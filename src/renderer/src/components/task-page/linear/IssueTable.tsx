@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { TaskPageComposerActionsModel } from '../use-task-page-composer-actions'
 import { ChevronDown, FolderOpen, ArrowRight, ExternalLink } from 'lucide-react'
 import { findLinearIssueWorkspaceAttachmentInIndex } from '@/lib/linear-issue-workspace-attachment'
@@ -14,6 +15,7 @@ export function TaskPageLinearIssueTable({
 }: {
   model: TaskPageComposerActionsModel
 }): React.JSX.Element | null {
+  const [collapsedSections, setCollapsedSections] = useState<ReadonlySet<string>>(new Set())
   const {
     selectedLinearWorkspaceId,
     linearTaskSourceContext,
@@ -25,19 +27,41 @@ export function TaskPageLinearIssueTable({
     linearIssueListRows,
     handleOpenOrUseLinearItem
   } = model
+  let sectionCollapsed = false
   return (
     <div className="divide-y divide-border/50">
       {linearIssueListRows.map((row) => {
         if (row.type === 'section') {
+          const collapsed = collapsedSections.has(row.key)
+          sectionCollapsed = collapsed
           return (
-            <div key={row.key} className="flex h-9 items-center gap-2 bg-muted/35 px-3">
-              <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+            <button
+              key={row.key}
+              type="button"
+              aria-expanded={!collapsed}
+              onClick={() => {
+                setCollapsedSections((current) => {
+                  const next = new Set(current)
+                  if (!next.delete(row.key)) {
+                    next.add(row.key)
+                  }
+                  return next
+                })
+              }}
+              className="flex h-9 w-full cursor-pointer items-center gap-2 bg-muted/35 px-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+            >
+              <ChevronDown
+                className={cn('size-3 shrink-0 text-muted-foreground', collapsed && '-rotate-90')}
+              />
               <span className="min-w-0 truncate text-[13px] font-medium text-foreground">
                 {row.label}
               </span>
               <span className="shrink-0 text-[11px] text-muted-foreground">{row.count}</span>
-            </div>
+            </button>
           )
+        }
+        if (sectionCollapsed) {
+          return null
         }
         const issue = row.issue
         const selected = issue.id === selectedLinearIssueId
