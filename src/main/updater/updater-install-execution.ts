@@ -14,6 +14,7 @@ import { LINUX_PACKAGE_MARKER_UNUSABLE_MESSAGE } from '../linux-package-download
 import { recordUpdaterLifecycle } from '../updater-lifecycle-diagnostics'
 import { requestServeUpdateHandoff, failServeUpdateHandoff } from '../serve-update-handoff'
 import { UpdaterPackageRecovery } from './updater-package-recovery'
+import { MAC_DEFERRED_STAGING_TIMEOUT_MS } from './updater-state'
 
 export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
   protected async performQuitAndInstall(): Promise<void> {
@@ -164,15 +165,23 @@ export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
           return
         }
 
-        killAllPty()
-        span.addEvent('local_pty_kill_all')
-
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.removeAllListeners('close')
+        // Why: this staging finishes after quitAndInstall returns; hold destructive prep until Squirrel stages so a staging failure leaves the server intact.
+        if (this.isMacStagingDeferredToInstall() && !isMacInstallerReady()) {
+          this.macDeferredStagingTimer = setTimeout(() => {
+            this.macDeferredStagingTimer = null
+            this.failMacStaging(
+              new Error(
+                `Squirrel did not stage the update within ${MAC_DEFERRED_STAGING_TIMEOUT_MS / 1000}s`
+              )
+            )
+          }, MAC_DEFERRED_STAGING_TIMEOUT_MS)
+          span.addEvent('awaiting_squirrel_staging')
+          return
         }
-        span.addEvent('window_close_listeners_removed', {
-          windowCount: BrowserWindow.getAllWindows().length
-        })
+
+        const windowCount = this.releaseSessionsForInstaller()
+        span.addEvent('local_pty_kill_all')
+        span.addEvent('window_close_listeners_removed', { windowCount })
 
         // Why: committed installs keep quittingForUpdate so dock activate can't reopen the old process; macOS without Squirrel stays uncommitted so late native errors can still recover.
         if (process.platform !== 'darwin' || isMacInstallerReady()) {
@@ -215,10 +224,47 @@ export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
 
   // Why: supervised serve keeps autoInstallOnAppQuit off, so electron-updater's MacUpdater asks Squirrel to stage only inside quitAndInstall; waiting for Squirrel first never ends.
   protected isMacStagingDeferredToInstall(): boolean {
-    return this.updateInstallMode === 'supervised-headless-serve'
+    return process.platform === 'darwin' && this.updateInstallMode === 'supervised-headless-serve'
   }
 
-  /** Called once the installer owns the swap: immediately elsewhere, when Squirrel stages on macOS. */
+  protected isAwaitingMacStaging(): boolean {
+    return (
+      this.isMacStagingDeferredToInstall() &&
+      this.quitAndInstallInProgress &&
+      this.quitAndInstallNativeInvoked &&
+      !this.updateInstallCommitted
+    )
+  }
+
+  /** Squirrel staged the bundle that quitAndInstall asked for; the installer now owns the swap. */
+  protected commitStagedMacInstall(): void {
+    if (!this.isAwaitingMacStaging()) {
+      return
+    }
+    this.clearMacDeferredStagingTimer()
+    this.releaseSessionsForInstaller()
+    this.commitInFlightInstall()
+    recordUpdaterLifecycle('macos_deferred_staging_committed', {
+      version: this.getPendingInstallVersion() || null
+    })
+  }
+
+  // Why: only Squirrel's own error ends the staging; an unrelated updater error (e.g. a background check) must not abandon it.
+  protected failMacStaging(error: unknown): void {
+    if (this.isAwaitingMacStaging()) {
+      this.handleQuitAndInstallFailure(error)
+    }
+  }
+
+  private releaseSessionsForInstaller(): number {
+    killAllPty()
+    const windows = BrowserWindow.getAllWindows()
+    for (const win of windows) {
+      win.removeAllListeners('close')
+    }
+    return windows.length
+  }
+
   protected commitInFlightInstall(): void {
     if (!this.quitAndInstallInProgress || this.updateInstallCommitted) {
       return

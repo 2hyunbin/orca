@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadUpdaterModule, warmUpdaterModule } from './updater-test-module-loader'
+import { MAC_DEFERRED_STAGING_TIMEOUT_MS } from './updater/updater-state'
 
 const {
   appMock,
@@ -385,14 +386,36 @@ describe('headless serve update install handoff', () => {
       setPlatform(originalPlatform)
     })
 
+    const STAGED_INSTALL = [
+      'native-quit-and-install',
+      'in-process-pty-cleanup',
+      'install-committed',
+      'mac-updater-app-quit'
+    ]
+
+    // Models electron-updater's MacUpdater with autoInstallOnAppQuit off: quitAndInstall only starts Squirrel and
+    // returns; a native error is re-emitted as an updater error first; staging ends in MacUpdater's own app.quit().
     const downloadSupervisedUpdate = async (
+      lifecycle: string[]
+    ): Promise<{
       send: ReturnType<typeof vi.fn>
-    ): Promise<{ quitAndInstall: () => void; fireSquirrelStaged: () => void }> => {
+      quitAndInstall: () => void
+      squirrel: { staged: () => void; failed: (error: Error) => void }
+    }> => {
+      const send = vi.fn()
+      let squirrelStarted = false
       autoUpdaterMock.checkForUpdates.mockImplementation(() => {
         autoUpdaterMock.emit('checking-for-update')
         queueMicrotask(() => autoUpdaterMock.emit('update-available', { version: '1.0.61' }))
         return Promise.resolve(null)
       })
+      autoUpdaterMock.quitAndInstall.mockImplementation(() => {
+        squirrelStarted = true
+        lifecycle.push('native-quit-and-install')
+      })
+      killAllPtyMock.mockImplementation(() => lifecycle.push('in-process-pty-cleanup'))
+      armUpdateInstallExitWatchdogMock.mockImplementation(() => lifecycle.push('install-committed'))
+
       const { checkForUpdatesFromMenu, downloadUpdate, quitAndInstall, setupAutoUpdater } =
         await loadUpdaterModule()
       setupAutoUpdater({ webContents: { send } } as never, {
@@ -403,28 +426,33 @@ describe('headless serve update install handoff', () => {
       await vi.advanceTimersByTimeAsync(0)
       downloadUpdate()
       autoUpdaterMock.emit('update-downloaded', { version: '1.0.61' })
-      const fireSquirrelStaged = (): void => {
-        const handler = nativeUpdaterMock.on.mock.calls.find(
-          ([event]) => event === 'update-downloaded'
-        )?.[1]
+
+      const nativeListener = (event: string): ((...args: unknown[]) => void) => {
+        const handler = nativeUpdaterMock.on.mock.calls.find(([name]) => name === event)?.[1]
         if (typeof handler !== 'function') {
-          throw new Error('Squirrel update-downloaded listener was not registered')
+          throw new Error(`Squirrel ${event} listener was not registered`)
         }
-        handler()
+        return handler
       }
-      return { quitAndInstall, fireSquirrelStaged }
+      const squirrel = {
+        staged: (): void => {
+          nativeListener('update-downloaded')()
+          if (squirrelStarted) {
+            lifecycle.push('mac-updater-app-quit')
+            appMock.quit()
+          }
+        },
+        failed: (error: Error): void => {
+          autoUpdaterMock.emit('error', error)
+          nativeListener('error')(error)
+        }
+      }
+      return { send, quitAndInstall, squirrel }
     }
 
-    it('reports the download installable and stages it during the supervised install', async () => {
+    it('reports the download installable and commits only once Squirrel stages it', async () => {
       const lifecycle: string[] = []
-      const send = vi.fn()
-      const { quitAndInstall, fireSquirrelStaged } = await downloadSupervisedUpdate(send)
-      // Why: autoInstallOnAppQuit is off, so electron-updater's MacUpdater asks Squirrel to stage here and nowhere earlier.
-      autoUpdaterMock.quitAndInstall.mockImplementation(() => {
-        lifecycle.push('native-quit-and-install')
-        fireSquirrelStaged()
-      })
-      armUpdateInstallExitWatchdogMock.mockImplementation(() => lifecycle.push('install-committed'))
+      const { send, quitAndInstall, squirrel } = await downloadSupervisedUpdate(lifecycle)
 
       expect(send).toHaveBeenCalledWith(
         'updater:status',
@@ -432,29 +460,65 @@ describe('headless serve update install handoff', () => {
       )
 
       quitAndInstall()
-      await vi.advanceTimersByTimeAsync(15_000)
+      await vi.advanceTimersByTimeAsync(5_000)
 
       expect(requestServeUpdateHandoffMock).toHaveBeenCalledWith('1.0.61')
       expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledWith(true, false)
-      expect(appMock.quit).not.toHaveBeenCalled()
-      expect(lifecycle).toEqual(['native-quit-and-install', 'install-committed'])
+      expect(lifecycle).toEqual(['native-quit-and-install'])
+
+      squirrel.staged()
+
+      expect(lifecycle).toEqual(STAGED_INSTALL)
+      expect(failServeUpdateHandoffMock).not.toHaveBeenCalled()
     })
 
-    it('keeps serving when Squirrel cannot stage the supervised install', async () => {
-      const send = vi.fn()
-      const { quitAndInstall } = await downloadSupervisedUpdate(send)
-      autoUpdaterMock.quitAndInstall.mockImplementation(() => {
-        autoUpdaterMock.emit('error', new Error('Squirrel could not stage the update'))
-      })
+    it('keeps the server intact and retryable when Squirrel fails to stage', async () => {
+      const lifecycle: string[] = []
+      const { send, quitAndInstall, squirrel } = await downloadSupervisedUpdate(lifecycle)
+      quitAndInstall()
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      squirrel.failed(new Error('Code signature did not pass validation'))
+
+      expect(failServeUpdateHandoffMock).toHaveBeenCalledOnce()
+      expect(lifecycle).toEqual(['native-quit-and-install'])
+      expect(send).toHaveBeenCalledWith(
+        'updater:status',
+        expect.objectContaining({ state: 'error' })
+      )
 
       quitAndInstall()
-      await vi.advanceTimersByTimeAsync(15_000)
+      await vi.advanceTimersByTimeAsync(100)
 
-      expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledOnce()
+      expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not abandon the staging for an unrelated updater error', async () => {
+      const lifecycle: string[] = []
+      const { quitAndInstall, squirrel } = await downloadSupervisedUpdate(lifecycle)
+      quitAndInstall()
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      autoUpdaterMock.emit('error', new Error('Background update check failed'))
+      squirrel.staged()
+
+      expect(failServeUpdateHandoffMock).not.toHaveBeenCalled()
+      expect(lifecycle).toEqual(STAGED_INSTALL)
+    })
+
+    it('gives up on a silent Squirrel without leaving the server mid-quit', async () => {
+      const lifecycle: string[] = []
+      const { quitAndInstall } = await downloadSupervisedUpdate(lifecycle)
+      quitAndInstall()
+      await vi.advanceTimersByTimeAsync(MAC_DEFERRED_STAGING_TIMEOUT_MS + 100)
+
       expect(failServeUpdateHandoffMock).toHaveBeenCalledOnce()
-      expect(armUpdateInstallExitWatchdogMock).not.toHaveBeenCalled()
-      expect(killAllPtyMock).not.toHaveBeenCalled()
-      expect(appMock.quit).not.toHaveBeenCalled()
+      expect(recordUpdaterLifecycleMock).toHaveBeenCalledWith(
+        'quit_and_install_failed_via_event',
+        expect.anything(),
+        expect.anything()
+      )
+      expect(lifecycle).toEqual(['native-quit-and-install'])
     })
   })
 

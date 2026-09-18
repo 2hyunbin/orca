@@ -43,7 +43,9 @@ export function registerAutoUpdaterHandlers({
   markUpdateAvailableEventPending,
   markMissingManifestPrereleaseFallbackChecking,
   performQuitAndInstall,
-  commitInFlightInstall,
+  commitStagedMacInstall,
+  failMacStaging,
+  isAwaitingMacStaging,
   isMacStagingDeferredToInstall,
   shouldDeferMacQuitForInstall,
   recordCompletedUpdateCheck,
@@ -64,7 +66,8 @@ export function registerAutoUpdaterHandlers({
     getPendingInstallVersion,
     getKnownReleaseUrl,
     performQuitAndInstall,
-    commitInFlightInstall,
+    commitStagedMacInstall,
+    failMacStaging,
     shouldDeferMacQuitForInstall,
     sendStatus
   })
@@ -263,6 +266,10 @@ export function registerAutoUpdaterHandlers({
 
   autoUpdater.on('error', (err) => {
     const message = err?.message ?? 'Unknown error'
+    // Why: the native Squirrel listener owns failure while it stages; MacUpdater re-emits that error here too.
+    if (isAwaitingMacStaging()) {
+      return
+    }
     // Why: quitAndInstall reports "no staged update" via this error event (async on macOS); recover quit flags before suppression guards run.
     if (handleQuitAndInstallFailure(err)) {
       return
