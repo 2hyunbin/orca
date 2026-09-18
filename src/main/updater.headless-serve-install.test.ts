@@ -506,19 +506,23 @@ describe('headless serve update install handoff', () => {
       expect(lifecycle).toEqual(STAGED_INSTALL)
     })
 
-    it('gives up on a silent Squirrel without leaving the server mid-quit', async () => {
+    it('reports a silent Squirrel but keeps the handoff live for a late staging', async () => {
       const lifecycle: string[] = []
-      const { quitAndInstall } = await downloadSupervisedUpdate(lifecycle)
+      const { send, quitAndInstall, squirrel } = await downloadSupervisedUpdate(lifecycle)
       quitAndInstall()
       await vi.advanceTimersByTimeAsync(MAC_DEFERRED_STAGING_TIMEOUT_MS + 100)
 
-      expect(failServeUpdateHandoffMock).toHaveBeenCalledOnce()
-      expect(recordUpdaterLifecycleMock).toHaveBeenCalledWith(
-        'quit_and_install_failed_via_event',
-        expect.anything(),
-        expect.anything()
+      expect(send).toHaveBeenCalledWith(
+        'updater:status',
+        expect.objectContaining({ state: 'error', version: '1.0.61', retryable: false })
       )
+      expect(failServeUpdateHandoffMock).not.toHaveBeenCalled()
       expect(lifecycle).toEqual(['native-quit-and-install'])
+
+      squirrel.staged()
+
+      expect(lifecycle).toEqual(STAGED_INSTALL)
+      expect(failServeUpdateHandoffMock).not.toHaveBeenCalled()
     })
   })
 

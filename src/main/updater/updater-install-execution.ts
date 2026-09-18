@@ -167,13 +167,22 @@ export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
 
         // Why: this staging finishes after quitAndInstall returns; hold destructive prep until Squirrel stages so a staging failure leaves the server intact.
         if (this.isMacStagingDeferredToInstall() && !isMacInstallerReady()) {
+          // Why: MacUpdater keeps its own completion listener that quits once Squirrel stages, so abandoning the
+          // install here would let a late staging apply with a failed handoff; report and keep the handoff live.
           this.macDeferredStagingTimer = setTimeout(() => {
             this.macDeferredStagingTimer = null
-            this.failMacStaging(
-              new Error(
-                `Squirrel did not stage the update within ${MAC_DEFERRED_STAGING_TIMEOUT_MS / 1000}s`
-              )
+            recordUpdaterLifecycle(
+              'macos_deferred_staging_slow',
+              { timeoutMs: MAC_DEFERRED_STAGING_TIMEOUT_MS },
+              { level: 'warn', message: 'Squirrel has not staged the supervised serve update' }
             )
+            this.sendInstallFailureStatus({
+              state: 'error',
+              message:
+                'macOS has not finished preparing the update. Orca keeps serving and installs it once ready; restart the Orca service if it never does.',
+              ...(pendingVersion ? { version: pendingVersion } : {}),
+              retryable: false
+            })
           }, MAC_DEFERRED_STAGING_TIMEOUT_MS)
           span.addEvent('awaiting_squirrel_staging')
           return
