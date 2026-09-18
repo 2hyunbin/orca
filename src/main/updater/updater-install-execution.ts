@@ -175,13 +175,8 @@ export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
         })
 
         // Why: committed installs keep quittingForUpdate so dock activate can't reopen the old process; macOS without Squirrel stays uncommitted so late native errors can still recover.
-        if (
-          !this.updateInstallCommitted &&
-          (process.platform !== 'darwin' || isMacInstallerReady())
-        ) {
-          this.updateInstallCommitted = true
-          // Why: past commit the installer waits for this process to exit; a wedged async shutdown would strand the user with no app and no update (#4438).
-          armUpdateInstallExitWatchdog()
+        if (process.platform !== 'darwin' || isMacInstallerReady()) {
+          this.commitInFlightInstall()
         }
       })
     } catch (error) {
@@ -216,6 +211,21 @@ export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
           : 'Could not restart to install the update. Quit and reopen Orca, then try again.'
       })
     }
+  }
+
+  // Why: supervised serve keeps autoInstallOnAppQuit off, so electron-updater's MacUpdater asks Squirrel to stage only inside quitAndInstall; waiting for Squirrel first never ends.
+  protected isMacStagingDeferredToInstall(): boolean {
+    return this.updateInstallMode === 'supervised-headless-serve'
+  }
+
+  /** Called once the installer owns the swap: immediately elsewhere, when Squirrel stages on macOS. */
+  protected commitInFlightInstall(): void {
+    if (!this.quitAndInstallInProgress || this.updateInstallCommitted) {
+      return
+    }
+    this.updateInstallCommitted = true
+    // Why: past commit the installer waits for this process to exit; a wedged async shutdown would strand the user with no app and no update (#4438).
+    armUpdateInstallExitWatchdog()
   }
 
   // Why: quitAndInstall failures arrive via 'error'; recover only after native invoke and before commit, else clearing quittingForUpdate lets dock activate reopen the old process mid-installer.

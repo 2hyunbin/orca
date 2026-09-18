@@ -10,6 +10,7 @@ export function registerMacUpdaterEvents({
   getPendingInstallVersion,
   getKnownReleaseUrl,
   performQuitAndInstall,
+  commitInFlightInstall,
   shouldDeferMacQuitForInstall,
   sendStatus
 }: {
@@ -18,11 +19,14 @@ export function registerMacUpdaterEvents({
   getPendingInstallVersion: () => string
   getKnownReleaseUrl: () => string | undefined
   performQuitAndInstall: () => void | Promise<void>
+  commitInFlightInstall: () => void
   shouldDeferMacQuitForInstall: () => boolean
   sendStatus: (status: UpdateStatus) => void
 }): void {
   if (process.platform === 'darwin') {
     nativeUpdater.on('update-downloaded', () => {
+      // Why: when staging runs inside quitAndInstall, this signal is the point where ShipIt owns the swap.
+      commitInFlightInstall()
       const hasInstallableVersion = hasInstallableDownloadedVersion()
       handleMacInstallerReady(hasInstallableVersion, performQuitAndInstall, () => {
         sendStatus({

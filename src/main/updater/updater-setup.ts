@@ -199,6 +199,8 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
       markMissingManifestPrereleaseFallbackChecking: () =>
         this.markMissingManifestPrereleaseFallbackChecking(),
       performQuitAndInstall: () => this.performQuitAndInstall(),
+      commitInFlightInstall: () => this.commitInFlightInstall(),
+      isMacStagingDeferredToInstall: () => this.isMacStagingDeferredToInstall(),
       shouldDeferMacQuitForInstall: () => this.updateInstallMode === 'interactive',
       recordCompletedUpdateCheck: () => this.recordCompletedUpdateCheck(),
       restoreReleaseUpdateSource: () => this.restoreReleaseUpdateSource(),

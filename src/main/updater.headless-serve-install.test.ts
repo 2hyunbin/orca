@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadUpdaterModule, warmUpdaterModule } from './updater-test-module-loader'
 
 const {
@@ -9,6 +9,7 @@ const {
   recordUpdaterLifecycleMock,
   requestServeUpdateHandoffMock,
   failServeUpdateHandoffMock,
+  armUpdateInstallExitWatchdogMock,
   resetHandlers
 } = vi.hoisted(() => {
   const appHandlers = new Map<string, ((...args: unknown[]) => void)[]>()
@@ -63,6 +64,7 @@ const {
     recordUpdaterLifecycleMock: vi.fn(),
     requestServeUpdateHandoffMock: vi.fn(() => true),
     failServeUpdateHandoffMock: vi.fn(),
+    armUpdateInstallExitWatchdogMock: vi.fn(),
     resetHandlers: () => {
       appHandlers.clear()
       updaterHandlers.clear()
@@ -101,7 +103,7 @@ vi.mock('./updater-prerelease-feed', () => ({
   getReleaseDownloadUrl: vi.fn()
 }))
 vi.mock('./update-install-exit-watchdog', () => ({
-  armUpdateInstallExitWatchdog: vi.fn(),
+  armUpdateInstallExitWatchdog: armUpdateInstallExitWatchdogMock,
   disarmUpdateInstallExitWatchdog: vi.fn()
 }))
 vi.mock('./updater-lifecycle-diagnostics', () => ({
@@ -134,6 +136,7 @@ describe('headless serve update install handoff', () => {
     recordUpdaterLifecycleMock.mockReset()
     requestServeUpdateHandoffMock.mockReset().mockReturnValue(true)
     failServeUpdateHandoffMock.mockReset()
+    armUpdateInstallExitWatchdogMock.mockReset()
     resetHandlers()
   })
 
@@ -371,6 +374,90 @@ describe('headless serve update install handoff', () => {
     )
   })
 
+  describe('on macOS, where Squirrel stages the bundle only inside quitAndInstall', () => {
+    const originalPlatform = process.platform
+
+    beforeEach(() => {
+      setPlatform('darwin')
+    })
+
+    afterEach(() => {
+      setPlatform(originalPlatform)
+    })
+
+    const downloadSupervisedUpdate = async (
+      send: ReturnType<typeof vi.fn>
+    ): Promise<{ quitAndInstall: () => void; fireSquirrelStaged: () => void }> => {
+      autoUpdaterMock.checkForUpdates.mockImplementation(() => {
+        autoUpdaterMock.emit('checking-for-update')
+        queueMicrotask(() => autoUpdaterMock.emit('update-available', { version: '1.0.61' }))
+        return Promise.resolve(null)
+      })
+      const { checkForUpdatesFromMenu, downloadUpdate, quitAndInstall, setupAutoUpdater } =
+        await loadUpdaterModule()
+      setupAutoUpdater({ webContents: { send } } as never, {
+        getLastUpdateCheckAt: () => Date.now(),
+        installMode: 'supervised-headless-serve'
+      })
+      checkForUpdatesFromMenu()
+      await vi.advanceTimersByTimeAsync(0)
+      downloadUpdate()
+      autoUpdaterMock.emit('update-downloaded', { version: '1.0.61' })
+      const fireSquirrelStaged = (): void => {
+        const handler = nativeUpdaterMock.on.mock.calls.find(
+          ([event]) => event === 'update-downloaded'
+        )?.[1]
+        if (typeof handler !== 'function') {
+          throw new Error('Squirrel update-downloaded listener was not registered')
+        }
+        handler()
+      }
+      return { quitAndInstall, fireSquirrelStaged }
+    }
+
+    it('reports the download installable and stages it during the supervised install', async () => {
+      const lifecycle: string[] = []
+      const send = vi.fn()
+      const { quitAndInstall, fireSquirrelStaged } = await downloadSupervisedUpdate(send)
+      // Why: autoInstallOnAppQuit is off, so electron-updater's MacUpdater asks Squirrel to stage here and nowhere earlier.
+      autoUpdaterMock.quitAndInstall.mockImplementation(() => {
+        lifecycle.push('native-quit-and-install')
+        fireSquirrelStaged()
+      })
+      armUpdateInstallExitWatchdogMock.mockImplementation(() => lifecycle.push('install-committed'))
+
+      expect(send).toHaveBeenCalledWith(
+        'updater:status',
+        expect.objectContaining({ state: 'downloaded', version: '1.0.61' })
+      )
+
+      quitAndInstall()
+      await vi.advanceTimersByTimeAsync(15_000)
+
+      expect(requestServeUpdateHandoffMock).toHaveBeenCalledWith('1.0.61')
+      expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledWith(true, false)
+      expect(appMock.quit).not.toHaveBeenCalled()
+      expect(lifecycle).toEqual(['native-quit-and-install', 'install-committed'])
+    })
+
+    it('keeps serving when Squirrel cannot stage the supervised install', async () => {
+      const send = vi.fn()
+      const { quitAndInstall } = await downloadSupervisedUpdate(send)
+      autoUpdaterMock.quitAndInstall.mockImplementation(() => {
+        autoUpdaterMock.emit('error', new Error('Squirrel could not stage the update'))
+      })
+
+      quitAndInstall()
+      await vi.advanceTimersByTimeAsync(15_000)
+
+      expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledOnce()
+      expect(failServeUpdateHandoffMock).toHaveBeenCalledOnce()
+      expect(armUpdateInstallExitWatchdogMock).not.toHaveBeenCalled()
+      expect(killAllPtyMock).not.toHaveBeenCalled()
+      expect(appMock.quit).not.toHaveBeenCalled()
+    })
+  })
+
   it.runIf(process.platform === 'darwin')(
     'defers a pre-staged macOS update resumed from the native-ready continuation',
     async () => {
@@ -534,3 +621,7 @@ describe('headless serve update install handoff', () => {
     expect(() => checkForRemoteServerUpdate('runtime-1')).toThrow('remote_update_manual_required')
   })
 })
+
+function setPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { configurable: true, value: platform })
+}
