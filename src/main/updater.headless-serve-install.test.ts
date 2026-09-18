@@ -388,13 +388,13 @@ describe('headless serve update install handoff', () => {
 
     const STAGED_INSTALL = [
       'native-quit-and-install',
-      'in-process-pty-cleanup',
       'install-committed',
+      'in-process-pty-cleanup',
       'mac-updater-app-quit'
     ]
 
-    // Models electron-updater's MacUpdater with autoInstallOnAppQuit off: quitAndInstall only starts Squirrel and
-    // returns; a native error is re-emitted as an updater error first; staging ends in MacUpdater's own app.quit().
+    // Models electron-updater's MacUpdater with autoInstallOnAppQuit off: each unstaged quitAndInstall adds a
+    // persistent native listener that app.quit()s and only starts Squirrel; native errors are re-emitted first.
     const downloadSupervisedUpdate = async (
       lifecycle: string[]
     ): Promise<{
@@ -403,15 +403,17 @@ describe('headless serve update install handoff', () => {
       squirrel: { staged: () => void; failed: (error: Error) => void }
     }> => {
       const send = vi.fn()
-      let squirrelStarted = false
       autoUpdaterMock.checkForUpdates.mockImplementation(() => {
         autoUpdaterMock.emit('checking-for-update')
         queueMicrotask(() => autoUpdaterMock.emit('update-available', { version: '1.0.61' }))
         return Promise.resolve(null)
       })
       autoUpdaterMock.quitAndInstall.mockImplementation(() => {
-        squirrelStarted = true
         lifecycle.push('native-quit-and-install')
+        nativeUpdaterMock.on('update-downloaded', () => {
+          lifecycle.push('mac-updater-app-quit')
+          appMock.quit()
+        })
       })
       killAllPtyMock.mockImplementation(() => lifecycle.push('in-process-pty-cleanup'))
       armUpdateInstallExitWatchdogMock.mockImplementation(() => lifecycle.push('install-committed'))
@@ -427,24 +429,19 @@ describe('headless serve update install handoff', () => {
       downloadUpdate()
       autoUpdaterMock.emit('update-downloaded', { version: '1.0.61' })
 
-      const nativeListener = (event: string): ((...args: unknown[]) => void) => {
-        const handler = nativeUpdaterMock.on.mock.calls.find(([name]) => name === event)?.[1]
-        if (typeof handler !== 'function') {
-          throw new Error(`Squirrel ${event} listener was not registered`)
+      // Why: EventEmitter semantics — listeners run in registration order and a throw stops the rest.
+      const emitNative = (event: string, ...args: unknown[]): void => {
+        for (const [name, handler] of nativeUpdaterMock.on.mock.calls) {
+          if (name === event && typeof handler === 'function') {
+            handler(...args)
+          }
         }
-        return handler
       }
       const squirrel = {
-        staged: (): void => {
-          nativeListener('update-downloaded')()
-          if (squirrelStarted) {
-            lifecycle.push('mac-updater-app-quit')
-            appMock.quit()
-          }
-        },
+        staged: (): void => emitNative('update-downloaded'),
         failed: (error: Error): void => {
           autoUpdaterMock.emit('error', error)
-          nativeListener('error')(error)
+          emitNative('error', error)
         }
       }
       return { send, quitAndInstall, squirrel }
@@ -489,8 +486,40 @@ describe('headless serve update install handoff', () => {
 
       quitAndInstall()
       await vi.advanceTimersByTimeAsync(100)
+      squirrel.staged()
 
-      expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledTimes(2)
+      expect(requestServeUpdateHandoffMock).toHaveBeenCalledTimes(2)
+      expect(armUpdateInstallExitWatchdogMock).toHaveBeenCalledOnce()
+      expect(killAllPtyMock).toHaveBeenCalledOnce()
+      // Why: MacUpdater keeps the failed attempt's listener too, so both quit; Orca commits once.
+      expect(lifecycle).toEqual([
+        'native-quit-and-install',
+        'native-quit-and-install',
+        'install-committed',
+        'in-process-pty-cleanup',
+        'mac-updater-app-quit',
+        'mac-updater-app-quit'
+      ])
+    })
+
+    it('still commits and lets MacUpdater quit when session cleanup throws', async () => {
+      const lifecycle: string[] = []
+      const { quitAndInstall, squirrel } = await downloadSupervisedUpdate(lifecycle)
+      killAllPtyMock.mockImplementation(() => {
+        lifecycle.push('in-process-pty-cleanup')
+        throw new Error('PTY cleanup callback failed')
+      })
+      quitAndInstall()
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      squirrel.staged()
+
+      expect(lifecycle).toEqual(STAGED_INSTALL)
+      expect(recordUpdaterLifecycleMock).toHaveBeenCalledWith(
+        'post_commit_cleanup_failed',
+        { errorType: 'Error' },
+        expect.objectContaining({ level: 'warn' })
+      )
     })
 
     it('does not abandon the staging for an unrelated updater error', async () => {

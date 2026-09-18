@@ -251,11 +251,23 @@ export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
       return
     }
     this.clearMacDeferredStagingTimer()
-    this.releaseSessionsForInstaller()
+    // Why: commit first; this runs inside Squirrel's event, so a throwing cleanup would otherwise skip the watchdog and MacUpdater's quit listener.
     this.commitInFlightInstall()
     recordUpdaterLifecycle('macos_deferred_staging_committed', {
       version: this.getPendingInstallVersion() || null
     })
+    try {
+      this.releaseSessionsForInstaller()
+    } catch (error) {
+      recordUpdaterLifecycle(
+        'post_commit_cleanup_failed',
+        { errorType: error instanceof Error ? error.name : typeof error },
+        {
+          level: 'warn',
+          message: 'Update install cleanup failed after commit; install already applied'
+        }
+      )
+    }
   }
 
   // Why: only Squirrel's own error ends the staging; an unrelated updater error (e.g. a background check) must not abandon it.
