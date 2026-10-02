@@ -1,3 +1,4 @@
+import type { ClosedTerminalTabTombstonesByTabId } from '../../../shared/closed-terminal-tab-tombstones'
 // The activation gate's fake store and inventory, shared by its window-owned and layout-owner tests.
 import { vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
@@ -53,6 +54,7 @@ export function testDeps(args: {
   const sleeping = args.sleeping ?? []
   const ptyIdsByTabId: Record<string, string[]> = {}
   const tabsByWorktree: Record<string, TerminalTab[]> = { [WORKTREE_ID]: [] }
+  const closedTerminalTabTombstonesByTabId: ClosedTerminalTabTombstonesByTabId = {}
   const terminalLayoutsByTabId: Record<string, SeededLayout> = Object.fromEntries(
     sleeping.map((record) => {
       const leafId = record.paneKey.slice(record.paneKey.indexOf(':') + 1)
@@ -106,6 +108,7 @@ export function testDeps(args: {
     ptyIdsByTabId[tabId] = [...new Set([...(ptyIdsByTabId[tabId] ?? []), ptyId])]
   })
   const store = {
+    closedTerminalTabTombstonesByTabId,
     createTab,
     ptyIdsByTabId,
     setTabLayout,
