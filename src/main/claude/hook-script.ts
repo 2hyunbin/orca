@@ -15,7 +15,6 @@ import {
   buildWindowsGrokReplayGuardLines
 } from '../agent-hooks/grok-replay-guard'
 import {
-  WINDOWS_HOOK_STDIN_DRAIN_LABEL,
   buildPosixHookPayloadCapture,
   buildPosixHookSpoolLines,
   buildWindowsHookEnvironmentGuardLines,
@@ -53,7 +52,7 @@ export function getManagedScript(
       ...(options.skipWhenDevinImportsClaude
         ? [
             // Devin imports Claude hooks; skip duplicate posts to preserve Devin attribution.
-            `if not "%DEVIN_PROJECT_DIR%"=="" goto :${WINDOWS_HOOK_STDIN_DRAIN_LABEL}`
+            'if not "%DEVIN_PROJECT_DIR%"=="" exit /b 0'
           ]
         : []),
       // Avoid a PowerShell startup per hook.
