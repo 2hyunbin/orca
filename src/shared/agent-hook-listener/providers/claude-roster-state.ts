@@ -24,7 +24,11 @@ const CLAUDE_SESSION_OWNER_EVENTS: ReadonlySet<string> = new Set([
   'PreToolUse',
   'PostToolUse',
   'PostToolUseFailure',
-  'PermissionRequest'
+  'PermissionRequest',
+  // Why: an elicitation carries session_id and can be the first event after a replaced session,
+  // so it has to void the previous conversation's claims the same way a permission wait does.
+  'Elicitation',
+  'ElicitationResult'
 ])
 
 /** Session replacement voids prior conversation claims even without SessionEnd. Preserve live shells until fresh inventory/certified death, confirmed in-process teammates, and the lead record the caller overwrites. */

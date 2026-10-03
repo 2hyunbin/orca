@@ -111,13 +111,17 @@ export function normalizeClaudeEvent(
   const isAskUserQuestion = eventName === 'PreToolUse' && isAskUserQuestionWait
   // Manual PostCompact ends at idle without Stop; auto compaction stays in-turn, and PreCompact alone can be aborted (STA-2915).
   const isManualCompactCompletion = eventName === 'PostCompact' && hookPayload.trigger === 'manual'
+  // Why: Claude's MCP elicitation dialog is a human wait (#25020). Other providers already map
+  // notification_type elicitation_dialog to waiting. ElicitationResult means the person answered
+  // and the in-flight tool continues, so the pane returns to working rather than done.
   const reportedStateName =
     eventName === 'UserPromptSubmit' ||
     eventName === 'PostToolUse' ||
     eventName === 'PostToolUseFailure' ||
+    eventName === 'ElicitationResult' ||
     (eventName === 'PreToolUse' && !isAskUserQuestion)
       ? 'working'
-      : eventName === 'PermissionRequest' || isAskUserQuestion
+      : eventName === 'PermissionRequest' || eventName === 'Elicitation' || isAskUserQuestion
         ? 'waiting'
         : isTurnBoundary || isManualCompactCompletion
           ? 'done'

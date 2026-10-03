@@ -54,6 +54,17 @@ export const CLAUDE_EVENTS = [
     eventName: 'PermissionRequest',
     definition: { matcher: '*', hooks: [{ type: 'command', command: '' }] }
   },
+  // Why: an MCP elicitation/create dialog blocks on the person (#25020). The matcher is the MCP
+  // server name, and '*' observes every server. The hook only reports status: exit 2 would decline
+  // the elicitation, so the script stays the neutral observer used by every other event.
+  {
+    eventName: 'Elicitation',
+    definition: { matcher: '*', hooks: [{ type: 'command', command: '' }] }
+  },
+  {
+    eventName: 'ElicitationResult',
+    definition: { matcher: '*', hooks: [{ type: 'command', command: '' }] }
+  },
   // Manual /compact may omit Stop; PostCompact clears the pane after completion.
   // PreCompact can fire on abort, so treating it as working would leave the pane stuck.
   {
