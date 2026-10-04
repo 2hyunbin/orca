@@ -251,6 +251,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
             pty.launchToken = launchToken ?? null
             pty.launchIncarnationId = launchToken ? pty.incarnationId : null
             pty.launchAgent = launchOpts.launchAgent ?? null
+            pty.launchCommandLine = launchOpts.command ?? null
           }
           recordPtySurface(pty, tabId, paneKey, spawnSurfaceClaimSequence(this.graphSequence))
         }

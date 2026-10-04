@@ -9,8 +9,13 @@ import {
   executionRuntimePlatform,
   remoteExecutionPlatform
 } from '../../shared/agent-launch-runtime'
-import { getTuiAgentLaunchCommand, TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
+import {
+  getTuiAgentLaunchCommand,
+  isTuiAgent,
+  TUI_AGENT_CONFIG
+} from '../../shared/tui-agent-config'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
+import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process-recognition'
 
 export function mergeTerminalEnvDeletionKeys(
   first: readonly string[] | undefined,
@@ -84,6 +89,14 @@ export function resolveBareAgentLaunchCommand(args: {
   }
 
   return null
+}
+
+/** Why: flags make a launch unmanaged (never rewritten, no spawn launchAgent), but the pane is
+ *  still that agent's — tui-idle ranking and published identity read this before any
+ *  foreground-process read lands. */
+export function resolveLaunchCommandPaneAgent(command: string | null | undefined): TuiAgent | null {
+  const recognized = recognizeAgentProcessFromCommandLine(command)
+  return recognized && isTuiAgent(recognized.agent) ? recognized.agent : null
 }
 
 export function inferCapturedClaudeAgentTeamsMode(

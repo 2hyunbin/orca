@@ -118,6 +118,7 @@ export abstract class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeW
         spawnSurfaceClaimSequence(this.graphSequence)
       )
       createdPty.runtimeSessionOwned = pty.runtimeSessionOwned
+      createdPty.launchCommandLine = opts.command ?? null
       this.setPairedRendererSessionOwnership(
         createdPty.ptyId,
         this.pairedRendererSessionOwnedPtyIds.has(pty.ptyId)

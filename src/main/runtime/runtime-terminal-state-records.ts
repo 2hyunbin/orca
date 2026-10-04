@@ -75,6 +75,9 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   launchToken: string | null
   launchIncarnationId: PtyIncarnationId | null
   launchAgent: TuiAgent | null
+  /** The command line this runtime-owned spawn was asked to launch; absent for adopted or
+   *  restored panes. Names the pane's agent before any foreground-process read lands. */
+  launchCommandLine: string | null
   agentSessionOwners: AgentSessionOwnerBinding[]
   /** Conversations the `incarnationId` execution reported; a later row can't hide them. In memory only. */
   cliConversations?: {

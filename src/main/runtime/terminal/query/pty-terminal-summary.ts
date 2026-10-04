@@ -17,6 +17,7 @@ import type { PtyIncarnationHandleRecord } from '../../orca-runtime-core'
 import type { TerminalHandleRecord } from '../../runtime-terminal-contracts'
 import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
+import { resolveLaunchCommandPaneAgent } from '../../runtime-agent-launch-resolution'
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
@@ -79,7 +80,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
       ...(pty.lastExitCause ? { exitCause: pty.lastExitCause } : {}),
       ...this.terminalExecutionHostField(pty.ptyId, pty.worktreeId),
       ...this.resolvePaneAgentIdentityField(
-        pty.launchAgent,
+        pty.launchAgent ?? resolveLaunchCommandPaneAgent(pty.launchCommandLine),
         pty.foregroundAgent,
         processTitle,
         recorded.paneKey
