@@ -9,6 +9,18 @@ import type {
   RuntimeMobileSessionTerminalClientTab
 } from '../../src/shared/runtime-types'
 import type { RpcRequest, RpcResponse } from './mock-server-rpc-handlers'
+import { startNativeChatPush, stopNativeChatPush } from './mock-server-native-chat-push'
+import {
+  activateRenderScrollTab,
+  createRenderScrollSessionTabs
+} from './mock-server-native-chat-session-tabs-fixture'
+import {
+  findRenderScrollChat,
+  nativeChatRenderScrollEnabled,
+  getRenderScrollChats,
+  startRenderScrollReply
+} from './mock-server-native-chat-render-scroll-fixture'
+import { handleRenderScrollTranscriptRequest } from './mock-server-native-chat-transcript-fixture'
 
 // Why: native chat needs a live agent tab, an empty-but-subscribed transcript,
 // and a terminal send path whose acceptance can be flipped mid-session.
@@ -76,16 +88,18 @@ function buildTab(): RuntimeMobileSessionTerminalClientTab {
 // Versions are per-worktree and only advance on real content change, so the
 // mock can't fake a re-render heartbeat the runtime would never send.
 function buildTabsResult(worktree: string): RuntimeMobileSessionTabsResult {
-  const result: RuntimeMobileSessionTabsResult = {
-    worktree,
-    publicationEpoch: 'mock-epoch-1',
-    snapshotVersion: 0,
-    activeGroupId: 'group-1',
-    activeTabId: TAB_ID,
-    activeTabType: 'terminal',
-    tabGroups: [{ id: 'group-1', activeTabId: TAB_ID, tabOrder: [TAB_ID] }],
-    tabs: [buildTab()]
-  }
+  const result: RuntimeMobileSessionTabsResult = nativeChatRenderScrollEnabled()
+    ? createRenderScrollSessionTabs(worktree)
+    : {
+        worktree,
+        publicationEpoch: 'mock-epoch-1',
+        snapshotVersion: 0,
+        activeGroupId: 'group-1',
+        activeTabId: TAB_ID,
+        activeTabType: 'terminal',
+        tabGroups: [{ id: 'group-1', activeTabId: TAB_ID, tabOrder: [TAB_ID] }],
+        tabs: [buildTab()]
+      }
   const signature = JSON.stringify(result)
   const previous = tabsSnapshots.get(worktree)
   const current =
@@ -153,42 +167,6 @@ function mockTranscript(): NativeChatMessage[] {
   ]
 }
 
-// Why: unsubscribe correlates by worktree, not request id, and a socket that
-// navigates A->B->A would otherwise stack one push loop per subscribe.
-const tabsPushLoops = new Map<WebSocket, Map<string, ReturnType<typeof setInterval>>>()
-
-function stopTabsPushLoop(ws: WebSocket, worktree: string): void {
-  const loops = tabsPushLoops.get(ws)
-  const existing = loops?.get(worktree)
-  if (existing !== undefined) {
-    clearInterval(existing)
-    loops?.delete(worktree)
-  }
-}
-
-function startTabsPushLoop(ws: WebSocket, worktree: string, push: () => void): void {
-  stopTabsPushLoop(ws, worktree)
-  const interval = setInterval(() => {
-    if (ws.readyState !== ws.OPEN) {
-      stopTabsPushLoop(ws, worktree)
-      return
-    }
-    push()
-  }, 3000)
-  let loops = tabsPushLoops.get(ws)
-  if (!loops) {
-    loops = new Map()
-    tabsPushLoops.set(ws, loops)
-    ws.once('close', () => {
-      for (const timer of tabsPushLoops.get(ws)?.values() ?? []) {
-        clearInterval(timer)
-      }
-      tabsPushLoops.delete(ws)
-    })
-  }
-  loops.set(worktree, interval)
-}
-
 type Respond = (response: RpcResponse) => void
 type Success = (id: string, result: unknown, streaming?: boolean) => RpcResponse
 type Failure = (id: string, code: string, message: string) => RpcResponse
@@ -196,7 +174,8 @@ type Failure = (id: string, code: string, message: string) => RpcResponse
 /** Mock backend for the native-chat surface: session tabs, a fixture transcript
  *  snapshot, terminal send, and image upload. Opt-in via MOCK_NATIVE_CHAT=1
  *  because it replaces the default terminal fixtures. No transcript or terminal
- *  output frames are pushed. Returns false for methods it does not own. */
+ *  output frames are pushed by default. MOCK_NATIVE_CHAT_SCENARIO opts into a
+ *  paged, streaming iPad fixture. Returns false for methods it does not own. */
 export function handleMockNativeChatRequest(
   request: RpcRequest,
   respond: Respond,
@@ -207,6 +186,10 @@ export function handleMockNativeChatRequest(
   if (process.env.MOCK_NATIVE_CHAT !== '1') {
     return false
   }
+  const renderScroll = nativeChatRenderScrollEnabled()
+  if (renderScroll && handleRenderScrollTranscriptRequest(request, respond, success, error, ws)) {
+    return true
+  }
   switch (request.method) {
     case 'session.tabs.list':
       respond(success(request.id, buildTabsResult(worktreeOf(request))))
@@ -214,22 +197,41 @@ export function handleMockNativeChatRequest(
 
     case 'session.tabs.subscribe': {
       const worktree = worktreeOf(request)
-      respond(success(request.id, buildTabsResult(worktree), true))
-      startTabsPushLoop(ws, worktree, () => {
-        const changed = tabsResultIfChanged(worktree)
-        if (changed) {
-          respond(success(request.id, changed, true))
-        }
-      })
+      const snapshot = buildTabsResult(worktree)
+      respond(
+        success(request.id, renderScroll ? { type: 'snapshot', ...snapshot } : snapshot, true)
+      )
+      if (renderScroll) {
+        respond(success(request.id, { type: 'updated', ...snapshot }, true))
+      }
+      startNativeChatPush(
+        ws,
+        `tabs:${worktree}`,
+        () => {
+          const changed = tabsResultIfChanged(worktree)
+          if (changed) {
+            respond(
+              success(request.id, renderScroll ? { type: 'updated', ...changed } : changed, true)
+            )
+          }
+        },
+        renderScroll ? 1000 : 3000
+      )
       return true
     }
 
     case 'session.tabs.unsubscribe':
-      stopTabsPushLoop(ws, worktreeOf(request))
+      stopNativeChatPush(ws, `tabs:${worktreeOf(request)}`)
       respond(success(request.id, { ok: true }))
       return true
 
     case 'session.tabs.activate':
+      if (renderScroll) {
+        activateRenderScrollTab(worktreeOf(request), request.params?.tabId)
+      }
+      respond(success(request.id, { ok: true }))
+      return true
+
     case 'nativeChat.unsubscribe':
       respond(success(request.id, { ok: true }))
       return true
@@ -243,7 +245,9 @@ export function handleMockNativeChatRequest(
       const entry = (handle: string) => ({
         handle,
         worktreeId,
-        title: CHAT_TITLE,
+        title: renderScroll
+          ? `Claude iPad ${findRenderScrollChat(handle)?.label ?? ''}`
+          : CHAT_TITLE,
         isActive: true,
         hasRunningProcess: true
       })
@@ -252,7 +256,9 @@ export function handleMockNativeChatRequest(
           ? []
           : mode === 'other'
             ? [entry('some-other-term')]
-            : [entry(TERMINAL_HANDLE)]
+            : renderScroll
+              ? getRenderScrollChats().map((chat) => entry(chat.terminal))
+              : [entry(TERMINAL_HANDLE)]
       respond(success(request.id, { terminals, totalCount: terminals.length, truncated: false }))
       return true
     }
@@ -268,8 +274,9 @@ export function handleMockNativeChatRequest(
       return true
 
     case 'terminal.subscribe': {
+      const terminal = renderScroll ? String(request.params?.terminal) : TERMINAL_HANDLE
       // The `subscribed` frame is what releases mobile's native-chat input lease.
-      respond(success(request.id, { type: 'subscribed', terminal: TERMINAL_HANDLE }, true))
+      respond(success(request.id, { type: 'subscribed', terminal }, true))
       if (readControl(TERMINAL_STREAM_MODE_FILE) === 'dead') {
         respond(success(request.id, { type: 'end' }))
         return true
@@ -291,10 +298,14 @@ export function handleMockNativeChatRequest(
         respond(error(request.id, 'mobile_input_floor_unavailable', 'Mobile input floor is held'))
         return true
       }
+      const chat = renderScroll ? findRenderScrollChat(request.params?.terminal) : undefined
+      if (chat && mode === 'accept') {
+        startRenderScrollReply(chat, String(request.params?.text ?? '').trim())
+      }
       respond(
         success(request.id, {
           send: {
-            handle: TERMINAL_HANDLE,
+            handle: chat?.terminal ?? TERMINAL_HANDLE,
             accepted: mode === 'accept',
             bytesWritten: mode === 'accept' ? String(request.params?.text ?? '').length : 0
           }
