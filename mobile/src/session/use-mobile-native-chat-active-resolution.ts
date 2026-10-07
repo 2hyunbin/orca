@@ -23,6 +23,7 @@ export function useMobileNativeChatActiveResolution(args: {
   activeTabAgentWorking: boolean
   nativeChatStatus: MobileNativeChatTab['agentStatus'] | null
   sourceIdentity: string
+  transcriptIdentity: string
   streamIdentity: string
   streamScopeKey: string
 } {
@@ -38,6 +39,10 @@ export function useMobileNativeChatActiveResolution(args: {
   const tabWantsChat =
     activeSessionTab?.type === 'agent-session' ||
     (activeSessionTabId ? isTabChatView(activeSessionTabId) : false)
+  const transcriptResolution = resolveMobileNativeChat(
+    activeSessionTab,
+    nativeChatTranscriptIsLocalReadable
+  )
   const activeChatResolution =
     activeSessionTab && activeSessionTabId && tabWantsChat
       ? resolveMobileNativeChat(activeSessionTab, nativeChatTranscriptIsLocalReadable)
@@ -77,6 +82,13 @@ export function useMobileNativeChatActiveResolution(args: {
     activeTabAgentWorking,
     nativeChatStatus,
     sourceIdentity: encodeNativeChatTranscriptIdentity([hostId, worktreeId]),
+    transcriptIdentity: encodeNativeChatTranscriptIdentity([
+      hostId,
+      worktreeId,
+      activeSessionTabId,
+      transcriptResolution?.agent ?? null,
+      transcriptResolution?.sessionId ?? providerSessionId
+    ]),
     streamIdentity,
     streamScopeKey
   }

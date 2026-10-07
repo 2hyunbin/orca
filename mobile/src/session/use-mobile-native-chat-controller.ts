@@ -73,7 +73,7 @@ export function useMobileNativeChatController(args: {
     showNativeChatRef,
     sourceIdentity,
     streamIdentity,
-    streamScopeKey,
+    transcriptIdentity,
     toggleTabChatView
   } = useMobileNativeChatActiveResolution({
     hostId,
@@ -308,7 +308,7 @@ export function useMobileNativeChatController(args: {
       : nativeChatAgentWorking,
     nativeChatStreamingText,
     nativeChatStreamLive,
-    nativeChatStreamScopeKey: streamScopeKey,
+    nativeChatStreamScopeKey: transcriptIdentity,
     ...promptCards,
     nativeChatAsk:
       !activeChatStructured && (askDismissal.showAsk || askDismissal.collapsedAsk)

@@ -143,7 +143,11 @@ vi.mock('../use-mobile-native-chat-queued-slot', () => ({
   useMobileNativeChatQueuedSlot: () => ({})
 }))
 vi.mock('../use-mobile-native-chat-streaming-bubble', () => ({
-  useMobileNativeChatStreamingBubble: () => null
+  useMobileNativeChatStreamingPresentation: () => ({
+    streaming: null,
+    streamingKey: 'streaming:0',
+    presentationKeys: {}
+  })
 }))
 
 let tree: ReactTestRenderer | null = null

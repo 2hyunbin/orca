@@ -1,0 +1,926 @@
+diff --git a/react-native.js b/react-native.js
+index b3c5a306b293f797a8b338adfca3060c0f6db22b..fd20b3b8479fdc4009bad9188ca94eace9bb0a56 100644
+--- a/react-native.js
++++ b/react-native.js
+@@ -1550,6 +1550,17 @@ function doScrollTo(ctx, params) {
+ }
+ 
+ // src/core/doMaintainScrollAtEnd.ts
++function acquireUserScroll(ctx) {
++  const state = ctx.state;
++  state.scheduledWork.cancel("maintainedEnd");
++  state.scheduledWork.cancel("maintainedEndCompletion");
++  state.scheduledWork.cancel("preservedEndAnchor");
++  state.maintainingScrollAtEnd = void 0;
++  state.pendingMaintainScrollAtEnd = false;
++  state.preservedEndAnchorCorrection = void 0;
++  supersedeInitialScroll(ctx);
++  cancelImperativeScroll(state);
++}
+ function doMaintainScrollAtEnd(ctx) {
+   const state = ctx.state;
+   const {
+@@ -1575,7 +1586,13 @@ function doMaintainScrollAtEnd(ctx) {
+       const activeState = maintainScrollAtEnd.animated ? "animated" : "instant";
+       const scrollAtRequest = state.scroll;
+       state.maintainingScrollAtEnd = pendingState;
+-      requestAnimationFrame(() => {
++      state.scheduledWork.frame(() => {
++        const maintainScrollAtEnd = state.props.maintainScrollAtEnd;
++        if (!maintainScrollAtEnd) {
++          state.maintainingScrollAtEnd = void 0;
++          state.pendingMaintainScrollAtEnd = false;
++          return;
++        }
+         const isStillWithinThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
+         const didScrollSinceRequest = state.scroll !== scrollAtRequest;
+         if (isStillWithinThreshold || !didScrollSinceRequest) {
+@@ -1595,7 +1612,7 @@ function doMaintainScrollAtEnd(ctx) {
+               animated: maintainScrollAtEnd.animated
+             });
+           }
+-          setTimeout(
++          state.scheduledWork.timeout(
+             () => {
+               if (state.maintainingScrollAtEnd === activeState) {
+                 state.maintainingScrollAtEnd = void 0;
+@@ -1604,13 +1621,14 @@ function doMaintainScrollAtEnd(ctx) {
+                 }
+               }
+             },
+-            maintainScrollAtEnd.animated ? 500 : 0
++            maintainScrollAtEnd.animated ? 500 : 0,
++            "maintainedEndCompletion"
+           );
+         } else if (state.maintainingScrollAtEnd === pendingState) {
+           state.maintainingScrollAtEnd = void 0;
+           state.pendingMaintainScrollAtEnd = false;
+         }
+-      });
++      }, "maintainedEnd");
+     } else {
+       state.pendingMaintainScrollAtEnd = true;
+     }
+@@ -1864,6 +1882,29 @@ function prepareMVCP(ctx, dataChanged) {
+         }
+       }
+     }
++    if (dataChanged && idsInViewWithPositions.length > 0) {
++      const nextIndexByKey = new Map(props.data.map((item, index) => [props.keyExtractor(item, index), index]));
++      if (!idsInViewWithPositions.some(({ id }) => nextIndexByKey.has(id))) {
++        const oldIndex = indexByKey.get(idsInViewWithPositions[0].id);
++        const oldData = state.previousData || props.data;
++        if (oldIndex !== void 0) {
++          for (let distance = 1; distance < oldData.length; distance++) {
++            let found = false;
++            for (const index of [oldIndex + distance, oldIndex - distance]) {
++              if (index < 0 || index >= oldData.length) continue;
++              const id = state.idCache[index] || props.keyExtractor(oldData[index], index);
++              const nextIndex = nextIndexByKey.get(id);
++              if (nextIndex === void 0 || positions[index] === void 0) continue;
++              if (shouldRestorePosition && !shouldRestorePosition(props.data[nextIndex], nextIndex, props.data)) continue;
++              idsInViewWithPositions.push({ id, position: prevScroll });
++              found = true;
++              break;
++            }
++            if (found) break;
++          }
++        }
++      }
++    }
+     if (targetId !== void 0 && prevPosition === void 0) {
+       const targetIndex = indexByKey.get(targetId);
+       if (targetIndex !== void 0) {
+@@ -2720,10 +2761,10 @@ function schedulePreservedEndAnchorCorrection(ctx) {
+ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+   const state = ctx.state;
+   state.preservedEndAnchorCorrection = correction;
+-  requestAnimationFrame(() => {
++  state.scheduledWork.frame(() => {
+     var _a3;
+     const activeCorrection = state.preservedEndAnchorCorrection;
+-    if (activeCorrection !== correction) {
++    if (activeCorrection !== correction || !state.props.maintainScrollAtEnd) {
+       return;
+     }
+     const offsetDiff = getPreservedEndAnchorOffsetDiff(ctx);
+@@ -2737,7 +2778,7 @@ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+       requestAdjust(ctx, offsetDiff);
+     }
+     schedulePreservedEndAnchorCorrectionFrame(ctx, correction);
+-  });
++  }, "preservedEndAnchor");
+ }
+ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
+   var _a3;
+@@ -7104,6 +7145,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onMetricsChange,
+     onLayout: onLayoutProp,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onRefresh,
+     onScroll: onScrollProp,
+@@ -7360,6 +7402,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onFirstVisibleItemChanged,
+     onItemSizeChanged,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onScroll: throttleScrollFn,
+     onScrollBeginDrag,
+@@ -7642,6 +7685,10 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+   const fns = React2.useMemo(
+     () => ({
+       getRenderedItem: (key) => getRenderedItem(ctx, key),
++      onMomentumScrollBegin: (event) => {
++        acquireUserScroll(ctx);
++        state.props.onMomentumScrollBegin?.(event);
++      },
+       onMomentumScrollEnd: (event) => {
+         checkFinishedScrollFallback(ctx);
+         if (state.props.onMomentumScrollEnd) {
+@@ -7651,6 +7698,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onScroll: (event) => onScroll(ctx, event),
+       onScrollBeginDrag: (event) => {
+         var _a4, _b2;
++        acquireUserScroll(ctx);
+         prepareReachedEdgeForNextUserScroll(ctx);
+         (_b2 = (_a4 = state.props).onScrollBeginDrag) == null ? void 0 : _b2.call(_a4, event);
+       },
+@@ -7680,6 +7728,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onInternalScrollEnd: fns.onScrollEnd,
+       onLayout,
+       onLayoutFooter,
++      onMomentumScrollBegin: fns.onMomentumScrollBegin,
+       onMomentumScrollEnd: fns.onMomentumScrollEnd,
+       onScroll: onScrollHandler,
+       recycleItems,
+diff --git a/react-native.mjs b/react-native.mjs
+index 40e87cda8c9bc79a889e5542f29af429a24b24d4..1868fd004556673a3ea007826583a0f843a4cece 100644
+--- a/react-native.mjs
++++ b/react-native.mjs
+@@ -1529,6 +1529,17 @@ function doScrollTo(ctx, params) {
+ }
+ 
+ // src/core/doMaintainScrollAtEnd.ts
++function acquireUserScroll(ctx) {
++  const state = ctx.state;
++  state.scheduledWork.cancel("maintainedEnd");
++  state.scheduledWork.cancel("maintainedEndCompletion");
++  state.scheduledWork.cancel("preservedEndAnchor");
++  state.maintainingScrollAtEnd = void 0;
++  state.pendingMaintainScrollAtEnd = false;
++  state.preservedEndAnchorCorrection = void 0;
++  supersedeInitialScroll(ctx);
++  cancelImperativeScroll(state);
++}
+ function doMaintainScrollAtEnd(ctx) {
+   const state = ctx.state;
+   const {
+@@ -1554,7 +1565,13 @@ function doMaintainScrollAtEnd(ctx) {
+       const activeState = maintainScrollAtEnd.animated ? "animated" : "instant";
+       const scrollAtRequest = state.scroll;
+       state.maintainingScrollAtEnd = pendingState;
+-      requestAnimationFrame(() => {
++      state.scheduledWork.frame(() => {
++        const maintainScrollAtEnd = state.props.maintainScrollAtEnd;
++        if (!maintainScrollAtEnd) {
++          state.maintainingScrollAtEnd = void 0;
++          state.pendingMaintainScrollAtEnd = false;
++          return;
++        }
+         const isStillWithinThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
+         const didScrollSinceRequest = state.scroll !== scrollAtRequest;
+         if (isStillWithinThreshold || !didScrollSinceRequest) {
+@@ -1574,7 +1591,7 @@ function doMaintainScrollAtEnd(ctx) {
+               animated: maintainScrollAtEnd.animated
+             });
+           }
+-          setTimeout(
++          state.scheduledWork.timeout(
+             () => {
+               if (state.maintainingScrollAtEnd === activeState) {
+                 state.maintainingScrollAtEnd = void 0;
+@@ -1583,13 +1600,14 @@ function doMaintainScrollAtEnd(ctx) {
+                 }
+               }
+             },
+-            maintainScrollAtEnd.animated ? 500 : 0
++            maintainScrollAtEnd.animated ? 500 : 0,
++            "maintainedEndCompletion"
+           );
+         } else if (state.maintainingScrollAtEnd === pendingState) {
+           state.maintainingScrollAtEnd = void 0;
+           state.pendingMaintainScrollAtEnd = false;
+         }
+-      });
++      }, "maintainedEnd");
+     } else {
+       state.pendingMaintainScrollAtEnd = true;
+     }
+@@ -1843,6 +1861,29 @@ function prepareMVCP(ctx, dataChanged) {
+         }
+       }
+     }
++    if (dataChanged && idsInViewWithPositions.length > 0) {
++      const nextIndexByKey = new Map(props.data.map((item, index) => [props.keyExtractor(item, index), index]));
++      if (!idsInViewWithPositions.some(({ id }) => nextIndexByKey.has(id))) {
++        const oldIndex = indexByKey.get(idsInViewWithPositions[0].id);
++        const oldData = state.previousData || props.data;
++        if (oldIndex !== void 0) {
++          for (let distance = 1; distance < oldData.length; distance++) {
++            let found = false;
++            for (const index of [oldIndex + distance, oldIndex - distance]) {
++              if (index < 0 || index >= oldData.length) continue;
++              const id = state.idCache[index] || props.keyExtractor(oldData[index], index);
++              const nextIndex = nextIndexByKey.get(id);
++              if (nextIndex === void 0 || positions[index] === void 0) continue;
++              if (shouldRestorePosition && !shouldRestorePosition(props.data[nextIndex], nextIndex, props.data)) continue;
++              idsInViewWithPositions.push({ id, position: prevScroll });
++              found = true;
++              break;
++            }
++            if (found) break;
++          }
++        }
++      }
++    }
+     if (targetId !== void 0 && prevPosition === void 0) {
+       const targetIndex = indexByKey.get(targetId);
+       if (targetIndex !== void 0) {
+@@ -2699,10 +2740,10 @@ function schedulePreservedEndAnchorCorrection(ctx) {
+ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+   const state = ctx.state;
+   state.preservedEndAnchorCorrection = correction;
+-  requestAnimationFrame(() => {
++  state.scheduledWork.frame(() => {
+     var _a3;
+     const activeCorrection = state.preservedEndAnchorCorrection;
+-    if (activeCorrection !== correction) {
++    if (activeCorrection !== correction || !state.props.maintainScrollAtEnd) {
+       return;
+     }
+     const offsetDiff = getPreservedEndAnchorOffsetDiff(ctx);
+@@ -2716,7 +2757,7 @@ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+       requestAdjust(ctx, offsetDiff);
+     }
+     schedulePreservedEndAnchorCorrectionFrame(ctx, correction);
+-  });
++  }, "preservedEndAnchor");
+ }
+ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
+   var _a3;
+@@ -7083,6 +7124,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onMetricsChange,
+     onLayout: onLayoutProp,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onRefresh,
+     onScroll: onScrollProp,
+@@ -7339,6 +7381,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onFirstVisibleItemChanged,
+     onItemSizeChanged,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onScroll: throttleScrollFn,
+     onScrollBeginDrag,
+@@ -7621,6 +7664,10 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+   const fns = useMemo(
+     () => ({
+       getRenderedItem: (key) => getRenderedItem(ctx, key),
++      onMomentumScrollBegin: (event) => {
++        acquireUserScroll(ctx);
++        state.props.onMomentumScrollBegin?.(event);
++      },
+       onMomentumScrollEnd: (event) => {
+         checkFinishedScrollFallback(ctx);
+         if (state.props.onMomentumScrollEnd) {
+@@ -7630,6 +7677,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onScroll: (event) => onScroll(ctx, event),
+       onScrollBeginDrag: (event) => {
+         var _a4, _b2;
++        acquireUserScroll(ctx);
+         prepareReachedEdgeForNextUserScroll(ctx);
+         (_b2 = (_a4 = state.props).onScrollBeginDrag) == null ? void 0 : _b2.call(_a4, event);
+       },
+@@ -7659,6 +7707,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onInternalScrollEnd: fns.onScrollEnd,
+       onLayout,
+       onLayoutFooter,
++      onMomentumScrollBegin: fns.onMomentumScrollBegin,
+       onMomentumScrollEnd: fns.onMomentumScrollEnd,
+       onScroll: onScrollHandler,
+       recycleItems,
+diff --git a/react-native.web.js b/react-native.web.js
+index 914d2dafaafa001c9ab6791a0a0581659295e333..8590e4d7d85a5df0df1b8c5b3dcb330bdd2da5cd 100644
+--- a/react-native.web.js
++++ b/react-native.web.js
+@@ -1426,6 +1426,17 @@ function listenForScrollEnd(ctx, params) {
+ }
+ 
+ // src/core/doMaintainScrollAtEnd.ts
++function acquireUserScroll(ctx) {
++  const state = ctx.state;
++  state.scheduledWork.cancel("maintainedEnd");
++  state.scheduledWork.cancel("maintainedEndCompletion");
++  state.scheduledWork.cancel("preservedEndAnchor");
++  state.maintainingScrollAtEnd = void 0;
++  state.pendingMaintainScrollAtEnd = false;
++  state.preservedEndAnchorCorrection = void 0;
++  supersedeInitialScroll(ctx);
++  cancelImperativeScroll(state);
++}
+ function doMaintainScrollAtEnd(ctx) {
+   const state = ctx.state;
+   const {
+@@ -1451,7 +1462,13 @@ function doMaintainScrollAtEnd(ctx) {
+       const activeState = maintainScrollAtEnd.animated ? "animated" : "instant";
+       const scrollAtRequest = state.scroll;
+       state.maintainingScrollAtEnd = pendingState;
+-      requestAnimationFrame(() => {
++      state.scheduledWork.frame(() => {
++        const maintainScrollAtEnd = state.props.maintainScrollAtEnd;
++        if (!maintainScrollAtEnd) {
++          state.maintainingScrollAtEnd = void 0;
++          state.pendingMaintainScrollAtEnd = false;
++          return;
++        }
+         const isStillWithinThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
+         const didScrollSinceRequest = state.scroll !== scrollAtRequest;
+         if (isStillWithinThreshold || !didScrollSinceRequest) {
+@@ -1471,7 +1488,7 @@ function doMaintainScrollAtEnd(ctx) {
+               animated: maintainScrollAtEnd.animated
+             });
+           }
+-          setTimeout(
++          state.scheduledWork.timeout(
+             () => {
+               if (state.maintainingScrollAtEnd === activeState) {
+                 state.maintainingScrollAtEnd = void 0;
+@@ -1480,13 +1497,14 @@ function doMaintainScrollAtEnd(ctx) {
+                 }
+               }
+             },
+-            maintainScrollAtEnd.animated ? 500 : 0
++            maintainScrollAtEnd.animated ? 500 : 0,
++            "maintainedEndCompletion"
+           );
+         } else if (state.maintainingScrollAtEnd === pendingState) {
+           state.maintainingScrollAtEnd = void 0;
+           state.pendingMaintainScrollAtEnd = false;
+         }
+-      });
++      }, "maintainedEnd");
+     } else {
+       state.pendingMaintainScrollAtEnd = true;
+     }
+@@ -1701,6 +1719,29 @@ function prepareMVCP(ctx, dataChanged) {
+         }
+       }
+     }
++    if (dataChanged && idsInViewWithPositions.length > 0) {
++      const nextIndexByKey = new Map(props.data.map((item, index) => [props.keyExtractor(item, index), index]));
++      if (!idsInViewWithPositions.some(({ id }) => nextIndexByKey.has(id))) {
++        const oldIndex = indexByKey.get(idsInViewWithPositions[0].id);
++        const oldData = state.previousData || props.data;
++        if (oldIndex !== void 0) {
++          for (let distance = 1; distance < oldData.length; distance++) {
++            let found = false;
++            for (const index of [oldIndex + distance, oldIndex - distance]) {
++              if (index < 0 || index >= oldData.length) continue;
++              const id = state.idCache[index] || props.keyExtractor(oldData[index], index);
++              const nextIndex = nextIndexByKey.get(id);
++              if (nextIndex === void 0 || positions[index] === void 0) continue;
++              if (shouldRestorePosition && !shouldRestorePosition(props.data[nextIndex], nextIndex, props.data)) continue;
++              idsInViewWithPositions.push({ id, position: prevScroll });
++              found = true;
++              break;
++            }
++            if (found) break;
++          }
++        }
++      }
++    }
+     if (targetId !== void 0 && prevPosition === void 0) {
+       const targetIndex = indexByKey.get(targetId);
+       if (targetIndex !== void 0) {
+@@ -2565,10 +2606,10 @@ function schedulePreservedEndAnchorCorrection(ctx) {
+ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+   const state = ctx.state;
+   state.preservedEndAnchorCorrection = correction;
+-  requestAnimationFrame(() => {
++  state.scheduledWork.frame(() => {
+     var _a3;
+     const activeCorrection = state.preservedEndAnchorCorrection;
+-    if (activeCorrection !== correction) {
++    if (activeCorrection !== correction || !state.props.maintainScrollAtEnd) {
+       return;
+     }
+     const offsetDiff = getPreservedEndAnchorOffsetDiff(ctx);
+@@ -2582,7 +2623,7 @@ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+       requestAdjust(ctx, offsetDiff);
+     }
+     schedulePreservedEndAnchorCorrectionFrame(ctx, correction);
+-  });
++  }, "preservedEndAnchor");
+ }
+ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
+   var _a3;
+@@ -6056,7 +6097,8 @@ var ListComponentScrollView = React3.forwardRef(function ListComponentScrollView
+   maintainVisibleContentPosition,
+   onScroll: onScroll2,
+   onInternalScrollEnd,
+-  onMomentumScrollEnd: _onMomentumScrollEnd,
++  onMomentumScrollBegin,
++  onMomentumScrollEnd,
+   showsHorizontalScrollIndicator = true,
+   showsVerticalScrollIndicator = true,
+   refreshControl,
+@@ -6159,8 +6201,8 @@ var ListComponentScrollView = React3.forwardRef(function ListComponentScrollView
+     };
+     return api;
+   }, [getCurrentScrollOffset, getMaxScrollOffset, getScrollTarget, horizontal, isWindowScroll, scrollToLocalOffset]);
+-  const emitScroll = React3.useCallback(() => {
+-    if (!onScroll2 || !scrollRef.current) {
++  const readScrollEvent = React3.useCallback(() => {
++    if (!scrollRef.current) {
+       return;
+     }
+     const contentSize = getContentSize2(contentRef.current);
+@@ -6182,8 +6224,14 @@ var ListComponentScrollView = React3.forwardRef(function ListComponentScrollView
+         }
+       }
+     };
+-    onScroll2(scrollEvent);
+-  }, [getCurrentScrollOffset, horizontal, isWindowScroll, onScroll2]);
++    return scrollEvent;
++  }, [getCurrentScrollOffset, horizontal, isWindowScroll]);
++  const emitScroll = React3.useCallback(() => {
++    const event = readScrollEvent();
++    if (event) onScroll2?.(event);
++  }, [onScroll2, readScrollEvent]);
++  const userInputActive = React3.useRef(false);
++  const touchPointer = React3.useRef(void 0);
+   const scrollEventCoalescer = useRafCoalescer(emitScroll);
+   const scrollEndFallbackRef = React3.useRef(void 0);
+   const emitScrollEnd = React3.useCallback(() => {
+@@ -6194,7 +6242,63 @@ var ListComponentScrollView = React3.forwardRef(function ListComponentScrollView
+     }
+     scrollEventCoalescer.flush();
+     onInternalScrollEnd == null ? void 0 : onInternalScrollEnd();
+-  }, [onInternalScrollEnd, scrollEventCoalescer]);
++    if (userInputActive.current) {
++      userInputActive.current = false;
++      const event = readScrollEvent();
++      if (event) onMomentumScrollEnd?.(event);
++    }
++  }, [onInternalScrollEnd, onMomentumScrollEnd, readScrollEvent, scrollEventCoalescer]);
++  const scheduleScrollEnd = React3.useCallback(() => {
++    if (scrollEndFallbackRef.current !== void 0) clearTimeout(scrollEndFallbackRef.current);
++    scrollEndFallbackRef.current = setTimeout(emitScrollEnd, SCROLL_END_FALLBACK_MS);
++  }, [emitScrollEnd]);
++  const beginUserInput = React3.useCallback(() => {
++    if (!userInputActive.current) {
++      const event = readScrollEvent();
++      if (!event) return;
++      userInputActive.current = true;
++      onMomentumScrollBegin?.(event);
++    }
++    scheduleScrollEnd();
++  }, [onMomentumScrollBegin, readScrollEvent, scheduleScrollEnd]);
++  const canMove = React3.useCallback((direction) => {
++    const offset = getCurrentScrollOffset();
++    return direction < 0 ? offset > 0 : direction > 0 && offset < getMaxScrollOffset();
++  }, [getCurrentScrollOffset, getMaxScrollOffset]);
++  const editableTarget = (target) => !!target?.closest?.("input,textarea,select,[contenteditable]:not([contenteditable='false'])");
++  const onWheelInput = React3.useCallback((event) => {
++    if (event.defaultPrevented || event.ctrlKey || event.metaKey || editableTarget(event.target)) return;
++    const delta = horizontal ? event.deltaX || (event.shiftKey ? event.deltaY : 0) : event.shiftKey ? 0 : event.deltaY;
++    if (canMove(delta)) beginUserInput();
++  }, [beginUserInput, canMove, horizontal]);
++  const onKeyInput = React3.useCallback((event) => {
++    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
++      editableTarget(event.target) || event.target?.closest?.("a,button,[role='button'],[role='link']")) return;
++    const direction = ["ArrowUp", "PageUp", "Home"].includes(event.key) ? -1 :
++      ["ArrowDown", "PageDown", "End", " "].includes(event.key) ? 1 : 0;
++    if (canMove(direction)) beginUserInput();
++  }, [beginUserInput, canMove]);
++  const onPointerInput = React3.useCallback((event) => {
++    if (event.defaultPrevented || editableTarget(event.target)) return;
++    if (event.type === "pointerdown") {
++      if (event.pointerType === "touch") {
++        touchPointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
++      } else if (event.button === 0 && event.target === scrollRef.current) {
++        const rect = scrollRef.current.getBoundingClientRect();
++        const element = scrollRef.current;
++        if (event.clientX >= rect.left + element.clientWidth || event.clientY >= rect.top + element.clientHeight) beginUserInput();
++      }
++    } else if (event.type === "pointermove") {
++      const pointer = touchPointer.current;
++      if (pointer?.id === event.pointerId) {
++        const direction = horizontal ? pointer.x - event.clientX : pointer.y - event.clientY;
++        if (canMove(direction)) beginUserInput();
++      }
++    } else {
++      touchPointer.current = void 0;
++      if (userInputActive.current) scheduleScrollEnd();
++    }
++  }, [beginUserInput, canMove, horizontal, scheduleScrollEnd]);
+   const handleScroll = React3.useCallback(
+     (_event) => {
+       if (!onScroll2) {
+@@ -6207,24 +6311,26 @@ var ListComponentScrollView = React3.forwardRef(function ListComponentScrollView
+       } else {
+         scrollEventCoalescer.schedule();
+       }
+-      if (onInternalScrollEnd) {
+-        const timeout = scrollEndFallbackRef.current;
+-        if (timeout !== void 0) {
+-          clearTimeout(timeout);
+-        }
+-        scrollEndFallbackRef.current = setTimeout(emitScrollEnd, SCROLL_END_FALLBACK_MS);
+-      }
++      if (onInternalScrollEnd) scheduleScrollEnd();
+     },
+-    [ctx.state, emitScrollEnd, onInternalScrollEnd, onScroll2, scrollEventCoalescer]
++    [ctx.state, onInternalScrollEnd, onScroll2, scheduleScrollEnd, scrollEventCoalescer]
+   );
+   React3.useLayoutEffect(() => {
+     const target = getScrollTarget();
+     if (!target) return;
++    target.addEventListener("wheel", onWheelInput, { passive: true });
++    target.addEventListener("keydown", onKeyInput);
++    for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) target.addEventListener(type, onPointerInput, { passive: true });
+     target.addEventListener("scroll", handleScroll, { passive: true });
+     if ("onscrollend" in target) {
+       target.addEventListener("scrollend", emitScrollEnd);
+     }
+     return () => {
++      target.removeEventListener("wheel", onWheelInput);
++      target.removeEventListener("keydown", onKeyInput);
++      for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) target.removeEventListener(type, onPointerInput);
++      userInputActive.current = false;
++      touchPointer.current = void 0;
+       target.removeEventListener("scroll", handleScroll);
+       if ("onscrollend" in target) {
+         target.removeEventListener("scrollend", emitScrollEnd);
+@@ -6236,7 +6342,7 @@ var ListComponentScrollView = React3.forwardRef(function ListComponentScrollView
+       }
+       scrollEventCoalescer.cancel();
+     };
+-  }, [emitScrollEnd, getScrollTarget, handleScroll, scrollEventCoalescer]);
++  }, [emitScrollEnd, getScrollTarget, handleScroll, onKeyInput, onPointerInput, onWheelInput, scrollEventCoalescer]);
+   React3.useEffect(() => {
+     const doScroll = () => {
+       if (contentOffset) {
+@@ -7748,6 +7854,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onMetricsChange,
+     onLayout: onLayoutProp,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onRefresh,
+     onScroll: onScrollProp,
+@@ -8004,6 +8111,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onFirstVisibleItemChanged,
+     onItemSizeChanged,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onScroll: throttleScrollFn,
+     onScrollBeginDrag,
+@@ -8278,6 +8386,10 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+   const fns = React3.useMemo(
+     () => ({
+       getRenderedItem: (key) => getRenderedItem(ctx, key),
++      onMomentumScrollBegin: (event) => {
++        acquireUserScroll(ctx);
++        state.props.onMomentumScrollBegin?.(event);
++      },
+       onMomentumScrollEnd: (event) => {
+         checkFinishedScrollFallback(ctx);
+         if (state.props.onMomentumScrollEnd) {
+@@ -8287,6 +8399,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onScroll: (event) => onScroll(ctx, event),
+       onScrollBeginDrag: (event) => {
+         var _a4, _b2;
++        acquireUserScroll(ctx);
+         prepareReachedEdgeForNextUserScroll(ctx);
+         (_b2 = (_a4 = state.props).onScrollBeginDrag) == null ? void 0 : _b2.call(_a4, event);
+       },
+@@ -8316,6 +8429,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onInternalScrollEnd: fns.onScrollEnd,
+       onLayout,
+       onLayoutFooter,
++      onMomentumScrollBegin: fns.onMomentumScrollBegin,
+       onMomentumScrollEnd: fns.onMomentumScrollEnd,
+       onScroll: onScrollHandler,
+       recycleItems,
+diff --git a/react-native.web.mjs b/react-native.web.mjs
+index 95465f2ab89ce41a10553f58af83618f7310e83c..7c94b421e6ec62c3487fb125a09ffe6d3990fe5d 100644
+--- a/react-native.web.mjs
++++ b/react-native.web.mjs
+@@ -1405,6 +1405,17 @@ function listenForScrollEnd(ctx, params) {
+ }
+ 
+ // src/core/doMaintainScrollAtEnd.ts
++function acquireUserScroll(ctx) {
++  const state = ctx.state;
++  state.scheduledWork.cancel("maintainedEnd");
++  state.scheduledWork.cancel("maintainedEndCompletion");
++  state.scheduledWork.cancel("preservedEndAnchor");
++  state.maintainingScrollAtEnd = void 0;
++  state.pendingMaintainScrollAtEnd = false;
++  state.preservedEndAnchorCorrection = void 0;
++  supersedeInitialScroll(ctx);
++  cancelImperativeScroll(state);
++}
+ function doMaintainScrollAtEnd(ctx) {
+   const state = ctx.state;
+   const {
+@@ -1430,7 +1441,13 @@ function doMaintainScrollAtEnd(ctx) {
+       const activeState = maintainScrollAtEnd.animated ? "animated" : "instant";
+       const scrollAtRequest = state.scroll;
+       state.maintainingScrollAtEnd = pendingState;
+-      requestAnimationFrame(() => {
++      state.scheduledWork.frame(() => {
++        const maintainScrollAtEnd = state.props.maintainScrollAtEnd;
++        if (!maintainScrollAtEnd) {
++          state.maintainingScrollAtEnd = void 0;
++          state.pendingMaintainScrollAtEnd = false;
++          return;
++        }
+         const isStillWithinThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
+         const didScrollSinceRequest = state.scroll !== scrollAtRequest;
+         if (isStillWithinThreshold || !didScrollSinceRequest) {
+@@ -1450,7 +1467,7 @@ function doMaintainScrollAtEnd(ctx) {
+               animated: maintainScrollAtEnd.animated
+             });
+           }
+-          setTimeout(
++          state.scheduledWork.timeout(
+             () => {
+               if (state.maintainingScrollAtEnd === activeState) {
+                 state.maintainingScrollAtEnd = void 0;
+@@ -1459,13 +1476,14 @@ function doMaintainScrollAtEnd(ctx) {
+                 }
+               }
+             },
+-            maintainScrollAtEnd.animated ? 500 : 0
++            maintainScrollAtEnd.animated ? 500 : 0,
++            "maintainedEndCompletion"
+           );
+         } else if (state.maintainingScrollAtEnd === pendingState) {
+           state.maintainingScrollAtEnd = void 0;
+           state.pendingMaintainScrollAtEnd = false;
+         }
+-      });
++      }, "maintainedEnd");
+     } else {
+       state.pendingMaintainScrollAtEnd = true;
+     }
+@@ -1680,6 +1698,29 @@ function prepareMVCP(ctx, dataChanged) {
+         }
+       }
+     }
++    if (dataChanged && idsInViewWithPositions.length > 0) {
++      const nextIndexByKey = new Map(props.data.map((item, index) => [props.keyExtractor(item, index), index]));
++      if (!idsInViewWithPositions.some(({ id }) => nextIndexByKey.has(id))) {
++        const oldIndex = indexByKey.get(idsInViewWithPositions[0].id);
++        const oldData = state.previousData || props.data;
++        if (oldIndex !== void 0) {
++          for (let distance = 1; distance < oldData.length; distance++) {
++            let found = false;
++            for (const index of [oldIndex + distance, oldIndex - distance]) {
++              if (index < 0 || index >= oldData.length) continue;
++              const id = state.idCache[index] || props.keyExtractor(oldData[index], index);
++              const nextIndex = nextIndexByKey.get(id);
++              if (nextIndex === void 0 || positions[index] === void 0) continue;
++              if (shouldRestorePosition && !shouldRestorePosition(props.data[nextIndex], nextIndex, props.data)) continue;
++              idsInViewWithPositions.push({ id, position: prevScroll });
++              found = true;
++              break;
++            }
++            if (found) break;
++          }
++        }
++      }
++    }
+     if (targetId !== void 0 && prevPosition === void 0) {
+       const targetIndex = indexByKey.get(targetId);
+       if (targetIndex !== void 0) {
+@@ -2544,10 +2585,10 @@ function schedulePreservedEndAnchorCorrection(ctx) {
+ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+   const state = ctx.state;
+   state.preservedEndAnchorCorrection = correction;
+-  requestAnimationFrame(() => {
++  state.scheduledWork.frame(() => {
+     var _a3;
+     const activeCorrection = state.preservedEndAnchorCorrection;
+-    if (activeCorrection !== correction) {
++    if (activeCorrection !== correction || !state.props.maintainScrollAtEnd) {
+       return;
+     }
+     const offsetDiff = getPreservedEndAnchorOffsetDiff(ctx);
+@@ -2561,7 +2602,7 @@ function schedulePreservedEndAnchorCorrectionFrame(ctx, correction) {
+       requestAdjust(ctx, offsetDiff);
+     }
+     schedulePreservedEndAnchorCorrectionFrame(ctx, correction);
+-  });
++  }, "preservedEndAnchor");
+ }
+ function clearFinishedBootstrapInitialScrollTargetIfMovedAway(ctx) {
+   var _a3;
+@@ -6035,7 +6076,8 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
+   maintainVisibleContentPosition,
+   onScroll: onScroll2,
+   onInternalScrollEnd,
+-  onMomentumScrollEnd: _onMomentumScrollEnd,
++  onMomentumScrollBegin,
++  onMomentumScrollEnd,
+   showsHorizontalScrollIndicator = true,
+   showsVerticalScrollIndicator = true,
+   refreshControl,
+@@ -6138,8 +6180,8 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
+     };
+     return api;
+   }, [getCurrentScrollOffset, getMaxScrollOffset, getScrollTarget, horizontal, isWindowScroll, scrollToLocalOffset]);
+-  const emitScroll = useCallback(() => {
+-    if (!onScroll2 || !scrollRef.current) {
++  const readScrollEvent = useCallback(() => {
++    if (!scrollRef.current) {
+       return;
+     }
+     const contentSize = getContentSize2(contentRef.current);
+@@ -6161,8 +6203,14 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
+         }
+       }
+     };
+-    onScroll2(scrollEvent);
+-  }, [getCurrentScrollOffset, horizontal, isWindowScroll, onScroll2]);
++    return scrollEvent;
++  }, [getCurrentScrollOffset, horizontal, isWindowScroll]);
++  const emitScroll = useCallback(() => {
++    const event = readScrollEvent();
++    if (event) onScroll2?.(event);
++  }, [onScroll2, readScrollEvent]);
++  const userInputActive = useRef(false);
++  const touchPointer = useRef(void 0);
+   const scrollEventCoalescer = useRafCoalescer(emitScroll);
+   const scrollEndFallbackRef = useRef(void 0);
+   const emitScrollEnd = useCallback(() => {
+@@ -6173,7 +6221,63 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
+     }
+     scrollEventCoalescer.flush();
+     onInternalScrollEnd == null ? void 0 : onInternalScrollEnd();
+-  }, [onInternalScrollEnd, scrollEventCoalescer]);
++    if (userInputActive.current) {
++      userInputActive.current = false;
++      const event = readScrollEvent();
++      if (event) onMomentumScrollEnd?.(event);
++    }
++  }, [onInternalScrollEnd, onMomentumScrollEnd, readScrollEvent, scrollEventCoalescer]);
++  const scheduleScrollEnd = useCallback(() => {
++    if (scrollEndFallbackRef.current !== void 0) clearTimeout(scrollEndFallbackRef.current);
++    scrollEndFallbackRef.current = setTimeout(emitScrollEnd, SCROLL_END_FALLBACK_MS);
++  }, [emitScrollEnd]);
++  const beginUserInput = useCallback(() => {
++    if (!userInputActive.current) {
++      const event = readScrollEvent();
++      if (!event) return;
++      userInputActive.current = true;
++      onMomentumScrollBegin?.(event);
++    }
++    scheduleScrollEnd();
++  }, [onMomentumScrollBegin, readScrollEvent, scheduleScrollEnd]);
++  const canMove = useCallback((direction) => {
++    const offset = getCurrentScrollOffset();
++    return direction < 0 ? offset > 0 : direction > 0 && offset < getMaxScrollOffset();
++  }, [getCurrentScrollOffset, getMaxScrollOffset]);
++  const editableTarget = (target) => !!target?.closest?.("input,textarea,select,[contenteditable]:not([contenteditable='false'])");
++  const onWheelInput = useCallback((event) => {
++    if (event.defaultPrevented || event.ctrlKey || event.metaKey || editableTarget(event.target)) return;
++    const delta = horizontal ? event.deltaX || (event.shiftKey ? event.deltaY : 0) : event.shiftKey ? 0 : event.deltaY;
++    if (canMove(delta)) beginUserInput();
++  }, [beginUserInput, canMove, horizontal]);
++  const onKeyInput = useCallback((event) => {
++    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
++      editableTarget(event.target) || event.target?.closest?.("a,button,[role='button'],[role='link']")) return;
++    const direction = ["ArrowUp", "PageUp", "Home"].includes(event.key) ? -1 :
++      ["ArrowDown", "PageDown", "End", " "].includes(event.key) ? 1 : 0;
++    if (canMove(direction)) beginUserInput();
++  }, [beginUserInput, canMove]);
++  const onPointerInput = useCallback((event) => {
++    if (event.defaultPrevented || editableTarget(event.target)) return;
++    if (event.type === "pointerdown") {
++      if (event.pointerType === "touch") {
++        touchPointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
++      } else if (event.button === 0 && event.target === scrollRef.current) {
++        const rect = scrollRef.current.getBoundingClientRect();
++        const element = scrollRef.current;
++        if (event.clientX >= rect.left + element.clientWidth || event.clientY >= rect.top + element.clientHeight) beginUserInput();
++      }
++    } else if (event.type === "pointermove") {
++      const pointer = touchPointer.current;
++      if (pointer?.id === event.pointerId) {
++        const direction = horizontal ? pointer.x - event.clientX : pointer.y - event.clientY;
++        if (canMove(direction)) beginUserInput();
++      }
++    } else {
++      touchPointer.current = void 0;
++      if (userInputActive.current) scheduleScrollEnd();
++    }
++  }, [beginUserInput, canMove, horizontal, scheduleScrollEnd]);
+   const handleScroll = useCallback(
+     (_event) => {
+       if (!onScroll2) {
+@@ -6186,24 +6290,26 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
+       } else {
+         scrollEventCoalescer.schedule();
+       }
+-      if (onInternalScrollEnd) {
+-        const timeout = scrollEndFallbackRef.current;
+-        if (timeout !== void 0) {
+-          clearTimeout(timeout);
+-        }
+-        scrollEndFallbackRef.current = setTimeout(emitScrollEnd, SCROLL_END_FALLBACK_MS);
+-      }
++      if (onInternalScrollEnd) scheduleScrollEnd();
+     },
+-    [ctx.state, emitScrollEnd, onInternalScrollEnd, onScroll2, scrollEventCoalescer]
++    [ctx.state, onInternalScrollEnd, onScroll2, scheduleScrollEnd, scrollEventCoalescer]
+   );
+   useLayoutEffect(() => {
+     const target = getScrollTarget();
+     if (!target) return;
++    target.addEventListener("wheel", onWheelInput, { passive: true });
++    target.addEventListener("keydown", onKeyInput);
++    for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) target.addEventListener(type, onPointerInput, { passive: true });
+     target.addEventListener("scroll", handleScroll, { passive: true });
+     if ("onscrollend" in target) {
+       target.addEventListener("scrollend", emitScrollEnd);
+     }
+     return () => {
++      target.removeEventListener("wheel", onWheelInput);
++      target.removeEventListener("keydown", onKeyInput);
++      for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) target.removeEventListener(type, onPointerInput);
++      userInputActive.current = false;
++      touchPointer.current = void 0;
+       target.removeEventListener("scroll", handleScroll);
+       if ("onscrollend" in target) {
+         target.removeEventListener("scrollend", emitScrollEnd);
+@@ -6215,7 +6321,7 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
+       }
+       scrollEventCoalescer.cancel();
+     };
+-  }, [emitScrollEnd, getScrollTarget, handleScroll, scrollEventCoalescer]);
++  }, [emitScrollEnd, getScrollTarget, handleScroll, onKeyInput, onPointerInput, onWheelInput, scrollEventCoalescer]);
+   useEffect(() => {
+     const doScroll = () => {
+       if (contentOffset) {
+@@ -7727,6 +7833,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onMetricsChange,
+     onLayout: onLayoutProp,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onRefresh,
+     onScroll: onScrollProp,
+@@ -7983,6 +8090,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+     onFirstVisibleItemChanged,
+     onItemSizeChanged,
+     onLoad,
++    onMomentumScrollBegin,
+     onMomentumScrollEnd,
+     onScroll: throttleScrollFn,
+     onScrollBeginDrag,
+@@ -8257,6 +8365,10 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+   const fns = useMemo(
+     () => ({
+       getRenderedItem: (key) => getRenderedItem(ctx, key),
++      onMomentumScrollBegin: (event) => {
++        acquireUserScroll(ctx);
++        state.props.onMomentumScrollBegin?.(event);
++      },
+       onMomentumScrollEnd: (event) => {
+         checkFinishedScrollFallback(ctx);
+         if (state.props.onMomentumScrollEnd) {
+@@ -8266,6 +8378,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onScroll: (event) => onScroll(ctx, event),
+       onScrollBeginDrag: (event) => {
+         var _a4, _b2;
++        acquireUserScroll(ctx);
+         prepareReachedEdgeForNextUserScroll(ctx);
+         (_b2 = (_a4 = state.props).onScrollBeginDrag) == null ? void 0 : _b2.call(_a4, event);
+       },
+@@ -8295,6 +8408,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
+       onInternalScrollEnd: fns.onScrollEnd,
+       onLayout,
+       onLayoutFooter,
++      onMomentumScrollBegin: fns.onMomentumScrollBegin,
+       onMomentumScrollEnd: fns.onMomentumScrollEnd,
+       onScroll: onScrollHandler,
+       recycleItems,

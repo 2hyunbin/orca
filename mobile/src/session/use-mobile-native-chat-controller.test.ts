@@ -970,7 +970,8 @@ describe('useMobileNativeChatController streaming scope', () => {
 
   it('keeps the delayed-send route guard view-gated, unlike the stream scope', () => {
     const before = answerSendArgs.at(-1)?.streamIdentity
-    expect(before).toBe(controller?.nativeChatStreamScopeKey)
+    const transcriptScope = controller?.nativeChatStreamScopeKey
+    expect(before).toContain('session-1')
 
     viewMode.isTabChatView = () => false
     act(() => renderer?.update(createElement(Harness)))
@@ -978,6 +979,6 @@ describe('useMobileNativeChatController streaming scope', () => {
     const after = answerSendArgs.at(-1)?.streamIdentity
     expect(after).not.toBe(before)
     expect(after).not.toContain('session-1')
-    expect(controller?.nativeChatStreamScopeKey).toBe(before)
+    expect(controller?.nativeChatStreamScopeKey).toBe(transcriptScope)
   })
 })

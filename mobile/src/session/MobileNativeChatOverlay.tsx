@@ -4,7 +4,7 @@ import { MobileNativeChatView, type MobileNativeChatInputLockReason } from './Mo
 import { foldMobileNativeChatMessages } from './mobile-native-chat-render-data'
 import type { MobileNativeChatImageAttachments } from './use-mobile-native-chat-image-attachments'
 import type { MobileNativeChatController } from './use-mobile-native-chat-controller'
-import { useMobileNativeChatStreamingBubble } from './use-mobile-native-chat-streaming-bubble'
+import { useMobileNativeChatStreamingPresentation } from './use-mobile-native-chat-streaming-bubble'
 import { useMobileNativeChatQueuedSlot } from './use-mobile-native-chat-queued-slot'
 
 type Props = {
@@ -54,11 +54,12 @@ export function MobileNativeChatOverlay({
 }: Props): React.JSX.Element | null {
   const session = controller.nativeChatSession
   const folded = useMemo(() => foldMobileNativeChatMessages(session.messages), [session.messages])
-  const streaming = useMobileNativeChatStreamingBubble(
+  const preview = useMobileNativeChatStreamingPresentation(
     folded,
     controller.nativeChatStreamingText,
     controller.nativeChatStreamScopeKey,
-    controller.nativeChatStreamLive
+    controller.nativeChatStreamLive,
+    { sourceSettled: session.status === 'ready', abandon: session.readFailedFinally === true }
   )
   const queued = controller.nativeChatQueued
   const queuedSlot = useMobileNativeChatQueuedSlot({
@@ -92,7 +93,10 @@ export function MobileNativeChatOverlay({
         workingStartedAt={controller.nativeChatWorkingStartedAt}
         settledTurns={controller.nativeChatSettledTurns}
         turnJournal={controller.nativeChatTurnJournal}
-        streaming={streaming}
+        streaming={preview.streaming}
+        streamingKey={preview.streamingKey}
+        presentationKeys={preview.presentationKeys}
+        transcriptIdentity={controller.nativeChatStreamScopeKey}
         onStop={controller.handleNativeChatStop}
         ask={controller.nativeChatAsk}
         askKey={controller.nativeChatAskKey}

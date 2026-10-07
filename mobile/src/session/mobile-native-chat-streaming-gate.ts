@@ -1,21 +1,24 @@
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 
-/** Decides whether the live streaming preview should render as a synthetic
- *  bubble. Text alone can't tell "the transcript caught up with this stream"
- *  from "a new reply happens to repeat the previous turn's prefix" — the old
- *  prefix test swallowed genuine repeated-prefix replies. The gate keeps the
- *  transcript tail observed when the current stream segment began: the bubble
- *  hides only when the tail MOVED during the segment and leads with the
- *  streamed text (the real turn landed), never for an older identical turn. */
+/** Reconciles one observed segment against the transcript tail that preceded it. */
 export type MobileNativeChatStreamingGate = {
-  /** Chat/session identity this baseline belongs to. */
   scopeKey: string | null
-  /** Streamed text seen on the previous tick ('' while idle). */
   prevText: string
-  /** Folded tail message id when the current segment began; null while the
-   *  gate has never observed a transcript tail (text arrived on its very first
-   *  tick), where the legacy suppress-on-prefix rule applies. */
   baselineTailId: string | null
+  segment: number
+  displayed: boolean
+  matchedTailId: string | null
+  streamLive: boolean
+  superseded: boolean
+  /** Only adopted entries still in the loaded source window are retained. */
+  presentationKeys: Readonly<Record<string, string>>
+}
+
+export type MobileNativeChatStreamingPresentation = {
+  gate: MobileNativeChatStreamingGate
+  streaming: string | null
+  streamingKey: string
+  presentationKeys: Readonly<Record<string, string>>
 }
 
 /** The preview text to feed the gate for one tick, or undefined for "no observation".
@@ -42,7 +45,17 @@ export function mobileNativeChatStreamPreview(
 export function createMobileNativeChatStreamingGate(
   scopeKey: string | null = null
 ): MobileNativeChatStreamingGate {
-  return { scopeKey, prevText: '', baselineTailId: null }
+  return {
+    scopeKey,
+    prevText: '',
+    baselineTailId: null,
+    segment: 0,
+    displayed: false,
+    matchedTailId: null,
+    streamLive: false,
+    superseded: false,
+    presentationKeys: {}
+  }
 }
 
 function assistantTailText(tail: NativeChatMessage | undefined): string {
@@ -56,59 +69,100 @@ function assistantTailText(tail: NativeChatMessage | undefined): string {
     .trim()
 }
 
-// Reuses the incoming gate object when nothing moved, so a caller can detect
-// "no change" by reference (and a render-time state adjustment can settle).
-function advanceGate(
-  gate: MobileNativeChatStreamingGate,
-  prevText: string,
-  baselineTailId: string | null
-): MobileNativeChatStreamingGate {
-  return gate.prevText === prevText && gate.baselineTailId === baselineTailId
-    ? gate
-    : { ...gate, prevText, baselineTailId }
-}
-
-/** Advance the gate one tick and derive the visible streaming text (null hides
- *  the bubble). Pure and idempotent for a repeated (text, tail) pair, so a
- *  re-render without new data cannot flip the decision. */
+/** No observation retires neither displayed words nor a matched entry's identity. */
 export function deriveMobileNativeChatStreaming(
   gate: MobileNativeChatStreamingGate,
   folded: readonly NativeChatMessage[],
   streamingText: string | undefined,
   options: {
     scopeKey?: string | null
-    /** Whether the agent is still mid-turn. A textless tick then means "no
-     *  observation this render", not "the stream ended". */
     streamLive?: boolean
+    sourceSettled?: boolean
+    abandon?: boolean
   } = {}
-): { gate: MobileNativeChatStreamingGate; streaming: string | null } {
+): MobileNativeChatStreamingPresentation {
   const scopeKey = options.scopeKey === undefined ? gate.scopeKey : options.scopeKey
-  const scopedGate =
-    gate.scopeKey === scopeKey ? gate : createMobileNativeChatStreamingGate(scopeKey)
-  const text = streamingText?.trim() ?? ''
+  const current = gate.scopeKey === scopeKey ? gate : createMobileNativeChatStreamingGate(scopeKey)
+  const live = options.streamLive === true
+  const observation = streamingText?.trim() ?? ''
   const tail = folded.at(-1)
   const tailId = tail?.id ?? null
-  if (!text) {
-    // Only a textless tick that carries a real tail and is outside a live turn
-    // is trustworthy pre-stream history. Mid-turn gaps (a tool call, a throttle
-    // lull, the transcript landing the reply before its status text) would
-    // otherwise adopt that reply as history and render it a second time as a
-    // bubble; a torn-down transcript carries no tail at all. The exception is a
-    // gate that has never anchored — mounted mid-turn, the first real tail it
-    // sees is the best pre-stream history it will ever get.
-    const canAnchor = tailId !== null && (!options.streamLive || scopedGate.baselineTailId === null)
-    return { gate: canAnchor ? advanceGate(scopedGate, '', tailId) : scopedGate, streaming: null }
+  const ids = new Set(folded.map((message) => message.id))
+  const presentationKeys =
+    options.sourceSettled === false
+      ? current.presentationKeys
+      : Object.fromEntries(Object.entries(current.presentationKeys).filter(([id]) => ids.has(id)))
+  const sourceEvicted =
+    options.sourceSettled === true &&
+    ((folded.length === 0 && current.prevText !== '' && current.baselineTailId !== null) ||
+      (current.baselineTailId !== null &&
+        !ids.has(current.baselineTailId) &&
+        (current.matchedTailId === null || !ids.has(current.matchedTailId))))
+  const restart =
+    (live && !current.streamLive && current.prevText !== '') ||
+    (observation !== '' && current.prevText !== '' && !observation.startsWith(current.prevText))
+  let next = { ...current, presentationKeys, streamLive: live }
+  const abandon =
+    options.abandon === true && (current.prevText !== '' || current.matchedTailId !== null)
+  if (abandon || sourceEvicted || restart) {
+    next = {
+      ...next,
+      prevText: '',
+      baselineTailId: restart ? (current.matchedTailId ?? tailId) : tailId,
+      displayed: false,
+      matchedTailId: null,
+      superseded: false,
+      segment: current.segment + 1
+    }
   }
-  // A stream that is not an extension of the previous tick is a new segment
-  // (next reply part); re-anchor to the tail that predates it.
-  const segmentStart = scopedGate.prevText !== '' && !text.startsWith(scopedGate.prevText)
-  const baselineTailId = segmentStart ? tailId : scopedGate.baselineTailId
-  const tailLeadsWithStream = assistantTailText(tail).startsWith(text)
-  // A null baseline (text on the very first tick, no tail ever seen) is unequal
-  // to every real tail id, so this degrades to the legacy suppress-on-prefix rule.
-  const caughtUp = tailLeadsWithStream && tailId !== baselineTailId
+  let text = observation || next.prevText
+  if (options.abandon || sourceEvicted) {
+    text = ''
+  }
+  if (!text) {
+    if (tailId !== null && (!live || next.baselineTailId === null)) {
+      next.baselineTailId = tailId
+    }
+  } else {
+    const caughtUp = tailId !== next.baselineTailId && assistantTailText(tail).startsWith(text)
+    if (caughtUp && tailId !== null) {
+      if (next.displayed && next.matchedTailId === null) {
+        next.presentationKeys = { ...next.presentationKeys, [tailId]: `streaming:${next.segment}` }
+      }
+      next.matchedTailId = tailId
+    } else if (
+      next.matchedTailId === null &&
+      tailId !== next.baselineTailId &&
+      tailId !== null &&
+      current.prevText !== '' &&
+      !live &&
+      observation === ''
+    ) {
+      // Different published content supersedes the observation; no identity guess.
+      next.superseded = true
+      next.displayed = false
+    }
+  }
+  next.prevText = text
+  const streaming = text && next.matchedTailId === null && !next.superseded ? text : null
+  if (streaming !== null) {
+    next.displayed = true
+  }
+  // The gate is render-derived state; repeated inputs must settle without another render.
+  const unchanged = Object.entries(next).every(([key, value]) =>
+    key === 'presentationKeys'
+      ? Object.keys(next.presentationKeys).length ===
+          Object.keys(current.presentationKeys).length &&
+        Object.entries(next.presentationKeys).every(
+          ([id, presentationKey]) => current.presentationKeys[id] === presentationKey
+        )
+      : value === Reflect.get(current, key)
+  )
+  const resultGate = unchanged ? current : next
   return {
-    gate: advanceGate(scopedGate, text, baselineTailId),
-    streaming: caughtUp ? null : text
+    gate: resultGate,
+    streaming,
+    streamingKey: `streaming:${resultGate.segment}`,
+    presentationKeys: resultGate.presentationKeys
   }
 }
