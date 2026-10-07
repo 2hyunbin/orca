@@ -12,7 +12,14 @@ import {
   type ComponentType,
   type ReactNode
 } from 'react'
-import { Pressable, ScrollView, Text as NativeText, View, type TextProps } from 'react-native'
+import {
+  Pressable,
+  ScrollView,
+  Text as NativeText,
+  View,
+  type TextProps,
+  type TextStyle
+} from 'react-native'
 import { normalizeMobileMarkdownPreviewHtml } from './mobile-markdown-preview-html'
 import { styles } from './mobile-markdown-styles'
 import {
@@ -36,6 +43,10 @@ type Props = {
   rangeSelectable?: boolean
   /** Forward long presses from interactive Android transcript spans to the message. */
   onLongPress?: () => void
+  /** Inherit a containing surface's foreground while retaining link decoration and actions. */
+  foregroundColor?: TextStyle['color']
+  /** Disable diagrams when code needs native selection and message long-press actions. */
+  renderMermaid?: boolean
   /** Multiplier for prose font size (paragraphs, lists, quotes). Defaults to 1;
    *  the chat view passes >1 so agent prose reads larger than the compact base. */
   textScale?: number
@@ -55,6 +66,7 @@ type MarkdownTextSetup = {
   /** Disable native selection only within the Android transcript. */
   androidTranscript: boolean
   onLongPress?: () => void
+  foregroundStyle?: TextStyle
 }
 const MarkdownTextContext = createContext<MarkdownTextSetup>({
   TextComponent: NativeText,
@@ -62,13 +74,15 @@ const MarkdownTextContext = createContext<MarkdownTextSetup>({
 })
 
 function MarkdownText(props: TextProps): React.JSX.Element {
-  const { TextComponent, androidTranscript, onLongPress } = useContext(MarkdownTextContext)
+  const { TextComponent, androidTranscript, onLongPress, foregroundStyle } =
+    useContext(MarkdownTextContext)
+  const textProps = foregroundStyle ? { ...props, style: [props.style, foregroundStyle] } : props
   if (!androidTranscript) {
-    return createElement(TextComponent, props)
+    return createElement(TextComponent, textProps)
   }
   // Override selection without changing the nested spans' inherited behavior.
   return createElement(TextComponent, {
-    ...props,
+    ...textProps,
     ...(props.selectable === true ? { selectable: false } : {}),
     ...(onLongPress && props.onPress ? { onLongPress } : {})
   })
@@ -233,7 +247,8 @@ function MobileMarkdownContent({
   fallback = '',
   rangeSelectable = false,
   textScale = 1,
-  onOpenFile
+  onOpenFile,
+  renderMermaid = true
 }: Props) {
   // Interactive children own their touches and must forward the row action.
   const setup = useContext(MarkdownTextContext)
@@ -283,7 +298,7 @@ function MobileMarkdownContent({
           // Mermaid fences render as diagrams (WebView), not as raw code — same as PR sidebar.
           // Unclosed fences are still streaming: mounting the WebView per tick would
           // reload its document up to 20x/sec, so they stay raw code until terminated.
-          if (isMobileMermaidLanguage(block.language) && block.closed) {
+          if (renderMermaid && isMobileMermaidLanguage(block.language) && block.closed) {
             const occurrence = mermaidSourceOccurrences.get(block.text) ?? 0
             mermaidSourceOccurrences.set(block.text, occurrence + 1)
             return (
@@ -364,7 +379,7 @@ function MobileMarkdownContent({
             <View key={index} style={styles.list}>
               {block.items.map((item, itemIndex) => (
                 <View key={itemIndex} style={styles.listItem}>
-                  <NativeText style={styles.listMarker}>
+                  <NativeText style={[styles.listMarker, setup.foregroundStyle]}>
                     {item.checked == null
                       ? block.ordered
                         ? `${itemIndex + 1}.`
@@ -404,16 +419,17 @@ function MobileMarkdownContent({
 }
 
 function MobileMarkdownInner(props: Props): React.JSX.Element | null {
-  const { rangeSelectable = false, onLongPress } = props
+  const { rangeSelectable = false, onLongPress, foregroundColor } = props
   // Other Markdown surfaces retain their existing selection behavior.
   const androidTranscript = rangeSelectable && !INLINE_TEXT_SELECTION
   const setup = useMemo<MarkdownTextSetup>(
     () => ({
       TextComponent: rangeSelectable && !androidTranscript ? MobileSelectableText : NativeText,
       androidTranscript,
+      ...(foregroundColor !== undefined ? { foregroundStyle: { color: foregroundColor } } : {}),
       ...(onLongPress ? { onLongPress } : {})
     }),
-    [rangeSelectable, androidTranscript, onLongPress]
+    [rangeSelectable, androidTranscript, onLongPress, foregroundColor]
   )
   return (
     <MarkdownTextContext.Provider value={setup}>

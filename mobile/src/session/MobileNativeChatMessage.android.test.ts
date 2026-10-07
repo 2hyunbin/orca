@@ -139,16 +139,16 @@ describe('MobileNativeChatMessage on Android', () => {
     expect(byType('MessageActionsSheet')).toHaveLength(0)
   })
 
-  it('renders the user bubble without inline selection', () => {
+  it('routes user Markdown selection and link long presses through the existing row action', () => {
     act(() => {
       renderer = create(
         createElement(MobileNativeChatMessage, { message: { ...message, id: 'u1', role: 'user' } })
       )
     })
-    const texts = byType('Text').filter((node) => node.props.selectable !== undefined)
-    expect(texts.length).toBeGreaterThan(0)
-    for (const node of texts) {
-      expect(node.props.selectable).toBe(false)
-    }
+    const [markdown] = byType('MobileMarkdown')
+    expect(markdown!.props.rangeSelectable).toBe(true)
+    expect(markdown!.props.onLongPress).toBe(byType('Pressable')[0]!.props.onLongPress)
+    act(() => markdown!.props.onLongPress())
+    expect(byType('MessageActionsSheet')[0]!.props.message.role).toBe('user')
   })
 })

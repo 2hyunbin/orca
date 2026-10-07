@@ -177,12 +177,12 @@ describe('MobileNativeChatMessage', () => {
     expect(texts.some((text) => text.includes('/tmp/host.png'))).toBe(true)
   })
 
-  it('makes user message text selectable', () => {
+  it('routes the original user source through selectable Markdown with the bubble foreground', () => {
     const tree = render(userMessage([{ type: 'text', text: 'Prompt I typed' }]))
-    const text = tree.root
-      .findAllByType('Text' as never)
-      .find((node) => String(node.children.join('')) === 'Prompt I typed')
-    expect(text?.props.selectable).toBe(true)
+    const markdown = tree.root.find((node) => String(node.type) === 'MobileMarkdown')
+    expect(markdown.props.content).toBe('Prompt I typed')
+    expect(markdown.props.rangeSelectable).toBe(true)
+    expect(markdown.props.foregroundColor).toBe(colors.textPrimary)
   })
 
   it('routes assistant prose through selectable Markdown', () => {
@@ -401,7 +401,10 @@ describe('MobileNativeChatMessage', () => {
       const tree = render(userMessage([{ type: 'text', text: 'go' }]), {
         structuredActivityUi: true
       })
-      expect(textIn(tree.root)).toEqual(['go'])
+      expect(textIn(tree.root)).toEqual([])
+      expect(tree.root.find((node) => String(node.type) === 'MobileMarkdown').props.content).toBe(
+        'go'
+      )
     })
   })
 

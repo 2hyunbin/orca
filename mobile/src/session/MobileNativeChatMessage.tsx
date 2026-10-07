@@ -47,15 +47,17 @@ function Prose({
         </Text>
       )
     }
-    // Preserve the user's literal prompt instead of rendering Markdown.
     if (invert) {
       return (
-        <Text
-          selectable={INLINE_TEXT_SELECTION}
-          style={[styles.userText, { fontSize: TEXT_SIZE * fontScale }]}
-        >
-          {block.text}
-        </Text>
+        <MobileMarkdown
+          content={block.text}
+          foregroundColor={styles.userText.color}
+          renderMermaid={false}
+          rangeSelectable
+          textScale={1.25 * fontScale}
+          onOpenFile={onOpenFile}
+          onLongPress={onLongPress}
+        />
       )
     }
     return (
