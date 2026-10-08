@@ -111,9 +111,13 @@ function parseBucket(
     return null
   }
   const usedPercent = Math.min(100, Math.max(0, Math.round((1 - fraction) * 100)))
+  const windowName = readString(raw.name)
   return {
     id,
-    name: formatBucketName(groupName, readString(raw.name), siblings),
+    name: formatBucketName(groupName, windowName, siblings),
+    // Why structured fields: the renderer builds short labels without splitting `name`.
+    group: groupName,
+    ...(windowName ? { windowName } : {}),
     usedPercent,
     // Why 0 and not null: RateLimitWindow requires a number, and an unrecognised agy window still
     // carries a real remaining fraction worth showing as a named bucket.

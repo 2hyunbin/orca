@@ -21,6 +21,8 @@ import { getTightestUsageSection, getUsageHeadlineSection } from './UsageRosterP
 import { formatBareUsagePercentage, formatUsagePercentageLabel } from './usage-percentage-label'
 import { translate } from '@/i18n/i18n'
 import { getStatusBarUsageSections } from './status-bar-usage-sections'
+import { GroupedPoolUsage } from './usage-grouped-pools'
+import { formatStatusBarSectionLabel } from './usage-pool-label'
 
 function MiniBar({
   usedPct,
@@ -272,6 +274,11 @@ export function ProviderSegment({
   const isStale = p.status === 'error' && !calm
   const showBalance = isExtraUsageActive(p)
   const sections = getStatusBarUsageSections(p, mode)
+  const groupedBuckets = p.buckets?.filter((bucket) =>
+    sections.some((section) => section.window === bucket)
+  )
+  const showGroupedPools =
+    mode === 'verbose' && groupedBuckets?.length && groupedBuckets.every((bucket) => bucket.group)
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -279,18 +286,26 @@ export function ProviderSegment({
       {mode === 'verbose' && tightest && !compact ? (
         <MiniBar usedPct={clampUsedPercent(tightest.window.usedPercent)} display={display} />
       ) : null}
-      {sections.map((section, index) => (
-        <React.Fragment key={section.key}>
-          {index > 0 ? <span className="text-muted-foreground">·</span> : null}
-          <WindowLabel
-            w={section.window}
-            label={section.label}
-            display={display}
-            showLabel={mode === 'verbose' || !compact}
-            labelFirst={section.labelFirst}
-          />
-        </React.Fragment>
-      ))}
+      {showGroupedPools ? (
+        <GroupedPoolUsage
+          visibleBuckets={groupedBuckets}
+          allBuckets={p.buckets ?? []}
+          display={display}
+        />
+      ) : (
+        sections.map((section, index) => (
+          <React.Fragment key={section.key}>
+            {index > 0 ? <span className="text-muted-foreground">·</span> : null}
+            <WindowLabel
+              w={section.window}
+              label={formatStatusBarSectionLabel(p, section)}
+              display={display}
+              showLabel={mode === 'verbose' || !compact}
+              labelFirst={section.labelFirst}
+            />
+          </React.Fragment>
+        ))
+      )}
       {showBalance && p.extraUsage ? (
         <>
           <span className="text-muted-foreground">·</span>

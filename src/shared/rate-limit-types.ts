@@ -39,6 +39,10 @@ export type ExtraUsageBalance = CurrencyExtraUsageBalance | CreditExtraUsageBala
 
 export type RateLimitBucket = RateLimitWindow & {
   name: string
+  /** Model-group name the pool belongs to (Antigravity), when the provider groups pools. */
+  group?: string
+  /** Provider's own window name for the pool, e.g. agy's "Weekly Limit Remaining". */
+  windowName?: string
 }
 
 export type UsageRateLimitSource = 'oauth' | 'cli' | 'web' | 'live-session'
