@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process'
 import { basename } from 'node:path'
 import { userInfo } from 'node:os'
-import { promisify } from 'node:util'
+import { runProcess } from '@orca/process-host'
 
-const execFileAsync = promisify(execFile)
 const AGENT_HOME_MAX_LENGTH = 4096
 const AGENT_HOME_PROBE_TIMEOUT_MS = 8_000
 
@@ -52,12 +50,18 @@ async function readLoginShellAgentHome(
     const shellName = basename(shell)
     const mode = shellName === 'sh' || shellName === 'dash' ? '-c' : '-lc'
     // Why: agent PTYs start login shells, so read the same profile-derived home override.
-    const { stdout } = await execFileAsync(
-      shell,
-      [mode, `printenv ${envName} | head -c ${AGENT_HOME_MAX_LENGTH + 1}`],
-      { encoding: 'utf8', timeout: AGENT_HOME_PROBE_TIMEOUT_MS, signal }
-    )
-    return normalizeAgentHome(stdout.split(/\r?\n/, 1)[0] ?? '')
+    const result = await runProcess({
+      program: shell,
+      args: [mode, `printenv ${envName} | head -c ${AGENT_HOME_MAX_LENGTH + 1}`],
+      timeoutMs: AGENT_HOME_PROBE_TIMEOUT_MS,
+      maxOutputBytes: AGENT_HOME_MAX_LENGTH * 2,
+      ...(signal ? { signal } : {})
+    })
+    signal?.throwIfAborted()
+    if (result.timedOut || result.code !== 0) {
+      return null
+    }
+    return normalizeAgentHome(result.stdout.split(/\r?\n/, 1)[0] ?? '')
   } catch {
     signal?.throwIfAborted()
     return null

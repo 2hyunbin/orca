@@ -1,37 +1,9 @@
 import { chmod, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as NodeChildProcess from 'node:child_process'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-// Why: the installer's home probe is observed through a wrapped execFile below.
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof NodeChildProcess>()
-  return { ...actual, execFile: vi.fn() }
-})
-
-const { execFile } = await import('node:child_process')
-const execFileMock = vi.mocked(execFile)
-const { execFile: actualExecFile } =
-  await vi.importActual<typeof NodeChildProcess>('node:child_process')
 const { installManagedHooks } = await import('./managed-hook-runtime')
-
-type ExecFileCallback = (error: Error | null, result?: { stdout: string; stderr: string }) => void
-
-beforeEach(() => {
-  execFileMock.mockReset()
-  // Why: `installManagedHooks` proves a skipped probe through the login-shell run log, so the
-  // probe must really spawn unless a case above stubs it. The mock loses `promisify.custom`,
-  // so the real `(error, stdout, stderr)` callback is reshaped into the `{ stdout, stderr }`
-  // that `promisify(execFile)` resolves in production.
-  execFileMock.mockImplementation(((...args: unknown[]) => {
-    const callback = args.at(-1) as ExecFileCallback
-    return (actualExecFile as (...callArgs: unknown[]) => unknown)(
-      ...args.slice(0, -1),
-      (error: Error | null, stdout: string, stderr: string) => callback(error, { stdout, stderr })
-    )
-  }) as unknown as typeof execFile)
-})
 
 const tempHomes: string[] = []
 const tempRoot = process.platform === 'win32' ? tmpdir() : '/tmp'

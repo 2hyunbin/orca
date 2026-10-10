@@ -1,38 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-type ExecFileCallback = (error: Error | null, result?: { stdout: string; stderr: string }) => void
-type ExecFileStub = (
-  shell: string,
-  args: string[],
-  options: unknown,
-  done: ExecFileCallback
-) => void
+type ProbeResult = { code: number | null; stdout: string; timedOut: boolean }
+type RunProcessStub = (spec: { program: string; args: string[] }) => Promise<ProbeResult>
 
 // Why: the probe spawns a real login shell and swallows every spawn failure into its fallback.
 // Left unmocked this asserts the runner's scheduling latency, not the parser: on a loaded CI box
 // the 8s timeout expires and the first case silently flips to the fallback path.
-const probe = vi.hoisted(() => ({ execFile: vi.fn<ExecFileStub>() }))
-vi.mock('node:child_process', async (importOriginal) => ({
+const probe = vi.hoisted(() => ({ runProcess: vi.fn<RunProcessStub>() }))
+vi.mock('@orca/process-host', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  execFile: probe.execFile
+  runProcess: probe.runProcess
 }))
 
-const execFileMock = probe.execFile
+const probeMock = probe.runProcess
 const { adoptLoginShellAgentHomes, resolveLoginShellGrokHome, resolveLoginShellKiroHome } =
   await import('./agent-home-login-shell')
 
 function stubProbeOutput(stdout: string | ((script: string) => string)): void {
-  execFileMock.mockImplementation((_shell, args, _options, done) =>
-    done(null, { stdout: typeof stdout === 'string' ? stdout : stdout(args[1] ?? ''), stderr: '' })
-  )
+  probeMock.mockImplementation(async ({ args }) => ({
+    code: 0,
+    timedOut: false,
+    stdout: typeof stdout === 'string' ? stdout : stdout(args[1] ?? '')
+  }))
 }
 
-function stubProbeFailure(error: Error): void {
-  execFileMock.mockImplementation((_shell, _args, _options, done) => done(error))
+function stubProbeFailure(error: Error & { killed?: boolean }): void {
+  probeMock.mockImplementation(async () => {
+    if (error.killed) {
+      return { code: null, timedOut: true, stdout: '' }
+    }
+    throw error
+  })
 }
 
 beforeEach(() => {
-  execFileMock.mockReset()
+  probeMock.mockReset()
 })
 
 afterEach(() => {
@@ -46,7 +48,7 @@ describe.runIf(process.platform !== 'win32')('resolveLoginShellGrokHome', () => 
 
     await expect(resolveLoginShellGrokHome('/home/orca')).resolves.toBe('/srv/grok')
 
-    const [shell, args] = execFileMock.mock.calls[0] ?? []
+    const { program: shell, args } = probeMock.mock.calls[0]?.[0] ?? {}
     expect(shell).toBe('/bin/sh')
     // `sh`/`dash` reject `-lc`, so the mode choice is part of the contract under test.
     expect(args?.[0]).toBe('-c')
@@ -58,7 +60,7 @@ describe.runIf(process.platform !== 'win32')('resolveLoginShellGrokHome', () => 
 
     await expect(resolveLoginShellGrokHome('/home/orca')).resolves.toBe('/srv/grok')
 
-    const [shell, args] = execFileMock.mock.calls[0] ?? []
+    const { program: shell, args } = probeMock.mock.calls[0]?.[0] ?? {}
     expect(shell).toBe('/bin/zsh')
     expect(args?.[0]).toBe('-lc')
   })
@@ -86,7 +88,7 @@ describe.runIf(process.platform !== 'win32')('resolveLoginShellKiroHome', () => 
     stubProbeOutput('/srv/kiro/\n')
 
     await expect(resolveLoginShellKiroHome('/home/orca')).resolves.toBe('/srv/kiro')
-    expect(execFileMock.mock.calls[0]?.[1]?.[1]).toContain('printenv KIRO_HOME')
+    expect(probeMock.mock.calls[0]?.[0].args[1]).toContain('printenv KIRO_HOME')
   })
 
   it('falls back to ~/.kiro when KIRO_HOME is unset or the probe fails', async () => {
@@ -108,7 +110,7 @@ describe.runIf(process.platform !== 'win32')('adoptLoginShellAgentHomes', () => 
     await adoptLoginShellAgentHomes(env)
 
     expect(env).toEqual({ GROK_HOME: '/already/grok', KIRO_HOME: '/srv/kiro' })
-    expect(execFileMock).toHaveBeenCalledTimes(1)
+    expect(probeMock).toHaveBeenCalledTimes(1)
   })
 
   it('leaves the environment alone when the login shell has no override', async () => {
