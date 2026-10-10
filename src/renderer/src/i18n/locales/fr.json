@@ -18348,6 +18348,7 @@
         "orcaStopUpdate": "Orca sur {{machine}} a redémarré pour une mise à jour pendant que cette réponse était en cours.",
         "orcaStopQuit": "Orca sur {{machine}} a été fermé pendant que cette réponse était en cours.",
         "orcaStopCrash": "Orca sur {{machine}} s'est arrêté de manière inattendue pendant que cette réponse était en cours.",
+        "orcaStopRemote": "Orca sur {{machine}} s'est arrêté pendant que cette réponse était en cours.",
         "orcaStopCanContinue": "Vous pouvez continuer dans cette conversation."
       },
       "providerFrame": {
