@@ -7,9 +7,10 @@
  * `workspace` means the caller can run code as this host's user: it opens terminals and starts
  * agents here. Anything a terminal command could do anyway (browsing directories, installing
  * skills, changing launch env or SSH targets) is therefore not a boundary for a `workspace`
- * caller. Those stay separate tiers only so narrower rows (mobile, an SSH host's CLI) can refuse
- * them. The real boundaries for a paired client are `desktop-control` (granted per device at
- * pairing) and `pairing-admin` (never granted to a paired client).
+ * caller. Those stay separate tiers so a narrower row (an SSH host's CLI) can refuse them; mobile
+ * is gated by its own method-name allowlist instead. For a paired runtime client the real
+ * boundaries are `desktop-control` (granted per device at pairing) and `pairing-admin` (never
+ * granted to it).
  */
 export type RpcMethodPermission =
   /** Projects, worktrees, terminals, files, git, browser, orchestration and integrations; equals
