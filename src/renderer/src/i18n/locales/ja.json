@@ -18009,6 +18009,7 @@
         "model": "モデル",
         "effort": "推論レベル",
         "fastMode": "高速モード",
+        "speed": "速度",
         "thinking": "思考",
         "options": "オプション",
         "sessionOptions": "セッションオプション",
@@ -18029,7 +18030,8 @@
           "high": "高",
           "xhigh": "最高",
           "max": "最大",
-          "ultra": "ウルトラ"
+          "ultra": "ウルトラ",
+          "standard": "標準"
         },
         "noCommandsOrSkills": "一致するコマンドやスキルがありません",
         "commands": "コマンド",
