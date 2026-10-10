@@ -1,5 +1,6 @@
 import { getAppEnvironment } from '../../shared/app-environment'
 import { startCodexHooks } from '../codex/codex-hook-reconcile'
+import { adoptLoginShellAgentHomes } from '../agent-hooks/agent-home-login-shell'
 import { hydrateAgentCliShellPath } from '../agent-hooks/local-agent-cli-presence'
 import {
   isAgentStatusHooksEnabled,
@@ -38,11 +39,13 @@ export function startOrcadManagedAgentHooks(
     // Why null: orcad launches Codex on ~/.codex; Orca-managed account homes are a desktop flow.
     resolveLaunchHome: () => null
   })
-  reconcileStartupManagedAgentHooks({
-    getSettings,
-    isQuitting: () => stopping,
-    shouldHydrateShellPath
-  })
+  void adoptLoginShellAgentHomes().then(() =>
+    reconcileStartupManagedAgentHooks({
+      getSettings,
+      isQuitting: () => stopping,
+      shouldHydrateShellPath
+    })
+  )
   try {
     refreshInstalledOpenCodeStatusPlugins(getSettings())
   } catch (error) {

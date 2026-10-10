@@ -25,7 +25,8 @@ const state = vi.hoisted(() => ({
   send: vi.fn(async () => ({ ok: true, results: [] })),
   startCodexHooks: vi.fn(),
   installManagedAgentHooks: vi.fn(async () => []),
-  refreshOpenCodePlugins: vi.fn()
+  refreshOpenCodePlugins: vi.fn(),
+  adoptLoginShellAgentHomes: vi.fn(async () => {})
 }))
 const profile = vi.hoisted(() => {
   const value: { settings: Partial<GlobalSettings> } = { settings: {} }
@@ -43,6 +44,9 @@ vi.mock('../agent-hooks/managed-agent-hook-controls', async (importOriginal) => 
 vi.mock('../agent-hooks/local-agent-cli-presence', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   hydrateAgentCliShellPath: async () => {}
+}))
+vi.mock('../agent-hooks/agent-home-login-shell', () => ({
+  adoptLoginShellAgentHomes: state.adoptLoginShellAgentHomes
 }))
 vi.mock('../opencode/opencode-status-plugin-startup-refresh', () => ({
   refreshInstalledOpenCodeStatusPlugins: state.refreshOpenCodePlugins
@@ -297,6 +301,10 @@ it('installs agent status hooks on the host when it starts', async () => {
       )
     )
     expect(state.refreshOpenCodePlugins).toHaveBeenCalledWith(profile.settings)
+    // Grok/Kiro homes set only in login profiles must be known before their installers run.
+    expect(state.adoptLoginShellAgentHomes.mock.invocationCallOrder[0]).toBeLessThan(
+      state.installManagedAgentHooks.mock.invocationCallOrder[0]!
+    )
   } finally {
     await host.stop()
   }
