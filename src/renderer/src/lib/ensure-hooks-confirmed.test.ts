@@ -252,13 +252,13 @@ describe('ensureHooksConfirmed', () => {
   })
 
   it('refuses to pick a host when the repo id is on two hosts and none is given', async () => {
-    const { state, pending } = createTestState({
-      settings: { activeRuntimeEnvironmentId: null },
+    const { state, pending } = createTestState()
+    Object.assign(state, {
       repos: [
         { id: 'repo-1', displayName: 'Runtime', executionHostId: 'runtime:env-1' },
         { id: 'repo-1', displayName: 'Local', executionHostId: 'local' }
       ]
-    } as unknown as Partial<AppState>)
+    })
 
     const decision = await ensureHooksConfirmed(state, 'repo-1', 'setup')
 
