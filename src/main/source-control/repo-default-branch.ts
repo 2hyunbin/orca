@@ -1,7 +1,9 @@
 import { resolveDefaultBaseRefViaExec } from '../git/repo'
 import { resolveRemoteHeadBranchViaExec, type GitExec } from '../../shared/git-default-base-ref'
 import { gitExecFileAsync } from '../git/runner'
-import { getSshGitProvider } from '../providers/ssh-git-dispatch'
+import { getSshGitProvider, getSshGitProviderGeneration } from '../providers/ssh-git-dispatch'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
+import { hostedReviewRepoScope, scopeGeneration } from './hosted-review-scope-generations'
 import type { HostedReviewLocalGitOptions } from './hosted-review-git-options'
 
 // Why: bounded like TRACKED_UPSTREAM_SNAPSHOT_CACHE in github/client.ts — PR
@@ -28,7 +30,13 @@ function getRepoDefaultBranchCacheKey(
   const runtimeKey = connectionId
     ? `ssh:${connectionId}`
     : `local:${localGitOptions.wslDistro ?? 'host'}`
-  return [runtimeKey, repoPath].join('\0')
+  const scope = hostedReviewRepoScope(repoPath, getRepoExecutionHostId({ connectionId }))
+  return [
+    runtimeKey,
+    repoPath,
+    scopeGeneration(scope),
+    connectionId ? getSshGitProviderGeneration(connectionId) : 0
+  ].join('\0')
 }
 
 function pruneRepoDefaultBranchCache(now: number): void {

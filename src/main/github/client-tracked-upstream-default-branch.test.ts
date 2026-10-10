@@ -80,7 +80,7 @@ function restPR(
     title: 'Release develop',
     state: 'closed',
     merged_at: null,
-    html_url: `https://github.com/${prRepo.owner}/${prRepo.repo}/pull/7`,
+    html_url: `https://${prRepo.host ?? 'github.com'}/${prRepo.owner}/${prRepo.repo}/pull/7`,
     updated_at: '2025-01-01T00:00:00Z',
     draft: false,
     mergeable: null,
@@ -95,39 +95,53 @@ function restPR(
 
 function primeGh(
   listsByHead: Record<string, RestPullRequest[]>,
-  exactPR: RestPullRequest = Object.values(listsByHead).flat()[0] ?? restPR()
+  exactPR: RestPullRequest | RestPullRequest[] = Object.values(listsByHead).flat()[0] ?? restPR()
 ): void {
-  const prsByNumber = new Map(
-    [...Object.values(listsByHead).flat(), exactPR].map((pr) => [pr.number, pr])
+  const repositorySlug = (pr: RestPullRequest): string =>
+    new URL(pr.html_url ?? '').pathname.split('/').slice(1, 3).join('/')
+  const repositoryHost = (pr: RestPullRequest): string => new URL(pr.html_url ?? '').host
+  const exactPRs = Array.isArray(exactPR) ? exactPR : [exactPR]
+  const prsByRepositoryAndNumber = new Map(
+    [...Object.values(listsByHead).flat(), ...exactPRs].map((pr) => [
+      `${repositoryHost(pr)}/${repositorySlug(pr)}#${pr.number}`,
+      pr
+    ])
   )
-  ghExecFileAsyncMock.mockImplementation(async (args: string[]) => {
-    const head = args[1]?.match(/pulls\?head=([^&]+)/)?.[1]
-    if (args[0] === 'api' && head) {
-      return { stdout: JSON.stringify(listsByHead[decodeURIComponent(head)] ?? []) }
-    }
-    const exact = prsByNumber.get(Number(args[2]))
-    if (args[0] === 'pr' && args[1] === 'view' && exact) {
-      return {
-        stdout: JSON.stringify({
-          number: exact.number,
-          title: exact.title,
-          state: exact.merged_at ? 'MERGED' : exact.state.toUpperCase(),
-          url: exact.html_url,
-          statusCheckRollup: [],
-          updatedAt: exact.updated_at,
-          isDraft: exact.draft,
-          mergeable: 'UNKNOWN',
-          baseRefName: exact.base?.ref,
-          headRefName: exact.head?.ref,
-          baseRefOid: exact.base?.sha,
-          headRefOid: exact.head?.sha,
-          headRepositoryOwner: exact.head?.repo?.owner,
-          headRepository: exact.head?.repo ? { name: exact.head.repo.name } : null
-        })
+  ghExecFileAsyncMock.mockImplementation(
+    async (args: string[], options: { host?: string } = {}) => {
+      const host = options.host ?? 'github.com'
+      const match = args[1]?.match(/^repos\/([^/]+\/[^/]+)\/pulls\?head=([^&]+)/)
+      if (args[0] === 'api' && match) {
+        const list = (listsByHead[decodeURIComponent(match[2])] ?? []).filter(
+          (pr) => repositoryHost(pr) === host && repositorySlug(pr) === match[1]
+        )
+        return { stdout: JSON.stringify(list) }
       }
+      const repoIndex = args.indexOf('--repo')
+      const exact = prsByRepositoryAndNumber.get(`${host}/${args[repoIndex + 1]}#${args[2]}`)
+      if (args[0] === 'pr' && args[1] === 'view' && exact) {
+        return {
+          stdout: JSON.stringify({
+            number: exact.number,
+            title: exact.title,
+            state: exact.merged_at ? 'MERGED' : exact.state.toUpperCase(),
+            url: exact.html_url,
+            statusCheckRollup: [],
+            updatedAt: exact.updated_at,
+            isDraft: exact.draft,
+            mergeable: 'UNKNOWN',
+            baseRefName: exact.base?.ref,
+            headRefName: exact.head?.ref,
+            baseRefOid: exact.base?.sha,
+            headRefOid: exact.head?.sha,
+            headRepositoryOwner: exact.head?.repo?.owner,
+            headRepository: exact.head?.repo ? { name: exact.head.repo.name } : null
+          })
+        }
+      }
+      throw new Error(`gh unavailable: ${args.join(' ')}`)
     }
-    throw new Error(`gh unavailable: ${args.join(' ')}`)
-  })
+  )
 }
 
 /** A fork clone: `origin` is the fork, `upstream` is the repo PRs target. */
@@ -163,6 +177,26 @@ describe('issue #26948: a branch tracking the default branch', () => {
     const outcome = await getPRForBranchOutcome('/repo-root', 'feature/my-change', null, null, 7)
 
     expect(outcome.kind).toBe('no-pr')
+  })
+
+  it('identifies the rejected merged integration PR so head-current caches can clear it', async () => {
+    primeGit('refs/remotes/origin/develop')
+    const integrationPR = {
+      ...restPR(),
+      merged_at: '2025-01-02T00:00:00Z',
+      head: { ...restPR().head, sha: 'feature-head-oid' }
+    }
+    primeGh({ 'acme:develop': [integrationPR] })
+
+    expect(
+      await getPRForBranchOutcome('/repo-root', 'feature/my-change', null, null, 7, {
+        currentHeadOid: 'feature-head-oid',
+        acceptMergedFallbackPR: true
+      })
+    ).toMatchObject({
+      kind: 'no-pr',
+      rejectedPRUrls: ['https://github.com/acme/widgets/pull/7']
+    })
   })
 
   it('skips the default branch on a second remote that PRs target (fork checkout off upstream)', async () => {
@@ -295,5 +329,91 @@ describe('issue #26948: a branch tracking the default branch', () => {
       ([args]) => args[0] === 'pr' && args[1] === 'view'
     )
     expect(exactCalls).toHaveLength(1)
+  })
+
+  it('does not reject a cached PR because another repository rejected the same number', async () => {
+    primeForkWithUpstream()
+    primeGit('refs/remotes/upstream/develop', { origin: 'main', upstream: 'develop' })
+    const unrelated = restPR('develop', UPSTREAM, UPSTREAM)
+    const cached = { ...restPR('feature/my-change'), state: 'open' }
+    primeGh({ 'stablyai:develop': [unrelated] }, [unrelated, cached])
+    const pr = await getPRForBranch('/repo-root', 'feature/my-change', null, null, 7)
+    expect(pr).toMatchObject({ number: 7, prRepo: ACME, headRefName: 'feature/my-change' })
+  })
+
+  it('continues cached number recovery after rejecting another repository default PR', async () => {
+    primeForkWithUpstream()
+    primeGit('refs/remotes/upstream/develop', { origin: 'main', upstream: 'develop' })
+    primeGh({}, [
+      restPR('develop', UPSTREAM, UPSTREAM),
+      { ...restPR('feature/my-change'), state: 'open' }
+    ])
+    const pr = await getPRForBranch('/repo-root', 'feature/my-change', null, null, 7)
+    expect(pr).toMatchObject({ number: 7, prRepo: ACME, headRefName: 'feature/my-change' })
+  })
+
+  it('does not accept another repository head with the same owner and branch name', async () => {
+    const other = { owner: 'acme', repo: 'other-widgets' }
+    resolvePRRepositoryCandidatesMock.mockResolvedValue({
+      candidates: [other, ACME],
+      headRepo: ACME
+    })
+    primeGit('')
+    primeGh({
+      'acme:feature/my-change': [{ ...restPR('feature/my-change', other, other), state: 'open' }]
+    })
+    expect(await getPRForBranch('/repo-root', 'feature/my-change')).toBeNull()
+  })
+
+  it('does not query another GitHub server for a known public GitHub head', async () => {
+    const enterprise = { ...ACME, host: 'ghe.example' }
+    resolvePRRepositoryCandidatesMock.mockResolvedValue({
+      candidates: [enterprise, ACME],
+      headRepo: ACME
+    })
+    primeGit('')
+    primeGh({
+      'acme:feature/my-change': [
+        { ...restPR('feature/my-change', enterprise, enterprise), state: 'open' }
+      ]
+    })
+    expect(await getPRForBranch('/repo-root', 'feature/my-change')).toBeNull()
+    expect(
+      ghExecFileAsyncMock.mock.calls.some(([, options]) => options?.host === 'ghe.example')
+    ).toBe(false)
+  })
+
+  it('preserves a tracked contributor fork with a different repository name', async () => {
+    const fork = { owner: 'contributor', repo: 'renamed-widgets' }
+    getOwnerRepoForRemoteMock.mockImplementation(async (_path: string, remote: string) =>
+      remote === 'contributor' ? fork : ACME
+    )
+    primeGit('refs/remotes/contributor/develop')
+    primeGh({ 'contributor:develop': [{ ...restPR('develop', fork), state: 'open' }] })
+    expect(await getPRForBranch('/repo-root', 'feature/my-change')).toMatchObject({
+      number: 7,
+      headRepo: fork,
+      prRepo: ACME
+    })
+  })
+
+  it('continues to a valid branch result after another repository returns the wrong head', async () => {
+    const other = { owner: 'acme', repo: 'other-widgets' }
+    resolvePRRepositoryCandidatesMock.mockResolvedValue({
+      candidates: [other, ACME],
+      headRepo: ACME
+    })
+    primeGit('')
+    primeGh({
+      'acme:feature/my-change': [
+        { ...restPR('feature/my-change', other, other), state: 'open' },
+        { ...restPR('feature/my-change'), state: 'open' }
+      ]
+    })
+    expect(await getPRForBranch('/repo-root', 'feature/my-change')).toMatchObject({
+      number: 7,
+      headRepo: ACME,
+      prRepo: ACME
+    })
   })
 })

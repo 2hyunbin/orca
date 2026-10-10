@@ -9,6 +9,7 @@ import type { GitAdmissionTier } from '../../../git/command-runner/git-exec-opti
 import type { HostedReviewExecutionOptions } from '../../../source-control/hosted-review-git-options'
 import { mapPRState } from '../../mappers'
 import type { MergedPRCommitMembership } from '../../merged-pr-commit-membership'
+import { githubRepoIdentityKey } from '../../../../shared/github/repository-identity-key'
 import {
   normalizePRMergeable,
   normalizeReviewDecision,
@@ -41,6 +42,12 @@ export type PullRequestLookupData = {
   headDefaultBranchName?: string
   stack?: GitHubPRStack
   stackMetadataChecked?: boolean
+}
+
+export type PullRequestLookupPolicy = {
+  accepts: (data: PullRequestLookupData, prRepo: OwnerRepo | null) => Promise<boolean>
+  isRejected: (prRepo: OwnerRepo, number: number) => boolean
+  rejectedPRUrls: ReadonlySet<string>
 }
 
 export type RestPullRequest = {
@@ -142,6 +149,19 @@ export function pullRequestHeadRepository(
   const owner = data.headRepositoryOwner?.login?.trim()
   const repo = data.headRepository?.name?.trim()
   return owner && repo ? { owner, repo, ...(prRepo?.host ? { host: prRepo.host } : {}) } : null
+}
+
+export function pullRequestMatchesHeadRepository(
+  data: PullRequestLookupData,
+  prRepo: OwnerRepo | null,
+  expectedHeadRepo: OwnerRepo | null
+): boolean {
+  const actualHeadRepo = pullRequestHeadRepository(data, prRepo)
+  return (
+    !actualHeadRepo ||
+    !expectedHeadRepo ||
+    githubRepoIdentityKey(actualHeadRepo) === githubRepoIdentityKey(expectedHeadRepo)
+  )
 }
 
 export function isMergedImplicitPR(

@@ -6,11 +6,13 @@ import {
 } from '../../../source-control/repo-default-branch'
 import type { HostedReviewLocalGitOptions } from './../github-exec-scope'
 import type { TrackedUpstreamBranch } from './tracked-upstream-cache'
-import { pullRequestHeadRepository, type PullRequestLookupData } from './pull-request-lookup-data'
+import {
+  pullRequestHeadRepository,
+  type PullRequestLookupData,
+  type PullRequestLookupPolicy
+} from './pull-request-lookup-data'
 
-export async function shouldHideImplicitDefaultBranchPR(input: {
-  data: PullRequestLookupData
-  prRepo: OwnerRepo | null
+export type ImplicitDefaultBranchPRContext = {
   originHeadRepo: OwnerRepo | null
   trackedUpstream: { branch: TrackedUpstreamBranch; headRepo: OwnerRepo } | null
   branchName: string
@@ -18,7 +20,34 @@ export async function shouldHideImplicitDefaultBranchPR(input: {
   repoPath: string
   connectionId?: string | null
   localGitOptions: HostedReviewLocalGitOptions
-}): Promise<boolean> {
+}
+
+export function createImplicitDefaultBranchPRPolicy(
+  context: ImplicitDefaultBranchPRContext
+): PullRequestLookupPolicy {
+  const rejected = new Set<string>()
+  const rejectedPRUrls = new Set<string>()
+  return {
+    rejectedPRUrls,
+    async accepts(data, prRepo) {
+      const hidden = await shouldHideImplicitDefaultBranchPR({ ...context, data, prRepo })
+      if (hidden && prRepo) {
+        rejected.add(`${githubRepoIdentityKey(prRepo)}#${data.number}`)
+        if (data.url) {
+          rejectedPRUrls.add(data.url)
+        }
+      }
+      return !hidden
+    },
+    isRejected(prRepo, number) {
+      return rejected.has(`${githubRepoIdentityKey(prRepo)}#${number}`)
+    }
+  }
+}
+
+async function shouldHideImplicitDefaultBranchPR(
+  input: ImplicitDefaultBranchPRContext & { data: PullRequestLookupData; prRepo: OwnerRepo | null }
+): Promise<boolean> {
   const { data, branchName, prRepo } = input
   if (
     !branchName ||

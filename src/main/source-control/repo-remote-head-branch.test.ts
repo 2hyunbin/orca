@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { gitExecFileAsyncMock, getSshGitProviderMock } = vi.hoisted(() => ({
-  gitExecFileAsyncMock: vi.fn(),
-  getSshGitProviderMock: vi.fn()
-}))
+const { gitExecFileAsyncMock, getSshGitProviderMock, getSshGitProviderGenerationMock } = vi.hoisted(
+  () => ({
+    gitExecFileAsyncMock: vi.fn(),
+    getSshGitProviderMock: vi.fn(),
+    getSshGitProviderGenerationMock: vi.fn(() => 0)
+  })
+)
 
 vi.mock('../git/runner', () => ({ gitExecFileAsync: gitExecFileAsyncMock }))
-vi.mock('../providers/ssh-git-dispatch', () => ({ getSshGitProvider: getSshGitProviderMock }))
+vi.mock('../providers/ssh-git-dispatch', () => ({
+  getSshGitProvider: getSshGitProviderMock,
+  getSshGitProviderGeneration: getSshGitProviderGenerationMock
+}))
+
+import { bumpScopeGeneration, hostedReviewRepoScope } from './hosted-review-scope-generations'
+import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 
 import {
   getRemoteHeadBranchName,
@@ -22,6 +31,7 @@ describe('getRemoteHeadBranchName', () => {
   beforeEach(() => {
     gitExecFileAsyncMock.mockReset()
     getSshGitProviderMock.mockReset()
+    getSshGitProviderGenerationMock.mockReset().mockReturnValue(0)
     __resetRepoDefaultBranchCacheForTests()
   })
 
@@ -119,5 +129,25 @@ describe('getRemoteHeadBranchName', () => {
     } finally {
       now.mockRestore()
     }
+  })
+
+  it('does not reuse defaults from a replaced SSH provider', async () => {
+    getSshGitProviderGenerationMock.mockReturnValue(1)
+    const exec = vi.fn().mockResolvedValue(remoteHead('upstream', 'old-default'))
+    getSshGitProviderMock.mockReturnValue({ exec })
+    await expect(getRemoteHeadBranchName('/repo', 'upstream', 'ssh-1')).resolves.toBe('old-default')
+    getSshGitProviderGenerationMock.mockReturnValue(2)
+    exec.mockResolvedValue(remoteHead('upstream', 'new-default'))
+    await expect(getRemoteHeadBranchName('/repo', 'upstream', 'ssh-1')).resolves.toBe('new-default')
+    expect(exec).toHaveBeenCalledTimes(2)
+  })
+
+  it('refreshes defaults after the repository review scope is invalidated', async () => {
+    gitExecFileAsyncMock.mockResolvedValue(remoteHead('upstream', 'old-default'))
+    await expect(getRemoteHeadBranchName('/repo', 'upstream')).resolves.toBe('old-default')
+    bumpScopeGeneration(hostedReviewRepoScope('/repo', LOCAL_EXECUTION_HOST_ID))
+    gitExecFileAsyncMock.mockResolvedValue(remoteHead('upstream', 'new-default'))
+    await expect(getRemoteHeadBranchName('/repo', 'upstream')).resolves.toBe('new-default')
+    expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(2)
   })
 })
