@@ -20,6 +20,7 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
   callRuntimeRpc: (...args: unknown[]) => callRuntimeRpc(...args),
   clearRecentRuntimeCompatibilityFailure: vi.fn(),
   clearRuntimeCompatibilityCache: vi.fn(),
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test responses always carry the typed result.
   unwrapRuntimeRpcResult: <T>(response: { result?: T }) => response.result as T
 }))
 
