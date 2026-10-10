@@ -360,6 +360,7 @@ const LINUX_PACKAGE_TESTS = [
 ]
 
 const WINDOWS_PACKAGE_TESTS = [
+  'src/main/zcode/zcode-plan-api-key-store-native-windows.test.ts',
   ...LINUX_PACKAGE_TESTS,
   'config/scripts/rebuild-native-deps.test.mjs',
   'config/scripts/rebuild-native-deps-windows-process-tree.test.mjs',

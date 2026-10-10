@@ -1213,6 +1213,7 @@ jobs:
       - name: Test Windows-specific boundaries
         run: >-
           pnpm exec vitest run --config config/vitest.config.ts
+          src/main/zcode/zcode-plan-api-key-store-native-windows.test.ts
           config/scripts/rebuild-native-deps.test.mjs
           config/scripts/rebuild-native-deps-windows-process-tree.test.mjs
           config/scripts/rebuild-native-deps-node-pty.test.mjs
