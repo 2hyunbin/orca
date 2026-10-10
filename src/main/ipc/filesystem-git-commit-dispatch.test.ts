@@ -208,7 +208,7 @@ describe('registerFilesystemHandlers', () => {
   })
 })
 
-describe('registerFilesystemHandlers', () => {
+describe('registerFilesystemHandlers pull request field generation', () => {
   beforeEach(() => {
     resetFilesystemIpcMocks()
     // Reset module-level auth cache so each test starts with a fresh dirty
