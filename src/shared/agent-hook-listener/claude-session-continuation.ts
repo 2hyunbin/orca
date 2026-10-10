@@ -45,6 +45,12 @@ export class ClaudeSessionContinuationTracker {
     if (session.key !== 'session_id' || !transcriptPath?.endsWith('.jsonl')) {
       return null
     }
+    // Why before the size memo: after `/clear` the old transcript stops growing, so only the job's
+    // state says where the conversation went.
+    const cleared = resolveClearedJobSession(transcriptPath, session.id)
+    if (cleared) {
+      return cleared
+    }
     let size: number
     try {
       size = statSync(transcriptPath).size
@@ -165,13 +171,41 @@ function resolveForkedSession(
 
 /** The fork lives beside the old transcript; the job's state names it when the file is not `<id>.jsonl`. */
 function findForkedTranscript(transcriptPath: string, sessionId: string): string | undefined {
-  const directory = path.dirname(transcriptPath)
-  const byId = path.join(directory, `${sessionId}.jsonl`)
+  const byId = path.join(path.dirname(transcriptPath), `${sessionId}.jsonl`)
   if (isFile(byId)) {
     return byId
   }
-  // <config>/projects/<cwd slug>/<id>.jsonl → <config>/jobs/<first 8 of id>/state.json
-  const configDir = path.dirname(path.dirname(directory))
+  const state = readJobState(transcriptPath, sessionId)
+  return state && isSiblingFile(transcriptPath, state.linkScanPath) ? state.linkScanPath : undefined
+}
+
+/** `/clear` inside a job starts a new transcript without writing `continued-in`; the job's state
+ *  keeps its first session id and names the current one as `resumeSessionId`. */
+function resolveClearedJobSession(
+  transcriptPath: string,
+  sessionId: string
+): AgentProviderSessionMetadata | null {
+  const state = readJobState(transcriptPath, sessionId)
+  const current = state
+    ? normalizeAgentProviderSession({ key: 'session_id', id: state.resumeSessionId })
+    : null
+  if (
+    !state ||
+    !current ||
+    current.id === sessionId ||
+    !isSiblingFile(transcriptPath, state.linkScanPath) ||
+    !forkHeadNamesSession(state.linkScanPath, current.id)
+  ) {
+    return null
+  }
+  return normalizeAgentProviderSession({ ...current, transcriptPath: state.linkScanPath })
+}
+
+type JobState = { linkScanPath: unknown; resumeSessionId: unknown }
+
+/** <config>/projects/<cwd slug>/<id>.jsonl → <config>/jobs/<first 8 of id>/state.json, when it is this session's job. */
+function readJobState(transcriptPath: string, sessionId: string): JobState | undefined {
+  const configDir = path.dirname(path.dirname(path.dirname(transcriptPath)))
   const statePath = path.join(configDir, 'jobs', sessionId.slice(0, 8), 'state.json')
   let state: Record<string, unknown> | undefined
   try {
@@ -179,16 +213,17 @@ function findForkedTranscript(transcriptPath: string, sessionId: string): string
   } catch {
     return undefined
   }
-  const linkScanPath = state?.linkScanPath
-  if (
-    state?.sessionId !== sessionId ||
-    typeof linkScanPath !== 'string' ||
-    path.dirname(linkScanPath) !== directory ||
-    !isFile(linkScanPath)
-  ) {
-    return undefined
-  }
-  return linkScanPath
+  return state?.sessionId === sessionId
+    ? { linkScanPath: state.linkScanPath, resumeSessionId: state.resumeSessionId }
+    : undefined
+}
+
+function isSiblingFile(transcriptPath: string, candidate: unknown): candidate is string {
+  return (
+    typeof candidate === 'string' &&
+    path.dirname(candidate) === path.dirname(transcriptPath) &&
+    isFile(candidate)
+  )
 }
 
 function isFile(filePath: string): boolean {

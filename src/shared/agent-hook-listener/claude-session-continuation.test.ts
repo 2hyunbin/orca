@@ -7,6 +7,7 @@ import { ClaudeSessionContinuationTracker } from './claude-session-continuation'
 const OLD = '11111111-1111-4111-8111-111111111111'
 const FORK = '22222222-2222-4222-8222-222222222222'
 const SECOND_FORK = '33333333-3333-4333-8333-333333333333'
+const CLEARED = '44444444-4444-4444-8444-444444444444'
 
 const createdDirs: string[] = []
 
@@ -40,6 +41,12 @@ function writeTranscript(projectDir: string, name: string, body: string): string
   const transcriptPath = join(projectDir, `${name}.jsonl`)
   writeFileSync(transcriptPath, body)
   return transcriptPath
+}
+
+function writeJobState(configDir: string, state: Record<string, unknown>): void {
+  const jobDir = join(configDir, 'jobs', String(state.sessionId).slice(0, 8))
+  mkdirSync(jobDir, { recursive: true })
+  writeFileSync(join(jobDir, 'state.json'), JSON.stringify(state))
 }
 
 function session(id: string, transcriptPath: string) {
@@ -154,5 +161,55 @@ describe('ClaudeSessionContinuationTracker', () => {
     expect(new ClaudeSessionContinuationTracker().resolve(session(OLD, oldPath))).toEqual(
       session(SECOND_FORK, secondPath)
     )
+  })
+
+  it('follows /clear inside a job through the job state, after the transcripts stop growing', () => {
+    const { configDir, projectDir } = makeProject()
+    const oldPath = writeTranscript(projectDir, OLD, turn(OLD, 'u1') + pointer(OLD, FORK))
+    const forkPath = writeTranscript(projectDir, FORK, turn(FORK, 'u1'))
+    writeJobState(configDir, { sessionId: FORK, resumeSessionId: FORK, linkScanPath: forkPath })
+    const tracker = new ClaudeSessionContinuationTracker()
+    expect(tracker.resolve(session(OLD, oldPath))).toEqual(session(FORK, forkPath))
+    expect(tracker.resolve(session(FORK, forkPath))).toBeNull()
+
+    const clearedPath = writeTranscript(projectDir, CLEARED, turn(CLEARED, 'u2'))
+    writeJobState(configDir, {
+      sessionId: FORK,
+      resumeSessionId: CLEARED,
+      linkScanPath: clearedPath
+    })
+    expect(tracker.resolve(session(FORK, forkPath))).toEqual(session(CLEARED, clearedPath))
+    expect(tracker.resolve(session(OLD, oldPath))).toEqual(session(CLEARED, clearedPath))
+  })
+
+  it.each([
+    [
+      'names the same session',
+      (_dir: string, forkPath: string) => ({ resumeSessionId: FORK, linkScanPath: forkPath })
+    ],
+    [
+      'points outside the project',
+      (configDir: string) => {
+        const elsewhere = join(configDir, 'projects', '-other-repo')
+        mkdirSync(elsewhere, { recursive: true })
+        return {
+          resumeSessionId: CLEARED,
+          linkScanPath: writeTranscript(elsewhere, CLEARED, turn(CLEARED, 'u2'))
+        }
+      }
+    ],
+    [
+      'points at a file that never names the session',
+      (_dir: string, forkPath: string) => ({
+        resumeSessionId: CLEARED,
+        linkScanPath: writeTranscript(join(forkPath, '..'), CLEARED, turn(SECOND_FORK, 'u2'))
+      })
+    ]
+  ])('ignores a job state that %s', (_label, makeState) => {
+    const { configDir, projectDir } = makeProject()
+    const forkPath = writeTranscript(projectDir, FORK, turn(FORK, 'u1'))
+    writeJobState(configDir, { sessionId: FORK, ...makeState(configDir, forkPath) })
+
+    expect(new ClaudeSessionContinuationTracker().resolve(session(FORK, forkPath))).toBeNull()
   })
 })
