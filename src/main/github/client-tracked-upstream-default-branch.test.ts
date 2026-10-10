@@ -117,9 +117,20 @@ function primeGh(
         )
         return { stdout: JSON.stringify(list) }
       }
+      const exactRestMatch = args[1]?.match(/^repos\/([^/]+\/[^/]+)\/pulls\/(\d+)$/)
+      if (args[0] === 'api' && exactRestMatch) {
+        const pr = prsByRepositoryAndNumber.get(`${host}/${exactRestMatch[1]}#${exactRestMatch[2]}`)
+        if (pr) {
+          return { stdout: JSON.stringify(pr) }
+        }
+        throw new Error('HTTP 404 Not Found')
+      }
       const repoIndex = args.indexOf('--repo')
       const exact = prsByRepositoryAndNumber.get(`${host}/${args[repoIndex + 1]}#${args[2]}`)
-      if (args[0] === 'pr' && args[1] === 'view' && exact) {
+      if (args[0] === 'pr' && args[1] === 'view') {
+        if (!exact) {
+          throw new Error('HTTP 404 Not Found')
+        }
         return {
           stdout: JSON.stringify({
             number: exact.number,
@@ -263,6 +274,92 @@ describe('issue #26948: a branch tracking the default branch', () => {
       (await getPRForBranchOutcome('/repo-root', 'feature/my-change', null, null, 7)).kind
     ).toBe('no-pr')
   })
+
+  it.each(['closed', 'merged'] as const)(
+    'clears a cached %s integration PR in a fork after upstream tracking is removed',
+    async (state) => {
+      primeForkWithUpstream()
+      primeGit('', { origin: 'main' })
+      const integrationPR = restPR('develop', UPSTREAM, UPSTREAM)
+      primeGh(
+        {},
+        {
+          ...integrationPR,
+          merged_at: state === 'merged' ? '2025-01-02T00:00:00Z' : null,
+          head: {
+            ...integrationPR.head,
+            sha: 'feature-head-oid',
+            repo: { name: 'widgets', owner: { login: 'stablyai' }, default_branch: 'develop' }
+          }
+        }
+      )
+
+      expect(
+        await getPRForBranchOutcome('/repo-root', 'feature/my-change', null, null, 7, {
+          currentHeadOid: 'feature-head-oid',
+          acceptMergedFallbackPR: true
+        })
+      ).toMatchObject({
+        kind: 'no-pr',
+        rejectedPRUrls: ['https://github.com/stablyai/widgets/pull/7']
+      })
+    }
+  )
+
+  it('preserves a cached renamed feature PR using its own repository default metadata', async () => {
+    primeForkWithUpstream()
+    primeGit('', { origin: 'develop' })
+    const featurePR = restPR('develop', UPSTREAM, UPSTREAM)
+    primeGh(
+      {},
+      {
+        ...featurePR,
+        state: 'open',
+        head: {
+          ...featurePR.head,
+          repo: { name: 'widgets', owner: { login: 'stablyai' }, default_branch: 'main' }
+        }
+      }
+    )
+
+    expect(await getPRForBranch('/repo-root', 'feature/my-change', null, null, 7)).toMatchObject({
+      number: 7,
+      headRefName: 'develop'
+    })
+  })
+
+  it.each(['unavailable', 'changed-head'] as const)(
+    'preserves an untracked cached PR when REST metadata is %s',
+    async (metadataState) => {
+      primeForkWithUpstream()
+      primeGit('', { origin: 'develop' })
+      primeGh({}, { ...restPR('develop', UPSTREAM, UPSTREAM), state: 'open' })
+      const ghImplementation = ghExecFileAsyncMock.getMockImplementation()
+      ghExecFileAsyncMock.mockImplementation(async (args: string[], options) => {
+        if (args[0] === 'api' && args[1] === 'repos/stablyai/widgets/pulls/7') {
+          if (metadataState === 'unavailable') {
+            throw new Error('network unavailable')
+          }
+          const pr = restPR('develop', ACME, UPSTREAM)
+          return {
+            stdout: JSON.stringify({
+              ...pr,
+              head: {
+                ...pr.head,
+                repo: { name: 'widgets', owner: { login: 'acme' }, default_branch: 'develop' }
+              }
+            })
+          }
+        }
+        return ghImplementation?.(args, options)
+      })
+
+      expect(await getPRForBranch('/repo-root', 'feature/my-change', null, null, 7)).toMatchObject({
+        number: 7,
+        headRepo: UPSTREAM
+      })
+    }
+  )
 
   it('tries the cached feature PR after rejecting an unrelated upstream result', async () => {
     primeGit('refs/remotes/origin/develop')

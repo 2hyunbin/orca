@@ -4,13 +4,14 @@ import {
   getRemoteHeadBranchName,
   getRepoDefaultBranchName
 } from '../../../source-control/repo-default-branch'
-import type { HostedReviewLocalGitOptions } from './../github-exec-scope'
+import type { GhExecOptions, HostedReviewLocalGitOptions } from './../github-exec-scope'
 import type { TrackedUpstreamBranch } from './tracked-upstream-cache'
 import {
   pullRequestHeadRepository,
   type PullRequestLookupData,
   type PullRequestLookupPolicy
 } from './pull-request-lookup-data'
+import { getRestPRByNumber } from './pr-number-lookup'
 
 export type ImplicitDefaultBranchPRContext = {
   originHeadRepo: OwnerRepo | null
@@ -20,6 +21,7 @@ export type ImplicitDefaultBranchPRContext = {
   repoPath: string
   connectionId?: string | null
   localGitOptions: HostedReviewLocalGitOptions
+  ghOptions: GhExecOptions
 }
 
 export function createImplicitDefaultBranchPRPolicy(
@@ -73,7 +75,19 @@ async function shouldHideImplicitDefaultBranchPR(
         ? 'origin'
         : null
   if (!remoteName) {
-    return false
+    try {
+      // Removed tracking can leave a cached integration PR without a matching remote.
+      const metadata = await getRestPRByNumber(prRepo, data.number, input.ghOptions)
+      const metadataHeadRepo = pullRequestHeadRepository(metadata, prRepo)
+      return (
+        metadataHeadRepo !== null &&
+        githubRepoIdentityKey(metadataHeadRepo) === headRepoKey &&
+        metadata.headRefName === data.headRefName &&
+        metadata.headDefaultBranchName === data.headRefName
+      )
+    } catch {
+      return false
+    }
   }
   // An unknown upstream HEAD cannot borrow a different repository's origin default.
   const defaultBranchName =

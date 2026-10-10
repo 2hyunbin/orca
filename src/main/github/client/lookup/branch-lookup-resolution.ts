@@ -87,7 +87,8 @@ export async function resolvePRForBranchOutcome(input: {
     linkedPRNumber,
     repoPath,
     connectionId,
-    localGitOptions
+    localGitOptions,
+    ghOptions
   }
   const implicitPRPolicy = createImplicitDefaultBranchPRPolicy(defaultBranchPRContext)
 
