@@ -46,13 +46,23 @@ const {
 
 const ACME = { owner: 'acme', repo: 'widgets' }
 
-function primeGit(trackedUpstream: string): void {
+/** remoteHeads maps a remote to the branch its `refs/remotes/<remote>/HEAD` points at. */
+function primeGit(
+  trackedUpstream: string,
+  remoteHeads: Record<string, string> = { origin: 'develop' }
+): void {
   gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
     if (args[0] === 'for-each-ref' && args.includes('--format=%(refname)%00%(upstream)')) {
       return { stdout: `refs/heads/feature/my-change\0${trackedUpstream}\n`, stderr: '' }
     }
     if (args[0] === 'for-each-ref' && args.includes('--format=%(refname)%00%(symref)')) {
-      return { stdout: 'refs/remotes/origin/HEAD\0refs/remotes/origin/develop\n', stderr: '' }
+      const stdout = Object.entries(remoteHeads)
+        .filter(([remote]) => args.includes(`refs/remotes/${remote}/HEA[D]`))
+        .map(
+          ([remote, branch]) => `refs/remotes/${remote}/HEAD\0refs/remotes/${remote}/${branch}\n`
+        )
+        .join('')
+      return { stdout, stderr: '' }
     }
     if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
       return { stdout: 'feature-head-oid\n', stderr: '' }
@@ -105,6 +115,18 @@ function primeGh(listsByHead: Record<string, Record<string, unknown>[]>): void {
   })
 }
 
+/** A fork clone: `origin` is the fork, `upstream` is the repo PRs target. */
+function primeForkWithUpstream(): void {
+  const UPSTREAM = { owner: 'stablyai', repo: 'widgets' }
+  resolvePRRepositoryCandidatesMock.mockResolvedValue({
+    candidates: [UPSTREAM, ACME],
+    headRepo: ACME
+  })
+  getOwnerRepoForRemoteMock.mockImplementation(async (_repoPath: string, remoteName: string) =>
+    remoteName === 'upstream' ? UPSTREAM : remoteName === 'origin' ? ACME : null
+  )
+}
+
 describe('issue #26948: a branch tracking the default branch', () => {
   beforeEach(() => {
     resetPRForBranchMocks(clientMocks)
@@ -130,20 +152,33 @@ describe('issue #26948: a branch tracking the default branch', () => {
   })
 
   it('skips the default branch on a second remote that PRs target (fork checkout off upstream)', async () => {
-    const UPSTREAM = { owner: 'stablyai', repo: 'widgets' }
-    resolvePRRepositoryCandidatesMock.mockResolvedValue({
-      candidates: [UPSTREAM, ACME],
-      headRepo: ACME
-    })
-    getOwnerRepoForRemoteMock.mockImplementation(async (_repoPath: string, remoteName: string) =>
-      remoteName === 'upstream' ? UPSTREAM : remoteName === 'origin' ? ACME : null
-    )
+    primeForkWithUpstream()
     primeGit('refs/remotes/upstream/develop')
     primeGh({ 'stablyai:develop': [restPR('develop')] })
 
     const pr = await getPRForBranch('/repo-root', 'feature/my-change')
 
     expect(pr).toBeNull()
+  })
+
+  it("uses the tracked remote's own default branch when it differs from origin's", async () => {
+    primeForkWithUpstream()
+    primeGit('refs/remotes/upstream/develop', { origin: 'main', upstream: 'develop' })
+    primeGh({ 'stablyai:develop': [restPR('develop')] })
+
+    const pr = await getPRForBranch('/repo-root', 'feature/my-change')
+
+    expect(pr).toBeNull()
+  })
+
+  it("keeps a PR headed by a tracked branch that is only origin's default", async () => {
+    primeForkWithUpstream()
+    primeGit('refs/remotes/upstream/develop', { origin: 'develop', upstream: 'main' })
+    primeGh({ 'stablyai:develop': [restPR('develop')] })
+
+    const pr = await getPRForBranch('/repo-root', 'feature/my-change')
+
+    expect(pr).toMatchObject({ number: 7 })
   })
 
   it("still follows a contributor fork's branch that shares the default branch's name", async () => {

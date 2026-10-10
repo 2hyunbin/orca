@@ -1,6 +1,9 @@
 import type { OwnerRepo } from '../../gh-utils'
 import { githubRepoIdentityKey } from '../../../../shared/github/repository-identity-key'
-import { getRepoDefaultBranchName } from '../../../source-control/repo-default-branch'
+import {
+  getRemoteHeadBranchName,
+  getRepoDefaultBranchName
+} from '../../../source-control/repo-default-branch'
 import type { HostedReviewLocalGitOptions } from './../github-exec-scope'
 import type { TrackedUpstreamBranch } from './tracked-upstream-cache'
 
@@ -21,10 +24,19 @@ export async function isTrackedUpstreamDefaultBranch(input: {
   if (!input.candidates.some((candidate) => githubRepoIdentityKey(candidate) === upstreamRepoKey)) {
     return false
   }
-  const defaultBranchName = await getRepoDefaultBranchName(
-    input.repoPath,
-    input.connectionId,
-    input.localGitOptions
-  )
+  const { remoteName } = input.upstreamBranch
+  // Why: a fork's `upstream` can default to a different branch than `origin`; use origin's only when the remote never recorded its HEAD.
+  const remoteDefaultBranchName =
+    remoteName === 'origin'
+      ? null
+      : await getRemoteHeadBranchName(
+          input.repoPath,
+          remoteName,
+          input.connectionId,
+          input.localGitOptions
+        )
+  const defaultBranchName =
+    remoteDefaultBranchName ??
+    (await getRepoDefaultBranchName(input.repoPath, input.connectionId, input.localGitOptions))
   return defaultBranchName === input.upstreamBranch.branchName
 }
