@@ -135,7 +135,20 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
     step: 'move',
     detail: /^group \S+ selects /,
     cause: 'headless move-to-group keeps the target group selection'
-  }))
+  })),
+  // A CLI create on a split headless host: the live publication puts a new active tab in groups[0]
+  // (mergeMobileSessionTabGroups / distributeHeadlessTabsAcrossGroups fallback), while the stored
+  // pane defaults to the focused group, so clients see it move groups on a restart, as on main.
+  // Fixed in PR 6, where the published projection replaces those snapshot builders.
+  ...(['orcad', 'electron'] as const).flatMap((kind) =>
+    ['CLI create in focused group', 'before cold restart'].map((step) => ({
+      scenario: `headless-${kind}-create-in-second-group-cold-restart`,
+      check: 'client' as const,
+      step,
+      detail: /^group \S+: runtime order /,
+      cause: 'headless CLI create publishes into the first group'
+    }))
+  )
 ]
 
 function covers(

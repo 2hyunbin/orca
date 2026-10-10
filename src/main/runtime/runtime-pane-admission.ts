@@ -8,6 +8,8 @@ type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
   worktreeId: string
   tabId: string
   leafId: string
+  /** The group a new tab joins; a split stays in its parent's. */
+  groupId?: string
 }
 
 /** The pane its placement names: a new tab, or a split beside its parent pane. */
@@ -30,6 +32,7 @@ function admissionFor(args: AdmittedSpawnArgs): TerminalPaneAdmission {
     workspace,
     tabId,
     leafId,
+    ...(args.groupId ? { groupId: args.groupId } : {}),
     ...(viewMode ? { viewMode } : {}),
     ...(args.cwd ? { creation: { startupCwd: args.cwd } } : {})
   }
@@ -65,9 +68,10 @@ export async function spawnInAdmittedPane(
     // Only a split is refused: its parent pane left the layout.
     throw new Error('terminal_split_source_not_found')
   }
+  const { groupId: _groupId, ...spawnArgs } = args
   let result: Awaited<ReturnType<Spawn>>
   try {
-    result = await controller.spawn(args)
+    result = await controller.spawn(spawnArgs)
   } catch (error) {
     if (outcome === 'admitted') {
       await withdrawRuntimePane(store, args)

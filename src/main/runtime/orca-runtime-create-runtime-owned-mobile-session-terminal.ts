@@ -110,6 +110,7 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
         ...(opts.launchConfig ? { launchConfig: opts.launchConfig } : {}),
         ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
         ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),
+        ...(opts.targetGroupId ? { targetGroupId: opts.targetGroupId } : {}),
         startupCommandDelivery: opts.startupCommandDelivery,
         ...(opts.identity
           ? {

@@ -169,7 +169,7 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
               ? { onPtySpawnCommitted: reportPtySpawnCommitted }
               : {}),
             ...(adoptedBeforeLaunch ? { adoptedStablePane: adoptedBeforeLaunch } : {}),
-            placement: dependencies.runtimeNewTabPlacement(launchOpts.viewMode),
+            ...dependencies.newTabIn(launchOpts, this.mobileSessionTabsByWorktree, workspace.id),
             ...(launchOpts.sessionId ? { sessionId: launchOpts.sessionId } : {}),
             ...(!adoptedBeforeLaunch && launchOpts.isNewSession ? { isNewSession: true } : {}),
             ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS
