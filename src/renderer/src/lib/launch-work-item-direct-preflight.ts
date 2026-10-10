@@ -2,6 +2,7 @@ import { getSetupConfig } from '@/lib/new-workspace'
 import { checkRuntimeHooks } from '@/runtime/runtime-hooks-client'
 import { resolveGitHubPrStartPointForRepo } from '@/lib/github-pr-start-point'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
+import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
 import type { OrcaHooks, RepoHookSettings } from '../../../shared/orca-yaml-hook-types'
 import type { SetupDecision } from '../../../shared/worktree/create-types'
 import type { GitHubPrStartPoint } from '../../../shared/worktree/types'
@@ -13,7 +14,7 @@ type PreflightSettings = Pick<GlobalSettings, 'activeRuntimeEnvironmentId'> | nu
 export async function resolveDirectPrStartPoint(
   repoId: string,
   prNumber: number,
-  settings: PreflightSettings,
+  target: RuntimeClientTarget | null,
   hints: {
     branchName?: string
     headRefName?: string
@@ -24,7 +25,7 @@ export async function resolveDirectPrStartPoint(
   return resolveGitHubPrStartPointForRepo({
     repoId,
     prNumber,
-    settings,
+    target,
     headRefName: hints.headRefName ?? hints.branchName,
     baseRefName: hints.baseRefName,
     isCrossRepository: hints.isCrossRepository
