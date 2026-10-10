@@ -181,6 +181,7 @@ export class AgentSessionJournal {
   /** Refuses every later write and resolves once the admitted ones have landed. Holds no
    *  connection, so there is nothing to release and nothing that can fail. */
   close(): Promise<void> {
+    this.queuedMessages.editLeases.dispose()
     this.queue.markClosed()
     return this.queue.drain()
   }
