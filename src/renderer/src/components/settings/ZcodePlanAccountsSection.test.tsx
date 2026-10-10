@@ -145,6 +145,7 @@ describe('ZcodePlanAccountsSection', () => {
     render(<ZcodePlanAccountsSection />)
 
     const input = await screen.findByPlaceholderText('Paste your GLM Coding Plan API key')
+    mocks.getStatus.mockResolvedValue({ apiKeyConfigured: true, zcodeCliConfigured: false })
     fireEvent.change(input, { target: { value: '  glm-secret  ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
