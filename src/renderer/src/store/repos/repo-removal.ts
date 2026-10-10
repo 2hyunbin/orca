@@ -6,11 +6,8 @@ import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { getWorktreeIdFromVisitKey, getWorktreeVisitKey } from '@/lib/worktree-visit-recency'
 import { omitSparsePresetsForRepos } from '../slices/sparse-presets'
 import { repoMatchesHostIdentity } from '../slices/repo-host-identity'
-import {
-  callRuntimeRpc,
-  getActiveRuntimeTarget,
-  hasRuntimeRpcErrorCode
-} from '../../runtime/runtime-rpc-client'
+import { callRuntimeRpc, hasRuntimeRpcErrorCode } from '../../runtime/runtime-rpc-client'
+import { runtimeTargetForOwnerHostId } from '../../runtime/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
 import { translate } from '@/i18n/i18n'
 import {
@@ -22,7 +19,6 @@ import { cleanupEphemeralVmRuntimesForDeleted } from '@/lib/ephemeral-vm-runtime
 import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
-import { settingsForRepoOwner } from './owner-routing'
 import {
   captureWorkspaceChatDraftKeys,
   deleteWorkspaceChatDrafts
@@ -32,8 +28,17 @@ export function worktreeBelongsToHost(worktree: { hostId?: string }, hostId: str
   return (worktree.hostId ?? LOCAL_EXECUTION_HOST_ID) === hostId
 }
 
+type HostScopedWorktreeRef = { id: string; hostId?: string }
+
+type RepoWorktreeCatalog = {
+  worktreesByRepo: Readonly<Record<string, readonly HostScopedWorktreeRef[] | undefined>>
+  detectedWorktreesByRepo: Readonly<
+    Record<string, { worktrees: readonly HostScopedWorktreeRef[] } | undefined>
+  >
+}
+
 export function getKnownRepoWorktreeIds(
-  state: AppState,
+  state: RepoWorktreeCatalog,
   projectId: string,
   hostId?: string
 ): string[] {
@@ -49,6 +54,26 @@ export function getKnownRepoWorktreeIds(
     }
   }
   return [...ids]
+}
+
+/** Terminal tabs that removing this project's host row will close. */
+export function countOpenRepoTerminalTabs(
+  state: RepoWorktreeCatalog & {
+    tabsByWorktree: Readonly<Record<string, readonly { id: string }[] | undefined>>
+    ptyIdsByTabId: Readonly<Record<string, readonly string[] | undefined>>
+  },
+  projectId: string,
+  hostId: string
+): number {
+  let count = 0
+  for (const worktreeId of getKnownRepoWorktreeIds(state, projectId, hostId)) {
+    for (const tab of state.tabsByWorktree[worktreeId] ?? []) {
+      if ((state.ptyIdsByTabId[tab.id]?.length ?? 0) > 0) {
+        count += 1
+      }
+    }
+  }
+  return count
 }
 
 export function createRepoRemovalActions(
@@ -80,7 +105,10 @@ export function createRepoRemovalActions(
           }
         }
         // Why: derive the target from the owner row's host so an SSH host removal never routes repo.rm to the focused runtime.
-        const target = getActiveRuntimeTarget(settingsForRepoOwner(get(), projectId, ownerHostId))
+        const target = runtimeTargetForOwnerHostId(ownerHostId)
+        if (!target) {
+          throw new Error('The project host is unresolved. Refresh and retry.')
+        }
         // Why before the host call: its announcement can start a listing refresh that drops these tabs.
         const chatDraftKeys = captureWorkspaceChatDraftKeys(
           get(),

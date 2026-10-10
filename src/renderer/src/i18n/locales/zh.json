@@ -1037,8 +1037,6 @@
         "0e3cf53060": "未找到浏览器选项卡 {{value0}}",
         "2f6637fe6c": "浏览器选项卡 {{value0}} 已固定",
         "a8d2bf8e9e": "没有可关闭的活动浏览器选项卡",
-        "291c8ed902": "当远程运行时处于活动状态时，浏览器选项卡不可用",
-        "f45fa2b03c": "当远程运行时处于活动状态时，浏览器配置文件不可用",
         "f000b2ff76": "没有活动的工作树",
         "56d3ec4203": "无法创建无标题 Markdown 文件。",
         "f6300deb8b": "新浏览器选项卡",
@@ -2931,7 +2929,6 @@
             "efb3843e75": "筛选并排序工作区",
             "93b7381d50": "筛选",
             "a615e24679": "排序",
-            "4cc5b73efe": "正在查找非活动工作区...",
             "5bf2e88480": "已扫描 {{value0}}/{{value1}} 个{{value2}}",
             "searchPlaceholder": "搜索工作区",
             "ageFilter": "时间",
@@ -2943,7 +2940,6 @@
             "1d3503357d": "删除继续期间，你可以关闭此窗口并稍后回来。",
             "4c2990886e": "已删除 {{value0}}/{{value1}}",
             "86ba852118": "{{value0}}，{{value1}} 个失败",
-            "7b7bde5181": "到目前为止已检查工作区：{{value0}}",
             "deletingCount": "正在删除工作区：{{value0}}",
             "deleteCount": "删除工作区：{{value0}}？",
             "selectedForDeletionCount": "已选择删除：{{value0}}",
@@ -3426,7 +3422,8 @@
             "ec2adf093e": "在新终端中启动 {{value0}}",
             "465e432ef1": "无法为 {{value0}} 构建启动命令。",
             "e518f544b1": "未检测到智能体",
-            "8dea9b5cdf": "没有启用智能体"
+            "8dea9b5cdf": "没有启用智能体",
+            "needsServerUpdate": "请更新此服务器上的 Orca 以列出此工作区的智能体"
           },
           "RecentTabSwitcher": {
             "329638ff6f": "切换选项卡",
@@ -3981,6 +3978,10 @@
           "StatusBarUsageChangeNotices": {
             "compactTitle": "用量显示现已精简",
             "compactBody": "每个服务提供商显示一个主要指标。在用量菜单中选择“<detailed>详细</detailed>”即可查看更多限额。"
+          },
+          "usageUnitLabel": {
+            "used": "已用",
+            "remaining": "剩余"
           },
           "UsagePercentageDisplayChangeNotice": {
             "title": "用量现在显示已用百分比",
@@ -5294,7 +5295,9 @@
           "b79b39d865": "删除项目",
           "removeDescriptionSsh": "此操作仅将 {{name}} 从 Orca 中移除。文件仍保留在 {{host}} 上 — 重新添加该 SSH 主机即可恢复。",
           "removeDescriptionLocal": "此操作仅将 {{name}} 从 Orca 中移除。文件仍保留在您的磁盘上。",
-          "removeDescriptionVmRecipe": "这会从 Orca 中删除 {{name}}。其VM配方决定是否永久删除环境及其文件。"
+          "removeDescriptionVmRecipe": "这会从 Orca 中删除 {{name}}。其VM配方决定是否永久删除环境及其文件。",
+          "openTerminalWarningOne": "此项目中 1 个打开的终端将被关闭。",
+          "openTerminalWarningMany": "此项目中 {{count}} 个打开的终端将被关闭。"
         },
         "ScrollToCurrentWorkspaceToolbarButton": {
           "23989bb663": "显示活动工作区"
@@ -5498,7 +5501,7 @@
           "allHostsDetail": "显示所有主机",
           "configuredSshHost": "已配置 SSH",
           "projectSshHost": "项目 SSH",
-          "activeRuntimeHost": "活动服务器",
+          "activeRuntimeHost": "新项目的默认主机",
           "projectRuntimeHost": "项目服务器",
           "631b97eea9": "主机范围",
           "2d4f0eb933": "默认",
@@ -6232,6 +6235,7 @@
           "serverTitle": "添加远程服务器",
           "sshTitle": "添加 SSH 主机",
           "serverDescription": "与另一台电脑上运行的 Orca 配对。",
+          "serverRunsAsYou": "此设备将能够在此服务器上以你的身份运行命令。",
           "sshDescription": "添加一台可通过 SSH 登录并持久保存的机器。",
           "cancel": "取消",
           "saving": "正在保存...",
@@ -6748,7 +6752,7 @@
           "codexSessionSourceInfo": "关于导入 Codex 历史记录",
           "codexSessionSourceTooltip": "Orca 在隔离的主目录中运行 Codex。将此项指向您现有的 Codex 主目录以导入会话历史记录。留空则使用 ~/.codex。",
           "03e1a5081a": "on {{value0}}",
-          "25a41a9aad": "重新检测活动服务器上安装的智能体",
+          "25a41a9aad": "重新检测此服务器上安装的代理",
           "remoteDetectionFailed": "无法检测已安装的智能体。请检查主机连接后重试。",
           "retryDetection": "Retry",
           "storedDefaultUndetected": "已保存为默认值，但目前未检测到",
@@ -8129,16 +8133,16 @@
           "6ce4664003": "刷新服务器",
           "b07070ed3c": "没有连接服务器",
           "78692becbd": "本地桌面",
-          "64b6bea541": "活动服务器",
+          "64b6bea541": "新项目的默认主机",
           "99ac81fb43": "切换到 {{value0}}。",
           "b5b5114cb0": "删除了 {{value0}}。",
           "6cb6eae14f": "无法保存运行时环境。",
-          "7b5986c8df": "已保存 {{value0}}。准备好后可通过活动服务器进行切换。",
+          "7b5986c8df": "已连接到 {{value0}}。若要默认在其上创建新项目，请在“高级 > 新项目的默认主机”中选择它。",
           "5ef712f407": "名为“{{value0}}”的服务器已存在。",
           "0c55a47480": "需要名称和配对代码。",
           "e6410d72c3": "无法加载运行时环境。",
           "6ef71985da": "无终点",
-          "ed3e3f069d": "这将从 Orca 中删除保存的服务器。它不会更改活动服务器。",
+          "ed3e3f069d": "这会从 Orca 中移除已保存的服务器，不会更改新项目的默认主机。",
           "b2fda48c39": "删除活动服务器会使此浏览器与该主机断开连接。现有主机会话会保持不变。",
           "9f7665a01b": "删除活动服务器会先将 Orca 切换回本地桌面。现有主机会话会保持不变。",
           "3595fd1948": "新链接",
@@ -8160,7 +8164,7 @@
           "hostModelCapabilityProjectSetup": "项目设置",
           "hostModelCapabilityTaskSourceContext": "任务来源上下文",
           "hostModelCapabilityWorkspaceRunContext": "工作区运行上下文",
-          "3f67e8078a": "默认使用此电脑。仅当你希望受支持的项目、文件、终端、提供商检查以及浏览器/移动端接续通过某个服务器运行时，才选择已保存的服务器。",
+          "3f67e8078a": "除非在此选择已保存的服务器，否则新项目会在这台电脑上创建。现有项目、文件和终端仍留在各自的主机上。",
           "2c85efb3e8": "选择已保存的服务器后，此浏览器会将配对的 Orca 运行时用作默认主机。",
           "serverConnected": "已连接",
           "serverChecking": "正在检查…",
@@ -8168,7 +8172,7 @@
           "disconnectedServer": "已断开与 {{value0}} 的连接。",
           "connectToRemoteServers": "连接到远程服务器",
           "connectToRemoteServersHelp": "配对另一个 Orca 运行时，然后在此处连接或断开连接。仅当你想更改默认主机时，才使用高级 > 活动服务器。",
-          "activeServerRowHelp": "用于通过服务器路由的项目、终端和提供商检查的活动服务器。",
+          "activeServerRowHelp": "新项目的默认主机。现有项目仍留在各自的主机上。",
           "disconnect": "断开连接",
           "connect": "连接",
           "advanced": "高级",
@@ -8182,8 +8186,8 @@
           "updateServer": "更新",
           "reviewServerUpdates": "服务器更新",
           "orcaVersion": "Orca v{{value0}}",
-          "removeActiveServerBlocked": "请先在“高级”中选择另一个活动服务器，然后再移除此服务器。",
-          "removeActiveServerDescription": "请先在“高级”中选择另一个活动服务器，然后再移除此服务器。现有的主机会话将保留。",
+          "removeActiveServerBlocked": "此服务器是新项目的默认主机。请先在“高级”中选择另一个主机，然后再移除它。",
+          "removeActiveServerDescription": "此服务器是新项目的默认主机。请先在“高级”中选择另一个主机，然后再移除它。现有的主机会话将保留。",
           "updatingServers": "正在更新服务器…",
           "workflow": "远程服务器工作流程",
           "connectWorkflow": "连接到主机",
@@ -8222,6 +8226,7 @@
           "de6d5cff95": "这台电脑（",
           "de77eb1b65": "连接地址",
           "ff80904fc4": "为浏览器或桌面客户端创建可撤销的访问授权。",
+          "pairedRunsAsYou": "已配对的客户端可以在此电脑上以你的身份运行命令。",
           "f8500e134a": "分享此 Orca 服务器",
           "d6c081adf4": "复制 URL 失败。",
           "df0aa45a86": "复制的配对 URL。",
@@ -10428,12 +10433,15 @@
               "ebd5369acf": "环境",
               "d198440ce3": "运行时",
               "baec27aa8f": "将此浏览器连接到已保存的 Orca 服务器。",
-              "3517fb2ec0": "活动服务器",
+              "3517fb2ec0": "远程 Orca 服务器",
               "c6e5a03aa0": "开发盒",
               "f1575f1e09": "网络客户端",
               "81444c4102": "配对网址",
               "104f4d7dbd": "配对",
-              "4575341c77": "选择本地桌面、添加已保存的远程 Orca 服务器或生成配对 URL。"
+              "4575341c77": "添加已保存的远程 Orca 服务器、生成配对 URL，或选择新项目的默认主机。",
+              "defaultHostKeyword": "默认主机",
+              "newProjectsKeyword": "新项目",
+              "activeServerKeyword": "活动服务器"
             }
           }
         },
@@ -11098,11 +11106,11 @@
         },
         "providerAccountScope": {
           "remoteServer": "远程服务器：{{value0}}",
-          "remoteServerCredentials": "此提供商的凭据和账户检查由该远程服务器拥有。使用“设置 > 远程 Orca 服务器 > 高级”编辑另一个默认运行时范围。",
+          "remoteServerCredentials": "此提供商的凭据和账户检查由这台远程服务器管理。要使用其他主机，请更改“设置 > 远程 Orca 服务器 > 高级 > 新项目的默认主机”。",
           "localMac": "本地 Mac",
-          "localCredentials": "此提供商的凭据和账户检查由该桌面客户端拥有。使用“设置 > 远程 Orca 服务器 > 高级”编辑服务器拥有的凭据。",
-          "remoteServerRateLimit": "{{value0}} API 预算从此远程服务器上的 CLI 获取。使用“设置 > 远程 Orca 服务器 > 高级”查看另一个默认运行时预算。",
-          "localRateLimit": "{{value0}} API 预算从此桌面客户端上的 CLI 获取。使用“设置 > 远程 Orca 服务器 > 高级”查看服务器拥有的预算。"
+          "localCredentials": "此提供商的凭据和账户检查由这台桌面客户端管理。要使用服务器，请更改“设置 > 远程 Orca 服务器 > 高级 > 新项目的默认主机”。",
+          "remoteServerRateLimit": "{{value0}} API 额度从这台远程服务器上的 CLI 获取。要查看其他主机的额度，请在“设置”顶部的主机菜单中选择。",
+          "localRateLimit": "{{value0}} API 额度从这台桌面客户端上的 CLI 获取。要查看服务器的额度，请在“设置”顶部的主机菜单中选择。"
         },
         "settingOwnership": {
           "clientDefault": "客户端默认",
@@ -11454,7 +11462,6 @@
           "pathGroup": "手机访问此电脑的方式",
           "anywhereTitle": "Orca Relay",
           "anywhereDescription": "手机可通过蜂窝网络或任意 Wi‑Fi 连接。仅 Relay 需要登录。",
-          "signInRequired": "仅 Relay 需要 — 局域网无需账号。",
           "relayUnavailable": "此版本不支持 Orca Relay。请使用局域网。",
           "signInAgain": "重新登录以使用 Relay",
           "localTitle": "局域网",
@@ -11964,7 +11971,6 @@
         },
         "BrowserTerminalLinkActionsSetting": {
           "title": "终端 URL 点击次数",
-          "description": "单击终端或聊天记录中的链接时显示可用的操作。关闭此功能需要在终端中单击 {{modifier}}。",
           "descriptionV2": "控制点击终端窗格和聊天记录中打印的已检测的 URL。",
           "plainClickLabel": "简单的点击",
           "plainClickDescription": "选择左键单击是显示操作、打开 URL 还是将其留给终端。 Cmd/Ctrl-单击始终直接打开。",
@@ -12380,7 +12386,7 @@
           },
           "loadFailed": "Orca 无法加载 SSH 主机和未完成的迁移。请重新打开设置以重试。",
           "outcome": {
-            "activeServer": "未完成：请先在“高级”中选择另一个活动服务器，再停止此服务器。",
+            "activeServer": "未完成：此服务器是新项目的默认主机。请先在“高级”中选择另一个主机，然后再停止它。",
             "live": "未完成：此服务器上的终端仍在运行。请关闭它们后重试。",
             "unverifiable": "未完成：Orca 无法确认此服务器上正在运行什么。请在主机可访问时重试。",
             "migration": "未完成：迁移到此服务器的操作尚未完成。请先继续该操作。",
@@ -17974,6 +17980,7 @@
         "model": "模型",
         "effort": "推理强度",
         "fastMode": "快速模式",
+        "speed": "速度",
         "thinking": "思考",
         "options": "选项",
         "sessionOptions": "会话选项",
@@ -17994,7 +18001,8 @@
           "high": "高",
           "xhigh": "极高",
           "max": "最大",
-          "ultra": "极致"
+          "ultra": "极致",
+          "standard": "标准"
         },
         "noCommandsOrSkills": "没有匹配的命令或技能",
         "commands": "命令",
@@ -18247,6 +18255,7 @@
         "orcaStopUpdate": "此回复进行期间，{{machine}} 上的 Orca 为更新而重新启动。",
         "orcaStopQuit": "此回复进行期间，{{machine}} 上的 Orca 已关闭。",
         "orcaStopCrash": "此回复进行期间，{{machine}} 上的 Orca 意外停止。",
+        "orcaStopRemote": "此回复进行期间，{{machine}} 上的 Orca 已停止。",
         "orcaStopCanContinue": "你可以在此对话中继续。"
       },
       "providerFrame": {
@@ -18383,10 +18392,8 @@
       },
       "queuedMessages": {
         "alreadySent": "此消息已发送。",
-        "editAlreadySent": "已发送 — 你的文本仍在输入框中。",
         "listLabel": "排队的消息",
         "behindReturnedHold": "等待中 — 前面有一条消息需要处理",
-        "awaitingAnswerHold": "等待你的回答",
         "steer": "立即发送",
         "send": "发送",
         "steerHint": "提交且不中断模型",
@@ -18410,7 +18417,15 @@
         "sendConfirmClear": "清空队列",
         "sendConfirmSend": "发送消息",
         "fromSender": "来自",
-        "pausedSendFailedWaiting": "无法发送。智能体完成后，点按发送以重试。"
+        "pausedSendFailedWaiting": "无法发送。智能体完成后，点按发送以重试。",
+        "save": "保存",
+        "editingMessage": "正在编辑消息",
+        "cancelEditing": "取消编辑",
+        "editChanged": "你编辑时此消息已更改。你编辑的内容已放入聊天输入框。",
+        "editChangedPrompt": "你编辑时此消息已更改。回答智能体后，你编辑的内容会出现在聊天输入框中。",
+        "editFailed": "此消息无法编辑。",
+        "editGone": "此消息已发送或移除。你编辑的内容已放入聊天输入框。",
+        "editGonePrompt": "此消息已发送或移除。回答智能体后，你编辑的内容会出现在聊天输入框中。"
       },
       "thought": "已思考",
       "thoughtForDuration": "思考了 {{duration}}",
@@ -19236,6 +19251,7 @@
       "sortResultsAriaLabel": "排序结果：{{value0}}",
       "consent": "启用全文搜索吗？ Orca 根据本地智能体记录在此计算机上构建索引，包括完整对话和每个工具输出最多 3,072 个字符。内容未经过编辑。经过身份验证的配对客户端可以搜索它。",
       "remoteDisabled": "此计算机上已禁用搜索。在该计算机上启用转录索引以搜索其会话。",
+      "titleOnly": "此计算机上的全文搜索已关闭，因此仅匹配会话标题。",
       "notReady": "搜索索引尚未准备好。稍后再试。",
       "noService": "在此计算机上无法进行搜索。它可能需要 Orca 更新或具有搜索支持的运行时。",
       "failed": "无法搜索这台计算机。检查其连接并重试。",

@@ -8,7 +8,7 @@ import {
 } from './daemon-launched-child-spawn'
 import { parseDaemonReadyIdentity } from './daemon-ready-identity'
 import { unlinkOwnedDaemonPidFile } from './daemon-spawner'
-import { childProcessHasExited } from '../../shared/child-process/process-tree-termination'
+import { childProcessHasExited } from '@orca/process-host/process-tree-termination'
 
 /** How long a forked daemon gets to report ready over IPC, unless the caller overrides it. */
 export const DAEMON_CHILD_STARTUP_TIMEOUT_MS = 10_000

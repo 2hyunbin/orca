@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
-import type { ProcessResult, ProcessSpec } from '../../shared/child-process/process-spec'
+import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
 
 const { state, runProcessMock, materializeMock, ensureWithinMock, disconnectMock } = vi.hoisted(
   () => {
@@ -25,7 +25,7 @@ const { state, runProcessMock, materializeMock, ensureWithinMock, disconnectMock
     }
   }
 )
-vi.mock('../../shared/child-process/run-process', () => ({ runProcess: runProcessMock }))
+vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
 vi.mock('../../shared/app-environment', () => ({
   hasAppEnvironment: () => true,
   getAppEnvironment: () => ({

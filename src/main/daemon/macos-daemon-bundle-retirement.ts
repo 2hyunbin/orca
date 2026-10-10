@@ -1,6 +1,6 @@
 import { opendir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { runProcess } from '../../shared/child-process/run-process'
+import { runProcess } from '@orca/process-host'
 import { rm } from '../asar-transparent-fs'
 import { inspectProcessLiveness } from './daemon-process-inspection'
 import { readMacDaemonJobState, stopMacDaemonJob } from './macos-daemon-job-state'

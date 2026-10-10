@@ -2,14 +2,14 @@ import { access, mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { ProcessResult, ProcessSpec } from '../../shared/child-process/process-spec'
+import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
 import type { ProcessLivenessVerdict } from './daemon-incarnation-evidence-types'
 
 const { run, liveness } = vi.hoisted(() => ({
   run: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>(),
   liveness: vi.fn<() => ProcessLivenessVerdict>()
 }))
-vi.mock('../../shared/child-process/run-process', () => ({ runProcess: run }))
+vi.mock('@orca/process-host', () => ({ runProcess: run }))
 vi.mock('./daemon-process-inspection', () => ({ inspectProcessLiveness: liveness }))
 import {
   retireAbandonedMacDaemonBundles,

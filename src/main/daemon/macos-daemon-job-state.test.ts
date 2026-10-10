@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import type { ProcessResult, ProcessSpec } from '../../shared/child-process/process-spec'
+import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
 
 const { run } = vi.hoisted(() => ({ run: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>() }))
-vi.mock('../../shared/child-process/run-process', () => ({ runProcess: run }))
+vi.mock('@orca/process-host', () => ({ runProcess: run }))
 import { readMacDaemonJobState, stopMacDaemonJob } from './macos-daemon-job-state'
 
 const result: ProcessResult = { code: 0, signal: null, stdout: '', stderr: '', timedOut: false }
