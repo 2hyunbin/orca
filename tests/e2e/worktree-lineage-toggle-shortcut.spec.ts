@@ -296,47 +296,30 @@ test.describe('Toggle Child Workspaces shortcut', () => {
   }) => {
     const { parentId, childId } = await seedLineageScenario(orcaPage)
     await setToggleBinding(orcaPage, ['Mod+Alt+H'])
-    const folderKey = 'folder:child-toggle-folder'
-    await orcaPage.evaluate(() => {
+    const folderKey = await orcaPage.evaluate(async () => {
       const store = window.__store
       const repo = store?.getState().repos[0]
       if (!store || !repo) {
         throw new Error('Missing seeded project')
       }
-      store.setState({
-        projectGroups: [
-          {
-            id: 'child-toggle-group',
-            name: 'Folder project',
-            parentPath: repo.path,
-            parentGroupId: null,
-            createdFrom: 'manual',
-            tabOrder: 0,
-            isCollapsed: false,
-            color: null,
-            createdAt: 1,
-            updatedAt: 1
-          }
-        ],
-        folderWorkspaces: [
-          {
-            id: 'child-toggle-folder',
-            projectGroupId: 'child-toggle-group',
-            name: 'Folder without a child chip',
-            folderPath: repo.path,
-            executionHostId: 'local',
-            linkedTask: null,
-            comment: '',
-            isArchived: false,
-            isUnread: false,
-            isPinned: false,
-            sortOrder: 0,
-            lastActivityAt: 1,
-            createdAt: 1,
-            updatedAt: 1
-          }
-        ]
+      const group = await window.api.projectGroups.create({
+        name: 'Folder project',
+        parentPath: repo.path,
+        createdFrom: 'manual'
       })
+      await store.getState().fetchProjectGroups({ runtimeEnvironmentId: null, throwOnError: true })
+      const folder = await store.getState().createFolderWorkspace(
+        {
+          projectGroupId: group.id,
+          name: 'Folder without a child chip',
+          folderPath: repo.path
+        },
+        { runtimeEnvironmentId: null }
+      )
+      if (!folder) {
+        throw new Error('Missing created folder workspace')
+      }
+      return `folder:${folder.id}`
     })
     const folder = sidebarWorktreeRow(orcaPage, folderKey)
     await expect(folder).toBeVisible()
@@ -355,6 +338,7 @@ test.describe('Toggle Child Workspaces shortcut', () => {
     await orcaPage.keyboard.press(CHORD)
     await expect(orcaPage.locator('body')).toHaveAttribute('data-child-toggle-claimed', 'false')
     await expect(sidebarWorktreeRow(orcaPage, childId)).toBeVisible()
+    await expect(orcaPage.locator('[data-terminal-error-toast]')).toHaveCount(0)
     await captureEvidence(orcaPage, 'child-toggle-folder-pass-through.png')
   })
 
