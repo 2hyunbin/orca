@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { test, expect } from './helpers/orca-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
+import { readPaneIdentitySnapshot } from './helpers/terminal'
 import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
 import { seedLineageScenario, seedWorkspaceLiveTerminal } from './worktree-lineage-state'
 
@@ -338,6 +339,33 @@ test.describe('Toggle Child Workspaces shortcut', () => {
     await orcaPage.keyboard.press(CHORD)
     await expect(orcaPage.locator('body')).toHaveAttribute('data-child-toggle-claimed', 'false')
     await expect(sidebarWorktreeRow(orcaPage, childId)).toBeVisible()
+    await expect
+      .poll(async () => {
+        if ((await orcaPage.locator('[data-terminal-error-toast]').count()) > 0) {
+          return 'error'
+        }
+        const snapshot = await readPaneIdentitySnapshot(orcaPage)
+        if (!snapshot) {
+          return 'pending'
+        }
+        const folderOwnsTab = await orcaPage.evaluate(
+          ({ folderKey, tabId }) => {
+            const state = window.__store?.getState()
+            return (
+              state?.activeWorktreeId === folderKey &&
+              (state.tabsByWorktree[folderKey] ?? []).some((tab) => tab.id === tabId)
+            )
+          },
+          { folderKey, tabId: snapshot.tabId }
+        )
+        return folderOwnsTab &&
+          snapshot.panes.some(
+            (pane) => pane.ptyId !== null && snapshot.ptyIdsByLeafId[pane.leafId] === pane.ptyId
+          )
+          ? 'ready'
+          : 'pending'
+      })
+      .not.toBe('pending')
     await expect(orcaPage.locator('[data-terminal-error-toast]')).toHaveCount(0)
     await captureEvidence(orcaPage, 'child-toggle-folder-pass-through.png')
   })

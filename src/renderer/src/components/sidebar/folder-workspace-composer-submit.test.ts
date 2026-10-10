@@ -64,7 +64,47 @@ function makeFolderWorkspace(overrides: Partial<FolderWorkspace> = {}): FolderWo
   }
 }
 
+const ISSUE_URL = 'https://github.com/stablyai/orca/issues/42'
+const linkedIssue = {
+  provider: 'github' as const,
+  type: 'issue' as const,
+  number: 42,
+  title: 'Restore linked quick-create',
+  url: ISSUE_URL,
+  repoId: 'repo-1'
+}
+
 describe('submitFolderWorkspaceCreate', () => {
+  it.each(['347', '002'])('keeps manual folder name %s with its linked source', async (name) => {
+    const linkedWorkItem = {
+      provider: 'github' as const,
+      type: 'issue' as const,
+      number: Number(name),
+      title: 'Fix export',
+      url: `https://github.com/fixture/repo/issues/${Number(name)}`
+    }
+    const createFolderWorkspace = vi.fn(async () => null)
+    await submitFolderWorkspaceCreate({
+      projectGroup: makeProjectGroup(),
+      name,
+      lastAutoName: 'Fix export',
+      linkedWorkItem,
+      note: '',
+      quickAgent: null,
+      autoRenameBranchFromWork: false,
+      agentCmdOverrides: {},
+      createFolderWorkspace,
+      onOpenChange: vi.fn()
+    })
+
+    expect(createFolderWorkspace).toHaveBeenCalledWith({
+      projectGroupId: 'group-1',
+      name,
+      connectionId: null,
+      linkedTask: linkedWorkItem
+    })
+  })
+
   beforeEach(() => {
     mocks.activateAndRevealFolderWorkspace.mockReturnValue({ primaryTabId: 'tab-1' })
   })
@@ -702,16 +742,6 @@ describe('submitFolderWorkspaceCreate', () => {
 })
 
 describe('submitFolderWorkspaceCreate native-chat launch draft', () => {
-  const ISSUE_URL = 'https://github.com/stablyai/orca/issues/42'
-  const linkedIssue = {
-    provider: 'github' as const,
-    type: 'issue' as const,
-    number: 42,
-    title: 'Restore linked quick-create',
-    url: ISSUE_URL,
-    repoId: 'repo-1'
-  }
-
   function seededDraftFor(tabId: string): { text: string } | undefined {
     return useAppStore.getState().nativeChatLaunchDraftByTabId[tabId]
   }
@@ -810,16 +840,6 @@ describe('submitFolderWorkspaceCreate native-chat launch draft', () => {
 })
 
 describe('folder-workspace draft: seeded set == chat-opening set', () => {
-  const ISSUE_URL = 'https://github.com/stablyai/orca/issues/42'
-  const linkedIssue = {
-    provider: 'github' as const,
-    type: 'issue' as const,
-    number: 42,
-    title: 'Restore linked quick-create',
-    url: ISSUE_URL,
-    repoId: 'repo-1'
-  }
-
   beforeEach(() => {
     mocks.activateAndRevealFolderWorkspace.mockReturnValue({ primaryTabId: 'tab-1' })
     useAppStore.setState({ nativeChatLaunchDraftByTabId: {} })
