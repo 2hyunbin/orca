@@ -17,6 +17,8 @@ import {
   isMergedImplicitPR,
   shouldHideMergedImplicitPR,
   getCurrentHeadOid,
+  pullRequestHeadRepository,
+  linkedMergedPRDivergedHeadOid,
   type PullRequestLookupData,
   type GitHubPRBranchLookupOptions
 } from './pull-request-lookup-data'
@@ -29,7 +31,7 @@ import {
   type TrackedUpstreamBranch
 } from './tracked-upstream-cache'
 import { getTrackedUpstreamBranch } from './tracked-upstream-branch'
-import { isTrackedUpstreamDefaultBranch } from './tracked-upstream-default-branch'
+import { shouldHideImplicitDefaultBranchPR } from './implicit-default-branch-pr'
 import { PR_BRANCH_LOOKUP_BUCKETS } from './pr-lookup-rate-limit'
 import type { HostedReviewLocalGitOptions } from './../github-exec-scope'
 export async function resolvePRForBranchOutcome(input: {
@@ -104,29 +106,6 @@ export async function resolvePRForBranchOutcome(input: {
       confirmedContainedHeadOid = headOid
     }
     return membership
-  }
-  const recordLinkedMergedPRDivergence = async (
-    candidate: PullRequestLookupData | null,
-    candidateRepo: OwnerRepo | null
-  ): Promise<void> => {
-    if (
-      typeof linkedPRNumber !== 'number' ||
-      !candidate ||
-      mapPRState(candidate.state, candidate.isDraft) !== 'merged' ||
-      explicitCurrentHeadOid === null ||
-      candidate.headRefOid === explicitCurrentHeadOid
-    ) {
-      return
-    }
-    const membership = await mergedPRContainsHead(
-      candidate,
-      candidateRepo ?? ownerRepoFromPullRequestUrl(candidate.url),
-      explicitCurrentHeadOid
-    )
-    if (membership === 'not-contained') {
-      // explicitCurrentHeadOid is non-null here (guarded above); record the exact diverged head so consumers clear only that worktree.
-      headDivergedFromMergedPRAtOid = explicitCurrentHeadOid
-    }
   }
   const hideMergedImplicitPR = async (
     candidate: PullRequestLookupData | null,
@@ -216,6 +195,29 @@ export async function resolvePRForBranchOutcome(input: {
       }
     }
   }
+  let rejectedDefaultPRNumber: number | null = null
+  const hideUnrelatedDefaultPR = async (): Promise<void> => {
+    if (
+      data &&
+      (await shouldHideImplicitDefaultBranchPR({
+        data,
+        prRepo: dataRepo,
+        originHeadRepo: headRepo,
+        trackedUpstream: retriedUpstream,
+        branchName,
+        linkedPRNumber,
+        repoPath,
+        connectionId,
+        localGitOptions
+      }))
+    ) {
+      rejectedDefaultPRNumber = data.number
+      data = null
+      dataRepo = null
+      dataHeadRepo = headRepo
+    }
+  }
+  await hideUnrelatedDefaultPR()
   let mergedBranchLookupNumber: number | null = null
   if (await hideMergedImplicitPR(data, dataRepo)) {
     mergedBranchLookupNumber = data?.number ?? null
@@ -223,7 +225,12 @@ export async function resolvePRForBranchOutcome(input: {
     dataRepo = null
     dataHeadRepo = headRepo
   }
-  if (!data && typeof linkedPRNumber !== 'number' && typeof fallbackPRNumber === 'number') {
+  if (
+    !data &&
+    typeof linkedPRNumber !== 'number' &&
+    typeof fallbackPRNumber === 'number' &&
+    fallbackPRNumber !== rejectedDefaultPRNumber
+  ) {
     usedExactNumberLookup = true
     const fallbackLookup = await lookupPRByNumber({
       candidates,
@@ -234,30 +241,26 @@ export async function resolvePRForBranchOutcome(input: {
     data = fallbackLookup.data
     dataRepo = fallbackLookup.dataRepo
   }
-  // Why: covers the cached fallback number too, so a link stored before #26948 heals.
-  if (
-    data &&
-    retriedUpstream &&
-    data.headRefName === retriedUpstream.branch.branchName &&
-    (await isTrackedUpstreamDefaultBranch({
-      upstreamBranch: retriedUpstream.branch,
-      upstreamHeadRepo: retriedUpstream.headRepo,
-      candidates,
-      repoPath,
-      connectionId,
-      localGitOptions
-    }))
-  ) {
-    data = null
-    dataRepo = null
-  }
+  // Recheck exact fallbacks so links cached before #26948 heal without upstream tracking.
+  await hideUnrelatedDefaultPR()
   if (!data) {
     if (hasPendingBranchLookupError) {
       return prRefreshUpstreamError(pendingBranchLookupError)
     }
     return { kind: 'no-pr', fetchedAt: Date.now() }
   }
-  await recordLinkedMergedPRDivergence(data, dataRepo)
+  dataHeadRepo = pullRequestHeadRepository(data, dataRepo) ?? dataHeadRepo
+  headDivergedFromMergedPRAtOid = await linkedMergedPRDivergedHeadOid(
+    data,
+    linkedPRNumber,
+    explicitCurrentHeadOid,
+    (candidate, headOid) =>
+      mergedPRContainsHead(
+        candidate,
+        dataRepo ?? ownerRepoFromPullRequestUrl(candidate.url),
+        headOid
+      )
+  )
   const fallbackConfirmedMergedBranch =
     typeof fallbackPRNumber === 'number' &&
     mergedBranchLookupNumber === fallbackPRNumber &&

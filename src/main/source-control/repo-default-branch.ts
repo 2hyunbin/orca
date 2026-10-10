@@ -100,7 +100,7 @@ export function getRepoDefaultBranchName(
   )
 }
 
-/** Branch the remote's own HEAD names; null on older Git or a remote added without it. */
+/** Branch the remote's own HEAD names; null when Git has not recorded it. */
 export function getRemoteHeadBranchName(
   repoPath: string,
   remoteName: string,
