@@ -18247,6 +18247,7 @@
         "orcaStopUpdate": "此回复进行期间，{{machine}} 上的 Orca 为更新而重新启动。",
         "orcaStopQuit": "此回复进行期间，{{machine}} 上的 Orca 已关闭。",
         "orcaStopCrash": "此回复进行期间，{{machine}} 上的 Orca 意外停止。",
+        "orcaStopRemote": "此回复进行期间，{{machine}} 上的 Orca 已停止。",
         "orcaStopCanContinue": "你可以在此对话中继续。"
       },
       "providerFrame": {
