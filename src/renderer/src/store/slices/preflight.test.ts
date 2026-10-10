@@ -20,13 +20,7 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
   callRuntimeRpc: (...args: unknown[]) => callRuntimeRpc(...args),
   clearRecentRuntimeCompatibilityFailure: vi.fn(),
   clearRuntimeCompatibilityCache: vi.fn(),
-  unwrapRuntimeRpcResult: <T>(response: { result?: T }) => response.result as T,
-  getActiveRuntimeTarget: (
-    settings?: { activeRuntimeEnvironmentId?: string | null } | null
-  ): { kind: 'local' } | { kind: 'environment'; environmentId: string } => {
-    const environmentId = settings?.activeRuntimeEnvironmentId?.trim()
-    return environmentId ? { kind: 'environment', environmentId } : { kind: 'local' }
-  }
+  unwrapRuntimeRpcResult: <T>(response: { result?: T }) => response.result as T
 }))
 
 globalThis.window = {
