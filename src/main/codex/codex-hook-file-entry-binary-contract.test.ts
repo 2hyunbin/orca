@@ -449,6 +449,7 @@ describe.runIf(binary)('codex hook file-entry binary contract', { timeout: 180_0
         ],
         {
           timeout: TIMEOUT_MS,
+          maxBuffer: 64 * 1024 * 1024,
           env: {
             PATH: process.env.PATH,
             HOME: home,
