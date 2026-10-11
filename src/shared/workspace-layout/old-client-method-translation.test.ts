@@ -201,22 +201,35 @@ describe('translateTerminalCreate', () => {
 })
 
 describe('session.tabs translations', () => {
-  it('closes a pane row as its pane and a tab row as its tab, pinned or not', () => {
-    const { ctx, model, tabA, leafA, tabB } = setup()
-    const withSplit = build(
+  it('closes a split pane row as its pane; a pinned tab refuses its tab row and last-pane row', () => {
+    const { ctx, model, tabA, leafA, tabB, leafB, browser } = setup()
+    const pinnedSplit = build(
       ctx,
-      [{ type: 'splitPane', workspace: WS, tabId: tabA, leafId: leafA, direction: 'vertical' }],
+      [
+        { type: 'splitPane', workspace: WS, tabId: tabA, leafId: leafA, direction: 'vertical' },
+        { type: 'setTabProps', workspace: WS, tabId: tabA, isPinned: true },
+        { type: 'setTabProps', workspace: WS, tabId: browser, isPinned: true }
+      ],
       model
     ).model
-    const workspace = withSplit.workspaces[WS]!
+    const workspace = pinnedSplit.workspaces[WS]!
+    // A pane of a split tab closes even when the tab is pinned, as today.
     expect(translateSessionTabClose(WS, workspace, { tabId: terminalRowId(tabA, leafA) })).toEqual({
       ok: true,
       commands: [{ type: 'closePane', workspace: WS, tabId: tabA, leafId: leafA }]
     })
-    const closePinned = commandsOf(translateSessionTabClose(WS, workspace, { tabId: tabB }))
-    expect(closePinned).toEqual([{ type: 'closeTabs', workspace: WS, tabIds: [tabB] }])
-    const closed = applyLayoutCommand(withSplit, closePinned[0]!, ctx)
-    expect(closed.ok && closed.result.closed).toEqual([tabB])
+    for (const tabId of [tabB, terminalRowId(tabB, leafB)]) {
+      const commands = commandsOf(translateSessionTabClose(WS, workspace, { tabId }))
+      expect(commands).toEqual([
+        { type: 'closeTabs', workspace: WS, tabIds: [tabB], refusePinned: true }
+      ])
+      const result = applyLayoutCommand(pinnedSplit, commands[0]!, ctx)
+      expect(result.ok && result.result.refused).toEqual([{ tabId: tabB, code: 'tab_pinned' }])
+    }
+    // Only terminal tabs check the pin today; a pinned browser tab closes.
+    expect(commandsOf(translateSessionTabClose(WS, workspace, { tabId: browser }))).toEqual([
+      { type: 'closeTabs', workspace: WS, tabIds: [browser] }
+    ])
   })
 
   it('closes a row that is already gone as already closed', () => {

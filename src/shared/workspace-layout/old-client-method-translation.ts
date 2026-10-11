@@ -138,8 +138,9 @@ export function translateSetTabProps(
 }
 
 /**
- * `session.tabs.close`: a pane row closes its pane, any other row its tab. Pinned tabs close: old
- * clients cannot confirm. A row that is already gone closes as already closed (#10747).
+ * `session.tabs.close`: a pane row of a split tab closes its pane; any other terminal row closes
+ * its tab, which a pinned tab refuses (`terminal_tab_pinned`) with or without a window, as today.
+ * Other kinds close as asked. A row that is already gone closes as already closed (#10747).
  */
 export function translateSessionTabClose(
   workspaceKey: string,
@@ -147,13 +148,10 @@ export function translateSessionTabClose(
   params: { tabId: string }
 ): MethodTranslation {
   const target = workspace ? resolveSessionTabRow(workspace, params.tabId) : null
-  if (target?.leafId) {
-    return to({
-      type: 'closePane',
-      workspace: workspaceKey,
-      tabId: target.tab.id,
-      leafId: target.leafId
-    })
+  if (target?.tab.kind === 'terminal') {
+    return target.leafId
+      ? translateTerminalClose(workspaceKey, { tab: target.tab, leafId: target.leafId })
+      : translateTerminalCloseTab(workspaceKey, { tab: target.tab })
   }
   return to({
     type: 'closeTabs',
@@ -288,7 +286,7 @@ export function translateTerminalClose(
 /** `terminal.closeTab` refuses a pinned tab (`terminal_tab_pinned`), as today. */
 export function translateTerminalCloseTab(
   workspaceKey: string,
-  pane: ResolvedPane
+  pane: Pick<ResolvedPane, 'tab'>
 ): MethodTranslation {
   return to({
     type: 'closeTabs',
