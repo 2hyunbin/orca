@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BROWSER_SCREENCAST_GHOST_SUBSCRIBER_REFUSAL_LIMIT } from './browser-screencast-ghost-subscriber-eviction'
 import { SCREENCAST_PENDING_FRAME_RETRY_MS } from './browser-screencast-subscriber-frame-delivery'
-import { createSinglePageBrowserCommandsHost } from './single-page-browser-commands-host-test-double'
+import {
+  createSinglePageBrowserCommandsHost,
+  createStreamedGuest
+} from './single-page-browser-commands-host-test-double'
 import type { RpcBinarySender } from './rpc/rpc-binary-sender'
 
 const { webContentsFromId, startBrowserScreencast } = vi.hoisted(() => ({
@@ -41,7 +44,7 @@ describe('screencast frames a viewer refused', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     webContentsFromId.mockReset()
-    webContentsFromId.mockReturnValue({ isDestroyed: () => false })
+    webContentsFromId.mockReturnValue(createStreamedGuest())
     startBrowserScreencast.mockReset()
   })
   afterEach(() => {

@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WebSocket } from 'ws'
 import { BROWSER_SCREENCAST_GHOST_SUBSCRIBER_REFUSAL_LIMIT } from './browser-screencast-ghost-subscriber-eviction'
 import { SCREENCAST_PENDING_FRAME_RETRY_MS } from './browser-screencast-subscriber-frame-delivery'
-import { createSinglePageBrowserCommandsHost } from './single-page-browser-commands-host-test-double'
+import {
+  createSinglePageBrowserCommandsHost,
+  createStreamedGuest
+} from './single-page-browser-commands-host-test-double'
 import { E2EEChannel } from './rpc/e2ee-channel'
 import { decrypt, decryptBytes, deriveSharedKey, encrypt, generateKeyPair } from './rpc/e2ee-crypto'
 import type { RpcBinarySender } from './rpc/rpc-binary-sender'
@@ -87,7 +90,7 @@ describe('screencast over a backlogged legacy E2EE socket', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     webContentsFromId.mockReset()
-    webContentsFromId.mockReturnValue({ isDestroyed: () => false })
+    webContentsFromId.mockReturnValue(createStreamedGuest())
     startBrowserScreencast.mockReset()
   })
   afterEach(() => {

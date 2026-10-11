@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { REMOTE_RUNTIME_MAX_OUTBOUND_BINARY_FRAME_BYTES } from '../../shared/remote-runtime-memory-limits'
 import { BROWSER_SCREENCAST_GHOST_SUBSCRIBER_REFUSAL_LIMIT } from './browser-screencast-ghost-subscriber-eviction'
 import type { RuntimeBrowserCommands } from './orca-runtime-browser'
-import { createSinglePageBrowserCommandsHost } from './single-page-browser-commands-host-test-double'
+import {
+  createSinglePageBrowserCommandsHost,
+  createStreamedGuest
+} from './single-page-browser-commands-host-test-double'
 
 const { webContentsFromId, startBrowserScreencast } = vi.hoisted(() => ({
   webContentsFromId: vi.fn(),
@@ -21,15 +24,6 @@ function deferred() {
     resolve = done
   })
   return { promise, resolve }
-}
-
-// A guest the page stream keeps painting while it streams.
-function createStreamedGuest() {
-  return {
-    isDestroyed: () => false,
-    setBackgroundThrottling: vi.fn(),
-    capturePage: vi.fn(async () => null)
-  }
 }
 
 describe('RuntimeBrowserCommands screencast fanout', () => {
