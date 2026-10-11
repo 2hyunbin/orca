@@ -14,6 +14,7 @@ import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-targe
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { refreshLocalStructuredSessionWorktreeTabs } from '@/runtime/local-structured-session-tabs-sync'
 import { STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import { supportsSessionTabsCloseAgentSessionById } from '@/runtime/structured-agent-session-client'
 import { isRuntimeCompatBlockError } from '@/runtime/runtime-protocol-compat'
 import {
   executionHostIdForStructuredTarget,
@@ -257,6 +258,13 @@ export async function revealStructuredSession(target: {
   return result?.refusal?.code === 'agent_session_identity_required' ? 'gone' : 'host-cannot-open'
 }
 
+/** Hosts that close a chat by id also hold a reveal until that chat's close has finished. */
+function revealWaitsForClose(host: RuntimeClientTarget): Promise<boolean> {
+  return withStructuredSessionRestoreTimeout(supportsSessionTabsCloseAgentSessionById(host)).catch(
+    () => false
+  )
+}
+
 type AgentSessionRevealReply = { ok?: boolean; refusal?: { code?: string } }
 
 /** Cleared at the answer, not the click: a frame from before the close could otherwise flash it. */
@@ -265,6 +273,10 @@ async function showReopenedChat(
   worktreeId: string,
   sessionId: string
 ): Promise<void> {
+  // Why: an older paired host can commit the close after this reveal, which would show then drop it.
+  if (!(await revealWaitsForClose(host))) {
+    return
+  }
   const owner = captureWebSessionIntentOwner(structuredAgentSessionFocusOwner(host).environmentId)
   if (reopenWebSessionCloseIntent(owner, worktreeId, `agent-session:${sessionId}`)) {
     // Why: a frame listing the reopened chat may already have been applied with it hidden.

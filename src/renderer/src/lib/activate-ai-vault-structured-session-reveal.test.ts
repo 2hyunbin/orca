@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   call: vi.fn(),
   supports: vi.fn(),
   environmentIdFor: vi.fn(),
-  reread: vi.fn()
+  reread: vi.fn(),
+  closesById: vi.fn()
 }))
 
 // The real target resolution is the thing under test; only the transport is stubbed.
@@ -27,6 +28,10 @@ vi.mock('./worktree-runtime-owner', () => ({
 
 vi.mock('@/runtime/host-session-tab-close', () => ({
   rereadHostSessionTabs: mocks.reread
+}))
+
+vi.mock('@/runtime/structured-agent-session-client', () => ({
+  supportsSessionTabsCloseAgentSessionById: mocks.closesById
 }))
 
 import { revealStructuredSession } from './activate-ai-vault-structured-session'
@@ -47,6 +52,7 @@ beforeEach(() => {
   mocks.supports.mockResolvedValue(true)
   mocks.environmentIdFor.mockReturnValue(null)
   mocks.reread.mockResolvedValue(undefined)
+  mocks.closesById.mockResolvedValue(true)
   resetWebSessionCloseIntentForTests()
 })
 
@@ -84,7 +90,10 @@ describe('revealStructuredSession', () => {
   })
 
   it('keeps a known recipient target when the active workspace would resolve locally', async () => {
-    const host = { kind: 'environment', environmentId: 'recipient-host' } as const
+    const host = {
+      kind: 'environment',
+      environmentId: 'recipient-host'
+    } as const
     await expect(revealStructuredSession({ ...target, target: host })).resolves.toBe('revealed')
     expect(mocks.supports).toHaveBeenCalledWith(
       'recipient-host',
@@ -220,6 +229,34 @@ describe('reopening a chat this window just closed', () => {
     mocks.call.mockRejectedValue(new Error('structured_session_restore_timeout'))
     await expect(revealStructuredSession(target)).resolves.toBe('unreachable')
     expect(shown()).toBe(false)
+  })
+
+  it('keeps the chat hidden on a host that does not hold a reveal behind its close', async () => {
+    mocks.closesById.mockResolvedValue(false)
+
+    await expect(revealStructuredSession(target)).resolves.toBe('revealed')
+
+    expect(shown()).toBe(false)
+    expect(mocks.reread).not.toHaveBeenCalled()
+  })
+
+  it('asks the paired host that owns the workspace whether it holds the reveal', async () => {
+    const PAIRED = { environmentId: 'env-1' }
+    mocks.environmentIdFor.mockReturnValue('env-1')
+    beginWebSessionCloseIntent(PAIRED, 'workspace-1', CHAT, Date.now())
+
+    await expect(revealStructuredSession(target)).resolves.toBe('revealed')
+
+    expect(mocks.closesById).toHaveBeenCalledWith({ kind: 'environment', environmentId: 'env-1' })
+    const pairedShown =
+      filterWebSessionCloseIntents(
+        PAIRED,
+        'workspace-1',
+        [{ id: CHAT }],
+        (tab) => tab.id,
+        Date.now()
+      ).length === 1
+    expect(pairedShown).toBe(true)
   })
 
   it('re-reads nothing when no close of the chat was pending', async () => {
