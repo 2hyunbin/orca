@@ -1,11 +1,10 @@
-import { useMemo } from 'react'
+import { useState } from 'react'
 import { openExternalLink } from '../platform/external-link'
 import { Pressable, Text, View } from 'react-native'
 import { Check, Moon } from 'lucide-react-native'
 import { buildWorktreeNavigationActions } from '../agent-history/worktree-navigation-actions'
 import { workspaceRouteHref } from '../navigation/workspace-execution-host'
-import { reachableServerClients } from '../transport/execution-host-scoped-rpc-client'
-import { useWorkspaceServer } from '../transport/workspace-server'
+import { useReachableServerClients, useWorkspaceServer } from '../transport/workspace-server'
 import { ActionSheetContent } from '../components/ActionSheetModal'
 import { BottomDrawer } from '../components/BottomDrawer'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -44,9 +43,11 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
     desktopCapabilities: hostCapabilities,
     executionHost: actionTarget?.hostId
   })
-  const serverClients = useMemo(
-    () => reachableServerClients(client, hostCapabilities, state.serverWorkspaces.hosts),
-    [client, hostCapabilities, state.serverWorkspaces.hosts]
+  // Why its own read: the host list's rows stop refreshing while the sheet is open.
+  const [newWorktreeVisible, setNewWorktreeVisible] = useState(false)
+  const serverClients = useReachableServerClients(
+    newWorktreeVisible ? client : null,
+    hostCapabilities
   )
 
   return (
@@ -238,6 +239,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         openExternalUrl={openExternalLink}
         onVisibleChange={(visible) => {
           state.newWorktreeModalVisibleRef.current = visible
+          setNewWorktreeVisible(visible)
         }}
         onCreated={(worktreeId, worktreeName, warning, executionHost) => {
           void catalog.fetchWorktrees({ allowDuringModal: true })

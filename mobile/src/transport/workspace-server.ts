@@ -1,8 +1,10 @@
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import type { MobileRelayHost } from '../../../src/shared/mobile-relay-hosts-contract'
 import { relayHostsFeed } from '../worktree/relay-hosts-feed'
 import { serverHostHealth } from '../worktree/server-workspaces'
 import {
+  reachableServerClients,
   scopeRpcClientToExecutionHost,
   workspaceRouteExecutionHost
 } from './execution-host-scoped-rpc-client'
@@ -34,6 +36,17 @@ export function useWorkspaceServer(args: {
 
 const noSubscription = (): (() => void) => () => {}
 
+/** The desktop's servers from the shared feed while `client` is set; null before it answers. */
+function useRelayHosts(client: RpcClient | null): readonly MobileRelayHost[] | null {
+  const feed = client ? relayHostsFeed(client) : null
+  const subscribe = useCallback(
+    (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
+    [feed]
+  )
+  const readHosts = () => feed?.getSnapshot() ?? null
+  return useSyncExternalStore(subscribe, readHosts, readHosts)
+}
+
 /**
  * The connection state a server workspace's screens see: the desktop's, unless the desktop reports
  * that server down. Desktop-owned workspaces (`routeHost` absent) keep the desktop's state untouched.
@@ -45,13 +58,7 @@ export function useWorkspaceServerConnState(args: {
 }): ConnectionState {
   const { client, connState, routeHost } = args
   // The same feed the host list reads, so a row's badge and its screens agree.
-  const feed = client && routeHost ? relayHostsFeed(client) : null
-  const subscribe = useCallback(
-    (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
-    [feed]
-  )
-  const readHosts = () => feed?.getSnapshot() ?? null
-  const hosts = useSyncExternalStore(subscribe, readHosts, readHosts)
+  const hosts = useRelayHosts(routeHost ? client : null)
   if (connState !== 'connected' || !routeHost || !hosts) {
     return connState
   }
@@ -68,4 +75,19 @@ export function useWorkspaceServerConnState(args: {
     case 'error':
       return 'disconnected'
   }
+}
+
+/**
+ * The servers a new workspace can run on, read from the desktop's server-list feed while `client`
+ * is set (the sheet is open), not from the host list's rows, which pause while the sheet is open.
+ */
+export function useReachableServerClients(
+  client: RpcClient | null,
+  hostCapabilities: readonly string[]
+): ReadonlyMap<ExecutionHostId, RpcClient> {
+  const hosts = useRelayHosts(client)
+  return useMemo(
+    () => reachableServerClients(client, hostCapabilities, hosts ?? []),
+    [client, hostCapabilities, hosts]
+  )
 }
