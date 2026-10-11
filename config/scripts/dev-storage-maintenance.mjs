@@ -1,5 +1,15 @@
+import { utimesSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { spawnProcess } from '@orca/process-host'
+
+export function refreshDevBundleLastUse(directory) {
+  try {
+    const now = new Date()
+    utimesSync(directory, now, now)
+  } catch {
+    // A read-only timestamp must not prevent launching a usable bundle.
+  }
+}
 
 export function startDevStorageMaintenance(
   repoRoot,

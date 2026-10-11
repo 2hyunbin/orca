@@ -10,7 +10,6 @@ import {
   rmSync,
   statSync,
   symlinkSync,
-  utimesSync,
   writeFileSync
 } from 'node:fs'
 import net from 'node:net'
@@ -18,7 +17,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 
 import { prepareDevCliTerminalWrappers } from './dev-cli-terminal-wrapper.mjs'
-import { startDevStorageMaintenance } from './dev-storage-maintenance.mjs'
+import { refreshDevBundleLastUse, startDevStorageMaintenance } from './dev-storage-maintenance.mjs'
 import {
   DEV_BUNDLE_MARKER_FILENAME,
   getDevBundleProcessTable,
@@ -259,12 +258,7 @@ function prepareMacDevElectronApp() {
   }
 
   if (copiedAppIsUsable()) {
-    try {
-      const now = new Date()
-      utimesSync(distDir, now, now)
-    } catch {
-      // A read-only timestamp must not prevent launching a usable bundle.
-    }
+    refreshDevBundleLastUse(distDir)
     pruneStaleDevBundles(distDir)
     process.env.ELECTRON_EXEC_PATH = executablePath
     return
@@ -289,6 +283,7 @@ function prepareMacDevElectronApp() {
     console.warn(
       `[orca-dev] Another dev instance is running from this bundle; reusing it instead of rebuilding. Quit the other instance (or delete ${distDir}) to force a rebuild.`
     )
+    refreshDevBundleLastUse(distDir)
     process.env.ELECTRON_EXEC_PATH = executablePath
     return
   }
