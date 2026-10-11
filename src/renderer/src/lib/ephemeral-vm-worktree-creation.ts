@@ -71,6 +71,13 @@ export async function prepareRequestForCreate(
     return null
   }
   appendProvisioningWarnings(creationId, preparedTarget.warnings)
+  if (preparedTarget.environmentId) {
+    // Why: the VM's first connect may have just deployed this server; host badges and removal read it.
+    await window.api.runtimeEnvironments
+      .list()
+      .then((environments) => useAppStore.getState().setRuntimeEnvironments(environments))
+      .catch(() => undefined)
+  }
   const preparedRequest: WorktreeCreationRequest = {
     ...request,
     repoId: preparedTarget.setup.repo.id,

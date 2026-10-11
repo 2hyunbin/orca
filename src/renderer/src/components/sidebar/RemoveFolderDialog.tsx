@@ -56,7 +56,12 @@ const RemoveFolderDialog = React.memo(function RemoveFolderDialog() {
   })
 
   const onRecipeVmServer = useAppStore(
-    (s) => getRecipeVmSshTargetForHost(s.runtimeEnvironments, hostId) !== null
+    (s) =>
+      getRecipeVmSshTargetForHost(s.runtimeEnvironments, hostId) !== null ||
+      (s.worktreesByRepo[repoId] ?? []).some(
+        (worktree) =>
+          worktree.hostId === hostId && worktree.ephemeralVmCheckoutMode === 'provisioned-root'
+      )
   )
 
   const openTerminalCount = useAppStore((s) =>

@@ -9,6 +9,7 @@ import {
   installReposRuntimeRoutingHarness,
   reposRemoveForHost,
   runtimeEnvironmentCall,
+  runtimeEnvironmentsList,
   sshRepo
 } from './repos-runtime-routing-fixture'
 import { createTestStore } from './store-test-helpers'
@@ -165,4 +166,35 @@ it('never destroys another VM whose server publishes the same workspace id', asy
 
   expect(ephemeralVmCleanup).toHaveBeenCalledTimes(1)
   expect(ephemeralVmCleanup).toHaveBeenCalledWith({ runtimeId: 'runtime-1' })
+})
+
+it("destroys the VM when the renderer's catalog predates the VM's server", async () => {
+  runtimeEnvironmentsList.mockResolvedValue([vmServer])
+  ephemeralVmListRuntimes.mockResolvedValue([
+    { id: 'runtime-1', cleanupStatus: 'not_started', sshTargetId: 'runtime-ssh-runtime-1' }
+  ])
+  ephemeralVmCleanup.mockResolvedValue({ status: 'cleaned', cleanupStatus: 'succeeded' })
+  const store = createTestStore()
+  store.setState({
+    repos: [vmServerRepo],
+    runtimeEnvironments: [],
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: removal reads only id, hostId and ephemeralVmCheckoutMode.
+    worktreesByRepo: {
+      [vmServerRepo.id]: [
+        {
+          id: `${vmServerRepo.id}::/home/orca/project`,
+          hostId: 'runtime:env-vm',
+          ephemeralVmCheckoutMode: 'provisioned-root'
+        }
+      ]
+    } as never
+  })
+
+  await store.getState().removeProject(vmServerRepo.id, {
+    hostId: 'runtime:env-vm',
+    errorFeedback: 'toast'
+  })
+
+  expect(ephemeralVmCleanup).toHaveBeenCalledWith({ runtimeId: 'runtime-1' })
+  expect(store.getState().repos).toEqual([])
 })

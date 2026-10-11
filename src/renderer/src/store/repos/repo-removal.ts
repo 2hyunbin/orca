@@ -87,12 +87,14 @@ export function createRepoRemovalActions(
           return
         }
         const ownerHostId = getRepoExecutionHostId(ownerRepo)
-        const vmServerDestroyed = await destroyRecipeVmBeforeProjectRemoval({
-          runtimeEnvironments: get().runtimeEnvironments,
+        // Why only awaited for a VM: concurrent removals of one row must reach the host together.
+        const vmDestroy = destroyRecipeVmBeforeProjectRemoval(
+          get(),
+          ownerRepo,
           ownerHostId,
-          connectionId: ownerRepo.connectionId,
-          workspaceIds: getKnownRepoWorktreeIds(get(), projectId, ownerHostId)
-        })
+          getKnownRepoWorktreeIds(get(), projectId, ownerHostId)
+        )
+        const vmServerDestroyed = vmDestroy !== false && (await vmDestroy)
         // Why: derive the target from the owner row's host so an SSH host removal never routes repo.rm to the focused runtime.
         const target = runtimeTargetForOwnerHostId(ownerHostId)
         if (!target) {

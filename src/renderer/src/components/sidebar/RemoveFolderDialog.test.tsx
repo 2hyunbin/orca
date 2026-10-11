@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../../shared/repo-types'
 
 const mocks = vi.hoisted(() => {
-  const worktreesByRepo: Record<string, { id: string; hostId?: string }[]> = {}
+  const worktreesByRepo: Record<
+    string,
+    { id: string; hostId?: string; ephemeralVmCheckoutMode?: 'provisioned-root' }[]
+  > = {}
   const tabsByWorktree: Record<string, { id: string }[]> = {}
   const ptyIdsByTabId: Record<string, string[]> = {}
   const runtimeEnvironments: { id: string; orcadDeployment?: { sshTargetId: string } }[] = []
@@ -109,6 +112,18 @@ describe('RemoveFolderDialog', () => {
     expect(html).toContain('Its VM recipe determines whether the environment')
     expect(html).toContain('files are permanently deleted')
     expect(html).not.toContain('Its files stay on')
+  })
+
+  it('warns about VM recipe cleanup for an adopted provisioned root before the catalog loads', () => {
+    mocks.state.modalData.hostId = 'runtime:env-vm'
+    mocks.state.repos = [repo(null, 'runtime:env-vm')]
+    mocks.state.worktreesByRepo = {
+      'repo-1': [
+        { id: 'repo-1::/vm', hostId: 'runtime:env-vm', ephemeralVmCheckoutMode: 'provisioned-root' }
+      ]
+    }
+
+    expect(renderToStaticMarkup(<RemoveFolderDialog />)).toContain('Its VM recipe determines')
   })
 
   it('keeps the file-preservation promise for ordinary SSH projects', () => {
