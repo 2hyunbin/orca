@@ -4,6 +4,7 @@ import type {
   PairingProvisionRelayParams
 } from '../../../shared/mobile-relay-credential-contract'
 import { callerScopeOf, devicePrincipalOf } from '../device-principal'
+import { registerSocketDeviceKey } from './runtime-rpc-device-key-registration'
 import type { AuthenticatedMobileSocket } from '../rpc/mobile-socket-wiring'
 import type { RpcRequest, RpcResponse } from '../rpc/core'
 import type { WebSocketTransport } from '../rpc/ws-transport'
@@ -81,7 +82,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
         {
           connectionId: socket.connectionId,
           deviceId: socket.device.deviceId,
-          deviceToken: socket.device.deviceToken,
+          deviceToken: socket.device.clientId,
           clientCapabilities: () => socket.clientCapabilities,
           reply,
           sendBinary: (bytes) => {
@@ -230,6 +231,13 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
               }
             : undefined,
         pairing: pairingContext,
+        deviceSelf:
+          authenticatedSocket && this.deviceRegistry
+            ? {
+                registerDeviceKey: (params) =>
+                  registerSocketDeviceKey(this.deviceRegistry!, authenticatedSocket, params)
+              }
+            : undefined,
         mobileRelayHosts: this.mobileRelayHostCatalog ?? undefined,
         delegatedMobileDevices:
           device.scope === 'runtime'
