@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fixture } from './profile-state-delayed-authority-fixture'
+import { fixture, admitRuntimeSpawnPane } from './profile-state-delayed-authority-fixture'
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { commitPtyIpcSpawn } from '../../ipc/pty/ipc/spawn-commit'
 import { createPtyIpcSpawnState } from '../../ipc/pty/ipc/spawn-state'
@@ -71,6 +71,7 @@ describe.each(['ipc', 'runtime'])('%s failed reattach routing', (controller) => 
         })
         ctx.result = result
         ctx.metadataLeafId = binding.leafId
+        await admitRuntimeSpawnPane(store, binding, connectionId)
         ctx.hostSessionBinding = { store, ...binding }
         shutdown = vi.spyOn(ctx.provider, 'shutdown')
         commit = () => commitRuntimePtySpawn(ctx)
@@ -85,15 +86,19 @@ describe.each(['ipc', 'runtime'])('%s failed reattach routing', (controller) => 
         await runtime.onPtyExit(binding.ptyId, 0, incarnationId, { providerExitObserved: true })
         if (outcome === 'replaced') {
           runtime.onPtySpawned(binding.ptyId, successorIncarnation)
-          ptyOwnership.set(binding.ptyId, 'successor-host')
+          ptyOwnership.set(binding.ptyId, 'ssh:successor-host')
           ptyIncarnationById.set(binding.ptyId, successorIncarnation)
         }
       }
       gate.finish.reject(new Error('disk full'))
       await pending
-      expect(ownerWhileSaving).toBe(connectionId)
+      expect(ownerWhileSaving).toBe(`ssh:${connectionId}`)
       expect(ptyOwnership.get(binding.ptyId)).toBe(
-        outcome === 'live' ? connectionId : outcome === 'replaced' ? 'successor-host' : undefined
+        outcome === 'live'
+          ? `ssh:${connectionId}`
+          : outcome === 'replaced'
+            ? 'ssh:successor-host'
+            : undefined
       )
       expect(ptyIncarnationById.get(binding.ptyId)).toBe(
         outcome === 'live'
