@@ -11,7 +11,7 @@ import {
 } from './native-chat-quote-selection'
 
 // Why: shown at once, a double-click's action would sit under the pointer and take the third click.
-const DOUBLE_CLICK_SETTLE_MS = 180
+const DOUBLE_CLICK_SETTLE_MS = 500
 
 /** The selected text, and the point the offer is drawn at, which moves with that text. */
 type QuoteRequest = {
