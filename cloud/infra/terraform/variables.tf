@@ -482,13 +482,13 @@ variable "relay_cloud_sql_private_ip" {
 
 variable "relay_director_cloud_sql_proxy_sidecar" {
   type        = bool
-  description = "Reach Cloud SQL from the director through a Cloud SQL Auth Proxy sidecar on 127.0.0.1, as the GCE cells do, instead of Cloud Run's built-in /cloudsql socket. A connect() on the built-in socket blocks the director's whole event loop until the connector's upstream dial ends, up to 10 s per attempt while the instance starts or fails over."
+  description = "Reach Cloud SQL from the director through a Cloud SQL Auth Proxy sidecar on 127.0.0.1 (the GCE cells run the same proxy beside the relay, over a Unix socket), instead of Cloud Run's built-in /cloudsql socket. A connect() on the built-in socket blocks the director's whole event loop until the connector's upstream dial ends, up to 10 s per attempt while the instance starts or fails over."
   default     = false
 }
 
 variable "relay_event_loop_stall_alert" {
   type        = bool
-  description = "Record the runtime metrics' event-loop delay max and alert when one interval holds a freeze of 5 s or more. The p99 metric reads normal through a single long freeze."
+  description = "Count runtime samples whose event-loop delay max reached 5 s and alert on any. The p99 metric reads normal through a single long freeze."
   default     = false
 }
 

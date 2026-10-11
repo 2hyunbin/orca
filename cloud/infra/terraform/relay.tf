@@ -396,8 +396,9 @@ resource "google_cloud_run_v2_service" "relay" {
       }
     }
 
-    # Accepts at once and dials Cloud SQL in the background, so the pool's 2 s connect timeout
-    # holds through a start-up or failover. Authenticates as the director's runtime account.
+    # Accepts a loopback TCP connection at once and dials Cloud SQL in the background, so the pool's
+    # 2 s connect timeout holds through a start-up or failover. Authenticates as the director's
+    # runtime account. The GCE cells run the same proxy, over a Unix socket on a full Linux kernel.
     dynamic "containers" {
       for_each = var.relay_director_cloud_sql_proxy_sidecar ? ["cloud-sql-proxy"] : []
 
@@ -431,9 +432,24 @@ resource "google_cloud_run_v2_service" "relay" {
           }
         }
 
+        # /liveness answers without the database; failing it means the proxy itself is wedged.
+        liveness_probe {
+          period_seconds    = 10
+          timeout_seconds   = 1
+          failure_threshold = 3
+
+          http_get {
+            path = "/liveness"
+            port = 9090
+          }
+        }
+
+        # A quarter vCPU carries the pool's few connections. Cloud Run rejects only a total under
+        # 1 vCPU with concurrency above 1 (validated against the API with the relay's 1 vCPU and
+        # concurrency 1000), so the sidecar adds 25% to director compute, not 100%.
         resources {
           limits = {
-            cpu    = "1"
+            cpu    = "0.25"
             memory = "256Mi"
           }
 

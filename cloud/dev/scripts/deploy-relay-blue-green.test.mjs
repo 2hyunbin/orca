@@ -441,7 +441,9 @@ function directorHarness({
   reserveCells = {},
   servingEnvironment = {},
   placements = {},
-  callerEmail
+  callerEmail,
+  // The revision template's Cloud SQL transport; a Terraform apply changes it under the serving one.
+  templateTransport
 } = {}) {
   const state = {
     activeRevision: 'relay-00001-old',
@@ -468,7 +470,9 @@ function directorHarness({
         }
       ]
     ]),
-    nextRevision: 2
+    nextRevision: 2,
+    latestCreated: 'relay-00001-old',
+    templateTransport
   }
   const removed = []
   const healthProtocols = []
@@ -477,6 +481,7 @@ function directorHarness({
     describeService: () => ({
       status: {
         url: 'https://relay-hash-uc.a.run.app',
+        latestCreatedRevisionName: state.latestCreated,
         traffic: [
           { percent: 100, revisionName: state.activeRevision },
           ...[...state.tags].map(([tag, revisionName]) => ({
@@ -493,13 +498,15 @@ function directorHarness({
         metadata: {
           annotations: {
             'autoscaling.knative.dev/minScale': String(value?.minimum ?? 0),
-            'autoscaling.knative.dev/maxScale': String(value?.maximum ?? 5)
+            'autoscaling.knative.dev/maxScale': String(value?.maximum ?? 5),
+            ...value?.transport?.annotations
           }
         },
         spec: {
           serviceAccountName: value?.serviceAccount,
           containers: [
             {
+              name: value?.transport?.name,
               image: value?.image,
               env: [
                 ...Object.entries(value?.env ?? {}).map(([name, value]) => ({ name, value })),
@@ -508,7 +515,8 @@ function directorHarness({
                   valueSource: { secretKeyRef }
                 }))
               ]
-            }
+            },
+            ...value?.transport?.sidecars ?? []
           ]
         }
       }
@@ -529,8 +537,10 @@ function directorHarness({
         serviceAccount:
           config['runtime-service-account'] ??
           state.revisions.get(state.activeRevision)?.serviceAccount,
-        image: image ?? state.revisions.get(state.activeRevision)?.image
+        image: image ?? state.revisions.get(state.activeRevision)?.image,
+        transport: state.templateTransport
       })
+      state.latestCreated = revision
       state.tags.set(tag, revision)
       if (deployFailure) throw deployFailure
     },
@@ -713,6 +723,83 @@ test('director deploy refuses to move traffic onto a candidate that lost the flo
   )
   // Traffic never moved, so the original revision still serves.
   assert.equal(harness.state.activeRevision, 'relay-00001-old')
+})
+
+// What a Terraform apply of relay_director_cloud_sql_proxy_sidecar puts in the template.
+const SIDECAR_TRANSPORT = {
+  name: 'relay',
+  annotations: { 'run.googleapis.com/container-dependencies': '{"relay":["cloud-sql-proxy"]}' },
+  sidecars: [{ name: 'cloud-sql-proxy', image: 'gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:1' }]
+}
+
+// The apply leaves its revision at 0%, as the director service declares no traffic block.
+function applySidecarTemplate(harness) {
+  const serving = harness.state.revisions.get(harness.state.activeRevision)
+  harness.state.templateTransport = SIDECAR_TRANSPORT
+  harness.state.revisions.set('relay-00009-terraform', { ...serving, transport: SIDECAR_TRANSPORT })
+  harness.state.latestCreated = 'relay-00009-terraform'
+}
+
+test('a deploy after a sidecar apply refuses the new shape unless the apply revision is named', async () => {
+  const harness = directorHarness()
+  applySidecarTemplate(harness)
+  await assert.rejects(
+    deployDirector({}, 'candidate-new', harness.operations),
+    /unrelated revision shape/
+  )
+  assert.equal(harness.state.activeRevision, 'relay-00001-old')
+})
+
+test('a deploy adopts the shape of the named Terraform apply revision', async () => {
+  const harness = directorHarness()
+  applySidecarTemplate(harness)
+  await deployDirector(
+    { 'shape-baseline-revision': 'relay-00009-terraform' },
+    'candidate-new',
+    harness.operations
+  )
+  const active = harness.state.revisions.get(harness.state.activeRevision)
+  assert.equal(active.transport, SIDECAR_TRANSPORT)
+  assert.equal(
+    harness.state.revisions.get(harness.state.tags.get('selector-rollback')).transport,
+    SIDECAR_TRANSPORT
+  )
+})
+
+test('the named shape baseline must be the unserved latest revision on the serving image', async () => {
+  const stale = directorHarness()
+  applySidecarTemplate(stale)
+  await assert.rejects(
+    deployDirector({ 'shape-baseline-revision': 'relay-00000-stale' }, 'candidate-new', stale.operations),
+    /not the latest created revision/
+  )
+  const serving = directorHarness()
+  await assert.rejects(
+    deployDirector({ 'shape-baseline-revision': 'relay-00001-old' }, 'candidate-new', serving.operations),
+    /already serving/
+  )
+  const otherImage = directorHarness()
+  applySidecarTemplate(otherImage)
+  otherImage.state.revisions.get('relay-00009-terraform').image = `relay@sha256:${'e'.repeat(64)}`
+  await assert.rejects(
+    deployDirector({ 'shape-baseline-revision': 'relay-00009-terraform' }, 'candidate-new', otherImage.operations),
+    /does not run the serving image/
+  )
+  for (const harness of [stale, serving, otherImage]) {
+    assert.equal(harness.state.activeRevision, 'relay-00001-old')
+  }
+})
+
+test('--shape-baseline-revision takes only a revision name, and only for a director', () => {
+  const base = ['--project', 'p', '--region', 'r', '--service', 's', '--image', 'i@sha256:' + 'a'.repeat(64), '--release-id', 'x']
+  assert.throws(
+    () => parseArguments([...base, '--role', 'director', '--shape-baseline-revision', 'Bad_Name']),
+    /must be a Cloud Run revision name/
+  )
+  assert.throws(
+    () => parseArguments([...base, '--role', 'cell', '--director-origin', 'https://d', '--admin-audience', 'a', '--shape-baseline-revision', 'relay-1']),
+    /--shape-baseline-revision requires --role director/
+  )
 })
 
 test('director deploy rejects unrelated revision-shape drift', async () => {
