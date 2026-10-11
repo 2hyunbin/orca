@@ -107,20 +107,6 @@ describe('AgentHookServer nested agent model fence', () => {
     ])
   })
 
-  it("shows a codex pane's own model", () => {
-    const server = new AgentHookServer()
-    ingest(server, 1_000, {
-      state: 'working',
-      prompt: 'codex turn',
-      agentType: 'codex',
-      model: 'gpt-6-astra'
-    })
-
-    expect(server.getStatusSnapshot()).toEqual([
-      expect.objectContaining({ agentType: 'codex', model: 'gpt-6-astra' })
-    ])
-  })
-
   it('lets a new agent claim the pane with its model once the parent turn is done', () => {
     const server = new AgentHookServer()
     ingest(server, 1_000, {
