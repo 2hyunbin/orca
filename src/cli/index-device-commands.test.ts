@@ -70,7 +70,10 @@ describe('orca cli worktree awareness', () => {
     )
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await main(['tab', 'current', '--pairing-code', 'remote-runtime', '--json'], '/tmp/client/src')
+    await main(
+      ['browser', 'page', 'current', '--pairing-code', 'remote-runtime', '--json'],
+      '/tmp/client/src'
+    )
 
     expect(callMock).toHaveBeenCalledTimes(1)
     expect(callMock).toHaveBeenCalledWith('browser.tabCurrent', {

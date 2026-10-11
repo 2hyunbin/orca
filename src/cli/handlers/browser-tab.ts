@@ -33,12 +33,12 @@ export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
       showProfile ? formatTabListWithProfiles(value, true) : formatTabList(value)
     )
   },
-  'tab show': async ({ flags, client, cwd, json }) => {
+  'browser page show': async ({ flags, client, cwd, json }) => {
     const target = await getBrowserCommandTarget(flags, cwd, client)
     const result = await client.call<BrowserTabShowResult>('browser.tabShow', target)
     printResult(result, json, formatTabShow)
   },
-  'tab current': async ({ flags, client, cwd, json }) => {
+  'browser page current': async ({ flags, client, cwd, json }) => {
     const worktree = await getBrowserWorktreeSelector(flags, cwd, client)
     const result = await client.call<BrowserTabCurrentResult>('browser.tabCurrent', { worktree })
     printResult(result, json, formatTabShow)
@@ -66,7 +66,7 @@ export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
     })
     printResult(result, json, (v) => `Switched to tab ${v.switched} (${v.browserPageId})`)
   },
-  'tab create': async ({ flags, client, cwd, json }) => {
+  'browser page create': async ({ flags, client, cwd, json }) => {
     const url = getOptionalStringFlag(flags, 'url')
     const profileId = getOptionalStringFlag(flags, 'profile')
     const worktree = await getBrowserWorktreeSelector(flags, cwd, client)

@@ -61,10 +61,10 @@ export const BROWSER_HANDLER_GROUPS: readonly HandlerGroup[] = [
     keys: [
       'open-url',
       'tab list',
-      'tab show',
-      'tab current',
+      'browser page show',
+      'browser page current',
       'tab switch',
-      'tab create',
+      'browser page create',
       'tab close',
       'exec'
     ],
@@ -73,13 +73,13 @@ export const BROWSER_HANDLER_GROUPS: readonly HandlerGroup[] = [
   {
     name: 'browser-profile',
     keys: [
-      'tab profile list',
-      'tab profile create',
-      'tab profile delete',
-      'tab profile set',
-      'tab profile show',
-      'tab profile use-default',
-      'tab profile clone'
+      'browser profile list',
+      'browser profile create',
+      'browser profile rm',
+      'browser profile set',
+      'browser profile show',
+      'browser profile use-default',
+      'browser profile clone'
     ],
     load: async () => (await import('./handlers/browser-profile.js')).BROWSER_PROFILE_HANDLERS
   },

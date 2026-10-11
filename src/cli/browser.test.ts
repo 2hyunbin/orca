@@ -152,13 +152,14 @@ describe('orca cli browser page targeting', () => {
     expect(call[1]).not.toHaveProperty('focus')
   })
 
-  it('passes explicit profile ids to tab create', async () => {
+  it('passes explicit profile ids to browser page create', async () => {
     queueFixtures(callMock, okFixture('req_create', { browserPageId: 'page-3' }))
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
       [
-        'tab',
+        'browser',
+        'page',
         'create',
         '--url',
         'https://example.com',
@@ -204,7 +205,7 @@ describe('orca cli browser page targeting', () => {
     )
   })
 
-  it('passes tab profile updates through by page id', async () => {
+  it('passes browser profile updates through by page id', async () => {
     queueFixtures(
       callMock,
       okFixture('req_set_profile', {
@@ -216,7 +217,7 @@ describe('orca cli browser page targeting', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'set', '--page', 'page-2', '--profile', 'work', '--json'],
+      ['browser', 'profile', 'set', '--page', 'page-2', '--profile', 'work', '--json'],
       '/tmp/repo/feature/src'
     )
 
@@ -283,7 +284,10 @@ describe('orca cli browser page targeting', () => {
     )
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await main(['tab', 'show', '--page', 'page-1', '--json'], '/tmp/not-an-orca-worktree')
+    await main(
+      ['browser', 'page', 'show', '--page', 'page-1', '--json'],
+      '/tmp/not-an-orca-worktree'
+    )
 
     expect(callMock).toHaveBeenCalledTimes(1)
     expect(callMock).toHaveBeenCalledWith('browser.tabShow', { page: 'page-1' })
@@ -307,7 +311,10 @@ describe('orca cli browser page targeting', () => {
     )
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await main(['tab', 'current', '--worktree', 'all', '--json'], '/tmp/not-an-orca-worktree')
+    await main(
+      ['browser', 'page', 'current', '--worktree', 'all', '--json'],
+      '/tmp/not-an-orca-worktree'
+    )
 
     expect(callMock).toHaveBeenCalledTimes(1)
     expect(callMock).toHaveBeenCalledWith('browser.tabCurrent', { worktree: undefined })
@@ -406,7 +413,7 @@ describe('orca cli browser profile management', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'show', '--page', 'page-2', '--json'],
+      ['browser', 'profile', 'show', '--page', 'page-2', '--json'],
       '/tmp/not-an-orca-worktree'
     )
 
@@ -426,7 +433,7 @@ describe('orca cli browser profile management', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'use-default', '--page', 'page-2', '--json'],
+      ['browser', 'profile', 'use-default', '--page', 'page-2', '--json'],
       '/tmp/not-an-orca-worktree'
     )
 
@@ -450,7 +457,7 @@ describe('orca cli browser profile management', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'clone', '--page', 'page-2', '--profile', 'work', '--json'],
+      ['browser', 'profile', 'clone', '--page', 'page-2', '--profile', 'work', '--json'],
       '/tmp/not-an-orca-worktree'
     )
 
@@ -475,7 +482,7 @@ describe('orca cli browser tab profiles', () => {
     queueFixtures(callMock, okFixture('req_profiles', { profiles: [] }))
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await main(['tab', 'profile', 'list'], '/tmp/not-an-orca-worktree')
+    await main(['browser', 'profile', 'list'], '/tmp/not-an-orca-worktree')
 
     expect(callMock).toHaveBeenCalledTimes(1)
     expect(callMock).toHaveBeenCalledWith('browser.profileList')
@@ -497,7 +504,7 @@ describe('orca cli browser tab profiles', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'create', '--label', 'Work', '--json'],
+      ['browser', 'profile', 'create', '--label', 'Work', '--json'],
       '/tmp/not-an-orca-worktree'
     )
 
@@ -523,7 +530,7 @@ describe('orca cli browser tab profiles', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'create', '--label', 'From Chrome', '--scope', 'imported', '--json'],
+      ['browser', 'profile', 'create', '--label', 'From Chrome', '--scope', 'imported', '--json'],
       '/tmp/not-an-orca-worktree'
     )
 
@@ -537,7 +544,7 @@ describe('orca cli browser tab profiles', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'create', '--label', 'Work', '--scope', 'isloated'],
+      ['browser', 'profile', 'create', '--label', 'Work', '--scope', 'isloated'],
       '/tmp/not-an-orca-worktree'
     )
 
@@ -549,7 +556,7 @@ describe('orca cli browser tab profiles', () => {
     queueFixtures(callMock, okFixture('req_profile_create', { profile: null }))
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await main(['tab', 'profile', 'create', '--label', 'Bogus'], '/tmp/not-an-orca-worktree')
+    await main(['browser', 'profile', 'create', '--label', 'Bogus'], '/tmp/not-an-orca-worktree')
 
     expect(callMock).toHaveBeenCalledTimes(1)
     expect(errorSpy).toHaveBeenCalledWith(
@@ -562,7 +569,7 @@ describe('orca cli browser tab profiles', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['tab', 'profile', 'delete', '--profile', 'work', '--json'],
+      ['browser', 'profile', 'rm', '--profile', 'work', '--json'],
       '/tmp/not-an-orca-worktree'
     )
 
@@ -577,10 +584,50 @@ describe('orca cli browser tab profiles', () => {
     )
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    await main(['tab', 'profile', 'delete', '--profile', 'default'], '/tmp/not-an-orca-worktree')
+    await main(['browser', 'profile', 'rm', '--profile', 'default'], '/tmp/not-an-orca-worktree')
 
     expect(callMock).toHaveBeenCalledWith('browser.profileDelete', { profileId: 'default' })
     expect(logSpy).toHaveBeenCalledWith('Profile default was not deleted')
+  })
+})
+
+describe('orca cli browser commands moved off tab', () => {
+  beforeEach(() => {
+    callMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    {
+      name: 'tab create',
+      argv: ['tab', 'create', '--url', 'https://example.com', '--worktree', 'all', '--json'],
+      method: 'browser.tabCreate',
+      params: { url: 'https://example.com', worktree: undefined }
+    },
+    {
+      name: 'tab show',
+      argv: ['tab', 'show', '--page', 'page-1', '--json'],
+      method: 'browser.tabShow',
+      params: { page: 'page-1' }
+    },
+    {
+      name: 'tab profile delete',
+      argv: ['tab', 'profile', 'delete', '--profile', 'work', '--json'],
+      method: 'browser.profileDelete',
+      params: { profileId: 'work' }
+    }
+  ])('still runs `$name` through its old name', async ({ argv, method, params }) => {
+    queueFixtures(callMock, okFixture('req_alias', { ok: true }))
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(argv, '/tmp/not-an-orca-worktree')
+
+    expect(callMock).toHaveBeenCalledTimes(1)
+    expect(callMock.mock.calls[0]?.[0]).toBe(method)
+    expect(callMock.mock.calls[0]?.[1]).toMatchObject(params)
   })
 })
 

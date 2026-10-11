@@ -29,11 +29,11 @@ function parseScopeFlag(flags: Map<string, string | boolean>): 'isolated' | 'imp
 }
 
 export const BROWSER_PROFILE_HANDLERS: Record<string, CommandHandler> = {
-  'tab profile list': async ({ client, json }) => {
+  'browser profile list': async ({ client, json }) => {
     const result = await client.call<BrowserProfileListResult>('browser.profileList')
     printResult(result, json, formatBrowserProfileList)
   },
-  'tab profile create': async ({ flags, client, json }) => {
+  'browser profile create': async ({ flags, client, json }) => {
     const label = getRequiredStringFlag(flags, 'label')
     const scope = parseScopeFlag(flags)
     const result = await client.call<BrowserProfileCreateResult>('browser.profileCreate', {
@@ -56,7 +56,7 @@ export const BROWSER_PROFILE_HANDLERS: Record<string, CommandHandler> = {
         `Created profile ${value.profile?.id ?? 'unknown'} (${value.profile?.label ?? label})`
     )
   },
-  'tab profile delete': async ({ flags, client, json }) => {
+  'browser profile rm': async ({ flags, client, json }) => {
     const profileId = getRequiredStringFlag(flags, 'profile')
     const result = await client.call<BrowserProfileDeleteResult>('browser.profileDelete', {
       profileId
@@ -67,7 +67,7 @@ export const BROWSER_PROFILE_HANDLERS: Record<string, CommandHandler> = {
         : `Profile ${value.profileId} was not deleted`
     )
   },
-  'tab profile set': async ({ flags, client, cwd, json }) => {
+  'browser profile set': async ({ flags, client, cwd, json }) => {
     const profileId = getRequiredStringFlag(flags, 'profile')
     const target = await getBrowserCommandTarget(flags, cwd, client)
     const result = await client.call<BrowserTabSetProfileResult>('browser.tabSetProfile', {
@@ -81,12 +81,12 @@ export const BROWSER_PROFILE_HANDLERS: Record<string, CommandHandler> = {
         `Switched ${value.browserPageId} to ${value.profileLabel ?? value.profileId ?? 'default'}`
     )
   },
-  'tab profile show': async ({ flags, client, cwd, json }) => {
+  'browser profile show': async ({ flags, client, cwd, json }) => {
     const target = await getBrowserCommandTarget(flags, cwd, client)
     const result = await client.call<BrowserTabProfileShowResult>('browser.tabProfileShow', target)
     printResult(result, json, formatTabProfileShow)
   },
-  'tab profile use-default': async ({ flags, client, cwd, json }) => {
+  'browser profile use-default': async ({ flags, client, cwd, json }) => {
     const target = await getBrowserCommandTarget(flags, cwd, client)
     const result = await client.call<BrowserTabSetProfileResult>('browser.tabSetProfile', {
       ...target,
@@ -94,7 +94,7 @@ export const BROWSER_PROFILE_HANDLERS: Record<string, CommandHandler> = {
     })
     printResult(result, json, (value) => `Switched ${value.browserPageId} to Default`)
   },
-  'tab profile clone': async ({ flags, client, cwd, json }) => {
+  'browser profile clone': async ({ flags, client, cwd, json }) => {
     const profileId = getRequiredStringFlag(flags, 'profile')
     const target = await getBrowserCommandTarget(flags, cwd, client)
     const result = await client.call<BrowserTabProfileCloneResult>('browser.tabProfileClone', {
