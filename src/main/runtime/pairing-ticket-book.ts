@@ -182,6 +182,17 @@ export class PairingTicketBook {
     }
   }
 
+  /** A row with this id may not exist yet (or never will): never a revocation verdict until expiry. */
+  isReservedDeviceId(deviceId: string): boolean {
+    this.sweep()
+    for (const entry of this.entries.values()) {
+      if (entry.reservedDeviceId === deviceId) {
+        return true
+      }
+    }
+    return false
+  }
+
   /** Counts a bad proof against an open ticket; true once the ticket is burned for it. */
   recordFailedProof(ticket: string): boolean {
     const entry = this.entries.get(hashPairingTicket(ticket))

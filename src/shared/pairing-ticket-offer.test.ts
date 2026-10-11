@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { parsePairingCode } from './pairing'
-import { decodePairingTicketCode, encodePairingTicketOffer } from './pairing-ticket-offer'
+import {
+  decodePairingTicketCode,
+  encodePairingTicketOffer,
+  parsePairingTicketInput
+} from './pairing-ticket-offer'
+import { buildVerifiedPairingLink } from './verified-pairing-link'
 
 const offer = {
   v: 3 as const,
@@ -13,11 +18,22 @@ const offer = {
 }
 
 describe('pairing ticket offer', () => {
-  it('round-trips and keeps the secret out of any query string', () => {
+  it('links only through the verified https link, secret in the fragment', () => {
     const { code, link } = encodePairingTicketOffer(offer)
-    expect(link).toBe(`orca://pair#${code}`)
+    // Why: any app can claim orca://, and a headless ticket redeems without approval.
+    expect(link).toBe(buildVerifiedPairingLink(code))
+    expect(link.startsWith('https://')).toBe(true)
     expect(link).not.toContain('?')
     expect(decodePairingTicketCode(code)).toEqual(offer)
+  })
+
+  it('accepts a bare code or the verified link, and refuses a ticket in an orca:// URL', () => {
+    const { code, link } = encodePairingTicketOffer(offer)
+    expect(parsePairingTicketInput(code)).toEqual(offer)
+    expect(parsePairingTicketInput(` ${link} `)).toEqual(offer)
+    expect(parsePairingTicketInput(`orca://pair#${code}`)).toBeNull()
+    expect(parsePairingTicketInput(`orca://pair?code=${code}`)).toBeNull()
+    expect(parsePairingTicketInput(`https://evil.example/pair#${code}`)).toBeNull()
   })
 
   it('is refused by the v2 parser, so an older app reports an invalid code', () => {

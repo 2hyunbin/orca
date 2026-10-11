@@ -164,4 +164,13 @@ describe('PairingTicketBook', () => {
       ['local-ui', true]
     ])
   })
+
+  it('remembers reserved device ids until the ticket expires', () => {
+    const { clock, tickets } = book()
+    const minted = tickets.mint(cli)
+    expect(tickets.isReservedDeviceId(minted.deviceId)).toBe(true)
+    expect(tickets.isReservedDeviceId('other')).toBe(false)
+    clock.now = minted.expiresAt
+    expect(tickets.isReservedDeviceId(minted.deviceId)).toBe(false)
+  })
 })

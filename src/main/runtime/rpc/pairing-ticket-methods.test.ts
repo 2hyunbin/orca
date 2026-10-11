@@ -3,6 +3,7 @@ import { OrcaRuntimeService } from '../orca-runtime'
 import { PairingTicketBook } from '../pairing-ticket-book'
 import { createOwnerPairingTicketContext } from '../runtime-rpc/runtime-rpc-pairing-ticket-owner'
 import { decodePairingTicketCode } from '../../../shared/pairing-ticket-offer'
+import { buildVerifiedPairingLink } from '../../../shared/verified-pairing-link'
 import type { RpcResponse } from './core'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcCallerScope } from './rpc-caller-scope'
@@ -44,7 +45,7 @@ describe('pairing ticket RPCs', () => {
     )
     const offer = decodePairingTicketCode(created.code)
     expect(offer).toMatchObject({ v: 3, scope: 'runtime', publicKeyB64: HOST_KEY })
-    expect(created.link).toBe(`orca://pair#${created.code}`)
+    expect(created.link).toBe(buildVerifiedPairingLink(created.code))
 
     const listed = await dispatch('pairing.listTickets', undefined, { pairingTickets })
     expect(JSON.stringify(listed)).not.toContain(offer!.ticket)

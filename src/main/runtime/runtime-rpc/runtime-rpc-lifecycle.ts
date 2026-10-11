@@ -283,6 +283,7 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
       allowInsecureWebPairing: () => process.env[ALLOW_INSECURE_WEB_PAIRING_ENV] === '1',
       redeemTicket: (redemption, context) =>
         this.redeemPairingTicketOnSocket(deviceRegistry, redemption, context),
+      isReservedDeviceId: (deviceId) => this.pairingTickets.isReservedDeviceId(deviceId),
       // Why: relay attempts are authorized upstream; only direct failures should prompt local re-pairing.
       onUnpairedDeviceAuthFailure: (metadata) => {
         if (metadata.transport === 'direct') {

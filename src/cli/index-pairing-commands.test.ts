@@ -44,7 +44,7 @@ import { main } from './index'
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
 import { okFixture, queueFixtures } from './test-fixtures'
 
-const LINK = 'orca://pair#c2VjcmV0'
+const LINK = 'https://www.onorca.dev/pair#c2VjcmV0'
 
 describe('orca pairing commands', () => {
   useWorktreeAwarenessEnvironment({

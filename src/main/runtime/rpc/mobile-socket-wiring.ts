@@ -9,6 +9,7 @@ import {
 } from '../../../shared/web-origin-security'
 import { devicePrincipalOf } from '../device-principal'
 import type { E2EEKeypair } from '../e2ee-keypair'
+import { resolveSocketDeviceKey } from './mobile-socket-device-key-resolution'
 import { E2EEChannel, type E2EEAuthenticatedDevice } from './e2ee-channel'
 import { createMobileE2EEOutboundMemoryBudget } from './mobile-e2ee-outbound-memory-budget'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
@@ -75,6 +76,8 @@ type MobileSocketWiringOptions = {
     redemption: E2EETicketRedemption,
     context: { transcriptHashB64: string; signal: AbortSignal }
   ) => Promise<E2EERedemptionOutcome<DeviceEntry>>
+  // Why: a ticket's reserved id has no row until its redemption commits; "unknown" there is not a revocation.
+  isReservedDeviceId?: (deviceId: string) => boolean
 }
 
 function toAuthenticatedDevice(device: DeviceEntry): E2EEAuthenticatedDevice {
@@ -95,6 +98,7 @@ export class MobileSocketWiring {
   private readonly allowInsecureWebPairing: () => boolean
   private readonly ephemeralSweep: ReturnType<typeof setInterval>
   private readonly redeemTicket: MobileSocketWiringOptions['redeemTicket']
+  private readonly isReservedDeviceId: (deviceId: string) => boolean
   private readonly channels = new Map<WebSocket, E2EEChannel>()
   private readonly connectionIds = new Map<WebSocket, string>()
   private readonly authenticatedSockets = new Map<WebSocket, AuthenticatedMobileSocket>()
@@ -111,6 +115,7 @@ export class MobileSocketWiring {
     this.onUnpairedDeviceAuthFailure = options.onUnpairedDeviceAuthFailure
     this.allowInsecureWebPairing = options.allowInsecureWebPairing ?? (() => false)
     this.redeemTicket = options.redeemTicket
+    this.isReservedDeviceId = options.isReservedDeviceId ?? (() => false)
     this.ephemeralSweep = setInterval(
       () => this.sweepIdleEphemeralDevices(Date.now()),
       EPHEMERAL_DEVICE_SWEEP_INTERVAL_MS
@@ -226,27 +231,14 @@ export class MobileSocketWiring {
           }
           return toAuthenticatedDevice(device)
         },
-        resolveAuthenticatedDeviceKey: (deviceId) => {
-          const lookup = this.deviceRegistry.lookupDeviceKey(deviceId)
-          if (lookup.kind !== 'found') {
-            return lookup
-          }
-          // Why: same relay binding rule as token auth — the outer relay cannot pick the identity.
-          // A fork keeps its token row's Relay binding (the key proof names the installation).
-          // Never "unknown": the device exists, and that verdict would make the client delete its key.
-          if (
-            metadata.transport === 'relay' &&
-            metadata.relayDeviceId !== lookup.device.deviceId &&
-            metadata.relayDeviceId !== lookup.device.forkedFrom
-          ) {
-            return { kind: 'refused' }
-          }
-          return {
-            kind: 'found',
-            device: toAuthenticatedDevice(lookup.device),
-            devicePublicKeyB64: lookup.device.devicePublicKeyB64
-          }
-        },
+        resolveAuthenticatedDeviceKey: (deviceId) =>
+          resolveSocketDeviceKey({
+            registry: this.deviceRegistry,
+            deviceId,
+            metadata,
+            isReservedDeviceId: this.isReservedDeviceId,
+            toDevice: toAuthenticatedDevice
+          }),
         redeemTicket: this.ticketRedeemerFor(metadata),
         onReady: (channel, device) => {
           const socket = {

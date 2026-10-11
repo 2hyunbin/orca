@@ -78,73 +78,80 @@ export async function redeemPairingTicket(args: {
     return { ok: false, code: 'ticket_consumed' }
   }
   const { ticket } = lock
-  // Why: the offer names the reserved id, so a mismatch is a forged or mixed-up redemption.
-  if (redemption.deviceId !== ticket.reservedDeviceId) {
-    lock.release()
-    tickets.recordFailedProof(redemption.ticket)
-    return { ok: false, code: 'ticket_invalid' }
-  }
-  const devices = args.registry.listDevices()
-  if (devices.some((device) => device.devicePublicKeyB64 === redemption.devicePublicKeyB64)) {
-    lock.burn()
-    return { ok: false, code: 'device_key_in_use' }
-  }
-  const label = sanitizeDeviceLabel(redemption.deviceLabel, FALLBACK_DEVICE_LABEL)
-  // Why: a same-named device is what an impersonator would mimic, so approval means replacement.
-  const replaces = ticket.requiresApproval
-    ? devices
-        .filter((device) => device.scope === ticket.scope && device.name === label)
-        .map((device) => ({ deviceId: device.deviceId, name: device.name }))
-    : []
-  if (ticket.requiresApproval) {
-    const comparisonCode = derivePairingComparisonCode(
-      Buffer.from(args.transcriptHashB64, 'base64')
-    )
-    const approval = await requestApproval(args.approver, {
-      ticketId: ticket.ticketId,
-      scope: ticket.scope,
-      grants: ticket.grants,
-      deviceLabel: label,
-      deviceKeyFingerprint: deviceKeyFingerprint(redemption.devicePublicKeyB64),
-      comparisonCode,
-      replaces,
-      signal: args.signal,
-      timeoutMs: args.approvalTimeoutMs ?? PAIRING_TICKET_APPROVAL_TIMEOUT_MS
-    })
-    const typedCodeMatches =
-      replaces.length === 0 ||
-      (approval.decision === 'allow' &&
-        normalizeTypedComparisonCode(approval.typedCode ?? '') === comparisonCode)
-    // Why: a closed socket can no longer receive the reply, so its ticket must not stay live.
-    if (approval.decision !== 'allow' || !typedCodeMatches || args.signal.aborted) {
-      lock.burn()
-      return { ok: false, code: 'approval_denied' }
-    }
-  }
-  let device: DeviceEntry
+  // Why: an unexpected throw must not leave the ticket stuck mid-redemption (burn is a no-op once settled).
   try {
-    device = args.registry.addRedeemedDeviceKey({
-      deviceId: ticket.reservedDeviceId,
-      label,
-      scope: ticket.scope,
-      grants: [...ticket.grants],
-      pairingReach: ticket.reach,
-      devicePublicKeyB64: redemption.devicePublicKeyB64
-    })
-  } catch (error) {
-    if (error instanceof DeviceKeyForkError) {
+    // Why: the offer names the reserved id, so a mismatch is a forged or mixed-up redemption.
+    if (redemption.deviceId !== ticket.reservedDeviceId) {
+      lock.release()
+      tickets.recordFailedProof(redemption.ticket)
+      return { ok: false, code: 'ticket_invalid' }
+    }
+    const devices = args.registry.listDevices()
+    if (devices.some((device) => device.devicePublicKeyB64 === redemption.devicePublicKeyB64)) {
       lock.burn()
       return { ok: false, code: 'device_key_in_use' }
     }
-    // Why: nothing was written, so the same client may retry this ticket.
-    lock.release()
-    console.error('[pairing] Failed to persist a redeemed device:', error)
-    return { ok: false, code: 'registry_unavailable' }
+    const label = sanitizeDeviceLabel(redemption.deviceLabel, FALLBACK_DEVICE_LABEL)
+    // Why: a same-named device is what an impersonator would mimic, so approval means replacement.
+    const replaces = ticket.requiresApproval
+      ? devices
+          .filter(
+            (device) =>
+              device.scope === ticket.scope && sanitizeDeviceLabel(device.name, '') === label
+          )
+          .map((device) => ({ deviceId: device.deviceId, name: label }))
+      : []
+    if (ticket.requiresApproval) {
+      const comparisonCode = derivePairingComparisonCode(
+        Buffer.from(args.transcriptHashB64, 'base64')
+      )
+      const approval = await requestApproval(args.approver, {
+        ticketId: ticket.ticketId,
+        scope: ticket.scope,
+        grants: ticket.grants,
+        deviceLabel: label,
+        deviceKeyFingerprint: deviceKeyFingerprint(redemption.devicePublicKeyB64),
+        comparisonCode,
+        replaces,
+        signal: args.signal,
+        timeoutMs: args.approvalTimeoutMs ?? PAIRING_TICKET_APPROVAL_TIMEOUT_MS
+      })
+      const typedCodeMatches =
+        replaces.length === 0 ||
+        (approval.decision === 'allow' &&
+          normalizeTypedComparisonCode(approval.typedCode ?? '') === comparisonCode)
+      // Why: a closed socket can no longer receive the reply, so its ticket must not stay live.
+      if (approval.decision !== 'allow' || !typedCodeMatches || args.signal.aborted) {
+        lock.burn()
+        return { ok: false, code: 'approval_denied' }
+      }
+    }
+    let device: DeviceEntry
+    try {
+      device = args.registry.addRedeemedDeviceKey({
+        deviceId: ticket.reservedDeviceId,
+        label,
+        scope: ticket.scope,
+        grants: [...ticket.grants],
+        pairingReach: ticket.reach,
+        devicePublicKeyB64: redemption.devicePublicKeyB64
+      })
+    } catch (error) {
+      if (error instanceof DeviceKeyForkError) {
+        lock.burn()
+        return { ok: false, code: 'device_key_in_use' }
+      }
+      // Why: nothing was written, so the same client may retry this ticket.
+      lock.release()
+      console.error('[pairing] Failed to persist a redeemed device:', error)
+      return { ok: false, code: 'registry_unavailable' }
+    }
+    lock.commit()
+    return { ok: true, device, replacedDeviceIds: replaces.map((entry) => entry.deviceId) }
+  } finally {
+    lock.burn()
   }
-  lock.commit()
-  return { ok: true, device, replacedDeviceIds: replaces.map((entry) => entry.deviceId) }
 }
-
 async function requestApproval(
   approver: PairingTicketApprover | null,
   request: Omit<PairingTicketApprovalRequest, 'signal'> & { signal: AbortSignal; timeoutMs: number }

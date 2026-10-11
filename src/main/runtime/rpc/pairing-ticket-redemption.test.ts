@@ -82,6 +82,7 @@ function harness(
     onText: vi.fn(),
     onBinary: vi.fn(),
     onClose: vi.fn(),
+    isReservedDeviceId: (deviceId) => tickets.isReservedDeviceId(deviceId),
     redeemTicket: (redemption, context) =>
       redeemPairingTicket({
         tickets,
@@ -327,6 +328,46 @@ describe('pairing ticket redemption (host)', () => {
   })
 })
 
+describe('pairing ticket redemption failures never revoke a pending key', () => {
+  it('answers key auth for an unredeemed reserved id with registry_unavailable, not device_revoked', async () => {
+    const { tickets, connect } = harness()
+    const minted = tickets.mint(cliTicket)
+    const key = nacl.sign.keyPair()
+    const early = connect((hash) => ({
+      deviceId: minted.deviceId,
+      deviceProofB64: sign(key, 'auth', hash)
+    }))
+    expect(await early.reply()).toEqual({
+      type: 'e2ee_error',
+      error: { code: 'registry_unavailable' }
+    })
+  })
+
+  it('burns the ticket when the approval step throws unexpectedly', async () => {
+    const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'orca-ticket-')))
+    const tickets = new PairingTicketBook()
+    const minted = tickets.mint(uiTicket)
+    const transcriptHashB64 = Buffer.alloc(32, 7).toString('base64')
+    vi.spyOn(registry, 'listDevices').mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    await expect(
+      redeemPairingTicket({
+        tickets,
+        registry,
+        approver: async () => ({ decision: 'allow' }),
+        transcriptHashB64,
+        signal: new AbortController().signal,
+        redemption: {
+          kind: 'redemption',
+          ...redemptionFor(minted, nacl.sign.keyPair())(transcriptHashB64)
+        }
+      })
+    ).rejects.toThrow('boom')
+    expect(tickets.beginRedemption(minted.ticket).kind).toBe('invalid')
+  })
+})
+
 describe('redeemPairingTicket approval rules', () => {
   function direct(approver: PairingTicketApprover | null, approvalTimeoutMs?: number) {
     const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'orca-ticket-')))
@@ -364,7 +405,8 @@ describe('redeemPairingTicket approval rules', () => {
       seen.push(request)
       return { decision: 'allow', typedCode }
     })
-    const existing = registry.addDevice('Laptop', 'runtime')
+    // A stored name with invisible characters still counts as the same device.
+    const existing = registry.addDevice('Lap\u200btop', 'runtime')
 
     const untyped = tickets.mint(uiTicket)
     expect(await redeem(untyped)).toEqual({ ok: false, code: 'approval_denied' })
