@@ -14,8 +14,7 @@ import type { PairedMobileSocket } from './helpers/paired-mobile-client'
 type Frame = PairedMobileSocket['frames'][number]
 
 const HostWorktreesSchema = z.looseObject({
-  worktrees: z.array(z.looseObject({ worktreeId: z.string(), path: z.string() })),
-  stale: z.boolean()
+  worktrees: z.array(z.looseObject({ worktreeId: z.string(), path: z.string() }))
 })
 const ReposSchema = z.object({
   repos: z.array(z.looseObject({ id: z.string(), path: z.string() }))
