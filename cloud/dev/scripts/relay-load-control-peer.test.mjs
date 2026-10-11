@@ -1053,3 +1053,22 @@ test('declares a reconnect only after an established control', async (context) =
   assert.equal(bodies[0].reconnect, undefined)
   assert.equal(bodies[1].reconnect, true)
 })
+
+test('a silent control is terminated after the desktop silence limit', (context) => {
+  context.mock.timers.enable({ apis: ['setInterval', 'Date'] })
+  const peer = new RelayLoadControlPeer(0, peerOptions(), () => undefined)
+  const socket = fakeOpenSocket()
+  let terminated = 0
+  socket.terminate = () => {
+    terminated++
+    socket.emit('close', 1006, Buffer.from(''))
+  }
+  peer.watchSilence(socket)
+  context.mock.timers.tick(60_000)
+  socket.emit('ping')
+  context.mock.timers.tick(60_000)
+  assert.equal(terminated, 0)
+  context.mock.timers.tick(30_000)
+  context.mock.timers.tick(60_000)
+  assert.equal(terminated, 1)
+})
