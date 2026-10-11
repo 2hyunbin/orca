@@ -37,8 +37,13 @@ describe('withholdUnreachableKeychainForServe', () => {
     })
     expect(safeStorageWithheldReason()).toBeNull()
 
-    const linuxProbe = vi.fn()
-    await withholdUnreachableKeychainForServe({ platform: 'linux', probe: linuxProbe })
-    expect(linuxProbe).not.toHaveBeenCalled()
+    const skippedProbe = vi.fn()
+    await withholdUnreachableKeychainForServe({ platform: 'linux', probe: skippedProbe })
+    await withholdUnreachableKeychainForServe({
+      platform: 'darwin',
+      usesMockKeychain: true,
+      probe: skippedProbe
+    })
+    expect(skippedProbe).not.toHaveBeenCalled()
   })
 })

@@ -41,6 +41,15 @@ describe('probeMacosKeychainReachability', () => {
     ).resolves.toEqual({ kind: 'unavailable', reason: 'timeout' })
   })
 
+  it('classifies by exit code when the message is localized', async () => {
+    await expect(
+      probeMacosKeychainReachability(runner({ code: 37, stderr: 'trousseau introuvable' }))
+    ).resolves.toEqual({ kind: 'unavailable', reason: 'no_default_keychain' })
+    await expect(
+      probeMacosKeychainReachability(runner({ code: 36, stderr: 'interaction refusée' }))
+    ).resolves.toEqual({ kind: 'unavailable', reason: 'interaction_not_allowed' })
+  })
+
   it('keeps today’s behavior when it cannot tell', async () => {
     await expect(
       probeMacosKeychainReachability(runner({ code: 1, stderr: 'something else' }))

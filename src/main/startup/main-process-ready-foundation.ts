@@ -93,7 +93,9 @@ export async function initializeReadyFoundation(): Promise<void> {
   updateGpuAccelerationAboutPanel()
   if (state.isServeMode) {
     // Why before the profile loads: loading can decrypt secrets, which is the call that hangs.
-    await withholdUnreachableKeychainForServe()
+    await withholdUnreachableKeychainForServe({
+      usesMockKeychain: app.commandLine.hasSwitch('use-mock-keychain')
+    })
   }
   // Why: managed WSL launchers live outside the Windows app bundle, so keep their launcher/bridge contract synced across app updates.
   state.managedWslCliReconciliationStatus = 'pending'

@@ -39,11 +39,13 @@ export async function probeMacosKeychainReachability(
   if (result.code === 0) {
     return { kind: 'reachable' }
   }
+  // Why exit codes too: security(1) exits with the OSStatus low byte, so a localized message
+  // still classifies (errSecNoDefaultKeychain -25307 = 37, errSecInteractionNotAllowed -25308 = 36).
   const output = `${result.stderr}\n${result.stdout}`
-  if (/default keychain could not be found/i.test(output)) {
+  if (result.code === 37 || /default keychain could not be found/i.test(output)) {
     return { kind: 'unavailable', reason: 'no_default_keychain' }
   }
-  if (/interaction is not allowed/i.test(output)) {
+  if (result.code === 36 || /interaction is not allowed/i.test(output)) {
     return { kind: 'unavailable', reason: 'interaction_not_allowed' }
   }
   return { kind: 'unknown' }
