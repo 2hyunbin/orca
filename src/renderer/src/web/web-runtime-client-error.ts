@@ -8,6 +8,7 @@ export type WebRuntimeAuthFailureReason =
   | 'approval-denied'
   | 'ticket-invalid'
   | 'ticket-consumed'
+  | 'ticket-cancelled'
   | 'device-key-in-use'
   | 'ticket-unsupported'
 
@@ -55,6 +56,11 @@ function webRuntimeAuthFailureMessage(reason: WebRuntimeAuthFailureReason): stri
       return translate(
         'auto.web.runtimeAuth.ticketConsumed',
         'This pairing code was already used by another device. If that was not you, revoke that device on the Orca desktop, then create a new code.'
+      )
+    case 'ticket-cancelled':
+      return translate(
+        'auto.web.runtimeAuth.ticketCancelled',
+        'This pairing code was cancelled before it finished. Ask for a new one on the Orca desktop.'
       )
     case 'device-key-in-use':
       return translate(

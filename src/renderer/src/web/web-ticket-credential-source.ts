@@ -68,8 +68,10 @@ export function createWebTicketCredentialSource(args: {
         step = 'redeem'
         return { kind: 'retry' }
       }
+      // Why cancelled, not "another device": a redemption of ours was in doubt, so the ticket
+      // was most likely burned (denied, or its socket dropped mid-approval).
       if (errorCode === 'device_revoked' && step === 'confirming') {
-        return { kind: 'failed', reason: 'ticket-consumed' }
+        return { kind: 'failed', reason: 'ticket-cancelled' }
       }
       return null
     },

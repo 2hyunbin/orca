@@ -3,9 +3,12 @@ import { rememberWebSessionDevice, webDeviceKeyStore } from './preload-api/web-r
 import { readWebDeviceKeySupport } from './web-device-key-support'
 import { pairWebBrowserWithTicket, webBrowserDeviceLabel } from './web-pairing-ticket-redemption'
 import { WebRuntimeClient } from './web-runtime-client'
-import type { StoredWebRuntimeEnvironment } from './web-runtime-environment'
+import {
+  saveStoredWebRuntimeEnvironment,
+  type StoredWebRuntimeEnvironment
+} from './web-runtime-environment'
 
-/** The browser's real dependencies for a ticket pairing. */
+/** Pairs with the browser's real dependencies; the returned pairing is already saved. */
 export function connectWebBrowserWithTicket(args: {
   offer: PairingTicketOffer
   name: string
@@ -20,6 +23,7 @@ export function connectWebBrowserWithTicket(args: {
       subtle: typeof crypto === 'undefined' ? null : crypto.subtle,
       deviceLabel: webBrowserDeviceLabel(navigator.userAgent),
       rememberSessionDevice: rememberWebSessionDevice,
+      saveEnvironment: saveStoredWebRuntimeEnvironment,
       // Why reconnect: a lost reply is retried with the reserved id; a refusal still ends it.
       createClient: (connection, options) =>
         new WebRuntimeClient(connection, { ...options, reconnect: true })

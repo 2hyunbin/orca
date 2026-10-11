@@ -108,7 +108,7 @@ describe('web ticket credential source', () => {
         rejected('device_revoked', 'reserved-1'),
         source
       )
-    ).toEqual({ kind: 'failed', reason: 'ticket-consumed' })
+    ).toEqual({ kind: 'failed', reason: 'ticket-cancelled' })
   })
 
   it('reports a consumed ticket at once when no redemption of ours was ever in doubt', async () => {

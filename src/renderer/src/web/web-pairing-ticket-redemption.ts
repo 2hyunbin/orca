@@ -1,3 +1,4 @@
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { PairedRuntimeConnection } from '../../../shared/paired-runtime-connection'
 import type { PairingTicketOffer } from '../../../shared/pairing-ticket-offer'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
@@ -44,6 +45,8 @@ export type WebTicketPairingDeps = {
       onPairingComparisonCode: (code: string) => void
     }
   ) => TicketPairingClient
+  // Persists the pairing; called before its key replaces the old one (crash-safe ordering).
+  saveEnvironment: (environment: StoredWebRuntimeEnvironment) => void
   rememberSessionDevice: (
     environment: StoredWebRuntimeEnvironment,
     device: { deviceId: string; key: WebDeviceSigningKey }
@@ -81,7 +84,8 @@ export async function pairWebBrowserWithTicket(args: {
   const recordId = webDeviceKeyId(offer.publicKeyB64, environment.id)
   // Why a per-ticket record: a re-pair to the same host must never reuse (or, on refusal, delete)
   // the key the existing pairing signs in with; it replaces that key only once the host confirms.
-  const attemptId = `${recordId}|ticket:${offer.deviceId}`
+  // Why a nonce too: two tabs redeeming one code must never adopt (then remove) each other's key.
+  const attemptId = `${recordId}|ticket:${offer.deviceId}|${createBrowserUuid()}`
   const key =
     persistent && deps.subtle
       ? webDeviceSigningKey(
@@ -114,6 +118,9 @@ export async function pairWebBrowserWithTicket(args: {
     if (!response.ok) {
       throw new Error(response.error.message)
     }
+    const paired = { ...environment, runtimeId: response._meta.runtimeId, lastUsedAt: Date.now() }
+    // Why first: until the key is copied, the pairing record still holds the old, working key.
+    deps.saveEnvironment(paired)
     if (persistent) {
       const attempt = await deps.store.get(attemptId)
       if (!attempt || attempt.publicKeyB64 !== key.publicKeyB64) {
@@ -130,7 +137,7 @@ export async function pairWebBrowserWithTicket(args: {
     } else {
       deps.rememberSessionDevice(environment, { deviceId: offer.deviceId, key })
     }
-    return { ...environment, runtimeId: response._meta.runtimeId, lastUsedAt: Date.now() }
+    return paired
   } catch (error) {
     // Why only on a sealed refusal: a lost reply may still have committed this key.
     if (persistent && isWebRuntimeUnauthorizedError(error)) {

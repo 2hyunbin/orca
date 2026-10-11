@@ -39,6 +39,7 @@ function deps(
       subtle: globalThis.crypto.subtle,
       deviceLabel: 'Chrome on macOS',
       rememberSessionDevice: vi.fn(),
+      saveEnvironment: vi.fn(),
       createClient: (_connection, options) => {
         seen.credential = options.credential
         options.onPairingComparisonCode('KMGVTD')
@@ -212,5 +213,60 @@ describe('pairing a browser with a ticket', () => {
       expect(record?.publicKeyB64).not.toBe('old-public-key')
       expect(record?.pairingRevision).toBe(environment.pairingRevision)
     })
+  })
+
+  it('saves the new pairing before its key replaces the old one, so a crash keeps a usable key', async () => {
+    setWebDeviceKeySupportForTests('persistent')
+    const { deps: pairing } = deps('persistent')
+    const order: string[] = []
+    const put = pairing.store.put
+    pairing.store.put = async (record) => {
+      order.push(`put:${record.state}`)
+      return put(record)
+    }
+    pairing.saveEnvironment = vi.fn(() => {
+      order.push('save')
+    })
+    await pairWebBrowserWithTicket({
+      offer,
+      name: 'Studio',
+      previousEnvironment: null,
+      onComparisonCode: vi.fn(),
+      deps: pairing
+    })
+    expect(order).toEqual(['save', 'put:active'])
+  })
+
+  it("gives each attempt its own record, so two tabs with one code never share or remove each other's key", async () => {
+    setWebDeviceKeySupportForTests('persistent')
+    const { deps: pairing } = deps('persistent', 'denied')
+    const created: string[] = []
+    const add = pairing.store.add
+    pairing.store.add = async (record) => {
+      created.push(record.id)
+      return add(record)
+    }
+    // Same host already paired: every attempt keeps the same environment id.
+    const previous = createStoredWebRuntimeEnvironment({
+      name: 'Studio',
+      offer: {
+        v: 2,
+        endpoint: offer.endpoint,
+        deviceToken: 'migrated:old-device',
+        publicKeyB64: offer.publicKeyB64,
+        scope: 'runtime'
+      }
+    })
+    for (let tab = 0; tab < 2; tab++) {
+      await pairWebBrowserWithTicket({
+        offer,
+        name: 'Studio',
+        previousEnvironment: previous,
+        onComparisonCode: vi.fn(),
+        deps: pairing
+      }).catch(() => undefined)
+    }
+    expect(created).toHaveLength(2)
+    expect(created[0]).not.toBe(created[1])
   })
 })

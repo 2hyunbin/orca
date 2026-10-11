@@ -62,7 +62,6 @@ describe('WebConnect with a single-use pairing code', () => {
       expect(screen.getByTestId('web-pairing-comparison-code')).toHaveTextContent('KMGVTD')
     )
     await act(async () => finish({ id: 'web-1' }))
-    expect(mocks.saveStoredWebRuntimeEnvironment).toHaveBeenCalledWith({ id: 'web-1' })
     expect(onConnected).toHaveBeenCalled()
   })
 
@@ -77,5 +76,18 @@ describe('WebConnect with a single-use pairing code', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     expect(await screen.findByText(/already used by another device/)).toBeInTheDocument()
     expect(mocks.saveStoredWebRuntimeEnvironment).not.toHaveBeenCalled()
+  })
+
+  it('never redeems a code from the address on its own: it names the destination and waits for a click', async () => {
+    mocks.connectWebBrowserWithTicket.mockResolvedValue({ id: 'web-1' })
+    render(<WebConnect initialPairingInput={link} onConnected={vi.fn()} />)
+    expect(await screen.findByText(/ws:\/\/192\.168\.1\.20:6768/)).toBeInTheDocument()
+    expect(screen.getByTestId('web-pairing-host-fingerprint').textContent).toMatch(
+      /^[0-9a-f]{4}( [0-9a-f]{4}){3}$/
+    )
+    await act(async () => {})
+    expect(mocks.connectWebBrowserWithTicket).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(mocks.connectWebBrowserWithTicket).toHaveBeenCalledOnce())
   })
 })

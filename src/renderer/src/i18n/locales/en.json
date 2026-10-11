@@ -484,7 +484,10 @@
         "3affe7de3a": "Paste a pairing URL from an Orca server that this browser can reach.",
         "e3bcd082ac": "Connect to Orca",
         "mobileScopeRejected": "This QR code grants limited (mobile) access. To use the full web app, open the browser access link from Settings → Runtime Environments → Share this Orca server → New Link.",
-        "ticketComparisonCode": "Approve this browser on the Orca desktop. Allow it only if the desktop shows this same code:"
+        "ticketComparisonCode": "Approve this browser on the Orca desktop. Allow it only if the desktop shows this same code:",
+        "ticketDestination": "This single-use code pairs this browser with:",
+        "ticketHostKey": "Server key:",
+        "ticketConfirmHost": "Connect only if this is the Orca server you meant to pair with."
       },
       "webPreloadApi": {
         "aiVaultUnavailableForHost": "Agent Session History is not available for this execution host.",
@@ -536,7 +539,8 @@
         "ticketInvalid": "This pairing code is no longer valid: it expired, was revoked, or was mistyped. Create a new one on the Orca desktop.",
         "ticketConsumed": "This pairing code was already used by another device. If that was not you, revoke that device on the Orca desktop, then create a new code.",
         "deviceKeyInUse": "This browser is already paired with that Orca server. Open it from its saved connection instead.",
-        "ticketUnsupported": "This Orca server does not accept single-use pairing codes. Update it, or use a pairing link from its Settings."
+        "ticketUnsupported": "This Orca server does not accept single-use pairing codes. Update it, or use a pairing link from its Settings.",
+        "ticketCancelled": "This pairing code was cancelled before it finished. Ask for a new one on the Orca desktop."
       }
     },
     "store": {

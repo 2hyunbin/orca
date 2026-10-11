@@ -19,6 +19,7 @@ import { readWebDeviceKeySupport } from './web-device-key-support'
 import { webSessionPairingGuidance } from './web-pairing-security-guidance'
 import { parsePairingTicketInput } from '../../../shared/pairing-ticket-offer'
 import { connectWebBrowserWithTicket } from './web-pairing-ticket-connect'
+import { pairingHostKeyFingerprint } from './web-pairing-host-fingerprint'
 
 type WebConnectProps = {
   initialPairingInput: string | null
@@ -50,14 +51,12 @@ export default function WebConnect({
     }
     setConnecting(true)
     try {
-      saveStoredWebRuntimeEnvironment(
-        await connectWebBrowserWithTicket({
-          offer,
-          name,
-          previousEnvironment: existingEnvironment,
-          onComparisonCode: setComparisonCode
-        })
-      )
+      await connectWebBrowserWithTicket({
+        offer,
+        name,
+        previousEnvironment: existingEnvironment,
+        onComparisonCode: setComparisonCode
+      })
       onConnected()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -132,7 +131,9 @@ export default function WebConnect({
   // Why: a deep-linked offer that reaches this screen either has mobile scope
   // or unknown legacy scope; run the same connect path to reject/probe it.
   useEffect(() => {
-    if (autoConnectAttempted.current || !initialPairingInput || (!parsedOffer && !ticketOffer)) {
+    // Why not tickets: a link can come from anyone, so redeeming one waits for a click on a
+    // screen that names its destination; otherwise it could pair this browser to a stranger's host.
+    if (autoConnectAttempted.current || !initialPairingInput || !parsedOffer || ticketOffer) {
       return
     }
     autoConnectAttempted.current = true
@@ -140,6 +141,11 @@ export default function WebConnect({
     // Why: run once for the deep-linked offer; connect() reads current refs/state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPairingInput, parsedOffer, ticketOffer])
+
+  const ticketHostFingerprint = useMemo(
+    () => (ticketOffer ? pairingHostKeyFingerprint(ticketOffer.publicKeyB64) : null),
+    [ticketOffer]
+  )
 
   const clear = (): void => {
     clearStoredWebRuntimeEnvironment()
@@ -202,6 +208,33 @@ export default function WebConnect({
         {parsedOffer && (
           <div className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
             {translate('auto.web.WebConnect.4a4c017be1', 'Endpoint:')} {parsedOffer.endpoint}
+          </div>
+        )}
+
+        {ticketOffer && (
+          <div className="grid gap-1 rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <span>
+              {translate(
+                'auto.web.WebConnect.ticketDestination',
+                'This single-use code pairs this browser with:'
+              )}{' '}
+              <span className="font-mono text-foreground">{ticketOffer.endpoint}</span>
+            </span>
+            <span>
+              {translate('auto.web.WebConnect.ticketHostKey', 'Server key:')}{' '}
+              <span
+                className="font-mono text-foreground"
+                data-testid="web-pairing-host-fingerprint"
+              >
+                {ticketHostFingerprint}
+              </span>
+            </span>
+            <span>
+              {translate(
+                'auto.web.WebConnect.ticketConfirmHost',
+                'Connect only if this is the Orca server you meant to pair with.'
+              )}
+            </span>
           </div>
         )}
 
