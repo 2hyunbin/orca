@@ -23,7 +23,7 @@ export function getMobileTerminalActionSheetActions<
   onClear: (target: Target) => void
   /** Fallback for a live handle with no matching session tab. */
   onClose: (target: Target) => void
-  /** Preferred path runs host teardown and records the local tombstone. */
+  /** Preferred path runs host teardown and records the pending close. */
   onCloseSessionTab: (tab: Tab) => void
   /** Appended after Close; receives the pressed tab's id so the session route's
    *  bulk-close builder can resolve the anchor itself. */

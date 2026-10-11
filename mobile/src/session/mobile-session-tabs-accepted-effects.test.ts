@@ -43,7 +43,7 @@ describe('runAcceptedMobileSessionTabsEffects', () => {
     }
   )
 
-  it('does not resolve a pending browser omitted by tombstone filtering', () => {
+  it('does not resolve a pending browser hidden by a pending close', () => {
     const activateBrowserTab = vi.fn()
     runAcceptedMobileSessionTabsEffects<Tab>({
       effectiveTabs: [],
