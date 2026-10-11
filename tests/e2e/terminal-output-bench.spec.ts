@@ -11,308 +11,264 @@ import {
   readFileSync,
   writeFileSync,
   rmSync,
-  existsSync,
-} from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import type { ElectronApplication, Page } from "@stablyai/playwright-test";
-import { test } from "./helpers/orca-app";
-import { createRestartSession } from "./helpers/orca-restart";
-import {
-  bootstrapFirstLaunch,
-  seededRepoPathOrSkip,
-} from "./helpers/terminal-restart-persistence";
-import { waitForActiveTerminalManager } from "./helpers/terminal";
-import { waitForBoundPanes } from "./helpers/terminal-layout-journeys";
-import { presentTerminalPerfWindow } from "./terminal-perf-presentation";
-import { RuntimeClient } from "../../src/cli/runtime/client";
+  existsSync
+} from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import type { ElectronApplication, Page } from '@stablyai/playwright-test'
+import { test } from './helpers/orca-app'
+import { createRestartSession } from './helpers/orca-restart'
+import { bootstrapFirstLaunch, seededRepoPathOrSkip } from './helpers/terminal-restart-persistence'
+import { waitForActiveTerminalManager } from './helpers/terminal'
+import { waitForBoundPanes } from './helpers/terminal-layout-journeys'
+import { presentTerminalPerfWindow } from './terminal-perf-presentation'
+import { RuntimeClient } from '../../src/cli/runtime/client'
 import type {
   RuntimeTerminalCreate,
   RuntimeTerminalListResult,
   RuntimeTerminalRead,
-  RuntimeWorktreeCreateResult,
-} from "../../src/shared/runtime-types";
+  RuntimeWorktreeCreateResult
+} from '../../src/shared/runtime-types'
 
-const LABEL = process.env.ORCA_OUTPUT_BENCH_LABEL ?? "unlabeled";
-const REPORT = process.env.ORCA_OUTPUT_BENCH_REPORT;
-const GROUP = process.env.ORCA_OUTPUT_BENCH_GROUP ?? "all";
-const ONLY =
-  process.env.ORCA_OUTPUT_BENCH_ONLY?.split(",").filter(Boolean) ?? [];
-const FIXTURES = path.join(__dirname, "terminal-output-bench-fixtures");
-const REPLAY = path.join(__dirname, "terminal-output-bench-replay.mjs");
-const WIN = process.platform === "win32";
-const MB = 1024 * 1024;
-const ECHO_SAMPLES = Number(process.env.ORCA_OUTPUT_BENCH_ECHO_SAMPLES ?? 60);
+const LABEL = process.env.ORCA_OUTPUT_BENCH_LABEL ?? 'unlabeled'
+const REPORT = process.env.ORCA_OUTPUT_BENCH_REPORT
+const GROUP = process.env.ORCA_OUTPUT_BENCH_GROUP ?? 'all'
+const ONLY = process.env.ORCA_OUTPUT_BENCH_ONLY?.split(',').filter(Boolean) ?? []
+const FIXTURES = path.join(__dirname, 'terminal-output-bench-fixtures')
+const REPLAY = path.join(__dirname, 'terminal-output-bench-replay.mjs')
+const WIN = process.platform === 'win32'
+const MB = 1024 * 1024
+const ECHO_SAMPLES = Number(process.env.ORCA_OUTPUT_BENCH_ECHO_SAMPLES ?? 60)
 
-type Json = Record<string, unknown>;
-type Done = { parsedAt: number; drawnAt: number } | { error: string };
+type Json = Record<string, unknown>
+type Done = { parsedAt: number; drawnAt: number } | { error: string }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- bench probes reach into window globals */
 async function installRendererProbe(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const w = window as any;
+    const w = window as any
     if (w.__obench) {
-      return;
+      return
     }
     const terminals = (): Map<string, any> => {
-      const out = new Map<string, any>();
+      const out = new Map<string, any>()
       for (const manager of w.__paneManagers?.values() ?? []) {
         for (const pane of manager.getPanes?.() ?? []) {
-          const id = pane.container?.dataset?.ptyId;
+          const id = pane.container?.dataset?.ptyId
           if (id) {
-            out.set(id, pane.terminal);
+            out.set(id, pane.terminal)
           }
         }
       }
-      return out;
-    };
+      return out
+    }
     const term = (ptyId: string): any => {
-      const t = terminals().get(ptyId);
+      const t = terminals().get(ptyId)
       if (!t) {
-        throw new Error(`no mounted pane for ${ptyId}`);
+        throw new Error(`no mounted pane for ${ptyId}`)
       }
-      return t;
-    };
+      return t
+    }
     const tail = (t: any, n: number): string[] => {
-      const b = t.buffer.active;
-      const end = b.baseY + b.cursorY;
-      const rows: string[] = [];
+      const b = t.buffer.active
+      const end = b.baseY + b.cursorY
+      const rows: string[] = []
       for (let y = Math.max(0, end - n); y <= end; y += 1) {
-        rows.push(b.getLine(y)?.translateToString(true) ?? "");
+        rows.push(b.getLine(y)?.translateToString(true) ?? '')
       }
-      return rows;
-    };
-    const cursorLine = (t: any): string => tail(t, 0)[0]!.trimEnd();
+      return rows
+    }
+    const cursorLine = (t: any): string => tail(t, 0)[0]!.trimEnd()
     const raf = (): Promise<number> =>
-      new Promise((resolve) =>
-        requestAnimationFrame(() => resolve(Date.now())),
-      );
-    const sleep = (ms: number): Promise<void> =>
-      new Promise((r) => setTimeout(r, ms));
+      new Promise((resolve) => requestAnimationFrame(() => resolve(Date.now())))
+    const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
     const until = (
       t: any,
       pred: () => boolean,
-      timeoutMs: number,
+      timeoutMs: number
     ): Promise<{ parsedAt: number; drawnAt: number }> =>
       new Promise((resolve, reject) => {
-        let done = false;
+        let done = false
         const finish = (): void => {
-          done = true;
-          sub.dispose();
-          clearTimeout(timer);
-        };
+          done = true
+          sub.dispose()
+          clearTimeout(timer)
+        }
         const check = (): void => {
           if (!done && pred()) {
-            finish();
-            const parsedAt = Date.now();
-            void raf().then((drawnAt) => resolve({ parsedAt, drawnAt }));
+            finish()
+            const parsedAt = Date.now()
+            void raf().then((drawnAt) => resolve({ parsedAt, drawnAt }))
           }
-        };
-        const sub = t.onWriteParsed(check);
+        }
+        const sub = t.onWriteParsed(check)
         const timer = setTimeout(() => {
           if (!done) {
-            finish();
-            reject(new Error("timeout"));
+            finish()
+            reject(new Error('timeout'))
           }
-        }, timeoutMs);
-        check();
-      });
-    const pending = new Map<string, Promise<unknown>>();
+        }, timeoutMs)
+        check()
+      })
+    const pending = new Map<string, Promise<unknown>>()
     w.__obench = {
       ptyIdsOfActiveTab(): string[] {
-        const state = w.__store.getState();
-        const manager = w.__paneManagers?.get(state.activeTabId);
-        return (manager?.getPanes?.() ?? []).map(
-          (p: any) => p.container.dataset.ptyId,
-        );
+        const state = w.__store.getState()
+        const manager = w.__paneManagers?.get(state.activeTabId)
+        return (manager?.getPanes?.() ?? []).map((p: any) => p.container.dataset.ptyId)
       },
       hasPty(ptyId: string): boolean {
-        return terminals().has(ptyId);
+        return terminals().has(ptyId)
       },
-      armSentinels(
-        key: string,
-        ptyIds: string[],
-        sentinel: string,
-        timeoutMs: number,
-      ): void {
+      armSentinels(key: string, ptyIds: string[], sentinel: string, timeoutMs: number): void {
         pending.set(
           key,
           Promise.allSettled(
             ptyIds.map((id) => {
-              const t = term(id);
-              return until(
-                t,
-                () => tail(t, 8).some((l) => l.startsWith(sentinel)),
-                timeoutMs,
-              );
-            }),
-          ),
-        );
+              const t = term(id)
+              return until(t, () => tail(t, 8).some((l) => l.startsWith(sentinel)), timeoutMs)
+            })
+          )
+        )
+      },
+      tuiResult(key: string): Promise<unknown> {
+        const p = pending.get(key)
+        pending.delete(key)
+        return p as Promise<unknown>
       },
       async result(key: string): Promise<unknown[]> {
-        const settled = (await pending.get(
-          key,
-        )) as PromiseSettledResult<unknown>[];
-        pending.delete(key);
+        const settled = (await pending.get(key)) as PromiseSettledResult<unknown>[]
+        pending.delete(key)
         return settled.map((s) =>
-          s.status === "fulfilled" ? s.value : { error: String(s.reason) },
-        );
+          s.status === 'fulfilled' ? s.value : { error: String(s.reason) }
+        )
       },
       write(ptyIds: string[], texts: string[]): number {
-        const at = Date.now();
-        ptyIds.forEach((id, i) => w.api.pty.write(id, texts[i], "driving"));
-        return at;
+        const at = Date.now()
+        ptyIds.forEach((id, i) => w.api.pty.write(id, texts[i], 'driving'))
+        return at
       },
       async rafRate(): Promise<number> {
-        const start = performance.now();
-        let frames = 0;
+        const start = performance.now()
+        let frames = 0
         while (performance.now() - start < 1000) {
-          await raf();
-          frames += 1;
+          await raf()
+          frames += 1
         }
-        return frames;
+        return frames
       },
       // Typing in a comment line (`# abc…`) so Enter is a no-op in POSIX shells and PowerShell.
-      async echoSamples(
-        ptyId: string,
-        count: number,
-        gapMs: number,
-        kind: "key" | "cmd",
-      ) {
-        const t = term(ptyId);
-        const samples: { parsedMs: number; drawnMs: number }[] = [];
-        let typed = "";
-        const timeouts = { n: 0 };
+      async echoSamples(ptyId: string, count: number, gapMs: number, kind: 'key' | 'cmd') {
+        const t = term(ptyId)
+        const samples: { parsedMs: number; drawnMs: number }[] = []
+        let typed = ''
+        const timeouts = { n: 0 }
         for (let i = 0; i < count; i += 1) {
           try {
-            if (kind === "key") {
+            if (kind === 'key') {
               if (i % 20 === 0) {
                 if (typed) {
-                  const prev = typed;
-                  w.api.pty.write(ptyId, "\r", "driving");
-                  await until(t, () => !cursorLine(t).endsWith(prev), 15_000);
+                  const prev = typed
+                  w.api.pty.write(ptyId, '\r', 'driving')
+                  await until(t, () => !cursorLine(t).endsWith(prev), 15_000)
                 }
-                typed = "#";
-                w.api.pty.write(ptyId, "#", "driving");
-                await until(t, () => cursorLine(t).endsWith("#"), 15_000);
+                typed = '#'
+                w.api.pty.write(ptyId, '#', 'driving')
+                await until(t, () => cursorLine(t).endsWith('#'), 15_000)
               }
-              typed += "abcdefghijklmnopqrstuvwxyz"[i % 26];
-              const expected = typed;
-              const t0 = Date.now();
-              w.api.pty.write(ptyId, expected.at(-1), "driving");
-              const r = await until(
-                t,
-                () => cursorLine(t).endsWith(expected),
-                15_000,
-              );
+              typed += 'abcdefghijklmnopqrstuvwxyz'[i % 26]
+              const expected = typed
+              const t0 = Date.now()
+              w.api.pty.write(ptyId, expected.at(-1), 'driving')
+              const r = await until(t, () => cursorLine(t).endsWith(expected), 15_000)
               samples.push({
                 parsedMs: r.parsedAt - t0,
-                drawnMs: r.drawnAt - t0,
-              });
+                drawnMs: r.drawnAt - t0
+              })
             } else {
-              const marker = `R${i}x${Date.now() % 100000}`;
-              const t0 = Date.now();
-              w.api.pty.write(ptyId, `echo ${marker}\r`, "driving");
-              const r = await until(
-                t,
-                () => tail(t, 8).some((l) => l.trim() === marker),
-                15_000,
-              );
+              const marker = `R${i}x${Date.now() % 100000}`
+              const t0 = Date.now()
+              w.api.pty.write(ptyId, `echo ${marker}\r`, 'driving')
+              const r = await until(t, () => tail(t, 8).some((l) => l.trim() === marker), 15_000)
               samples.push({
                 parsedMs: r.parsedAt - t0,
-                drawnMs: r.drawnAt - t0,
-              });
+                drawnMs: r.drawnAt - t0
+              })
             }
           } catch {
-            timeouts.n += 1;
-            typed = "";
+            timeouts.n += 1
+            typed = ''
           }
-          await sleep(gapMs);
+          await sleep(gapMs)
         }
-        if (kind === "key" && typed) {
-          w.api.pty.write(ptyId, "\r", "driving");
+        if (kind === 'key' && typed) {
+          w.api.pty.write(ptyId, '\r', 'driving')
         }
-        return { samples, timeouts: timeouts.n };
+        return { samples, timeouts: timeouts.n }
       },
-      armTui(
-        key: string,
-        ptyId: string,
-        sentinel: string,
-        timeoutMs: number,
-      ): void {
-        const t = term(ptyId);
-        const drawn: { n: number; lagMs: number }[] = [];
-        let latest: { n: number; emitted: number } | null = null;
-        let lastDrawn = -1;
-        let rafPending = false;
+      armTui(key: string, ptyId: string, sentinel: string, timeoutMs: number): void {
+        const t = term(ptyId)
+        const drawn: { n: number; lagMs: number }[] = []
+        let latest: { n: number; emitted: number } | null = null
+        let lastDrawn = -1
+        let rafPending = false
         const sub = t.onWriteParsed(() => {
-          const b = t.buffer.active;
-          if (b.type !== "alternate") {
-            return;
+          const b = t.buffer.active
+          if (b.type !== 'alternate') {
+            return
           }
-          const m = /^F (\d+) (\d+)/.exec(
-            b.getLine(b.viewportY)?.translateToString(true) ?? "",
-          );
+          const m = /^F (\d+) (\d+)/.exec(b.getLine(b.viewportY)?.translateToString(true) ?? '')
           if (m) {
-            latest = { n: Number(m[1]), emitted: Number(m[2]) };
+            latest = { n: Number(m[1]), emitted: Number(m[2]) }
             if (!rafPending) {
-              rafPending = true;
+              rafPending = true
               requestAnimationFrame(() => {
-                rafPending = false;
+                rafPending = false
                 if (latest && latest.n !== lastDrawn) {
-                  lastDrawn = latest.n;
+                  lastDrawn = latest.n
                   drawn.push({
                     n: latest.n,
-                    lagMs: Date.now() - latest.emitted,
-                  });
+                    lagMs: Date.now() - latest.emitted
+                  })
                 }
-              });
+              })
             }
           }
-        });
+        })
         pending.set(
           key,
-          until(
-            t,
-            () => tail(t, 8).some((l) => l.startsWith(sentinel)),
-            timeoutMs,
-          ).then((done) => {
-            sub.dispose();
-            return { done, drawn };
-          }),
-        );
+          until(t, () => tail(t, 8).some((l) => l.startsWith(sentinel)), timeoutMs).then((done) => {
+            sub.dispose()
+            return { done, drawn }
+          })
+        )
       },
       async findSentinelAnywhere(sentinel: string): Promise<number | null> {
         for (const t of terminals().values()) {
           if (tail(t, 12).some((l: string) => l.startsWith(sentinel))) {
-            return raf();
+            return raf()
           }
         }
-        return null;
-      },
-    };
-  });
+        return null
+      }
+    }
+  })
 }
 
 async function installMainProbe(app: ElectronApplication): Promise<void> {
   await app.evaluate(() => {
-    const g = globalThis as any;
+    const g = globalThis as any
     if (g.__obenchMain) {
-      return;
+      return
     }
-    const net = process.getBuiltinModule("node:net");
-    const st = (g.__obenchMain = { sockets: new Map<string, any>() });
-    const original = net.Socket.prototype.emit;
-    net.Socket.prototype.emit = function (
-      this: any,
-      event: string | symbol,
-      ...args: any[]
-    ) {
-      const chunk = args[0];
-      if (event === "data" && chunk && typeof chunk.length === "number") {
-        const key: string =
-          this._pipeName || `${this.remoteAddress}:${this.remotePort}`;
-        let s = st.sockets.get(key);
+    const net = process.getBuiltinModule('node:net')
+    const st = (g.__obenchMain = { sockets: new Map<string, any>() })
+    const original = net.Socket.prototype.emit
+    net.Socket.prototype.emit = function (this: any, event: string | symbol, ...args: any[]) {
+      const chunk = args[0]
+      if (event === 'data' && chunk && typeof chunk.length === 'number') {
+        const key: string = this._pipeName || `${this.remoteAddress}:${this.remotePort}`
+        let s = st.sockets.get(key)
         if (!s) {
           s = {
             key,
@@ -330,49 +286,49 @@ async function installMainProbe(app: ElectronApplication): Promise<void> {
             bytesInTurnsAtLeast64k: 0,
             maxTurnBytes: 0,
             turnBytes: 0,
-            open: false,
-          };
-          st.sockets.set(key, s);
+            open: false
+          }
+          st.sockets.set(key, s)
         }
-        const n: number = chunk.length;
-        s.reads += 1;
-        s.bytes += n;
-        s.maxRead = Math.max(s.maxRead, n);
+        const n: number = chunk.length
+        s.reads += 1
+        s.bytes += n
+        s.maxRead = Math.max(s.maxRead, n)
         if (n <= 1024) {
-          s.readsLe1k += 1;
+          s.readsLe1k += 1
         } else if (n <= 8192) {
-          s.readsLe8k += 1;
+          s.readsLe8k += 1
         } else if (n <= 32768) {
-          s.readsLe32k += 1;
+          s.readsLe32k += 1
         } else if (n < 65536) {
-          s.readsLt64k += 1;
+          s.readsLt64k += 1
         } else if (n === 65536) {
-          s.readsEq64k += 1;
+          s.readsEq64k += 1
         } else {
-          s.readsGt64k += 1;
+          s.readsGt64k += 1
         }
-        s.turnBytes += n;
+        s.turnBytes += n
         if (!s.open) {
-          s.open = true;
+          s.open = true
           setImmediate(() => {
-            s.turns += 1;
+            s.turns += 1
             if (s.turnBytes >= 65536) {
-              s.turnsAtLeast64k += 1;
-              s.bytesInTurnsAtLeast64k += s.turnBytes;
+              s.turnsAtLeast64k += 1
+              s.bytesInTurnsAtLeast64k += s.turnBytes
             }
-            s.maxTurnBytes = Math.max(s.maxTurnBytes, s.turnBytes);
-            s.turnBytes = 0;
-            s.open = false;
-          });
+            s.maxTurnBytes = Math.max(s.maxTurnBytes, s.turnBytes)
+            s.turnBytes = 0
+            s.open = false
+          })
         }
       }
-      return original.call(this, event, ...args);
-    };
-  });
+      return original.call(this, event, ...args)
+    }
+  })
 }
 
 async function resetMainProbe(app: ElectronApplication): Promise<void> {
-  await app.evaluate(() => (globalThis as any).__obenchMain.sockets.clear());
+  await app.evaluate(() => (globalThis as any).__obenchMain.sockets.clear())
 }
 
 async function readMainProbe(app: ElectronApplication): Promise<Json[]> {
@@ -382,117 +338,89 @@ async function readMainProbe(app: ElectronApplication): Promise<Json[]> {
       .slice(0, 3)
       .map(({ turnBytes: _t, open: _o, ...rest }: any) => ({
         ...rest,
-        key: String(rest.key).split(/[\\/]/).at(-1),
-      })),
-  );
+        key: String(rest.key).split(/[\\/]/).at(-1)
+      }))
+  )
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const q = (s: string): string =>
-  WIN ? `'${s.replaceAll("'", "''")}'` : `'${s.replaceAll("'", "'\\''")}'`;
+  WIN ? `'${s.replaceAll("'", "''")}'` : `'${s.replaceAll("'", "'\\''")}'`
 const nodeCall = (args: string[]): string =>
-  `${WIN ? "& " : ""}${q(process.execPath)} ${[REPLAY, ...args].map(q).join(" ")}`;
+  `${WIN ? '& ' : ''}${q(process.execPath)} ${[REPLAY, ...args].map(q).join(' ')}`
 
-let seq = 0;
+let seq = 0
 function nonce(): string {
-  seq += 1;
-  return `${Date.now().toString(36)}${seq}`;
+  seq += 1
+  return `${Date.now().toString(36)}${seq}`
 }
 
 type Ctx = {
-  app: ElectronApplication;
-  page: Page;
-  client: RuntimeClient;
-  worktreeId: string;
-  tmp: string;
-};
+  app: ElectronApplication
+  page: Page
+  client: RuntimeClient
+  worktreeId: string
+  tmp: string
+}
 
 async function newTab(ctx: Ctx, panes: number): Promise<string[]> {
-  const created = await ctx.client.call<{ terminal: RuntimeTerminalCreate }>(
-    "terminal.create",
-    {
-      worktree: `id:${ctx.worktreeId}`,
-    },
-  );
-  await ctx.client.call("terminal.focus", {
+  const created = await ctx.client.call<{ terminal: RuntimeTerminalCreate }>('terminal.create', {
+    worktree: `id:${ctx.worktreeId}`
+  })
+  await ctx.client.call('terminal.focus', {
     terminal: created.result.terminal.handle,
-    navigation: "host",
-  });
-  await waitForActiveTerminalManager(ctx.page);
-  await waitForBoundPanes(ctx.page, 1);
-  // Columns first, then rows, so no pane is a sliver.
-  const plan: [number, "vertical" | "horizontal"][] =
-    panes <= 1
-      ? []
-      : panes === 2
-        ? [[0, "vertical"]]
-        : panes === 3
-          ? [
-              [0, "vertical"],
-              [1, "vertical"],
-            ]
-          : panes === 5
-            ? [
-                [0, "vertical"],
-                [1, "vertical"],
-                [0, "horizontal"],
-                [1, "horizontal"],
-              ]
-            : [
-                [0, "vertical"],
-                [1, "vertical"],
-                [0, "horizontal"],
-                [1, "horizontal"],
-                [2, "horizontal"],
-              ];
-  for (const [index, direction] of plan) {
-    const count = await ctx.page.evaluate(
-      ({ index, direction }) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- window test hooks
-        const w = window as any;
-        const manager = w.__paneManagers.get(w.__store.getState().activeTabId);
-        const pane = manager.getPanes()[index];
-        manager.splitPane(pane.id, direction);
-        return manager.getPanes().length as number;
-      },
-      { index, direction },
-    );
-    await waitForBoundPanes(ctx.page, count);
+    navigation: 'host'
+  })
+  await waitForActiveTerminalManager(ctx.page)
+  await waitForBoundPanes(ctx.page, 1)
+  // Always split the largest pane along its longer side, so no pane is a sliver.
+  for (let count = 1; count < panes;) {
+    count = await ctx.page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- window test hooks
+      const w = window as any
+      const manager = w.__paneManagers.get(w.__store.getState().activeTabId)
+      const sized = manager.getPanes().map((pane: any) => {
+        const rect = pane.container.getBoundingClientRect()
+        return { pane, rect, area: rect.width * rect.height }
+      })
+      const largest = sized.reduce((x: any, y: any) => (y.area > x.area ? y : x))
+      manager.splitPane(
+        largest.pane.id,
+        largest.rect.width >= largest.rect.height * 2 ? 'vertical' : 'horizontal'
+      )
+      return manager.getPanes().length as number
+    })
+    await waitForBoundPanes(ctx.page, count)
   }
-  await waitForBoundPanes(ctx.page, panes);
+  await waitForBoundPanes(ctx.page, panes)
   const ptyIds: string[] = await ctx.page.evaluate(() =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
-    (window as any).__obench.ptyIdsOfActiveTab(),
-  );
+    (window as any).__obench.ptyIdsOfActiveTab()
+  )
   // Every shell must be at a prompt before timing starts.
-  const n = nonce();
+  const n = nonce()
   await runAndWait(
     ctx,
     ptyIds,
     ptyIds.map(() => (WIN ? `echo DONE-${n}` : `printf 'DONE-%s\\n' ${n}`)),
     `DONE-${n}`,
-    60_000,
-  );
-  return ptyIds;
+    60_000
+  )
+  return ptyIds
 }
 
 async function closeTab(ctx: Ctx, ptyIds: string[]): Promise<void> {
   try {
-    const list = await ctx.client.call<RuntimeTerminalListResult>(
-      "terminal.list",
-      {
-        worktree: `id:${ctx.worktreeId}`,
-      },
-    );
+    const list = await ctx.client.call<RuntimeTerminalListResult>('terminal.list', {
+      worktree: `id:${ctx.worktreeId}`
+    })
     for (const terminal of list.result.terminals) {
       if (terminal.ptyId && ptyIds.includes(terminal.ptyId)) {
-        await ctx.client
-          .call("terminal.close", { terminal: terminal.handle })
-          .catch(() => {});
+        await ctx.client.call('terminal.close', { terminal: terminal.handle }).catch(() => {})
       }
     }
   } catch (error) {
-    console.warn("[output-bench] close tab", error);
+    console.warn('[output-bench] close tab', error)
   }
 }
 
@@ -502,388 +430,348 @@ async function runAndWait(
   ptyIds: string[],
   commands: string[],
   sentinel: string,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<{ startedAt: number; done: Done[] }> {
-  const key = nonce();
+  const key = nonce()
   await ctx.page.evaluate(
     ({ key, ptyIds, sentinel, timeoutMs }) =>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
       (window as any).__obench.armSentinels(key, ptyIds, sentinel, timeoutMs),
-    { key, ptyIds, sentinel, timeoutMs },
-  );
+    { key, ptyIds, sentinel, timeoutMs }
+  )
   const startedAt: number = await ctx.page.evaluate(
     ({ ptyIds, texts }) =>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
       (window as any).__obench.write(ptyIds, texts),
-    { ptyIds, texts: commands.map((c) => `${c}\r`) },
-  );
+    { ptyIds, texts: commands.map((c) => `${c}\r`) }
+  )
   const done: Done[] = await ctx.page.evaluate(
     (key) =>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
       (window as any).__obench.result(key),
-    key,
-  );
-  return { startedAt, done };
+    key
+  )
+  return { startedAt, done }
 }
 
-function replayCommand(
-  ctx: Ctx,
-  n: string,
-  args: string[],
-): { cmd: string; stamp: string } {
-  const stamp = path.join(ctx.tmp, `stamp-${n}`);
-  return { cmd: nodeCall([n, stamp, ...args]), stamp };
+function replayCommand(ctx: Ctx, n: string, args: string[]): { cmd: string; stamp: string } {
+  const stamp = path.join(ctx.tmp, `stamp-${n}`)
+  return { cmd: nodeCall([n, stamp, ...args]), stamp }
 }
 
 function readStamp(stamp: string): number | null {
-  return existsSync(stamp) ? Number(readFileSync(stamp, "utf8")) : null;
+  return existsSync(stamp) ? Number(readFileSync(stamp, 'utf8')) : null
 }
 
 type Workload = {
-  name: string;
-  group: "realistic" | "stress";
-  run: (ctx: Ctx) => Promise<Json>;
-};
+  name: string
+  group: 'realistic' | 'stress'
+  run: (ctx: Ctx) => Promise<Json>
+}
 
 /** One pane per entry runs `args` at once; reports time to last drawn byte and emit→drawn lag. */
 function paneWorkload(
   name: string,
-  group: Workload["group"],
+  group: Workload['group'],
   perPane: (ctx: Ctx, index: number) => string[] | { posix: string; n?: never },
   panes: number,
-  timeoutMs: number,
+  timeoutMs: number
 ): Workload {
   return {
     name,
     group,
     run: async (ctx) => {
-      const ptyIds = await newTab(ctx, panes);
-      const n = nonce();
-      const stamps: string[] = [];
+      const ptyIds = await newTab(ctx, panes)
+      const n = nonce()
+      const stamps: string[] = []
       const commands = ptyIds.map((_, i) => {
-        const spec = perPane(ctx, i);
+        const spec = perPane(ctx, i)
         const big = (s: string, quote: boolean): string =>
           s.replace(/\{BIG(\d+)\}/g, (_m, mb: string) => {
-            const file = path.join(ctx.tmp, `big${mb}.txt`);
-            return quote ? q(file) : file;
-          });
+            const file = path.join(ctx.tmp, `big${mb}.txt`)
+            return quote ? q(file) : file
+          })
         if (Array.isArray(spec)) {
           const { cmd, stamp } = replayCommand(
             ctx,
             `${n}`,
-            spec.map((a) => big(a, false)),
-          );
-          stamps.push(stamp);
-          return cmd;
+            spec.map((a) => big(a, false))
+          )
+          stamps.push(stamp)
+          return cmd
         }
-        return big(spec.posix, true).replaceAll("{N}", n);
-      });
-      await resetMainProbe(ctx.app);
-      const { startedAt, done } = await runAndWait(
-        ctx,
-        ptyIds,
-        commands,
-        `DONE-${n}`,
-        timeoutMs,
-      );
-      const socket = await readMainProbe(ctx.app);
-      await closeTab(ctx, ptyIds);
-      return summarizeDone(startedAt, done, stamps, socket);
-    },
-  };
+        return big(spec.posix, true).replaceAll('{N}', n)
+      })
+      await resetMainProbe(ctx.app)
+      const { startedAt, done } = await runAndWait(ctx, ptyIds, commands, `DONE-${n}`, timeoutMs)
+      const socket = await readMainProbe(ctx.app)
+      await closeTab(ctx, ptyIds)
+      return summarizeDone(startedAt, done, stamps, socket)
+    }
+  }
 }
 
-function summarizeDone(
-  startedAt: number,
-  done: Done[],
-  stamps: string[],
-  socket: Json[],
-): Json {
-  const ok = done.filter(
-    (d): d is { parsedAt: number; drawnAt: number } => !("error" in d),
-  );
-  const emitted = stamps.map(readStamp).filter((s): s is number => s !== null);
+function summarizeDone(startedAt: number, done: Done[], stamps: string[], socket: Json[]): Json {
+  const ok = done.filter((d): d is { parsedAt: number; drawnAt: number } => !('error' in d))
+  const emitted = stamps.map(readStamp).filter((s): s is number => s !== null)
   return {
     errors: done.length - ok.length,
-    allDrawnMs: ok.length
-      ? Math.max(...ok.map((d) => d.drawnAt)) - startedAt
-      : null,
-    allParsedMs: ok.length
-      ? Math.max(...ok.map((d) => d.parsedAt)) - startedAt
-      : null,
+    allDrawnMs: ok.length ? Math.max(...ok.map((d) => d.drawnAt)) - startedAt : null,
+    allParsedMs: ok.length ? Math.max(...ok.map((d) => d.parsedAt)) - startedAt : null,
     perPaneDrawnMs: ok.map((d) => d.drawnAt - startedAt),
     // Lag after the producer finished writing: how far the window trailed the program.
     trailingLagMs:
       emitted.length === ok.length && ok.length
         ? Math.max(...ok.map((d, i) => d.drawnAt - emitted[i]!))
         : null,
-    socket,
-  };
+    socket
+  }
 }
 
 async function echoSamples(
   ctx: Ctx,
   ptyId: string,
-  kind: "key" | "cmd",
+  kind: 'key' | 'cmd',
   count: number,
-  gapMs: number,
+  gapMs: number
 ): Promise<Json> {
   return ctx.page.evaluate(
     ({ ptyId, kind, count, gapMs }) =>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
       (window as any).__obench.echoSamples(ptyId, count, gapMs, kind),
-    { ptyId, kind, count, gapMs },
-  );
+    { ptyId, kind, count, gapMs }
+  )
 }
 
 /** Typing latency in pane 0 while the other panes run `background` until done (or until sampled). */
 function typingUnder(
   name: string,
-  group: Workload["group"],
+  group: Workload['group'],
   backgroundPanes: number,
   background: (ctx: Ctx, n: string, index: number) => string,
-  stopWithCtrlC: boolean,
+  stopWithCtrlC: boolean
 ): Workload {
   return {
     name,
     group,
     run: async (ctx) => {
-      const ptyIds = await newTab(ctx, backgroundPanes + 1);
-      const [typing, ...others] = ptyIds as [string, ...string[]];
-      const idleKey = await echoSamples(ctx, typing, "key", 20, 30);
-      const n = nonce();
-      await resetMainProbe(ctx.app);
-      const key = nonce();
+      const ptyIds = await newTab(ctx, backgroundPanes + 1)
+      const [typing, ...others] = ptyIds as [string, ...string[]]
+      const idleKey = await echoSamples(ctx, typing, 'key', 20, 30)
+      const n = nonce()
+      await resetMainProbe(ctx.app)
+      const key = nonce()
       if (!stopWithCtrlC) {
         await ctx.page.evaluate(
           ({ key, others, sentinel }) =>
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
-            (window as any).__obench.armSentinels(
-              key,
-              others,
-              sentinel,
-              600_000,
-            ),
-          { key, others, sentinel: `DONE-${n}` },
-        );
+            (window as any).__obench.armSentinels(key, others, sentinel, 600_000),
+          { key, others, sentinel: `DONE-${n}` }
+        )
       }
       const startedAt: number = await ctx.page.evaluate(
         ({ others, texts }) =>
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
           (window as any).__obench.write(others, texts),
-        { others, texts: others.map((_, i) => `${background(ctx, n, i)}\r`) },
-      );
-      await new Promise((r) => setTimeout(r, 1500));
-      const key1 = await echoSamples(ctx, typing, "key", ECHO_SAMPLES, 150);
-      const cmd = await echoSamples(
-        ctx,
-        typing,
-        "cmd",
-        Math.max(50, ECHO_SAMPLES),
-        150,
-      );
-      let backgroundDone: Json = {};
+        { others, texts: others.map((_, i) => `${background(ctx, n, i)}\r`) }
+      )
+      await new Promise((r) => setTimeout(r, 1500))
+      const key1 = await echoSamples(ctx, typing, 'key', ECHO_SAMPLES, 150)
+      const cmd = await echoSamples(ctx, typing, 'cmd', Math.max(50, ECHO_SAMPLES), 150)
+      let backgroundDone: Json = {}
       if (stopWithCtrlC) {
         await ctx.page.evaluate(
           ({ others }) =>
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
             (window as any).__obench.write(
               others,
-              others.map(() => "\x03"),
+              others.map(() => '\x03')
             ),
-          { others },
-        );
-        await new Promise((r) => setTimeout(r, 1000));
+          { others }
+        )
+        await new Promise((r) => setTimeout(r, 1000))
       } else {
         const done: Done[] = await ctx.page.evaluate(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
           (key) => (window as any).__obench.result(key),
-          key,
-        );
-        backgroundDone = summarizeDone(startedAt, done, [], []);
+          key
+        )
+        backgroundDone = summarizeDone(startedAt, done, [], [])
       }
-      const socket = await readMainProbe(ctx.app);
-      await closeTab(ctx, ptyIds);
-      return { idleKey, key: key1, cmd, backgroundDone, socket };
-    },
-  };
+      const socket = await readMainProbe(ctx.app)
+      await closeTab(ctx, ptyIds)
+      return { idleKey, key: key1, cmd, backgroundDone, socket }
+    }
+  }
 }
 
-const fixture = (name: string): string => path.join(FIXTURES, name);
+const fixture = (name: string): string => path.join(FIXTURES, name)
 const posixOr =
-  (
-    posix: string,
-    win: string[],
-  ): ((ctx: Ctx) => string[] | { posix: string }) =>
+  (posix: string, win: string[]): ((ctx: Ctx) => string[] | { posix: string }) =>
   () =>
-    WIN ? win : { posix: `${posix}; printf 'DONE-%s\\n' {N}` };
+    WIN ? win : { posix: `${posix}; printf 'DONE-%s\\n' {N}` }
 
 const WORKLOADS: Workload[] = [
   // Realistic: recorded real sessions, replayed at their recorded pace.
   paneWorkload(
-    "agent-claude-code-1x",
-    "realistic",
-    () => ["timed", fixture("claude-code.json.gz")],
+    'agent-claude-code-1x',
+    'realistic',
+    () => ['timed', fixture('claude-code.json.gz')],
     1,
-    300_000,
+    300_000
   ),
   paneWorkload(
-    "agent-codex-1x",
-    "realistic",
-    () => ["timed", fixture("codex.json.gz")],
+    'agent-codex-1x',
+    'realistic',
+    () => ['timed', fixture('codex.json.gz')],
     1,
-    300_000,
+    300_000
   ),
   paneWorkload(
-    "agents-4-panes-1x",
-    "realistic",
-    (_ctx, i) => [
-      "timed",
-      fixture(i % 2 === 0 ? "codex.json.gz" : "claude-code.json.gz"),
-    ],
+    'agents-4-panes-1x',
+    'realistic',
+    (_ctx, i) => ['timed', fixture(i % 2 === 0 ? 'codex.json.gz' : 'claude-code.json.gz')],
     4,
-    300_000,
+    300_000
   ),
   paneWorkload(
-    "vitest-log-1x",
-    "realistic",
-    () => ["timed", fixture("vitest-run.json.gz")],
+    'vitest-log-1x',
+    'realistic',
+    () => ['timed', fixture('vitest-run.json.gz')],
     1,
-    300_000,
+    300_000
   ),
   paneWorkload(
-    "pnpm-install-1x",
-    "realistic",
-    () => ["timed", fixture("pnpm-install.json.gz")],
+    'pnpm-install-1x',
+    'realistic',
+    () => ['timed', fixture('pnpm-install.json.gz')],
     1,
-    120_000,
+    120_000
   ),
   // Realistic bursts: whole output available at once (cat a log, git log -p, a big file).
   paneWorkload(
-    "git-log-p-2.8MB-burst",
-    "realistic",
-    () => ["burst", fixture("git-log-p.txt.gz")],
+    'git-log-p-2.8MB-burst',
+    'realistic',
+    () => ['burst', fixture('git-log-p.txt.gz')],
     1,
-    300_000,
+    300_000
   ),
   paneWorkload(
-    "vitest-log-2.8MB-burst",
-    "realistic",
-    () => ["burst", fixture("vitest-run.json.gz")],
+    'vitest-log-2.8MB-burst',
+    'realistic',
+    () => ['burst', fixture('vitest-run.json.gz')],
     1,
-    300_000,
+    300_000
   ),
   paneWorkload(
-    "codex-transcript-0.7MB-burst",
-    "realistic",
-    () => ["burst", fixture("codex.json.gz")],
+    'codex-transcript-0.7MB-burst',
+    'realistic',
+    () => ['burst', fixture('codex.json.gz')],
     1,
-    300_000,
+    300_000
   ),
   paneWorkload(
-    "cat-pnpm-lock-0.56MB",
-    "realistic",
-    posixOr(`cat ${q(path.resolve(__dirname, "../../pnpm-lock.yaml"))}`, [
-      "burst",
-      path.resolve(__dirname, "../../pnpm-lock.yaml"),
+    'cat-pnpm-lock-0.56MB',
+    'realistic',
+    posixOr(`cat ${q(path.resolve(__dirname, '../../pnpm-lock.yaml'))}`, [
+      'burst',
+      path.resolve(__dirname, '../../pnpm-lock.yaml')
     ]),
     1,
-    120_000,
+    120_000
   ),
   typingUnder(
-    "typing-while-4-agents",
-    "realistic",
+    'typing-while-4-agents',
+    'realistic',
     4,
     (ctx, n, i) =>
       replayCommand(ctx, n, [
-        "timed",
-        fixture(i % 2 === 0 ? "codex.json.gz" : "claude-code.json.gz"),
+        'timed',
+        fixture(i % 2 === 0 ? 'codex.json.gz' : 'claude-code.json.gz')
       ]).cmd,
-    false,
+    false
   ),
   typingUnder(
-    "typing-while-vitest-log",
-    "realistic",
+    'typing-while-vitest-log',
+    'realistic',
     1,
-    (ctx, n) =>
-      replayCommand(ctx, n, ["timed", fixture("vitest-run.json.gz")]).cmd,
-    false,
+    (ctx, n) => replayCommand(ctx, n, ['timed', fixture('vitest-run.json.gz')]).cmd,
+    false
   ),
   // Stress bounds.
   paneWorkload(
-    "stress-cat-50MB",
-    "stress",
-    posixOr(`cat {BIG50}`, ["burst", "{BIG50}"]),
+    'stress-cat-50MB',
+    'stress',
+    posixOr(`cat {BIG50}`, ['burst', '{BIG50}']),
     1,
-    900_000,
+    900_000
   ),
   paneWorkload(
-    "stress-yes-head-50MB",
-    "stress",
-    posixOr(`yes | head -c ${50 * MB}`, ["yes", String(50 * MB)]),
+    'stress-yes-head-50MB',
+    'stress',
+    posixOr(`yes | head -c ${50 * MB}`, ['yes', String(50 * MB)]),
     1,
-    900_000,
+    900_000
   ),
   paneWorkload(
-    "stress-seq-10M",
-    "stress",
-    posixOr("seq 1 10000000", ["seq", "10000000"]),
+    'stress-seq-10M',
+    'stress',
+    posixOr('seq 1 10000000', ['seq', '10000000']),
     1,
-    900_000,
+    900_000
   ),
   paneWorkload(
-    "stress-3-panes-20MB",
-    "stress",
-    posixOr(`cat {BIG20}`, ["burst", "{BIG20}"]),
+    'stress-3-panes-20MB',
+    'stress',
+    posixOr(`cat {BIG20}`, ['burst', '{BIG20}']),
     3,
-    900_000,
+    900_000
   ),
   paneWorkload(
-    "stress-6-panes-20MB",
-    "stress",
-    posixOr(`cat {BIG20}`, ["burst", "{BIG20}"]),
+    'stress-6-panes-20MB',
+    'stress',
+    posixOr(`cat {BIG20}`, ['burst', '{BIG20}']),
     6,
-    900_000,
+    900_000
   ),
   typingUnder(
-    "stress-typing-while-flood",
-    "stress",
+    'stress-typing-while-flood',
+    'stress',
     1,
-    (ctx, n) => replayCommand(ctx, n, ["flood"]).cmd,
-    true,
+    (ctx, n) => replayCommand(ctx, n, ['flood']).cmd,
+    true
   ),
   {
-    name: "stress-tui-60fps-10s",
-    group: "stress",
+    name: 'stress-tui-60fps-10s',
+    group: 'stress',
     run: async (ctx) => {
-      const [ptyId] = (await newTab(ctx, 1)) as [string];
-      const n = nonce();
-      const { cmd } = replayCommand(ctx, n, ["tui", "10", "60"]);
-      const key = nonce();
-      await resetMainProbe(ctx.app);
+      const [ptyId] = (await newTab(ctx, 1)) as [string]
+      const n = nonce()
+      const { cmd } = replayCommand(ctx, n, ['tui', '10', '60'])
+      const key = nonce()
+      await resetMainProbe(ctx.app)
       await ctx.page.evaluate(
         ({ key, ptyId, sentinel }) =>
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
           (window as any).__obench.armTui(key, ptyId, sentinel, 120_000),
-        { key, ptyId, sentinel: `DONE-${n}` },
-      );
+        { key, ptyId, sentinel: `DONE-${n}` }
+      )
       const startedAt: number = await ctx.page.evaluate(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
-        ({ ptyId, cmd }) =>
-          (window as any).__obench.write([ptyId], [`${cmd}\r`]),
-        { ptyId, cmd },
-      );
+        ({ ptyId, cmd }) => (window as any).__obench.write([ptyId], [`${cmd}\r`]),
+        { ptyId, cmd }
+      )
       const { done, drawn } = (await ctx.page.evaluate(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
-        (key) => (window as any).__obench.result(key).then((r: any) => r),
-        key,
+        (key) => (window as any).__obench.tuiResult(key),
+        key
       )) as unknown as {
-        done: { drawnAt: number };
-        drawn: { n: number; lagMs: number }[];
-      };
-      const socket = await readMainProbe(ctx.app);
-      await closeTab(ctx, [ptyId]);
-      const lags = drawn.map((d) => d.lagMs).toSorted((a, b) => a - b);
+        done: { drawnAt: number }
+        drawn: { n: number; lagMs: number }[]
+      }
+      const socket = await readMainProbe(ctx.app)
+      await closeTab(ctx, [ptyId])
+      const lags = drawn.map((d) => d.lagMs).toSorted((a, b) => a - b)
       return {
         totalDrawnMs: done.drawnAt - startedAt,
         framesEmitted: 600,
@@ -892,162 +780,166 @@ const WORKLOADS: Workload[] = [
         frameLagP95: lags[Math.floor(lags.length * 0.95)] ?? null,
         frameLagMax: lags.at(-1) ?? null,
         framesOver50ms: lags.filter((l) => l > 50).length,
-        socket,
-      };
-    },
+        socket
+      }
+    }
   },
-  hiddenWorkload("hidden-worktree-cat-50MB", "stress", (ctx, n) =>
+  hiddenWorkload('hidden-worktree-cat-50MB', 'stress', (ctx, n) =>
     WIN
-      ? replayCommand(ctx, n, ["burst", `${ctx.tmp}/big50.txt`]).cmd
-      : `cat ${q(path.join(ctx.tmp, "big50.txt"))}; printf 'DONE-%s\\n' ${n}`,
+      ? replayCommand(ctx, n, ['burst', `${ctx.tmp}/big50.txt`]).cmd
+      : `cat ${q(path.join(ctx.tmp, 'big50.txt'))}; printf 'DONE-%s\\n' ${n}`
   ),
   hiddenWorkload(
-    "hidden-worktree-codex-1x",
-    "realistic",
-    (ctx, n) => replayCommand(ctx, n, ["timed", fixture("codex.json.gz")]).cmd,
-  ),
-];
+    'hidden-worktree-codex-1x',
+    'realistic',
+    (ctx, n) => replayCommand(ctx, n, ['timed', fixture('codex.json.gz')]).cmd
+  )
+]
 
 /** Output in a worktree that is never shown: main still ingests it. Timed via terminal.read. */
 function hiddenWorkload(
   name: string,
-  group: Workload["group"],
-  command: (ctx: Ctx, n: string) => string,
+  group: Workload['group'],
+  command: (ctx: Ctx, n: string) => string
 ): Workload {
   return {
     name,
     group,
     run: async (ctx) => {
-      const shown = await ctx.client.call<{ worktree: { repoId: string } }>(
-        "worktree.show",
-        {
-          worktree: `id:${ctx.worktreeId}`,
-        },
-      );
-      const created = await ctx.client.call<RuntimeWorktreeCreateResult>(
-        "worktree.create",
-        {
-          repo: `id:${shown.result.worktree.repoId}`,
-          name: `obench-${nonce()}`,
-          noParent: true,
-          activate: false,
-          setupDecision: "skip",
-        },
-      );
-      const hiddenId = created.result.worktree.id;
+      console.log('[output-bench] hidden: worktree.show')
+      const shown = await ctx.client.call<{ worktree: { repoId: string } }>('worktree.show', {
+        worktree: `id:${ctx.worktreeId}`
+      })
+      const created = await ctx.client.call<RuntimeWorktreeCreateResult>('worktree.create', {
+        repo: `id:${shown.result.worktree.repoId}`,
+        name: `obench-${nonce()}`,
+        noParent: true,
+        activate: false,
+        setupDecision: 'skip'
+      })
+      const hiddenId = created.result.worktree.id
+      console.log(`[output-bench] hidden worktree ${hiddenId}`)
       try {
-        const term = await ctx.client.call<{ terminal: RuntimeTerminalCreate }>(
-          "terminal.create",
-          {
-            worktree: `id:${hiddenId}`,
-          },
-        );
-        const handle = term.result.terminal.handle;
+        const term = await ctx.client.call<{ terminal: RuntimeTerminalCreate }>('terminal.create', {
+          worktree: `id:${hiddenId}`
+        })
+        const handle = term.result.terminal.handle
+        console.log(`[output-bench] hidden terminal ${handle}`)
         const readTail = async (): Promise<string> =>
           (
-            await ctx.client.call<{ terminal: RuntimeTerminalRead }>(
-              "terminal.read",
-              {
-                terminal: handle,
-                limit: 12,
-              },
-            )
-          ).result.terminal.tail.join("\n");
-        const ready = nonce();
-        await ctx.client.call("terminal.send", {
+            await ctx.client.call<{ terminal: RuntimeTerminalRead }>('terminal.read', {
+              terminal: handle,
+              limit: 12
+            })
+          ).result.terminal.tail.join('\n')
+        const ready = nonce()
+        await ctx.client.call('terminal.send', {
           terminal: handle,
           text: WIN ? `echo DONE-${ready}` : `printf 'DONE-%s\\n' ${ready}`,
-          enter: true,
-        });
-        const deadline = Date.now() + 60_000;
-        while (!new RegExp(`^DONE-${ready}`, "m").test(await readTail())) {
-          if (Date.now() > deadline) {
-            throw new Error("hidden shell never became ready");
+          enter: true
+        })
+        const deadline = Date.now() + 60_000
+        let lastLog = 0
+        while (!new RegExp(`^DONE-${ready}`, 'm').test(await readTail())) {
+          if (Date.now() - lastLog > 5000) {
+            lastLog = Date.now()
+            console.log(`[output-bench] hidden tail: ${JSON.stringify(await readTail())}`)
           }
-          await new Promise((r) => setTimeout(r, 100));
+          if (Date.now() > deadline) {
+            throw new Error('hidden shell never became ready')
+          }
+          await new Promise((r) => setTimeout(r, 100))
         }
-        const n = nonce();
-        await resetMainProbe(ctx.app);
-        const startedAt = Date.now();
-        await ctx.client.call("terminal.send", {
+        const n = nonce()
+        await resetMainProbe(ctx.app)
+        const startedAt = Date.now()
+        await ctx.client.call('terminal.send', {
           terminal: handle,
           text: command(ctx, n),
-          enter: true,
-        });
-        const end = Date.now() + 900_000;
-        while (!new RegExp(`^DONE-${n}`, "m").test(await readTail())) {
-          if (Date.now() > end) {
-            throw new Error("hidden output never finished");
+          enter: true
+        })
+        const end = Date.now() + 900_000
+        let lastTailLog = 0
+        while (!new RegExp(`^DONE-${n}`, 'm').test(await readTail())) {
+          if (Date.now() - lastTailLog > 10_000) {
+            lastTailLog = Date.now()
+            console.log(
+              `[output-bench] hidden run tail: ${JSON.stringify((await readTail()).slice(-300))}`
+            )
           }
-          await new Promise((r) => setTimeout(r, 50));
+          if (Date.now() > end) {
+            throw new Error('hidden output never finished')
+          }
+          await new Promise((r) => setTimeout(r, 50))
         }
-        const ingestedMs = Date.now() - startedAt;
-        const socket = await readMainProbe(ctx.app);
-        const stamp = readStamp(path.join(ctx.tmp, `stamp-${n}`));
-        await ctx.client
-          .call("terminal.close", { terminal: handle })
-          .catch(() => {});
+        const ingestedMs = Date.now() - startedAt
+        const socket = await readMainProbe(ctx.app)
+        const stamp = readStamp(path.join(ctx.tmp, `stamp-${n}`))
+        await ctx.client.call('terminal.close', { terminal: handle }).catch(() => {})
         return {
           mainIngestedMs: ingestedMs,
           trailingLagMs: stamp ? startedAt + ingestedMs - stamp : null,
-          socket,
-        };
+          socket
+        }
       } finally {
         await ctx.client
-          .call("worktree.rm", {
+          .call('worktree.rm', {
             worktree: `id:${hiddenId}`,
             force: true,
-            runHooks: false,
+            runHooks: false
           })
-          .catch(() => {});
+          .catch(() => {})
       }
-    },
-  };
+    }
+  }
 }
 
 function writeBigFile(file: string, bytes: number): void {
   const line = (i: number): string =>
-    `${String(i).padStart(8, "0")} src/main/daemon/client.ts:${i % 997} const value${i % 31} = await reader.feed(chunk) // ok\n`;
-  let out = "";
-  let i = 0;
+    `${String(i).padStart(8, '0')} src/main/daemon/client.ts:${i % 997} const value${i % 31} = await reader.feed(chunk) // ok\n`
+  let out = ''
+  let i = 0
   while (out.length < bytes) {
-    out += line(i++);
+    out += line(i++)
   }
-  writeFileSync(file, out.slice(0, bytes));
+  writeFileSync(file, `${out.slice(0, bytes - 1)}\n`)
 }
 
 // oxlint-disable-next-line no-empty-pattern -- The benchmark owns its launch.
-test("terminal output bench", async ({}, testInfo) => {
-  test.setTimeout(120 * 60_000);
-  const repoPath = seededRepoPathOrSkip();
-  const session = createRestartSession(testInfo);
-  const { app, page } = await session.launch();
-  const tmp = mkdtempSync(path.join(os.tmpdir(), "orca-output-bench-"));
+test('terminal output bench', async ({}, testInfo) => {
+  test.setTimeout(120 * 60_000)
+  const repoPath = seededRepoPathOrSkip()
+  const session = createRestartSession(testInfo)
+  const { app, page } = await session.launch()
+  const tmp = mkdtempSync(path.join(os.tmpdir(), 'orca-output-bench-'))
   try {
-    await presentTerminalPerfWindow(app, testInfo);
-    writeBigFile(path.join(tmp, "big50.txt"), 50 * MB);
-    writeBigFile(path.join(tmp, "big20.txt"), 20 * MB);
-    const { worktreeId } = await bootstrapFirstLaunch(page, repoPath);
-    const client = new RuntimeClient(session.userDataDir, 60_000);
-    await installRendererProbe(page);
-    await installMainProbe(app);
-    const ctx: Ctx = { app, page, client, worktreeId, tmp };
+    await presentTerminalPerfWindow(app, testInfo)
+    writeBigFile(path.join(tmp, 'big50.txt'), 50 * MB)
+    writeBigFile(path.join(tmp, 'big20.txt'), 20 * MB)
+    const { worktreeId } = await bootstrapFirstLaunch(page, repoPath)
+    const client = new RuntimeClient(session.userDataDir, 60_000)
+    await installRendererProbe(page)
+    await installMainProbe(app)
+    const ctx: Ctx = { app, page, client, worktreeId, tmp }
     const rafPerSecond: number = await page.evaluate(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
-      () => (window as any).__obench.rafRate(),
-    );
+      () => (window as any).__obench.rafRate()
+    )
     const selected = WORKLOADS.filter(
-      (w) =>
-        (GROUP === "all" || w.group === GROUP) &&
-        (ONLY.length === 0 || ONLY.includes(w.name)),
-    );
+      (w) => (GROUP === 'all' || w.group === GROUP) && (ONLY.length === 0 || ONLY.includes(w.name))
+    )
     for (const workload of selected) {
-      const startedAt = Date.now();
-      let result: Json;
+      const startedAt = Date.now()
+      let result: Json
       try {
-        result = await workload.run(ctx);
+        result = await Promise.race([
+          workload.run(ctx),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('workload timed out')), 15 * 60_000)
+          )
+        ])
       } catch (error) {
-        result = { error: String(error) };
+        result = { error: String(error) }
       }
       const line = {
         label: LABEL,
@@ -1056,18 +948,16 @@ test("terminal output bench", async ({}, testInfo) => {
         group: workload.group,
         rafPerSecond,
         wallMs: Date.now() - startedAt,
-        ...result,
-      };
-      console.log(
-        `[output-bench] ${JSON.stringify({ ...line, socket: undefined })}`,
-      );
+        ...result
+      }
+      console.log(`[output-bench] ${JSON.stringify({ ...line, socket: undefined })}`)
       if (REPORT) {
-        appendFileSync(REPORT, `${JSON.stringify(line)}\n`);
+        appendFileSync(REPORT, `${JSON.stringify(line)}\n`)
       }
     }
   } finally {
-    rmSync(tmp, { recursive: true, force: true });
-    await session.close(app);
-    await session.dispose();
+    rmSync(tmp, { recursive: true, force: true })
+    await session.close(app)
+    await session.dispose()
   }
-});
+})
