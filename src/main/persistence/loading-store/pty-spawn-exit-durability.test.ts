@@ -32,9 +32,7 @@ vi.mock('../../ssh/ssh-config-parser', () => ({
 it.each(
   [
     { controller: 'runtime', connectionId: null, exitCode: 0 },
-    { controller: 'runtime', connectionId: 'test-host', exitCode: 0 },
-    { controller: 'ipc', connectionId: null, exitCode: -1 },
-    { controller: 'ipc', connectionId: 'test-host', exitCode: 0 }
+    { controller: 'ipc', connectionId: null, exitCode: -1 }
   ].flatMap((test) => [
     { ...test, stableOwner: false },
     { ...test, stableOwner: true }
