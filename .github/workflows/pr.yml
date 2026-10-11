@@ -331,6 +331,10 @@ jobs:
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: pnpm run check:focus-read-ratchet
 
+      - name: Enforce layout-writer ratchets
+        if: needs.code_paths.outputs.static_analysis == 'true'
+        run: pnpm run check:layout-writer-ratchets
+
       - name: Check Node runtime pin
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: pnpm run check:node-runtime-pin
