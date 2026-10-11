@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+
 import {
   isDurableMutation,
   isTerminalPromptMutation
@@ -285,6 +285,3 @@ export function getOrchestrationMutationExecutor(
   return executor
 }
 
-export function fingerprintAuthenticatedPairingCredential(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
-}
