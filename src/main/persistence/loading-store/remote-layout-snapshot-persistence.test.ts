@@ -51,13 +51,13 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-function profile() {
+function profile(seeded: Record<string, unknown> = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'orca-remote-layout-snapshot-'))
   directories.push(directory)
   const databasePath = join(directory, 'profile-state.db')
   const profileId = 'remote-layout-snapshot'
   new ProfileStateSqliteAuthority(databasePath, profileId).writeSerializedState(
-    Buffer.from(JSON.stringify(getDefaultPersistedState(directory)))
+    Buffer.from(JSON.stringify({ ...getDefaultPersistedState(directory), ...seeded }))
   )
   const open = () => {
     const store = new Store({
@@ -116,10 +116,19 @@ it('survives a restart and saves only its own domain', () => {
   const after = documentRevisions()
   const changed = [...after].filter(([domain, revision]) => before.get(domain) !== revision)
   expect(changed.map(([domain]) => domain)).toEqual(['remoteLayoutSnapshots'])
-  expect(open().getRemoteLayoutSnapshot('env')).toMatchObject({
-    serverRuntimeId: 'server',
-    workspaces: { [workspace.worktree]: workspace }
+  expect(open().getRemoteLayoutSnapshots()).toEqual({
+    env: { workspaces: { [workspace.worktree]: workspace } }
   })
+})
+
+it('reads a snapshot an older build saved with its receipt fields, without them', () => {
+  const workspaces = { [workspace.worktree]: workspace }
+  const { open } = profile({
+    remoteLayoutSnapshots: {
+      env: { receivedAt: 1, serverRuntimeId: 'server', workspaces }
+    }
+  })
+  expect(open().getRemoteLayoutSnapshots()).toEqual({ env: { workspaces } })
 })
 
 it('keeps a title-only change without arming a save, and writes it with the next save', () => {

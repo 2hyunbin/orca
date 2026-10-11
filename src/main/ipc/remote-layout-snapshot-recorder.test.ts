@@ -64,11 +64,7 @@ describe('remote layout snapshot recorder', () => {
       frame({ type: 'snapshots', snapshots: [tabs('b', 'renamed')] }, 'server-2')
     )
 
-    expect(snapshots.get('env')).toMatchObject({
-      serverRuntimeId: 'server-2',
-      workspaces: { b: tabs('b', 'renamed') }
-    })
-    expect(workspacesOf(snapshots)).not.toHaveProperty('a')
+    expect(snapshots.get('env')).toEqual({ workspaces: { b: tabs('b', 'renamed') } })
   })
 
   it('replaces one worktree on an update and drops it on a removal', () => {

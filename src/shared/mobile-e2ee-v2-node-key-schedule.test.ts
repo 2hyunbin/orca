@@ -2,12 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   encodeMobileE2EEV2Transcript,
   validateMobileE2EEV2Handshake
-} from '../../../shared/mobile-e2ee-v2-contract'
-import {
-  createMobileE2EEV2Fixture,
-  MOBILE_E2EE_V2_VECTOR
-} from '../../../shared/mobile-e2ee-v2-fixtures'
-import { deriveMobileE2EEV2KeySchedule } from './mobile-e2ee-v2-key-schedule'
+} from './mobile-e2ee-v2-contract'
+import { createMobileE2EEV2Fixture, MOBILE_E2EE_V2_VECTOR } from './mobile-e2ee-v2-fixtures'
+import { derivePairedE2EEV2KeySchedule } from './paired-e2ee-v2-key-schedule'
+import { deriveMobileE2EEV2KeySchedule } from './mobile-e2ee-v2-node-key-schedule'
 
 describe('desktop mobile E2EE v2 key schedule', () => {
   it('derives the normative 96-byte HKDF vector', () => {
@@ -55,5 +53,24 @@ describe('desktop mobile E2EE v2 key schedule', () => {
       )
     }
     expect(fingerprints.size).toBe(128)
+  })
+
+  it('matches the pure-JS client schedule across fresh desktop nonces', () => {
+    const { hello, ready, sharedSecret } = createMobileE2EEV2Fixture()
+    for (let index = 0; index < 16; index++) {
+      const nonce = Buffer.alloc(32)
+      nonce.writeUInt32BE(index, 28)
+      const handshake = validateMobileE2EEV2Handshake(hello, {
+        ...ready,
+        desktopNonceB64: nonce.toString('base64')
+      })!
+      const input = {
+        sharedSecret,
+        transcript: encodeMobileE2EEV2Transcript(handshake),
+        clientNonce: handshake.clientNonce,
+        desktopNonce: handshake.desktopNonce
+      }
+      expect(derivePairedE2EEV2KeySchedule(input)).toEqual(deriveMobileE2EEV2KeySchedule(input))
+    }
   })
 })

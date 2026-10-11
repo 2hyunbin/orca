@@ -1,11 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { withDurableRuntimeStore } from '../../../runtime/runtime-durable-store-fixture'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
-import { TerminalSessionOwnerUnverifiedError } from '../../../daemon/daemon-errors'
 import {
-  SSH_SESSION_EXPIRED_ERROR,
-  SshPtyAbsentFromRelayError
-} from '../../../providers/ssh-pty-errors'
+  SessionNotFoundError,
+  TerminalSessionOwnerUnverifiedError
+} from '../../../daemon/daemon-errors'
 import type { Store } from '../../../persistence'
 import type { IPtyProvider } from '../../../providers/types'
 import { spawnForStablePane, type StablePaneOwner } from './stable-owner'
@@ -82,7 +81,7 @@ function sessionStore(leaves: string[]): { store: Store; read: () => WorkspaceSe
   }
 }
 
-describe('stable pane adoption after the relay reports the PTY absent', () => {
+describe('stable pane adoption after the owning host reports the PTY absent', () => {
   it.each([false, true])(
     'reattaches a live pane without launching a provider process (settled worker: %s)',
     async (settledWorker) => {
@@ -126,10 +125,8 @@ describe('stable pane adoption after the relay reports the PTY absent', () => {
     }
   )
 
-  it('spawns fresh once the relay has positively answered for that id', async () => {
-    const { run, spawn } = spawnAfterAttachRejection(
-      new SshPtyAbsentFromRelayError(`${SSH_SESSION_EXPIRED_ERROR}: pty-1`)
-    )
+  it('spawns fresh once the owning host has positively answered for that id', async () => {
+    const { run, spawn } = spawnAfterAttachRejection(new SessionNotFoundError(OWNER.ptyId))
 
     const result = await run()
 
@@ -139,10 +136,10 @@ describe('stable pane adoption after the relay reports the PTY absent', () => {
     expect(result.owner).toBeNull()
   })
 
-  // A restarted relay renumbers from pty-1, so the message alone cannot distinguish absence from a
-  // lost link — only the class may authorise abandoning the binding.
+  // The message alone cannot distinguish absence from a lost link; only the class may authorise
+  // abandoning the binding.
   it.each([
-    ['an expired session with no relay evidence', `${SSH_SESSION_EXPIRED_ERROR}: pty-1`],
+    ['an untyped absence message', `Session not found: ${OWNER.ptyId}`],
     ['a lost link', 'SSH connection lost, reconnecting...'],
     ['a request timeout', 'Request "pty.attach" timed out after 10000ms']
   ])('keeps the binding and refuses to respawn after %s', async (_label, message) => {
@@ -158,10 +155,10 @@ describe('stable pane adoption after the relay reports the PTY absent', () => {
   describe('with persistence actually reached', () => {
     it('retires only the absent leaf and leaves the tab and its sibling bound', async () => {
       const { store, read } = sessionStore([LEAF, SIBLING_LEAF])
-      const { run, spawn } = spawnAfterAttachRejection(
-        new SshPtyAbsentFromRelayError(`${SSH_SESSION_EXPIRED_ERROR}: pty-1`),
-        { store, worktreeId: WORKTREE }
-      )
+      const { run, spawn } = spawnAfterAttachRejection(new SessionNotFoundError(OWNER.ptyId), {
+        store,
+        worktreeId: WORKTREE
+      })
 
       const result = await run()
 
@@ -180,10 +177,10 @@ describe('stable pane adoption after the relay reports the PTY absent', () => {
     // survival then rests entirely on the renderer. If that ever regresses, this is the tripwire.
     it('drops the tab when the absent leaf was the only one, leaving re-persistence to the renderer', async () => {
       const { store, read } = sessionStore([LEAF])
-      const { run, spawn } = spawnAfterAttachRejection(
-        new SshPtyAbsentFromRelayError(`${SSH_SESSION_EXPIRED_ERROR}: pty-1`),
-        { store, worktreeId: WORKTREE }
-      )
+      const { run, spawn } = spawnAfterAttachRejection(new SessionNotFoundError(OWNER.ptyId), {
+        store,
+        worktreeId: WORKTREE
+      })
 
       const result = await run()
 

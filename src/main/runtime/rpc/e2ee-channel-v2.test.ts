@@ -14,7 +14,7 @@ import {
 import { deriveSharedKey } from './e2ee-crypto'
 import type { RpcBinarySendResult } from './rpc-binary-sender'
 import { E2EEChannel } from './e2ee-channel'
-import { deriveMobileE2EEV2KeySchedule } from './mobile-e2ee-v2-key-schedule'
+import { deriveMobileE2EEV2KeySchedule } from '../../../shared/mobile-e2ee-v2-node-key-schedule'
 
 const server = nacl.box.keyPair.fromSecretKey(new Uint8Array(32).fill(1))
 const client = nacl.box.keyPair.fromSecretKey(new Uint8Array(32).fill(2))
