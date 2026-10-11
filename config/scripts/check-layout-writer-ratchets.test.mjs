@@ -38,6 +38,17 @@ describe('renderer layout writes', () => {
     expect(countLayoutWrites(src, rendererRatchet, 'a.tsx')).toBe(5)
   })
 
+  it('skips content updates of existing editor and browser entries, not membership changes', () => {
+    const src = [
+      'set({ openFiles: s.openFiles.map((f) => (f.id === id ? { ...f, isDirty: true } : f)) })',
+      'set({ browserTabsByWorktree: { ...s.browserTabsByWorktree, [wt]: (s.browserTabsByWorktree[wt] ?? []).map(withUrl) } })',
+      'set({ openFiles: [...s.openFiles, file] })',
+      'set({ openFiles: s.openFiles.filter((f) => f.id !== id) })',
+      'set({ tabsByWorktree: s.tabsByWorktree.map(rename) })'
+    ].join('\n')
+    expect(countLayoutWrites(src, rendererRatchet, 'a.tsx')).toBe(3)
+  })
+
   it('allows only the frozen mirror writers', () => {
     expect(rendererRatchet.allowed('src/renderer/src/store/workspace-layout-cache.ts')).toBe(true)
     expect(

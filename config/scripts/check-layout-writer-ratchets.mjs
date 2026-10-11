@@ -18,6 +18,7 @@ import {
 //   directly (the Store-internal session writers included).
 // - Renderer: writes of the window's layout and per-view selection fields, including computed
 //   keys (counted at the string key) and spreads (counted where the spread object is built).
+//   Content updates of existing editor and browser entries are not membership and are not counted.
 
 // Partition fields of the saved workspace session (census class 1).
 const SESSION_PARTITION_FIELDS = [
@@ -120,6 +121,7 @@ export const RATCHETS = [
     ]),
     // These names also key unrelated main objects, so only the session itself counts as a key.
     keyedFields: new Set(SESSION_FIELDS),
+    entryContentFields: new Set(),
     allowed: () => false,
     header: [
       '# Main-process writers of saved workspace layout, per file: calls of the Store layout',
@@ -136,6 +138,9 @@ export const RATCHETS = [
     writerNames: new Set(),
     assignedFields: RENDERER_LAYOUT_FIELDS,
     keyedFields: RENDERER_LAYOUT_FIELDS,
+    // Entries here also carry content (drafts, git status, URL). A `.map(…)` over the existing
+    // list keeps membership and order, so it is a content update and is not counted.
+    entryContentFields: new Set(['openFiles', 'browserTabsByWorktree']),
     // The three writers the plan allows: applyFromRuntime, the frozen mirror's store patch and
     // the frozen setters for remote-server workspaces.
     allowed: (rel) =>
@@ -179,8 +184,8 @@ function staticName(node) {
   return null
 }
 
-/** Whether a write target (`a.b[c]!.d`) goes through one of `fields`; root identifiers are locals. */
-function targetsField(node, fields) {
+/** The field a write target (`a.b[c]!.d`) goes through, if any; root identifiers are locals. */
+function targetedField(node, fields) {
   let current = node
   while (current) {
     if (
@@ -192,18 +197,75 @@ function targetsField(node, fields) {
       current = current.expression
     } else if (ts.isPropertyAccessExpression(current)) {
       if (fields.has(current.name.text)) {
-        return true
+        return current.name.text
       }
       current = current.expression
     } else if (ts.isElementAccessExpression(current)) {
       const key = staticName(current.argumentExpression)
       if (key !== null && fields.has(key)) {
-        return true
+        return key
       }
       current = current.expression
     } else {
-      return false
+      return null
     }
+  }
+  return null
+}
+
+function unwrap(node) {
+  let current = node
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression
+  }
+  return current
+}
+
+/** An existing value read as-is: `s.openFiles`, `s.tabs[id] ?? []`. */
+function isPlainRead(node) {
+  const current = unwrap(node)
+  if (ts.isIdentifier(current) || current.kind === ts.SyntaxKind.ThisKeyword) {
+    return true
+  }
+  if (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+    return isPlainRead(current.expression)
+  }
+  if (
+    ts.isBinaryExpression(current) &&
+    (current.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+      current.operatorToken.kind === ts.SyntaxKind.BarBarToken)
+  ) {
+    const right = unwrap(current.right)
+    const emptyLiteral =
+      (ts.isArrayLiteralExpression(right) && right.elements.length === 0) ||
+      (ts.isObjectLiteralExpression(right) && right.properties.length === 0)
+    return isPlainRead(current.left) && (emptyLiteral || isPlainRead(right))
+  }
+  return false
+}
+
+/** `list.map(…)`, or `{ ...map, [key]: list.map(…) }`: same entries in the same order. */
+function keepsMembership(node) {
+  const value = unwrap(node)
+  if (ts.isCallExpression(value)) {
+    const callee = unwrap(value.expression)
+    return (
+      ts.isPropertyAccessExpression(callee) &&
+      callee.name.text === 'map' &&
+      isPlainRead(callee.expression)
+    )
+  }
+  if (ts.isObjectLiteralExpression(value)) {
+    return value.properties.every(
+      (property) =>
+        (ts.isSpreadAssignment(property) && isPlainRead(property.expression)) ||
+        (ts.isPropertyAssignment(property) && keepsMembership(property.initializer))
+    )
   }
   return false
 }
@@ -242,19 +304,27 @@ export function countLayoutWrites(sourceText, ratchet, fileName = 'file.tsx') {
     } else if (
       ts.isBinaryExpression(node) &&
       ASSIGNMENT_OPERATORS.has(node.operatorToken.kind) &&
-      targetsField(node.left, ratchet.assignedFields)
+      targetedField(node.left, ratchet.assignedFields) !== null
     ) {
-      count += 1
+      const field = targetedField(node.left, ratchet.assignedFields)
+      if (!(ratchet.entryContentFields.has(field) && keepsMembership(node.right))) {
+        count += 1
+      }
     } else if (
       ts.isDeleteExpression(node) &&
-      targetsField(node.expression, ratchet.assignedFields)
+      targetedField(node.expression, ratchet.assignedFields) !== null
     ) {
       count += 1
     } else if (ts.isShorthandPropertyAssignment(node) && ratchet.keyedFields.has(node.name.text)) {
       count += 1
     } else if (ts.isPropertyAssignment(node)) {
       const name = staticName(node.name)
-      if (name !== null && ratchet.keyedFields.has(name) && !isSameNameCopy(node, name)) {
+      if (
+        name !== null &&
+        ratchet.keyedFields.has(name) &&
+        !isSameNameCopy(node, name) &&
+        !(ratchet.entryContentFields.has(name) && keepsMembership(node.initializer))
+      ) {
         count += 1
       }
     } else if (
