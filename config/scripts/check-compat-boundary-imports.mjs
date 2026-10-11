@@ -6,14 +6,10 @@ import { isTestOnlySourcePath } from './test-only-source-path.mjs'
 
 // Code kept only for old clients, servers or profiles. Each folder is reached through its
 // `index` and only from the listed importers, so deleting the folder plus those import lines
-// removes the path. Folders that do not exist yet are listed so they start at zero importers.
+// removes the path.
 export const COMPAT_FOLDERS = [
   // The RPC handler wiring joins in PR 6 step 6c.
   { folder: 'src/shared/workspace-layout/old-client', importers: [] },
-  {
-    folder: 'src/main/runtime/old-session-tabs-stream',
-    importers: ['src/main/runtime/rpc/methods/session-tabs.ts']
-  },
   {
     folder: 'src/main/remote-layout-snapshot',
     importers: [
@@ -21,10 +17,6 @@ export const COMPAT_FOLDERS = [
       'src/main/ipc/runtime-environment-removal-cleanup.ts',
       'src/main/persistence/loading-store/store-domain-composition.ts'
     ]
-  },
-  {
-    folder: 'src/renderer/src/runtime/remote-workspace-frozen',
-    importers: ['src/renderer/src/runtime/layout-command-router.ts']
   }
 ]
 
@@ -35,7 +27,9 @@ function importTarget(file, specifier) {
   if (normalized.startsWith('.')) {
     return path.posix.normalize(path.posix.join(path.posix.dirname(file), normalized))
   }
-  const alias = RENDERER_ALIASES.find((prefix) => normalized.startsWith(prefix))
+  const alias =
+    file.startsWith('src/renderer/') &&
+    RENDERER_ALIASES.find((prefix) => normalized.startsWith(prefix))
   return alias ? `src/renderer/src/${normalized.slice(alias.length)}` : null
 }
 

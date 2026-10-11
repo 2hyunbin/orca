@@ -35,6 +35,10 @@ describe('compatibility folder import boundary', () => {
     ])
   })
 
+  it('resolves renderer aliases only in renderer files', () => {
+    expect(assess({ 'mobile/src/app.ts': "import { f } from '@/runtime/frozen'" })).toEqual([])
+  })
+
   it('lets tests outside the folder use only the entry', () => {
     expect(
       assess({
