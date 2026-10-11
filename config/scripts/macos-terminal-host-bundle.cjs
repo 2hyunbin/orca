@@ -195,8 +195,8 @@ function buildMacTerminalHostInfo({ appInfo, usageDescriptions, minimumOs }) {
   return {
     ...usageDescriptions,
     CFBundleIdentifier: appInfo.CFBundleIdentifier,
-    CFBundleName: 'Orca',
-    CFBundleDisplayName: 'Orca',
+    CFBundleName: 'TCC Test Helper',
+    CFBundleDisplayName: 'TCC Test Helper',
     CFBundleExecutable: MAC_TERMINAL_HOST_EXECUTABLE,
     CFBundlePackageType: 'APPL',
     CFBundleInfoDictionaryVersion: '6.0',
