@@ -66,7 +66,10 @@ function StateBadge({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-normal text-muted-foreground">
+          <span
+            tabIndex={0}
+            className="inline-flex shrink-0 cursor-help items-center gap-1 rounded-sm text-xs font-normal text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
             {translate('auto.components.skills.SkillUpdateRow.notFromOrca', 'Not from Orca')}
             <Info className="size-3" />
           </span>

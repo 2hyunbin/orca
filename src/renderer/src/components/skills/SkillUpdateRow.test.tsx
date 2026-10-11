@@ -67,6 +67,11 @@ describe('SkillUpdateRow', () => {
     expect(tooltipText()).toBe(
       'Installed from acme/agent-skills. Selecting it replaces it with Orca’s version.'
     )
+    // Why: the source is only in the tooltip, so keyboard focus must be able to open it.
+    const label = Array.from(container?.querySelectorAll('[tabindex="0"]') ?? []).find((node) =>
+      node.textContent?.includes('Not from Orca')
+    )
+    expect(label).toBeDefined()
   })
 
   it('says there is no install record when the lock has no entry', async () => {
