@@ -56,7 +56,7 @@ export type PtySpawnIpcArgs = {
   replacesPtyId?: string
   // Untyped on purpose: parseTerminalPanePlacement is the one check, and drops what it rejects.
   placement?: unknown
-  // Untyped on purpose: isSpawnIntent is the one check; anything else is undeclared.
+  // Untyped on purpose: isRestoreSpawnIntent is the one check; anything else is undeclared.
   spawnIntent?: unknown
   // Why: renderer-threaded launch telemetry (telemetry-plan.md§Agent launch semantics); loosely typed because the main-side schema validator is the single enforcement point.
   telemetry?: {

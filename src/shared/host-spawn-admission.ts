@@ -37,6 +37,19 @@ export function isSpawnIntent(value: unknown): value is SpawnIntent {
   return typeof value === 'string' && SPAWN_INTENTS.some((intent) => intent === value)
 }
 
+/** The only intents a client may declare. `interactive` skips the gate, and a daemon kept running
+ *  across an update still trusts it, so it is never accepted from a client. */
+export const RESTORE_SPAWN_INTENTS = [
+  'user-resume',
+  'automatic-restore'
+] as const satisfies readonly SpawnIntent[]
+
+export type RestoreSpawnIntent = (typeof RESTORE_SPAWN_INTENTS)[number]
+
+export function isRestoreSpawnIntent(value: unknown): value is RestoreSpawnIntent {
+  return typeof value === 'string' && RESTORE_SPAWN_INTENTS.some((intent) => intent === value)
+}
+
 export type SpawnDeferralReason = 'paused' | 'live_cap' | 'pressure' | 'deadline'
 
 /** Sent only to requests that declared an intent; the fork never started. */

@@ -31,5 +31,8 @@ describe('renderer pty spawn: declared spawn intent', () => {
   it('treats a missing or unknown intent as undeclared', async () => {
     await expect(resolveSpawnIntent(PANE)).resolves.toBeUndefined()
     await expect(resolveSpawnIntent({ ...PANE, spawnIntent: 'urgent' })).resolves.toBeUndefined()
+    await expect(
+      resolveSpawnIntent({ ...PANE, spawnIntent: 'interactive' })
+    ).resolves.toBeUndefined()
   })
 })
