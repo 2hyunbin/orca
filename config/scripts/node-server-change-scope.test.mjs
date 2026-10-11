@@ -338,21 +338,21 @@ it.each([
 })
 
 const registry = 'config/scripts/vitest-node-runtime-files.mjs'
-const unrelatedProviderUnit = 'src/main/providers/local-filesystem-provider.test.ts'
+const unrelatedSshUnit = 'src/main/ssh/pinned-runtime-materializer-context.test.ts'
 
 function qualificationTree(extra = {}) {
   return moduleTree({
     'entry.ts': `import './${registry}'; throw Error('never execute')`,
     [registry]: 'export const NODE_RUNTIME_INCLUDE = []',
-    [unrelatedProviderUnit]: 'throw Error("never execute unrelated test")',
+    [unrelatedSshUnit]: 'throw Error("never execute unrelated test")',
     ...extra
   })
 }
 
-it('keeps a Node harness smoke without widening it for an unrelated modified provider unit', async () => {
+it('keeps a Node harness smoke without widening it for an unrelated modified SSH unit', async () => {
   const root = qualificationTree()
   writeFileSync(join(root, registry), 'export const NODE_RUNTIME_INCLUDE = ["new.unit.test.ts"]')
-  const changed = [registry, unrelatedProviderUnit]
+  const changed = [registry, unrelatedSshUnit]
   const scope = await classifyNodeServerChanges(
     changed,
     () => collectNodeServerInputs({ root, entryPoints: ['entry.ts'] }),
@@ -378,7 +378,7 @@ it.each([
   ]
 ])('retains daemon platform coverage: %s', async (daemon, runners, qualification) => {
   const root = qualificationTree({ [daemon]: 'throw Error("unselected")' })
-  const diff = [registry, daemon, unrelatedProviderUnit]
+  const diff = [registry, daemon, unrelatedSshUnit]
   const g = await collectNodeServerInputs({ root, entryPoints: ['entry.ts'] })
   expect(g.has(registry)).toBe(true)
   expect(g.has(daemon)).toBe(false)
@@ -388,12 +388,12 @@ it.each([
 })
 
 it('keeps every host when the modified SSH production module is an actual consumer', async () => {
-  const ssh = 'src/main/ssh/runtime-ssh-access-verification.ts'
+  const ssh = 'src/main/ssh/pinned-runtime-materializer.ts'
   const root = qualificationTree({
     'entry.ts': `import './${registry}'; import './${ssh}'; throw Error('never execute')`,
-    [ssh]: 'export const store = 1'
+    [ssh]: 'export const materializer = 1'
   })
-  const changed = [registry, ssh, unrelatedProviderUnit]
+  const changed = [registry, ssh, unrelatedSshUnit]
   const scope = await classifyNodeServerChanges(
     changed,
     () => collectNodeServerInputs({ root, entryPoints: ['entry.ts'] }),
@@ -411,13 +411,13 @@ it.each(['added', 'deleted', 'renamed', 'unknown', 'duplicate', 'foreign'])(
   'retains complete-path qualification when modification evidence is %s',
   async (status) => {
     const root = qualificationTree()
-    const changed = [registry, unrelatedProviderUnit]
+    const changed = [registry, unrelatedSshUnit]
     let modifiedFiles = [registry]
     if (status === 'deleted' || status === 'renamed') {
-      rmSync(join(root, unrelatedProviderUnit))
+      rmSync(join(root, unrelatedSshUnit))
     }
     if (status === 'renamed') {
-      const renamed = 'src/main/providers/renamed-provider.test.ts'
+      const renamed = 'src/main/ssh/renamed-context.test.ts'
       writeFileSync(join(root, renamed), 'throw Error("never execute renamed test")')
       changed.push(renamed)
     }
@@ -425,7 +425,7 @@ it.each(['added', 'deleted', 'renamed', 'unknown', 'duplicate', 'foreign'])(
       modifiedFiles = [registry, registry]
     }
     if (status === 'foreign') {
-      modifiedFiles = [registry, 'src/main/providers/foreign.test.ts']
+      modifiedFiles = [registry, 'src/main/ssh/foreign.test.ts']
     }
     const scope = await classifyNodeServerChanges(
       changed,
@@ -443,7 +443,7 @@ it.each(['added', 'deleted', 'renamed', 'unknown', 'duplicate', 'foreign'])(
 it('retains protected server tests and broken imports despite complete modification evidence', async () => {
   const protectedTest = 'src/main/sqlite/example.test.ts'
   const root = qualificationTree({ [protectedTest]: 'export const value = 1' })
-  const changed = [registry, protectedTest, unrelatedProviderUnit]
+  const changed = [registry, protectedTest, unrelatedSshUnit]
   const collect = () => collectNodeServerInputs({ root, entryPoints: ['entry.ts'] })
   const protectedScope = await classifyNodeServerChanges(changed, collect, {
     modifiedFiles: changed
@@ -453,7 +453,7 @@ it('retains protected server tests and broken imports despite complete modificat
     runners: NODE_SERVER_RUNNERS
   })
   writeFileSync(join(root, 'entry.ts'), `import './${registry}'; import './missing'`)
-  const brokenChanged = [registry, unrelatedProviderUnit]
+  const brokenChanged = [registry, unrelatedSshUnit]
   const brokenScope = await classifyNodeServerChanges(brokenChanged, collect, {
     modifiedFiles: brokenChanged
   })
