@@ -136,7 +136,7 @@ async function seedDuplicateTabOrderProjectGroups(
 
     const groups = []
     for (const name of groupNames) {
-      const created = await state.createProjectGroup(name)
+      const created = await state.createProjectGroup(name, 'local')
       if (!created) {
         throw new Error(`Failed to create Project Group: ${name}`)
       }

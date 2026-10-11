@@ -87,7 +87,7 @@ for (const delayCreateResponse of [false, true]) {
       })
     }
     const creation = orcaPage.evaluate(() =>
-      window.__store!.getState().createProjectGroup('Crowded group')
+      window.__store!.getState().createProjectGroup('Crowded group', 'local')
     )
     if (delayCreateResponse) {
       try {

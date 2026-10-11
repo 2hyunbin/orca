@@ -35,10 +35,13 @@ for (const theme of ['dark', 'light'] as const) {
           if (!group) {
             throw new Error('Could not create project group')
           }
-          const workspace = await state.createFolderWorkspace({
-            projectGroupId: group.id,
-            ...folder
-          })
+          const workspace = await state.createFolderWorkspace(
+            {
+              projectGroupId: group.id,
+              ...folder
+            },
+            { runtimeEnvironmentId: null }
+          )
           if (!workspace) {
             throw new Error('Could not create folder workspace')
           }
@@ -97,11 +100,14 @@ test('names a folder terminal recovered from the daemon after restart without an
       if (!group) {
         throw new Error('Could not create project group')
       }
-      const folder = await state.createFolderWorkspace({
-        projectGroupId: group.id,
-        name: 'Recovered notes',
-        folderPath
-      })
+      const folder = await state.createFolderWorkspace(
+        {
+          projectGroupId: group.id,
+          name: 'Recovered notes',
+          folderPath
+        },
+        { runtimeEnvironmentId: null }
+      )
       if (!folder) {
         throw new Error('Could not create folder workspace')
       }
