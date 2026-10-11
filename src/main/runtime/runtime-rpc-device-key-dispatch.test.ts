@@ -1,7 +1,9 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import nacl from 'tweetnacl'
 import { describe, expect, it, vi } from 'vitest'
+import { encodeDeviceProofMessage } from '../../shared/device-key-proof'
 import { devicePrincipalOf } from './device-principal'
 import { DeviceRegistry } from './device-registry'
 import type { OrcaRuntimeService } from './orca-runtime'
@@ -77,4 +79,59 @@ describe('requests on a key-authenticated socket', () => {
       error: { code: 'unauthorized' }
     })
   })
+})
+
+describe('pairing.registerDeviceKey over the dispatcher', () => {
+  it.each(['runtime', 'mobile'] as const)(
+    'forks a %s token row bound to the calling socket',
+    async (scope) => {
+      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-key-register-'))
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration never touches the runtime service.
+      const runtime = {
+        configureNotificationDismissalStore: () => {},
+        getRuntimeId: () => 'test-runtime'
+      } as unknown as OrcaRuntimeService
+      const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
+      const registry = new DeviceRegistry(userDataPath)
+      server['deviceRegistry'] = registry
+      const legacy = registry.addDevice('Device', scope)
+      const transcriptHashB64 = Buffer.alloc(32, 9).toString('base64')
+      const key = nacl.sign.keyPair()
+      const proof = nacl.sign.detached(
+        encodeDeviceProofMessage('register', Buffer.from(transcriptHashB64, 'base64')),
+        key.secretKey
+      )
+      const replies: string[] = []
+      await server['handleWebSocketMessage'](
+        JSON.stringify({
+          id: 'register',
+          method: 'pairing.registerDeviceKey',
+          params: {
+            devicePublicKeyB64: Buffer.from(key.publicKey).toString('base64'),
+            deviceProofB64: Buffer.from(proof).toString('base64'),
+            deviceLabel: 'Laptop'
+          }
+        }),
+        (response) => replies.push(response),
+        () => {},
+        undefined,
+        undefined,
+        legacy.token,
+        {
+          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispatch only uses ws as a map key for abort registration.
+          ws: {} as AuthenticatedMobileSocket['ws'],
+          connectionId: 'connection-1',
+          transcriptHashB64,
+          device: { ...devicePrincipalOf(legacy), deviceToken: legacy.token },
+          clientCapabilities: [],
+          transport: { transport: 'direct' }
+        }
+      )
+      const reply: unknown = JSON.parse(replies.at(-1)!)
+      expect(reply).toMatchObject({ id: 'register', ok: true, result: { credentialRevision: 0 } })
+      expect(
+        registry.listDevices().filter((row) => row.forkedFrom === legacy.deviceId)
+      ).toHaveLength(1)
+    }
+  )
 })
