@@ -13,7 +13,7 @@ import { discardStructuredAgentSessionChatSends } from '@/lib/structured-agent-s
 import { stopStructuredAgentSessionSends } from '@/components/native-chat/structured-agent-session-message-sender'
 import { retireStructuredAgentSessionReadOwner } from '@/components/native-chat/structured-agent-session-read-owner-registry'
 import { closeStructuredAgentSession } from './structured-agent-session-close'
-import { withLocalSessionTabCloseOwner } from './local-session-tab-close-owner'
+import { supportsSessionTabsCloseAgentSessionById } from './structured-agent-session-client'
 import {
   executionHostIdForStructuredTarget,
   structuredAgentSessionFocusOwner
@@ -66,18 +66,24 @@ export function retireStructuredAgentSessionTab(args: {
     }
   }
   const hostTabId = `agent-session:${args.sessionId}`
-  void closeStructuredAgentSession(args.target, args.sessionId).catch(report)
   let gaveUp = false
   const sendHostTabClose = async (): Promise<HostSessionTabCloseAnswer | undefined> => {
+    // Why: a close the window already gave up on must not be sent late (after a slow
+    // compatibility check), or the chat it showed again would vanish again.
+    const throwIfGaveUp = (): void => {
+      if (gaveUp) {
+        throw new Error('session_tab_close_abandoned')
+      }
+    }
+    // Why: a capable host's tab close also stops the chat and closes one still starting by its id.
+    if (!(await supportsSessionTabsCloseAgentSessionById(args.target))) {
+      throwIfGaveUp()
+      void closeStructuredAgentSession(args.target, args.sessionId).catch(report)
+    }
     if (args.target.kind === 'environment') {
       await ensureRuntimeEnvironmentCompatible(args.target.environmentId)
     }
-    // Why: a close the window already gave up on must not be sent late (after a slow
-    // compatibility check), or the chat it showed again would vanish again.
-    if (gaveUp) {
-      throw new Error('session_tab_close_abandoned')
-    }
-    // Why: main echoes the host tab id it was asked to close, never this window's tab id.
+    throwIfGaveUp()
     return callRuntimeRpc<HostSessionTabCloseAnswer | undefined>(
       args.target,
       'session.tabs.close',
@@ -85,11 +91,7 @@ export function retireStructuredAgentSessionTab(args: {
       { timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS, skipCompatibilityCheck: true }
     )
   }
-  const promise: Promise<HostTabCloseSettlement> = withLocalSessionTabCloseOwner(
-    args.worktreeId,
-    hostTabId,
-    sendHostTabClose
-  ).then(
+  const promise: Promise<HostTabCloseSettlement> = sendHostTabClose().then(
     (value) => ({ status: 'fulfilled' as const, value }),
     (reason: unknown) => {
       report(reason)

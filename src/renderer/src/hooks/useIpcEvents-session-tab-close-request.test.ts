@@ -44,9 +44,11 @@ describe('useIpcEvents session tab close requests', () => {
     expect(respondSessionTabClose).toHaveBeenCalledWith({ requestId: 'close-session-tab' })
   })
 
-  it('acknowledges an initiating command without re-prompting or removing its tab early', async () => {
+  // The window removes a chat in the same tick it starts its close, so main's relay of that close
+  // finds no tab; main reads this answer as the chat already closed.
+  it('answers no such tab for a chat the window already removed, without a prompt', async () => {
     const listenerRef: { current: SessionTabCloseRequestListener | null } = { current: null }
-    const closeUnifiedTab = vi.fn()
+    const closeUnifiedTab = vi.fn().mockReturnValue(null)
     const respondSessionTabClose = vi.fn()
     const requestPinnedTabCloseConfirm = vi.fn()
     await useIpcEventsForCloseRouting({
@@ -57,24 +59,19 @@ describe('useIpcEvents session tab close requests', () => {
         requestPinnedTabCloseConfirm,
         browserTabsByWorktree: {},
         openFiles: [],
-        unifiedTabsByWorktree: {
-          'wt-1': [
-            { id: 'chat-tab', entityId: 'session-1', contentType: 'agent-session', isPinned: true }
-          ]
-        }
+        unifiedTabsByWorktree: { 'wt-1': [] }
       })
     })
-    const { withLocalSessionTabCloseOwner } =
-      await import('@/runtime/local-session-tab-close-owner')
-    await withLocalSessionTabCloseOwner('wt-1', 'chat-tab', async () => {
-      listenerRef.current?.({ requestId: 'owned-close', worktreeId: 'wt-1', tabId: 'chat-tab' })
-      expect(respondSessionTabClose).toHaveBeenCalledWith({ requestId: 'owned-close' })
-      expect(closeUnifiedTab).not.toHaveBeenCalled()
-      expect(requestPinnedTabCloseConfirm).not.toHaveBeenCalled()
+    listenerRef.current?.({
+      requestId: 'relayed-close',
+      worktreeId: 'wt-1',
+      tabId: 'agent-session:session-1'
     })
-    listenerRef.current?.({ requestId: 'independent-close', worktreeId: 'wt-1', tabId: 'chat-tab' })
-    expect(requestPinnedTabCloseConfirm).toHaveBeenCalledOnce()
-    expect(respondSessionTabClose).not.toHaveBeenCalledWith({ requestId: 'independent-close' })
+    expect(requestPinnedTabCloseConfirm).not.toHaveBeenCalled()
+    expect(respondSessionTabClose).toHaveBeenCalledWith({
+      requestId: 'relayed-close',
+      error: 'session_tab_not_found'
+    })
   })
 
   it('rejects a pinned browser close when confirmation is canceled', async () => {

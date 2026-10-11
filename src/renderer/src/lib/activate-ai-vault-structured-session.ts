@@ -15,7 +15,13 @@ import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { refreshLocalStructuredSessionWorktreeTabs } from '@/runtime/local-structured-session-tabs-sync'
 import { STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import { isRuntimeCompatBlockError } from '@/runtime/runtime-protocol-compat'
-import { executionHostIdForStructuredTarget } from '@/runtime/structured-agent-session-owner'
+import {
+  executionHostIdForStructuredTarget,
+  structuredAgentSessionFocusOwner
+} from '@/runtime/structured-agent-session-owner'
+import { reopenWebSessionCloseIntent } from '@/runtime/web-session-close-intent'
+import { captureWebSessionIntentOwner } from '@/runtime/web-runtime-session-environment'
+import { rereadHostSessionTabs } from '@/runtime/host-session-tab-close'
 
 const STRUCTURED_SESSION_RESTORE_TIMEOUT_MS = 5_000
 
@@ -243,6 +249,7 @@ export async function revealStructuredSession(target: {
     return 'unreachable'
   }
   if (result?.ok === true) {
+    await showReopenedChat(host, target.worktreeId, target.sessionId)
     return 'revealed'
   }
   // The host raises two different refusals here and they mean opposite things to a user: it holds
@@ -251,6 +258,21 @@ export async function revealStructuredSession(target: {
 }
 
 type AgentSessionRevealReply = { ok?: boolean; refusal?: { code?: string } }
+
+/** Cleared at the answer, not the click: a frame from before the close could otherwise flash it. */
+async function showReopenedChat(
+  host: RuntimeClientTarget,
+  worktreeId: string,
+  sessionId: string
+): Promise<void> {
+  const owner = captureWebSessionIntentOwner(structuredAgentSessionFocusOwner(host).environmentId)
+  if (reopenWebSessionCloseIntent(owner, worktreeId, `agent-session:${sessionId}`)) {
+    // Why: a frame listing the reopened chat may already have been applied with it hidden.
+    await withStructuredSessionRestoreTimeout(
+      rereadHostSessionTabs(host, worktreeId, owner.pairingRevision, true)
+    ).catch(() => undefined)
+  }
+}
 
 async function refreshStructuredSessionTabs(
   worktreeId: string,

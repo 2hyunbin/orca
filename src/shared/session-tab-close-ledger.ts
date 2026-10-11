@@ -138,6 +138,13 @@ export class SessionTabCloseLedger {
     return visible.length === tabs.length ? tabs : visible
   }
 
+  /** The client opened this id again; its earlier close must not hide the reopened tab. */
+  reopen(partition: string, closedId: string): boolean {
+    const existed = this.partitions.get(partition)?.has(closedId) === true
+    this.remove(partition, closedId)
+    return existed
+  }
+
   clearPartition(partition: string): void {
     this.partitions.delete(partition)
   }

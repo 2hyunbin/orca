@@ -1,4 +1,3 @@
-import { isLocalSessionTabCloseOwned } from '@/runtime/local-session-tab-close-owner'
 import { closeMobileSessionTabInStore } from '@/runtime/mobile-session-tab-close'
 import {
   SESSION_TAB_CLOSE_CANCELED_ERROR,
@@ -18,9 +17,6 @@ import { resolveWindowTabIdForHostTab } from './host-session-tab-target'
 export function registerSessionTabIpcBridge(unsubs: (() => void)[]): void {
   unsubs.push(
     window.api.ui.onCloseSessionTab(({ tabId, worktreeId }) => {
-      if (isLocalSessionTabCloseOwned(worktreeId, tabId)) {
-        return
-      }
       const localTabId = resolveWindowTabIdForHostTab(worktreeId, tabId)
       const store = useAppStore.getState()
       const browserTarget = resolveBrowserSessionTabTarget(store, worktreeId, localTabId)
@@ -90,14 +86,6 @@ export function registerSessionTabIpcBridge(unsubs: (() => void)[]): void {
         } catch (error) {
           respond(error instanceof Error ? error.message : SESSION_TAB_CLOSE_FAILED_ERROR)
         }
-      }
-      if (isLocalSessionTabCloseOwned(worktreeId, tabId)) {
-        respond(
-          expiresAt !== undefined && Date.now() >= expiresAt
-            ? SESSION_TAB_CLOSE_TIMEOUT_ERROR
-            : undefined
-        )
-        return
       }
       const visibleId = browserTarget?.workspaceId ?? localTabId
       cancelConfirmation = guardPinnedTabClose({

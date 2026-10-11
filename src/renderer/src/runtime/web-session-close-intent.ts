@@ -65,6 +65,15 @@ export function isWebSessionCloseIntentPending(
   return ledger.isPending(closePartition(owner, worktreeId), hostTabId, now)
 }
 
+/** True when a close of this id was still hiding it; the reopened tab now shows. */
+export function reopenWebSessionCloseIntent(
+  owner: WebSessionIntentOwner,
+  worktreeId: string,
+  hostTabId: string
+): boolean {
+  return ledger.reopen(closePartition(owner, worktreeId), hostTabId)
+}
+
 export function clearWebSessionCloseIntentsForWorktree(
   owner: WebSessionIntentOwner,
   worktreeId: string

@@ -15,6 +15,7 @@ import {
   AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY,
   type RuntimeCapability
 } from '../../../shared/protocol-version'
+import { SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-close-capabilities'
 import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../shared/agent-session-create-capabilities'
 import {
   callRuntimeRpc,
@@ -55,6 +56,16 @@ export function supportsStructuredAgentSessionCreateMessage(
   target: RuntimeClientTarget
 ): Promise<boolean> {
   return structuredAgentSessionHostSupports(target, AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY)
+}
+
+/** Whether `session.tabs.close` alone closes a chat, listed or not, so no `agentSession.close` is sent. */
+export function supportsSessionTabsCloseAgentSessionById(
+  target: RuntimeClientTarget
+): Promise<boolean> {
+  return structuredAgentSessionHostSupports(
+    target,
+    SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY
+  )
 }
 
 /** Whether the host writes no row for a Stop that stopped nothing, so a repeated Stop is quiet. */

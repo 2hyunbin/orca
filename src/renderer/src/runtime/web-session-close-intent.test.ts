@@ -5,6 +5,7 @@ import {
   clearWebSessionCloseIntentsForWorktree,
   filterWebSessionCloseIntents,
   isWebSessionCloseIntentPending,
+  reopenWebSessionCloseIntent,
   resetWebSessionCloseIntentForTests,
   settleWebSessionCloseIntent
 } from './web-session-close-intent'
@@ -68,6 +69,15 @@ describe('web session tab close records', () => {
     clearWebSessionCloseIntentsForWorktree(OWNER, WT)
     expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-2', 1000)).toBe(false)
     expect(isWebSessionCloseIntentPending(OWNER, 'other-wt', 'host-tab-3', 1000)).toBe(true)
+  })
+
+  it('a reopen ends only that tab close in its own partition', () => {
+    beginWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)
+    beginWebSessionCloseIntent(OWNER, 'other-wt', 'host-tab-1', 1000)
+    expect(reopenWebSessionCloseIntent(OWNER, WT, 'host-tab-1')).toBe(true)
+    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', 1000)).toBe(false)
+    expect(isWebSessionCloseIntentPending(OWNER, 'other-wt', 'host-tab-1', 1000)).toBe(true)
+    expect(reopenWebSessionCloseIntent(OWNER, WT, 'host-tab-1')).toBe(false)
   })
 
   it('drops only the closes of pairings that ended', () => {
