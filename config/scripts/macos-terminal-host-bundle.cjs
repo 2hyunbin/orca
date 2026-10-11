@@ -35,8 +35,9 @@ const FORBIDDEN_INFO_KEYS = [
 ]
 // node-pty ships as the slice subset above.
 const PACKAGES_NOT_COPIED = new Set(['node-pty'])
-const LITERAL_LOAD = /\b(?:require|import)\(\s*[`'"]([^`'"]+)[`'"]\s*\)/g
-const COMPUTED_LOAD = /\b(?:require|import)\(\s*[^`'"\s)]/
+const LOAD_CALL = /\b(?:require|import)\(/g
+// The whole argument must be one plain string literal; anything else is a computed name.
+const LITERAL_ARGUMENT = /^\s*([`'"])([^`'"$]+)\1\s*\)/
 const LIPO_ARCH_TO_NODE_ARCH = { x86_64: 'x64', arm64: 'arm64' }
 
 function macTerminalHostPaths(appPath) {
@@ -63,6 +64,17 @@ function packageNameOf(specifier) {
   return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
 }
 
+/** The file a relative load names, as Node resolves it; null for a non-JS target. */
+function resolveRelativeLoad(fromFile, specifier) {
+  const base = resolve(dirname(fromFile), specifier)
+  for (const candidate of [base, `${base}.js`, join(base, 'index.js')]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) {
+      return candidate.endsWith('.js') ? candidate : null
+    }
+  }
+  throw new Error(`[macos-terminal-host] ${fromFile} loads ${specifier}, which does not exist`)
+}
+
 /** Package specifiers the daemon loads, walking its files from daemon-entry.js. */
 function daemonBareRequires(outMainDir) {
   const builtins = new Set(builtinModules)
@@ -76,14 +88,18 @@ function daemonBareRequires(outMainDir) {
     }
     visited.add(file)
     const source = readFileSync(file, 'utf8')
-    // A computed specifier could load a package this walk cannot see.
-    if (COMPUTED_LOAD.test(source)) {
-      throw new Error(`[macos-terminal-host] ${file} loads a module by a computed name`)
-    }
-    for (const [, specifier] of source.matchAll(LITERAL_LOAD)) {
+    for (const call of source.matchAll(LOAD_CALL)) {
+      const literal = LITERAL_ARGUMENT.exec(source.slice(call.index + call[0].length))
+      // A computed specifier could load a package this walk cannot see.
+      if (!literal) {
+        throw new Error(`[macos-terminal-host] ${file} loads a module by a computed name`)
+      }
+      const specifier = literal[2]
       if (specifier.startsWith('.')) {
-        const target = resolve(dirname(file), specifier)
-        pending.push(target.endsWith('.js') ? target : `${target}.js`)
+        const target = resolveRelativeLoad(file, specifier)
+        if (target) {
+          pending.push(target)
+        }
       } else if (!specifier.startsWith('node:') && !builtins.has(packageNameOf(specifier))) {
         specifiers.add(specifier)
       }
@@ -97,10 +113,12 @@ function copyDaemonPackages(outMainDir, sourceNodeModules, targetNodeModules) {
   const pending = daemonBareRequires(outMainDir)
     .map(packageNameOf)
     .filter((name) => !PACKAGES_NOT_COPIED.has(name))
+    .map((name) => ({ name, parent: null }))
   const copied = new Set()
   while (pending.length > 0) {
-    const name = pending.pop()
-    if (copied.has(name)) {
+    const { name, parent } = pending.pop()
+    // A dependency nested under its parent was copied with it.
+    if (copied.has(name) || (parent && existsSync(join(parent, 'node_modules', name)))) {
       continue
     }
     const source = join(sourceNodeModules, name)
@@ -112,7 +130,12 @@ function copyDaemonPackages(outMainDir, sourceNodeModules, targetNodeModules) {
     cpSync(source, join(targetNodeModules, name), { recursive: true })
     copied.add(name)
     const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8'))
-    pending.push(...Object.keys(manifest.dependencies ?? {}))
+    pending.push(
+      ...Object.keys(manifest.dependencies ?? {}).map((dependency) => ({
+        name: dependency,
+        parent: source
+      }))
+    )
   }
   return [...copied].sort()
 }

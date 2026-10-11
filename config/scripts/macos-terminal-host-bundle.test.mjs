@@ -273,9 +273,36 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
     expect(findUnresolvedDaemonRequires(paths)).toEqual([])
   })
 
-  it('fails when the daemon loads a module by a computed name', () => {
+  it('follows directory and JSON loads and keeps nested dependencies with their parent', () => {
+    const resources = join(appPath, 'Contents', 'Resources')
+    const main = join(resources, 'app.asar.unpacked', 'out', 'main')
+    mkdirSync(join(main, 'lib'), { recursive: true })
+    writeFileSync(join(main, 'daemon-entry.js'), "require('./lib');require('./data.json')")
+    writeFileSync(join(main, 'lib', 'index.js'), "require('outer')")
+    writeFileSync(join(main, 'data.json'), '{}')
+    const outer = join(resources, 'node_modules', 'outer')
+    mkdirSync(join(outer, 'node_modules', 'inner'), { recursive: true })
+    writeFileSync(join(outer, 'package.json'), '{"dependencies":{"inner":"1"}}')
+    writeFileSync(join(outer, 'node_modules', 'inner', 'package.json'), '{}')
+    const paths = assembleMacTerminalHost({
+      appPath,
+      nodeExecutable: join(root, 'node'),
+      iconPath: join(root, 'icon.icns'),
+      info: {}
+    })
+    expect(daemonBareRequires(join(paths.daemon, 'out', 'main'))).toEqual(['outer'])
+    expect(existsSync(join(paths.daemon, 'node_modules', 'outer', 'node_modules', 'inner'))).toBe(
+      true
+    )
+  })
+
+  it.each([
+    ['a variable', 'const name = pick();require(name)'],
+    ['a concatenated literal', "require('yaml' + suffix)"],
+    ['a template with a substitution', 'require(`./chunk-${id}.js`)']
+  ])('fails when the daemon loads a module through %s', (_label, source) => {
     const main = join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'out', 'main')
-    writeFileSync(join(main, 'daemon-entry.js'), 'const name = pick();require(name)')
+    writeFileSync(join(main, 'daemon-entry.js'), source)
     expect(() =>
       assembleMacTerminalHost({
         appPath,

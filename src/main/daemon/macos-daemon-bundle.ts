@@ -77,11 +77,11 @@ export async function materializeMacDaemonBundle(
     // Recorded before copying so a crash mid-copy leaves a copy retirement can still claim.
     await writeMacDaemonJobRecord(directory, label, false)
     await mkdir(dirname(bundlePath))
+    // Bounded by `signal`, which carries the launch's preparation deadline.
     const copy = async (clone: boolean): Promise<boolean> => {
       const result = await runProcess({
         program: '/bin/cp',
         args: [clone ? '-cR' : '-R', sourceBundle, bundlePath],
-        timeoutMs: 45_000,
         maxOutputBytes: 8192,
         signal
       })
@@ -97,7 +97,6 @@ export async function materializeMacDaemonBundle(
     const verified = await runProcess({
       program: '/usr/bin/codesign',
       args: ['--verify', '--deep', '--strict', bundlePath],
-      timeoutMs: 45_000,
       maxOutputBytes: 8192,
       signal
     })
