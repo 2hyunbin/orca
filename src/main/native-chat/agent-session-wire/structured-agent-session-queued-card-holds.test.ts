@@ -48,10 +48,17 @@ let rig: QueuedMessageTestRig
 const MANUAL_IDLE_SWEEP = { idleMs: 0, intervalMs: 60 * 60 * 1000 }
 
 beforeEach(async () => {
+  vi.useFakeTimers()
   rig = await createQueuedMessageTestRig({ restartable: true })
 })
 
-afterEach(() => rig.dispose())
+afterEach(async () => {
+  try {
+    await rig.dispose()
+  } finally {
+    vi.useRealTimers()
+  }
+})
 
 async function queuedDraft(text: string): Promise<string> {
   const queued = await rig.send(text, 'queue-if-active').result
@@ -92,7 +99,7 @@ function laneDrained(): Promise<void> {
 
 /** Lets the drain run its steps; none may hand a card off. */
 async function expectNothingSent(...draftIds: string[]): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 250))
+  await vi.advanceTimersByTimeAsync(250)
   for (const draftId of draftIds) {
     expect(await rig.handoff(draftId)).toBeUndefined()
   }
