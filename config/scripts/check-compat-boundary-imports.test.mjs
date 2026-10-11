@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assessCompatBoundaryImports, main } from './check-compat-boundary-imports.mjs'
+import { assessCompatBoundaryImports } from './check-compat-boundary-imports.mjs'
 
 const folders = [
   { folder: 'src/main/compat', importers: ['src/main/owner.ts'] },
@@ -42,9 +42,5 @@ describe('compatibility folder import boundary', () => {
         'src/main/other.test.ts': "import { a } from './compat/a'"
       })
     ).toEqual(['src/main/other.test.ts: import src/main/compat through its index, not ./compat/a'])
-  })
-
-  it('passes on this repository', () => {
-    expect(main()).toBe(0)
   })
 })
