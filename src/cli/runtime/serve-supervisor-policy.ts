@@ -1,7 +1,7 @@
-import type { ChildProcess } from 'node:child_process'
+import type { ProcessResult } from '@orca/process-host/process-spec'
 import type { ServeUpdateHandoffState } from '../../shared/serve-update-handoff'
 
-type ExitSignal = ChildProcess['signalCode']
+type ExitSignal = ProcessResult['signal']
 
 export type InstallRequestedHandoff = Extract<
   ServeUpdateHandoffState,
