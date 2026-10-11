@@ -4664,8 +4664,8 @@
           "stillOutdated": "更新运行后仍为过期状态。"
         },
         "SkillUpdateRow": {
-          "oneLocation": "1 location",
-          "manyLocations": "{{value0}} locations",
+          "oneLocation": "1 个位置",
+          "manyLocations": "{{value0}} 个位置",
           "notFromOrca": "非 Orca 安装",
           "notFromOrcaSourceTip": "安装自 {{value0}}。选中后会替换为 Orca 的版本。",
           "notFromOrcaNoRecordTip": "此副本没有 Orca 安装记录。选中后会替换为 Orca 的版本。",
