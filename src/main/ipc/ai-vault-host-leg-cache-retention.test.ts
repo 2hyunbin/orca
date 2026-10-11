@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
   local: vi.fn<() => Promise<AiVaultListResult>>(),
   ssh: vi.fn<(host: string, args?: AiVaultListArgs) => Promise<AiVaultListResult>>()
 }))
-vi.mock('electron', () => ({ app: { on: vi.fn() }, ipcMain: { handle: vi.fn() } }))
+vi.mock('electron', () => ({
+  app: { on: vi.fn() },
+  ipcMain: { handle: vi.fn() }
+}))
 vi.mock('../ai-vault/cached-session-list', () => ({
   configureAiVaultSessionSources: vi.fn(),
   resetAiVaultSessionListCacheForTests: vi.fn(),
@@ -19,7 +22,9 @@ vi.mock('../ai-vault/cached-session-list', () => ({
   getAiVaultWslHomeDirs: vi.fn().mockResolvedValue([]),
   listAiVaultSessions: mocks.local
 }))
-vi.mock('../ai-vault/ssh-session-list', () => ({ scanSshAiVaultSessions: mocks.ssh }))
+vi.mock('../ai-vault/ssh-session-list', () => ({
+  scanSshAiVaultSessions: mocks.ssh
+}))
 vi.mock('./ssh', () => ({
   getActiveSshAiVaultHostInfos: () =>
     ['one', 'two', 'three', 'four'].map((targetId) => ({ targetId }))
@@ -56,7 +61,13 @@ function result(marker: string): AiVaultListResult {
 }
 
 function args(scan: () => Promise<AiVaultListResult>, force = false, depth = 4) {
-  return { cacheKey: 'leg', depth, force, scopePaths: ['/workspaces/project'], scan }
+  return {
+    cacheKey: 'leg',
+    depth,
+    force,
+    scopePaths: ['/workspaces/project'],
+    scan
+  }
 }
 
 async function cacheOwner(
@@ -89,7 +100,11 @@ async function cacheOwner(
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(1000)
-  mocks.local.mockResolvedValue({ sessions: [], issues: [], scannedAt: '2026-10-02T00:00:00Z' })
+  mocks.local.mockResolvedValue({
+    sessions: [],
+    issues: [],
+    scannedAt: '2026-10-02T00:00:00Z'
+  })
   mocks.ssh.mockImplementation(async (host, input) => result(`${host}-${input?.scopePaths?.[0]}`))
 })
 afterEach(() => {
@@ -155,6 +170,42 @@ describe('host session result cache lifetime', () => {
     scan.mockResolvedValue(result('shallow'))
     await scanHostLegWithCache({ ...request, depth: 2 })
     expect(scan).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores the last full list behind an unchanged reply for fingerprint-less readers', async () => {
+    const fingerprint = 'a'.repeat(64)
+    const full = { ...result('full'), fingerprint }
+    const scan = vi.fn().mockResolvedValue(full)
+    await scanHostLegWithCache({ ...args(scan), afterFingerprint: null })
+    await vi.advanceTimersByTimeAsync(AI_VAULT_CACHE_TTL_MS)
+    const compact = {
+      sessions: [],
+      issues: [],
+      scannedAt: 'fresh',
+      fingerprint,
+      unchanged: true
+    }
+    scan.mockResolvedValue(compact)
+    expect(
+      await scanHostLegWithCache({
+        ...args(scan),
+        afterFingerprint: fingerprint
+      })
+    ).toEqual(compact)
+    const lookup = await scanHostLegWithCache(args(scan))
+    expect(scan).toHaveBeenCalledTimes(2)
+    expect(lookup.unchanged).toBeUndefined()
+    expect(lookup.scannedAt).toBe('fresh')
+    expect(lookup.sessions.map((session) => session.id)).toEqual(
+      [0, 1, 2, 3].map((index) => `local:codex:full-${index}`)
+    )
+    invalidateAiVaultHostLegCache()
+    await scanHostLegWithCache({
+      ...args(scan),
+      afterFingerprint: fingerprint
+    })
+    await scanHostLegWithCache(args(scan))
+    expect(scan).toHaveBeenCalledTimes(4)
   })
 
   it('keeps the refreshed deadline and cached scoped depth when the old timer fires', async () => {
