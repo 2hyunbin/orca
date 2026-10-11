@@ -1,3 +1,4 @@
+import type * as NodeFs from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -30,7 +31,7 @@ const {
   (await import('./daemon-init-test-harness')).createDaemonInitMocks()
 )
 
-vi.mock('fs', () => moduleFactories.fs())
+vi.mock('fs', async (importOriginal) => moduleFactories.fs(await importOriginal<typeof NodeFs>()))
 vi.mock('child_process', async (importOriginal) =>
   moduleFactories.childProcess(await importOriginal<Record<string, unknown>>())
 )
@@ -50,6 +51,27 @@ vi.mock('./daemon-pty-adapter', () => moduleFactories.daemonPtyAdapter())
 vi.mock('../ipc/pty', () => moduleFactories.ipcPty())
 
 describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
+  it('imports document preview while retaining daemon filesystem stubs', async () => {
+    await expect(import('../../shared/doc-preview-file-access')).resolves.toHaveProperty(
+      'readAuthorizedDocPreviewFile',
+      expect.any(Function)
+    )
+    const filesystem = await import('node:fs')
+    const actualFilesystem = await vi.importActual<typeof NodeFs>('node:fs')
+    expect(filesystem.constants).toBe(actualFilesystem.constants)
+    expect(filesystem.readFileSync).toBe(readFileSyncMock)
+    expect(filesystem.unlinkSync).toBe(unlinkSyncMock)
+    for (const method of [
+      'mkdirSync',
+      'existsSync',
+      'unlinkSync',
+      'readFileSync',
+      'writeFileSync'
+    ] as const) {
+      expect(filesystem.default[method]).toBe(filesystem[method])
+    }
+  })
+
   beforeEach(() => {
     installDefaultNetConnectStub()
   })

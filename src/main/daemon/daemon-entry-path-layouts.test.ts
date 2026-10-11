@@ -1,3 +1,4 @@
+import type * as NodeFs from 'node:fs'
 /**
  * Which daemon-entry.js the launcher forks, per deployment layout.
  *
@@ -24,7 +25,7 @@ const {
   (await import('./daemon-init-test-harness')).createDaemonInitMocks()
 )
 
-vi.mock('fs', () => moduleFactories.fs())
+vi.mock('fs', async (importOriginal) => moduleFactories.fs(await importOriginal<typeof NodeFs>()))
 vi.mock('child_process', async (importOriginal) =>
   moduleFactories.childProcess(await importOriginal<Record<string, unknown>>())
 )
