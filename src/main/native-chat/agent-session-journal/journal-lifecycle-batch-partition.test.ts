@@ -160,14 +160,16 @@ describe('journal lifecycle batch partitioning', () => {
       const settlementId = `settle:"\\\n😀:${'q'.repeat(random(2_000))}`
       const actual = partitionJournalLifecycleMutations(settlementId, mutations)
       let offset = 0
-      const expected = LEGACY_MIXED_PARTITIONS[fixture]!.map(([suffix, mutationCount]) => {
-        const chunk = {
-          settlementId: `${settlementId}${suffix}`,
-          mutations: mutations.slice(offset, offset + mutationCount)
+      const expected = LEGACY_MIXED_PARTITIONS[fixture]!.map(
+        ([suffix, mutationCount]: readonly [string, number]) => {
+          const chunk = {
+            settlementId: `${settlementId}${suffix}`,
+            mutations: mutations.slice(offset, offset + mutationCount)
+          }
+          offset += mutationCount
+          return chunk
         }
-        offset += mutationCount
-        return chunk
-      })
+      )
       expect(actual).toEqual(expected)
       const flattened = actual.flatMap((chunk) => chunk.mutations)
       expect(flattened).toHaveLength(mutations.length)
