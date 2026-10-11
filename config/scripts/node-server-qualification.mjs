@@ -46,7 +46,14 @@ export function nodeServerQualification(changedFiles, scope, { fullQualification
     matched.length > 0 &&
     new Set(matched).size === matched.length &&
     matched.every((file) => typeof file === 'string' && changedFiles.includes(file))
-      ? matched
+      ? [
+          ...new Set([
+            ...matched,
+            ...changedFiles.filter((file) =>
+              PLATFORM_PREFIXES.some((prefix) => file.startsWith(prefix))
+            )
+          ])
+        ]
       : changedFiles
   for (const file of qualificationFiles) {
     // Build policy and native sources can change every slot, even with a platform in the name.

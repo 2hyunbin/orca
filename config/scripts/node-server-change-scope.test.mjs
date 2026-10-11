@@ -369,6 +369,24 @@ it('keeps a Node harness smoke without widening it for an unrelated modified rel
   })
 })
 
+it.each([
+  ['src/main/daemon/daemon-authenticated-client-activity.test.ts', NODE_SERVER_RUNNERS, true],
+  [
+    'src/main/daemon/daemon-endpoint-windows.test.ts',
+    ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
+    false
+  ]
+])('retains daemon platform coverage: %s', async (daemon, runners, qualification) => {
+  const root = qualificationTree({ [daemon]: 'throw Error("unselected")' })
+  const diff = [registry, daemon, unrelatedRelayUnit]
+  const g = await collectNodeServerInputs({ root, entryPoints: ['entry.ts'] })
+  expect(g.has(registry)).toBe(true)
+  expect(g.has(daemon)).toBe(false)
+  const s = await classifyNodeServerChanges(diff, async () => g, { modifiedFiles: diff })
+  expect(s.shouldRun).toBe(true)
+  expect(nodeServerQualification(diff, s)).toEqual({ qualification, runners })
+})
+
 it('keeps every host when the modified relay production module is an actual consumer', async () => {
   const relay = 'src/relay/agent-status-store.ts'
   const root = qualificationTree({
