@@ -13,7 +13,8 @@ import { generateKeyPair } from './e2ee-crypto'
 import {
   MobileSocketWiring,
   type AuthenticatedMobileSocket,
-  type MobileSocketTransport
+  type MobileSocketTransport,
+  type MobileSocketTransportMetadata
 } from './mobile-socket-wiring'
 
 class FakeSocket {
@@ -41,8 +42,16 @@ class FakeTransport implements MobileSocketTransport {
 
 const desktop = generateKeyPair()
 const LAN_PAGE = 'http://192.168.1.20:6768'
+const RELAY_HOST_ID = 'AbCdEf0123_-xyZ9'
 
-function harness(webOrigin: string | undefined, allowInsecureWebPairing = false) {
+// The new web bundle marks its upgrade; phones (React Native) send an http Origin but no marker.
+const WEB_CLIENT = { webOrigin: LAN_PAGE, webClient: true as const }
+
+function harness(
+  page: { webOrigin?: string; webClient?: true } | undefined,
+  allowInsecureWebPairing = false,
+  relay?: (deviceId: string) => MobileSocketTransportMetadata
+) {
   const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'orca-web-session-')))
   const transport = new FakeTransport()
   const ready: AuthenticatedMobileSocket[] = []
@@ -59,11 +68,18 @@ function harness(webOrigin: string | undefined, allowInsecureWebPairing = false)
     onReady: (socket) => ready.push(socket),
     allowInsecureWebPairing: () => allowInsecureWebPairing
   })
-  wiring.attachTransport(transport, () => ({ transport: 'direct', webOrigin }))
+  let relayDeviceId = ''
+  wiring.attachTransport(transport, () =>
+    relay ? relay(relayDeviceId) : { transport: 'direct', ...page }
+  )
 
   function connect(auth: (transcriptHashB64: string) => Record<string, unknown>) {
     const ws = new FakeSocket()
-    const peer = new SimulatedMobileE2EEV2Peer(nacl.box.keyPair(), desktop.publicKey, null)
+    const peer = new SimulatedMobileE2EEV2Peer(
+      nacl.box.keyPair(),
+      desktop.publicKey,
+      relay ? RELAY_HOST_ID : null
+    )
     transport.receive(ws, JSON.stringify(peer.hello))
     expect(peer.acceptReady(JSON.parse(String(ws.sent[0])))).toBe(true)
     const transcriptHashB64 = peer.transcriptHashB64
@@ -77,7 +93,13 @@ function harness(webOrigin: string | undefined, allowInsecureWebPairing = false)
     const reply = ws.sent[1] ? JSON.parse(peer.openText(String(ws.sent[1]))!) : null
     return { ws, transcriptHashB64, reply, socket: ready.length > before ? ready.at(-1) : null }
   }
-  return { registry, wiring, transport, connect }
+  return {
+    registry,
+    wiring,
+    transport,
+    connect,
+    bindRelay: (deviceId: string) => (relayDeviceId = deviceId)
+  }
 }
 
 function sign(key: nacl.SignKeyPair, purpose: 'auth' | 'register', transcriptHashB64: string) {
@@ -87,7 +109,7 @@ function sign(key: nacl.SignKeyPair, purpose: 'auth' | 'register', transcriptHas
 
 describe('pairing from a plain-http page on another machine', () => {
   it('refuses a first pairing without operator opt-in, with a sealed reason', () => {
-    const { registry, connect } = harness(LAN_PAGE)
+    const { registry, connect } = harness(WEB_CLIENT)
     const pending = registry.getOrCreatePendingDevice('Browser', 'runtime')
     const attempt = connect(() => ({ deviceToken: pending.token }))
     expect(attempt.reply).toEqual({ type: 'e2ee_error', error: { code: 'insecure_origin' } })
@@ -97,7 +119,7 @@ describe('pairing from a plain-http page on another machine', () => {
   })
 
   it('pairs when the operator opted in', () => {
-    const { registry, connect } = harness(LAN_PAGE, true)
+    const { registry, connect } = harness(WEB_CLIENT, true)
     const pending = registry.getOrCreatePendingDevice('Browser', 'runtime')
     expect(connect(() => ({ deviceToken: pending.token })).reply).toMatchObject({
       type: 'e2ee_authenticated'
@@ -105,7 +127,7 @@ describe('pairing from a plain-http page on another machine', () => {
   })
 
   it('never cuts a browser that was already paired', () => {
-    const { registry, connect } = harness(LAN_PAGE)
+    const { registry, connect } = harness(WEB_CLIENT)
     const paired = registry.addDevice('Browser', 'runtime')
     registry.updateLastSeen(paired.deviceId)
     expect(connect(() => ({ deviceToken: paired.token })).reply).toMatchObject({
@@ -114,8 +136,12 @@ describe('pairing from a plain-http page on another machine', () => {
   })
 
   it('lets https, loopback and native clients pair as before', () => {
-    for (const origin of ['https://desk.example.com', 'http://localhost:6768', undefined]) {
-      const { registry, connect } = harness(origin)
+    for (const page of [
+      { webOrigin: 'https://desk.example.com', webClient: true as const },
+      { webOrigin: 'http://localhost:6768', webClient: true as const },
+      undefined
+    ]) {
+      const { registry, connect } = harness(page)
       const pending = registry.getOrCreatePendingDevice('Client', 'runtime')
       expect(connect(() => ({ deviceToken: pending.token })).reply).toMatchObject({
         type: 'e2ee_authenticated'
@@ -124,9 +150,41 @@ describe('pairing from a plain-http page on another machine', () => {
   })
 })
 
+describe('phones over direct LAN are never gated by their Origin', () => {
+  it('pairs a released phone whose socket sends an http LAN Origin but no web marker', () => {
+    for (const scope of ['mobile', 'runtime'] as const) {
+      const { registry, connect } = harness({ webOrigin: LAN_PAGE })
+      const pending = registry.getOrCreatePendingDevice('Phone', scope)
+      expect(connect(() => ({ deviceToken: pending.token })).reply).toMatchObject({
+        type: 'e2ee_authenticated'
+      })
+    }
+  })
+})
+
+describe('relayed phones are never gated', () => {
+  it('pairs over Relay whatever the page marker says', () => {
+    const { registry, connect, bindRelay } = harness(WEB_CLIENT, false, (relayDeviceId) => ({
+      transport: 'relay',
+      relayHostId: RELAY_HOST_ID,
+      relayDeviceId,
+      basisConnId: 'conn',
+      credentialKind: 'invite'
+    }))
+    const pending = registry.getOrCreatePendingDevice('Phone', 'mobile')
+    bindRelay(pending.deviceId)
+    expect(connect(() => ({ deviceToken: pending.token })).reply).toMatchObject({
+      type: 'e2ee_authenticated'
+    })
+  })
+})
+
 describe('session-only browser keys', () => {
   it('registers an ephemeral row, sweeps it once idle and disconnected, and then revokes it', () => {
-    const { registry, wiring, transport, connect } = harness('https://desk.example.com')
+    const { registry, wiring, transport, connect } = harness({
+      webOrigin: 'https://desk.example.com',
+      webClient: true as const
+    })
     const paired = registry.addDevice('Browser', 'runtime')
     registry.updateLastSeen(paired.deviceId)
     const migrating = connect(() => ({ deviceToken: paired.token }))

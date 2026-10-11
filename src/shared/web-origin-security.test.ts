@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { isInsecureRemoteWebOrigin } from './web-origin-security'
+import {
+  hasWebClientUpgradeMarker,
+  isInsecureRemoteWebOrigin,
+  withWebClientUpgradeMarker
+} from './web-origin-security'
 
 describe('isInsecureRemoteWebOrigin', () => {
   it('flags plain http pages served to other machines', () => {
@@ -22,5 +26,22 @@ describe('isInsecureRemoteWebOrigin', () => {
     expect(isInsecureRemoteWebOrigin('null')).toBe(false)
     expect(isInsecureRemoteWebOrigin('file://')).toBe(false)
     expect(isInsecureRemoteWebOrigin('not a url')).toBe(false)
+  })
+})
+
+describe('web client upgrade marker', () => {
+  it('round-trips through the endpoint the web bundle dials', () => {
+    const marked = withWebClientUpgradeMarker('ws://192.168.1.20:6768')
+    expect(marked).toBe('ws://192.168.1.20:6768/?orca-client=web')
+    expect(hasWebClientUpgradeMarker(new URL(marked).pathname + new URL(marked).search)).toBe(true)
+    expect(withWebClientUpgradeMarker('wss://desk.example.com/orca?x=1')).toBe(
+      'wss://desk.example.com/orca?x=1&orca-client=web'
+    )
+  })
+
+  it('is absent for phones, CLIs and other paths', () => {
+    expect(hasWebClientUpgradeMarker('/')).toBe(false)
+    expect(hasWebClientUpgradeMarker(undefined)).toBe(false)
+    expect(hasWebClientUpgradeMarker('/?orca-client=phone')).toBe(false)
   })
 })

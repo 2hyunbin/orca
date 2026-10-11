@@ -17,8 +17,8 @@ import type { RpcBinarySender } from './rpc-binary-sender'
 type MobileSocketPayload = string | Uint8Array<ArrayBufferLike>
 
 export type MobileSocketTransportMetadata =
-  // webOrigin: the page origin a browser sent on upgrade.
-  | { transport: 'direct'; webOrigin?: string }
+  // webClient: the Orca web bundle marked its upgrade; webOrigin: that page's origin.
+  | { transport: 'direct'; webOrigin?: string; webClient?: true }
   | {
       transport: 'relay'
       relayHostId: string
@@ -203,6 +203,8 @@ export class MobileSocketWiring {
           if (
             isPendingTokenRow(device) &&
             metadata.transport === 'direct' &&
+            // Why the marker too: phones send an http Origin as well, and must never be gated.
+            metadata.webClient === true &&
             isInsecureRemoteWebOrigin(metadata.webOrigin) &&
             !this.allowInsecureWebPairing()
           ) {

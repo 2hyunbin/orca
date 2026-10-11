@@ -195,7 +195,7 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
     const mobileSocketWiring = this.ensureMobileSocketWiring(deviceRegistry, e2eeKeypair)
     this.detachWebSocketWiring = mobileSocketWiring.attachTransport(wsTransport, (ws) => ({
       transport: 'direct',
-      webOrigin: wsTransport.webOriginOf(ws)
+      ...wsTransport.webPageOf(ws)
     }))
 
     try {

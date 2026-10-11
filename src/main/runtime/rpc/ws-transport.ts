@@ -4,6 +4,7 @@ import { createServer as createHttpServer, type Server as HttpServer } from 'nod
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { RpcTransport } from './transport'
 import { createStaticWebClientHandler } from './static-web-client-handler'
+import { hasWebClientUpgradeMarker } from '../../../shared/web-origin-security'
 import {
   attachNodeWebSocketLifecycle,
   clearNodeWebSocketPreAuthTimer,
@@ -59,7 +60,7 @@ export class WebSocketTransport implements RpcTransport {
   private readonly fallbackLadder: readonly number[]
   private persistedFallbackBindFailed = false
   private httpServer: HttpsServer | HttpServer | null = null
-  private readonly webOrigins = new WeakMap<WebSocket, string>()
+  private readonly webPages = new WeakMap<WebSocket, { webOrigin?: string; webClient: true }>()
   private wss: WebSocketServer | null = null
   private messageHandler: WebSocketMessageHandler | null = null
   private connectionCloseHandler: WebSocketConnectionCloseHandler | null = null
@@ -111,9 +112,9 @@ export class WebSocketTransport implements RpcTransport {
     this.connectionCloseHandler = handler
   }
 
-  /** The page origin a browser sent on upgrade; absent for native clients. */
-  webOriginOf(ws: WebSocket): string | undefined {
-    return this.webOrigins.get(ws)
+  /** The Orca web bundle that opened `ws` (it marks its upgrade), with its page origin. */
+  webPageOf(ws: WebSocket): { webOrigin?: string; webClient: true } | undefined {
+    return this.webPages.get(ws)
   }
 
   setClientId(ws: WebSocket, clientId: string): void {
@@ -224,9 +225,12 @@ export class WebSocketTransport implements RpcTransport {
         rejectNodeWebSocketOverCapacity(ws)
         return
       }
-      const origin = request.headers.origin
-      if (typeof origin === 'string') {
-        this.webOrigins.set(ws, origin)
+      if (hasWebClientUpgradeMarker(request.url)) {
+        const origin = request.headers.origin
+        this.webPages.set(ws, {
+          ...(typeof origin === 'string' ? { webOrigin: origin } : {}),
+          webClient: true
+        })
       }
       this.handleConnection(ws)
     })

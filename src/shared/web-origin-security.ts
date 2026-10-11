@@ -28,3 +28,34 @@ export const INSECURE_WEB_ORIGIN_AUTH_CODE = 'insecure_origin' as const
 
 // Operator opt-in, read by the host serving the page (desktop or `orca serve`).
 export const ALLOW_INSECURE_WEB_PAIRING_ENV = 'ORCA_ALLOW_INSECURE_WEB_PAIRING' as const
+
+// Why a marker: React Native phones also send an http Origin on LAN sockets, so the Origin alone
+// cannot say "browser". Only the web bundle adds this query to its upgrade URL; hosts that predate
+// it ignore the query string, so the marked upgrade still connects to them.
+export const WEB_CLIENT_UPGRADE_PARAM = 'orca-client' as const
+export const WEB_CLIENT_UPGRADE_VALUE = 'web' as const
+
+export function withWebClientUpgradeMarker(endpoint: string): string {
+  try {
+    const url = new URL(endpoint)
+    url.searchParams.set(WEB_CLIENT_UPGRADE_PARAM, WEB_CLIENT_UPGRADE_VALUE)
+    return url.toString()
+  } catch {
+    return endpoint
+  }
+}
+
+/** True when an upgrade request path (`/path?query`) carries the web bundle's marker. */
+export function hasWebClientUpgradeMarker(requestUrl: string | undefined): boolean {
+  if (!requestUrl) {
+    return false
+  }
+  try {
+    return (
+      new URL(requestUrl, 'http://upgrade.invalid').searchParams.get(WEB_CLIENT_UPGRADE_PARAM) ===
+      WEB_CLIENT_UPGRADE_VALUE
+    )
+  } catch {
+    return false
+  }
+}
