@@ -169,8 +169,13 @@ export class MobileSocketWiring {
             return lookup
           }
           // Why: same relay binding rule as token auth — the outer relay cannot pick the identity.
+          // A fork keeps its token row's Relay binding (the key proof names the installation).
           // Never "unknown": the device exists, and that verdict would make the client delete its key.
-          if (metadata.transport === 'relay' && metadata.relayDeviceId !== lookup.device.deviceId) {
+          if (
+            metadata.transport === 'relay' &&
+            metadata.relayDeviceId !== lookup.device.deviceId &&
+            metadata.relayDeviceId !== lookup.device.forkedFrom
+          ) {
             return { kind: 'refused' }
           }
           return {

@@ -2,7 +2,7 @@
 // (mobile) connections. Each paired device gets its own revocable token so
 // compromising one device doesn't expose others. The registry is a simple
 // JSON file with hardened permissions matching the runtime metadata pattern.
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   hardenExistingSecureFile,
@@ -51,6 +51,7 @@ export class DeviceRegistry {
   private devices: DeviceEntry[] = []
   /** Set when the registry exists but could not be read, which makes `devices` a lie to save from. */
   private registryUnreadable = false
+  private loadedIntact = true
   private pendingLastSeenFlush: NodeJS.Timeout | null = null
 
   constructor(userDataPath: string) {
@@ -237,7 +238,7 @@ export class DeviceRegistry {
 
   // Why: "unknown" must mean "readable and absent" — clients delete their key only on that verdict.
   lookupDeviceKey(deviceId: string): DeviceKeyLookup {
-    return this.registryUnreadable
+    return this.registryUnreadable || !this.loadedIntact
       ? { kind: 'unavailable' }
       : lookupDeviceKeyRow(this.getDevice(deviceId))
   }
@@ -322,20 +323,21 @@ export class DeviceRegistry {
   }
 
   private load(): void {
-    if (!existsSync(this.registryPath)) {
-      this.devices = []
-      return
-    }
     try {
       hardenExistingSecureFile(this.registryPath)
       const parsed = JSON.parse(readFileSync(this.registryPath, 'utf-8')) as DeviceEntry[]
       this.devices = parsed.map(normalizeLoadedDeviceRow)
       this.registryUnreadable = false
     } catch (error) {
+      this.devices = []
+      if (isMissingFileError(error)) {
+        return
+      }
       // "Cannot read" is not "is empty". Saving an empty list over a registry we were merely
       // denied would erase every paired device's bearer token, and the write would succeed.
       this.registryUnreadable = isUnreadableError(error)
-      this.devices = []
+      // Why: a corrupt file is not evidence any device was revoked; never tell a keyed client so.
+      this.loadedIntact = false
     }
   }
 
@@ -373,4 +375,8 @@ export class DeviceRegistry {
     writeDurableSecureJsonFile(this.registryPath, devices)
     this.cancelPendingLastSeenFlush()
   }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
