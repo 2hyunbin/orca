@@ -23,6 +23,22 @@ const ALL_CATEGORIES: NativeChatToolCategory[] = [
 ]
 
 describe('native chat tool icons', () => {
+  it('names a glyph for every category in the vocabulary', () => {
+    expect(NATIVE_CHAT_TOOL_ICON_NAMES).toEqual({
+      read: 'eye',
+      search: 'search',
+      listFiles: 'folder',
+      unknown: 'square-terminal',
+      fileChange: 'pencil',
+      webSearch: 'globe',
+      mcpToolCall: 'plug',
+      subAgentActivity: 'bot',
+      todoList: 'list-checks',
+      other: 'wrench'
+    })
+    expect(Object.keys(NATIVE_CHAT_TOOL_ICON_NAMES).sort()).toEqual([...ALL_CATEGORIES].sort())
+  })
+
   it('gives each category a distinct glyph so rows are told apart by icon', () => {
     const glyphs = ALL_CATEGORIES.map((category) => NATIVE_CHAT_TOOL_ICON_NAMES[category])
     expect(new Set(glyphs).size).toBe(glyphs.length)
