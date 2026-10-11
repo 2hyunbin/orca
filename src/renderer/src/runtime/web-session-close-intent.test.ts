@@ -1,54 +1,44 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  clearWebSessionCloseIntent,
-  clearWebSessionCloseIntentsForOwner,
+  beginWebSessionTabClose,
+  clearEndedPairingWebSessionCloseIntents,
   clearWebSessionCloseIntentsForWorktree,
-  isWebSessionCloseIntentPending,
-  reconcileWebSessionCloseIntents,
-  recordWebSessionCloseIntent,
+  filterWebSessionTabCloses,
+  isWebSessionTabClosePending,
   resetWebSessionCloseIntentForTests,
-  WEB_SESSION_CLOSE_INTENT_TTL_MS
+  settleWebSessionTabClose
 } from './web-session-close-intent'
-import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
+
+const revisions = vi.hoisted(() => new Map<string, number>())
+vi.mock('./runtime-environment-revision', () => ({
+  getRuntimeEnvironmentRevision: (environmentId: string) => revisions.get(environmentId)
+}))
 
 const WT = 'repo::/wt'
 const OWNER = { environmentId: 'runtime-a', pairingRevision: 1 }
+const topLevel = (tab: { id: string; parentTabId?: string }): string => tab.parentTabId ?? tab.id
 
-afterEach(() => resetWebSessionCloseIntentForTests())
+afterEach(() => {
+  resetWebSessionCloseIntentForTests()
+  revisions.clear()
+})
 
-describe('web session close intent', () => {
-  it('keeps an intent until the host confirms removal', () => {
-    recordWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)
-    reconcileWebSessionCloseIntents(OWNER, WT, new Set(['host-tab-1', 'host-tab-2']))
-    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', 1000)).toBe(true)
-
-    reconcileWebSessionCloseIntents(OWNER, WT, new Set(['host-tab-2']))
-    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', 1000)).toBe(false)
+describe('web session tab close records', () => {
+  it('hides the tab until the host has accepted and a host list omits it', () => {
+    const ticket = beginWebSessionTabClose(OWNER, WT, 'host-tab-1', 1000)!
+    const listed = [{ id: 'host-tab-1' }, { id: 'host-tab-2' }]
+    expect(filterWebSessionTabCloses(OWNER, WT, listed, topLevel, 1000)).toEqual([
+      { id: 'host-tab-2' }
+    ])
+    settleWebSessionTabClose(ticket, 'closed', 1001)
+    filterWebSessionTabCloses(OWNER, WT, [{ id: 'host-tab-2' }], topLevel, 1002)
+    expect(isWebSessionTabClosePending(OWNER, WT, 'host-tab-1', 1002)).toBe(false)
   })
 
-  it('expires a never-confirmed close', () => {
-    recordWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)
+  it('scopes records by owner, pairing revision, and worktree', () => {
+    beginWebSessionTabClose(OWNER, WT, 'host-tab-1', 1000)
     expect(
-      isWebSessionCloseIntentPending(
-        OWNER,
-        WT,
-        'host-tab-1',
-        1000 + WEB_SESSION_CLOSE_INTENT_TTL_MS + 1
-      )
-    ).toBe(false)
-  })
-
-  // The durable flip in the tab_not_found path can only reach an entry that is still there, so the
-  // TTL must outlast the RPC that produces that answer. Two independent literals would drift.
-  it('outlives the tab RPC that can still answer tab_not_found', () => {
-    expect(WEB_SESSION_CLOSE_INTENT_TTL_MS).toBeGreaterThan(WEB_SESSION_TAB_RPC_TIMEOUT_MS)
-  })
-
-  it('scopes intents by owner, pairing revision, and worktree', () => {
-    recordWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)
-
-    expect(
-      isWebSessionCloseIntentPending(
+      isWebSessionTabClosePending(
         { environmentId: 'runtime-b', pairingRevision: 1 },
         WT,
         'host-tab-1',
@@ -56,35 +46,38 @@ describe('web session close intent', () => {
       )
     ).toBe(false)
     expect(
-      isWebSessionCloseIntentPending(
+      isWebSessionTabClosePending(
         { environmentId: 'runtime-a', pairingRevision: 2 },
         WT,
         'host-tab-1',
         1000
       )
     ).toBe(false)
-    expect(isWebSessionCloseIntentPending(OWNER, 'other::/wt', 'host-tab-1', 1000)).toBe(false)
+    expect(isWebSessionTabClosePending(OWNER, 'other::/wt', 'host-tab-1', 1000)).toBe(false)
   })
 
-  it('clears one tab, one worktree, or one owner without crossing partitions', () => {
-    const otherOwner = { environmentId: 'runtime-b', pairingRevision: 1 }
-    recordWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)
-    recordWebSessionCloseIntent(OWNER, WT, 'host-tab-2', 1000)
-    recordWebSessionCloseIntent(OWNER, 'other-wt', 'host-tab-3', 1000)
-    recordWebSessionCloseIntent(otherOwner, WT, 'host-tab-4', 1000)
-
-    clearWebSessionCloseIntent(OWNER, WT, 'host-tab-1')
-    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-2', 1000)).toBe(true)
+  it('clears one worktree without crossing partitions', () => {
+    beginWebSessionTabClose(OWNER, WT, 'host-tab-2', 1000)
+    beginWebSessionTabClose(OWNER, 'other-wt', 'host-tab-3', 1000)
     clearWebSessionCloseIntentsForWorktree(OWNER, WT)
-    expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-2', 1000)).toBe(false)
-    expect(isWebSessionCloseIntentPending(OWNER, 'other-wt', 'host-tab-3', 1000)).toBe(true)
-    clearWebSessionCloseIntentsForOwner(OWNER)
-    expect(isWebSessionCloseIntentPending(OWNER, 'other-wt', 'host-tab-3', 1000)).toBe(false)
-    expect(isWebSessionCloseIntentPending(otherOwner, WT, 'host-tab-4', 1000)).toBe(true)
+    expect(isWebSessionTabClosePending(OWNER, WT, 'host-tab-2', 1000)).toBe(false)
+    expect(isWebSessionTabClosePending(OWNER, 'other-wt', 'host-tab-3', 1000)).toBe(true)
+  })
+
+  it('drops only the closes of pairings that ended', () => {
+    revisions.set('runtime-a', 1)
+    revisions.set('runtime-b', 1)
+    const otherOwner = { environmentId: 'runtime-b', pairingRevision: 1 }
+    beginWebSessionTabClose(OWNER, WT, 'host-tab-1', 1000)
+    beginWebSessionTabClose(otherOwner, WT, 'host-tab-2', 1000)
+    revisions.set('runtime-b', 2)
+    clearEndedPairingWebSessionCloseIntents()
+    expect(isWebSessionTabClosePending(OWNER, WT, 'host-tab-1', 1000)).toBe(true)
+    expect(isWebSessionTabClosePending(otherOwner, WT, 'host-tab-2', 1000)).toBe(false)
   })
 
   it('ignores empty ids', () => {
-    recordWebSessionCloseIntent(OWNER, WT, '   ', 1000)
-    expect(isWebSessionCloseIntentPending(OWNER, WT, '', 1000)).toBe(false)
+    expect(beginWebSessionTabClose(OWNER, WT, '   ', 1000)).toBeNull()
+    expect(isWebSessionTabClosePending(OWNER, WT, '', 1000)).toBe(false)
   })
 })

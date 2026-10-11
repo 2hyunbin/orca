@@ -97,6 +97,12 @@ export class SessionTabCloseLedger {
     this.remove(partition, closedId.trim())
   }
 
+  /** Whether a close of exactly this id is still hiding it; reads only, ends nothing. */
+  isPending(partition: string, closedId: string, now: number): boolean {
+    const entry = this.partitions.get(partition)?.get(closedId)
+    return entry !== undefined && !this.expired(entry, now)
+  }
+
   hasPending(partition: string): boolean {
     return (this.partitions.get(partition)?.size ?? 0) > 0
   }

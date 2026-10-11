@@ -68,8 +68,8 @@ import {
   resetStructuredAgentSessionReadOwnersForTests
 } from '@/components/native-chat/structured-agent-session-read-owner'
 import {
-  isWebSessionCloseIntentPending,
-  reconcileWebSessionCloseIntents,
+  isWebSessionTabClosePending,
+  filterWebSessionTabCloses,
   resetWebSessionCloseIntentForTests
 } from './web-session-close-intent'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from './local-structured-session-owner'
@@ -118,8 +118,19 @@ beforeEach(() => {
   mocks.refreshPaired.mockResolvedValue(undefined)
 })
 
+// A host frame for wt-1 listing exactly these host tab ids, as the window applies it.
+const applyHostFrame = (owner: { environmentId: string }, hostTabIds: readonly string[]): void => {
+  filterWebSessionTabCloses(
+    owner,
+    'wt-1',
+    hostTabIds.map((id) => ({ id })),
+    (tab) => tab.id,
+    Date.now()
+  )
+}
+
 const closing = (owner: string): boolean =>
-  isWebSessionCloseIntentPending(
+  isWebSessionTabClosePending(
     { environmentId: owner },
     'wt-1',
     'agent-session:session-1',
@@ -164,7 +175,8 @@ describe('structured agent session tab retirement', () => {
     expect(mocks.callRuntime).toHaveBeenCalledWith(
       target,
       'session.tabs.close',
-      expect.objectContaining({ tabId: 'agent-session:session-1' })
+      expect.objectContaining({ tabId: 'agent-session:session-1' }),
+      { timeoutMs: 15_000 }
     )
   })
 
@@ -184,11 +196,7 @@ describe('structured agent session tab retirement', () => {
     })
     expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(true)
     // A frame the host sent before handling the close still lists the chat.
-    reconcileWebSessionCloseIntents(
-      { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
-      'wt-1',
-      new Set(['agent-session:session-1'])
-    )
+    applyHostFrame({ environmentId: LOCAL_STRUCTURED_SESSION_OWNER }, ['agent-session:session-1'])
     expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(true)
     expect(mocks.reacceptLocal).not.toHaveBeenCalled()
 
@@ -198,11 +206,7 @@ describe('structured agent session tab retirement', () => {
     // This machine's host emitted its removal before answering, so that frame ends it: no read.
     expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(true)
     expect(mocks.reacceptLocal).not.toHaveBeenCalled()
-    reconcileWebSessionCloseIntents(
-      { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
-      'wt-1',
-      new Set()
-    )
+    applyHostFrame({ environmentId: LOCAL_STRUCTURED_SESSION_OWNER }, [])
     expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(false)
   })
 
@@ -216,7 +220,7 @@ describe('structured agent session tab retirement', () => {
       provisional: false
     })
     expect(
-      isWebSessionCloseIntentPending(
+      isWebSessionTabClosePending(
         { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
         FLOATING_TERMINAL_WORKTREE_ID,
         'agent-session:session-1',
@@ -315,7 +319,7 @@ describe('structured agent session tab retirement', () => {
       provisional: false
     })
     const pendingUnder = (pairingRevision: number): boolean =>
-      isWebSessionCloseIntentPending(
+      isWebSessionTabClosePending(
         { environmentId: 'server-1', pairingRevision },
         'wt-1',
         'agent-session:session-1',

@@ -1,5 +1,5 @@
 import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
-import { clearWebSessionCloseIntentsForOwner } from '../web-session-close-intent'
+import { clearEndedPairingWebSessionCloseIntents } from '../web-session-close-intent'
 import { clearWebSessionFocusIntentsForOwner } from '../web-session-focus-intent'
 import { clearWebSessionReorderIntentsForOwner } from '../web-session-reorder-intent'
 import {
@@ -208,9 +208,11 @@ export function installGlobalSessionTabsSubscriptions({
     refs.snapshotApply.current = () => true
     refs.snapshotAccepted.current = () => {}
     dispose()
+    // Why: this effect re-runs whenever any host is paired or re-paired, so a close still in flight
+    // on an unchanged pairing must keep hiding its tab; only ended pairings' closes go.
+    clearEndedPairingWebSessionCloseIntents()
     for (const { environmentId, expectedEnvironmentPairingRevision } of environments) {
       const owner = { environmentId, pairingRevision: expectedEnvironmentPairingRevision }
-      clearWebSessionCloseIntentsForOwner(owner)
       clearWebSessionFocusIntentsForOwner(owner)
       clearWebSessionReorderIntentsForOwner(owner)
     }

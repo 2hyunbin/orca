@@ -6,10 +6,7 @@ import type {
   WebSessionTabsSnapshotApplyOptions,
   WebSessionTabsSyncState
 } from './state'
-import {
-  reconcileWebSessionCloseIntents,
-  isWebSessionCloseIntentPending
-} from '../web-session-close-intent'
+import { filterWebSessionTabCloses } from '../web-session-close-intent'
 import {
   peekWebSessionFocusIntent,
   resolveWebSessionVisibleTabId,
@@ -40,29 +37,15 @@ export function prepareWebSessionTabsSnapshotBase(
   batchContext: WebSessionTabsBatchContext | undefined,
   options: WebSessionTabsSnapshotApplyOptions | undefined
 ) {
-  const snapshotHostTabId = (tab: RuntimeMobileSessionTabsResult['tabs'][number]): string =>
-    tab.type === 'terminal' ? tab.parentTabId : tab.id
-  reconcileWebSessionCloseIntents(
+  const visibleTabs = filterWebSessionTabCloses(
     { environmentId },
     worktreeId,
-    new Set(rawSnapshot.tabs.map((tab) => snapshotHostTabId(tab)))
+    rawSnapshot.tabs,
+    (tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id),
+    now
   )
-  const snapshot: RuntimeMobileSessionTabsResult = rawSnapshot.tabs.some((tab) =>
-    isWebSessionCloseIntentPending({ environmentId }, worktreeId, snapshotHostTabId(tab), now)
-  )
-    ? {
-        ...rawSnapshot,
-        tabs: rawSnapshot.tabs.filter(
-          (tab) =>
-            !isWebSessionCloseIntentPending(
-              { environmentId },
-              worktreeId,
-              snapshotHostTabId(tab),
-              now
-            )
-        )
-      }
-    : rawSnapshot
+  const snapshot: RuntimeMobileSessionTabsResult =
+    visibleTabs === rawSnapshot.tabs ? rawSnapshot : { ...rawSnapshot, tabs: [...visibleTabs] }
   // Why: only a caller-recorded create intent may focus its arriving tab; unsolicited server-active must not steal focus (#5435).
   const focusIntent = peekWebSessionFocusIntent({ environmentId }, worktreeId)
   const focusIntentHostTabId = focusIntent?.hostTabId ?? null

@@ -4,9 +4,9 @@ import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import {
-  clearWebSessionCloseIntent,
-  isWebSessionCloseIntentPending,
-  recordWebSessionCloseIntent
+  settleWebSessionTabClose,
+  isWebSessionTabClosePending,
+  beginWebSessionTabClose
 } from './web-session-close-intent'
 import { recordWebSessionReorderIntent } from './web-session-reorder-intent'
 import type { Tab } from '../../../shared/tab-types'
@@ -480,7 +480,7 @@ describe('applyWebSessionTabsSnapshot', () => {
       isActive: true
     }
     // Client closed host-tab-1; an in-flight pre-close snapshot still lists it.
-    recordWebSessionCloseIntent({ environmentId: ENV }, WT, 'host-tab-1', NOW)
+    const ticket = beginWebSessionTabClose({ environmentId: ENV }, WT, 'host-tab-1', NOW)!
     const stalePreClose = applyWebSessionTabsSnapshot(
       makeState(),
       makeSnapshot([surface]),
@@ -491,8 +491,9 @@ describe('applyWebSessionTabsSnapshot', () => {
       toWebTerminalSurfaceTabId('host-tab-1')
     )
 
-    // The host's post-close snapshot omits the tab -> intent clears; a later
+    // The host accepted, and its post-close snapshot omits the tab -> the record ends; a later
     // snapshot that re-adds the SAME id (a genuinely new tab) is no longer hidden.
+    settleWebSessionTabClose(ticket, 'closed', NOW + 1)
     applyWebSessionTabsSnapshot(makeState(), makeSnapshot([]), ENV, NOW + 1)
     const reopened = applyWebSessionTabsSnapshot(
       makeState(),
@@ -519,7 +520,7 @@ describe('applyWebSessionTabsSnapshot', () => {
     const authoritative = makeSnapshot([surface], { snapshotVersion: 6 })
 
     const initial = makeState()
-    recordWebSessionCloseIntent({ environmentId: ENV }, WT, 'host-tab-1', NOW)
+    const ticket = beginWebSessionTabClose({ environmentId: ENV }, WT, 'host-tab-1', NOW)!
     const hiddenPatch = applyFreshWebSessionTabsSnapshot(initial, authoritative, ENV, NOW)
     const hidden = { ...initial, ...(hiddenPatch as Partial<WebSessionTabsSyncState>) }
     expect((hidden.tabsByWorktree[WT] ?? []).map((tab) => tab.id)).not.toContain(
@@ -528,7 +529,7 @@ describe('applyWebSessionTabsSnapshot', () => {
 
     // The host vetoed lifecycle cleanup because the PTY is still live. Its
     // unchanged snapshot must become usable immediately, without a new publish.
-    clearWebSessionCloseIntent({ environmentId: ENV }, WT, 'host-tab-1')
+    settleWebSessionTabClose(ticket, 'failed', NOW + 1)
     acceptReplayedWebSessionTabsSnapshot(ENV, WT)
     const restoredPatch = applyFreshWebSessionTabsSnapshot(hidden, authoritative, ENV, NOW + 1)
     const restored = { ...hidden, ...(restoredPatch as Partial<WebSessionTabsSyncState>) }
@@ -540,7 +541,7 @@ describe('applyWebSessionTabsSnapshot', () => {
   it('does not let a replay reset clear another close intent from an older snapshot', () => {
     const current = makeSnapshot([], { snapshotVersion: 6, activeTabType: null })
     expect(shouldApplyWebSessionTabsSnapshot(current, ENV)).toBe(true)
-    recordWebSessionCloseIntent({ environmentId: ENV }, WT, 'host-tab-2', NOW)
+    beginWebSessionTabClose({ environmentId: ENV }, WT, 'host-tab-2', NOW)
 
     acceptReplayedWebSessionTabsSnapshot(ENV, WT)
     const state = makeState()
@@ -552,7 +553,7 @@ describe('applyWebSessionTabsSnapshot', () => {
     )
 
     expect(stalePatch).toBe(state)
-    expect(isWebSessionCloseIntentPending({ environmentId: ENV }, WT, 'host-tab-2', NOW + 1)).toBe(
+    expect(isWebSessionTabClosePending({ environmentId: ENV }, WT, 'host-tab-2', NOW + 1)).toBe(
       true
     )
   })

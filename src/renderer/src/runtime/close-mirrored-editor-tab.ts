@@ -2,7 +2,7 @@ import {
   getRuntimeEnvironmentIdForWorktree,
   type WorktreeRuntimeOwnerState
 } from '@/lib/worktree-runtime-owner'
-import { recordWebSessionCloseIntent } from './web-session-close-intent'
+import { beginWebSessionTabClose } from './web-session-close-intent'
 import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import type { OpenFile } from '@/store/slices/editor'
 import type { Tab } from '../../../shared/tab-types'
@@ -42,10 +42,10 @@ export function notifyHostOfMirroredEditorClose(
   if (unifiedTabs.length === 0) {
     return false
   }
-  // Record the close intent SYNCHRONOUSLY so a host snapshot landing before the dynamic import below resolves can't
-  // flash the old-path tab back. closeWebRuntimeSessionTab re-records it idempotently.
+  // Begin the close SYNCHRONOUSLY so a host snapshot landing before the dynamic import below resolves can't
+  // flash the old-path tab back. closeWebRuntimeSessionTab begins it again and settles that one.
   for (const tab of unifiedTabs) {
-    recordWebSessionCloseIntent(
+    beginWebSessionTabClose(
       { environmentId: runtimeEnvironmentId },
       worktreeId,
       toHostSessionTabId(tab.id),

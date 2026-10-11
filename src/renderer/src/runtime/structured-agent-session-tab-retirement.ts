@@ -18,62 +18,78 @@ import {
   executionHostIdForStructuredTarget,
   structuredAgentSessionFocusOwner
 } from './structured-agent-session-owner'
-import { clearWebSessionCloseIntent, recordWebSessionCloseIntent } from './web-session-close-intent'
+import { SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS } from '../../../shared/session-tab-close-ledger'
+import { beginWebSessionTabClose } from './web-session-close-intent'
+import { settleHostSessionTabClose, type HostSessionTabCloseAnswer } from './host-session-tab-close'
+import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import type { WebSessionIntentOwner } from './web-session-intent-owner'
 import { captureWebSessionIntentOwner } from './web-runtime-session-environment'
 import { callRuntimeRpc, type RuntimeClientTarget } from './runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 
-const inFlightRetirements = new Map<string, Promise<boolean>>()
+type HostTabCloseSettlement = PromiseSettledResult<HostSessionTabCloseAnswer | undefined>
+
+const inFlightRetirements = new Map<string, Promise<HostTabCloseSettlement>>()
 
 function retirementKey(target: RuntimeClientTarget, worktreeId: string, sessionId: string): string {
   return `${target.kind}:${target.kind === 'environment' ? target.environmentId : 'local'}:${worktreeId}:${sessionId}`
 }
 
 /**
- * Best-effort host cleanup; local removal must never wait for bookkeeping. Resolves false when the
- * host tab close failed, so the host may still list the chat.
+ * Best-effort host cleanup; local removal must never wait for bookkeeping. Settles with the host
+ * tab close's own result, which decides whether the host may still list the chat.
  */
 export function retireStructuredAgentSessionTab(args: {
   target: RuntimeClientTarget
   worktreeId: string
   sessionId: string
   onError?: (error: unknown) => void
-}): Promise<boolean> {
+}): Promise<HostTabCloseSettlement> {
   retireStructuredAgentSessionReadOwner(args.sessionId, args.target)
   const key = retirementKey(args.target, args.worktreeId, args.sessionId)
   const existing = inFlightRetirements.get(key)
   if (existing) {
     return existing
   }
-  const hostTabId = `agent-session:${args.sessionId}`
-  // Why: main echoes the host tab id it was asked to close, never this window's tab id.
-  const closeHostTab = () =>
-    withLocalSessionTabCloseOwner(args.worktreeId, hostTabId, () =>
-      callRuntimeRpc(args.target, 'session.tabs.close', {
-        worktree: toRuntimeWorktreeSelector(args.worktreeId),
-        tabId: hostTabId,
-        reason: 'user'
-      })
-    )
-  const promise = Promise.allSettled([
-    closeStructuredAgentSession(args.target, args.sessionId),
-    closeHostTab()
-  ]).then((results) => {
-    inFlightRetirements.delete(key)
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        if (args.onError) {
-          args.onError(result.reason)
-        } else {
-          console.warn('[structured-agent-session] host retirement failed', result.reason)
-        }
-      }
+  const report = (error: unknown): void => {
+    if (args.onError) {
+      args.onError(error)
+    } else {
+      console.warn('[structured-agent-session] host retirement failed', error)
     }
-    const [, hostTabClose] = results
-    return hostTabClose.status === 'fulfilled'
-  })
+  }
+  const hostTabId = `agent-session:${args.sessionId}`
+  void closeStructuredAgentSession(args.target, args.sessionId).catch(report)
+  // Why: main echoes the host tab id it was asked to close, never this window's tab id.
+  const promise: Promise<HostTabCloseSettlement> = withLocalSessionTabCloseOwner(
+    args.worktreeId,
+    hostTabId,
+    () =>
+      callRuntimeRpc<HostSessionTabCloseAnswer | undefined>(
+        args.target,
+        'session.tabs.close',
+        { worktree: toRuntimeWorktreeSelector(args.worktreeId), tabId: hostTabId, reason: 'user' },
+        { timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS }
+      )
+  ).then(
+    (value) => ({ status: 'fulfilled' as const, value }),
+    (reason: unknown) => {
+      report(reason)
+      return { status: 'rejected' as const, reason }
+    }
+  )
   inFlightRetirements.set(key, promise)
+  const forget = (): void => {
+    if (inFlightRetirements.get(key) === promise) {
+      inFlightRetirements.delete(key)
+    }
+  }
+  // Why: a hung local close must not hold back every later retry of this chat's close.
+  const bound = setTimeout(forget, SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS)
+  void promise.finally(() => {
+    clearTimeout(bound)
+    forget()
+  })
   return promise
 }
 
@@ -130,24 +146,23 @@ export function beginStructuredAgentSessionTabClose(args: {
   )
   const hostTabId = `agent-session:${args.sessionId}`
   // Why: a host frame sent before the host handles the close still lists the chat and would re-add
-  // it at the end of the strip; the intent lifts once a host frame stops listing it. Floating-panel
-  // frames are never applied, so nothing there could re-add the chat or ever end its intent.
+  // it at the end of the strip. Floating-panel frames are never applied, so nothing there could
+  // re-add the chat or ever confirm its close.
   if (args.worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
     void retireStructuredAgentSessionTab(args)
     return
   }
-  recordWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId, Date.now())
-  void retireStructuredAgentSessionTab(args).then((hostTabClosed) => {
-    if (!hostTabClosed) {
-      // The host may still have the chat: let its list show it again.
-      clearWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId)
-    }
-    // Why: this machine's host emits its removal frame before the close answers, so only a failure
-    // needs a read; a paired server's frames travel apart from its answer, so, as for its terminal
-    // closes, every close is followed by a read.
-    if (!hostTabClosed || args.target.kind === 'environment') {
-      reacceptHostSessionTabs(args.target, args.worktreeId, intentOwner)
-    }
+  const ticket = beginWebSessionTabClose(intentOwner, args.worktreeId, hostTabId, Date.now())
+  const reread = (): void => reacceptHostSessionTabs(args.target, args.worktreeId, intentOwner)
+  void settleHostSessionTabClose({
+    tickets: () => (ticket ? [ticket] : []),
+    close: retireStructuredAgentSessionTab(args).then((settled) =>
+      settled.status === 'fulfilled' ? settled.value : Promise.reject(settled.reason)
+    ),
+    rereadAcceptingCurrent: reread,
+    // Why: this machine's host emits its removal frame before the close answers; a paired server's
+    // frames travel apart from its answer, so, as for its terminal closes, a read follows.
+    readAfterClose: args.target.kind === 'environment' ? reread : undefined
   })
 }
 
