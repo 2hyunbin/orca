@@ -32,10 +32,7 @@ export type HostStackLanding = 'replace-host-index' | 'over-workspace-list'
 export type HostStackResetAction = Readonly<{
   type: 'RESET'
   target: string
-  payload: Readonly<{
-    index: number
-    routes: readonly [HostStackNavigationRoute, HostStackRouteTarget]
-  }>
+  payload: Readonly<{ index: number; routes: readonly HostStackNavigationRoute[] }>
 }>
 
 export type HostStackRootNavigation = {
@@ -103,10 +100,12 @@ function hostParamMatches(param: unknown, expectedHostId: string): boolean {
   }
 }
 
-/** The focused `h` route, however deep the caller's navigator sits above it: a screen
- *  inside the root stack sees it at the top, but app/_layout.tsx is itself a screen of
- *  Expo Router's internal navigator, so from there the root stack is one level down. */
-function focusedHostRoute(state: HostStackNavigationState): HostStackNavigationRoute | null {
+/** The focused `h` route and the root stack holding it, however deep the caller's navigator
+ *  sits above it: a screen inside the root stack sees it at the top, but app/_layout.tsx is
+ *  itself a screen of Expo Router's internal navigator, so from there it is one level down. */
+function focusedHostRoute(
+  state: HostStackNavigationState
+): { route: HostStackNavigationRoute; rootStack: HostStackNavigationState } | null {
   let current: HostStackNavigationState | undefined = state
   while (current) {
     const route: HostStackNavigationRoute | undefined = current.routes[current.index]
@@ -114,7 +113,7 @@ function focusedHostRoute(state: HostStackNavigationState): HostStackNavigationR
       return null
     }
     if (route.name === 'h') {
-      return route
+      return { route, rootStack: current }
     }
     current = route.state
   }
@@ -138,6 +137,34 @@ function mountedHostStack(
   return { key: hostState.key, hostRoute: { ...hostRoute, key: hostRoute.key } }
 }
 
+/** Leaves the root stack's routes below its first host area, then this host area holding only
+ *  its pushed workspace list and the target. The push stacked onto wherever focus was — this host
+ *  stack, or a root screen above an earlier `h` — and a session screen left beneath stays mounted,
+ *  subscribed to its terminals under this device's id. */
+function landOverWorkspaceList(
+  hostArea: { route: HostStackNavigationRoute; rootStack: HostStackNavigationState },
+  hostStack: NonNullable<ReturnType<typeof mountedHostStack>>,
+  target: HostStackRouteTarget
+): HostStackResetAction {
+  const routes = [hostStack.hostRoute, target]
+  const { rootStack } = hostArea
+  if (!rootStack.key) {
+    return { type: 'RESET', target: hostStack.key, payload: { index: 1, routes } }
+  }
+  const firstHostArea = rootStack.routes.findIndex((route) => route.name === 'h')
+  return {
+    type: 'RESET',
+    target: rootStack.key,
+    payload: {
+      index: firstHostArea,
+      routes: [
+        ...rootStack.routes.slice(0, firstHostArea),
+        { ...hostArea.route, state: { key: hostStack.key, index: 1, routes } }
+      ]
+    }
+  }
+}
+
 /** Opens a deep host route by mounting `/h/[hostId]` first and replacing it once
  *  its stack is committed. A cold push straight to a nested route resolves to the
  *  host index without the dynamic id, which lands on a blank host screen. */
@@ -149,7 +176,7 @@ export function navigateToHostStackRoute(
   landing: HostStackLanding = 'replace-host-index'
 ): HostStackNavigationController {
   const state = navigation.getState()
-  const hostState = state && focusedHostRoute(state)?.state
+  const hostState = state && focusedHostRoute(state)?.route.state
   const focused = hostState?.routes[hostState.index]
   if (
     hostState?.key &&
@@ -189,14 +216,15 @@ export function navigateToHostStackRoute(
     if (!state) {
       return
     }
-    const hostContainer = focusedHostRoute(state)
+    const hostArea = focusedHostRoute(state)
+    const hostContainer = hostArea?.route
     if (hostContainer) {
       hostRouteSeen = true
     } else if (hostRouteSeen) {
       dispose()
       return
     }
-    const hostStack = hostContainer && mountedHostStack(hostContainer, hostId)
+    const hostStack = hostArea && mountedHostStack(hostArea.route, hostId)
     if (!hostStack) {
       if (hostContainer && hostParamMatches(hostContainer.params?.hostId, hostId)) {
         dispose()
@@ -205,15 +233,9 @@ export function navigateToHostStackRoute(
       return
     }
     dispose()
-    // Why RESET: the push stacked the host index on whatever the stack held, and a session
-    // screen left beneath stays mounted, subscribed to its terminals under this device's id.
     navigation.dispatch(
       selectedLanding === 'over-workspace-list'
-        ? {
-            type: 'RESET',
-            target: hostStack.key,
-            payload: { index: 1, routes: [hostStack.hostRoute, selectedTarget] }
-          }
+        ? landOverWorkspaceList(hostArea, hostStack, selectedTarget)
         : {
             type: 'REPLACE',
             target: hostStack.key,
