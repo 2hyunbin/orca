@@ -28,7 +28,21 @@ anything on SSH hosts. Run maintenance on the execution host when maintaining re
 Healthy Electron installs join the shared distribution cache during native dependency setup,
 without waiting for an Electron upgrade. The manual command migrates older installs immediately.
 
-Cleanup runs only when explicitly requested. Starting `pnpm dev` does not trigger a sweep.
+On macOS, `pnpm dev` starts a detached cleanup of idle dev bundles, at most once per day per
+repository after a successful sweep. It keeps bundles used within seven days and excludes the
+worktree being launched. Reusing a bundle refreshes its last-use timestamp. Startup does not wait
+for cleanup; failures retry on a later launch. CI and injected test runners skip automatic cleanup.
+The background sweep does not migrate Electron distributions; use the manual command for that.
+
+Set `ORCA_DISABLE_STORAGE_MAINTENANCE=1` to opt out, for example:
+
+```sh
+ORCA_DISABLE_STORAGE_MAINTENANCE=1 pnpm dev
+```
+
+You can also export that variable in your shell profile. Automatic dev-bundle cleanup is macOS-only;
+Linux and Windows retain their existing startup behavior.
+
 The repository lock prevents competing cleanup commands. Dev bundle removal checks active
 processes and recent unfinished builds, then rechecks eligibility immediately before deletion.
 An unreadable process table prevents removal.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { lock } from 'proper-lockfile'
 import { runProcess } from '@orca/process-host'
@@ -7,6 +7,8 @@ import { runProcess } from '@orca/process-host'
 export async function reclaimWorktreeSpace({
   repoRoot = process.cwd(),
   apply = false,
+  automatic = false,
+  now = Date.now(),
   execute = runProcess,
   acquireLock = lock,
   commonDirectory
@@ -14,7 +16,9 @@ export async function reclaimWorktreeSpace({
   if (!commonDirectory) {
     const result = await runProcess({
       program: 'git',
-      args: ['-C', repoRoot, 'rev-parse', '--git-common-dir']
+      args: ['-C', repoRoot, 'rev-parse', '--git-common-dir'],
+      timeoutMs: 30_000,
+      terminationBarrier: true
     })
     if (result.code !== 0 || result.timedOut || !result.stdout.trim()) {
       throw new Error('Run this command inside a local Git repository, or supply --repo')
@@ -23,6 +27,7 @@ export async function reclaimWorktreeSpace({
   }
   const cacheRoot = join(commonDirectory, 'orca-cache')
   const lockPath = join(cacheRoot, 'storage-cleanup')
+  const completedPath = join(cacheRoot, 'storage-cleanup-completed.json')
   await mkdir(cacheRoot, { recursive: true })
   let release
   try {
@@ -36,11 +41,28 @@ export async function reclaimWorktreeSpace({
   let cleanupFailed = false
   let cleanupError
   try {
-    const scripts = ['reclaim-electron-dists.mjs', 'reclaim-dev-electron-bundles.mjs']
+    let recent = false
+    if (automatic) {
+      try {
+        const completedAt = JSON.parse(await readFile(completedPath, 'utf8')).completedAt
+        recent =
+          Number.isFinite(completedAt) && now >= completedAt && now - completedAt < 86_400_000
+      } catch {
+        // Missing or incomplete state retries maintenance on the next launch.
+      }
+    }
+    const scripts = recent
+      ? []
+      : automatic
+        ? ['reclaim-dev-electron-bundles.mjs']
+        : ['reclaim-electron-dists.mjs', 'reclaim-dev-electron-bundles.mjs']
     for (const script of scripts) {
       const args = [resolve(import.meta.dirname, script), '--repo', repoRoot]
       if (apply) {
         args.push('--apply')
+      }
+      if (automatic) {
+        args.push('--min-age-days', '7', '--exclude-worktree', repoRoot)
       }
       const result = await execute({
         program: process.execPath,
@@ -53,6 +75,9 @@ export async function reclaimWorktreeSpace({
       if (result.code !== 0 || result.timedOut) {
         throw new Error(`${script} failed; rerun cleanup after resolving the error`)
       }
+    }
+    if (automatic && apply && !recent) {
+      await writeFile(completedPath, JSON.stringify({ completedAt: now }))
     }
   } catch (error) {
     cleanupFailed = true
@@ -87,7 +112,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename
     const argument = process.argv[index]
     if (argument === '--repo') {
       index += 1
-    } else if (argument !== '--apply') {
+    } else if (argument !== '--apply' && argument !== '--automatic') {
       throw new Error(`Unknown argument: ${argument}`)
     }
   }
@@ -99,7 +124,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename
   }
   await reclaimWorktreeSpace({
     repoRoot: repoIndex !== -1 ? resolve(process.argv[repoIndex + 1]) : process.cwd(),
-    apply: process.argv.includes('--apply')
+    apply: process.argv.includes('--apply'),
+    automatic: process.argv.includes('--automatic')
   }).catch((error) => {
     console.error(error.message)
     process.exitCode = 1

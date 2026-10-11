@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -85,5 +85,45 @@ it('fails if cleanup succeeds but the repository lock cannot be released', async
   await expect(reclaimWorktreeSpace({ ...options, acquireLock: async () => release })).rejects.toBe(
     failure
   )
+  expect(options.execute).toHaveBeenCalledTimes(2)
+})
+
+it('limits automatic cleanup to older bundles outside the launching worktree, once per day', async () => {
+  const options = { ...(await fixture()), automatic: true, apply: true, now: 1_000_000_000 }
+  await reclaimWorktreeSpace(options)
+  expect(options.execute).toHaveBeenCalledTimes(1)
+  expect(options.execute.mock.calls[0][0].args.slice(1)).toEqual([
+    '--repo',
+    options.repoRoot,
+    '--apply',
+    '--min-age-days',
+    '7',
+    '--exclude-worktree',
+    options.repoRoot
+  ])
+  await reclaimWorktreeSpace({ ...options, now: options.now + 86_399_999 })
+  expect(options.execute).toHaveBeenCalledTimes(1)
+  await reclaimWorktreeSpace({ ...options, now: options.now + 86_400_000 })
+  expect(options.execute).toHaveBeenCalledTimes(2)
+  await reclaimWorktreeSpace({ ...options, automatic: false })
+  expect(options.execute).toHaveBeenCalledTimes(4)
+})
+
+it('retries failed automatic cleanup without waiting a day', async () => {
+  const options = { ...(await fixture()), automatic: true, apply: true }
+  options.execute.mockResolvedValueOnce({ code: 1, timedOut: false })
+  await expect(reclaimWorktreeSpace(options)).rejects.toThrow('failed')
+  await reclaimWorktreeSpace(options)
+  expect(options.execute).toHaveBeenCalledTimes(2)
+})
+
+it('retries malformed state and does not let a preview suppress the next applied sweep', async () => {
+  const options = { ...(await fixture()), automatic: true, apply: false }
+  await reclaimWorktreeSpace(options)
+  await writeFile(
+    join(options.commonDirectory, 'orca-cache', 'storage-cleanup-completed.json'),
+    '{'
+  )
+  await reclaimWorktreeSpace({ ...options, apply: true })
   expect(options.execute).toHaveBeenCalledTimes(2)
 })

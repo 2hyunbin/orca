@@ -10,6 +10,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync
 } from 'node:fs'
 import net from 'node:net'
@@ -17,6 +18,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 
 import { prepareDevCliTerminalWrappers } from './dev-cli-terminal-wrapper.mjs'
+import { startDevStorageMaintenance } from './dev-storage-maintenance.mjs'
 import {
   DEV_BUNDLE_MARKER_FILENAME,
   getDevBundleProcessTable,
@@ -257,6 +259,12 @@ function prepareMacDevElectronApp() {
   }
 
   if (copiedAppIsUsable()) {
+    try {
+      const now = new Date()
+      utimesSync(distDir, now, now)
+    } catch {
+      // A read-only timestamp must not prevent launching a usable bundle.
+    }
     pruneStaleDevBundles(distDir)
     process.env.ELECTRON_EXEC_PATH = executablePath
     return
@@ -471,6 +479,7 @@ seedDevInstanceIdentityEnv()
 if (!useStableElectronName && process.env.ORCA_SKIP_DEV_ELECTRON_APP_PREPARE !== '1') {
   prepareMacDevElectronApp()
 }
+startDevStorageMaintenance(repoRoot)
 
 // Why: tests inject a tiny fake CLI here so they can verify Ctrl+C tears down
 // the full child tree without depending on a real electron-vite install.
