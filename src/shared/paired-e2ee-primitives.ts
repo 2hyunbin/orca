@@ -3,6 +3,13 @@
 // browser), so the shared handshake core takes them as a parameter.
 export type PairedE2EEKeyPair = { publicKey: Uint8Array; secretKey: Uint8Array }
 
+export type PairedE2EEV2KeySchedule = {
+  mobileToDesktopKey: Uint8Array
+  desktopToMobileKey: Uint8Array
+  sessionId: Uint8Array
+  transcriptHash: Uint8Array
+}
+
 export type PairedE2EEPrimitives = {
   generateKeyPair: () => PairedE2EEKeyPair
   deriveSharedKey: (ourSecretKey: Uint8Array, peerPublicKey: Uint8Array) => Uint8Array
@@ -16,4 +23,11 @@ export type PairedE2EEPrimitives = {
   openLegacyText: (frame: string, sharedKey: Uint8Array) => string | null
   sealLegacyBinary: (plaintext: Uint8Array, sharedKey: Uint8Array) => Uint8Array<ArrayBuffer>
   openLegacyBinary: (frame: Uint8Array, sharedKey: Uint8Array) => Uint8Array | null
+  // Why injected: Node uses node:crypto, so the CLI's unbundled runtime needs no extra package.
+  deriveV2KeySchedule: (args: {
+    sharedSecret: Uint8Array
+    transcript: Uint8Array
+    clientNonce: Uint8Array
+    desktopNonce: Uint8Array
+  }) => PairedE2EEV2KeySchedule
 }

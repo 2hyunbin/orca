@@ -1,5 +1,6 @@
 import nacl from 'tweetnacl'
 import type { PairedE2EEPrimitives } from '../../../shared/paired-e2ee-primitives'
+import { derivePairedE2EEV2KeySchedule } from '../../../shared/paired-e2ee-v2-key-schedule'
 import {
   decrypt,
   decryptBytes,
@@ -25,5 +26,6 @@ export const WEB_PAIRED_E2EE_PRIMITIVES: PairedE2EEPrimitives = {
   sealLegacyText: encrypt,
   openLegacyText: decrypt,
   sealLegacyBinary: encryptBytes,
-  openLegacyBinary: decryptBytes
+  openLegacyBinary: decryptBytes,
+  deriveV2KeySchedule: derivePairedE2EEV2KeySchedule
 }

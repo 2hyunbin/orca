@@ -1,4 +1,5 @@
 import type { PairedE2EEPrimitives } from '../../../src/shared/paired-e2ee-primitives'
+import { derivePairedE2EEV2KeySchedule } from '../../../src/shared/paired-e2ee-v2-key-schedule'
 import { decodeBase64Bytes, encodeBase64Bytes } from './base64-byte-codec'
 import * as e2ee from './e2ee'
 
@@ -15,5 +16,6 @@ export const MOBILE_PAIRED_E2EE_PRIMITIVES: PairedE2EEPrimitives = {
   sealLegacyText: (plaintext, sharedKey) => e2ee.encrypt(plaintext, sharedKey),
   openLegacyText: (frame, sharedKey) => e2ee.decrypt(frame, sharedKey),
   sealLegacyBinary: (plaintext, sharedKey) => e2ee.encryptBytes(plaintext, sharedKey),
-  openLegacyBinary: (frame, sharedKey) => e2ee.decryptBytes(frame, sharedKey)
+  openLegacyBinary: (frame, sharedKey) => e2ee.decryptBytes(frame, sharedKey),
+  deriveV2KeySchedule: derivePairedE2EEV2KeySchedule
 }

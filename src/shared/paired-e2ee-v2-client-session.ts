@@ -5,11 +5,11 @@ import {
   type MobileE2EEV2Hello
 } from './mobile-e2ee-v2-contract'
 import { openMobileE2EEV2Frame, sealMobileE2EEV2Frame } from './mobile-e2ee-v2-framing'
-import type { PairedE2EEKeyPair, PairedE2EEPrimitives } from './paired-e2ee-primitives'
-import {
-  derivePairedE2EEV2KeySchedule,
-  type PairedE2EEV2KeySchedule
-} from './paired-e2ee-v2-key-schedule'
+import type {
+  PairedE2EEKeyPair,
+  PairedE2EEPrimitives,
+  PairedE2EEV2KeySchedule
+} from './paired-e2ee-primitives'
 
 export type PairedE2EEV2ClientSessionArgs = {
   primitives: PairedE2EEPrimitives
@@ -69,7 +69,7 @@ export class PairedE2EEV2ClientSession {
     if (!handshake || !equalBytes(handshake.desktopPublicKey, this.pinnedDesktopPublicKey)) {
       return false
     }
-    this.schedule = derivePairedE2EEV2KeySchedule({
+    this.schedule = this.primitives.deriveV2KeySchedule({
       sharedSecret: this.primitives.deriveSharedKey(
         this.clientSecretKey,
         this.pinnedDesktopPublicKey

@@ -9,6 +9,7 @@ import {
   publicKeyFromBase64,
   publicKeyToBase64
 } from './e2ee-crypto'
+import { deriveMobileE2EEV2KeySchedule } from './mobile-e2ee-v2-node-key-schedule'
 import type { PairedE2EEPrimitives } from './paired-e2ee-primitives'
 
 export const NODE_PAIRED_E2EE_PRIMITIVES: PairedE2EEPrimitives = {
@@ -22,5 +23,6 @@ export const NODE_PAIRED_E2EE_PRIMITIVES: PairedE2EEPrimitives = {
   sealLegacyText: encrypt,
   openLegacyText: decrypt,
   sealLegacyBinary: encryptBytes,
-  openLegacyBinary: decryptBytes
+  openLegacyBinary: decryptBytes,
+  deriveV2KeySchedule: deriveMobileE2EEV2KeySchedule
 }
