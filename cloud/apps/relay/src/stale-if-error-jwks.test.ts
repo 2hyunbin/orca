@@ -85,6 +85,17 @@ describe('relay token keys while auth is down', () => {
     expect(await verify(await relayToken(key))).toBeNull()
   })
 
+  it('fails closed in a process that has not fetched a set yet, as after a restart', async () => {
+    const key = await signingKey('auth-1')
+    const authServer = auth(key)
+    authServer.state.up = false
+    const jwks = createStaleIfErrorJWKSet(new URL(config.jwksUrl), { fetch: authServer.fetch })
+    const verify = createRelayTokenVerifier(config as RelayConfig, jwks)
+    expect(await verify(await relayToken(key))).toBeNull()
+    authServer.state.up = true
+    expect(await verify(await relayToken(key))).not.toBeNull()
+  })
+
   it('picks up a rotated key once auth is back, and drops the rotated-out one', async () => {
     const before = await signingKey('auth-1')
     const authServer = auth(before)

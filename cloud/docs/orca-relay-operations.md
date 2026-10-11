@@ -458,6 +458,14 @@ At connection headroom, queue, heap, or event-loop alerts:
 
 Never raise runtime admission or queued-byte limits during an incident without a load result proving memory headroom.
 
+## Auth outage and host token keys
+
+Cells and directors verify host relay tokens against auth's JWKS. When a refetch fails they keep verifying against the last set auth served for up to 30 minutes (`RELAY_JWKS_MAX_STALE_MS`), so a still-valid token is not refused while auth is down. A key the served set never had is always refused, and the first successful fetch replaces the set, so a rotation takes effect as soon as a process can reach auth.
+
+Relay tokens last 5 minutes, so an auth outage longer than about 6 minutes still disconnects every desktop: neither side can refresh. The stale set only keeps the tokens minted before the outage working until they expire.
+
+Emergency purge, after rotating a leaked signing key while some processes cannot reach auth: restart them (cells by the reviewed roll, the director by a blue/green deploy). A restarted process holds no set and refuses every host token until its first fetch from auth succeeds, so it fails closed. Do this only for a key compromise; for an ordinary outage, waiting is correct.
+
 ## Drain and SIGTERM
 
 Planned drain uses the authenticated admin endpoint and a reviewed grace that permits target-first registration and origin-owned operations to settle. Phones and desktops always recover through the configured director.
