@@ -839,9 +839,12 @@ describe('folder-workspace draft: seeded set == chat-opening set', () => {
     })
 
     const startup = mocks.activateAndRevealFolderWorkspace.mock.calls[0]?.[1]?.startup
-    const seeded = useAppStore.getState().nativeChatLaunchDraftByTabId['tab-1'] != null
+    const seededDraft = useAppStore.getState().nativeChatLaunchDraftByTabId['tab-1']
     // The draft always reaches the TUI, whichever way it is delivered.
     expect(`${startup?.command ?? ''}${startup?.draftPrompt ?? ''}`).toContain(ISSUE_URL)
-    expect(seeded).toBe(expectMirrored)
+    expect(seededDraft != null).toBe(expectMirrored)
+    if (expectMirrored) {
+      expect(seededDraft?.text).toBe(note ? `${note}\n\n${ISSUE_URL}` : ISSUE_URL)
+    }
   })
 })

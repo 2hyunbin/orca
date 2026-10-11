@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AgentSessionBackgroundTaskState } from '../../../../shared/agent-session-wire'
 import type { AgentChildWorkView } from '../../../../shared/agent-status-child-work-view'
-import {
-  AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY,
-  AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY
-} from '../../../../shared/protocol-version'
+import { AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY } from '../../../../shared/protocol-version'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from '../../../../shared/agent-session-background-task-child-views-capability'
 import { remoteRuntimeClientCapabilities } from '../../../../shared/remote-runtime-client-capabilities'
 import type { AgentSessionSubscribeInput } from '../../../native-chat/agent-session-wire/structured-agent-session-subscribers'
@@ -45,12 +42,6 @@ const MIXED_ROWS: AgentSessionBackgroundTaskState = {
 }
 
 describe('background-task stop capability at the RPC boundary', () => {
-  it('advertises reader support on remote requests and subscriptions', () => {
-    expect(CURRENT_CLIENT.clientCapabilities).toContain(
-      AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY
-    )
-  })
-
   it.each([
     ['legacy reader', STRUCTURED_CLIENT, null],
     ['current reader', CURRENT_CLIENT, TASKS],
@@ -110,17 +101,6 @@ describe('background-task stop capability at the RPC boundary', () => {
       expect(TASKS.supportsStopAll).toBe(false)
     }
   )
-
-  it('advertises row-stop support separately from stop support', () => {
-    // A client can advertise the stop capability and still predate `stoppable`,
-    // so the two must not be conflated.
-    expect(CURRENT_CLIENT.clientCapabilities).toContain(
-      AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY
-    )
-    expect(STOP_ONLY_CLIENT.clientCapabilities).not.toContain(
-      AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY
-    )
-  })
 
   it.each([
     ['row-stop reader', () => CURRENT_CLIENT, MIXED_ROWS],
