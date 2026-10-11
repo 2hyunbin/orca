@@ -125,7 +125,7 @@ function findUnresolvedDaemonRequires(paths) {
     } catch {
       // Reported below.
     }
-    if (!resolved || relative(bundle, resolved).startsWith('..' + sep)) {
+    if (!resolved || relative(bundle, resolved).startsWith(`..${sep}`)) {
       problems.push(`${specifier} resolves to ${resolved ?? 'nothing'}, not inside the helper`)
     }
   }
