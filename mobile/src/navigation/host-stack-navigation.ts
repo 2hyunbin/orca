@@ -261,13 +261,17 @@ export function coordinateHostStackNavigation(
 
 type CommittedRootStack = HostStackNavigationState & Readonly<{ key: string }>
 
+function isCommittedRootStack(state: HostStackNavigationState): state is CommittedRootStack {
+  return Boolean(state.key) && state.routeNames?.includes('h') === true
+}
+
 function committedRootStack(
   state: HostStackNavigationState | undefined
 ): CommittedRootStack | null {
   let current = state
   while (current) {
-    if (current.key && current.routeNames?.includes('h')) {
-      return { ...current, key: current.key }
+    if (isCommittedRootStack(current)) {
+      return current
     }
     current = current.routes[current.index]?.state
   }
@@ -281,11 +285,11 @@ export function workspaceLanding(
   target: HostStackRouteTarget
 ): HostStackResetAction {
   const firstArea = root.routes.findIndex((route) => route.name === 'h')
-  const area = firstArea === -1 ? undefined : root.routes[firstArea]
+  const below = firstArea === -1 ? root.routes : root.routes.slice(0, firstArea)
+  const area = root.routes[below.length]
   const list = area?.state?.routes.find(
     (route) => route.name === '[hostId]/index' && hostParamMatches(route.params?.hostId, hostId)
   ) ?? { name: '[hostId]/index', params: { hostId } }
-  const below = firstArea === -1 ? root.routes : root.routes.slice(0, firstArea)
   return {
     type: 'RESET',
     target: root.key,
@@ -308,7 +312,6 @@ export function landOnWorkspace(
   if (updateFocusedTarget(navigation, hostId, target)) {
     return SETTLED_NAVIGATION
   }
-  let selectedTarget = target
   let active = true
   let unsubscribe = () => {}
   const land = (): void => {
@@ -318,7 +321,7 @@ export function landOnWorkspace(
     }
     active = false
     unsubscribe()
-    navigation.dispatch(workspaceLanding(root, hostId, selectedTarget))
+    navigation.dispatch(workspaceLanding(root, hostId, target))
   }
   // Why: a cold-start tap arrives before the root stack has committed any state.
   unsubscribe = navigation.addListener('state', land)
@@ -329,8 +332,6 @@ export function landOnWorkspace(
       unsubscribe()
     },
     isActive: () => active,
-    retarget: (nextTarget) => {
-      selectedTarget = nextTarget
-    }
+    retarget: () => {}
   }
 }

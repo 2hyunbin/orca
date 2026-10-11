@@ -35,45 +35,36 @@ const HOME = { key: 'index', name: 'index' }
 const SETTINGS = { key: 'terminal-settings', name: 'terminal-settings' }
 
 describe('workspaceLanding leaves [workspace list, Y] in one host area', () => {
+  const hostList = list('host')
+  const freshList = { name: '[hostId]/index', params: { hostId: 'host' } }
+
   it.each([
-    ['the workspace list', [HOME], [list('host')], 'reused'],
-    ['workspace X', [HOME], [list('host'), session('X')], 'reused'],
-    ['X with Y deeper', [HOME], [list('host'), session('Y'), session('X')], 'reused'],
+    ['the workspace list', [hostList], hostList],
+    ['workspace X', [hostList, session('X')], hostList],
+    ['X with Y deeper', [hostList, session('Y'), session('X')], hostList],
     [
       'a sub-route of Y',
-      [HOME],
-      [list('host'), session('Y'), session('Y', '[hostId]/source-control/[worktreeId]')],
-      'reused'
+      [hostList, session('Y'), session('Y', '[hostId]/source-control/[worktreeId]')],
+      hostList
     ],
-    ["another host's workspace", [HOME], [list('other'), session('X')], 'fresh']
-  ] as const)('from %s', (_from, below, hostRoutes, listing) => {
+    ["another host's workspace", [list('other'), session('X')], freshList]
+  ])('from %s', (_from, hostRoutes, landedList) => {
     const area = hostArea(...hostRoutes)
-    const landing = workspaceLanding(rootStack(...below, area), 'host', Y)
+    const landing = workspaceLanding(rootStack(HOME, area), 'host', Y)
 
     expect(landing).toEqual({
       type: 'RESET',
       target: 'root',
       payload: {
-        index: below.length,
-        routes: [
-          ...below,
-          {
-            ...area,
-            state: {
-              index: 1,
-              routes: [{ name: '[hostId]/index', params: { hostId: 'host' } }, Y].map((route, i) =>
-                i === 0 && listing === 'reused' ? hostRoutes[0] : route
-              )
-            }
-          }
-        ]
+        index: 1,
+        routes: [HOME, { ...area, state: { index: 1, routes: [landedList, Y] } }]
       }
     })
-    const landedArea = landing.payload.routes[below.length]
+    const landedArea = landing.payload.routes[1]
     expect(landedArea?.key).toBe(area.key)
     expect(landedArea?.params).toBe(area.params)
-    if (listing === 'reused') {
-      expect(landedArea?.state?.routes[0]).toBe(hostRoutes[0])
+    if (landedList === hostList) {
+      expect(landedArea?.state?.routes[0]).toBe(hostList)
     }
   })
 
@@ -88,7 +79,7 @@ describe('workspaceLanding leaves [workspace list, Y] in one host area', () => {
     expect(landing.payload.routes).toHaveLength(2)
   })
 
-  it('on cold start, with no host area yet', () => {
+  it('from Home, with no host area', () => {
     expect(workspaceLanding(rootStack(HOME), 'host', Y)).toEqual({
       type: 'RESET',
       target: 'root',
