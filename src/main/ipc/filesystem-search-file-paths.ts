@@ -23,7 +23,8 @@ import {
   RipgrepLaunchFailureError,
   RipgrepUnavailableError
 } from '../../shared/ripgrep-process-availability'
-import { parseWslPath, toWindowsWslPath } from '../wsl'
+import { toWindowsWslPath } from '../wsl'
+import { resolveBundledRipgrepWslRouting } from '../ripgrep/bundled-ripgrep-wsl-routing'
 import { resolveAuthorizedPath } from './filesystem-auth'
 import { getLocalGitOptionsForRegisteredWorktree } from './local-worktree-runtime-options'
 import { QuickOpenSubprocessPathAccumulator } from '../../shared/quick-open-subprocess-path-accumulator'
@@ -57,7 +58,10 @@ export async function searchQuickOpenFilePaths(
     rootPath,
     authorizedRootPath
   )
-  const wslDistroForOutput = parseWslPath(authorizedRootPath)?.distro ?? localGitOptions.wslDistro
+  const { wslDistro, wslDistroForOutput } = resolveBundledRipgrepWslRouting(
+    authorizedRootPath,
+    localGitOptions.wslDistro
+  )
 
   const excludePathPrefixes = [
     ...new Set([
@@ -78,7 +82,7 @@ export async function searchQuickOpenFilePaths(
       args: args.includeIgnored === false ? primary : ignoredPass,
       authorizedRootPath,
       excludePathPrefixes,
-      localGitOptions,
+      wslDistro,
       ranker,
       signal: args.signal,
       wslDistroForOutput
@@ -110,7 +114,7 @@ function scanRipgrepPaths(args: {
   args: string[]
   authorizedRootPath: string
   excludePathPrefixes: readonly string[]
-  localGitOptions: { wslDistro?: string }
+  wslDistro?: string
   ranker: QuickOpenPathRanker
   signal?: AbortSignal
   wslDistroForOutput?: string
@@ -132,7 +136,7 @@ function scanRipgrepPaths(args: {
     try {
       child = spawnBundledRipgrep(args.args, {
         cwd: args.authorizedRootPath,
-        wslDistro: args.localGitOptions.wslDistro,
+        wslDistro: args.wslDistro,
         wslDistroForOutput: args.wslDistroForOutput,
         stdio: ['ignore', 'pipe', 'pipe']
       })
