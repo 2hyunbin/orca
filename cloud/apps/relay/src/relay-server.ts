@@ -161,6 +161,8 @@ export function createRelayServer(
   const relayJwks = createRemoteJWKSet(new URL(config.jwksUrl))
   const verifyRelayToken = createRelayTokenVerifier(config, relayJwks)
   const store = new RelayCredentialStore(observedDatabase, options.now)
+  // Bound once the poller below exists; without one, no poll ever reads as dead.
+  const pollEvidence: { pollsDead?: (cellId: string, now: number) => boolean } = {}
   const assignments = new RelayAssignmentStore(observedDatabase, options.now, {
     requireLiveCells: config.role === 'director',
     placementLoadBand: config.role === 'director' ? new PlacementLoadBand(options.random) : undefined,
@@ -169,7 +171,8 @@ export function createRelayServer(
     regionalRehomeDirectorRegion:
       config.role === 'director' ? (config.region ?? RELAY_DEFAULT_REGION) : undefined,
     recordControlRenewal: (durationMs, outcome) =>
-      observability.recordControlRenewal?.(durationMs, outcome)
+      observability.recordControlRenewal?.(durationMs, outcome),
+    cellPollsDead: (cellId, now) => pollEvidence.pollsDead?.(cellId, now) ?? false
   })
   const readiness = createRelayReadiness(observedDatabase, config.jwksUrl, {
     jwksGraceMs: config.readinessJwksGraceMs,
@@ -185,6 +188,7 @@ export function createRelayServer(
     listCells: () => assignments.seatFeedCells(),
     reserver: () => placing.on
   })
+  pollEvidence.pollsDead = shadowSeatPoller?.pollsDead
   const shadowCompare = shadowSeatPoller
     ? new ShadowDirectoryCompare(shadowSeatPoller.directory, options.now)
     : undefined

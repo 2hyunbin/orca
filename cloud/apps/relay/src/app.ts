@@ -577,19 +577,14 @@ export function createRelayApp(
         if (!current) return context.json({ error: 'assignment_not_found' }, 409)
         assignment = current
       } else {
-        // Without step 5 the call is exactly today's.
-        const step5Active = step5.epochFloor !== undefined || step5.placeFresh !== undefined
-        assignment = step5Active
-          ? await operations.assignments.assign(
-              identity,
-              requestedRegion,
-              requestedRegion ? targetRegion : undefined,
-              undefined,
-              step5
-            )
-          : requestedRegion
-            ? await operations.assignments.assign(identity, requestedRegion, targetRegion)
-            : await operations.assignments.assign(identity)
+        // The host asked: it may leave a reserve cell the director proves dead.
+        assignment = await operations.assignments.assign(
+          identity,
+          requestedRegion,
+          requestedRegion ? targetRegion : undefined,
+          undefined,
+          { ...step5, hostRequested: true }
+        )
       }
       if (body.data.regionCorrection) {
         try {

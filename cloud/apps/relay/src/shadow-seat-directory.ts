@@ -1,5 +1,6 @@
 import type { RelayRegion } from '@orca-cloud/relay-contract'
 import { z } from 'zod'
+import { CellPollReachability, isNoBackendStatus } from './cell-poll-reachability.js'
 import type { RelayConfig } from './config.js'
 import { googleMetadataIdentityToken, reusedIdentityToken } from './google-metadata-identity-token.js'
 
@@ -612,6 +613,8 @@ export type ShadowSeatPoller = {
   startedAt: number
   // One round: refreshes the cell list when due, then polls every idle cell.
   tick: () => Promise<void>
+  // This director's polls have gone unanswered long enough to count as death evidence.
+  pollsDead: (cellId: string, now: number) => boolean
   stop: () => void
 }
 
@@ -637,6 +640,7 @@ export function startShadowSeatPoller(
     options.identityToken ??
     ((tokenAudience: string) => googleMetadataIdentityToken(tokenAudience, fetchImpl))
   const directory = new ShadowSeatDirectory()
+  const reachability = new CellPollReachability()
   const startedAt = now()
   const inFlight = new Set<string>()
   let cells: SeatFeedCell[] = []
@@ -671,6 +675,7 @@ export function startShadowSeatPoller(
           )
         }
       )
+      reachability.forget(new Set(cells.map((cell) => cell.cellId)))
       cellsReadAt = now()
       cellListFailures = 0
     } catch (error) {
@@ -699,11 +704,18 @@ export function startShadowSeatPoller(
     if (since !== undefined) url.searchParams.set('since', since)
     // Placing on reserve cells: keeps each cell's dead-man from flipping it back to db.
     if (options.reserver?.()) url.searchParams.set('reserver', '1')
+    // Outside the request: a token this director cannot mint says nothing about the cell.
+    const token = await identity()
     const response = await fetchImpl(url, {
-      headers: { authorization: `Bearer ${await identity()}` },
+      headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(SHADOW_SEAT_POLL_TIMEOUT_MS)
+    }).catch((error: unknown) => {
+      reachability.unanswered(cell.cellId, now())
+      throw error
     })
     if (stopped) return false
+    if (isNoBackendStatus(response.status)) reachability.unanswered(cell.cellId, now())
+    else reachability.answered(cell.cellId)
     if (response.status === 404) {
       await response.body?.cancel().catch(() => undefined)
       directory.markNoFeed(cell.cellId, now(), cell.incarnation)
@@ -770,6 +782,7 @@ export function startShadowSeatPoller(
     cells: () => cells,
     startedAt,
     tick: () => round(true),
+    pollsDead: (cellId, at) => reachability.dead(cellId, cells.length, at),
     stop: () => {
       stopped = true
       clearInterval(timer)
