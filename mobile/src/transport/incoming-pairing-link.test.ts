@@ -68,6 +68,7 @@ describe('redirectIncomingPairingLink', () => {
     expect(redirectIncomingPairingLink('orca://pairing')).toBeNull()
     expect(redirectIncomingPairingLink('orca://h/host-1?notice=x#y')).toBeNull()
     expect(redirectIncomingPairingLink('orca://pair-scan')).toBeNull()
+    expect(redirectIncomingPairingLink('orca://h/host-1/session/pair')).toBeNull()
     expect(redirectIncomingPairingLink('/settings')).toBeNull()
   })
 })

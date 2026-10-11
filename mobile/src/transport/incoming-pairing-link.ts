@@ -46,8 +46,12 @@ export function redirectIncomingPairingLink(
   if ([...target.searchParams.keys()].some((key) => key.toLowerCase() === 'code')) {
     return REFUSED_PATH
   }
-  const segments = target.pathname.split('/').map((segment) => safeDecode(segment).toLowerCase())
-  if (!segments.some((segment) => PAIRING_ROUTES.has(segment))) {
+  // Pairing screens are top-level routes; groups like `(tabs)` don't count as segments.
+  const route = target.pathname
+    .split('/')
+    .map((segment) => safeDecode(segment).toLowerCase())
+    .find((segment) => segment !== '' && !/^\(.*\)$/.test(segment))
+  if (!route || !PAIRING_ROUTES.has(route)) {
     return null
   }
   // Why the outer hash too: the router drops it, but a legacy `orca://pair#<code>` still earns the notice.
