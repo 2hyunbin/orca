@@ -11,7 +11,7 @@ vi.mock('@/i18n/i18n', () => ({
     fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => options?.[name] ?? '')
 }))
 
-import { PairingApprovalDialog } from './PairingApprovalDialog'
+import { PAIRING_APPROVAL_ARMING_DELAY_MS, PairingApprovalDialog } from './PairingApprovalDialog'
 import { PairingApprovalHost } from './PairingApprovalHost'
 
 const base = {
@@ -30,10 +30,32 @@ const replacement: PairingApprovalPrompt = {
   replaces: ['Laptop browser']
 }
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
+
+function arm(): void {
+  act(() => {
+    vi.advanceTimersByTime(PAIRING_APPROVAL_ARMING_DELAY_MS)
+  })
+}
 
 describe('PairingApprovalDialog', () => {
+  it('keeps Allow disarmed briefly, so a click meant for a withdrawn prompt cannot approve this one', () => {
+    vi.useFakeTimers()
+    const onAnswer = vi.fn()
+    render(<PairingApprovalDialog prompt={compare} onAnswer={onAnswer} />)
+    const allow = screen.getByRole('button', { name: 'Allow' })
+    expect(allow).toBeDisabled()
+    fireEvent.click(allow)
+    expect(onAnswer).not.toHaveBeenCalled()
+    arm()
+    expect(allow).toBeEnabled()
+  })
+
   it('shows host, authority, device, key and the code, and allows on request', () => {
+    vi.useFakeTimers()
     const onAnswer = vi.fn()
     render(
       <PairingApprovalDialog
@@ -48,6 +70,7 @@ describe('PairingApprovalDialog', () => {
     expect(screen.getByText('Laptop browser')).toBeInTheDocument()
     expect(screen.getByText('aaaa bbbb cccc dddd')).toBeInTheDocument()
     expect(screen.getByTestId('pairing-comparison-code')).toHaveTextContent('KMGVTD')
+    arm()
     fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
     expect(onAnswer).toHaveBeenCalledWith({ requestId: base.requestId, decision: 'allow' })
   })
@@ -62,11 +85,13 @@ describe('PairingApprovalDialog', () => {
   })
 
   it('makes the owner type the device code before a replacement, never showing it', () => {
+    vi.useFakeTimers()
     const onAnswer = vi.fn()
     render(<PairingApprovalDialog prompt={replacement} onAnswer={onAnswer} />)
     expect(screen.queryByTestId('pairing-comparison-code')).toBeNull()
     expect(screen.getByText(/replaces Laptop browser/)).toBeInTheDocument()
     const allow = screen.getByRole('button', { name: 'Allow' })
+    arm()
     expect(allow).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Type the code shown on the new device'), {
       target: { value: 'kmg-vtd' }
@@ -83,6 +108,7 @@ describe('PairingApprovalDialog', () => {
 
 describe('PairingApprovalHost', () => {
   it('shows host prompts one at a time, drops withdrawn ones and sends answers', () => {
+    vi.useFakeTimers()
     let requested: (prompt: PairingApprovalPrompt) => void = () => {}
     let cancelled: (detail: { requestId: string }) => void = () => {}
     const answerPairingApproval = vi.fn(async () => true)
@@ -117,6 +143,7 @@ describe('PairingApprovalHost', () => {
     expect(screen.getByText('Laptop browser')).toBeInTheDocument()
     act(() => cancelled({ requestId: compare.requestId }))
     expect(screen.getByText('Tablet')).toBeInTheDocument()
+    arm()
     fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
     expect(answerPairingApproval).toHaveBeenCalledWith({
       requestId: second.requestId,

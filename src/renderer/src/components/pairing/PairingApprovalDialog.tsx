@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,6 +19,9 @@ import type {
   PairingApprovalAnswer,
   PairingApprovalPrompt
 } from '../../../../shared/pairing-approval-prompt'
+
+// Why: a click aimed at a prompt the host just withdrew must not approve the next queued one.
+export const PAIRING_APPROVAL_ARMING_DELAY_MS = 700
 
 function authorityDescription(prompt: PairingApprovalPrompt): string {
   const base =
@@ -47,6 +50,11 @@ export function PairingApprovalDialog({
   onAnswer: (answer: PairingApprovalAnswer) => void
 }): React.JSX.Element {
   const [typedCode, setTypedCode] = useState('')
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setArmed(true), PAIRING_APPROVAL_ARMING_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [])
   const typing = prompt.mode === 'type-to-confirm'
   const typedComplete =
     normalizeTypedComparisonCode(typedCode).length === PAIRING_COMPARISON_CODE_LENGTH
@@ -130,7 +138,7 @@ export function PairingApprovalDialog({
           <Button variant="ghost" size="sm" onClick={deny}>
             {translate('auto.components.pairing.PairingApprovalDialog.deny', 'Deny')}
           </Button>
-          <Button size="sm" onClick={allow} disabled={typing && !typedComplete}>
+          <Button size="sm" onClick={allow} disabled={!armed || (typing && !typedComplete)}>
             {translate('auto.components.pairing.PairingApprovalDialog.allow', 'Allow')}
           </Button>
         </DialogFooter>
