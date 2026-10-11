@@ -13,7 +13,7 @@ const {
   writeFileSync
 } = require('node:fs')
 const { builtinModules } = require('node:module')
-const { dirname, join, relative, resolve, sep } = require('node:path')
+const { basename, dirname, join, relative, resolve, sep } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const MAC_TERMINAL_HOST_NAME = 'Orca Terminal Host'
@@ -108,36 +108,48 @@ function daemonBareRequires(outMainDir) {
   return [...specifiers].sort()
 }
 
-/** Copies each package the daemon requires, and its dependencies, from the app's node_modules. */
+/** Where Node loads package `name` from when required inside `fromDir`, never above `nodeModules`. */
+function resolvePackageDir(name, fromDir, nodeModules) {
+  for (let dir = fromDir; ; dir = dirname(dir)) {
+    const candidate =
+      basename(dir) === 'node_modules' ? join(dir, name) : join(dir, 'node_modules', name)
+    if (existsSync(join(candidate, 'package.json'))) {
+      return candidate
+    }
+    if (!dir.startsWith(`${nodeModules}${sep}`)) {
+      return null
+    }
+  }
+}
+
+/** Copies each package the daemon requires, and its dependencies, to the same relative place. */
 function copyDaemonPackages(outMainDir, sourceNodeModules, targetNodeModules) {
   const pending = daemonBareRequires(outMainDir)
     .map(packageNameOf)
     .filter((name) => !PACKAGES_NOT_COPIED.has(name))
-    .map((name) => ({ name, parent: null }))
+    .map((name) => ({ name, from: sourceNodeModules }))
   const copied = new Set()
   while (pending.length > 0) {
-    const { name, parent } = pending.pop()
-    // A dependency nested under its parent was copied with it.
-    if (copied.has(name) || (parent && existsSync(join(parent, 'node_modules', name)))) {
+    const { name, from } = pending.pop()
+    const source = resolvePackageDir(name, from, sourceNodeModules)
+    if (!source) {
+      throw new Error(`[macos-terminal-host] the daemon requires ${name}, missing from ${from}`)
+    }
+    if (copied.has(source)) {
       continue
     }
-    const source = join(sourceNodeModules, name)
-    if (!existsSync(join(source, 'package.json'))) {
-      throw new Error(
-        `[macos-terminal-host] the daemon requires ${name}, missing from ${sourceNodeModules}`
-      )
+    // A package nested inside one already copied came along with it.
+    if (![...copied].some((parent) => source.startsWith(`${parent}${sep}`))) {
+      cpSync(source, join(targetNodeModules, relative(sourceNodeModules, source)), {
+        recursive: true
+      })
     }
-    cpSync(source, join(targetNodeModules, name), { recursive: true })
-    copied.add(name)
+    copied.add(source)
     const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8'))
     pending.push(
-      ...Object.keys(manifest.dependencies ?? {}).map((dependency) => ({
-        name: dependency,
-        parent: source
-      }))
+      ...Object.keys(manifest.dependencies ?? {}).map((dep) => ({ name: dep, from: source }))
     )
   }
-  return [...copied].sort()
 }
 
 /** Bare requires that do not resolve to a file inside the helper bundle. */

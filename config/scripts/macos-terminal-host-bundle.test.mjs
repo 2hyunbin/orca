@@ -296,6 +296,36 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
     )
   })
 
+  it("copies a nested package's dependency from wherever Node resolves it", () => {
+    const resources = join(appPath, 'Contents', 'Resources')
+    writeFileSync(
+      join(resources, 'app.asar.unpacked', 'out', 'main', 'daemon-entry.js'),
+      "require('b')"
+    )
+    const modules = join(resources, 'node_modules')
+    const packages = {
+      b: { dependencies: { c: '2' } },
+      // The top-level c is another version; b gets its own nested copy.
+      c: {},
+      [join('b', 'node_modules', 'c')]: { dependencies: { e: '1' } },
+      e: {}
+    }
+    for (const [dir, manifest] of Object.entries(packages)) {
+      mkdirSync(join(modules, dir), { recursive: true })
+      writeFileSync(join(modules, dir, 'package.json'), JSON.stringify(manifest))
+    }
+    const paths = assembleMacTerminalHost({
+      appPath,
+      nodeExecutable: join(root, 'node'),
+      iconPath: join(root, 'icon.icns'),
+      info: {}
+    })
+    const helperModules = join(paths.daemon, 'node_modules')
+    expect(existsSync(join(helperModules, 'b', 'node_modules', 'c', 'package.json'))).toBe(true)
+    expect(existsSync(join(helperModules, 'e', 'package.json'))).toBe(true)
+    expect(existsSync(join(helperModules, 'c'))).toBe(false)
+  })
+
   it.each([
     ['a variable', 'const name = pick();require(name)'],
     ['a concatenated literal', "require('yaml' + suffix)"],
