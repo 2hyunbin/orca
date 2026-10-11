@@ -11,6 +11,7 @@ export type RecentlyClosedTabPosition = {
  *  membership, which makes close-all cubic in the tab count. */
 export type RecentlyClosedTabPositionIndex = {
   positionFor: (entityId: string) => RecentlyClosedTabPosition | undefined
+  positionForTabId: (tabId: string) => RecentlyClosedTabPosition | undefined
 }
 
 export function createRecentlyClosedTabPositionIndex(
@@ -75,6 +76,20 @@ export function createRecentlyClosedTabPositionIndex(
   }
 
   return {
+    positionForTabId: (tabId) => {
+      const tab = tabById.get(tabId)
+      const group = tab ? groupById.get(tab.groupId) : undefined
+      const groupIndex = group ? tabOrderIndexByGroupId.get(group.id)?.get(tabId) : undefined
+      if (!group || groupIndex === undefined) {
+        return undefined
+      }
+      const tabBarIndex = tabBarIndexByEntityId.get(tabId)
+      return {
+        groupId: group.id,
+        groupIndex,
+        ...(tabBarIndex === undefined ? {} : { tabBarIndex })
+      }
+    },
     positionFor: (entityId) => {
       const tabBarIndex = tabBarOrder ? (tabBarIndexByEntityId.get(entityId) ?? -1) : -1
       const unifiedTab = tabByEntityId.get(entityId)
@@ -92,6 +107,14 @@ export function createRecentlyClosedTabPositionIndex(
       }
     }
   }
+}
+
+export function getRecentlyClosedTabPositionByTabId(
+  state: Pick<AppState, 'tabBarOrderByWorktree' | 'groupsByWorktree' | 'unifiedTabsByWorktree'>,
+  worktreeId: string,
+  tabId: string
+): RecentlyClosedTabPosition | undefined {
+  return createRecentlyClosedTabPositionIndex(state, worktreeId).positionForTabId(tabId)
 }
 
 export function getRecentlyClosedTabPosition(

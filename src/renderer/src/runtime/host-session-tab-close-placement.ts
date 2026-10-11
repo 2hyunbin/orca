@@ -1,7 +1,7 @@
 import type { WebSessionTabsSyncState } from './web-session-tabs-sync/state'
 import { resolveLocalTabIdForHostSessionTab } from './web-session-tabs-sync/tracking-mappings'
 import {
-  getRecentlyClosedTabPosition,
+  getRecentlyClosedTabPositionByTabId,
   insertTabAtRecentlyClosedPosition
 } from '../store/slices/recently-closed-tab-position'
 
@@ -27,7 +27,7 @@ export function captureHostSessionTabClosePlacement(
   if (!tab) {
     return undefined
   }
-  const position = getRecentlyClosedTabPosition(state, worktreeId, tab.entityId)
+  const position = getRecentlyClosedTabPositionByTabId(state, worktreeId, tab.id)
   const group = state.groupsByWorktree[worktreeId]?.find(
     (candidate) => candidate.id === position?.groupId
   )

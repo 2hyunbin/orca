@@ -103,10 +103,10 @@ export function prepareWebSessionTabsSnapshotGroups(
       }
     }
     if (options?.closeRestoration) {
-      placementMoves.push({
-        tabId: options.closeRestoration.localTabId,
-        groupId: options.closeRestoration.groupId
-      })
+      const restoredTabId = hostToLocalTabId.get(options.closeRestoration.hostTabId)
+      if (restoredTabId) {
+        placementMoves.push({ tabId: restoredTabId, groupId: options.closeRestoration.groupId })
+      }
     }
     const adoptedTabs = mirroredUnifiedTabs
       .filter((tab) => !knownGroupTabIds.has(tab.id))

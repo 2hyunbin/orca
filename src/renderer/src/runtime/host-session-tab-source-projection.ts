@@ -1,8 +1,17 @@
+import { parseExecutionHostId, toSshExecutionHostId } from '../../../shared/execution-host'
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
+import { resolveExplicitWorktreeOperationRouteResult } from '../lib/worktree-operation-catalog-route'
+import { resolveStrictWorktreeOperationRouteResultForHost } from '../lib/worktree-operation-route'
+import type {
+  WorktreeOperationRouteResolution,
+  WorktreeOperationRouteState
+} from '../lib/worktree-operation-route'
+import { getExplicitRuntimeEnvironmentIdForFolderWorkspace } from '../lib/folder-workspace-runtime-owner'
 import {
-  getExecutionHostIdForWorktree,
-  getKnownExecutionHostIdForWorktree
-} from '../lib/worktree-runtime-owner'
-import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
+  findIndexedFolderWorkspaceOwner,
+  findIndexedProjectGroupOwner
+} from '../lib/worktree-runtime-owner-index'
+import { routeForOwner } from '../lib/worktree-owner-route'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
 import {
   localStructuredSessionGeneration,
@@ -29,6 +38,35 @@ import {
   survivingHostSessionTabClosePlacement
 } from './host-session-tab-close-placement'
 import type { WebSessionCloseIntentTicket } from './web-session-close-intent'
+import { resolveLocalTabIdForHostSessionTab } from './web-session-tabs-sync/tracking-mappings'
+
+function resolveSourceWorkspaceOwner(
+  state: WorktreeOperationRouteState,
+  worktreeId: string
+): WorktreeOperationRouteResolution {
+  const scope = parseWorkspaceKey(worktreeId)
+  if (scope?.type !== 'folder') {
+    return resolveExplicitWorktreeOperationRouteResult(state, worktreeId)
+  }
+  const folder = findIndexedFolderWorkspaceOwner(state.folderWorkspaces, scope.folderWorkspaceId)
+  if (!folder) {
+    return state.folderWorkspaces?.some((row) => row.id === scope.folderWorkspaceId)
+      ? { kind: 'ambiguous' }
+      : { kind: 'missing' }
+  }
+  const group = findIndexedProjectGroupOwner(state.projectGroups, folder.projectGroupId)
+  if (!group && state.projectGroups?.some((row) => row.id === folder.projectGroupId)) {
+    return { kind: 'ambiguous' }
+  }
+  const host = parseExecutionHostId(folder.executionHostId ?? group?.executionHostId)
+  const connectionId = folder.connectionId?.trim() || group?.connectionId?.trim()
+  const route = routeForOwner({
+    hostId: host?.id ?? (connectionId ? toSshExecutionHostId(connectionId) : undefined),
+    runtimeOwnerEnvironmentId:
+      getExplicitRuntimeEnvironmentIdForFolderWorkspace(state, scope.folderWorkspaceId) ?? undefined
+  })
+  return route ? { kind: 'resolved', route } : { kind: 'missing' }
+}
 
 export function reprojectHostSessionTabSource(ticket: WebSessionCloseIntentTicket): void {
   const { owner, worktreeId } = ticket
@@ -92,19 +130,41 @@ export function reprojectHostSessionTabSource(ticket: WebSessionCloseIntentTicke
   }
   applyWebSessionTabsStorePatch(
     (state) => {
-      const knownOwner = getKnownExecutionHostIdForWorktree(state, worktreeId)
-      const expectedOwner = local ? 'local' : toRuntimeExecutionHostId(owner.environmentId)
-      if (knownOwner !== null && knownOwner !== expectedOwner) {
+      const catalog = resolveSourceWorkspaceOwner(state, worktreeId)
+      const host =
+        state.activeWorktreeId === worktreeId
+          ? parseExecutionHostId(state.activeWorkspaceExecutionHostId)
+          : null
+      const selected = host
+        ? catalog.kind === 'resolved' && catalog.route.executionHostId === host.id
+          ? catalog
+          : resolveStrictWorktreeOperationRouteResultForHost(state, worktreeId, host.id)
+        : ({ kind: 'missing' } as const)
+      // A catalog gap is silence; the captured pairing/generation remains the recovery fence.
+      if (
+        [catalog, selected].some(
+          (resolution) =>
+            resolution.kind === 'ambiguous' ||
+            (resolution.kind === 'resolved' &&
+              (local
+                ? resolution.route.executionHostId !== 'local' ||
+                  resolution.route.runtimeEnvironmentId !== null
+                : resolution.route.runtimeEnvironmentId !== owner.environmentId))
+        )
+      ) {
         return state
       }
-      if (local && getExecutionHostIdForWorktree(state, worktreeId) !== 'local') {
-        return state
-      }
-      const closeRestoration = state.unifiedTabsByWorktree[worktreeId]?.some(
-        (tab) => tab.id === ticket.placement?.localTabId
+      const currentTabId = resolveLocalTabIdForHostSessionTab({
+        environmentId: owner.environmentId,
+        worktreeId,
+        hostTabId: ticket.closedId
+      })
+      const placement = state.unifiedTabsByWorktree[worktreeId]?.some(
+        (tab) => tab.id === currentTabId
       )
         ? undefined
         : survivingHostSessionTabClosePlacement(state, worktreeId, ticket.placement)
+      const closeRestoration = placement ? { ...placement, hostTabId: ticket.closedId } : undefined
       const patch = applyWebSessionTabsSnapshot(
         state,
         projection,
@@ -122,14 +182,18 @@ export function reprojectHostSessionTabSource(ticket: WebSessionCloseIntentTicke
             : {})
         }
       )
-      return closeRestoration
+      const restoredTabId = resolveLocalTabIdForHostSessionTab({
+        environmentId: owner.environmentId,
+        worktreeId,
+        hostTabId: ticket.closedId
+      })
+      return closeRestoration && restoredTabId
         ? {
             ...patch,
-            ...applyHostSessionTabClosePlacement(
-              { ...state, ...patch },
-              worktreeId,
-              closeRestoration
-            )
+            ...applyHostSessionTabClosePlacement({ ...state, ...patch }, worktreeId, {
+              ...closeRestoration,
+              localTabId: restoredTabId
+            })
           }
         : patch
     },

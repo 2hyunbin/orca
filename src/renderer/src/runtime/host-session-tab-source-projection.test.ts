@@ -21,6 +21,10 @@ import {
 } from './web-session-close-intent'
 import { rereadHostSessionTabs, settleHostSessionTabClose } from './host-session-tab-close'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from './local-structured-session-owner'
+import { makeWorktree } from './host-session-mirror-frame-fixtures'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import { createGlobalSettingsFixture } from '../../../shared/global-settings-test-fixture'
 
 vi.mock('./web-runtime-session-snapshot', () => ({
   refreshWebRuntimeSessionTabsSnapshot: async () => {
@@ -33,9 +37,19 @@ vi.mock('./local-structured-session-tabs-sync/inventory-refresh', () => ({
   }
 }))
 
-const WT = 'folder-workspace'
+let WT = 'folder-workspace'
 const ENV = 'paired-host'
 const initial = useAppStore.getState()
+const otherEnvironment = {
+  id: 'other-host',
+  name: 'other',
+  createdAt: 0,
+  updatedAt: 0,
+  lastUsedAt: null,
+  runtimeId: null,
+  endpoints: [],
+  preferredEndpointId: 'other'
+}
 
 function frame(version = 1, ids = ['a', 'b', 'c']): RuntimeMobileSessionTabsResult {
   return {
@@ -135,10 +149,19 @@ function start(local = false) {
 }
 
 beforeEach(() => {
+  WT = 'folder-workspace'
   vi.useFakeTimers()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   replaceRuntimeEnvironmentRevisions([{ id: ENV, createdAt: 0, pairingRevision: 3 }])
-  useAppStore.setState({ activeWorktreeId: WT })
+  useAppStore.setState({
+    activeWorktreeId: WT,
+    activeWorkspaceExecutionHostId: null,
+    repos: [],
+    worktreesByRepo: {},
+    detectedWorktreesByRepo: {},
+    folderWorkspaces: [],
+    projectGroups: []
+  })
 })
 
 afterEach(() => {
@@ -152,6 +175,181 @@ afterEach(() => {
 })
 
 describe('failed host close projection', () => {
+  it.each([false, true])(
+    'ignores Active Server changes with a missing owner, local=%s',
+    async (local) => {
+      apply(frame(), local)
+      const { result } = start(local)
+      useAppStore.setState({
+        settings: createGlobalSettingsFixture({ activeRuntimeEnvironmentId: 'other-host' }),
+        runtimeEnvironments: [otherEnvironment]
+      })
+      await vi.advanceTimersByTimeAsync(15_000)
+      await result
+      expect(strip()).toEqual(['a', 'b', 'c'])
+      expect(useAppStore.getState().worktreesByRepo).toEqual({})
+    }
+  )
+
+  it('keeps an unstamped catalog independent of Active Server', async () => {
+    useAppStore.setState({
+      worktreesByRepo: {
+        'repo-1': [{ ...makeWorktree(WT, '/workspace/feature'), hostId: undefined }]
+      },
+      repos: [{ id: 'repo-1', path: '/workspace', displayName: 'repo', badgeColor: '', addedAt: 0 }]
+    })
+    apply(frame())
+    const { result } = start()
+    useAppStore.setState({
+      settings: createGlobalSettingsFixture({ activeRuntimeEnvironmentId: 'other-host' }),
+      runtimeEnvironments: [otherEnvironment]
+    })
+    await vi.advanceTimersByTimeAsync(15_000)
+    await result
+    expect(strip()).toEqual(['a', 'b', 'c'])
+  })
+
+  it.each(['paired', 'ssh', 'ssh-repo', 'selected-ssh'] as const)(
+    'restores by the explicit RPC owner: %s',
+    async (kind) => {
+      const row = {
+        ...makeWorktree(WT, '/workspace/feature'),
+        hostId: kind === 'paired' ? ('runtime:paired-host' as const) : ('ssh:target' as const),
+        runtimeOwnerEnvironmentId: kind === 'ssh-repo' ? undefined : ENV
+      }
+      useAppStore.setState({
+        worktreesByRepo: { 'repo-1': [row] },
+        ...(kind === 'selected-ssh'
+          ? { activeWorkspaceExecutionHostId: 'ssh:target' as const }
+          : {}),
+        ...(kind === 'ssh-repo'
+          ? {
+              repos: [
+                {
+                  id: 'repo-1',
+                  connectionId: 'target',
+                  executionHostId: 'runtime:paired-host',
+                  displayName: 'repo',
+                  path: '/workspace',
+                  badgeColor: '',
+                  addedAt: 0
+                }
+              ]
+            }
+          : {})
+      })
+      apply(frame())
+      const { result } = start()
+      useAppStore.setState({
+        settings: createGlobalSettingsFixture({ activeRuntimeEnvironmentId: 'other-host' }),
+        runtimeEnvironments: [otherEnvironment]
+      })
+      await vi.advanceTimersByTimeAsync(15_000)
+      await result
+      expect(strip()).toEqual(['a', 'b', 'c'])
+    }
+  )
+
+  it.each(['conflict', 'ambiguous', 'ssh-without-hub', 'local-ssh', 'selected-conflict'] as const)(
+    'fences an incompatible explicit owner: %s',
+    async (kind) => {
+      const local = kind === 'local-ssh'
+      apply(frame(), local)
+      const { result } = start(local)
+      const row = {
+        ...makeWorktree(WT, '/workspace/feature'),
+        hostId: 'ssh:target' as const,
+        runtimeOwnerEnvironmentId:
+          kind === 'ssh-without-hub' || local
+            ? undefined
+            : kind === 'selected-conflict'
+              ? ENV
+              : 'other-host'
+      }
+      useAppStore.setState({
+        ...(kind === 'selected-conflict'
+          ? { activeWorkspaceExecutionHostId: 'local' as const }
+          : {}),
+        worktreesByRepo: {
+          'repo-1': kind === 'ambiguous' ? [row, { ...row, runtimeOwnerEnvironmentId: ENV }] : [row]
+        }
+      })
+      await vi.advanceTimersByTimeAsync(15_000)
+      await result
+      expect(strip()).toEqual(['a', 'c'])
+    }
+  )
+
+  it.each(['paired', 'project-group', 'local', 'conflict', 'ambiguous', 'ssh-local'] as const)(
+    'checks folder owner correspondence: %s',
+    async (kind) => {
+      WT = 'folder:source-folder'
+      const local = kind === 'local' || kind === 'ssh-local'
+      const group: ProjectGroup = {
+        id: 'source-group',
+        name: 'group',
+        parentPath: '/workspace',
+        parentGroupId: null,
+        createdFrom: 'manual',
+        tabOrder: 0,
+        isCollapsed: false,
+        color: null,
+        createdAt: 0,
+        updatedAt: 0,
+        executionHostId: kind === 'project-group' ? 'runtime:paired-host' : null
+      }
+      const folder: FolderWorkspace = {
+        id: 'source-folder',
+        projectGroupId: group.id,
+        name: 'folder',
+        folderPath: '/workspace',
+        linkedTask: null,
+        comment: '',
+        isArchived: false,
+        isUnread: false,
+        isPinned: false,
+        sortOrder: 0,
+        lastActivityAt: 0,
+        createdAt: 0,
+        updatedAt: 0,
+        executionHostId:
+          kind === 'project-group'
+            ? undefined
+            : kind === 'local'
+              ? 'local'
+              : kind === 'ssh-local'
+                ? 'local'
+                : 'runtime:paired-host',
+        connectionId: kind === 'paired' ? 'target' : null
+      }
+      useAppStore.setState({
+        activeWorktreeId: WT,
+        folderWorkspaces: [folder],
+        projectGroups: [group]
+      })
+      apply(frame(), local)
+      const { result } = start(local)
+      useAppStore.setState({
+        settings: createGlobalSettingsFixture({ activeRuntimeEnvironmentId: 'other-host' }),
+        runtimeEnvironments: [otherEnvironment],
+        ...(kind === 'ssh-local'
+          ? { folderWorkspaces: [{ ...folder, executionHostId: 'ssh:target' }] }
+          : {}),
+        ...(kind === 'conflict'
+          ? { folderWorkspaces: [{ ...folder, executionHostId: 'runtime:other-host' }] }
+          : {}),
+        ...(kind === 'ambiguous'
+          ? { folderWorkspaces: [folder, { ...folder, executionHostId: 'runtime:other-host' }] }
+          : {})
+      })
+      await vi.advanceTimersByTimeAsync(15_000)
+      await result
+      expect(strip()).toEqual(
+        ['conflict', 'ambiguous', 'ssh-local'].includes(kind) ? ['a', 'c'] : ['a', 'b', 'c']
+      )
+    }
+  )
+
   it.each([false, true])(
     'restores original neighbors at the offline bound, local=%s',
     async (local) => {

@@ -74,7 +74,7 @@ export type WebSessionTabsSnapshotApplyOptions = {
   preserveLocalLayout?: boolean
   terminalPtyMode?: 'local' | 'remote'
   projectionOnly?: boolean
-  closeRestoration?: HostSessionTabClosePlacement
+  closeRestoration?: HostSessionTabClosePlacement & { hostTabId: string }
 }
 
 export type TrackedWebSessionTabsWorktree = {
