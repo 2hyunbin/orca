@@ -81,6 +81,14 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 }
 
+function firstServeSpawnArgs(): string[] {
+  const args: unknown = spawnMock.mock.calls[0]?.[1]
+  if (!Array.isArray(args)) {
+    throw new Error('orca serve did not spawn its server')
+  }
+  return args.map(String)
+}
+
 function startRecipeJsonServer() {
   const child = new FakeChildProcess()
   spawnMock.mockReturnValue(child)
@@ -125,7 +133,7 @@ describe('serveOrcaApp', () => {
       queueMicrotask(() => child.stdout.emit('data', `${RECIPE_JSON}\n`))
       await expect(result).resolves.toBe(0)
 
-      const args = spawnMock.mock.calls[0]?.[1] as string[]
+      const args = firstServeSpawnArgs()
       expect(args).toEqual(
         expect.arrayContaining(['--password-store=basic', '--use-mock-keychain'])
       )
@@ -145,7 +153,7 @@ describe('serveOrcaApp', () => {
       queueMicrotask(() => child.stdout.emit('data', `${RECIPE_JSON}\n`))
       await expect(result).resolves.toBe(0)
 
-      const args = spawnMock.mock.calls[0]?.[1] as string[]
+      const args = firstServeSpawnArgs()
       expect(args).not.toContain('--use-mock-keychain')
       expect(args).not.toContain('--password-store=basic')
     } finally {
