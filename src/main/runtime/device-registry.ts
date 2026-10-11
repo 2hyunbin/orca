@@ -322,12 +322,14 @@ export class DeviceRegistry {
   }
 
   private load(): void {
+    // Why: a set-aside corrupt copy keeps revocation verdicts off until the owner removes it, even
+    // when the rewrite after quarantine never landed and the registry file itself is missing.
+    this.registryDoubtful = corruptRegistryCopyExists(this.registryPath)
     try {
       hardenExistingSecureFile(this.registryPath)
       const parsed = JSON.parse(readFileSync(this.registryPath, 'utf-8')) as DeviceEntry[]
       this.devices = parsed.map(normalizeLoadedDeviceRow)
       this.registryUnreadable = false
-      this.registryDoubtful = corruptRegistryCopyExists(this.registryPath)
     } catch (error) {
       this.devices = []
       if (isMissingFileError(error)) {

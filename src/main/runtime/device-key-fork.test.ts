@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -93,5 +93,15 @@ describe('planDeviceKeyFork', () => {
     const nextLaunch = new DeviceRegistry(userDataPath)
     expect(nextLaunch.listDevices()).toHaveLength(1)
     expect(nextLaunch.lookupDeviceKey('keyed')).toEqual({ kind: 'unavailable' })
+  })
+
+  it('stays doubtful when the rewrite after quarantine never landed', () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-key-fork-'))
+    writeFileSync(join(userDataPath, DEVICE_REGISTRY_FILENAME), '{')
+    writeFileSync(join(userDataPath, `${DEVICE_REGISTRY_FILENAME}.corrupt-1`), '{')
+    rmSync(join(userDataPath, DEVICE_REGISTRY_FILENAME))
+    expect(new DeviceRegistry(userDataPath).lookupDeviceKey('keyed')).toEqual({
+      kind: 'unavailable'
+    })
   })
 })
