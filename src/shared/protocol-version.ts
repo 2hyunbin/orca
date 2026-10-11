@@ -45,6 +45,7 @@ import { AGENT_SESSION_RESUME_RUNTIME_CAPABILITIES } from './agent-session-resum
 import { QODER_OWNED_TERMINAL_CREATE_CAPABILITY } from './qoder-terminal-create-capability'
 import { AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY } from './agent-session-continue-interrupted-capability'
 import { ORCAD_RUNTIME_CAPABILITIES } from './orcad-runtime-capabilities'
+import { DEVICE_KEY_RUNTIME_CAPABILITY } from './device-key-capability'
 // Why a star: every resume capability is part of the runtime contract this module re-exports.
 export * from './agent-session-resume-runtime-capabilities'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from './agent-session-background-task-child-views-capability'
@@ -83,6 +84,7 @@ export const MIN_COMPATIBLE_RUNTIME_SERVER_VERSION = 2
 export const PROJECT_HOST_SETUP_RUNTIME_CAPABILITY = 'project-host-setup.v1' as const
 export const TASK_SOURCE_CONTEXT_RUNTIME_CAPABILITY = 'task-source-context.v1' as const
 export const WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY = 'workspace-run-context.v1' as const
+export const WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY = 'worktree.provisioned-root.v1' as const
 export const WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY =
   'worktree.linked-work-item-context.v1' as const
 export const WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY =
@@ -138,6 +140,11 @@ export const TERMINAL_PROMPT_DELIVERY_RUNTIME_CAPABILITY = 'terminal.prompt-deli
 // Why: paired clients may unmount xterm only when the host can return a
 // bounded, sequenced scrollback snapshot for lossless reveal.
 export const TERMINAL_PAIRED_PARKING_RUNTIME_CAPABILITY = 'terminal.paired-parking.v1' as const
+// Why: terminal.ensureAgentSession params are strict, so an older host rejects `spawnIntent`; a
+// host that advertises this also may answer a declared restore with `terminal_spawn_deferred`.
+export const TERMINAL_SPAWN_INTENT_RUNTIME_CAPABILITY = 'terminal.spawn-intent.v1' as const
+// Why: clients offer "Resume automatic restores" only on hosts that can clear a recorded pause.
+export const RUNTIME_AUTOMATIC_WORK_RUNTIME_CAPABILITY = 'runtime.automatic-work.v1' as const
 // Why: older hosts lack the targeted settings RPCs and strip agentPrompt from
 // terminal creation, so mobile must hide Quick Commands unless both are present.
 export const TERMINAL_QUICK_COMMANDS_RUNTIME_CAPABILITY = 'terminal.quick-commands.v1' as const
@@ -349,6 +356,7 @@ export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
 
 export const RUNTIME_CAPABILITIES = [
   ...ORCAD_RUNTIME_CAPABILITIES,
+  DEVICE_KEY_RUNTIME_CAPABILITY,
   QODER_OWNED_TERMINAL_CREATE_CAPABILITY,
   ...AGENT_SESSION_STOP_RUNTIME_CAPABILITIES,
   ...AGENT_SESSION_CREATE_RUNTIME_CAPABILITIES,
@@ -374,6 +382,7 @@ export const RUNTIME_CAPABILITIES = [
   PROJECT_HOST_SETUP_RUNTIME_CAPABILITY,
   TASK_SOURCE_CONTEXT_RUNTIME_CAPABILITY,
   WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY,
+  WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY,
   WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY,
   ...WORKSPACE_ATTACHMENT_RUNTIME_CAPABILITIES,
   WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY,
@@ -386,6 +395,8 @@ export const RUNTIME_CAPABILITIES = [
   TERMINAL_QUERY_REPLY_INPUT_RUNTIME_CAPABILITY,
   TERMINAL_PROMPT_DELIVERY_RUNTIME_CAPABILITY,
   TERMINAL_PAIRED_PARKING_RUNTIME_CAPABILITY,
+  TERMINAL_SPAWN_INTENT_RUNTIME_CAPABILITY,
+  RUNTIME_AUTOMATIC_WORK_RUNTIME_CAPABILITY,
   TERMINAL_QUICK_COMMANDS_RUNTIME_CAPABILITY,
   WORKTREE_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY,
   WORKTREE_ARCHIVE_FAILURE_BLOCKING_RUNTIME_CAPABILITY,
@@ -434,6 +445,7 @@ export const RUNTIME_CAPABILITIES = [
   ...SKILL_RUNTIME_CAPABILITIES,
   ...AUTOMATION_RUNTIME_CAPABILITIES,
   NOTIFICATIONS_REMOTE_PUSH_RUNTIME_CAPABILITY,
+  'pairing.delegated-mobile-devices.v1',
   PREFLIGHT_WORKSPACE_SCOPED_RUNTIME_CAPABILITY,
   PREFLIGHT_OTHER_RUNTIME_REFUSAL_RUNTIME_CAPABILITY,
   WORKSPACE_PORTS_HOST_SCOPED_RUNTIME_CAPABILITY,
