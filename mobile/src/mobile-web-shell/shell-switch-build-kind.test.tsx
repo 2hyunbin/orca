@@ -42,7 +42,8 @@ vi.mock('../transport/client-context', () => ({
   useHostClient: () => ({ client: null, state: 'disconnected' })
 }))
 vi.mock('../transport/workspace-server', () => ({
-  useWorkspaceServer: () => ({ routeHost: undefined, server: null })
+  useWorkspaceServer: () => ({ routeHost: undefined, server: null }),
+  useWorkspaceServerConnState: ({ connState }: { connState: string }) => connState
 }))
 vi.mock('expo-router', () => ({
   Redirect: 'Redirect',

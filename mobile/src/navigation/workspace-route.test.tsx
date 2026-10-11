@@ -30,6 +30,7 @@ vi.mock('expo-router', () => ({
   }
 }))
 vi.mock('react-native', () => ({
+  AppState: { currentState: 'active' },
   StyleSheet: { create: (styles: unknown) => styles },
   View: 'View',
   Text: 'Text',
@@ -46,7 +47,7 @@ vi.mock('../transport/host-descriptor-recorder', () => ({
 vi.mock('./route-handoff', () => ({ useRouteHandoff: () => ({ replace: () => {} }) }))
 // The native switch always hands the page its route, so the census reads what the page is told.
 vi.mock('../mobile-web-shell/shell-switch-decision', () => ({
-  useShellSwitchDecision: (shellRoute: unknown) =>
+  shellSwitchDecision: (shellRoute: unknown) =>
     shellRoute ? { kind: 'shell', route: shellRoute } : { kind: 'native' }
 }))
 vi.mock('../mobile-web-shell/ShellSwitchPendingScreen', () => ({
@@ -73,7 +74,10 @@ import {
   HostStatusGatesContext,
   useOptionalHostProtocolGates
 } from '../components/host-protocol-gates-context'
+import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
+import { MOBILE_RELAY_HOSTS_LIST_METHOD } from '../../../src/shared/mobile-relay-hosts-contract'
 import type { HostStatusGates } from '../transport/host-status-gates'
+import type { ConnectionState } from '../transport/types'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { RpcClient } from '../transport/rpc-client'
 import { useWorkspaceClient } from '../transport/use-workspace-client'
@@ -84,14 +88,21 @@ const RELAYS = [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY]
 const VAULT = 'aiVault.v1'
 
 /** What a screen under the route sees: its server, its client and its feature gates. */
-const below: { client: RpcClient | null; capabilities: readonly string[] | null } = {
+const below: {
+  client: RpcClient | null
+  state: ConnectionState | null
+  capabilities: readonly string[] | null
+} = {
   client: null,
+  state: null,
   capabilities: null
 }
 
 function Probe(): null {
   route.seen.push(useWorkspaceExecutionHost())
-  below.client = useWorkspaceClient('host-1').client
+  const workspace = useWorkspaceClient('host-1')
+  below.client = workspace.client
+  below.state = workspace.state
   below.capabilities = useOptionalHostProtocolGates()?.hostCapabilities ?? null
   return null
 }
@@ -108,13 +119,25 @@ function desktopGates(hostCapabilities: string[], statusPending = false): HostSt
   }
 }
 
+/** The server's health as the desktop reports it in `mobileRelay.hosts.list`. */
+const serverHealth: { current: ExecutionHostHealth } = { current: 'available' }
+
 /** A desktop whose own status is settled as given; a status it is asked for is the server's. */
 function desktop(serverCapabilities: string[] = []): FakeSession {
   const session = new FakeSession('connected')
   session.sendRequest.mockImplementation(async (method: string) => ({
     id: 'reply',
     ok: true,
-    result: method === 'status.get' ? { capabilities: serverCapabilities } : {},
+    result:
+      method === 'status.get'
+        ? { capabilities: serverCapabilities }
+        : method === MOBILE_RELAY_HOSTS_LIST_METHOD
+          ? {
+              hosts: [
+                { hostId: 'runtime:vm', label: 'vm', health: serverHealth.current, relay: 'ready' }
+              ]
+            }
+          : {},
     _meta: { runtimeId: 'runtime-1' }
   }))
   route.client = session
@@ -133,7 +156,9 @@ async function render(element: ReactElement, gates: HostStatusGates): Promise<Re
   route.shellRoutes.length = 0
   route.redirects.length = 0
   below.client = null
+  below.state = null
   below.capabilities = null
+  serverHealth.current = 'available'
   let renderer: ReactTestRenderer | null = null
   await act(async () => {
     renderer = create(createElement(HostStatusGatesContext.Provider, { value: gates }, element))
@@ -204,6 +229,45 @@ describe('a server workspace', () => {
     })
   })
 
+  it('reads as disconnected while the desktop reports its server down, and recovers', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
+      desktop()
+      await render(screen, desktopGates(RELAYS))
+      expect(below.state).toBe('connected')
+      serverHealth.current = 'connecting'
+      await act(async () => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(below.state).toBe('connecting')
+      serverHealth.current = 'error'
+      await act(async () => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(below.state).toBe('disconnected')
+      serverHealth.current = 'available'
+      await act(async () => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(below.state).toBe('connected')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens disconnected, not loading, when its server is already down', async () => {
+    route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
+    desktop()
+    serverHealth.current = 'disconnected'
+    await act(async () => {
+      create(
+        createElement(HostStatusGatesContext.Provider, { value: desktopGates(RELAYS) }, screen)
+      )
+    })
+    expect(below.state).toBe('disconnected')
+  })
+
   it('says so once the desktop has answered that it cannot reach the server', async () => {
     route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
     const session = desktop()
@@ -235,6 +299,10 @@ describe('the desktop’s own workspace', () => {
     )
     expect([...new Set(route.seen)]).toEqual([undefined])
     expect(below.client).toBe(session)
+    expect(below.state).toBe('connected')
     expect(below.capabilities).toEqual([...RELAYS, VAULT])
+    expect(session.sendRequest.mock.calls.map(([method]) => method)).not.toContain(
+      MOBILE_RELAY_HOSTS_LIST_METHOD
+    )
   })
 })
