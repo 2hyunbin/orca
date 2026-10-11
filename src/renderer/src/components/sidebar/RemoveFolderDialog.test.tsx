@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   const worktreesByRepo: Record<string, { id: string; hostId?: string }[]> = {}
   const tabsByWorktree: Record<string, { id: string }[]> = {}
   const ptyIdsByTabId: Record<string, string[]> = {}
+  const runtimeEnvironments: { id: string; orcadDeployment?: { sshTargetId: string } }[] = []
   return {
     state: {
       activeModal: 'confirm-remove-folder' as string | null,
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => {
         hostId: 'ssh:target-1'
       } as Record<string, unknown>,
       repos: [] as Repo[],
+      runtimeEnvironments,
       sshTargetLabels: new Map<string, string>(),
       removedSshTargetLabels: new Map<string, string>(),
       worktreesByRepo,
@@ -82,6 +84,20 @@ describe('RemoveFolderDialog', () => {
     mocks.state.worktreesByRepo = {}
     mocks.state.tabsByWorktree = {}
     mocks.state.ptyIdsByTabId = {}
+    mocks.state.runtimeEnvironments = []
+  })
+
+  it("warns about VM recipe cleanup for a project on a recipe VM's managed server", () => {
+    mocks.state.modalData.hostId = 'runtime:env-vm'
+    mocks.state.repos = [repo(null, 'runtime:env-vm')]
+    mocks.state.runtimeEnvironments = [
+      { id: 'env-vm', orcadDeployment: { sshTargetId: 'runtime-ssh-runtime-1' } }
+    ]
+
+    const html = renderToStaticMarkup(<RemoveFolderDialog />)
+
+    expect(html).toContain('Its VM recipe determines whether the environment')
+    expect(html).not.toContain('It is still on your disk')
   })
 
   it('warns that VM recipe cleanup controls file deletion', () => {

@@ -9,10 +9,8 @@ import {
   getEphemeralVmRecipeResultConnection,
   getEphemeralVmRecipeResultPairingCode
 } from '../../shared/ephemeral-vm-recipes'
-import {
-  removeEnvironment,
-  updateEnvironmentFromPairingCode
-} from '../../shared/runtime-environment-store'
+import { updateEnvironmentFromPairingCode } from '../../shared/runtime-environment-store'
+import { releaseEphemeralVmRuntimeEnvironment } from '../ephemeral-vm-runtime-environment-release'
 import {
   cleanupEphemeralVmRuntime,
   resumeEphemeralVmRuntime,
@@ -107,7 +105,7 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
       }
       if (result.ok && runtime.runtimeEnvironmentId) {
         try {
-          removeEnvironment(userDataPath, runtime.runtimeEnvironmentId)
+          await releaseEphemeralVmRuntimeEnvironment(userDataPath, runtime.runtimeEnvironmentId)
         } catch {
           // Cleanup of provider resources matters more than hiding a stale local
           // environment row; users can still remove that manually.
