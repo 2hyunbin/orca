@@ -55,22 +55,12 @@ function readUnixProcesses() {
   return parseUnixProcesses(stdout)
 }
 
-/**
- * A `Win32_Process` time field as seconds. Those fields are counts of 100 ns units,
- * and absent when a host cannot supply them.
- *
- * Why not `Number(value)`: it maps `null` to `0`, which is also a real counter
- * value, so a missing field would look like a genuine reading and the delta below
- * would come out kernel-only instead of falling back.
- */
+// `Win32_Process` times are 100 ns counts. Not `Number(value)`: that turns a missing
+// field into a real-looking 0, so the CPU delta would silently go kernel-only.
 function cimTimeSeconds(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value / 10_000_000 : null
 }
 
-/**
- * The sampler derives CPU from the per-process time delta, so a `Win32_Process`
- * entry without both time fields must stay `null` rather than become kernel-only.
- */
 export function cimCpuSeconds(entry) {
   const userModeSeconds = cimTimeSeconds(entry.UserModeTime)
   const kernelModeSeconds = cimTimeSeconds(entry.KernelModeTime)
@@ -80,7 +70,10 @@ export function cimCpuSeconds(entry) {
 }
 
 function readWindowsProcesses() {
+  // Why UTF-8: the default OEM code page best-fits characters such as `•` or `→` in any
+  // process's command line to raw control bytes (0x07, 0x1A), which JSON.parse rejects.
   const script =
+    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' +
     'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,WorkingSetSize,UserModeTime,KernelModeTime,CommandLine | ConvertTo-Json -Compress'
   const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
     encoding: 'utf8',

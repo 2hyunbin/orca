@@ -1,6 +1,8 @@
+import { spawn } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import {
   cimCpuSeconds,
+  readProcessRows,
   sampleProcessTreeUntilWorkloadsComplete
 } from './idle-cpu-process-sampling.mjs'
 
@@ -45,6 +47,22 @@ describe('Windows CIM CPU time mapping', () => {
       cimCpuSeconds({ UserModeTime: Number.POSITIVE_INFINITY, KernelModeTime: 10_000_000 })
     ).toBeNull()
   })
+})
+
+describe.skipIf(process.platform !== 'win32')('Windows process table read', () => {
+  it('parses a command line whose characters the OEM code page maps to control bytes', () => {
+    const marker = 'idle-cpu-oem • → ♪'
+    const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30_000)', marker], {
+      stdio: 'ignore'
+    })
+    try {
+      const row = readProcessRows().find((candidate) => candidate.pid === child.pid)
+      expect(row?.command).toContain(marker)
+      expect(row?.cpuTimeSeconds).toEqual(expect.any(Number))
+    } finally {
+      child.kill()
+    }
+  }, 30_000)
 })
 
 describe('idle CPU process sampling window', () => {
