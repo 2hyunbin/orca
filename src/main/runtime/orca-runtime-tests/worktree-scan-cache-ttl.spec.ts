@@ -46,7 +46,11 @@ describe('resolveWorktreeScanCacheTtlMs', () => {
   it('keeps a scratch repo scan cached past the base TTL while normal repos rescan', async () => {
     // Why: the whole fix lives in the cache-stamp call site; pin the wiring so
     // a revert to the flat TTL fails CI, not just the pure-function tests.
-    vi.useFakeTimers()
+    // Why only Date: each refresh starts a real admin-fingerprint read, which must settle on the
+    // real event loop; a probe still pending at the next refresh reuses the cache by design.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const settleFingerprintProbes = (): Promise<void> =>
+      new Promise((resolve) => setTimeout(resolve, 25))
     // Why: the shared listWorktrees stub keeps call history across this file's
     // tests; absolute counts need a clean baseline.
     vi.mocked(listWorktrees).mockClear()
@@ -70,6 +74,7 @@ describe('resolveWorktreeScanCacheTtlMs', () => {
         vi.mocked(listWorktrees).mock.calls.filter((call) => call[0] === path).length
 
       await internals.listResolvedWorktrees()
+      await settleFingerprintProbes()
       expect(scanCallsFor('/tmp/repo')).toBe(1)
       expect(scanCallsFor(scratchPath)).toBe(1)
 
