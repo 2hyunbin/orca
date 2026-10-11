@@ -742,8 +742,8 @@ export function startShadowSeatPoller(
   const round = async (awaitPolls: boolean): Promise<void> => {
     if (stopped) return
     const refresh = refreshCells()
-    // Only the first list is waited for: later rounds poll the last list, so a stalled database
-    // read never starves the polls that feed each reserve cell's dead-man.
+    // Only the first list is waited for: later rounds poll the last list, so the round that starts
+    // a refresh no longer skips its polls (one round, ~1 s, per refresh) while the read is slow.
     if (cellsReadAt === undefined) await refresh
     // A slow cell holds only its own slot; the timer never waits on it.
     const polls = cells.map((cell) => poll(cell))

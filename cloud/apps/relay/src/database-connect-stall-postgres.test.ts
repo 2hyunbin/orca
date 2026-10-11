@@ -126,6 +126,7 @@ async function stallingDatabase(mode: StallingDatabase['mode']): Promise<Stallin
     socket.on('close', () => upstream.destroy())
   })
   await new Promise<void>((resolve) => stalling.server.listen(0, '127.0.0.1', resolve))
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a TCP server listening on a host and port reports an AddressInfo, never a pipe path.
   stalling.port = (stalling.server.address() as AddressInfo).port
   cleanups.push(async () => {
     dropConnections(stalling)
