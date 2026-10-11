@@ -63,6 +63,8 @@ function liveBlockTui() {
   }
 }
 
+let renderer: ReactTestRenderer | undefined
+
 /** The real foundation + subscription hooks, with xterm writes landing in a headless phone terminal. */
 function harness(phone: Terminal) {
   const handlers: ((result: unknown) => void)[] = []
@@ -141,7 +143,6 @@ function harness(phone: Terminal) {
   }
 }
 
-let renderer: ReactTestRenderer | undefined
 afterEach(() => {
   act(() => renderer?.unmount())
   renderer = undefined
