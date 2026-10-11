@@ -17,7 +17,7 @@ import {
   type RelayRegion
 } from '@orca-cloud/relay-contract'
 import { Hono, type Context } from 'hono'
-import { SignJWT, type createRemoteJWKSet } from 'jose'
+import { SignJWT } from 'jose'
 import { z } from 'zod'
 import {
   createAdminTokenVerifier,
@@ -79,6 +79,7 @@ import {
   probeRegionalRehomeTrust
 } from './regional-rehome-trust-probe.js'
 import { createRelayTokenVerifier, readBearer } from './relay-token-verifier.js'
+import type { RelayJWKSet } from './stale-if-error-jwks.js'
 import { stagingAsiaProofMembership } from './staging-asia-proof-admission.js'
 
 const RelayCellConnectionHardCapSchema = z.custom<RelayCellConnectionHardCap>(
@@ -150,7 +151,7 @@ export function createRelayApp(
     // Both only on cells; the switch is the per-cell `readinessLocal` flag, off by default.
     readinessLocal?: () => boolean
     localReadiness?: () => RelayLocalReadinessVerdict
-    relayJwks?: ReturnType<typeof createRemoteJWKSet>
+    relayJwks?: RelayJWKSet
     recordAssignmentAdmission?: (outcome: AssignmentAdmissionOutcome) => void
     recordAssignmentRejectionReason?: (
       lane: AssignmentAdmissionLane,

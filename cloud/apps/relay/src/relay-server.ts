@@ -15,7 +15,6 @@ import {
 import type { IncomingMessage } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
-import { createRemoteJWKSet } from 'jose'
 import { WebSocketServer } from 'ws'
 import type WebSocket from 'ws'
 import type { RawData } from 'ws'
@@ -45,6 +44,7 @@ import type { AppliedControlFlags } from './relay-control-flag-channel.js'
 import { createRelayLocalReadiness } from './relay-local-readiness.js'
 import { createRelayReadiness } from './relay-readiness.js'
 import { createRelayTokenVerifier, readBearer } from './relay-token-verifier.js'
+import { createStaleIfErrorJWKSet } from './stale-if-error-jwks.js'
 import { closeRelayWebSocket } from './relay-websocket-close.js'
 import { ShadowDirectoryCompare } from './shadow-directory-compare.js'
 import { startShadowSeatPoller } from './shadow-seat-directory.js'
@@ -158,7 +158,7 @@ export function createRelayServer(
     perMessageDeflate: false,
     maxPayload: 1024 * 1024
   })
-  const relayJwks = createRemoteJWKSet(new URL(config.jwksUrl))
+  const relayJwks = createStaleIfErrorJWKSet(new URL(config.jwksUrl))
   const verifyRelayToken = createRelayTokenVerifier(config, relayJwks)
   const store = new RelayCredentialStore(observedDatabase, options.now)
   const assignments = new RelayAssignmentStore(observedDatabase, options.now, {
