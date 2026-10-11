@@ -25,7 +25,11 @@ import { groupSkillFreshness } from './skill-freshness-grouping'
 import { useSkillUpdateSelection } from './use-skill-update-selection'
 import { SkillFreshnessScanIssues } from './skill-freshness-scan-issues'
 import { SkillUpdateRow } from './SkillUpdateRow'
-import { SummaryHeadline, summarizeInventory } from './skill-freshness-summary-headline'
+import {
+  SummaryHeadline,
+  summarizeInventory,
+  updateActionLabel
+} from './skill-freshness-summary-headline'
 import {
   acknowledgeSkillUpdateRun,
   cancelSkillUpdateRun,
@@ -430,16 +434,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
                       'auto.components.skills.SkillFreshnessUpdateDialog.updating',
                       'Updating…'
                     )
-                  : selection.selectedNames.length === 1
-                    ? translate(
-                        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionOne',
-                        'Update 1 skill'
-                      )
-                    : translate(
-                        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionMany',
-                        'Update {{value0}} skills',
-                        { value0: selection.selectedNames.length }
-                      )}
+                  : updateActionLabel(selection.selectedNames.length)}
               </Button>
             ) : null}
           </div>

@@ -43,6 +43,24 @@ export function summarizeInventory(
   return 'current'
 }
 
+// Why: the button stays while any row is updatable, so unticking every row doesn't reflow
+// the footer; a disabled "Update 0 skills" would read as a broken count.
+export function updateActionLabel(count: number): string {
+  if (count === 0) {
+    return translate('auto.components.skills.SkillFreshnessUpdateDialog.title', 'Update skills')
+  }
+  return count === 1
+    ? translate(
+        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionOne',
+        'Update 1 skill'
+      )
+    : translate(
+        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionMany',
+        'Update {{value0}} skills',
+        { value0: count }
+      )
+}
+
 /** Pre-run headline. Once a run starts, the dialog reports the run instead. */
 export function SummaryHeadline({
   kind,

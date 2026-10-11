@@ -593,7 +593,8 @@ describe('SkillFreshnessUpdateDialog', () => {
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(findButton('Update 0 skills')?.disabled).toBe(true)
+    expect(findButton('Update 0 skills')).toBeUndefined()
+    expect(findButton('Update skills')?.disabled).toBe(true)
   })
 
   it('drops a choice when a re-check finds a different install source', async () => {
@@ -649,7 +650,7 @@ describe('SkillFreshnessUpdateDialog', () => {
 
     expect(container?.textContent).toContain('All installed Orca skills are up to date.')
     expect(container?.textContent).toContain('1 skill not installed by Orca is unselected.')
-    expect(findButton('Update 0 skills')?.disabled).toBe(true)
+    expect(findButton('Update skills')?.disabled).toBe(true)
   })
 
   it('stays coherent while an idle re-scan is in flight', async () => {
