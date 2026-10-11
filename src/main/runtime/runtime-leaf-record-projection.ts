@@ -10,6 +10,7 @@ import { resolveTerminalTabTitle } from '../../shared/tab-title-resolution'
 import { collectLayoutLeafIdsInOrder } from '../../shared/workspace-layout/terminal-pane-tree'
 import type { LoadedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load-types'
 import {
+  paneKeyOf,
   tabsInOrder,
   type LayoutTerminalTab
 } from '../../shared/workspace-layout/workspace-layout-model'
@@ -78,7 +79,18 @@ export type RuntimePtyRegistryView = {
   livenessOf: (ptyId: string) => PtyLivenessVerdict | null
 }
 
+/**
+ * A neutral title that replaced the pane's stuck agent title (terminal-pane-title-reset.ts), dated
+ * on the PTY title observation sequence so it compares with `lastOscTitleAt`. Today the renderer
+ * decides these: a confirmed return to a shell (pane-agent-identity.ts) and an inferred interrupt
+ * (shell-command-inference.ts). Main sees two of the triggers (`agentStatus:inferInterrupt`,
+ * `agentStatus:reconcileEndedProcess`); the title-only interrupt has none yet.
+ */
+export type PaneTitleReset = { title: string; at: number }
+
 export type RuntimeLeafProjectionInput = RuntimePtyRegistryView & {
+  /** Pane key → the pane's latest neutral title reset. */
+  paneTitleResets: (paneKey: string) => PaneTitleReset | null
   /** Each partition the holder loaded, with the desktop's focused panes and the live tab titles. */
   partitions: readonly Pick<LoadedWorkspaceLayout, 'layout' | 'desktopView' | 'facts'>[]
   generatedTitlesEnabled: boolean
@@ -111,6 +123,15 @@ export function paneTerminalFact(
   return state === 'running' ? 'live' : state === 'exited' ? 'exited' : 'unverifiable'
 }
 
+/** The newer of the PTY's OSC title and a neutral reset, as the window's pane title is today. */
+function latestPaneTitle(
+  pty: RuntimeLeafPtyFacts | undefined,
+  reset: PaneTitleReset | null
+): { title: string | null; at: number | null } {
+  const osc = { title: pty?.lastOscTitle ?? null, at: pty?.lastOscTitleAt ?? null }
+  return reset && (osc.at === null || reset.at > osc.at) ? reset : osc
+}
+
 function projectLeaf(
   tab: LayoutTerminalTab,
   base: { worktreeId: string; leafId: string; ptyId: string | null; liveTitle: string },
@@ -118,11 +139,13 @@ function projectLeaf(
 ): RuntimeLeafRecord {
   const { ptyId, leafId } = base
   const pty = ptyId === null ? undefined : input.ptysById.get(ptyId)
-  // A saved binding the registry does not hold live is not writable, unlike a renderer transport.
+  // As the mirror: connected unless the host proved an exit. A binding with no PTY record is not:
+  // the mirror would have created one from the window's live transport, the holder has none.
   const connected =
-    ptyId !== null && pty?.connected === true && input.livenessOf(ptyId)?.status !== 'exited'
+    ptyId !== null && pty !== undefined && input.livenessOf(ptyId)?.status !== 'exited'
   const previous = input.previous?.leaves.get(runtimeLeafKey(tab.entityId, leafId))
-  const paneLiveTitle = pty?.lastOscTitle ?? base.liveTitle
+  const paneTitle = latestPaneTitle(pty, input.paneTitleResets(paneKeyOf(tab.entityId, leafId)))
+  const paneLiveTitle = paneTitle.title ?? base.liveTitle
   return {
     tabId: tab.entityId,
     worktreeId: base.worktreeId,
@@ -130,9 +153,9 @@ function projectLeaf(
     // No renderer pane backs a holder leaf; -1 as other runtime-made leaves use.
     paneRuntimeId: -1,
     ptyId,
-    // The pane's live title is the PTY's OSC title, so it carries the title's own time.
-    paneTitle: pty?.lastOscTitle ?? null,
-    paneTitleUpdatedAt: pty?.lastOscTitleAt ?? null,
+    // Dated by the title itself, not by a graph sync that relayed it.
+    paneTitle: paneTitle.title,
+    paneTitleUpdatedAt: paneTitle.at,
     title: resolveTerminalTabTitle(
       { ...tab, title: paneLiveTitle },
       input.generatedTitlesEnabled,

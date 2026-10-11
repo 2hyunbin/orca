@@ -50,10 +50,11 @@ export function derivePaneStatus(facts: PaneStatusFacts): PaneStatus {
   if (facts.sleeping) {
     return 'sleeping'
   }
-  if (facts.host === 'awaiting') {
+  if (facts.host === 'awaiting' || (facts.host === 'lost' && facts.terminal === null)) {
     return 'waiting_for_host'
   }
-  if (facts.host === 'lost') {
+  // A terminal on a host out of contact may still run; only an exit proven before stays `exited`.
+  if (facts.host === 'lost' && facts.terminal !== 'exited') {
     return 'unverifiable'
   }
   switch (facts.terminal) {

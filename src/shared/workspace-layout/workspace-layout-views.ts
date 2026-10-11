@@ -1,6 +1,6 @@
 // The per-view store (design §1.4): each view's own selection, kept beside the layout and never
-// published to another view. A record may name a tab or pane a later change removed: reads fall
-// back, and a save prunes, so no listener has to chase layout changes.
+// published to another view. A close moves each view's shown tab when it is applied; anything else
+// a record names that a later change removed falls back at read time and is pruned at save.
 
 import { collectLayoutLeafIdsInOrder } from './terminal-pane-tree'
 import type { DesktopLayoutView } from './workspace-layout-beside'
@@ -75,7 +75,11 @@ export type ResolvedWorkspaceSelection = {
   activeBrowserTabId: string | null
 }
 
-/** The group's shown tab: the recorded one, else the most recent still there, else the first. */
+/**
+ * The group's shown tab: the recorded one, else the most recent still there, else the first. A
+ * close moves the record to the neighbour when applied (workspace-layout-view-tab-closes.ts); this
+ * covers a record that names a tab it never saw leave, such as one loaded from disk.
+ */
 function resolveGroupTab(
   tabOrder: readonly string[],
   selection: { activeTabId: string | null; recentTabIds?: string[] } | undefined

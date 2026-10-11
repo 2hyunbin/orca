@@ -1,7 +1,8 @@
 // Today's graph mirror, captured from OrcaRuntimeService.syncWindowGraph: tab-1 splits a live
 // terminal (output and an OSC title) beside one that exited 1; tab-2 has one unbound pane. Step 2
-// restarts the exited pane on a new terminal. runtime-graph-mirror-capture.test.ts replays this on
-// the mirror and checks every record here; the projection is checked against the same records.
+// restarts the exited pane on a new terminal. Step 3: pane 1's agent title is reset to neutral by
+// the window after its agent exits, pty-c's host is lost, and pane 3 names a PTY nobody registered.
+// runtime-graph-mirror-capture.test.ts replays this on the mirror and checks every record here.
 
 import type { PtyLivenessVerdict } from '../../shared/pty-liveness-verdict'
 import type { RuntimeSyncedLeaf, RuntimeSyncedTab } from '../../shared/runtime-types'
@@ -14,6 +15,7 @@ export const LEAF_2 = '22222222-2222-4222-8222-222222222222'
 export const LEAF_3 = '33333333-3333-4333-8333-333333333333'
 
 export const PTY_A_OUTPUT = '\x1b]0;build watch\x07hello\r\nworld\r\n'
+export const PTY_A_AGENT_TITLE_OUTPUT = '\x1b]0;\u2733 Claude Code\x07'
 
 export const TAB_1_ROOT = {
   type: 'split',
@@ -196,4 +198,54 @@ export const MIRROR_LEAVES_STEP_2: RuntimeLeafRecord[] = [
     paneTitleUpdatedAt: 3
   }),
   MIRROR_LEAF_3
+]
+
+/** Step 3: the window's neutral pane title (titleAfterConfirmedShell) after pane 1's agent exits. */
+export const PANE_1_NEUTRAL_TITLE = 'Terminal 1'
+
+export const PUBLISHED_LEAVES_STEP_3: RuntimeSyncedLeaf[] = [
+  { ...PUBLISHED_1, paneTitle: PANE_1_NEUTRAL_TITLE, title: PANE_1_NEUTRAL_TITLE },
+  { ...PUBLISHED_2, ptyId: 'pty-c' },
+  { ...PUBLISHED_3, ptyId: 'pty-d' }
+]
+
+export const PTY_A_FACTS_STEP_3: RuntimeLeafPtyFacts = {
+  ...PTY_FACTS['pty-a'],
+  lastOutputAt: 4000,
+  lastAgentStatus: 'idle',
+  lastOscTitle: '\u2733 Claude Code',
+  lastOscTitleAt: 4
+}
+
+/** The record the mirror itself creates for the unregistered pty-d; the holder has no such writer. */
+export const MIRROR_MADE_PTY_D: RuntimeLeafPtyFacts = {
+  ...PTY_FACTS['pty-c'],
+  ...NO_TAIL,
+  lastOutputAt: null,
+  preview: ''
+}
+
+export const LIVENESS_VERDICTS_STEP_3: Record<string, PtyLivenessVerdict | null> = {
+  ...LIVENESS_VERDICTS,
+  'pty-c': { status: 'unverifiable', reason: 'host lost' },
+  'pty-d': null
+}
+
+/** The neutral title's time: the graph sync that relayed it, after the OSC title it replaced. */
+export const PANE_1_NEUTRAL_TITLE_AT = 6
+
+export const MIRROR_LEAVES_STEP_3: RuntimeLeafRecord[] = [
+  // The leaf's own OSC-title write stamps a second sequence (5), one after the PTY record's (4).
+  mirrorLeaf(
+    PUBLISHED_LEAVES_STEP_3[0]!,
+    { ...withoutConnected(PTY_A_FACTS_STEP_3), lastOscTitleAt: 5 },
+    { ptyGeneration: 0, connected: true, paneTitleUpdatedAt: PANE_1_NEUTRAL_TITLE_AT }
+  ),
+  // An unverifiable verdict is not an exit, so the mirror keeps the pane connected.
+  MIRROR_LEAVES_STEP_2[1]!,
+  mirrorLeaf(PUBLISHED_LEAVES_STEP_3[2]!, null, {
+    ptyGeneration: 1,
+    connected: true,
+    paneTitleUpdatedAt: 6
+  })
 ]

@@ -21,7 +21,8 @@ describe('derivePaneStatus', () => {
     [{ host: 'awaiting', terminal: 'live' }, 'waiting_for_host'],
     [{ host: 'awaiting' }, 'waiting_for_host'],
     [{ host: 'lost', terminal: 'live' }, 'unverifiable'],
-    [{ host: 'lost' }, 'unverifiable']
+    [{ host: 'lost' }, 'waiting_for_host'],
+    [{ host: 'lost', terminal: 'exited' }, 'exited']
   ] as const)('%o derives %s', (facts, status) => {
     expect(derivePaneStatus({ ...idle, ...facts })).toBe(status)
   })
