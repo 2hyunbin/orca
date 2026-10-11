@@ -67,8 +67,13 @@ const sockets: MockWebSocket[] = []
 const originalWebSocket = globalThis.WebSocket
 const flush = () => vi.advanceTimersByTimeAsync(0)
 
-function firstFrame(socket: MockWebSocket): Record<string, unknown> {
-  return JSON.parse(String(socket.sent[0])) as Record<string, unknown>
+function firstFrame(socket: MockWebSocket): unknown {
+  return JSON.parse(String(socket.sent[0]))
+}
+
+function requestIdOf(plaintext: string | null): string {
+  const value: unknown = JSON.parse(plaintext ?? 'null')
+  return value && typeof value === 'object' && 'id' in value ? String(value.id) : ''
 }
 
 // Plays the current host's direct v2 handshake with real crypto.
@@ -81,8 +86,7 @@ async function completeHostV2Handshake(socket: MockWebSocket): Promise<DesktopMo
   expect(host).not.toBeNull()
   socket.receive(JSON.stringify(host!.ready))
   await flush()
-  const auth = JSON.parse(host!.openText(String(socket.sent[1]))!) as Record<string, unknown>
-  expect(auth).toEqual({
+  expect(JSON.parse(host!.openText(String(socket.sent[1]))!)).toEqual({
     type: 'e2ee_auth',
     v: 2,
     transcriptHashB64: host!.transcriptHashB64,
@@ -131,8 +135,8 @@ describe('direct connections use E2EE v2 framing', () => {
 
     const pending = client.sendRequest('status.get', {})
     await flush()
-    const request = JSON.parse(host.openText(String(socket.sent.at(-1)))!) as { id: string }
-    socket.receive(host.sealText(JSON.stringify({ id: request.id, ok: true, result: { up: 1 } })))
+    const id = requestIdOf(host.openText(String(socket.sent.at(-1))))
+    socket.receive(host.sealText(JSON.stringify({ id, ok: true, result: { up: 1 } })))
     await expect(pending).resolves.toMatchObject({ ok: true, result: { up: 1 } })
     expect(isHostLatchedToE2EEV2(desktopPublicKeyB64)).toBe(true)
     client.close()

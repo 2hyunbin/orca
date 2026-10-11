@@ -86,6 +86,7 @@ describe('E2EE v2 host latch', () => {
       onText: vi.fn(),
       onBinary: vi.fn(),
       onError: vi.fn(),
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the link only calls send/close and assigns handlers on this stub.
       createSocket: () => ({ close: vi.fn(), send: vi.fn() }) as unknown as WebSocket
     })
     channelArgs[0]!.onAuthenticated()

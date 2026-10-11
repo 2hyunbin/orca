@@ -3,8 +3,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   encodeMobileE2EEV2Transcript,
   validateMobileE2EEV2Handshake,
-  type MobileE2EEV2Hello,
-  type MobileE2EEV2Ready
+  type MobileE2EEV2Hello
 } from '../../../src/shared/mobile-e2ee-v2-contract'
 import {
   openMobileE2EEV2Frame,
@@ -37,6 +36,7 @@ let ReleasedChannel: ChannelConstructor
 beforeAll(async () => {
   const checkout = await materializeReleaseCheckout(resolveBaselineReleaseRef())
   const module = await importReleaseCheckoutModule(checkout, 'src/main/runtime/rpc/e2ee-channel.ts')
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pinned release's E2EEChannel class; a changed shape fails the assertions below.
   ReleasedChannel = module.E2EEChannel as ChannelConstructor
 }, SUITE_TIMEOUT_MS)
 
@@ -81,7 +81,7 @@ describe('cross-version: updated phone dials a released host over direct v2', ()
 
     const hello = directHello()
     channel.handleRawMessage(JSON.stringify(hello))
-    const ready = JSON.parse(String(sent[0])) as MobileE2EEV2Ready
+    const ready: unknown = JSON.parse(String(sent[0]))
     const handshake = validateMobileE2EEV2Handshake(hello, ready)
     expect(handshake).not.toBeNull()
     const schedule = deriveMobileE2EEV2KeySchedule({
@@ -130,8 +130,9 @@ describe('cross-version: updated phone dials a released host over direct v2', ()
     })
 
     channel.onMessage((plaintext, reply) => {
-      const request = JSON.parse(plaintext) as { id: string }
-      reply(JSON.stringify({ id: request.id, ok: true, result: { echoed: true } }))
+      const request: unknown = JSON.parse(plaintext)
+      const id = request && typeof request === 'object' && 'id' in request ? request.id : null
+      reply(JSON.stringify({ id, ok: true, result: { echoed: true } }))
     })
     channel.handleRawMessage(seal(JSON.stringify({ id: 'r1', method: 'status.get' })))
     expect(JSON.parse(open(sent[2]!))).toEqual({ id: 'r1', ok: true, result: { echoed: true } })
