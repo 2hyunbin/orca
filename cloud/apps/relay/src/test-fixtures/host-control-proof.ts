@@ -53,7 +53,9 @@ export type HostControlProofFixture = {
   hello: string
 }
 
-export function hostControlProofFixture(): HostControlProofFixture {
+export function hostControlProofFixture(
+  verifyRelayToken: (token: string) => Promise<RelayTokenClaims | null> = async () => null
+): HostControlProofFixture {
   const database: RelayDatabase = {
     query: vi.fn(async () => []),
     queryLocked: vi.fn(async () => []),
@@ -79,7 +81,7 @@ export function hostControlProofFixture(): HostControlProofFixture {
   const recordAuth = vi.fn()
   const registry = new HostSessionRegistry(
     config,
-    async () => null,
+    verifyRelayToken,
     new RelayCredentialStore(database),
     assignments,
     new ProcessQueuedByteBudget(),

@@ -1,5 +1,6 @@
 import { CONTROL_CONTINUITY_LIMITS, RELAY_CLOSE_CODE } from '@orca-cloud/relay-contract'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RelayTokenClaims } from './relay-token-verifier.js'
 import {
   answerProof,
   hostControlProofFixture,
@@ -36,16 +37,7 @@ function sentAck(socket: ProofSocket): { generation: number; controlResumeSecret
 // A host whose token lapsed while auth was down: the cell expires its control at the next
 // heartbeat, and the host comes back inside orphan grace with a resume secret and a new token.
 async function lapsedHost() {
-  vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-  const h = hostControlProofFixture()
-  vi.spyOn(h.assignments, 'renewControlActivities').mockImplementation(async (rows) =>
-    rows.map(() => 'renewed')
-  )
-  const lapsed = { ...h.identity, exp: nowSeconds() - 61 }
-  const first = await openProof(h, new ProofSocket(), lapsed)
-  answerProof(first, h.keyPair)
-  await vi.advanceTimersByTimeAsync(0)
-  const ack = sentAck(first)
+  const { h, first, ack } = await connectedHost(-61)
   await vi.advanceTimersByTimeAsync(15_000)
   expect(first.close).toHaveBeenCalledWith(
     RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL,
@@ -55,14 +47,39 @@ async function lapsedHost() {
   expect(session?.state).toBe('orphaned')
   expect(CONTROL_CONTINUITY_LIMITS.orphanGraceMs).toBeGreaterThan(5_000)
   await vi.advanceTimersByTimeAsync(5_000)
-  const resumeHello = (overrides: object = {}) =>
+  return { h, ack, session: session!, resumeHello: resumeHelloFor(h.hello, ack) }
+}
+
+async function connectedHost(
+  expiresInSeconds: number,
+  verifyRelayToken?: (token: string) => Promise<RelayTokenClaims | null>
+) {
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  const h = hostControlProofFixture(verifyRelayToken)
+  vi.spyOn(h.assignments, 'renewControlActivities').mockImplementation(async (rows) =>
+    rows.map(() => 'renewed')
+  )
+  const first = await openProof(h, new ProofSocket(), {
+    ...h.identity,
+    exp: nowSeconds() + expiresInSeconds
+  })
+  answerProof(first, h.keyPair)
+  await vi.advanceTimersByTimeAsync(0)
+  return { h, first, ack: sentAck(first) }
+}
+
+function resumeHelloFor(hello: string, ack: { generation: number; controlResumeSecret: string }) {
+  return (overrides: object = {}) =>
     JSON.stringify({
-      ...JSON.parse(h.hello),
+      ...JSON.parse(hello),
       previousGeneration: ack.generation,
       controlResumeSecret: ack.controlResumeSecret,
       ...overrides
     })
-  return { h, ack, session: session!, resumeHello }
+}
+
+function sendRefresh(socket: ProofSocket): void {
+  socket.emit('message', Buffer.from(JSON.stringify({ type: 'auth-refresh', relayJwt: 'jwt' })), false)
 }
 
 describe('a resumed control adopts the token its hello proved', () => {
@@ -97,16 +114,71 @@ describe('a resumed control adopts the token its hello proved', () => {
     await vi.advanceTimersByTimeAsync(0)
   })
 
-  it('starts a new generation when the hello speaks for another profile', async () => {
+  it.each([
+    ['profile', { prof: 'profile-other' }],
+    ['organization', { org: 'org-other' }]
+  ])('starts a new generation when the hello speaks for another %s', async (_, claims) => {
     const { h, ack, session, resumeHello } = await lapsedHost()
-    const otherProfile = { ...h.identity, prof: 'profile-other', exp: nowSeconds() + 300 }
-    const replacement = await openProof(h, new ProofSocket(), otherProfile, resumeHello())
+    const other = { ...h.identity, ...claims, exp: nowSeconds() + 300 }
+    const replacement = await openProof(h, new ProofSocket(), other, resumeHello())
     answerProof(replacement, h.keyPair)
     await vi.advanceTimersByTimeAsync(0)
     expect(sentAck(replacement).generation).toBe(ack.generation + 1)
     expect(session.state).toBe('closed')
     const current = h.registry.get({ userId: h.identity.sub, relayHostId: h.identity.relayHostId })
-    expect(current?.identity.prof).toBe('profile-other')
+    expect(current?.identity).toMatchObject(claims)
+    h.registry.drain(0)
+    await vi.advanceTimersByTimeAsync(0)
+  })
+})
+
+describe('an auth refresh', () => {
+  it('never lowers the expiry the session already holds', async () => {
+    const verify = vi.fn<(token: string) => Promise<RelayTokenClaims | null>>()
+    const { h, first } = await connectedHost(600, verify)
+    const session = h.registry.get({ userId: h.identity.sub, relayHostId: h.identity.relayHostId })!
+    const held = session.identity.exp
+    verify.mockResolvedValueOnce({ ...h.identity, exp: held - 300 })
+    sendRefresh(first)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(session.identity.exp).toBe(held)
+    verify.mockResolvedValueOnce({ ...h.identity, exp: held + 300 })
+    sendRefresh(first)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(session.identity.exp).toBe(held + 300)
+    expect(first.close).not.toHaveBeenCalled()
+    h.registry.drain(0)
+    await vi.advanceTimersByTimeAsync(0)
+  })
+
+  it('closes the socket a refused refresh arrived on, not the control that replaced it', async () => {
+    let finish!: (claims: RelayTokenClaims | null) => void
+    const verify = vi.fn(
+      () =>
+        new Promise<RelayTokenClaims | null>((resolve) => {
+          finish = resolve
+        })
+    )
+    const { h, first, ack } = await connectedHost(600, verify)
+    sendRefresh(first)
+    await vi.advanceTimersByTimeAsync(0)
+    // The host resumes on a new socket while the old socket's refresh is still verifying.
+    const successor = await openProof(
+      h,
+      new ProofSocket(),
+      { ...h.identity, exp: nowSeconds() + 600 },
+      resumeHelloFor(h.hello, ack)()
+    )
+    answerProof(successor, h.keyPair)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sentAck(successor).generation).toBe(ack.generation)
+    finish({ ...h.identity, prof: 'profile-other', exp: nowSeconds() + 600 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(first.close).toHaveBeenCalledWith(
+      RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL,
+      'refresh identity changed'
+    )
+    expect(successor.close).not.toHaveBeenCalled()
     h.registry.drain(0)
     await vi.advanceTimersByTimeAsync(0)
   })
