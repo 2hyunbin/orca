@@ -3,6 +3,9 @@ import { warnTerminalLifecycleAnomaly } from '../terminal-lifecycle-diagnostics'
 import { isSshSessionGoneError, recordPtyConnectDiagnostic } from './pty-connect-limits'
 import { toProcessExitStartup } from './process-exit-startup'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
+import type { HeldPaneReopenOutcome } from '../newer-daemon-hold-state'
+import { holdForNewerDaemon } from './newer-daemon-hold-pane'
+import { NEWER_DAEMON_HOLD_ERROR } from '../../../../../shared/newer-daemon-hold'
 
 import {
   awaitAgentStatusStartupSnapshot,
@@ -51,8 +54,16 @@ async function prepareDeferredSessionReattach(
 
 function connectDeferredSessionReattach(
   session: ConnectPanePtySession,
-  deferredReattachSessionId: string
+  deferredReattachSessionId: string,
+  onSettled?: (outcome: HeldPaneReopenOutcome) => void
 ): void {
+  let settled = false
+  const settle = (outcome: HeldPaneReopenOutcome): void => {
+    if (!settled) {
+      settled = true
+      onSettled?.(outcome)
+    }
+  }
   session.allowInitialIdleCacheSeed = true
   recordPtyConnectDiagnostic(`pane=${session.pane.id} -> REATTACH ${deferredReattachSessionId}`)
 
@@ -65,11 +76,16 @@ function connectDeferredSessionReattach(
 
   let expiredReattachError = false
   let paneOwnerUnverified = false
+  let heldByNewerDaemon = false
   const coldRestoreStartup = session.buildColdRestoreAgentResumeStartup()
   const outputCallbacks = session.captureTransportOutputCallbacks(
     (message) => {
       if (isSshSessionGoneError(message)) {
         expiredReattachError = true
+        return
+      }
+      if (message.includes(NEWER_DAEMON_HOLD_ERROR)) {
+        heldByNewerDaemon = true
         return
       }
       if (message.includes(PANE_OWNER_UNVERIFIED_ERROR)) {
@@ -119,6 +135,19 @@ function connectDeferredSessionReattach(
         }
         return
       }
+      if (!result && heldByNewerDaemon) {
+        session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
+        const gen = await preSignalPromise
+        if (typeof gen === 'number') {
+          void window.api.pty.clearPendingPaneSerializer(session.cacheKey, gen).catch(() => {})
+        }
+        if (isCurrentReattach()) {
+          holdForNewerDaemon(session, deferredReattachSessionId, (onSettled) =>
+            connectDeferredSessionReattach(session, deferredReattachSessionId, onSettled)
+          )
+        }
+        return
+      }
       if (!result && paneOwnerUnverified) {
         session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
         const gen = await preSignalPromise
@@ -150,6 +179,13 @@ function connectDeferredSessionReattach(
         coldRestoreStartup,
         outputCallbacks.generation
       )
+      settle({
+        reopened: accepted,
+        agentResumed:
+          accepted &&
+          Boolean(coldRestoreStartup) &&
+          !(result && typeof result === 'object' && result.agentResumeUnavailable)
+      })
       session.finishReattachLiveDataDeferral(accepted, outputCallbacks.generation)
       const gen = await preSignalPromise
       if (typeof gen === 'number') {
@@ -200,4 +236,6 @@ function connectDeferredSessionReattach(
         forceBlankRestoredViewport: true
       })
     })
+    // Why: only an accepted reattach counts as reopened; every other branch settles as not.
+    .finally(() => settle({ reopened: false, agentResumed: false }))
 }

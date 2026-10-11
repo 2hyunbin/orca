@@ -19469,6 +19469,18 @@
       "learnMore": "Learn more",
       "dontShowAgain": "Don't show again",
       "dismiss": "Dismiss"
+    },
+    "newerDaemonBanner": {
+      "failedTitle": "Couldn't reopen this terminal",
+      "title": "This terminal was opened in a newer version of Orca",
+      "resumableBody": "Reopen it here to keep working. Your agent session will resume.",
+      "reopening": "Reopening…",
+      "tryAgain": "Try again",
+      "reopen": "Reopen terminal",
+      "reopenedOne": "Reopened 1 terminal",
+      "reopenedOther": "Reopened {{count}} terminals",
+      "resumedOne": "1 agent session resumed.",
+      "resumedOther": "{{count}} agent sessions resumed."
     }
   },
   "fileExplorer": {
