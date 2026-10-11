@@ -10,6 +10,8 @@ export function sshTargetNotConnectedMessage(connectionId: string): string {
   return `SSH connection "${connectionId}" not found or not connected`
 }
 
+// Why no custom `name`: Electron IPC rejects with `${error}`, so the renderer keeps seeing
+// `Error: <message>`, the text these paths showed before the typed error existed.
 export class SshHostNotServedError extends Error {
   readonly code = 'ssh_host_not_served'
 
@@ -18,6 +20,5 @@ export class SshHostNotServedError extends Error {
     message: string = SSH_HOST_NOT_SERVED_MESSAGE
   ) {
     super(message)
-    this.name = 'SshHostNotServedError'
   }
 }
