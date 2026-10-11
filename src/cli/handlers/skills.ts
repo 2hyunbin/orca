@@ -17,7 +17,7 @@ import {
   detectSkillsCliUpdateAgentKeys
 } from '../../shared/skills-cli-agent-detection'
 import { buildAgentFeatureSkillInstallArgs } from '../../shared/agent-feature-install-commands'
-import { readOrcaCliVersion } from '../cli-version'
+import { readOrcaCliBuildCommit } from '../cli-version'
 
 function resolveSelectedSkillNames(
   flags: Map<string, string | boolean>,
@@ -165,18 +165,18 @@ function resolveAgentKeys(verb: SkillMutationVerb, flags: Map<string, string | b
 }
 
 function buildNpxSkillsArgs(skillNames: string[], global: boolean, agents: string[]): string[] {
-  const appVersion = readOrcaCliVersion()
-  if (!appVersion) {
+  const sourceCommit = readOrcaCliBuildCommit()
+  if (!sourceCommit) {
     throw new RuntimeClientError(
       'invalid_environment',
-      'Could not read the Orca version this CLI ships with, so there is no release to install skills from.'
+      'Could not read the commit this Orca CLI was built from, so there is no source to install skills from.'
     )
   }
   // Why: a cold package cache makes bare `npx` prompt before it will fetch
   // `skills`, which strands an unattended host just like the picker does.
   return [
     '--yes',
-    ...buildAgentFeatureSkillInstallArgs(skillNames, { appVersion, global, yes: true, agents })
+    ...buildAgentFeatureSkillInstallArgs(skillNames, { sourceCommit, global, yes: true, agents })
   ]
 }
 
@@ -224,7 +224,7 @@ function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
 
     const global = flags.get('local') !== true
     // Why: update is the same pinned `skills add`; `skills update` follows GitHub HEAD,
-    // which runs ahead of the release this CLI judges freshness against.
+    // which runs ahead of the build this CLI judges freshness against.
     const npxArgs = buildNpxSkillsArgs(skillNames, global, resolveAgentKeys(verb, flags))
     const command = formatNpxCommand(npxArgs)
     const dryRun = flags.get('dry-run') === true

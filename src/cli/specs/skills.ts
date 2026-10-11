@@ -73,10 +73,10 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'skill', 'all', 'agent', 'local', 'dry-run'],
     notes: [
       'Reads the bundled skill registry locally without contacting the Orca runtime.',
-      'Resolves to the same `npx skills add <repo>/tree/v<version> --skill <name> ...` ' +
-        'command used by Orca Settings, pinned to this Orca release, plus the ' +
-        'non-interactive flags an unattended host needs (`npx --yes` and `-y`), then ' +
-        'runs it and forwards its output and exit code.',
+      'Resolves to the same `npx skills@<pinned> add <repo>/tree/<commit> --skill <name> ...` ' +
+        'command used by Orca Settings, pinned to the commit this Orca build was made from, ' +
+        'plus the non-interactive flags an unattended host needs (`npx --yes` and `-y`), ' +
+        'then runs it and forwards its output and exit code.',
       'Installs globally (all projects, adds --global) by default. Use --local to install ' +
         'into the current project instead.',
       'Targets the coding agents Orca detects on this host, plus the shared ' +
@@ -101,7 +101,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['skills', 'update'],
-    summary: 'Update Orca skills to the version this Orca release ships',
+    summary: 'Update Orca skills to the version this Orca build ships',
     usage:
       'orca skills update [--skill <name>]... [--all] [--agent <name>[,<name>]] ' +
       '[--local] [--dry-run] [--json]',
@@ -109,7 +109,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       'Reads the bundled skill registry locally without contacting the Orca runtime.',
       'Runs the same pinned `npx skills add` command as `orca skills install`, which ' +
-        'replaces each selected skill with the copy this Orca release ships.',
+        'replaces each selected skill with the copy this Orca build ships.',
       'Updates the global install (all projects, adds --global) by default. Use --local to ' +
         'update the current project instead.',
       'Targets the same agents as `orca skills install`, or only the shared ' +

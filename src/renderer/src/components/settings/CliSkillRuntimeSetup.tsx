@@ -196,7 +196,7 @@ function wrapWindowsSkillCommandWithNpxPrerequisite(
     // shells rewrite cmd.exe's leading /d /s /c switches into drive paths,
     // starting an interactive cmd session instead of running the payload.
     (target === 'copied-command' && isPosixFamilyWindowsShellConfigured()) ||
-    !/^npx\s+skills\s+(?:add|update)\b/i.test(trimmedCommand)
+    !/^npx\s+skills(?:@[\w.-]+)?\s+(?:add|update)\b/i.test(trimmedCommand)
   ) {
     return command
   }

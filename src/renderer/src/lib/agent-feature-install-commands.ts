@@ -19,7 +19,7 @@ export {
 
 /** The interactive install, pinned to this build; also the update, since `add` re-copies. */
 export function buildAgentFeatureSkillInstallCommand(skillNames: readonly string[]): string {
-  return buildPinnedSkillInstallCommand(skillNames, { appVersion: ORCA_APP_VERSION })
+  return buildPinnedSkillInstallCommand(skillNames, { sourceCommit: ORCA_BUILD_COMMIT })
 }
 
 export const ORCA_CLI_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([

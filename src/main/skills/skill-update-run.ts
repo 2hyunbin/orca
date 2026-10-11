@@ -30,8 +30,8 @@ const OUTPUT_FLUSH_MS = 100
 export const CANCEL_RELEASE_TIMEOUT_MS = 12_000
 
 export type SkillUpdateRunnerDeps = {
-  /** The running build's version; the install is pinned to its release tag. */
-  appVersion: string
+  /** The commit the running build was made from; the install is pinned to it. */
+  sourceCommit: string
   /** Same targets `orca skills update` picks on this host. */
   detectAgentKeys?: () => string[]
   spawnProcess?: typeof spawn
@@ -54,7 +54,7 @@ function clampOutput(value: string): string {
 }
 
 /**
- * Runs the pinned `npx --yes skills add <orca>/tree/v<version> --skill <name>... --global
+ * Runs the pinned `npx --yes skills@<pinned> add <orca>/tree/<commit> --skill <name>... --global
  * --agent ... -y` headlessly. `add` always re-copies, so the result is this build's bytes
  * however the old copy was installed or edited.
  *
@@ -104,7 +104,7 @@ export class SkillUpdateRunner {
     const npxArgs = [
       '--yes',
       ...buildAgentFeatureSkillInstallArgs(canonicalNames, {
-        appVersion: this.deps.appVersion,
+        sourceCommit: this.deps.sourceCommit,
         yes: true,
         agents: (this.deps.detectAgentKeys ?? detectSkillsCliUpdateAgentKeys)()
       })

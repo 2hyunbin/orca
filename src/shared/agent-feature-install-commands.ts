@@ -1,4 +1,5 @@
 import { isUsableSkillsCliAgentKey } from './skills-cli-agent-keys'
+import { SKILLS_CLI_VERSION } from './skills-cli-version'
 
 export const ORCA_SKILLS_REPOSITORY_URL = 'https://github.com/stablyai/orca'
 
@@ -14,7 +15,8 @@ export const LINEAR_AGENT_SKILL_NAMES = [ORCA_LINEAR_SKILL_NAME, LINEAR_TICKETS_
 // pastes keeps its interactive prompts and the CLI's own agent detection. Only an
 // unattended spawn, which nothing can answer, opts in.
 export type AgentFeatureSkillCommandOptions = {
-  appVersion: string
+  /** Full commit the running build was made from. */
+  sourceCommit: string
   global?: boolean
   yes?: boolean
   agents?: readonly string[]
@@ -26,6 +28,9 @@ export function buildAgentFeatureSkillInstallArgs(
 ): string[] {
   if (skillNames.length === 0) {
     throw new Error('At least one skill name is required.')
+  }
+  if (!/^[0-9a-f]{40}$/.test(options.sourceCommit)) {
+    throw new Error(`"${options.sourceCommit}" is not a commit official skills can be pinned to.`)
   }
   const global = options.global ?? true
   // Why: -y with no --agent is the one combination that makes `skills add` install
@@ -43,12 +48,12 @@ export function buildAgentFeatureSkillInstallArgs(
   // Why: one flag per name remains compatible with both single-value and variadic parsers.
   const skillArgs = skillNames.flatMap((name) => ['--skill', name])
   return [
-    'skills',
+    `skills@${SKILLS_CLI_VERSION}`,
     'add',
-    // Why: pinned to the running build's release tag so the installed bytes are the ones
-    // its bundled manifest judges freshness against. `add` always re-copies, so the same
-    // command is both the install and the update.
-    `${ORCA_SKILLS_REPOSITORY_URL}/tree/v${options.appVersion}`,
+    // Why: pinned to the build's own commit so the installed bytes are the ones its bundled
+    // manifest judges freshness against, on every channel (hourly builds have no tag in
+    // this repo). `add` always re-copies, so the same command is install and update.
+    `${ORCA_SKILLS_REPOSITORY_URL}/tree/${options.sourceCommit}`,
     ...skillArgs,
     ...(global ? ['--global'] : []),
     // Why: an explicit --agent stops `skills add` calling its own detection, whose

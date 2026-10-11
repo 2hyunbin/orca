@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import {
@@ -37,7 +37,7 @@ export function registerSkillsHandlers(store: Store, runtime?: OrcaRuntimeServic
     inventorySkillFreshness({ repos: store.getRepos() })
 
   const runner = new SkillUpdateRunner({
-    appVersion: app.getVersion(),
+    sourceCommit: ORCA_BUILD_COMMIT,
     // Why: per-skill outcomes come from re-hashing what is actually on disk, not
     // from scraping stdout.
     rescanOutdatedNames: async (names) => {
