@@ -2,6 +2,7 @@
 // list and every open server workspace share one poll and one answer, so a row's badge and its
 // workspace screen never disagree and two readers never double the desktop's load.
 
+import { useCallback, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 import type { MobileRelayHost } from '../../../src/shared/mobile-relay-hosts-contract'
 import type { RpcClient } from '../transport/rpc-client'
@@ -126,4 +127,17 @@ export function relayHostsFeed(client: RpcClient): RelayHostsFeed {
     feeds.set(client, feed)
   }
   return feed
+}
+
+const noSubscription = (): (() => void) => () => {}
+
+/** The desktop's servers from the shared feed while `client` is set; null before it answers. */
+export function useRelayHosts(client: RpcClient | null): readonly MobileRelayHost[] | null {
+  const feed = client ? relayHostsFeed(client) : null
+  const subscribe = useCallback(
+    (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
+    [feed]
+  )
+  const readHosts = () => feed?.getSnapshot() ?? null
+  return useSyncExternalStore(subscribe, readHosts, readHosts)
 }
