@@ -73,36 +73,15 @@ export class OrcaRuntimeWithRecordAgentPromptLifecycleState extends OrcaRuntimeW
   }
 
   getPtyOutputSequence(ptyId: string): number {
-    return this.ptyOutputSequenceById.get(ptyId) ?? 0
+    return this.terminalOutput.getPtyOutputSequence(ptyId)
   }
 
   protected getPtyLifecycleGeneration(ptyId: string): number {
-    const existing = this.ptyLifecycleGenerationById.get(ptyId)
-    if (existing !== undefined) {
-      return existing
-    }
-    const generation = this.nextPtyLifecycleGeneration++
-    this.ptyLifecycleGenerationById.set(ptyId, generation)
-    return generation
+    return this.terminalOutput.getPtyLifecycleGeneration(ptyId)
   }
 
   protected advancePtyLifecycleGeneration(ptyId: string): void {
-    this.ptyLifecycleGenerationById.set(ptyId, this.nextPtyLifecycleGeneration++)
-    this.clearAgentPromptCorrelationForPty(ptyId)
-    // A stop intent belongs to one process incarnation; never let it label a
-    // replacement process when the provider reports a generation reset.
-    this.stopRequestedPtyIds.delete(ptyId)
-    this.agentPromptLifecycleByPtyId.delete(ptyId)
-    this.agentPromptPermissionSequenceByPtyId.delete(ptyId)
-    this.agentPromptExplicitStatusFloorByPtyId.set(ptyId, Date.now())
-    this.legacyWorkerRecovery.deleteRecoveredPty(ptyId)
-    // Why: a respawn under the same session id needs its own subscriber-driven attach.
-    this.terminalViewSubscribers.resetGeneration(ptyId)
-    // Why: a provider response belongs to the process generation that issued
-    // it; a respawn must neither reuse its frame nor join its in-flight call.
-    this.providerBufferAcquisitionsByPtyId.delete(ptyId)
-    this.providerVisibleStateByPtyId.delete(ptyId)
-    this.providerVisibleRetryAtByPtyId.delete(ptyId)
+    return this.terminalOutput.advancePtyLifecycleGeneration(ptyId)
   }
 
   synchronizePtyOutputSequenceFromProvider(
@@ -110,81 +89,11 @@ export class OrcaRuntimeWithRecordAgentPromptLifecycleState extends OrcaRuntimeW
     providerSequence: { value: number; generation: 'continued' | 'reset' },
     runtimeSequenceAtSpawnStart = 0
   ): number {
-    if (
-      !Number.isFinite(providerSequence.value) ||
-      providerSequence.value < 0 ||
-      !Number.isFinite(runtimeSequenceAtSpawnStart) ||
-      runtimeSequenceAtSpawnStart < 0
-    ) {
-      return this.getPtyOutputSequence(ptyId)
-    }
-    const baseline = Math.floor(providerSequence.value)
-    const currentSequence = this.getPtyOutputSequence(ptyId)
-    const sequenceAtSpawnStart = Math.min(currentSequence, Math.floor(runtimeSequenceAtSpawnStart))
-    const postSpawnSequence = currentSequence - sequenceAtSpawnStart
-    const wasInitialized = this.providerSequenceInitializedPtys.has(ptyId)
-    const replacesExistingRuntimeGeneration = wasInitialized || sequenceAtSpawnStart > 0
-    const providerOffset =
-      providerSequence.generation === 'reset'
-        ? sequenceAtSpawnStart
-        : (this.providerSequenceOffsetByPtyId.get(ptyId) ?? 0)
-    const providerBaseline = providerOffset + baseline
-
-    if (providerSequence.generation === 'reset') {
-      this.advancePtyLifecycleGeneration(ptyId)
-      // Why: daemon respawn/cold restore starts a new absolute domain. Old
-      // emulator state cannot remain authoritative over the replacement.
-      if (replacesExistingRuntimeGeneration) {
-        this.disposeHeadlessTerminal(ptyId)
-      }
-      this.providerModeTrackersByPtyId.delete(ptyId)
-      this.wslDistroByPtyId.delete(ptyId)
-      this.terminalCwdByPtyId.delete(ptyId)
-      this.terminalFileUriHostnameByPtyId.delete(ptyId)
-      const pty = this.ptysById.get(ptyId)
-      if (pty) {
-        pty.wslDistro = null
-      }
-      if (replacesExistingRuntimeGeneration && postSpawnSequence === 0) {
-        this.resetTrackedTerminalStateForProviderGeneration(ptyId)
-      }
-    }
-
-    const synchronizedSequence =
-      providerSequence.generation === 'reset'
-        ? currentSequence
-        : wasInitialized
-          ? currentSequence
-          : providerBaseline + postSpawnSequence
-    this.ptyOutputSequenceById.set(ptyId, synchronizedSequence)
-    this.providerSequenceInitializedPtys.add(ptyId)
-    this.providerSequenceOffsetByPtyId.set(ptyId, providerOffset)
-
-    const snapshotMayCoverMissingState =
-      (providerSequence.generation === 'continued' && !wasInitialized) ||
-      (postSpawnSequence > 0 &&
-        providerSequence.generation === 'reset' &&
-        replacesExistingRuntimeGeneration) ||
-      (providerSequence.generation === 'continued' &&
-        wasInitialized &&
-        providerBaseline > currentSequence)
-    if (snapshotMayCoverMissingState) {
-      // Why: bytes can cross the control/stream sockets around attach. Until a
-      // full renderer/provider snapshot is available, a partial model is unsafe.
-      this.providerSnapshotPreferredPtys.add(ptyId)
-    } else if (providerSequence.generation === 'reset') {
-      this.providerSnapshotPreferredPtys.delete(ptyId)
-    }
-
-    const headless = this.headlessTerminals.get(ptyId)
-    if (headless && !wasInitialized && providerSequence.generation === 'continued') {
-      // Why: daemon bytes can reach main just before spawn resolves. Queue the
-      // baseline behind those writes so their emulator sequence is rebased too.
-      headless.writeChain = headless.writeChain.then(() => {
-        headless.outputSequence = synchronizedSequence
-      })
-    }
-    return synchronizedSequence
+    return this.terminalOutput.synchronizePtyOutputSequenceFromProvider(
+      ptyId,
+      providerSequence,
+      runtimeSequenceAtSpawnStart
+    )
   }
 
   subscribeToTerminalData(

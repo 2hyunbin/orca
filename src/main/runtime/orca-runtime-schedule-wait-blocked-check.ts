@@ -1,13 +1,11 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { TerminalWaitBlockedChecks } from './terminal/wait/terminal-wait-blocked-checks'
 import { OrcaRuntimeWithOnPtyData } from './orca-runtime-on-pty-data'
-import {
-  type ProcessedAgentStatusChunk,
-  createAgentStatusOscProcessor
-} from '../../shared/agent-status-osc'
+import type { ProcessedAgentStatusChunk } from '../../shared/agent-status-osc'
 import type { RuntimePtyTitleTrackerEntry } from './runtime-terminal-state-records'
 
-export class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntimeWithOnPtyData {
+export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntimeWithOnPtyData {
+  protected abstract recordAgentPromptPermissionObservation(ptyId: string): void
+
   private readonly waitBlockedChecks = new TerminalWaitBlockedChecks({
     getPty: (id) => this.ptysById.get(id),
     recordAgentPromptPermissionObservation: (id) => this.recordAgentPromptPermissionObservation(id)
@@ -32,12 +30,7 @@ export class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntimeWithOnPt
   }
 
   protected processAgentStatusOscForPty(ptyId: string, data: string): ProcessedAgentStatusChunk {
-    let processor = this.agentStatusOscProcessorsByPtyId.get(ptyId)
-    if (!processor) {
-      processor = createAgentStatusOscProcessor()
-      this.agentStatusOscProcessorsByPtyId.set(ptyId, processor)
-    }
-    return processor(data)
+    return this.terminalOutput.processAgentStatusOscForPty(ptyId, data)
   }
 
   /** Emit the facts batched while applying one chunk/frame as a single
@@ -46,26 +39,12 @@ export class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntimeWithOnPt
     ptyId: string,
     entry: RuntimePtyTitleTrackerEntry
   ): void {
-    if (entry.pendingFacts.length > 0) {
-      const facts = entry.pendingFacts
-      entry.pendingFacts = []
-      this.emitTerminalSideEffectBatch(ptyId, facts)
-    }
-    const afterFacts = entry.afterFacts
-    entry.afterFacts = []
-    for (const run of afterFacts) {
-      run()
-    }
+    return this.terminalOutput.flushPendingTerminalSideEffectFacts(ptyId, entry)
   }
 
   /** Runs `run` after the chunk being applied has emitted its facts, or now between chunks. */
   protected runAfterPendingTerminalSideEffectFacts(ptyId: string, run: () => void): void {
-    const entry = this.ptyTitleTrackersByPtyId.get(ptyId)
-    if (entry?.applyingChunk) {
-      entry.afterFacts.push(run)
-      return
-    }
-    run()
+    return this.terminalOutput.runAfterPendingTerminalSideEffectFacts(ptyId, run)
   }
 
   /** Feed a main-fabricated OSC title/BEL frame (agent hook spinners) through
@@ -78,18 +57,7 @@ export class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntimeWithOnPt
    *  renderer parsers; this ingest keeps main's facts and records
    *  authoritative. */
   ingestSyntheticTitleFrame(ptyId: string, data: string): void {
-    const entry = this.getOrCreatePtyTitleTrackerEntry(ptyId)
-    entry.applyingChunk = true
-    entry.chunkTouchedSessionTabs = false
-    try {
-      entry.tracker.applySyntheticTitleFrame(data)
-    } finally {
-      entry.applyingChunk = false
-      this.flushPendingTerminalSideEffectFacts(ptyId, entry)
-    }
-    if (entry.chunkTouchedSessionTabs) {
-      this.touchMobileSessionSnapshotsForPty(ptyId)
-    }
+    return this.terminalOutput.ingestSyntheticTitleFrame(ptyId, data)
   }
 
   /** Scan-authority handoff for a backgrounded PTY (daemon keep-tail
@@ -103,17 +71,11 @@ export class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntimeWithOnPt
     scanSeedAnsi?: string,
     mode2031PendingSubscribe?: true
   ): void {
-    const entry = this.getOrCreatePtyTitleTrackerEntry(ptyId)
-    entry.tracker.setTransientFactScanningSuppressed(delegated)
-    if (!delegated && scanSeedAnsi) {
-      // Prime the freshly reset scanner carry with the emulator's dangling
-      // incomplete escape at the handoff position — a sequence split across
-      // the un-background toggle must not mint a phantom bell or lose its
-      // fact. titleScanData:'' keeps titles out (they were never suppressed).
-      entry.tracker.handleChunk(scanSeedAnsi, {
-        titleScanData: '',
-        mode2031PendingSubscribe
-      })
-    }
+    return this.terminalOutput.setPtyTransientFactDelegation(
+      ptyId,
+      delegated,
+      scanSeedAnsi,
+      mode2031PendingSubscribe
+    )
   }
 }

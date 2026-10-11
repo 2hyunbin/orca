@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { RuntimeTerminalOutputOwner } from './terminal/output/terminal-output-owner'
 import { OrchestrationStructuredMailboxPointerDelivery } from './orchestration/structured-mailbox-pointer-delivery'
 import { createStructuredMailboxPointerHost } from './orchestration/structured-mailbox-pointer-host'
 import { localOrchestrationCliCommand } from './orchestration/cli-command'
@@ -35,7 +36,6 @@ import type { RuntimeMessageWaiter } from './runtime-message-waiters'
 import { RuntimeMessageWaiters } from './runtime-message-waiters'
 import type { RuntimeSkillCommands } from './runtime-skill-command-surface'
 import { RuntimeTerminalStreamConsumers } from './runtime-terminal-stream-consumers'
-import type { RecentPtyOutputBuffer } from './recent-pty-output-buffer'
 
 export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId {
   protected readonly stopRequestedPtyIds = new Set<string>()
@@ -307,7 +307,15 @@ export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId
 
   // Why: startup draft paste can subscribe after the agent already emitted its
   // ready marker. Keep a bounded raw buffer so fast startup output is replayed.
-  protected recentPtyOutputById = new Map<string, RecentPtyOutputBuffer>()
+  private readonly terminalOutputOwner = new RuntimeTerminalOutputOwner(
+    this.createTerminalOutputHost()
+  )
+
+  protected get terminalOutput(): RuntimeTerminalOutputOwner {
+    return this.terminalOutputOwner
+  }
+
+  protected readonly recentPtyOutputById = this.terminalOutput.recentPtyOutputById
 
   protected setupCompletionTokenByPtyId = new Map<string, string>()
 }

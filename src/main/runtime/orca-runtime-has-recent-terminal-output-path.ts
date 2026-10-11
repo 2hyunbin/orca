@@ -1,28 +1,12 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithGetOrchestrationDispatchAuthority } from './orca-runtime-get-orchestration-dispatch-authority'
-import {
-  recentTerminalOutputIncludesPath,
-  recentTerminalPathCandidatesIncludePath
-} from './terminal-output-path-candidates'
+
 import type { ApplyLayoutResult, DriverState } from './orca-runtime-core'
 import { clampTerminalViewport } from './terminal-viewport'
 
 export class OrcaRuntimeWithHasRecentTerminalOutputPath extends OrcaRuntimeWithGetOrchestrationDispatchAuthority {
   hasRecentTerminalOutputPath(handle: string, pathText: string, absolutePath: string): boolean {
-    // Why: safety net for any query path that never saw a mobile onReady —
-    // lazily backfill so the answer matches pre-gate behavior.
-    if (!this.recentPtyPathCandidateTrackingActive) {
-      this.activateRecentPtyPathCandidateTracking()
-    }
-    const ptyId = this.resolveLeafForHandle(handle)?.ptyId
-    const recentOutput = ptyId ? this.recentPtyOutputById.get(ptyId)?.read() : null
-    if (recentOutput && recentTerminalOutputIncludesPath(recentOutput, pathText, absolutePath)) {
-      return true
-    }
-    const candidates = ptyId ? this.recentPtyPathCandidatesById.get(ptyId) : null
-    return candidates
-      ? recentTerminalPathCandidatesIncludePath(candidates, pathText, absolutePath)
-      : false
+    return this.terminalOutput.hasRecentTerminalOutputPath(handle, pathText, absolutePath)
   }
 
   // ─── Mobile Fit Override Management ─────────────────────────

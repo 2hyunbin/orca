@@ -66,9 +66,19 @@ export class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeWithTermin
     | ((paneKey: string, evidence: ClaudeTerminalEvidence) => void)
     | null
 
-  protected terminalSideEffectLocalConsumerAvailable = false
+  protected get terminalSideEffectLocalConsumerAvailable() {
+    return this.terminalOutput.terminalSideEffectLocalConsumerAvailable
+  }
+  protected set terminalSideEffectLocalConsumerAvailable(value: boolean) {
+    this.terminalOutput.terminalSideEffectLocalConsumerAvailable = value
+  }
 
-  protected terminalSideEffectConsumerAvailable = false
+  protected get terminalSideEffectConsumerAvailable() {
+    return this.terminalOutput.terminalSideEffectConsumerAvailable
+  }
+  protected set terminalSideEffectConsumerAvailable(value: boolean) {
+    this.terminalOutput.terminalSideEffectConsumerAvailable = value
+  }
 
   protected readonly getAgentStatusSnapshotFn: (() => AgentStatusIpcPayload[]) | null
 
