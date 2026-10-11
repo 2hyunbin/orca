@@ -5,7 +5,7 @@ import type { RuntimeFileReadResult } from '../../shared/runtime-types'
 import { isMobileBinaryPath, isSafeMobileRelativePath } from './runtime-file-command-host'
 import { joinWorktreeRelativePath } from './runtime-relative-paths'
 import { readLocalMobileFile } from './runtime-file-commands-terminal-file-paths'
-import { truncateMobileFilePreview } from './runtime-file-commands-terminal-artifact-access'
+import { truncateMobileFilePreview } from './runtime-terminal-artifact-integrity'
 import {
   requireSshRuntimeFileProvider,
   runtimeFileRouteForTarget

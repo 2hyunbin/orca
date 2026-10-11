@@ -18,8 +18,6 @@ import {
 } from './runtime-file-command-target'
 import { isSafeMobileRelativePath } from './runtime-file-command-host'
 import { isENOENT } from '../ipc/filesystem-path-containment'
-import type { RuntimeFileStatLike } from './runtime-file-commands-mobile-file-list-limit'
-import { requireSshFilesystemProvider } from '../providers/ssh-filesystem-dispatch'
 
 export class RuntimeFileCommandsWithResolveTerminalPath extends RuntimeFileCommandsWithReadMobileFile {
   // Resolves a mobile terminal tap to a worktree-relative path; relatives resolve against cwd, else the worktree root.
@@ -185,15 +183,5 @@ export class RuntimeFileCommandsWithResolveTerminalPath extends RuntimeFileComma
       }
       throw error
     }
-  }
-
-  // Leaf helper: only ever reached from a route already resolved to `ssh`, so the id it takes is
-  // this client's dialable target rather than a repo row's raw `connectionId`.
-  protected async statRemoteTerminalPath(
-    absolutePath: string,
-    connectionId: string
-  ): Promise<RuntimeFileStatLike & { isDirectory: () => boolean }> {
-    const stats = await requireSshFilesystemProvider(connectionId).stat(absolutePath)
-    return { ...stats, isDirectory: () => stats.type === 'directory' }
   }
 }

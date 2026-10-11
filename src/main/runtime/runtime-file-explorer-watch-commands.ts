@@ -1,11 +1,8 @@
-// @ts-nocheck -- mechanically split class members.
-import { RuntimeFileCommandsWithWriteTerminalArtifactFile } from './runtime-file-commands-write-terminal-artifact-file'
-import type { TerminalFileGrant } from './runtime-file-commands-mobile-file-list-limit'
+import { RuntimeFileCommandsWithResolveTerminalPath } from './runtime-file-commands-resolve-terminal-path'
 import {
   runtimeFileWatcherLeasesByOwnerAndRoot,
   runtimeWatcherReleaseKey
 } from './runtime-file-commands-mobile-file-list-limit'
-import type { IFilesystemProvider } from '../providers/types'
 import {
   SSH_FILESYSTEM_PROVIDER_UNAVAILABLE_MESSAGE,
   getSshFilesystemProvider
@@ -30,31 +27,8 @@ import {
   watchFileExplorerInWatcherProcess
 } from './file-watcher-host'
 import { registerRuntimeFileWatcherRelease } from './runtime-file-watcher-leases'
-import { requireFilesystemProviderForHost } from '../providers/execution-host-provider-dispatch'
-import { toSshExecutionHostId } from '../../shared/execution-host'
 
-export class RuntimeFileCommandsWithAssertRemoteTerminalFileGrantPathStillCanonical extends RuntimeFileCommandsWithWriteTerminalArtifactFile {
-  protected async assertRemoteTerminalFileGrantPathStillCanonical(
-    grant: TerminalFileGrant
-  ): Promise<IFilesystemProvider> {
-    if (!grant.connectionId) {
-      throw new Error('terminal_file_grant_mismatch')
-    }
-    const provider = requireFilesystemProviderForHost(toSshExecutionHostId(grant.connectionId))
-    const canonicalPath =
-      grant.provenance === 'native-chat'
-        ? await provider.realpath(grant.absolutePath)
-        : await this.resolveAllowedRemoteTerminalArtifactPath(
-            grant.absolutePath,
-            grant.connectionId
-          )
-    // Why: relay I/O follows symlinks, so re-canonicalize after the remote process can mutate the path.
-    if (canonicalPath !== grant.absolutePath) {
-      throw new Error('terminal_file_grant_stale')
-    }
-    return provider
-  }
-
+export class RuntimeFileExplorerWatchCommands extends RuntimeFileCommandsWithResolveTerminalPath {
   async readFileExplorerDir(
     worktreeSelector: string,
     relativePath: string,
