@@ -20,7 +20,7 @@ export function registerDirectSshStateIpcBridge(
     reconnectCoordinator,
     currentAuthority,
     terminalActions,
-    prepareAndSync
+    prepareHost
   } = runtime
   const sshStateWatermarkByTargetId = new Map<string, number>()
   // Connect replies can update the store before this bridge routes the matching push.
@@ -188,9 +188,8 @@ export function registerDirectSshStateIpcBridge(
         coordinatorRoutingEnabled: isDirectSshReconnectCoordinatorRoutingEnabled(),
         invalidateStaleTerminalBindings: (nextAuthority) =>
           terminalActions().invalidateStaleDirectSshTargetPtyBindings?.(nextAuthority) ?? 0,
-        retryTargetPanes: (nextAuthority) =>
-          terminalActions().retryDirectSshTargetPanes?.(nextAuthority) ?? 0,
-        prepareAndSync: prepareAndSync,
+        retryTargetPanes: () => 0,
+        prepareHost,
         rememberReconnectAuthority: (nextAuthority) => {
           if (nextAuthority) {
             reconnectAuthorityByTarget.set(targetId, nextAuthority)
@@ -261,7 +260,7 @@ export function registerDirectSshStateIpcBridge(
       getConnectionStates: () => useAppStore.getState().sshConnectionStates ?? [],
       wakeAuthority: (authority) => {
         reconnectCoordinator.correctUnboundTerminals(authority, 'wake-refresh')
-        void prepareAndSync(authority, 'wake-refresh')
+        void prepareHost(authority, 'wake-refresh')
       },
       ...(typeof window.api.ui.onSystemResumed === 'function'
         ? { onSystemResumed: (callback: () => void) => window.api.ui.onSystemResumed(callback) }

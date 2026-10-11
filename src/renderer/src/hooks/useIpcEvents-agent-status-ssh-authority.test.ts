@@ -172,7 +172,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
     { enabled: true, expectedRoute: ['request'] },
     {
       enabled: false,
-      expectedRoute: ['replace', 'invalidate', 'retry', 'capture', 'prepare']
+      expectedRoute: ['replace', 'invalidate', 'capture', 'prepare']
     }
   ])(
     'routes a changed direct SSH authority through the enabled=$enabled path',
@@ -202,13 +202,8 @@ describe('useIpcEvents agent status snapshot integration', () => {
           order.push('invalidate')
           return 1
         },
-        retryDirectSshTargetPanes: () => {
-          order.push('retry')
-          return 1
-        },
         setSshTargetsMetadata: vi.fn(),
         setRemovedSshTargetLabels: vi.fn(),
-        setRemoteWorkspaceSyncStatus: vi.fn(),
         clearRemoteDetectedAgents: vi.fn(),
         clearDirectSshTargetPtyBindings: vi.fn(),
         clearRemovedSshTargetState: vi.fn()
@@ -226,7 +221,6 @@ describe('useIpcEvents agent status snapshot integration', () => {
           return { token: null }
         }),
         correctUnboundTerminals: vi.fn(() => 0),
-        finalizeHydratedTerminals: vi.fn(() => 0),
         invalidate: vi.fn(),
         stop: vi.fn()
       }
@@ -427,21 +421,18 @@ describe('useIpcEvents agent status snapshot integration', () => {
       setDetectedPorts,
       setSshTargetsMetadata: vi.fn(),
       setRemovedSshTargetLabels: vi.fn(),
-      setRemoteWorkspaceSyncStatus: vi.fn(),
       fetchRuntimeEnvironmentRepos: vi.fn(async () => []),
       fetchWorktreeLineage: vi.fn(async () => undefined),
       clearRemoteDetectedAgents: vi.fn(),
       clearDirectSshTargetPtyBindings: vi.fn(),
       clearRemovedSshTargetState: vi.fn(),
-      invalidateStaleDirectSshTargetPtyBindings: vi.fn(() => 0),
-      retryDirectSshTargetPanes: vi.fn(() => 0)
+      invalidateStaleDirectSshTargetPtyBindings: vi.fn(() => 0)
     })
     const coordinator = {
       requestReconnect: vi.fn(async () => ({ status: 'complete' })),
       replaceAuthority: vi.fn(),
       prepareOnly: vi.fn(async () => ({ token: null })),
       correctUnboundTerminals: vi.fn(() => 0),
-      finalizeHydratedTerminals: vi.fn(() => 0),
       invalidate: vi.fn(),
       stop: vi.fn()
     }

@@ -23,7 +23,7 @@ import {
 } from '../../../../shared/execution-host'
 import { statUserOpenedPath } from '@/lib/user-opened-local-path'
 import {
-  CLIENT_LOCAL_FILE_SETTINGS,
+  CLIENT_LOCAL_FILE_TARGET,
   resolveHostWorkspaceFile,
   type HostWorkspaceFile
 } from './terminal-host-workspace-file'
@@ -36,6 +36,7 @@ export {
   terminalPathWslDistro,
   type TerminalFileContext
 } from './terminal-file-path-mapping'
+import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
 
 export type FileOpenFailure = {
   /** `missing` is a verified absence; `unverifiable` means the host could not answer (dropped SSH, timeout, denied path). */
@@ -49,6 +50,8 @@ type TerminalFileOpenDeps = {
   runtimeEnvironmentId?: string | null
   wslDistro?: string | null
   openWithSystemDefault?: boolean
+  /** The paired-server terminal that printed the link; lets its host grant a file outside workspaces. */
+  terminalHandle?: string | null
   /** Reports a path that could not be verified before opening; skipped once a later open supersedes it. */
   onOpenFailure?: (failure: FileOpenFailure) => void
 }
@@ -129,6 +132,7 @@ export function openDetectedFilePath(
     let statResult
     let fileContext = getTerminalFileContext(worktreeId, worktreePath, runtimeEnvironmentId)
     let hostWorkspaceFile: HostWorkspaceFile | null = null
+    let hostGrantId: string | null = null
     let clientLocal = false
     if (!fileContext.sourceHostResolved) {
       // Why: with no owner the host is unknown — refuse rather than touch this machine's files.
@@ -159,12 +163,20 @@ export function openDetectedFilePath(
     }
 
     try {
-      const linkOwner = await resolveHostWorkspaceFile(fileContext, mappedFilePath)
-      if (linkOwner?.kind === 'client') {
+      const linkOwner = await resolveHostWorkspaceFile(
+        fileContext,
+        mappedFilePath,
+        deps.terminalHandle
+      )
+      if (linkOwner?.kind === 'grant') {
+        hostGrantId = linkOwner.grantId
+        mappedFilePath = linkOwner.absolutePath
+        statResult = { isDirectory: false, escapesWorktree: true }
+      } else if (linkOwner?.kind === 'client') {
         clientLocal = true
         fileContext = {
           ...fileContext,
-          settings: CLIENT_LOCAL_FILE_SETTINGS,
+          target: CLIENT_LOCAL_FILE_TARGET,
           connectionId: undefined
         }
         statResult = { isDirectory: linkOwner.isDirectory, escapesWorktree: false }
@@ -212,7 +224,8 @@ export function openDetectedFilePath(
       return
     }
 
-    if (openWithSystemDefault && !canOpenWithSystemDefault) {
+    // Why: a granted file is readable only through its grant, so it opens in Orca, never as a download.
+    if (openWithSystemDefault && !canOpenWithSystemDefault && hostGrantId === null) {
       // Why: the popover names Shift+Cmd/Ctrl "Download & open with default app", and the OS
       // cannot launch a remote path, so the direct gesture must reach the same download.
       await downloadAndOpenRemoteTerminalFile(fileContext, mappedFilePath)
@@ -221,7 +234,7 @@ export function openDetectedFilePath(
 
     // Why: local HTML files render in Orca's browser for ordinary Cmd/Ctrl-click,
     // and remain the fallback if Shift+Cmd/Ctrl cannot launch the OS default.
-    if (isHtmlFilePath(mappedFilePath)) {
+    if (isHtmlFilePath(mappedFilePath) && hostGrantId === null) {
       if (canOpenWithSystemDefault) {
         openHtmlFileInBrowser(mappedFilePath, worktreeId, clientLocal)
         return
@@ -248,13 +261,14 @@ export function openDetectedFilePath(
         relativePath = maybeRelative
       }
     } else if (
+      hostGrantId === null &&
       !isFloatingWorkspaceId(worktreeId) &&
       store.openFiles.some(
         (openFile) => openFile.filePath === mappedFilePath && openFile.worktreeId !== worktreeId
       )
     ) {
       // Why: early resolution is only needed to avoid an existing sibling-tab collision.
-      const runtimeOwnerId = fileContext.settings?.activeRuntimeEnvironmentId?.trim()
+      const runtimeOwnerId = runtimeTargetEnvironmentId(fileContext.target)
       const executionHostId = runtimeOwnerId
         ? toRuntimeExecutionHostId(runtimeOwnerId)
         : getConnectionExecutionHostId(fileContext.connectionId)
@@ -286,10 +300,12 @@ export function openDetectedFilePath(
         runtimeEnvironmentId: clientLocal ? null : runtimeEnvironmentId,
         // Why: a tab's owner must match its workspace's to be editable; this one is this computer's.
         ...(clientLocal && targetWorktreeId === worktreeId ? { readOnly: true } : {}),
+        // Why: the grant is the only authority to read a host file outside its workspaces.
+        ...(hostGrantId !== null ? { readOnly: true, terminalArtifactGrantId: hostGrantId } : {}),
         // Why: absolute SSH paths outside the worktree otherwise look identical
         // to client-local external files when the editor reloads or restores.
         ...(relativePath === filePath &&
-        !fileContext.settings?.activeRuntimeEnvironmentId?.trim() &&
+        fileContext.target.kind === 'local' &&
         fileContext.connectionId
           ? { externalSshTargetId: fileContext.connectionId }
           : {})

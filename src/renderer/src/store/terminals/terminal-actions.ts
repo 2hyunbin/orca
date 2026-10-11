@@ -1,5 +1,5 @@
 import type { AgentAttentionUnreadReason } from '@/attention/agent-attention-contract'
-import type { DirectSshLayoutEdit, TerminalState } from './terminal-state'
+import type { TerminalState } from './terminal-state'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -18,10 +18,6 @@ import type {
   GeneratedTabTitleUpdate,
   TerminalTabTitleUpdate
 } from '../slices/terminal-tab-title-batch'
-import type {
-  DirectSshPaneRetryAttemptId,
-  DirectSshPaneRetryResult
-} from '../slices/direct-ssh-terminal-recovery'
 import type { NativeChatLaunchDraft, NativeChatLaunchPrompt } from '@/lib/native-chat-launch-prompt'
 import type { AgentStatusWorktreeShutdownReason } from '../slices/agent-status'
 import type {
@@ -141,12 +137,7 @@ export type TerminalActions = {
     options?: { remount?: boolean }
   ) => void
   /** Binds only live tabs and migrates replacement identity state before publishing ownership. */
-  updateTabPtyId: (
-    tabId: string,
-    ptyId: string,
-    replacedPtyId?: string,
-    directSshRetryAttemptId?: DirectSshPaneRetryAttemptId
-  ) => void
+  updateTabPtyId: (tabId: string, ptyId: string, replacedPtyId?: string) => void
   /** Reconciles exact exits; bulk clear intentionally retains relay-grace identity. */
   clearTabPtyId: (tabId: string, ptyId?: string) => void
   /** Protects a tab from orphan cleanup after an unverified PTY loss. */
@@ -155,8 +146,6 @@ export type TerminalActions = {
   markPtySourceDisowned: (ptyId: string) => void
   clearDirectSshTargetPtyBindings: (targetId: string) => number
   invalidateStaleDirectSshTargetPtyBindings: (authority: DirectSshAuthority) => number
-  retryDirectSshTargetPanes: (authority: DirectSshAuthority, now?: number) => number
-  settleDirectSshPaneRetry: (result: DirectSshPaneRetryResult, now?: number) => void
   /** Awaited verified shutdown; unlike closeTab, physical teardown gates the state commit. */
   shutdownWorktreeTerminals: (
     worktreeId: string,
@@ -197,7 +186,6 @@ export type TerminalActions = {
   setTabPaneExpanded: (tabId: string, expanded: boolean) => void
   setTabCanExpandPane: (tabId: string, canExpand: boolean) => void
   setTabLayout: (tabId: string, layout: TerminalLayoutSnapshot | null) => void
-  acknowledgeDirectSshLayoutEdits: (uploaded: Readonly<Record<string, DirectSshLayoutEdit>>) => void
   /** Client-local park scrollback for a tab. Never uploaded; read via `resolveLeafScrollback`. */
   setTabLocalOnlyScrollback: (tabId: string, buffersByLeafId: Record<string, string> | null) => void
   syncPaneDetachPtyOwnership: (args: {
