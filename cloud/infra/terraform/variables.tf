@@ -488,7 +488,7 @@ variable "relay_director_cloud_sql_proxy_sidecar" {
 
 variable "relay_dead_cell_verdict_alert" {
   type        = bool
-  description = "Count and alert on directors withholding the dead-cell verdict for a reserve cell whose seat-feed polls fail (cell-poll-reachability.ts). Off in production until staging has proved it; the first apply creates the metric before the policy."
+  description = "Count and alert on directors withholding the dead-cell verdict for a reserve cell whose seat-feed polls fail (cell-poll-reachability.ts). Off in production until staging has proved it. Turning it on: apply the metric first, then the policy a few minutes later, because Cloud Monitoring refuses a policy on a log metric it cannot see yet."
   default     = false
 }
 

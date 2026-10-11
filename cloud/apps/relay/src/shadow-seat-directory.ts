@@ -792,11 +792,14 @@ export function startShadowSeatPoller(
     startedAt,
     tick: () => round(true),
     deadCellVerdict: (cellId, at) => {
+      // Peers count once they have served this director a feed. The candidate always does: the
+      // store asks only for a cell Postgres records as reserve, which only a feed image runs, and a
+      // director restarted after it died would otherwise never hear from it.
       const feedCells = cells.filter((cell) => {
+        if ((cell.capacityRequests ?? 1) <= 0) return false
+        if (cell.cellId === cellId) return true
         const state = directory.cellState(cell.cellId)
-        return (
-          (cell.capacityRequests ?? 1) > 0 && state?.status !== 'no-feed' && state?.lastLiveAt !== undefined
-        )
+        return state?.status !== 'no-feed' && state?.lastLiveAt !== undefined
       })
       const verdict = reachability.verdict(cellId, feedCells, at)
       // A withheld verdict strands that cell's hosts until an operator fences it, so it alerts.

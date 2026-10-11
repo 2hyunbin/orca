@@ -1943,7 +1943,8 @@ resource "google_monitoring_alert_policy" "relay_reserve_placement_off_with_rese
 # cell-poll-reachability.ts: a reserve cell stopped answering polls, but the director would not call it
 # dead (too few feed cells, or too many failing with it), so its hosts wait for an operator fence.
 # Logged at most once a minute per cell per director. Gated until staging has proved it (variables.tf);
-# the policy reads the metric's name, so a first apply creates the metric before the policy.
+# apply the metric first, then the policy a few minutes later: Monitoring refuses a policy on a new
+# log metric until the metric is visible, which the dependency ordering alone does not wait for.
 resource "google_logging_metric" "relay_dead_cell_verdict_withheld" {
   count = var.relay_dead_cell_verdict_alert ? 1 : 0
 

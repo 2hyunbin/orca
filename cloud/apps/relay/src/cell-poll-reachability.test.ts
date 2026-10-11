@@ -140,7 +140,7 @@ const answer = (status: number) => new Response('{}', { status })
 // Every cell serves a feed page on the first round; `respond` answers every round after it.
 function poller(
   respond: (cellId: string) => Response | Promise<Response>,
-  options: { identityFails?: boolean; cells?: SeatFeedCell[]; neverServed?: string } = {}
+  options: { identityFails?: boolean; cells?: SeatFeedCell[]; neverServed?: ReadonlySet<string> } = {}
 ) {
   let now = 1_000
   let round = 0
@@ -152,7 +152,7 @@ function poller(
       fetch: vi.fn(async (input: string | URL | Request) => {
         const cellId = new URL(String(input)).hostname.split('.')[0] ?? ''
         if (cellId.startsWith('legacy')) return answer(404)
-        if (cellId === options.neverServed) return answer(502)
+        if (options.neverServed?.has(cellId)) return answer(502)
         return round === 0 ? page(cellId) : await respond(cellId)
       }),
       identityToken: vi.fn(async () => {
@@ -226,11 +226,54 @@ describe('seat-feed poller reachability', () => {
     })
   })
 
-  it('withholds a cell that never served this director a feed: it is not in the sample', async () => {
-    const cells = poller((cellId) => (cellId === 'c2' ? answer(502) : page(cellId)), { neverServed: 'c2' })
+  it('a director restarted during a lone outage still judges the dead cell: the candidate is always sampled', async () => {
+    // c2 died before this director started, so it never served it a feed page.
+    const cells = poller((cellId) => (cellId === 'c2' ? answer(502) : page(cellId)), {
+      neverServed: new Set(['c2'])
+    })
     const at = await cells.run(CELL_POLL_DEAD_STREAK_MS)
     cells.stop()
-    expect(cells.deadCellVerdict('c2', at)).toMatchObject({ dead: false, withheld: 'sample', fleetPolled: 5 })
+    expect(cells.deadCellVerdict('c2', at)).toMatchObject({
+      dead: true,
+      fleetFailing: 1,
+      fleetPolled: 6,
+      regionFailing: 1,
+      regionPolled: 6
+    })
+  })
+
+  it('a partition that began before the restart withholds: the candidate is its region\'s only sample', async () => {
+    const asia = ['a1', 'a2', 'a3'].map((cellId) => ({ ...feedCell(cellId), region: 'asia-east2' as const }))
+    const cells = poller((cellId) => (cellId.startsWith('a') ? answer(502) : page(cellId)), {
+      cells: [...CELLS, ...asia],
+      neverServed: new Set(['a1', 'a2', 'a3'])
+    })
+    const at = await cells.run(CELL_POLL_DEAD_STREAK_MS)
+    cells.stop()
+    expect(cells.deadCellVerdict('a1', at)).toMatchObject({
+      dead: false,
+      withheld: 'region',
+      fleetPolled: 7,
+      regionFailing: 1,
+      regionPolled: 1
+    })
+  })
+
+  it('counts no cell without capacity, the candidate included', async () => {
+    const empty = (cell: SeatFeedCell) => ({ ...cell, capacityRequests: 0 })
+    const peersEmpty = poller((cellId) => (cellId === 'c2' ? answer(502) : page(cellId)), {
+      cells: CELLS.map((cell) => (['c4', 'c5', 'c6'].includes(cell.cellId) ? empty(cell) : cell))
+    })
+    const at = await peersEmpty.run(CELL_POLL_DEAD_STREAK_MS)
+    peersEmpty.stop()
+    expect(peersEmpty.deadCellVerdict('c2', at)).toMatchObject({ withheld: 'sample', fleetPolled: 3 })
+
+    const candidateEmpty = poller((cellId) => (cellId === 'c2' ? answer(502) : page(cellId)), {
+      cells: CELLS.map((cell) => (cell.cellId === 'c2' ? empty(cell) : cell))
+    })
+    const candidateAt = await candidateEmpty.run(CELL_POLL_DEAD_STREAK_MS)
+    candidateEmpty.stop()
+    expect(candidateEmpty.deadCellVerdict('c2', candidateAt)).toMatchObject({ withheld: 'sample', fleetPolled: 5 })
   })
 
   it('logs every withheld verdict, sample included, once a minute per cell, for the alert', async () => {
