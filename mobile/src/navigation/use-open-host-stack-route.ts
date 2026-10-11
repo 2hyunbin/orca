@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useNavigation, useRouter } from 'expo-router'
 import {
   coordinateHostStackNavigation,
-  type HostStackLanding,
+  landOnWorkspace,
   type HostStackRootNavigation,
   type HostStackRouteTarget,
   type PendingHostStackNavigation
@@ -12,11 +12,7 @@ import {
 // Resume tap and a Tasks tap arm two independent pushes that cannot cancel each other.
 let pendingNavigation: PendingHostStackNavigation | null = null
 
-export function useOpenHostStackRoute(): (
-  hostId: string,
-  target: HostStackRouteTarget,
-  landing?: HostStackLanding
-) => void {
+export function useOpenHostStackRoute(): (hostId: string, target: HostStackRouteTarget) => void {
   const navigation = useNavigation<HostStackRootNavigation>()
   const router = useRouter()
   // Why: an unmounting screen may only cancel a transition it armed itself — home
@@ -35,17 +31,28 @@ export function useOpenHostStackRoute(): (
   )
 
   return useCallback(
-    (hostId, target, landing) => {
+    (hostId, target) => {
       pendingNavigation = coordinateHostStackNavigation(
         pendingNavigation,
         navigation,
         router,
         hostId,
-        target,
-        landing
+        target
       )
       armedRef.current = pendingNavigation
     },
     [navigation, router]
+  )
+}
+
+/** Opens a push-tapped workspace, taking over whatever transition was pending. */
+export function useLandOnWorkspace(): (hostId: string, target: HostStackRouteTarget) => void {
+  const navigation = useNavigation<HostStackRootNavigation>()
+  return useCallback(
+    (hostId, target) => {
+      pendingNavigation?.controller.cancel()
+      pendingNavigation = { hostId, controller: landOnWorkspace(navigation, hostId, target) }
+    },
+    [navigation]
   )
 }

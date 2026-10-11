@@ -1,160 +1,148 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type {
-  HostStackNavigationRoute,
-  HostStackNavigationState,
-  HostStackRootNavigation
+import {
+  workspaceLanding,
+  type HostStackNavigationRoute,
+  type HostStackNavigationState
 } from '../navigation/host-stack-navigation'
+import { mobileSessionRouteTarget } from '../session/mobile-session-route'
 import { getNotificationNavigationTarget } from './notification-routing'
 import { useOpenNotificationRoute } from './use-open-notification-route'
 
-const SESSION = '[hostId]/session/[worktreeId]'
-const LIST = '[hostId]/index'
+const ROOT_SCREENS = ['index', 'terminal-settings', 'h']
+const Y = mobileSessionRouteTarget({ hostId: 'host', worktreeId: 'Y' })
 
-type HostStackAction = Parameters<HostStackRootNavigation['dispatch']>[0]
-
-// The root stack's routes as app/_layout.tsx sees them; each `h` route carries its host stack.
-type NavigatorModel = {
-  root: HostStackNavigationRoute[] | undefined
-  listeners: Set<() => void>
-  pushes: number
-  dispatches: HostStackAction[]
-  pushedHostParams: HostStackNavigationRoute['params']
+function list(hostId: string): HostStackNavigationRoute {
+  return { key: `list-${hostId}`, name: '[hostId]/index', params: { hostId } }
 }
 
-const model = vi.hoisted((): NavigatorModel => ({
-  root: undefined,
-  listeners: new Set(),
-  pushes: 0,
-  dispatches: [],
-  pushedHostParams: undefined
-}))
-
-function stackOf(routes: readonly HostStackNavigationRoute[], key: string) {
-  return { key, index: routes.length - 1, routes }
+function session(worktreeId: string, name = '[hostId]/session/[worktreeId]') {
+  return { key: `${name}-${worktreeId}`, name, params: { hostId: 'host', worktreeId } }
 }
 
-function rootState(): HostStackNavigationState | undefined {
-  if (!model.root) {
-    return undefined
-  }
-  const inner = stackOf(model.root, 'root')
-  return { key: 'internal', index: 0, routes: [{ key: '__root', name: '__root', state: inner }] }
+// A pushed `h` carries the nested-screen params expo-router builds (getPayloadFromStateRoute).
+function hostArea(...routes: HostStackNavigationRoute[]): HostStackNavigationRoute {
+  const params = { hostId: 'host', screen: '[hostId]/index', params: { hostId: 'host' } }
+  return { key: 'h-1', name: 'h', params, state: { key: 'hs', index: routes.length - 1, routes } }
 }
 
-function emit(): void {
-  for (const listener of model.listeners) {
-    listener()
-  }
+function rootStack(...routes: HostStackNavigationRoute[]) {
+  return { key: 'root', index: routes.length - 1, routeNames: ROOT_SCREENS, routes }
 }
 
-// What expo-router's push of `/h/<host>` commits (routing.js findDivergentState): a fresh host
-// index on top of a focused host stack, else a new `h` route on the root stack.
-function commitPush(hostSegment: string): void {
-  const pushed = { key: `pushed-${model.pushes}`, name: LIST, params: { hostId: hostSegment } }
-  const root = model.root ?? [{ key: 'index', name: 'index' }]
-  const focused = root.at(-1)
-  model.root =
-    focused?.name === 'h' && focused.state
-      ? [
-          ...root.slice(0, -1),
-          { ...focused, state: stackOf([...focused.state.routes, pushed], focused.state.key!) }
+const HOME = { key: 'index', name: 'index' }
+const SETTINGS = { key: 'terminal-settings', name: 'terminal-settings' }
+
+describe('workspaceLanding leaves [workspace list, Y] in one host area', () => {
+  it.each([
+    ['the workspace list', [HOME], [list('host')], 'reused'],
+    ['workspace X', [HOME], [list('host'), session('X')], 'reused'],
+    ['X with Y deeper', [HOME], [list('host'), session('Y'), session('X')], 'reused'],
+    [
+      'a sub-route of Y',
+      [HOME],
+      [list('host'), session('Y'), session('Y', '[hostId]/source-control/[worktreeId]')],
+      'reused'
+    ],
+    ["another host's workspace", [HOME], [list('other'), session('X')], 'fresh']
+  ] as const)('from %s', (_from, below, hostRoutes, listing) => {
+    const area = hostArea(...hostRoutes)
+    const landing = workspaceLanding(rootStack(...below, area), 'host', Y)
+
+    expect(landing).toEqual({
+      type: 'RESET',
+      target: 'root',
+      payload: {
+        index: below.length,
+        routes: [
+          ...below,
+          {
+            ...area,
+            state: {
+              index: 1,
+              routes: [{ name: '[hostId]/index', params: { hostId: 'host' } }, Y].map((route, i) =>
+                i === 0 && listing === 'reused' ? hostRoutes[0] : route
+              )
+            }
+          }
         ]
-      : [...root, pushedHostArea(pushed)]
-  emit()
-}
-
-// Unkeyed routes get keys, as React Navigation rehydrates a partial state.
-function rehydrated(routes: readonly HostStackNavigationRoute[]): HostStackNavigationRoute[] {
-  return routes.map((route, index) => ({
-    key: `reset-${index}`,
-    ...route,
-    ...(route.state
-      ? { state: stackOf(rehydrated(route.state.routes), route.state.key ?? 'rehydrated') }
-      : {})
-  }))
-}
-
-function applyToHostStack(
-  routes: readonly HostStackNavigationRoute[],
-  action: HostStackAction
-): readonly HostStackNavigationRoute[] {
-  if (action.type === 'RESET') {
-    return rehydrated(action.payload.routes)
-  }
-  return routes.map((route) => {
-    if (route.key !== action.source) {
-      return route
+      }
+    })
+    const landedArea = landing.payload.routes[below.length]
+    expect(landedArea?.key).toBe(area.key)
+    expect(landedArea?.params).toBe(area.params)
+    if (listing === 'reused') {
+      expect(landedArea?.state?.routes[0]).toBe(hostRoutes[0])
     }
-    return action.type === 'REPLACE'
-      ? { key: 'replaced', ...action.payload }
-      : { ...route, params: { ...route.params, ...action.payload.params } }
   })
-}
 
-function applyDispatch(action: HostStackAction): void {
-  model.dispatches.push(action)
-  if (!model.root) {
-    return
+  it('from a root screen above X, dropping it with the host area beneath', () => {
+    const area = hostArea(list('host'), session('X'))
+    const landing = workspaceLanding(rootStack(HOME, area, SETTINGS), 'host', Y)
+
+    expect(landing.payload.index).toBe(1)
+    expect(landing.payload.routes[0]).toBe(HOME)
+    expect(landing.payload.routes[1]?.params).toBe(area.params)
+    expect(landing.payload.routes[1]?.state?.routes).toEqual([area.state!.routes[0], Y])
+    expect(landing.payload.routes).toHaveLength(2)
+  })
+
+  it('on cold start, with no host area yet', () => {
+    expect(workspaceLanding(rootStack(HOME), 'host', Y)).toEqual({
+      type: 'RESET',
+      target: 'root',
+      payload: {
+        index: 1,
+        routes: [
+          HOME,
+          {
+            name: 'h',
+            state: { index: 1, routes: [{ name: '[hostId]/index', params: { hostId: 'host' } }, Y] }
+          }
+        ]
+      }
+    })
+  })
+})
+
+const navigator = vi.hoisted(() => {
+  const listeners = new Set<() => void>()
+  const state: { current: HostStackNavigationState | undefined } = { current: undefined }
+  return {
+    listeners,
+    state,
+    dispatch: vi.fn(),
+    push: vi.fn(),
+    commit(next: HostStackNavigationState) {
+      state.current = next
+      for (const listener of listeners) {
+        listener()
+      }
+    }
   }
-  if (action.target === 'root' && action.type === 'RESET') {
-    model.root = rehydrated(action.payload.routes)
-    return
-  }
-  model.root = model.root.map((route) =>
-    route.state?.key === action.target
-      ? {
-          ...route,
-          state: stackOf(applyToHostStack(route.state.routes, action), action.target)
-        }
-      : route
-  )
-}
+})
 
 vi.mock('expo-router', () => ({
   useNavigation: () => ({
     addListener: (_event: 'state', listener: () => void) => {
-      model.listeners.add(listener)
-      return () => model.listeners.delete(listener)
+      navigator.listeners.add(listener)
+      return () => navigator.listeners.delete(listener)
     },
-    dispatch: applyDispatch,
-    getState: rootState
+    dispatch: navigator.dispatch,
+    getState: () => navigator.state.current
   }),
-  useRouter: () => ({
-    push: (route: string) => {
-      model.pushes += 1
-      queueMicrotask(() => commitPush(route.slice('/h/'.length)))
-    },
-    replace: vi.fn()
-  })
+  useRouter: () => ({ push: navigator.push, replace: vi.fn() })
 }))
 
-// A pushed `h` carries the nested-screen params expo-router builds (getPayloadFromStateRoute).
-// The host stack adopts a parent's RESET only while that same params object stays on the route.
-function pushedHostArea(pushed: HostStackNavigationRoute): HostStackNavigationRoute {
-  const params = { hostId: pushed.params?.hostId, screen: LIST, params: pushed.params }
-  model.pushedHostParams = params
-  return { ...hostArea(`host-stack-${model.pushes}`, pushed), params }
+// app/_layout.tsx is a screen of Expo Router's internal navigator, one level above the root stack.
+function asSeenByRootLayout(root: HostStackNavigationState): HostStackNavigationState {
+  return { key: 'internal', index: 0, routes: [{ key: '__root', name: '__root', state: root }] }
 }
-
-function hostArea(key: string, ...routes: HostStackNavigationRoute[]): HostStackNavigationRoute {
-  return { key: `h-${key}`, name: 'h', state: stackOf(routes, key) }
-}
-
-function list(hostId: string): HostStackNavigationRoute {
-  return { key: `list-${hostId}`, name: LIST, params: { hostId } }
-}
-
-function session(hostId: string, worktreeId: string, name = SESSION): HostStackNavigationRoute {
-  return { key: `${name}-${worktreeId}`, name, params: { hostId, worktreeId } }
-}
-
-const HOME = { key: 'index', name: 'index' }
 
 let renderer: ReactTestRenderer | null = null
 
-async function tapPush(hostId: string, worktreeId: string): Promise<void> {
+async function tapPush(worktreeId: string): Promise<void> {
   const hook: { open?: ReturnType<typeof useOpenNotificationRoute> } = {}
   function Probe() {
     hook.open = useOpenNotificationRoute()
@@ -167,107 +155,46 @@ async function tapPush(hostId: string, worktreeId: string): Promise<void> {
   if (!open) {
     throw new Error('the notification hook did not render')
   }
-  await act(async () => {
-    open(getNotificationNavigationTarget({ hostId, worktreeId })!)
-  })
-}
-
-function screenName(route: HostStackNavigationRoute): string {
-  if (route.name === LIST) {
-    return `list:${decodeURIComponent(String(route.params?.hostId))}`
-  }
-  if (route.state) {
-    return `${route.name}[${route.state.routes.map(screenName).join(', ')}]`
-  }
-  if (route.params?.worktreeId === undefined) {
-    return route.name
-  }
-  const name = route.name === SESSION ? 'session' : route.name
-  return `${name}:${String(route.params.worktreeId)}`
-}
-
-function rootScreens(): string[] {
-  return (model.root ?? []).map(screenName)
+  open(getNotificationNavigationTarget({ hostId: 'host', worktreeId })!)
 }
 
 afterEach(() => {
   act(() => renderer?.unmount())
   renderer = null
-  model.root = undefined
-  model.listeners.clear()
-  model.pushes = 0
-  model.dispatches = []
-  model.pushedHostParams = undefined
+  navigator.state.current = undefined
+  navigator.listeners.clear()
+  navigator.dispatch.mockReset()
+  navigator.push.mockReset()
 })
 
-describe('a push tap for workspace Y lands on [workspace list, Y]', () => {
-  it('from the workspace list', async () => {
-    model.root = [HOME, hostArea('hs', list('host'))]
-    await tapPush('host', 'Y')
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
-  })
+describe('a push tap through the notification hook', () => {
+  it('on cold start, lands only once the root stack has committed', async () => {
+    await tapPush('Y')
+    expect(navigator.dispatch).not.toHaveBeenCalled()
 
-  it('from workspace X, whose screen does not stay beneath Y', async () => {
-    model.root = [HOME, hostArea('hs', list('host'), session('host', 'X'))]
-    await tapPush('host', 'Y')
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
-  })
+    navigator.commit({ key: 'internal', index: 0, routes: [{ key: '__root', name: '__root' }] })
+    expect(navigator.dispatch).not.toHaveBeenCalled()
 
-  it('keeps the pushed workspace list mounted rather than remounting it', async () => {
-    model.root = [HOME, hostArea('hs', list('host'), session('host', 'X'))]
-    await tapPush('host', 'Y')
-    expect(model.root?.[1]?.state?.routes[0]?.key).toBe('pushed-1')
-  })
-
-  it('from X with Y deeper in the stack, leaving one session screen for Y', async () => {
-    model.root = [HOME, hostArea('hs', list('host'), session('host', 'Y'), session('host', 'X'))]
-    await tapPush('host', 'Y')
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
-  })
-
-  it("from a sub-route on top of Y's session", async () => {
-    const sourceControl = session('host', 'Y', '[hostId]/source-control/[worktreeId]')
-    model.root = [HOME, hostArea('hs', list('host'), session('host', 'Y'), sourceControl)]
-    await tapPush('host', 'Y')
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
-  })
-
-  it("from another host's workspace", async () => {
-    model.root = [HOME, hostArea('hs', list('other'), session('other', 'X'))]
-    await tapPush('host', 'Y')
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
-  })
-
-  it("from a root screen above X's host area, leaving one host area", async () => {
-    model.root = [
-      HOME,
-      hostArea('hs', list('host'), session('host', 'X')),
-      { key: 'terminal-settings', name: 'terminal-settings' }
-    ]
-    await tapPush('host', 'Y')
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
-    expect(model.root?.[0]?.key).toBe('index')
-    const reset = model.dispatches.at(-1)
-    expect(reset?.type).toBe('RESET')
-    expect(reset?.type === 'RESET' && reset.payload.routes.at(-1)?.params).toBe(
-      model.pushedHostParams
+    navigator.commit(asSeenByRootLayout(rootStack(HOME)))
+    navigator.commit(asSeenByRootLayout(rootStack(HOME)))
+    expect(navigator.dispatch).toHaveBeenCalledExactlyOnceWith(
+      workspaceLanding(rootStack(HOME), 'host', Y)
     )
+    expect(navigator.push).not.toHaveBeenCalled()
   })
 
-  it('on cold start, before the root navigator has committed', async () => {
-    await tapPush('host', 'Y')
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
-  })
-})
+  it('updates the workspace already on screen in place (#20310)', async () => {
+    navigator.state.current = asSeenByRootLayout(
+      rootStack(HOME, hostArea(list('host'), session('X'), session('Y')))
+    )
+    await tapPush('Y')
 
-describe('a push tap for the workspace already on screen (#20310)', () => {
-  it('updates its params in place, with no push', async () => {
-    model.root = [HOME, hostArea('hs', list('host'), session('host', 'X'), session('host', 'Y'))]
-    await tapPush('host', 'Y')
-    expect(model.pushes).toBe(0)
-    expect(model.dispatches).toEqual([
-      expect.objectContaining({ type: 'SET_PARAMS', target: 'hs', source: `${SESSION}-Y` })
-    ])
-    expect(rootScreens()).toEqual(['index', 'h[list:host, session:X, session:Y]'])
+    expect(navigator.dispatch).toHaveBeenCalledExactlyOnceWith({
+      type: 'SET_PARAMS',
+      target: 'hs',
+      source: session('Y').key,
+      payload: { params: Y.params }
+    })
+    expect(navigator.push).not.toHaveBeenCalled()
   })
 })

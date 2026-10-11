@@ -1,6 +1,7 @@
 export type HostStackNavigationState = Readonly<{
   key?: string
   index: number
+  routeNames?: readonly string[]
   routes: readonly HostStackNavigationRoute[]
 }>
 
@@ -24,10 +25,6 @@ export type HostStackReplaceAction = Readonly<{
   source: string
   payload: HostStackRouteTarget
 }>
-
-/** What the target lands on: nothing beneath it in a fresh host stack (Home's entries, whose
- *  Back returns Home), or only its host's workspace list (a notification tap). */
-export type HostStackLanding = 'replace-host-index' | 'over-workspace-list'
 
 export type HostStackResetAction = Readonly<{
   type: 'RESET'
@@ -68,7 +65,7 @@ export type HostStackRouter = {
 export type HostStackNavigationController = Readonly<{
   cancel: () => void
   isActive: () => boolean
-  retarget: (target: HostStackRouteTarget, landing: HostStackLanding) => void
+  retarget: (target: HostStackRouteTarget) => void
 }>
 
 export type PendingHostStackNavigation = Readonly<{
@@ -100,12 +97,10 @@ function hostParamMatches(param: unknown, expectedHostId: string): boolean {
   }
 }
 
-/** The focused `h` route and the root stack holding it, however deep the caller's navigator
- *  sits above it: a screen inside the root stack sees it at the top, but app/_layout.tsx is
- *  itself a screen of Expo Router's internal navigator, so from there it is one level down. */
-function focusedHostRoute(
-  state: HostStackNavigationState
-): { route: HostStackNavigationRoute; rootStack: HostStackNavigationState } | null {
+/** The focused `h` route, however deep the caller's navigator sits above it: a screen
+ *  inside the root stack sees it at the top, but app/_layout.tsx is itself a screen of
+ *  Expo Router's internal navigator, so from there the root stack is one level down. */
+function focusedHostRoute(state: HostStackNavigationState): HostStackNavigationRoute | null {
   let current: HostStackNavigationState | undefined = state
   while (current) {
     const route: HostStackNavigationRoute | undefined = current.routes[current.index]
@@ -113,7 +108,7 @@ function focusedHostRoute(
       return null
     }
     if (route.name === 'h') {
-      return { route, rootStack: current }
+      return route
     }
     current = route.state
   }
@@ -123,7 +118,7 @@ function focusedHostRoute(
 function mountedHostStack(
   hostContainer: HostStackNavigationRoute,
   expectedHostId: string
-): { key: string; hostRoute: HostStackNavigationRoute & { key: string } } | null {
+): { key: string; routeKey: string } | null {
   const hostState = hostContainer.state
   const hostRoute = hostState?.routes[hostState.index]
   if (
@@ -134,49 +129,17 @@ function mountedHostStack(
   ) {
     return null
   }
-  return { key: hostState.key, hostRoute: { ...hostRoute, key: hostRoute.key } }
+  return { key: hostState.key, routeKey: hostRoute.key }
 }
 
-/** Leaves the root stack's routes below its first host area, then this host area holding only
- *  its pushed workspace list and the target. The push stacked onto wherever focus was — this host
- *  stack, or a root screen above an earlier `h` — and a session screen left beneath stays mounted,
- *  subscribed to its terminals under this device's id. */
-function landOverWorkspaceList(
-  hostArea: { route: HostStackNavigationRoute; rootStack: HostStackNavigationState },
-  hostStack: NonNullable<ReturnType<typeof mountedHostStack>>,
-  target: HostStackRouteTarget
-): HostStackResetAction {
-  const routes = [hostStack.hostRoute, target]
-  const { rootStack } = hostArea
-  if (!rootStack.key) {
-    return { type: 'RESET', target: hostStack.key, payload: { index: 1, routes } }
-  }
-  const firstHostArea = rootStack.routes.findIndex((route) => route.name === 'h')
-  return {
-    type: 'RESET',
-    target: rootStack.key,
-    payload: {
-      index: firstHostArea,
-      routes: [
-        ...rootStack.routes.slice(0, firstHostArea),
-        { ...hostArea.route, state: { index: 1, routes } }
-      ]
-    }
-  }
-}
-
-/** Opens a deep host route by mounting `/h/[hostId]` first and replacing it once
- *  its stack is committed. A cold push straight to a nested route resolves to the
- *  host index without the dynamic id, which lands on a blank host screen. */
-export function navigateToHostStackRoute(
+/** Updates the target in place when it is already the focused host route (#20310). */
+function updateFocusedTarget(
   navigation: HostStackRootNavigation,
-  router: HostStackRouter,
   hostId: string,
-  target: HostStackRouteTarget,
-  landing: HostStackLanding = 'replace-host-index'
-): HostStackNavigationController {
+  target: HostStackRouteTarget
+): boolean {
   const state = navigation.getState()
-  const hostState = state && focusedHostRoute(state)?.route.state
+  const hostState = state && focusedHostRoute(state)?.state
   const focused = hostState?.routes[hostState.index]
   if (
     hostState?.key &&
@@ -191,13 +154,33 @@ export function navigateToHostStackRoute(
       source: focused.key,
       payload: { params: target.params }
     })
-    return { cancel: () => {}, isActive: () => false, retarget: () => {} }
+    return true
+  }
+  return false
+}
+
+const SETTLED_NAVIGATION: HostStackNavigationController = {
+  cancel: () => {},
+  isActive: () => false,
+  retarget: () => {}
+}
+
+/** Opens a deep host route by mounting `/h/[hostId]` first and replacing it once
+ *  its stack is committed. A cold push straight to a nested route resolves to the
+ *  host index without the dynamic id, which lands on a blank host screen. */
+export function navigateToHostStackRoute(
+  navigation: HostStackRootNavigation,
+  router: HostStackRouter,
+  hostId: string,
+  target: HostStackRouteTarget
+): HostStackNavigationController {
+  if (updateFocusedTarget(navigation, hostId, target)) {
+    return SETTLED_NAVIGATION
   }
 
   let active = true
   let hostRouteSeen = false
   let selectedTarget = target
-  let selectedLanding = landing
   let unsubscribeState = () => {}
   const dispose = () => {
     if (!active) {
@@ -216,15 +199,14 @@ export function navigateToHostStackRoute(
     if (!state) {
       return
     }
-    const hostArea = focusedHostRoute(state)
-    const hostContainer = hostArea?.route
+    const hostContainer = focusedHostRoute(state)
     if (hostContainer) {
       hostRouteSeen = true
     } else if (hostRouteSeen) {
       dispose()
       return
     }
-    const hostStack = hostArea && mountedHostStack(hostArea.route, hostId)
+    const hostStack = hostContainer && mountedHostStack(hostContainer, hostId)
     if (!hostStack) {
       if (hostContainer && hostParamMatches(hostContainer.params?.hostId, hostId)) {
         dispose()
@@ -233,16 +215,12 @@ export function navigateToHostStackRoute(
       return
     }
     dispose()
-    navigation.dispatch(
-      selectedLanding === 'over-workspace-list'
-        ? landOverWorkspaceList(hostArea, hostStack, selectedTarget)
-        : {
-            type: 'REPLACE',
-            target: hostStack.key,
-            source: hostStack.hostRoute.key,
-            payload: selectedTarget
-          }
-    )
+    navigation.dispatch({
+      type: 'REPLACE',
+      target: hostStack.key,
+      source: hostStack.routeKey,
+      payload: selectedTarget
+    })
   }
 
   try {
@@ -255,10 +233,9 @@ export function navigateToHostStackRoute(
   return {
     cancel: dispose,
     isActive: () => active,
-    retarget: (nextTarget, nextLanding) => {
+    retarget: (nextTarget) => {
       if (active) {
         selectedTarget = nextTarget
-        selectedLanding = nextLanding
       }
     }
   }
@@ -269,16 +246,91 @@ export function coordinateHostStackNavigation(
   navigation: HostStackRootNavigation,
   router: HostStackRouter,
   hostId: string,
-  target: HostStackRouteTarget,
-  landing: HostStackLanding = 'replace-host-index'
+  target: HostStackRouteTarget
 ): PendingHostStackNavigation {
   if (current?.hostId === hostId && current.controller.isActive()) {
-    current.controller.retarget(target, landing)
+    current.controller.retarget(target)
     return current
   }
   current?.controller.cancel()
   return {
     hostId,
-    controller: navigateToHostStackRoute(navigation, router, hostId, target, landing)
+    controller: navigateToHostStackRoute(navigation, router, hostId, target)
+  }
+}
+
+type CommittedRootStack = HostStackNavigationState & Readonly<{ key: string }>
+
+function committedRootStack(
+  state: HostStackNavigationState | undefined
+): CommittedRootStack | null {
+  let current = state
+  while (current) {
+    if (current.key && current.routeNames?.includes('h')) {
+      return { ...current, key: current.key }
+    }
+    current = current.routes[current.index]?.state
+  }
+  return null
+}
+
+/** Reuses the first host area, its params and the host's list, so none of them remounts. */
+export function workspaceLanding(
+  root: CommittedRootStack,
+  hostId: string,
+  target: HostStackRouteTarget
+): HostStackResetAction {
+  const firstArea = root.routes.findIndex((route) => route.name === 'h')
+  const area = firstArea === -1 ? undefined : root.routes[firstArea]
+  const list = area?.state?.routes.find(
+    (route) => route.name === '[hostId]/index' && hostParamMatches(route.params?.hostId, hostId)
+  ) ?? { name: '[hostId]/index', params: { hostId } }
+  const below = firstArea === -1 ? root.routes : root.routes.slice(0, firstArea)
+  return {
+    type: 'RESET',
+    target: root.key,
+    payload: {
+      index: below.length,
+      routes: [
+        ...below,
+        { ...(area ?? { name: 'h' }), state: { index: 1, routes: [list, target] } }
+      ]
+    }
+  }
+}
+
+/** Lands a push-opened workspace with only its host's workspace list beneath it. */
+export function landOnWorkspace(
+  navigation: HostStackRootNavigation,
+  hostId: string,
+  target: HostStackRouteTarget
+): HostStackNavigationController {
+  if (updateFocusedTarget(navigation, hostId, target)) {
+    return SETTLED_NAVIGATION
+  }
+  let selectedTarget = target
+  let active = true
+  let unsubscribe = () => {}
+  const land = (): void => {
+    const root = active ? committedRootStack(navigation.getState()) : null
+    if (!root) {
+      return
+    }
+    active = false
+    unsubscribe()
+    navigation.dispatch(workspaceLanding(root, hostId, selectedTarget))
+  }
+  // Why: a cold-start tap arrives before the root stack has committed any state.
+  unsubscribe = navigation.addListener('state', land)
+  land()
+  return {
+    cancel: () => {
+      active = false
+      unsubscribe()
+    },
+    isActive: () => active,
+    retarget: (nextTarget) => {
+      selectedTarget = nextTarget
+    }
   }
 }
