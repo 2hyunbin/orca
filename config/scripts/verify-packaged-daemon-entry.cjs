@@ -2,7 +2,8 @@ const { existsSync, mkdtempSync, readFileSync, rmSync, statSync } = require('nod
 const { spawn, spawnSync } = require('node:child_process')
 const { randomUUID } = require('node:crypto')
 const { connect } = require('node:net')
-const { join } = require('node:path')
+const { tmpdir } = require('node:os')
+const { join, relative } = require('node:path')
 const { setTimeout: delay } = require('node:timers/promises')
 const { macTerminalHostPaths } = require('./macos-terminal-host-bundle.cjs')
 const {
@@ -277,10 +278,18 @@ async function verifyPackagedMacTerminalHostBoots(appPath, { arch }) {
     return 'skipped'
   }
   const stderr = []
+  // Boot a clone outside the build tree, as installs do, so no ancestor node_modules can
+  // satisfy a require the helper lacks.
+  const isolated = mkdtempSync(join(tmpdir(), 'orca-terminal-host-boot-'))
+  const clone = join(isolated, 'Orca Terminal Host.app')
   try {
+    const cloned = spawnSync('/bin/cp', ['-cR', paths.bundle, clone], { encoding: 'utf8' })
+    if (cloned.status !== 0) {
+      throw new Error(`could not clone the helper: ${cloned.stderr.trim()}`)
+    }
     await runTerminalHostRoundTrip({
-      command: [...prefix, paths.executable],
-      entry: paths.entry,
+      command: [...prefix, join(clone, relative(paths.bundle, paths.executable))],
+      entry: join(clone, relative(paths.bundle, paths.entry)),
       deadline: Date.now() + TERMINAL_HOST_BOOT_TIMEOUT_MS,
       stderr
     })
@@ -288,6 +297,8 @@ async function verifyPackagedMacTerminalHostBoots(appPath, { arch }) {
     throw new Error(
       `[verify-packaged-daemon-entry] the ${arch} terminal host did not serve a PTY: ${error.message}\n${stderr.join('').slice(-2000)}`
     )
+  } finally {
+    rmSync(isolated, { recursive: true, force: true })
   }
   console.log(`[verify-packaged-daemon-entry] OK — ${arch} terminal host served a PTY`)
   return 'booted'

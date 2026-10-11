@@ -21,7 +21,9 @@ const require = createRequire(import.meta.url)
 const {
   assembleMacTerminalHost,
   buildMacTerminalHostInfo,
+  daemonBareRequires,
   findMacTerminalHostInfoProblems,
+  findUnresolvedDaemonRequires,
   lipoArchsToNodeArchs,
   macTerminalHostPaths,
   macTerminalHostSignIgnore,
@@ -194,6 +196,81 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
       encoding: 'utf8'
     })
     expect(findMacTerminalHostInfoProblems(JSON.parse(plist.stdout), expectations)).toEqual([])
+  })
+
+  it('copies every package the daemon requires, with its dependencies', () => {
+    const resources = join(appPath, 'Contents', 'Resources')
+    const chunk = join(resources, 'app.asar.unpacked', 'out', 'main', 'chunks', 'kill.js')
+    writeFileSync(
+      chunk,
+      "require(`node:fs`);require('os');require(`@orca/process-host/gate`);require(`electron`)"
+    )
+    const modules = join(resources, 'node_modules')
+    mkdirSync(join(modules, '@orca', 'process-host', 'dist'), { recursive: true })
+    writeFileSync(
+      join(modules, '@orca', 'process-host', 'package.json'),
+      '{"dependencies":{"retry":"1"}}'
+    )
+    mkdirSync(join(modules, 'retry'), { recursive: true })
+    writeFileSync(join(modules, 'retry', 'package.json'), '{}')
+    mkdirSync(join(modules, 'unused'), { recursive: true })
+    writeFileSync(join(modules, 'unused', 'package.json'), '{}')
+    const paths = assembleMacTerminalHost({
+      appPath,
+      nodeExecutable: join(root, 'node'),
+      iconPath: join(root, 'icon.icns'),
+      info: {}
+    })
+    const helperModules = join(paths.daemon, 'node_modules')
+    expect(daemonBareRequires(join(paths.daemon, 'out', 'main'))).toEqual([
+      '@orca/process-host/gate',
+      'electron'
+    ])
+    expect(existsSync(join(helperModules, '@orca', 'process-host', 'package.json'))).toBe(true)
+    expect(existsSync(join(helperModules, 'retry', 'package.json'))).toBe(true)
+    expect(existsSync(join(helperModules, 'unused'))).toBe(false)
+    expect(existsSync(join(helperModules, 'electron'))).toBe(false)
+  })
+
+  it('fails when the app lacks a package the daemon requires', () => {
+    writeFileSync(
+      join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'out', 'main', 'gone.js'),
+      "require('yaml')"
+    )
+    expect(() =>
+      assembleMacTerminalHost({
+        appPath,
+        nodeExecutable: join(root, 'node'),
+        iconPath: join(root, 'icon.icns'),
+        info: {}
+      })
+    ).toThrow(/requires yaml, missing/)
+  })
+
+  it('flags a require that only resolves outside the helper', () => {
+    const paths = assembleMacTerminalHost({
+      appPath,
+      nodeExecutable: join(root, 'node'),
+      iconPath: join(root, 'icon.icns'),
+      info: {}
+    })
+    writeFileSync(join(paths.daemon, 'out', 'main', 'late.js'), "require('jsonc-parser')")
+    // The build tree's node_modules above dist/ is what hid this from the boot check.
+    mkdirSync(join(root, 'node_modules', 'jsonc-parser'), { recursive: true })
+    writeFileSync(join(root, 'node_modules', 'jsonc-parser', 'package.json'), '{"main":"i.js"}')
+    writeFileSync(join(root, 'node_modules', 'jsonc-parser', 'i.js'), '')
+    expect(findUnresolvedDaemonRequires(paths)).toEqual([
+      expect.stringMatching(
+        /^jsonc-parser resolves to .*node_modules\/jsonc-parser\/i\.js, not inside/
+      )
+    ])
+    // Node caches resolutions, so the in-bundle case uses a package not resolved above.
+    rmSync(join(paths.daemon, 'out', 'main', 'late.js'))
+    writeFileSync(join(paths.daemon, 'out', 'main', 'bundled.js'), "require('yaml')")
+    mkdirSync(join(paths.daemon, 'node_modules', 'yaml'), { recursive: true })
+    writeFileSync(join(paths.daemon, 'node_modules', 'yaml', 'package.json'), '{"main":"i.js"}')
+    writeFileSync(join(paths.daemon, 'node_modules', 'yaml', 'i.js'), '')
+    expect(findUnresolvedDaemonRequires(paths)).toEqual([])
   })
 
   it('fails before writing anything when the daemon entry is missing', () => {

@@ -6,11 +6,15 @@ const {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync
 } = require('node:fs')
-const { join, resolve } = require('node:path')
+const { builtinModules } = require('node:module')
+const { join, relative, resolve, sep } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const MAC_TERMINAL_HOST_NAME = 'Orca Terminal Host'
@@ -30,6 +34,9 @@ const FORBIDDEN_INFO_KEYS = [
   'UTImportedTypeDeclarations',
   'NSServices'
 ]
+// node-pty ships as the slice subset above; the daemon never loads electron under Node.
+const PACKAGES_NOT_COPIED = new Set(['node-pty', 'electron'])
+const BARE_REQUIRE = /require\(\s*[`'"]([^`'"./][^`'"]*)[`'"]\s*\)/g
 const LIPO_ARCH_TO_NODE_ARCH = { x86_64: 'x64', arm64: 'arm64' }
 
 function macTerminalHostPaths(appPath) {
@@ -49,6 +56,80 @@ function macTerminalHostPaths(appPath) {
     ptyNode: join(ptyRelease, 'pty.node'),
     spawnHelper: join(ptyRelease, 'spawn-helper')
   }
+}
+
+function packageNameOf(specifier) {
+  const parts = specifier.split('/')
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+}
+
+function listJsFiles(dir) {
+  return readdirSync(dir, { recursive: true })
+    .map((file) => join(dir, file))
+    .filter((file) => file.endsWith('.js') && statSync(file).isFile())
+}
+
+/** Bare specifiers the daemon JS requires, other than Node builtins. */
+function daemonBareRequires(outMainDir) {
+  const builtins = new Set(builtinModules)
+  const specifiers = new Set()
+  for (const file of listJsFiles(outMainDir)) {
+    for (const match of readFileSync(file, 'utf8').matchAll(BARE_REQUIRE)) {
+      const specifier = match[1]
+      if (!specifier.startsWith('node:') && !builtins.has(packageNameOf(specifier))) {
+        specifiers.add(specifier)
+      }
+    }
+  }
+  return [...specifiers].sort()
+}
+
+/** Copies each package the daemon requires, and its dependencies, from the app's node_modules. */
+function copyDaemonPackages(outMainDir, sourceNodeModules, targetNodeModules) {
+  const pending = daemonBareRequires(outMainDir)
+    .map(packageNameOf)
+    .filter((name) => !PACKAGES_NOT_COPIED.has(name))
+  const copied = new Set()
+  while (pending.length > 0) {
+    const name = pending.pop()
+    if (copied.has(name)) {
+      continue
+    }
+    const source = join(sourceNodeModules, name)
+    if (!existsSync(join(source, 'package.json'))) {
+      throw new Error(
+        `[macos-terminal-host] the daemon requires ${name}, missing from ${sourceNodeModules}`
+      )
+    }
+    cpSync(source, join(targetNodeModules, name), { recursive: true })
+    copied.add(name)
+    const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8'))
+    pending.push(...Object.keys(manifest.dependencies ?? {}))
+  }
+  return [...copied].sort()
+}
+
+/** Bare requires that do not resolve to a file inside the helper bundle. */
+function findUnresolvedDaemonRequires(paths) {
+  const outMain = join(paths.daemon, 'out', 'main')
+  // Resolution returns real paths, so compare against the bundle's real path.
+  const bundle = realpathSync(paths.bundle)
+  const problems = []
+  for (const specifier of daemonBareRequires(outMain)) {
+    if (packageNameOf(specifier) === 'electron') {
+      continue
+    }
+    let resolved = null
+    try {
+      resolved = require.resolve(specifier, { paths: [outMain] })
+    } catch {
+      // Reported below.
+    }
+    if (!resolved || relative(bundle, resolved).startsWith('..' + sep)) {
+      problems.push(`${specifier} resolves to ${resolved ?? 'nothing'}, not inside the helper`)
+    }
+  }
+  return problems
 }
 
 function readPlist(path) {
@@ -136,7 +217,7 @@ function lipoArchsToNodeArchs(lipoOutput) {
     .map((arch) => LIPO_ARCH_TO_NODE_ARCH[arch] ?? arch)
 }
 
-/** Copies the pinned Node, the daemon JS and this slice's node-pty into `Contents/Helpers`. */
+/** Copies the pinned Node, the daemon JS with its packages, and this slice's node-pty. */
 function assembleMacTerminalHost({ appPath, nodeExecutable, iconPath, info }) {
   const resourcesDir = join(appPath, 'Contents', 'Resources')
   const daemonOut = join(resourcesDir, 'app.asar.unpacked', 'out')
@@ -155,6 +236,11 @@ function assembleMacTerminalHost({ appPath, nodeExecutable, iconPath, info }) {
   cpSync(join(daemonOut, 'main'), join(paths.daemon, 'out', 'main'), { recursive: true })
   // Pins out/ to CommonJS so a stray parent package.json cannot change the loader.
   cpSync(join(daemonOut, 'package.json'), paths.outPackageJson)
+  copyDaemonPackages(
+    join(daemonOut, 'main'),
+    join(resourcesDir, 'node_modules'),
+    join(paths.daemon, 'node_modules')
+  )
   for (const file of NODE_PTY_FILES) {
     cpSync(join(nodePty, file), join(paths.nodePty, file), { recursive: true })
   }
@@ -236,6 +322,8 @@ async function verifyMacTerminalHost({ appPath, arch, usageDescriptions, expecte
   if (problems.length > 0) {
     throw new Error(`[macos-terminal-host] ${problems.join('; ')}`)
   }
+  // The build tree's node_modules sits above dist/, so the boot check alone cannot catch these.
+  problems.push(...findUnresolvedDaemonRequires(paths))
   const appId = readPlist(join(appPath, 'Contents', 'Info.plist')).CFBundleIdentifier
   problems.push(
     ...findMacTerminalHostInfoProblems(readPlist(paths.infoPlist), {
@@ -286,7 +374,9 @@ module.exports = {
   assembleMacTerminalHost,
   buildMacTerminalHost,
   buildMacTerminalHostInfo,
+  daemonBareRequires,
   findMacTerminalHostInfoProblems,
+  findUnresolvedDaemonRequires,
   lipoArchsToNodeArchs,
   macTerminalHostPaths,
   macTerminalHostSignIgnore,
