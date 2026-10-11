@@ -18,6 +18,6 @@ describe('retiring a removed runtime environment', () => {
     }
     await retireRemovedRuntimeEnvironment('env 1', vi.fn(), store)
     expect(store.removeWorkspaceSessionHost).toHaveBeenCalledWith('runtime:env%201')
-    expect(store.setRemoteLayoutSnapshot).toHaveBeenCalledWith('env 1', null)
+    expect(store.setRemoteLayoutSnapshot).toHaveBeenCalledWith('env 1', null, 'now')
   })
 })

@@ -291,7 +291,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     expect(store.removeWorkspaceSessionHost).toHaveBeenCalledWith(
       `runtime:${encodeURIComponent(added.environment.id)}`
     )
-    expect(store.setRemoteLayoutSnapshot).toHaveBeenCalledWith(added.environment.id, null)
+    expect(store.setRemoteLayoutSnapshot).toHaveBeenCalledWith(added.environment.id, null, 'now')
     expect(JSON.stringify(removed)).not.toContain('device-token')
     expect(await list(null, undefined)).toEqual([])
   })

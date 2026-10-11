@@ -118,7 +118,31 @@ it('survives a restart and saves only its own domain', () => {
   expect(changed.map(([domain]) => domain)).toEqual(['remoteLayoutSnapshots'])
   expect(open().getRemoteLayoutSnapshot('env')).toMatchObject({
     serverRuntimeId: 'server',
-    protocol: 'session-tabs',
     workspaces: { [workspace.worktree]: workspace }
   })
+})
+
+it('keeps a title-only change without arming a save, and writes it with the next save', () => {
+  const { open } = profile()
+  const store = open()
+  const record = (result: Record<string, unknown>) =>
+    recordRemoteLayoutFrame(store, 'env', 'session.tabs.subscribeAll', {
+      id: 'stream',
+      ok: true,
+      result,
+      _meta: { runtimeId: 'server' }
+    })
+  record({ type: 'snapshots', snapshots: [workspace] })
+  store.flushOrThrow()
+
+  const timers = vi.spyOn(globalThis, 'setTimeout')
+  const retitled = { ...workspace, snapshotVersion: 4 }
+  record({ type: 'updated', ...retitled })
+  expect(timers).not.toHaveBeenCalled()
+  timers.mockRestore()
+
+  // Another domain's save writes only the domains marked dirty, which must include this one.
+  store.updateSettings({ opencodeSessionCookie: 'cookie' })
+  store.flushOrThrow()
+  expect(open().getRemoteLayoutSnapshot('env')?.workspaces[workspace.worktree]).toEqual(retitled)
 })

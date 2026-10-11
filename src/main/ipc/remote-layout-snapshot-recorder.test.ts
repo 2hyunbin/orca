@@ -13,11 +13,11 @@ const METHOD = 'session.tabs.subscribeAll'
 
 function memoryStore() {
   const snapshots = new Map<string, RemoteLayoutSnapshot>()
-  let writes = 0
+  const saves: ('now' | 'later')[] = []
   const store: RemoteLayoutSnapshotStore = {
     getRemoteLayoutSnapshot: (environmentId) => snapshots.get(environmentId),
-    setRemoteLayoutSnapshot: (environmentId, snapshot) => {
-      writes += 1
+    setRemoteLayoutSnapshot: (environmentId, snapshot, save) => {
+      saves.push(save)
       if (snapshot) {
         snapshots.set(environmentId, snapshot)
       } else {
@@ -25,7 +25,7 @@ function memoryStore() {
       }
     }
   }
-  return { store, snapshots, writes: () => writes }
+  return { store, snapshots, saves }
 }
 
 function tabs(worktree: string, title = 'shell') {
@@ -66,7 +66,6 @@ describe('remote layout snapshot recorder', () => {
 
     expect(snapshots.get('env')).toMatchObject({
       serverRuntimeId: 'server-2',
-      protocol: 'session-tabs',
       workspaces: { b: tabs('b', 'renamed') }
     })
     expect(workspacesOf(snapshots)).not.toHaveProperty('a')
@@ -92,6 +91,59 @@ describe('remote layout snapshot recorder', () => {
     expect(workspacesOf(snapshots)).toEqual({ a: tabs('a', 'vim') })
   })
 
+  it('keeps neither retirement proofs nor one-shot navigation', () => {
+    const { store, snapshots } = memoryStore()
+    const proof = { parentTabId: 'a-tab', leafId: 'leaf', ptyId: 'pty', terminal: 'term' }
+    recordRemoteLayoutFrame(
+      store,
+      'env',
+      METHOD,
+      frame({ type: 'snapshots', snapshots: [{ ...tabs('a'), retiredTerminalSurfaces: [proof] }] })
+    )
+    expect(workspacesOf(snapshots)).toEqual({ a: tabs('a') })
+
+    // A capable client is sent only new proofs, so an update's list is a delta, here empty.
+    recordRemoteLayoutFrame(
+      store,
+      'env',
+      METHOD,
+      frame({
+        type: 'updated',
+        ...tabs('a', 'vim'),
+        retiredTerminalSurfaces: [],
+        navigationIntent: 'follow'
+      })
+    )
+    expect(workspacesOf(snapshots)).toEqual({ a: tabs('a', 'vim') })
+  })
+
+  it('saves at once only when tabs or groups change; title ticks ride the next save', () => {
+    const { store, saves } = memoryStore()
+    const census = (snapshots: unknown[]) => frame({ type: 'snapshots', snapshots })
+    const update = (result: Record<string, unknown>) => frame({ type: 'updated', ...result })
+    recordRemoteLayoutFrame(store, 'env', METHOD, census([tabs('a')]))
+    recordRemoteLayoutFrame(store, 'env', METHOD, update(tabs('a', 'thinking.')))
+    recordRemoteLayoutFrame(store, 'env', METHOD, update(tabs('a', 'thinking..')))
+    const twoTabs = {
+      ...tabs('a'),
+      tabs: [...tabs('a').tabs, { type: 'terminal', id: 'second', title: 'shell' }]
+    }
+    recordRemoteLayoutFrame(store, 'env', METHOD, update(twoTabs))
+    const grouped = {
+      ...twoTabs,
+      tabGroups: [{ id: 'g', activeTabId: null, tabOrder: ['second'] }]
+    }
+    recordRemoteLayoutFrame(store, 'env', METHOD, update(grouped))
+    recordRemoteLayoutFrame(
+      store,
+      'env',
+      METHOD,
+      update({ ...grouped, tabGroups: [{ id: 'g', activeTabId: 'second', tabOrder: ['second'] }] })
+    )
+    recordRemoteLayoutFrame(store, 'env', METHOD, update({ ...tabs('a'), tabs: [], removed: true }))
+    expect(saves).toEqual(['now', 'later', 'later', 'now', 'now', 'later', 'now'])
+  })
+
   it('keeps each server in its own entry', () => {
     const { store, snapshots } = memoryStore()
     recordRemoteLayoutFrame(
@@ -106,7 +158,7 @@ describe('remote layout snapshot recorder', () => {
   })
 
   it('records nothing from other streams, failures, ends or unreadable frames', () => {
-    const { store, writes } = memoryStore()
+    const { store, saves } = memoryStore()
     const census = { type: 'snapshots', snapshots: [tabs('a')] }
     recordRemoteLayoutFrame(store, 'env', 'session.tabs.subscribe', frame(census))
     recordRemoteLayoutFrame(store, 'env', 'terminal.multiplex', frame(census))
@@ -119,7 +171,7 @@ describe('remote layout snapshot recorder', () => {
     recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'end' }))
     recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'snapshots', snapshots: [{}] }))
     recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'updated', worktree: 'a' }))
-    expect(writes()).toBe(0)
+    expect(saves).toEqual([])
   })
 
   it('forgets a removed server', () => {

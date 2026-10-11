@@ -3,7 +3,7 @@ import type { StoreRuntimeState } from './store-runtime-state'
 import type { WriteSchedulingOperations } from './write-scheduling'
 import { scheduleSave } from './write-scheduling'
 
-type RemoteLayoutSnapshotRuntime = Pick<StoreRuntimeState, 'state'>
+type RemoteLayoutSnapshotRuntime = Pick<StoreRuntimeState, 'state' | 'dirtyProfileStateDomains'>
 
 const remoteLayoutSnapshotPersistenceContext = Symbol('RemoteLayoutSnapshotPersistence')
 type RemoteLayoutSnapshotPersistenceContext = {
@@ -24,8 +24,15 @@ export class RemoteLayoutSnapshotPersistence {
     ]
   }
 
-  /** Only the recorder calls this (ratchet in remote-layout-snapshot-recorder.test.ts). */
-  setRemoteLayoutSnapshot(environmentId: string, snapshot: RemoteLayoutSnapshot | null): void {
+  /**
+   * Only the recorder calls this (ratchet in remote-layout-snapshot-recorder.test.ts). `later`
+   * marks the domain dirty without arming the save timer, so it rides the next save or quit flush.
+   */
+  setRemoteLayoutSnapshot(
+    environmentId: string,
+    snapshot: RemoteLayoutSnapshot | null,
+    save: 'now' | 'later'
+  ): void {
     const { runtime, scheduling } = this[remoteLayoutSnapshotPersistenceContext]
     const { [environmentId]: previous, ...others } = runtime.state.remoteLayoutSnapshots ?? {}
     if (snapshot === null && previous === undefined) {
@@ -34,6 +41,10 @@ export class RemoteLayoutSnapshotPersistence {
     runtime.state.remoteLayoutSnapshots = snapshot
       ? { ...others, [environmentId]: snapshot }
       : others
+    if (save === 'later') {
+      runtime.dirtyProfileStateDomains?.add('remoteLayoutSnapshots')
+      return
+    }
     // Named so the save writes only this domain and wakes no workspace-session listener.
     scheduleSave(scheduling, ['remoteLayoutSnapshots'])
   }
