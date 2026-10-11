@@ -104,7 +104,7 @@ function saveWorkspace(
         tab.kind === 'editor' && tab.isPreview ? [tab.entityId] : []
       )
     )
-    // An editor file's `view` stays in memory: the disk format is unchanged.
+    // The view is not saved.
     session.openFilesByWorktree[key] = workspace.editorFiles.map(
       ({ view: _view, ...file }): PersistedOpenFile => ({
         ...file,

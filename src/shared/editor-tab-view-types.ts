@@ -94,10 +94,7 @@ export type OpenChatVisualTabState = {
   title: string | null
 }
 
-/**
- * An editor tab's view, keyed by its mode, with exactly the open-file fields that mode uses today.
- * Held in memory only: it never reaches disk, so these tabs do not survive a restart.
- */
+/** An editor tab's view, keyed by its mode, with exactly the open-file fields that mode uses today. The view is not saved. */
 export type EditorTabView =
   /** An edit tab opened on a conflicted file. */
   | { mode: 'edit'; conflict: OpenConflictMetadata }
@@ -122,3 +119,9 @@ export type EditorTabView =
   | { mode: 'conflict-review'; conflictReview?: ConflictReviewState }
   | { mode: 'check-details'; checkRunDetails?: OpenCheckRunDetailsState }
   | { mode: 'chat-visual'; chatVisual?: OpenChatVisualTabState }
+
+/** The view an edit tab's file record carries. */
+export type EditorFileView = Extract<EditorTabView, { mode: 'edit' }>
+
+/** The view of a tab that is not a file on disk; its file path is a worktree root or a synthetic id. */
+export type VirtualEditorTabView = Exclude<EditorTabView, { mode: 'edit' }>

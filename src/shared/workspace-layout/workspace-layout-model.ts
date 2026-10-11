@@ -8,7 +8,7 @@ import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
 import type { PersistedClientHostedBrowserPage } from '../client-hosted-browser-page-record'
 import type { ClosedTerminalTabTombstone } from '../closed-terminal-tab-tombstones'
-import type { EditorTabView } from '../editor-tab-view-types'
+import type { EditorFileView, VirtualEditorTabView } from '../editor-tab-view-types'
 import type { ExecutionHostId } from '../execution-host'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
 import type { TerminalPaneLayoutNode, TerminalTab } from '../terminal-tab-types'
@@ -64,8 +64,8 @@ export type LayoutEditorFile = Omit<
   PersistedOpenFile,
   'dirtyDraftContent' | 'lastKnownDiskSignature' | 'isPreview' | 'worktreeId'
 > & {
-  /** In memory only: the Serializer never writes it. */
-  view?: EditorTabView
+  /** The view is not saved. */
+  view?: EditorFileView
 }
 
 /** A browser tab minus the live page state its host view reports. */
@@ -102,6 +102,8 @@ export type WorkspaceLayout = {
   groups: LayoutGroup[]
   groupLayout?: TabGroupLayoutNode
   editorFiles?: LayoutEditorFile[]
+  /** Tab id → the view of an editor tab that is not a file. The view is not saved. */
+  editorViews?: Record<string, VirtualEditorTabView>
   browserTabs?: LayoutBrowserTab[]
   /** Leaf id → the data of a pane of one of this workspace's terminal tabs. */
   leaves?: Record<string, LayoutLeaf>
