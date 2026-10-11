@@ -5,8 +5,7 @@ import {
   AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY,
   AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY,
   AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY,
-  AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY,
-  STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
+  AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY
 } from '../../../src/shared/protocol-version'
 import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 
@@ -18,7 +17,6 @@ describe('structuredAgentSessionHostSupport', () => {
       queuedMessages: false,
       queuedCommands: false,
       quietRepeatedStop: false,
-      registeredAgents: false,
       statusFeed: false
     }
     expect(structuredAgentSessionHostSupport([])).toEqual(none)
@@ -40,10 +38,5 @@ describe('structuredAgentSessionHostSupport', () => {
     expect(
       structuredAgentSessionHostSupport([AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY])
     ).toEqual({ ...none, statusFeed: true })
-    expect(
-      structuredAgentSessionHostSupport([
-        STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
-      ])
-    ).toEqual({ ...none, registeredAgents: true })
   })
 })

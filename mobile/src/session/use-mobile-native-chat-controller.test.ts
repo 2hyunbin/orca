@@ -362,7 +362,7 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
     })
     expect(structuredSendWithOutcome).toHaveBeenCalledWith('/review')
     expect(acceptSend).toHaveBeenCalledWith(ORIGIN, '/review', undefined)
-    // Its host record decides attach, not the built-in answer.
+    // Its options report decides attach, not the built-in answer.
     expect(controller!.nativeChatAcceptsImages).toBe(false)
   })
 
