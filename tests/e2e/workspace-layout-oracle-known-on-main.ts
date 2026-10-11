@@ -22,15 +22,36 @@ type KnownOnMain = {
 const TRANSIENT = /\(transient\)$/
 
 export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
-  // Two writers: a terminal's spawn saves its tab row at once, while the window's tab bar waits in
-  // main's 1 s debounced save, so the saved profile holds rows with no or an older tab bar.
-  ...(['tab_bar_missing', 'tab_lists_disagree'] as const).map((rule) => ({
-    scenario: '*',
-    check: 'rules' as const,
-    rule,
-    detail: /^\w+: saved profile: /,
-    cause: 'two writers'
+  // Three copies of tab order: a reorder moves the tab bar, not the saved rows.
+  {
+    scenario: 'client-reorder-tabs',
+    check: 'rules',
+    rule: 'tab_order_disagrees',
+    cause: 'one tab order'
+  },
+  // After a cold relaunch the paired-client tab list stays empty while the window shows the tabs.
+  {
+    scenario: 'cold-daemon-restart',
+    check: 'client',
+    step: 'after cold relaunch',
+    cause: 'client tab list empty after cold relaunch'
+  },
+  // After a cold relaunch main holds the tab rows but no tab bar for the worktree until the window
+  // saves again, so its group is minted again under a new id (Linux CI).
+  ...(['rules', 'view'] as const).map((check) => ({
+    scenario: 'cold-daemon-restart',
+    check,
+    step: 'after cold relaunch',
+    cause: 'tab bar not saved after relaunch'
   })),
+  {
+    scenario: 'cold-daemon-restart',
+    check: 'restart',
+    step: 'cold relaunch',
+    // Only the group ids; lost tabs or panes still fail.
+    detail: /: groups \[.*\] vs after restart \[.*\]$/,
+    cause: 'tab bar not saved after relaunch'
+  },
   // STA-9417: first activation of a host-created setup split mints a second tab for the setup
   // terminal (one terminal in two panes) or leaves that terminal with no pane.
   ...(['rules', 'view', 'client', 'expected'] as const).map((check) => ({
@@ -42,6 +63,13 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
   ...(['view', 'expected', 'restart', 'marker'] as const).map((check) => ({
     scenario: 'live-daemon-restart',
     check,
+    cause: 'daemon restart empties the runtime layout'
+  })),
+  // The relaunch after it has no tab bar for the worktree, so its group is minted again (Linux CI).
+  ...(['rules', 'client'] as const).map((check) => ({
+    scenario: 'live-daemon-restart',
+    check,
+    step: 'after relaunch',
     cause: 'daemon restart empties the runtime layout'
   })),
   // A worktree woken after relaunch has no tab bar in main until the window next saves it, so the
@@ -67,14 +95,14 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
     detail: /^group id differs: runtime \S+, client headless-terminals:\S+ \(tabs /,
     cause: 'two group ids'
   },
-  // A renamed terminal's title lists as null in terminal.list after an orcad serve restart
-  // (session tabs keep it).
-  {
-    scenario: 'headless-orcad-rename-terminal',
-    check: 'expected',
+  // A renamed terminal's title lists as null in terminal.list after a serve restart (session tabs
+  // keep it): orcad everywhere, Electron serve on Linux CI.
+  ...(['orcad', 'electron'] as const).map((kind) => ({
+    scenario: `headless-${kind}-rename-terminal`,
+    check: 'expected' as const,
     step: 'rename after restart',
-    cause: 'orcad title after restart'
-  },
+    cause: 'title after restart'
+  })),
   // A headless reorder saves rows through the session merge door, which keeps the stored row order,
   // so rows and the group disagree. Fixed in PR 6, where rows follow the group's tab order.
   ...(['orcad', 'electron'] as const).map((kind) => ({
