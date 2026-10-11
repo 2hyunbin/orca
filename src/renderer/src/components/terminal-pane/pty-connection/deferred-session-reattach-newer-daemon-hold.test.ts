@@ -40,7 +40,9 @@ function createSession(opts: { runtimeEnvironmentId?: string } = {}) {
     transportStreamGeneration: 1,
     runtimeEnvironmentId: opts.runtimeEnvironmentId ?? null,
     waitTeardowns: new Array<() => void>(),
+    writeReplayData: vi.fn(),
     deps: {
+      restoredViewportBlankingPanesRef: { current: new Set<number>() },
       tabId: 'tab',
       worktreeId: 'wt',
       paneTransportsRef: { current: new Map([[1, transport]]) },
@@ -82,6 +84,7 @@ describe('restored pane refused for a newer daemon', () => {
       value: {
         pty: {
           declarePendingPaneSerializer: vi.fn().mockResolvedValue(null),
+          readNewerDaemonHeldScreen: vi.fn().mockResolvedValue(null),
           reopenNewerDaemonTerminals: vi.fn().mockResolvedValue({ reopened: true })
         }
       }
@@ -112,6 +115,31 @@ describe('restored pane refused for a newer daemon', () => {
     expect(toast.success).toHaveBeenCalledWith('Reopened 1 terminal', {
       description: '1 agent session resumed.'
     })
+  })
+
+  it('shows the saved screen while held and clears it before reconnecting', async () => {
+    vi.mocked(window.api.pty.readNewerDaemonHeldScreen).mockResolvedValue({
+      scrollback: 'old output',
+      cols: 80,
+      rows: 24
+    })
+    const { fixture, session, nextConnect } = createSession()
+    startDeferredSessionReattach(session, 'restored-pty')
+    await vi.waitFor(() => expect(fixture.writeReplayData).toHaveBeenCalledWith('old output'))
+    nextConnect('reattach')
+    await reopenHeldTerminals()
+    expect(fixture.writeReplayData).toHaveBeenLastCalledWith('\x1b[0m\x1b[2J\x1b[3J\x1b[H')
+  })
+
+  it('leaves a screen the layout restore already painted alone', async () => {
+    const { fixture, session, nextConnect } = createSession()
+    fixture.deps.restoredViewportBlankingPanesRef.current.add(1)
+    startDeferredSessionReattach(session, 'restored-pty')
+    await vi.waitFor(() => expect(isHeld()).toBe(true))
+    nextConnect('reattach')
+    await reopenHeldTerminals()
+    expect(window.api.pty.readNewerDaemonHeldScreen).not.toHaveBeenCalled()
+    expect(fixture.writeReplayData).not.toHaveBeenCalled()
   })
 
   it('counts a released pane that falls back to a fresh session as reopened', async () => {

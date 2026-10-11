@@ -148,7 +148,7 @@ function connectDeferredSessionReattach(
           void window.api.pty.clearPendingPaneSerializer(session.cacheKey, gen).catch(() => {})
         }
         if (isCurrentReattach()) {
-          holdForNewerDaemon(session, () =>
+          holdForNewerDaemon(session, deferredReattachSessionId, () =>
             connectDeferredSessionReattach(session, deferredReattachSessionId)
           )
         }

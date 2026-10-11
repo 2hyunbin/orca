@@ -27,6 +27,7 @@ vi.mock('./daemon-stale-kill', () => ({ killStaleDaemon: probes.kill }))
 import {
   discoverNewerProtocolHolds,
   isHoldingForNewerProtocolDaemon,
+  readNewerDaemonHeldScreen,
   reopenNewerDaemonTerminals
 } from './daemon-newer-protocol-hold'
 import { getDaemonPidPath } from './daemon-spawner'
@@ -171,5 +172,11 @@ describe('reopenNewerDaemonTerminals', () => {
     ])
     expect(results).toEqual([{ reopened: true }, { reopened: true }])
     expect(probes.kill).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('readNewerDaemonHeldScreen', () => {
+  it('reads nothing for a session with no saved history', async () => {
+    await expect(readNewerDaemonHeldScreen('s1', runtimeDir)).resolves.toBeNull()
   })
 })
