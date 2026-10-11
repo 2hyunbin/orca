@@ -39,6 +39,14 @@ describe('redirectIncomingPairingLink', () => {
     }
   })
 
+  it('refuses a code nested in development-client wrappers at any depth', () => {
+    let url = 'orca://pair-confirm?code=abc123'
+    for (let depth = 0; depth < 12; depth++) {
+      url = `orca://expo-development-client/?url=${encodeURIComponent(url)}`
+    }
+    expect(redirectIncomingPairingLink(url)).toBe(refused)
+  })
+
   it('opens the scanner for a bare custom-scheme pairing link', () => {
     expect(redirectIncomingPairingLink('orca://pair')).toBe('/pair-scan')
     expect(redirectIncomingPairingLink('orca://pair/')).toBe('/pair-scan')

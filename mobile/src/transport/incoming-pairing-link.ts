@@ -39,7 +39,8 @@ export function redirectIncomingPairingLink(url: string): string | null {
 
 function fullyDecode(value: string): string {
   let decoded = value
-  for (let pass = 0; pass < 5; pass++) {
+  // No pass cap: the router unwraps wrappers at any depth, and every changing pass shortens the text.
+  for (;;) {
     // Why byte by byte: an invalid UTF-8 escape must not shield a neighbouring `%26code%3D`, which
     // the router still decodes. Bytes are exact for the ASCII this check reads.
     const next = decoded.replace(/%([0-9a-f]{2})/gi, (_, hex: string) =>
