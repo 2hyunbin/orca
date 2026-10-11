@@ -5509,7 +5509,6 @@
       "src/main/ssh/ssh-host-server-telemetry.test.ts": 228,
       "src/main/ssh/ssh-hostile-host-cells.test.ts": 137,
       "src/main/ssh/ssh-hostile-host-local-sshd.test.ts": 69,
-      "src/main/ssh/ssh-hostile-host-observer.test.ts": 79,
       "src/main/ssh/ssh-keyboard-interactive-wire.test.ts": 290,
       "src/main/ssh/ssh-keyboard-interactive.test.ts": 72,
       "src/main/ssh/ssh-known-hosts-source.test.ts": 128,
