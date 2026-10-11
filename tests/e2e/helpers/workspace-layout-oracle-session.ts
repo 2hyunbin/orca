@@ -84,7 +84,11 @@ export async function runOracleScenario(
       page,
       client,
       feed,
-      readSavedPartitions: () => readSavedPartitions(session.userDataDir),
+      readSavedPartitions: async () => {
+        // Main debounces saves by up to 5 s; flushing makes the read the state main holds now.
+        await page.evaluate(() => window.api.session.flush())
+        return readSavedPartitions(session.userDataDir)
+      },
       worktreeIds: () => worktreeIds
     })
     const client = new RuntimeClient(session.userDataDir, 30_000)

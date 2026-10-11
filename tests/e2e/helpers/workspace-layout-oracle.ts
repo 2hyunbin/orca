@@ -63,7 +63,7 @@ export type OracleTarget = {
   /** The runtime's live layout; the same feed across retargets of one run. */
   feed: LiveLayoutFeed
   /** The saved profile, read once a step settles for the disk-format rules and the round trip. */
-  readSavedPartitions: () => WorkspaceLayoutPartition[]
+  readSavedPartitions: () => Promise<WorkspaceLayoutPartition[]>
   /** Worktrees whose client view is compared; the scenario's own worktrees. */
   worktreeIds: () => string[]
 }
@@ -74,8 +74,8 @@ const SETTLE_TIMEOUT_MS = Number(process.env.ORCA_LAYOUT_ORACLE_SETTLE_MS ?? 12_
 // Views (the window's drawing, session.tabs.list, terminal.list) catch up after the runtime's last
 // frame with no event of their own, so the step re-reads them on this interval until they agree.
 const VIEW_CONVERGENCE_POLL_MS = 300
-// Today's quiet window: the runtime sent no frame across this many consecutive view reads.
-const QUIET_READS = 3
+// Today's quiet window (three reads, ~600 ms): no frame across this many gaps between reads.
+const QUIET_GAPS = 2
 
 type ViewRead = { view: string[]; client: string[]; evidence: Record<string, unknown> }
 
@@ -204,21 +204,22 @@ export class LayoutOracle {
     const { feed } = this.target
     const deadline = Date.now() + SETTLE_TIMEOUT_MS
     let stableReads = 0
+    let lastFrames = -1
     let entries: LiveWorkspace[] = []
     let differences: ViewRead = { view: [], client: [], evidence: {} }
     for (;;) {
-      const frames = feed.frames
       entries = feed.entries()
       differences = await this.readViews(entries)
-      // The runtime held still across the read only if no frame arrived during it.
-      stableReads = feed.ready && feed.frames === frames ? stableReads + 1 : 0
+      // Quiet only if no frame arrived since the previous read, including during the sleep.
+      stableReads = feed.ready && feed.frames === lastFrames ? stableReads + 1 : 0
+      lastFrames = feed.frames
       // A difference main is known to keep never converges, so it does not hold the wait.
       const agreed =
         unexpectedFindings(this.scenarioId, [
           { check: 'view', step: label, details: differences.view },
           { check: 'client', step: label, details: differences.client }
         ]).length === 0
-      if ((agreed && stableReads >= QUIET_READS) || Date.now() > deadline) {
+      if ((agreed && stableReads >= QUIET_GAPS) || Date.now() > deadline) {
         break
       }
       await sleep(VIEW_CONVERGENCE_POLL_MS)
@@ -233,7 +234,7 @@ export class LayoutOracle {
       checkWorkspaceLayoutModelRules(models, this.previousModels ?? undefined)
     )
     // The saved profile, which the live stream does not carry: disk-format rules and round trip.
-    const saved = this.target.readSavedPartitions()
+    const saved = await this.target.readSavedPartitions()
     const savedLines = formatViolations(
       checkWorkspaceLayoutRules(saved, this.previousSaved ?? undefined)
     ).map((line) => line.replace(': ', ': saved profile: '))

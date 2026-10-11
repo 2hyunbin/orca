@@ -195,20 +195,32 @@ export function compareClientToRuntime(
   const clientGroups = new Map(
     (view.tabs.tabGroups ?? []).map((group) => [group.id, group.tabOrder])
   )
+  const unmatchedRuntime = new Map([...groups].filter(([groupId]) => !clientGroups.has(groupId)))
   for (const [groupId, order] of clientGroups) {
     const want = groups.get(groupId)
-    if (!want) {
-      differences.push(`client group ${groupId} is not in the runtime`)
-    } else if (orderText(want) !== orderText(order)) {
+    if (want) {
+      if (orderText(want) !== orderText(order)) {
+        differences.push(
+          `group ${groupId}: runtime order ${orderText(want)} but client ${orderText(order)}`
+        )
+      }
+      continue
+    }
+    // The same tabs in the same order under another id is a renamed group, not a lost one.
+    const renamed = [...unmatchedRuntime].find(
+      ([, runtime]) => orderText(runtime) === orderText(order)
+    )
+    if (renamed) {
+      unmatchedRuntime.delete(renamed[0])
       differences.push(
-        `group ${groupId}: runtime order ${orderText(want)} but client ${orderText(order)}`
+        `group id differs: runtime ${renamed[0]}, client ${groupId} (tabs ${orderText(order)})`
       )
+    } else {
+      differences.push(`client group ${groupId} is not in the runtime`)
     }
   }
-  for (const groupId of groups.keys()) {
-    if (!clientGroups.has(groupId)) {
-      differences.push(`runtime group ${groupId} is missing from the client`)
-    }
+  for (const groupId of unmatchedRuntime.keys()) {
+    differences.push(`runtime group ${groupId} is missing from the client`)
   }
   for (const terminal of view.terminals) {
     const key = `${terminal.tabId}:${terminal.leafId}`

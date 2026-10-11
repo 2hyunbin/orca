@@ -64,13 +64,7 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
   {
     scenario: 'headless-*',
     check: 'client',
-    detail: /^client group headless-terminals:\S+ is not in the runtime$/,
-    cause: 'two group ids'
-  },
-  {
-    scenario: 'headless-*',
-    check: 'client',
-    detail: /^runtime group \S+ is missing from the client$/,
+    detail: /^group id differs: runtime \S+, client headless-terminals:\S+ \(tabs /,
     cause: 'two group ids'
   },
   // A renamed terminal's title lists as null in terminal.list after an orcad serve restart
