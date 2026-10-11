@@ -53,6 +53,7 @@ export async function scanHostLegWithCache(args: {
   depth: AiVaultSessionDepth
   scopePaths?: readonly string[]
   force: boolean
+  afterFingerprint?: string | null
   scan: () => Promise<AiVaultListResult>
 }): Promise<AiVaultListResult> {
   const now = Date.now()
@@ -62,7 +63,9 @@ export async function scanHostLegWithCache(args: {
     !args.force &&
     cached &&
     cached.expiresAt > now &&
-    aiVaultSessionDepthCovers(cached.depth, args.depth)
+    aiVaultSessionDepthCovers(cached.depth, args.depth) &&
+    (!cached.result.unchanged ||
+      (cached.depth === args.depth && cached.result.fingerprint === args.afterFingerprint))
   ) {
     return truncateAiVaultListResult(cached.result, args.depth, args.scopePaths)
   }
@@ -85,7 +88,9 @@ export async function scanHostLegWithCache(args: {
     !args.force &&
     current &&
     current.expiresAt > Date.now() &&
-    aiVaultSessionDepthCovers(current.depth, args.depth)
+    aiVaultSessionDepthCovers(current.depth, args.depth) &&
+    (!current.result.unchanged ||
+      (current.depth === args.depth && current.result.fingerprint === args.afterFingerprint))
   ) {
     return result
   }

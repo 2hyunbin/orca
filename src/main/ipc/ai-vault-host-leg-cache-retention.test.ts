@@ -123,6 +123,40 @@ describe('host session result cache lifetime', () => {
     expect(mocks.ssh).toHaveBeenCalledTimes(32)
   })
 
+  it('uses compact proofs only for an exact query depth and fingerprint until the same idle TTL', async () => {
+    const fingerprint = 'a'.repeat(64)
+    const compact: AiVaultListResult = {
+      sessions: [],
+      issues: [],
+      scannedAt: 'fresh',
+      fingerprint,
+      unchanged: true
+    }
+    const scan = vi.fn().mockResolvedValue(compact)
+    const request = { ...args(scan), afterFingerprint: fingerprint }
+    const owner = await cacheOwner(() => scanHostLegWithCache(request))
+    expect(await scanHostLegWithCache(request)).toEqual(compact)
+    expect(scan).toHaveBeenCalledTimes(1)
+    expect(owner.size).toBe(1)
+    await vi.advanceTimersByTimeAsync(AI_VAULT_CACHE_TTL_MS)
+    expect(owner.size).toBe(0)
+    await scanHostLegWithCache(request)
+    expect(scan).toHaveBeenCalledTimes(2)
+    for (const afterFingerprint of [undefined, null, 'b'.repeat(64)]) {
+      scan.mockResolvedValue(result('full'))
+      const calls = scan.mock.calls.length
+      await scanHostLegWithCache({ ...request, afterFingerprint })
+      expect(scan).toHaveBeenCalledTimes(calls + 1)
+      invalidateAiVaultHostLegCache()
+      scan.mockResolvedValue(compact)
+      await scanHostLegWithCache(request)
+      scan.mockClear()
+    }
+    scan.mockResolvedValue(result('shallow'))
+    await scanHostLegWithCache({ ...request, depth: 2 })
+    expect(scan).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the refreshed deadline and cached scoped depth when the old timer fires', async () => {
     const scan = vi.fn().mockResolvedValue(result('old'))
     const owner = await cacheOwner(() => scanHostLegWithCache(args(scan)))
