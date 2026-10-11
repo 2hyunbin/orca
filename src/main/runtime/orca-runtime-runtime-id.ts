@@ -2,9 +2,10 @@
 import { randomUUID } from 'node:crypto'
 import { SessionTabsInventoryPublication } from './session-tabs/session-tabs-inventory-publication'
 import { createHeadlessSessionTabCommands } from './session-tabs/headless-session-tab-commands'
+import { RuntimeTerminalIdentityOwner } from './terminal/identity/terminal-identity-owner'
+import { structuredWorkerTerminalRefusal } from './structured-worker-terminal-refusal'
+import { resolveStructuredWorkerAuthority } from './structured-worker-authority'
 import { preserveTerminalRetirementProofs } from './mobile-session-terminal-retirement-proof'
-import type { TuiAgent } from '../../shared/tui-agent'
-import { isTuiAgent } from '../../shared/tui-agent-config'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { RuntimeClientSettingsController } from './runtime-client-settings'
 import type { RuntimeAutomationController } from './runtime-automation-controller'
@@ -40,8 +41,7 @@ import type {
   RuntimePtyController
 } from './runtime-pty-controller-contract'
 import type { RuntimeLeafRecord } from './runtime-terminal-state-records'
-import type { TerminalHandleRecord } from './runtime-terminal-contracts'
-import type { PtyIncarnationHandleRecord } from './orca-runtime-core'
+
 import { MailPointerRepointScheduler } from './orchestration/mail-pointer-repoint-scheduler'
 import { RuntimeTerminalWaiterRegistry } from './runtime-terminal-waiter-registry'
 import { RuntimeTerminalWriter } from './runtime-terminal-writer'
@@ -284,17 +284,6 @@ export class OrcaRuntimeWithRuntimeId {
   protected pendingMobileSessionPtyAggregateInventoryRefresh: Promise<PtyControllerInventory | null> | null =
     null
 
-  /** The agent Orca believes owns this pane, for tui-idle evidence ranking. Launch
-   *  authority first; the live foreground agent covers panes Orca did not launch. */
-  protected getPaneAgentForTuiIdle(ptyId: string | null | undefined): TuiAgent | null {
-    if (!ptyId) {
-      return null
-    }
-    const pty = this.ptysById.get(ptyId)
-    const agent = pty?.launchAgent ?? pty?.foregroundAgent ?? null
-    return isTuiAgent(agent) ? agent : null
-  }
-
   /** One-shot delivery retries, keyed by leaf. See checkDeliverySettledAndArmRecheck. */
   protected deliveryRecheckTimersByLeafKey = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -308,24 +297,39 @@ export class OrcaRuntimeWithRuntimeId {
   // ptyId keeps active TUI redraws independent of the total open terminal count.
   protected leavesByPtyId = new Map<string, RuntimeLeafRecord[]>()
 
-  protected handles = new Map<string, TerminalHandleRecord>()
+  protected readonly terminalIdentity = new RuntimeTerminalIdentityOwner({
+    runtimeId: () => this.runtimeId,
+    rendererGraphEpoch: () => this.rendererGraphEpoch,
+    graphSequence: () => this.graphSequence,
+    graphStatus: () => this.graphStatus,
+    leaves: () => this.leaves,
+    leavesByPtyId: () => this.leavesByPtyId,
+    ptysById: () => this.ptysById,
+    wslDistroByPtyId: () => this.wslDistroByPtyId,
+    titleObservationSequence: () => this.titleObservationSequence,
+    setTitleObservationSequence: (sequence) => {
+      this.titleObservationSequence = sequence
+    },
+    assertGraphReady: () => this.assertGraphReady(),
+    rejectWaitersForHandle: (handle, code) => this.rejectWaitersForHandle(handle, code),
+    structuredTerminalRefusal: (handle) =>
+      structuredWorkerTerminalRefusal(handle, this._orchestrationDb),
+    isLiveStructuredWorker: (handle) =>
+      Boolean(resolveStructuredWorkerAuthority(handle, this._orchestrationDb))
+  })
 
-  protected handleByLeafKey = new Map<string, string>()
+  protected readonly handles = this.terminalIdentity.handles
 
-  protected handleByPtyId = new Map<string, string>()
+  protected readonly handleByLeafKey = this.terminalIdentity.handleByLeafKey
 
-  protected handleByPtyIncarnation = new Map<string, PtyIncarnationHandleRecord>()
+  protected readonly handleByPtyId = this.terminalIdentity.handleByPtyId
+
+  protected readonly handleByPtyIncarnation = this.terminalIdentity.handleByPtyIncarnation
 
   // A provider announces a replacement before the spawn commit can bind its
   // pane. Keep the predecessor aliases fenced during that hand-off window.
-  protected pendingPtyHandleReplacementFences = new Map<
-    string,
-    {
-      incarnationId: PtyIncarnationId
-      staleHandles: Set<string>
-      pendingRegistration: boolean
-    }
-  >()
+  protected readonly pendingPtyHandleReplacementFences =
+    this.terminalIdentity.pendingPtyHandleReplacementFences
 
   // Why: pointer state is process-local; one harmless replay after restart avoids a wire or schema change.
   protected readonly lastPointedMessageSequenceByHandle = new Map<string, number>()
@@ -337,9 +341,9 @@ export class OrcaRuntimeWithRuntimeId {
     this.repointPendingMessagesForHandle(handle)
   )
 
-  protected syntheticTerminalHandles = new Set<string>()
+  protected readonly syntheticTerminalHandles = this.terminalIdentity.syntheticTerminalHandles
 
-  protected detachedPreAllocatedLeaves = new Map<string, RuntimeLeafRecord>()
+  protected readonly detachedPreAllocatedLeaves = this.terminalIdentity.detachedPreAllocatedLeaves
 
   protected graphSyncCallbacks: (() => void)[] = []
 

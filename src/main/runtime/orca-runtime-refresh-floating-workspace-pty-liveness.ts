@@ -149,7 +149,7 @@ export class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends OrcaRunt
   }
 
   protected leafExistsForPty(ptyId: string): boolean {
-    return (this.leavesByPtyId.get(ptyId)?.length ?? 0) > 0
+    return this.terminalIdentity.leafExistsForPty(ptyId)
   }
 
   protected rebuildLeafPtyIndex(): void {
@@ -169,7 +169,7 @@ export class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends OrcaRunt
   }
 
   protected getLeavesForPty(ptyId: string): RuntimeLeafRecord[] {
-    return this.leavesByPtyId.get(ptyId) ?? []
+    return this.terminalIdentity.getLeavesForPty(ptyId)
   }
 
   // Keep the notification hook on the runtime as well as on the installed

@@ -27,8 +27,20 @@ import {
 } from './terminal-wait-results'
 import { createSetupCompletionScanner } from './orchestration/setup-completion-signal'
 import type { TuiAgent } from '../../shared/tui-agent'
+import { isTuiAgent } from '../../shared/tui-agent-config'
 
 export class OrcaRuntimeWithStartTuiIdleVisibleReadProbe extends OrcaRuntimeWithCreateAgentPromptRenderGate {
+  /** The agent Orca believes owns this pane, for tui-idle evidence ranking. Launch
+   *  authority first; the live foreground agent covers panes Orca did not launch. */
+  protected getPaneAgentForTuiIdle(ptyId: string | null | undefined): TuiAgent | null {
+    if (!ptyId) {
+      return null
+    }
+    const pty = this.ptysById.get(ptyId)
+    const agent = pty?.launchAgent ?? pty?.foregroundAgent ?? null
+    return isTuiAgent(agent) ? agent : null
+  }
+
   /** One bounded look at the provider's screen for an adopted PTY whose retained
    *  readiness metadata was lost. Deliberately single-shot: it answers "is the
    *  screen already showing a settled prompt", and the poll above owns every

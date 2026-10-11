@@ -22,7 +22,7 @@ export class OrcaRuntimeWithResolveWaiter extends OrcaRuntimeWithDeliverPendingM
   }
 
   protected getLeafKey(tabId: string, leafId: string): string {
-    return `${tabId}::${leafId}`
+    return this.terminalIdentity.getLeafKey(tabId, leafId)
   }
 
   protected getAuthoritativeWindow(): BrowserWindow {

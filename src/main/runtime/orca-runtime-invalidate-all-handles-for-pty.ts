@@ -6,83 +6,17 @@ import { getConnectionExecutionHostId, parseExecutionHostId } from '../../shared
 
 export class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRuntimeWithResolveKnownWorkspaceFileTarget {
   protected invalidateAllHandlesForPty(ptyId: string, preserveHandle?: string): Set<string> {
-    const incarnationHandle = this.handleByPtyIncarnation.get(ptyId)?.handle
-    const preallocatedHandle = this.handleByPtyId.get(ptyId)
-    const invalidated = new Set<string>()
-    if (incarnationHandle && incarnationHandle !== preserveHandle) {
-      this.handleByPtyIncarnation.delete(ptyId)
-      invalidated.add(incarnationHandle)
-    } else if (incarnationHandle) {
-      // The retained handle no longer describes the old incarnation. Keep its direct alias,
-      // when requested, but discard the incarnation-specific leaf record.
-      this.handleByPtyIncarnation.delete(ptyId)
-    }
-    if (preallocatedHandle && preallocatedHandle !== preserveHandle) {
-      this.handleByPtyId.delete(ptyId)
-      invalidated.add(preallocatedHandle)
-    }
-    for (const [handle, record] of this.handles) {
-      if (record.ptyId === ptyId && handle !== preserveHandle) {
-        invalidated.add(handle)
-      }
-    }
-    for (const handle of invalidated) {
-      this.handles.delete(handle)
-      this.syntheticTerminalHandles.delete(handle)
-      this.rejectWaitersForHandle(handle, 'terminal_handle_stale')
-    }
-    for (const [leafKey, handle] of this.handleByLeafKey) {
-      if (invalidated.has(handle) || (preserveHandle !== undefined && handle === preserveHandle)) {
-        this.handleByLeafKey.delete(leafKey)
-      }
-    }
-    if (preserveHandle !== undefined) {
-      // The direct alias is the only identity retained across an incarnation
-      // change. Renderer records point at the predecessor pane generation and
-      // must be rebuilt by graph sync (or issuePtyHandle) before use.
-      this.handles.delete(preserveHandle)
-      this.syntheticTerminalHandles.delete(preserveHandle)
-    }
-    return invalidated
+    return this.terminalIdentity.invalidateAllHandlesForPty(ptyId, preserveHandle)
   }
 
   protected replaceSyntheticTerminalHandlesForRestoredPty(
     ptyId: string,
     controllerHandle: string
   ): boolean {
-    const boundHandles = new Set<string>()
-    const directHandle = this.handleByPtyId.get(ptyId)
-    if (directHandle) {
-      boundHandles.add(directHandle)
-    }
-    for (const [handle, record] of this.handles) {
-      if (record.ptyId === ptyId) {
-        boundHandles.add(handle)
-      } else if (handle === controllerHandle) {
-        return false
-      }
-    }
-    for (const [otherPtyId, handle] of this.handleByPtyId) {
-      if (otherPtyId !== ptyId && handle === controllerHandle) {
-        return false
-      }
-    }
-    for (const leaf of this.getLeavesForPty(ptyId)) {
-      const handle = this.handleByLeafKey.get(this.getLeafKey(leaf.tabId, leaf.leafId))
-      if (handle) {
-        boundHandles.add(handle)
-      }
-    }
-    if (
-      boundHandles.size === 0 ||
-      [...boundHandles].some(
-        (handle) => handle === controllerHandle || !this.syntheticTerminalHandles.has(handle)
-      )
-    ) {
-      return false
-    }
-    this.invalidateAllHandlesForPty(ptyId)
-    return true
+    return this.terminalIdentity.replaceSyntheticTerminalHandlesForRestoredPty(
+      ptyId,
+      controllerHandle
+    )
   }
 
   // Why: adoption is best-effort restart recovery and must be first-wins.
@@ -91,25 +25,7 @@ export class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRuntimeWithRe
   // are not trusted to be collision-free — a handle bound to a different
   // pty must never be stolen by a later report.
   protected isTerminalHandleAdoptionBlocked(ptyId: string, handle: string): boolean {
-    if (this.handleByPtyId.get(ptyId) ?? this.findHandleForPtyRecord(ptyId)) {
-      return true
-    }
-    for (const leaf of this.getLeavesForPty(ptyId)) {
-      const issued = this.handleByLeafKey.get(this.getLeafKey(leaf.tabId, leaf.leafId))
-      if (issued && issued !== handle) {
-        return true
-      }
-    }
-    const existingRecord = this.handles.get(handle)
-    if (existingRecord && existingRecord.ptyId !== ptyId) {
-      return true
-    }
-    for (const [otherPtyId, otherHandle] of this.handleByPtyId) {
-      if (otherHandle === handle && otherPtyId !== ptyId) {
-        return true
-      }
-    }
-    return false
+    return this.terminalIdentity.isTerminalHandleAdoptionBlocked(ptyId, handle)
   }
 
   protected invalidatePtyControllerInventoryForLifecycle(

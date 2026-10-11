@@ -1,8 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from './orca-runtime-prune-mobile-session-tab-group-layout'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
-import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
-import { detectAgentStatusFromTitle, isClaudeManagementTitle } from '../../shared/agent-detection'
+
 import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
 import {
   resolveStructuredWorkerAuthority,
@@ -18,71 +17,19 @@ import {
 } from './orchestration/structured-session-mail-target'
 import { exitedChatDispatchesForSession } from './orchestration/chat-assignee'
 import { OPERATOR_CLOSE_EXIT_CAUSE } from '../../shared/terminal-exit-cause'
-import {
-  resolveTerminalIdentityFromProbes,
-  type RuntimeTerminalIdentity
-} from './terminal-identity-probe'
+import type { RuntimeTerminalIdentity } from './terminal-identity-probe'
 
 export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneMobileSessionTabGroupLayout {
   protected getPtyRecordForPaneKey(paneKey: string): RuntimePtyWorktreeRecord | null {
-    const parsed = parsePaneKey(paneKey)
-    let leafPty: RuntimePtyWorktreeRecord | null = null
-    if (parsed) {
-      const leaf = this.leaves.get(this.getLeafKey(parsed.tabId, parsed.leafId))
-      const pty = leaf?.ptyId ? this.ptysById.get(leaf.ptyId) : undefined
-      if (pty?.connected) {
-        return pty
-      }
-      leafPty = pty ?? null
-      for (const candidate of this.leaves.values()) {
-        if (candidate.leafId !== parsed.leafId || !candidate.ptyId) {
-          continue
-        }
-        const remintedPty = this.ptysById.get(candidate.ptyId)
-        if (remintedPty?.connected) {
-          return remintedPty
-        }
-        leafPty ??= remintedPty ?? null
-      }
-    }
-    let newestMatch: RuntimePtyWorktreeRecord | null = null
-    for (const pty of this.ptysById.values()) {
-      const ptyPane = parsePaneKey(pty.paneKey ?? '')
-      if (pty.paneKey === paneKey || (parsed && ptyPane && parsed.leafId === ptyPane.leafId)) {
-        if (pty.connected) {
-          return pty
-        }
-        newestMatch = pty
-      }
-    }
-    return leafPty ?? newestMatch
+    return this.terminalIdentity.getPtyRecordForPaneKey(paneKey)
   }
 
   protected getPaneKeyForTerminalHandle(handle: string): string | null {
-    const livePty = this.getLivePtyForHandle(handle)
-    if (livePty?.pty.paneKey) {
-      return livePty.pty.paneKey
-    }
-    const record = this.handles.get(handle)
-    if (!record || record.runtimeId !== this.runtimeId) {
-      return null
-    }
-    if (!isTerminalLeafId(record.leafId)) {
-      return null
-    }
-    return makePaneKey(record.tabId, record.leafId)
+    return this.terminalIdentity.getPaneKeyForTerminalHandle(handle)
   }
 
   getTerminalWorktreeIdForHandle(handle: string): string | null {
-    const livePty = this.getLivePtyForHandle(handle)
-    if (livePty?.pty.worktreeId) {
-      return livePty.pty.worktreeId
-    }
-    const record = this.handles.get(handle)
-    if (!record || record.runtimeId !== this.runtimeId) {
-      return null
-    }
-    return record.worktreeId
+    return this.terminalIdentity.getTerminalWorktreeIdForHandle(handle)
   }
 
   protected setPtyManagementTitleFromObservedTitle(
@@ -90,27 +37,11 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
     title: string | null | undefined,
     observedAt: number
   ): void {
-    const trimmed = title?.trim()
-    if (!trimmed) {
-      return
-    }
-    if (isClaudeManagementTitle(trimmed)) {
-      pty.managementTitle = trimmed
-      pty.managementTitleAt = observedAt
-      return
-    }
-    if (
-      detectAgentStatusFromTitle(trimmed) !== null &&
-      observedAt >= (pty.managementTitleAt ?? -1)
-    ) {
-      pty.managementTitle = null
-      pty.managementTitleAt = null
-    }
+    return this.terminalIdentity.setPtyManagementTitleFromObservedTitle(pty, title, observedAt)
   }
 
   protected nextTitleObservationSequence(): number {
-    this.titleObservationSequence += 1
-    return this.titleObservationSequence
+    return this.terminalIdentity.nextTitleObservationSequence()
   }
 
   // Why: title is the tightest agent-presence signal, but a Claude management title is negative evidence for task activity.
@@ -165,14 +96,7 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
    * validation without `terminal.show`'s writable-looking pane payload.
    */
   resolveTerminalIdentity(handle: string): RuntimeTerminalIdentity {
-    return resolveTerminalIdentityFromProbes(handle, {
-      isLiveStructuredWorker: () =>
-        Boolean(resolveStructuredWorkerAuthority(handle, this._orchestrationDb)),
-      hasLivePty: () => Boolean(this.getLivePtyForHandle(handle)),
-      assertLiveLeaf: () => {
-        this.getLiveLeafForHandle(handle)
-      }
-    })
+    return this.terminalIdentity.resolveTerminalIdentity(handle)
   }
 
   /**

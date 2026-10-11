@@ -9,7 +9,7 @@ import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import { resolveWorktreeHostRouting } from './worktree-launch-host-repo'
 import { findRuntimeWorkspaceFileOwner } from '../../shared/runtime-workspace-file-owner'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
-import { randomUUID } from 'node:crypto'
+
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 
 export class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeWithPersistHeadlessTerminalTitle {
@@ -112,17 +112,11 @@ export class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeW
   // env var) so they can self-identify in orchestration messages without an
   // extra RPC round-trip. Pre-allocating by ptyId lets issueHandle reuse it.
   preAllocateHandleForPty(ptyId: string): string {
-    const existing = this.handleByPtyId.get(ptyId)
-    if (existing) {
-      return existing
-    }
-    const handle = this.createPreAllocatedTerminalHandle()
-    this.handleByPtyId.set(ptyId, handle)
-    return handle
+    return this.terminalIdentity.preAllocateHandleForPty(ptyId)
   }
 
   createPreAllocatedTerminalHandle(): string {
-    return `term_${randomUUID()}`
+    return this.terminalIdentity.createPreAllocatedTerminalHandle()
   }
 
   protected rememberPtyHandleReplacementFence(
@@ -131,43 +125,16 @@ export class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeW
     staleHandles: Iterable<string>,
     pendingRegistration: boolean
   ): void {
-    const previous = this.pendingPtyHandleReplacementFences.get(ptyId)
-    const merged = new Set(previous?.staleHandles)
-    for (const handle of staleHandles) {
-      merged.add(handle)
-    }
-    // A PTY normally has one direct and one renderer alias. Keep a small bound
-    // in case a malformed provider emits an unbounded alias stream.
-    while (merged.size > 16) {
-      const oldest = merged.values().next().value
-      if (typeof oldest !== 'string') {
-        break
-      }
-      merged.delete(oldest)
-    }
-    this.pendingPtyHandleReplacementFences.set(ptyId, {
+    return this.terminalIdentity.rememberPtyHandleReplacementFence(
+      ptyId,
       incarnationId,
-      staleHandles: merged,
+      staleHandles,
       pendingRegistration
-    })
+    )
   }
 
   registerPreAllocatedHandleForPty(ptyId: string, handle: string): void {
-    if (this.pendingPtyHandleReplacementFences.get(ptyId)?.staleHandles.has(handle)) {
-      // The provider can replay the old env handle after announcing a new
-      // incarnation. Never let that predecessor alias be reintroduced.
-      return
-    }
-    const retained = this.handleByPtyIncarnation.get(ptyId)
-    if (retained?.handle === handle) {
-      this.handleByPtyIncarnation.delete(ptyId)
-    } else {
-      this.invalidatePtyIncarnationHandle(ptyId)
-    }
-    this.handleByPtyId.set(ptyId, handle)
-    for (const leaf of this.getLeavesForPty(ptyId)) {
-      this.adoptPreAllocatedHandle(leaf)
-    }
+    return this.terminalIdentity.registerPreAllocatedHandleForPty(ptyId, handle)
   }
 
   protected adoptControllerTerminalHandle(
@@ -176,35 +143,11 @@ export class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeW
     incarnationId?: string,
     options: { exactRestoredSurface?: boolean } = {}
   ): void {
-    const trimmed = handle?.trim()
-    if (!trimmed || !trimmed.startsWith('term_')) {
-      return
-    }
-    const pty = this.ptysById.get(ptyId)
-    const changedIncarnation = Boolean(
-      incarnationId && pty?.incarnationId && incarnationId !== pty.incarnationId
+    return this.terminalIdentity.adoptControllerTerminalHandle(
+      ptyId,
+      handle,
+      incarnationId,
+      options
     )
-    if (changedIncarnation) {
-      const priorHandle = this.handleByPtyId.get(ptyId)
-      this.invalidateAllHandlesForPty(ptyId)
-      pty!.tabId = null
-      pty!.paneKey = null
-      // Reusing an exported handle would make stale client metadata name the replacement process.
-      if (priorHandle === trimmed) {
-        return
-      }
-    }
-    if (this.isTerminalHandleAdoptionBlocked(ptyId, trimmed)) {
-      if (
-        !options.exactRestoredSurface ||
-        !this.replaceSyntheticTerminalHandlesForRestoredPty(ptyId, trimmed) ||
-        this.isTerminalHandleAdoptionBlocked(ptyId, trimmed)
-      ) {
-        return
-      }
-    }
-    // Why: after an app/runtime restart, the live PTY child still has its
-    // original ORCA_TERMINAL_HANDLE, but the runtime's in-memory map is gone.
-    this.registerPreAllocatedHandleForPty(ptyId, trimmed)
   }
 }
