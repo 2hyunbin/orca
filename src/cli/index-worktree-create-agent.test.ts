@@ -43,6 +43,7 @@ vi.mock('child_process', async () => {
 import { main } from './index'
 import { buildWorktree, okFixture, queueFixtures, worktreeListFixture } from './test-fixtures'
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
+import { agentLaunchFixture, agentLaunchHostFixture } from './agent-launch-test-fixtures'
 
 describe('orca cli worktree awareness', () => {
   useWorktreeAwarenessEnvironment({
@@ -89,17 +90,17 @@ describe('orca cli worktree awareness', () => {
     })
   })
 
-  it('starts an agent worktree in the background unless activation is explicit', async () => {
+  it('starts an agent worktree through agent.launch, in the background unless activation is explicit', async () => {
     queueFixtures(
       callMock,
       worktreeListFixture([buildWorktree('/tmp/repo', 'main', 'abc', 'repo-1')]),
-      okFixture('req_create', {
-        worktree: buildWorktree('/tmp/repo/agent-task', 'agent-task', 'abc', 'repo-1'),
-        lineage: null,
-        warnings: []
+      agentLaunchHostFixture(),
+      agentLaunchFixture('repo-1::/tmp/repo/agent-task'),
+      okFixture('req_show', {
+        worktree: buildWorktree('/tmp/repo/agent-task', 'agent-task', 'abc', 'repo-1')
       })
     )
-    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
       [
@@ -120,32 +121,49 @@ describe('orca cli worktree awareness', () => {
       '/tmp/repo/src'
     )
 
-    expect(callMock).toHaveBeenNthCalledWith(2, 'worktree.create', {
-      repo: 'id:repo-1',
-      name: 'agent-task',
-      displayName: 'agent-task',
-      displayNameKind: 'user',
-      baseBranch: undefined,
-      linkedIssue: undefined,
-      comment: undefined,
-      runHooks: false,
-      activate: false,
-      setupDecision: 'run',
-      parentWorktree: undefined,
-      cwdParentWorktree: 'id:repo-1::/tmp/repo',
-      noParent: false,
-      callerTerminalHandle: undefined,
-      cliProvenanceRequest: {},
-      startupAgent: 'codex',
-      startupPrompt: 'hi',
+    expect(callMock).toHaveBeenNthCalledWith(3, 'agent.launch', {
+      target: {
+        kind: 'create-worktree',
+        create: {
+          repo: 'id:repo-1',
+          name: 'agent-task',
+          displayName: 'agent-task',
+          displayNameKind: 'user',
+          baseBranch: undefined,
+          linkedIssue: undefined,
+          comment: undefined,
+          runHooks: false,
+          activate: false,
+          setupDecision: 'run',
+          parentWorktree: undefined,
+          cwdParentWorktree: 'id:repo-1::/tmp/repo',
+          noParent: false,
+          callerTerminalHandle: undefined,
+          cliProvenanceRequest: {}
+        }
+      },
+      presentation: 'background',
+      agent: 'codex',
+      prompt: { text: 'hi', delivery: 'submit' },
       launchSource: 'cli'
+    })
+    expect(callMock).toHaveBeenNthCalledWith(4, 'worktree.show', {
+      worktree: 'id:repo-1::/tmp/repo/agent-task'
+    })
+    const printed = JSON.parse(String(logSpy.mock.calls[0]?.[0]))
+    expect(printed.result.worktree.path).toBe('/tmp/repo/agent-task')
+    expect(printed.result.launch.outcome).toEqual({
+      kind: 'structured',
+      sessionId: 'codex_1',
+      handle: 'agent_1'
     })
   })
 
-  it('infers the repo and honors explicit activation on worktree.create', async () => {
+  it('falls back to the startup terminal on a host older than agent.launch', async () => {
     queueFixtures(
       callMock,
       worktreeListFixture([buildWorktree('/tmp/repo', 'main', 'abc', 'repo-1')]),
+      okFixture('req_status', { capabilities: [] }),
       okFixture('req_create', {
         worktree: buildWorktree('/tmp/repo/agent-task', 'agent-task', 'abc', 'repo-1'),
         lineage: null,
@@ -170,7 +188,7 @@ describe('orca cli worktree awareness', () => {
       '/tmp/repo/src'
     )
 
-    expect(callMock).toHaveBeenNthCalledWith(2, 'worktree.create', {
+    expect(callMock).toHaveBeenNthCalledWith(3, 'worktree.create', {
       repo: 'id:repo-1',
       name: 'agent-task',
       displayName: 'agent-task',
@@ -268,7 +286,7 @@ describe('orca cli worktree awareness', () => {
     )
     expect(callMock.mock.calls.some(([method]) => method === 'worktree.create')).toBe(false)
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
-      'Missing value for --prompt'
+      '--prompt requires a value'
     )
 
     callMock.mockClear()
