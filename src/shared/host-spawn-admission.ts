@@ -79,9 +79,6 @@ export function readTerminalSpawnDeferral(error: unknown): SpawnDeferralReason |
   return index === -1 ? null : parseTerminalSpawnDeferral(message.slice(index).split(/\s/)[0])
 }
 
-/** What a client declares for a restore: the pane on screen outranks hidden ones. */
-export type RestoreSpawnIntent = Extract<SpawnIntent, 'user-resume' | 'automatic-restore'>
-
 export type SpawnAdmissionDecision =
   | { kind: 'admit'; charge: SpawnCharge }
   /** `retryAt` null means "until a slot is released". */
