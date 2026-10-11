@@ -12,7 +12,10 @@ import { RuntimeBrowserDriverController } from './runtime-browser-driver-control
 import type { StatsCollector } from '../stats/collector'
 import { RuntimeRemoteFetchController } from './runtime-remote-fetch-controller'
 import { RuntimeWorktreeBaseReconciliation } from './runtime-worktree-base-reconciliation'
-import { RuntimeWorktreeRemovalInFlight } from './runtime-worktree-removal-in-flight'
+import { RuntimeWorkspaceRemovalRecovery } from './workspaces/workspace-removal-recovery'
+import { RuntimeWorkspaceRemoval } from './workspaces/workspace-removal'
+import { killAllProcessesForWorktree } from './worktree-teardown'
+import { teardownFolderWorkspacePtys } from './folder-workspace-pty-teardown'
 
 export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
   protected readonly terminalLayout = new TerminalLayoutController({
@@ -99,5 +102,62 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
     () => this.notifier
   )
 
-  protected readonly removeManagedWorktreeInFlight = new RuntimeWorktreeRemovalInFlight()
+  protected readonly workspaceRemovalRecovery = new RuntimeWorkspaceRemovalRecovery({
+    getStore: () => this.store,
+    getPreservedBranchCleanup: () => this.preservedBranchCleanup,
+    localRemovalJobHost: (store) => this.localRemovalJobHost(store),
+    purgeRemovedWorktree: (...args) => this.purgeRemovedWorktree(...args),
+    getAcquireFileWatcherRemoval: () => this.acquireFileWatcherRemoval,
+    closeFileWatchersForRemoval: (path) => this.closeFileWatchersForRemoval(path),
+    stopPtysForDestructiveWorktreeRemoval: (id, options) =>
+      this.stopPtysForDestructiveWorktreeRemoval(id, options),
+    emitWorktreeLifecycle: (event) => this.emitWorktreeLifecycle(event),
+    publishWorktreeRemovalChange: (id) => this.publishWorktreeRemovalChange(id),
+    clearOptimisticReconcileToken: (id) => this.clearOptimisticReconcileToken(id),
+    removeWorktreeMetadataAndHistory: (store, id, host) =>
+      this.removeWorktreeMetadataAndHistory(store, id, host),
+    invalidateResolvedWorktreeCache: () => this.invalidateResolvedWorktreeCache(),
+    invalidateWorktreeScanCacheForRepo: (id) => this.invalidateWorktreeScanCacheForRepo(id)
+  })
+
+  protected readonly workspaceRemoval = new RuntimeWorkspaceRemoval({
+    getStore: () => this.store,
+    requireStore: () => this.requireStore(),
+    resolveWorktreeRemovalTarget: (selector, hostId) =>
+      this.resolveWorktreeRemovalTarget(selector, hostId),
+    joinPendingWorktreeRemoval: (worktreeId, options) =>
+      this.joinPendingWorktreeRemoval(worktreeId, options),
+    emitWorktreeLifecycle: (event) => this.emitWorktreeLifecycle(event),
+    purgeRemovedWorktree: (store, worktreeId, repoId, hostId) =>
+      this.purgeRemovedWorktree(store, worktreeId, repoId, hostId),
+    retryFailedLocalRemoval: (route, target, registered, options) =>
+      this.retryFailedLocalRemoval(route, target, registered, options),
+    getLocalProvider: () => this.getLocalProvider(),
+    getOnPtyStopped: () => this.onPtyStopped,
+    killOrphanWorktreeProcesses: (worktreeId, deps) =>
+      killAllProcessesForWorktree(worktreeId, { runtime: this, ...deps }),
+    teardownFolderWorkspacePtys: (worktreeId, connectionId) =>
+      teardownFolderWorkspacePtys(
+        {
+          runtime: this,
+          getLocalProvider: () => this.getLocalProvider(),
+          onPtyStopped: this.onPtyStopped
+        },
+        worktreeId,
+        connectionId
+      ),
+    getAcquireFileWatcherRemoval: () => this.acquireFileWatcherRemoval,
+    acquireFileWatcherRemoval: (...args) => this.acquireFileWatcherRemoval(...args),
+    clearOptimisticReconcileToken: (worktreeId) => this.clearOptimisticReconcileToken(worktreeId),
+    removeWorktreeMetadataAndHistory: (store, worktreeId, hostId) =>
+      this.removeWorktreeMetadataAndHistory(store, worktreeId, hostId),
+    getPreservedBranchCleanup: () => this.preservedBranchCleanup,
+    invalidateResolvedWorktreeCache: () => this.invalidateResolvedWorktreeCache(),
+    invalidateWorktreeScanCacheForRepo: (repoId) => this.invalidateWorktreeScanCacheForRepo(repoId),
+    notifyWorktreesChanged: (repoId) => this.notifyWorktreesChanged(repoId),
+    stopPtysForDestructiveWorktreeRemoval: (worktreeId, options) =>
+      this.stopPtysForDestructiveWorktreeRemoval(worktreeId, options),
+    closeFileWatchersForRemoval: (path) => this.closeFileWatchersForRemoval(path),
+    publishWorktreeRemovalChange: (repoId) => this.publishWorktreeRemovalChange(repoId)
+  })
 }

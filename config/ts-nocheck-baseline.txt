@@ -63,8 +63,6 @@ src/main/runtime/orca-runtime-refresh-pty-worktree-records-from-controller.ts
 src/main/runtime/orca-runtime-refresh-pty-worktree-records-with-controller-inventory.ts
 src/main/runtime/orca-runtime-refuse-unattributed-mobile-session-tab-close.ts
 src/main/runtime/orca-runtime-register-pty.ts
-src/main/runtime/orca-runtime-remove-managed-worktree.ts
-src/main/runtime/orca-runtime-remove-orphan-or-folder-worktree.ts
 src/main/runtime/orca-runtime-resolve-authoritative-terminal-wait-permission.ts
 src/main/runtime/orca-runtime-resolve-browser-network-execution-host-for-worktree.ts
 src/main/runtime/orca-runtime-resolve-exit-waiters.ts
