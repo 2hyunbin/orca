@@ -21,6 +21,8 @@ import {
   planDelegatedMobileDevices,
   type DelegatedMobileDeviceEntry
 } from './delegated-mobile-devices'
+import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
+import { validGrants, validRelayBinding } from './device-registry-row-validation'
 import {
   parseMobilePushRegistration,
   type MobilePushRegistration
@@ -46,25 +48,13 @@ export type DeviceEntry = {
   // Why: a phone relayed by a paired desktop is that desktop's child; it dies with the parent's grant.
   parentDeviceId?: string
   phoneKey?: string
+  // Why: administrative permissions are granted only when pairing; absent on older rows means none.
+  grants?: RuntimeDeviceGrant[]
 }
 
-function validRelayBinding(value: unknown, deviceId: string): RelayDeviceBinding | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined
-  }
-  const binding = value as Partial<RelayDeviceBinding>
-  return binding.relayDeviceId === deviceId &&
-    typeof binding.relayHostId === 'string' &&
-    typeof binding.ownerIdentityKey === 'string'
-    ? {
-        relayHostId: binding.relayHostId,
-        relayDeviceId: binding.relayDeviceId,
-        ownerIdentityKey: binding.ownerIdentityKey,
-        ...(typeof binding.inviteExpiresAt === 'number' && Number.isFinite(binding.inviteExpiresAt)
-          ? { inviteExpiresAt: binding.inviteExpiresAt }
-          : {})
-      }
-    : undefined
+function sameGrants(entry: DeviceEntry, grants: readonly RuntimeDeviceGrant[]): boolean {
+  const current = entry.grants ?? []
+  return current.length === grants.length && current.every((grant) => grants.includes(grant))
 }
 
 // Why: a lastSeen refresh is pure bookkeeping, so coalesce reconnect bursts into one write instead of
@@ -91,24 +81,28 @@ export class DeviceRegistry {
   addDevice(
     name: string,
     scope: DeviceScope = 'mobile',
-    pairingReach: RuntimePairingReach = 'network'
+    pairingReach: RuntimePairingReach = 'network',
+    grants: readonly RuntimeDeviceGrant[] = []
   ): DeviceEntry {
-    return this.createAndPersistDevice(this.devices, name, scope, pairingReach)
+    return this.createAndPersistDevice(this.devices, name, scope, pairingReach, grants)
   }
 
   private createAndPersistDevice(
     existingDevices: DeviceEntry[],
     name: string,
     scope: DeviceScope,
-    pairingReach: RuntimePairingReach
+    pairingReach: RuntimePairingReach,
+    grants: readonly RuntimeDeviceGrant[]
   ): DeviceEntry {
+    const validatedGrants = validGrants(grants, scope)
     const entry: DeviceEntry = {
       ...mintDeviceCredential(),
       name,
       scope,
       pairedAt: Date.now(),
       lastSeenAt: 0,
-      pairingReach
+      pairingReach,
+      ...(validatedGrants ? { grants: validatedGrants } : {})
     }
     const nextDevices = [...existingDevices, entry]
     // Why: a credential is not valid until its durable registry write succeeds.
@@ -126,9 +120,14 @@ export class DeviceRegistry {
   getOrCreatePendingDevice(
     name: string,
     scope: DeviceScope = 'mobile',
-    pairingReach: RuntimePairingReach = 'network'
+    pairingReach: RuntimePairingReach = 'network',
+    grants: readonly RuntimeDeviceGrant[] = []
   ): DeviceEntry {
-    const existing = this.devices.find((d) => d.lastSeenAt === 0 && d.scope === scope)
+    // Why: a pending token is reused only for the same grants, so re-advertising never widens one.
+    const existing = this.devices.find(
+      (d) =>
+        d.lastSeenAt === 0 && d.scope === scope && sameGrants(d, validGrants(grants, scope) ?? [])
+    )
     if (existing) {
       // Why: the same pending token can be re-advertised at a broader reach; widen it but never narrow it,
       // or a link already handed out for off-host use would stop being served after the next launch.
@@ -136,7 +135,7 @@ export class DeviceRegistry {
         ? this.setPairingReach(existing, 'network')
         : existing
     }
-    return this.addDevice(name, scope, pairingReach)
+    return this.addDevice(name, scope, pairingReach, grants)
   }
 
   private setPairingReach(existing: DeviceEntry, pairingReach: RuntimePairingReach): DeviceEntry {
@@ -160,11 +159,12 @@ export class DeviceRegistry {
   rotatePendingDevice(
     name: string,
     scope: DeviceScope = 'mobile',
-    pairingReach: RuntimePairingReach = 'network'
+    pairingReach: RuntimePairingReach = 'network',
+    grants: readonly RuntimeDeviceGrant[] = []
   ): DeviceEntry {
     // Why: a pending runtime device has no delegated children — its first auth sets lastSeenAt before any sync.
     const retainedDevices = this.devices.filter((d) => d.lastSeenAt !== 0 || d.scope !== scope)
-    return this.createAndPersistDevice(retainedDevices, name, scope, pairingReach)
+    return this.createAndPersistDevice(retainedDevices, name, scope, pairingReach, grants)
   }
 
   listDelegatedMobileDevices(parentDeviceId: string): DeviceEntry[] {
@@ -350,6 +350,7 @@ export class DeviceRegistry {
         // Why: older registries only existed for phone pairing. Treat missing
         // scope as mobile so legacy device tokens do not gain new CLI powers.
         scope: device.scope === 'runtime' ? 'runtime' : 'mobile',
+        grants: validGrants(device.grants, device.scope === 'runtime' ? 'runtime' : 'mobile'),
         relayBinding: validRelayBinding(device.relayBinding, device.deviceId),
         mobilePairingConnectionMode:
           device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic',

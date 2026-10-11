@@ -10,6 +10,9 @@ import type { WebSocketTransport } from '../rpc/ws-transport'
 import type { DeviceScope } from '../device-registry'
 import { RuntimeRpcMobileDevices } from './runtime-rpc-mobile-devices'
 import { classifyRuntimeLongPoll } from './runtime-rpc-long-poll'
+import type { RpcBinarySender } from '../rpc/rpc-binary-sender'
+import type { RpcCallerScope } from '../rpc/rpc-caller-scope'
+import { limitRuntimeRpcReplySize } from './runtime-rpc-reply-size-limit'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc-mobile-method-allowlist'
 import { MOBILE_RPC_METHOD_ROUTES } from './runtime-rpc-mobile-method-routing'
 import { parseExecutionHostId } from '../../../shared/execution-host'
@@ -35,7 +38,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     request: RpcRequest,
     rawMessage: string,
     reply: (response: string) => void,
-    sendBinary: (response: Uint8Array<ArrayBufferLike>) => boolean | void,
+    sendBinary: RpcBinarySender,
     socket: AuthenticatedMobileSocket | undefined
   ): boolean {
     const { executionHost } = request
@@ -82,7 +85,9 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
           deviceToken: socket.device.deviceToken,
           clientCapabilities: () => socket.clientCapabilities,
           reply,
-          sendBinary
+          sendBinary: (bytes) => {
+            sendBinary(bytes)
+          }
         },
         target.environmentId,
         request,
@@ -96,7 +101,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
   protected async handleWebSocketMessage(
     rawMessage: string,
     reply: (response: string) => void,
-    sendBinary: (response: Uint8Array<ArrayBufferLike>) => boolean | void,
+    sendBinary: RpcBinarySender,
     wsTransport?: WebSocketTransport,
     ws?: WebSocket,
     authenticatedDeviceToken?: string | null,
@@ -138,20 +143,14 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
       reply(JSON.stringify(this.buildError(request.id, 'unauthorized', 'Invalid device token')))
       return
     }
-    if (device.scope === 'mobile' && !MOBILE_RPC_METHOD_ALLOWLIST.has(request.method)) {
-      reply(
-        JSON.stringify(
-          this.buildError(
-            request.id,
-            'forbidden',
-            `Method '${request.method}' is not available to mobile clients`
-          )
-        )
-      )
-      return
-    }
+    // Why: the dispatcher enforces this scope's permissions; it never trusts a request field.
+    const callerScope: RpcCallerScope =
+      device.scope === 'mobile'
+        ? { kind: 'mobile', delegated: device.parentDeviceId !== undefined }
+        : { kind: 'runtime-paired', grants: device.grants ?? [] }
 
-    if (device.scope === 'mobile') {
+    // Why: relayed calls skip this dispatcher's scope check, so only allowlisted methods may relay.
+    if (device.scope === 'mobile' && MOBILE_RPC_METHOD_ALLOWLIST.has(request.method)) {
       // Why: the phone's open server sockets must see the same capabilities the desktop does.
       if (authenticatedSocket && request.method === 'runtime.clientCapabilities.update') {
         this.mobileDesktopRelay?.forwardClientCapabilities(
@@ -179,10 +178,13 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     const abortRegistration = ws ? this.registerWebSocketDispatchAbort(ws) : null
 
     // Why: older pairings may lack scope metadata, so stamp the authenticated scope onto status.get.
+    const boundedReply = limitRuntimeRpcReplySize(request.id, reply, (id, code, message) =>
+      this.buildError(id, code, message)
+    )
     const replyForRequest =
       request.method === 'status.get'
-        ? (response: string): void => reply(injectDeviceScope(response, device.scope))
-        : reply
+        ? (response: string): void => boundedReply(injectDeviceScope(response, device.scope))
+        : boundedReply
 
     const connectionId = ws ? this.mobileSocketWiring?.getConnectionId(ws) : undefined
     const pairingProvider = this.mobileRelayPairingProvider
@@ -218,6 +220,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
         pairedDeviceId: device.deviceId,
         // Why: gates the mobile-only payload diet so full-screen web/desktop clients aren't truncated.
         clientKind: device.scope,
+        callerScope,
         clientCapabilities: authenticatedSocket?.clientCapabilities,
         updateClientCapabilities:
           authenticatedSocket && device.scope === 'mobile'

@@ -14,6 +14,7 @@ import type {
 } from '../../shared/project-types'
 import type { Repo } from '../../shared/repo-types'
 import {
+  getRepoExecutionHostId,
   getSshTargetIdForExecutionHost,
   parseExecutionHostId,
   type ExecutionHostId
@@ -21,8 +22,14 @@ import {
 import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
 import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
+import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidators'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
+import { readAllWorktreeMetaForRepo } from '../persistence/host-qualified-worktree-meta'
+import {
+  countRepoWorkspacesWithMetadata,
+  describeProjectRemovalRefusal
+} from './project-removal-impact'
 
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
@@ -39,6 +46,7 @@ type RuntimeProjectHostSetupDependencies = {
   invalidateResolvedWorktrees: () => void
   invalidateWorktreeScan: (repoId: string) => void
   notifyReposChanged: () => void
+  countLiveTerminalsForRepo: (repo: Repo) => number
 }
 
 // Why clone alone still refuses: nothing in this process clones onto an SSH host. `cloneRepo` runs
@@ -88,6 +96,7 @@ export class RuntimeProjectHostSetupController {
     if (!result) {
       throw new Error(`Project not found: ${args.projectId}`)
     }
+    this.deps.notifyReposChanged()
     return result
   }
 
@@ -114,6 +123,19 @@ export class RuntimeProjectHostSetupController {
     return this.completeSetup(args, repo, !knownRepoIds.has(repo.id))
   }
 
+  /** Registers an existing folder on one of this host's SSH targets as a new project. */
+  addSshRepo(args: {
+    connectionId: string
+    remotePath: string
+    displayName?: string
+    kind?: 'folder' | 'git'
+  }): Promise<Repo> {
+    if (!this.deps.getStore()) {
+      throw new Error('runtime_unavailable')
+    }
+    return this.deps.addRemoteRepo({ ...args, kind: args.kind === 'folder' ? 'folder' : 'git' })
+  }
+
   async setupClone(args: ProjectHostSetupCloneArgs): Promise<ProjectHostSetupResult> {
     assertCloneHostIsSupported(args.hostId)
     const knownRepoIds = new Set(this.deps.listRepos().map((repo) => repo.id))
@@ -138,6 +160,11 @@ export class RuntimeProjectHostSetupController {
       void prepareLocalWorktreeRootForRepo(store, result.repo)
       invalidateAuthorizedRootsCache()
     }
+    if (result.repo && ('path' in args.updates || 'kind' in args.updates)) {
+      this.retireRepoCatalog(result.repo.id)
+    }
+    this.deps.invalidateResolvedWorktrees()
+    this.deps.notifyReposChanged()
     return result
   }
 
@@ -146,11 +173,52 @@ export class RuntimeProjectHostSetupController {
     if (!store?.deleteProjectHostSetup) {
       throw new Error('runtime_unavailable')
     }
+    if (args.force === false) {
+      this.assertSetupRemovalIsUnused(store, args.setupId)
+    }
     const result = store.deleteProjectHostSetup(args)
     if (!result) {
       throw new Error(`Project host setup not found: ${args.setupId}`)
     }
+    if (result.repo) {
+      this.retireRepoCatalog(result.repo.id)
+    }
+    this.deps.invalidateResolvedWorktrees()
+    this.deps.notifyReposChanged()
     return result
+  }
+
+  // Why the shared invalidators: desktop and runtime scan caches key on repo id, not path or kind.
+  private retireRepoCatalog(repoId: string): void {
+    runWorktreeChangeInvalidators(repoId)
+    invalidateAuthorizedRootsCache()
+  }
+
+  // Why only for an explicit `force: false`: older clients omit it and must keep their delete.
+  private assertSetupRemovalIsUnused(store: RuntimeStore, setupId: string): void {
+    const setup = this.listSetups().find((entry) => entry.id === setupId)
+    // Same exact-host match the store's delete uses, so a sibling host's row is never measured.
+    const repo = setup?.repoId
+      ? this.deps
+          .listRepos()
+          .find(
+            (entry) => entry.id === setup.repoId && getRepoExecutionHostId(entry) === setup.hostId
+          )
+      : undefined
+    if (!repo) {
+      return
+    }
+    const refusal = describeProjectRemovalRefusal({
+      liveTerminals: this.deps.countLiveTerminalsForRepo(repo),
+      workspacesWithMetadata: countRepoWorkspacesWithMetadata(
+        repo,
+        // Host-qualified read: a same-id, same-path sibling host keeps its rows only in canonical maps.
+        readAllWorktreeMetaForRepo(store, repo)
+      )
+    })
+    if (refusal) {
+      throw new Error(refusal)
+    }
   }
 
   private completeSetup(
@@ -162,7 +230,10 @@ export class RuntimeProjectHostSetupController {
       return this.linkRepo(args, initialRepo)
     } catch (error) {
       if (repoWasCreated) {
-        this.deps.getStore()?.removeProject?.(initialRepo.id)
+        // Why: host-scoped so a rollback never takes a same-id row on another host.
+        this.deps
+          .getStore()
+          ?.removeProjectForHost?.(initialRepo.id, getRepoExecutionHostId(initialRepo))
         this.deps.invalidateResolvedWorktrees()
         this.deps.invalidateWorktreeScan(initialRepo.id)
         invalidateAuthorizedRootsCache()

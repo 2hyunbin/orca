@@ -38,7 +38,6 @@ vi.mock('@/lib/repo-runtime-owner', () => ({
 }))
 
 vi.mock('@/runtime/runtime-rpc-client', () => ({
-  getActiveRuntimeTarget: () => ({ kind: 'local' }),
   callRuntimeRpc: vi.fn()
 }))
 
@@ -228,9 +227,12 @@ describe('RepositoryGitHubAccountSection', () => {
       await Promise.resolve()
     })
 
-    expect(listAccountsMock).toHaveBeenNthCalledWith(2, expect.anything(), BASE_REPO, {
-      refreshCapability: true
-    })
+    expect(listAccountsMock).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      { id: BASE_REPO.id, path: BASE_REPO.path },
+      { refreshCapability: true }
+    )
   })
 
   it('validates and then binds a keyring account', async () => {
