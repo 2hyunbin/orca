@@ -23,9 +23,10 @@ So a packaged macOS GUI app starts its daemon from a private copy that the updat
   `userData/daemon-host/macos/terminal-host-<cdhash>/app.noindex/Orca Terminal Host.app`. The helper
   is read from the bundle the running main process executes from, never the whole app. A present
   copy is reused as is. Otherwise the helper is cloned (APFS clone, regular copy otherwise) into a
-  `.staging-<pid>-*` sibling, must pass `codesign --verify --strict -R "=<app designated
-  requirement>"`, and is published with one `rename`; losing that rename to another publisher is
-  fine. An app without the helper falls back to the fork.
+  `.staging-<pid>-*` sibling, verified once with
+  `codesign --verify --strict -R "=<app designated requirement>"`, and published with one `rename`;
+  losing that rename to another publisher is fine. An app without the helper falls back to the
+  fork.
 - `macos-daemon-launchd.ts` runs the copy's Node on the copy's `daemon-entry.js` as a
   non-persistent launchd job, so the daemon has Orca's own identity rather than the UI process's
   replaceable path. The label is fixed per profile and protocol
