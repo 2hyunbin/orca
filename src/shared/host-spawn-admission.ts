@@ -137,8 +137,10 @@ export function resolveSpawnCharge(
   // Why a claim alone: a remote client's `--resume` arrives on a fresh terminal id with no
   // history seed, so requiring one let every reconnect storm through. An old caller is only
   // ever paced, so a user-started agent costs at most a short wait during a storm.
+  const inferred = facts.hasAgentSessionClaim ? 'automatic-restore' : 'interactive'
+  // Why: `interactive` skips the gate entirely, so a claimed resume cannot declare its way past it.
   const intent =
-    facts.declaredIntent ?? (facts.hasAgentSessionClaim ? 'automatic-restore' : 'interactive')
+    facts.declaredIntent === 'interactive' ? inferred : (facts.declaredIntent ?? inferred)
   if (intent === 'interactive') {
     return 'interactive'
   }
