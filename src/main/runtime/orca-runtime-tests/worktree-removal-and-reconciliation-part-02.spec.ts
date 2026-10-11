@@ -68,7 +68,7 @@ describe('OrcaRuntimeService', () => {
     expect(removeWorktree).not.toHaveBeenCalled()
   })
 
-  it('sweeps an orphaned SSH worktree through its host provider', async () => {
+  it('never sweeps an orphaned SSH worktree through the local provider', async () => {
     const { runtimeStore } = createStaleRuntimeWorktreeStore(TEST_WORKTREE_ID, {
       hostId: 'ssh:ssh-1'
     })
@@ -81,22 +81,14 @@ describe('OrcaRuntimeService', () => {
       listProcesses: vi.fn(async () => []),
       shutdown: vi.fn(async () => {})
     }
-    const sshProvider = {
-      listProcesses: vi.fn(async () => []),
-      shutdown: vi.fn(async () => {})
-    }
-    const getSshProvider = vi.fn(() => sshProvider as never)
     const runtime = new OrcaRuntimeService(orphanStore as never, undefined, {
-      getLocalProvider: () => localProvider as never,
-      getSshProvider
+      getLocalProvider: () => localProvider as never
     })
 
     await expect(runtime.removeManagedWorktree(TEST_WORKTREE_ID)).resolves.toEqual({
       warning: expect.stringContaining(TEST_WORKTREE_PATH)
     })
 
-    expect(getSshProvider).toHaveBeenCalledWith('ssh-1')
-    expect(sshProvider.listProcesses).toHaveBeenCalled()
     expect(localProvider.listProcesses).not.toHaveBeenCalled()
     expect(closeRemoteWatcherForWorktreePathMock).toHaveBeenCalledWith('ssh-1', TEST_WORKTREE_PATH)
     // The remote directory survives, so its watchers are restored, not forgotten.

@@ -86,7 +86,6 @@ export class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreS
       {
         runtime: this as RuntimeCommandSurfaceHost<this>,
         getLocalProvider: () => this.getLocalProvider(),
-        getSshProvider: (connectionId) => this.getSshProviderFn?.(connectionId),
         onPtyStopped: this.onPtyStopped ?? undefined
       }
     )
