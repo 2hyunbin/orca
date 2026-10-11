@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { setTimeout as delay } from 'node:timers/promises'
 import { RelayLoadControlPeer } from './relay-load-control-peer.mjs'
-import { requestGitHubSmokeTokens } from './github-smoke-token.mjs'
+import { RELAY_ASIA_LOAD_PRINCIPAL_SHARDS, requestGitHubSmokeTokens } from './github-smoke-token.mjs'
 import { relayLoadFailureReason } from './relay-load-connection-failure.mjs'
 import {
   assertRelayLoadDirectorCapacityToken,
@@ -160,7 +160,9 @@ if (!accessToken && !key.signingKey && process.env.ACTIONS_ID_TOKEN_REQUEST_URL 
   const loadOptions = config.relayAsiaLoadPrincipalCount > 0
     ? {
         relayAsiaLoad: {
-          shardIndex: config.shardIndex,
+          // Staging auth mints principal sets for shards 0-3 only; shards past that (a second
+          // hosted runner) reuse a set, and their hosts stay distinct by peer index.
+          shardIndex: config.shardIndex % RELAY_ASIA_LOAD_PRINCIPAL_SHARDS,
           principalCount: config.relayAsiaLoadPrincipalCount
         }
       }
