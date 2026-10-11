@@ -258,7 +258,6 @@ describe('BrowserAddressBar autocomplete preview', () => {
 
     act(() => {
       input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1 }))
-      input.focus()
       input.setSelectionRange(url.length, url.length)
       input.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail: 1 }))
     })
