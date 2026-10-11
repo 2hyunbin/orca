@@ -88,6 +88,34 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
     expect(launched).toBe(1)
   })
 
+  it("does not credit a split leaf with another leaf's ssh pty", () => {
+    const record = makeRecord()
+    useAppStore.setState({
+      activeWorktreeId: 'wt-other',
+      tabsByWorktree: { 'wt-1': [{ ...makeTerminalTab('tab-1', 'wt-1'), ptyId: SSH_PTY_ID }] },
+      terminalLayoutsByTabId: {
+        'tab-1': {
+          root: {
+            type: 'split',
+            direction: 'vertical',
+            first: { type: 'leaf', leafId: OTHER_LEAF_ID },
+            second: { type: 'leaf', leafId: LEAF_ID }
+          },
+          activeLeafId: OTHER_LEAF_ID,
+          expandedLeafId: null,
+          ptyIdsByLeafId: {}
+        }
+      },
+      ptyIdsByTabId: {},
+      sshConnectionStates: new Map([['ssh-target-1', { status: 'disconnected' }]]),
+      sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
+    } as never)
+
+    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+
+    expect(launched).toBe(1)
+  })
+
   it('still resumes when the preserved pane has no pty binding and cannot own recovery', () => {
     const record = makeRecord()
     useAppStore.setState({

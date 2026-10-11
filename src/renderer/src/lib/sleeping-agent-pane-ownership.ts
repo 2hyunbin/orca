@@ -195,8 +195,10 @@ export function recordPaneIsOwnedByPreservedPane(
     // Why: disconnect clears ptyIdsByTabId while the remote process keeps running, so a leaf
     // bound to an unreachable SSH target is `unverifiable`, not dead. A connected target's
     // live-PTY map is authoritative (sleep kills the PTY but keeps its id).
+    const layout = state.terminalLayoutsByTabId[tabId]
+    const isSingleLeafLayout = layout?.root?.type === 'leaf' && layout.root.leafId === stable.leafId
     const leafPtyId =
-      state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[stable.leafId] ?? tab.ptyId
+      layout?.ptyIdsByLeafId?.[stable.leafId] ?? (isSingleLeafLayout ? tab.ptyId : null)
     const sshPty = leafPtyId ? parseAppSshPtyId(leafPtyId) : null
     if (sshPty && state.sshConnectionStates.get(sshPty.connectionId)?.status !== 'connected') {
       return true
