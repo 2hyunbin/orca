@@ -59,16 +59,6 @@ export function locationChip(installation: SkillFreshnessInstallation): SkillLoc
   }
 }
 
-export function orcaOwnedSkillNames(
-  installations: readonly SkillFreshnessInstallation[]
-): ReadonlySet<string> {
-  return new Set(
-    installations
-      .filter((installation) => isOrcaSkillLockSource(installation.lockSource))
-      .map((installation) => installation.name)
-  )
-}
-
 /**
  * Groups installations by skill for the review modal and derives each skill's
  * update disposition. A skill appears when a copy is out of date, or when a copy is

@@ -43,26 +43,6 @@ export function summarizeInventory(
   return 'current'
 }
 
-function UnselectedForeignLine({ count }: { count: number }): React.JSX.Element | null {
-  if (count === 0) {
-    return null
-  }
-  return (
-    <p className="text-xs text-muted-foreground">
-      {count === 1
-        ? translate(
-            'auto.components.skills.SkillFreshnessUpdateDialog.unselectedForeignOne',
-            '1 skill not installed by Orca is unselected.'
-          )
-        : translate(
-            'auto.components.skills.SkillFreshnessUpdateDialog.unselectedForeignMany',
-            '{{value0}} skills not installed by Orca are unselected.',
-            { value0: count }
-          )}
-    </p>
-  )
-}
-
 /** Pre-run headline. Once a run starts, the dialog reports the run instead. */
 export function SummaryHeadline({
   kind,
@@ -84,7 +64,18 @@ export function SummaryHeadline({
   return (
     <div className="space-y-1">
       {main}
-      <UnselectedForeignLine count={unselectedForeignCount} />
+      <p className="text-xs text-muted-foreground">
+        {unselectedForeignCount === 1
+          ? translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.unselectedForeignOne',
+              '1 skill not installed by Orca is unselected.'
+            )
+          : translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.unselectedForeignMany',
+              '{{value0}} skills not installed by Orca are unselected.',
+              { value0: unselectedForeignCount }
+            )}
+      </p>
     </div>
   )
 }

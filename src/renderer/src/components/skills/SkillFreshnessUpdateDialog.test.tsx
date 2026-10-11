@@ -580,7 +580,8 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(foreign?.getAttribute('aria-checked')).toBe('true')
     expect(container?.textContent).not.toContain('not installed by Orca')
     await clickButton('Update 2 skills')
-    expect(skillsApi.startUpdateRun).toHaveBeenLastCalledWith(['computer-use', 'orca-cli'])
+    // Display order, Orca's first; the runner canonicalizes.
+    expect(skillsApi.startUpdateRun).toHaveBeenLastCalledWith(['orca-cli', 'computer-use'])
   })
 
   it('disables the update once nothing is selected', async () => {

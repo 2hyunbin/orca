@@ -86,11 +86,10 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     lastInventoryRef.current = state.inventory
   }
   const inventory = state.inventory ?? (state.loading ? lastInventoryRef.current : null)
-  // Display only. The action fires the live `selectedNames`, so a re-scan in flight
-  // can never authorize work — but the button keeps its place and its label
-  // instead of vanishing and reflowing the footer every time one runs.
+  // Display only. The button stays disabled until a live scan lands, so a re-scan in
+  // flight can never authorize work — but it keeps its place and its label instead of
+  // vanishing and reflowing the footer every time one runs.
   const displayEligibleCount = inventory?.eligibleUpdateNames.length ?? 0
-  const selection = useSkillUpdateSelection(state.inventory, inventory)
   const isRunning = run.state === 'running'
   // The kill sweep can take seconds; without this the Stop button sits enabled
   // and inert, which reads as broken.
@@ -107,6 +106,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
         : [],
     [inventory, runNames]
   )
+  const selection = useSkillUpdateSelection(groups)
   const hasBlockedGroup = groups.some((group) => group.status === 'cannot-update')
   const blockedCount = groups.filter((group) => group.status === 'cannot-update').length
   // Retained: the list keeps the last known folders on screen through a re-scan, the
@@ -118,7 +118,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
   // available". Live means it says "Checking…" over the rows it kept on screen.
   const summaryKind = summarizeInventory(
     state.inventory,
-    selection.ownedEligibleCount,
+    selection.ownedCount,
     hasBlockedGroup,
     (state.inventory?.scanIssues ?? []).some(
       (issue) => isSkillScanIssueNeedingAttention(issue) || isSkillScanIssueTruncatingScan(issue)
@@ -261,7 +261,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     return (
       <SummaryHeadline
         kind={summaryKind}
-        eligibleCount={selection.ownedEligibleCount}
+        eligibleCount={selection.ownedCount}
         blockedCount={blockedCount}
         unselectedForeignCount={selection.unselectedForeignCount}
       />
@@ -420,7 +420,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
               <Button
                 type="button"
                 size="sm"
-                disabled={isRunning || selection.selectedNames.length === 0}
+                disabled={isRunning || !state.inventory || selection.selectedNames.length === 0}
                 onClick={() => handleUpdate(selection.selectedNames)}
               >
                 {/* Not during a stop: the Stop button already carries the status,
@@ -430,7 +430,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
                       'auto.components.skills.SkillFreshnessUpdateDialog.updating',
                       'Updating…'
                     )
-                  : selection.displaySelectedCount === 1
+                  : selection.selectedNames.length === 1
                     ? translate(
                         'auto.components.skills.SkillFreshnessUpdateDialog.updateActionOne',
                         'Update 1 skill'
@@ -438,7 +438,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
                     : translate(
                         'auto.components.skills.SkillFreshnessUpdateDialog.updateActionMany',
                         'Update {{value0}} skills',
-                        { value0: selection.displaySelectedCount }
+                        { value0: selection.selectedNames.length }
                       )}
               </Button>
             ) : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SkillFreshnessInstallation } from '../../../../shared/skill-freshness'
-import { groupSkillFreshness, orcaOwnedSkillNames } from './skill-freshness-grouping'
+import { groupSkillFreshness } from './skill-freshness-grouping'
 
 function placement(
   name: string,
@@ -64,16 +64,6 @@ describe('groupSkillFreshness', () => {
     expect(groups.find((group) => group.name === 'computer-use')?.lockSource).toBe(
       'acme/agent-skills'
     )
-  })
-
-  it('collects the names the lock attributes to Orca', () => {
-    expect(
-      orcaOwnedSkillNames([
-        placement('orca-cli'),
-        placement('computer-use', { lockSource: 'acme/agent-skills' }),
-        placement('linear-tickets', { lockSource: null })
-      ])
-    ).toEqual(new Set(['orca-cli']))
   })
 
   it('hides skills whose every copy is current', () => {
