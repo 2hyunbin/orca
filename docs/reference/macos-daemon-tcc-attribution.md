@@ -33,7 +33,8 @@ So a packaged macOS GUI app starts its daemon from a private copy that the updat
   Readiness is the normal authenticated handshake, fenced by the launch nonce.
 
 Node servers, SSH hosts, unpackaged builds, Linux and Windows keep the fork launcher. Adopting an
-existing daemon never copies.
+existing daemon never copies. Telemetry reports a daemon started this way as
+`spawner_path_class=stable-copy`.
 
 Only Developer ID builds exercise the helper path in practice. A local ad hoc build's designated
 requirement is a cdhash, which the helper (a different binary) cannot match, so it falls back to the
@@ -92,7 +93,7 @@ one background collection (one at a time per process) that retires a copy only w
 Any timeout, permission error, warning or truncated output keeps the copy. Explicit shutdown
 unregisters the job, then applies rule 3. Cleanup never reads sockets, tokens or PID records.
 Collection matches the directory, not the bundle inside it, so copies made before the
-`app.noindex` folder (`runtime-*/Orca.app`) retire the same way.
+`app.noindex` folder (`runtime-*/Orca.app`) retire, and classify as `stable-copy`, the same way.
 
 ## LaunchServices and Spotlight
 
@@ -121,7 +122,9 @@ Never revert the cleanup: the old code never deletes copies, and each one keeps 
 full-app copy from an earlier build, about 628 MiB) after an update removes the bundle it was cloned
 from.
 
-## Existing sessions
+## Existing sessions and status
 
-Running old daemons keep their terminals; a denied terminal is recovered by closing it or restarting
-the daemon.
+Running old daemons keep their terminals; settings reports app and terminal-host Full Disk Access
+separately, and a denied terminal is recovered by closing it or restarting the daemon. The packaging
+hook also gives the main bundle and every Helper the Desktop, Documents and Downloads descriptions,
+because the fork fallback still hosts terminals in `Orca Helper`.

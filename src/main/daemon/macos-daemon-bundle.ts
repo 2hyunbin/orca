@@ -46,7 +46,7 @@ async function codesignRequirement(bundlePath: string, signal: AbortSignal): Pro
   return requirement
 }
 
-/** Private signed runtime copies the updater never touches. */
+/** Private signed runtime copies; telemetry classifies a daemon spawned from here as `stable-copy`. */
 export function getMacDaemonBundleRoot(userDataPath: string): string {
   return join(userDataPath, 'daemon-host', 'macos')
 }

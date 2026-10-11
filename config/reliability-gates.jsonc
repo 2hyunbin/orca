@@ -22108,7 +22108,11 @@
       "protection": "partial",
       "owner": "terminal-runtime",
       "layer": "daemon-native-signing-and-provider-contract",
-      "surfaces": ["packaged macOS daemon launch", "signed bundle retirement"],
+      "surfaces": [
+        "packaged macOS daemon launch",
+        "signed bundle retirement",
+        "Full Disk Access status"
+      ],
       "platforms": ["macos", "linux", "windows"],
       "providers": ["local", "daemon", "ssh", "wsl", "remote-runtime", "mobile"],
       "coveredPlatforms": ["macos"],
@@ -22116,9 +22120,9 @@
       "coverageNotes": "Signed arm64 macOS evidence; other platforms and hosts keep the existing launcher. See docs/reference/macos-daemon-tcc-attribution.md.",
       "motivatingLinks": ["https://github.com/stablyai/orca/issues/13921"],
       "invariant": "A packaged macOS daemon runs from a verified signed bundle copy the updater never touches, and the fork fallback still fits the startup gate. Unverified observations never delete code or replace live sessions.",
-      "oracle": "Deterministic launch, fallback-deadline and retirement tests, plus the signed launcher validation recorded in #25848.",
+      "oracle": "Deterministic launch, fallback-deadline, retirement and status tests, plus the signed launcher validation recorded in #25848.",
       "commands": [
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/macos-daemon-bundle.test.ts src/main/daemon/macos-daemon-launchd.test.ts src/main/daemon/daemon-init-macos-stable-launch-fallback.test.ts src/main/daemon/macos-daemon-job-state.test.ts src/main/daemon/macos-daemon-bundle-retirement.test.ts config/scripts/macos-folder-usage-descriptions.test.mjs"
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/macos-daemon-bundle.test.ts src/main/daemon/macos-daemon-launchd.test.ts src/main/daemon/daemon-init-macos-stable-launch-fallback.test.ts src/main/daemon/macos-daemon-job-state.test.ts src/main/daemon/macos-daemon-bundle-retirement.test.ts src/main/daemon/daemon-full-disk-access-status.test.ts src/main/daemon/daemon-pty-adapter-full-disk-access.test.ts config/scripts/macos-folder-usage-descriptions.test.mjs src/renderer/src/components/settings/DeveloperPermissionsPane.test.tsx"
       ],
       "testFiles": [
         "src/main/daemon/macos-daemon-bundle.test.ts",
@@ -22126,7 +22130,10 @@
         "src/main/daemon/daemon-init-macos-stable-launch-fallback.test.ts",
         "src/main/daemon/macos-daemon-job-state.test.ts",
         "src/main/daemon/macos-daemon-bundle-retirement.test.ts",
-        "config/scripts/macos-folder-usage-descriptions.test.mjs"
+        "src/main/daemon/daemon-full-disk-access-status.test.ts",
+        "src/main/daemon/daemon-pty-adapter-full-disk-access.test.ts",
+        "config/scripts/macos-folder-usage-descriptions.test.mjs",
+        "src/renderer/src/components/settings/DeveloperPermissionsPane.test.tsx"
       ],
       "assertionRefs": [
         {
@@ -22154,10 +22161,10 @@
           "date": "2026-10-10",
           "runner": "local",
           "platform": "macos",
-          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/macos-daemon-bundle.test.ts src/main/daemon/macos-daemon-launchd.test.ts src/main/daemon/daemon-init-macos-stable-launch-fallback.test.ts src/main/daemon/macos-daemon-job-state.test.ts src/main/daemon/macos-daemon-bundle-retirement.test.ts config/scripts/macos-folder-usage-descriptions.test.mjs",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/macos-daemon-bundle.test.ts src/main/daemon/macos-daemon-launchd.test.ts src/main/daemon/daemon-init-macos-stable-launch-fallback.test.ts src/main/daemon/macos-daemon-job-state.test.ts src/main/daemon/macos-daemon-bundle-retirement.test.ts src/main/daemon/daemon-full-disk-access-status.test.ts src/main/daemon/daemon-pty-adapter-full-disk-access.test.ts config/scripts/macos-folder-usage-descriptions.test.mjs src/renderer/src/components/settings/DeveloperPermissionsPane.test.tsx",
           "result": "passed",
-          "durationSeconds": 2.92,
-          "summary": "All 66 focused launch, fallback-deadline, retirement and packaging tests passed."
+          "durationSeconds": 2.97,
+          "summary": "All 84 focused launch, fallback-deadline, retirement, status and packaging tests passed."
         }
       ],
       "runtimeBudget": {
