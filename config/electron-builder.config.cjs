@@ -817,7 +817,11 @@ async function packageMacTerminalHost(appPath, context) {
     signCode: (path, { entitlements }) =>
       signMacStandaloneHelper(path, 'terminal host', context.packager, entitlements)
   })
-  await verifyPackagedMacTerminalHostBoots(appPath, { arch })
+  // Only a local build may skip a slice this host cannot run; a shipped slice must serve a PTY.
+  await verifyPackagedMacTerminalHostBoots(appPath, {
+    arch,
+    required: isMacRelease || process.env.CI === 'true'
+  })
   await verifyMacTerminalHost({
     appPath,
     arch,
