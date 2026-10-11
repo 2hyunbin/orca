@@ -60,3 +60,30 @@ it('rejects competing sweeps and releases the lock after a failed operation', as
   await reclaimWorktreeSpace(options)
   expect(options.execute).toHaveBeenCalledTimes(3)
 })
+
+it('preserves the cleanup failure and reports a concurrent lock release failure separately', async () => {
+  const options = await fixture()
+  const failure = new Error('original cleanup failure')
+  options.execute.mockRejectedValue(failure)
+  const release = vi.fn().mockRejectedValue(new Error('lock release failure'))
+  const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await expect(
+      reclaimWorktreeSpace({ ...options, acquireLock: async () => release })
+    ).rejects.toBe(failure)
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(report).toHaveBeenCalledWith('Failed to release cleanup lock: lock release failure')
+  } finally {
+    report.mockRestore()
+  }
+})
+
+it('fails if cleanup succeeds but the repository lock cannot be released', async () => {
+  const options = await fixture()
+  const failure = new Error('lock release failure')
+  const release = vi.fn().mockRejectedValue(failure)
+  await expect(reclaimWorktreeSpace({ ...options, acquireLock: async () => release })).rejects.toBe(
+    failure
+  )
+  expect(options.execute).toHaveBeenCalledTimes(2)
+})

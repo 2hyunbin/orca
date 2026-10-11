@@ -8,6 +8,7 @@ export async function reclaimWorktreeSpace({
   repoRoot = process.cwd(),
   apply = false,
   execute = runProcess,
+  acquireLock = lock,
   commonDirectory
 } = {}) {
   if (!commonDirectory) {
@@ -25,13 +26,15 @@ export async function reclaimWorktreeSpace({
   await mkdir(cacheRoot, { recursive: true })
   let release
   try {
-    release = await lock(lockPath, { realpath: false, stale: 600_000, retries: 0 })
+    release = await acquireLock(lockPath, { realpath: false, stale: 600_000, retries: 0 })
   } catch (error) {
     if (error.code === 'ELOCKED') {
       throw new Error('Another worktree cleanup is already running')
     }
     throw error
   }
+  let cleanupFailed = false
+  let cleanupError
   try {
     const scripts = ['reclaim-electron-dists.mjs', 'reclaim-dev-electron-bundles.mjs']
     for (const script of scripts) {
@@ -51,10 +54,24 @@ export async function reclaimWorktreeSpace({
         throw new Error(`${script} failed; rerun cleanup after resolving the error`)
       }
     }
-    return { completed: true }
-  } finally {
-    await release()
+  } catch (error) {
+    cleanupFailed = true
+    cleanupError = error
   }
+  try {
+    await release()
+  } catch (error) {
+    if (!cleanupFailed) {
+      throw error
+    }
+    console.error(
+      `Failed to release cleanup lock: ${error instanceof Error ? error.message : String(error)}`
+    )
+  }
+  if (cleanupFailed) {
+    throw cleanupError
+  }
+  return { completed: true }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {

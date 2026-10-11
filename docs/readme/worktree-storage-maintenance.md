@@ -40,4 +40,5 @@ node config/scripts/reclaim-dev-electron-bundles.mjs --min-age-days 7 --apply
 ```
 
 That limit uses the bundle directory's modification time. The underlying command also accepts
-`--exclude-worktree DIRECTORY` to protect an entire worktree. Neither option schedules cleanup.
+`--exclude-worktree DIRECTORY` to protect an entire worktree. A missing exclusion path is an error;
+filesystem aliases resolve to the same worktree. Neither option schedules cleanup.

@@ -52,6 +52,28 @@ describe('collectDevBundles', () => {
 })
 
 describe('sweeping across worktrees', () => {
+  it.each([
+    ['--apply', '--exclude-worktree'],
+    ['--exclude-worktree', '--apply'],
+    ['--exclude-worktree', '-invalid', '--apply']
+  ])('rejects invalid exclusion operands before cleanup: %j', async (...flags) => {
+    const worktree = makeWorktree([{ name: 'idle', marker: true }])
+    const initialized = await runProcess({ program: 'git', args: ['-C', worktree, 'init', '-q'] })
+    expect(initialized.code).toBe(0)
+    const result = await runProcess({
+      program: process.execPath,
+      args: [
+        path.join(import.meta.dirname, 'reclaim-dev-electron-bundles.mjs'),
+        '--repo',
+        worktree,
+        ...flags
+      ]
+    })
+    expect(result.code).not.toBe(0)
+    expect(result.stderr).toContain('--exclude-worktree requires a directory')
+    expect(existsSync(path.join(worktree, 'out', 'electron-dev', 'idle'))).toBe(true)
+  })
+
   it.skipIf(process.platform !== 'darwin')(
     'previews and removes only bundles outside the retention window',
     async () => {
@@ -75,6 +97,12 @@ describe('sweeping across worktrees', () => {
       const preview = await runProcess({ program: process.execPath, args })
       expect(preview.code, preview.stderr).toBe(0)
       expect(preview.stdout).toContain('Would remove 1 bundle(s)')
+      expect(existsSync(old)).toBe(true)
+      const excluded = await runProcess({
+        program: process.execPath,
+        args: [...args, '--exclude-worktree', worktree, '--apply']
+      })
+      expect(excluded.code, excluded.stderr).toBe(0)
       expect(existsSync(old)).toBe(true)
       const applied = await runProcess({ program: process.execPath, args: [...args, '--apply'] })
       expect(applied.code, applied.stderr).toBe(0)

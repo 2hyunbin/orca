@@ -11,7 +11,7 @@
 // now shared, rebuilding is cheap.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 import {
   DEV_BUNDLE_MARKER_FILENAME,
@@ -23,7 +23,11 @@ const apply = process.argv.includes('--apply')
 const minAgeIndex = process.argv.indexOf('--min-age-days')
 const minAgeDays = minAgeIndex === -1 ? 0 : Number(process.argv[minAgeIndex + 1])
 const excludeIndex = process.argv.indexOf('--exclude-worktree')
-const excludeWorktree = excludeIndex === -1 ? null : path.resolve(process.argv[excludeIndex + 1])
+const excludeArgument = excludeIndex === -1 ? undefined : process.argv[excludeIndex + 1]
+if (excludeIndex !== -1 && (!excludeArgument || excludeArgument.startsWith('-'))) {
+  throw new Error('--exclude-worktree requires a directory')
+}
+const excludeWorktree = excludeArgument ? realpathSync(excludeArgument) : null
 const repoRoot = process.argv.includes('--repo')
   ? path.resolve(process.argv[process.argv.indexOf('--repo') + 1])
   : process.cwd()
@@ -36,6 +40,14 @@ function listWorktrees(root) {
     .split('\n')
     .filter((line) => line.startsWith('worktree '))
     .map((line) => line.slice('worktree '.length).trim())
+}
+
+function canonicalWorktreePath(worktree) {
+  try {
+    return realpathSync(worktree)
+  } catch {
+    return path.resolve(worktree)
+  }
 }
 
 function measure(targetPath) {
@@ -94,7 +106,7 @@ function main() {
   }
 
   const bundles = listWorktrees(repoRoot)
-    .filter((worktree) => path.resolve(worktree) !== excludeWorktree)
+    .filter((worktree) => canonicalWorktreePath(worktree) !== excludeWorktree)
     .flatMap((worktree) => collectDevBundles(worktree))
   // currentDir is null on purpose: unlike the dev runner, this sweep is not about to launch anything,
   // so the only thing protecting a bundle is a live process or an in-flight build.
