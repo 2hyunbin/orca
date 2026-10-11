@@ -419,6 +419,13 @@ resource "google_cloud_run_v2_service" "relay" {
           local.relay_database_connection_name
         ]
 
+        # Go sizes its scheduler to the host's cores, not the 0.25 vCPU quota; one keeps it from
+        # being throttled in bursts.
+        env {
+          name  = "GOMAXPROCS"
+          value = "1"
+        }
+
         # Ready once it listens; it does not wait for the database, so the relay boots through
         # an outage exactly as it does today.
         startup_probe {

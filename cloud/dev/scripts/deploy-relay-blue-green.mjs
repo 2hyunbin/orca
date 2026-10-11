@@ -383,8 +383,21 @@ export function parseArguments(argv) {
   ) {
     throw new Error('--shape-baseline-revision must be a Cloud Run revision name')
   }
-  if (values['shape-baseline-revision'] !== undefined && values.role !== 'director') {
-    throw new Error('--shape-baseline-revision requires --role director')
+  if (values['shape-baseline-revision'] !== undefined) {
+    if (values.role !== 'director') {
+      throw new Error('--shape-baseline-revision requires --role director')
+    }
+    // A shape adoption moves only what the reviewed apply changed: no identity, topology or
+    // pruning rides along, whichever caller builds the arguments.
+    if (values['bootstrap-runtime-identity'] === 'true') {
+      throw new Error('--shape-baseline-revision cannot combine with a runtime identity bootstrap')
+    }
+    if (values['capacity-cell-id'] !== undefined || values['director-cells-json'] !== undefined) {
+      throw new Error('--shape-baseline-revision cannot combine with a director topology change')
+    }
+    if (values['prune-revisions'] === 'true') {
+      throw new Error('--shape-baseline-revision cannot combine with revision pruning')
+    }
   }
   if (values.role === 'director') {
     directorDeploymentEnvironment(values)
@@ -917,9 +930,14 @@ export function directorShapeBaseline(config, service, servingRevision, describe
   if (named !== service.status?.latestCreatedRevisionName) {
     throw new Error('shape baseline revision is not the latest created revision')
   }
+  const servingImage = servingRevision.spec?.containers?.[0]?.image
+  // A shape change and an image change never ride together: each is reviewed on its own.
+  if (config.image?.split('@').at(-1) !== servingImage?.split('@').at(-1)) {
+    throw new Error('a shape baseline deploy must keep the serving image')
+  }
   const baseline = describe(config, named)
   // Terraform ignores the image, so its revision runs what is serving; anything else was not an apply.
-  if (baseline.spec?.containers?.[0]?.image !== servingRevision.spec?.containers?.[0]?.image) {
+  if (baseline.spec?.containers?.[0]?.image !== servingImage) {
     throw new Error('shape baseline revision does not run the serving image')
   }
   return baseline

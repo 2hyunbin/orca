@@ -145,6 +145,7 @@ jobs:
             [[ "${PREDECESSOR_IMAGE_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]
             test "${PRUNE_INCOMPATIBLE_REVISIONS}" = false
             test "${REGIONAL_PLACEMENT_MODE}" = preserve
+            test -z "${SHAPE_BASELINE_REVISION}"
             test "${CONFIRMATION}" = BOOTSTRAP_RELAY_DIRECTOR_REHOME_IDENTITY
           elif test -n "${SHAPE_BASELINE_REVISION}"; then
             [[ "${SHAPE_BASELINE_REVISION}" =~ ^orca-cloud-relay-[0-9]{5}-[a-z0-9]{3}$ ]]

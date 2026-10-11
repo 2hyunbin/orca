@@ -725,6 +725,8 @@ test('director deploy refuses to move traffic onto a candidate that lost the flo
   assert.equal(harness.state.activeRevision, 'relay-00001-old')
 })
 
+const SERVING_IMAGE = `relay@sha256:${'f'.repeat(64)}`
+
 // What a Terraform apply of relay_director_cloud_sql_proxy_sidecar puts in the template.
 const SIDECAR_TRANSPORT = {
   name: 'relay',
@@ -754,7 +756,7 @@ test('a deploy adopts the shape of the named Terraform apply revision', async ()
   const harness = directorHarness()
   applySidecarTemplate(harness)
   await deployDirector(
-    { 'shape-baseline-revision': 'relay-00009-terraform' },
+    { image: SERVING_IMAGE, 'shape-baseline-revision': 'relay-00009-terraform' },
     'candidate-new',
     harness.operations
   )
@@ -782,10 +784,20 @@ test('the named shape baseline must be the unserved latest revision on the servi
   applySidecarTemplate(otherImage)
   otherImage.state.revisions.get('relay-00009-terraform').image = `relay@sha256:${'e'.repeat(64)}`
   await assert.rejects(
-    deployDirector({ 'shape-baseline-revision': 'relay-00009-terraform' }, 'candidate-new', otherImage.operations),
+    deployDirector({ image: SERVING_IMAGE, 'shape-baseline-revision': 'relay-00009-terraform' }, 'candidate-new', otherImage.operations),
     /does not run the serving image/
   )
-  for (const harness of [stale, serving, otherImage]) {
+  const newImage = directorHarness()
+  applySidecarTemplate(newImage)
+  await assert.rejects(
+    deployDirector(
+      { image: `relay@sha256:${'e'.repeat(64)}`, 'shape-baseline-revision': 'relay-00009-terraform' },
+      'candidate-new',
+      newImage.operations
+    ),
+    /must keep the serving image/
+  )
+  for (const harness of [stale, serving, otherImage, newImage]) {
     assert.equal(harness.state.activeRevision, 'relay-00001-old')
   }
 })
@@ -800,6 +812,16 @@ test('--shape-baseline-revision takes only a revision name, and only for a direc
     () => parseArguments([...base, '--role', 'cell', '--director-origin', 'https://d', '--admin-audience', 'a', '--shape-baseline-revision', 'relay-1']),
     /--shape-baseline-revision requires --role director/
   )
+  const director = [...base, '--role', 'director', '--shape-baseline-revision', 'relay-1']
+  assert.equal(parseArguments(director)['shape-baseline-revision'], 'relay-1')
+  for (const [extra, refusal] of [
+    [['--bootstrap-runtime-identity', 'true'], /cannot combine with a runtime identity bootstrap/],
+    [['--capacity-cell-id', 'c1', '--director-cells-json', '[]'], /cannot combine with a director topology change/],
+    [['--director-cells-json', '[]'], /cannot combine with a director topology change/],
+    [['--prune-revisions', 'true'], /cannot combine with revision pruning/]
+  ]) {
+    assert.throws(() => parseArguments([...director, ...extra]), refusal)
+  }
 })
 
 test('director deploy rejects unrelated revision-shape drift', async () => {

@@ -850,8 +850,6 @@ resource "google_monitoring_alert_policy" "relay_cell_process_exit" {
   depends_on = [google_logging_metric.relay_incident]
 }
 
-# Pages on cell holds only: director holds of 1-2.5 s recur several times a day with rehoming paused,
-# and pausing rehome does not stop them, so paging on them would ask on-call to do nothing.
 # One count per runtime sample whose interval held a 5 s or longer freeze. A count, not a distribution:
 # a percentile of the max would hide a single freeze among healthy samples. Gated until staging
 # has proved it (variables.tf).
@@ -932,6 +930,8 @@ resource "google_monitoring_alert_policy" "relay_event_loop_stall" {
   }
 }
 
+# Pages on cell holds only: director holds of 1-2.5 s recur several times a day with rehoming paused,
+# and pausing rehome does not stop them, so paging on them would ask on-call to do nothing.
 resource "google_monitoring_alert_policy" "relay_long_cell_inventory_hold" {
   project               = var.project_id
   display_name          = "Orca Relay: cell table lock held over 1 second"

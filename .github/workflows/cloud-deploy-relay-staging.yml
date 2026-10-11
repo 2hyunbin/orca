@@ -114,6 +114,7 @@ jobs:
           if test -n "${SHAPE_BASELINE_REVISION}"; then
             [[ "${SHAPE_BASELINE_REVISION}" =~ ^orca-cloud-relay-staging-[0-9]{5}-[a-z0-9]{3}$ ]]
             test "${BOOTSTRAP_RUNTIME_IDENTITY}" = false
+            test "${CAPACITY_CELL_ID}" = none
             test "${CONFIRMATION}" = ADOPT_RELAY_DIRECTOR_TERRAFORM_SHAPE
           fi
 
