@@ -28,7 +28,6 @@ import {
   scanWorkspacePortsOnExecutionHost,
   type WorkspacePortExecutionHostDeps
 } from '../ports/workspace-port-execution-host'
-import { getActiveMultiplexer } from '../ssh/ssh-target-registry'
 import { resolveWorktreeHostRouting } from './worktree-launch-host-repo'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 
@@ -178,8 +177,7 @@ export class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreS
 
   protected getWorkspacePortHostDeps(): WorkspacePortExecutionHostDeps {
     return {
-      getLocalProbes: () => this.getWorkspacePortProbes(),
-      getSshMultiplexer: getActiveMultiplexer
+      getLocalProbes: () => this.getWorkspacePortProbes()
     }
   }
 

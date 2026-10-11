@@ -22,7 +22,6 @@ import {
   localWorktreeFilesystem,
   lstat,
   mkdir,
-  registerSshGitProvider,
   removeWorktree,
   removeWorktreeLinkedPathsMock,
   restoreLocalWatcherAfterFailedRemovalMock,
@@ -30,10 +29,8 @@ import {
   rm,
   runHook,
   setPlatform,
-  unregisterSshGitProvider,
   writeFile
 } from '../orca-runtime-test-mocks.spec'
-import type { WorktreeMeta } from '../orca-runtime-test-mocks.spec'
 import {
   TEST_REPO_ID,
   TEST_REPO_PATH,
@@ -608,76 +605,5 @@ describe('OrcaRuntimeService', () => {
       'feature/test',
       'def456'
     )
-  })
-
-  it('force-deletes an SSH branch that was preserved by runtime worktree removal', async () => {
-    const remoteRepo = {
-      ...store.getRepo(TEST_REPO_ID)!,
-      path: '/remote/repo',
-      connectionId: 'ssh-1'
-    }
-    const remoteWorktree = {
-      path: '/remote/feature-wt',
-      head: 'def456',
-      branch: 'feature/test',
-      isBare: false,
-      isMainWorktree: false
-    }
-    const remoteWorktreeId = `${remoteRepo.id}::${remoteWorktree.path}`
-    const metaById: Record<string, WorktreeMeta> = {
-      [remoteWorktreeId]: makeWorktreeMeta()
-    }
-    const runtimeStore = {
-      ...store,
-      getRepos: () => [remoteRepo],
-      getRepo: (id: string) => (id === remoteRepo.id ? remoteRepo : undefined),
-      getAllWorktreeMeta: () => metaById,
-      getWorktreeMeta: (worktreeId: string) => metaById[worktreeId],
-      setWorktreeMeta: (worktreeId: string, meta: Partial<WorktreeMeta>) => {
-        metaById[worktreeId] = { ...(metaById[worktreeId] ?? makeWorktreeMeta()), ...meta }
-        return metaById[worktreeId]
-      },
-      removeWorktreeMeta: (worktreeId: string) => {
-        delete metaById[worktreeId]
-      }
-    }
-    const provider = {
-      exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
-      forceDeletePreservedBranch: vi.fn().mockResolvedValue(undefined),
-      listWorktrees: vi.fn().mockResolvedValue([
-        {
-          path: remoteRepo.path,
-          head: 'main',
-          branch: 'main',
-          isBare: false,
-          isMainWorktree: true
-        },
-        remoteWorktree
-      ]),
-      removeWorktree: vi.fn().mockResolvedValue({
-        preservedBranch: { branchName: 'feature/test', head: 'def456' }
-      })
-    }
-    registerSshGitProvider('ssh-1', provider as never)
-    const runtime = createWorktreeRemovalRuntime(runtimeStore)
-
-    try {
-      await runtime.removeManagedWorktree(remoteWorktreeId)
-      const result = await runtime.forceDeletePreservedBranch(
-        remoteWorktreeId,
-        'feature/test',
-        'def456'
-      )
-
-      expect(result).toEqual({ deleted: true })
-      expect(provider.forceDeletePreservedBranch).toHaveBeenCalledWith(
-        '/remote/repo',
-        'feature/test',
-        'def456'
-      )
-      expect(forceDeleteLocalBranchMock).not.toHaveBeenCalled()
-    } finally {
-      unregisterSshGitProvider('ssh-1')
-    }
   })
 })

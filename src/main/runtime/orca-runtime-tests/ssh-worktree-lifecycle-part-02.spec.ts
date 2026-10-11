@@ -14,7 +14,6 @@ import {
   listWorktrees,
   loadHooks,
   muxRequestMock,
-  parseOrcaYaml,
   registerSshFilesystemProvider,
   registerSshGitProvider,
   removeWorktree,
@@ -537,7 +536,7 @@ describe('OrcaRuntimeService', () => {
     expect(removeWorktree).not.toHaveBeenCalled()
   })
 
-  it('reads SSH repo hooks through the SSH filesystem provider', async () => {
+  it('reports SSH repo hooks as absent without reading this machine', async () => {
     const remoteStore = {
       ...store,
       getRepos: () => [
@@ -551,31 +550,13 @@ describe('OrcaRuntimeService', () => {
         }
       ]
     }
-    const fsProvider = {
-      readFile: vi.fn().mockResolvedValue({
-        content: 'scripts:\n  setup: pnpm install\n',
-        isBinary: false
-      })
-    }
-    vi.mocked(parseOrcaYaml).mockReturnValue({ scripts: { setup: 'pnpm install' } })
-    registerSshFilesystemProvider('ssh-1', fsProvider as never)
     const runtime = new OrcaRuntimeService(remoteStore as never)
 
-    try {
-      await expect(runtime.getRepoHooks('id:repo-1')).resolves.toMatchObject({
-        hasHooksFile: true,
-        hooks: { scripts: { setup: 'pnpm install' } },
-        source: 'orca.yaml',
-        setupTrust: {
-          contentHash: '005d0b7e5c261dcc5e2f8568e69a0b30e889a3275b55b18ec20a7deef0081e90',
-          scriptContent: 'pnpm install'
-        }
-      })
-    } finally {
-      unregisterSshFilesystemProvider('ssh-1')
-    }
-
-    expect(fsProvider.readFile).toHaveBeenCalledWith('C:\\remote\\repo\\orca.yaml')
+    await expect(runtime.getRepoHooks('id:repo-1')).resolves.toMatchObject({
+      hasHooksFile: false,
+      hooks: null,
+      source: null
+    })
     expect(hasHooksFile).not.toHaveBeenCalled()
     expect(getEffectiveHooks).not.toHaveBeenCalled()
   })

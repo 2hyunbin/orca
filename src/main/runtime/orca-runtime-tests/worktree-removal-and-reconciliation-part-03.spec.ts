@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { resetWorktreeTestSshHostHome } from '../../worktree-removal-test-ssh-host-home'
 import { _settlePendingWorktreeRemovalsForTests } from '../../worktree-background-removal'
+import { SshHostNotServedError } from '../../providers/ssh-host-not-served-error'
 
 import {
   OrcaRuntimeService,
@@ -109,19 +110,11 @@ describe('OrcaRuntimeService', () => {
       })
       expect(provider.removeWorktree).toHaveBeenCalledWith(TEST_WORKTREE_PATH, false)
       expect(metaById[TEST_WORKTREE_ID]?.hostId).toBe('local')
-      const result = await runtime.forceDeletePreservedBranch(
-        TEST_WORKTREE_ID,
-        'feature/test',
-        'def456',
-        'ssh:ssh-1'
-      )
-
-      expect(result).toEqual({ deleted: true })
-      expect(provider.forceDeletePreservedBranch).toHaveBeenCalledWith(
-        remoteRepo.path,
-        'feature/test',
-        'def456'
-      )
+      // The SSH host is not served here, so the qualified host refuses instead of deleting locally.
+      await expect(
+        runtime.forceDeletePreservedBranch(TEST_WORKTREE_ID, 'feature/test', 'def456', 'ssh:ssh-1')
+      ).rejects.toThrow(SshHostNotServedError)
+      expect(provider.forceDeletePreservedBranch).not.toHaveBeenCalled()
       expect(forceDeleteLocalBranchMock).not.toHaveBeenCalled()
     } finally {
       unregisterSshGitProvider('ssh-1')
