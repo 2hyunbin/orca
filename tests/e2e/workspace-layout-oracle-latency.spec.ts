@@ -35,7 +35,8 @@ import {
 import { installFirstDrawnWatch, readFirstDrawn } from './helpers/first-drawn-watch'
 import {
   summarizeEventLoopDelay,
-  waitForEventLoopDelayWindow
+  waitForEventLoopDelayWindow,
+  type EventLoopDelaySummary
 } from './helpers/event-loop-delay-report'
 import { RuntimeClient } from '../../src/cli/runtime/client'
 import type {
@@ -50,6 +51,7 @@ const SAMPLES = Number(process.env.ORCA_LAYOUT_ORACLE_LATENCY_SAMPLES ?? 100)
 const STARTUP_SAMPLES = Number(process.env.ORCA_LAYOUT_ORACLE_STARTUP_SAMPLES ?? 10)
 const FLOOD_COMMAND = 'yes orca-latency-flood'
 const CLOSE_CONFIRM = 'Stop and Close'
+const LARGE_PROFILE = { hiddenWorktrees: 12, tabsPerWorktree: 3, activePanes: 4 }
 
 type Condition = 'idle' | 'flood'
 type Sample = { outerMs: number; inApp: InAppSample }
@@ -236,15 +238,29 @@ async function createHiddenWorktree(
   }
 }
 
-/** The summary goes to the log on one line, so a CI run's numbers can be read from its log. */
-function writeLatencyReport(
-  testInfo: TestInfo,
-  scenario: string,
-  summary: object,
-  samples: unknown
-): void {
-  const report = { scenario, platform: process.platform, ...summary }
+type Stats = ReturnType<typeof stats>
+type StartupSample = { firstDrawnMs: number; eventLoopDelayMax: number }
+type LatencyReport =
+  | {
+      scenario: 'latency'
+      summary: Record<string, { n: number; inAppCommit: Stats; inAppDrawn: Stats; outer: Stats }>
+      eventLoopDelay: Record<string, EventLoopDelaySummary>
+      closeConfirms: Record<Condition, number>
+      samples: Samples
+    }
+  | {
+      scenario: 'first-drawn'
+      profile: typeof LARGE_PROFILE
+      firstDrawn: Stats & { n: number }
+      eventLoopDelayMax: Stats
+      samples: StartupSample[]
+    }
+
+/** All but the samples go to the log on one line, so a CI run's numbers can be read from it. */
+function writeLatencyReport(testInfo: TestInfo, { samples, ...summary }: LatencyReport): void {
+  const report = { ...summary, platform: process.platform }
   console.log(`[layout-oracle] ${JSON.stringify(report)}`)
+  const scenario = summary.scenario
   const dir = process.env[ORACLE_REPORT_DIR_ENV] ?? testInfo.outputPath('layout-oracle')
   mkdirSync(dir, { recursive: true })
   writeFileSync(
@@ -309,7 +325,13 @@ test('layout oracle: command to drawn latency', async ({}, testInfo) => {
       ])
     )
     const closeConfirms = { idle: phases.idle.confirms, flood: phases.flood.confirms }
-    writeLatencyReport(testInfo, 'latency', { summary, eventLoopDelay, closeConfirms }, samples)
+    writeLatencyReport(testInfo, {
+      scenario: 'latency',
+      summary,
+      eventLoopDelay,
+      closeConfirms,
+      samples
+    })
   } finally {
     for (const cleanup of cleanups) {
       await cleanup().catch((error: unknown) => console.warn('[layout-oracle] cleanup', error))
@@ -318,8 +340,6 @@ test('layout oracle: command to drawn latency', async ({}, testInfo) => {
     await session.dispose()
   }
 })
-
-const LARGE_PROFILE = { hiddenWorktrees: 12, tabsPerWorktree: 3, activePanes: 4 }
 
 // oxlint-disable-next-line no-empty-pattern -- The measurement owns its launches.
 test('layout oracle: time to first drawn on a large profile', async ({}, testInfo) => {
@@ -350,7 +370,7 @@ test('layout oracle: time to first drawn on a large profile', async ({}, testInf
       await waitForBoundPanes(page, panes)
     }
 
-    const startup: { firstDrawnMs: number; eventLoopDelayMax: number }[] = []
+    const startup: StartupSample[] = []
     for (let index = 0; index < STARTUP_SAMPLES; index += 1) {
       await session.close(app)
       ;({ app, page } = await session.launch({
@@ -364,16 +384,13 @@ test('layout oracle: time to first drawn on a large profile', async ({}, testInf
           .max
       })
     }
-    writeLatencyReport(
-      testInfo,
-      'first-drawn',
-      {
-        profile: LARGE_PROFILE,
-        firstDrawn: { n: startup.length, ...stats(startup.map((sample) => sample.firstDrawnMs)) },
-        eventLoopDelayMax: stats(startup.map((sample) => sample.eventLoopDelayMax))
-      },
-      startup
-    )
+    writeLatencyReport(testInfo, {
+      scenario: 'first-drawn',
+      profile: LARGE_PROFILE,
+      firstDrawn: { n: startup.length, ...stats(startup.map((sample) => sample.firstDrawnMs)) },
+      eventLoopDelayMax: stats(startup.map((sample) => sample.eventLoopDelayMax)),
+      samples: startup
+    })
   } finally {
     for (const cleanup of cleanups) {
       await cleanup().catch((error: unknown) => console.warn('[layout-oracle] cleanup', error))
