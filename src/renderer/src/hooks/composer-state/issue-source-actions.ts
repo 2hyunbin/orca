@@ -54,7 +54,7 @@ import {
   buildWorkspaceSourceSelection,
   shouldApplyWorkspaceSourceAutoName
 } from '../../../../shared/new-workspace/workspace-source'
-import type { SmartWorkspaceNameSelection } from '@/components/new-workspace/SmartWorkspaceNameField'
+import type { SmartWorkspaceNameSelection } from '@/components/new-workspace/smart-workspace-name-field-model'
 import type { TaskSourceContext } from '../../../../shared/task-source-context'
 
 export function useIssueSourceActions(input: IssueSourceActionsInput) {
@@ -103,9 +103,10 @@ export function useIssueSourceActions(input: IssueSourceActionsInput) {
         if (
           shouldApplyWorkspaceSourceAutoName({
             currentName: name,
-            lastAutoName: lastAutoNameRef.current
+            lastAutoName: lastAutoNameRef.current,
+            lookupTextIsQuery: !linkedWorkItem
           }) ||
-          name.trim().toLowerCase() === issue.identifier.toLowerCase()
+          (!linkedWorkItem && name.trim().toLowerCase() === issue.identifier.toLowerCase())
         ) {
           setName(suggestedName)
           lastAutoNameRef.current = suggestedName
@@ -124,9 +125,10 @@ export function useIssueSourceActions(input: IssueSourceActionsInput) {
       if (
         shouldApplyWorkspaceSourceAutoName({
           currentName: name,
-          lastAutoName: lastAutoNameRef.current
+          lastAutoName: lastAutoNameRef.current,
+          lookupTextIsQuery: !linkedWorkItem
         }) ||
-        name.trim().toLowerCase() === issue.identifier.toLowerCase()
+        (!linkedWorkItem && name.trim().toLowerCase() === issue.identifier.toLowerCase())
       ) {
         setName(suggestedName)
         lastAutoNameRef.current = suggestedName
@@ -141,6 +143,7 @@ export function useIssueSourceActions(input: IssueSourceActionsInput) {
     [
       isProjectGroupTarget,
       name,
+      linkedWorkItem,
       branchAutoNameRef,
       lastAutoNameRef,
       setBranchNameOverride,
@@ -182,7 +185,8 @@ export function useIssueSourceActions(input: IssueSourceActionsInput) {
         suggestedName &&
         shouldApplyWorkspaceSourceAutoName({
           currentName: name,
-          lastAutoName: lastAutoNameRef.current
+          lastAutoName: lastAutoNameRef.current,
+          lookupTextIsQuery: !linkedWorkItem
         })
       ) {
         setName(suggestedName)
@@ -191,6 +195,7 @@ export function useIssueSourceActions(input: IssueSourceActionsInput) {
     },
     [
       name,
+      linkedWorkItem,
       baseBranchNamesWorkspace,
       branchAutoNameRef,
       lastAutoNameRef,

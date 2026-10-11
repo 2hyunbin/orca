@@ -8,6 +8,7 @@ import {
   sessionSearchServiceStatus
 } from '../../../ai-vault-search/session-search-service-registry'
 import { defineMethod } from '../core'
+import { conditionalAiVaultListResult } from '../../../ai-vault/session-list-fingerprint'
 import { restampAiVaultListResult } from '../../../ai-vault/session-list-results'
 import type { AiVaultPrepareSessionResumeArgs } from '../../../../shared/ai-vault-resume-preparation'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
@@ -29,6 +30,7 @@ export { AiVaultListSessionsParams, AiVaultPrepareSessionResumeParams, AiVaultSe
 export const AI_VAULT_METHODS = [
   defineMethod({
     name: 'aiVault.searchSessions',
+    permission: 'workspace',
     params: AiVaultSearchRequestSchema,
     handler: (params, { runtime, clientKind, clientCapabilities }) => {
       const response = searchSessionService(params, clientKind ? 'relay' : 'runtime')
@@ -41,12 +43,14 @@ export const AI_VAULT_METHODS = [
   }),
   defineMethod({
     name: 'aiVault.searchStatus',
+    permission: 'workspace',
     params: AiVaultSearchStatusRequestSchema,
     handler: (params, { clientKind }) =>
       sessionSearchServiceStatus(params, clientKind ? 'relay' : 'runtime')
   }),
   defineMethod({
     name: 'aiVault.setSearchEnabled',
+    permission: 'settings-write',
     params: AiVaultSetSearchEnabledParamsSchema,
     handler: async (params, { runtime, clientKind, pairedDeviceId }) => {
       // Paired clients only: an in-process caller writes this host's own settings directly,
@@ -66,12 +70,14 @@ export const AI_VAULT_METHODS = [
   }),
   defineMethod({
     name: 'aiVault.resolveSessionTitles',
+    permission: 'workspace',
     params: AiVaultSessionTitlesParams,
     handler: (params, { runtime, signal }) =>
       runtime.resolveAiVaultSessionTitles(params.requests, signal)
   }),
   defineMethod({
     name: 'aiVault.listSessions',
+    permission: 'workspace',
     params: AiVaultListSessionsParams,
     handler: async (params, { runtime, clientKind, clientCapabilities }) => {
       await ensureStructuredAgentSessionHostUnlessRefused(() =>
@@ -100,18 +106,24 @@ export const AI_VAULT_METHODS = [
         clientKind === undefined ||
           (clientCapabilities?.includes(STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY) ?? false)
       )
-      return params.executionHostId
-        ? restampAiVaultListResult(projected, params.executionHostId)
-        : projected
+      return conditionalAiVaultListResult(
+        params.executionHostId
+          ? restampAiVaultListResult(projected, params.executionHostId)
+          : projected,
+        params.unlimited ? undefined : params.afterFingerprint,
+        params.force
+      )
     }
   }),
   defineMethod({
     name: 'aiVault.prepareSessionResume',
+    permission: 'workspace',
     params: AiVaultPrepareSessionResumeParams,
     handler: async (params, { runtime }) => {
       const args: AiVaultPrepareSessionResumeArgs = {
         agent: params.agent,
         ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+        ...(params.fork ? { fork: true } : {}),
         filePath: params.filePath,
         codexHome: params.codexHome,
         // Why: the RPC executes on the transcript-owning host; never let a

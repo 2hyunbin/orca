@@ -1,4 +1,7 @@
+import { useCallback, useSyncExternalStore } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import { relayHostsFeed } from '../worktree/relay-hosts-feed'
+import { serverHostHealth } from '../worktree/server-workspaces'
 import {
   scopeRpcClientToExecutionHost,
   workspaceRouteExecutionHost
@@ -27,4 +30,42 @@ export function useWorkspaceServer(args: {
   // No hostId: the desktop's recorded version and descriptor must not take the server's.
   const gates = useHostStatusGates({ hostId: undefined, client: serverClient, connState })
   return { routeHost, server: routeHost === undefined ? null : { client: serverClient, gates } }
+}
+
+const noSubscription = (): (() => void) => () => {}
+
+/**
+ * The connection state a server workspace's screens see: the desktop's, unless the desktop reports
+ * that server down. Desktop-owned workspaces (`routeHost` absent) keep the desktop's state untouched.
+ */
+export function useWorkspaceServerConnState(args: {
+  client: RpcClient | null
+  connState: ConnectionState
+  routeHost: ExecutionHostId | undefined | null
+}): ConnectionState {
+  const { client, connState, routeHost } = args
+  // The same feed the host list reads, so a row's badge and its screens agree.
+  const feed = client && routeHost ? relayHostsFeed(client) : null
+  const subscribe = useCallback(
+    (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
+    [feed]
+  )
+  const readHosts = () => feed?.getSnapshot() ?? null
+  const hosts = useSyncExternalStore(subscribe, readHosts, readHosts)
+  if (connState !== 'connected' || !routeHost || !hosts) {
+    return connState
+  }
+  const host = hosts.find((entry) => entry.hostId === routeHost)
+  // A server the desktop no longer lists cannot be reached through it.
+  switch (host ? serverHostHealth(host) : 'disconnected') {
+    case 'local':
+    case 'available':
+      return 'connected'
+    case 'connecting':
+      return 'connecting'
+    case 'blocked':
+    case 'disconnected':
+    case 'error':
+      return 'disconnected'
+  }
 }

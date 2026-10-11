@@ -8,6 +8,7 @@ const {
 } = require('./scripts/verify-packaged-daemon-entry.cjs')
 const {
   assertPackagedNativeVariantsInstalled,
+  assertProcessHostOutputBuilt,
   createPackagedRuntimeNodeModuleResources,
   prunePackagedRuntimeNodeModules,
   verifyPackagedMainRuntimeDeps
@@ -300,6 +301,7 @@ module.exports = {
   // disappears from Agent Session History in packaged builds only. Worker
   // entries reached solely from the Electron main process stay packed, since
   // asar redirects their app.asar paths.
+  // Why: `orca serve` runs the orcad selection entry under ELECTRON_RUN_AS_NODE too (#27307).
   asarUnpack: [
     'out/package.json',
     'out/cli/**',
@@ -326,6 +328,7 @@ module.exports = {
     'out/main/plugin-host-entry.js',
     'out/main/computer-sidecar.js',
     'out/main/parcel-watcher-process-entry.js',
+    'out/main/orcad/orcad-local-serve-selection-entry.js',
     'out/main/chunks/**',
     'resources/**',
     'node_modules/ws/**',
@@ -343,6 +346,7 @@ module.exports = {
   beforePack: (context, mobileWebBundleDir = MOBILE_WEB_BUNDLE_DIR) => {
     assertPackagedNativeVariantsInstalled(context.electronPlatformName, context.arch)
     assertBundledRipgrepInstalled()
+    assertProcessHostOutputBuilt()
     assertOrcadTemplateBuilt()
     assertMobileWebBundleBuilt(mobileWebBundleDir)
   },

@@ -3,7 +3,9 @@ import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
 import type { MobileRelayHost } from '../../../src/shared/mobile-relay-hosts-contract'
 import type { RpcOperationSender } from '../transport/rpc-operation-sender'
-import { relayHostsListRead, relayHostWorktreesRead } from './server-workspace-operations'
+import type { RpcClient } from '../transport/rpc-client'
+import { relayHostsFeed } from './relay-hosts-feed'
+import { relayHostWorktreesRead } from './server-workspace-operations'
 import type { Worktree } from './workspace-list-types'
 import { areWorktreeListsEqual } from './worktree-list-snapshot'
 
@@ -60,13 +62,12 @@ export type FetchedServerWorkspaces = {
 
 /** The servers' rows through the desktop's one listing path; null when it did not answer. */
 export async function fetchServerWorkspaces(
-  client: RpcOperationSender
+  client: RpcClient
 ): Promise<FetchedServerWorkspaces | null> {
-  const listed = relayHostsListRead.interpret(await relayHostsListRead.request(client))
-  if (!listed.accepted) {
+  const hosts = await relayHostsFeed(client).read()
+  if (!hosts) {
     return null
   }
-  const hosts = listed.value
   return { hosts, rows: await Promise.all(hosts.map((host) => fetchHostRows(client, host.hostId))) }
 }
 
