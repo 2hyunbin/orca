@@ -248,6 +248,8 @@ export type AgentSessionStatusSummary = {
   latestPrompt: string
   /** Provider model in force for the next turn; absent until the host has read the options. */
   model?: string
+  /** The host's saved option selection, including an empty selection. Absent on older hosts. */
+  optionSelection?: Readonly<Record<string, string>>
   /** The tool the running turn is inside, else the last one it used. Absent unless `status`
    *  is 'working'. */
   toolName?: string

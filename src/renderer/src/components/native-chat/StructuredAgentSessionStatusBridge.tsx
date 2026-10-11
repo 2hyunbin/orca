@@ -95,10 +95,16 @@ export function useStructuredAgentSessionHostStopping(
 export function useStructuredAgentSessionHostExecution(
   sessionId: string,
   target: RuntimeClientTarget
-): { phase: ReturnType<typeof useStructuredAgentSessionHostExecutionPhase>; stopping: boolean } {
+): {
+  phase: ReturnType<typeof useStructuredAgentSessionHostExecutionPhase>
+  stopping: boolean
+  optionSelection: AgentSessionStatusSummary['optionSelection']
+} {
+  const { summary } = useStructuredAgentSessionStatusSummary(sessionId, target)
   return {
-    phase: useStructuredAgentSessionHostExecutionPhase(sessionId, target),
-    stopping: useStructuredAgentSessionHostStopping(sessionId, target)
+    phase: summary?.hostExecutionPhase ?? null,
+    stopping: summary?.stopping === true,
+    optionSelection: summary?.optionSelection
   }
 }
 

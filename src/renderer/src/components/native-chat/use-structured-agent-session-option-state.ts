@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentSessionConversationCommand } from '../../../../shared/agent-session-conversation-command'
 import type { AgentSessionOptionsResult } from '../../../../shared/agent-session-wire'
 import type { AgentSessionRewindSupport } from '../../../../shared/agent-session-rewind'
@@ -8,13 +8,18 @@ import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
+  commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '@/runtime/runtime-rpc-client'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
-import { cloneNativeChatSessionOptionRecord } from '../../../../shared/native-chat-session-option-state'
+import {
+  cloneNativeChatSessionOptionRecord,
+  createNativeChatSessionOptionRecord
+} from '../../../../shared/native-chat-session-option-state'
+import { structuredAgentSessionOptionView } from '../../../../shared/structured-agent-session-option-view'
 import {
   createCoalescedPollRunner,
   type CoalescedPollRunner
@@ -33,7 +38,16 @@ function firstFrameOptionState(
   return snapshot ? applyStructuredAgentSessionModelCatalog(seeded, seed, snapshot, launch) : seeded
 }
 
-/** The picker's option state for one session: seeded, kept across its fences, re-read each turn. */
+function selectionIncludes(
+  selection: Readonly<Record<string, string>> | undefined,
+  values: Readonly<Record<string, string>>
+): boolean {
+  return selection
+    ? Object.entries(values).every(([key, value]) => selection[key] === value)
+    : false
+}
+
+/** The picker's catalog and selection for one conversation on its execution host. */
 export function useStructuredAgentSessionOptionState(args: {
   agent: AgentType
   optionCatalog: AgentSessionOptionCatalog | null
@@ -49,6 +63,9 @@ export function useStructuredAgentSessionOptionState(args: {
   providerVisible: boolean
   providerStarting: boolean
   readsBeforeStart: boolean
+  hostSelection: Readonly<Record<string, string>> | undefined
+  launchSeedOptions: Readonly<Record<string, string>> | undefined
+  held: Readonly<Record<string, string>>
   turnId: string | null
   unloadedTurnRevisions: number | undefined
 }) {
@@ -62,11 +79,34 @@ export function useStructuredAgentSessionOptionState(args: {
     providerStarting,
     providerVisible,
     readsBeforeStart,
+    hostSelection,
+    launchSeedOptions,
+    held,
     sessionId,
     target,
     turnId,
     worktree
   } = args
+  const selectionFromStatus = hostSelection !== undefined
+  const [pendingPick, setPendingPick] = useState<{
+    identity: string
+    values: Readonly<Record<string, string>>
+    settled: boolean
+  } | null>(null)
+  useEffect(() => {
+    if (
+      pendingPick &&
+      (pendingPick.identity !== identity ||
+        (pendingPick.settled && selectionIncludes(hostSelection, pendingPick.values)))
+    ) {
+      setPendingPick((current) => (current === pendingPick ? null : current))
+    }
+  }, [hostSelection, identity, pendingPick])
+  const activePendingPick =
+    pendingPick?.identity === identity &&
+    (!pendingPick.settled || !selectionIncludes(hostSelection, pendingPick.values))
+      ? pendingPick.values
+      : null
   const [conversationSupport, setConversationSupport] = useState<{
     sessionId: string
     commands: readonly AgentSessionConversationCommand[]
@@ -88,7 +128,6 @@ export function useStructuredAgentSessionOptionState(args: {
       ...(worktree ? { worktree } : {})
     })
   )
-  // Read only when a fence or session resets the state, so a new target alone resets nothing.
   const firstFrameLaunch = useRef({ target, newLaunch, worktree, seedsModel })
   useEffect(() => {
     firstFrameLaunch.current = { target, newLaunch, worktree, seedsModel }
@@ -110,6 +149,9 @@ export function useStructuredAgentSessionOptionState(args: {
     const previous = optionStateRef.current
     const sameSession = optionIdentityRef.current === identity
     optionIdentityRef.current = identity
+    if (sameSession && selectionFromStatus) {
+      return
+    }
     const launch = firstFrameLaunch.current
     const seeded = firstFrameOptionState(agent, launch.target, {
       newLaunch: launch.newLaunch,
@@ -131,11 +173,11 @@ export function useStructuredAgentSessionOptionState(args: {
     optionStateRef.current = next
     activeOptionRecordRef.current = next.record
     setOptionState(next)
-  }, [agent, fence, identity])
+  }, [agent, fence, identity, selectionFromStatus])
 
   const optionsReadRef = useRef<CoalescedPollRunner | null>(null)
-  // Refresh options each turn to confirm which model the provider actually selected, and once
-  // the provider starts: only then has the host read what it will run.
+  // The read also carries commands, goal, context, image and rewind support. A capable host's
+  // selection comes from status even when this metadata read returns an older model.
   useEffect(() => {
     if (!providerVisible || (providerStarting && !readsBeforeStart) || !optionCatalog) {
       return
@@ -159,11 +201,19 @@ export function useStructuredAgentSessionOptionState(args: {
           rewind: result.rewind ?? { supported: false, reason: 'unsupported' },
           fence
         })
-        updateOptionState((current) =>
-          current.record === activeOptionRecordRef.current
-            ? applyStructuredAgentSessionOptions(current, optionCatalog, result)
-            : current
-        )
+        updateOptionState((current) => {
+          if (current.record !== activeOptionRecordRef.current) {
+            return current
+          }
+          const applied = applyStructuredAgentSessionOptions(
+            selectionFromStatus
+              ? { ...current, record: cloneNativeChatSessionOptionRecord(current.record) }
+              : current,
+            optionCatalog,
+            result
+          )
+          return selectionFromStatus ? { ...applied, record: current.record } : applied
+        })
       }
     })
     optionsReadRef.current = runner
@@ -178,6 +228,7 @@ export function useStructuredAgentSessionOptionState(args: {
     providerStarting,
     providerVisible,
     readsBeforeStart,
+    selectionFromStatus,
     sessionId,
     target,
     turnId,
@@ -197,6 +248,30 @@ export function useStructuredAgentSessionOptionState(args: {
   return {
     conversationSupport,
     optionState,
+    optionView: useMemo(() => {
+      const selected = selectionFromStatus
+        ? commitStructuredAgentSessionOptionValues(
+            { ...optionState, record: createNativeChatSessionOptionRecord(agent) },
+            hostSelection
+          )
+        : optionState
+      return structuredAgentSessionOptionView(
+        activePendingPick
+          ? commitStructuredAgentSessionOptionValues(selected, activePendingPick)
+          : selected,
+        selectionFromStatus ? undefined : launchSeedOptions,
+        held
+      )
+    }, [
+      agent,
+      activePendingPick,
+      held,
+      hostSelection,
+      launchSeedOptions,
+      optionState,
+      selectionFromStatus
+    ]),
+    setPendingPick,
     optionStateRef,
     activeOptionRecordRef,
     pendingOptionRef,

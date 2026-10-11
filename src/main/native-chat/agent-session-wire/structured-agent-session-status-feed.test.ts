@@ -157,6 +157,7 @@ describe('StructuredAgentSessionStatusFeed', () => {
             agent: 'codex',
             status: null,
             latestPrompt: '',
+            optionSelection: {},
             updatedAt: expect.any(Number)
           }
         ]
@@ -675,9 +676,10 @@ describe('StructuredAgentSessionStatusFeed', () => {
       { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hello' }] },
       { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
+    const initialOptions: Record<string, string> = { model: 'first-model' }
     const record = {
       location: indexed({ journal }).params.location,
-      options: { model: 'first-model' },
+      options: initialOptions,
       providerHandleChain: []
     }
     const { feed, events } = feedFor(new Map([[SESSION, { journal }]]), record)
@@ -685,8 +687,19 @@ describe('StructuredAgentSessionStatusFeed', () => {
     feed.publish(SESSION)
     expect(events.at(-1)).toMatchObject({
       type: 'status',
-      session: { status: 'idle', model: 'second-model' }
+      session: { status: 'idle', model: 'second-model', optionSelection: { model: 'second-model' } }
     })
+    const before = events.length
+    record.options = { model: 'second-model', effort: 'high' }
+    feed.publish(SESSION)
+    expect(events).toHaveLength(before + 1)
+    expect(events.at(-1)).toMatchObject({
+      type: 'status',
+      session: { optionSelection: { model: 'second-model', effort: 'high' } }
+    })
+    record.options = {}
+    feed.publish(SESSION)
+    expect(events.at(-1)).toMatchObject({ type: 'status', session: { optionSelection: {} } })
   })
 })
 
