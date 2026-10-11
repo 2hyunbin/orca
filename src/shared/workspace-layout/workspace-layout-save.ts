@@ -104,12 +104,15 @@ function saveWorkspace(
         tab.kind === 'editor' && tab.isPreview ? [tab.entityId] : []
       )
     )
-    session.openFilesByWorktree[key] = workspace.editorFiles.map((file): PersistedOpenFile => ({
-      ...file,
-      worktreeId,
-      ...(previewFiles.has(file.filePath) ? { isPreview: true } : {}),
-      ...view.editorDrafts[key]?.[file.filePath]
-    }))
+    // An editor file's `view` stays in memory: the disk format is unchanged.
+    session.openFilesByWorktree[key] = workspace.editorFiles.map(
+      ({ view: _view, ...file }): PersistedOpenFile => ({
+        ...file,
+        worktreeId,
+        ...(previewFiles.has(file.filePath) ? { isPreview: true } : {}),
+        ...view.editorDrafts[key]?.[file.filePath]
+      })
+    )
   }
   if (workspace.browserTabs) {
     session.browserTabsByWorktree[key] = workspace.browserTabs.map((tab): BrowserWorkspace => ({

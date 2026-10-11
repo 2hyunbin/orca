@@ -58,7 +58,8 @@ type PartSources = {
     | Prefixed<'tab.terminal', keyof LayoutTerminalCreation>
     | Prefixed<'tab.panes', keyof LayoutTerminalPanes>
     | Prefixed<'group', keyof LayoutGroup>
-    | Prefixed<'file', keyof LayoutEditorFile>
+    // `view` is in memory only: its tabs do not survive a restart, as today.
+    | Prefixed<'file', Exclude<keyof LayoutEditorFile, 'view'>>
     | Prefixed<'browserTab', keyof LayoutBrowserTab>
     // `$key`: the map key the entry is stored under.
     | Prefixed<'leaf', Exclude<keyof LayoutLeaf, 'sleeping'> | '$key'>

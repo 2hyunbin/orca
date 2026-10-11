@@ -8,6 +8,7 @@ import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
 import type { PersistedClientHostedBrowserPage } from '../client-hosted-browser-page-record'
 import type { ClosedTerminalTabTombstone } from '../closed-terminal-tab-tombstones'
+import type { EditorTabView } from '../editor-tab-view-types'
 import type { ExecutionHostId } from '../execution-host'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
 import type { TerminalPaneLayoutNode, TerminalTab } from '../terminal-tab-types'
@@ -62,7 +63,10 @@ export type LayoutGroup = { id: string; tabOrder: string[] }
 export type LayoutEditorFile = Omit<
   PersistedOpenFile,
   'dirtyDraftContent' | 'lastKnownDiskSignature' | 'isPreview' | 'worktreeId'
->
+> & {
+  /** In memory only: the Serializer never writes it. */
+  view?: EditorTabView
+}
 
 /** A browser tab minus the live page state its host view reports. */
 export type LayoutBrowserTab = Pick<

@@ -11,7 +11,7 @@ import {
   relaySshSession,
   serverRuntimeSession
 } from './workspace-layout-profile.test-fixture'
-import { addWorkspace, emptySession, leaf } from './workspace-layout-session.test-fixture'
+import { addWorkspace, emptySession, GIT_KEY, leaf } from './workspace-layout-session.test-fixture'
 
 /** What reaches disk: the profile documents are JSON, so an undefined field is a missing one. */
 const onDisk = (session: WorkspaceSessionState): unknown => JSON.parse(JSON.stringify(session))
@@ -127,5 +127,27 @@ describe('workspace layout Loader and Serializer', () => {
         lastKnownDiskSignature: 'sig-1'
       }
     })
+  })
+
+  it('never writes an editor file view to disk', () => {
+    const { loaded } = roundTrip(LOCAL_EXECUTION_HOST_ID, localDesktopSession())
+    const workspace = loaded.layout.workspaces[GIT_KEY]!
+    expect(workspace.editorFiles?.length).toBeGreaterThan(0)
+    const withView = structuredClone(loaded)
+    withView.layout.workspaces[GIT_KEY]!.editorFiles = workspace.editorFiles!.map((file) => ({
+      ...file,
+      view: {
+        mode: 'edit',
+        conflict: {
+          kind: 'conflict-editable',
+          conflictKind: 'both_modified',
+          conflictStatus: 'unresolved',
+          conflictStatusSource: 'git'
+        }
+      }
+    }))
+    expect(JSON.stringify(saveWorkspaceLayout(withView))).toBe(
+      JSON.stringify(saveWorkspaceLayout(loaded))
+    )
   })
 })
