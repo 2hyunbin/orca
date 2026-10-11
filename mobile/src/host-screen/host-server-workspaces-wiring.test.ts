@@ -76,7 +76,7 @@ function desktop({ hostWorktrees, carriesExecutionHost }: Desktop = {}): FakeSes
         const { hostId } = z.object({ hostId: z.string() }).parse(params)
         const result = hostWorktrees
           ? hostWorktrees(hostId)
-          : { worktrees: [row(`${hostId}-wt`, hostId)], stale: false, fetchedAt: 1 }
+          : { worktrees: [row(`${hostId}-wt`, hostId)] }
         if (result instanceof Error) {
           throw result
         }
@@ -253,7 +253,7 @@ describe("a desktop's server workspaces on the phone", () => {
       hostWorktrees: (hostId) =>
         failing && hostId === 'runtime:vm'
           ? new Error('timed out')
-          : { worktrees: [row(`${hostId}-wt`, hostId)], stale: false, fetchedAt: 1 }
+          : { worktrees: [row(`${hostId}-wt`, hostId)] }
     })
     const screen = await mountScreen(client, RELAYS)
     failing = true
@@ -264,7 +264,7 @@ describe("a desktop's server workspaces on the phone", () => {
       method === 'mobileRelay.hosts.list'
         ? reply({ hosts: [HOSTS[1]] })
         : method === 'mobileRelay.hosts.worktrees'
-          ? reply({ worktrees: [row('stray', 'runtime:vm')], stale: true, fetchedAt: 1 })
+          ? reply({ worktrees: [row('stray', 'runtime:vm')] })
           : reply({ worktrees: [row('mac-wt', 'local')], snapshotId: 's1' })
     )
     await screen.poll()
