@@ -91,6 +91,7 @@ describe('preflight RPC methods', () => {
         cacheKey: 'p1:wsl:Ubuntu'
       }
     } as const
+    detectInstalledAgentsWithShellPathHydrationMock.mockClear()
     detectInstalledAgentsWithShellPathHydrationMock.mockResolvedValueOnce(['codex'])
     const resolveAgentDetectionHost = vi.fn((worktreeId?: string) =>
       worktreeId === 'repo-ssh::/srv/w'
@@ -118,6 +119,7 @@ describe('preflight RPC methods', () => {
   })
 
   it('refuses agent detection on an SSH target this host does not serve', async () => {
+    detectInstalledAgentsWithShellPathHydrationMock.mockClear()
     const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
 
