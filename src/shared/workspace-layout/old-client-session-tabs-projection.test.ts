@@ -187,7 +187,7 @@ describe('projectSessionTabs', () => {
           {
             type: 'terminal',
             id: `${apiTab}::${apiSplit}`,
-            title: 'api server',
+            title: 'Terminal',
             parentTabId: apiTab,
             leafId: apiSplit,
             ptyId: 'pty-2',
@@ -253,25 +253,113 @@ describe('projectSessionTabs', () => {
           }
         ]
       }
-    expect(projectSessionTabs(WS, model.workspaces[WS]!, view, facts)).toEqual(expected)
+    expect(projectSessionTabs(WS, model.workspaces[WS]!, view, facts, false)).toEqual(expected)
   })
 
-  it('reads the tab name before the live terminal title (#19582)', () => {
-    const { model, agent } = workspace()
-    const facts = { ...noFacts, terminalRows: { [agent!.tabId!]: { title: 'zsh' } } }
-    const renamed = build(
-      testContext(),
-      [{ type: 'renameTab', workspace: WS, tabId: agent!.tabId!, kind: 'custom', title: 'deploy' }],
-      model
-    ).model
-    const rows = projectSessionTabs(WS, renamed.workspaces[WS]!, views(), facts).tabs
-    expect(rows.find((row) => row.id.startsWith(agent!.tabId!))?.title).toBe('deploy')
+  describe("titles follow today's order", () => {
+    function soleTab(fields: { title?: string; paneTitle?: string; live?: string }) {
+      const ctx = testContext()
+      const created = build(ctx, [
+        {
+          type: 'createTerminalTab',
+          workspace: WS,
+          ...(fields.title ? { title: fields.title } : {})
+        }
+      ])
+      const { tabId, leafId } = created.results[0]!
+      const model = fields.paneTitle
+        ? build(
+            ctx,
+            [
+              {
+                type: 'renamePane',
+                workspace: WS,
+                tabId: tabId!,
+                leafId: leafId!,
+                title: fields.paneTitle
+              }
+            ],
+            created.model
+          ).model
+        : created.model
+      const facts = fields.live
+        ? { ...noFacts, terminalRows: { [tabId!]: { title: fields.live } } }
+        : noFacts
+      return { model, tabId: tabId!, facts }
+    }
+    const titleOf = (
+      { model, facts }: ReturnType<typeof soleTab>,
+      generatedTitlesEnabled = false
+    ) =>
+      projectSessionTabs(WS, model.workspaces[WS]!, views(), facts, generatedTitlesEnabled).tabs[0]!
+        .title
+
+    it('a custom title beats the pane title and the live title (#19582)', () => {
+      expect(titleOf(soleTab({ title: 'deploy', paneTitle: 'logs', live: 'zsh' }))).toBe('deploy')
+    })
+
+    it('a pane title beats the live title when there is no custom title', () => {
+      expect(titleOf(soleTab({ paneTitle: 'logs', live: 'zsh' }))).toBe('logs')
+    })
+
+    it('reads generated titles only with the setting on', () => {
+      const tab = soleTab({ live: 'zsh' })
+      const ws = tab.model.workspaces[WS]!
+      const generated = {
+        ...tab,
+        model: {
+          ...tab.model,
+          workspaces: {
+            [WS]: {
+              ...ws,
+              tabs: ws.tabs.map((entry) => ({ ...entry, generatedTitle: 'Fix login' }))
+            }
+          }
+        }
+      }
+      expect(titleOf(generated)).toBe('zsh')
+      expect(titleOf(generated, true)).toBe('Fix login')
+    })
+
+    it('a quick-command label beats the live title', () => {
+      const tab = soleTab({ live: 'zsh' })
+      const ws = tab.model.workspaces[WS]!
+      const labelled = {
+        ...tab,
+        model: {
+          ...tab.model,
+          workspaces: {
+            [WS]: {
+              ...ws,
+              tabs: ws.tabs.map((entry) => ({ ...entry, quickCommandLabel: 'Tests' }))
+            }
+          }
+        }
+      }
+      const row = projectSessionTabs(
+        WS,
+        labelled.model.workspaces[WS]!,
+        views(),
+        labelled.facts,
+        false
+      ).tabs[0]
+      expect(row).toMatchObject({ title: 'Tests', quickCommandLabel: 'Tests' })
+    })
+
+    it('split panes show their own title or "Terminal", never the tab title', () => {
+      const { model, api } = workspace()
+      const rows = projectSessionTabs(WS, model.workspaces[WS]!, views(), noFacts, true).tabs
+      expect(rows.filter((row) => row.id.startsWith(api!.tabId!)).map((row) => row.title)).toEqual([
+        'logs',
+        'Terminal'
+      ])
+    })
   })
 
   it('names nothing active when the view selects nothing, and keeps one group without a tree', () => {
     const ctx = testContext()
     const { model } = build(ctx, [{ type: 'createTerminalTab', workspace: WS }])
-    const projected = projectSessionTabs(WS, model.workspaces[WS]!, views(), noFacts)
+    const projected = projectSessionTabs(WS, model.workspaces[WS]!, views(), noFacts, false)
     expect(projected).toMatchObject({ activeGroupId: null, activeTabId: null, activeTabType: null })
     expect(projected.tabGroups).toHaveLength(1)
     expect(projected).not.toHaveProperty('tabGroupLayout')
@@ -281,7 +369,7 @@ describe('projectSessionTabs', () => {
   it('round-trips every row id to the tab (and pane) it names', () => {
     const { model, api, apiSplit } = workspace()
     const ws = model.workspaces[WS]!
-    for (const row of projectSessionTabs(WS, ws, views(), noFacts).tabs) {
+    for (const row of projectSessionTabs(WS, ws, views(), noFacts, false).tabs) {
       const target = resolveSessionTabRow(ws, row.id)
       expect(target, row.id).not.toBeNull()
       if (row.type === 'terminal') {

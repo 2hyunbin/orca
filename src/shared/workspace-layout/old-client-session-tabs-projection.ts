@@ -1,9 +1,11 @@
 // The model as today's `session.tabs.*` snapshot (design 2.6), for old phones and desktops. Rows,
 // ids and group orders keep today's shape (wire rule 3). The runtime still adds what the model
-// does not hold: live terminal handles, agent status, terminal theme, launch drafts and the
-// publication epoch and version.
+// does not hold: live terminal handles, agent status, terminal theme, launch drafts, a browser
+// page's certificate failure, a dirty markdown draft's document version, and the publication
+// epoch and version.
 
 import { defaultAgentChatLabel } from '../agent-session-chat-label'
+import { resolveTerminalTabTitle } from '../tab-title-resolution'
 import type {
   RuntimeMobileSessionAgentTab,
   RuntimeMobileSessionBrowserTab,
@@ -61,13 +63,16 @@ type Scope = {
   facts: SessionTabsFacts
   /** The tab shown in the view's active group; its rows are the active ones. */
   activeTabId: string | null
+  /** The user's generated-titles setting, which today's title order reads. */
+  generatedTitlesEnabled: boolean
 }
 
 export function projectSessionTabs(
   key: string,
   workspace: WorkspaceLayout,
   view: SessionTabsView,
-  facts: SessionTabsFacts
+  facts: SessionTabsFacts,
+  generatedTitlesEnabled: boolean
 ): ProjectedSessionTabs {
   const activeGroupId = view.activeGroupIdByWorktree?.[key] ?? null
   const groupViews = view.groups[key] ?? {}
@@ -76,6 +81,7 @@ export function projectSessionTabs(
     workspace,
     view,
     facts,
+    generatedTitlesEnabled,
     activeTabId: activeGroupId ? (groupViews[activeGroupId]?.activeTabId ?? null) : null
   }
   const byId = new Map(workspace.tabs.map((tab) => [tab.id, tab]))
@@ -187,29 +193,35 @@ function terminalRows(tab: LayoutTerminalTab, scope: Scope): RuntimeMobileSessio
     ...(ptyIdsByLeafId ? { ptyIdsByLeafId } : {}),
     ...(titlesByLeafId ? { titlesByLeafId } : {})
   }
-  // #19582: the user's title outranks every live one.
-  const tabTitle =
-    tab.customTitle?.trim() ||
-    tab.generatedTitle?.trim() ||
-    scope.facts.terminalRows[tab.entityId]?.title?.trim() ||
-    tab.terminal.defaultTitle?.trim() ||
-    'Terminal'
-  // Tab-wide launch evidence describes a sole pane only, as the window publishes it.
-  const sole = leafIds.length === 1
+  // Tab-wide evidence (tab title, quick-command label, launch agent) describes a sole pane that is
+  // also the focused one, as the window publishes it.
+  const root = tab.panes.root
+  const tabWide = root?.type === 'leaf' && activeLeafId === root.leafId
+  const liveTitle =
+    scope.facts.terminalRows[tab.entityId]?.title ?? tab.terminal.defaultTitle ?? 'Terminal'
   return leafIds.map((leafId) => {
     const leaf = leaves[leafId]
+    const paneTitle = leaf?.title?.trim() || undefined
+    // Today's order: a custom title beats the pane's own title (#19582); other panes show theirs.
+    const title = tabWide
+      ? resolveTerminalTabTitle(
+          { ...tab, title: paneTitle ?? liveTitle },
+          scope.generatedTitlesEnabled,
+          paneTitle ?? liveTitle
+        )
+      : (paneTitle ?? 'Terminal')
     return {
       type: 'terminal',
       id: terminalRowId(tab.entityId, leafId),
-      title: leaf?.title?.trim() || tabTitle,
-      ...(sole && tab.quickCommandLabel?.trim()
+      title,
+      ...(tabWide && tab.quickCommandLabel?.trim()
         ? { quickCommandLabel: tab.quickCommandLabel.trim() }
         : {}),
       parentTabId: tab.entityId,
       leafId,
       ...(leaf?.ptyId ? { ptyId: leaf.ptyId } : {}),
       ...(leaf?.incarnationId ? { incarnationId: leaf.incarnationId } : {}),
-      ...(sole && tab.terminal.launchAgent ? { launchAgent: tab.terminal.launchAgent } : {}),
+      ...(tabWide && tab.terminal.launchAgent ? { launchAgent: tab.terminal.launchAgent } : {}),
       ...(tab.terminal.startupCwd ? { startupCwd: tab.terminal.startupCwd } : {}),
       parentLayout,
       ...tabProps(tab),

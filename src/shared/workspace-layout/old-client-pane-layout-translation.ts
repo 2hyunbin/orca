@@ -16,7 +16,7 @@ import type { LayoutTerminalTab, WorkspaceLayout } from './workspace-layout-mode
 export type PaneLayoutTranslation = {
   /** In apply order; the runtime applies them as one change, so one update is published. */
   commands: LayoutCommand[]
-  /** The sent tree changes panes, or moves more than one: today's `{updated: false}`. */
+  /** The sent tree changes panes or moves more than one; new: the handler replies `{updated: false}` (today it always replies true). */
   structureRefused: boolean
 }
 

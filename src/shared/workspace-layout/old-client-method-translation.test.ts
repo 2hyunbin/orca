@@ -6,6 +6,8 @@ import {
   translateSessionTabClose,
   translateSessionTabMove,
   translateSetTabProps,
+  translateTerminalClose,
+  translateTerminalCloseTab,
   translateTerminalCreate,
   translateTerminalRename,
   translateTerminalSplit,
@@ -13,12 +15,15 @@ import {
 } from './old-client-method-translation'
 import { translateUpdatePaneLayout } from './old-client-pane-layout-translation'
 import { terminalRowId } from './old-client-session-tab-rows'
+import { projectSessionTabs } from './old-client-session-tabs-projection'
 import { applyLayoutCommand } from './workspace-layout-commands'
 import { build, terminalTab, testContext, WS } from './workspace-layout-command.test-fixture'
 import type { LayoutCommand } from './workspace-layout-command-types'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
 
 const NEW_LEAF = '99999999-9999-4999-8999-999999999999'
+const NO_VIEW = { groups: {}, panes: {}, editorDrafts: {} }
+const NO_FACTS = { tabLabels: {}, terminalRows: {}, browserTabs: {} }
 
 /** Two terminal tabs and a browser tab in one group; the second terminal tab is pinned. */
 function setup() {
@@ -217,11 +222,9 @@ describe('session.tabs translations', () => {
   it('closes a row that is already gone as already closed', () => {
     const { ctx, model } = setup()
     const commands = commandsOf(
-      translateSessionTabClose(WS, model.workspaces[WS], { tabId: 'gone::leaf', force: true })
+      translateSessionTabClose(WS, model.workspaces[WS], { tabId: 'gone::leaf' })
     )
-    expect(commands).toEqual([
-      { type: 'closeTabs', workspace: WS, tabIds: ['gone::leaf'], force: true }
-    ])
+    expect(commands).toEqual([{ type: 'closeTabs', workspace: WS, tabIds: ['gone::leaf'] }])
     const closed = applyLayoutCommand(model, commands[0]!, ctx)
     expect(closed.ok && closed.result.closed).toEqual(['gone::leaf'])
   })
@@ -240,10 +243,7 @@ describe('session.tabs translations', () => {
     })
     expect(
       translateSetTabProps(WS, model.workspaces[WS]!, { tabId: 'gone', isPinned: true })
-    ).toEqual({
-      ok: false,
-      code: 'tab_not_found'
-    })
+    ).toEqual({ ok: true, commands: [] })
   })
 
   it('creates a terminal tab after the tab a row names', () => {
@@ -274,22 +274,46 @@ describe('session.tabs.move translation', () => {
     return model.workspaces[WS]!.groups.find((group) => group.id === groupId)!.tabOrder
   }
 
+  /** Translates against the snapshot the client was shown, as the handler does today. */
+  function move(model: WorkspaceLayoutModel, params: Record<string, unknown>) {
+    const workspace = model.workspaces[WS]!
+    const shown = projectSessionTabs(WS, workspace, NO_VIEW, NO_FACTS, false)
+    return translateSessionTabMove(WS, workspace, shown, MoveTab.parse({ worktree: WS, ...params }))
+  }
+
   it('turns a full reorder into the moves that produce it', () => {
     const { ctx, model, tabA, leafA, tabB, browser } = setup()
     const group = model.workspaces[WS]!.groups[0]!
-    const params = MoveTab.parse({
-      worktree: WS,
-      tabId: browser,
-      targetGroupId: group.id,
-      kind: 'reorder',
-      tabOrder: [browser, terminalRowId(tabA, leafA), tabB]
-    })
-    const commands = commandsOf(translateSessionTabMove(WS, model.workspaces[WS]!, params))
+    const commands = commandsOf(
+      move(model, {
+        tabId: browser,
+        targetGroupId: group.id,
+        kind: 'reorder',
+        tabOrder: [browser, terminalRowId(tabA, leafA), tabB]
+      })
+    )
     expect(groupOrder(build(ctx, commands, model).model, group.id)).toEqual([browser, tabA, tabB])
   })
 
-  it('moves a tab into another group at the index its reorder names', () => {
-    const { ctx, model, tabA, tabB, browser } = setup()
+  it.each([
+    ['a partial order', (ids: string[]) => ids.slice(1)],
+    ['a repeated tab', (ids: string[]) => [ids[0]!, ids[0]!, ids[1]!]],
+    ['an unknown tab', (ids: string[]) => [...ids.slice(0, 2), 'gone']]
+  ])('refuses %s with invalid_tab_order, as today', (_, edit) => {
+    const { model } = setup()
+    const group = model.workspaces[WS]!.groups[0]!
+    expect(
+      move(model, {
+        tabId: group.tabOrder[0],
+        targetGroupId: group.id,
+        kind: 'reorder',
+        tabOrder: edit(group.tabOrder)
+      })
+    ).toEqual({ ok: false, code: 'invalid_tab_order' })
+  })
+
+  it("refuses a tab outside the reordered group and an unknown group with today's codes", () => {
+    const { ctx, model, tabA, tabB } = setup()
     const sourceGroup = model.workspaces[WS]!.groups[0]!.id
     const splitOff = build(
       ctx,
@@ -305,37 +329,45 @@ describe('session.tabs.move translation', () => {
       model
     )
     const target = splitOff.results[0]!.groupId!
-    const params = MoveTab.parse({
-      worktree: WS,
-      tabId: tabA,
-      targetGroupId: target,
-      kind: 'reorder',
-      tabOrder: [tabA, tabB]
+    expect(
+      move(splitOff.model, {
+        tabId: tabA,
+        targetGroupId: target,
+        kind: 'reorder',
+        tabOrder: [tabB]
+      })
+    ).toEqual({ ok: false, code: 'invalid_tab_order' })
+    expect(move(model, { tabId: tabA, targetGroupId: 'gone', kind: 'move-to-group' })).toEqual({
+      ok: false,
+      code: 'target_group_not_found'
     })
-    const commands = commandsOf(translateSessionTabMove(WS, splitOff.model.workspaces[WS]!, params))
-    const moved = build(ctx, commands, splitOff.model).model
-    expect(groupOrder(moved, target)).toEqual([tabA, tabB])
-    expect(groupOrder(moved, sourceGroup)).toEqual([browser])
+    expect(
+      move(model, { tabId: 'gone', targetGroupId: sourceGroup, kind: 'move-to-group' })
+    ).toEqual({ ok: false, code: 'tab_not_found' })
   })
 
-  it('maps move-to-group and split', () => {
+  it('maps move-to-group (shown index to full index) and split', () => {
     const { model, tabA, browser } = setup()
     const workspace = model.workspaces[WS]!
     const groupId = workspace.groups[0]!.id
-    const base = { worktree: WS, tabId: browser, targetGroupId: groupId }
-    expect(
-      translateSessionTabMove(WS, workspace, MoveTab.parse({ ...base, kind: 'move-to-group' }))
-    ).toEqual({
+    const base = { tabId: browser, targetGroupId: groupId }
+    expect(move(model, { ...base, kind: 'move-to-group' })).toEqual({
       ok: true,
       commands: [{ type: 'moveTab', workspace: WS, toGroupId: groupId, tabId: browser, index: 3 }]
     })
-    expect(
-      translateSessionTabMove(
-        WS,
-        workspace,
-        MoveTab.parse({ ...base, tabId: tabA, kind: 'split', splitDirection: 'down' })
-      )
-    ).toEqual({
+    expect(move(model, { ...base, kind: 'move-to-group', index: 1 })).toEqual({
+      ok: true,
+      commands: [
+        {
+          type: 'moveTab',
+          workspace: WS,
+          toGroupId: groupId,
+          tabId: browser,
+          index: workspace.groups[0]!.tabOrder.indexOf(workspace.groups[0]!.tabOrder[1]!)
+        }
+      ]
+    })
+    expect(move(model, { ...base, tabId: tabA, kind: 'split', splitDirection: 'down' })).toEqual({
       ok: true,
       commands: [
         {
@@ -347,13 +379,32 @@ describe('session.tabs.move translation', () => {
         }
       ]
     })
+  })
+})
+
+describe('terminal.close and terminal.closeTab keep the pinned refusal', () => {
+  it('refuses a pinned tab and its last pane, and closes a pane of a split tab', () => {
+    const { ctx, model, tabA, leafA, tabB, leafB } = setup()
+    const pinnedPane = { tab: terminalTab(model, tabB), leafId: leafB }
+    for (const translation of [
+      translateTerminalCloseTab(WS, pinnedPane),
+      translateTerminalClose(WS, pinnedPane)
+    ]) {
+      const commands = commandsOf(translation)
+      expect(commands).toEqual([
+        { type: 'closeTabs', workspace: WS, tabIds: [tabB], refusePinned: true }
+      ])
+      const result = applyLayoutCommand(model, commands[0]!, ctx)
+      expect(result.ok && result.result.refused).toEqual([{ tabId: tabB, code: 'tab_pinned' }])
+    }
+    const split = build(
+      ctx,
+      [{ type: 'splitPane', workspace: WS, tabId: tabA, leafId: leafA, direction: 'vertical' }],
+      model
+    ).model
     expect(
-      translateSessionTabMove(
-        WS,
-        workspace,
-        MoveTab.parse({ ...base, kind: 'reorder', tabOrder: [tabA] })
-      )
-    ).toEqual({ ok: false, code: 'invalid_params' })
+      commandsOf(translateTerminalClose(WS, { tab: terminalTab(split, tabA), leafId: leafA }))
+    ).toEqual([{ type: 'closePane', workspace: WS, tabId: tabA, leafId: leafA }])
   })
 })
 
