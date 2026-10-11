@@ -16,8 +16,9 @@ function toWebBody(response: Readable): ReadableStream<Uint8Array> {
         controller.enqueue(value)
       }
     },
-    async cancel() {
-      await chunks.return?.()
+    cancel() {
+      // Destroy directly: iterator return() would queue behind a pending read on a stalled body.
+      response.destroy()
     }
   })
 }

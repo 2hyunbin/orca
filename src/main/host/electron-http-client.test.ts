@@ -30,13 +30,16 @@ class FakeClientRequest extends Writable {
     return callback
   }
 
-  respond(status: number, text: string): void {
-    const response = Object.assign(Readable.from([Buffer.from(text)]), {
+  respond(status: number, text: string | null): Readable {
+    // null leaves the body stalled after headers.
+    const stream = text === null ? new Readable({ read() {} }) : Readable.from([Buffer.from(text)])
+    const response = Object.assign(stream, {
       statusCode: status,
       statusMessage: 'OK',
       headers: { 'content-type': 'text/plain', 'set-cookie': ['a=1', 'b=2'] }
     })
     this.emit('response', response)
+    return response
   }
 }
 
@@ -171,5 +174,16 @@ describe('electronHttpClient proxy authentication', () => {
 
     await expect(pending).rejects.toBe(reason)
     expect(native.abort).toHaveBeenCalled()
+  })
+
+  it('cancels a stalled response body without waiting for more data', async () => {
+    setElectronProxyCredentialsForSession(mocks.defaultSession, PROXY)
+    const { pending } = await startRequest()
+    const stalled = native.respond(503, null)
+    const response = await pending
+
+    await response.body?.cancel()
+
+    expect(stalled.destroyed).toBe(true)
   })
 })
