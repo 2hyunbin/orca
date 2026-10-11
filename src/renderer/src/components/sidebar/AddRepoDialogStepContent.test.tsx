@@ -148,8 +148,11 @@ describe('AddRepoDialogStepContent nested imports', () => {
     expect(html).toContain('aria-label="Browse host filesystem"')
   })
 
-  it('shows no SSH host step without a paired server to reach it', () => {
-    expect(renderStepContent({ step: 'remote', selectedTargetId: 'openclaw-2' })).toBe('')
+  it('falls back to the start step when no paired server reaches the SSH hosts', () => {
+    const html = renderStepContent({ step: 'remote', selectedTargetId: 'openclaw-2' })
+
+    expect(html).toContain('Browse folder')
+    expect(html).not.toContain('Host path')
   })
 
   it('uses the standard add step for remote Orca server hosts', () => {

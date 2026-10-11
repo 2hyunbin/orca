@@ -140,7 +140,9 @@ export function AddRepoDialogStepContent({
     selectedHostLabel ?? null,
     onOpenRemoteStep
   )
-  if (step === 'add') {
+  // Why the start step for a remote step without a server: SSH hosts hold projects only through
+  // the paired server that reaches them, so there is nothing to show if that server went away.
+  if (step === 'add' || (step === 'remote' && !serverSsh)) {
     return (
       <AddRepoLocalStartStep
         repoCount={repoCount}
@@ -178,7 +180,6 @@ export function AddRepoDialogStepContent({
     )
   }
 
-  // Why only with a server: SSH hosts hold projects through the paired server that reaches them.
   if (step === 'remote' && serverSsh) {
     return (
       <RemoteStep
