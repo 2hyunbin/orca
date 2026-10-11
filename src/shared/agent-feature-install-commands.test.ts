@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildAgentFeatureSkillInstallArgs,
-  buildAgentFeatureSkillInstallCommand,
-  orcaSkillsSourceUrl
+  buildAgentFeatureSkillInstallCommand
 } from './agent-feature-install-commands'
 
 const appVersion = '1.4.222'
@@ -10,8 +9,7 @@ const source = 'https://github.com/stablyai/orca/tree/v1.4.222'
 
 describe('agent feature skill commands', () => {
   it('pins the source to the running release tag', () => {
-    expect(orcaSkillsSourceUrl(appVersion)).toBe(source)
-    expect(orcaSkillsSourceUrl('1.4.178-rc.2')).toBe(
+    expect(buildAgentFeatureSkillInstallArgs(['orca-cli'], { appVersion: '1.4.178-rc.2' })[2]).toBe(
       'https://github.com/stablyai/orca/tree/v1.4.178-rc.2'
     )
   })
