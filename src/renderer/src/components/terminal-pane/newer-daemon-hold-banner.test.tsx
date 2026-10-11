@@ -26,7 +26,6 @@ const FAILED_TITLE = "Couldn't reopen this terminal"
 let paneElement: HTMLDivElement
 let root: Root
 let reopenNewerDaemonTerminals: ReturnType<typeof vi.fn<() => Promise<NewerDaemonReopenResult>>>
-let announceRelease: () => void = () => {}
 
 class ResizeObserverStub {
   observe(): void {}
@@ -64,15 +63,7 @@ beforeEach(() => {
   reopenNewerDaemonTerminals = vi.fn(() => Promise.resolve({ reopened: true }))
   Object.defineProperty(window, 'api', {
     configurable: true,
-    value: {
-      pty: {
-        reopenNewerDaemonTerminals,
-        onNewerDaemonReleased: (callback: () => void) => {
-          announceRelease = callback
-          return () => {}
-        }
-      }
-    }
+    value: { pty: { reopenNewerDaemonTerminals } }
   })
 })
 
@@ -147,7 +138,7 @@ describe('NewerDaemonHoldBanner', () => {
   })
 })
 
-describe('hold phase and release', () => {
+describe('hold phase', () => {
   it('shows a pane held after a failed attempt as held, not failed', async () => {
     reopenNewerDaemonTerminals.mockResolvedValue({ reopened: false })
     holdPaneForNewerDaemon('other-tab:leaf', {
@@ -163,28 +154,6 @@ describe('hold phase and release', () => {
     expect(paneElement.textContent).toContain(TITLE)
     expect(paneElement.textContent).toContain(BODY)
     expect(paneElement.textContent).not.toContain(FAILED_TITLE)
-  })
-
-  it('releases held panes when main announces a stop another surface confirmed, without a toast', async () => {
-    const releasePane = release({ reopened: true, agentResumed: true })
-    holdPaneForNewerDaemon(PANE_KEY, { resumable: true, release: releasePane })
-    await renderBanner()
-    await act(async () => announceRelease())
-    expect(releasePane).toHaveBeenCalledOnce()
-    expect(paneElement.textContent).toBe('')
-    expect(toast.success).not.toHaveBeenCalled()
-  })
-
-  it('releases once, with one toast, when this window clicked and main also announces', async () => {
-    const releasePane = release({ reopened: true, agentResumed: false })
-    reopenNewerDaemonTerminals.mockImplementation(async () => {
-      announceRelease()
-      return { reopened: true }
-    })
-    holdPaneForNewerDaemon(PANE_KEY, { resumable: false, release: releasePane })
-    await reopenHeldTerminals()
-    expect(releasePane).toHaveBeenCalledOnce()
-    expect(toast.success).toHaveBeenCalledOnce()
   })
 })
 

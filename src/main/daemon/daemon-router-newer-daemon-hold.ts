@@ -8,15 +8,14 @@ import type { DaemonSessionOwnerResolver } from './daemon-session-owner-resoluti
  * The adapter a spawn routes to, refusing with the hold marker a cold restore of an id no adopted
  * daemon owns while a newer daemon this build cannot adopt may still run it. Why at the router:
  * every spawn source (IPC, runtime controller, mobile, CLI) reaches it, and restoring would start
- * a second shell, and agent, beside the newer build's still-running one. Synchronous when nothing
- * is held, so the common spawn pays no extra tick.
+ * a second shell, and agent, beside the newer build's still-running one.
  */
-export function routeUnlessNewerDaemonHolds(
+export async function routeSpawnOrHold(
   opts: Pick<PtySpawnOptions, 'sessionId'>,
   routed: DaemonPtyAdapter | undefined,
   current: DaemonPtyAdapter,
   ownerResolver: DaemonSessionOwnerResolver<DaemonPtyAdapter>
-): DaemonPtyAdapter | Promise<DaemonPtyAdapter> {
+): Promise<DaemonPtyAdapter> {
   const { sessionId } = opts
   if (
     routed ||
@@ -27,10 +26,9 @@ export function routeUnlessNewerDaemonHolds(
     return routed ?? current
   }
   // Why: an unanswered inventory holds too; a wrong hold costs a click, a wrong release an agent.
-  return ownerResolver.resolve(sessionId).then((resolution) => {
-    if (resolution.kind !== 'owner') {
-      throw new Error(NEWER_DAEMON_HOLD_ERROR)
-    }
-    return resolution.provider
-  })
+  const resolution = await ownerResolver.resolve(sessionId)
+  if (resolution.kind !== 'owner') {
+    throw new Error(NEWER_DAEMON_HOLD_ERROR)
+  }
+  return resolution.provider
 }

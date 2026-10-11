@@ -159,8 +159,6 @@ export type PtyApi = {
   readNewerDaemonHold: (sessionId: string) => Promise<NewerDaemonHold>
   /** Stops the newer daemons; reopened only once each is confirmed exited. */
   reopenNewerDaemonTerminals: () => Promise<NewerDaemonReopenResult>
-  /** Fires once main confirms the newer daemons stopped, so held panes may reconnect. */
-  onNewerDaemonReleased: (callback: () => void) => () => void
   getCwd: (id: string) => Promise<string>
   getSize: (id: string) => Promise<{ cols: number; rows: number } | null>
   listSessions: (scope?: PtySessionListScope) => Promise<PtyListedSession[]>

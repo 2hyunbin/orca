@@ -41,8 +41,7 @@ beforeEach(() => {
     value: {
       pty: {
         readNewerDaemonHold,
-        reopenNewerDaemonTerminals: vi.fn(() => Promise.resolve({ reopened: true })),
-        onNewerDaemonReleased: vi.fn(() => () => {})
+        reopenNewerDaemonTerminals: vi.fn(() => Promise.resolve({ reopened: true }))
       }
     }
   })

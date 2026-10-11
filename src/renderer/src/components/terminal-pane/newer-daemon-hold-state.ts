@@ -13,11 +13,8 @@ type HeldPane = {
 
 export type NewerDaemonHoldPhase = 'held' | 'reopening' | 'failed'
 
-const heldPanes = new Map<string, HeldPane>()
-// Why per pane: a pane held after a failed attempt has not failed anything yet.
-const failedPanes = new WeakSet<HeldPane>()
-let reopening = false
-let releaseSubscription: (() => void) | null = null
+// Why a phase per pane: a pane held after a failed attempt has not failed anything yet.
+const heldPanes = new Map<string, HeldPane & { phase: NewerDaemonHoldPhase }>()
 let version = 0
 const listeners = new Set<() => void>()
 
@@ -44,18 +41,23 @@ async function releaseHeldPanes(): Promise<HeldPaneReopenOutcome[]> {
   )
 }
 
+function setPhase(
+  panes: readonly { phase: NewerDaemonHoldPhase }[],
+  phase: NewerDaemonHoldPhase
+): void {
+  for (const pane of panes) {
+    pane.phase = phase
+  }
+  notify()
+}
+
 /** Registers a held pane; the returned teardown forgets it if it unmounts while held. */
 export function holdPaneForNewerDaemon(paneKey: string, pane: HeldPane): () => void {
-  // Why: main announces a confirmed stop; this window's own click releases on its reply instead.
-  releaseSubscription ??= window.api.pty.onNewerDaemonReleased(() => {
-    if (!reopening) {
-      void releaseHeldPanes()
-    }
-  })
-  heldPanes.set(paneKey, pane)
+  const entry: HeldPane & { phase: NewerDaemonHoldPhase } = { ...pane, phase: 'held' }
+  heldPanes.set(paneKey, entry)
   notify()
   return () => {
-    if (heldPanes.get(paneKey) === pane) {
+    if (heldPanes.get(paneKey) === entry) {
       heldPanes.delete(paneKey)
       notify()
     }
@@ -67,11 +69,7 @@ export function useNewerDaemonHold(
 ): { resumable: boolean; phase: NewerDaemonHoldPhase } | null {
   useSyncExternalStore(subscribe, () => version)
   const pane = heldPanes.get(paneKey)
-  if (!pane) {
-    return null
-  }
-  const phase = reopening ? 'reopening' : failedPanes.has(pane) ? 'failed' : 'held'
-  return { resumable: pane.resumable, phase }
+  return pane ? { resumable: pane.resumable, phase: pane.phase } : null
 }
 
 export function announceReopenedTerminals(outcomes: readonly HeldPaneReopenOutcome[]): void {
@@ -103,23 +101,19 @@ export function announceReopenedTerminals(outcomes: readonly HeldPaneReopenOutco
 
 /** Stops the newer daemon, then lets every held pane through its normal restore path. */
 export async function reopenHeldTerminals(): Promise<void> {
-  if (reopening) {
+  const attempt = [...heldPanes.values()]
+  if (attempt.some((pane) => pane.phase === 'reopening')) {
     return
   }
-  reopening = true
-  notify()
+  setPhase(attempt, 'reopening')
   let reopened = false
   try {
     reopened = (await window.api.pty.reopenNewerDaemonTerminals()).reopened
   } catch {
     reopened = false
   }
-  reopening = false
   if (!reopened) {
-    for (const pane of heldPanes.values()) {
-      failedPanes.add(pane)
-    }
-    notify()
+    setPhase(attempt, 'failed')
     return
   }
   announceReopenedTerminals(await releaseHeldPanes())
@@ -128,8 +122,5 @@ export async function reopenHeldTerminals(): Promise<void> {
 /** Test seam: module state outlives a test file's renders. */
 export function resetNewerDaemonHoldStateForTests(): void {
   heldPanes.clear()
-  reopening = false
-  releaseSubscription?.()
-  releaseSubscription = null
   notify()
 }

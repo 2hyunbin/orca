@@ -17,7 +17,7 @@ import type { DaemonPtyRouterDataEvent, DaemonPtyRouterExitEvent } from './daemo
 import { DaemonSessionOwnerResolver } from './daemon-session-owner-resolution'
 import type { DaemonIdleRetirementResult } from './daemon-pty-runtime-state'
 import { DaemonRouterRetirement } from './daemon-router-retirement'
-import { routeUnlessNewerDaemonHolds } from './daemon-router-newer-daemon-hold'
+import { routeSpawnOrHold } from './daemon-router-newer-daemon-hold'
 import type { WriteSettlement } from '../../shared/pty-write-settlement'
 import type { TerminalOscColorQueryReplyColors } from '../../shared/terminal-osc-color-reply'
 
@@ -60,8 +60,7 @@ export class DaemonPtyRouter implements IPtyProvider {
         return await this.ownerResolver.spawnAttachOnly({ ...opts, sessionId: opts.sessionId })
       }
       const adapter = opts.sessionId ? this.sessionAdapters.get(opts.sessionId) : undefined
-      const routed = routeUnlessNewerDaemonHolds(opts, adapter, this.current, this.ownerResolver)
-      const target = routed instanceof Promise ? await routed : routed
+      const target = await routeSpawnOrHold(opts, adapter, this.current, this.ownerResolver)
       const result = await target.spawn(opts)
       // Why: the adapter filters intentional recovery exits and canonical-ID races before publishing proof.
       if (!result.exitedBeforeSpawnReply) {
