@@ -1,20 +1,24 @@
 import { hkdf } from '@noble/hashes/hkdf'
 import { sha256 } from '@noble/hashes/sha256'
 
+// Why: pure JS so clients without crypto.subtle (web on http://<lan-ip>, Hermes)
+// derive the same v2 keys as the host's node:crypto schedule.
 const SALT_LABEL = new TextEncoder().encode('orca-mobile-e2ee/v2/salt\0')
 const INFO_LABEL = new TextEncoder().encode('orca-mobile-e2ee/v2/session\0')
 
-export function deriveMobileE2EEV2KeySchedule(args: {
-  sharedSecret: Uint8Array
-  transcript: Uint8Array
-  clientNonce: Uint8Array
-  desktopNonce: Uint8Array
-}): {
+export type PairedE2EEV2KeySchedule = {
   mobileToDesktopKey: Uint8Array
   desktopToMobileKey: Uint8Array
   sessionId: Uint8Array
   transcriptHash: Uint8Array
-} {
+}
+
+export function derivePairedE2EEV2KeySchedule(args: {
+  sharedSecret: Uint8Array
+  transcript: Uint8Array
+  clientNonce: Uint8Array
+  desktopNonce: Uint8Array
+}): PairedE2EEV2KeySchedule {
   requireLength(args.sharedSecret, 32, 'shared secret')
   requireLength(args.clientNonce, 32, 'client nonce')
   requireLength(args.desktopNonce, 32, 'desktop nonce')
