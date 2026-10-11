@@ -16,21 +16,24 @@ import { useLiveWorktreeName } from './use-live-worktree-name'
 import { useMissingWorktreeBounce } from './use-missing-worktree-bounce'
 import { hostRouteWithNotice } from '../host-route-notice'
 import { useHostProtocolGates } from '../components/HostProtocolGate'
+import { firstParam } from '../navigation/route-param-reader'
 
 export function useMobileSessionFoundation() {
   const {
-    hostId,
-    worktreeId,
+    hostId: routeHostId,
+    worktreeId: routeWorktreeId,
     name: routeWorktreeName,
     created,
     warning: createdWarning
   } = useLocalSearchParams<{
-    hostId: string
-    worktreeId: string
+    hostId: string | string[]
+    worktreeId: string | string[]
     name?: string
     created?: string
     warning?: string
   }>()
+  const hostId = firstParam(routeHostId)
+  const worktreeId = firstParam(routeWorktreeId)
   const isFolderWorkspaceRoute = worktreeId.startsWith('folder:') // Synthetic ids have no repo scope.
   // Why: the floating sentinel has no repo/worktree, so repo-backed surfaces hide.
   const isFloatingWorkspaceRoute = isFloatingWorkspaceWorktreeId(worktreeId)

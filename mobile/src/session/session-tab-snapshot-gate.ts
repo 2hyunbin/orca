@@ -50,11 +50,11 @@ function topLevelTabId(tab: MobileSessionTab): string {
 /** Records a close the host accepted, so lists it publishes before removing the tab stay without it. */
 export function recordAcceptedTabClose(
   ledger: SessionTabCloseLedger,
-  worktreeId: string,
+  partition: string,
   tabId: string,
   now: number
 ): void {
-  const ticket = ledger.begin(worktreeId, tabId, now)
+  const ticket = ledger.begin(partition, tabId, now)
   if (ticket) {
     ledger.settle(ticket, 'closed', now)
   }
@@ -66,10 +66,10 @@ export function recordAcceptedTabClose(
  */
 export function hidePendingTabCloses(
   ledger: SessionTabCloseLedger,
-  worktreeId: string,
+  partition: string,
   tabs: MobileSessionTab[],
   now: number
 ): MobileSessionTab[] {
-  const visible = ledger.filter(worktreeId, tabs, topLevelTabId, now)
+  const visible = ledger.filter(partition, tabs, topLevelTabId, now)
   return visible === tabs ? tabs : [...visible]
 }

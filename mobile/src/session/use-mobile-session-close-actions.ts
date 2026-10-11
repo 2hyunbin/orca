@@ -1,3 +1,6 @@
+import { useMemo } from 'react'
+import { sessionTabCloseAnswerOutcome } from '../../../src/shared/session-tab-close-answer'
+import { useCommittedOperationOwnership } from '../transport/use-committed-operation-ownership'
 import { pendingSelectionTabId, withoutPendingHandle } from './pending-session-selection'
 import {
   sessionTabClose,
@@ -10,6 +13,7 @@ import type { MobileSessionContentCreateActionsModel } from './use-mobile-sessio
 
 export function useMobileSessionCloseActions(scope: MobileSessionContentCreateActionsModel) {
   const {
+    hostId,
     worktreeId,
     client,
     setTerminals,
@@ -21,6 +25,7 @@ export function useMobileSessionCloseActions(scope: MobileSessionContentCreateAc
     sessionTabsRef,
     reconcileBufferedDraftsRef,
     closedTabLedger,
+    closedTabPartition,
     clearTerminalLiveInputDefault,
     setActiveHandle,
     setActiveSessionTabId,
@@ -39,6 +44,8 @@ export function useMobileSessionCloseActions(scope: MobileSessionContentCreateAc
     subscribeToTerminal,
     fetchTerminals
   } = scope
+  const localOwner = useMemo(() => ({ hostId, worktreeId, client }), [hostId, worktreeId, client])
+  const captureLocalOwnership = useCommittedOperationOwnership(localOwner)
   async function handleRenameTerminal(value: string) {
     if (!client || !renameTarget) {
       return
@@ -110,6 +117,7 @@ export function useMobileSessionCloseActions(scope: MobileSessionContentCreateAc
     if (!client) {
       return
     }
+    const isCurrentRoute = captureLocalOwnership()
     try {
       const response = sessionTabClose.interpret(
         await sessionTabClose.request(client, {
@@ -120,7 +128,12 @@ export function useMobileSessionCloseActions(scope: MobileSessionContentCreateAc
           reason: 'user'
         })
       )
-      if (response.accepted) {
+      if (response.accepted && sessionTabCloseAnswerOutcome(response.value) === 'closed') {
+        recordAcceptedTabClose(closedTabLedger, closedTabPartition, tab.id, Date.now())
+        // Record the captured host's acceptance even when this activation has retired.
+        if (!isCurrentRoute()) {
+          return
+        }
         if (tab.type === 'markdown') {
           setMarkdownDocs((prev) => {
             const doc = prev.get(tab.id)
@@ -156,8 +169,6 @@ export function useMobileSessionCloseActions(scope: MobileSessionContentCreateAc
         }
         sessionTabsRef.current = remainingTabs
         setSessionTabs(remainingTabs)
-        // Why: hide the closed tab and rely on the snapshot, not a blind refetch that often re-added the not-yet-closed tab.
-        recordAcceptedTabClose(closedTabLedger, worktreeId, tab.id, Date.now())
         // Why: bulk close re-activates the anchor before awaiting each close;
         // the render-synced ref sees that switch while this closure would not,
         // so comparing against the ref keeps the anchor from being nulled out.

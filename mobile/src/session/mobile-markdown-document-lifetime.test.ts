@@ -53,6 +53,8 @@ function mountDocuments(readReply: () => Promise<RpcResponse>) {
         setMarkdownDocs: setDocs,
         reconcileBufferedDraftsRef: { current: () => {} },
         closedTabLedger: new SessionTabCloseLedger(),
+        closedTabPartition: 'test-partition',
+        hostId: 'test-host',
         activeSessionTabIdRef: { current: null },
         selectedSessionTabIdRef: { current: null },
         activeSessionTabTypeRef: { current: null },

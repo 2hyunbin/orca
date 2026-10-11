@@ -57,12 +57,18 @@ function pane(parent: string, leaf: string): MobileSessionTab {
 function sessionScreen(initialTabs: MobileSessionTab[]) {
   const closedTabLedger = new SessionTabCloseLedger()
   const sessionTabsRef = { current: initialTabs }
-  let closeReply = accepted
+  let closeReply: RpcResponse | Error = accepted
   let version = 0
   const client = {
-    sendRequest: vi.fn(async (method: string) =>
-      method === 'session.tabs.close' ? closeReply : accepted
-    )
+    sendRequest: vi.fn(async (method: string) => {
+      if (method !== 'session.tabs.close') {
+        return accepted
+      }
+      if (closeReply instanceof Error) {
+        throw closeReply
+      }
+      return closeReply
+    })
   }
   const refs = {
     activeSessionTabIdRef: { current: null },
@@ -85,6 +91,8 @@ function sessionScreen(initialTabs: MobileSessionTab[]) {
         sessionTabsRef,
         setSessionTabs: () => {},
         closedTabLedger,
+        closedTabPartition: WT,
+        hostId: 'test-host',
         setFileDocs: () => {},
         terminalRefs: { current: new Map() },
         unsubscribeTerminal: () => {},
@@ -100,6 +108,7 @@ function sessionScreen(initialTabs: MobileSessionTab[]) {
         sessionTabsRef,
         setSessionTabs: () => {},
         closedTabLedger,
+        closedTabPartition: WT,
         appliedSnapshotMarkerRef: { current: { epoch: null, version: -1 } },
         appliedSessionTabsRevisionRef: { current: 0 },
         markdownDocsRef: { current: new Map() },
@@ -126,6 +135,7 @@ function sessionScreen(initialTabs: MobileSessionTab[]) {
         sessionTabsRef,
         terminalsRef: { current: [] },
         closedTabLedger,
+        closedTabPartition: WT,
         nativeChatStream: { hasTabsRecoveryNeed: () => false },
         terminalGestureInputQueuesRef: { current: new Map() },
         terminalGestureInputInFlightRef: { current: new Set() },
@@ -143,7 +153,7 @@ function sessionScreen(initialTabs: MobileSessionTab[]) {
   return {
     visibleIds: () => sessionTabsRef.current.map((tab) => tab.id),
     pollingForCloses: () => reconciliation.hasRecoveryNeed?.() ?? false,
-    setCloseReply(reply: RpcResponse) {
+    setCloseReply(reply: RpcResponse | Error) {
       closeReply = reply
     },
     close(tab: MobileSessionTab) {
@@ -167,6 +177,21 @@ function sessionScreen(initialTabs: MobileSessionTab[]) {
 }
 
 describe('a tab the host accepted closing', () => {
+  it('ends screen recovery at the backstop without applying another host list', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const screen = sessionScreen([file('a'), file('b')])
+    try {
+      await screen.close(file('a'))
+      expect(screen.pollingForCloses()).toBe(true)
+      clock.mockReturnValue(21_001)
+      expect(screen.pollingForCloses()).toBe(false)
+      expect(screen.visibleIds()).toEqual(['b'])
+    } finally {
+      screen.dispose()
+      clock.mockRestore()
+    }
+  })
+
   it('stays hidden from host lists that still name it and ends at the first list without it', async () => {
     const screen = sessionScreen([file('a'), file('b')])
     try {
@@ -194,9 +219,72 @@ describe('a tab the host accepted closing', () => {
     try {
       screen.setCloseReply(refused)
       await screen.close(file('a'))
+      expect(screen.visibleIds()).toEqual(['a', 'b'])
       expect(screen.pollingForCloses()).toBe(false)
       screen.applyHostList([file('a'), file('b')])
       expect(screen.visibleIds()).toEqual(['a', 'b'])
+    } finally {
+      screen.dispose()
+    }
+  })
+
+  it('keeps a live tab when a successful reply refuses the close and republishes it', async () => {
+    const liveTabs = [pane('tab', 'left'), pane('tab', 'right')]
+    const screen = sessionScreen(liveTabs)
+    try {
+      screen.setCloseReply({
+        ...accepted,
+        result: {
+          closed: true,
+          refused: true,
+          refusalReason: 'stale-terminal',
+          snapshotRepublished: true
+        }
+      })
+      await screen.close(pane('tab', 'left'))
+      expect(screen.visibleIds()).toEqual(['tab::left', 'tab::right'])
+      expect(screen.pollingForCloses()).toBe(false)
+      screen.applyHostList(liveTabs)
+      expect(screen.visibleIds()).toEqual(['tab::left', 'tab::right'])
+    } finally {
+      screen.dispose()
+    }
+  })
+
+  it('keeps the desktop dead-leaf policy when a refusal republishes no tab', async () => {
+    const screen = sessionScreen([pane('tab', 'left'), pane('tab', 'right')])
+    try {
+      screen.setCloseReply({
+        ...accepted,
+        result: { closed: true, refused: true, refusalReason: 'live-host-pty' }
+      })
+      await screen.close(pane('tab', 'left'))
+      expect(screen.visibleIds()).toEqual(['tab::right'])
+      expect(screen.pollingForCloses()).toBe(true)
+    } finally {
+      screen.dispose()
+    }
+  })
+
+  it.each([null, undefined])('keeps legacy success compatible with result %s', async (result) => {
+    const screen = sessionScreen([file('a'), file('b')])
+    try {
+      screen.setCloseReply({ ...accepted, result })
+      await screen.close(file('a'))
+      expect(screen.visibleIds()).toEqual(['b'])
+      expect(screen.pollingForCloses()).toBe(true)
+    } finally {
+      screen.dispose()
+    }
+  })
+
+  it('keeps the tab and records nothing when transport fails', async () => {
+    const screen = sessionScreen([file('a'), file('b')])
+    try {
+      screen.setCloseReply(new Error('Connection lost'))
+      await screen.close(file('a'))
+      expect(screen.visibleIds()).toEqual(['a', 'b'])
+      expect(screen.pollingForCloses()).toBe(false)
     } finally {
       screen.dispose()
     }

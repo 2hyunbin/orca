@@ -131,6 +131,8 @@ export function sessionScreenTabMountAdapters(
             },
             reconcileBufferedDraftsRef: { current: () => {} },
             closedTabLedger: new SessionTabCloseLedger(),
+            closedTabPartition: 'test-partition',
+            hostId: 'test-host',
             clearTerminalLiveInputDefault: (handle: string) =>
               effect('clear-live-input', { handle }),
             setActiveHandle: (value) => {

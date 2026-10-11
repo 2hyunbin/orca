@@ -57,7 +57,8 @@ let closeLedger: SessionTabCloseLedger | null = null
 let hostListsClosedTabUntil = 0
 const CLOSE_PARTITION = 'repo::worktree'
 const CLOSED_TAB = 'closed-tab'
-const hasRecoveryNeed = () => recoveryNeeded || (closeLedger?.hasPending(CLOSE_PARTITION) ?? false)
+const hasRecoveryNeed = () =>
+  recoveryNeeded || (closeLedger?.hasPending(CLOSE_PARTITION, Date.now()) ?? false)
 const subscribe = vi.fn()
 const unsubscribe = vi.fn()
 let streamListener: ((payload: unknown) => void) | null = null
@@ -607,7 +608,7 @@ describe('useMobileSessionTabsReconciliation', () => {
 
     // Lists at 2 s and 4 s still name the tab; the 6 s list omits it and ends the close.
     expect(sendRequest).toHaveBeenCalledTimes(3)
-    expect(closeLedger.hasPending(CLOSE_PARTITION)).toBe(false)
+    expect(closeLedger.hasPending(CLOSE_PARTITION, Date.now())).toBe(false)
   })
 
   it('stops polling for a close no list confirms once its backstop passes', async () => {
@@ -623,9 +624,9 @@ describe('useMobileSessionTabsReconciliation', () => {
       await vi.advanceTimersByTimeAsync(60_000)
     })
 
-    // The 22 s list is the first past the 20 s backstop; it drops the entry and polling ends.
-    expect(sendRequest).toHaveBeenCalledTimes(11)
-    expect(closeLedger.hasPending(CLOSE_PARTITION)).toBe(false)
+    // The 22 s tick expires the close before issuing another list.
+    expect(sendRequest).toHaveBeenCalledTimes(10)
+    expect(closeLedger.hasPending(CLOSE_PARTITION, Date.now())).toBe(false)
   })
 
   it('keeps the controller and physical subscription stable across route rerenders', async () => {

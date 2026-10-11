@@ -7,6 +7,10 @@ export type MobileSessionRouteParams = {
   name?: string
 }
 
+export function mobileSessionRouteIdentity(hostId: string, worktreeId: string): string {
+  return JSON.stringify([hostId, worktreeId])
+}
+
 /** Identities stay raw — the navigator owns the params, so pre-encoding a
  *  workspace id would reach the session screen still escaped. */
 export function mobileSessionRouteTarget({

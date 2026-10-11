@@ -35,6 +35,7 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
     appliedSnapshotMarkerRef,
     appliedSessionTabsRevisionRef,
     closedTabLedger,
+    closedTabPartition,
     reconcileBufferedDraftsRef,
     setTerminalsLoaded,
     defaultTerminalHandlesToLiveInput,
@@ -65,7 +66,12 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
         return { accepted: false }
       }
       const applicationRevision = ++appliedSessionTabsRevisionRef.current
-      let nextTabs = hidePendingTabCloses(closedTabLedger, worktreeId, result.tabs, Date.now())
+      let nextTabs = hidePendingTabCloses(
+        closedTabLedger,
+        closedTabPartition,
+        result.tabs,
+        Date.now()
+      )
       const presentTabIds = new Set(nextTabs.map((tab) => tab.id))
       const orphanedDraftTabs: MobileSessionTab[] = []
       const currentMarkdownDocs = markdownDocsRef.current
@@ -238,6 +244,7 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
     },
     [
       closedTabLedger,
+      closedTabPartition,
       defaultTerminalHandlesToLiveInput,
       subscribeToTerminal,
       unsubscribeTerminal,

@@ -26,6 +26,7 @@ import type {
 } from './mobile-session-route-types'
 import { useMobileSessionTabActionTargets } from './use-mobile-session-tab-action-targets'
 import type { MobileSessionFoundationModel } from './use-mobile-session-foundation'
+import { mobileSessionRouteIdentity } from './mobile-session-route'
 
 export function useMobileSessionScreenState(scope: MobileSessionFoundationModel) {
   const { worktreeId, hostId, initialCreateWarning } = scope
@@ -38,6 +39,7 @@ export function useMobileSessionScreenState(scope: MobileSessionFoundationModel)
   const appliedSessionTabsRevisionRef = useRef(0)
   // Why: after the host accepts a close, hide the tab until a snapshot omits it, so an in-flight snapshot can't flash it back.
   const [closedTabLedger] = useState(() => new SessionTabCloseLedger())
+  const closedTabPartition = mobileSessionRouteIdentity(hostId, worktreeId)
   const [terminalsLoaded, setTerminalsLoaded] = useWorktreeSessionTabsLoaded(worktreeId)
   const [input, setInput] = useState('')
   // Why: baseline terminal zoom reloaded on focus so a Settings → Terminal change applies in place (panes stay mounted).
@@ -138,6 +140,7 @@ export function useMobileSessionScreenState(scope: MobileSessionFoundationModel)
     appliedSnapshotMarkerRef,
     appliedSessionTabsRevisionRef,
     closedTabLedger,
+    closedTabPartition,
     terminalsLoaded,
     setTerminalsLoaded,
     input,

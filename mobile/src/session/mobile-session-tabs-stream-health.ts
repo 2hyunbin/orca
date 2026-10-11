@@ -82,7 +82,8 @@ export class MobileSessionTabsStreamHealth<Result, Tab> {
     if (!this.options.hasRecoveryNeed()) {
       return Promise.resolve()
     }
-    return this.requestReconciliation()
+    this.syncGeneration()
+    return this.startCurrentRequest()
   }
 
   retryReconciliation(): Promise<void> {
@@ -114,7 +115,7 @@ export class MobileSessionTabsStreamHealth<Result, Tab> {
         return null
       }
     }
-    return this.ensureReconciliation()
+    return this.health === 'live' ? this.startCurrentRequest() : this.ensureReconciliation()
   }
 
   setReconciliationActive(active: boolean): void {

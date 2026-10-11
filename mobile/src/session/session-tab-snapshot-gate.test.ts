@@ -102,14 +102,14 @@ describe('hidePendingTabCloses', () => {
     recordAcceptedTabClose(ledger, WT, 'a', NOW)
     expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], NOW))).toEqual(['b'])
     expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], NOW + 1000))).toEqual(['b'])
-    expect(ledger.hasPending(WT)).toBe(true)
+    expect(ledger.hasPending(WT, NOW)).toBe(true)
   })
 
   it('ends the close at the first snapshot that omits the tab', () => {
     const ledger = new SessionTabCloseLedger()
     recordAcceptedTabClose(ledger, WT, 'a', NOW)
     expect(ids(hidePendingTabCloses(ledger, WT, [file('b')], NOW))).toEqual(['b'])
-    expect(ledger.hasPending(WT)).toBe(false)
+    expect(ledger.hasPending(WT, NOW)).toBe(false)
     // A later tab with the same id (reopened) is shown.
     expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], NOW))).toEqual(['a', 'b'])
   })
@@ -119,7 +119,7 @@ describe('hidePendingTabCloses', () => {
     recordAcceptedTabClose(ledger, WT, 'a', NOW)
     const late = NOW + SESSION_TAB_CLOSE_SETTLED_TTL_MS + 1
     expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], late))).toEqual(['a', 'b'])
-    expect(ledger.hasPending(WT)).toBe(false)
+    expect(ledger.hasPending(WT, late)).toBe(false)
   })
 
   it('hides only the closed pane of a split terminal', () => {

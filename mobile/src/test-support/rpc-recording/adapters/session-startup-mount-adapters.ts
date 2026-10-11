@@ -55,7 +55,7 @@ export function sessionStartupMountAdapters(
       const appliedSnapshotMarkerRef = { current: { epoch: 'epoch-0', version: 7 } }
       const closedTabLedger = new SessionTabCloseLedger()
       // A close pending from the previous route, which the reset must drop.
-      closedTabLedger.begin(WORKTREE_ID, 'tab-closed-on-previous-route', 0)
+      closedTabLedger.begin(WORKTREE_ID, 'tab-closed-on-previous-route', Date.now())
       const terminalGestureInputQueuesRef = { current: new Map<string, never>() }
       const terminalGestureInputInFlightRef = { current: new Set<string>() }
       const sessionTabActionSheetRequestSeqRef = { current: 0 }
@@ -149,7 +149,7 @@ export function sessionStartupMountAdapters(
           activeHandle,
           initializedHandles: [...initializedHandlesRef.current].sort(),
           appliedSnapshotMarker: appliedSnapshotMarkerRef.current,
-          pendingTabCloses: closedTabLedger.hasPending(WORKTREE_ID),
+          pendingTabCloses: closedTabLedger.hasPending(WORKTREE_ID, Date.now()),
           actionSheetRequestSeq: sessionTabActionSheetRequestSeqRef.current
         }),
         dispose: hook.unmount

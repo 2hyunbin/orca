@@ -88,6 +88,8 @@ function previewSession() {
         setFileDocs,
         reconcileBufferedDraftsRef: { current: () => {} },
         closedTabLedger: new SessionTabCloseLedger(),
+        closedTabPartition: 'test-partition',
+        hostId: 'test-host',
         pendingBrowserFocusPageIdRef: { current: null },
         activeSessionTabIdRef: { current: keptTab.id }
       })

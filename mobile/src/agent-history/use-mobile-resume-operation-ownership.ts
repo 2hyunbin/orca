@@ -1,4 +1,5 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
+import { useCommittedOperationOwnership } from '../transport/use-committed-operation-ownership'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 
@@ -13,17 +14,12 @@ export function useMobileResumeOperationOwnership(
     () => ({ hostId, worktreeId, client, connection, generation }),
     [hostId, worktreeId, client, connection, generation]
   )
-  const currentOwner = useRef<typeof owner | null>(owner)
-  useLayoutEffect(() => {
-    currentOwner.current = owner
+  const captureOwnership = useCommittedOperationOwnership(owner)
+  return useCallback(() => {
+    const isCurrentOwner = captureOwnership()
     return () => {
-      currentOwner.current = null
-    }
-  }, [owner])
-  return useCallback(
-    () => () => {
       if (
-        currentOwner.current !== owner ||
+        !isCurrentOwner() ||
         owner.connection !== 'connected' ||
         !owner.client ||
         owner.client.getState() !== 'connected' ||
@@ -31,7 +27,6 @@ export function useMobileResumeOperationOwnership(
       ) {
         throw new Error('Host connection changed. Retry resume.')
       }
-    },
-    [owner]
-  )
+    }
+  }, [captureOwnership, owner])
 }

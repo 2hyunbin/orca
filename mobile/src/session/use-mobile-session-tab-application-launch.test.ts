@@ -70,6 +70,7 @@ function scope(pending: PendingSessionSelection | null) {
       appliedSessionTabsRevisionRef: { current: 0 },
       worktreeId: 'workspace-1',
       closedTabLedger: new SessionTabCloseLedger(),
+      closedTabPartition: 'test-partition',
       reconcileBufferedDraftsRef: { current: vi.fn() },
       setTerminalsLoaded: vi.fn(),
       defaultTerminalHandlesToLiveInput: vi.fn(),
