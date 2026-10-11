@@ -4,8 +4,8 @@ import { z } from 'zod'
 import type { AutomaticWorkMode } from './host-spawn-admission'
 
 export type BootIdentity = {
-  /** Wall-clock boot time; drifts with clock changes, so compared with a tolerance. */
-  bootTimeMs: number
+  /** Wall-clock boot time, compared with a tolerance; null where it cannot identify a boot. */
+  bootTimeMs: number | null
   /** Exact per-boot id where the OS exposes one (Linux). */
   bootId: string | null
 }
@@ -23,6 +23,9 @@ const BOOT_TIME_TOLERANCE_MS = 120_000
 export function isSameBoot(a: BootIdentity, b: BootIdentity): boolean {
   if (a.bootId !== null && b.bootId !== null) {
     return a.bootId === b.bootId
+  }
+  if (a.bootTimeMs === null || b.bootTimeMs === null) {
+    return false
   }
   return Math.abs(a.bootTimeMs - b.bootTimeMs) <= BOOT_TIME_TOLERANCE_MS
 }
@@ -51,7 +54,7 @@ export function decideStartupAutomaticWorkMode(
 
 const MarkerSchema = z.object({
   schemaVersion: z.literal(1),
-  boot: z.object({ bootTimeMs: z.number().finite(), bootId: z.string().nullable() }),
+  boot: z.object({ bootTimeMs: z.number().finite().nullable(), bootId: z.string().nullable() }),
   state: z.enum(['running', 'clean-exit']),
   mode: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('normal') }),

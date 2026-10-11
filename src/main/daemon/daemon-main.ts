@@ -2,8 +2,7 @@ import { DaemonServer } from './daemon-server'
 import type { DaemonServerOptions } from './daemon-server-options'
 import type { DaemonFileLog } from './daemon-file-log'
 import { readTerminalSpawnAdmissionArg } from './terminal-spawn-gate'
-import { dirname, join } from 'node:path'
-import { AUTOMATIC_WORK_MARKER_FILE } from './automatic-work-run-marker-store'
+import { automaticWorkMarkerPathFor } from './automatic-work-run-marker-store'
 
 export type DaemonStartOptions = {
   socketPath: string
@@ -31,6 +30,8 @@ export type DaemonStartOptions = {
 
 export type DaemonHandle = {
   shutdown(): Promise<void>
+  /** Marks this run as ended on purpose when the process exits without a teardown. */
+  recordOrderlyExit(): void
 }
 
 export async function startDaemon(opts: DaemonStartOptions): Promise<DaemonHandle> {
@@ -60,8 +61,7 @@ export async function startDaemon(opts: DaemonStartOptions): Promise<DaemonHandl
     ...(opts.automaticWorkMarkerPath || opts.pidPath
       ? {
           automaticWorkMarkerPath:
-            opts.automaticWorkMarkerPath ??
-            join(dirname(opts.pidPath ?? ''), AUTOMATIC_WORK_MARKER_FILE)
+            opts.automaticWorkMarkerPath ?? automaticWorkMarkerPathFor(opts.pidPath ?? '')
         }
       : {}),
     ...(opts.onIdleShutdown ? { onIdleShutdown: opts.onIdleShutdown } : {}),
@@ -74,6 +74,7 @@ export async function startDaemon(opts: DaemonStartOptions): Promise<DaemonHandl
   await server.start()
 
   return {
-    shutdown: () => server.shutdown()
+    shutdown: () => server.shutdown(),
+    recordOrderlyExit: () => server.recordOrderlyExit()
   }
 }

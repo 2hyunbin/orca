@@ -63,6 +63,10 @@ describe('isSameBoot', () => {
     expect(isSameBoot({ bootTimeMs: 0, bootId: null }, { bootTimeMs: 600_000, bootId: null })).toBe(
       false
     )
+    // Windows: boot time cannot identify a boot, so it never reads as the same one.
+    expect(isSameBoot({ bootTimeMs: null, bootId: null }, { bootTimeMs: null, bootId: null })).toBe(
+      false
+    )
   })
 })
 

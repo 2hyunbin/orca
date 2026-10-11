@@ -2,7 +2,10 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AutomaticWorkRunMarker } from './automatic-work-run-marker-store'
+import {
+  AutomaticWorkRunMarker,
+  automaticWorkMarkerPathFor
+} from './automatic-work-run-marker-store'
 
 const BOOT = { bootTimeMs: 1_000_000, bootId: null }
 
@@ -71,5 +74,21 @@ describe('AutomaticWorkRunMarker', () => {
     const unopened = new AutomaticWorkRunMarker(path, logger)
     unopened.markCleanExit()
     expect(() => readFileSync(path)).toThrow()
+  })
+
+  it('never writes once the daemon has lost its endpoint to a successor', () => {
+    let owns = true
+    const marker = new AutomaticWorkRunMarker(path, logger, () => owns)
+    marker.open(10, BOOT)
+    marker.arm()
+    owns = false
+    marker.markCleanExit()
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ state: 'running' })
+  })
+
+  it('keeps one marker per protocol version beside its PID record', () => {
+    expect(automaticWorkMarkerPathFor(join(dir, 'daemon-v44.pid'))).toBe(
+      join(dir, 'daemon-v44.automatic-work-run.json')
+    )
   })
 })

@@ -11,7 +11,11 @@ import {
 
 const PRIVATE_FILE_MODE = 0o600
 
-export const AUTOMATIC_WORK_MARKER_FILE = 'automatic-work-run.json'
+// Why per protocol version: an old-protocol daemon can stay alive beside a new one in the
+// same runtime dir, and must neither read the other's run as a crash nor overwrite it.
+export function automaticWorkMarkerPathFor(pidRecordPath: string): string {
+  return `${pidRecordPath.replace(/\.pid$/, '')}.automatic-work-run.json`
+}
 
 export function readBootIdentity(now: number = Date.now()): BootIdentity {
   let bootId: string | null = null
@@ -22,7 +26,9 @@ export function readBootIdentity(now: number = Date.now()): BootIdentity {
       bootId = null
     }
   }
-  return { bootTimeMs: now - uptime() * 1000, bootId }
+  // Why null on Windows: Fast Startup keeps the uptime counter across a shutdown, so boot
+  // time cannot tell a new boot from the same one; an unknown boot never pauses.
+  return { bootTimeMs: process.platform === 'win32' ? null : now - uptime() * 1000, bootId }
 }
 
 function readPreviousMarker(path: string): AutomaticWorkRunMarkerFile | null {
@@ -47,7 +53,9 @@ export class AutomaticWorkRunMarker {
 
   constructor(
     private readonly path: string | undefined,
-    private readonly logger: { log: (event: string, details: Record<string, unknown>) => void }
+    private readonly logger: { log: (event: string, details: Record<string, unknown>) => void },
+    /** Why: a daemon that lost its endpoint must not rewrite its successor's record. */
+    private readonly ownsEndpoint: () => boolean = () => true
   ) {}
 
   open(now: number = Date.now(), boot: BootIdentity = readBootIdentity(now)): void {
@@ -94,7 +102,7 @@ export class AutomaticWorkRunMarker {
   }
 
   private writeSync(state: AutomaticWorkRunMarkerFile['state']): void {
-    if (!this.path || !this.boot) {
+    if (!this.path || !this.boot || !this.ownsEndpoint()) {
       return
     }
     const marker: AutomaticWorkRunMarkerFile = {

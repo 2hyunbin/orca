@@ -48,10 +48,15 @@ export class DaemonServer {
   private readonly admission: DaemonTerminalAdmission
   private readonly requestRouter: DaemonRequestRouter
   private stopStreamBacklogProbe: () => void = () => {}
+  readonly recordOrderlyExit = (): void => this.automaticWork.markCleanExit()
 
   constructor(options: DaemonServerOptions) {
     this.log = options.log ?? createNoopDaemonFileLog()
-    this.automaticWork = new AutomaticWorkRunMarker(options.automaticWorkMarkerPath, this.log)
+    this.automaticWork = new AutomaticWorkRunMarker(
+      options.automaticWorkMarkerPath,
+      this.log,
+      () => !this.endpoint.lost
+    )
     this.host = new TerminalHost({
       spawnSubprocess: options.spawnSubprocess,
       spawnGate: new TerminalSpawnGate({
