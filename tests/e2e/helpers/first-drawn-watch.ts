@@ -1,8 +1,9 @@
 /**
- * Time to first drawn after a launch: from the main process's start to the first animation frame
- * in which the restored active tab shows all its panes with a terminal in each. The watch is
- * installed by main into the window as soon as its DOM is ready, so it runs before any restore
- * draws and no DevTools round trip lands inside the sample.
+ * Time to first drawn after a relaunch: from the main process's start to the first animation
+ * frame in which the restored active tab shows all its panes with a terminal in each. The span
+ * includes the test harness attaching DevTools before the first window, and every relaunch keeps
+ * the PTY daemon warm, so compare it only with itself, not with a user's cold start. The watch is
+ * installed by main as soon as the window's DOM is ready and fails if the panes drew earlier.
  */
 
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'

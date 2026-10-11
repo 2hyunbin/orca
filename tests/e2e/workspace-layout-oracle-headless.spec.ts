@@ -481,7 +481,12 @@ async function runHeadlessScenario(
       durationMs: ended - started,
       findings,
       // orcad, or Electron serve's main process.
-      eventLoopDelay: summarizeEventLoopDelay(host.userDataDir, started, ended)
+      eventLoopDelay: summarizeEventLoopDelay(
+        host.userDataDir,
+        kind === 'orcad' ? 'orcad' : 'main',
+        started,
+        ended
+      )
     })
     await host.dispose()
   }

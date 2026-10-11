@@ -136,7 +136,7 @@ export async function runOracleScenario(
     writeReport(testInfo, scenarioId, {
       findings: run.oracle.findings,
       viewCreations: run.oracle.viewCreations.at(-1) ?? {},
-      eventLoopDelay: summarizeEventLoopDelay(session.userDataDir, started, Date.now())
+      eventLoopDelay: summarizeEventLoopDelay(session.userDataDir, 'main', started, Date.now())
     })
     return run.oracle.findings
   } finally {

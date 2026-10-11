@@ -251,6 +251,7 @@ type LatencyReport =
     }
   | {
       scenario: 'first-drawn'
+      note: string
       profile: typeof LARGE_PROFILE
       firstDrawn: Stats & { n: number }
       eventLoopDelayMax: Stats
@@ -322,7 +323,7 @@ test('layout oracle: command to drawn latency', async ({}, testInfo) => {
     const eventLoopDelay = Object.fromEntries(
       Object.entries(phases).map(([condition, phase]) => [
         condition,
-        summarizeEventLoopDelay(session.userDataDir, phase.from, phase.to)
+        summarizeEventLoopDelay(session.userDataDir, 'main', phase.from, phase.to)
       ])
     )
     const closeConfirms = { idle: phases.idle.confirms, flood: phases.flood.confirms }
@@ -381,12 +382,17 @@ test('layout oracle: time to first drawn on a large profile', async ({}, testInf
       await waitForEventLoopDelayWindow(session.userDataDir, drawnAt)
       startup.push({
         firstDrawnMs: Math.round(drawnAt - processStartedAt),
-        eventLoopDelayMax: summarizeEventLoopDelay(session.userDataDir, processStartedAt, drawnAt)
-          .max
+        eventLoopDelayMax: summarizeEventLoopDelay(
+          session.userDataDir,
+          'main',
+          processStartedAt,
+          drawnAt
+        ).max
       })
     }
     writeLatencyReport(testInfo, {
       scenario: 'first-drawn',
+      note: 'from main process start, so includes DevTools attach; warm PTY daemon; relative use only',
       profile: LARGE_PROFILE,
       firstDrawn: { n: startup.length, ...stats(startup.map((sample) => sample.firstDrawnMs)) },
       eventLoopDelayMax: stats(startup.map((sample) => sample.eventLoopDelayMax)),

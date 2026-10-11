@@ -34,7 +34,7 @@ declare global {
 export type InAppSample = { commitMs: number; drawnMs: number }
 
 export type ArmOptions = {
-  /** `keydown` stamps the start on the next key the window sees; otherwise the sender stamps it. */
+  /** `keydown` stamps the start on the next non-modifier key; otherwise the sender stamps it. */
   startOn: 'keydown' | 'sender'
   /** A confirmation button the command may raise; the probe clicks it in the window. */
   confirmButton?: string
@@ -93,6 +93,8 @@ export function armLayoutLatencyProbe(
             reject(new Error(`latency probe: ${JSON.stringify(condition)} never drew`))
           }, timeoutMs)
           const observer = new MutationObserver(() => {
+            // Stamped before the checks below, whose DOM reads would force layout inside the sample.
+            const seenAt = Date.now()
             const confirm = confirmButton
               ? Array.from(document.querySelectorAll('button')).find(
                   (button) => button.textContent?.trim() === confirmButton
@@ -107,7 +109,7 @@ export function armLayoutLatencyProbe(
             }
             observer.disconnect()
             clearTimeout(timer)
-            probe.commitAt = Date.now()
+            probe.commitAt = seenAt
             requestAnimationFrame(() => {
               probe.drawnAt = Date.now()
               resolve()
@@ -121,13 +123,15 @@ export function armLayoutLatencyProbe(
         })
       }
       if (startOn === 'keydown') {
-        window.addEventListener(
-          'keydown',
-          () => {
-            probe.startedAt ??= Date.now()
-          },
-          { capture: true, once: true }
-        )
+        // A chord arrives as one keydown per key; the command's key is the first non-modifier.
+        const onKeydown = (event: KeyboardEvent): void => {
+          if (['Meta', 'Control', 'Shift', 'Alt'].includes(event.key)) {
+            return
+          }
+          probe.startedAt = Date.now()
+          window.removeEventListener('keydown', onKeydown, { capture: true })
+        }
+        window.addEventListener('keydown', onKeydown, { capture: true })
       }
       window.__layoutLatencyProbe = probe
     },

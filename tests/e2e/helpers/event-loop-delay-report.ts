@@ -12,7 +12,7 @@ import {
 } from '../../../src/main/diagnostics/event-loop-delay-probe'
 
 export type EventLoopDelaySummary = {
-  process: EventLoopDelayWindow['process'] | 'none'
+  process: EventLoopDelayWindow['process']
   /** One-second windows overlapping the range. */
   windows: number
   /** Worst window's p99 and the largest single delay, in ms. */
@@ -60,17 +60,18 @@ function readWindows(userDataDir: string): ReadWindow[] {
     : []
 }
 
-/** Windows overlapping [from, to] (epoch ms). */
+/** `processKind`'s windows overlapping [from, to] (epoch ms). */
 export function summarizeEventLoopDelay(
   userDataDir: string,
+  processKind: EventLoopDelayWindow['process'],
   from: number,
   to: number
 ): EventLoopDelaySummary {
   const windows = readWindows(userDataDir).filter(
-    (entry) => entry.t > from && entry.t - entry.windowMs < to
+    (entry) => entry.process === processKind && entry.t > from && entry.t - entry.windowMs < to
   )
   return {
-    process: windows[0]?.process ?? 'none',
+    process: processKind,
     windows: windows.length,
     p99: Math.max(0, ...windows.map((entry) => entry.p99)),
     max: Math.max(0, ...windows.map((entry) => entry.max))

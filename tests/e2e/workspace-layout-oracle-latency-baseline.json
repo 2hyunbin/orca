@@ -26,18 +26,18 @@
         "n": 100,
         "inAppCommit": {
           "p50": 23,
-          "p95": 188,
-          "max": 346
+          "p95": 105,
+          "max": 174
         },
         "inAppDrawn": {
           "p50": 24,
-          "p95": 189,
-          "max": 347
+          "p95": 106,
+          "max": 175
         },
         "outer": {
-          "p50": 33,
-          "p95": 191,
-          "max": 349
+          "p50": 26,
+          "p95": 108,
+          "max": 176
         }
       },
       "new tab (idle)": {
@@ -133,19 +133,19 @@
       "close pane (flood)": {
         "n": 100,
         "inAppCommit": {
-          "p50": 37,
-          "p95": 206,
-          "max": 410
+          "p50": 30,
+          "p95": 87,
+          "max": 98
         },
         "inAppDrawn": {
-          "p50": 38,
-          "p95": 207,
-          "max": 410
+          "p50": 31,
+          "p95": 88,
+          "max": 98
         },
         "outer": {
-          "p50": 54,
-          "p95": 216,
-          "max": 430
+          "p50": 38,
+          "p95": 91,
+          "max": 99
         }
       },
       "new tab (flood)": {
@@ -255,12 +255,14 @@
         "p50": 73,
         "p95": 96,
         "max": 96
-      }
-    }
+      },
+      "caveat": "Measured from main process start, so it includes the test harness attaching DevTools before the first window; every relaunch keeps the PTY daemon warm. Compare only with itself, not with a user's cold start."
+    },
+    "note": "close pane rows re-taken after the clock moved from the modifier keydown to the w keydown; other rows unchanged."
   },
   "linux": {
     "machine": "GitHub-hosted ubuntu-latest, Xvfb, hidden window; CI run 38165956663 job 114549487905",
-    "caveat": "Chromium runs a hidden window's animation frames at about 1 per second here, so inAppDrawn and outer are bounded by that throttle and only inAppCommit measures the app.",
+    "caveat": "Chromium runs a hidden window's animation frames at about 1 per second here, so inAppDrawn and outer are bounded by that throttle and only inAppCommit measures the app. Flood numbers are sensitive to runner CPU: three unthrottled `yes` panes compete with the app on a small runner, so Linux flood is not comparable with macOS or across runner types. The close pane rows were taken before the w-key fix, so their start includes one DevTools round trip (about 1 ms).",
     "latency": {
       "split (idle)": {
         "n": 100,
@@ -514,7 +516,7 @@
         "p95": 106,
         "max": 106
       },
-      "caveat": "first drawn is also read on an animation frame, so it can be up to ~1 s late here"
+      "caveat": "Measured from main process start, so it includes the test harness attaching DevTools before the first window; every relaunch keeps the PTY daemon warm. Compare only with itself, not with a user's cold start. Also read on an animation frame, so up to ~1 s late here."
     }
   }
 }
