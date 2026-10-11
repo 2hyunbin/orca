@@ -2,20 +2,27 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { spawnProcess } from '@orca/process-host'
-import type { ProviderProcessTeardownVerdict } from '../provider-process/provider-process-teardown'
+import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
 import { openCodexAppServerConnection } from './codex-app-server-connection'
 
 const teardown = vi.hoisted(() => {
-  const state: { verdict: ProviderProcessTeardownVerdict; rootExits: () => void } = {
-    verdict: null,
+  const state: { verdict: DescendantTreeVerdict; rootExits: () => void } = {
+    verdict: 'unverifiable',
     rootExits: () => {}
   }
   return state
 })
-vi.mock('../provider-process/provider-process-teardown', () => ({
-  terminateProviderProcessTree: vi.fn(async () => {
-    teardown.rootExits()
-    return teardown.verdict
+vi.mock('../claude/claude-agent-sdk-exit-proof', () => ({
+  createClaudeChildTreeReaper: () => ({
+    capture: async () => {},
+    refresh: async () => {},
+    reap: async () => {
+      teardown.rootExits()
+      return teardown.verdict
+    },
+    get treeVerdict() {
+      return teardown.verdict
+    }
   })
 }))
 
@@ -44,8 +51,7 @@ describe('Codex process-tree diagnostic after a forced close', () => {
   it.each([
     ['unverifiable', true],
     ['live', true],
-    ['exited', false],
-    [null, false]
+    ['exited', false]
   ] as const)('teardown observing %s reads unproven=%s', async (verdict, unproven) => {
     vi.useFakeTimers()
     teardown.verdict = verdict

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { describe, expect, it, vi } from 'vitest'
 import { CODEX_SPAWN_TOKEN_ENV } from './codex-structured-owner-identity'
 import {
   openCodexAppServerConnection,
@@ -6,6 +7,35 @@ import {
 } from './codex-app-server-connection'
 
 const ITERATIONS = 40
+
+const DETACHED_GRANDCHILD_APP_SERVER = String.raw`
+  const { spawn } = require('node:child_process')
+  const readline = require('node:readline')
+  const grandchild = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 60000)"], {
+    detached: true,
+    stdio: 'ignore'
+  })
+  const send = (payload) => process.stdout.write(JSON.stringify(payload) + '\n')
+  readline.createInterface({ input: process.stdin }).on('line', (line) => {
+    const message = JSON.parse(line)
+    if (message.method === 'initialize') send({ id: message.id, result: {} })
+    if (message.method === 'initialized') {
+      send({ method: 'test/grandchild', params: { provider: process.pid, grandchild: grandchild.pid } })
+    }
+  })
+  process.on('SIGTERM', () => {})
+  setInterval(() => {}, 60000)
+`
+
+function processIdentity(pid: number): string | null {
+  try {
+    return execFileSync('ps', ['-p', String(pid), '-o', 'lstart=', '-o', 'command='], {
+      encoding: 'utf8'
+    }).trim()
+  } catch {
+    return null
+  }
+}
 
 const FORCE_KILL_APP_SERVER = String.raw`
   const { spawn } = require('node:child_process')
@@ -88,6 +118,51 @@ async function cleanupServer(server: RunningServer): Promise<void> {
 }
 
 describe.runIf(process.platform !== 'win32')('Codex app-server process teardown', () => {
+  it('reaps a grandchild in its own session after an unresponsive provider root', async () => {
+    const observed = Promise.withResolvers<{ provider: number; grandchild: number }>()
+    const connection = await openCodexAppServerConnection(
+      { command: process.execPath, args: ['-e', DETACHED_GRANDCHILD_APP_SERVER] },
+      {
+        onNotification: (method, params) => {
+          if (
+            method === 'test/grandchild' &&
+            typeof params === 'object' &&
+            params !== null &&
+            'provider' in params &&
+            'grandchild' in params &&
+            typeof params.provider === 'number' &&
+            typeof params.grandchild === 'number'
+          ) {
+            observed.resolve({ provider: params.provider, grandchild: params.grandchild })
+          }
+        }
+      }
+    )
+    const pids = await observed.promise
+    const identities = [connection.pid, pids.provider, pids.grandchild]
+      .filter((pid): pid is number => typeof pid === 'number')
+      .map((pid) => ({ pid, identity: processIdentity(pid) }))
+    try {
+      expect(processExists(pids.grandchild)).toBe(true)
+      const rootExited = await connection.close()
+      expect(rootExited).toBe(true)
+      if (connection.closeResult?.tree === 'exited') {
+        await vi.waitFor(() => expect(processExists(pids.grandchild)).toBe(false))
+        expect(connection.closeResult).toMatchObject({ root: 'exited', tree: 'exited' })
+      } else {
+        expect(connection.closeResult?.tree).not.toBe('exited')
+        expect(connection.processTreeUnproven).toBe(true)
+      }
+    } finally {
+      await connection.close().catch(() => false)
+      for (const { pid, identity } of identities) {
+        if (identity && processIdentity(pid) === identity) {
+          process.kill(pid, 'SIGKILL')
+        }
+      }
+    }
+  }, 30_000)
+
   it('reaps the forced-close descendant in 40 consecutive launches', async () => {
     const running: RunningServer[] = []
     try {
@@ -108,7 +183,7 @@ describe.runIf(process.platform !== 'win32')('Codex app-server process teardown'
   }, 30_000)
 
   it.each(['normal', 'signal'] as const)(
-    'reaps provider descendants before relaying a %s root exit in 40 consecutive launches',
+    'does not claim an unobserved tree clean after a %s root exit in 40 launches',
     async (exitMode) => {
       for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
         const server = await openServer(iteration, exitMode)
@@ -117,6 +192,10 @@ describe.runIf(process.platform !== 'win32')('Codex app-server process teardown'
           expect(processExists(server.supervisorPid)).toBe(false)
           expect(processExists(server.descendantPid)).toBe(false)
           await expect(server.connection.close()).resolves.toBe(true)
+          expect(server.connection.closeResult).toMatchObject({
+            root: 'exited',
+            tree: 'unverifiable'
+          })
         } finally {
           await cleanupServer(server)
         }

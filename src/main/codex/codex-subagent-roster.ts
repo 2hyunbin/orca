@@ -190,8 +190,8 @@ export class CodexSubagentRoster {
    * This is the ONLY sweep. A turn ending is not one: `spawn_agent` children
    * routinely outlive their turn and keep reporting into the same group.
    */
-  settleSession(): StructuredAgentSessionSinkAdmission {
-    this.executions.settleSession()
+  settleSession(provenStopped = false): StructuredAgentSessionSinkAdmission {
+    this.executions.settleSession(provenStopped ? 'stopped' : 'unverifiable')
     return this.tracker.settleSession()
   }
 

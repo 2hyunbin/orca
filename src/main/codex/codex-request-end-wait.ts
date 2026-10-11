@@ -1,7 +1,7 @@
 import type { CodexSession } from './codex-structured-session-state'
 import { codexStopTarget } from './codex-structured-turn-open-wait'
 
-export const CODEX_STOP_GRACE_MS = 2_000
+export const CODEX_STOP_GRACE_MS = 5_000
 const waiters = new WeakMap<CodexSession, Set<() => void>>()
 
 function requestInFlight(session: CodexSession): boolean {

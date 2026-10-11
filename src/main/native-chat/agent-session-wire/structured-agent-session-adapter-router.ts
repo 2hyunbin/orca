@@ -4,7 +4,10 @@ import type {
   AgentSessionAccountHome,
   AgentSessionExecutionLocation
 } from '../../../shared/agent-session-record'
-import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
+import type {
+  StructuredAgentSessionAdapter,
+  StructuredAgentSessionStopCause
+} from './structured-agent-session-adapter'
 import type {
   StructuredAgentRegistration,
   StructuredAgentRegistry
@@ -178,19 +181,31 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     Promise.resolve(null)
 
   closeSession = (sessionId: string): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.closeSession)
+    this.stopSession(sessionId, (adapter) => adapter.closeSession?.(sessionId))
 
   forceCloseSession = (sessionId: string): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.forceCloseSession ?? adapter.closeSession)
+    this.stopSession(sessionId, (adapter) =>
+      (adapter.forceCloseSession ?? adapter.closeSession)?.call(adapter, sessionId)
+    )
 
   disposeSession = (sessionId: string): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.disposeSession ?? adapter.closeSession)
+    this.stopSession(sessionId, (adapter) =>
+      (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
+    )
+
+  stopSessionWithCause = (
+    sessionId: string,
+    cause?: StructuredAgentSessionStopCause
+  ): Promise<boolean> =>
+    this.stopSession(sessionId, (adapter) =>
+      adapter.stopSessionWithCause
+        ? adapter.stopSessionWithCause(sessionId, cause)
+        : (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
+    )
 
   private async stopSession(
     sessionId: string,
-    selectStop: (
-      adapter: StructuredAgentSessionAdapter
-    ) => NonNullable<StructuredAgentSessionAdapter['closeSession']> | undefined
+    stop: (adapter: StructuredAgentSessionAdapter) => Promise<boolean> | undefined
   ): Promise<boolean> {
     const route = this.routes.get(sessionId)
     if (!route) {
@@ -203,8 +218,7 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
       return true
     }
     const { adapter } = route.registration
-    const stop = selectStop(adapter)
-    const stopped = await stop?.call(adapter, sessionId)
+    const stopped = await stop(adapter)
     if (stopped === true) {
       route.state = 'stopped'
       return true

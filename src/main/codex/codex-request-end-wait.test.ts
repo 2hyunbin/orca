@@ -35,7 +35,7 @@ it('lets a Stop wait for the interrupted turn to end, without waiting on its mis
   await adapter.closeAll()
 })
 
-it('spends only the remaining two-second budget from the Stop timestamp', async () => {
+it('spends only the remaining five-second budget from the Stop timestamp', async () => {
   const codex = fakeCodex()
   codex.routes['turn/start'] = answerWithOpenedTurn(codex, 'turn-1')
   const adapter = await acquired(codex)
@@ -51,7 +51,7 @@ it('spends only the remaining two-second budget from the Stop timestamp', async 
   const waiting = adapter.awaitStoppedRequestEnd('session-1', stoppedAt).then(() => {
     ended = true
   })
-  await vi.advanceTimersByTimeAsync(1_499)
+  await vi.advanceTimersByTimeAsync(4_499)
   expect(ended).toBe(false)
   await vi.advanceTimersByTimeAsync(1)
   await waiting

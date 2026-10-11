@@ -42,6 +42,7 @@ import type {
   AgentSessionCancelOutcome,
   StructuredAgentSessionAdapterStop
 } from './structured-agent-session-adapter-stop'
+import type { StructuredAgentSessionStopCause } from './structured-agent-session-stop-cause'
 export type { AgentSessionCancelOutcome } from './structured-agent-session-adapter-stop'
 export type {
   StructuredAgentSessionChildEndCause,
@@ -192,6 +193,13 @@ export type StructuredAgentSessionEndedEvent = {
    *  Orca fault. Absent reads as a provider exit with nothing to add. */
   failure?: SubmissionRejectionFact
   cause: 'unexpected-exit' | 'requested-close'
+  /** The host's stop cause, when this end came from a requested close. */
+  stopCause?: StructuredAgentSessionStopCause
+  /** Execution-host observations from a requested provider close, when available. */
+  processExit?: {
+    root: 'live' | 'unverifiable' | 'exited'
+    workload: 'live' | 'unverifiable' | 'exited' | null
+  }
   fence: number
   acquisitionGeneration: string
   /** Host receipt of the child exit: the end time of a turn it interrupted. */
@@ -422,6 +430,11 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   forceCloseSession?(sessionId: string): Promise<boolean>
   /** Stops a provider child for teardown without requiring a future-resume cursor. */
   disposeSession?(sessionId: string): Promise<boolean>
+  /** Host stop cause for adapters that classify child work at exit. */
+  stopSessionWithCause?(
+    sessionId: string,
+    cause?: StructuredAgentSessionStopCause
+  ): Promise<boolean>
   /** Host acknowledgement that the proven-dead child, lease and journal owner are released. */
   acknowledgeSessionRelease?(sessionId: string): void
 }

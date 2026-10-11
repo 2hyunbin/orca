@@ -314,6 +314,10 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   closeSession = (sessionId: string): Promise<boolean> => this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)
   disposeSession = (sessionId: string): Promise<boolean> => this.teardown.close(sessionId)
+  stopSessionWithCause: NonNullable<StructuredAgentSessionAdapter['stopSessionWithCause']> = (
+    sessionId,
+    cause
+  ) => this.teardown.close(sessionId, { cause })
   closeAll = (): Promise<void> => this.teardown.closeAll()
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.teardown.close(input.sessionId)
