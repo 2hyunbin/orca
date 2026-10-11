@@ -20,6 +20,7 @@ import { AgentModelCatalogListingStoppedError } from './agent-model-catalog-fail
 import type { StructuredAgentRegistry } from '../agent-session-wire/structured-agent-registry'
 import {
   recordConfiguredDefault,
+  sessionWorkspacePath,
   workspaceKeepsListedDefault
 } from './agent-model-catalog-workspace-default'
 import { relistingSettledInTime, selectedModelRules } from './agent-model-catalog-selected-model'
@@ -62,6 +63,8 @@ export type AgentModelCatalogService = {
     sessionId?: string
     /** Where a new chat would run; null when one was named but is not a local directory. */
     workspacePath?: string | null
+    /** Answer for the folder the named session runs in, as its new-chat read did. */
+    inSessionWorkspace?: true
     /** With no entry yet, answer from the listing this read starts or joins instead of `unknown`;
      *  with a held reason past its TTL, from the probe re-checking it. */
     waitForListing?: boolean
@@ -196,6 +199,11 @@ export function createAgentModelCatalogService(
       }
       const accountHomePath =
         probeHome && isLegacyAgentSessionAccountHome(probeHome) ? probeHome.path : null
+      const workspacePath = params.inSessionWorkspace
+        ? record
+          ? await sessionWorkspacePath(deps, record)
+          : null
+        : params.workspacePath
       await recordingDefaults.get(fingerprint)
       let entry = deps.store.get(fingerprint)
       const probe = deps.probes?.[params.agent]
@@ -219,12 +227,7 @@ export function createAgentModelCatalogService(
         const result = listed
           ? resultFromEntry(
               listed,
-              await workspaceKeepsListedDefault(
-                deps,
-                params.agent,
-                params.workspacePath,
-                accountHomePath
-              ),
+              await workspaceKeepsListedDefault(deps, params.agent, workspacePath, accountHomePath),
               deps.listingNamesConfiguredModel?.has(params.agent) === true
             )
           : null

@@ -118,7 +118,9 @@ function restingChat(input: {
     conversation: async () => resting
   } as unknown as StructuredAgentSessionMutationContext
   const read = async () => {
-    const result = await readStructuredAgentSessionOptions(context, record.sessionId)
+    const result = await readStructuredAgentSessionOptions(context, record.sessionId, {
+      readsWithoutModel: true
+    })
     const state = applyStructuredAgentSessionOptions(
       createStructuredAgentSessionOptionState('claude', CLAUDE_SESSION_OPTION_CATALOG),
       CLAUDE_SESSION_OPTION_CATALOG,

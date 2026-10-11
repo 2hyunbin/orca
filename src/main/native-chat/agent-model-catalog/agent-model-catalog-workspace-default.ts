@@ -3,6 +3,7 @@
 
 import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { isNativeLocalLocation } from '../../../shared/execution-host'
 import type { AgentModelCatalogConfiguredChoice } from './agent-model-catalog-entry'
 import type { AgentModelCatalogServiceDeps } from './agent-model-catalog-service'
 
@@ -26,6 +27,18 @@ export async function workspaceKeepsListedDefault(
   }
 }
 
+/** The local folder a session's agent runs in; null where this host cannot look into it, as a new
+ *  chat's own read answers. */
+export async function sessionWorkspacePath(
+  deps: AgentModelCatalogServiceDeps,
+  record: AgentSessionRecord
+): Promise<string | null> {
+  if (!isNativeLocalLocation(record.location) || !deps.recordWorkspacePath) {
+    return null
+  }
+  return deps.recordWorkspacePath(record).catch(() => null)
+}
+
 /** A session launched with no model pick resolved its config scope's default model and effort;
  *  when that scope is the account's (a native workspace with no config of its own), they are the
  *  account's default, and a resolution naming no listed model retires the saved one. */
@@ -36,14 +49,10 @@ export async function recordConfiguredDefault(
   choice: AgentModelCatalogConfiguredChoice | null
 ): Promise<void> {
   const accountHome = record.accountHome
-  if (
-    record.location.wslDistro !== null ||
-    !deps.recordWorkspacePath ||
-    !deps.workspaceMayOverrideDefaultModel
-  ) {
+  if (!deps.workspaceMayOverrideDefaultModel) {
     return
   }
-  const workspacePath = await deps.recordWorkspacePath(record)
+  const workspacePath = await sessionWorkspacePath(deps, record)
   if (
     !workspacePath ||
     (await deps.workspaceMayOverrideDefaultModel({
