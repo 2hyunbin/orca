@@ -1,20 +1,40 @@
-import { mkdir, mkdtemp, realpath, stat } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, realpath, rename } from 'node:fs/promises'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { rm } from '../asar-transparent-fs'
 import { ensurePrivateDir } from './daemon-private-file-modes'
 import { inspectMacProcessCodeIdentity } from './daemon-mac-code-identity'
-import { MAC_DAEMON_BUNDLE_FOLDER, writeMacDaemonJobRecord } from './macos-daemon-bundle-retirement'
 
 /** Packaged by config/scripts/macos-terminal-host-bundle.cjs; its main executable is plain Node. */
 export const MAC_TERMINAL_HOST_BUNDLE = 'Orca Terminal Host.app'
 export const MAC_TERMINAL_HOST_EXECUTABLE = 'orca-terminal-host'
+/** One published copy per helper build: `terminal-host-<helper CDHash>`. */
+export const MAC_DAEMON_COPY_PREFIX = 'terminal-host-'
 
 export type MacDaemonBundle = {
   directory: string
-  bundlePath: string
   execPath: string
   entryPath: string
+}
+
+/** Private signed copies the updater never touches. */
+export function getMacDaemonBundleRoot(userDataPath: string): string {
+  return join(userDataPath, 'daemon-host', 'macos')
+}
+
+/** Spotlight skips `.noindex` folders, so a copy is never indexed or listed as an app. */
+export function macDaemonCopyBundlePath(directory: string): string {
+  return join(directory, 'app.noindex', MAC_TERMINAL_HOST_BUNDLE)
+}
+
+function describeCopy(directory: string): MacDaemonBundle {
+  const contents = join(macDaemonCopyBundlePath(directory), 'Contents')
+  return {
+    directory,
+    execPath: join(contents, 'MacOS', MAC_TERMINAL_HOST_EXECUTABLE),
+    entryPath: join(contents, 'Resources', 'daemon', 'out', 'main', 'daemon-entry.js')
+  }
 }
 
 function appBundleForMainExecutable(executable: string): string {
@@ -29,101 +49,97 @@ function appBundleForMainExecutable(executable: string): string {
   return bundle
 }
 
-async function codesignRequirement(bundlePath: string, signal: AbortSignal): Promise<string> {
+/** One `codesign` display line, e.g. `CDHash=` or `designated => `; codesign prints to stderr. */
+async function readCodesignField(
+  args: string[],
+  prefix: string,
+  signal: AbortSignal
+): Promise<string> {
   const result = await runProcess({
     program: '/usr/bin/codesign',
-    args: ['--display', '-r-', bundlePath],
+    args,
     timeoutMs: 5_000,
-    maxOutputBytes: 8192,
+    maxOutputBytes: 64 * 1024,
     signal
   })
-  const requirement = `${result.stderr}\n${result.stdout}`
+  const line = `${result.stderr}\n${result.stdout}`
     .split(/\r?\n/)
-    .find((line) => line.startsWith('designated => '))
-  if (result.code !== 0 || result.timedOut || result.outputTruncated || !requirement) {
-    throw new Error('Could not read the macOS app signing requirement')
+    .find((candidate) => candidate.startsWith(prefix))
+  if (result.code !== 0 || result.timedOut || result.outputTruncated || !line) {
+    throw new Error(`Could not read ${prefix.trim()} from codesign`)
   }
-  return requirement
+  return line.slice(prefix.length)
 }
 
-/** Private signed runtime copies the updater never touches. */
-export function getMacDaemonBundleRoot(userDataPath: string): string {
-  return join(userDataPath, 'daemon-host', 'macos')
+async function copyBundle(source: string, destination: string, signal: AbortSignal): Promise<void> {
+  // APFS clone first; a failed clone can leave a partial tree on other filesystems.
+  for (const args of [['-cR'], ['-R']]) {
+    await rm(destination, { recursive: true, force: true })
+    const result = await runProcess({
+      program: '/bin/cp',
+      args: [...args, source, destination],
+      maxOutputBytes: 8192,
+      signal
+    })
+    if (result.code === 0 && !result.timedOut) {
+      return
+    }
+  }
+  throw new Error('Could not copy the macOS terminal host')
 }
 
-/** Keep signed bytes and their bundle layout outside the updater's rename/delete window. */
+/** The copy of the running app's helper for its build, published once and reused after. */
 export async function materializeMacDaemonBundle(
-  userDataPath: string,
-  label: string,
+  root: string,
   signal: AbortSignal
 ): Promise<MacDaemonBundle> {
+  // Not process.execPath: after an update that path names the new bundle, not the running one.
   const running = await inspectMacProcessCodeIdentity(process.pid)
   if (!running.executablePath) {
     throw new Error('Could not resolve the running macOS app bundle')
   }
-  const runningBundle = await realpath(appBundleForMainExecutable(running.executablePath))
-  // Copying only the helper keeps each retained runtime ~124 MiB instead of the whole app.
-  const sourceBundle = join(runningBundle, 'Contents', 'Helpers', MAC_TERMINAL_HOST_BUNDLE)
-  if (!(await stat(sourceBundle).catch(() => null))?.isDirectory()) {
-    throw new Error('The running app has no macOS terminal host helper')
+  const appBundle = await realpath(appBundleForMainExecutable(running.executablePath))
+  const source = join(appBundle, 'Contents', 'Helpers', MAC_TERMINAL_HOST_BUNDLE)
+  const cdhash = await readCodesignField(['-dvvv', source], 'CDHash=', signal)
+  if (!/^[0-9a-f]{40,64}$/.test(cdhash)) {
+    throw new Error('The macOS terminal host has an unexpected CDHash')
   }
-  // The helper must carry the running app's designated requirement to inherit Orca's grants.
-  const requirement = await codesignRequirement(runningBundle, signal)
-  const root = getMacDaemonBundleRoot(userDataPath)
+  const name = `${MAC_DAEMON_COPY_PREFIX}${cdhash}`
+  const copy = describeCopy(join(root, name))
+  // Only a verified copy is ever renamed into place, so presence alone proves it.
+  if (existsSync(copy.directory)) {
+    return copy
+  }
   ensurePrivateDir(root)
-  const directory = await mkdtemp(join(root, 'runtime-'))
-  const bundlePath = join(directory, MAC_DAEMON_BUNDLE_FOLDER, basename(sourceBundle))
+  // The pid keeps this process's collection off its own in-flight staging copy.
+  const staging = await mkdtemp(join(root, `${name}.staging-${process.pid}-`))
   try {
-    // Recorded before copying so a crash mid-copy leaves a copy retirement can still claim.
-    await writeMacDaemonJobRecord(directory, label, false)
-    await mkdir(dirname(bundlePath))
-    // Bounded by `signal`, which carries the launch's preparation deadline.
-    const copy = async (clone: boolean): Promise<boolean> => {
-      const result = await runProcess({
-        program: '/bin/cp',
-        args: [clone ? '-cR' : '-R', sourceBundle, bundlePath],
-        maxOutputBytes: 8192,
-        signal
-      })
-      return result.code === 0 && !result.timedOut
-    }
-    if (!(await copy(true))) {
-      // A failed APFS clone can leave a partial tree on other filesystems.
-      await rm(bundlePath, { recursive: true, force: true })
-      if (!(await copy(false))) {
-        throw new Error('Could not copy the macOS terminal runtime')
-      }
-    }
+    const stagedBundle = macDaemonCopyBundlePath(staging)
+    await mkdir(dirname(stagedBundle))
+    await copyBundle(source, stagedBundle, signal)
+    // The copy must satisfy the running app's requirement to inherit Orca's privacy grants.
+    const requirement = await readCodesignField(
+      ['--display', '-r-', appBundle],
+      'designated => ',
+      signal
+    )
     const verified = await runProcess({
       program: '/usr/bin/codesign',
-      args: ['--verify', '--deep', '--strict', bundlePath],
+      args: ['--verify', '--strict', '-R', `=${requirement}`, stagedBundle],
       maxOutputBytes: 8192,
       signal
     })
-    if (
-      verified.code !== 0 ||
-      verified.timedOut ||
-      (await codesignRequirement(bundlePath, signal)) !== requirement
-    ) {
-      throw new Error('The copied macOS terminal runtime did not preserve the app signature')
+    if (verified.code !== 0 || verified.timedOut) {
+      throw new Error("The macOS terminal host copy does not satisfy the app's signature")
     }
-    return {
-      directory,
-      bundlePath,
-      execPath: join(bundlePath, 'Contents', 'MacOS', MAC_TERMINAL_HOST_EXECUTABLE),
-      entryPath: join(
-        bundlePath,
-        'Contents',
-        'Resources',
-        'daemon',
-        'out',
-        'main',
-        'daemon-entry.js'
-      )
-    }
-  } catch (error) {
-    // No process has been launched from this private copy yet.
-    await rm(directory, { recursive: true, force: true }).catch(() => {})
-    throw error
+    await rename(staging, copy.directory).catch((error: unknown) => {
+      // Losing to a concurrent publisher is fine: its copy passed the same verification.
+      if (!existsSync(copy.directory)) {
+        throw error
+      }
+    })
+    return copy
+  } finally {
+    await rm(staging, { recursive: true, force: true }).catch(() => {})
   }
 }
