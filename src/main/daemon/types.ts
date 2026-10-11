@@ -1,4 +1,3 @@
-import type { FullDiskAccessStatusRequest } from './daemon-permission-requests'
 import type {
   ConfirmForegroundProcessRequest,
   ConfirmShellForegroundRequest,
@@ -323,7 +322,6 @@ export type DaemonRequest =
   | PingRequest
   | SystemResolverHealthRequest
   | PtySpawnHealthRequest
-  | FullDiskAccessStatusRequest
   | GetSnapshotRequest
   | GetSizeRequest
   | TakePendingOutputRequest

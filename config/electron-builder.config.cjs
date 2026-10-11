@@ -1,10 +1,7 @@
 const { chmodSync, existsSync, readdirSync, readFileSync, writeFileSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
-const {
-  MACOS_FOLDER_USAGE_DESCRIPTIONS,
-  applyMacHelperFolderUsageDescriptions
-} = require('./scripts/macos-folder-usage-descriptions.cjs')
+const { MACOS_FOLDER_USAGE_DESCRIPTIONS } = require('./scripts/macos-folder-usage-descriptions.cjs')
 const electronBuilderNativeRebuild = require('./scripts/electron-builder-native-rebuild.cjs')
 const {
   assertPackagedDaemonEntryExists,
@@ -398,10 +395,6 @@ module.exports = {
       writeFileSync(join(resourcesDir, 'package-type'), 'AppImage')
     }
     if (context.electronPlatformName === 'darwin') {
-      applyMacHelperFolderUsageDescriptions(
-        join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`),
-        context.packager.appInfo.productFilename
-      )
       const architecture = macSliceArch(context.arch, 'local-build compatibility')
       const version = context.packager.appInfo.version
       let commit = process.env.ORCA_BUILD_COMMIT || process.env.GITHUB_SHA || 'unknown'
