@@ -1,13 +1,12 @@
 import type { RuntimeMobileSessionTabCloseResult } from '../../shared/runtime-types'
 import type { ClientSessionTabSelectionStore } from './client-session-tab-selection'
 
-// Why: a selection tombstone (ClientSessionTabSelectionStore.forgetTabs) is not a
-// hint — it filters the tab out of every snapshot published to that client, and
-// only activating the tab clears it. So it is a claim that the host itself
-// authoritatively retired the tab while its own published snapshot still lists
-// it. Claiming that for a close the host merely asked someone else to perform
-// would hide a still-live tab from a paired client with no recovery path.
-// Hence the three outcome classes below, one constructor each.
+// Why: a committed close forgets the closed tab as each client's selection, and a closed pane is
+// also hidden from that client's frames until the host list drops it
+// (ClientSessionTabSelectionStore.forgetTabs). Both claim the host itself retired it. Claiming that
+// for a close the host merely asked someone else to perform would drop a still-live tab's
+// selection and could hide it with no recovery path. Hence the three outcome classes below, one
+// constructor each.
 
 // Why: declared, never assigned — the brand exists only in the type system, so
 // no new field reaches mixed-version clients over the RPC wire.
@@ -24,21 +23,22 @@ type MobileSessionTabCloseRefusalReason = NonNullable<
 >
 
 // Why: the host tore the tab down (or verified its teardown) itself, so it may
-// tombstone the client's selection. The tombstone is written here, not by the
-// caller, so this outcome's name and its effect cannot drift apart.
+// forget the client's selection. That is written here, not by the caller, so this
+// outcome's name and its effect cannot drift apart.
 export function committedMobileSessionTabClose(
   selections: Pick<ClientSessionTabSelectionStore, 'forgetTabs'>,
   worktreeId: string,
-  closedTabIds: readonly string[]
+  closedTabIds: readonly string[],
+  closedPaneIds: readonly string[] = []
 ): MobileSessionTabCloseOutcome {
-  selections.forgetTabs(worktreeId, closedTabIds)
+  selections.forgetTabs(worktreeId, closedTabIds, closedPaneIds)
   return { closed: true } as MobileSessionTabCloseOutcome
 }
 
 // Why: the close was handed to the renderer over a fire-and-forget notifier that
 // carries no acknowledgement. The renderer may legitimately decline it — an
 // unresolvable worktree route, or a pinned-tab confirm the user cancels — so the
-// host does not know the tab retired and must not tombstone it.
+// host does not know the tab retired and must not forget it.
 export function delegatedMobileSessionTabClose(): MobileSessionTabCloseOutcome {
   return { closed: true } as MobileSessionTabCloseOutcome
 }

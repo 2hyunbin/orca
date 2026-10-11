@@ -1,64 +1,56 @@
-import type {
-  RuntimeMobileSessionClientTab,
-  RuntimeMobileSessionTabsResult
-} from '../../shared/runtime-types'
+import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { ClientSessionTabSelection } from './client-session-tab-selection'
 
 export type StoredClientSessionTabSelection = {
   selection: ClientSessionTabSelection
   revision: number
   shouldPersist: boolean
-  closedTabIds: ReadonlySet<string>
+  closedPaneIds: ReadonlySet<string>
 }
 
-function topLevelTabId(tab: RuntimeMobileSessionClientTab): string {
-  return tab.type === 'terminal' ? tab.parentTabId : tab.id
-}
-
-export function projectWithoutClosedClientSessionTabs(
+/**
+ * Hides panes closed on this host from the client until the host list stops listing them.
+ * Why panes only: a closed tab leaves the host list when its close commits, but the window drops a
+ * pane on an unacknowledged notice, so the list keeps the pane until the window republishes.
+ */
+export function projectWithoutClosedClientSessionPanes(
   snapshot: RuntimeMobileSessionTabsResult,
-  closedTabIds: ReadonlySet<string>
-): { snapshot: RuntimeMobileSessionTabsResult; retainedClosedTabIds: ReadonlySet<string> } {
-  if (closedTabIds.size === 0) {
-    return { snapshot, retainedClosedTabIds: closedTabIds }
+  closedPaneIds: ReadonlySet<string>
+): {
+  snapshot: RuntimeMobileSessionTabsResult
+  retainedClosedPaneIds: ReadonlySet<string>
+} {
+  if (closedPaneIds.size === 0) {
+    return { snapshot, retainedClosedPaneIds: closedPaneIds }
   }
-  const presentTabIds = new Set(snapshot.tabs.flatMap((tab) => [tab.id, topLevelTabId(tab)]))
-  const retainedClosedTabIds = new Set(
-    [...closedTabIds].filter((tabId) => presentTabIds.has(tabId))
+  const retainedClosedPaneIds = new Set(
+    snapshot.tabs.filter((tab) => closedPaneIds.has(tab.id)).map((tab) => tab.id)
   )
-  if (retainedClosedTabIds.size === 0) {
-    return { snapshot, retainedClosedTabIds }
+  if (retainedClosedPaneIds.size === 0) {
+    return { snapshot, retainedClosedPaneIds }
   }
-  const tabs = snapshot.tabs.filter(
-    (tab) => !retainedClosedTabIds.has(tab.id) && !retainedClosedTabIds.has(topLevelTabId(tab))
-  )
-  const tabGroups = snapshot.tabGroups?.map((group) => {
-    const tabOrder = group.tabOrder.filter((tabId) => !retainedClosedTabIds.has(tabId))
-    return {
-      ...group,
-      tabOrder,
-      activeTabId:
-        group.activeTabId && tabOrder.includes(group.activeTabId) ? group.activeTabId : null
-    }
-  })
   return {
-    snapshot: { ...snapshot, tabs, ...(tabGroups ? { tabGroups } : {}) },
-    retainedClosedTabIds
+    snapshot: {
+      ...snapshot,
+      tabs: snapshot.tabs.filter((tab) => !retainedClosedPaneIds.has(tab.id))
+    },
+    retainedClosedPaneIds
   }
 }
 
 export function forgetClosedClientSessionSelection(
   selection: ClientSessionTabSelection,
-  existingClosedTabIds: ReadonlySet<string>,
-  tabIds: readonly string[]
+  existingClosedPaneIds: ReadonlySet<string>,
+  tabIds: readonly string[],
+  paneIds: readonly string[]
 ): {
   selection: ClientSessionTabSelection
-  closedTabIds: ReadonlySet<string>
+  closedPaneIds: ReadonlySet<string>
   selectionChanged: boolean
   closureChanged: boolean
 } {
   const forgotten = new Set(tabIds)
-  const closedTabIds = new Set([...existingClosedTabIds, ...forgotten])
+  const closedPaneIds = new Set([...existingClosedPaneIds, ...paneIds])
   const activeTabId =
     selection.activeTabId && forgotten.has(selection.activeTabId) ? null : selection.activeTabId
   const activeTabIdByGroupId = Object.fromEntries(
@@ -68,19 +60,20 @@ export function forgetClosedClientSessionSelection(
   )
   return {
     selection: { ...selection, activeTabId, activeTabIdByGroupId },
-    closedTabIds,
+    closedPaneIds,
     selectionChanged:
       activeTabId !== selection.activeTabId ||
       Object.keys(activeTabIdByGroupId).length !==
         Object.keys(selection.activeTabIdByGroupId).length,
-    closureChanged: closedTabIds.size !== existingClosedTabIds.size
+    closureChanged: closedPaneIds.size !== existingClosedPaneIds.size
   }
 }
 
 export function forgetClosedClientSessionTabsByWorktree(
   statesByClient: ReadonlyMap<string, Map<string, StoredClientSessionTabSelection>>,
   worktreeId: string,
-  tabIds: readonly string[]
+  tabIds: readonly string[],
+  paneIds: readonly string[]
 ): boolean {
   let persistedSelectionChanged = false
   for (const statesByWorktree of statesByClient.values()) {
@@ -88,7 +81,12 @@ export function forgetClosedClientSessionTabsByWorktree(
     if (!state) {
       continue
     }
-    const closed = forgetClosedClientSessionSelection(state.selection, state.closedTabIds, tabIds)
+    const closed = forgetClosedClientSessionSelection(
+      state.selection,
+      state.closedPaneIds,
+      tabIds,
+      paneIds
+    )
     if (!closed.selectionChanged && !closed.closureChanged) {
       continue
     }
@@ -96,7 +94,7 @@ export function forgetClosedClientSessionTabsByWorktree(
       selection: closed.selection,
       revision: state.revision + 1,
       shouldPersist: state.shouldPersist,
-      closedTabIds: closed.closedTabIds
+      closedPaneIds: closed.closedPaneIds
     })
     persistedSelectionChanged ||= state.shouldPersist && closed.selectionChanged
   }

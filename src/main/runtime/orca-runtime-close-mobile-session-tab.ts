@@ -113,11 +113,12 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
       }
     }
     let closedSelectionTabIds = [tab.id]
-    const finishCommittedClose = (): MobileSessionTabCloseOutcome =>
+    const finishCommittedClose = (closedPaneIds?: string[]): MobileSessionTabCloseOutcome =>
       committedMobileSessionTabClose(
         this.clientSessionTabSelections,
         worktreeId,
-        closedSelectionTabIds
+        closedSelectionTabIds,
+        closedPaneIds
       )
     if (tab.type === 'terminal') {
       // Why: the wire id carries the intent — `parent::leaf` names a pane, `parent` its tab.
@@ -186,6 +187,12 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
       if (closingWholeParent && this.notifier?.closeTerminalTab) {
         // The renderer flush can rebase its omission; the host commits the acknowledged identity.
         const acknowledgeRetirement = this.captureTerminalTabRetirement(worktreeId, tab.parentTabId)
+        // Why before the relay: the window kills the PTYs during it, and a proof needs a live one.
+        const retireListedTab = this.captureTerminalTabListRetirement(
+          snapshot,
+          tab,
+          ptyCloseAuthority
+        )
         // Wait for the renderer's pin guard, retirement and forced session flush.
         const win = this.getAvailableAuthoritativeWindow()
         if (win?.webContents.isDestroyed?.()) {
@@ -247,6 +254,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
           this.republishMobileSessionTabsSnapshot(worktreeId)
           return refusedMobileSessionTabClose('stale-terminal', { snapshotRepublished: true })
         }
+        retireListedTab()
         this.clearRuntimeSessionOwnershipForMobileTab(worktreeId, snapshot, tab.parentTabId)
         return finishCommittedClose()
       }
@@ -269,7 +277,8 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         return delegatedMobileSessionTabClose()
       }
       await this.closeMobileSessionTerminalPane(worktreeId, tab)
-      return finishCommittedClose()
+      // Why hide the pane: the window drops it on an unacknowledged notice, so the host still lists it.
+      return finishCommittedClose([tab.id])
     } else if (tab.type === 'browser') {
       // Why: a browser tab can be hosted by a client, by the offscreen backend,
       // or by the renderer; each surface owns a different retirement path.
@@ -288,7 +297,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         if (!this.notifier?.closeSessionTab) {
           throw new Error('runtime_unavailable')
         }
-        await this.notifier.closeSessionTab(tab.id, worktreeId)
+        await this.closeRelayedMobileSessionTab(worktreeId, tab)
       }
     } else if (tab.type === 'agent-session') {
       if (this.notifier?.closeSessionTab) {
@@ -312,7 +321,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         throw new Error('runtime_unavailable')
       }
     } else {
-      await this.notifier.closeSessionTab(tab.id, worktreeId)
+      await this.closeRelayedMobileSessionTab(worktreeId, tab)
     }
     return finishCommittedClose()
   }

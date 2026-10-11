@@ -4,6 +4,7 @@ import type {
   RuntimeMobileSessionAgentTab,
   RuntimeMobileSessionBrowserTab,
   RuntimeMobileSessionRetiredTerminalSurface,
+  RuntimeMobileSessionSnapshotTab,
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
@@ -15,6 +16,7 @@ import { applyBrowserSessionTabSelection } from './browser-session-tab-selection
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-tab-retirement'
+import { retireMobileSessionTabFrom } from './mobile-session-tab-retirement'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
   protected async closeStructuredAgentSessionTab(
@@ -65,6 +67,19 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
       return true
     }
     return false
+  }
+
+  /** Relays a browser or editor close to the window, then drops the tab from the host list. */
+  protected async closeRelayedMobileSessionTab(
+    worktreeId: string,
+    tab: RuntimeMobileSessionSnapshotTab
+  ): Promise<void> {
+    await this.notifier.closeSessionTab(tab.id, worktreeId)
+    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const next = snapshot ? retireMobileSessionTabFrom(snapshot, tab.id) : null
+    if (next) {
+      this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(worktreeId, next))
+    }
   }
 
   // Why: a refused echoed close means the echoing client already pruned its

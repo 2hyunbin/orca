@@ -11,6 +11,7 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
 import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
+import { retireMobileSessionTabFrom } from './mobile-session-tab-retirement'
 
 /** The snapshot's tab for a structured session, matched by session id and by published tab id. */
 export function findStructuredAgentSessionTab(
@@ -37,24 +38,7 @@ export function retireStructuredAgentSessionTabFrom(
   sessionId: string
 ): RuntimeMobileSessionTabsSnapshot | null {
   const tab = findStructuredAgentSessionTab(snapshot, sessionId)
-  if (!tab) {
-    return null
-  }
-  const nextTabs = snapshot.tabs.filter((candidate) => candidate.id !== tab.id)
-  const active = nextTabs.find((candidate) => candidate.isActive) ?? nextTabs[0] ?? null
-  return {
-    ...snapshot,
-    snapshotVersion: snapshot.snapshotVersion + 1,
-    activeTabId: active?.id ?? null,
-    activeTabType: active?.type ?? null,
-    tabGroups: (snapshot.tabGroups ?? []).map((group) => ({
-      ...group,
-      tabOrder: group.tabOrder.filter((id) => id !== tab.id),
-      activeTabId: group.activeTabId === tab.id ? null : group.activeTabId,
-      recentTabIds: group.recentTabIds?.filter((id) => id !== tab.id)
-    })),
-    tabs: nextTabs
-  }
+  return tab ? retireMobileSessionTabFrom(snapshot, tab.id) : null
 }
 
 /**

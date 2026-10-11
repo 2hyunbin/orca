@@ -268,43 +268,60 @@ describe('client session-tab selection', () => {
     expect(store.project(full, 'device-a').activeTabId).toBe('browser-unified')
   })
 
-  it('does not restore a closed tab from a stale pre-close snapshot', () => {
+  it('forgets a closed tab as every client selection without filtering it from frames', () => {
     const store = new ClientSessionTabSelectionStore()
     const full = snapshot()
     store.activate(full, 'device-a', 'browser-unified')
     store.activate(full, 'device-b', 'browser-unified')
+    const before = store.project(full, 'device-a').snapshotVersion
 
     store.forgetTabs('wt-1', ['browser-unified'])
+
+    const forgotten = store['statesByClient'].get('device-a')?.get('wt-1')?.selection
+    expect(forgotten?.activeTabId).toBeNull()
+    expect(forgotten?.activeTabIdByGroupId).toEqual({ 'group-left': 'terminal-a' })
+    for (const clientId of ['device-a', 'device-b']) {
+      // Why shown: the host list drops a closed tab at commit, so a frame listing it is the truth.
+      const projected = store.project(full, clientId)
+      expect(projected.tabs.some((tab) => tab.id === 'browser-unified')).toBe(true)
+      expect(projected.snapshotVersion).toBeGreaterThan(before)
+    }
+  })
+
+  it('hides a closed pane from every client until a host frame omits it', () => {
+    const store = new ClientSessionTabSelectionStore()
+    const full = snapshot()
+    store.activate(full, 'device-a', 'terminal-a::leaf-b')
+    store.activate(full, 'device-b', 'terminal-a::leaf-a')
+
+    store.forgetTabs('wt-1', ['terminal-a::leaf-b'], ['terminal-a::leaf-b'])
 
     for (const clientId of ['device-a', 'device-b']) {
       const stale = store.project(full, clientId)
+      expect(stale.tabs.map((tab) => tab.id)).toEqual(['terminal-a::leaf-a', 'browser-unified'])
       expect(stale.activeTabId).toBe('terminal-a::leaf-a')
-      expect(stale.tabs.some((tab) => tab.id === 'browser-unified')).toBe(false)
     }
 
-    const withoutBrowser = {
+    const withoutPane = {
       ...full,
-      activeTabId: 'terminal-a::leaf-a',
-      activeTabType: 'terminal' as const,
-      tabGroups: full.tabGroups?.slice(0, 1),
-      tabs: full.tabs.filter((tab) => tab.id !== 'browser-unified')
+      snapshotVersion: 2,
+      tabs: full.tabs.filter((tab) => tab.id !== 'terminal-a::leaf-b')
     }
-    store.project(withoutBrowser, 'device-a')
+    store.project(withoutPane, 'device-a')
     const reused = store.project(full, 'device-a')
-    expect(reused.activeTabId).toBe('terminal-a::leaf-a')
-    expect(reused.tabs.some((tab) => tab.id === 'browser-unified')).toBe(true)
+    expect(reused.tabs.some((tab) => tab.id === 'terminal-a::leaf-b')).toBe(true)
   })
 
-  it('lets an explicit activation reuse a recently closed tab identity', () => {
+  it('lets an explicit activation reuse a recently closed pane identity', () => {
     const store = new ClientSessionTabSelectionStore()
     const full = snapshot()
-    store.activate(full, 'device-a', 'browser-unified')
-    store.forgetTabs('wt-1', ['browser-unified'])
+    store.activate(full, 'device-a', 'terminal-a::leaf-b')
+    store.forgetTabs('wt-1', ['terminal-a::leaf-b'], ['terminal-a::leaf-b'])
 
-    const reopened = store.activate(full, 'device-a', 'browser-unified')
+    const reopened = store.activate(full, 'device-a', 'terminal-a::leaf-b')
 
-    expect(reopened.activeTabId).toBe('browser-unified')
-    expect(reopened.tabs.some((tab) => tab.id === 'browser-unified')).toBe(true)
+    expect(reopened.activeTabId).toBe('terminal-a::leaf-b')
+    expect(reopened.tabs.some((tab) => tab.id === 'terminal-a::leaf-b')).toBe(true)
   })
 
   it('drops malformed persisted payloads instead of hydrating them', () => {
