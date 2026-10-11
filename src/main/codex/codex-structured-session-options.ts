@@ -7,8 +7,7 @@ import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured
 import {
   CODEX_DEFAULT_SERVICE_TIER,
   codexFastServiceTier,
-  codexOffersServiceTier,
-  dropUnlistedCodexServiceTier
+  codexOffersServiceTier
 } from './codex-structured-service-tier'
 import {
   composeCodexSessionOptionCatalog,
@@ -104,24 +103,12 @@ function composeLiveCodexCatalog(
   })
 }
 
-function applyLiveCodexCatalog(
-  session: CodexSession,
-  listing: CodexModelCatalogListing
-): AgentSessionOptionsResult {
-  dropUnlistedCodexServiceTier(
-    session,
-    session.options.get('model') ?? session.reportedOptions.model,
-    listing.models
-  )
-  return composeLiveCodexCatalog(session, listing)
-}
-
 export async function readLiveCodexSessionOptions(
   session: CodexSession,
   timeoutMs: number | undefined
 ): Promise<AgentSessionOptionsResult> {
   const listing = await codexSessionCatalogListingForPicker(session, timeoutMs)
-  return applyLiveCodexCatalog(session, listing)
+  return composeLiveCodexCatalog(session, listing)
 }
 
 /** Fetch outside the session lane; apply against current options inside it. */
@@ -130,7 +117,7 @@ export async function prepareLiveCodexSessionOptions(
   timeoutMs: number | undefined
 ): Promise<() => AgentSessionOptionsResult> {
   const listing = await codexSessionCatalogListingForPicker(session, timeoutMs)
-  return () => applyLiveCodexCatalog(session, listing)
+  return () => composeLiveCodexCatalog(session, listing)
 }
 
 export async function applyCodexStructuredSessionOption(
@@ -203,9 +190,7 @@ function applyValidatedCodexStructuredSessionOption(
   const modelId = key === 'model' ? value : catalog.current.model
   const model = catalog.models.find((entry) => entry.id === modelId)
   if (key === 'serviceTier') {
-    if (
-      !codexOffersServiceTier(value, session.reportedOptions.serviceTier, model, catalog.models)
-    ) {
+    if (!codexOffersServiceTier(value, model)) {
       throw new Error(`codex app-server model ${modelId} does not offer the ${value} tier`)
     }
     session.options.set(key, value)
@@ -231,7 +216,6 @@ function applyValidatedCodexStructuredSessionOption(
   } else {
     session.options.delete('effort')
   }
-  dropUnlistedCodexServiceTier(session, modelId, catalog.models)
   return Object.fromEntries(session.options)
 }
 

@@ -9,6 +9,7 @@ import type { CodexSession } from './codex-structured-session-state'
 
 /** Codex's request value for a model's standard tier. */
 export const CODEX_DEFAULT_SERVICE_TIER = 'default'
+const CODEX_FLEX_SERVICE_TIER = 'flex'
 
 function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
@@ -91,34 +92,15 @@ function codexListsServiceTier(
   return model?.serviceTiers?.some((choice) => choice.value === tier) === true
 }
 
-/** Codex also takes the thread's reported tier when no model lists it, such as a configured `flex`. */
+/** Codex runs a tier on a model that lists it, standard anywhere, and `flex` on every model without
+ *  listing it; any other tier it leaves out, so that model runs standard. */
 export function codexOffersServiceTier(
   tier: string,
-  reportedTier: string | null | undefined,
-  model: AgentSessionModelOption | undefined,
-  models: readonly AgentSessionModelOption[]
+  model: Pick<AgentSessionModelOption, 'serviceTiers'> | undefined
 ): boolean {
   return (
     tier === CODEX_DEFAULT_SERVICE_TIER ||
-    codexListsServiceTier(model, tier) ||
-    (tier === reportedTier && !models.some((entry) => codexListsServiceTier(entry, tier)))
+    tier === CODEX_FLEX_SERVICE_TIER ||
+    codexListsServiceTier(model, tier)
   )
-}
-
-/** A picked tier the model does not offer falls back to standard. With no pick nothing is written:
- *  Codex applies the user's configured tier per model, and the picker derives what it shows. */
-export function dropUnlistedCodexServiceTier(
-  session: CodexSession,
-  modelId: string | undefined,
-  models: readonly AgentSessionModelOption[]
-): void {
-  const tier = session.options.get('serviceTier')
-  const model = models.find((entry) => entry.id === modelId)
-  if (
-    tier &&
-    model?.serviceTiers &&
-    !codexOffersServiceTier(tier, session.reportedOptions.serviceTier, model, models)
-  ) {
-    session.options.set('serviceTier', CODEX_DEFAULT_SERVICE_TIER)
-  }
 }

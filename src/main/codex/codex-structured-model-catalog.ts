@@ -153,17 +153,15 @@ export function composeCodexSessionOptionCatalog(
     throw new Error('codex app-server returned no available models')
   }
   const modelEntry = models.find((entry) => entry.id === model)
-  const reported = input.reportedServiceTierKnown
+  const reportedTier = input.reportedServiceTierKnown
     ? (input.reportedServiceTier ?? CODEX_DEFAULT_SERVICE_TIER)
     : undefined
-  // Codex omits the thread's tier on a model that does not offer it, so that model runs standard.
-  const reportedTier =
-    reported === undefined ||
-    !modelEntry?.serviceTiers ||
-    codexOffersServiceTier(reported, input.reportedServiceTier, modelEntry, models)
-      ? reported
+  // The pick, else the configured tier, as this model runs it; neither is ever rewritten.
+  const chosen = input.current.serviceTier ?? reportedTier
+  const serviceTier =
+    chosen === undefined || !modelEntry?.serviceTiers || codexOffersServiceTier(chosen, modelEntry)
+      ? chosen
       : CODEX_DEFAULT_SERVICE_TIER
-  const serviceTier = input.current.serviceTier ?? reportedTier
   // Older clients only read Fast; any other tier leaves their toggle unset.
   const fastMode = codexFastModeOfServiceTier(serviceTier, modelEntry)
   const support = codexFastModeSupport(models)
