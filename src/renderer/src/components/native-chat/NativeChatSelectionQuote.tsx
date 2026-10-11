@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { MessageSquarePlus } from 'lucide-react'
+import { Quote } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { addViewportSizeChangeListener } from '@/hooks/viewport-size-change-listener'
@@ -11,7 +11,7 @@ import {
 } from './native-chat-quote-selection'
 
 // Why: shown at once, a double-click's action would sit under the pointer and take the third click.
-const DOUBLE_CLICK_SETTLE_MS = 500
+const DOUBLE_CLICK_SETTLE_MS = 180
 
 /** The selected text, and the point the offer is drawn at, which moves with that text. */
 type QuoteRequest = {
@@ -144,7 +144,7 @@ export function NativeChatSelectionQuote({
                 setRequest(null)
               }}
             >
-              <MessageSquarePlus />
+              <Quote />
               {translate('components.native-chat.addSelectionToChat', 'Add to chat')}
             </Button>
           </div>

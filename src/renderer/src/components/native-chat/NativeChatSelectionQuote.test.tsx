@@ -117,6 +117,23 @@ describe('NativeChatSelectionQuote', () => {
     expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull()
   })
 
+  it('offers a double-clicked word after a short wait for a third click', () => {
+    render(<Chat />)
+    const first = screen.getByTestId('first')
+    fireEvent.pointerDown(first, { button: 0 })
+    select(first)
+    fireEvent.mouseUp(first, { button: 0, detail: 2 })
+
+    act(() => {
+      vi.advanceTimersByTime(179)
+    })
+    expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull()
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(screen.getByRole('button', { name: 'Add to chat' })).toBeTruthy()
+  })
+
   it('offers a selection made with the keyboard', () => {
     render(<Chat />)
     select(screen.getByTestId('first'))
