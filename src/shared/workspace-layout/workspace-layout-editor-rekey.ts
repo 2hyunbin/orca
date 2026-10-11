@@ -77,6 +77,7 @@ export function renameEditorFiles(
       tabs,
       groups,
       ...(editorFiles ? { editorFiles } : {})
-    })
+    }),
+    { renamedTabIds: Object.fromEntries([...renamedTabIds].filter(([from, to]) => from !== to)) }
   )
 }

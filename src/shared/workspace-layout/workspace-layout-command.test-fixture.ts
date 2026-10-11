@@ -65,6 +65,8 @@ export const CLEAN_EXIT: ProcessExitFacts = {
   exitCode: 0,
   local: false,
   spawnedFresh: false,
+  tabHadPaneAtConnect: false,
+  restored: false,
   inputWritten: true,
   outputReceived: true
 }

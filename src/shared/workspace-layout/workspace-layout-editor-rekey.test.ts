@@ -66,6 +66,7 @@ describe('editor tabs follow a rename', () => {
       ]
     })
     expect(result.ok && result.model.workspaces[WS]!.groups).toEqual(before.groups)
+    expect(result.ok && result.result.renamedTabIds).toEqual({})
     expect(result.ok && result.model.workspaces[WS]!.tabs.map((tab) => tab.id)).toEqual(
       before.tabs.map((tab) => tab.id)
     )
@@ -134,5 +135,6 @@ describe('editor tabs follow a rename', () => {
     expect(
       result.ok && result.model.workspaces[WS]!.tabs.some((tab) => tab.id === '/repo/c.ts')
     ).toBe(true)
+    expect(result.ok && result.result.renamedTabIds).toEqual({ '/repo/a.ts': '/repo/c.ts' })
   })
 })

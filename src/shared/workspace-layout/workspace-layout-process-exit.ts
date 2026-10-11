@@ -20,25 +20,35 @@ export type ProcessExitFacts = {
   local: boolean
   /** The pane's current start attempt spawned it: not a reattach or a cold restore. */
   spawnedFresh: boolean
+  /** Another pane of the tab already had a terminal when this pane connected. */
+  tabHadPaneAtConnect: boolean
+  /** This pane's terminal was restored rather than started for it. */
+  restored: boolean
   inputWritten: boolean
   outputReceived: boolean
   /** Attach found no process: never proof that it exited, whatever the code. */
   attachAbsent?: boolean
 }
 
-export type ExitVerdict = 'retire' | 'keep' | 'unbind'
+type ExitVerdict = 'retire' | 'keep' | 'unbind'
 
-export function exitVerdict(facts: ProcessExitFacts, paneCount: number): ExitVerdict {
+function exitVerdict(facts: ProcessExitFacts, paneCount: number): ExitVerdict {
   if (facts.attachAbsent || !isProvenProcessExit(facts.exitCode)) {
     return 'unbind'
   }
   if (facts.local && facts.exitCode !== 0) {
     return 'keep'
   }
-  // A newborn that dies before any input keeps its error visible, whatever the code; a split one
-  // only if it printed nothing. The runtime sees output for hidden panes too, so no visibility gate.
-  const newborn = facts.spawnedFresh && !facts.inputWritten
-  return newborn && (paneCount === 1 || !facts.outputReceived) ? 'keep' : 'retire'
+  if (facts.inputWritten) {
+    return 'retire'
+  }
+  // Whatever the code: a sole newborn keeps its error visible; so does a fresh split that printed
+  // nothing. The runtime sees output for hidden panes too, so no visibility gate.
+  if (paneCount <= 1) {
+    return facts.spawnedFresh ? 'keep' : 'retire'
+  }
+  const freshSplit = facts.tabHadPaneAtConnect && !facts.restored && !facts.outputReceived
+  return freshSplit ? 'keep' : 'retire'
 }
 
 export function applyProcessExit(

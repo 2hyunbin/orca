@@ -141,6 +141,8 @@ export type LayoutCommandResult = {
   refused?: { tabId: string; code: 'tab_pinned' | 'editor_tab_has_unsaved_draft' }[]
   slept?: string[]
   woken?: string[]
+  /** Old tab-bar id → new, for tabs a file rename re-ided; views move their selection with it. */
+  renamedTabIds?: Record<string, string>
 }
 
 export type LayoutContext = {

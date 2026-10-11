@@ -104,6 +104,8 @@ describe('processExited', () => {
     exitCode: 1,
     local: false,
     spawnedFresh: false,
+    tabHadPaneAtConnect: false,
+    restored: false,
     inputWritten: true,
     outputReceived: true,
     ...overrides
@@ -145,6 +147,7 @@ describe('processExited', () => {
 
   it("keeps today's keep cases as exited, with the same ids and binding", () => {
     const newborn = { spawnedFresh: true, inputWritten: false }
+    const split = { ...newborn, tabHadPaneAtConnect: true }
     const keeps = [
       // A local process that exits non-zero.
       { panes: 2 as const, facts: exit({ local: true }) },
@@ -152,9 +155,11 @@ describe('processExited', () => {
       { panes: 1 as const, facts: exit(newborn) },
       { panes: 1 as const, facts: exit({ ...newborn, exitCode: 0, local: true }) },
       { panes: 1 as const, facts: exit({ ...newborn, exitCode: 0 }) },
-      // A fresh split that dies before input or output, whatever the code.
-      { panes: 2 as const, facts: exit({ ...newborn, outputReceived: false }) },
-      { panes: 2 as const, facts: exit({ ...newborn, exitCode: 0, outputReceived: false }) }
+      // A split into a tab with a live pane, not restored, dead before input or output, whatever
+      // the code; it need not be a fresh spawn.
+      { panes: 2 as const, facts: exit({ ...split, outputReceived: false }) },
+      { panes: 2 as const, facts: exit({ ...split, exitCode: 0, outputReceived: false }) },
+      { panes: 2 as const, facts: exit({ ...split, spawnedFresh: false, outputReceived: false }) }
     ]
     for (const { panes, facts } of keeps) {
       const kept = exitPane(panes, facts)
@@ -164,12 +169,20 @@ describe('processExited', () => {
   })
 
   it('retires every other proven exit', () => {
+    const silent = { inputWritten: false, outputReceived: false }
     const retires = [
       { panes: 1 as const, facts: exit({}) },
       { panes: 1 as const, facts: exit({ spawnedFresh: true }) },
       { panes: 1 as const, facts: exit({ exitCode: 0, spawnedFresh: true }) },
-      { panes: 2 as const, facts: exit({ spawnedFresh: true, inputWritten: false }) },
-      { panes: 2 as const, facts: exit({ exitCode: 0, local: true, spawnedFresh: true }) }
+      { panes: 2 as const, facts: exit({ exitCode: 0, local: true, spawnedFresh: true }) },
+      // A fresh spawn in a restored multi-pane tab is not a split into a live tab.
+      { panes: 2 as const, facts: exit({ ...silent, spawnedFresh: true }) },
+      // Neither is a restored terminal, nor a split that printed output.
+      { panes: 2 as const, facts: exit({ ...silent, tabHadPaneAtConnect: true, restored: true }) },
+      {
+        panes: 2 as const,
+        facts: exit({ ...silent, tabHadPaneAtConnect: true, outputReceived: true })
+      }
     ]
     for (const { panes, facts } of retires) {
       expect(exitPane(panes, facts)).toMatchObject({ pane: 'retired', outcome: null })
