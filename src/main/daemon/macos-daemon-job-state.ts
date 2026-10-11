@@ -1,4 +1,8 @@
+import { setTimeout as delay } from 'node:timers/promises'
 import { runProcess } from '@orca/process-host'
+
+const JOB_REMOVAL_TIMEOUT_MS = 3_000
+const JOB_REMOVAL_POLL_MS = 50
 
 export type MacDaemonJobState = 'running' | 'stopped' | 'missing' | 'unverifiable'
 
@@ -32,17 +36,20 @@ export async function readMacDaemonJobState(service: string): Promise<MacDaemonJ
 }
 
 export async function stopMacDaemonJob(service: string): Promise<void> {
-  const result = await runProcess({
+  await runProcess({
     program: '/bin/launchctl',
     args: ['bootout', service],
     timeoutMs: 10_000,
     maxOutputBytes: 8192
   })
-  if (result.code === 0 && !result.timedOut) {
-    return
-  }
-  if ((await readMacDaemonJobState(service)) !== 'missing') {
-    throw new Error('Could not stop the macOS terminal service')
+  // bootout can return while launchd still holds a job that was running, and a bootstrap
+  // under the same label in that window is refused.
+  const goneByMs = Date.now() + JOB_REMOVAL_TIMEOUT_MS
+  while ((await readMacDaemonJobState(service)) !== 'missing') {
+    if (Date.now() >= goneByMs) {
+      throw new Error('Could not stop the macOS terminal service')
+    }
+    await delay(JOB_REMOVAL_POLL_MS)
   }
 }
 

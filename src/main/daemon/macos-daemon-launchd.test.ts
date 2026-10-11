@@ -151,6 +151,10 @@ beforeEach(async () => {
           (launchctl.print.length > 1 ? launchctl.print.shift() : launchctl.print[0]) ?? missing
         )
       }
+      if (verb === 'bootout' && launchctl.bootout.code === 0) {
+        // A successful bootout leaves nothing for later prints to find.
+        launchctl.print = [missing]
+      }
       return verb === 'bootstrap' ? launchctl.bootstrap : launchctl.bootout
     }
     return ok
