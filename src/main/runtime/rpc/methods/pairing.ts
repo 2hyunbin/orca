@@ -11,6 +11,7 @@ import {
 export const PAIRING_METHODS = [
   defineMethod({
     name: 'pairing.getEndpoints',
+    permission: 'pairing-admin',
     params: PairingGetEndpointsParamsSchema,
     handler: async (params, ctx) => {
       if (!ctx.pairing) {
@@ -21,6 +22,7 @@ export const PAIRING_METHODS = [
   }),
   defineMethod({
     name: 'pairing.provisionRelay',
+    permission: 'pairing-admin',
     params: PairingProvisionRelayParamsSchema,
     handler: async (params, ctx) => {
       if (!ctx.pairing) {
@@ -31,6 +33,8 @@ export const PAIRING_METHODS = [
   }),
   defineMethod({
     name: DELEGATED_MOBILE_DEVICE_SYNC_METHOD,
+    // Why: paired desktops call this and are never granted pairing-admin; children reach no further (rpc-caller-scope.ts).
+    permission: 'workspace',
     params: DelegatedMobileDeviceSyncParamsSchema,
     handler: (params, ctx) => {
       if (!ctx.delegatedMobileDevices) {

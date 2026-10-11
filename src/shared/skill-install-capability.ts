@@ -21,7 +21,6 @@ export const SKILL_DELETE_CAPABILITY = 'skills.delete.v1' as const
 export const SKILL_DELETE_UPDATE_REQUIRED_MESSAGE =
   'Update Orca on the selected machine to delete skills.'
 
-/** Every skills capability the runtime advertises. */
 export const SKILL_RUNTIME_CAPABILITIES = [
   SKILL_INSTALL_CAPABILITY,
   SKILL_BUNDLE_INSTALL_CAPABILITY,
