@@ -207,6 +207,7 @@ describe('a Stop holds the queue, in order', () => {
     // Still winding down: the paused row shows, but neither Resume nor "Send message?" while it runs.
     expect(views.at(-1)).toMatchObject({ working: true, header: true, dialog: false })
     await rig.settleAccepted(working, 'stopped')
+    await vi.advanceTimersByTimeAsync(5)
     await laneDrained()
     await eventually(() => expect(views.at(-1)).toMatchObject({ header: true, dialog: true }))
     expect(views.at(-1)?.button).toBe('resume')
