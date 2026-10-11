@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { resetWorktreeTestSshHostHome } from '../../worktree-removal-test-ssh-host-home'
 import { _settlePendingWorktreeRemovalsForTests } from '../../worktree-background-removal'
-import { SshHostNotServedError } from '../../providers/ssh-host-not-served-error'
 
 import {
   assertWorktreeCleanForRemoval,
