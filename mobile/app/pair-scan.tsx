@@ -41,7 +41,7 @@ function LinkRefusedNotice({ notice }: { notice: string | undefined }) {
   }
   return (
     <Text style={styles.notice}>
-      That orca:// link can't pair your phone, because any app can open orca:// links. Scan the QR
+      That orca:// link can’t pair your phone, because any app can open orca:// links. Scan the QR
       code on your computer instead.
     </Text>
   )
