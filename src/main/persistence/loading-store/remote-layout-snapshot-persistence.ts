@@ -24,6 +24,19 @@ export class RemoteLayoutSnapshotPersistence {
     ]
   }
 
+  /** Every server's snapshot, for `layout.getRemoteSnapshots`. */
+  getRemoteLayoutSnapshots(): Record<string, RemoteLayoutSnapshot> {
+    const stored =
+      this[remoteLayoutSnapshotPersistenceContext].runtime.state.remoteLayoutSnapshots ?? {}
+    // Rebuilt so fields older builds stored (receivedAt, serverRuntimeId) are not handed on.
+    return Object.fromEntries(
+      Object.entries(stored).map(([environmentId, { workspaces }]) => [
+        environmentId,
+        { workspaces }
+      ])
+    )
+  }
+
   /**
    * Only the recorder calls this (ratchet in remote-layout-snapshot-recorder.test.ts). `later`
    * marks the domain dirty without arming the save timer, so it rides the next save or quit flush.

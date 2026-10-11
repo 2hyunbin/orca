@@ -1,6 +1,6 @@
 // The one writer of the display-only server layout snapshot (design 6.3, D3). It records the
 // `session.tabs.subscribeAll` frames main already relays to the window, so no server receives a
-// new request. Nothing reads the snapshot yet.
+// new request. Its one reader, `layout.getRemoteSnapshots`, has no caller yet.
 
 import type {
   RemoteLayoutSnapshot,
@@ -71,26 +71,25 @@ export function recordRemoteLayoutFrame(
   if (!isSessionTabsFrame(frame)) {
     return
   }
-  const recorded = { receivedAt: Date.now(), serverRuntimeId: response._meta.runtimeId }
   if (frame.type === 'snapshots') {
     // A census replaces the whole entry: a worktree missing from it is gone.
     const workspaces = Object.fromEntries(
       frame.snapshots.map((snapshot) => [snapshot.worktree, displayed(snapshot)])
     )
-    store.setRemoteLayoutSnapshot(environmentId, { ...recorded, workspaces }, 'now')
+    store.setRemoteLayoutSnapshot(environmentId, { workspaces }, 'now')
     return
   }
   const { type: _type, removed, ...result } = frame
   const { [frame.worktree]: previous, ...others } =
     store.getRemoteLayoutSnapshot(environmentId)?.workspaces ?? {}
   if (removed) {
-    store.setRemoteLayoutSnapshot(environmentId, { ...recorded, workspaces: others }, 'now')
+    store.setRemoteLayoutSnapshot(environmentId, { workspaces: others }, 'now')
     return
   }
   const workspace = displayed(result)
   store.setRemoteLayoutSnapshot(
     environmentId,
-    { ...recorded, workspaces: { ...others, [frame.worktree]: workspace } },
+    { workspaces: { ...others, [frame.worktree]: workspace } },
     structure(previous) === structure(workspace) ? 'later' : 'now'
   )
 }
