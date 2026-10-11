@@ -57,8 +57,8 @@ export function bindSettlePaneSerializer(session: ConnectPanePtySession): void {
       .catch(() => {})
   }
 
-  // Why: local and ordinary SSH startup commands are provider-owned so delivery
-  // survives renderer replacement. Only explicit terminal-paste stays renderer-owned.
+  // Why: startup commands are provider-owned so delivery survives renderer
+  // replacement. Only explicit terminal-paste stays renderer-owned.
   session.pendingStartupCommand = session.shouldDeliverStartupViaTerminalPaste
     ? session.paneStartup?.command
       ? { command: session.paneStartup.command }
@@ -207,11 +207,7 @@ export function bindSettlePaneSerializer(session: ConnectPanePtySession): void {
       armStartupDraftQuietTimer()
     }
   }
-  if (
-    session.ownsStartupDraftPaste &&
-    !session.connectionId &&
-    !session.shouldDeliverStartupViaTerminalPaste
-  ) {
+  if (session.ownsStartupDraftPaste && !session.shouldDeliverStartupViaTerminalPaste) {
     session.armStartupDraftReadinessObservation()
   }
   let sessionRestoredBannerShown: SessionRestoredBannerReason | null = null
