@@ -24,6 +24,8 @@ export type NewWorktreeModalProps = {
   /** The desktop's servers this phone can reach now; their repos are offered and created there. */
   serverClients?: ReadonlyMap<ExecutionHostId, RpcClient>
   hostId?: string
+  /** The host list's badge labels, so a run target reads as its row does. */
+  hostLabelById?: ReadonlyMap<ExecutionHostId, string>
   existingWorktreePaths?: readonly string[]
   existingWorktrees?: readonly { repoId: string; branch: string }[]
   openExternalUrl: (url: string) => void

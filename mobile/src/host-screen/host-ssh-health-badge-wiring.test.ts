@@ -11,7 +11,7 @@ vi.mock('../cache/repo-cache', () => ({ setCachedRepos: () => {} }))
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { RpcResponse } from '../transport/types'
 import type { Worktree } from '../worktree/workspace-list-types'
-import { useHostDisplayWorktrees } from './use-host-display-worktrees'
+import { useHostDisplayWorktrees, useHostLabelSources } from './use-host-display-worktrees'
 import { useHostRepoMetadata } from './use-host-repo-metadata'
 import { useHostScreenState } from './use-host-screen-state'
 
@@ -68,7 +68,7 @@ async function displayedRows(args: {
     state.clientRef.current = client
     setWorktrees = state.setWorktrees
     seen.refresh = useHostRepoMetadata({ client, connState: 'connected', hostId: 'host-1', state })
-    seen.rows = useHostDisplayWorktrees('connected', state)
+    seen.rows = useHostDisplayWorktrees('connected', state, useHostLabelSources('host-1', state))
     return null
   }
   await act(async () => {

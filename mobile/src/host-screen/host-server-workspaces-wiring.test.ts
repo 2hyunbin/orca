@@ -18,11 +18,15 @@ vi.mock('../transport/use-worktree-resync', () => ({
 }))
 
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
+import {
+  recordHostDescriptor,
+  resetHostDescriptorStoreForTests
+} from '../transport/host-descriptor-store'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { RpcResponse } from '../transport/types'
 import { readVisibleHostIds } from '../worktree/visible-host-rows'
 import type { Worktree } from '../worktree/workspace-list-types'
-import { useHostDisplayWorktrees } from './use-host-display-worktrees'
+import { useHostDisplayWorktrees, useHostLabelSources } from './use-host-display-worktrees'
 import { useHostScreenState } from './use-host-screen-state'
 import { useHostWorktreeActions } from './use-host-worktree-actions'
 import { useHostWorktreeCatalog } from './use-host-worktree-catalog'
@@ -145,7 +149,7 @@ async function mountScreen(first: FakeSession, hostCapabilities: string[]): Prom
     })
     held.state = state
     held.fetch = catalog.fetchWorktrees
-    held.rows = useHostDisplayWorktrees('connected', state)
+    held.rows = useHostDisplayWorktrees('connected', state, useHostLabelSources('host-1', state))
     return null
   }
   await act(async () => {
@@ -211,6 +215,19 @@ describe("a desktop's server workspaces on the phone", () => {
       'VM',
       'ThinkPad'
     ])
+  })
+
+  it("names the desktop's own row for the desktop's platform once servers mix the list", async () => {
+    recordHostDescriptor('host-1', { machineName: null, platform: 'darwin' })
+    try {
+      const screen = await mountScreen(desktop(), RELAYS)
+      expect(screen.rows()[0]).toMatchObject({
+        worktreeId: 'mac-wt',
+        hostContextLabel: 'Local Mac'
+      })
+    } finally {
+      resetHostDescriptorStoreForTests()
+    }
   })
 
   it('keeps showing today’s view under an older desktop or an older shell', async () => {

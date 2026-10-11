@@ -1,10 +1,9 @@
 import { View } from 'react-native'
 import { getRepoExecutionHostId } from '../../../src/shared/execution-host'
-import { Monitor } from 'lucide-react-native'
 import type { SmartModeAvailabilityInput } from '../tasks/mobile-smart-source-modes'
 import type { PasteRepoCandidate } from '../tasks/smart-source-paste-intent'
 import type { useMobileComposerSource } from '../tasks/use-mobile-composer-source'
-import { colors } from '../theme/mobile-theme'
+import { HostKindIcon } from './HostKindIcon'
 import { MobileAgentIcon } from './MobileAgentIcon'
 import type { NewWorktreeAgentOption } from './new-worktree-agent-selection'
 import { newWorktreeFormStyles as styles } from './new-worktree-form-styles'
@@ -90,7 +89,7 @@ export function NewWorktreeModalDrawers(props: {
         selectedId={props.selectedRepo ? getRepoExecutionHostId(props.selectedRepo) : ''}
         onSelect={(item) => props.onRepoChange(item.repo)}
         onClose={props.onTransitionToForm}
-        renderIcon={() => <Monitor size={16} color={colors.textMuted} />}
+        renderIcon={(item) => <HostKindIcon hostId={item.hostId} size={16} />}
       />
 
       <PickerListDrawer

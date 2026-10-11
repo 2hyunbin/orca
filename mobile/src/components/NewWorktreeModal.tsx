@@ -69,6 +69,7 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
     client: desktopClient,
     serverClients,
     hostId,
+    hostLabelById,
     existingWorktreePaths,
     existingWorktrees,
     openExternalUrl,
@@ -182,11 +183,11 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
   const selectedProject =
     projectPickerItems.find((project) => project.id === selectedProjectId) ?? null
   const runTargetPickerItems = useMemo(
-    () => buildNewWorkspaceRunTargetOptions(repos, selectedProjectId, hostPlatform),
-    [hostPlatform, repos, selectedProjectId]
+    () => buildNewWorkspaceRunTargetOptions(repos, selectedProjectId, hostPlatform, hostLabelById),
+    [hostLabelById, hostPlatform, repos, selectedProjectId]
   )
   const selectedRunTarget = selectedRepo
-    ? getNewWorkspaceRunTarget(selectedRepo, hostPlatform)
+    ? getNewWorkspaceRunTarget(selectedRepo, hostPlatform, hostLabelById)
     : null
   const needsSetupChoice = Boolean(setupScript.setupCommand) && setupScript.setupRunPolicy === 'ask'
   const canCreate =

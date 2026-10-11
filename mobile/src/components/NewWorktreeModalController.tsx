@@ -20,6 +20,7 @@ export const NewWorktreeModalController = forwardRef<NewWorktreeModalControllerH
       client,
       serverClients,
       hostId,
+      hostLabelById,
       existingWorktreePaths,
       existingWorktrees,
       openExternalUrl,
@@ -57,6 +58,7 @@ export const NewWorktreeModalController = forwardRef<NewWorktreeModalControllerH
         client={client}
         serverClients={serverClients}
         hostId={hostId}
+        hostLabelById={hostLabelById}
         existingWorktreePaths={existingWorktreePaths}
         existingWorktrees={existingWorktrees}
         openExternalUrl={openExternalUrl}

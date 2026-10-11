@@ -184,7 +184,7 @@ describe('NewWorktreeModal project targets', () => {
     expect(pickerItems(renderer, 'Run on')).toEqual([
       expect.objectContaining({ label: LOCAL_HOST_LABEL, detail: '/src/orca' }),
       expect.objectContaining({
-        label: 'SSH · build-server',
+        label: 'build-server',
         detail: '/home/dev/orca'
       })
     ])
@@ -349,6 +349,7 @@ describe('NewWorktreeModal project targets', () => {
           client: requestsOnly(desktop),
           serverClients: new Map([['runtime:env-1', requestsOnly(server)]]),
           hostId: 'host-1',
+          hostLabelById: new Map([['runtime:env-1', 'scratch-server']]),
           onCreated,
           onClose: () => {}
         })
@@ -357,10 +358,26 @@ describe('NewWorktreeModal project targets', () => {
     await flushUpdates()
 
     const runTargets = pickerItems(renderer, 'Run on')
-    expect(runTargets.map((item) => item.detail)).toEqual(['/src/orca', '/srv/orca'])
+    expect(runTargets.map((item) => [item.label, item.detail])).toEqual([
+      [LOCAL_HOST_LABEL, '/src/orca'],
+      ['scratch-server', '/srv/orca']
+    ])
     const serverTarget = runTargetPicker(renderer)
+    const iconOf = (item: unknown) => {
+      let icon: ReactTestRenderer | undefined
+      act(() => {
+        icon = create(serverTarget.props.renderIcon(item))
+      })
+      return icon?.toJSON()
+    }
+    expect(serverTarget.props.items.map(iconOf)).toMatchObject([
+      { type: 'Monitor' },
+      { type: 'Server' }
+    ])
     await act(async () => serverTarget.props.onSelect(serverTarget.props.items[1]))
     await flushUpdates()
+    // The Run on field shows the picked server's glyph, as its row does.
+    expect(renderer.root.findAll((node) => node.type === 'Server')).toHaveLength(1)
     expect(pickerItems(renderer, 'Run on')[0]?.label).toBe(LOCAL_HOST_LABEL)
     act(() => sourceInputs(renderer)[0]!.props.onChangeText('srv-wt'))
     const form = renderer.root.find((node) => typeof node.props.onCreate === 'function')

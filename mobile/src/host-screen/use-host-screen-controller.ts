@@ -15,7 +15,7 @@ import {
   useRelayRecoveryStatus
 } from '../transport/client-context-connection-metrics'
 import { useWorkspaceSections } from '../worktree/use-workspace-sections'
-import { useHostDisplayWorktrees } from './use-host-display-worktrees'
+import { useHostDisplayWorktrees, useHostLabelSources } from './use-host-display-worktrees'
 import { useHostRepoMetadata } from './use-host-repo-metadata'
 import { useHostScreenIdentity } from './use-host-screen-identity'
 import { useHostScreenState } from './use-host-screen-state'
@@ -103,7 +103,8 @@ export function useHostScreenController({
   }
   const showNewWorktree = resolvedRouteActionState.showNewWorktree
 
-  const displayWorktrees = useHostDisplayWorktrees(connState, state)
+  const hostLabels = useHostLabelSources(hostId, state)
+  const displayWorktrees = useHostDisplayWorktrees(connState, state, hostLabels)
   const sectionsResult = useWorkspaceSections({
     displayWorktrees,
     sortMode: state.sortMode,
@@ -135,6 +136,7 @@ export function useHostScreenController({
     hostCapabilities,
     hostDisplay,
     hostId,
+    hostLabels,
     insets,
     isReadOnly: connState === 'auth-failed',
     isWideLayout,
