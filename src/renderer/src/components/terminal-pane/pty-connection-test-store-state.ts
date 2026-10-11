@@ -109,6 +109,8 @@ export type StoreState = {
   getAgentLaunchConfigForStatusEntry: ReturnType<typeof vi.fn>
   clearSleepingAgentSession: ReturnType<typeof vi.fn>
   rememberSleepingAgentSession?: ReturnType<typeof vi.fn>
+  pendingStartupByTabId?: Record<string, unknown>
+  automaticAgentResumeClaimsByTabId?: Record<string, unknown>
   registerAgentLaunchConfig: ReturnType<typeof vi.fn>
   clearAgentLaunchConfig: ReturnType<typeof vi.fn>
   markWorktreeUnread: ReturnType<typeof vi.fn>

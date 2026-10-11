@@ -4,6 +4,8 @@ import type { SpawnDeferralReason } from '../../../shared/host-spawn-admission'
 export type PaneSpawnDeferral = {
   reason: SpawnDeferralReason
   resume: () => void
+  /** The retry is in flight; the pane still owns the session but shows no overlay. */
+  resuming?: true
 }
 
 // Why module state: the pane session is imperative and outlives renders; overlays only read it.

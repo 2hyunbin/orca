@@ -1,14 +1,19 @@
 import { useAppStore } from '@/store'
 import { writeTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
-import type { SleepingAgentSessionRecord } from '../../../../../shared/agent-session-resume'
 import {
   agentProviderSessionsEqual,
-  isResumableTuiAgent
+  isResumableTuiAgent,
+  type AgentProviderSessionMetadata,
+  type SleepingAgentSessionRecord
 } from '../../../../../shared/agent-session-resume'
 import { parsePaneKey } from '../../../../../shared/stable-pane-id'
 import { stablePaneHasLivePty } from '@/lib/sleeping-agent-pane-ownership'
-import { clearPaneSpawnDeferral, setPaneSpawnDeferral } from '@/lib/pane-spawn-deferral-registry'
+import {
+  clearPaneSpawnDeferral,
+  getPaneSpawnDeferral,
+  setPaneSpawnDeferral
+} from '@/lib/pane-spawn-deferral-registry'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type {
   ColdRestoreAgentResumeStartup,
@@ -20,6 +25,7 @@ const SESSION_RUNNING_ELSEWHERE_NOTICE =
   '\r\n\x1b[2mThis agent session is already running in another tab.\x1b[0m\r\n'
 
 type DeferredSpawn = {
+  reason: SpawnDeferralReason
   startupOverride: PendingStartupCommand | null | undefined
   options: FreshSpawnOptions
 }
@@ -82,6 +88,29 @@ function providerSessionLiveInAnotherPane(resume: SleepingAgentSessionRecord): b
   })
 }
 
+function providerSessionQueuedInAnotherTab(
+  resume: SleepingAgentSessionRecord,
+  ownTabId: string
+): boolean {
+  const state = useAppStore.getState()
+  const sameSession = (
+    agent: string | undefined,
+    providerSession: AgentProviderSessionMetadata | undefined
+  ): boolean =>
+    agent === resume.agent &&
+    agentProviderSessionsEqual(resume.agent, providerSession, resume.providerSession)
+  return (
+    Object.entries(state.pendingStartupByTabId).some(
+      ([tabId, startup]) =>
+        tabId !== ownTabId && sameSession(startup.launchAgent, startup.resumeProviderSession)
+    ) ||
+    Object.entries(state.automaticAgentResumeClaimsByTabId).some(
+      ([tabId, claim]) =>
+        tabId !== ownTabId && sameSession(claim.launchAgent, claim.providerSession)
+    )
+  )
+}
+
 /** A restore the host kept asleep: the pane shows a sleeping overlay and retries when opened. */
 export function installSpawnDeferredSleep(session: ConnectPanePtySession): void {
   // Set by the transport for the spawn in flight; read when that spawn settles without a PTY.
@@ -99,7 +128,7 @@ export function installSpawnDeferredSleep(session: ConnectPanePtySession): void 
       // Why left after a later resume: the next quit capture replaces it, and a pane with a live PTY owns it.
       useAppStore.getState().rememberSleepingAgentSession(record)
     }
-    session.deferredSpawn = { startupOverride, options }
+    session.deferredSpawn = { reason, startupOverride, options }
     setPaneSpawnDeferral(session.cacheKey, {
       reason,
       resume: () => void session.resumeDeferredSpawn()
@@ -116,16 +145,38 @@ export function installSpawnDeferredSleep(session: ConnectPanePtySession): void 
       return Promise.resolve(null)
     }
     session.deferredSpawn = null
-    clearPaneSpawnDeferral(session.cacheKey)
     const resume = deferredResumeRecord(session, deferred.startupOverride)
-    if (resume && providerSessionLiveInAnotherPane(resume)) {
-      // Why no spawn: the session already runs elsewhere, and a second `--resume` forks it.
+    if (
+      resume &&
+      (providerSessionLiveInAnotherPane(resume) ||
+        providerSessionQueuedInAnotherTab(resume, session.deps.tabId))
+    ) {
+      clearPaneSpawnDeferral(session.cacheKey)
+      // Why no spawn: the session runs or is starting elsewhere, and a second `--resume` forks it.
       writeTerminalOutput(session.pane.terminal, SESSION_RUNNING_ELSEWHERE_NOTICE, {
         foreground: session.deps.isVisibleRef.current === true
       })
       return Promise.resolve(null)
     }
-    return session.startFreshSpawn(deferred.startupOverride, deferred.options)
+    // Why keep the entry while in flight: until the PTY binds, the pane is still the session's
+    // owner, and a sweep in between must not start it in another tab.
+    const resuming = { reason: deferred.reason, resume: () => {}, resuming: true as const }
+    setPaneSpawnDeferral(session.cacheKey, resuming)
+    const settle = (): void => {
+      if (getPaneSpawnDeferral(session.cacheKey) === resuming) {
+        clearPaneSpawnDeferral(session.cacheKey)
+      }
+    }
+    return session.startFreshSpawn(deferred.startupOverride, deferred.options).then(
+      (ptyId: string | null) => {
+        settle()
+        return ptyId
+      },
+      (error: unknown) => {
+        settle()
+        throw error
+      }
+    )
   }
 
   session.resumeDeferredSpawnOnReveal = (): void => {

@@ -167,6 +167,8 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     mockStoreState.rememberSleepingAgentSession = vi.fn((record: { paneKey: string }) => {
       mockStoreState.sleepingAgentSessionsByPaneKey[record.paneKey] ??= record
     })
+    mockStoreState.pendingStartupByTabId = {}
+    mockStoreState.automaticAgentResumeClaimsByTabId = {}
     await installTerminalTestGlobals()
   })
 
@@ -291,6 +293,74 @@ describe('connectPanePty: a restore the host kept asleep', () => {
 
     expect(freshSpawns(transport)).toHaveLength(1)
     expect(getPaneSpawnDeferral(paneKey)).toBeUndefined()
+    binding.dispose()
+  })
+
+  it('stays the owner while its retry is in flight, then hands over to the PTY', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    const { getPaneSpawnDeferral, isPaneSpawnDeferred } =
+      await import('@/lib/pane-spawn-deferral-registry')
+    const transport = deferringTransport()
+    transportFactoryQueue.push(transport)
+    const pane = createPane(1)
+    const paneKey = makePaneKey('tab-1', pane.leafId)
+    const deps = createDeps({
+      isVisibleRef: { current: false },
+      startup: {
+        command: "claude '--resume' 'provider-session-1'",
+        launchAgent: 'claude',
+        resumeProviderSession: RESUME
+      }
+    })
+
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
+    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    await flushAsyncTicks(20)
+
+    let bind: (ptyId: string) => void = () => {}
+    transport.connect.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          bind = resolve
+        })
+    )
+    deps.isVisibleRef.current = true
+    binding.noteVisibilityResume()
+    await flushAsyncTicks(5)
+
+    expect(isPaneSpawnDeferred(paneKey)).toBe(true)
+    expect(getPaneSpawnDeferral(paneKey)?.resuming).toBe(true)
+    bind('resumed-pty')
+    await flushAsyncTicks(20)
+    expect(isPaneSpawnDeferred(paneKey)).toBe(false)
+    binding.dispose()
+  })
+
+  it('does not resume a session another tab has already queued', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    const transport = deferringTransport()
+    transportFactoryQueue.push(transport)
+    const pane = createPane(1)
+    const deps = createDeps({
+      isVisibleRef: { current: false },
+      startup: {
+        command: "claude '--resume' 'provider-session-1'",
+        launchAgent: 'claude',
+        resumeProviderSession: RESUME
+      }
+    })
+
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
+    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    await flushAsyncTicks(20)
+    mockStoreState.pendingStartupByTabId = {
+      'tab-9': { command: 'claude', launchAgent: 'claude', resumeProviderSession: RESUME }
+    }
+    deps.isVisibleRef.current = true
+    binding.noteVisibilityResume()
+    await flushAsyncTicks(20)
+
+    expect(freshSpawns(transport)).toHaveLength(1)
     binding.dispose()
   })
 })

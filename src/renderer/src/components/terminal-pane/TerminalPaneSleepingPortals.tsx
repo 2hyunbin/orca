@@ -13,7 +13,7 @@ function SleepingPanePortal({
   tabId: string
 }): React.JSX.Element | null {
   const deferral = usePaneSpawnDeferral(makePaneKey(tabId, pane.leafId))
-  if (!deferral) {
+  if (!deferral || deferral.resuming) {
     return null
   }
   return createPortal(
