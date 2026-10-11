@@ -22,6 +22,8 @@ import { SESSION_TAB_NOT_FOUND_ERROR } from '../../shared/session-tab-close'
 import { rendererPublicationThrottle } from '../window/renderer-publication-throttle'
 import { structuredAgentSessionTabCloseCause } from './structured-agent-session-tab-close-cause'
 import { retireHeadlessMobileSessionEditorTab } from './mobile-session-editor-projection'
+import { closeRelayedMobileSessionTab } from './mobile-session-relayed-tab-close'
+import { captureTerminalTabListRetirement } from './mobile-session-terminal-tab-retirement'
 
 export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose {
   async closeMobileSessionTab(
@@ -188,11 +190,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         // The renderer flush can rebase its omission; the host commits the acknowledged identity.
         const acknowledgeRetirement = this.captureTerminalTabRetirement(worktreeId, tab.parentTabId)
         // Why before the relay: the window kills the PTYs during it, and a proof needs a live one.
-        const retireListedTab = this.captureTerminalTabListRetirement(
-          snapshot,
-          tab,
-          ptyCloseAuthority
-        )
+        const retireTab = captureTerminalTabListRetirement(this, snapshot, tab, ptyCloseAuthority)
         // Wait for the renderer's pin guard, retirement and forced session flush.
         const win = this.getAvailableAuthoritativeWindow()
         if (win?.webContents.isDestroyed?.()) {
@@ -254,7 +252,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
           this.republishMobileSessionTabsSnapshot(worktreeId)
           return refusedMobileSessionTabClose('stale-terminal', { snapshotRepublished: true })
         }
-        retireListedTab()
+        retireTab()
         this.clearRuntimeSessionOwnershipForMobileTab(worktreeId, snapshot, tab.parentTabId)
         return finishCommittedClose()
       }
@@ -297,7 +295,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         if (!this.notifier?.closeSessionTab) {
           throw new Error('runtime_unavailable')
         }
-        await this.closeRelayedMobileSessionTab(worktreeId, tab)
+        await closeRelayedMobileSessionTab(this, worktreeId, tab)
       }
     } else if (tab.type === 'agent-session') {
       if (this.notifier?.closeSessionTab) {
@@ -321,7 +319,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         throw new Error('runtime_unavailable')
       }
     } else {
-      await this.closeRelayedMobileSessionTab(worktreeId, tab)
+      await closeRelayedMobileSessionTab(this, worktreeId, tab)
     }
     return finishCommittedClose()
   }

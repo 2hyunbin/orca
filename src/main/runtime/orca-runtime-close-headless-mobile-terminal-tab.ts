@@ -10,7 +10,6 @@ import type {
 import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import { buildHeadlessMobileSessionTabGroups } from './mobile-session-layout-projection'
 import { appendRetiredTerminalSurfaceProofs } from './mobile-session-terminal-retirement-proof'
-import { retireProvenTerminalTabFrom } from './mobile-session-terminal-tab-retirement'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import type { TerminalPaneLayoutNode } from '../../shared/terminal-tab-types'
 import type { RuntimeSessionTabCloseReason } from '../../shared/runtime-session-contracts'
@@ -142,31 +141,6 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
       )
       return proof ? [proof] : []
     })
-  }
-
-  /**
-   * Captures a terminal tab's proofs now, before its PTYs die; the returned call drops the tab from
-   * the host list with them once the window has acknowledged the close.
-   */
-  protected captureTerminalTabListRetirement(
-    snapshot: RuntimeMobileSessionTabsSnapshot,
-    tab: RuntimeMobileSessionTerminalTab,
-    ptyCloseAuthority?: { pty: RuntimePtyWorktreeRecord } | null
-  ): () => void {
-    const worktreeId = snapshot.worktree
-    const proofs = this.captureMobileSessionTerminalTabRetirementProofs(
-      worktreeId,
-      snapshot,
-      tab.parentTabId,
-      ptyCloseAuthority?.pty
-    )
-    return () => {
-      const current = this.mobileSessionTabsByWorktree.get(worktreeId)
-      const next = current ? retireProvenTerminalTabFrom(current, tab.parentTabId, proofs) : null
-      if (next) {
-        this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(worktreeId, next))
-      }
-    }
   }
 
   async moveMobileSessionTab(

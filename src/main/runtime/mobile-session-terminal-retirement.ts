@@ -157,7 +157,7 @@ function topLevelTabId(tab: RuntimeMobileSessionSnapshotTab): string {
   return tab.type === 'terminal' ? tab.parentTabId : tab.id
 }
 
-function chooseActiveSurface(
+export function chooseActiveSurface(
   tabs: readonly RuntimeMobileSessionSnapshotTab[],
   previousActiveId: string | null,
   groups: readonly RuntimeMobileSessionTabGroup[] | undefined,

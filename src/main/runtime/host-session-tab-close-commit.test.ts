@@ -126,12 +126,15 @@ describe('a window-owned terminal tab closed through the acknowledged relay', ()
       `${ACK_TAB}::${ACK_LEAF}`,
       `${ACK_TAB}::${ACK_SECOND_LEAF}`
     ])
+    const epoch = f.runtime['mobileSessionTabsByWorktree'].get(ACK_WORKTREE)?.publicationEpoch
     const frames = recordFrames(f.runtime)
     const pending = f.close()
     await f.entered.promise
     f.acknowledgement.resolve()
 
     await expect(pending).resolves.toEqual({ closed: true })
+    // Why the same epoch: a close is not a handover, and a fresh one would fence the window's next frame.
+    expect(f.runtime['mobileSessionTabsByWorktree'].get(ACK_WORKTREE)?.publicationEpoch).toBe(epoch)
     const listed = await f.runtime.listMobileSessionTabs(`id:${ACK_WORKTREE}`, CLIENT)
     expect(ackTabIds(listed)).toEqual([])
     expect(listed.retiredTerminalSurfaces).toEqual(
@@ -176,6 +179,47 @@ describe('a window-owned terminal tab closed through the acknowledged relay', ()
     expect(f.runtime['mobileSessionTabsByWorktree'].get(ACK_WORKTREE)?.tabs).toHaveLength(2)
   })
 
+  it('retires no pane of a split when only one of them has a proof', async () => {
+    const f = terminalFixture()
+    await f.runtime.listMobileSessionTabs(`id:${ACK_WORKTREE}`, CLIENT)
+    // The second pane's PTY is already gone, so it has nothing to prove its retirement with.
+    f.runtime['ptysById'].delete('pty-b')
+    const pending = f.close()
+    await f.entered.promise
+    f.acknowledgement.resolve()
+
+    await expect(pending).resolves.toEqual({ closed: true })
+    const stored = f.runtime['mobileSessionTabsByWorktree'].get(ACK_WORKTREE)
+    expect(stored?.tabs.map((tab) => tab.id)).toEqual([
+      `${ACK_TAB}::${ACK_LEAF}`,
+      `${ACK_TAB}::${ACK_SECOND_LEAF}`
+    ])
+    expect(stored?.retiredTerminalSurfaces ?? []).toEqual([])
+  })
+
+  it('still ships the proofs when the window dropped the tab before acknowledging', async () => {
+    const f = terminalFixture()
+    await f.runtime.listMobileSessionTabs(`id:${ACK_WORKTREE}`, CLIENT)
+    const frames = recordFrames(f.runtime)
+    const pending = f.close()
+    await f.entered.promise
+    f.publish(false, 2)
+    expect(
+      f.runtime['mobileSessionTabsByWorktree'].get(ACK_WORKTREE)?.retiredTerminalSurfaces
+    ).toBeUndefined()
+    f.acknowledgement.resolve()
+
+    await expect(pending).resolves.toEqual({ closed: true })
+    const proofs = expect.arrayContaining([
+      expect.objectContaining({ parentTabId: ACK_TAB, leafId: ACK_LEAF, ptyId: 'pty-a' }),
+      expect.objectContaining({ parentTabId: ACK_TAB, leafId: ACK_SECOND_LEAF, ptyId: 'pty-b' })
+    ])
+    expect(
+      f.runtime['mobileSessionTabsByWorktree'].get(ACK_WORKTREE)?.retiredTerminalSurfaces
+    ).toEqual(proofs)
+    expect(frames.at(-1)?.retiredTerminalSurfaces).toEqual(proofs)
+  })
+
   it('retires nothing when the close is refused as a stale terminal', async () => {
     const f = terminalFixture()
     await f.runtime.listMobileSessionTabs(`id:${ACK_WORKTREE}`, CLIENT)
@@ -218,6 +262,24 @@ describe('a relayed browser or editor tab', () => {
     expect(stored?.publicationEpoch).toBe('renderer:1')
     expect(frames).toHaveLength(1)
     expect(frames[0]?.tabs.map((tab) => tab.id)).not.toContain(closedId)
+  })
+
+  it("keeps a bystander client's projected version monotonic across the close", async () => {
+    const runtime = windowHost(vi.fn(async () => undefined))
+    const bystander = 'phone-b'
+    const before = await runtime.listMobileSessionTabs(`id:${WORKTREE}`, bystander)
+    const versions: number[] = []
+    runtime.onMobileSessionTabsChanged((frame) => versions.push(frame.snapshotVersion), bystander)
+
+    await runtime.closeMobileSessionTab(`id:${WORKTREE}`, browserTab.id)
+    const after = await runtime.listMobileSessionTabs(`id:${WORKTREE}`, bystander)
+
+    // The bystander is on the editor (a browser with no live page is never projected).
+    expect(before.activeTabId).toBe(editorTab.id)
+    expect(after.activeTabId).toBe(editorTab.id)
+    expect(versions).toHaveLength(1)
+    expect(versions[0]).toBeGreaterThan(before.snapshotVersion)
+    expect(after.snapshotVersion).toBeGreaterThanOrEqual(versions[0] ?? Infinity)
   })
 
   it('stays listed when the window declines the close', async () => {

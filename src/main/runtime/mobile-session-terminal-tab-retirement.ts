@@ -4,6 +4,12 @@ import type {
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
 import { retireTerminalSurfacesFromSnapshot } from './mobile-session-terminal-retirement'
+import { attachRetirementProofsToSnapshot } from './mobile-session-terminal-retirement-proof'
+import {
+  publishMobileSessionRetirement,
+  type MobileSessionSnapshotPublisher
+} from './mobile-session-tab-retirement'
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
 /**
  * The snapshot without a closed terminal tab, or null unless every surface it lists for that tab
@@ -41,4 +47,57 @@ export function retireProvenTerminalTabFrom(
     next = retired.snapshot
   }
   return next
+}
+
+/**
+ * After the window acknowledged closing a terminal tab: drops it with its proofs, or, when the
+ * window's own frame already dropped it, still ships the proofs so paired clients can retire it.
+ */
+export function retireAcknowledgedTerminalTabFrom(
+  snapshot: RuntimeMobileSessionTabsSnapshot,
+  parentTabId: string,
+  proofs: readonly RuntimeMobileSessionRetiredTerminalSurface[]
+): RuntimeMobileSessionTabsSnapshot | null {
+  const listed = snapshot.tabs.some(
+    (tab) => tab.type === 'terminal' && tab.parentTabId === parentTabId
+  )
+  return listed
+    ? retireProvenTerminalTabFrom(snapshot, parentTabId, proofs)
+    : attachRetirementProofsToSnapshot(snapshot, proofs)
+}
+
+export type TerminalTabListRetirementHost = MobileSessionSnapshotPublisher & {
+  captureMobileSessionTerminalTabRetirementProofs(
+    worktreeId: string,
+    snapshot: RuntimeMobileSessionTabsSnapshot,
+    parentTabId: string,
+    authorizedPty?: RuntimePtyWorktreeRecord
+  ): RuntimeMobileSessionRetiredTerminalSurface[]
+}
+
+/**
+ * Captures a terminal tab's proofs now, before the window's close kills its PTYs; the returned
+ * call retires the tab from the host list with them once the window has acknowledged the close.
+ */
+export function captureTerminalTabListRetirement(
+  host: TerminalTabListRetirementHost,
+  snapshot: RuntimeMobileSessionTabsSnapshot,
+  tab: RuntimeMobileSessionTerminalTab,
+  ptyCloseAuthority?: { pty: RuntimePtyWorktreeRecord } | null
+): () => void {
+  const worktreeId = snapshot.worktree
+  const proofs = host.captureMobileSessionTerminalTabRetirementProofs(
+    worktreeId,
+    snapshot,
+    tab.parentTabId,
+    ptyCloseAuthority?.pty
+  )
+  return () => {
+    const current = host.mobileSessionTabsByWorktree.get(worktreeId)
+    publishMobileSessionRetirement(
+      host,
+      worktreeId,
+      current ? retireAcknowledgedTerminalTabFrom(current, tab.parentTabId, proofs) : null
+    )
+  }
 }
