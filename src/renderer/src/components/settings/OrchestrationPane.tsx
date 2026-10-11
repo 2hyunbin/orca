@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { ArrowRightLeft, GitBranch, ListChecks, Workflow, type LucideIcon } from 'lucide-react'
-import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-install-commands'
+import {
+  ORCHESTRATION_SKILL_INSTALL_COMMAND,
+  ORCHESTRATION_SKILL_NAME
+} from '@/lib/agent-feature-install-commands'
 import type { SkillUsageExample } from '@/lib/skill-usage-example'
-import { ORCHESTRATION_SKILL_INSTALL_COMMAND } from '@/lib/orchestration-install-command'
 import { getOrchestrationUsageExamples } from '@/lib/orchestration-usage-examples'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,

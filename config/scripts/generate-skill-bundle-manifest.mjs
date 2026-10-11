@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
-import { constants } from 'node:fs'
-import { access, lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -183,13 +182,7 @@ function serialized(value) {
 }
 
 async function verifyCurrentManifest(manifest) {
-  let committedText = null
-  try {
-    await access(CURRENT_MANIFEST_PATH, constants.R_OK)
-    committedText = await readFile(CURRENT_MANIFEST_PATH, 'utf8')
-  } catch {
-    committedText = null
-  }
+  const committedText = await readFile(CURRENT_MANIFEST_PATH, 'utf8').catch(() => null)
   if (committedText !== serialized(manifest)) {
     throw new Error(
       `Generated skill manifest is stale:\n${path.relative(REPO_ROOT, CURRENT_MANIFEST_PATH)}\n` +

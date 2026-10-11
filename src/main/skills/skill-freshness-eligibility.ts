@@ -35,15 +35,11 @@ export function eligibleSkillUpdateNames(
     const convergent = entries.filter((entry) =>
       SUPPORTED_GLOBAL_SKILL_TOPOLOGIES.has(entry.topology)
     )
-    const hasOutdated = convergent.some((entry) => entry.status === 'outdated')
-    const everyConvergentCopyIsReadable = convergent.every(
-      (entry) =>
-        entry.status !== 'inaccessible' && Boolean(entry.resolvedPath && entry.physicalIdentity)
-    )
-    const noUnwritablePlacement = entries.every(
-      (entry) => !UNWRITABLE_HOME_TOPOLOGIES.has(entry.topology)
-    )
-    if (hasOutdated && everyConvergentCopyIsReadable && noUnwritablePlacement) {
+    if (
+      convergent.some((entry) => entry.status === 'outdated') &&
+      convergent.every((entry) => entry.status !== 'inaccessible') &&
+      entries.every((entry) => !UNWRITABLE_HOME_TOPOLOGIES.has(entry.topology))
+    ) {
       eligible.push(name)
     }
   }

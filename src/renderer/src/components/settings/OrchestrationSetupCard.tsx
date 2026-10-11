@@ -1,6 +1,8 @@
 import type { JSX } from 'react'
-import { ORCHESTRATION_SKILL_INSTALL_COMMAND } from '@/lib/orchestration-install-command'
-import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-install-commands'
+import {
+  ORCHESTRATION_SKILL_INSTALL_COMMAND,
+  ORCHESTRATION_SKILL_NAME
+} from '@/lib/agent-feature-install-commands'
 import type { InstalledAgentSkillState } from '@/hooks/useInstalledAgentSkills'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'

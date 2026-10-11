@@ -77,17 +77,6 @@ export function isOrcaSkillLockSource(source: string | null): boolean {
   return normalized === ORCA_SKILL_LOCK_SOURCE
 }
 
-// A scope whose contents belong to someone other than the user: a project's own checkout,
-// or a plugin's bundled copy. Orca's global update never writes here.
-const OWNER_MANAGED_SKILL_SCOPES: ReadonlySet<SkillInstallationTopology> = new Set([
-  'repo-scope',
-  'plugin-cache'
-])
-
-export function isOwnerManagedSkillScope(topology: SkillInstallationTopology): boolean {
-  return OWNER_MANAGED_SKILL_SCOPES.has(topology)
-}
-
 // Why: Orca's updater only ever passes --global, so a project's or a plugin's own copy is
 // not something Orca can act on. Without a list of past releases, a differing plugin copy
 // is indistinguishable from another vendor's same-named skill, so neither scope can be
@@ -95,7 +84,7 @@ export function isOwnerManagedSkillScope(topology: SkillInstallationTopology): b
 export function skillPlacementParticipatesInGlobalFreshness(
   installation: SkillFreshnessInstallation
 ): boolean {
-  return !isOwnerManagedSkillScope(installation.topology)
+  return installation.topology !== 'repo-scope' && installation.topology !== 'plugin-cache'
 }
 
 /**
