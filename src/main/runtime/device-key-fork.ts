@@ -80,3 +80,42 @@ export function planDeviceKeyFork(
   }
   return { nextDevices: [...devices, entry], entry, created: true }
 }
+
+export type RedeemedDeviceKey = {
+  deviceId: string
+  label: string
+  scope: DeviceEntry['scope']
+  grants: NonNullable<DeviceEntry['grants']>
+  pairingReach: NonNullable<DeviceEntry['pairingReach']>
+  devicePublicKeyB64: string
+}
+
+/** A keyed row for a redeemed ticket; authority comes from the ticket, never from the client (I6). */
+export function planRedeemedDeviceKey(
+  devices: readonly DeviceEntry[],
+  redeemed: RedeemedDeviceKey,
+  now: number
+): { nextDevices: DeviceEntry[]; entry: DeviceEntry } {
+  // Why: one key is one installation, and a reserved id must never land on an existing row.
+  if (
+    devices.some(
+      (device) =>
+        device.devicePublicKeyB64 === redeemed.devicePublicKeyB64 ||
+        device.deviceId === redeemed.deviceId
+    )
+  ) {
+    throw new DeviceKeyForkError('device_key_in_use')
+  }
+  const entry: DeviceEntry = {
+    deviceId: redeemed.deviceId,
+    name: redeemed.label,
+    scope: redeemed.scope,
+    ...(redeemed.grants.length > 0 ? { grants: [...redeemed.grants] } : {}),
+    pairingReach: redeemed.pairingReach,
+    credentialKind: 'device-key',
+    devicePublicKeyB64: redeemed.devicePublicKeyB64,
+    pairedAt: now,
+    lastSeenAt: now
+  }
+  return { nextDevices: [...devices, entry], entry }
+}

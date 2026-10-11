@@ -21,6 +21,7 @@ import { ARTIFACT_COMMAND_SPECS } from './artifacts'
 import { SEARCH_COMMAND_SPECS } from './search'
 import { PROFILE_STATE_COMMAND_SPECS } from './profile-state'
 import { REFERENCE_COMMAND_SPECS } from './reference'
+import { PAIRING_COMMAND_SPECS } from './pairing'
 
 export const COMMAND_SPECS: CommandSpec[] = [
   ...CORE_COMMAND_SPECS,
@@ -38,6 +39,7 @@ export const COMMAND_SPECS: CommandSpec[] = [
   ...DIAGNOSTICS_COMMAND_SPECS,
   ...INTROSPECTION_COMMAND_SPECS,
   ...ENVIRONMENT_COMMAND_SPECS,
+  ...PAIRING_COMMAND_SPECS,
   ...MANAGED_SERVER_COMMAND_SPECS,
   ...LINEAR_COMMAND_SPECS,
   ...VM_COMMAND_SPECS,

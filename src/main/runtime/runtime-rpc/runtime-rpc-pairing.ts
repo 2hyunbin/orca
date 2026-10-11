@@ -8,6 +8,9 @@ import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../../shared/pairi
 import type { RuntimePairingReach } from '../../../shared/runtime-pairing-reach'
 import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
 import { RuntimeRpcNetworkExposure } from './runtime-rpc-network-exposure'
+import type { PairingTicketOwnerContext } from '../pairing-ticket-owner-context'
+import type { PairingTicketApprover } from '../pairing-ticket-redemption'
+import { createOwnerPairingTicketContext } from './runtime-rpc-pairing-ticket-owner'
 import { MobileDesktopRelay } from '../mobile-desktop-relay/mobile-desktop-relay'
 import type { MobileDesktopRelayHosts } from '../mobile-desktop-relay/mobile-desktop-relay-hosts'
 import { MobileRelayHostCatalog } from '../mobile-desktop-relay/mobile-relay-host-catalog'
@@ -23,9 +26,17 @@ import {
   type PairingOfferUnavailable
 } from './runtime-rpc-pairing-types'
 
+const WEBSOCKET_UNAVAILABLE_GUIDANCE =
+  'WebSocket pairing is unavailable. Inspect preceding runtime errors and choose an unused --port if the listener failed.'
+
 export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
   getDeviceRegistry(): DeviceRegistry | null {
     return this.deviceRegistry
+  }
+
+  /** The desktop UI that asks the owner to approve a GUI pairing; null on a headless host. */
+  setPairingTicketApprover(approver: PairingTicketApprover | null): void {
+    this.pairingTicketApprover = approver
   }
 
   getTlsFingerprint(): string | null {
@@ -151,10 +162,7 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     }
     const rawEndpoint = this.getWebSocketEndpoint()
     if (!rawEndpoint) {
-      return pairingUnavailable(
-        'websocket_unavailable',
-        'WebSocket pairing is unavailable. Inspect preceding runtime errors and choose an unused --port if the listener failed.'
-      )
+      return pairingUnavailable('websocket_unavailable', WEBSOCKET_UNAVAILABLE_GUIDANCE)
     }
     if (!this.deviceRegistry) {
       return pairingUnavailable('device_registry_unavailable', DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE)
@@ -201,6 +209,34 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
       webClientUrl:
         this.webClientRoot && scope === 'runtime' ? createWebClientUrl(endpoint, pairingUrl) : null
     }
+  }
+
+  protected override ownerPairingTicketContext(): PairingTicketOwnerContext {
+    return createOwnerPairingTicketContext({
+      tickets: this.pairingTickets,
+      resolveHost: () => {
+        const rawEndpoint = this.getWebSocketEndpoint()
+        const publicKeyB64 = this.getE2EEPublicKey()
+        if (this.pairingInitializationFailure) {
+          return this.pairingInitializationFailure
+        }
+        if (!rawEndpoint) {
+          return pairingUnavailable('websocket_unavailable', WEBSOCKET_UNAVAILABLE_GUIDANCE)
+        }
+        if (!publicKeyB64) {
+          return pairingUnavailable('e2ee_key_unavailable', E2EE_KEY_UNAVAILABLE_GUIDANCE)
+        }
+        const advertised = resolveAdvertisedPairingEndpoint(rawEndpoint, null)
+        return advertised.ok
+          ? {
+              available: true,
+              endpoint: advertised.endpoint,
+              publicKeyB64,
+              hostDescriptor: this.hostDescriptor
+            }
+          : pairingUnavailable(advertised.reason, advertised.guidance)
+      }
+    })
   }
 
   protected queueOrRetainRelayDeviceRevoke(deviceId: string, binding: RelayDeviceBinding): void {

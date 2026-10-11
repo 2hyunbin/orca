@@ -8,7 +8,7 @@ import type { DeviceScope } from '../../shared/runtime-types'
 import { removeStaleDurableWriteTempFiles } from '../durable-file-write'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 import { mintDeviceCredential } from './device-credential'
-import { planDeviceKeyFork } from './device-key-fork'
+import { planDeviceKeyFork, planRedeemedDeviceKey, type RedeemedDeviceKey } from './device-key-fork'
 import { planIdleEphemeralPrune, withoutEphemeralRows } from './ephemeral-device-rows'
 import { quarantineCorruptRegistry } from './device-registry-corruption'
 import { readDeviceRegistryFile } from './device-registry-file-read'
@@ -241,23 +241,24 @@ export class DeviceRegistry {
   /** Forks `legacyDeviceId` into a keyed row; durable before it returns (security transition). */
   forkDeviceKey(
     legacyDeviceId: string,
-    devicePublicKeyB64: string,
+    publicKeyB64: string,
     label: string,
     options: { ephemeral?: boolean } = {}
   ): DeviceEntry {
-    const fork = planDeviceKeyFork(
-      this.devices,
-      legacyDeviceId,
-      devicePublicKeyB64,
-      label,
-      Date.now(),
-      options
-    )
-    if (fork.created) {
-      this.save(fork.nextDevices, { durable: true })
-      this.devices = fork.nextDevices
-    }
-    return fork.entry
+    const at = Date.now()
+    const fork = planDeviceKeyFork(this.devices, legacyDeviceId, publicKeyB64, label, at, options)
+    return fork.created ? this.commitDurable(fork) : fork.entry
+  }
+
+  /** Adds a redeemed ticket's keyed row, durably, before any reply can claim it exists (I1). */
+  addRedeemedDeviceKey(redeemed: RedeemedDeviceKey): DeviceEntry {
+    return this.commitDurable(planRedeemedDeviceKey(this.devices, redeemed, Date.now()))
+  }
+
+  private commitDurable(planned: { nextDevices: DeviceEntry[]; entry: DeviceEntry }): DeviceEntry {
+    this.save(planned.nextDevices, { durable: true })
+    this.devices = planned.nextDevices
+    return planned.entry
   }
 
   /** Drops idle session-only rows; durable, since a removed row is a revocation. */

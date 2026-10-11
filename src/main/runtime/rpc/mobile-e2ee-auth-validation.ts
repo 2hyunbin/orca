@@ -1,16 +1,40 @@
 import type { DesktopMobileE2EEV2Session } from './mobile-e2ee-v2-desktop-session'
 import { publicKeyFromBase64 } from './e2ee-crypto'
 import { parseRemoteRuntimeJsonText } from '../../../shared/remote-runtime-request-frames'
-import { isDeviceProofB64, verifyDeviceProof } from '../../../shared/device-key-proof'
+import {
+  isDeviceProofB64,
+  isDevicePublicKeyB64,
+  verifyDeviceProof
+} from '../../../shared/device-key-proof'
 import { INSECURE_WEB_ORIGIN_AUTH_CODE } from '../../../shared/web-origin-security'
 
 export type ClassifiedE2EEAuth =
   | { kind: 'token'; deviceToken: string; clientCapabilities?: unknown }
   | { kind: 'device-key'; deviceId: string; deviceProofB64: string; clientCapabilities?: unknown }
+  | E2EETicketRedemption
   | { kind: 'invalid' }
+
+export type E2EETicketRedemption = {
+  kind: 'redemption'
+  ticket: string
+  deviceId: string
+  devicePublicKeyB64: string
+  deviceProofB64: string
+  deviceLabel: string
+  clientCapabilities?: unknown
+}
 
 const V2_TOKEN_KEYS = 'deviceToken,transcriptHashB64,type,v'
 const V2_DEVICE_KEY_KEYS = new Set(['clientCapabilities', 'deviceId', 'deviceProofB64'])
+const V2_REDEMPTION_KEYS = new Set([
+  'clientCapabilities',
+  'deviceId',
+  'deviceLabel',
+  'devicePublicKeyB64',
+  'deviceProofB64',
+  'ticket'
+])
+const TICKET_PATTERN = /^[A-Za-z0-9_-]{43}$/
 
 /** The one parser for e2ee_auth: every accepted shape, nothing mixed. */
 export function classifyE2EEAuth(
@@ -58,6 +82,9 @@ export function classifyE2EEAuth(
     return { kind: 'token', deviceToken: auth.deviceToken }
   }
   const rest = keys.filter((key) => key !== 'type' && key !== 'v' && key !== 'transcriptHashB64')
+  if (auth.ticket !== undefined) {
+    return classifyRedemption(auth, rest)
+  }
   if (
     rest.every((key) => V2_DEVICE_KEY_KEYS.has(key)) &&
     typeof auth.deviceId === 'string' &&
@@ -75,6 +102,33 @@ export function classifyE2EEAuth(
   return { kind: 'invalid' }
 }
 
+function classifyRedemption(
+  auth: Record<string, unknown>,
+  keys: readonly string[]
+): E2EETicketRedemption | { kind: 'invalid' } {
+  const { ticket, deviceId, devicePublicKeyB64, deviceProofB64, deviceLabel } = auth
+  return keys.every((key) => V2_REDEMPTION_KEYS.has(key)) &&
+    typeof ticket === 'string' &&
+    TICKET_PATTERN.test(ticket) &&
+    typeof deviceId === 'string' &&
+    deviceId.length > 0 &&
+    deviceId.length <= 128 &&
+    isDevicePublicKeyB64(devicePublicKeyB64) &&
+    isDeviceProofB64(deviceProofB64) &&
+    typeof deviceLabel === 'string' &&
+    deviceLabel.length <= 256
+    ? {
+        kind: 'redemption',
+        ticket,
+        deviceId,
+        devicePublicKeyB64,
+        deviceProofB64,
+        deviceLabel,
+        clientCapabilities: auth.clientCapabilities
+      }
+    : { kind: 'invalid' }
+}
+
 export type MobileE2EEAuthFailureCode =
   | 'bad_auth'
   | 'unauthorized'
@@ -82,6 +136,14 @@ export type MobileE2EEAuthFailureCode =
   | 'registry_unavailable'
   | 'bad_proof'
   | typeof INSECURE_WEB_ORIGIN_AUTH_CODE
+  | PairingTicketFailureCode
+
+// Why sealed: only a client holding this connection's keys learns why its ticket was refused.
+export type PairingTicketFailureCode =
+  | 'ticket_invalid'
+  | 'ticket_consumed'
+  | 'approval_denied'
+  | 'device_key_in_use'
 
 // The token matched, but this transport may not claim it (e.g. a first pairing from an insecure page).
 export type DeviceTokenRefusal = { refused: typeof INSECURE_WEB_ORIGIN_AUTH_CODE }
@@ -100,8 +162,10 @@ export function authenticateMobileE2EE<TDevice extends { deviceToken?: string }>
   resolveDevice: (token: string) => TDevice | DeviceTokenRefusal | null
   // Absent on a host that does not accept device keys: key auth is then bad_auth, as before.
   resolveDeviceKey?: (deviceId: string) => DeviceKeyResolution<TDevice>
+  acceptsRedemption?: boolean
 }):
   | { ok: true; device: TDevice; clientCapabilities: unknown }
+  | { ok: 'redeem'; redemption: E2EETicketRedemption }
   | { ok: false; code: MobileE2EEAuthFailureCode; deviceId?: string } {
   const auth = classifyE2EEAuth(args.plaintext, args.v2Session)
   if (auth.kind === 'token') {
@@ -113,6 +177,12 @@ export function authenticateMobileE2EE<TDevice extends { deviceToken?: string }>
     return device?.deviceToken === auth.deviceToken
       ? { ok: true, device, clientCapabilities: auth.clientCapabilities }
       : { ok: false, code: 'unauthorized' }
+  }
+  if (auth.kind === 'redemption') {
+    // Why: redemption needs the owner's approval, so it settles asynchronously in the channel.
+    return args.acceptsRedemption && args.v2Session
+      ? { ok: 'redeem', redemption: auth }
+      : { ok: false, code: 'bad_auth' }
   }
   if (auth.kind === 'invalid' || !args.resolveDeviceKey || !args.v2Session) {
     return { ok: false, code: 'bad_auth' }
@@ -154,7 +224,9 @@ export function describeMobileE2EEAuthFailure(failure: {
         ? 'Device registry unavailable'
         : failure.code === INSECURE_WEB_ORIGIN_AUTH_CODE
           ? 'Insecure web origin'
-          : 'Invalid e2ee_auth'
+          : failure.code === 'bad_auth' || failure.code === 'bad_proof'
+            ? 'Invalid e2ee_auth'
+            : 'Pairing ticket refused'
   return {
     sealedError: {
       type: 'e2ee_error',

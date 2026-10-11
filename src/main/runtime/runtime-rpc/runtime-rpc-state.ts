@@ -31,6 +31,9 @@ import type {
   PairingOfferUnavailable
 } from './runtime-rpc-pairing-types'
 import { DEFAULT_WS_PORT } from './runtime-rpc-pairing-types'
+import { PairingTicketBook } from '../pairing-ticket-book'
+import type { PairingTicketApprover } from '../pairing-ticket-redemption'
+import type { PairingTicketOwnerContext } from '../pairing-ticket-owner-context'
 
 export class RuntimeRpcState {
   protected readonly runtime: OrcaRuntimeService
@@ -62,6 +65,10 @@ export class RuntimeRpcState {
   protected readonly relayRevokeOutbox: RelayRevokeOutbox
   protected readonly pushUnregisterOutbox: PushUnregisterOutbox
   protected deviceRegistry: DeviceRegistry | null = null
+  // Why in memory: a restart drops unredeemed tickets and the UI mints again (no persisted secret).
+  protected readonly pairingTickets = new PairingTicketBook()
+  // Null without a desktop UI: tickets that need the owner's approval are then denied.
+  protected pairingTicketApprover: PairingTicketApprover | null = null
   protected e2eeKeypair: E2EEKeypair | null = null
   protected hostDescriptor: RuntimeHostDescriptor | null = null
   protected pairingInitializationFailure: PairingOfferUnavailable | null = null
@@ -154,5 +161,10 @@ export class RuntimeRpcState {
       this.clientRequestsInFlight -= 1
       this.lastClientRequestAt = Date.now()
     })
+  }
+
+  /** Owner-only ticket minting; overridden where pairing endpoints are known (I6, I9). */
+  protected ownerPairingTicketContext(): PairingTicketOwnerContext | undefined {
+    return undefined
   }
 }

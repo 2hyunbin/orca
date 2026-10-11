@@ -1,21 +1,28 @@
 // Why: this channel keeps E2EE framing out of RPC handlers, which consume plaintext across transports.
 import type { WebSocket } from 'ws'
-import { deriveSharedKey, encrypt, decrypt, decryptBytes } from './e2ee-crypto'
-import {
+import { encrypt } from './e2ee-crypto'
+import { handleDesktopMobileE2EELegacyInbound } from './mobile-e2ee-legacy-desktop-inbound'
+import type {
   DesktopMobileE2EEV2Session,
-  type DesktopMobileE2EEV2Context
+  DesktopMobileE2EEV2Context
 } from './mobile-e2ee-v2-desktop-session'
 import type { DesktopMobileE2EEV2OutboundItem as V2OutboundItem } from './mobile-e2ee-v2-desktop-outbound'
 import { handleDesktopMobileE2EEV2Inbound } from './mobile-e2ee-v2-desktop-inbound'
+import { acceptE2EEHello } from './e2ee-channel-hello'
 import {
   authenticateMobileE2EE,
-  decodeMobileE2EEPublicKey,
   describeMobileE2EEAuthFailure,
   type DeviceKeyResolution,
-  type DeviceTokenRefusal
+  type DeviceTokenRefusal,
+  type E2EETicketRedemption,
+  type MobileE2EEAuthFailureCode
 } from './mobile-e2ee-auth-validation'
+import {
+  PAIRING_TICKET_REDEMPTION_TIMEOUT_MS,
+  startE2EERedemption,
+  type RedeemE2EETicket
+} from './e2ee-channel-redemption'
 import { isMobileE2EEOutboundItemWithinLimit } from './mobile-e2ee-outbound-admission'
-import { parseRemoteRuntimeJsonText } from '../../../shared/remote-runtime-request-frames'
 import type { MobileE2EEOutboundMemoryBudget } from './mobile-e2ee-outbound-memory-budget'
 import { MobileE2EEDesktopOutboundOwner } from './mobile-e2ee-desktop-outbound-owner'
 import { createLegacyReplySenders } from './mobile-e2ee-legacy-reply-senders'
@@ -40,6 +47,8 @@ export type E2EEChannelOptions = {
   resolveAuthenticatedDevice: (token: string) => E2EEAuthenticatedDevice | DeviceTokenRefusal | null
   // Absent: key auth is refused as bad_auth, the same as before device keys existed.
   resolveAuthenticatedDeviceKey?: (deviceId: string) => DeviceKeyResolution<E2EEAuthenticatedDevice>
+  // Absent: a ticket redemption is refused as bad_auth, as on hosts that predate tickets.
+  redeemTicket?: RedeemE2EETicket<E2EEAuthenticatedDevice>
   onReady: (channel: E2EEChannel, device: E2EEAuthenticatedDevice) => void
   onError: (code: number, reason: string) => void
   transportContext?: DesktopMobileE2EEV2Context
@@ -53,7 +62,7 @@ export type E2EEAuthenticatedDevice = DevicePrincipal & {
 }
 
 export class E2EEChannel {
-  private state: 'awaiting_hello' | 'awaiting_auth' | 'ready' = 'awaiting_hello'
+  private state: 'awaiting_hello' | 'awaiting_auth' | 'redeeming' | 'ready' = 'awaiting_hello'
   private sharedKey: Uint8Array | null = null
   private consecutiveFailures = 0
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null
@@ -61,8 +70,9 @@ export class E2EEChannel {
   private readonly serverSecretKey: Uint8Array
   private readonly resolvers: Pick<
     E2EEChannelOptions,
-    'resolveAuthenticatedDevice' | 'resolveAuthenticatedDeviceKey'
+    'resolveAuthenticatedDevice' | 'resolveAuthenticatedDeviceKey' | 'redeemTicket'
   >
+  private redemptionAbort: AbortController | null = null
   private readonly onReady: (channel: E2EEChannel, device: E2EEAuthenticatedDevice) => void
   private readonly onError: (code: number, reason: string) => void
   private readonly transportContext: DesktopMobileE2EEV2Context
@@ -103,9 +113,21 @@ export class E2EEChannel {
       options.outboundMemoryBudget
     )
 
+    this.armHandshakeTimer(HANDSHAKE_TIMEOUT_MS)
+  }
+
+  private clearHandshakeTimer(): void {
+    if (this.handshakeTimer) {
+      clearTimeout(this.handshakeTimer)
+      this.handshakeTimer = null
+    }
+  }
+
+  private armHandshakeTimer(timeoutMs: number): void {
+    this.clearHandshakeTimer()
     this.handshakeTimer = setTimeout(() => {
       this.onError(4002, 'E2EE handshake timeout')
-    }, HANDSHAKE_TIMEOUT_MS)
+    }, timeoutMs)
   }
 
   onMessage(
@@ -140,41 +162,25 @@ export class E2EEChannel {
     if (!sharedKey) {
       return
     }
-
-    if (typeof raw !== 'string') {
-      const plaintextBytes = decryptBytes(raw, sharedKey)
-      if (plaintextBytes === null) {
-        this.trackDecryptFailure()
-        return
-      }
-      this.consecutiveFailures = 0
-      if (this.state !== 'ready') {
-        this.onError(4001, 'Invalid binary message before authentication')
-        return
-      }
-      this.binaryMessageHandler?.(plaintextBytes)
-      return
-    }
-
-    const plaintext = decrypt(raw, sharedKey)
-    if (plaintext === null) {
-      this.trackDecryptFailure()
-      return
-    }
-
-    this.consecutiveFailures = 0
-    if (this.state === 'awaiting_auth') {
-      this.handleAuth(plaintext)
-      return
-    }
-
-    const reply = createLegacyReplySenders({
-      ws: this.ws,
-      outbound: this.outbound,
-      getSharedKey: () => this.sharedKey,
-      onOversize: () => this.closeForOutboundBudget('size')
+    handleDesktopMobileE2EELegacyInbound({
+      sharedKey,
+      raw,
+      state: this.state,
+      onDecryptFailure: () => this.trackDecryptFailure(),
+      onDecryptSuccess: () => (this.consecutiveFailures = 0),
+      onAuth: (plaintext) => this.handleAuth(plaintext),
+      onText: (plaintext) => {
+        const reply = createLegacyReplySenders({
+          ws: this.ws,
+          outbound: this.outbound,
+          getSharedKey: () => this.sharedKey,
+          onOversize: () => this.closeForOutboundBudget('size')
+        })
+        this.messageHandler?.(plaintext, reply.text, reply.binary)
+      },
+      onBinary: (plaintext) => this.binaryMessageHandler?.(plaintext),
+      onProtocolError: () => this.onError(4001, 'Invalid binary message before authentication')
     })
-    this.messageHandler?.(plaintext, reply.text, reply.binary)
   }
 
   private trackDecryptFailure(): void {
@@ -187,56 +193,23 @@ export class E2EEChannel {
   }
 
   private handleHello(raw: string): void {
-    let hello: Record<string, unknown>
-    try {
-      hello = parseRemoteRuntimeJsonText(raw) as Record<string, unknown>
-    } catch {
-      this.onError(4001, 'Invalid handshake message')
+    const accepted = acceptE2EEHello(raw, {
+      serverSecretKey: this.serverSecretKey,
+      transportContext: this.transportContext,
+      requireV2: this.requireV2
+    })
+    if (accepted.kind === 'refused') {
+      this.onError(4001, accepted.reason)
       return
     }
-
-    if (hello.type === 'e2ee_hello' && hello.v === 2) {
-      const session = DesktopMobileE2EEV2Session.create({
-        hello,
-        serverSecretKey: this.serverSecretKey,
-        expectedContext: this.transportContext
-      })
-      if (!session) {
-        this.onError(4001, 'Invalid e2ee_hello v2')
-        return
-      }
-      this.v2Session = session
-      this.state = 'awaiting_auth'
-      if (this.ws.readyState === this.ws.OPEN) {
-        this.ws.send(JSON.stringify(session.ready))
-      }
-      return
+    if (accepted.kind === 'v2') {
+      this.v2Session = accepted.session
+    } else {
+      this.sharedKey = accepted.sharedKey
     }
-
-    if (this.requireV2) {
-      this.onError(4001, 'E2EE v2 required')
-      return
-    }
-    if (hello.type !== 'e2ee_hello' || typeof hello.publicKeyB64 !== 'string') {
-      this.onError(4001, 'Invalid e2ee_hello')
-      return
-    }
-
-    // Why: derive the shared key from our secret + client's public key.
-    // Both sides compute the same shared secret via ECDH.
-    const clientPublicKey = decodeMobileE2EEPublicKey(hello.publicKeyB64)
-    if (!clientPublicKey) {
-      this.onError(4001, 'Invalid public key')
-      return
-    }
-
-    this.sharedKey = deriveSharedKey(this.serverSecretKey, clientPublicKey)
     this.state = 'awaiting_auth'
-
-    // Why: send e2ee_ready as plaintext — the client needs it to know the
-    // key exchange succeeded before it can send encrypted authentication.
     if (this.ws.readyState === this.ws.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'e2ee_ready' }))
+      this.ws.send(accepted.readyText)
     }
   }
 
@@ -245,25 +218,49 @@ export class E2EEChannel {
       plaintext,
       v2Session: this.v2Session,
       resolveDevice: this.resolvers.resolveAuthenticatedDevice,
-      resolveDeviceKey: this.resolvers.resolveAuthenticatedDeviceKey
+      resolveDeviceKey: this.resolvers.resolveAuthenticatedDeviceKey,
+      acceptsRedemption: this.resolvers.redeemTicket !== undefined
     })
-    if (!authentication.ok) {
-      const failure = describeMobileE2EEAuthFailure(authentication)
-      this.sendEncryptedControl(failure.sealedError)
-      this.onError(4001, failure.closeReason)
-      return
+    if (authentication.ok === 'redeem') {
+      this.redeem(authentication.redemption)
+    } else if (!authentication.ok) {
+      this.failAuth(authentication)
+    } else {
+      this.completeAuth(authentication.device, authentication.clientCapabilities)
     }
-    const authenticatedDevice = authentication.device
+  }
 
-    this.clientCapabilities = parseRuntimeClientCapabilities(authentication.clientCapabilities)
+  // Why: the owner may take up to two minutes to approve, so the handshake timer is extended.
+  private redeem(redemption: E2EETicketRedemption): void {
+    const session = this.v2Session
+    if (!session || !this.resolvers.redeemTicket) {
+      return this.failAuth({ code: 'bad_auth' })
+    }
+    this.state = 'redeeming'
+    this.armHandshakeTimer(PAIRING_TICKET_REDEMPTION_TIMEOUT_MS)
+    this.redemptionAbort = startE2EERedemption(this.resolvers.redeemTicket, redemption, {
+      transcriptHashB64: session.transcriptHashB64,
+      onSettled: (outcome) => {
+        this.redemptionAbort = null
+        return outcome.ok
+          ? this.completeAuth(outcome.device, redemption.clientCapabilities)
+          : this.failAuth(outcome)
+      }
+    })
+  }
+
+  private failAuth(failure: { code: MobileE2EEAuthFailureCode; deviceId?: string }): void {
+    const described = describeMobileE2EEAuthFailure(failure)
+    this.sendEncryptedControl(described.sealedError)
+    this.onError(4001, described.closeReason)
+  }
+
+  private completeAuth(authenticatedDevice: E2EEAuthenticatedDevice, capabilities: unknown): void {
+    this.clientCapabilities = parseRuntimeClientCapabilities(capabilities)
     this.deviceToken = authenticatedDevice.deviceToken ?? null
     this.authenticatedDevice = authenticatedDevice
     this.state = 'ready'
-
-    if (this.handshakeTimer) {
-      clearTimeout(this.handshakeTimer)
-      this.handshakeTimer = null
-    }
+    this.clearHandshakeTimer()
 
     // Why: transport-bound identity checks must complete before the peer sees
     // authentication success; relay sockets additionally bind this context to
@@ -331,10 +328,9 @@ export class E2EEChannel {
   }
 
   destroy(): void {
-    if (this.handshakeTimer) {
-      clearTimeout(this.handshakeTimer)
-      this.handshakeTimer = null
-    }
+    this.redemptionAbort?.abort()
+    this.redemptionAbort = null
+    this.clearHandshakeTimer()
     this.sharedKey = null
     this.authenticatedDevice = null
     this.v2Session = null

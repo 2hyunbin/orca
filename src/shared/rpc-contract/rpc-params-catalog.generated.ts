@@ -28,6 +28,10 @@ import { MobileRelayHostWorktreesParamsSchema } from '../mobile-relay-hosts-cont
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
 import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration-scrollback'
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
+import {
+  CreatePairingTicketParamsSchema,
+  RevokePairingTicketParamsSchema
+} from '../pairing-ticket-contract'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
 import {
   AccountsUnsubscribeParams,
@@ -1115,10 +1119,13 @@ export const RPC_PARAMS_BY_METHOD = {
   'orchestration.workerStart': WorkerStartParams,
   'orchestration.workerStop': WorkerDispatchParamsOfOrchestrationWorkerStopParams,
   'orchestration.workerTerminalUserInput': OrchestrationWorkerTerminalUserInputParams,
+  'pairing.createTicket': CreatePairingTicketParamsSchema,
   'pairing.delegatedMobileDevice.sync': DelegatedMobileDeviceSyncParamsSchema,
   'pairing.getEndpoints': PairingGetEndpointsParamsSchema,
+  'pairing.listTickets': null,
   'pairing.provisionRelay': PairingProvisionRelayParamsSchema,
   'pairing.registerDeviceKey': RegisterDeviceKeyParamsSchema,
+  'pairing.revokeTicket': RevokePairingTicketParamsSchema,
   'plugins.consent': pluginConsentRequestSchema,
   'plugins.invokeCommand': PluginInvokeCommandParams,
   'plugins.list': null,

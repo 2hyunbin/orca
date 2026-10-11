@@ -14,6 +14,11 @@ import {
 import type { DeviceRegistry } from '../device-registry'
 import type { E2EEKeypair } from '../e2ee-keypair'
 import { UnpairedDeviceAuthThrottle } from '../rpc/unpaired-device-auth-throttle'
+import {
+  redeemPairingTicket,
+  type PairingTicketRedemptionResult
+} from '../pairing-ticket-redemption'
+import type { E2EETicketRedemption } from '../rpc/mobile-e2ee-auth-validation'
 import { MobileSocketWiring } from '../rpc/mobile-socket-wiring'
 import { RuntimeRpcWebSocketDispatch } from './runtime-rpc-websocket-dispatch'
 import {
@@ -276,6 +281,8 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
         }
       },
       allowInsecureWebPairing: () => process.env[ALLOW_INSECURE_WEB_PAIRING_ENV] === '1',
+      redeemTicket: (redemption, context) =>
+        this.redeemPairingTicketOnSocket(deviceRegistry, redemption, context),
       // Why: relay attempts are authorized upstream; only direct failures should prompt local re-pairing.
       onUnpairedDeviceAuthFailure: (metadata) => {
         if (metadata.transport === 'direct') {
@@ -285,5 +292,33 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
     })
     this.mobileSocketWiring = mobileSocketWiring
     return mobileSocketWiring
+  }
+
+  private async redeemPairingTicketOnSocket(
+    registry: DeviceRegistry,
+    redemption: E2EETicketRedemption,
+    context: { transcriptHashB64: string; signal: AbortSignal }
+  ): Promise<PairingTicketRedemptionResult> {
+    const result = await redeemPairingTicket({
+      tickets: this.pairingTickets,
+      registry,
+      approver: this.pairingTicketApprover,
+      redemption,
+      ...context
+    })
+    // Why: the owner typed the comparison code to replace these; revoke them like an unpair would.
+    for (const deviceId of result.ok ? result.replacedDeviceIds : []) {
+      const replacedScope = registry.getDevice(deviceId)?.scope
+      const revoked =
+        replacedScope === 'mobile'
+          ? this.revokeMobileDevice(deviceId)
+          : Promise.resolve(this.revokeRuntimeAccess(deviceId))
+      void revoked.then((done) => {
+        if (!done) {
+          console.error('[pairing] Could not revoke a replaced device:', deviceId)
+        }
+      })
+    }
+    return result
   }
 }

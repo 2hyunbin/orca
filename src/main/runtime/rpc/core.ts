@@ -1,4 +1,5 @@
 // Why: single boundary between raw RPC frames and OrcaRuntimeService; keeps schema, handler, and result type on one object.
+import type { PairingTicketOwnerContext } from '../pairing-ticket-owner-context'
 import { ZodError, type ZodType } from 'zod'
 import type { TerminalStreamFrame } from '../../../shared/terminal-stream-protocol'
 import type { OrcaRuntimeService, OrchestrationCompatibilityCallerAuthority } from '../orca-runtime'
@@ -135,6 +136,8 @@ export type RpcContext = {
   authenticatedCallerFingerprint?: string
   pairing?: PairingRpcContext
   deviceSelf?: DeviceSelfRpcContext
+  // Why: set only on the owner's local transport; ticket minting is never reachable from a paired caller.
+  pairingTickets?: PairingTicketOwnerContext
   // Why: set only on a desktop that relays; it lists the configured servers it shows.
   mobileRelayHosts?: {
     list(): MobileRelayHostsListResult

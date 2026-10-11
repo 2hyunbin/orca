@@ -28,6 +28,11 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     load: async () => (await import('./handlers/serve-restore.js')).SERVE_RESTORE_HANDLERS
   },
   {
+    name: 'pairing',
+    keys: ['pairing create', 'pairing list', 'pairing revoke'],
+    load: async () => (await import('./handlers/pairing.js')).PAIRING_HANDLERS
+  },
+  {
     name: 'account',
     keys: ['account add', 'account list', 'account select', 'account rm'],
     load: async () => (await import('./handlers/account.js')).ACCOUNT_HANDLERS

@@ -38,7 +38,8 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     try {
       return await this.dispatcher.dispatch(request, {
         signal: longPoll ? context?.signal : undefined,
-        callerScope
+        callerScope,
+        pairingTickets: callerScope.kind === 'owner' ? this.ownerPairingTicketContext() : undefined
       })
     } finally {
       this.releaseLongPoll(longPoll)
