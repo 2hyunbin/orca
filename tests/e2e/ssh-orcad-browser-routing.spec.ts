@@ -95,9 +95,10 @@ test('retained and new browser tabs keep SSH routing and login cookies after man
         if (!state) {
           throw new Error('Missing store')
         }
+        // Not shown yet: it mounts once the user opens it after upgrading.
         return state.createBrowserTab(worktreeId, url, {
           title: 'Retained browser',
-          activate: true
+          activate: false
         }).id
       },
       { worktreeId: remote.worktreeId, url: `${SSH_REMOTE_ONLY_ORIGIN}/login` }
@@ -178,6 +179,11 @@ test('retained and new browser tabs keep SSH routing and login cookies after man
     expect(retained).toBe(tabId)
     // The retained tab reaches the host and still sends the relay-era cookie, with no new login.
     await expect(async () => {
+      // A page that mounted before the host connected offers Retry, as it would to the user.
+      const retry = page.getByRole('button', { name: 'Retry', exact: true })
+      if (await retry.isVisible()) {
+        await retry.click()
+      }
       await navigateGuest(page, tabId, `${SSH_REMOTE_ONLY_ORIGIN}/echo/retained`)
       expect(await guestMarker(page, tabId)).toBe(cookieMarker)
     }).toPass({ timeout: 60_000 })
