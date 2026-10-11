@@ -183,7 +183,12 @@ for (const { config } of TYPECHECK_PROJECTS) {
   try {
     writeFileSync(
       probe,
-      'export const preflightBenchmarkValue: number = "typecheck must reject this"\n',
+      [
+        'export const preflightBenchmarkValue: number = "typecheck must reject this"',
+        'export function preflightBenchmarkReturn(value: number): string { return value }',
+        'export const preflightBenchmarkNull: string = null',
+        'export function preflightBenchmarkImplicit(value) { return value }'
+      ].join('\n'),
       { flag: 'wx' }
     )
     for (const arm of ['native', 'bun']) {
@@ -191,7 +196,10 @@ for (const { config } of TYPECHECK_PROJECTS) {
       const result = await command(program, args, `probe-${path.basename(config)}-${arm}`)
       report.parity.push({ config, arm, ...result })
       save()
-      if (result.code !== 1 || !`${result.stdout}${result.stderr}`.includes('TS2322')) {
+      if (
+        result.code !== 1 ||
+        (`${result.stdout}${result.stderr}`.match(/: error TS2322:/g) ?? []).length !== 3
+      ) {
         throw new Error(`Missing expected diagnostic: ${arm} ${config}`)
       }
     }
@@ -242,7 +250,7 @@ for (const { config } of TYPECHECK_PROJECTS) {
   }
   save()
 }
-const summary = `Compiler comparison on ${process.platform}/${process.arch}, ${report.host.cores} cores\n\n\`\`\`json\n${JSON.stringify(report.comparisons, null, 2)}\n\`\`\`\n\nAll project file lists match after normalizing embedded standard-library names; both compilers reject the assignment-error probe in every project.\n`
+const summary = `Compiler comparison on ${process.platform}/${process.arch}, ${report.host.cores} cores\n\n\`\`\`json\n${JSON.stringify(report.comparisons, null, 2)}\n\`\`\`\n\nAll project file lists match after normalizing embedded standard-library names; both compilers report identical diagnostics for assignment, return-type, strict-null and implicit-any probes under each project's existing settings.\n`
 writeFileSync(path.join(output, `${reportName}.md`), summary)
 if (process.env.GITHUB_STEP_SUMMARY) {
   writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary, { flag: 'a' })

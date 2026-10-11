@@ -114,7 +114,7 @@ function checkProject(config, { compiler, bunThreads, root }) {
       program: compiler === 'bun' ? 'bun' : process.execPath,
       args:
         compiler === 'bun'
-          ? ['check', '-p', config, '--threads', String(bunThreads), '--all']
+          ? ['check', '-p', config, '--threads', String(bunThreads), '--no-pretty', '--all']
           : [installedCompiler.program, '--noEmit', '-p', config],
       cwd: root,
       stdio: 'inherit'

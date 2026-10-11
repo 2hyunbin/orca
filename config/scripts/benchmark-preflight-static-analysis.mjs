@@ -89,17 +89,22 @@ writeFileSync(
   'type InvalidAlias = unknown; type ObjectAlias = object; export function consume(value: ObjectAlias): void {}\n'
 )
 let fixtureDiagnostics
-for (const runtime of [process.execPath, bun]) {
+for (const [runtime, flags] of [
+  [process.execPath, []],
+  [bun, []],
+  [bun, ['--smol']]
+]) {
   const result = await command(
     runtime,
     [
+      ...flags,
       ...oxlint.prefixArgs,
       '--config',
       path.join(output, 'patched.json'),
       fixturePath,
       '--format=json'
     ],
-    `cli-fixture-${path.basename(runtime)}`
+    `cli-fixture-${path.basename(runtime)}-${flags.length}`
   )
   const findings = JSON.parse(result.stdout).diagnostics
   if (

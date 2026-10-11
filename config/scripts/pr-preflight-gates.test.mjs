@@ -50,6 +50,20 @@ it('shares one setup and overlaps the compiler only after type-aware checks fini
   )
 })
 
+it('keeps the Bun anti-slop scan aligned with the local audit', () => {
+  const audit = steps.find((step) => step.name === 'Reject low-evidence patterns')
+  const manifest = JSON.parse(readFileSync('package.json', 'utf8'))
+  const localCommand = manifest.scripts['audit:anti-slop'].split('&&').at(-1).trim()
+  expect(audit.run.trim().split('\n')[0]).toBe('node config/scripts/sync-anti-slop-plugin.mjs')
+  expect(
+    audit.run
+      .trim()
+      .split('\n')
+      .at(-1)
+      .replace('bun --smol node_modules/oxlint/bin/oxlint', 'oxlint')
+  ).toBe(localCommand)
+})
+
 it('requires physical preflight success before publishing shards and admitting consumers', () => {
   const join = steps.findIndex((step) => step.wait === 'unit-plan')
   const upload = steps.findIndex((step) => step.uses === 'actions/upload-artifact@v7')

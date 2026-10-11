@@ -228,7 +228,9 @@ jobs:
 
       - name: Reject low-evidence patterns
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run audit:anti-slop
+        run: |
+          node config/scripts/sync-anti-slop-plugin.mjs
+          bun --smol node_modules/oxlint/bin/oxlint --config config/oxlint-anti-slop.json src config tests mobile --deny-warnings
 
       - wait: root-lint
 
