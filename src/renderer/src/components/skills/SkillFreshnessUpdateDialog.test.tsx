@@ -596,6 +596,43 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(findButton('Update 0 skills')?.disabled).toBe(true)
   })
 
+  it('drops a choice when a re-check finds a different install source', async () => {
+    mocks.inventory = {
+      schemaVersion: 1,
+      installations: [
+        placement('computer-use', { lockSource: 'acme/agent-skills' }),
+        placement('orca-cli')
+      ],
+      eligibleUpdateNames: ['computer-use', 'orca-cli'],
+      scanIssues: [],
+      scannedAt: 10
+    }
+    await renderDialog()
+    await openViaRequest()
+    await act(async () => {
+      container
+        ?.querySelector('[aria-label="Include computer-use"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    // The re-check now attributes orca-cli to someone else: its preselection was Orca's,
+    // not the user's, so it must not be replaced without a fresh tick.
+    mocks.inventory = {
+      ...mocks.inventory,
+      installations: [
+        placement('computer-use', { lockSource: 'acme/agent-skills' }),
+        placement('orca-cli', { lockSource: 'acme/agent-skills' })
+      ],
+      scannedAt: 11
+    }
+    await rerender()
+
+    expect(
+      container?.querySelector('[aria-label="Include orca-cli"]')?.getAttribute('aria-checked')
+    ).toBe('false')
+    await clickButton('Update 1 skill')
+    expect(skillsApi.startUpdateRun).toHaveBeenLastCalledWith(['computer-use'])
+  })
+
   it('reads Orca’s skills as current when only a foreign copy is outdated', async () => {
     mocks.inventory = {
       schemaVersion: 1,

@@ -317,7 +317,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
                   state={row.state}
                   selection={
                     row.state === 'available' && !isRunning && !showResult
-                      ? selection.checkboxFor(row.group.name)
+                      ? selection.checkboxFor(row.group)
                       : undefined
                   }
                 />
