@@ -71,7 +71,7 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
         ? await this.buildStartupForDraft(
             repo,
             args.startupDraft,
-            requestedAgent,
+            args.startupDraftAgent ?? requestedAgent,
             args.startupLaunchSource
           )
         : null
@@ -118,7 +118,7 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
     }
     const lineageInput =
       args.lineage || args.comment ? { ...args.lineage, comment: args.comment } : undefined
-    const lineageResolution = await this.resolveLineageForWorktreeCreate(lineageInput)
+    const lineageResolution = await this.resolveLineageForWorktreeCreate(lineageInput, repo)
     if (createRoute.kind === 'runtime') {
       throw new ExecutionHostNotDispatchableError(createRoute.hostId)
     }
@@ -137,6 +137,10 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
         timing
       })
       const recordedLineage = this.recordCreatedWorktreeLineage(result.worktree, lineageResolution)
+      if (recordedLineage.lineage || recordedLineage.workspaceLineage) {
+        // Lineage lands after the create notify; order-save events no longer refetch it.
+        this.notifyWorktreesChanged(repo.id, { invalidateGitScans: false })
+      }
       this.emitWorktreeLifecycle({
         kind: 'created',
         worktreeId: result.worktree.id,
@@ -152,13 +156,7 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
           lineage: recordedLineage.lineage,
           workspaceLineage: recordedLineage.workspaceLineage
         },
-        ...(lineageInput
-          ? {
-              lineage: recordedLineage.lineage,
-              workspaceLineage: recordedLineage.workspaceLineage,
-              warnings: recordedLineage.warnings
-            }
-          : {})
+        ...(lineageInput ? recordedLineage : {})
       }
     }
     const localCreate = await createRuntimeLocalManagedWorktree({
