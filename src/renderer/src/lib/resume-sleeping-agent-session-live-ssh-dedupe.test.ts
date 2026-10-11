@@ -62,6 +62,7 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
       tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
       terminalLayoutsByTabId: { 'tab-1': makeLayout(LEAF_ID, SSH_PTY_ID) },
       ptyIdsByTabId: {},
+      sshConnectionStates: new Map([['ssh-target-1', { status: 'disconnected' }]]),
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
     } as never)
 
@@ -69,6 +70,22 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
 
     expect(launched).toBe(0)
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBe(record)
+  })
+
+  it('resumes a leaf whose ssh pty is gone while its target is connected', () => {
+    const record = makeRecord({ origin: 'worktree-sleep' })
+    useAppStore.setState({
+      activeWorktreeId: 'wt-other',
+      tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1', 'wt-1')] },
+      terminalLayoutsByTabId: { 'tab-1': makeLayout(LEAF_ID, SSH_PTY_ID) },
+      ptyIdsByTabId: {},
+      sshConnectionStates: new Map([['ssh-target-1', { status: 'connected' }]]),
+      sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
+    } as never)
+
+    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+
+    expect(launched).toBe(1)
   })
 
   it('still resumes when the preserved pane has no pty binding and cannot own recovery', () => {
@@ -124,5 +141,28 @@ describe('resumeSleepingAgentSessionsForWorktree — SSH panes and stale worktre
     const records = useAppStore.getState().sleepingAgentSessionsByPaneKey
     expect(records[stale.paneKey]).toBeUndefined()
     expect(records[owned.paneKey]).toBe(owned)
+  })
+
+  it('does not let a finished note in another worktree clear an active record', () => {
+    const active = makeRecord({ providerSession: { key: 'session_id', id: 'sess-9' } })
+    const finished = makeRecord({
+      paneKey: makePaneKey('tab-2', OTHER_LEAF_ID),
+      tabId: 'tab-2',
+      worktreeId: 'wt-2',
+      origin: 'live',
+      state: 'done',
+      providerSession: { key: 'session_id', id: 'sess-9' }
+    })
+    useAppStore.setState({
+      activeWorktreeId: 'wt-other',
+      tabsByWorktree: { 'wt-1': [], 'wt-2': [makeTerminalTab('tab-2', 'wt-2')] },
+      terminalLayoutsByTabId: { 'tab-2': makeLayout(OTHER_LEAF_ID, null) },
+      ptyIdsByTabId: {},
+      sleepingAgentSessionsByPaneKey: { [active.paneKey]: active, [finished.paneKey]: finished }
+    } as never)
+
+    const launched = resumeSleepingAgentSessionsForWorktree('wt-1')
+
+    expect(launched).toBe(1)
   })
 })

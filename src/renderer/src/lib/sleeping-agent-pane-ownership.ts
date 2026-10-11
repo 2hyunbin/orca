@@ -132,11 +132,7 @@ function paneWillConnectOnActivation(
   return !isWebTerminalSurfaceTabId(tabId)
 }
 
-// Why: sleeping records persist the worktreeId observed at capture time, which
-// goes stale when the session's transcript project differs from the tab's
-// worktree (e.g. an agent-managed checkout). Tab ids are globally unique, so a
-// miss under the recorded worktree must fall back to the tab's real owner —
-// otherwise a live pane is misread as gone and its session forked.
+// Why: a record's worktreeId can be stale (e.g. agent-managed checkout); tab ids are global.
 function findPreservedTabOwner(
   state: AppStoreState,
   worktreeIdHint: string,
@@ -196,13 +192,13 @@ export function recordPaneIsOwnedByPreservedPane(
     ) {
       return true
     }
-    // Why: a remote SSH PTY survives transport loss — the disconnect handler
-    // clears ptyIdsByTabId for the whole target while the remote host keeps the
-    // process running. A leaf still bound to an SSH pty id owns its session
-    // with no live PTY mapped; treating it as dead forks a second `--resume`.
+    // Why: disconnect clears ptyIdsByTabId while the remote process keeps running, so a leaf
+    // bound to an unreachable SSH target is `unverifiable`, not dead. A connected target's
+    // live-PTY map is authoritative (sleep kills the PTY but keeps its id).
     const leafPtyId =
       state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[stable.leafId] ?? tab.ptyId
-    if (leafPtyId && parseAppSshPtyId(leafPtyId)) {
+    const sshPty = leafPtyId ? parseAppSshPtyId(leafPtyId) : null
+    if (sshPty && state.sshConnectionStates.get(sshPty.connectionId)?.status !== 'connected') {
       return true
     }
     // Why: active sessions rely on pane-level cold restore. A preserved leaf
