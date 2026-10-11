@@ -26,18 +26,11 @@ const SERVER_WORKTREE_LIMIT = 10_000
 // Why well under the phone's 30s request timeout: a hung server must answer with its last rows.
 const SERVER_FETCH_TIMEOUT_MS = 5_000
 
-const WorktreePsReplySchema = z.object({
-  worktrees: z.array(z.looseObject({})),
-  totalCount: z.number(),
-  truncated: z.boolean()
-})
+const WorktreePsReplySchema = z.object({ worktrees: z.array(z.looseObject({})) })
 
 type CachedServerWorktrees = {
   fence: string
-  fetchedAt: number
   worktrees: MobileRelayServerWorktreeRow[]
-  totalCount: number
-  truncated: boolean
 }
 
 type DescribedHost = MobileRelayHost & {
@@ -54,13 +47,12 @@ type DescribedHost = MobileRelayHost & {
 export class MobileRelayHostCatalog {
   private readonly cached = new Map<string, CachedServerWorktrees>()
   // Keyed by server identity, so a poll after a re-pair never joins the old server's fetch.
-  private readonly refreshing = new Map<string, Promise<boolean>>()
+  private readonly refreshing = new Map<string, Promise<void>>()
 
   constructor(
     private readonly options: {
       hosts: MobileDesktopRelayHosts
       hostLabelOverrides: () => ReadonlyMap<ExecutionHostId, string>
-      now?: () => number
     }
   ) {}
 
@@ -84,7 +76,9 @@ export class MobileRelayHostCatalog {
     if (!host) {
       return { worktrees: null }
     }
-    const refreshed = host.health === 'available' && (await withinFetchBound(this.refresh(host)))
+    if (host.health === 'available') {
+      await withinFetchBound(this.refresh(host))
+    }
     const cached = this.cached.get(host.environmentId)
     const current = this.options.hosts
       .list()
@@ -94,14 +88,7 @@ export class MobileRelayHostCatalog {
       return { worktrees: null }
     }
     // Why: the desktop asks with background-removal support; a phone asking itself never sees these rows.
-    const worktrees = cached.worktrees.filter((row) => row.removing !== true)
-    return {
-      worktrees,
-      totalCount: cached.totalCount - (cached.worktrees.length - worktrees.length),
-      truncated: cached.truncated,
-      fetchedAt: cached.fetchedAt,
-      stale: !refreshed
-    }
+    return { worktrees: cached.worktrees.filter((row) => row.removing !== true) }
   }
 
   private describe(): DescribedHost[] {
@@ -146,7 +133,7 @@ export class MobileRelayHostCatalog {
     })
   }
 
-  private refresh(host: DescribedHost): Promise<boolean> {
+  private refresh(host: DescribedHost): Promise<void> {
     const key = `${host.environmentId}\0${fenceOf(host.identity)}`
     const inFlight = this.refreshing.get(key)
     if (inFlight) {
@@ -157,7 +144,7 @@ export class MobileRelayHostCatalog {
     return refresh
   }
 
-  private async fetchAsDesktop(host: DescribedHost): Promise<boolean> {
+  private async fetchAsDesktop(host: DescribedHost): Promise<void> {
     try {
       const response = await this.options.hosts.call(
         host,
@@ -168,20 +155,15 @@ export class MobileRelayHostCatalog {
       )
       const reply = response.ok ? WorktreePsReplySchema.safeParse(response.result) : null
       if (!reply?.success) {
-        return false
+        return
       }
       this.cached.set(host.environmentId, {
         // Why the identity taken before the fetch: the call's own check cannot see a re-pair after dispatch.
         fence: fenceOf(host.identity),
-        fetchedAt: (this.options.now ?? Date.now)(),
-        worktrees: stampServerWorktreeRows(host.environmentId, reply.data.worktrees),
-        totalCount: reply.data.totalCount,
-        truncated: reply.data.truncated
+        worktrees: stampServerWorktreeRows(host.environmentId, reply.data.worktrees)
       })
-      return true
     } catch {
-      // An unreachable server keeps its last rows; they are served as stale.
-      return false
+      // An unreachable server keeps its last rows.
     }
   }
 }
@@ -190,11 +172,11 @@ function fenceOf(identity: DescribedHost['identity']): string {
   return `${identity.pairingRevision}\0${identity.runtimeId}`
 }
 
-/** False once the bound passes; the call's own timeout starts only after the desktop's per-server queue. */
-async function withinFetchBound(refresh: Promise<boolean>): Promise<boolean> {
+/** Settles once the bound passes; the call's own timeout starts only after the desktop's per-server queue. */
+async function withinFetchBound(refresh: Promise<void>): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined
-  const bound = new Promise<false>((resolve) => {
-    timer = setTimeout(() => resolve(false), SERVER_FETCH_TIMEOUT_MS)
+  const bound = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, SERVER_FETCH_TIMEOUT_MS)
   })
   try {
     return await Promise.race([refresh, bound])

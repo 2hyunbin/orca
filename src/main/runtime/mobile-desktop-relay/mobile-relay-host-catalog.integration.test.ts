@@ -155,7 +155,7 @@ describe('mobile relay hosts: phone -> desktop lists the servers it shows', () =
     return { box, contact, phoneCall }
   }
 
-  it('lists rows live through the desktop, then its last rows as stale once a server is unreachable', async () => {
+  it('lists rows live through the desktop, then its last rows once a server is unreachable', async () => {
     const { box, contact, phoneCall } = await startTopology()
 
     await expect(phoneCall('mobileRelay.hosts.list')).resolves.toEqual({
@@ -168,17 +168,14 @@ describe('mobile relay hosts: phone -> desktop lists the servers it shows', () =
     expect(warm).toMatchObject({
       worktrees: [
         { worktreeId: 'repo-1::/tmp/worktree-a', hostId: 'runtime:box', branch: 'feature/foo' }
-      ],
-      totalCount: 1,
-      stale: false
+      ]
     })
 
     // The update-needed server still answers the desktop, so its rows are live.
     await expect(
       phoneCall('mobileRelay.hosts.worktrees', { hostId: 'runtime:old' })
     ).resolves.toMatchObject({
-      worktrees: [{ worktreeId: 'repo-1::/tmp/worktree-a', hostId: 'runtime:old' }],
-      stale: false
+      worktrees: [{ worktreeId: 'repo-1::/tmp/worktree-a', hostId: 'runtime:old' }]
     })
 
     await box.stop()
@@ -186,12 +183,10 @@ describe('mobile relay hosts: phone -> desktop lists the servers it shows', () =
     await expect(phoneCall('mobileRelay.hosts.list')).resolves.toMatchObject({
       hosts: [{ hostId: 'runtime:box', relay: 'unavailable' }, { hostId: 'runtime:old' }]
     })
-    const asRecord = z.record(z.string(), z.unknown())
-    const offline = asRecord.parse(
-      await phoneCall('mobileRelay.hosts.worktrees', { hostId: 'runtime:box' })
-    )
     // The last rows exactly as fetched, provenance kept.
-    expect(offline).toEqual({ ...asRecord.parse(warm), stale: true })
+    await expect(
+      phoneCall('mobileRelay.hosts.worktrees', { hostId: 'runtime:box' })
+    ).resolves.toEqual(warm)
   })
 
   it('answers an empty list on a desktop that relays nowhere', async () => {

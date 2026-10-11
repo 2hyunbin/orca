@@ -36,7 +36,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     rawMessage: string,
     reply: (response: string) => void,
     sendBinary: (response: Uint8Array<ArrayBufferLike>) => boolean | void,
-    socket: AuthenticatedMobileSocket
+    socket: AuthenticatedMobileSocket | undefined
   ): boolean {
     const { executionHost } = request
     if (executionHost === undefined) {
@@ -47,12 +47,22 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
       return false
     }
     // Why: the phone tags every call on a workspace screen; only this Mac's routing table decides.
-    if (target && MOBILE_RPC_METHOD_ROUTES.get(request.method) === 'paired-desktop') {
+    if (target && MOBILE_RPC_METHOD_ROUTES.get(request.method) !== 'execution-host') {
       return false
     }
     if (!target) {
       reply(
         JSON.stringify(this.buildError(request.id, 'invalid_argument', 'Invalid executionHost'))
+      )
+    } else if (!socket) {
+      reply(
+        JSON.stringify(
+          this.buildError(
+            request.id,
+            'remote_runtime_unavailable',
+            'Servers are reachable only over an encrypted pairing'
+          )
+        )
       )
     } else if (!this.mobileDesktopRelay) {
       reply(
@@ -141,9 +151,9 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
       return
     }
 
-    if (device.scope === 'mobile' && authenticatedSocket) {
+    if (device.scope === 'mobile') {
       // Why: the phone's open server sockets must see the same capabilities the desktop does.
-      if (request.method === 'runtime.clientCapabilities.update') {
+      if (authenticatedSocket && request.method === 'runtime.clientCapabilities.update') {
         this.mobileDesktopRelay?.forwardClientCapabilities(
           authenticatedSocket.connectionId,
           rawMessage

@@ -1,7 +1,8 @@
+import { MOBILE_AGENT_SESSION_RPC_METHODS } from './runtime-rpc-mobile-agent-session-methods'
 import { PAIRED_DESKTOP_METHODS } from './runtime-rpc-mobile-paired-desktop-methods'
 
 // Why: a relaying Mac sends `execution-host` calls to the host named by the call's target (itself when
-// local) and keeps `paired-desktop` calls; every allowlisted method must pick one (census test).
+// local) and keeps `paired-desktop` calls. A route is what allowlists a phone method.
 export type MobileRpcMethodRoute = 'execution-host' | 'paired-desktop'
 
 export const EXECUTION_HOST_METHODS = [
@@ -104,6 +105,7 @@ export const EXECUTION_HOST_METHODS = [
   'github.updatePRState',
   'github.updatePRTitle',
   'github.workItem',
+  // Cross-repo lookup: lets the mobile Smart picker resolve a pasted github.com URL for a different repo.
   'github.workItemByOwnerRepo',
   'github.workItemDetails',
   'gitlab.addIssueComment',
@@ -116,6 +118,7 @@ export const EXECUTION_HOST_METHODS = [
   'gitlab.updateIssue',
   'gitlab.updateMR',
   'gitlab.updateMRState',
+  // Mobile Smart picker: resolve a pasted GitLab URL to an exact issue/MR (MR listing reuses gitlab.listWorkItems).
   'gitlab.workItemByPath',
   'gitlab.workItemDetails',
   // Shell and agent availability are facts about the machine that spawns the process.
@@ -137,6 +140,7 @@ export const EXECUTION_HOST_METHODS = [
   'nativeChat.readSession',
   'nativeChat.subscribe',
   'nativeChat.unsubscribe',
+  // Why: the phone reports a takeover out of band, the same signal the desktop renderer sends.
   'orchestration.workerTerminalUserInput',
   'projectGroup.list',
   'repo.baseRefDefault',
@@ -166,31 +170,7 @@ export const EXECUTION_HOST_METHODS = [
   'session.tabs.subscribeAll',
   'session.tabs.unsubscribe',
   'session.tabs.unsubscribeAll',
-  'agentSession.cancel',
-  'agentSession.close',
-  'agentSession.commands',
-  'agentSession.conversationCommand',
-  'agentSession.create',
-  'agentSession.createSupport',
-  'agentSession.ensure',
-  'agentSession.handoffStatus',
-  'agentSession.history',
-  'agentSession.hold',
-  'agentSession.modelCatalog',
-  'agentSession.options',
-  'agentSession.queuedMessageDelete',
-  'agentSession.queuedMessageSend',
-  'agentSession.queuedMessagesResume',
-  'agentSession.readVisual',
-  'agentSession.release',
-  'agentSession.respondToApproval',
-  'agentSession.respondToQuestion',
-  'agentSession.reveal',
-  'agentSession.send',
-  'agentSession.setOption',
-  'agentSession.subscribe',
-  'agentSession.subscribeStatus',
-  'agentSession.unsubscribe',
+  ...MOBILE_AGENT_SESSION_RPC_METHODS,
   'terminal.adoptOrphans',
   'terminal.agentStatus',
   'terminal.clearBuffer',

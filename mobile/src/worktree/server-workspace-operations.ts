@@ -64,10 +64,7 @@ export const relayHostWorktreesRead = bindDeferredRpcOperation(
     barrier: 'after-caller-barrier',
     read: rpcResultVariant(
       'relay-host-worktrees',
-      z.looseObject({
-        worktrees: z.array(z.unknown()).nullable(),
-        stale: z.boolean().optional()
-      })
+      z.looseObject({ worktrees: z.array(z.unknown()).nullable() })
     )
   })
 )
