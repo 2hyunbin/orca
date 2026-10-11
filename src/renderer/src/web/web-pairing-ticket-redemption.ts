@@ -77,17 +77,16 @@ export async function pairWebBrowserWithTicket(args: {
     previousEnvironment: args.previousEnvironment
   })
   const persistent = deps.support === 'persistent' && deps.subtle !== null
+  const pairingRevision = environment.pairingRevision ?? environment.createdAt
   const recordId = webDeviceKeyId(offer.publicKeyB64, environment.id)
+  // Why a per-ticket record: a re-pair to the same host must never reuse (or, on refusal, delete)
+  // the key the existing pairing signs in with; it replaces that key only once the host confirms.
+  const attemptId = `${recordId}|ticket:${offer.deviceId}`
   const key =
     persistent && deps.subtle
       ? webDeviceSigningKey(
           deps.subtle,
-          await getOrCreatePendingWebDeviceKey(
-            deps.store,
-            deps.subtle,
-            recordId,
-            environment.pairingRevision ?? environment.createdAt
-          )
+          await getOrCreatePendingWebDeviceKey(deps.store, deps.subtle, attemptId, pairingRevision)
         )
       : createSessionDeviceSigningKey()
   const client = deps.createClient(
@@ -116,11 +115,18 @@ export async function pairWebBrowserWithTicket(args: {
       throw new Error(response.error.message)
     }
     if (persistent) {
-      const record = await deps.store.get(recordId)
-      if (!record || record.publicKeyB64 !== key.publicKeyB64) {
+      const attempt = await deps.store.get(attemptId)
+      if (!attempt || attempt.publicKeyB64 !== key.publicKeyB64) {
         throw new Error('The device key changed while this browser was pairing')
       }
-      await deps.store.put({ ...record, state: 'active', deviceId: offer.deviceId })
+      await deps.store.put({
+        ...attempt,
+        id: recordId,
+        state: 'active',
+        deviceId: offer.deviceId,
+        pairingRevision
+      })
+      await deps.store.remove(attemptId)
     } else {
       deps.rememberSessionDevice(environment, { deviceId: offer.deviceId, key })
     }
@@ -128,11 +134,26 @@ export async function pairWebBrowserWithTicket(args: {
   } catch (error) {
     // Why only on a sealed refusal: a lost reply may still have committed this key.
     if (persistent && isWebRuntimeUnauthorizedError(error)) {
-      await deps.store.remove(recordId).catch(() => {})
+      await removePendingAttempt(deps.store, attemptId, key.publicKeyB64)
     }
     throw error
   } finally {
     client.close()
+  }
+}
+
+async function removePendingAttempt(
+  store: WebDeviceKeyStore,
+  attemptId: string,
+  publicKeyB64: string
+): Promise<void> {
+  try {
+    const attempt = await store.get(attemptId)
+    if (attempt?.state === 'pending' && attempt.publicKeyB64 === publicKeyB64) {
+      await store.remove(attemptId)
+    }
+  } catch {
+    // A leftover pending record is harmless; it is never used to sign in.
   }
 }
 

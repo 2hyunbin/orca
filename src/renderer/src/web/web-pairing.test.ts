@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { encodePairingTicketOffer } from '../../../shared/pairing-ticket-offer'
 import { decideWebPairingStartup, parseWebPairingInput, type WebPairingOffer } from './web-pairing'
 
 describe('web pairing input', () => {
@@ -91,6 +92,29 @@ describe('web pairing input', () => {
     expect(
       decideWebPairingStartup({ initialPairingInput: legacyInput, hasStoredEnvironment: true })
     ).toEqual({ kind: 'show-connect', initialPairingInput: legacyInput })
+  })
+
+  it('routes a single-use code in the address to the connect screen so it is cleared and redeemed', () => {
+    const { code, link } = encodePairingTicketOffer({
+      v: 3,
+      endpoint: 'ws://192.168.1.20:6768',
+      publicKeyB64: Buffer.alloc(32, 4).toString('base64'),
+      ticket: Buffer.alloc(32, 9).toString('base64url'),
+      deviceId: '1b1f6d1e-6d5f-4b0e-9a49-4c1d2d0f8a11',
+      scope: 'runtime',
+      expiresAt: 1_800_000_000_000
+    })
+    for (const input of [code, link]) {
+      expect(
+        decideWebPairingStartup({ initialPairingInput: input, hasStoredEnvironment: true })
+      ).toEqual({ kind: 'show-connect', initialPairingInput: input })
+    }
+    expect(
+      decideWebPairingStartup({
+        initialPairingInput: `orca://pair#${code}`,
+        hasStoredEnvironment: true
+      })
+    ).toEqual({ kind: 'use-stored-environment' })
   })
 
   it('uses a stored environment when no fresh valid pairing offer is present', () => {

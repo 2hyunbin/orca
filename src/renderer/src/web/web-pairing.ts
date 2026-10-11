@@ -1,3 +1,4 @@
+import { parsePairingTicketInput } from '../../../shared/pairing-ticket-offer'
 import {
   RuntimeHostDescriptorSchema,
   type RuntimeHostDescriptor
@@ -72,7 +73,8 @@ export function decideWebPairingStartup(args: {
   if (offer?.scope === 'runtime') {
     return { kind: 'auto-save-runtime-offer', offer }
   }
-  if (offer) {
+  // Why: a single-use code in the address must leave history at once; the connect screen redeems it.
+  if (offer || (args.initialPairingInput && parsePairingTicketInput(args.initialPairingInput))) {
     return { kind: 'show-connect', initialPairingInput: args.initialPairingInput }
   }
   return args.hasStoredEnvironment

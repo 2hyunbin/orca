@@ -6,6 +6,7 @@ vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => f
 
 import type { PairingTicketOffer } from '../../../shared/pairing-ticket-offer'
 import { createMemoryWebDeviceKeyStore, webDeviceKeyId } from './web-device-key-store'
+import { createStoredWebRuntimeEnvironment } from './web-runtime-environment'
 import { setWebDeviceKeySupportForTests } from './web-device-key-support'
 import { createWebRuntimeUnauthorizedError } from './web-runtime-client-error'
 import type { WebRuntimeCredentialSource } from './web-runtime-credential-source'
@@ -142,5 +143,74 @@ describe('pairing a browser with a ticket', () => {
       )
     ).toBe('Firefox on Linux')
     expect(webBrowserDeviceLabel('curl/8')).toBe('Web browser')
+  })
+
+  describe('re-pairing a browser already paired with the same host', () => {
+    async function pairedBefore(pairing: WebTicketPairingDeps) {
+      const previous = createStoredWebRuntimeEnvironment({
+        name: 'Studio',
+        offer: {
+          v: 2,
+          endpoint: offer.endpoint,
+          deviceToken: 'migrated:old-device',
+          publicKeyB64: offer.publicKeyB64,
+          scope: 'runtime'
+        }
+      })
+      const keys = await globalThis.crypto.subtle.generateKey({ name: 'Ed25519' }, false, [
+        'sign',
+        'verify'
+      ])
+      if (!('privateKey' in keys)) {
+        throw new Error('expected a key pair')
+      }
+      const active = {
+        id: webDeviceKeyId(offer.publicKeyB64, previous.id),
+        privateKey: keys.privateKey,
+        publicKeyB64: 'old-public-key',
+        state: 'active' as const,
+        deviceId: 'old-device',
+        pairingRevision: previous.createdAt
+      }
+      await pairing.store.put(active)
+      return { previous, active }
+    }
+
+    it('keeps the working key when the host refuses the new ticket', async () => {
+      setWebDeviceKeySupportForTests('persistent')
+      const { deps: pairing, seen } = deps('persistent', 'denied')
+      const { previous, active } = await pairedBefore(pairing)
+      await expect(
+        pairWebBrowserWithTicket({
+          offer,
+          name: 'Studio',
+          previousEnvironment: previous,
+          onComparisonCode: vi.fn(),
+          deps: pairing
+        })
+      ).rejects.toThrow(/declined this pairing/)
+      expect(await pairing.store.get(active.id)).toEqual(active)
+      const sent = seen.credential?.nextPlan(true)
+      expect(sent).toMatchObject({ kind: 'redeem' })
+      expect(sent).not.toMatchObject({ key: { publicKeyB64: 'old-public-key' } })
+    })
+
+    it('replaces the old key only after the host confirmed the new one', async () => {
+      setWebDeviceKeySupportForTests('persistent')
+      const { deps: pairing } = deps('persistent')
+      const { previous, active } = await pairedBefore(pairing)
+      const environment = await pairWebBrowserWithTicket({
+        offer,
+        name: 'Studio',
+        previousEnvironment: previous,
+        onComparisonCode: vi.fn(),
+        deps: pairing
+      })
+      expect(environment.id).toBe(previous.id)
+      const record = await pairing.store.get(active.id)
+      expect(record).toMatchObject({ state: 'active', deviceId: offer.deviceId })
+      expect(record?.publicKeyB64).not.toBe('old-public-key')
+      expect(record?.pairingRevision).toBe(environment.pairingRevision)
+    })
   })
 })

@@ -23,15 +23,16 @@ export async function resolveWebRuntimeAuthRejection(
   if (reply.errorCode === INSECURE_WEB_ORIGIN_AUTH_CODE) {
     return { kind: 'failed', reason: 'insecure-origin' }
   }
+  // Why first: a ticket pairing must never delete a key the host may already hold.
+  const overridden = plan ? source.resolveRejection?.(plan, reply.errorCode) : null
+  if (overridden) {
+    return overridden
+  }
   if (plan?.kind === 'redeem') {
     return { kind: 'failed', reason: ticketRefusalReason(reply.errorCode) }
   }
   if (plan?.kind !== 'device-key') {
     return { kind: 'failed', reason: 'unauthorized' }
-  }
-  // Why first: a ticket's key-first retry must redeem again, never delete its pending key.
-  if (source.keyAuthRefused?.(reply.errorCode)) {
-    return { kind: 'retry' }
   }
   if (reply.errorCode === 'registry_unavailable') {
     return { kind: 'retry' }
@@ -49,7 +50,7 @@ export async function resolveWebRuntimeAuthRejection(
   return { kind: 'failed', reason: 'unauthorized' }
 }
 
-function ticketRefusalReason(errorCode: string | null): WebRuntimeAuthFailureReason {
+export function ticketRefusalReason(errorCode: string | null): WebRuntimeAuthFailureReason {
   switch (errorCode) {
     case 'approval_denied':
       return 'approval-denied'

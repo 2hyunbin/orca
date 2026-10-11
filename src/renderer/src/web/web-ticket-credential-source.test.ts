@@ -82,4 +82,39 @@ describe('web ticket credential source', () => {
       })
     }
   })
+
+  it('after a lost reply, never gives up a key the host may hold because the ticket reads as consumed', async () => {
+    const source = createWebTicketCredentialSource(ticket)
+    planOf(source)
+    source.redemptionInterrupted?.()
+    // Key-first lands while the host registry is briefly unreadable, so it redeems again...
+    expect(
+      await resolveWebRuntimeAuthRejection(planOf(source), rejected('registry_unavailable'), source)
+    ).toEqual({ kind: 'retry' })
+    const again = planOf(source)
+    expect(again.kind).toBe('redeem')
+    // ...and the ticket is consumed: possibly by this very browser, so confirm with the key.
+    expect(
+      await resolveWebRuntimeAuthRejection(again, rejected('ticket_consumed'), source)
+    ).toEqual({ kind: 'retry' })
+    const confirm = planOf(source)
+    expect(confirm).toMatchObject({ kind: 'device-key', deviceId: 'reserved-1' })
+    expect(
+      await resolveWebRuntimeAuthRejection(confirm, rejected('registry_unavailable'), source)
+    ).toEqual({ kind: 'retry' })
+    expect(
+      await resolveWebRuntimeAuthRejection(
+        planOf(source),
+        rejected('device_revoked', 'reserved-1'),
+        source
+      )
+    ).toEqual({ kind: 'failed', reason: 'ticket-consumed' })
+  })
+
+  it('reports a consumed ticket at once when no redemption of ours was ever in doubt', async () => {
+    const source = createWebTicketCredentialSource(ticket)
+    expect(
+      await resolveWebRuntimeAuthRejection(planOf(source), rejected('ticket_consumed'), source)
+    ).toEqual({ kind: 'failed', reason: 'ticket-consumed' })
+  })
 })

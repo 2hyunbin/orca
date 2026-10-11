@@ -1,3 +1,4 @@
+import type { WebRuntimeAuthFailureReason } from './web-runtime-client-error'
 import {
   DEVICE_KEY_EPHEMERAL_RUNTIME_CAPABILITY,
   DEVICE_KEY_RUNTIME_CAPABILITY
@@ -49,8 +50,11 @@ export type WebRuntimeCredentialSource = {
   authenticated?(plan: WebRuntimeAuthPlan): void
   /** A redemption was sent but the socket closed before any verdict (a lost reply). */
   redemptionInterrupted?(): void
-  /** Key auth was refused with `errorCode`; true asks to reconnect with the next plan instead. */
-  keyAuthRefused?(errorCode: string | null): boolean
+  /** Overrides how a sealed refusal of `plan` is handled; null keeps the default handling. */
+  resolveRejection?(
+    plan: WebRuntimeAuthPlan,
+    errorCode: string | null
+  ): { kind: 'retry' } | { kind: 'failed'; reason: WebRuntimeAuthFailureReason } | null
 }
 
 /** Today's behaviour: a bearer token over legacy framing. */
