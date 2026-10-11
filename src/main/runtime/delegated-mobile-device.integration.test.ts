@@ -169,6 +169,26 @@ describe('pairing.delegatedMobileDevice.sync', () => {
     expect(registry.listDevices().filter((device) => device.parentDeviceId)).toEqual([])
   })
 
+  it('refuses a child the pairing admin its parent was never granted', async () => {
+    const { server } = await startServer()
+    const desktop = pairDesktop(server)
+    const [child] = await sync(desktop, [{ phoneKey: 'p', name: 'p' }])
+    const directPhone = pair(server, { name: 'phone', scope: 'mobile' })
+    const registerPush = (caller: PairingOffer) =>
+      sendRemoteRuntimeRequest(
+        caller,
+        'notifications.registerPush',
+        { platform: 'android', token: 'fcm-token', filter: {} },
+        5_000
+      )
+
+    await expect(registerPush(asPhone(desktop, child!))).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'forbidden' }
+    })
+    await expect(registerPush(directPhone)).resolves.toMatchObject({ ok: true })
+  })
+
   it('gives children the parent grant reach, so they never widen the bind', async () => {
     const { server, registry } = await startServer()
     const desktop = pair(server, { name: 'local Mac', scope: 'runtime', reach: 'this-computer' })

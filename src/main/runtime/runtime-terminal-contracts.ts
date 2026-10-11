@@ -67,6 +67,8 @@ export type TerminalCreateOptions = {
   terminalKittyKeyboardProtocol?: boolean
   terminalColorQueryReplies?: TerminalOscColorQueryReplyColors
   viewMode?: 'terminal' | 'chat'
+  /** The tab group a background create joins; defaults to the first group. */
+  targetGroupId?: string
   startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
   telemetry?: WorktreeStartupLaunch['telemetry']
   /** The surface that asked for this `startupAgent` launch; the runtime attributes every one it
@@ -89,6 +91,8 @@ export type TerminalCreateOptions = {
   agentSessionClaim?: AgentSessionExecutionClaim
   agentSessionCreateOperationId?: string
   signal?: AbortSignal
+  /** Refuse (`worktree_terminals_sleeping`) instead of waking a worktree the host has put to sleep. */
+  refuseSleptWorktree?: boolean
   onPtySpawnCommitted?: () => void
   /** Called before the spawn request leaves this process; a throw before it proves nothing spawned. */
   onPtySpawnDispatched?: (launch?: {
