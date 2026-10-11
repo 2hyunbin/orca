@@ -200,11 +200,14 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
 
   it('copies every package the daemon requires, with its dependencies', () => {
     const resources = join(appPath, 'Contents', 'Resources')
-    const chunk = join(resources, 'app.asar.unpacked', 'out', 'main', 'chunks', 'kill.js')
+    const main = join(resources, 'app.asar.unpacked', 'out', 'main')
+    writeFileSync(join(main, 'daemon-entry.js'), "require('./chunks/kill.js')")
     writeFileSync(
-      chunk,
-      "require(`node:fs`);require('os');require(`@orca/process-host/gate`);require(`electron`)"
+      join(main, 'chunks', 'kill.js'),
+      "require(`node:fs`);require('os');require(`@orca/process-host/gate`)"
     )
+    // Main-process code shipped alongside is not part of the daemon.
+    writeFileSync(join(main, 'index.js'), "require('unused');require(`electron`)")
     const modules = join(resources, 'node_modules')
     mkdirSync(join(modules, '@orca', 'process-host', 'dist'), { recursive: true })
     writeFileSync(
@@ -223,8 +226,7 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
     })
     const helperModules = join(paths.daemon, 'node_modules')
     expect(daemonBareRequires(join(paths.daemon, 'out', 'main'))).toEqual([
-      '@orca/process-host/gate',
-      'electron'
+      '@orca/process-host/gate'
     ])
     expect(existsSync(join(helperModules, '@orca', 'process-host', 'package.json'))).toBe(true)
     expect(existsSync(join(helperModules, 'retry', 'package.json'))).toBe(true)
@@ -233,10 +235,9 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
   })
 
   it('fails when the app lacks a package the daemon requires', () => {
-    writeFileSync(
-      join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'out', 'main', 'gone.js'),
-      "require('yaml')"
-    )
+    const main = join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'out', 'main')
+    writeFileSync(join(main, 'daemon-entry.js'), "require('./gone')")
+    writeFileSync(join(main, 'gone.js'), "require('yaml')")
     expect(() =>
       assembleMacTerminalHost({
         appPath,
@@ -254,7 +255,7 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
       iconPath: join(root, 'icon.icns'),
       info: {}
     })
-    writeFileSync(join(paths.daemon, 'out', 'main', 'late.js'), "require('jsonc-parser')")
+    writeFileSync(paths.entry, "require('jsonc-parser')")
     // The build tree's node_modules above dist/ is what hid this from the boot check.
     mkdirSync(join(root, 'node_modules', 'jsonc-parser'), { recursive: true })
     writeFileSync(join(root, 'node_modules', 'jsonc-parser', 'package.json'), '{"main":"i.js"}')
@@ -265,12 +266,24 @@ describe.skipIf(process.platform !== 'darwin')('terminal host assembly', () => {
       )
     ])
     // Node caches resolutions, so the in-bundle case uses a package not resolved above.
-    rmSync(join(paths.daemon, 'out', 'main', 'late.js'))
-    writeFileSync(join(paths.daemon, 'out', 'main', 'bundled.js'), "require('yaml')")
+    writeFileSync(paths.entry, "require('yaml')")
     mkdirSync(join(paths.daemon, 'node_modules', 'yaml'), { recursive: true })
     writeFileSync(join(paths.daemon, 'node_modules', 'yaml', 'package.json'), '{"main":"i.js"}')
     writeFileSync(join(paths.daemon, 'node_modules', 'yaml', 'i.js'), '')
     expect(findUnresolvedDaemonRequires(paths)).toEqual([])
+  })
+
+  it('fails when the daemon loads a module by a computed name', () => {
+    const main = join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'out', 'main')
+    writeFileSync(join(main, 'daemon-entry.js'), 'const name = pick();require(name)')
+    expect(() =>
+      assembleMacTerminalHost({
+        appPath,
+        nodeExecutable: join(root, 'node'),
+        iconPath: join(root, 'icon.icns'),
+        info: {}
+      })
+    ).toThrow(/loads a module by a computed name/)
   })
 
   it('fails before writing anything when the daemon entry is missing', () => {

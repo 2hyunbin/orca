@@ -6,7 +6,6 @@ const {
   cpSync,
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -14,7 +13,7 @@ const {
   writeFileSync
 } = require('node:fs')
 const { builtinModules } = require('node:module')
-const { join, relative, resolve, sep } = require('node:path')
+const { dirname, join, relative, resolve, sep } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const MAC_TERMINAL_HOST_NAME = 'Orca Terminal Host'
@@ -34,9 +33,10 @@ const FORBIDDEN_INFO_KEYS = [
   'UTImportedTypeDeclarations',
   'NSServices'
 ]
-// node-pty ships as the slice subset above; the daemon never loads electron under Node.
-const PACKAGES_NOT_COPIED = new Set(['node-pty', 'electron'])
-const BARE_REQUIRE = /require\(\s*[`'"]([^`'"./][^`'"]*)[`'"]\s*\)/g
+// node-pty ships as the slice subset above.
+const PACKAGES_NOT_COPIED = new Set(['node-pty'])
+const LITERAL_LOAD = /\b(?:require|import)\(\s*[`'"]([^`'"]+)[`'"]\s*\)/g
+const COMPUTED_LOAD = /\b(?:require|import)\(\s*[^`'"\s)]/
 const LIPO_ARCH_TO_NODE_ARCH = { x86_64: 'x64', arm64: 'arm64' }
 
 function macTerminalHostPaths(appPath) {
@@ -63,20 +63,28 @@ function packageNameOf(specifier) {
   return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
 }
 
-function listJsFiles(dir) {
-  return readdirSync(dir, { recursive: true })
-    .map((file) => join(dir, file))
-    .filter((file) => file.endsWith('.js') && statSync(file).isFile())
-}
-
-/** Bare specifiers the daemon JS requires, other than Node builtins. */
+/** Package specifiers the daemon loads, walking its files from daemon-entry.js. */
 function daemonBareRequires(outMainDir) {
   const builtins = new Set(builtinModules)
   const specifiers = new Set()
-  for (const file of listJsFiles(outMainDir)) {
-    for (const match of readFileSync(file, 'utf8').matchAll(BARE_REQUIRE)) {
-      const specifier = match[1]
-      if (!specifier.startsWith('node:') && !builtins.has(packageNameOf(specifier))) {
+  const visited = new Set()
+  const pending = [join(outMainDir, 'daemon-entry.js')]
+  while (pending.length > 0) {
+    const file = pending.pop()
+    if (visited.has(file)) {
+      continue
+    }
+    visited.add(file)
+    const source = readFileSync(file, 'utf8')
+    // A computed specifier could load a package this walk cannot see.
+    if (COMPUTED_LOAD.test(source)) {
+      throw new Error(`[macos-terminal-host] ${file} loads a module by a computed name`)
+    }
+    for (const [, specifier] of source.matchAll(LITERAL_LOAD)) {
+      if (specifier.startsWith('.')) {
+        const target = resolve(dirname(file), specifier)
+        pending.push(target.endsWith('.js') ? target : `${target}.js`)
+      } else if (!specifier.startsWith('node:') && !builtins.has(packageNameOf(specifier))) {
         specifiers.add(specifier)
       }
     }
@@ -116,9 +124,6 @@ function findUnresolvedDaemonRequires(paths) {
   const bundle = realpathSync(paths.bundle)
   const problems = []
   for (const specifier of daemonBareRequires(outMain)) {
-    if (packageNameOf(specifier) === 'electron') {
-      continue
-    }
     let resolved = null
     try {
       resolved = require.resolve(specifier, { paths: [outMain] })
