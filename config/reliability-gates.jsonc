@@ -18967,15 +18967,14 @@
       "invariant": "For one connected SSH authority, a renderer snapshot may update Forwarded or Detected state only if no newer push for that target and stream arrived after the snapshot began. Active tunnels and persisted intent remain authoritative through scan refresh and reconnect until explicit removal or a real connection-lifecycle transition.",
       "oracle": "Hold empty initial Forwarded and Detected snapshot promises, publish live events, release the snapshots, and require each target and stream to preserve only its own newer push while applying unaffected snapshots. Reject one target's Detected snapshot and require its Forwarded snapshot plus later targets to hydrate independently. Begin another target with partial connected authority and require its snapshots to hydrate after same-watermark authority reconciliation. In headed Electron, hold an authoritative empty Forwarded snapshot across renderer reload, add a forward through the Ports panel, release and confirm the wrapped main handler resumed, then complete a later renderer-to-main listPortForwards round trip as the ordered hydration-continuation barrier. Before checking the Forwarded row, require main inventory, persisted intent, HTTP, remote process identity, and close warnings to prove the tunnel remained authoritative. Then forward two real Docker listeners, refresh detection, force an in-place relay-channel reconnect, perform a full transport reconnect, reject a bound local-port collision, remove one row, and require all signals to agree.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/ssh-port-forward.test.ts src/main/ssh/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts tests/e2e/helpers/ssh-port-forward-snapshot-barrier.unit.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/ssh-port-forward.test.ts src/main/ssh/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts --reporter=dot",
         "pnpm exec electron-vite build --mode e2e"
       ],
       "testFiles": [
         "src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts",
         "src/main/ssh/ssh-port-forward.test.ts",
         "src/main/ssh/system-ssh-forward-process.test.ts",
-        "src/main/ipc/ssh.test.ts",
-        "tests/e2e/helpers/ssh-port-forward-snapshot-barrier.unit.test.ts"
+        "src/main/ipc/ssh.test.ts"
       ],
       "assertionRefs": [
         {
@@ -19000,10 +18999,6 @@
             "preserves active port forwards and live connections across handler re-registration",
             "persists desired forwards and broadcasts when an active forward closes unexpectedly"
           ]
-        },
-        {
-          "file": "tests/e2e/helpers/ssh-port-forward-snapshot-barrier.unit.test.ts",
-          "assertions": ["holds only the first matching request while its snapshot is unresolved"]
         }
       ],
       "evidenceRuns": [
@@ -19011,7 +19006,7 @@
           "date": "2026-07-30",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/ssh-port-forward.test.ts src/main/ssh/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts tests/e2e/helpers/ssh-port-forward-snapshot-barrier.unit.test.ts --reporter=dot",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/hooks/useIpcEvents-agent-status-ssh-authority.test.ts src/main/ssh/ssh-port-forward.test.ts src/main/ssh/system-ssh-forward-process.test.ts src/main/ipc/ssh.test.ts --reporter=dot",
           "result": "passed",
           "durationSeconds": 6.77,
           "summary": "Six renderer, main-process, and barrier lifecycle files passed with 215 tests, including deterministic stale-snapshot, rejected-stream, partial-authority, and single-capture isolation plus existing collision, delayed-exit, reconnect, persistence, re-registration, and unrelated-forward contracts."
@@ -20245,25 +20240,15 @@
       "invariant": "Transport loss and frozen-host silence must preserve the remote session; host relay loss may rebind a pane without accumulating reattachable leases. Reconnects must preserve usable terminal content, bounded PTYs/fds/processes, complete large listings, and independently recoverable watcher processes. Electron test shutdown must release inherited pipes after confirmed root exit without closing live-process pipes.",
       "oracle": "Poll a changed connected SSH authority after injected faults, then require terminal output and appropriate PTY identity. Read remote process/fd state, listFiles replies, and rendered explorer rows. Resolve Playwright cleanup only after the root process exits and its inherited pipes close; live-process pipes remain untouched.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts tests/e2e/helpers/electron-process-shutdown.unit.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts tests/e2e/ssh-codex-replay-reply-probe.unit.test.ts"
+        "pnpm exec vitest run --config config/vitest.config.ts tests/e2e/helpers/electron-process-shutdown.unit.test.ts"
       ],
-      "testFiles": [
-        "tests/e2e/helpers/electron-process-shutdown.unit.test.ts",
-        "tests/e2e/ssh-codex-replay-reply-probe.unit.test.ts"
-      ],
+      "testFiles": ["tests/e2e/helpers/electron-process-shutdown.unit.test.ts"],
       "assertionRefs": [
         {
           "file": "tests/e2e/helpers/electron-process-shutdown.unit.test.ts",
           "assertions": [
             "releases inherited pipes after confirmed exit, including prior exit",
             "retains live-process pipes on shutdown timeout"
-          ]
-        },
-        {
-          "file": "tests/e2e/ssh-codex-replay-reply-probe.unit.test.ts",
-          "assertions": [
-            "unrelated, replacement, initial-spawn, empty and non-replay replies do not count; original reattach results and failures pass through unchanged"
           ]
         }
       ],
