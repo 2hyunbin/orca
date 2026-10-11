@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { execFile, execFileSync } from 'node:child_process'
 import { runProcess, runProcessSync } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
 import {
   _resetWslAvailabilityCacheForTests,
   isWslAvailable,
   isWslAvailableAsync
 } from './wsl-availability'
 
-vi.mock('node:child_process', () => ({ execFile: vi.fn(), execFileSync: vi.fn() }))
 vi.mock('@orca/process-host', () => ({
   runProcess: vi.fn(),
   runProcessSync: vi.fn()
@@ -33,22 +31,28 @@ afterEach(() => {
 for (const mode of ['sync', 'async'] as const) {
   describe(`${mode} WSL1 availability without WSL2 kernel`, () => {
     const probe = () => (mode === 'sync' ? isWslAvailable() : isWslAvailableAsync())
-    const guestRunner = () => (mode === 'sync' ? runProcessSync : runProcess)
+    const runner = () => (mode === 'sync' ? runProcessSync : runProcess)
+    const guestCalls = () =>
+      vi.mocked(runner()).mock.calls.filter(([spec]) => spec.args?.[0] === '--exec')
+    let statusCode = 0
+    let guest: () => ProcessResult = () => success
 
     function failStatus(code: number): void {
-      vi.mocked(execFileSync).mockImplementation(() => {
-        throw { status: code }
-      })
-      vi.mocked(execFile).mockImplementation((...args: unknown[]) => {
-        const callback = args.at(-1) as (error: unknown) => void
-        callback({ code })
-        return {} as ReturnType<typeof execFile>
-      })
+      statusCode = code
     }
     function guestResult(result: ProcessResult): void {
-      vi.mocked(runProcess).mockResolvedValue(result)
-      vi.mocked(runProcessSync).mockReturnValue(result)
+      guest = () => result
     }
+    function respond(spec: ProcessSpec): ProcessResult {
+      return spec.args?.[0] === '--status' ? { ...success, code: statusCode } : guest()
+    }
+
+    beforeEach(() => {
+      statusCode = 0
+      guest = () => success
+      vi.mocked(runProcessSync).mockImplementation(respond)
+      vi.mocked(runProcess).mockImplementation(async (spec) => respond(spec))
+    })
 
     // Node reports the Windows DWORD; the console prints its signed equivalent.
     for (const status of [-444, 4_294_966_852]) {
@@ -57,8 +61,8 @@ for (const mode of ['sync', 'async'] as const) {
         guestResult(success)
         expect(await probe()).toBe(true)
         expect(await probe()).toBe(true)
-        expect(guestRunner()).toHaveBeenCalledTimes(1)
-        expect(guestRunner()).toHaveBeenCalledWith(
+        expect(guestCalls()).toHaveLength(1)
+        expect(runner()).toHaveBeenCalledWith(
           expect.objectContaining({
             program: 'wsl.exe',
             args: ['--exec', '/bin/true'],
@@ -82,18 +86,16 @@ for (const mode of ['sync', 'async'] as const) {
 
     it('stays unavailable when the guest probe cannot be spawned', async () => {
       failStatus(-444)
-      vi.mocked(runProcess).mockRejectedValue(new Error('EPERM'))
-      vi.mocked(runProcessSync).mockImplementation(() => {
+      guest = () => {
         throw new Error('EPERM')
-      })
+      }
       expect(await probe()).toBe(false)
     })
 
     it('does not probe a guest for unrelated status failures', async () => {
       failStatus(1)
       expect(await probe()).toBe(false)
-      expect(runProcess).not.toHaveBeenCalled()
-      expect(runProcessSync).not.toHaveBeenCalled()
+      expect(guestCalls()).toHaveLength(0)
     })
   })
 }

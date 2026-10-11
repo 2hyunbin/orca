@@ -1,8 +1,7 @@
-import { execFile, execFileSync } from 'node:child_process'
 import { runProcess, runProcessSync } from '@orca/process-host'
 import type { ProcessSpec } from '@orca/process-host/process-spec'
 import { buildWslExecArgs } from '../shared/wsl-login-shell-command'
-import { resolveWslInteropSpawnCwd } from './wsl-interop-spawn-directory'
+import { wslExeExitError, wslExeProcessSpec } from './wsl-exe-process'
 
 type WslAvailabilityCache =
   | { available: true }
@@ -41,12 +40,11 @@ function wslAvailabilityRetryDelayMs(cache: { retryable: boolean; failures: numb
 
 // Why ENOENT stays definitive: it means wsl.exe is not on PATH. It used to also mean
 // "the cwd this process inherited was deleted", which is not answer-shaped at all --
-// naming an explicit spawn directory below is what removes that source (#16463).
+// the explicit spawn directory in `wslExeProcessSpec` removes that source (#16463).
 // Why: a non-zero exit (wsl.exe ran and said no) or ENOENT (not installed) is answer-shaped,
-// so it earns a long window rather than the short one a timeout gets. execFileSync reports the
-// exit code as `status`, the execFile callback as a numeric `code`; both must count as
-// definitive or the async twin poisons the shared cache with the short retryable window.
-// Same numeric-status rule as `wslUncDirectoryExists`; neither latches forever.
+// so it earns a long window rather than the short one a timeout gets. Both probes report the
+// exit through `wslExeExitError`; a numeric `status` or `code` must count as definitive or the
+// async twin poisons the shared cache with the short retryable window. Neither latches forever.
 function isRetryableWslProbeFailure(error: unknown): boolean {
   const failure = error as { status?: unknown; code?: unknown } | null
   if (typeof failure?.status === 'number' || typeof failure?.code === 'number') {
@@ -108,12 +106,16 @@ function isMissingWsl2KernelStatus(error: unknown): boolean {
 // Cheapest proof the default guest runs: no login shell, no output to parse.
 function defaultGuestExecutionProbe(): ProcessSpec {
   return {
-    program: 'wsl.exe',
-    args: buildWslExecArgs(undefined, ['/bin/true']),
-    cwd: resolveWslInteropSpawnCwd(),
-    timeoutMs: WSL_AVAILABILITY_PROBE_TIMEOUT_MS,
+    ...wslExeProcessSpec(
+      buildWslExecArgs(undefined, ['/bin/true']),
+      WSL_AVAILABILITY_PROBE_TIMEOUT_MS
+    ),
     maxOutputBytes: 4096
   }
+}
+
+function wslStatusProbe(): ProcessSpec {
+  return wslExeProcessSpec(['--status'], WSL_AVAILABILITY_PROBE_TIMEOUT_MS)
 }
 
 /**
@@ -146,28 +148,9 @@ async function wslStatusErrorAfterGuestProbeAsync(error: unknown): Promise<unkno
   }
 }
 
-function probeWslStatus(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'wsl.exe',
-      ['--status'],
-      {
-        timeout: WSL_AVAILABILITY_PROBE_TIMEOUT_MS,
-        windowsHide: true,
-        // Why explicit (#16463): inheriting a cwd the user deleted makes
-        // CreateProcessW fail ENOENT, which this cache reads as "WSL is not
-        // installed" and holds on the definitive TTL with backoff.
-        cwd: resolveWslInteropSpawnCwd()
-      },
-      (error: unknown) => {
-        if (error) {
-          reject(error)
-          return
-        }
-        resolve()
-      }
-    )
-  })
+/** The `--status` failure, or null when wsl.exe answered cleanly. */
+async function probeWslStatus(): Promise<unknown> {
+  return wslExeExitError(await runProcess(wslStatusProbe()))
 }
 
 /**
@@ -189,21 +172,16 @@ export function isWslAvailable(): boolean {
     return false
   }
 
+  let error: unknown
   try {
-    execFileSync('wsl.exe', ['--status'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: WSL_AVAILABILITY_PROBE_TIMEOUT_MS,
-      // Same reason as the async twin: they share one cache, so a false ENOENT
-      // from either poisons both.
-      cwd: resolveWslInteropSpawnCwd()
-    })
-    return cacheWslAvailabilityProbeResult(null, startedAtGeneration)
-  } catch (error) {
-    return cacheWslAvailabilityProbeResult(
-      wslStatusErrorAfterGuestProbe(error),
-      startedAtGeneration
-    )
+    error = wslExeExitError(runProcessSync(wslStatusProbe()))
+  } catch (spawnError) {
+    error = spawnError
   }
+  return cacheWslAvailabilityProbeResult(
+    error ? wslStatusErrorAfterGuestProbe(error) : null,
+    startedAtGeneration
+  )
 }
 
 /**
@@ -230,10 +208,10 @@ export function isWslAvailableAsync(): Promise<boolean> {
 
   const startedAtGeneration = wslAvailabilityCacheGeneration
   wslAvailabilityProbeInFlight = probeWslStatus()
-    .then(() => cacheWslAvailabilityProbeResult(null, startedAtGeneration))
-    .catch(async (error: unknown) =>
+    .catch((spawnError: unknown) => spawnError)
+    .then(async (error) =>
       cacheWslAvailabilityProbeResult(
-        await wslStatusErrorAfterGuestProbeAsync(error),
+        error ? await wslStatusErrorAfterGuestProbeAsync(error) : null,
         startedAtGeneration
       )
     )
