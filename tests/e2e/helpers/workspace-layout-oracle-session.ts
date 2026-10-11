@@ -153,7 +153,7 @@ function writeReport(
   report: {
     findings: OracleFinding[]
     viewCreations: Record<string, number>
-    /** Main's event-loop delay over the scenario; the oracle's own polling runs in the test process. */
+    /** Main's event-loop delay over the scenario. */
     eventLoopDelay: EventLoopDelaySummary
   }
 ): void {
