@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test, expect } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
-import { runProcess } from '../../src/shared/child-process/run-process'
+import { runProcess } from '@orca/process-host'
 
 test.use({ seedTestRepo: false })
 
@@ -87,7 +87,7 @@ for (const delayCreateResponse of [false, true]) {
       })
     }
     const creation = orcaPage.evaluate(() =>
-      window.__store!.getState().createProjectGroup('Crowded group')
+      window.__store!.getState().createProjectGroup('Crowded group', 'local')
     )
     if (delayCreateResponse) {
       try {
@@ -163,7 +163,11 @@ for (const delayCreateResponse of [false, true]) {
       }
     }
     await expect(group).toHaveCount(1)
-    await orcaPage.evaluate(() => window.__store!.getState().fetchProjectGroups())
+    await orcaPage.evaluate(() =>
+      window
+        .__store!.getState()
+        .fetchProjectGroups({ runtimeEnvironmentId: null, throwOnError: true })
+    )
     await expect(group).toHaveCount(1)
     await group.click()
     for (const repo of groupedRepos) {

@@ -62,11 +62,11 @@ class FakeShellChannel extends EventEmitter {
 }
 
 function runtimeUnavailable(): RemoteRuntimeUnavailableError {
-  const run = new RelayRuntimeLadderRun('target-1', null)
+  const run = new RelayRuntimeLadderRun('target-1', null, true)
   run.host = getRemoteHostPlatform('linux-x64')
   run.refused('A', 'libc_floor')
   run.refused('C', 'host_node_missing')
-  return new RemoteRuntimeUnavailableError('no_runtime', run)
+  return new RemoteRuntimeUnavailableError(run)
 }
 
 function createConnection(systemSsh = false) {
@@ -125,6 +125,16 @@ describe('SshRelaySession plain SSH mode (runtime rung D)', () => {
     )
     expect(getSshPlainSshMode('target-1')).toMatchObject({ reason: 'no_runtime' })
     expect(getSshPlainSshMode('target-1')?.message).toContain('plain SSH terminals')
+  })
+
+  it('keeps the OS the runtime ladder detected so agent launches quote for that host', async () => {
+    const { session } = createSession()
+    const { conn } = createConnection()
+
+    await session.establish(conn)
+
+    expect(session.getHostPlatform()).toBeNull()
+    expect(session.getPlainSshSession()?.remotePlatform).toBe('linux')
   })
 
   it('routes shell output and a proven exit through the SSH output intake', async () => {

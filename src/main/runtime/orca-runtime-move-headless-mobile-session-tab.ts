@@ -9,8 +9,9 @@ import type {
 import {
   buildHeadlessTabGroupMove,
   buildHeadlessTabGroupSplit
-} from './headless-tab-group-split-layout'
+} from '../../shared/workspace-layout/tab-group-moves'
 import { randomUUID } from 'node:crypto'
+import { withSelectedTabs } from './headless-tab-group-selection'
 import type { TabGroupLayoutNode } from '../../shared/tab-types'
 
 export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWithPersistHeadlessSessionTabProps {
@@ -68,10 +69,7 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
       tabGroups: nextGroups,
       tabs: nextTabs
     }
-    this.persistHeadlessTerminalTabOrder(worktreeId, tabOrder)
-    if (nextGroups.length > 1 && snapshot.tabGroupLayout) {
-      this.persistHeadlessTabGroups(worktreeId, nextGroups, snapshot.tabGroupLayout)
-    }
+    this.persistHeadlessTabGroups(worktreeId, nextGroups, snapshot.tabGroupLayout)
     this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
     this.emitMobileSessionTabsSnapshot(nextSnapshot)
     return { moved: true }
@@ -102,15 +100,16 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
       // as a no-op; mirror that instead of churning the snapshot.
       return { moved: true }
     }
+    const groups = withSelectedTabs(snapshot.tabGroups ?? [], split.groups, hostTabId)
     const nextSnapshot: RuntimeMobileSessionTabsSnapshot = {
       ...snapshot,
       publicationEpoch: `headless:${Date.now().toString(36)}`,
       snapshotVersion: snapshot.snapshotVersion + 1,
       activeGroupId: split.newGroupId,
-      tabGroups: split.groups,
+      tabGroups: groups,
       tabGroupLayout: split.layout
     }
-    this.persistHeadlessTabGroups(worktreeId, split.groups, split.layout)
+    this.persistHeadlessTabGroups(worktreeId, groups, split.layout)
     this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
     this.emitMobileSessionTabsSnapshot(nextSnapshot)
     return { moved: true }
@@ -138,32 +137,65 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
       return { moved: true }
     }
     const layout = moved.layout ?? { type: 'leaf' as const, groupId: move.targetGroupId }
+    const groups = withSelectedTabs(snapshot.tabGroups ?? [], moved.groups, hostTabId)
     const nextSnapshot: RuntimeMobileSessionTabsSnapshot = {
       ...snapshot,
       publicationEpoch: `headless:${Date.now().toString(36)}`,
       snapshotVersion: snapshot.snapshotVersion + 1,
       activeGroupId: move.targetGroupId,
-      tabGroups: moved.groups,
+      tabGroups: groups,
       tabGroupLayout: layout
     }
-    this.persistHeadlessTabGroups(worktreeId, moved.groups, layout)
+    this.persistHeadlessTabGroups(worktreeId, groups, layout)
     this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
     this.emitMobileSessionTabsSnapshot(nextSnapshot)
     return { moved: true }
   }
 
-  // Persist the headless tab-GROUP layout so snapshot rebuilds keep the split.
+  // Persist the headless tab-GROUP layout so snapshot rebuilds keep the split; the tab bar and rows
+  // follow the groups. Deleted by the switch (PR 6), when moves are layout commands.
   protected persistHeadlessTabGroups(
     worktreeId: string,
     groups: readonly RuntimeMobileSessionTabGroup[],
-    layout: TabGroupLayoutNode
+    layout: TabGroupLayoutNode | undefined
   ): void {
     const session = this.getWorkspaceSessionForWorktree(worktreeId)
     if (!session || !this.store?.setWorkspaceSession) {
       return
     }
+    const order = groups.flatMap((group) => group.tabOrder)
+    const groupIdByTabId = new Map(
+      groups.flatMap((group) => group.tabOrder.map((tabId) => [tabId, group.id] as const))
+    )
+    const position = (tabId: string): number => {
+      const index = order.indexOf(tabId)
+      return index === -1 ? order.length : index
+    }
+    const entries = session.unifiedTabs?.[worktreeId]
+    const rows = session.tabsByWorktree[worktreeId]
     this.setWorkspaceSessionForWorktree(worktreeId, {
       ...session,
+      ...(rows
+        ? {
+            tabsByWorktree: {
+              ...session.tabsByWorktree,
+              [worktreeId]: [...rows]
+                .sort((a, b) => position(a.id) - position(b.id) || a.sortOrder - b.sortOrder)
+                .map((row, sortOrder) => ({ ...row, sortOrder }))
+            }
+          }
+        : {}),
+      ...(entries
+        ? {
+            unifiedTabs: {
+              ...session.unifiedTabs,
+              [worktreeId]: entries.map((entry) => ({
+                ...entry,
+                groupId: groupIdByTabId.get(entry.id) ?? entry.groupId
+              }))
+            }
+          }
+        : {}),
       tabGroups: {
         ...session.tabGroups,
         [worktreeId]: groups.map((group) => ({
@@ -174,10 +206,7 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
           ...(group.recentTabIds ? { recentTabIds: [...group.recentTabIds] } : {})
         }))
       },
-      tabGroupLayouts: {
-        ...session.tabGroupLayouts,
-        [worktreeId]: layout
-      }
+      ...(layout ? { tabGroupLayouts: { ...session.tabGroupLayouts, [worktreeId]: layout } } : {})
     })
   }
 }
