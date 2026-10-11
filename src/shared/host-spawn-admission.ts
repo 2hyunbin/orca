@@ -16,6 +16,15 @@ export type AutomaticWorkMode =
       since: number
     }
 
+/** What a daemon reports about automatic restores; `admission` says whether its gate enforces. */
+export type AutomaticWorkStatus = {
+  admission: 'observe' | 'enforce'
+  mode: AutomaticWorkMode
+}
+
+/** `cleared` is the pause the resume lifted, or null when automatic restores were running. */
+export type AutomaticWorkResumeResult = AutomaticWorkStatus & { cleared: AutomaticWorkMode | null }
+
 export type SpawnRequestFacts = {
   clientId: string
   /** Null when the caller predates the field; presence opts the request into `defer`. */

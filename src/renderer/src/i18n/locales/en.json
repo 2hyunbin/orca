@@ -3572,7 +3572,8 @@
             "pressureDetail": "The host is under heavy load. Your session is saved.",
             "deadlineDetail": "The host was busy restoring other terminals. Your session is saved.",
             "title": "Sleeping — click to resume",
-            "resume": "Resume"
+            "resume": "Resume",
+            "resumeAutomaticRestores": "Resume automatic restores"
           }
         }
       },

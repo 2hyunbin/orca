@@ -3,6 +3,12 @@ import { DaemonPtyDaemonRecovery } from './daemon-pty-daemon-recovery'
 import { supportsMode2031UnsubscribeFact, type DaemonEvent } from './types'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
 import type { IPtyProvider } from '../providers/types'
+import type {
+  AutomaticWorkResumeResult,
+  AutomaticWorkStatus
+} from '../../shared/host-spawn-admission'
+import { isUnknownRequestTypeError } from './daemon-endpoint-errors'
+import type { AutomaticWorkRequestType } from './daemon-automatic-work-protocol'
 
 export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyProvider {
   /** Identity of the daemon behind this adapter; null until hello completes or after a disconnect. */
@@ -108,6 +114,27 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
         )
       }
     })
+  }
+
+  getAutomaticWorkStatus(): Promise<AutomaticWorkStatus | null> {
+    return this.requestAutomaticWork<AutomaticWorkStatus>('automaticWorkStatus')
+  }
+
+  resumeAutomaticWork(): Promise<AutomaticWorkResumeResult | null> {
+    return this.requestAutomaticWork<AutomaticWorkResumeResult>('resumeAutomaticWork')
+  }
+
+  private async requestAutomaticWork<T>(type: AutomaticWorkRequestType): Promise<T | null> {
+    await this.ensureConnected()
+    try {
+      return await this.client.request<T>(type, undefined)
+    } catch (error) {
+      // Why: a daemon that predates the gate has nothing to report or resume.
+      if (isUnknownRequestTypeError(error)) {
+        return null
+      }
+      throw error
+    }
   }
 
   async closeStartupQueryAuthority(id: string): Promise<number> {

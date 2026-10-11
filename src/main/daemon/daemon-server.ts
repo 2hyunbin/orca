@@ -22,6 +22,7 @@ import { checkPtySpawnHealth } from './pty-subprocess'
 import { TerminalHistorySeedTransferRegistry } from './terminal-history-seed-transfer-registry'
 import { TerminalHost } from './terminal-host'
 import { DaemonAutomaticWorkGuard } from './daemon-automatic-work-guard'
+import { automaticWorkRequestType } from './daemon-automatic-work-protocol'
 import {
   CLEAN_DISCONNECT_PROTOCOL_VERSION,
   NOTIFY_PREFIX,
@@ -289,7 +290,10 @@ export class DaemonServer {
   ): Promise<void> {
     const isNotify = request.id.startsWith(NOTIFY_PREFIX)
     try {
-      const result = await this.requestRouter.route(clientId, request)
+      const automaticWorkType = automaticWorkRequestType(request)
+      const result = automaticWorkType
+        ? this.automaticWork.handle(automaticWorkType)
+        : await this.requestRouter.route(clientId, request)
       if (!isNotify) {
         socket.write(encodeNdjson({ id: request.id, ok: true, payload: result }), () => {
           this.lifecycle.startPendingShutdownReply(clientId, request.id)

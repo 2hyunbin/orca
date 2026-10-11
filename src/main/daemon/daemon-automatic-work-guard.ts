@@ -1,6 +1,12 @@
-import type { AutomaticWorkMode, HostPressureLevel } from '../../shared/host-spawn-admission'
+import type {
+  AutomaticWorkMode,
+  AutomaticWorkResumeResult,
+  AutomaticWorkStatus,
+  HostPressureLevel
+} from '../../shared/host-spawn-admission'
 import type { ProcessGrowthTrip } from '../../shared/process-growth-breaker'
 import { AutomaticWorkRunMarker } from './automatic-work-run-marker-store'
+import type { AutomaticWorkRequestType } from './daemon-automatic-work-protocol'
 import { DaemonProcessGrowthMonitor } from './daemon-process-growth-monitor'
 import { TerminalSpawnGate, type TerminalSpawnAdmissionMode } from './terminal-spawn-gate'
 
@@ -62,6 +68,23 @@ export class DaemonAutomaticWorkGuard {
     this.marker.markCleanExit()
   }
 
+  status(): AutomaticWorkStatus {
+    return { admission: this.options.mode, mode: this.automaticWorkMode() }
+  }
+
+  handle(type: AutomaticWorkRequestType): AutomaticWorkStatus | AutomaticWorkResumeResult {
+    return type === 'resumeAutomaticWork' ? this.resume() : this.status()
+  }
+
+  /** The operator's resume: clears a crash or pressure pause and lets waiting restores through. */
+  resume(): AutomaticWorkResumeResult {
+    const before = this.automaticWorkMode()
+    this.marker.resume()
+    this.pressurePausedSince = null
+    this.gate.onPressureChanged()
+    return { ...this.status(), cleared: before.kind === 'paused' ? before : null }
+  }
+
   private onPressureChanged(level: HostPressureLevel): void {
     this.options.log.log('process-growth-level', { level })
     this.gate.onPressureChanged()
@@ -77,8 +100,8 @@ export class DaemonAutomaticWorkGuard {
 
   private onTrip(trips: readonly ProcessGrowthTrip[]): void {
     // Why pause, not kill: running agents keep running and only new automatic work stops
-    // (owner decision Q3). Why in memory for this run: nothing can resume a recorded pause
-    // yet, and an observe-only host must not leave one behind for when it starts enforcing.
+    // (owner decision Q3). Why in memory for this run: an observe-only host must not leave
+    // one behind for when it starts enforcing, and a resume or restart clears it.
     if (this.options.mode === 'enforce') {
       this.pressurePausedSince ??= Date.now()
     }
