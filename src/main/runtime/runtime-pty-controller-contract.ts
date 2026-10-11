@@ -1,5 +1,5 @@
 import type {
-  AutomaticWorkResumeResult,
+  AutomaticWorkResumeOutcome,
   AutomaticWorkStatus,
   SpawnIntent
 } from '../../shared/host-spawn-admission'
@@ -110,7 +110,7 @@ export type RuntimePtyController = {
   }>
   /** The local terminal owner's automatic-restore state; null when it has no fork gate. */
   getAutomaticWorkStatus?(): Promise<AutomaticWorkStatus | null>
-  resumeAutomaticWork?(): Promise<AutomaticWorkResumeResult | null>
+  resumeAutomaticWork?(): Promise<AutomaticWorkResumeOutcome>
   write(ptyId: string, data: string, inputKind: TerminalInputKind): boolean
   /** Three-valued settlement; local providers settle synchronously. */
   writeWithSettlement?(

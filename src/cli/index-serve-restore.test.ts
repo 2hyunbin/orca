@@ -99,4 +99,16 @@ describe('orca serve restore resume', () => {
     expect(logSpy.mock.calls[0]?.[0]).toContain('were not paused')
     expect(logSpy.mock.calls[1]?.[0]).toContain('no automatic-restore gate')
   })
+
+  it('explains a terminal host that predates the command', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    callMock.mockResolvedValueOnce({
+      id: 'rpc',
+      ok: true,
+      result: { automaticWork: null, terminalHostPredatesResume: true },
+      _meta: { runtimeId: 'runtime-1' }
+    })
+    await main(['serve', 'restore', 'resume'], '/tmp/repo')
+    expect(logSpy.mock.calls[0]?.[0]).toContain('predates this command')
+  })
 })

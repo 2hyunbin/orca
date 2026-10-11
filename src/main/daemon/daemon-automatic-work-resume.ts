@@ -1,5 +1,5 @@
 import type {
-  AutomaticWorkResumeResult,
+  AutomaticWorkResumeOutcome,
   AutomaticWorkStatus
 } from '../../shared/host-spawn-admission'
 import type { IPtyProvider } from '../providers/types'
@@ -33,7 +33,7 @@ export async function getLocalAutomaticWorkStatus(
  */
 export async function resumeLocalAutomaticWork(
   provider: IPtyProvider
-): Promise<AutomaticWorkResumeResult | null> {
+): Promise<AutomaticWorkResumeOutcome> {
   const daemons = localDaemons(provider)
   if (!daemons) {
     return null

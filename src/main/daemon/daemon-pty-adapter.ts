@@ -3,9 +3,11 @@ import { DaemonPtyDaemonRecovery } from './daemon-pty-daemon-recovery'
 import { supportsMode2031UnsubscribeFact, type DaemonEvent } from './types'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
 import type { IPtyProvider } from '../providers/types'
-import type {
-  AutomaticWorkResumeResult,
-  AutomaticWorkStatus
+import {
+  AUTOMATIC_WORK_RESUME_UNSUPPORTED,
+  type AutomaticWorkResumeOutcome,
+  type AutomaticWorkResumeResult,
+  type AutomaticWorkStatus
 } from '../../shared/host-spawn-admission'
 import { isUnknownRequestTypeError } from './daemon-endpoint-errors'
 import type { AutomaticWorkRequestType } from './daemon-automatic-work-protocol'
@@ -116,22 +118,25 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
     })
   }
 
-  getAutomaticWorkStatus(): Promise<AutomaticWorkStatus | null> {
-    return this.requestAutomaticWork<AutomaticWorkStatus>('automaticWorkStatus')
+  async getAutomaticWorkStatus(): Promise<AutomaticWorkStatus | null> {
+    const status = await this.requestAutomaticWork<AutomaticWorkStatus>('automaticWorkStatus')
+    return status === AUTOMATIC_WORK_RESUME_UNSUPPORTED ? null : status
   }
 
-  resumeAutomaticWork(): Promise<AutomaticWorkResumeResult | null> {
+  resumeAutomaticWork(): Promise<AutomaticWorkResumeOutcome> {
     return this.requestAutomaticWork<AutomaticWorkResumeResult>('resumeAutomaticWork')
   }
 
-  private async requestAutomaticWork<T>(type: AutomaticWorkRequestType): Promise<T | null> {
+  private async requestAutomaticWork<T>(
+    type: AutomaticWorkRequestType
+  ): Promise<T | typeof AUTOMATIC_WORK_RESUME_UNSUPPORTED> {
     await this.ensureConnected()
     try {
       return await this.client.request<T>(type, undefined)
     } catch (error) {
-      // Why: a daemon that predates the gate has nothing to report or resume.
+      // Why not "no gate": a daemon from before these requests may still hold a recorded pause.
       if (isUnknownRequestTypeError(error)) {
-        return null
+        return AUTOMATIC_WORK_RESUME_UNSUPPORTED
       }
       throw error
     }

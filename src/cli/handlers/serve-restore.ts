@@ -5,7 +5,10 @@ import type {
   AutomaticWorkResumeResult
 } from '../../shared/host-spawn-admission'
 
-type AutomaticWorkResumeResponse = { automaticWork: AutomaticWorkResumeResult | null }
+type AutomaticWorkResumeResponse = {
+  automaticWork: AutomaticWorkResumeResult | null
+  terminalHostPredatesResume?: true
+}
 
 const PAUSE_REASONS: Record<Extract<AutomaticWorkMode, { kind: 'paused' }>['reason'], string> = {
   unclean_host_death: 'the terminal host stopped unexpectedly',
@@ -15,6 +18,9 @@ const PAUSE_REASONS: Record<Extract<AutomaticWorkMode, { kind: 'paused' }>['reas
 
 export function formatAutomaticWorkResume(result: AutomaticWorkResumeResponse): string {
   const automaticWork = result.automaticWork
+  if (result.terminalHostPredatesResume) {
+    return 'The terminal host running now predates this command, so it cannot clear its pause. Run this again after the terminal host restarts. Until then, opening a sleeping terminal still resumes it.'
+  }
   if (!automaticWork) {
     return 'This host has no automatic-restore gate to resume (its terminal host predates it).'
   }

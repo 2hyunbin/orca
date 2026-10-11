@@ -1,5 +1,5 @@
 import './mock-descendant-sweep'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -75,7 +75,33 @@ describe('daemon automatic-work resume', () => {
     expect(after.mode).toEqual({ kind: 'normal' })
   })
 
-  it('reports no gate for a daemon that predates the request', async () => {
+  it('refuses a resume once the daemon no longer owns its endpoint, leaving the marker alone', async () => {
+    directory = mkdtempSync(join(tmpdir(), 'daemon-automatic-work-resume-'))
+    const markerPath = join(directory, 'daemon.automatic-work-run.json')
+    server = new DaemonServer({
+      socketPath: getDaemonSocketPath(directory),
+      tokenPath: join(directory, 'daemon.token'),
+      automaticWorkMarkerPath: markerPath,
+      spawnAdmission: 'enforce',
+      spawnSubprocess: async () => createMockSubprocess()
+    })
+    await server.start()
+    client = new DaemonClient({
+      socketPath: getDaemonSocketPath(directory),
+      tokenPath: join(directory, 'daemon.token')
+    })
+    await client.ensureConnected()
+    const markerBefore = readFileSync(markerPath, 'utf8')
+    // A successor took the canonical socket before the loss watchdog noticed.
+    vi.spyOn(server['endpoint'], 'hasLostOwnership').mockReturnValue(true)
+
+    await expect(client.request('resumeAutomaticWork', undefined)).rejects.toThrow(
+      'no longer owns its endpoint'
+    )
+    expect(readFileSync(markerPath, 'utf8')).toBe(markerBefore)
+  })
+
+  it('tells a gate-bearing daemon from before resume apart from no gate', async () => {
     vi.spyOn(DaemonClient.prototype, 'ensureConnected').mockResolvedValue()
     vi.spyOn(DaemonClient.prototype, 'request').mockRejectedValue(
       new Error('Unknown request type: resumeAutomaticWork')
@@ -85,7 +111,7 @@ describe('daemon automatic-work resume', () => {
       tokenPath: '/tmp/orca-automatic-work-old.token'
     })
     try {
-      await expect(adapter.resumeAutomaticWork()).resolves.toBeNull()
+      await expect(adapter.resumeAutomaticWork()).resolves.toBe('terminal-host-predates-resume')
       await expect(adapter.getAutomaticWorkStatus()).resolves.toBeNull()
     } finally {
       adapter.dispose()

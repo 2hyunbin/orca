@@ -34,7 +34,7 @@ import type { RuntimeWorktreeLifecycleEvent } from './orca-runtime-core'
 import { WORKTREE_CREATE_RESULT_TTL_MS } from './orca-runtime-core'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type {
-  AutomaticWorkResumeResult,
+  AutomaticWorkResumeOutcome,
   AutomaticWorkStatus
 } from '../../shared/host-spawn-admission'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
@@ -201,7 +201,7 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     return (await this.ptyController?.getAutomaticWorkStatus?.()) ?? null
   }
 
-  async resumeAutomaticWork(): Promise<AutomaticWorkResumeResult | null> {
+  async resumeAutomaticWork(): Promise<AutomaticWorkResumeOutcome> {
     return (await this.ptyController?.resumeAutomaticWork?.()) ?? null
   }
 

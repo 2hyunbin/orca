@@ -61,6 +61,15 @@ describe('runtime.automaticWork RPC methods', () => {
     ).resolves.toEqual({ automaticWork: null })
   })
 
+  it('says when the running terminal host predates resume instead of claiming no gate', async () => {
+    const runtime = runtimeWithController({
+      resumeAutomaticWork: async () => 'terminal-host-predates-resume' as const
+    })
+    await expect(
+      method('runtime.automaticWork.resume').handler(undefined, context(runtime))
+    ).resolves.toEqual({ automaticWork: null, terminalHostPredatesResume: true })
+  })
+
   it('lets a paired desktop resume but never a phone', () => {
     const resume = method('runtime.automaticWork.resume')
     expect(resume.permission).toBe('host-admin')
