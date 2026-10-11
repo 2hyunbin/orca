@@ -17,6 +17,24 @@ import { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { Store } from '../persistence'
 
+type MigrationStoreKey =
+  | 'stageOrcadMigrationCatalog'
+  | 'commitStagedOrcadMigrationCatalog'
+  | 'stageOrcadMigrationSnapshotChunk'
+  | 'abortStagedOrcadMigrationCatalog'
+  | 'getOrcadMigrationCatalogState'
+  | 'flushPendingOrThrowAsync'
+
+function hasMigrationStoreMethods<K extends MigrationStoreKey>(
+  store: RuntimeStore | null,
+  methods: readonly K[]
+): store is RuntimeStore & Pick<Store, K> {
+  if (!store || methods.some((method) => typeof store[method] !== 'function')) {
+    return false
+  }
+  return true
+}
+
 /** The destination half of a dormant catalog migration; every mutation is flushed before it answers. */
 export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaiter {
   async stageOrcadMigrationCatalog(
@@ -78,13 +96,11 @@ export class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithResolveWaite
   }
 
   /** A partial store (tests, headless hosts) lacks some optional methods; refuse rather than half-run. */
-  private requireMigrationStore<K extends keyof RuntimeStore & keyof Store>(
-    ...methods: K[]
-  ): Pick<Store, K> {
+  private requireMigrationStore<K extends MigrationStoreKey>(...methods: K[]): Pick<Store, K> {
     const store = this.store
-    if (!store || methods.some((method) => typeof store[method] !== 'function')) {
+    if (!hasMigrationStoreMethods(store, methods)) {
       throw new Error('runtime_unavailable')
     }
-    return this.requireStore()
+    return store
   }
 }

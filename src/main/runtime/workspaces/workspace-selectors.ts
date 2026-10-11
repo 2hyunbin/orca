@@ -1,34 +1,40 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from './orca-runtime-resolve-browser-network-execution-host-for-worktree'
-import type { ResolvedWorktree } from './runtime-worktree-path-identity'
-import { splitWorktreeIdForFilesystem, worktreeIdComparisonKey } from '../../shared/worktree/id'
-import { branchSelectorMatches, runtimePathsEqual } from './runtime-worktree-path-identity'
-import { getRepoExecutionHostId, getWorktreeExecutionHostId } from '../../shared/execution-host'
-import type {
-  WorktreeLineageInput,
-  WorktreeLineageResolution
-} from './runtime-worktree-lineage-resolution'
-import type { OrchestrationDb } from './orchestration/db'
-import { resolveNestedWorkerMaxDepth } from '../../shared/nested-worker-depth'
-import type { WorkspaceLineage, WorktreeLineage } from '../../shared/worktree/lineage-types'
-import type { WorkspaceKey } from '../../shared/folder-workspace-types'
-import type { Repo } from '../../shared/repo-types'
-import type { Store } from '../persistence'
-import { areWorktreePathsEqual, mergeWorktree } from '../ipc/worktree-logic'
+import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
+import { splitWorktreeIdForFilesystem, worktreeIdComparisonKey } from '../../../shared/worktree/id'
+import { branchSelectorMatches, runtimePathsEqual } from '../runtime-worktree-path-identity'
+import { getRepoExecutionHostId, getWorktreeExecutionHostId } from '../../../shared/execution-host'
+import type { Repo } from '../../../shared/repo-types'
+import { areWorktreePathsEqual, mergeWorktree } from '../../ipc/worktree-logic'
+import type { RuntimeStore } from '../runtime-store-contract'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 
-export class OrcaRuntimeWithResolveWorktreeSelector extends OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree {
-  protected async resolveWorktreeSelector(selector: string): Promise<ResolvedWorktree> {
-    const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(selector)
+export type RuntimeWorkspaceSelectorHost = {
+  getStore(): RuntimeStore | null
+  getValidatedExplicitWorktreeIdSelector(selector: string): string | null
+  hasFreshResolvedWorktreeCache(): boolean
+  resolveExplicitWorktreeIdScoped(
+    worktreeId: string,
+    hostId?: ExecutionHostId
+  ): Promise<ResolvedWorktree | null>
+  listResolvedWorktrees(): Promise<ResolvedWorktree[]>
+}
+
+export class RuntimeWorkspaceSelectors {
+  constructor(private readonly host: RuntimeWorkspaceSelectorHost) {}
+  private get store(): RuntimeStore | null {
+    return this.host.getStore()
+  }
+  async resolveWorktreeSelector(selector: string): Promise<ResolvedWorktree> {
+    const explicitWorktreeId = this.host.getValidatedExplicitWorktreeIdSelector(selector)
     // Why only `id:`: every other selector kind is matched across the whole fleet, and their
     // `selector_ambiguous` contract is defined over all repos. Scoping those would silently pick a
     // winner where today they correctly refuse. An `id:` selector already names its repo.
-    if (explicitWorktreeId && !this.hasFreshResolvedWorktreeCache()) {
-      const scoped = await this.resolveExplicitWorktreeIdScoped(explicitWorktreeId)
+    if (explicitWorktreeId && !this.host.hasFreshResolvedWorktreeCache()) {
+      const scoped = await this.host.resolveExplicitWorktreeIdScoped(explicitWorktreeId)
       if (scoped) {
         return scoped
       }
     }
-    const worktrees = await this.listResolvedWorktrees()
+    const worktrees = await this.host.listResolvedWorktrees()
     let candidates: ResolvedWorktree[]
 
     if (selector === 'active') {
@@ -105,44 +111,7 @@ export class OrcaRuntimeWithResolveWorktreeSelector extends OrcaRuntimeWithResol
     throw new Error('selector_not_found')
   }
 
-  /** `childRepo` scopes the parent to the new worktree's execution host (#12757). */
-  protected resolveLineageForWorktreeCreate(
-    input?: WorktreeLineageInput,
-    childRepo?: Repo
-  ): Promise<WorktreeLineageResolution> {
-    return this.worktreeLineage.resolveCreate(
-      input,
-      childRepo ? getRepoExecutionHostId(childRepo) : undefined
-    )
-  }
-
-  protected getOrchestrationDbIfAvailable(): OrchestrationDb | null {
-    return this._orchestrationDb
-  }
-
-  getNestedWorkerMaxDepth(): number {
-    return resolveNestedWorkerMaxDepth({
-      nestedWorkerMaxDepth: (
-        this.store?.getSettings?.() as { nestedWorkerMaxDepth?: number } | undefined
-      )?.nestedWorkerMaxDepth
-    })
-  }
-
-  hydrateInferredWorktreeLineage(): Promise<void> {
-    return this.worktreeLineage.hydrate()
-  }
-
-  listWorktreeLineage(): Promise<Record<string, WorktreeLineage>> {
-    return this.worktreeLineage.listWorktreeLineage()
-  }
-
-  listWorkspaceLineage(): Promise<Record<WorkspaceKey, WorkspaceLineage>> {
-    return this.worktreeLineage.listWorkspaceLineage()
-  }
-
-  // Why: one selector grammar, so connection-scoped resolution can narrow the same
-  // candidate set instead of reimplementing (and diverging from) the matching rules.
-  protected selectReposBySelector(selector: string): Repo[] {
+  selectReposBySelector(selector: string): Repo[] {
     const repos = this.store?.getRepos() ?? []
     if (selector.startsWith('id:')) {
       return repos.filter((repo) => repo.id === selector.slice(3))
@@ -161,7 +130,7 @@ export class OrcaRuntimeWithResolveWorktreeSelector extends OrcaRuntimeWithResol
     )
   }
 
-  protected async resolveRepoSelector(selector: string): Promise<Repo> {
+  async resolveRepoSelector(selector: string): Promise<Repo> {
     if (!this.store) {
       throw new Error('repo_not_found')
     }
@@ -176,14 +145,7 @@ export class OrcaRuntimeWithResolveWorktreeSelector extends OrcaRuntimeWithResol
     throw new Error('repo_not_found')
   }
 
-  protected requireStore(): Store {
-    if (!this.store) {
-      throw new Error('runtime_unavailable')
-    }
-    return this.store as unknown as Store
-  }
-
-  protected buildResolvedWorktreeFromId(worktreeId: string): ResolvedWorktree | null {
+  buildResolvedWorktreeFromId(worktreeId: string): ResolvedWorktree | null {
     const parsed = splitWorktreeIdForFilesystem(worktreeId)
     if (!parsed?.repoId || !parsed.worktreePath) {
       return null

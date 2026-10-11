@@ -1,24 +1,22 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithListKnownResolvedWorktreesForExplicitTarget } from './orca-runtime-list-known-resolved-worktrees-for-explicit-target'
-import type { Repo } from '../../shared/repo-types'
-import type { ProjectExecutionRuntimeResolution } from '../../shared/project-execution-runtime'
-import type { RuntimeWorktreeScanCache, RuntimeWorktreeScanRefresh } from './orca-runtime-core'
-import { resolveWorktreeScanCacheTtlMs } from './runtime-worktree-scan-cache'
+import type { Repo } from '../../../shared/repo-types'
+import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
+import type { RuntimeWorktreeScanCache, RuntimeWorktreeScanRefresh } from '../orca-runtime-core'
+import { resolveWorktreeScanCacheTtlMs } from '../runtime-worktree-scan-cache'
 import {
   WORKTREE_SCAN_ADMIN_FINGERPRINT_TIMEOUT_MS,
   WORKTREE_SCAN_ADMIN_RECONCILE_INTERVAL_MS
-} from './orca-runtime-postlude'
-import { getLocalProjectWorktreeGitOptionsForRuntime } from '../project-runtime-git-options'
-import { withTimeoutResult } from './runtime-async-boundaries'
-import { readRepoWorktreeAdminFingerprint } from './repo-worktree-admin-fingerprint'
-import type { RuntimeWorktreeScanResult } from './repo-worktree-resolution-scan'
-import { scanLocalRepoWorktreesForResolution } from './repo-worktree-resolution-scan'
-import { dropRepeatedWorktreeRows } from './repeated-worktree-rows'
-import { getSshGitProvider } from '../providers/ssh-git-dispatch'
-import type { GitWorktreeInfo } from '../../shared/worktree/types'
-import { listStoredWorktreeRowsForRepo } from './repo-worktree-row-resolution'
-import type { ResolvedWorktree } from './runtime-worktree-path-identity'
-import { getRepoExecutionHostId, getRepoSshConnectionId } from '../../shared/execution-host'
+} from '../orca-runtime-postlude'
+import { getLocalProjectWorktreeGitOptionsForRuntime } from '../../project-runtime-git-options'
+import { withTimeoutResult } from '../runtime-async-boundaries'
+import { readRepoWorktreeAdminFingerprint } from '../repo-worktree-admin-fingerprint'
+import type { RuntimeWorktreeScanResult } from '../repo-worktree-resolution-scan'
+import { scanLocalRepoWorktreesForResolution } from '../repo-worktree-resolution-scan'
+import { dropRepeatedWorktreeRows } from '../repeated-worktree-rows'
+import { getSshGitProvider } from '../../providers/ssh-git-dispatch'
+import type { GitWorktreeInfo } from '../../../shared/worktree/types'
+import { listStoredWorktreeRowsForRepo } from '../repo-worktree-row-resolution'
+import { getRepoSshConnectionId } from '../../../shared/execution-host'
+import type { RuntimeStore } from '../runtime-store-contract'
 
 const lastFingerprintUnknownWarnAt = new Map<string, number>()
 
@@ -39,12 +37,21 @@ function warnFingerprintUnknownOnce(repoId: string, reason: string): void {
   )
 }
 
-export class OrcaRuntimeWithRefreshRepoWorktreeScan extends OrcaRuntimeWithListKnownResolvedWorktreesForExplicitTarget {
-  /**
-   * Refresh one repo's worktree rows, skipping the `git worktree list` subprocess when a cheap
-   * Git-admin fingerprint proves nothing changed since the cached scan.
-   */
-  protected async refreshRepoWorktreeScan(
+export type RuntimeWorkspaceRepoScanHost = {
+  getStore(): RuntimeStore | null
+  requireStore(): RuntimeStore
+}
+
+export class RuntimeWorkspaceRepoScanRefresh {
+  readonly pendingFingerprintProbes = new Set<string>()
+  constructor(private readonly host: RuntimeWorkspaceRepoScanHost) {}
+  private get store(): RuntimeStore | null {
+    return this.host.getStore()
+  }
+  private requireStore(): RuntimeStore {
+    return this.host.requireStore()
+  }
+  async refreshRepoWorktreeScan(
     repo: Repo,
     projectRuntime: ProjectExecutionRuntimeResolution | undefined,
     cached: RuntimeWorktreeScanCache | null
@@ -128,26 +135,19 @@ export class OrcaRuntimeWithRefreshRepoWorktreeScan extends OrcaRuntimeWithListK
     return { result, adminFingerprint: null, adminFingerprintProbe: probe, scannedAt }
   }
 
-  /**
-   * Read one repo's Git-admin fingerprint, unless that repo's previous read is still outstanding.
-   * Why the gate: `withTimeout` abandons a probe without cancelling it, and readdir/stat take no
-   * AbortSignal — on a wedged mount a fresh probe per refresh would pin every libuv fs thread.
-   */
-  protected startRepoWorktreeAdminFingerprintProbe(
-    repo: Repo
-  ): Promise<string | null> | 'in-flight' {
-    if (this.worktreeAdminFingerprintProbes.has(repo.id)) {
+  private startRepoWorktreeAdminFingerprintProbe(repo: Repo): Promise<string | null> | 'in-flight' {
+    if (this.pendingFingerprintProbes.has(repo.id)) {
       return 'in-flight'
     }
-    this.worktreeAdminFingerprintProbes.add(repo.id)
+    this.pendingFingerprintProbes.add(repo.id)
     return readRepoWorktreeAdminFingerprint(repo.path)
       .catch(() => null)
       .finally(() => {
-        this.worktreeAdminFingerprintProbes.delete(repo.id)
+        this.pendingFingerprintProbes.delete(repo.id)
       })
   }
 
-  protected async listRepoWorktreesForResolutionUncached(
+  private async listRepoWorktreesForResolutionUncached(
     repo: Repo,
     projectRuntime: ProjectExecutionRuntimeResolution | undefined
   ): Promise<RuntimeWorktreeScanResult> {
@@ -172,84 +172,7 @@ export class OrcaRuntimeWithRefreshRepoWorktreeScan extends OrcaRuntimeWithListK
     }
   }
 
-  protected listStoredWorktreesForResolution(repo: Repo): GitWorktreeInfo[] {
+  private listStoredWorktreesForResolution(repo: Repo): GitWorktreeInfo[] {
     return this.store ? listStoredWorktreeRowsForRepo(this.requireStore(), repo) : []
-  }
-
-  protected async getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>> {
-    return new Map((await this.listResolvedWorktrees()).map((worktree) => [worktree.id, worktree]))
-  }
-
-  protected invalidateResolvedWorktreeCache(): void {
-    this.resolvedWorktrees.invalidateResolved()
-  }
-
-  protected invalidateWorktreeScanCacheForRepo(repoId: string): void {
-    const prefix = `${repoId}\0`
-    const scopeKeys = new Set(
-      this.store
-        ?.getRepos()
-        .filter((repo) => repo.id === repoId)
-        .map((repo) => `${repoId}\0${getRepoExecutionHostId(repo)}`) ?? []
-    )
-    for (const keys of [
-      this.worktreeScanGenerations.keys(),
-      this.worktreeScanCache.keys(),
-      this.worktreeScanInFlight.keys()
-    ]) {
-      for (const key of keys) {
-        if (key.startsWith(prefix)) {
-          scopeKeys.add(key)
-        }
-      }
-    }
-    for (const key of scopeKeys) {
-      this.worktreeScanGenerations.set(key, (this.worktreeScanGenerations.get(key) ?? 0) + 1)
-      this.worktreeScanCache.delete(key)
-      this.worktreeScanInFlight.delete(key)
-    }
-  }
-
-  invalidateWorktreeCatalog(repoId: string): void {
-    this.invalidateResolvedWorktreeCache()
-    this.invalidateWorktreeScanCacheForRepo(repoId)
-  }
-
-  protected invalidateSshWorktreeScanCacheInternal(targetId: string): void {
-    const repos = this.store?.getRepos() ?? []
-    const affectedRepos = repos.filter((repo) => getRepoSshConnectionId(repo) === targetId)
-    const affectedScopeKeys = new Set(
-      affectedRepos.map((repo) => `${repo.id}\0${getRepoExecutionHostId(repo)}`)
-    )
-    for (const key of affectedScopeKeys) {
-      this.worktreeScanGenerations.set(key, (this.worktreeScanGenerations.get(key) ?? 0) + 1)
-      this.worktreeScanCache.delete(key)
-      this.worktreeScanInFlight.delete(key)
-    }
-    if (affectedScopeKeys.size > 0) {
-      this.resolvedWorktrees.invalidateResolved()
-    }
-  }
-
-  /** Invalidate the worktree cache and tell the renderer to re-list after an out-of-band branch change so the new name surfaces immediately. */
-  notifyBranchRenamed(repoId: string): void {
-    this.invalidateResolvedWorktreeCache()
-    this.invalidateWorktreeScanCacheForRepo(repoId)
-    this.notifyWorktreesChanged(repoId)
-  }
-
-  /** Like {@link notifyBranchRenamed} but carries old->new worktree id so the renderer re-keys instead of treating the id change as a deletion. */
-  notifyWorktreeFolderRenamed(repoId: string, oldWorktreeId: string, newWorktreeId: string): void {
-    this.clientSessionTabSelections.migrateWorktree(oldWorktreeId, newWorktreeId)
-    this.invalidateResolvedWorktreeCache()
-    this.invalidateWorktreeScanCacheForRepo(repoId)
-    this.notifier?.worktreesChanged(repoId, { oldWorktreeId, newWorktreeId })
-    // Mirror notifyBranchRenamed so in-process onClientEvent listeners also see the rename.
-    this.emitClientEvent({ type: 'worktreesChanged', repoId })
-  }
-
-  notifyFolderWorkspaceChanged(): void {
-    this.invalidateResolvedWorktreeCache()
-    this.notifyReposChanged()
   }
 }

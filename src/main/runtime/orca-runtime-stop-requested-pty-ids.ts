@@ -12,15 +12,11 @@ import type { RuntimeNotifier } from './runtime-notifier-contract'
 import { RuntimeClientEventBus } from './runtime-client-event-bus'
 import { RuntimeNativeChatDraftResolutions } from './runtime-native-chat-draft-resolutions'
 import { RuntimeWorktreeLifecycleEvents } from './runtime-worktree-lifecycle-events'
-import type {
-  RuntimeWorktreeLifecycleEvent,
-  RuntimeWorktreeScanCache,
-  RuntimeWorktreeScanInFlight
-} from './orca-runtime-core'
+import type { RuntimeWorktreeLifecycleEvent } from './orca-runtime-core'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { EmulatorBridge } from '../emulator/emulator-bridge'
-import { RuntimeResolvedWorktreeCache } from './runtime-resolved-worktree-cache'
+import { RuntimeWorkspaceCatalog } from './workspaces/workspace-catalog'
 import { RuntimeWorktreeLineageController } from './runtime-worktree-lineage-controller'
 import { RuntimeAgentOrchestrationProjection } from './runtime-agent-orchestration-projection'
 import { RuntimeTerminalList } from './runtime-terminal-list'
@@ -87,16 +83,19 @@ export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId
 
   protected emulatorBridge: EmulatorBridge | null = null
 
-  protected readonly resolvedWorktrees = new RuntimeResolvedWorktreeCache()
+  protected readonly workspaceQueries = new RuntimeWorkspaceCatalog({
+    getStore: () => this.store,
+    requireStore: () => this.requireStore(),
+    getValidatedExplicitWorktreeIdSelector: (selector) =>
+      this.getValidatedExplicitWorktreeIdSelector(selector),
+    listRepoWorktreesForResolution: (repo, projectRuntimeByRepoId) =>
+      this.listRepoWorktreesForResolution(repo, projectRuntimeByRepoId)
+  })
 
-  protected worktreeScanGenerations = new Map<string, number>()
+  protected readonly resolvedWorktrees = this.workspaceQueries.resolvedWorktrees
 
-  protected worktreeScanCache = new Map<string, RuntimeWorktreeScanCache>()
-
-  protected worktreeScanInFlight = new Map<string, RuntimeWorktreeScanInFlight>()
-
-  /** Repos whose Git-admin probe has not settled yet; caps abandoned fs work at one per repo. */
-  protected worktreeAdminFingerprintProbes = new Set<string>()
+  protected readonly worktreeAdminFingerprintProbes =
+    this.workspaceQueries.repoScans.pendingFingerprintProbes
 
   protected readonly worktreeLineage = new RuntimeWorktreeLineageController({
     getStore: () => this.store,
