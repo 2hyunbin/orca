@@ -8,6 +8,7 @@ import { RemoteRuntimeClientError } from './remote-runtime-client-error'
 import {
   isKeepaliveFrame,
   RuntimeRpcEnvelopeSchema,
+  type RuntimeRpcFailure,
   type RuntimeRpcResponse
 } from './runtime-rpc-envelope'
 import { parseRemoteRuntimeJsonText } from './remote-runtime-request-frames'
@@ -19,7 +20,7 @@ type RequestResponseRouterOptions<TResult> = {
   serializedStatusRequest: string | null
   requestId: string
   statusRequestId: string | null
-  validateStatus?: (response: RuntimeRpcResponse<RuntimeStatus>) => void
+  validateStatus?: (response: RuntimeRpcResponse<RuntimeStatus>) => void | RuntimeRpcFailure | null
   send: (frame: string) => void
   sendRequestedRpc: () => void
   refreshTimeout: () => void
@@ -141,7 +142,14 @@ export class RemoteRuntimeRequestResponseRouter<TResult> {
     }
     if (this.awaitingStatus && this.options.validateStatus) {
       try {
-        this.options.validateStatus(parsed.data as RuntimeRpcResponse<RuntimeStatus>)
+        const failure = this.options.validateStatus(
+          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The validated envelope matches status.get; its payload follows that RPC contract.
+          parsed.data as RuntimeRpcResponse<RuntimeStatus>
+        )
+        if (failure) {
+          this.options.finishResponse(failure)
+          return
+        }
       } catch (error) {
         this.options.finishError(
           error instanceof Error

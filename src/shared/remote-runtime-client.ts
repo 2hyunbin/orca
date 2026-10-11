@@ -7,7 +7,11 @@ import {
   type RemoteRuntimeSubscriptionOptions,
   type RemoteRuntimeTransportSubscriptionCallbacks
 } from './remote-runtime-subscription-transport'
-import type { RuntimeOrchestrationEnvelope, RuntimeRpcResponse } from './runtime-rpc-envelope'
+import type {
+  RuntimeOrchestrationEnvelope,
+  RuntimeRpcFailure,
+  RuntimeRpcResponse
+} from './runtime-rpc-envelope'
 import type { RuntimeStatus } from './runtime-types'
 
 export { RemoteRuntimeClientError } from './remote-runtime-client-error'
@@ -35,6 +39,9 @@ export type RemoteRuntimeSubscriptionCallbacks<TResult = unknown> = {
   onClose?: () => void
 }
 
+/** Local validation at socket send; never serialized to the execution host. */
+export type RemoteRuntimeSendValidation = () => RuntimeRpcFailure | null
+
 export function sendRemoteRuntimeRequest<TResult>(
   pairing: PairingOffer,
   method: string,
@@ -61,10 +68,11 @@ export function sendRemoteRuntimeRequestWithStatusPreflight<TResult>(
   method: string,
   params: unknown,
   timeoutMs: number,
-  validateStatus: (response: RuntimeRpcResponse<RuntimeStatus>) => void,
+  validateStatus: (response: RuntimeRpcResponse<RuntimeStatus>) => void | RuntimeRpcFailure | null,
   envelope?: RuntimeOrchestrationEnvelope,
   clientCapabilities: readonly RuntimeCapability[] = [],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  validateBeforeSend?: RemoteRuntimeSendValidation
 ): Promise<RuntimeRpcResponse<TResult>> {
   return sendRemoteRuntimeRequestOnSocket(
     pairing,
@@ -74,7 +82,8 @@ export function sendRemoteRuntimeRequestWithStatusPreflight<TResult>(
     envelope,
     validateStatus,
     signal,
-    clientCapabilities
+    clientCapabilities,
+    validateBeforeSend
   )
 }
 

@@ -10,6 +10,7 @@ import {
 } from './e2ee-crypto'
 import type { PairingOffer } from './pairing'
 import type { RuntimeCapability } from './protocol-version'
+import type { RemoteRuntimeSendValidation } from './remote-runtime-client'
 import { remoteRuntimeClientCapabilities } from './remote-runtime-client-capabilities'
 import {
   formatRemoteRuntimeCloseMessage,
@@ -31,7 +32,11 @@ import {
   takeRemoteRuntimePreparedRequest
 } from './remote-runtime-prepared-request-admission'
 import { RemoteRuntimeRequestResponseRouter } from './remote-runtime-request-response-router'
-import type { RuntimeOrchestrationEnvelope, RuntimeRpcResponse } from './runtime-rpc-envelope'
+import type {
+  RuntimeOrchestrationEnvelope,
+  RuntimeRpcFailure,
+  RuntimeRpcResponse
+} from './runtime-rpc-envelope'
 import type { RuntimeStatus } from './runtime-types'
 import { isSafeTimerDelayMs, MAX_TIMER_DELAY_MS } from './timer-delay'
 
@@ -41,9 +46,10 @@ export async function sendRemoteRuntimeRequestOnSocket<TResult>(
   params: unknown,
   timeoutMs: number,
   envelope?: RuntimeOrchestrationEnvelope,
-  validateStatus?: (response: RuntimeRpcResponse<RuntimeStatus>) => void,
+  validateStatus?: (response: RuntimeRpcResponse<RuntimeStatus>) => void | RuntimeRpcFailure | null,
   signal?: AbortSignal,
-  clientCapabilities: readonly RuntimeCapability[] = []
+  clientCapabilities: readonly RuntimeCapability[] = [],
+  validateBeforeSend?: RemoteRuntimeSendValidation
 ): Promise<RuntimeRpcResponse<TResult>> {
   throwIfSignalAborted(signal)
   if (!isSafeTimerDelayMs(timeoutMs)) {
@@ -52,6 +58,7 @@ export async function sendRemoteRuntimeRequestOnSocket<TResult>(
       `Runtime request timeout must be an integer between 0 and ${MAX_TIMER_DELAY_MS}ms.`
     )
   }
+  const deadline = Date.now() + timeoutMs
   const requestId = randomUUID()
   const statusRequestId = validateStatus ? randomUUID() : null
   const serializedStatusRequest = statusRequestId
@@ -100,7 +107,10 @@ export async function sendRemoteRuntimeRequestOnSocket<TResult>(
       }
     }
 
-    let timeout = setTimeout(onTimeout, timeoutMs)
+    let timeout = setTimeout(
+      onTimeout,
+      validateBeforeSend ? Math.max(0, deadline - Date.now()) : timeoutMs
+    )
 
     function onTimeout(): void {
       finishError(
@@ -117,6 +127,11 @@ export async function sendRemoteRuntimeRequestOnSocket<TResult>(
     }
 
     function refreshTimeout(): void {
+      // A pinned close keeps one deadline through status and keepalive frames.
+      if (validateBeforeSend) {
+        return
+      }
+
       const refreshableTimeout = timeout as { refresh?: () => void }
       if (typeof refreshableTimeout.refresh === 'function') {
         refreshableTimeout.refresh()
@@ -152,6 +167,16 @@ export async function sendRemoteRuntimeRequestOnSocket<TResult>(
       finish({ ok: true, response })
 
     function sendRequestedRpc(): void {
+      if (validateBeforeSend && Date.now() >= deadline) {
+        onTimeout()
+        return
+      }
+      const failure = validateBeforeSend?.()
+      if (failure) {
+        serializedRequest = null
+        finishResponse(failure)
+        return
+      }
       const request = serializedRequest
       serializedRequest = null
       if (request === null) {

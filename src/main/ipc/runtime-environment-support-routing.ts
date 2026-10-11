@@ -1,4 +1,12 @@
-import { isOrchestrationMutation } from '../../shared/orchestration-rpc-contract'
+export {
+  shouldRouteCallBySupport,
+  shouldRouteSubscriptionBySupport,
+  shouldUseSharedControlEnvelope
+} from './runtime-environment-support-policy'
+import {
+  isRuntimePinnedClose,
+  sendRuntimeEnvironmentPinnedClose
+} from './runtime-environment-pinned-close'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { PairingOffer } from '../../shared/pairing'
 import type {
@@ -47,27 +55,6 @@ type SubscriptionCallbacks = {
   onClose: () => void
 }
 
-export function shouldRouteCallBySupport(method: string): boolean {
-  // Snapshot recovery must stay available while shared-control streams reconnect after a restart.
-  return (
-    method !== 'status.get' && method !== 'session.tabs.list' && method !== 'session.tabs.listAll'
-  )
-}
-
-export function shouldRouteSubscriptionBySupport(method: string): boolean {
-  if (method === 'browser.screencast' || method === 'terminal.multiplex') {
-    return false
-  }
-  return (
-    method === 'runtime.clientEvents.subscribe' ||
-    method === 'session.tabs.subscribe' ||
-    method === 'session.tabs.subscribeAll' ||
-    method === 'accounts.subscribe' ||
-    method === 'notifications.subscribe' ||
-    method === 'files.watch'
-  )
-}
-
 export function executeSupportRoutedCall(args: {
   userDataPath: string
   environment: KnownRuntimeEnvironment
@@ -79,6 +66,8 @@ export function executeSupportRoutedCall(args: {
   envelope?: RuntimeOrchestrationEnvelope
   signal?: AbortSignal
 }): Promise<RuntimeRpcResponse<unknown>> {
+  const deadline = Date.now() + args.timeoutMs
+  const pinnedClose = isRuntimePinnedClose(args.method, args.expectedRuntimeId)
   return routeRuntimeEnvironmentCallBySupport({
     userDataPath: args.userDataPath,
     initialEnvironment: args.environment,
@@ -88,25 +77,29 @@ export function executeSupportRoutedCall(args: {
     expectedRuntimeId: args.expectedRuntimeId,
     signal: args.signal,
     supported: (route) =>
-      sendRemoteRuntimeSharedControlRequestAbortable(
-        route.environment.id,
-        route.pairing,
-        args.method,
-        args.params,
-        args.timeoutMs,
-        args.envelope,
-        args.signal
-      ),
+      pinnedClose
+        ? sendRuntimeEnvironmentPinnedClose({ ...args, ...route, deadline })
+        : sendRemoteRuntimeSharedControlRequestAbortable(
+            route.environment.id,
+            route.pairing,
+            args.method,
+            args.params,
+            args.timeoutMs,
+            args.envelope,
+            args.signal
+          ),
     unsupported: (route) =>
-      sendRemoteRuntimeRequestAbortable(
-        route.pairing,
-        args.method,
-        args.params,
-        args.timeoutMs,
-        args.envelope,
-        args.signal,
-        ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES
-      ),
+      pinnedClose
+        ? sendRuntimeEnvironmentPinnedClose({ ...args, ...route, deadline })
+        : sendRemoteRuntimeRequestAbortable(
+            route.pairing,
+            args.method,
+            args.params,
+            args.timeoutMs,
+            args.envelope,
+            args.signal,
+            ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES
+          ),
     markUsed: (environmentId, response) => {
       if (response.ok) {
         markEnvironmentUsed(args.userDataPath, environmentId, {
@@ -292,14 +285,4 @@ function subscriptionCallbacks(
       args.callbacks.onClose()
     }
   }
-}
-
-export function shouldUseSharedControlEnvelope(
-  method: string,
-  params: unknown,
-  envelope: RuntimeOrchestrationEnvelope | undefined
-): RuntimeOrchestrationEnvelope | undefined {
-  return envelope && method.startsWith('orchestration.') && !isOrchestrationMutation(method, params)
-    ? envelope
-    : undefined
 }
