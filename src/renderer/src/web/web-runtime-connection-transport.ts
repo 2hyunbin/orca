@@ -6,17 +6,18 @@ import {
   routeWebRuntimeConnectionFrame,
   type WebRuntimeConnectionState
 } from './web-runtime-connection-frame-router'
-import type {
-  WebRuntimeAuthPlan,
-  WebRuntimeCredentialSource
-} from './web-runtime-credential-source'
-import { WebRuntimeConnectionAuth } from './web-runtime-connection-auth'
+import {
+  WebRuntimeConnectionAuth,
+  type WebRuntimeConnectionLifecycle
+} from './web-runtime-connection-auth'
+import type { WebRuntimeAuthPlan } from './web-runtime-credential-source'
 import { WebRuntimeConnectionTimers } from './web-runtime-connection-timers'
 import {
   createPairedE2EEClientHandshake,
   type PairedE2EEClientHandshake
 } from '../../../shared/paired-e2ee-client-handshake'
 import { WEB_PAIRED_E2EE_PRIMITIVES } from './web-paired-e2ee-primitives'
+import { withWebClientUpgradeMarker } from '../../../shared/web-origin-security'
 import type { WebRuntimeTransportSubscription } from './web-runtime-subscription-contract'
 import { WebRuntimeSubscriptionRegistry } from './web-runtime-subscription-registry'
 import { WebRuntimeRequestRegistry } from './web-runtime-request-registry'
@@ -44,17 +45,12 @@ export class WebRuntimeConnectionTransport {
   constructor(
     private readonly connection: PairedRuntimeConnection,
     clock: { now: () => number; isDocumentVisible: () => boolean },
-    private readonly lifecycle: {
-      onStateChanged?: (state: WebRuntimeConnectionState) => void
-      reconnect?: boolean
-      credential?: WebRuntimeCredentialSource
-      // Why: only the primary socket registers a key; helper sockets reuse it once active.
-      allowKeyMigration?: boolean
-    } = {}
+    private readonly lifecycle: WebRuntimeConnectionLifecycle = {}
   ) {
-    this.auth = new WebRuntimeConnectionAuth(connection.credential.deviceToken, lifecycle)
-    // Why: an invalid host key fails construction, not the first connect.
-    WEB_PAIRED_E2EE_PRIMITIVES.publicKeyFromBase64(connection.hostPublicKeyB64)
+    this.auth = new WebRuntimeConnectionAuth(connection, {
+      ...lifecycle,
+      retryLater: () => this.scheduleReconnect()
+    })
     this.connectionWaiters = new WebRuntimeConnectionWaiters({
       endpoint: connection.endpoint,
       getState: () => this.state,
@@ -103,10 +99,8 @@ export class WebRuntimeConnectionTransport {
     this.requestRegistry.rejectAll('Remote Orca runtime connection closed.')
     this.connectionWaiters.rejectAll(new Error('Remote Orca runtime connection closed.'))
     this.subscriptionRegistry.close(options.notifySubscriptions ?? true)
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
-    }
+    this.ws?.close()
+    this.ws = null
     this.handshake = null
     this.setState('disconnected')
   }
@@ -211,7 +205,7 @@ export class WebRuntimeConnectionTransport {
   private openSocket(plan: WebRuntimeAuthPlan): void {
     let socket: WebSocket
     try {
-      socket = new WebSocket(this.connection.endpoint)
+      socket = new WebSocket(withWebClientUpgradeMarker(this.connection.endpoint))
     } catch (error) {
       this.requestRegistry.rejectAll(error instanceof Error ? error.message : String(error))
       this.scheduleReconnect()

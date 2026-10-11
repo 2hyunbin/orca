@@ -52,6 +52,7 @@ export type WebRuntimeCredentialEnvironment = {
   environmentId: string
   hostPublicKeyB64: string
   deviceToken: string
+  pairingRevision: number
   /**
    * persisted: the pairing lives in localStorage (existing pairings, kept working as-is when
    * no persistent key is possible). session: memory only, never written to disk.
@@ -79,26 +80,46 @@ export function createWebRuntimeCredentialSource(args: {
     deviceToken: environment.deviceToken
   })
 
-  const persistentPlan = async (allowMigration: boolean): Promise<WebRuntimeAuthPlan> => {
-    if (!subtle) {
-      return legacy()
+  const persistentPlan = (
+    allowMigration: boolean
+  ): WebRuntimeAuthPlan | Promise<WebRuntimeAuthPlan> =>
+    // Why no store read: a code that never migrated must connect even if IndexedDB is broken.
+    !subtle || (!tokenForgotten && (!allowMigration || unavailable))
+      ? legacy()
+      : storedKeyPlan(subtle)
+
+  const storedKeyPlan = async (keySubtle: SubtleCrypto): Promise<WebRuntimeAuthPlan> => {
+    let existing = await store.get(recordId)
+    // Why: a re-pair saved a fresh code; a key from an earlier pairing may be refused for good.
+    if (existing && existing.pairingRevision !== environment.pairingRevision && !tokenForgotten) {
+      await store.remove(recordId)
+      existing = undefined
     }
-    const existing = await store.get(recordId)
     if (existing?.state === 'active' && existing.deviceId) {
+      // Why: another tab (or a run that closed mid-migration) activated the key; drop the code.
+      if (!tokenForgotten) {
+        tokenForgotten = true
+        args.forgetStoredToken(existing.deviceId)
+      }
       return {
         kind: 'device-key',
         deviceId: existing.deviceId,
-        key: webDeviceSigningKey(subtle, existing)
+        key: webDeviceSigningKey(keySubtle, existing)
       }
     }
-    if (!allowMigration || unavailable || tokenForgotten) {
+    if (tokenForgotten) {
       return legacy()
     }
-    const record = await getOrCreatePendingWebDeviceKey(store, subtle, recordId)
+    const record = await getOrCreatePendingWebDeviceKey(
+      store,
+      keySubtle,
+      recordId,
+      environment.pairingRevision
+    )
     return {
       kind: 'migrate',
       deviceToken: environment.deviceToken,
-      key: webDeviceSigningKey(subtle, record),
+      key: webDeviceSigningKey(keySubtle, record),
       ephemeral: false,
       requiredCapabilities: [DEVICE_KEY_RUNTIME_CAPABILITY]
     }
@@ -174,7 +195,9 @@ export function withoutTokenOnKeyedSocket(
 export function withWebRuntimeAuthPlan(
   source: WebRuntimeCredentialSource,
   allowMigration: boolean,
-  open: (plan: WebRuntimeAuthPlan) => void
+  open: (plan: WebRuntimeAuthPlan) => void,
+  // Neither plan could be built (e.g. IndexedDB broken for a migrated pairing): retry later.
+  onUnavailable: () => void
 ): void {
   let planned: WebRuntimeAuthPlan | Promise<WebRuntimeAuthPlan>
   try {
@@ -192,5 +215,8 @@ export function withWebRuntimeAuthPlan(
       source.migrationUnavailable()
       return source.nextPlan(false)
     })
-    .then(open)
+    .then(open, (error: unknown) => {
+      console.warn('[web] Device key store unavailable; will retry.', error)
+      onUnavailable()
+    })
 }

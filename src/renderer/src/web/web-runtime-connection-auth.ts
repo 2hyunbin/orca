@@ -9,7 +9,12 @@ import {
   type WebRuntimeAuthFailureReason,
   type WebRuntimeClientError
 } from './web-runtime-client-error'
-import { sealWebRuntimePlanAuth } from './web-runtime-connection-frame-router'
+import {
+  sealWebRuntimePlanAuth,
+  type WebRuntimeConnectionState
+} from './web-runtime-connection-frame-router'
+import type { PairedRuntimeConnection } from '../../../shared/paired-runtime-connection'
+import { WEB_PAIRED_E2EE_PRIMITIVES } from './web-paired-e2ee-primitives'
 import {
   tokenOnlyCredentialSource,
   withWebRuntimeAuthPlan,
@@ -19,6 +24,14 @@ import {
 } from './web-runtime-credential-source'
 import { migrateWebRuntimeToDeviceKey } from './web-runtime-device-key-migration'
 
+export type WebRuntimeConnectionLifecycle = {
+  onStateChanged?: (state: WebRuntimeConnectionState) => void
+  reconnect?: boolean
+  credential?: WebRuntimeCredentialSource
+  // Why: only the primary socket registers a key; helper sockets reuse it once active.
+  allowKeyMigration?: boolean
+}
+
 /** How one web transport authenticates each socket it opens (token, key, or a key migration). */
 export class WebRuntimeConnectionAuth {
   plan: WebRuntimeAuthPlan | null = null
@@ -27,11 +40,19 @@ export class WebRuntimeConnectionAuth {
 
   private readonly credential: WebRuntimeCredentialSource
   private readonly allowKeyMigration: boolean
+  private readonly retryLater: () => void
 
   constructor(
-    deviceToken: string,
-    options: { credential?: WebRuntimeCredentialSource; allowKeyMigration?: boolean }
+    connection: PairedRuntimeConnection,
+    options: WebRuntimeConnectionLifecycle & {
+      // No plan could be built (a migrated pairing whose key store is broken).
+      retryLater: () => void
+    }
   ) {
+    // Why: an invalid host key fails construction, not the first connect.
+    WEB_PAIRED_E2EE_PRIMITIVES.publicKeyFromBase64(connection.hostPublicKeyB64)
+    const deviceToken = connection.credential.deviceToken
+    this.retryLater = options.retryLater
     // Absent: the pairing token over legacy framing, as before device keys.
     this.credential = options.credential ?? tokenOnlyCredentialSource(deviceToken)
     this.allowKeyMigration = options.allowKeyMigration === true
@@ -39,11 +60,16 @@ export class WebRuntimeConnectionAuth {
 
   /** Resolves the next plan, then opens; synchronous for a token-only source. */
   open(openSocket: (plan: WebRuntimeAuthPlan) => void): void {
-    withWebRuntimeAuthPlan(this.credential, this.allowKeyMigration, (plan) => {
-      this.plan = plan
-      this.readyAccepted = false
-      openSocket(plan)
-    })
+    withWebRuntimeAuthPlan(
+      this.credential,
+      this.allowKeyMigration,
+      (plan) => {
+        this.plan = plan
+        this.readyAccepted = false
+        openSocket(plan)
+      },
+      this.retryLater
+    )
   }
 
   framingFor(plan: WebRuntimeAuthPlan): 'legacy' | 'v2' {

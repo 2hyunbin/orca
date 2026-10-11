@@ -89,7 +89,34 @@ export function saveStoredWebRuntimeEnvironment(environment: StoredWebRuntimeEnv
     return
   }
   sessionEnvironment = null
-  window.localStorage.setItem(ENVIRONMENT_STORAGE_KEY, JSON.stringify(environment))
+  window.localStorage.setItem(
+    ENVIRONMENT_STORAGE_KEY,
+    JSON.stringify(keepMigratedPlaceholders(environment, readStoredWebRuntimeEnvironment()))
+  )
+}
+
+// Why: a tab holding a stale copy of this pairing must not put its code back after another tab
+// replaced it with a device key. A re-pair (new revision) stores its fresh code as usual.
+function keepMigratedPlaceholders(
+  next: StoredWebRuntimeEnvironment,
+  stored: StoredWebRuntimeEnvironment | null
+): StoredWebRuntimeEnvironment {
+  if (!stored || stored.id !== next.id || pairingRevision(stored) !== pairingRevision(next)) {
+    return next
+  }
+  return {
+    ...next,
+    endpoints: next.endpoints.map((endpoint) => {
+      const storedToken = stored.endpoints.find((entry) => entry.id === endpoint.id)?.deviceToken
+      return storedToken?.startsWith(MIGRATED_DEVICE_TOKEN_PREFIX)
+        ? { ...endpoint, deviceToken: storedToken }
+        : endpoint
+    })
+  }
+}
+
+function pairingRevision(environment: StoredWebRuntimeEnvironment): number {
+  return environment.pairingRevision ?? environment.createdAt
 }
 
 export function clearStoredWebRuntimeEnvironment(): void {

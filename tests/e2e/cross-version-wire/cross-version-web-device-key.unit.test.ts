@@ -135,6 +135,7 @@ class BrowserSocket {
   private readonly server: HostSocket
 
   constructor(readonly url: string) {
+    dialedUrls.push(url)
     this.server = {
       OPEN: 1,
       readyState: 1,
@@ -163,8 +164,15 @@ class BrowserSocket {
   }
 }
 
-function browserFor(token: string, support: WebDeviceKeySupport, storage: 'persisted' | 'session') {
-  const store = createMemoryWebDeviceKeyStore()
+const dialedUrls: string[] = []
+
+function browserFor(
+  token: string,
+  support: WebDeviceKeySupport,
+  storage: 'persisted' | 'session',
+  store = createMemoryWebDeviceKeyStore(),
+  pairingRevision = 1
+) {
   const forgetStoredToken = vi.fn()
   const forgetPairing = vi.fn()
   const credential = createWebRuntimeCredentialSource({
@@ -172,6 +180,7 @@ function browserFor(token: string, support: WebDeviceKeySupport, storage: 'persi
       environmentId: 'env-1',
       hostPublicKeyB64: Buffer.from(desktop.publicKey).toString('base64'),
       deviceToken: token,
+      pairingRevision,
       storage
     },
     support,
@@ -230,10 +239,32 @@ describe('a browser moving from its pairing code to a device key', () => {
     // The token row stays for every other holder of the same code.
     expect(currentHost.registry.validateToken(paired.token)?.deviceId).toBe(paired.deviceId)
 
+    // Every socket the web bundle opens carries the marker hosts use to tell it from a phone.
+    expect(dialedUrls.length).toBeGreaterThan(1)
+    expect(dialedUrls.every((url) => url.endsWith('?orca-client=web'))).toBe(true)
     const reply = await browser.transport.call('repos.list')
     expect(reply.ok).toBe(true)
     expect(currentHost.requests.at(-1)).not.toHaveProperty('deviceToken')
     browser.transport.close()
+  })
+
+  it('a re-pair recovers with its fresh code after a downgrade refuses the old key', async () => {
+    currentHost = host([DEVICE_KEY_RUNTIME_CAPABILITY])
+    const first = currentHost.registry.addDevice('Browser', 'runtime')
+    currentHost.registry.updateLastSeen(first.deviceId)
+    const store = createMemoryWebDeviceKeyStore()
+    const migrated = browserFor(first.token, 'persistent', 'persisted', store, 1)
+    await migrated.transport.waitForConnected(5_000)
+    migrated.transport.close()
+
+    currentHost.wiring.dispose?.()
+    currentHost = host([], releasedHost)
+    const fresh = currentHost.registry.addDevice('Browser', 'runtime')
+    currentHost.registry.updateLastSeen(fresh.deviceId)
+    const repaired = browserFor(fresh.token, 'persistent', 'persisted', store, 2)
+    await repaired.transport.waitForConnected(5_000)
+    expect(currentHost.authenticated.at(-1)?.device.deviceToken).toBe(fresh.token)
+    repaired.transport.close()
   })
 
   it('keeps its pairing code against a released host', async () => {

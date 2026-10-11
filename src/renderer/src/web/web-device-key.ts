@@ -39,7 +39,8 @@ export async function detectWebDeviceKeySupport(scope: {
 export async function getOrCreatePendingWebDeviceKey(
   store: WebDeviceKeyStore,
   subtle: SubtleCrypto,
-  id: string
+  id: string,
+  pairingRevision?: number
 ): Promise<WebDeviceKeyRecord> {
   const existing = await store.get(id)
   if (existing) {
@@ -54,7 +55,8 @@ export async function getOrCreatePendingWebDeviceKey(
     id,
     privateKey: pair.privateKey,
     publicKeyB64: bytesToBase64(publicKey),
-    state: 'pending'
+    state: 'pending',
+    ...(pairingRevision !== undefined ? { pairingRevision } : {})
   }
   if (await store.add(record)) {
     return record

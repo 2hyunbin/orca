@@ -8,6 +8,8 @@ export type WebDeviceKeyRecord = {
   state: 'pending' | 'active'
   /** The keyed device row the host forked for this key; set once registration is confirmed. */
   deviceId?: string
+  /** The pairing this key belongs to; a re-pair (new revision) starts over with its fresh code. */
+  pairingRevision?: number
 }
 
 export type WebDeviceKeyStore = {

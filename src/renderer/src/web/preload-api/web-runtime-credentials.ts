@@ -49,6 +49,7 @@ export function webRuntimeCredentialFor(
       environmentId: environment.id,
       hostPublicKeyB64: endpoint.publicKeyB64,
       deviceToken: endpoint.deviceToken,
+      pairingRevision: environment.pairingRevision ?? environment.createdAt,
       storage: environment.sessionOnly ? 'session' : 'persisted'
     },
     support,
