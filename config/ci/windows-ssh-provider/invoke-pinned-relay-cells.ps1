@@ -92,7 +92,6 @@ function Invoke-AppCell($Account,[string]$Descriptor,[string]$Log,[string]$Spec,
 New-Item -ItemType Directory -Force -Path $ReceiptRoot | Out-Null
 Push-Location $SourceRoot
 try {
-  if(-not (Test-Path -LiteralPath "out\relay\$Target\relay.js")){throw 'Build the relay before provisioning'}
   if(-not (Test-Path -LiteralPath 'out\orcad-template')){throw 'Build the orcad template before provisioning'}
   # ssh2 consults the runner's known_hosts: pin only this private endpoint, restored below.
   New-Item -ItemType Directory -Force -Path (Split-Path $knownPath) | Out-Null
@@ -117,8 +116,8 @@ try {
     if($appCells.ContainsKey($cell)){
       $code=Invoke-AppCell $account $descriptor (Join-Path $ReceiptRoot "$cell.log") $appCells[$cell][0] $appCells[$cell][1]
     } else {
-      # orcad cells deploy managed orcad instead of the relay; same account and descriptor shape.
-      $lane=if($cell.StartsWith('orcad-')){'src/main/ssh/orcad-windows-host-lane.test.ts'}else{'src/main/ssh/ssh-relay-windows-host-lane.test.ts'}
+      if(-not $cell.StartsWith('orcad-')){throw "Unknown Windows host cell $cell"}
+      $lane='src/main/ssh/orcad-windows-host-lane.test.ts'
       & node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts $lane --reporter=verbose 2>&1 | Tee-Object -FilePath (Join-Path $ReceiptRoot "$cell.log")
       # Why global: under the workflow's GetNewClosure callback, bare $LASTEXITCODE reads a stale captured copy.
       $code=$global:LASTEXITCODE
