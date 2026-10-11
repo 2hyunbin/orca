@@ -6,17 +6,20 @@ import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
 import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
 
 const { state, runProcessMock, materializeMock, ensureWithinMock, disconnectMock } = vi.hoisted(
-  () => ({
-    state: {
+  () => {
+    const state: { root: string; packaged: boolean; identity: DaemonEndpointIdentity | null } = {
       root: '',
       packaged: true,
-      identity: null as DaemonEndpointIdentity | null
-    },
-    runProcessMock: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>(),
-    materializeMock: vi.fn(),
-    ensureWithinMock: vi.fn(),
-    disconnectMock: vi.fn()
-  })
+      identity: null
+    }
+    return {
+      state,
+      runProcessMock: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>(),
+      materializeMock: vi.fn(),
+      ensureWithinMock: vi.fn(),
+      disconnectMock: vi.fn()
+    }
+  }
 )
 vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
 vi.mock('../../shared/app-environment', () => ({
