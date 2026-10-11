@@ -25,11 +25,25 @@ export type HostStackReplaceAction = Readonly<{
   payload: HostStackRouteTarget
 }>
 
+/** What the target lands on: nothing beneath it in a fresh host stack (Home's entries, whose
+ *  Back returns Home), or only its host's workspace list (a notification tap). */
+export type HostStackLanding = 'replace-host-index' | 'over-workspace-list'
+
+export type HostStackResetAction = Readonly<{
+  type: 'RESET'
+  target: string
+  payload: Readonly<{
+    index: number
+    routes: readonly [HostStackNavigationRoute, HostStackRouteTarget]
+  }>
+}>
+
 export type HostStackRootNavigation = {
   addListener: (event: 'state', listener: () => void) => () => void
   dispatch: (
     action:
       | HostStackReplaceAction
+      | HostStackResetAction
       | Readonly<{
           type: 'SET_PARAMS'
           target: string
@@ -57,7 +71,7 @@ export type HostStackRouter = {
 export type HostStackNavigationController = Readonly<{
   cancel: () => void
   isActive: () => boolean
-  retarget: (target: HostStackRouteTarget) => void
+  retarget: (target: HostStackRouteTarget, landing: HostStackLanding) => void
 }>
 
 export type PendingHostStackNavigation = Readonly<{
@@ -110,7 +124,7 @@ function focusedHostRoute(state: HostStackNavigationState): HostStackNavigationR
 function mountedHostStack(
   hostContainer: HostStackNavigationRoute,
   expectedHostId: string
-): { key: string; routeKey: string } | null {
+): { key: string; hostRoute: HostStackNavigationRoute & { key: string } } | null {
   const hostState = hostContainer.state
   const hostRoute = hostState?.routes[hostState.index]
   if (
@@ -121,7 +135,7 @@ function mountedHostStack(
   ) {
     return null
   }
-  return { key: hostState.key, routeKey: hostRoute.key }
+  return { key: hostState.key, hostRoute: { ...hostRoute, key: hostRoute.key } }
 }
 
 /** Opens a deep host route by mounting `/h/[hostId]` first and replacing it once
@@ -131,7 +145,8 @@ export function navigateToHostStackRoute(
   navigation: HostStackRootNavigation,
   router: HostStackRouter,
   hostId: string,
-  target: HostStackRouteTarget
+  target: HostStackRouteTarget,
+  landing: HostStackLanding = 'replace-host-index'
 ): HostStackNavigationController {
   const state = navigation.getState()
   const hostState = state && focusedHostRoute(state)?.state
@@ -155,6 +170,7 @@ export function navigateToHostStackRoute(
   let active = true
   let hostRouteSeen = false
   let selectedTarget = target
+  let selectedLanding = landing
   let unsubscribeState = () => {}
   const dispose = () => {
     if (!active) {
@@ -189,12 +205,22 @@ export function navigateToHostStackRoute(
       return
     }
     dispose()
-    navigation.dispatch({
-      type: 'REPLACE',
-      target: hostStack.key,
-      source: hostStack.routeKey,
-      payload: selectedTarget
-    })
+    // Why RESET: the push stacked the host index on whatever the stack held, and a session
+    // screen left beneath stays mounted, subscribed to its terminals under this device's id.
+    navigation.dispatch(
+      selectedLanding === 'over-workspace-list'
+        ? {
+            type: 'RESET',
+            target: hostStack.key,
+            payload: { index: 1, routes: [hostStack.hostRoute, selectedTarget] }
+          }
+        : {
+            type: 'REPLACE',
+            target: hostStack.key,
+            source: hostStack.hostRoute.key,
+            payload: selectedTarget
+          }
+    )
   }
 
   try {
@@ -207,9 +233,10 @@ export function navigateToHostStackRoute(
   return {
     cancel: dispose,
     isActive: () => active,
-    retarget: (nextTarget) => {
+    retarget: (nextTarget, nextLanding) => {
       if (active) {
         selectedTarget = nextTarget
+        selectedLanding = nextLanding
       }
     }
   }
@@ -220,15 +247,16 @@ export function coordinateHostStackNavigation(
   navigation: HostStackRootNavigation,
   router: HostStackRouter,
   hostId: string,
-  target: HostStackRouteTarget
+  target: HostStackRouteTarget,
+  landing: HostStackLanding = 'replace-host-index'
 ): PendingHostStackNavigation {
   if (current?.hostId === hostId && current.controller.isActive()) {
-    current.controller.retarget(target)
+    current.controller.retarget(target, landing)
     return current
   }
   current?.controller.cancel()
   return {
     hostId,
-    controller: navigateToHostStackRoute(navigation, router, hostId, target)
+    controller: navigateToHostStackRoute(navigation, router, hostId, target, landing)
   }
 }

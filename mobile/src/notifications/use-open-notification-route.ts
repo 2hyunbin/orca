@@ -19,7 +19,7 @@ export function useOpenNotificationRoute(): (target: NotificationNavigationTarge
         return
       }
       if (target.sessionTarget) {
-        openHostStackRoute(target.hostId, target.sessionTarget)
+        openHostStackRoute(target.hostId, target.sessionTarget, 'over-workspace-list')
         return
       }
       router.push(hostStackHostRoute(target.hostId))

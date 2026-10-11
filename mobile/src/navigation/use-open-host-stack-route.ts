@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useNavigation, useRouter } from 'expo-router'
 import {
   coordinateHostStackNavigation,
+  type HostStackLanding,
   type HostStackRootNavigation,
   type HostStackRouteTarget,
   type PendingHostStackNavigation
@@ -11,7 +12,11 @@ import {
 // Resume tap and a Tasks tap arm two independent pushes that cannot cancel each other.
 let pendingNavigation: PendingHostStackNavigation | null = null
 
-export function useOpenHostStackRoute(): (hostId: string, target: HostStackRouteTarget) => void {
+export function useOpenHostStackRoute(): (
+  hostId: string,
+  target: HostStackRouteTarget,
+  landing?: HostStackLanding
+) => void {
   const navigation = useNavigation<HostStackRootNavigation>()
   const router = useRouter()
   // Why: an unmounting screen may only cancel a transition it armed itself — home
@@ -30,13 +35,14 @@ export function useOpenHostStackRoute(): (hostId: string, target: HostStackRoute
   )
 
   return useCallback(
-    (hostId, target) => {
+    (hostId, target, landing) => {
       pendingNavigation = coordinateHostStackNavigation(
         pendingNavigation,
         navigation,
         router,
         hostId,
-        target
+        target,
+        landing
       )
       armedRef.current = pendingNavigation
     },
