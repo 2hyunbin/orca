@@ -1,20 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
+
+const hold = vi.hoisted(() => ({ holding: false }))
+vi.mock('./daemon-newer-protocol-hold', () => ({
+  isHoldingForNewerProtocolDaemon: () => hold.holding
+}))
 import { NEWER_DAEMON_HOLD_ERROR } from '../../shared/newer-daemon-hold'
 import { createAdapter } from './daemon-pty-router-test-fixture'
 import { DaemonPtyRouter } from './daemon-pty-router'
-import { setNewerProtocolDaemons } from './daemon-newer-protocol-hold'
-import { PROTOCOL_VERSION } from './types'
 
 function setup(opts: { holding: boolean; restorable?: string[]; currentSessions?: string[] }) {
   const current = createAdapter('current', opts.currentSessions ?? [])
   const legacy = createAdapter('legacy', ['legacy-session'])
   const restorable = new Set(opts.restorable ?? [])
   Object.assign(current, { hasRestorableHistory: vi.fn((id: string) => restorable.has(id)) })
-  setNewerProtocolDaemons(
-    opts.holding ? [{ protocolVersion: PROTOCOL_VERSION + 1, verdict: 'live' }] : []
-  )
+  hold.holding = opts.holding
   const router = new DaemonPtyRouter({ current, legacy: [legacy] })
-  return { current, legacy, router, release: () => setNewerProtocolDaemons([]) }
+  return { current, legacy, router, release: () => (hold.holding = false) }
 }
 
 const SPAWN = { cols: 80, rows: 24 }

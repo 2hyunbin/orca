@@ -19477,10 +19477,12 @@
       "reopening": "Reopening…",
       "tryAgain": "Try again",
       "reopen": "Reopen terminal",
-      "reopenedOne": "Reopened 1 terminal",
-      "reopenedOther": "Reopened {{count}} terminals",
-      "resumedOne": "1 agent session resumed.",
-      "resumedOther": "{{count}} agent sessions resumed."
+      "reopened": "Reopened {{count}} terminals",
+      "reopened_one": "Reopened {{count}} terminal",
+      "reopened_other": "Reopened {{count}} terminals",
+      "resumed": "{{count}} agent sessions resumed.",
+      "resumed_one": "{{count}} agent session resumed.",
+      "resumed_other": "{{count}} agent sessions resumed."
     }
   },
   "fileExplorer": {

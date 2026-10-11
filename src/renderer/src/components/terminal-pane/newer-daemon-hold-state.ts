@@ -1,74 +1,55 @@
-import { useSyncExternalStore } from 'react'
+import { useStore } from 'zustand'
+import { createStore } from 'zustand/vanilla'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 
 /** What one held pane did once released through the normal restore path. */
 export type HeldPaneReopenOutcome = { reopened: boolean; agentResumed: boolean }
 
+export type NewerDaemonHoldPhase = 'held' | 'reopening' | 'failed'
+
 type HeldPane = {
   /** The cold-restore resume test passed when the pane was held. */
   resumable: boolean
+  // Why a phase per pane: a pane held after a failed attempt has not failed anything yet.
+  phase: NewerDaemonHoldPhase
   release: () => Promise<HeldPaneReopenOutcome>
 }
 
-export type NewerDaemonHoldPhase = 'held' | 'reopening' | 'failed'
+export const newerDaemonHoldStore = createStore<{ panes: Record<string, HeldPane> }>(() => ({
+  panes: {}
+}))
 
-// Why a phase per pane: a pane held after a failed attempt has not failed anything yet.
-const heldPanes = new Map<string, HeldPane & { phase: NewerDaemonHoldPhase }>()
-let version = 0
-const listeners = new Set<() => void>()
-
-function notify(): void {
-  version += 1
-  for (const listener of listeners) {
-    listener()
-  }
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
-async function releaseHeldPanes(): Promise<HeldPaneReopenOutcome[]> {
-  const released = [...heldPanes.values()]
-  heldPanes.clear()
-  notify()
-  return Promise.all(
-    released.map((pane) =>
-      pane.release().catch((): HeldPaneReopenOutcome => ({ reopened: false, agentResumed: false }))
+function setPhase(paneKeys: readonly string[], phase: NewerDaemonHoldPhase): void {
+  newerDaemonHoldStore.setState(({ panes }) => ({
+    panes: Object.fromEntries(
+      Object.entries(panes).map(([key, pane]) => [
+        key,
+        paneKeys.includes(key) ? { ...pane, phase } : pane
+      ])
     )
-  )
-}
-
-function setPhase(
-  panes: readonly { phase: NewerDaemonHoldPhase }[],
-  phase: NewerDaemonHoldPhase
-): void {
-  for (const pane of panes) {
-    pane.phase = phase
-  }
-  notify()
+  }))
 }
 
 /** Registers a held pane; the returned teardown forgets it if it unmounts while held. */
-export function holdPaneForNewerDaemon(paneKey: string, pane: HeldPane): () => void {
-  const entry: HeldPane & { phase: NewerDaemonHoldPhase } = { ...pane, phase: 'held' }
-  heldPanes.set(paneKey, entry)
-  notify()
-  return () => {
-    if (heldPanes.get(paneKey) === entry) {
-      heldPanes.delete(paneKey)
-      notify()
-    }
-  }
+export function holdPaneForNewerDaemon(paneKey: string, pane: Omit<HeldPane, 'phase'>): () => void {
+  newerDaemonHoldStore.setState(({ panes }) => ({
+    panes: { ...panes, [paneKey]: { ...pane, phase: 'held' } }
+  }))
+  return () =>
+    newerDaemonHoldStore.setState(({ panes }) => {
+      if (panes[paneKey]?.release !== pane.release) {
+        return {}
+      }
+      const { [paneKey]: _forgotten, ...rest } = panes
+      return { panes: rest }
+    })
 }
 
 export function useNewerDaemonHold(
   paneKey: string
 ): { resumable: boolean; phase: NewerDaemonHoldPhase } | null {
-  useSyncExternalStore(subscribe, () => version)
-  const pane = heldPanes.get(paneKey)
+  const pane = useStore(newerDaemonHoldStore, (state) => state.panes[paneKey])
   return pane ? { resumable: pane.resumable, phase: pane.phase } : null
 }
 
@@ -78,49 +59,44 @@ export function announceReopenedTerminals(outcomes: readonly HeldPaneReopenOutco
     return
   }
   const resumed = outcomes.filter((outcome) => outcome.reopened && outcome.agentResumed).length
-  const title =
-    reopened === 1
-      ? translate('terminal.newerDaemonBanner.reopenedOne', 'Reopened 1 terminal')
-      : translate('terminal.newerDaemonBanner.reopenedOther', 'Reopened {{count}} terminals', {
-          count: reopened
-        })
-  const description =
-    resumed === 0
-      ? undefined
-      : resumed === 1
-        ? translate('terminal.newerDaemonBanner.resumedOne', '1 agent session resumed.')
-        : translate(
-            'terminal.newerDaemonBanner.resumedOther',
+  toast.success(
+    translate('terminal.newerDaemonBanner.reopened', 'Reopened {{count}} terminals', {
+      count: reopened
+    }),
+    resumed > 0
+      ? {
+          description: translate(
+            'terminal.newerDaemonBanner.resumed',
             '{{count}} agent sessions resumed.',
-            {
-              count: resumed
-            }
+            { count: resumed }
           )
-  toast.success(title, description ? { description } : undefined)
+        }
+      : undefined
+  )
 }
 
 /** Stops the newer daemon, then lets every held pane through its normal restore path. */
 export async function reopenHeldTerminals(): Promise<void> {
-  const attempt = [...heldPanes.values()]
-  if (attempt.some((pane) => pane.phase === 'reopening')) {
+  const { panes } = newerDaemonHoldStore.getState()
+  const attempt = Object.keys(panes)
+  if (Object.values(panes).some((pane) => pane.phase === 'reopening')) {
     return
   }
   setPhase(attempt, 'reopening')
-  let reopened = false
-  try {
-    reopened = (await window.api.pty.reopenNewerDaemonTerminals()).reopened
-  } catch {
-    reopened = false
-  }
+  const reopened = await window.api.pty.reopenNewerDaemonTerminals().then(
+    (result) => result.reopened,
+    () => false
+  )
   if (!reopened) {
     setPhase(attempt, 'failed')
     return
   }
-  announceReopenedTerminals(await releaseHeldPanes())
-}
-
-/** Test seam: module state outlives a test file's renders. */
-export function resetNewerDaemonHoldStateForTests(): void {
-  heldPanes.clear()
-  notify()
+  const released = Object.values(newerDaemonHoldStore.getState().panes)
+  newerDaemonHoldStore.setState({ panes: {} })
+  const outcomes = await Promise.all(
+    released.map((pane) =>
+      pane.release().catch((): HeldPaneReopenOutcome => ({ reopened: false, agentResumed: false }))
+    )
+  )
+  announceReopenedTerminals(outcomes)
 }

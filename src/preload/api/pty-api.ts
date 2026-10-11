@@ -25,7 +25,7 @@ import type { TerminalPanePlacement } from '../../shared/terminal-pane-placement
 import type { PtyManagementApi } from './pty-management-api'
 import type { TerminalProcessInspection } from '../../shared/terminal-process-inspection'
 import type { CodexSharedServerStatus } from '../../shared/codex-shared-server-command'
-import type { NewerDaemonHold, NewerDaemonReopenResult } from '../../shared/newer-daemon-hold'
+import type { NewerDaemonReopenResult } from '../../shared/newer-daemon-hold'
 
 export type PtyApi = {
   spawn: (opts: {
@@ -155,8 +155,6 @@ export type PtyApi = {
     id: string,
     target: { runtime: 'host' } | { runtime: 'wsl'; wslDistro: string }
   ) => Promise<boolean>
-  /** Whether a restored local terminal must wait for a newer Orca build's daemon to stop. */
-  readNewerDaemonHold: (sessionId: string) => Promise<NewerDaemonHold>
   /** Stops the newer daemons; reopened only once each is confirmed exited. */
   reopenNewerDaemonTerminals: () => Promise<NewerDaemonReopenResult>
   getCwd: (id: string) => Promise<string>

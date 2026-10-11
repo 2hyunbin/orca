@@ -1,46 +1,76 @@
-import type { NewerDaemonHold, NewerDaemonReopenResult } from '../../shared/newer-daemon-hold'
-import { coldRestorePayloadFromInfo } from './cold-restore-payload-cache'
-import { getDaemonHistoryDir, getDaemonRuntimeDir } from './daemon-launch-paths'
-import {
-  classifyNewerProtocolDaemon,
-  type NewerProtocolDaemon
-} from './daemon-newer-protocol-discovery'
-import { getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
+import { readdirSync, readFileSync } from 'node:fs'
+import type { NewerDaemonReopenResult } from '../../shared/newer-daemon-hold'
+import { endpointIsProvenDead, probeSocketConnect } from './daemon-endpoint-probe'
+import type { ProcessLivenessVerdict } from './daemon-incarnation-evidence-types'
+import { getDaemonRuntimeDir } from './daemon-launch-paths'
+import { parseDaemonPidFile } from './daemon-pid-file-parse'
+import { inspectDaemonProcessIdentity } from './daemon-pid-identity'
+import { hasErrorCode } from './daemon-process-inspection'
+import { getDaemonPidPath, getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
 import { killStaleDaemon } from './daemon-stale-kill'
-import { HistoryReader } from './history-reader'
+import { PROTOCOL_VERSION } from './types'
+
+const PID_FILE_PATTERN = /^daemon-v(\d+)\.pid$/
 
 let heldProtocols: readonly number[] = []
 let reopenInFlight: Promise<NewerDaemonReopenResult> | null = null
 
-/** Records the newer daemons this launch must not duplicate; exited ones hold nothing. */
-export function setNewerProtocolDaemons(daemons: readonly NewerProtocolDaemon[]): void {
-  heldProtocols = daemons
-    .filter((daemon) => daemon.verdict !== 'exited')
-    .map((daemon) => daemon.protocolVersion)
+/**
+ * Reads only a newer daemon's PID record and endpoint; this build cannot speak its protocol and
+ * never touches its files. An unidentifiable owner falls back to the endpoint, the same
+ * tiebreaker killStaleDaemon uses, so a dead leftover never holds a tab forever.
+ */
+async function classifyNewerProtocolDaemon(
+  runtimeDir: string,
+  protocolVersion: number
+): Promise<ProcessLivenessVerdict['status']> {
+  const socketPath = getDaemonSocketPath(runtimeDir, protocolVersion)
+  const byEndpoint = async (): Promise<ProcessLivenessVerdict['status']> =>
+    endpointIsProvenDead(await probeSocketConnect(socketPath)) ? 'exited' : 'unverifiable'
+  let contents: string
+  try {
+    contents = readFileSync(getDaemonPidPath(runtimeDir, protocolVersion), 'utf8')
+  } catch (error) {
+    // Why: a daemon removes its own record as it exits.
+    return hasErrorCode(error, 'ENOENT') ? 'exited' : byEndpoint()
+  }
+  const parsed = parseDaemonPidFile(contents)
+  // Why pid > 0: an empty record parses as pid 0, which names no process.
+  if (!parsed || !Number.isInteger(parsed.pid) || parsed.pid <= 0) {
+    return byEndpoint()
+  }
+  const identity = await inspectDaemonProcessIdentity(
+    parsed.pid,
+    socketPath,
+    getDaemonTokenPath(runtimeDir, protocolVersion),
+    parsed.startedAtMs
+  )
+  if (identity === 'match') {
+    return 'live'
+  }
+  // Why mismatch is exited: the pid is gone or now names another process.
+  return identity === 'mismatch' ? 'exited' : byEndpoint()
+}
+
+/** Holds restores for every live or unverifiable newer daemon in this profile's runtime dir. */
+export async function discoverNewerProtocolHolds(runtimeDir: string): Promise<void> {
+  let names: string[] = []
+  try {
+    names = readdirSync(runtimeDir)
+  } catch {
+    // No runtime dir means no newer daemon.
+  }
+  const versions = names
+    .map((name) => Number(PID_FILE_PATTERN.exec(name)?.[1]))
+    .filter((version) => Number.isSafeInteger(version) && version > PROTOCOL_VERSION)
+  const verdicts = await Promise.all(
+    versions.map((version) => classifyNewerProtocolDaemon(runtimeDir, version))
+  )
+  heldProtocols = versions.filter((_, index) => verdicts[index] !== 'exited')
 }
 
 export function isHoldingForNewerProtocolDaemon(): boolean {
   return heldProtocols.length > 0
-}
-
-/** The session's last saved screen, read from history without spawning, while a hold stands. */
-export async function readNewerDaemonHold(
-  sessionId: string,
-  historyPath = getDaemonHistoryDir()
-): Promise<NewerDaemonHold> {
-  if (heldProtocols.length === 0) {
-    return { held: false }
-  }
-  const restoreInfo = await new HistoryReader(historyPath)
-    .detectColdRestore(sessionId)
-    .catch(() => null)
-  const payload = restoreInfo ? coldRestorePayloadFromInfo(restoreInfo) : null
-  return {
-    held: true,
-    restoredScreen: payload
-      ? { scrollback: payload.scrollback, cols: payload.cols, rows: payload.rows }
-      : null
-  }
 }
 
 /** Signals only a verified daemon; confirmed only once the same classifier reads it exited. */

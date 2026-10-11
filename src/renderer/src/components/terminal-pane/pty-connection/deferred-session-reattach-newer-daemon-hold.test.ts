@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 
+import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerAgentStatusStartupSnapshot } from '@/hooks/ipc-events/agent-status-startup-snapshot'
 import { NEWER_DAEMON_HOLD_ERROR } from '../../../../../shared/newer-daemon-hold'
-import { reopenHeldTerminals, resetNewerDaemonHoldStateForTests } from '../newer-daemon-hold-state'
+import { newerDaemonHoldStore, reopenHeldTerminals } from '../newer-daemon-hold-state'
 import { startDeferredSessionReattach } from './deferred-session-reattach-connect'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
@@ -14,13 +15,18 @@ vi.mock('./pty-connect-limits', () => ({
   isSshSessionGoneError: () => false
 }))
 
-function createSession() {
+const REFUSAL = `Error invoking remote method 'pty:spawn': Error: ${NEWER_DAEMON_HOLD_ERROR}`
+
+function createSession(opts: { runtimeEnvironmentId?: string } = {}) {
   let onError: (message: string) => void = () => {}
-  let holdNextConnect = true
+  let next: 'refuse' | 'reattach' | 'throw' = 'refuse'
   const transport = {
     connect: vi.fn(async () => {
-      if (holdNextConnect) {
-        onError(`Error invoking remote method 'pty:spawn': Error: ${NEWER_DAEMON_HOLD_ERROR}`)
+      if (next === 'throw') {
+        throw new Error('spawn failed')
+      }
+      if (next === 'refuse') {
+        onError(REFUSAL)
         return undefined
       }
       return { id: 'restored-pty', coldRestore: { scrollback: 'x', cwd: '/', cols: 80, rows: 24 } }
@@ -28,12 +34,18 @@ function createSession() {
     getPtyId: () => null
   }
   const fixture = {
-    pane: { id: 1, terminal: { options: { disableStdin: false } } },
+    pane: { id: 1, leafId: 'leaf', terminal: { options: { disableStdin: false } } },
     transport,
     disposed: false,
     transportStreamGeneration: 1,
+    runtimeEnvironmentId: opts.runtimeEnvironmentId ?? null,
     waitTeardowns: new Array<() => void>(),
-    deps: { paneTransportsRef: { current: new Map([[1, transport]]) } },
+    deps: {
+      tabId: 'tab',
+      worktreeId: 'wt',
+      paneTransportsRef: { current: new Map([[1, transport]]) },
+      clearTabPtyId: vi.fn()
+    },
     buildColdRestoreAgentResumeStartup: () => ({ command: 'claude --resume c1', agent: 'claude' }),
     captureTransportOutputCallbacks: (reportError: (message: string) => void) => {
       onError = reportError
@@ -44,8 +56,8 @@ function createSession() {
     shouldDeclareHiddenAtSpawn: () => false,
     mergeStartupEnvWithPaneIdentity: (env: Record<string, string>) => env,
     handleReattachResult: vi.fn().mockResolvedValue(true),
-    startFreshColdRestoreAgentResume: vi.fn(),
-    writeReplayData: vi.fn(),
+    clearExitedPanePtyLayoutBinding: vi.fn(),
+    startFreshColdRestoreAgentResume: vi.fn().mockResolvedValue('fresh-pty'),
     reportError: vi.fn(),
     cols: 80,
     rows: 24,
@@ -53,13 +65,16 @@ function createSession() {
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture provides every session field read by deferred reattach and the hold.
   const session = fixture as unknown as ConnectPanePtySession
-  return { fixture, session, transport, release: () => (holdNextConnect = false) }
+  return { fixture, session, transport, nextConnect: (mode: typeof next) => (next = mode) }
 }
+
+const isHeld = (): boolean => Object.keys(newerDaemonHoldStore.getState().panes).length > 0
 
 describe('restored pane refused for a newer daemon', () => {
   let bridge: ReturnType<typeof registerAgentStatusStartupSnapshot>
   beforeEach(() => {
-    resetNewerDaemonHoldStateForTests()
+    vi.clearAllMocks()
+    newerDaemonHoldStore.setState({ panes: {} })
     bridge = registerAgentStatusStartupSnapshot()
     bridge.settle()
     Object.defineProperty(window, 'api', {
@@ -67,38 +82,66 @@ describe('restored pane refused for a newer daemon', () => {
       value: {
         pty: {
           declarePendingPaneSerializer: vi.fn().mockResolvedValue(null),
-          readNewerDaemonHold: vi.fn().mockResolvedValue({ held: true, restoredScreen: null }),
           reopenNewerDaemonTerminals: vi.fn().mockResolvedValue({ reopened: true })
         }
       }
     })
   })
-  afterEach(() => {
-    bridge.dispose()
-    resetNewerDaemonHoldStateForTests()
-  })
+  afterEach(() => bridge.dispose())
 
-  it('holds the pane instead of reporting an error or starting a fresh agent', async () => {
+  it('holds the pane read-only instead of reporting an error or starting a fresh agent', async () => {
     const { fixture, session, transport } = createSession()
     startDeferredSessionReattach(session, 'restored-pty')
-    await vi.waitFor(() => expect(fixture.pane.terminal.options.disableStdin).toBe(true))
+    await vi.waitFor(() => expect(isHeld()).toBe(true))
+    expect(fixture.pane.terminal.options.disableStdin).toBe(true)
     expect(transport.connect).toHaveBeenCalledTimes(1)
     expect(fixture.reportError).not.toHaveBeenCalled()
     expect(fixture.startFreshColdRestoreAgentResume).not.toHaveBeenCalled()
-    expect(fixture.handleReattachResult).not.toHaveBeenCalled()
   })
 
-  it('reconnects the same session through the normal path once released', async () => {
-    const { fixture, session, transport, release } = createSession()
+  it('reconnects the same session through the normal path once released, and counts it', async () => {
+    const { fixture, session, transport, nextConnect } = createSession()
     startDeferredSessionReattach(session, 'restored-pty')
-    await vi.waitFor(() => expect(fixture.pane.terminal.options.disableStdin).toBe(true))
-    release()
+    await vi.waitFor(() => expect(isHeld()).toBe(true))
+    nextConnect('reattach')
     await reopenHeldTerminals()
-    expect(transport.connect).toHaveBeenCalledTimes(2)
     expect(transport.connect).toHaveBeenLastCalledWith(
       expect.objectContaining({ sessionId: 'restored-pty', command: 'claude --resume c1' })
     )
-    expect(fixture.handleReattachResult).toHaveBeenCalledTimes(1)
-    expect(fixture.startFreshColdRestoreAgentResume).not.toHaveBeenCalled()
+    expect(fixture.pane.terminal.options.disableStdin).toBe(false)
+    expect(toast.success).toHaveBeenCalledWith('Reopened 1 terminal', {
+      description: '1 agent session resumed.'
+    })
+  })
+
+  it('counts a released pane that falls back to a fresh session as reopened', async () => {
+    const { fixture, session, nextConnect } = createSession()
+    startDeferredSessionReattach(session, 'restored-pty')
+    await vi.waitFor(() => expect(isHeld()).toBe(true))
+    nextConnect('throw')
+    await reopenHeldTerminals()
+    expect(fixture.startFreshColdRestoreAgentResume).toHaveBeenCalledOnce()
+    expect(toast.success).toHaveBeenCalledWith('Reopened 1 terminal', {
+      description: '1 agent session resumed.'
+    })
+  })
+
+  it('treats a paired host refusal as an ordinary error, never a local hold', async () => {
+    const { fixture, session, transport } = createSession({ runtimeEnvironmentId: 'env-1' })
+    startDeferredSessionReattach(session, 'restored-pty')
+    await vi.waitFor(() => expect(fixture.reportError).toHaveBeenCalledWith(REFUSAL))
+    expect(isHeld()).toBe(false)
+    expect(transport.connect).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not release a pane that unmounted while held', async () => {
+    const { fixture, session, transport } = createSession()
+    startDeferredSessionReattach(session, 'restored-pty')
+    await vi.waitFor(() => expect(isHeld()).toBe(true))
+    for (const teardown of fixture.waitTeardowns) {
+      teardown()
+    }
+    await reopenHeldTerminals()
+    expect(transport.connect).toHaveBeenCalledTimes(1)
   })
 })

@@ -8,10 +8,9 @@ import {
   takeDaemonAdoptionLeaseRelease
 } from './daemon-endpoint-adoption'
 import { createLegacyDaemonAdapters } from './daemon-legacy-adapters'
-import { discoverNewerProtocolDaemons } from './daemon-newer-protocol-discovery'
 import {
-  isHoldingForNewerProtocolDaemon,
-  setNewerProtocolDaemons
+  discoverNewerProtocolHolds,
+  isHoldingForNewerProtocolDaemon
 } from './daemon-newer-protocol-hold'
 import {
   getDaemonHistoryDir as getHistoryDir,
@@ -121,12 +120,11 @@ export async function initDaemonPtyProvider(
     releaseDaemonAdoptionLease(newSpawner.getHandle())
 
     // Why beside legacy discovery: older daemons are adopted, newer ones only hold their tabs.
-    const [discoveredLegacyAdapters, newerDaemons] = await Promise.all([
+    const [discoveredLegacyAdapters] = await Promise.all([
       createLegacyDaemonAdapters(runtimeDir),
-      discoverNewerProtocolDaemons(runtimeDir)
+      discoverNewerProtocolHolds(runtimeDir)
     ])
     legacyAdapters = discoveredLegacyAdapters
-    setNewerProtocolDaemons(newerDaemons)
     routedAdapter =
       launchMode === 'degraded-new-pty-fallback'
         ? new DegradedDaemonPtyProvider({

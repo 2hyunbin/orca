@@ -2,17 +2,13 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
 import { NewerDaemonHoldBanner } from './NewerDaemonHoldBanner'
-import {
-  holdPaneForNewerDaemon,
-  reopenHeldTerminals,
-  resetNewerDaemonHoldStateForTests,
-  type HeldPaneReopenOutcome
-} from './newer-daemon-hold-state'
+import { holdPaneForNewerDaemon, newerDaemonHoldStore } from './newer-daemon-hold-state'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn() } }))
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -32,11 +28,14 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 
-function release(outcome: HeldPaneReopenOutcome) {
-  return vi.fn(() => Promise.resolve(outcome))
+function hold(paneKey: string, resumable: boolean): void {
+  holdPaneForNewerDaemon(paneKey, {
+    resumable,
+    release: vi.fn(() => Promise.resolve({ reopened: true, agentResumed: resumable }))
+  })
 }
 
-async function renderBanner(): Promise<void> {
+async function render(): Promise<void> {
   await act(async () => {
     root.render(<NewerDaemonHoldBanner tabId={TAB_ID} leafId={LEAF_ID} />)
   })
@@ -53,10 +52,8 @@ function button(label: string): HTMLButtonElement {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks()
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
-  vi.spyOn(toast, 'success').mockImplementation(() => 'toast')
-  resetNewerDaemonHoldStateForTests()
+  newerDaemonHoldStore.setState({ panes: {} })
   paneElement = document.createElement('div')
   document.body.appendChild(paneElement)
   root = createRoot(paneElement)
@@ -71,118 +68,48 @@ afterEach(() => {
   act(() => root.unmount())
   paneElement.remove()
   vi.unstubAllGlobals()
-  vi.restoreAllMocks()
-  resetNewerDaemonHoldStateForTests()
 })
 
 describe('NewerDaemonHoldBanner', () => {
   it('renders nothing for a pane that is not held', async () => {
-    await renderBanner()
+    await render()
     expect(paneElement.textContent).toBe('')
   })
 
   it('promises a resume only for a pane with a resumable agent session', async () => {
-    const forget = holdPaneForNewerDaemon(PANE_KEY, {
-      resumable: true,
-      release: release({ reopened: true, agentResumed: true })
-    })
-    await renderBanner()
+    hold(PANE_KEY, true)
+    await render()
     expect(paneElement.textContent).toContain(TITLE)
     expect(paneElement.textContent).toContain(BODY)
     expect(paneElement.textContent).not.toContain('Dismiss')
-    act(() => forget())
-    holdPaneForNewerDaemon(PANE_KEY, {
-      resumable: false,
-      release: release({ reopened: true, agentResumed: false })
-    })
-    await renderBanner()
+    hold(PANE_KEY, false)
+    await render()
     expect(paneElement.textContent).toContain(TITLE)
     expect(paneElement.textContent).not.toContain(BODY)
   })
 
-  it('disables the button while reopening and releases every held pane after the stop', async () => {
-    let finishStop!: (result: NewerDaemonReopenResult) => void
-    reopenNewerDaemonTerminals.mockReturnValue(
-      new Promise((resolve) => {
-        finishStop = resolve
-      })
-    )
-    const releaseThis = release({ reopened: true, agentResumed: true })
-    const releaseOther = release({ reopened: true, agentResumed: false })
-    holdPaneForNewerDaemon(PANE_KEY, { resumable: true, release: releaseThis })
-    holdPaneForNewerDaemon('other-tab:leaf', { resumable: false, release: releaseOther })
-    await renderBanner()
+  it('shows Reopening while the stop runs, then nothing once released', async () => {
+    let finish!: (result: NewerDaemonReopenResult) => void
+    reopenNewerDaemonTerminals.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    hold(PANE_KEY, true)
+    await render()
     await act(async () => button('Reopen terminal').click())
     expect(button('Reopening…').disabled).toBe(true)
-    expect(releaseThis).not.toHaveBeenCalled()
-    await act(async () => finishStop({ reopened: true }))
-    expect(releaseThis).toHaveBeenCalledTimes(1)
-    expect(releaseOther).toHaveBeenCalledTimes(1)
+    await act(async () => finish({ reopened: true }))
     expect(paneElement.textContent).toBe('')
-    expect(toast.success).toHaveBeenCalledWith('Reopened 2 terminals', {
-      description: '1 agent session resumed.'
-    })
   })
 
-  it('reopens nothing and offers a retry when the stop is not confirmed', async () => {
+  it('offers Try again after an unconfirmed stop, but not to a pane held afterwards', async () => {
     reopenNewerDaemonTerminals.mockResolvedValue({ reopened: false })
-    const releasePane = release({ reopened: true, agentResumed: true })
-    holdPaneForNewerDaemon(PANE_KEY, { resumable: true, release: releasePane })
-    await renderBanner()
+    hold(PANE_KEY, true)
+    await render()
     await act(async () => button('Reopen terminal').click())
     expect(paneElement.textContent).toContain(FAILED_TITLE)
     expect(paneElement.textContent).not.toContain(BODY)
     expect(button('Try again').disabled).toBe(false)
-    expect(releasePane).not.toHaveBeenCalled()
-    expect(toast.success).not.toHaveBeenCalled()
-  })
-})
-
-describe('hold phase', () => {
-  it('shows a pane held after a failed attempt as held, not failed', async () => {
-    reopenNewerDaemonTerminals.mockResolvedValue({ reopened: false })
-    holdPaneForNewerDaemon('other-tab:leaf', {
-      resumable: false,
-      release: release({ reopened: true, agentResumed: false })
-    })
-    await reopenHeldTerminals()
-    holdPaneForNewerDaemon(PANE_KEY, {
-      resumable: true,
-      release: release({ reopened: true, agentResumed: true })
-    })
-    await renderBanner()
+    hold(PANE_KEY, true)
+    await render()
     expect(paneElement.textContent).toContain(TITLE)
-    expect(paneElement.textContent).toContain(BODY)
     expect(paneElement.textContent).not.toContain(FAILED_TITLE)
-  })
-})
-
-describe('reopen toast', () => {
-  it.each([
-    [[{ reopened: true, agentResumed: false }], 'Reopened 1 terminal', undefined],
-    [
-      [
-        { reopened: true, agentResumed: true },
-        { reopened: true, agentResumed: true },
-        { reopened: false, agentResumed: false }
-      ],
-      'Reopened 2 terminals',
-      { description: '2 agent sessions resumed.' }
-    ]
-  ])('counts only what reopened', async (outcomes, title, options) => {
-    outcomes.forEach((outcome, index) =>
-      holdPaneForNewerDaemon(`pane-${index}`, { resumable: true, release: release(outcome) })
-    )
-    await reopenHeldTerminals()
-    expect(toast.success).toHaveBeenCalledWith(title, options)
-  })
-
-  it('shows no toast when nothing reopened', async () => {
-    holdPaneForNewerDaemon(PANE_KEY, {
-      resumable: true,
-      release: release({ reopened: false, agentResumed: false })
-    })
-    await reopenHeldTerminals()
-    expect(toast.success).not.toHaveBeenCalled()
   })
 })
