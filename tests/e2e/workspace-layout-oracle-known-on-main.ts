@@ -73,10 +73,10 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
     detail: /^runtime group \S+ is missing from the client$/,
     cause: 'two group ids'
   },
-  // A renamed terminal's title lists as null after a serve restart (session tabs keep it): orcad
-  // everywhere, Electron serve on Linux.
+  // A renamed terminal's title lists as null in terminal.list after an orcad serve restart
+  // (session tabs keep it).
   {
-    scenario: 'headless-*',
+    scenario: 'headless-orcad-rename-terminal',
     check: 'expected',
     step: 'rename after restart',
     cause: 'orcad title after restart'

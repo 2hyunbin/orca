@@ -426,7 +426,7 @@ async function runHeadlessScenario(
       readSavedPartitions: () => readSavedPartitions(host.userDataDir),
       worktreeIds: () => [worktreeId]
     })
-    const oracle = new LayoutOracle(target(a))
+    const oracle = new LayoutOracle(target(a), `headless-${kind}-${scenario.id}`)
     findings = oracle.findings
     // A cold restart gives every pane a new terminal.
     let restarting = false

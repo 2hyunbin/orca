@@ -37,6 +37,7 @@ import { expectedDifferences, type ExpectedLayout } from './workspace-layout-ora
 import { checkLayoutRoundTrip } from '../../../src/shared/workspace-layout/workspace-layout-round-trip-check'
 import { checkPaneMarkers } from './workspace-layout-oracle-markers'
 import { installRemountCounter, readRemountCounts } from './workspace-layout-oracle-watch'
+import { unexpectedFindings } from '../workspace-layout-oracle-known-on-main'
 
 export type OracleCheck =
   | 'rules'
@@ -120,7 +121,11 @@ export class LayoutOracle {
   private readonly frameBreaches: FrameBreaches = new Map()
   private label = 'start'
 
-  constructor(private target: OracleTarget) {}
+  constructor(
+    private target: OracleTarget,
+    /** The scenario id the known-on-main list is keyed by. */
+    private readonly scenarioId: string
+  ) {}
 
   /** The feed's frame callback: the model rules on every published frame. */
   checkFrame(feed: LiveLayoutFeed): void {
@@ -207,7 +212,12 @@ export class LayoutOracle {
       differences = await this.readViews(entries)
       // The runtime held still across the read only if no frame arrived during it.
       stableReads = feed.ready && feed.frames === frames ? stableReads + 1 : 0
-      const agreed = differences.view.length === 0 && differences.client.length === 0
+      // A difference main is known to keep never converges, so it does not hold the wait.
+      const agreed =
+        unexpectedFindings(this.scenarioId, [
+          { check: 'view', step: label, details: differences.view },
+          { check: 'client', step: label, details: differences.client }
+        ]).length === 0
       if ((agreed && stableReads >= QUIET_READS) || Date.now() > deadline) {
         break
       }

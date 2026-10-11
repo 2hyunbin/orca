@@ -92,7 +92,7 @@ export async function runOracleScenario(
       page: first.page,
       userDataDir: session.userDataDir,
       client,
-      oracle: new LayoutOracle(target(first.page, client)),
+      oracle: new LayoutOracle(target(first.page, client), scenarioId),
       worktreeIds,
       reloadWindow: async () => {
         await run.page.reload()
