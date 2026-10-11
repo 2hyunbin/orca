@@ -4,6 +4,7 @@ import {
   createSpawnAdmissionState,
   decideSpawnAdmission,
   DEFAULT_SPAWN_ADMISSION_LIMITS as LIMITS,
+  readTerminalSpawnDeferral,
   releaseLiveAutomatic,
   resolveSpawnCharge,
   settleSpawnAdmission,
@@ -233,5 +234,24 @@ describe('decideSpawnAdmission', () => {
         }
       }
     }
+  })
+})
+
+describe('readTerminalSpawnDeferral', () => {
+  it('reads the reason from an RPC message and from the local IPC wrapper', () => {
+    expect(readTerminalSpawnDeferral(new Error('terminal_spawn_deferred:paused'))).toBe('paused')
+    expect(
+      readTerminalSpawnDeferral(
+        new Error(
+          "Error invoking remote method 'pty:spawn': Error: terminal_spawn_deferred:deadline"
+        )
+      )
+    ).toBe('deadline')
+  })
+
+  it('ignores other errors and unknown reasons', () => {
+    expect(readTerminalSpawnDeferral(new Error('ENOENT'))).toBeNull()
+    expect(readTerminalSpawnDeferral(new Error('terminal_spawn_deferred:later'))).toBeNull()
+    expect(readTerminalSpawnDeferral(undefined)).toBeNull()
   })
 })
