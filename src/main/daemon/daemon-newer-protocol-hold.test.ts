@@ -110,6 +110,14 @@ describe('discoverNewerProtocolHolds', () => {
     }
   )
 
+  it('re-probes a timed-out endpoint once before holding', async () => {
+    probes.identity.mockResolvedValue('unknown')
+    probes.endpoint.mockResolvedValueOnce('unknown').mockResolvedValueOnce('refused')
+    writePid(runtimeDir, NEWER, RECORD)
+    await expect(holds()).resolves.toBe(false)
+    expect(probes.endpoint).toHaveBeenCalledTimes(2)
+  })
+
   it.each(['', '{"pid":4242,"startedAt', 'not a record'])(
     'never holds forever on an unparseable record %j',
     async (contents) => {

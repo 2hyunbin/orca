@@ -27,8 +27,15 @@ async function classifyNewerProtocolDaemon(
   protocolVersion: number
 ): Promise<ProcessLivenessVerdict['status']> {
   const socketPath = getDaemonSocketPath(runtimeDir, protocolVersion)
-  const byEndpoint = async (): Promise<ProcessLivenessVerdict['status']> =>
-    endpointIsProvenDead(await probeSocketConnect(socketPath)) ? 'exited' : 'unverifiable'
+  const byEndpoint = async (): Promise<ProcessLivenessVerdict['status']> => {
+    let outcome = await probeSocketConnect(socketPath)
+    if (outcome === 'unknown') {
+      // Why: a stalled main loop can fire the probe timeout before a dead socket's refusal lands.
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      outcome = await probeSocketConnect(socketPath)
+    }
+    return endpointIsProvenDead(outcome) ? 'exited' : 'unverifiable'
+  }
   let contents: string
   try {
     contents = readFileSync(getDaemonPidPath(runtimeDir, protocolVersion), 'utf8')
