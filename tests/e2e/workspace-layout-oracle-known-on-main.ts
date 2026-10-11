@@ -58,9 +58,9 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
     rule: 'tab_order_disagrees',
     cause: 'one tab order'
   },
-  // Intermittent (about 1 in 30 on main): the relaunch's exits for the killed daemon's terminals retire
-  // both tab rows, the respawns re-add them in whichever order they bind, and the window's next
-  // save keeps main's row order. Fixed in PR 6, where rows follow the group's tab order.
+  // Intermittent (about 1 in 30 on main): the relaunch's exits for the killed daemon's terminals
+  // retire both tab rows, the respawns re-add them in whichever order they bind, and the window's
+  // next save keeps main's row order. Fixed in PR 6, where rows follow the group's tab order.
   {
     scenario: 'cold-daemon-restart',
     check: 'expected',
