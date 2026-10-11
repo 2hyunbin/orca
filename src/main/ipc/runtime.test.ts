@@ -196,6 +196,65 @@ describe('registerRuntimeHandlers', () => {
     expect(result).toMatchObject({ ok: true, result: { tabs: [claudeTab] } })
   })
 
+  it.each([17, undefined])(
+    'uses the verified sender origin %s and ignores request data',
+    async (windowId) => {
+      const runtime = {
+        getRuntimeId: () => 'runtime-1',
+        getClientSettings: () => ({ experimentalNativeChat: true }),
+        listMobileSessionTabs: vi.fn(async () => ({
+          tabs: [
+            {
+              type: 'agent-session',
+              id: 'agent-session:chat',
+              sessionId: 'chat',
+              title: 'Chat',
+              agent: 'claude'
+            }
+          ]
+        })),
+        closeMobileSessionTab: vi.fn(async () => ({ closed: true }))
+      }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this handler calls only the stubbed runtime identity, inventory, settings and close methods.
+      registerRuntimeHandlers(runtime as never)
+      fromWebContentsMock.mockReturnValue(windowId === undefined ? null : { id: windowId })
+      const handler = handleMock.mock.calls.find(([channel]) => channel === 'runtime:call')![1]
+      const result = await handler(runtimeCallEvent(), {
+        method: 'session.tabs.close',
+        params: {
+          worktree: 'id:wt-1',
+          tabId: 'agent-session:chat',
+          reason: 'user',
+          originatingWindowId: 999
+        }
+      })
+      expect(result).toMatchObject({ ok: true })
+      expect(runtime.closeMobileSessionTab).toHaveBeenCalledWith('id:wt-1', 'agent-session:chat', {
+        reason: 'user',
+        ...(windowId === undefined ? {} : { originatingWindowId: windowId })
+      })
+    }
+  )
+
+  it('rejects a superseded frame before capturing close origin', async () => {
+    const runtime = { closeMobileSessionTab: vi.fn() }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the frame guard rejects before accessing any runtime method.
+    registerRuntimeHandlers(runtime as never)
+    const handler = handleMock.mock.calls.find(([channel]) => channel === 'runtime:call')![1]
+    const event = runtimeCallEvent()
+    await expect(
+      handler(
+        { ...event, senderFrame: {} },
+        {
+          method: 'session.tabs.close',
+          params: { worktree: 'id:wt-1', tabId: 'agent-session:chat', reason: 'user' }
+        }
+      )
+    ).rejects.toThrow('Runtime RPC call must originate from the current main frame')
+    expect(fromWebContentsMock).not.toHaveBeenCalled()
+    expect(runtime.closeMobileSessionTab).not.toHaveBeenCalled()
+  })
+
   it('registers project group runtime RPC methods for local desktop callers', async () => {
     const runtime = {
       syncWindowGraph: vi.fn(),

@@ -75,6 +75,7 @@ export function executeSupportRoutedCall(args: {
   params: unknown
   timeoutMs: number
   expectedPairingRevision?: number
+  expectedRuntimeId?: string
   envelope?: RuntimeOrchestrationEnvelope
   signal?: AbortSignal
 }): Promise<RuntimeRpcResponse<unknown>> {
@@ -84,6 +85,7 @@ export function executeSupportRoutedCall(args: {
     method: args.method,
     timeoutMs: args.timeoutMs,
     expectedPairingRevision: args.expectedPairingRevision,
+    expectedRuntimeId: args.expectedRuntimeId,
     signal: args.signal,
     supported: (route) =>
       sendRemoteRuntimeSharedControlRequestAbortable(
@@ -177,6 +179,7 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
   method: string
   timeoutMs: number
   expectedPairingRevision?: number
+  expectedRuntimeId?: string
   signal?: AbortSignal
   supported: (route: SupportRoute) => Promise<RuntimeRpcResponse<unknown>>
   unsupported: (route: SupportRoute) => Promise<RuntimeRpcResponse<unknown>>
@@ -187,7 +190,8 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
     const revisionFailure = runtimeEnvironmentRevisionFailure(
       environment,
       args.expectedPairingRevision,
-      args.method
+      args.method,
+      args.expectedRuntimeId
     )
     if (revisionFailure) {
       return revisionFailure
@@ -201,6 +205,21 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
       outcome.kind !== 'stale_incarnation' &&
       isRuntimeEnvironmentCapabilityOutcomeCurrent(outcome)
     ) {
+      if (args.expectedPairingRevision !== undefined || args.expectedRuntimeId !== undefined) {
+        const currentEnvironment = resolveEnvironment(args.userDataPath, environment.id)
+        const failure = runtimeEnvironmentRevisionFailure(
+          currentEnvironment,
+          args.expectedPairingRevision,
+          args.method,
+          args.expectedRuntimeId
+        )
+        if (failure) {
+          return failure
+        }
+        if (args.expectedRuntimeId !== undefined && outcome.runtimeId !== args.expectedRuntimeId) {
+          return runtimeEnvironmentChangedFailure(currentEnvironment, args.method)
+        }
+      }
       const route = { environment, pairing, outcome }
       const response = await (outcome.kind === 'supported'
         ? args.supported(route)

@@ -55,6 +55,11 @@ export const SESSION_TAB_CLOSE_METHODS = [
             params.tabId,
             {
               reason: 'user',
+              ...(params.reason === 'user' &&
+              context.caller?.kind === 'desktop' &&
+              context.originatingWindowId !== undefined
+                ? { originatingWindowId: context.originatingWindowId }
+                : {}),
               ...(context.pairedDeviceId ? { clientNavigationId: context.pairedDeviceId } : {})
             }
           )

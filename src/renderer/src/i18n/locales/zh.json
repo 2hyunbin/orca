@@ -951,7 +951,7 @@
         }
       },
       "activateAiVaultStructuredSession": {
-        "unavailable": "结构化智能体会话尚不可用。稍后重试。",
+        "unavailable": "此聊天暂时无法重新打开，请稍后重试。",
         "gone": "此聊天不再在此主机上，因此无法在此处重新打开。",
         "hostCannotOpen": "在 Orca 更新之前，无法重新打开此聊天。"
       },

@@ -1055,7 +1055,7 @@
         "sparseCheckoutUnsupported": "Les recettes à racine provisionnée ne prennent pas en charge le sparse checkout."
       },
       "activateAiVaultStructuredSession": {
-        "unavailable": "La session d'agent structuré n'est pas encore disponible. Réessayez dans un instant.",
+        "unavailable": "Cette conversation ne peut pas encore être rouverte. Réessayez dans un instant.",
         "gone": "Ce chat n'est plus sur cet hôte, il ne peut donc pas être rouvert ici.",
         "hostCannotOpen": "Ce chat ne peut pas être rouvert tant qu'Orca n'est pas mis à jour."
       },

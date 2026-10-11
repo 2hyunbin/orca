@@ -15,6 +15,7 @@ vi.mock('./terminal-tab-close-request-relay', () => ({
 }))
 
 import { registerRuntimeWindowLifecycle } from './runtime-window-lifecycle'
+import { requestSessionTabCloseFromRenderer } from './session-tab-close-request-relay'
 
 function attachNotifier(): { notifier: RuntimeNotifier; send: ReturnType<typeof vi.fn> } {
   const send = vi.fn()
@@ -84,4 +85,28 @@ describe('runtime window file-open notifications', () => {
       expect.objectContaining({ navigation: 'caller' })
     )
   })
+})
+
+describe('runtime window close origin', () => {
+  it('skips the relay only for its own trusted origin', async () => {
+    vi.mocked(requestSessionTabCloseFromRenderer).mockClear()
+    const { notifier } = attachNotifier()
+    await notifier.closeSessionTab?.('agent-session:chat', 'wt-1', { originatingWindowId: 1 })
+    expect(requestSessionTabCloseFromRenderer).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, { originatingWindowId: 2 }])(
+    'keeps independent relay for %j',
+    async (options) => {
+      vi.mocked(requestSessionTabCloseFromRenderer).mockClear()
+      const { notifier } = attachNotifier()
+      await notifier.closeSessionTab?.('agent-session:chat', 'wt-1', options)
+      expect(requestSessionTabCloseFromRenderer).toHaveBeenCalledOnce()
+      expect(requestSessionTabCloseFromRenderer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1 }),
+        'agent-session:chat',
+        'wt-1'
+      )
+    }
+  )
 })

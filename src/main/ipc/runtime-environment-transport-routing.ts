@@ -115,6 +115,7 @@ export async function callRuntimeEnvironment(
             params,
             timeoutMs: effectiveTimeoutMs,
             expectedPairingRevision: expectedEnvironmentPairingRevision,
+            expectedRuntimeId: options?.expectedEnvironmentRuntimeId,
             envelope: sharedControlEnvelope,
             signal: options?.signal
           })

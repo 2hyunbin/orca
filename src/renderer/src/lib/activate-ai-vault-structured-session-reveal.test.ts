@@ -19,7 +19,17 @@ const mocks = vi.hoisted(() => ({
 // The real target resolution is the thing under test; only the transport is stubbed.
 vi.mock('@/runtime/runtime-rpc-client', () => ({
   callRuntimeRpc: mocks.call,
-  runtimeEnvironmentSupportsCapability: mocks.supports
+  getRuntimeEnvironmentCapabilityStatus: async (...args: unknown[]) => ({
+    runtimeId: 'server-runtime',
+    capabilities: (await mocks.supports(...args))
+      ? [
+          STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY,
+          ...((await mocks.closesById({ kind: 'environment', environmentId: args[0] }))
+            ? [SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY]
+            : [])
+        ]
+      : []
+  })
 }))
 
 vi.mock('./worktree-runtime-owner', () => ({
@@ -36,6 +46,7 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 
 import { revealStructuredSession } from './activate-ai-vault-structured-session'
 import { STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import { SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-close-capabilities'
 import { RUNTIME_COMPAT_BLOCK_CODE } from '@/runtime/runtime-protocol-compat'
 import {
   beginWebSessionCloseIntent,
@@ -79,7 +90,8 @@ describe('revealStructuredSession', () => {
     expect(mocks.supports).toHaveBeenCalledWith(
       'env-1',
       STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY,
-      expect.any(Number)
+      expect.any(Number),
+      expect.any(Object)
     )
     expect(mocks.call).toHaveBeenCalledWith(
       { kind: 'environment', environmentId: 'env-1' },
@@ -98,7 +110,8 @@ describe('revealStructuredSession', () => {
     expect(mocks.supports).toHaveBeenCalledWith(
       'recipient-host',
       STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY,
-      expect.any(Number)
+      expect.any(Number),
+      expect.any(Object)
     )
     expect(mocks.call).toHaveBeenCalledWith(
       host,

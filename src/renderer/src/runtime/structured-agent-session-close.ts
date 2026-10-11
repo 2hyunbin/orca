@@ -7,17 +7,22 @@ import { callStructuredAgentSession } from './structured-agent-session-client'
 
 export async function closeStructuredAgentSession(
   target: RuntimeClientTarget,
-  sessionId: string
+  sessionId: string,
+  options?: { expectedEnvironmentPairingRevision?: number; expectedEnvironmentRuntimeId?: string }
 ): Promise<'closed' | 'unsupported'> {
   if (
     target.kind === 'environment' &&
     !(await runtimeEnvironmentSupportsCapability(
       target.environmentId,
-      STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
+      STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
+      undefined,
+      options
     ))
   ) {
     return 'unsupported'
   }
-  await callStructuredAgentSession(target, 'agentSession.close', { sessionId })
+  await (options
+    ? callStructuredAgentSession(target, 'agentSession.close', { sessionId }, options)
+    : callStructuredAgentSession(target, 'agentSession.close', { sessionId }))
   return 'closed'
 }

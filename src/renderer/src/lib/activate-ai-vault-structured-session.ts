@@ -1,28 +1,40 @@
-import { toast } from 'sonner'
+import { structuredSessionOpenFeedback } from './structured-session-open-feedback'
+export { structuredSessionOpenFeedback } from './structured-session-open-feedback'
 import type { AiVaultSession } from '../../../shared/ai-vault-types'
-import { translate } from '@/i18n/i18n'
 import { activateAndRevealWorktree } from './worktree-activation'
 import { activateStructuredAgentSessionById } from './structured-agent-session-tab-activation'
 import { useAppStore } from '@/store'
 import { getRuntimeEnvironmentIdForWorktree } from './worktree-runtime-owner'
 import {
   callRuntimeRpc,
-  runtimeEnvironmentSupportsCapability,
+  getRuntimeEnvironmentCapabilityStatus,
   type RuntimeClientTarget
 } from '@/runtime/runtime-rpc-client'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { refreshLocalStructuredSessionWorktreeTabs } from '@/runtime/local-structured-session-tabs-sync'
 import { STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import { SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-close-capabilities'
 import { supportsSessionTabsCloseAgentSessionById } from '@/runtime/structured-agent-session-client'
 import { isRuntimeCompatBlockError } from '@/runtime/runtime-protocol-compat'
 import {
   executionHostIdForStructuredTarget,
   structuredAgentSessionFocusOwner
 } from '@/runtime/structured-agent-session-owner'
-import { reopenWebSessionCloseIntent } from '@/runtime/web-session-close-intent'
+import {
+  captureWebSessionCloseIntent,
+  reopenWebSessionCloseIntent,
+  type WebSessionCloseIntentTicket
+} from '@/runtime/web-session-close-intent'
 import { captureWebSessionIntentOwner } from '@/runtime/web-runtime-session-environment'
 import { rereadHostSessionTabs } from '@/runtime/host-session-tab-close'
+import {
+  captureHostIdentityFence,
+  isHostIdentityFenceCurrent,
+  type HostIdentityFence
+} from '@/store/host-catalog-fencing'
+import { resolveContinuedRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
+import { pendingStructuredAgentSessionTabRetirement } from '@/runtime/structured-agent-session-tab-retirement'
 
 const STRUCTURED_SESSION_RESTORE_TIMEOUT_MS = 5_000
 
@@ -47,45 +59,6 @@ type StructuredSessionActivationDeps = {
   unavailable: () => void
   gone: () => void
   hostCannotOpen: () => void
-}
-
-/** The feedback a click that opens a chat gives when it cannot, shared by every surface that
- *  opens one. */
-export const structuredSessionOpenFeedback: Pick<
-  StructuredSessionActivationDeps,
-  'unavailable' | 'gone' | 'hostCannotOpen'
-> = {
-  unavailable: () => {
-    toast.error(
-      translate(
-        'auto.lib.activateAiVaultStructuredSession.unavailable',
-        'The structured agent session is not available yet. Retry in a moment.'
-      )
-    )
-  },
-  // Why a second message: once reveal exists, a miss is no longer a timing problem the user can
-  // wait out, so telling them to retry sends them in a circle.
-  gone: () => {
-    toast.error(
-      translate(
-        'auto.lib.activateAiVaultStructuredSession.gone',
-        'This chat is no longer on this host, so it cannot be reopened here.'
-      )
-    )
-  },
-  // Separate from `gone` because the chat is not gone: something about this pairing cannot open
-  // it — a host too old to know the method, adapters that do not cover the provider, or a version
-  // block that can name EITHER side. Naming a machine here would point half of those at the wrong
-  // one, so the message names the remedy instead. Telling someone their work is lost when an
-  // update would bring it back is the worse of the two wrong answers.
-  hostCannotOpen: () => {
-    toast.error(
-      translate(
-        'auto.lib.activateAiVaultStructuredSession.hostCannotOpen',
-        "This chat can't be reopened until Orca is updated."
-      )
-    )
-  }
 }
 
 const defaultDeps: StructuredSessionActivationDeps = {
@@ -208,6 +181,35 @@ export async function revealStructuredSession(target: {
     runtimeTargetForOwnerEnvironment(
       getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), target.worktreeId)
     )
+  const fence = captureHostIdentityFence({ target: host, at: 'local' })
+  const owner = captureWebSessionIntentOwner(structuredAgentSessionFocusOwner(host).environmentId)
+  const ticket = captureWebSessionCloseIntent(
+    owner,
+    target.worktreeId,
+    `agent-session:${target.sessionId}`
+  )
+  const pendingClose = pendingStructuredAgentSessionTabRetirement(
+    host,
+    target.worktreeId,
+    target.sessionId
+  )
+  const requestRevision = (): number | undefined =>
+    host.kind === 'environment'
+      ? resolveContinuedRuntimeEnvironmentRevision(host.environmentId, fence.pairingRevision)
+      : undefined
+  // The host cannot order reveal behind a close still awaiting its client-side capability probe.
+  try {
+    if (pendingClose) {
+      await withStructuredSessionRestoreTimeout(pendingClose)
+    }
+  } catch {
+    return 'unreachable'
+  }
+  if (!isHostIdentityFenceCurrent(fence)) {
+    return 'unreachable'
+  }
+  let runtimeId: string | undefined
+  let closeSupported: boolean | undefined
   // Negotiated against the host that will answer this call, not the local one: a paired host runs
   // its own build, and its method-not-found is indistinguishable from a refusal we should surface.
   // A local host is this build, so it always has the method and needs no round trip to prove it.
@@ -217,13 +219,20 @@ export async function revealStructuredSession(target: {
       // Raced, not merely given a timeout argument: on a cache hit this awaits a promise created
       // by an earlier probe that may carry no deadline of its own, and one that never settles
       // would hold this session's in-flight entry for the life of the process.
-      supported = await withStructuredSessionRestoreTimeout(
-        runtimeEnvironmentSupportsCapability(
+      const status = await withStructuredSessionRestoreTimeout(
+        getRuntimeEnvironmentCapabilityStatus(
           host.environmentId,
           STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY,
-          STRUCTURED_SESSION_RESTORE_TIMEOUT_MS
+          STRUCTURED_SESSION_RESTORE_TIMEOUT_MS,
+          { expectedEnvironmentPairingRevision: requestRevision() }
         )
       )
+      supported =
+        status.capabilities?.includes(STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY) === true
+      runtimeId = status.runtimeId
+      closeSupported =
+        status.capabilities?.includes(SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY) ===
+        true
     } catch (error) {
       // A version block is the host's age, stated outright; anything else means we never got to
       // ask, which is not evidence about the chat or the host. `remote-agent-session-launch`
@@ -234,6 +243,9 @@ export async function revealStructuredSession(target: {
       return 'host-cannot-open'
     }
   }
+  if (!isHostIdentityFenceCurrent(fence)) {
+    return 'unreachable'
+  }
   let result: AgentSessionRevealReply | undefined
   try {
     result = await withStructuredSessionRestoreTimeout(
@@ -242,15 +254,20 @@ export async function revealStructuredSession(target: {
         'agentSession.reveal',
         { sessionId: target.sessionId },
         {
-          timeoutMs: STRUCTURED_SESSION_RESTORE_TIMEOUT_MS
+          timeoutMs: STRUCTURED_SESSION_RESTORE_TIMEOUT_MS,
+          expectedEnvironmentPairingRevision: requestRevision(),
+          expectedEnvironmentRuntimeId: runtimeId
         }
       )
     )
   } catch {
     return 'unreachable'
   }
+  if (!isHostIdentityFenceCurrent(fence)) {
+    return 'unreachable'
+  }
   if (result?.ok === true) {
-    await showReopenedChat(host, target.worktreeId, target.sessionId)
+    await showReopenedChat(fence, target.worktreeId, ticket, closeSupported)
     return 'revealed'
   }
   // The host raises two different refusals here and they mean opposite things to a user: it holds
@@ -269,19 +286,24 @@ type AgentSessionRevealReply = { ok?: boolean; refusal?: { code?: string } }
 
 /** Cleared at the answer, not the click: a frame from before the close could otherwise flash it. */
 async function showReopenedChat(
-  host: RuntimeClientTarget,
+  fence: HostIdentityFence,
   worktreeId: string,
-  sessionId: string
+  ticket: WebSessionCloseIntentTicket | null,
+  closeSupported: boolean | undefined
 ): Promise<void> {
+  const host = fence.route.target
   // Why: an older paired host can commit the close after this reveal, which would show then drop it.
-  if (!(await revealWaitsForClose(host))) {
+  if (
+    !ticket ||
+    !(closeSupported ?? (await revealWaitsForClose(host))) ||
+    !isHostIdentityFenceCurrent(fence)
+  ) {
     return
   }
-  const owner = captureWebSessionIntentOwner(structuredAgentSessionFocusOwner(host).environmentId)
-  if (reopenWebSessionCloseIntent(owner, worktreeId, `agent-session:${sessionId}`)) {
+  if (reopenWebSessionCloseIntent(ticket)) {
     // Why: a frame listing the reopened chat may already have been applied with it hidden.
     await withStructuredSessionRestoreTimeout(
-      rereadHostSessionTabs(host, worktreeId, owner.pairingRevision, true)
+      rereadHostSessionTabs(host, worktreeId, fence.pairingRevision, true)
     ).catch(() => undefined)
   }
 }

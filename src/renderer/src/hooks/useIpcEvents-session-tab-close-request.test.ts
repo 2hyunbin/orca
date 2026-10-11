@@ -20,6 +20,7 @@ describe('useIpcEvents session tab close requests', () => {
     const respondSessionTabClose = vi.fn()
 
     await useIpcEventsForCloseRouting({
+      sessionTabBridgeOnly: true,
       sessionTabCloseRequestListenerRef: listenerRef,
       respondSessionTabClose,
       getState: () => ({
@@ -52,6 +53,7 @@ describe('useIpcEvents session tab close requests', () => {
     const respondSessionTabClose = vi.fn()
     const requestPinnedTabCloseConfirm = vi.fn()
     await useIpcEventsForCloseRouting({
+      sessionTabBridgeOnly: true,
       sessionTabCloseRequestListenerRef: listenerRef,
       respondSessionTabClose,
       getState: () => ({
@@ -81,6 +83,7 @@ describe('useIpcEvents session tab close requests', () => {
     const requestPinnedTabCloseConfirm = vi.fn()
 
     await useIpcEventsForCloseRouting({
+      sessionTabBridgeOnly: true,
       sessionTabCloseRequestListenerRef: listenerRef,
       respondSessionTabClose,
       getState: () => ({
@@ -126,6 +129,7 @@ describe('useIpcEvents session tab close requests', () => {
     const cancelPinnedTabCloseRequest = vi.fn()
 
     await useIpcEventsForCloseRouting({
+      sessionTabBridgeOnly: true,
       sessionTabCloseRequestListenerRef: listenerRef,
       respondSessionTabClose,
       getState: () => ({

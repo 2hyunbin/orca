@@ -30,7 +30,12 @@ vi.mock('@/store', () => ({
 vi.mock('@/runtime/runtime-rpc-client', async (original) => ({
   ...(await original<Record<string, unknown>>()),
   callRuntimeRpc: mocks.call,
-  runtimeEnvironmentSupportsCapability: mocks.supports
+  getRuntimeEnvironmentCapabilityStatus: async (...args: unknown[]) => ({
+    runtimeId: 'server-runtime',
+    capabilities: (await mocks.supports(...args))
+      ? [STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY]
+      : []
+  })
 }))
 vi.mock('@/runtime/local-structured-session-tabs-sync', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -82,7 +87,8 @@ it('keeps the known host through the default refresh/reveal/activation path with
   expect(mocks.supports).toHaveBeenCalledWith(
     'remote-2',
     STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY,
-    expect.any(Number)
+    expect.any(Number),
+    expect.any(Object)
   )
   expect(mocks.call.mock.calls.map(([host, method]) => [host, method])).toEqual([
     [TARGET, 'session.tabs.list'],

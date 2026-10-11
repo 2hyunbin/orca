@@ -29,6 +29,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
     tabId: string,
     options: {
       reason?: RuntimeSessionTabCloseReason
+      originatingWindowId?: number
       expectedPublicationEpoch?: string
       expectedTerminalHandle?: string
       clientNavigationId?: string
@@ -294,7 +295,11 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
       if (this.notifier?.closeSessionTab) {
         try {
           // Why: a reopened chat's window tab id is not derivable from its session; the window maps ours.
-          await this.notifier.closeSessionTab(tab.id, worktreeId)
+          await (options.reason === 'user' && options.originatingWindowId !== undefined
+            ? this.notifier.closeSessionTab(tab.id, worktreeId, {
+                originatingWindowId: options.originatingWindowId
+              })
+            : this.notifier.closeSessionTab(tab.id, worktreeId))
         } catch (error) {
           // The renderer already having removed the tab is an idempotent close, not a veto.
           if (!(error instanceof Error && error.message === SESSION_TAB_NOT_FOUND_ERROR)) {

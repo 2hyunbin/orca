@@ -18,11 +18,14 @@ vi.mock('@/lib/structured-agent-session-launch-prompt', () => ({
 vi.mock('./structured-agent-session-close', () => ({
   closeStructuredAgentSession: mocks.closeSession
 }))
-vi.mock('./runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntime }))
+vi.mock('./runtime-rpc-client', () => ({
+  callRuntimeRpc: mocks.callRuntime,
+  ensureRuntimeEnvironmentCompatible: async () => {}
+}))
 // A host without close-by-id, so the chat's close is also sent as its own command.
 vi.mock('./structured-agent-session-client', async (importOriginal) => ({
   ...(await importOriginal<typeof StructuredAgentSessionClientModule>()),
-  supportsSessionTabsCloseAgentSessionById: async () => false
+  readSessionTabsCloseAgentSessionCapability: async () => ({ supported: false })
 }))
 vi.mock('./runtime-worktree-selector', () => ({
   toRuntimeWorktreeSelector: (worktreeId: string) => `id:${worktreeId}`
@@ -99,7 +102,9 @@ describe('a chat closed before its create landed on a paired server', () => {
     const applied = acceptPairedHostStructuredSessions(serverFrame(), 'server-1')
 
     expect(applied.tabs).toEqual([])
-    await vi.waitFor(() => expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat'))
+    await vi.waitFor(() =>
+      expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat', expect.any(Object))
+    )
   })
 
   // A tombstone guards a random session id, so it is inert once stale; its 30-day TTL ends it.
@@ -114,7 +119,9 @@ describe('a chat closed before its create landed on a paired server', () => {
     const applied = acceptPairedHostStructuredSessions(serverFrame(), 'server-1')
 
     expect(applied.tabs).toEqual([])
-    await vi.waitFor(() => expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat'))
+    await vi.waitFor(() =>
+      expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat', expect.any(Object))
+    )
     expect(mocks.closeSession).not.toHaveBeenCalledWith({ kind: 'local' }, 'remote-chat')
     expect(hasStructuredAgentSessionLaunchCancellationTombstone(WORKTREE, 'remote-chat')).toBe(true)
   })

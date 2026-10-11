@@ -53,7 +53,10 @@ vi.mock('./runtime-rpc-client', () => ({
 }))
 vi.mock('./structured-agent-session-client', async (importOriginal) => ({
   ...(await importOriginal<typeof StructuredAgentSessionClientModule>()),
-  supportsSessionTabsCloseAgentSessionById: mocks.closesById
+  readSessionTabsCloseAgentSessionCapability: async (target: RuntimeClientTarget) => ({
+    supported: await mocks.closesById(target),
+    runtimeId: target.kind === 'environment' ? 'server-runtime' : undefined
+  })
 }))
 vi.mock('./local-structured-session-tabs-sync/inventory-refresh', () => ({
   refreshLocalStructuredSessionWorktreeTabs: mocks.reacceptLocal
@@ -159,7 +162,7 @@ describe('structured agent session tab retirement', () => {
     expect(mocks.discardOutbox).toHaveBeenCalledWith('session-1')
     expect(mocks.stopSends).not.toHaveBeenCalled()
     await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalled())
-    expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1')
+    expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1', expect.any(Object))
   })
 
   // Withdrawn, as a Stop does: nothing more goes out, and nothing is dropped.
@@ -172,7 +175,9 @@ describe('structured agent session tab retirement', () => {
     })
     expect(mocks.discardOutbox).not.toHaveBeenCalled()
     expect(mocks.stopSends).toHaveBeenCalledWith('session-1')
-    await vi.waitFor(() => expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1'))
+    await vi.waitFor(() =>
+      expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1', expect.any(Object))
+    )
   })
 
   it('suppresses and retires a late cancelled publication', async () => {
@@ -181,7 +186,9 @@ describe('structured agent session tab retirement', () => {
     expect(result.tabs).toEqual([])
     expect(result.tabGroups).toEqual([])
     expect(result.activeTabId).toBeNull()
-    await vi.waitFor(() => expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1'))
+    await vi.waitFor(() =>
+      expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1', expect.any(Object))
+    )
     expect(mocks.callRuntime).toHaveBeenCalledWith(
       target,
       'session.tabs.close',
@@ -338,6 +345,7 @@ describe('structured agent session tab retirement', () => {
       )
     expect(pendingUnder(3)).toBe(true)
 
+    await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalled())
     // Re-paired while the close is in flight.
     replaceRuntimeEnvironmentRevisions([{ id: 'server-1', createdAt: 0, pairingRevision: 4 }])
     await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalled())
@@ -390,7 +398,7 @@ describe('structured agent session tab retirement', () => {
     })
     await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalledTimes(1))
     expect(mocks.closesById).toHaveBeenCalledWith(paired)
-    expect(mocks.closeSession).toHaveBeenCalledWith(paired, 'session-1')
+    expect(mocks.closeSession).toHaveBeenCalledWith(paired, 'session-1', expect.any(Object))
     expect(mocks.callRuntime).toHaveBeenCalledWith(
       paired,
       'session.tabs.close',
@@ -526,7 +534,9 @@ describe('structured agent session tab retirement', () => {
     expect(findStructuredAgentSessionReadOwner('session-1', target)).toBeUndefined()
     expect(findStructuredAgentSessionReadOwner('session-1', remoteTarget)).toBe(remote)
     expect(dispose).toHaveBeenCalledOnce()
-    await vi.waitFor(() => expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1'))
+    await vi.waitFor(() =>
+      expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1', expect.any(Object))
+    )
   })
 
   it('still closes the host tab if reader disposal fails', async () => {
@@ -540,7 +550,7 @@ describe('structured agent session tab retirement', () => {
     ).not.toThrow()
     expect(findStructuredAgentSessionReadOwner('session-1', target)).toBeUndefined()
     await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalled())
-    expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1')
+    expect(mocks.closeSession).toHaveBeenCalledWith(target, 'session-1', expect.any(Object))
     expect(warn).toHaveBeenCalledOnce()
     warn.mockRestore()
   })

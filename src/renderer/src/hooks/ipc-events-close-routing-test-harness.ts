@@ -28,7 +28,14 @@ export type TerminalTabCloseRequestListener = (data: {
   force?: boolean
 }) => void
 
+function setListener<T>(ref: { current: T | null } | undefined, listener: T): void {
+  if (ref) {
+    ref.current = listener
+  }
+}
+
 export async function useIpcEventsForCloseRouting({
+  sessionTabBridgeOnly = false,
   closeActiveTabListenerRef,
   closeFloatingItemListenerRef,
   selectFloatingIndexListenerRef,
@@ -43,6 +50,7 @@ export async function useIpcEventsForCloseRouting({
   respondTerminalTabClose = vi.fn(),
   persistWorkspaceSession = vi.fn().mockResolvedValue(undefined)
 }: {
+  sessionTabBridgeOnly?: boolean
   closeActiveTabListenerRef?: { current: CloseActiveTabListener | null }
   closeFloatingItemListenerRef?: { current: CloseFloatingItemListener | null }
   selectFloatingIndexListenerRef?: { current: SelectFloatingIndexListener | null }
@@ -187,15 +195,11 @@ export async function useIpcEventsForCloseRouting({
         onFocusTerminal: () => () => {},
         onFocusEditorTab: () => () => {},
         onCloseSessionTab: (listener: CloseSessionTabListener) => {
-          if (closeSessionTabListenerRef) {
-            closeSessionTabListenerRef.current = listener
-          }
+          setListener(closeSessionTabListenerRef, listener)
           return () => {}
         },
         onSessionTabCloseRequest: (listener: SessionTabCloseRequestListener) => {
-          if (sessionTabCloseRequestListenerRef) {
-            sessionTabCloseRequestListenerRef.current = listener
-          }
+          setListener(sessionTabCloseRequestListenerRef, listener)
           return () => {}
         },
         respondSessionTabClose,
@@ -203,15 +207,11 @@ export async function useIpcEventsForCloseRouting({
         onOpenFileFromMobile: () => () => {},
         onOpenDiffFromMobile: () => () => {},
         onCloseTerminal: (listener: CloseTerminalListener) => {
-          if (closeTerminalListenerRef) {
-            closeTerminalListenerRef.current = listener
-          }
+          setListener(closeTerminalListenerRef, listener)
           return () => {}
         },
         onTerminalTabCloseRequest: (listener: TerminalTabCloseRequestListener) => {
-          if (terminalTabCloseRequestListenerRef) {
-            terminalTabCloseRequestListenerRef.current = listener
-          }
+          setListener(terminalTabCloseRequestListenerRef, listener)
           return () => {}
         },
         respondTerminalTabClose,
@@ -222,9 +222,7 @@ export async function useIpcEventsForCloseRouting({
         onRequestTabCreate: () => () => {},
         replyTabCreate: () => {},
         onRequestTabClose: (listener: RequestTabCloseListener) => {
-          if (requestTabCloseListenerRef) {
-            requestTabCloseListenerRef.current = listener
-          }
+          setListener(requestTabCloseListenerRef, listener)
           return () => {}
         },
         replyTabClose,
@@ -232,21 +230,15 @@ export async function useIpcEventsForCloseRouting({
         replyTabSetProfile: () => {},
         onNewTerminalTab: () => () => {},
         onCloseActiveTab: (listener: CloseActiveTabListener) => {
-          if (closeActiveTabListenerRef) {
-            closeActiveTabListenerRef.current = listener
-          }
+          setListener(closeActiveTabListenerRef, listener)
           return () => {}
         },
         onCloseFloatingItem: (listener: CloseFloatingItemListener) => {
-          if (closeFloatingItemListenerRef) {
-            closeFloatingItemListenerRef.current = listener
-          }
+          setListener(closeFloatingItemListenerRef, listener)
           return () => {}
         },
         onSelectFloatingIndex: (listener: SelectFloatingIndexListener) => {
-          if (selectFloatingIndexListenerRef) {
-            selectFloatingIndexListenerRef.current = listener
-          }
+          setListener(selectFloatingIndexListenerRef, listener)
           return () => {}
         },
         onSwitchTab: () => () => {},
@@ -303,6 +295,11 @@ export async function useIpcEventsForCloseRouting({
     }
   })
 
-  const { useIpcEvents: registerIpcEvents } = await import('./useIpcEvents')
-  registerIpcEvents()
+  if (sessionTabBridgeOnly) {
+    const { registerSessionTabIpcBridge } = await import('./ipc-events/session-tab-ipc-bridge')
+    registerSessionTabIpcBridge([])
+  } else {
+    const { useIpcEvents: registerIpcEvents } = await import('./useIpcEvents')
+    registerIpcEvents()
+  }
 }

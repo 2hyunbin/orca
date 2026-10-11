@@ -13,13 +13,17 @@ const {
   clearSupportMock,
   resolveEnvironmentMock,
   subscribeSharedMock,
-  subscribeLegacyMock
+  subscribeLegacyMock,
+  sendSharedMock,
+  sendLegacyMock
 } = vi.hoisted(() => ({
   supportsMock: vi.fn(),
   clearSupportMock: vi.fn(),
   resolveEnvironmentMock: vi.fn(),
   subscribeSharedMock: vi.fn(),
-  subscribeLegacyMock: vi.fn()
+  subscribeLegacyMock: vi.fn(),
+  sendSharedMock: vi.fn(),
+  sendLegacyMock: vi.fn()
 }))
 
 vi.mock('./runtime-environment-shared-control-support', () => ({
@@ -29,6 +33,13 @@ vi.mock('./runtime-environment-shared-control-support', () => ({
 vi.mock('../../shared/runtime-environment-store', async (importOriginal) => ({
   ...(await importOriginal()),
   resolveEnvironment: resolveEnvironmentMock
+}))
+vi.mock('./runtime-environment-managed-tunnel', () => ({
+  resolveManagedRuntimeEnvironment: async () => resolveEnvironmentMock()
+}))
+vi.mock('./runtime-environment-abortable-requests', () => ({
+  sendRemoteRuntimeSharedControlRequestAbortable: sendSharedMock,
+  sendRemoteRuntimeRequestAbortable: sendLegacyMock
 }))
 
 vi.mock('./runtime-environment-request-connections', async (importOriginal) => ({
@@ -47,6 +58,7 @@ import {
   routeRuntimeEnvironmentCallBySupport,
   routeRuntimeEnvironmentSubscriptionBySupport
 } from './runtime-environment-support-routing'
+import { callRuntimeEnvironment } from './runtime-environment-transport-routing'
 
 beforeEach(() => {
   resetRuntimeEnvironmentCapabilityEvidence()
@@ -54,6 +66,8 @@ beforeEach(() => {
   clearSupportMock.mockReset()
   subscribeSharedMock.mockReset()
   subscribeLegacyMock.mockReset()
+  sendSharedMock.mockReset()
+  sendLegacyMock.mockReset()
   resolveEnvironmentMock.mockReset()
   resolveEnvironmentMock.mockReturnValue(environment())
 })
@@ -152,7 +166,7 @@ describe('runtime environment support routing', () => {
   })
 })
 
-function acceptedOutcome(verdict: 'capable' | 'absent') {
+function acceptedOutcome(verdict: 'capable' | 'absent', runtimeId = 'runtime') {
   const environmentId = 'env'
   const pairing = {
     v: 2 as const,
@@ -161,8 +175,8 @@ function acceptedOutcome(verdict: 'capable' | 'absent') {
     publicKeyB64: 'key'
   }
   const evidence = captureRuntimeEnvironmentCapabilityEvidence(environmentId, pairing)
-  applyRuntimeEnvironmentCapabilityVerdict({ evidence, verdict, runtimeId: 'runtime' })
-  return runtimeEnvironmentCapabilityOutcome(evidence, verdict, 'runtime')
+  applyRuntimeEnvironmentCapabilityVerdict({ evidence, verdict, runtimeId })
+  return runtimeEnvironmentCapabilityOutcome(evidence, verdict, runtimeId)
 }
 
 function environment(overrides: Partial<KnownRuntimeEnvironment> = {}): KnownRuntimeEnvironment {
@@ -200,6 +214,102 @@ function deferred<T>() {
   })
   return { promise, resolve }
 }
+
+it.each(['capable', 'absent'] as const)(
+  'refuses a pinned close when its main support probe discovers a replacement runtime (%s)',
+  async (verdict) => {
+    const probe = deferred<ReturnType<typeof acceptedOutcome>>()
+    supportsMock.mockReturnValue(probe.promise)
+    const closing = callRuntimeEnvironment(
+      '/profile',
+      'env',
+      'session.tabs.close',
+      { tabId: 'agent-session:starting' },
+      100,
+      1,
+      undefined,
+      { expectedEnvironmentRuntimeId: 'runtime' }
+    )
+    await vi.waitFor(() => expect(supportsMock).toHaveBeenCalledOnce())
+    resolveEnvironmentMock.mockReturnValue(environment({ runtimeId: 'replacement' }))
+    probe.resolve(acceptedOutcome(verdict, 'replacement'))
+
+    await expect(closing).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'runtime_environment_changed' }
+    })
+    expect(sendSharedMock).not.toHaveBeenCalled()
+    expect(sendLegacyMock).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['capable', 'absent'] as const)(
+  'does not trust replacement support evidence even before the saved runtime updates (%s)',
+  async (verdict) => {
+    supportsMock.mockResolvedValue(acceptedOutcome(verdict, 'replacement'))
+    const supported = vi.fn()
+    const unsupported = vi.fn()
+    const result = await routeRuntimeEnvironmentCallBySupport({
+      userDataPath: '/profile',
+      initialEnvironment: environment(),
+      method: 'session.tabs.close',
+      timeoutMs: 100,
+      expectedRuntimeId: 'runtime',
+      supported,
+      unsupported,
+      markUsed: vi.fn()
+    })
+    expect(result).toMatchObject({ ok: false, error: { code: 'runtime_environment_changed' } })
+    expect(supported).not.toHaveBeenCalled()
+    expect(unsupported).not.toHaveBeenCalled()
+  }
+)
+
+it('preserves the runtime fence when a stale support result triggers a retry', async () => {
+  supportsMock.mockImplementation(async () => {
+    resolveEnvironmentMock.mockReturnValue(environment({ runtimeId: 'replacement' }))
+    return { kind: 'stale_incarnation' }
+  })
+  const supported = vi.fn()
+  const unsupported = vi.fn()
+  const result = await routeRuntimeEnvironmentCallBySupport({
+    userDataPath: '/profile',
+    initialEnvironment: environment(),
+    method: 'session.tabs.close',
+    timeoutMs: 100,
+    expectedRuntimeId: 'runtime',
+    supported,
+    unsupported,
+    markUsed: vi.fn()
+  })
+  expect(result).toMatchObject({ ok: false, error: { code: 'runtime_environment_changed' } })
+  expect(supportsMock).toHaveBeenCalledOnce()
+  expect(supported).not.toHaveBeenCalled()
+  expect(unsupported).not.toHaveBeenCalled()
+})
+
+it.each(['capable', 'absent'] as const)(
+  'allows a pinned call through the %s route when the runtime still matches',
+  async (verdict) => {
+    supportsMock.mockResolvedValue(acceptedOutcome(verdict))
+    const supported = vi.fn().mockResolvedValue(success())
+    const unsupported = vi.fn().mockResolvedValue(success())
+    await expect(
+      routeRuntimeEnvironmentCallBySupport({
+        userDataPath: '/profile',
+        initialEnvironment: environment(),
+        method: 'session.tabs.close',
+        timeoutMs: 100,
+        expectedRuntimeId: 'runtime',
+        supported,
+        unsupported,
+        markUsed: vi.fn()
+      })
+    ).resolves.toMatchObject({ ok: true })
+    expect(verdict === 'capable' ? supported : unsupported).toHaveBeenCalledOnce()
+    expect(verdict === 'capable' ? unsupported : supported).not.toHaveBeenCalled()
+  }
+)
 
 it('cancels only the waiting subscription while a sibling waits on the same support probe', async () => {
   const probe = deferred<ReturnType<typeof acceptedOutcome>>()

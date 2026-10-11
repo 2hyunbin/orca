@@ -19,6 +19,7 @@ import { SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY } from '../..
 import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../shared/agent-session-create-capabilities'
 import {
   callRuntimeRpc,
+  getRuntimeEnvironmentCapabilityStatus,
   runtimeEnvironmentSupportsCapability,
   type RuntimeClientTarget
 } from './runtime-rpc-client'
@@ -66,6 +67,28 @@ export function supportsSessionTabsCloseAgentSessionById(
     target,
     SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY
   )
+}
+
+/** The runtime identity that proved the single-command close, retained through dispatch. */
+export async function readSessionTabsCloseAgentSessionCapability(
+  target: RuntimeClientTarget,
+  options: { expectedEnvironmentPairingRevision?: number } = {}
+): Promise<{ supported: boolean; runtimeId?: string }> {
+  if (target.kind === 'local') {
+    return { supported: await supportsSessionTabsCloseAgentSessionById(target) }
+  }
+  const status = await getRuntimeEnvironmentCapabilityStatus(
+    target.environmentId,
+    SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY,
+    undefined,
+    options
+  )
+  return {
+    supported:
+      status.capabilities?.includes(SESSION_TABS_CLOSE_AGENT_SESSION_BY_ID_RUNTIME_CAPABILITY) ===
+      true,
+    runtimeId: status.runtimeId
+  }
 }
 
 /** Whether the host writes no row for a Stop that stopped nothing, so a repeated Stop is quiet. */
@@ -119,7 +142,11 @@ export async function callStructuredAgentSession<TResult>(
   method: string,
   params?: unknown,
   /** For a caller that checked the remote host's compatibility itself, just before. */
-  options: { skipCompatibilityCheck?: true } = {}
+  options: {
+    skipCompatibilityCheck?: true
+    expectedEnvironmentPairingRevision?: number
+    expectedEnvironmentRuntimeId?: string
+  } = {}
 ): Promise<TResult> {
   if (
     method === 'agentSession.rewind' &&
@@ -132,7 +159,7 @@ export async function callStructuredAgentSession<TResult>(
     throw new Error('Rewinding requires a newer Orca server. Update the server and try again.')
   }
   const timeoutMs = STRUCTURED_AGENT_SESSION_METHOD_TIMEOUT_MS.get(method)
-  return timeoutMs === undefined && !options.skipCompatibilityCheck
+  return timeoutMs === undefined && Object.keys(options).length === 0
     ? callRuntimeRpc<TResult>(target, method, params)
     : callRuntimeRpc<TResult>(target, method, params, {
         ...(timeoutMs === undefined ? {} : { timeoutMs }),

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   beginWebSessionCloseIntent,
+  captureWebSessionCloseIntent,
   clearEndedPairingWebSessionCloseIntents,
   clearWebSessionCloseIntentsForWorktree,
   filterWebSessionCloseIntents,
@@ -72,12 +73,13 @@ describe('web session tab close records', () => {
   })
 
   it('a reopen ends only that tab close in its own partition', () => {
-    beginWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)
+    const ticket = beginWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)!
+    expect(captureWebSessionCloseIntent(OWNER, WT, 'host-tab-1')).toEqual(ticket)
     beginWebSessionCloseIntent(OWNER, 'other-wt', 'host-tab-1', 1000)
-    expect(reopenWebSessionCloseIntent(OWNER, WT, 'host-tab-1')).toBe(true)
+    expect(reopenWebSessionCloseIntent(ticket)).toBe(true)
     expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', 1000)).toBe(false)
     expect(isWebSessionCloseIntentPending(OWNER, 'other-wt', 'host-tab-1', 1000)).toBe(true)
-    expect(reopenWebSessionCloseIntent(OWNER, WT, 'host-tab-1')).toBe(false)
+    expect(reopenWebSessionCloseIntent(ticket)).toBe(false)
   })
 
   it('drops only the closes of pairings that ended', () => {

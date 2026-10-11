@@ -13,7 +13,13 @@ import { discardStructuredAgentSessionChatSends } from '@/lib/structured-agent-s
 import { stopStructuredAgentSessionSends } from '@/components/native-chat/structured-agent-session-message-sender'
 import { retireStructuredAgentSessionReadOwner } from '@/components/native-chat/structured-agent-session-read-owner-registry'
 import { closeStructuredAgentSession } from './structured-agent-session-close'
-import { supportsSessionTabsCloseAgentSessionById } from './structured-agent-session-client'
+import { readSessionTabsCloseAgentSessionCapability } from './structured-agent-session-client'
+import {
+  captureHostIdentityFence,
+  isHostIdentityFenceCurrent,
+  type HostIdentityFence
+} from '@/store/host-catalog-fencing'
+import { resolveContinuedRuntimeEnvironmentRevision } from './runtime-environment-revision'
 import {
   executionHostIdForStructuredTarget,
   structuredAgentSessionFocusOwner
@@ -36,10 +42,23 @@ import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 
 type HostTabCloseSettlement = PromiseSettledResult<HostSessionTabCloseAnswer | undefined>
 
-const inFlightRetirements = new Map<string, Promise<HostTabCloseSettlement>>()
+const inFlightRetirements = new Map<
+  string,
+  { fence: HostIdentityFence; promise: Promise<HostTabCloseSettlement> }
+>()
 
 function retirementKey(target: RuntimeClientTarget, worktreeId: string, sessionId: string): string {
   return `${target.kind}:${target.kind === 'environment' ? target.environmentId : 'local'}:${worktreeId}:${sessionId}`
+}
+
+/** A reveal must follow the close this client has already started, including its capability await. */
+export function pendingStructuredAgentSessionTabRetirement(
+  target: RuntimeClientTarget,
+  worktreeId: string,
+  sessionId: string
+): Promise<HostTabCloseSettlement> | undefined {
+  const pending = inFlightRetirements.get(retirementKey(target, worktreeId, sessionId))
+  return pending && isHostIdentityFenceCurrent(pending.fence) ? pending.promise : undefined
 }
 
 /**
@@ -53,8 +72,13 @@ export function retireStructuredAgentSessionTab(args: {
   onError?: (error: unknown) => void
 }): Promise<HostTabCloseSettlement> {
   retireStructuredAgentSessionReadOwner(args.sessionId, args.target)
+  const fence = captureHostIdentityFence({ target: args.target, at: 'local' })
   const key = retirementKey(args.target, args.worktreeId, args.sessionId)
-  const existing = inFlightRetirements.get(key)
+  const existing = pendingStructuredAgentSessionTabRetirement(
+    args.target,
+    args.worktreeId,
+    args.sessionId
+  )
   if (existing) {
     return existing
   }
@@ -74,21 +98,41 @@ export function retireStructuredAgentSessionTab(args: {
       if (gaveUp) {
         throw new Error('session_tab_close_abandoned')
       }
+      if (!isHostIdentityFenceCurrent(fence)) {
+        throw new Error('session_tab_close_host_changed')
+      }
     }
+    const requestOptions = (): { expectedEnvironmentPairingRevision?: number } => ({
+      expectedEnvironmentPairingRevision:
+        args.target.kind === 'environment'
+          ? resolveContinuedRuntimeEnvironmentRevision(
+              args.target.environmentId,
+              fence.pairingRevision
+            )
+          : undefined
+    })
     // Why: a capable host's tab close also stops the chat and closes one still starting by its id.
-    if (!(await supportsSessionTabsCloseAgentSessionById(args.target))) {
-      throwIfGaveUp()
-      void closeStructuredAgentSession(args.target, args.sessionId).catch(report)
-    }
+    const capability = await readSessionTabsCloseAgentSessionCapability(
+      args.target,
+      requestOptions()
+    ).catch(() => ({ supported: false, runtimeId: undefined }))
+    throwIfGaveUp()
     if (args.target.kind === 'environment') {
-      await ensureRuntimeEnvironmentCompatible(args.target.environmentId)
+      await ensureRuntimeEnvironmentCompatible(args.target.environmentId, requestOptions())
     }
     throwIfGaveUp()
+    const options = {
+      ...requestOptions(),
+      expectedEnvironmentRuntimeId: capability.runtimeId
+    }
+    if (!capability.supported) {
+      void closeStructuredAgentSession(args.target, args.sessionId, options).catch(report)
+    }
     return callRuntimeRpc<HostSessionTabCloseAnswer | undefined>(
       args.target,
       'session.tabs.close',
       { worktree: toRuntimeWorktreeSelector(args.worktreeId), tabId: hostTabId, reason: 'user' },
-      { timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS, skipCompatibilityCheck: true }
+      { timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS, skipCompatibilityCheck: true, ...options }
     )
   }
   const promise: Promise<HostTabCloseSettlement> = sendHostTabClose().then(
@@ -98,9 +142,9 @@ export function retireStructuredAgentSessionTab(args: {
       return { status: 'rejected' as const, reason }
     }
   )
-  inFlightRetirements.set(key, promise)
+  inFlightRetirements.set(key, { fence, promise })
   const forget = (): void => {
-    if (inFlightRetirements.get(key) === promise) {
+    if (inFlightRetirements.get(key)?.promise === promise) {
       inFlightRetirements.delete(key)
     }
   }

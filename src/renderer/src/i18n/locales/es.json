@@ -968,7 +968,7 @@
         "generic": "Vuelve a soltar los archivos."
       },
       "activateAiVaultStructuredSession": {
-        "unavailable": "La sesión del agente estructurado aún no está disponible. Vuelve a intentarlo en un momento.",
+        "unavailable": "Este chat aún no se pudo volver a abrir. Vuelve a intentarlo en un momento.",
         "gone": "Este chat ya no está en este anfitrión, por lo que no se puede volver a abrir aquí.",
         "hostCannotOpen": "Este chat no se puede volver a abrir hasta que se actualice Orca."
       },
