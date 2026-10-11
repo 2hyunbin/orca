@@ -6,6 +6,8 @@ import {
   classifyE2eJobs,
   ORCAD_AUTO_CONVERT_E2E_SPEC,
   ORCAD_IDLE_EXIT_E2E_SPEC,
+  ORCAD_JOURNEY_E2E_SPECS,
+  ORCAD_OPEN_IN_OWNER_E2E_SPEC,
   ORCAD_SERVE_MODE_SWITCH_E2E_SPEC,
   WINDOWS_MISSING_APPDATA_E2E_SPEC
 } from './ci-e2e-job-selection.mjs'
@@ -61,10 +63,13 @@ it('routes the idle-exit spec from its idle sources and the shared convert harne
   expectRouted(
     [
       'src/shared/orcad-idle-exit.ts',
+      'src/main/ssh/orcad-remote-runtime-control.ts',
+      'src/main/ssh/orcad-managed-serving.ts',
       'tests/e2e/helpers/orcad-convert-flow.ts',
       'tests/e2e/helpers/orcad-convert-host.ts'
     ],
-    ORCAD_IDLE_EXIT_E2E_SPEC
+    ORCAD_IDLE_EXIT_E2E_SPEC,
+    ORCAD_OPEN_IN_OWNER_E2E_SPEC
   )
 })
 
@@ -72,7 +77,8 @@ it('builds the e2e app when only a build-dependent orcad spec is requested', () 
   for (const spec of [
     ORCAD_SERVE_MODE_SWITCH_E2E_SPEC,
     ORCAD_AUTO_CONVERT_E2E_SPEC,
-    ORCAD_IDLE_EXIT_E2E_SPEC
+    ORCAD_IDLE_EXIT_E2E_SPEC,
+    ORCAD_OPEN_IN_OWNER_E2E_SPEC
   ]) {
     expect(classifyE2eJobs(JSON.stringify([spec])), spec).toEqual({
       e2e_run_changed: false,
@@ -84,7 +90,11 @@ it('builds the e2e app when only a build-dependent orcad spec is requested', () 
 
 it('runs the auto-convert lane only when routed, not on every SSH source change', () => {
   const condition = jobs['orcad-auto-convert-docker'].if
-  for (const spec of [ORCAD_AUTO_CONVERT_E2E_SPEC, ORCAD_IDLE_EXIT_E2E_SPEC]) {
+  for (const spec of [
+    ORCAD_AUTO_CONVERT_E2E_SPEC,
+    ORCAD_IDLE_EXIT_E2E_SPEC,
+    ORCAD_OPEN_IN_OWNER_E2E_SPEC
+  ]) {
     expect(condition).toContain(`contains(inputs.test_files, '${spec}')`)
   }
   expect(condition).not.toContain('ssh_source_changed')
@@ -98,5 +108,58 @@ it('runs both Windows serve specs on one runner, each only when requested', () =
     const step = job.steps.find((candidate) => candidate.run?.includes(spec))
     expect(step.if, spec).toContain(`contains(inputs.test_files, '${spec}')`)
     expect(step.env.ORCA_STARTUP_DIAGNOSTICS, spec).toBeUndefined()
+  }
+})
+
+it('routes managed target-owner guards and menus to the real launch regression', () => {
+  expectRouted(
+    [
+      'src/renderer/src/lib/local-path-open-guard.ts',
+      'src/renderer/src/lib/external-editor-open-capability.ts',
+      'src/renderer/src/lib/worktree-runtime-owner.ts',
+      'src/renderer/src/components/sidebar/WorktreeOpenInMenu.tsx',
+      'src/renderer/src/components/sidebar/WorktreeContextMenuView.tsx',
+      'src/renderer/src/components/right-sidebar/FileExplorer.tsx',
+      'src/renderer/src/components/right-sidebar/FileExplorerToolbar.tsx',
+      'src/renderer/src/components/right-sidebar/source-control/listing/entry-context-menu.tsx',
+      'tests/e2e/helpers/orcad-convert-flow.ts',
+      'tests/e2e/helpers/orcad-convert-host.ts',
+      'tests/e2e/helpers/orcad-upgrade-profile.ts',
+      'tests/e2e/helpers/docker-ssh-relay-target.ts'
+    ],
+    ORCAD_OPEN_IN_OWNER_E2E_SPEC
+  )
+  expect(selectPrE2eSpecs(['src/renderer/src/lib/local-path-open-guard.test.ts'])).not.toContain(
+    ORCAD_OPEN_IN_OWNER_E2E_SPEC
+  )
+  expect(
+    jobs['orcad-auto-convert-docker'].steps.some((step) =>
+      step.run?.includes(ORCAD_OPEN_IN_OWNER_E2E_SPEC)
+    )
+  ).toBe(true)
+})
+
+it('runs the managed-host journey specs in their own job when routed', () => {
+  const job = jobs['orcad-journeys-docker']
+  expect(job.needs).toEqual(['build', 'prepare-native-cache'])
+  for (const spec of ORCAD_JOURNEY_E2E_SPECS) {
+    expectRouted(
+      [
+        'tests/e2e/helpers/orcad-managed-workspace.ts',
+        'src/renderer/src/components/terminal-pane/terminal-host-workspace-file.ts',
+        'src/renderer/src/components/terminal-pane/terminal-host-file-link-existence.ts',
+        'src/renderer/src/runtime/runtime-terminal-artifact-read.ts'
+      ],
+      spec
+    )
+    expect(job.if, spec).toContain(`contains(inputs.test_files, '${spec}')`)
+    expect(
+      job.steps.some((step) => step.run?.includes(spec)),
+      spec
+    ).toBe(true)
+    expect(classifyE2eJobs(JSON.stringify([spec])), spec).toEqual({
+      e2e_run_changed: false,
+      e2e_needs_build: true
+    })
   }
 })
