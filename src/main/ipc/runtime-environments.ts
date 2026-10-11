@@ -6,6 +6,7 @@ import {
 import { app, ipcMain } from 'electron'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import type { Store } from '../persistence'
+import { recordRemoteLayoutFrame } from './remote-layout-snapshot-recorder'
 import {
   isRuntimeEnvironmentManuallyDisconnected,
   registerRuntimeEnvironmentConnectivityHandlers,
@@ -24,6 +25,7 @@ import { registerOrcadRuntimeConversionHandlers } from './orcad-runtime-conversi
 import { registerOrcadDeltaMoveHandlers } from './orcad-delta-move-handlers'
 import { registerOrcadRuntimeMaintenanceHandlers } from './orcad-runtime-maintenance-handlers'
 import { clearPublishedManagedServer } from './ssh-renderer-broadcast'
+import { clearManagedServerNotes } from './runtime-environment-managed-tunnel'
 import { reconcileOrphanedRuntimeSessions } from './runtime-environment-session-reconcile'
 import { registerRuntimeSshAccessHandlers } from './runtime-ssh-access-handlers'
 import { retirePairedRuntimeBrowserClientHostEnvironment } from '../browser/paired-runtime-browser-client-host-runtime'
@@ -71,6 +73,7 @@ export function invalidateRuntimeEnvironmentTransport(environmentId: string): Pr
   advanceRuntimeEnvironmentTransportGeneration(environmentId)
   closeRemoteRuntimeRequestConnection(environmentId)
   closeSubscriptionsForEnvironment(environmentId)
+  reactivateRuntimeEnvironmentStatus(environmentId)
   return retirePairedRuntimeBrowserClientHostEnvironment(
     environmentId,
     new Error('Runtime environment transport was invalidated')
@@ -80,6 +83,21 @@ export function invalidateRuntimeEnvironmentTransport(environmentId: string): Pr
       console.warn('[runtime-environments] browser client host retirement failed:', error)
     }
   )
+}
+
+/**
+ * A re-pair main ran (an update or rollback from the CLI) reaches renderers only through status
+ * published under the new revision; without an owner nothing publishes it (P1-C).
+ */
+function reactivateRuntimeEnvironmentStatus(environmentId: string): void {
+  const userDataPath = getUserDataPath()
+  if (
+    isRuntimeEnvironmentManuallyDisconnected(environmentId) ||
+    !listEnvironments(userDataPath).some((environment) => environment.id === environmentId)
+  ) {
+    return
+  }
+  getRuntimeEnvironmentStatusOwner(userDataPath, environmentId).activate()
 }
 
 const pendingSubscriptions = new Map<string, PendingRuntimeSubscription>()
@@ -129,11 +147,14 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
     getActiveEnvironmentId: () => store.getSettings().activeRuntimeEnvironmentId,
     invalidateTransport: invalidateRuntimeEnvironmentTransport,
     clearHostServerStatus: clearPublishedManagedServer,
-    forgetHostSession: (hostId) => store.removeWorkspaceSessionHost(hostId)
+    clearHostServerNotes: clearManagedServerNotes,
+    store
   })
   registerRuntimeEnvironmentSubscriptionHandlers({
     getUserDataPath,
     remoteRuntimeSubscriptions,
-    pendingSubscriptions
+    pendingSubscriptions,
+    recordLayoutFrame: (environmentId, method, response) =>
+      recordRemoteLayoutFrame(store, environmentId, method, response)
   })
 }
