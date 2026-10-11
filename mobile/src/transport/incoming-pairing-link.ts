@@ -40,8 +40,11 @@ export function redirectIncomingPairingLink(url: string): string | null {
 function fullyDecode(value: string): string {
   let decoded = value
   for (let pass = 0; pass < 5; pass++) {
-    // Why per run: one malformed escape elsewhere must not leave an encoded `code=` undecoded.
-    const next = decoded.replace(/(?:%[0-9a-f]{2})+/gi, safeDecode)
+    // Why byte by byte: an invalid UTF-8 escape must not shield a neighbouring `%26code%3D`, which
+    // the router still decodes. Bytes are exact for the ASCII this check reads.
+    const next = decoded.replace(/%([0-9a-f]{2})/gi, (_, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16))
+    )
     if (next === decoded) {
       break
     }
