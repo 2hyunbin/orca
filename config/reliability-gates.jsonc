@@ -12399,10 +12399,9 @@
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/orca-runtime-tail-wait-memo.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/wsl-guest/protocol-backpressure.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/wsl-guest/dispatcher.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-source-range-ledger.test.ts src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-source-range-ledger.test.ts src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/persistence-ssh-targets-and-pane-keys.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/wsl-hook-relay-sentinel.test.ts --reporter=dot"
         // Historical evidence commands; the override is ignored after the always-on transition.
@@ -12417,8 +12416,6 @@
         "src/main/runtime/orca-runtime-tail-wait-memo.test.ts",
         "src/wsl-guest/protocol-backpressure.test.ts",
         "src/wsl-guest/dispatcher.test.ts",
-        "src/main/runtime/rpc/terminal-source-range-ledger.test.ts",
-        "src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts",
         "src/main/ssh/ssh-multiplexer-transport-writer.test.ts",
         "src/main/ssh/ssh-channel-multiplexer.test.ts",
         "src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts",
@@ -12486,21 +12483,6 @@
           "assertions": [
             "relay decoder accepts one maximum frame plus 1 MiB partial input and rejects one extra byte",
             "a throwing continuation clears retained input, releases one pause epoch, and publishes one typed ownership error"
-          ]
-        },
-        {
-          "file": "src/main/runtime/rpc/terminal-source-range-ledger.test.ts",
-          "assertions": [
-            "partial cumulative byte ACK releases exact credit while retaining the immutable covering source frame",
-            "a contiguous higher-generation recovery token is admitted while the prior token remains unsettled",
-            "stale stream and source generations cannot advance or replace the current ledger identity"
-          ]
-        },
-        {
-          "file": "src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts",
-          "assertions": [
-            "a partial cumulative byte ACK does not settle its source frame or detach the stream before recovered-token output",
-            "a parsed stale-generation ACK cannot release in-flight byte credit or flush queued output"
           ]
         },
         {
@@ -12579,19 +12561,10 @@
           "summary": "Sixteen deterministic SSH relay/session/source/decoder files passed 192 tests, including exit-sealed private recovery, retained stale-transfer cancellation authority, exact private-frame proof watermarks, one retirement record across 10,000 same-PTY token rotations, stale-owner fallback, and scheduler rejection isolation; no live topology was exercised."
         },
         {
-          "date": "2026-07-28",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-source-range-ledger.test.ts src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts --reporter=dot",
-          "result": "passed",
-          "durationSeconds": 7.17,
-          "summary": "Three deterministic main/runtime files passed 78 tests, including joined renderer/headless snapshot admission, exact partial cumulative credit, and recovered-token continuity; no live paired server or Docker topology was exercised."
-        },
-        {
           "date": "2026-07-29",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/terminal-source-range-ledger.test.ts src/main/runtime/rpc/terminal-multiplex-source-range-admission.test.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts --reporter=dot",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts --reporter=dot",
           "result": "passed",
           "durationSeconds": 6.89,
           "summary": "Thirteen current-head deterministic files passed 150 tests across exit-sealed private recovery, stale-transfer cancellation authority, bounded latest-token retirement, restore retirement, fail-closed recovery cancellation, partial ACK and token rotation, reclaimed-span replacement, mux lane fairness, provisional activation, and exit-proof ordering; no live topology was exercised."

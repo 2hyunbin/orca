@@ -1,11 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithRecordAgentPromptLifecycleState } from './orca-runtime-record-agent-prompt-lifecycle-state'
-import type {
-  RemoteTerminalSourceRangeReplacementPublication,
-  RemoteTerminalSourceRangeReplacementReservation,
-  RemoteTerminalSourceRangeStreamIdentity
-} from './remote-terminal-source-range-consumer'
-import type { TerminalOutputSourceRange } from '../../shared/terminal-output-source-range'
 import type { DriverState } from './orca-runtime-core'
 import { addListenerToMap } from './orca-runtime-core'
 import { notifyRuntimeListeners } from './runtime-async-boundaries'
@@ -13,50 +7,7 @@ import type { RuntimeTerminalBufferSnapshot } from './runtime-terminal-state-rec
 import { AUTHORITATIVE_TERMINAL_SNAPSHOT_TIMEOUT_MS } from './orca-runtime-postlude'
 import { assertTerminalInputWithinLimitWithYield } from './terminal-send-payload'
 
-export class OrcaRuntimeWithAttachRemoteTerminalSourceRangeConsumer extends OrcaRuntimeWithRecordAgentPromptLifecycleState {
-  attachRemoteTerminalSourceRangeConsumer(
-    identity: RemoteTerminalSourceRangeStreamIdentity
-  ): boolean {
-    return this.terminalStreamConsumers.attachSourceRangeConsumer(identity)
-  }
-
-  settleRemoteTerminalSourceRanges(
-    identity: RemoteTerminalSourceRangeStreamIdentity,
-    ranges: readonly TerminalOutputSourceRange[]
-  ): void {
-    this.terminalStreamConsumers.settleSourceRanges(identity, ranges)
-  }
-
-  reserveRemoteTerminalSourceRangeReplacement(
-    identity: RemoteTerminalSourceRangeStreamIdentity,
-    requiredSeq: number,
-    reason: string
-  ): RemoteTerminalSourceRangeReplacementReservation | null {
-    return this.terminalStreamConsumers.reserveSourceRangeReplacement(identity, requiredSeq, reason)
-  }
-
-  commitRemoteTerminalSourceRangeReplacement(
-    reservation: RemoteTerminalSourceRangeReplacementReservation,
-    publication: RemoteTerminalSourceRangeReplacementPublication
-  ): boolean {
-    return this.terminalStreamConsumers.commitSourceRangeReplacement(reservation, publication)
-  }
-
-  rollbackRemoteTerminalSourceRangeReplacement(
-    reservation: RemoteTerminalSourceRangeReplacementReservation,
-    reason: string
-  ): boolean {
-    return this.terminalStreamConsumers.rollbackSourceRangeReplacement(reservation, reason)
-  }
-
-  cancelRemoteTerminalSourceRanges(
-    identity: RemoteTerminalSourceRangeStreamIdentity,
-    ranges: readonly TerminalOutputSourceRange[],
-    reason: string
-  ): void {
-    this.terminalStreamConsumers.cancelSourceRanges(identity, ranges, reason)
-  }
-
+export class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged extends OrcaRuntimeWithRecordAgentPromptLifecycleState {
   protected notifyRemoteTerminalViewPresenceChanged(ptyId: string): void {
     try {
       this.onRemoteTerminalViewPresenceChanged?.(ptyId)
