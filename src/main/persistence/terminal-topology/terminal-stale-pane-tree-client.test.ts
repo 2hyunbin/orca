@@ -6,7 +6,8 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
-import { OrcaRuntimeWithPersistHeadlessSessionTabProps } from '../../runtime/orca-runtime-persist-headless-session-tab-props'
+import { OrcaRuntimeWithCloseHeadlessMobileTerminalTab } from '../../runtime/orca-runtime-close-headless-mobile-terminal-tab'
+import { RuntimeHeadlessTabProperties } from '../../runtime/session-tabs/headless-tab-properties'
 import type { Store } from '../loading-store/store'
 import { closeLeafOrTab } from './terminal-topology-commit'
 import {
@@ -32,15 +33,26 @@ const NEW_LEAF = '55555555-5555-4555-8555-555555555555'
 const directories: string[] = []
 
 type PaneLayoutHandler = Pick<
-  OrcaRuntimeWithPersistHeadlessSessionTabProps,
+  OrcaRuntimeWithCloseHeadlessMobileTerminalTab,
   'updateMobileSessionPaneLayout'
 >
 
 /** Main's real `updateMobileSessionPaneLayout`, on a headless host whose session is `store`'s. */
 function paneLayoutHandler(store: Store): PaneLayoutHandler {
-  return Object.assign(Object.create(OrcaRuntimeWithPersistHeadlessSessionTabProps.prototype), {
+  return Object.assign(Object.create(OrcaRuntimeWithCloseHeadlessMobileTerminalTab.prototype), {
     store,
     mobileSessionTabsByWorktree: new Map(),
+    headlessSessionTabCommands: {
+      properties: new RuntimeHeadlessTabProperties({
+        getWorkspaceSessionForWorktree: () => store.getWorkspaceSession(),
+        canPersistWorkspaceSession: () => true,
+        setWorkspaceSessionForWorktree: (_worktreeId, session) =>
+          store.setWorkspaceSession(session),
+        getMobileSessionSnapshot: () => undefined,
+        storeMobileSessionSnapshot: () => {},
+        emitMobileSessionTabsSnapshot: () => {}
+      })
+    },
     getValidatedExplicitWorktreeIdSelector: () => WT,
     getAvailableAuthoritativeWindow: () => null,
     getWorkspaceSessionForWorktree: () => store.getWorkspaceSession(),

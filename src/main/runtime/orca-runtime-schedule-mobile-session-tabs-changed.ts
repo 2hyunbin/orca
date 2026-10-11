@@ -116,7 +116,7 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
     }
     this.worktreesAwaitingSessionTabsPublication.add(worktreeId)
     const onPublished = (): void => {
-      this.sessionTabsInventoryWaiters.delete(onPublished)
+      this.sessionTabsInventoryPublication.removePublicationListener(onPublished)
       this.worktreesAwaitingSessionTabsPublication.delete(worktreeId)
       const publishedEpoch = this.getAuthoritativeSessionTabsInventoryEpoch()
       if (publishedEpoch === null || this.mobileSessionTabsByWorktree.has(worktreeId)) {
@@ -131,7 +131,7 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
         )
       }
     }
-    this.sessionTabsInventoryWaiters.add(onPublished)
+    this.sessionTabsInventoryPublication.addPublicationListener(onPublished)
   }
 
   protected emitMobileSessionTabsSnapshotToClient(

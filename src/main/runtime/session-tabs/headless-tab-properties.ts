@@ -1,24 +1,32 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithCloseHeadlessMobileTerminalTab } from './orca-runtime-close-headless-mobile-terminal-tab'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type {
   RuntimeMobileSessionSnapshotTab,
   RuntimeMobileSessionTabsSnapshot
-} from '../../shared/runtime-types'
+} from '../../../shared/runtime-types'
 import type {
   TerminalLayoutSnapshot,
   TerminalPaneLayoutNode
-} from '../../shared/terminal-tab-types'
-import { cloneTerminalLayoutSnapshot } from './mobile-session-layout-projection'
+} from '../../../shared/terminal-tab-types'
+import { cloneTerminalLayoutSnapshot } from '../mobile-session-layout-projection'
 
-export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWithCloseHeadlessMobileTerminalTab {
-  protected persistHeadlessSessionTabProps(
+export type RuntimeHeadlessTabPropertiesHost = {
+  getWorkspaceSessionForWorktree(worktreeId: string): WorkspaceSessionState | null
+  canPersistWorkspaceSession(): boolean
+  setWorkspaceSessionForWorktree(worktreeId: string, session: WorkspaceSessionState): void
+  getMobileSessionSnapshot(worktreeId: string): RuntimeMobileSessionTabsSnapshot | undefined
+  storeMobileSessionSnapshot(worktreeId: string, snapshot: RuntimeMobileSessionTabsSnapshot): void
+  emitMobileSessionTabsSnapshot(snapshot: RuntimeMobileSessionTabsSnapshot): void
+}
+
+export class RuntimeHeadlessTabProperties {
+  constructor(private readonly host: RuntimeHeadlessTabPropertiesHost) {}
+  persistHeadlessSessionTabProps(
     worktreeId: string,
     tabId: string,
     props: { color?: string | null; isPinned?: boolean; viewMode?: 'terminal' | 'chat' }
   ): void {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    if (!session || !this.store?.setWorkspaceSession) {
+    const session = this.host.getWorkspaceSessionForWorktree(worktreeId)
+    if (!session || !this.host.canPersistWorkspaceSession()) {
       return
     }
     const tabs = session.tabsByWorktree[worktreeId]
@@ -61,10 +69,10 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
     if (!changed) {
       return
     }
-    this.setWorkspaceSessionForWorktree(worktreeId, nextSession)
+    this.host.setWorkspaceSessionForWorktree(worktreeId, nextSession)
   }
 
-  protected applyHeadlessSessionTabPropsToSnapshot(
+  applyHeadlessSessionTabPropsToSnapshot(
     worktreeId: string,
     tabId: string,
     props: {
@@ -74,7 +82,7 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
       viewMode?: 'terminal' | 'chat'
     }
   ): void {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.host.getMobileSessionSnapshot(worktreeId)
     if (!snapshot) {
       return
     }
@@ -101,18 +109,16 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
       snapshotVersion: snapshot.snapshotVersion + 1,
       tabs
     }
-    this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
-    this.emitMobileSessionTabsSnapshot(nextSnapshot)
+    this.host.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
+    this.host.emitMobileSessionTabsSnapshot(nextSnapshot)
   }
 
-  protected getMobileSessionTopLevelTabId(tab: RuntimeMobileSessionSnapshotTab): string {
+  getMobileSessionTopLevelTabId(tab: RuntimeMobileSessionSnapshotTab): string {
     return tab.type === 'terminal' ? tab.parentTabId : tab.id
   }
 
-  // Merge the client's pane structure into the persisted tab layout. PTY
-  // bindings and active leaf stay host-owned; only ratios/expand/titles change.
-  // terminalLayoutsByTabId is keyed by tab id (worktree-independent).
-  protected persistHeadlessTerminalPaneLayout(
+  // Only pane presentation changes; PTY bindings and active leaf remain host-owned.
+  persistHeadlessTerminalPaneLayout(
     worktreeId: string,
     args: {
       tabId: string
@@ -122,8 +128,8 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
       titlesByLeafId?: Record<string, string>
     }
   ): TerminalLayoutSnapshot | undefined {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    if (!session || !this.store?.setWorkspaceSession) {
+    const session = this.host.getWorkspaceSessionForWorktree(worktreeId)
+    if (!session || !this.host.canPersistWorkspaceSession()) {
       return undefined
     }
     const existing = session.terminalLayoutsByTabId?.[args.tabId]
@@ -143,15 +149,15 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
         }
       }
     }
-    this.setWorkspaceSessionForWorktree(worktreeId, candidate)
+    this.host.setWorkspaceSessionForWorktree(worktreeId, candidate)
     // Why: persistence may reject stale membership while accepting its metadata; publish only that rebased layout.
     return (
-      this.getWorkspaceSessionForWorktree(worktreeId)?.terminalLayoutsByTabId[args.tabId] ??
+      this.host.getWorkspaceSessionForWorktree(worktreeId)?.terminalLayoutsByTabId[args.tabId] ??
       candidate.terminalLayoutsByTabId[args.tabId]
     )
   }
 
-  protected applyHeadlessTerminalPaneLayoutToSnapshot(
+  applyHeadlessTerminalPaneLayoutToSnapshot(
     worktreeId: string,
     args: {
       tabId: string
@@ -161,7 +167,7 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
       titlesByLeafId?: Record<string, string>
     }
   ): void {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.host.getMobileSessionSnapshot(worktreeId)
     if (!snapshot) {
       return
     }
@@ -191,7 +197,7 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
       snapshotVersion: snapshot.snapshotVersion + 1,
       tabs
     }
-    this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
-    this.emitMobileSessionTabsSnapshot(nextSnapshot)
+    this.host.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
+    this.host.emitMobileSessionTabsSnapshot(nextSnapshot)
   }
 }

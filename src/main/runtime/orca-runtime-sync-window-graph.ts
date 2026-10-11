@@ -283,7 +283,7 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
       if (mobileSessionResyncWorktrees.size === 0) {
         this.markSessionTabsInventoryPublished()
       } else {
-        this.sessionTabsInventoryPublicationEpoch = null
+        this.sessionTabsInventoryPublication.reset()
       }
     }
     if (rendererGeneration !== undefined) {

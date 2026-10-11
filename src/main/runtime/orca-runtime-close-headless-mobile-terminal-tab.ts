@@ -1,4 +1,6 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeHeadlessTabProperties } from './session-tabs/headless-tab-properties'
+import type { RuntimeHeadlessTabGroups } from './session-tabs/headless-tab-group-moves'
 import { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './orca-runtime-close-structured-agent-session-tab'
 import type {
   RuntimeMobileSessionTabMove,
@@ -244,5 +246,51 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     this.persistHeadlessSessionTabProps(worktreeId, hostTabId, args)
     this.applyHeadlessSessionTabPropsToSnapshot(worktreeId, hostTabId, args)
     return { updated: true }
+  }
+
+  protected persistHeadlessSessionTabProps(
+    ...args: Parameters<RuntimeHeadlessTabProperties['persistHeadlessSessionTabProps']>
+  ): ReturnType<RuntimeHeadlessTabProperties['persistHeadlessSessionTabProps']> {
+    return this.headlessSessionTabCommands.properties.persistHeadlessSessionTabProps(...args)
+  }
+
+  protected applyHeadlessSessionTabPropsToSnapshot(
+    ...args: Parameters<RuntimeHeadlessTabProperties['applyHeadlessSessionTabPropsToSnapshot']>
+  ): ReturnType<RuntimeHeadlessTabProperties['applyHeadlessSessionTabPropsToSnapshot']> {
+    return this.headlessSessionTabCommands.properties.applyHeadlessSessionTabPropsToSnapshot(
+      ...args
+    )
+  }
+
+  protected getMobileSessionTopLevelTabId(
+    ...args: Parameters<RuntimeHeadlessTabProperties['getMobileSessionTopLevelTabId']>
+  ): ReturnType<RuntimeHeadlessTabProperties['getMobileSessionTopLevelTabId']> {
+    return this.headlessSessionTabCommands.properties.getMobileSessionTopLevelTabId(...args)
+  }
+
+  protected persistHeadlessTerminalPaneLayout(
+    ...args: Parameters<RuntimeHeadlessTabProperties['persistHeadlessTerminalPaneLayout']>
+  ): ReturnType<RuntimeHeadlessTabProperties['persistHeadlessTerminalPaneLayout']> {
+    return this.headlessSessionTabCommands.properties.persistHeadlessTerminalPaneLayout(...args)
+  }
+
+  protected applyHeadlessTerminalPaneLayoutToSnapshot(
+    ...args: Parameters<RuntimeHeadlessTabProperties['applyHeadlessTerminalPaneLayoutToSnapshot']>
+  ): ReturnType<RuntimeHeadlessTabProperties['applyHeadlessTerminalPaneLayoutToSnapshot']> {
+    return this.headlessSessionTabCommands.properties.applyHeadlessTerminalPaneLayoutToSnapshot(
+      ...args
+    )
+  }
+
+  protected moveHeadlessMobileSessionTab(
+    ...args: Parameters<RuntimeHeadlessTabGroups['moveHeadlessMobileSessionTab']>
+  ): ReturnType<RuntimeHeadlessTabGroups['moveHeadlessMobileSessionTab']> {
+    return this.headlessSessionTabCommands.groups.moveHeadlessMobileSessionTab(...args)
+  }
+
+  protected persistHeadlessTabGroups(
+    ...args: Parameters<RuntimeHeadlessTabGroups['persistHeadlessTabGroups']>
+  ): ReturnType<RuntimeHeadlessTabGroups['persistHeadlessTabGroups']> {
+    return this.headlessSessionTabCommands.groups.persistHeadlessTabGroups(...args)
   }
 }

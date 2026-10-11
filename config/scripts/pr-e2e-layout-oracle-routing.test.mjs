@@ -22,7 +22,7 @@ const LAYOUT_AUTHORITIES = [
   'src/main/persistence/restoring-sessions/session-owner-fields.ts',
   'src/main/persistence/loading-store/pty-binding-persistence.ts',
   'src/main/runtime/orca-runtime-split-pty-backed-terminal.ts',
-  'src/main/runtime/orca-runtime-move-headless-mobile-session-tab.ts',
+  'src/main/runtime/session-tabs/headless-tab-group-moves.ts',
   'src/main/runtime/orca-runtime-create-terminal.ts',
   'src/renderer/src/runtime/mobile-session-tab-close.ts',
   'src/renderer/src/runtime/runtime-layout-client.ts',

@@ -1,5 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { randomUUID } from 'node:crypto'
+import { SessionTabsInventoryPublication } from './session-tabs/session-tabs-inventory-publication'
+import { createHeadlessSessionTabCommands } from './session-tabs/headless-session-tab-commands'
 import { preserveTerminalRetirementProofs } from './mobile-session-terminal-retirement-proof'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
@@ -125,9 +127,26 @@ export class OrcaRuntimeWithRuntimeId {
 
   protected mobileSessionTabsChangeSequence = 0
 
-  protected sessionTabsInventoryPublicationEpoch: number | null = null
+  protected readonly sessionTabsInventoryPublication = new SessionTabsInventoryPublication({
+    getGraphStatus: () => this.graphStatus,
+    getRendererGraphEpoch: () => this.rendererGraphEpoch
+  })
 
-  protected sessionTabsInventoryWaiters = new Set<() => void>()
+  protected readonly headlessSessionTabCommands = createHeadlessSessionTabCommands({
+    getWorkspaceSessionForWorktree: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
+    canPersistWorkspaceSession: () => Boolean(this.store?.setWorkspaceSession),
+    setWorkspaceSessionForWorktree: (worktreeId, session) =>
+      this.setWorkspaceSessionForWorktree(worktreeId, session),
+    getMobileSessionSnapshot: (worktreeId) => this.mobileSessionTabsByWorktree.get(worktreeId),
+    resolveMobileSessionHostTabId: (snapshot, tabId) =>
+      this.resolveMobileSessionHostTabId(snapshot, tabId),
+    normalizeMobileSessionTabOrder: (snapshot, group, order) =>
+      this.normalizeMobileSessionTabOrder(snapshot, group, order),
+    toMobileSessionTabsResult: (snapshot) => this.toMobileSessionTabsResult(snapshot),
+    storeMobileSessionSnapshot: (worktreeId, snapshot) =>
+      this.storeMobileSessionSnapshot(worktreeId, snapshot),
+    emitMobileSessionTabsSnapshot: (snapshot) => this.emitMobileSessionTabsSnapshot(snapshot)
+  })
 
   // Worktrees answered with the unpublished placeholder, owed their real answer once the graph publishes.
   protected worktreesAwaitingSessionTabsPublication = new Set<string>()

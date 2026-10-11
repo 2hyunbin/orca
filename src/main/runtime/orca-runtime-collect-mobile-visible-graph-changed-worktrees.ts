@@ -195,4 +195,16 @@ export class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends Or
       return parsed?.kind !== 'runtime' && !inventory.queriedHostIds.has(hostId)
     })
   }
+
+  protected waitForSessionTabsInventoryPublication(signal?: AbortSignal): Promise<void> {
+    return this.sessionTabsInventoryPublication.waitForSessionTabsInventoryPublication(signal)
+  }
+
+  protected getAuthoritativeSessionTabsInventoryEpoch(): number | null {
+    return this.sessionTabsInventoryPublication.getAuthoritativeSessionTabsInventoryEpoch()
+  }
+
+  protected markSessionTabsInventoryPublished(): void {
+    this.sessionTabsInventoryPublication.markSessionTabsInventoryPublished()
+  }
 }

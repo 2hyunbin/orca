@@ -1,5 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithMoveHeadlessMobileSessionTab } from './orca-runtime-move-headless-mobile-session-tab'
+import { OrcaRuntimeWithCloseHeadlessMobileTerminalTab } from './orca-runtime-close-headless-mobile-terminal-tab'
 import type {
   RuntimeMarkdownReadTabResult,
   RuntimeMarkdownSaveTabResult,
@@ -17,7 +17,7 @@ import { getLocalProjectWorktreeGitOptions } from '../project-runtime-git-option
 import { resolveWorktreeHostRouting } from './worktree-launch-host-repo'
 import { isFloatingWorkspaceSelector } from '../../shared/floating-workspace-worktree'
 
-export class OrcaRuntimeWithPersistHeadlessTerminalTitle extends OrcaRuntimeWithMoveHeadlessMobileSessionTab {
+export class OrcaRuntimeWithPersistHeadlessTerminalTitle extends OrcaRuntimeWithCloseHeadlessMobileTerminalTab {
   // Persist a manual terminal rename so a headless rebuild keeps the title
   // instead of reverting to the generated/default one.
   protected persistHeadlessTerminalTitle(

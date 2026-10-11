@@ -1,21 +1,42 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithPersistHeadlessSessionTabProps } from './orca-runtime-persist-headless-session-tab-props'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type {
+  RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabMove,
   RuntimeMobileSessionTabMoveResult,
   RuntimeMobileSessionTabsSnapshot
-} from '../../shared/runtime-types'
+} from '../../../shared/runtime-types'
 import {
   buildHeadlessTabGroupMove,
   buildHeadlessTabGroupSplit
-} from '../../shared/workspace-layout/tab-group-moves'
+} from '../../../shared/workspace-layout/tab-group-moves'
 import { randomUUID } from 'node:crypto'
-import { withSelectedTabs } from './headless-tab-group-selection'
-import type { TabGroupLayoutNode } from '../../shared/tab-types'
+import { withSelectedTabs } from '../headless-tab-group-selection'
+import type { TabGroupLayoutNode } from '../../../shared/tab-types'
 
-export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWithPersistHeadlessSessionTabProps {
-  protected moveHeadlessMobileSessionTab(
+export type RuntimeHeadlessTabGroupsHost = {
+  getWorkspaceSessionForWorktree(worktreeId: string): WorkspaceSessionState | null
+  canPersistWorkspaceSession(): boolean
+  setWorkspaceSessionForWorktree(worktreeId: string, session: WorkspaceSessionState): void
+  resolveMobileSessionHostTabId(
+    snapshot: RuntimeMobileSessionTabsSnapshot,
+    tabId: string
+  ): string | null
+  normalizeMobileSessionTabOrder(
+    snapshot: RuntimeMobileSessionTabsSnapshot,
+    group: RuntimeMobileSessionTabGroup,
+    order: readonly string[]
+  ): string[]
+  toMobileSessionTabsResult(
+    snapshot: RuntimeMobileSessionTabsSnapshot
+  ): RuntimeMobileSessionTabsResult
+  storeMobileSessionSnapshot(worktreeId: string, snapshot: RuntimeMobileSessionTabsSnapshot): void
+  emitMobileSessionTabsSnapshot(snapshot: RuntimeMobileSessionTabsSnapshot): void
+}
+
+export class RuntimeHeadlessTabGroups {
+  constructor(private readonly host: RuntimeHeadlessTabGroupsHost) {}
+  moveHeadlessMobileSessionTab(
     worktreeId: string,
     snapshot: RuntimeMobileSessionTabsSnapshot,
     move: RuntimeMobileSessionTabMove
@@ -29,12 +50,12 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
     if (move.kind !== 'reorder') {
       throw new Error('renderer_unavailable')
     }
-    const hostTabId = this.resolveMobileSessionHostTabId(snapshot, move.tabId)
+    const hostTabId = this.host.resolveMobileSessionHostTabId(snapshot, move.tabId)
     if (!hostTabId) {
       throw new Error('tab_not_found')
     }
     const targetGroup = this.requireHeadlessTargetGroup(snapshot, move.targetGroupId)
-    const tabOrder = this.normalizeMobileSessionTabOrder(snapshot, targetGroup, move.tabOrder)
+    const tabOrder = this.host.normalizeMobileSessionTabOrder(snapshot, targetGroup, move.tabOrder)
     const orderIndexByParentTabId = new Map(tabOrder.map((tabId, index) => [tabId, index]))
     const nextTabs = [...snapshot.tabs].sort((a, b) => {
       const aParent = a.type === 'terminal' ? a.parentTabId : a.id
@@ -46,8 +67,7 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
     const active = nextTabs.find((candidate) => candidate.isActive) ?? nextTabs[0] ?? null
     const reorderedTargetActiveTabId =
       active?.type === 'terminal' ? active.parentTabId : active ? active.id : (tabOrder[0] ?? null)
-    // Why: reorder only changes ONE group's order. Preserve every other group so
-    // a multi-group split isn't deleted by re-sorting tabs in one of its groups.
+    // Reordering one group must preserve the other groups.
     const existingGroups = snapshot.tabGroups ?? []
     const nextGroups = existingGroups.some((group) => group.id === targetGroup.id)
       ? existingGroups.map((group) =>
@@ -66,20 +86,18 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
       tabs: nextTabs
     }
     this.persistHeadlessTabGroups(worktreeId, nextGroups, snapshot.tabGroupLayout)
-    this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
-    this.emitMobileSessionTabsSnapshot(nextSnapshot)
+    this.host.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
+    this.host.emitMobileSessionTabsSnapshot(nextSnapshot)
     return { moved: true }
   }
 
-  // Why: a drag-to-split-group used to be a client-only change the headless host
-  // never modeled, so the next snapshot coalesced every tab back into one group.
-  // Model + persist the multi-group layout so the split survives rebuilds.
-  protected splitHeadlessMobileSessionTabGroup(
+  // Persist split groups so snapshot rebuilds cannot merge them.
+  private splitHeadlessMobileSessionTabGroup(
     worktreeId: string,
     snapshot: RuntimeMobileSessionTabsSnapshot,
     move: Extract<RuntimeMobileSessionTabMove, { kind: 'split' }>
   ): RuntimeMobileSessionTabMoveResult {
-    const hostTabId = this.resolveMobileSessionHostTabId(snapshot, move.tabId)
+    const hostTabId = this.host.resolveMobileSessionHostTabId(snapshot, move.tabId)
     if (!hostTabId) {
       throw new Error('tab_not_found')
     }
@@ -93,8 +111,7 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
       newGroupId: randomUUID()
     })
     if (!split) {
-      // Renderer treats an unsplittable drop (e.g. last tab onto its own group)
-      // as a no-op; mirror that instead of churning the snapshot.
+      // An unsplittable drop must remain a no-op, matching the renderer.
       return { moved: true }
     }
     const groups = withSelectedTabs(snapshot.tabGroups ?? [], split.groups, hostTabId)
@@ -107,18 +124,17 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
       tabGroupLayout: split.layout
     }
     this.persistHeadlessTabGroups(worktreeId, groups, split.layout)
-    this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
-    this.emitMobileSessionTabsSnapshot(nextSnapshot)
+    this.host.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
+    this.host.emitMobileSessionTabsSnapshot(nextSnapshot)
     return { moved: true }
   }
 
-  // Move a tab into an existing group on a headless serve (non-split drop).
-  protected moveHeadlessMobileSessionTabToGroup(
+  private moveHeadlessMobileSessionTabToGroup(
     worktreeId: string,
     snapshot: RuntimeMobileSessionTabsSnapshot,
     move: Extract<RuntimeMobileSessionTabMove, { kind: 'move-to-group' }>
   ): RuntimeMobileSessionTabMoveResult {
-    const hostTabId = this.resolveMobileSessionHostTabId(snapshot, move.tabId)
+    const hostTabId = this.host.resolveMobileSessionHostTabId(snapshot, move.tabId)
     if (!hostTabId) {
       throw new Error('tab_not_found')
     }
@@ -145,34 +161,33 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
       tabGroupLayout: layout
     }
     this.persistHeadlessTabGroups(worktreeId, groups, layout)
-    this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
-    this.emitMobileSessionTabsSnapshot(nextSnapshot)
+    this.host.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
+    this.host.emitMobileSessionTabsSnapshot(nextSnapshot)
     return { moved: true }
   }
 
   // Why: the builders return null for a missing target AND a legit no-op; only the no-op may succeed.
-  protected requireHeadlessTargetGroup(
+  private requireHeadlessTargetGroup(
     snapshot: RuntimeMobileSessionTabsSnapshot,
     targetGroupId: string
   ): RuntimeMobileSessionTabGroup {
-    const targetGroup = this.toMobileSessionTabsResult(snapshot).tabGroups?.find(
-      (group) => group.id === targetGroupId
-    )
+    const targetGroup = this.host
+      .toMobileSessionTabsResult(snapshot)
+      .tabGroups?.find((group) => group.id === targetGroupId)
     if (!targetGroup) {
       throw new Error('target_group_not_found')
     }
     return targetGroup
   }
 
-  // Persist the headless tab-GROUP layout so snapshot rebuilds keep the split; the tab bar and rows
-  // follow the groups. Deleted by the switch (PR 6), when moves are layout commands.
-  protected persistHeadlessTabGroups(
+  // Snapshot rebuilds reuse the persisted tab order and group memberships.
+  persistHeadlessTabGroups(
     worktreeId: string,
     groups: readonly RuntimeMobileSessionTabGroup[],
-    layout: TabGroupLayoutNode | undefined
+    layout: TabGroupLayoutNode | null | undefined
   ): void {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    if (!session || !this.store?.setWorkspaceSession) {
+    const session = this.host.getWorkspaceSessionForWorktree(worktreeId)
+    if (!session || !this.host.canPersistWorkspaceSession()) {
       return
     }
     const order = groups.flatMap((group) => group.tabOrder)
@@ -185,7 +200,7 @@ export class OrcaRuntimeWithMoveHeadlessMobileSessionTab extends OrcaRuntimeWith
     }
     const entries = session.unifiedTabs?.[worktreeId]
     const rows = session.tabsByWorktree[worktreeId]
-    this.setWorkspaceSessionForWorktree(worktreeId, {
+    this.host.setWorkspaceSessionForWorktree(worktreeId, {
       ...session,
       ...(rows
         ? {
