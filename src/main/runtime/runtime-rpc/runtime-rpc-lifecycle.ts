@@ -25,6 +25,7 @@ import {
   sweepOrphanedRuntimeSockets
 } from './runtime-rpc-socket-metadata'
 import { errorMessage } from '../../../shared/error-message'
+import { loadHostDescriptor, publishHostDescriptor } from '../host-descriptor'
 
 export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
   async start(): Promise<void> {
@@ -90,6 +91,8 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
         this.deviceRegistry = pairingIdentity.deviceRegistry
         this.e2eeKeypair = pairingIdentity.e2eeKeypair
         this.pairingInitializationFailure = null
+        this.hostDescriptor = await loadHostDescriptor(this.userDataPath)
+        publishHostDescriptor(this.runtime.getRuntimeId(), this.hostDescriptor)
         try {
           const host = this.resolveInitialWebSocketBindHost()
           const { transport, endpoint } = await this.startWebSocketTransport({
@@ -232,7 +235,7 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
             sendBinary,
             undefined,
             socket.ws,
-            socket.device.deviceToken,
+            socket.device.deviceToken ?? null,
             socket
           )
         )
@@ -258,12 +261,13 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
           return
         }
         this.abortWebSocketDispatches(socket.ws)
+        this.mobileDesktopRelay?.closePhoneConnection(socket.connectionId)
         // Why: subscriptions and binary streams are socket-scoped, but disconnect state is device-scoped across transports.
         this.runtime.cleanupSubscriptionsForConnection(socket.connectionId)
         this.runtime.cancelMobileDictationForConnection(socket.connectionId)
         this.binaryMessageRouter.deleteConnection(socket.connectionId)
         if (!hasOtherConnections) {
-          this.runtime.onClientDisconnected(socket.device.deviceToken)
+          this.runtime.onClientDisconnected(socket.device.clientId)
         }
       },
       // Why: relay attempts are authorized upstream; only direct failures should prompt local re-pairing.
