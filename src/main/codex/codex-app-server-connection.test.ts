@@ -1,4 +1,4 @@
-import './__fixtures__/codex-connection-tree-reaper'
+import { FAKE_APP_SERVER } from './__fixtures__/codex-connection-app-server'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import type { EventEmitter } from 'node:events'
 import { realpathSync } from 'node:fs'
@@ -17,6 +17,29 @@ import {
 import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
 import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import { isCodexAppServerHandshakeExitUnprovenError } from './codex-app-server-handshake-exit-proof'
+
+vi.mock('../claude/claude-agent-sdk-exit-proof', () => ({ createClaudeChildTreeReaper }))
+
+function createClaudeChildTreeReaper(
+  child: { kill: (signal: NodeJS.Signals) => boolean },
+  deps: { exited: () => boolean }
+) {
+  let verdict: 'exited' | 'unverifiable' = 'unverifiable'
+  return {
+    capture: async () => {},
+    refresh: async () => {},
+    reap: async () => {
+      if (!deps.exited()) {
+        child.kill('SIGKILL')
+      }
+      verdict = 'exited'
+      return verdict
+    },
+    get treeVerdict() {
+      return verdict
+    }
+  }
+}
 
 const GRACEFUL_EXIT_MS = process.platform === 'win32' ? 1_500 : PROVIDER_SUPERVISOR_MAX_STOP_MS
 
@@ -37,36 +60,6 @@ afterEach(() => {
  * a stub, but it is the only thing that proves the spawn, the environment, and
  * both traffic directions actually work end to end.
  */
-const FAKE_APP_SERVER = String.raw`
-  const readline = require('node:readline')
-  const send = (payload) => process.stdout.write(JSON.stringify(payload) + '\n')
-  readline.createInterface({ input: process.stdin }).on('line', (line) => {
-    const message = JSON.parse(line)
-    if (message.method === 'initialize') return send({ id: message.id, result: {} })
-    if (message.method === 'test/env') {
-      return send({ id: message.id, result: { codexHome: process.env.CODEX_HOME ?? null } })
-    }
-    if (message.method === 'test/cwd') {
-      return send({ id: message.id, result: { cwd: process.cwd() } })
-    }
-    if (message.method === 'test/notify') {
-      send({ method: 'turn/started', params: { threadId: 'thread-1', turn: { id: 'turn-7' } } })
-      return send({ id: message.id, result: {} })
-    }
-    if (message.method === 'test/ask') {
-      return send({ id: 99, method: 'item/fileChange/requestApproval', params: { itemId: 'i1' } })
-    }
-    if (message.method === 'test/refuse') {
-      return send({ id: message.id, error: { code: -32602, message: 'bad params' } })
-    }
-    if (message.method === 'test/missing') {
-      return send({ id: message.id, error: { code: -32601, message: 'method not found' } })
-    }
-    if (message.id === 99) {
-      return send({ method: 'test/answered', params: message })
-    }
-  })
-`
 
 async function openFakeServer(
   handlers: CodexAppServerConnectionHandlers = {},
