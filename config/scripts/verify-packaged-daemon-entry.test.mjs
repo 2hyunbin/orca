@@ -8,7 +8,8 @@ const require = createRequire(import.meta.url)
 const {
   assertPackagedDaemonEntryExists,
   runTerminalHostRoundTrip,
-  verifyPackagedDaemonEntryBoots
+  verifyPackagedDaemonEntryBoots,
+  verifyPackagedMacTerminalHostBoots
 } = require('./verify-packaged-daemon-entry.cjs')
 
 describe('verify-packaged-daemon-entry', () => {
@@ -54,6 +55,21 @@ describe('verify-packaged-daemon-entry', () => {
   it('fails when the packaged entry never reaches argv parsing', () => {
     writePackagedEntry('process.exit(0)\n')
     expect(() => verifyPackagedDaemonEntryBoots(resourcesDir)).toThrow(/did not reach argv parsing/)
+  })
+})
+
+describe('terminal host boot check on a slice this host cannot run', () => {
+  // No Mac runs a riscv64 binary, so this is the same path as an x64 slice without Rosetta.
+  it('fails a release or CI build', async () => {
+    await expect(
+      verifyPackagedMacTerminalHostBoots('/Orca.app', { arch: 'riscv64', required: true })
+    ).rejects.toThrow(/riscv64 cannot run on this/)
+  })
+
+  it('lets a local build skip it', async () => {
+    await expect(
+      verifyPackagedMacTerminalHostBoots('/Orca.app', { arch: 'riscv64', required: false })
+    ).resolves.toBeUndefined()
   })
 })
 

@@ -17,12 +17,7 @@ import {
 } from './daemon-launched-child'
 import { getDaemonEntryPath, probeDaemonSocket as probeSocket } from './daemon-launch-paths'
 import { materializeRelocatedDaemonHost, pruneDaemonHostStaging } from './daemon-host-relocation'
-import {
-  launchMacDaemonFromStableBundle,
-  MacDaemonStableLaunchUnavailableError
-} from './macos-daemon-launchd'
-import { getMacDaemonBundleRoot } from './macos-daemon-bundle'
-import { retireAbandonedMacDaemonBundles } from './macos-daemon-bundle-retirement'
+import { launchMacDaemonFromStableBundle } from './macos-daemon-launchd'
 import { DAEMON_RECOVERY_BUDGET_MS, daemonRecoveryProbeTimeoutMs } from './daemon-recovery-budget'
 import { cleanupDaemonForProtocol } from './daemon-protocol-cleanup'
 import {
@@ -134,41 +129,18 @@ export function createOutOfProcessLauncher(
       }
 
       const userDataPath = getAppEnvironment().getPath('userData')
-      let macHandle: DaemonProcessHandle | null = null
-      const handoffDeadlineMs = launchStartedAtMs + MAC_STABLE_LAUNCH_HANDOFF_MS
-      try {
-        macHandle = await launchMacDaemonFromStableBundle(
-          {
-            entryPath,
-            userDataPath,
-            socketPath,
-            tokenPath,
-            pidPath,
-            launchNonce,
-            macosLoginSessionWatch
-          },
-          handoffDeadlineMs
-        )
-      } catch (error) {
-        // Why the deadline: a fork that cannot finish inside the gate would only land after the
-        // app has already moved to local PTYs.
-        if (
-          !(error instanceof MacDaemonStableLaunchUnavailableError) ||
-          Date.now() > handoffDeadlineMs
-        ) {
-          throw error
-        }
-        // Why: no job from that attempt can claim the endpoint, and a forked daemon keeps
-        // persistent terminals where failing here would leave only local PTYs.
-        console.warn(
-          `[daemon] macOS stable-bundle launch unavailable (${error.message}); forking from the app`,
-          error.cause
-        )
-      } finally {
-        if (process.platform === 'darwin' && macosLoginSessionWatch) {
-          void retireAbandonedMacDaemonBundles(getMacDaemonBundleRoot(userDataPath))
-        }
-      }
+      const macHandle = await launchMacDaemonFromStableBundle(
+        {
+          entryPath,
+          userDataPath,
+          socketPath,
+          tokenPath,
+          pidPath,
+          launchNonce,
+          macosLoginSessionWatch
+        },
+        launchStartedAtMs + MAC_STABLE_LAUNCH_HANDOFF_MS
+      )
       if (macHandle) {
         return macHandle
       }

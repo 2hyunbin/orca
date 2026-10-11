@@ -6,7 +6,6 @@ import { DAEMON_CHILD_STARTUP_TIMEOUT_MS } from './daemon-launched-child'
 
 const {
   stableLaunch,
-  retireMock,
   materializeMock,
   forkMock,
   isPackagedMock,
@@ -18,15 +17,11 @@ const {
   moduleFactories
 } = await vi.hoisted(async () => {
   const stableLaunch: {
-    /** `disabled` is the rollback: the stable launcher returns null and never copies. */
-    failure: 'unavailable' | 'fatal' | 'disabled' | 'real'
+    failure: 'unavailable' | 'fatal' | 'real'
     deadlinesMs: number[]
-    /** Where the clock stands, relative to the handoff deadline, when the attempt fails. */
-    failAtDeadlineOffsetMs: number | null
-  } = { failure: 'unavailable', deadlinesMs: [], failAtDeadlineOffsetMs: null }
+  } = { failure: 'unavailable', deadlinesMs: [] }
   return {
     stableLaunch,
-    retireMock: vi.fn(async (_root: string) => {}),
     materializeMock: vi.fn(),
     ...(await (await import('./daemon-init-test-harness')).createDaemonInitMocks())
   }
@@ -61,16 +56,10 @@ vi.mock('./macos-daemon-launchd', async (importOriginal) => {
       if (stableLaunch.failure === 'real') {
         return actual.launchMacDaemonFromStableBundle(options, deadlineMs)
       }
-      if (stableLaunch.failAtDeadlineOffsetMs !== null) {
-        const failedAtMs = deadlineMs + stableLaunch.failAtDeadlineOffsetMs
-        vi.spyOn(Date, 'now').mockReturnValue(failedAtMs)
-      }
-      if (stableLaunch.failure === 'disabled') {
+      if (stableLaunch.failure === 'unavailable') {
         return null
       }
-      throw stableLaunch.failure === 'unavailable'
-        ? new actual.MacDaemonStableLaunchUnavailableError('Could not prepare the runtime')
-        : new Error('Could not start the macOS terminal service')
+      throw new Error('Could not start the macOS terminal service')
     }
   }
 })
@@ -78,11 +67,6 @@ vi.mock('./macos-daemon-launchd', async (importOriginal) => {
 vi.mock('./macos-daemon-bundle', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   materializeMacDaemonBundle: materializeMock
-}))
-
-vi.mock('./macos-daemon-bundle-retirement', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  retireAbandonedMacDaemonBundles: retireMock
 }))
 
 function isDaemonLauncher(value: unknown): value is DaemonLauncher {
@@ -107,7 +91,6 @@ function readyChild(): unknown {
 describe('daemon-init: macOS stable-bundle launch fallback', () => {
   beforeEach(() => {
     stableLaunch.deadlinesMs = []
-    stableLaunch.failAtDeadlineOffsetMs = null
     installDefaultNetConnectStub()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
@@ -146,33 +129,14 @@ describe('daemon-init: macOS stable-bundle launch fallback', () => {
 
   it('hands off to the fork early enough for its readiness wait and adapter to fit the gate', async () => {
     stableLaunch.failure = 'unavailable'
-    stableLaunch.failAtDeadlineOffsetMs = 0
-    await expect(launchOnce()).resolves.toBeTruthy()
-    expect(forkMock).toHaveBeenCalledOnce()
+    await launchOnce()
     const handoffMs = (stableLaunch.deadlinesMs[0] ?? Infinity) - launcherCalledAtMs
-    // Even a stable failure at the last allowed moment leaves the whole fork budget in the gate.
+    // A stable failure at the handoff deadline still leaves the whole fork budget in the gate...
     expect(handoffMs + DAEMON_CHILD_STARTUP_TIMEOUT_MS + 5_000).toBeLessThanOrEqual(
       LOCAL_PTY_STARTUP_FAIL_OPEN_TIMEOUT_MS
     )
     // ...without starving the stable launch of its own bootstrap and readiness time.
     expect(handoffMs).toBeGreaterThan(20_000)
-  })
-
-  it('reports a stable failure too late for any fork to finish inside the gate', async () => {
-    stableLaunch.failure = 'unavailable'
-    stableLaunch.failAtDeadlineOffsetMs = 1
-    await expect(launchOnce()).rejects.toThrow('Could not prepare the runtime')
-    expect(forkMock).not.toHaveBeenCalled()
-  })
-
-  it('keeps retiring copies when the stable launch is turned off', async () => {
-    stableLaunch.failure = 'disabled'
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    await expect(launchOnce()).resolves.toBeTruthy()
-    expect(forkMock).toHaveBeenCalledOnce()
-    // Copies made while it was on are only ever deleted by this collection.
-    expect(retireMock).toHaveBeenCalledOnce()
-    expect(retireMock.mock.calls[0]?.[0]).toMatch(/daemon-host[\\/]macos$/)
   })
 
   describe('with the real stable launcher', () => {

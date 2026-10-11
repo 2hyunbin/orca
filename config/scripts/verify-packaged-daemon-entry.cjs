@@ -268,14 +268,16 @@ async function runTerminalHostRoundTrip({
 // Why: the helper's own Node must load node-pty and serve a PTY; a `Usage:` boot never loads
 // node-pty. Release builds run it under hardened runtime, so allow-jit and same-team library
 // validation are exercised before notarization.
-async function verifyPackagedMacTerminalHostBoots(appPath, { arch }) {
+async function verifyPackagedMacTerminalHostBoots(appPath, { arch, required }) {
   const paths = macTerminalHostPaths(appPath)
   const prefix = macCommandPrefixForArch(arch)
   if (!prefix) {
-    console.log(
-      `[verify-packaged-daemon-entry] skipped terminal host boot on ${arch} (host ${process.arch})`
-    )
-    return 'skipped'
+    const message = `terminal host boot on ${arch} cannot run on this ${process.arch} host`
+    if (required) {
+      throw new Error(`[verify-packaged-daemon-entry] the ${message}`)
+    }
+    console.log(`[verify-packaged-daemon-entry] skipped ${message}`)
+    return
   }
   const stderr = []
   // Boot a clone outside the build tree, as installs do, so no ancestor node_modules can
@@ -301,7 +303,6 @@ async function verifyPackagedMacTerminalHostBoots(appPath, { arch }) {
     rmSync(isolated, { recursive: true, force: true })
   }
   console.log(`[verify-packaged-daemon-entry] OK — ${arch} terminal host served a PTY`)
-  return 'booted'
 }
 
 module.exports = {

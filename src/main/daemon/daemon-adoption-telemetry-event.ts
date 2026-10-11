@@ -18,7 +18,7 @@ import type { EventProps } from '../../shared/telemetry-events'
 import { track } from '../telemetry/client'
 import { readDaemonPidRecord } from './daemon-endpoint-incarnation'
 import { getDaemonMacCodeIdentity } from './daemon-mac-code-identity'
-import { getMacDaemonBundleRoot } from './macos-daemon-bundle'
+import { getMacDaemonBundleRoot, MAC_DAEMON_COPY_PREFIX } from './macos-daemon-bundle'
 import { enumerateDirectoryOnce } from './directory-enumeration-probe'
 import type { ParsedDaemonPid } from './daemon-pid-file-parse'
 import type { MacDaemonTccAttributionHealth } from './daemon-tcc-attribution'
@@ -35,7 +35,10 @@ export type DaemonAdoptionOrigin = Pick<
 
 function stableCopyPrefix(): string | null {
   try {
-    return join(getMacDaemonBundleRoot(getAppEnvironment().getPath('userData')), 'runtime-')
+    return join(
+      getMacDaemonBundleRoot(getAppEnvironment().getPath('userData')),
+      MAC_DAEMON_COPY_PREFIX
+    )
   } catch {
     return null
   }

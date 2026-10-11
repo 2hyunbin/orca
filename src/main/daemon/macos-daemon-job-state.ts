@@ -45,3 +45,15 @@ export async function stopMacDaemonJob(service: string): Promise<void> {
     throw new Error('Could not stop the macOS terminal service')
   }
 }
+
+/** True once no process can start under `service`: missing, or stopped and booted out. */
+export async function releaseMacDaemonJob(service: string): Promise<boolean> {
+  const state = await readMacDaemonJobState(service)
+  if (state !== 'stopped') {
+    return state === 'missing'
+  }
+  return stopMacDaemonJob(service).then(
+    () => true,
+    () => false
+  )
+}

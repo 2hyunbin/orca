@@ -3,7 +3,11 @@ import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec
 
 const { run } = vi.hoisted(() => ({ run: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>() }))
 vi.mock('@orca/process-host', () => ({ runProcess: run }))
-import { readMacDaemonJobState, stopMacDaemonJob } from './macos-daemon-job-state'
+import {
+  readMacDaemonJobState,
+  releaseMacDaemonJob,
+  stopMacDaemonJob
+} from './macos-daemon-job-state'
 
 const result: ProcessResult = { code: 0, signal: null, stdout: '', stderr: '', timedOut: false }
 beforeEach(() => run.mockReset())
@@ -38,3 +42,29 @@ it('accepts an already removed job but refuses an unverified bootout', async () 
   run.mockResolvedValue({ ...result, code: 1 })
   await expect(stopMacDaemonJob('gui/501/owned')).rejects.toThrow('Could not stop')
 })
+
+const missing = { ...result, code: 113, stderr: 'Could not find service "owned"' }
+
+it.each([
+  ['missing', [missing], true],
+  ['stopped and booted out', [{ ...result, stdout: '\tstate = not running' }, result], true],
+  [
+    'stopped but not booted out',
+    [
+      { ...result, stdout: '\tstate = not running' },
+      { ...result, code: 1 },
+      { ...result, code: 1 }
+    ],
+    false
+  ],
+  ['running', [{ ...result, stdout: '\tstate = running' }], false],
+  ['unverifiable', [{ ...result, code: 1, stderr: 'Operation not permitted' }], false]
+] as const)(
+  'releases the label only when no process can start under it: %s',
+  async (_, replies, released) => {
+    for (const reply of replies) {
+      run.mockResolvedValueOnce(reply)
+    }
+    expect(await releaseMacDaemonJob('gui/501/owned')).toBe(released)
+  }
+)
