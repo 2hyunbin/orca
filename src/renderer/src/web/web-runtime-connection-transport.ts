@@ -24,7 +24,6 @@ import { WebRuntimeRequestRegistry } from './web-runtime-request-registry'
 import { WebRuntimeConnectionWaiters } from './web-runtime-connection-waiters'
 
 const CONNECT_TIMEOUT_MS = 12_000
-const HANDSHAKE_TIMEOUT_MS = 10_000
 const RECONNECT_DELAYS_MS = [500, 1000, 2000, 4000, 8000, 15_000]
 
 export class WebRuntimeConnectionTransport {
@@ -141,6 +140,7 @@ export class WebRuntimeConnectionTransport {
       return
     }
     this.timers.clear('handshake')
+    this.auth.authenticated()
     this.reconnectAttempt = 0
     this.setState('connected')
   }
@@ -235,7 +235,7 @@ export class WebRuntimeConnectionTransport {
       })
       this.handshake = handshake
       socket.send(handshake.helloText())
-      this.timers.arm('handshake', HANDSHAKE_TIMEOUT_MS, () => {
+      this.timers.arm('handshake', this.auth.handshakeTimeoutMs(plan), () => {
         if (this.ws === socket && (this.state === 'handshaking' || this.state === 'migrating')) {
           socket.close()
         }

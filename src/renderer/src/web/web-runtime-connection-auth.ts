@@ -15,6 +15,7 @@ import {
 } from './web-runtime-connection-frame-router'
 import type { PairedRuntimeConnection } from '../../../shared/paired-runtime-connection'
 import { WEB_PAIRED_E2EE_PRIMITIVES } from './web-paired-e2ee-primitives'
+import { derivePairingComparisonCode } from '../../../shared/pairing-comparison-code-noble'
 import {
   tokenOnlyCredentialSource,
   withWebRuntimeAuthPlan,
@@ -30,7 +31,13 @@ export type WebRuntimeConnectionLifecycle = {
   credential?: WebRuntimeCredentialSource
   // Why: only the primary socket registers a key; helper sockets reuse it once active.
   allowKeyMigration?: boolean
+  // The code to show while the desktop owner approves a ticket redemption.
+  onPairingComparisonCode?: (code: string) => void
 }
+
+const HANDSHAKE_TIMEOUT_MS = 10_000
+// Why: the desktop owner gets two minutes to approve a redemption, plus the durable write.
+const REDEMPTION_HANDSHAKE_TIMEOUT_MS = 2 * 60_000 + 20_000
 
 /** How one web transport authenticates each socket it opens (token, key, or a key migration). */
 export class WebRuntimeConnectionAuth {
@@ -41,6 +48,8 @@ export class WebRuntimeConnectionAuth {
   private readonly credential: WebRuntimeCredentialSource
   private readonly allowKeyMigration: boolean
   private readonly retryLater: () => void
+  private readonly onPairingComparisonCode: ((code: string) => void) | undefined
+  private verdictReceived = false
 
   constructor(
     connection: PairedRuntimeConnection,
@@ -56,6 +65,19 @@ export class WebRuntimeConnectionAuth {
     // Absent: the pairing token over legacy framing, as before device keys.
     this.credential = options.credential ?? tokenOnlyCredentialSource(deviceToken)
     this.allowKeyMigration = options.allowKeyMigration === true
+    this.onPairingComparisonCode = options.onPairingComparisonCode
+  }
+
+  handshakeTimeoutMs(plan: WebRuntimeAuthPlan): number {
+    return plan.kind === 'redeem' ? REDEMPTION_HANDSHAKE_TIMEOUT_MS : HANDSHAKE_TIMEOUT_MS
+  }
+
+  /** The socket authenticated; a ticket source then signs in with its key from now on. */
+  authenticated(): void {
+    this.verdictReceived = true
+    if (this.plan) {
+      this.credential.authenticated?.(this.plan)
+    }
   }
 
   /** Resolves the next plan, then opens; synchronous for a token-only source. */
@@ -66,6 +88,7 @@ export class WebRuntimeConnectionAuth {
       (plan) => {
         this.plan = plan
         this.readyAccepted = false
+        this.verdictReceived = false
         openSocket(plan)
       },
       this.retryLater
@@ -91,8 +114,15 @@ export class WebRuntimeConnectionAuth {
       args.fail()
       return
     }
-    if (args.isCurrent()) {
-      args.send(frame)
+    if (!args.isCurrent()) {
+      return
+    }
+    args.send(frame)
+    const transcriptHashB64 = args.handshake.transcriptHashB64()
+    if (this.plan?.kind === 'redeem' && transcriptHashB64) {
+      this.onPairingComparisonCode?.(
+        derivePairingComparisonCode(WEB_PAIRED_E2EE_PRIMITIVES.decodeBase64(transcriptHashB64))
+      )
     }
   }
 
@@ -128,6 +158,7 @@ export class WebRuntimeConnectionAuth {
   async rejected(
     reply: Extract<PairedE2EEAuthReply, { kind: 'rejected' }>
   ): Promise<{ kind: 'retry' } | { kind: 'failed'; error: WebRuntimeClientError }> {
+    this.verdictReceived = true
     const outcome = await resolveWebRuntimeAuthRejection(this.plan, reply, this.credential)
     if (outcome.kind === 'retry') {
       return outcome
@@ -140,6 +171,10 @@ export class WebRuntimeConnectionAuth {
     // Why: a host that refuses a v2 hello predates device keys; fall back to the token.
     if (this.plan?.kind === 'migrate' && !this.readyAccepted) {
       this.credential.migrationUnavailable()
+    }
+    // Why: the redemption may have committed before the reply was lost; sign in with the key first.
+    if (this.plan?.kind === 'redeem' && this.readyAccepted && !this.verdictReceived) {
+      this.credential.redemptionInterrupted?.()
     }
   }
 }

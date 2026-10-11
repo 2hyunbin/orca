@@ -5,6 +5,11 @@ export type WebRuntimeAuthFailureReason =
   | 'device-revoked'
   | 'device-downgraded'
   | 'insecure-origin'
+  | 'approval-denied'
+  | 'ticket-invalid'
+  | 'ticket-consumed'
+  | 'device-key-in-use'
+  | 'ticket-unsupported'
 
 export class WebRuntimeClientError extends Error {
   constructor(
@@ -35,6 +40,31 @@ function webRuntimeAuthFailureMessage(reason: WebRuntimeAuthFailureReason): stri
       return translate(
         'auto.web.runtimeAuth.deviceDowngraded',
         'This Orca server no longer supports this browser’s sign-in key (it may have been downgraded). Update the server, or pair this browser again.'
+      )
+    case 'approval-denied':
+      return translate(
+        'auto.web.runtimeAuth.approvalDenied',
+        'The Orca desktop declined this pairing, or nobody answered in time. Create a new pairing code and try again.'
+      )
+    case 'ticket-invalid':
+      return translate(
+        'auto.web.runtimeAuth.ticketInvalid',
+        'This pairing code is no longer valid: it expired, was revoked, or was mistyped. Create a new one on the Orca desktop.'
+      )
+    case 'ticket-consumed':
+      return translate(
+        'auto.web.runtimeAuth.ticketConsumed',
+        'This pairing code was already used by another device. If that was not you, revoke that device on the Orca desktop, then create a new code.'
+      )
+    case 'device-key-in-use':
+      return translate(
+        'auto.web.runtimeAuth.deviceKeyInUse',
+        'This browser is already paired with that Orca server. Open it from its saved connection instead.'
+      )
+    case 'ticket-unsupported':
+      return translate(
+        'auto.web.runtimeAuth.ticketUnsupported',
+        'This Orca server does not accept single-use pairing codes. Update it, or use a pairing link from its Settings.'
       )
     case 'device-revoked':
     case 'unauthorized':

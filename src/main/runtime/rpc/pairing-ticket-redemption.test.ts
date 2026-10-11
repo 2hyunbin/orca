@@ -15,6 +15,8 @@ import {
 } from '../pairing-ticket-redemption'
 import { SimulatedMobileE2EEV2Peer } from '../relay/simulated-mobile-e2ee-v2-peer'
 import { encrypt, generateKeyPair } from './e2ee-crypto'
+import { createPairedE2EEClientHandshake } from '../../../shared/paired-e2ee-client-handshake'
+import { NODE_PAIRED_E2EE_PRIMITIVES } from '../../../shared/paired-e2ee-node-primitives'
 import {
   MobileSocketWiring,
   type MobileSocketTransport,
@@ -67,7 +69,11 @@ function sign(key: nacl.SignKeyPair, purpose: DeviceProofPurpose, transcriptHash
 }
 
 function harness(
-  options: { approver?: PairingTicketApprover; metadata?: MobileSocketTransportMetadata } = {}
+  options: {
+    approver?: PairingTicketApprover
+    metadata?: MobileSocketTransportMetadata
+    allowInsecureWebPairing?: boolean
+  } = {}
 ) {
   const registry = new DeviceRegistry(mkdtempSync(join(tmpdir(), 'orca-ticket-')))
   const tickets = new PairingTicketBook()
@@ -83,6 +89,7 @@ function harness(
     onBinary: vi.fn(),
     onClose: vi.fn(),
     isReservedDeviceId: (deviceId) => tickets.isReservedDeviceId(deviceId),
+    allowInsecureWebPairing: () => options.allowInsecureWebPairing === true,
     redeemTicket: (redemption, context) =>
       redeemPairingTicket({
         tickets,
@@ -375,6 +382,79 @@ describe('pairing ticket redemption failures never revoke a pending key', () => 
       })
     ).rejects.toThrow('boom')
     expect(tickets.beginRedemption(minted.ticket).kind).toBe('invalid')
+  })
+})
+
+describe('the shared client core redeems a ticket', () => {
+  async function redeemWithCore(
+    h: ReturnType<typeof harness>,
+    minted: { ticket: string; deviceId: string },
+    key: nacl.SignKeyPair,
+    extra: { ephemeral?: boolean } = {}
+  ) {
+    const ws = new FakeSocket()
+    const handshake = createPairedE2EEClientHandshake({
+      primitives: NODE_PAIRED_E2EE_PRIMITIVES,
+      hostPublicKeyB64: Buffer.from(desktop.publicKey).toString('base64'),
+      framing: 'v2',
+      transport: 'direct'
+    })
+    h.transport.receive(ws, handshake.helloText())
+    expect(handshake.acceptReadyText(String(ws.sent[0]))).toBe('accepted')
+    h.transport.receive(
+      ws,
+      await handshake.sealAuth({
+        kind: 'ticket',
+        ticket: minted.ticket,
+        deviceId: minted.deviceId,
+        devicePublicKeyB64: Buffer.from(key.publicKey).toString('base64'),
+        deviceLabel: 'Chrome on macOS',
+        sign: async (message) => nacl.sign.detached(message, key.secretKey),
+        ...extra
+      })
+    )
+    await vi.waitFor(() => expect(ws.sent.length).toBeGreaterThan(1))
+    return handshake.classifyAuthReply(handshake.channel.openText(String(ws.sent[1]))!)
+  }
+
+  it('authenticates a core-built redemption and writes the row', async () => {
+    const h = harness()
+    const minted = h.tickets.mint(cliTicket)
+    expect(await redeemWithCore(h, minted, nacl.sign.keyPair())).toEqual({ kind: 'authenticated' })
+    expect(h.registry.getDevice(minted.deviceId)).toMatchObject({
+      credentialKind: 'device-key',
+      name: 'Chrome on macOS'
+    })
+    expect(h.registry.getDevice(minted.deviceId)?.ephemeral).toBeUndefined()
+  })
+
+  it('marks a session-only browser redemption as an ephemeral row', async () => {
+    const h = harness()
+    const minted = h.tickets.mint(cliTicket)
+    await redeemWithCore(h, minted, nacl.sign.keyPair(), { ephemeral: true })
+    expect(h.registry.getDevice(minted.deviceId)?.ephemeral).toBe(true)
+  })
+
+  it('refuses a redemption from a plain-http page on another machine unless the operator opted in', async () => {
+    const insecure: MobileSocketTransportMetadata = {
+      transport: 'direct',
+      webClient: true,
+      webOrigin: 'http://192.168.1.9:6768'
+    }
+    const gated = harness({ metadata: insecure })
+    const minted = gated.tickets.mint(cliTicket)
+    expect(await redeemWithCore(gated, minted, nacl.sign.keyPair())).toMatchObject({
+      kind: 'rejected',
+      errorCode: 'insecure_origin'
+    })
+    // The ticket is untouched, so the owner can still redeem it from a safe page.
+    expect(gated.tickets.beginRedemption(minted.ticket).kind).toBe('locked')
+
+    const optedIn = harness({ metadata: insecure, allowInsecureWebPairing: true })
+    const allowed = optedIn.tickets.mint(cliTicket)
+    expect(await redeemWithCore(optedIn, allowed, nacl.sign.keyPair())).toEqual({
+      kind: 'authenticated'
+    })
   })
 })
 

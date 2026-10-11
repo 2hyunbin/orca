@@ -51,6 +51,20 @@ export function sealWebRuntimePlanAuth(
   plan: WebRuntimeAuthPlan | null,
   fallbackToken: string
 ): Promise<string> {
+  if (plan?.kind === 'redeem') {
+    return handshake.sealAuth(
+      {
+        kind: 'ticket',
+        ticket: plan.ticket,
+        deviceId: plan.deviceId,
+        devicePublicKeyB64: plan.key.publicKeyB64,
+        deviceLabel: plan.deviceLabel,
+        ephemeral: plan.ephemeral,
+        sign: plan.key.sign
+      },
+      { clientCapabilities: WEB_RUNTIME_CLIENT_CAPABILITIES }
+    )
+  }
   return plan?.kind === 'device-key'
     ? handshake.sealAuth(
         { kind: 'device-key', deviceId: plan.deviceId, sign: plan.key.sign },

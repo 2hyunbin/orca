@@ -43,6 +43,7 @@ export class WebRuntimeClient {
       // Absent: the connection's token over legacy framing, as before device keys.
       credential?: WebRuntimeCredentialSource
       allowKeyMigration?: boolean
+      onPairingComparisonCode?: (code: string) => void
       status?: {
         environmentId: string
         pairingRevision: number
@@ -62,6 +63,7 @@ export class WebRuntimeClient {
         reconnect: options.reconnect,
         credential: options.credential,
         allowKeyMigration: options.allowKeyMigration,
+        onPairingComparisonCode: options.onPairingComparisonCode,
         onStateChanged: (state) => {
           if (state === 'auth-failed') {
             this.statusOwner?.authenticationRejected()

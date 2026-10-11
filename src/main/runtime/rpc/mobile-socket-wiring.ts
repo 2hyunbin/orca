@@ -87,6 +87,15 @@ function toAuthenticatedDevice(device: DeviceEntry): E2EEAuthenticatedDevice {
   }
 }
 
+// Why the marker too: phones send an http Origin as well, and must never be gated.
+function isInsecureWebSocket(metadata: MobileSocketTransportMetadata): boolean {
+  return (
+    metadata.transport === 'direct' &&
+    metadata.webClient === true &&
+    isInsecureRemoteWebOrigin(metadata.webOrigin)
+  )
+}
+
 export class MobileSocketWiring {
   private readonly deviceRegistry: DeviceRegistry
   private readonly e2eeKeypair: E2EEKeypair
@@ -216,10 +225,7 @@ export class MobileSocketWiring {
           }
           if (
             isPendingTokenRow(device) &&
-            metadata.transport === 'direct' &&
-            // Why the marker too: phones send an http Origin as well, and must never be gated.
-            metadata.webClient === true &&
-            isInsecureRemoteWebOrigin(metadata.webOrigin) &&
+            isInsecureWebSocket(metadata) &&
             !this.allowInsecureWebPairing()
           ) {
             return { refused: INSECURE_WEB_ORIGIN_AUTH_CODE }
@@ -302,6 +308,10 @@ export class MobileSocketWiring {
     const redeemTicket = this.redeemTicket
     if (!redeemTicket || metadata.transport !== 'direct') {
       return undefined
+    }
+    // Why: a ticket typed into a plain-http page on another machine is as exposed as a pairing code.
+    if (isInsecureWebSocket(metadata) && !this.allowInsecureWebPairing()) {
+      return async () => ({ ok: false, code: INSECURE_WEB_ORIGIN_AUTH_CODE })
     }
     return async (redemption, context) => {
       const outcome = await redeemTicket(redemption, context)

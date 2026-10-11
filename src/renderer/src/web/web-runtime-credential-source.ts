@@ -25,6 +25,15 @@ export type WebRuntimeAuthPlan =
       requiredCapabilities: readonly string[]
     }
   | { kind: 'device-key'; deviceId: string; key: WebDeviceSigningKey }
+  // Redeems a single-use ticket into `key` under the id the ticket reserved.
+  | {
+      kind: 'redeem'
+      ticket: string
+      deviceId: string
+      key: WebDeviceSigningKey
+      deviceLabel: string
+      ephemeral: boolean
+    }
 
 export type WebRuntimeCredentialSource = {
   /** Helper sockets pass false so only the primary socket ever registers a key. Synchronous
@@ -36,6 +45,12 @@ export type WebRuntimeCredentialSource = {
   migrationUnavailable(): void
   /** A sealed device_revoked naming `deviceId`: delete the key only if it is ours. */
   deviceRevoked(deviceId: string): Promise<boolean>
+  /** This socket authenticated with `plan`. */
+  authenticated?(plan: WebRuntimeAuthPlan): void
+  /** A redemption was sent but the socket closed before any verdict (a lost reply). */
+  redemptionInterrupted?(): void
+  /** Key auth was refused with `errorCode`; true asks to reconnect with the next plan instead. */
+  keyAuthRefused?(errorCode: string | null): boolean
 }
 
 /** Today's behaviour: a bearer token over legacy framing. */
@@ -58,6 +73,8 @@ export type WebRuntimeCredentialEnvironment = {
    * no persistent key is possible). session: memory only, never written to disk.
    */
   storage: 'persisted' | 'session'
+  /** A session key this page already registered (a ticket redemption); used before anything else. */
+  sessionDevice?: { deviceId: string; key: WebDeviceSigningKey }
 }
 
 export function createWebRuntimeCredentialSource(args: {
@@ -74,7 +91,8 @@ export function createWebRuntimeCredentialSource(args: {
   const recordId = webDeviceKeyId(environment.hostPublicKeyB64, environment.environmentId)
   let unavailable = false
   let tokenForgotten = environment.deviceToken.startsWith(MIGRATED_DEVICE_TOKEN_PREFIX)
-  let sessionKey: { key: WebDeviceSigningKey; deviceId?: string } | null = null
+  let sessionKey: { key: WebDeviceSigningKey; deviceId?: string } | null =
+    environment.sessionDevice ?? null
   const legacy = (): WebRuntimeAuthPlan => ({
     kind: 'legacy-token',
     deviceToken: environment.deviceToken
@@ -190,7 +208,11 @@ export function withoutTokenOnKeyedSocket(
   plan: WebRuntimeAuthPlan | null,
   message: unknown
 ): unknown {
-  if (plan?.kind !== 'device-key' || !message || typeof message !== 'object') {
+  if (
+    (plan?.kind !== 'device-key' && plan?.kind !== 'redeem') ||
+    !message ||
+    typeof message !== 'object'
+  ) {
     return message
   }
   return Object.fromEntries(Object.entries(message).filter(([key]) => key !== 'deviceToken'))

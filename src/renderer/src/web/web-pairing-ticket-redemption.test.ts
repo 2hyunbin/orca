@@ -1,0 +1,146 @@
+// @vitest-environment happy-dom
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
+
+import type { PairingTicketOffer } from '../../../shared/pairing-ticket-offer'
+import { createMemoryWebDeviceKeyStore, webDeviceKeyId } from './web-device-key-store'
+import { setWebDeviceKeySupportForTests } from './web-device-key-support'
+import { createWebRuntimeUnauthorizedError } from './web-runtime-client-error'
+import type { WebRuntimeCredentialSource } from './web-runtime-credential-source'
+import {
+  pairWebBrowserWithTicket,
+  webBrowserDeviceLabel,
+  type WebTicketPairingDeps
+} from './web-pairing-ticket-redemption'
+
+const offer: PairingTicketOffer = {
+  v: 3,
+  endpoint: 'wss://studio.example:6768',
+  publicKeyB64: Buffer.alloc(32, 4).toString('base64'),
+  ticket: Buffer.alloc(32, 9).toString('base64url'),
+  deviceId: '1b1f6d1e-6d5f-4b0e-9a49-4c1d2d0f8a11',
+  scope: 'runtime',
+  expiresAt: 1_800_000_000_000
+}
+
+function deps(
+  support: WebTicketPairingDeps['support'],
+  outcome: 'ok' | 'denied' = 'ok'
+): { deps: WebTicketPairingDeps; seen: { credential?: WebRuntimeCredentialSource } } {
+  const seen: { credential?: WebRuntimeCredentialSource } = {}
+  return {
+    seen,
+    deps: {
+      support,
+      store: createMemoryWebDeviceKeyStore(),
+      subtle: globalThis.crypto.subtle,
+      deviceLabel: 'Chrome on macOS',
+      rememberSessionDevice: vi.fn(),
+      createClient: (_connection, options) => {
+        seen.credential = options.credential
+        options.onPairingComparisonCode('KMGVTD')
+        return {
+          call: async () => {
+            if (outcome === 'denied') {
+              throw createWebRuntimeUnauthorizedError('approval-denied')
+            }
+            return { id: 'r', ok: true, result: {}, _meta: { runtimeId: 'runtime-1' } }
+          },
+          close: vi.fn()
+        }
+      }
+    }
+  }
+}
+
+afterEach(() => setWebDeviceKeySupportForTests(null))
+
+describe('pairing a browser with a ticket', () => {
+  it('redeems with a non-extractable key and stores no token, only a placeholder', async () => {
+    setWebDeviceKeySupportForTests('persistent')
+    const { deps: pairing, seen } = deps('persistent')
+    const onComparisonCode = vi.fn()
+    const environment = await pairWebBrowserWithTicket({
+      offer,
+      name: 'Studio',
+      previousEnvironment: null,
+      onComparisonCode,
+      deps: pairing
+    })
+    expect(onComparisonCode).toHaveBeenCalledWith('KMGVTD')
+    expect(seen.credential).toBeDefined()
+    expect(JSON.stringify(environment)).not.toContain(offer.ticket)
+    expect(environment.endpoints[0]?.deviceToken).toBe(`migrated:${offer.deviceId}`)
+    expect(environment.pairedDeviceId).toBe(offer.deviceId)
+    const record = await pairing.store.get(webDeviceKeyId(offer.publicKeyB64, environment.id))
+    expect(record).toMatchObject({ state: 'active', deviceId: offer.deviceId })
+    expect(record?.privateKey.extractable).toBe(false)
+  })
+
+  it('keeps a session-only browser key in memory and asks for an ephemeral row', async () => {
+    setWebDeviceKeySupportForTests('session-insecure-origin')
+    const { deps: pairing, seen } = deps('session-insecure-origin')
+    const firstPlans: unknown[] = []
+    const createClient = pairing.createClient
+    pairing.createClient = (connection, options) => {
+      firstPlans.push(options.credential.nextPlan(true))
+      return createClient(connection, options)
+    }
+    const environment = await pairWebBrowserWithTicket({
+      offer,
+      name: 'Studio',
+      previousEnvironment: null,
+      onComparisonCode: vi.fn(),
+      deps: pairing
+    })
+    expect(firstPlans[0]).toMatchObject({
+      kind: 'redeem',
+      ephemeral: true,
+      deviceLabel: 'Chrome on macOS'
+    })
+    expect(environment.sessionOnly).toBe(true)
+    expect(pairing.rememberSessionDevice).toHaveBeenCalledWith(
+      expect.objectContaining({ id: environment.id }),
+      expect.objectContaining({ deviceId: offer.deviceId })
+    )
+    expect(seen.credential).toBeDefined()
+  })
+
+  it('drops the pending key when the host refuses the ticket', async () => {
+    setWebDeviceKeySupportForTests('persistent')
+    const { deps: pairing } = deps('persistent', 'denied')
+    const createdIds: string[] = []
+    const add = pairing.store.add
+    pairing.store.add = async (record) => {
+      createdIds.push(record.id)
+      return add(record)
+    }
+    await expect(
+      pairWebBrowserWithTicket({
+        offer,
+        name: 'Studio',
+        previousEnvironment: null,
+        onComparisonCode: vi.fn(),
+        deps: pairing
+      })
+    ).rejects.toThrow(/declined this pairing/)
+    expect(createdIds).toHaveLength(1)
+    expect(await pairing.store.get(createdIds[0]!)).toBeUndefined()
+  })
+
+  it('labels the browser without identifying details', () => {
+    expect(
+      webBrowserDeviceLabel(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36'
+      )
+    ).toBe('Chrome on macOS')
+    expect(
+      webBrowserDeviceLabel(
+        'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0'
+      )
+    ).toBe('Firefox on Linux')
+    expect(webBrowserDeviceLabel('curl/8')).toBe('Web browser')
+  })
+})

@@ -16,6 +16,19 @@ export type PairedE2EEDeviceKeyCredential = {
   sign: (message: Uint8Array) => Promise<Uint8Array>
 }
 
+// Redeems a single-use pairing ticket into this installation's new key (purpose 'redeem').
+export type PairedE2EETicketCredential = {
+  kind: 'ticket'
+  ticket: string
+  // The id the ticket reserved; the client retries key auth under it after a lost reply.
+  deviceId: string
+  devicePublicKeyB64: string
+  deviceLabel: string
+  // Session-only browsers: the host drops the row on restart or after idle.
+  ephemeral?: boolean
+  sign: (message: Uint8Array) => Promise<Uint8Array>
+}
+
 export type PairedE2EEReadyVerdict =
   | 'accepted'
   // Not JSON. Legacy clients treat this as an encrypted frame.
@@ -61,7 +74,10 @@ export type PairedE2EEClientHandshake = {
   // This connection's v2 transcript hash once the ready is accepted; null for legacy framing.
   transcriptHashB64: () => string | null
   sealAuth: (
-    credential: PairedE2EEAuthCredential | PairedE2EEDeviceKeyCredential,
+    credential:
+      | PairedE2EEAuthCredential
+      | PairedE2EEDeviceKeyCredential
+      | PairedE2EETicketCredential,
     options?: { clientCapabilities?: readonly string[] }
   ) => Promise<string>
   classifyAuthReply: (plaintext: string) => PairedE2EEAuthReply
@@ -126,7 +142,7 @@ function createLegacyHandshake(args: PairedE2EEClientHandshakeArgs): PairedE2EEC
     transcriptHashB64: () => null,
     sealAuth: async (credential, options) => {
       if (credential.kind !== 'token') {
-        throw new Error('device-key credentials need E2EE v2')
+        throw new Error('device-key and ticket credentials need E2EE v2')
       }
       if (!mayUseLegacy()) {
         throw new PairedE2EEDowngradeError('auth')
@@ -197,9 +213,27 @@ function createV2Handshake(args: PairedE2EEClientHandshakeArgs): PairedE2EEClien
           serializeJson(pairedE2EEV2TokenAuth(transcriptHashB64, credential.deviceToken))
         )
       }
-      const signature = await credential.sign(
-        encodeDeviceProofMessage('auth', args.primitives.decodeBase64(transcriptHashB64))
-      )
+      const transcriptHash = args.primitives.decodeBase64(transcriptHashB64)
+      if (credential.kind === 'ticket') {
+        const proof = await credential.sign(encodeDeviceProofMessage('redeem', transcriptHash))
+        return session.sealText(
+          serializeJson({
+            type: 'e2ee_auth',
+            v: 2,
+            transcriptHashB64,
+            ticket: credential.ticket,
+            deviceId: credential.deviceId,
+            devicePublicKeyB64: credential.devicePublicKeyB64,
+            deviceProofB64: args.primitives.encodeBase64(proof),
+            deviceLabel: credential.deviceLabel,
+            ...(credential.ephemeral ? { ephemeral: true } : {}),
+            ...(options?.clientCapabilities
+              ? { clientCapabilities: options.clientCapabilities }
+              : {})
+          })
+        )
+      }
+      const signature = await credential.sign(encodeDeviceProofMessage('auth', transcriptHash))
       return session.sealText(
         serializeJson({
           type: 'e2ee_auth',
