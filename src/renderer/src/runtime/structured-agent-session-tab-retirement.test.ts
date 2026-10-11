@@ -4,7 +4,13 @@ import type { RuntimeClientTarget } from './runtime-client-target'
 
 const mocks = vi.hoisted(() => ({
   closeSession:
-    vi.fn<(target: RuntimeClientTarget, sessionId: string) => Promise<'closed' | 'unsupported'>>(),
+    vi.fn<
+      (
+        target: RuntimeClientTarget,
+        sessionId: string,
+        options?: { expectedEnvironmentPairingRevision?: number }
+      ) => Promise<'closed' | 'unsupported'>
+    >(),
   callRuntime:
     vi.fn<
       (
@@ -14,7 +20,13 @@ const mocks = vi.hoisted(() => ({
         options?: { signal?: AbortSignal }
       ) => Promise<unknown>
     >(),
-  ensureCompatible: vi.fn<(environmentId: string) => Promise<void>>(),
+  ensureCompatible:
+    vi.fn<
+      (
+        environmentId: string,
+        options?: { expectedEnvironmentPairingRevision?: number }
+      ) => Promise<void>
+    >(),
   discardOutbox: vi.fn<(sessionId: string) => void>(),
   stopSends: vi.fn<(sessionId: string) => void>(),
   hasTombstone: vi.fn<(worktreeId: string, sessionId: string) => boolean>(),
@@ -373,6 +385,58 @@ describe('structured agent session tab retirement', () => {
     expect(mocks.closeSession).toHaveBeenCalledTimes(1)
     release()
     await first
+  })
+
+  it('pins delayed close commands and deduplication to each captured pairing', async () => {
+    const paired = { kind: 'environment', environmentId: 'server-1' } as const
+    replaceRuntimeEnvironmentRevisions([{ id: 'server-1', createdAt: 0, pairingRevision: 3 }])
+    const compatible: (() => void)[] = []
+    mocks.ensureCompatible.mockImplementation(
+      () => new Promise<void>((resolve) => compatible.push(resolve))
+    )
+    const first = retireStructuredAgentSessionTab({
+      target: paired,
+      worktreeId: 'wt-1',
+      sessionId: 'session-1'
+    })
+    replaceRuntimeEnvironmentRevisions([{ id: 'server-1', createdAt: 0, pairingRevision: 4 }])
+    const second = retireStructuredAgentSessionTab({
+      target: paired,
+      worktreeId: 'wt-1',
+      sessionId: 'session-1'
+    })
+    expect(second).not.toBe(first)
+    expect(mocks.closeSession).toHaveBeenCalledWith(paired, 'session-1', {
+      expectedEnvironmentPairingRevision: 3
+    })
+    expect(mocks.closeSession).toHaveBeenCalledWith(paired, 'session-1', {
+      expectedEnvironmentPairingRevision: 4
+    })
+    expect(mocks.ensureCompatible).toHaveBeenCalledWith('server-1', {
+      expectedEnvironmentPairingRevision: 3
+    })
+    compatible.forEach((resolve) => resolve())
+    await Promise.all([first, second])
+    expect(mocks.callRuntime).toHaveBeenCalledWith(
+      paired,
+      'session.tabs.close',
+      expect.anything(),
+      {
+        timeoutMs: 15_000,
+        skipCompatibilityCheck: true,
+        expectedEnvironmentPairingRevision: 3
+      }
+    )
+    expect(mocks.callRuntime).toHaveBeenCalledWith(
+      paired,
+      'session.tabs.close',
+      expect.anything(),
+      {
+        timeoutMs: 15_000,
+        skipCompatibilityCheck: true,
+        expectedEnvironmentPairingRevision: 4
+      }
+    )
   })
 
   it('gives up on a hung local close after the bound: shows the chat, allows a retry', async () => {

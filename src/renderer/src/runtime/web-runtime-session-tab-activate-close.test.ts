@@ -576,7 +576,7 @@ describe('web runtime session tab actions', () => {
       .mockResolvedValueOnce({
         id: 'close',
         ok: true,
-        result: { closed: true, refused: true }
+        result: { closed: true, refused: true, refusalReason: 'live-host-pty' }
       })
       .mockResolvedValueOnce({ id: 'list', ok: true, result: makeSnapshot() })
 

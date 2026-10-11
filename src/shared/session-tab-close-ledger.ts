@@ -100,8 +100,21 @@ export class SessionTabCloseLedger {
     return entry !== undefined && !this.expired(entry, now)
   }
 
-  hasPending(partition: string): boolean {
-    return (this.partitions.get(partition)?.size ?? 0) > 0
+  hasPending(partition: string, now: number): boolean {
+    const entries = this.partitions.get(partition)
+    if (!entries) {
+      return false
+    }
+    for (const [closedId, entry] of entries) {
+      if (this.expired(entry, now)) {
+        entries.delete(closedId)
+      }
+    }
+    if (entries.size === 0) {
+      this.partitions.delete(partition)
+      return false
+    }
+    return true
   }
 
   /**
@@ -112,7 +125,8 @@ export class SessionTabCloseLedger {
     partition: string,
     tabs: readonly T[],
     topLevelIdOf: (tab: T) => string,
-    now: number
+    now: number,
+    confirmOmission: boolean | ((closedId: string) => boolean) = true
   ): readonly T[] {
     const entries = this.partitions.get(partition)
     if (!entries) {
@@ -125,8 +139,12 @@ export class SessionTabCloseLedger {
     }
     for (const [closedId, entry] of entries) {
       const omitted = !named.has(closedId)
-      entry.omittedByLatest = omitted
-      if (this.expired(entry, now) || (omitted && entry.state !== 'unsettled')) {
+      const confirms =
+        typeof confirmOmission === 'function' ? confirmOmission(closedId) : confirmOmission
+      if (confirms) {
+        entry.omittedByLatest = omitted
+      }
+      if (this.expired(entry, now) || (confirms && omitted && entry.state !== 'unsettled')) {
         entries.delete(closedId)
       }
     }

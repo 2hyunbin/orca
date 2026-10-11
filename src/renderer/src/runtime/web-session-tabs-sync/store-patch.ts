@@ -1,4 +1,6 @@
 import type { AppState } from '../../store'
+import { retainAcceptedHostSessionTabSource } from '../host-session-tab-source'
+import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 import { useAppStore } from '../../store'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { pickParsedAgentStatusPayload } from '../../../../shared/agent-status-types'
@@ -25,6 +27,11 @@ export function applyWebSessionTabsStorePatch(
   agentStatusSnapshots?: RuntimeMobileSessionTabsResult | readonly RuntimeMobileSessionTabsResult[],
   allowCompletionNotification = false
 ): HostSessionMirrorSettle {
+  const sourceFrames = hostMirrorVerdict.frames.map((frame) => ({
+    ...frame,
+    pairingRevision:
+      frame.expectedEnvironmentPairingRevision ?? getRuntimeEnvironmentRevision(frame.environmentId)
+  }))
   let mirroredAgentStatusChanged = false
   // Zustand commits before notifying subscribers, so a completed producer has landed even if a subscriber throws.
   let patchCommitted = false
@@ -160,6 +167,11 @@ export function applyWebSessionTabsStorePatch(
 
   const settleHostMirror = createHostSessionMirrorSettle(hostMirrorVerdict)
   try {
+    for (const frame of sourceFrames) {
+      if (frame.decision.apply && frame.source) {
+        retainAcceptedHostSessionTabSource(frame.environmentId, frame.source, frame.pairingRevision)
+      }
+    }
     if (mirroredAgentStatusChanged) {
       useAppStore.getState().scheduleAgentStatusFreshness()
     }

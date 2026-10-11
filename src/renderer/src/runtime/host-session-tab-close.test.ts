@@ -95,7 +95,7 @@ describe('settleHostSessionTabClose', () => {
   })
 
   it('keeps hiding a refused close that republished nothing', async () => {
-    const { result } = closeWith(Promise.resolve({ refused: true }))
+    const { result } = closeWith(Promise.resolve({ refused: true, refusalReason: 'live-host-pty' }))
     await expect(result).resolves.toBe('applied')
     expect(pending()).toBe(true)
   })

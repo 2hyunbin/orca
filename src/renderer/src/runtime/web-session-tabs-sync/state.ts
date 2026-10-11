@@ -18,6 +18,7 @@ import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { OpenFile } from '../../store/slices/editor'
 import type { RuntimeBrowserPlacement } from '../../../../shared/runtime-browser-placement'
+import type { HostSessionTabClosePlacement } from '../host-session-tab-close-placement'
 
 export const WEB_SESSION_GROUP_PREFIX = 'web-session-tabs:'
 export const WEB_SESSION_TABS_VISIBILITY_RESUME_STAGGER_MS = 100
@@ -72,6 +73,8 @@ export type WebSessionTabsSnapshotApplyOptions = {
   contentScope?: 'all' | 'agent-session'
   preserveLocalLayout?: boolean
   terminalPtyMode?: 'local' | 'remote'
+  projectionOnly?: boolean
+  closeRestoration?: HostSessionTabClosePlacement
 }
 
 export type TrackedWebSessionTabsWorktree = {
@@ -87,7 +90,16 @@ export type VisibilityResumeOmission = {
   visibilityGeneration: number
 }
 
-export const latestSessionTabsSnapshotByWorktree = new Map<string, SnapshotFreshness>()
+export const latestSessionTabsSnapshotByWorktree = new Map<
+  string,
+  SnapshotFreshness & {
+    source?: RuntimeMobileSessionTabsResult
+    pairingRevision?: number
+    sourceRuntimeId?: string
+    sourceReceivedFrame?: number
+    runtimeId?: string
+  }
+>()
 export const replayableSessionTabsSnapshotByWorktree = new Map<string, SnapshotFreshness>()
 export const latestReceivedSessionTabsSnapshotByWorktree = new Map<
   string,

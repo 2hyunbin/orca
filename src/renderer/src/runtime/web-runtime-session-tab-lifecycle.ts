@@ -1,8 +1,4 @@
-import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
-import type {
-  RuntimeMobileSessionTabCloseResult,
-  RuntimeSessionTabCloseReason
-} from '../../../shared/runtime-types'
+import type { RuntimeSessionTabCloseReason } from '../../../shared/runtime-types'
 import { useAppStore } from '../store'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
@@ -113,6 +109,7 @@ export async function closeWebRuntimeSessionTab(args: {
   reason: RuntimeSessionTabCloseReason
   publicationEpoch?: string | null
   terminalHandle?: string | null
+  initialCloseTicket?: WebSessionCloseIntentTicket | null
 }): Promise<WebRuntimeSessionTabCloseOutcome> {
   const environmentId = resolveSessionTabEnvironmentId(args.environmentId)
   if (!environmentId) {
@@ -139,7 +136,9 @@ export async function closeWebRuntimeSessionTab(args: {
   }
 
   // Why: begin before async id resolution so a stale snapshot cannot flash the closed tab back.
-  const tickets: WebSessionCloseIntentTicket[] = []
+  const tickets: WebSessionCloseIntentTicket[] = args.initialCloseTicket
+    ? [args.initialCloseTicket]
+    : []
   let settled = false
   const begin = (hostTabId: string): void => {
     if (settled) {
@@ -151,7 +150,9 @@ export async function closeWebRuntimeSessionTab(args: {
     }
   }
   const immediateHostTabId = toHostSessionTabId(args.tabId)
-  begin(immediateHostTabId)
+  if (!tickets.some((ticket) => ticket.closedId === immediateHostTabId)) {
+    begin(immediateHostTabId)
+  }
   const close = (async () => {
     const hostTabId = await resolveHostTabId(environmentId, args.worktreeId, args.tabId)
     if (hostTabId !== immediateHostTabId) {
@@ -171,9 +172,7 @@ export async function closeWebRuntimeSessionTab(args: {
       },
       timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
     })
-    return unwrapRuntimeRpcResult(
-      response as RuntimeRpcResponse<RuntimeMobileSessionTabCloseResult | undefined>
-    )
+    return unwrapRuntimeRpcResult(response)
   })()
   return settleHostSessionTabClose({
     tickets: () => {

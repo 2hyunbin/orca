@@ -165,6 +165,7 @@ export function installActiveSessionTabsSubscription({
             {
               environmentId,
               worktreeId: recovered.worktree,
+              source: recovered,
               decision,
               expectedEnvironmentConnectionGeneration: activeWorktreeRuntimeConnectionGeneration,
               expectedEnvironmentPairingRevision: activeWorktreeRuntimePairingRevision,

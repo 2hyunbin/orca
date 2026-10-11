@@ -42,26 +42,26 @@ export function notifyHostOfMirroredEditorClose(
   if (unifiedTabs.length === 0) {
     return false
   }
-  // Begin the close SYNCHRONOUSLY so a host snapshot landing before the dynamic import below resolves can't
-  // flash the old-path tab back. closeWebRuntimeSessionTab begins it again and settles that one.
-  for (const tab of unifiedTabs) {
+  // Capture the operation before the local prune and carry it through the deferred command.
+  const tickets = unifiedTabs.map((tab) =>
     beginWebSessionCloseIntent(
       { environmentId: runtimeEnvironmentId },
       worktreeId,
       toHostSessionTabId(tab.id),
       Date.now()
     )
-  }
+  )
   // Dynamic import: this helper is imported by the editor slice during store creation, so importing
   // web-runtime-session eagerly imports the store back and trips cyclic init in full-suite import order.
   void import('./web-runtime-session').then(({ closeWebRuntimeSessionTab }) =>
     Promise.all(
-      unifiedTabs.map((tab) =>
+      unifiedTabs.map((tab, index) =>
         closeWebRuntimeSessionTab({
           worktreeId,
           tabId: tab.id,
           environmentId: runtimeEnvironmentId,
-          reason: 'user'
+          reason: 'user',
+          initialCloseTicket: tickets[index]
         })
       )
     )
