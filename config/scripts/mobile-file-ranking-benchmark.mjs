@@ -21,7 +21,7 @@ async function load(source) {
 const results = []
 let differentialCases = 0
 for (const [file, name] of [
-  ['src/main/runtime/runtime-mobile-file-path-search.ts', 'rankRuntimeMobileFilePaths'],
+  ['src/main/runtime/files/search/mobile-path-search.ts', 'rankRuntimeMobileFilePaths'],
   ['mobile/src/session/mobile-native-chat-autocomplete.ts', 'rankSuggestions'],
   ['mobile/src/session/mobile-native-chat-autocomplete.ts', 'rankSlashCommandSuggestions']
 ]) {
