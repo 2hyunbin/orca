@@ -1,6 +1,5 @@
-import { useCallback, useSyncExternalStore } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { relayHostsFeed } from '../worktree/relay-hosts-feed'
+import { useRelayHosts } from '../worktree/relay-hosts-feed'
 import { serverHostHealth } from '../worktree/server-workspaces'
 import {
   scopeRpcClientToExecutionHost,
@@ -32,8 +31,6 @@ export function useWorkspaceServer(args: {
   return { routeHost, server: routeHost === undefined ? null : { client: serverClient, gates } }
 }
 
-const noSubscription = (): (() => void) => () => {}
-
 /**
  * The connection state a server workspace's screens see: the desktop's, unless the desktop reports
  * that server down. Desktop-owned workspaces (`routeHost` absent) keep the desktop's state untouched.
@@ -45,13 +42,7 @@ export function useWorkspaceServerConnState(args: {
 }): ConnectionState {
   const { client, connState, routeHost } = args
   // The same feed the host list reads, so a row's badge and its screens agree.
-  const feed = client && routeHost ? relayHostsFeed(client) : null
-  const subscribe = useCallback(
-    (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
-    [feed]
-  )
-  const readHosts = () => feed?.getSnapshot() ?? null
-  const hosts = useSyncExternalStore(subscribe, readHosts, readHosts)
+  const hosts = useRelayHosts(routeHost ? client : null)
   if (connState !== 'connected' || !routeHost || !hosts) {
     return connState
   }
