@@ -664,4 +664,63 @@ describe('openMobileFileTap', () => {
 
     expect(switchSessionTab).not.toHaveBeenCalled()
   })
+
+  it("previews a tapped worktree file when the workspace's server has no editor tabs", async () => {
+    const client = createClient([
+      ok({
+        worktree: 'wt-1',
+        relativePath: 'src/index.ts',
+        absolutePath: '/repo/src/index.ts',
+        exists: true,
+        isDirectory: false,
+        openTarget: {
+          kind: 'worktree-file',
+          provider: 'local',
+          relativePath: 'src/index.ts',
+          absolutePath: '/repo/src/index.ts'
+        }
+      }),
+      { ok: false, error: { code: 'runtime_error', message: 'renderer_unavailable' } }
+    ])
+    const pushPreviewRoute = vi.fn()
+    const onOpenFailed = vi.fn()
+
+    openMobileFileTap({
+      client,
+      hostId: 'host-1',
+      worktreeId: 'wt-1',
+      worktreeName: 'api',
+      pathText: 'src/index.ts',
+      line: null,
+      column: null,
+      pushPreviewRoute,
+      openBrowser: vi.fn(),
+      triggerOpenFeedback: vi.fn(),
+      fetchSessionTabs: vi.fn(),
+      getSessionTabs: () => [],
+      getActiveSessionTabId: () => 'terminal-tab',
+      getActivationState: activeTerminalState,
+      switchSessionTab: vi.fn(),
+      scheduleDelayedAction: vi.fn(),
+      onOpenFailed
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(client.sendRequest).toHaveBeenCalledWith(
+      'files.open',
+      { worktree: 'id:wt-1', relativePath: 'src/index.ts' },
+      { timeoutMs: 15_000 }
+    )
+    expect(pushPreviewRoute).toHaveBeenCalledWith({
+      pathname: '/h/[hostId]/files/preview/[worktreeId]',
+      params: expect.objectContaining({
+        hostId: 'host-1',
+        worktreeId: 'wt-1',
+        source: 'worktree',
+        relativePath: 'src/index.ts',
+        worktreeName: 'api'
+      })
+    })
+    expect(onOpenFailed).not.toHaveBeenCalled()
+  })
 })
