@@ -11,6 +11,7 @@ const terraform = read('../../infra/terraform/relay-observability.tf')
 const deadMan = read('../../apps/relay/src/cell-reserve-dead-man.ts')
 const registry = read('../../apps/relay/src/host-session-registry.ts')
 const server = read('../../apps/relay/src/relay-server.ts')
+const poller = read('../../apps/relay/src/shadow-seat-directory.ts')
 
 const block = (kind, name) => {
   const body = new RegExp(`resource "${kind}" "${name}" \\{([\\s\\S]*?)\\n\\}`).exec(terraform)?.[1]
@@ -66,4 +67,13 @@ test('the director alert counts its placement-off line on the director service',
     )
   )
   notifyingOnAnyLine('relay_reserve_placement_off_with_reserve_cells', event, 'cloud_run_revision', 'revision')
+})
+
+test('the withheld dead-cell verdict alert counts the director line for the region and fleet guards', () => {
+  const event = 'orca_relay_dead_cell_verdict_withheld'
+  assert.match(poller, new RegExp(`event: '${event}', cellId, \\.\\.\\.verdict`))
+  const metric = block('google_logging_metric', 'relay_dead_cell_verdict_withheld')
+  assert.ok(metric.includes(`jsonPayload.event=\\"${event}\\" AND (jsonPayload.withheld=\\"region\\" OR jsonPayload.withheld=\\"fleet\\")`))
+  assert.ok(metric.includes('withheld = "EXTRACT(jsonPayload.withheld)"'))
+  notifyingOnAnyLine('relay_dead_cell_verdict_withheld', event, 'cloud_run_revision', 'withheld')
 })

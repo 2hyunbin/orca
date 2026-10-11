@@ -7,6 +7,8 @@ export const CELL_POLL_DEAD_STREAK_MS = 45_000
 export const CELL_POLL_DEAD_MIN_FAILURES = 3
 // A gap this long (a frozen director, a stopped poller) restarts the streak: unasked is not unanswered.
 export const CELL_POLL_DEAD_MAX_GAP_MS = 5_000
+// Never decide from a handful of cells: one dead of three looks the same as a partition.
+export const CELL_POLL_DEAD_MIN_POLLED = 6
 
 type Streak = { startedAt: number; failures: number; lastFailedAt: number }
 
@@ -15,6 +17,19 @@ const NO_BACKEND_STATUSES: ReadonlySet<number> = new Set([502, 503, 504])
 
 export function isNoBackendStatus(status: number): boolean {
   return NO_BACKEND_STATUSES.has(status)
+}
+
+export type PolledCell = { cellId: string; region: string }
+
+export type DeadCellVerdict = {
+  dead: boolean
+  // Why an unreachable cell is not called dead: too few cells to judge, or the failure is too wide
+  // to be the cell (this director's network, credential, or a cross-region partition).
+  withheld?: 'sample' | 'fleet' | 'region'
+  fleetUnreachable: number
+  fleetPolled: number
+  regionUnreachable: number
+  regionPolled: number
 }
 
 export class CellPollReachability {
@@ -50,12 +65,30 @@ export class CellPollReachability {
     )
   }
 
-  // Unreachable, unless more than a third of the polled cells are at once: that is this director's
-  // network or credential failing, not the cells.
-  dead(cellId: string, polledCells: number, now: number): boolean {
-    if (!this.unreachable(cellId, now)) return false
-    let unreachable = 0
-    for (const other of this.streaks.keys()) if (this.unreachable(other, now)) unreachable += 1
-    return unreachable * 3 <= polledCells
+  // Null unless this cell is unreachable. Every director runs in one region, so a partition from
+  // another region fails every cell there for all of them at once: half a region is never a cell.
+  verdict(cellId: string, polled: readonly PolledCell[], now: number): DeadCellVerdict | null {
+    if (!this.unreachable(cellId, now)) return null
+    const region = polled.find((cell) => cell.cellId === cellId)?.region
+    let fleetUnreachable = 0
+    let regionUnreachable = 0
+    let regionPolled = 0
+    for (const cell of polled) {
+      const down = this.unreachable(cell.cellId, now)
+      if (down) fleetUnreachable += 1
+      if (cell.region !== region) continue
+      regionPolled += 1
+      if (down) regionUnreachable += 1
+    }
+    const counts = { fleetUnreachable, fleetPolled: polled.length, regionUnreachable, regionPolled }
+    const withheld =
+      region === undefined || polled.length < CELL_POLL_DEAD_MIN_POLLED
+        ? 'sample'
+        : fleetUnreachable * 3 > polled.length
+          ? 'fleet'
+          : regionUnreachable * 2 >= regionPolled
+            ? 'region'
+            : undefined
+    return withheld ? { dead: false, withheld, ...counts } : { dead: true, ...counts }
   }
 }

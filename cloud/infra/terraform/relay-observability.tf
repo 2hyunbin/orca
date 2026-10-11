@@ -1939,3 +1939,70 @@ resource "google_monitoring_alert_policy" "relay_reserve_placement_off_with_rese
 
   depends_on = [google_logging_metric.relay_reserve_placement_off_with_reserve_cells]
 }
+
+# cell-poll-reachability.ts: a reserve cell looks dead, but too many cells fail with it to call it, so
+# its hosts wait for an operator fence. Logged at most once a minute per cell per director.
+resource "google_logging_metric" "relay_dead_cell_verdict_withheld" {
+  project     = var.project_id
+  name        = "orca_relay_dead_cell_verdict_withheld"
+  description = "Directors that saw a cell stop answering but withheld the dead-cell verdict because a third of the fleet or half its region failed with it."
+  filter      = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${var.relay_cloud_run_service_name}\" AND jsonPayload.event=\"orca_relay_dead_cell_verdict_withheld\" AND (jsonPayload.withheld=\"region\" OR jsonPayload.withheld=\"fleet\")"
+  label_extractors = {
+    cell_id  = "EXTRACT(jsonPayload.cellId)"
+    withheld = "EXTRACT(jsonPayload.withheld)"
+  }
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+
+    labels {
+      key         = "cell_id"
+      value_type  = "STRING"
+      description = "Durable relay cell identifier."
+    }
+    labels {
+      key         = "withheld"
+      value_type  = "STRING"
+      description = "Which guard withheld the verdict: region (half the cell's region) or fleet (a third of all cells)."
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "relay_dead_cell_verdict_withheld" {
+  project               = var.project_id
+  display_name          = "Orca Relay: directors cannot reach a region or a third of the cells"
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.relay_alert_notification_channels
+
+  conditions {
+    display_name = "A dead-cell verdict was withheld by the region or fleet guard"
+
+    condition_threshold {
+      filter          = "resource.type=\"cloud_run_revision\" AND metric.type=\"logging.googleapis.com/user/orca_relay_dead_cell_verdict_withheld\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields      = ["metric.label.\"withheld\""]
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  documentation {
+    content   = "The directors' seat-feed polls and the heartbeats of many cells failed together: at least half of one region (`withheld=region`, typically a us-central1 to asia-east2 partition) or more than a third of the fleet (`withheld=fleet`, typically the directors' own network or credential). Hosts that lost their control on those reserve cells are not moved off automatically; they get `relay_home_cell_unavailable` until the cells answer again or an operator fences them. Cells that are only cut off from the directors keep serving the hosts still connected. Check director egress and the cells' heartbeats (`relay_cell_runtime`) before fencing anything: fencing a cell that is still serving disconnects its hosts."
+    mime_type = "text/markdown"
+  }
+
+  depends_on = [google_logging_metric.relay_dead_cell_verdict_withheld]
+}

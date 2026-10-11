@@ -73,6 +73,7 @@ import {
 } from './database.js'
 import type { RelayCellConfig } from './config.js'
 import type { CellLockHoldSite } from './cell-inventory-hold-samples.js'
+import type { DeadCellVerdict } from './cell-poll-reachability.js'
 import { isPostgresPoolConnectFailure } from './postgres-pool-pressure.js'
 import { isPostgresReadTimeout } from './relay-database-rejection-fence.js'
 import type {
@@ -136,8 +137,8 @@ type RelayAssignmentStoreOptions = {
   // Absent keeps the strict least-loaded pick (tests that assert exact cells).
   placementLoadBand?: PlacementLoadBand
   recordControlRenewal?: (durationMs: number, outcome: ControlRenewalOutcome) => void
-  // This director's seat-feed polls to the cell have gone unanswered (see cell-poll-reachability).
-  cellPollsDead?: (cellId: string, now: number) => boolean
+  // This director's seat-feed polls to the cell (see cell-poll-reachability); null while answered.
+  deadCellVerdict?: (cellId: string, now: number) => DeadCellVerdict | null
 }
 
 // Step 5 inputs, plus whether the host itself asked: only its own request may leave a dead cell.
@@ -626,7 +627,7 @@ export class RelayAssignmentStore {
     { failures: number; until: number }
   >()
   private readonly recordControlRenewal?: RelayAssignmentStoreOptions['recordControlRenewal']
-  private readonly cellPollsDead?: RelayAssignmentStoreOptions['cellPollsDead']
+  private readonly deadCellVerdict?: RelayAssignmentStoreOptions['deadCellVerdict']
   private reserveModeRead: {
     cells: ReadonlySet<string>
     admitsDatabase: ReadonlySet<string>
@@ -664,7 +665,7 @@ export class RelayAssignmentStore {
     this.regionalRehomeDirectorRegion = options.regionalRehomeDirectorRegion
     this.requireLiveCells = options.requireLiveCells ?? false
     this.heartbeatTtlMs = options.heartbeatTtlMs ?? 45_000
-    this.cellPollsDead = options.cellPollsDead
+    this.deadCellVerdict = options.deadCellVerdict
     this.recordControlRenewal = options.recordControlRenewal
     this.placementLoadBand = options.placementLoadBand
     this.admissionSelector = new RelayCellAdmissionSelector(database, now)
@@ -1015,7 +1016,8 @@ export class RelayAssignmentStore {
           preferredRegion,
           placementRegion,
           step5.epochFloor ?? 0,
-          step5.hostRequested === true
+          // Only through the step-5 plan: its floor holds every epoch the map knows for the host.
+          step5.hostRequested === true && step5.epochFloor !== undefined
         )
     )
   }
@@ -1381,7 +1383,7 @@ export class RelayAssignmentStore {
       let strandedReassignment = false
       let isolatedIncumbent: CellRow | undefined
       let isolatedTarget: CellRow | undefined
-      let deadReserveSource: CellRow | undefined
+      let deadReserveSource: { cell: CellRow; verdict: DeadCellVerdict } | undefined
       // Set when only the target rows are locked. The old cell's row is never
       // written then, so the host must hold no units that no lease backs.
       // Counters below the leases (drift the old reset left) are fine: the
@@ -1559,14 +1561,15 @@ export class RelayAssignmentStore {
             // A host that lost its control may leave a reserve cell this director proves dead
             // without a fence: nothing re-places a host that did not ask, and a migration's epochs
             // stay fenced. Capped db cells keep the fence: autoheal returns them with their hosts.
-            const leavesDeadReserveCell =
+            const verdict =
               hostRequested &&
               !fence.pinned &&
               cause === 'unheard' &&
-              (await this.reserveModeCells(transaction))?.has(current.cellId) === true &&
-              this.cellPollsDead?.(current.cellId, now) === true
-            if (!leavesDeadReserveCell) throw new RelayHomeCellUnavailableError(current.cellId, cause)
-            deadReserveSource = current
+              (await this.reserveModeCells(transaction))?.has(current.cellId) === true
+                ? this.deadCellVerdict?.(current.cellId, now)
+                : undefined
+            if (!verdict?.dead) throw new RelayHomeCellUnavailableError(current.cellId, cause)
+            deadReserveSource = { cell: current, verdict }
           }
           forcedDeadReassignment = true
         }
@@ -1585,9 +1588,13 @@ export class RelayAssignmentStore {
         events.push(
           JSON.stringify({
             event: 'orca_relay_dead_reserve_cell_host_replaced',
-            fromCellId: deadReserveSource.cellId,
+            fromCellId: deadReserveSource.cell.cellId,
             toCellId: target.cellId,
-            region: target.region
+            region: target.region,
+            fleetUnreachable: deadReserveSource.verdict.fleetUnreachable,
+            fleetPolled: deadReserveSource.verdict.fleetPolled,
+            regionUnreachable: deadReserveSource.verdict.regionUnreachable,
+            regionPolled: deadReserveSource.verdict.regionPolled
           })
         )
       }

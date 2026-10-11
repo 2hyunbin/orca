@@ -1,6 +1,10 @@
 import type { RelayRegion } from '@orca-cloud/relay-contract'
 import { z } from 'zod'
-import { CellPollReachability, isNoBackendStatus } from './cell-poll-reachability.js'
+import {
+  CellPollReachability,
+  type DeadCellVerdict,
+  isNoBackendStatus
+} from './cell-poll-reachability.js'
 import type { RelayConfig } from './config.js'
 import { googleMetadataIdentityToken, reusedIdentityToken } from './google-metadata-identity-token.js'
 
@@ -16,6 +20,7 @@ const RECENTLY_LEFT_PER_HOST = 4
 // Google identity tokens live an hour; one per poll would be 26 metadata reads a second.
 const IDENTITY_TOKEN_REUSE_MS = 10 * 60_000
 const SUMMARY_INTERVAL_MS = 60_000
+const WITHHELD_LOG_INTERVAL_MS = 60_000
 const CELL_LIST_RETRY_BASE_MS = 1_000
 const CELL_LIST_RETRY_MAX_MS = SHADOW_SEAT_CELL_LIST_REFRESH_MS
 // A drain backlog drains over a few polls rather than holding one slot indefinitely.
@@ -613,8 +618,9 @@ export type ShadowSeatPoller = {
   startedAt: number
   // One round: refreshes the cell list when due, then polls every idle cell.
   tick: () => Promise<void>
-  // This director's polls have gone unanswered long enough to count as death evidence.
-  pollsDead: (cellId: string, now: number) => boolean
+  // This director's polls to the cell have gone unanswered long enough to count as death evidence;
+  // null while they are answered.
+  deadCellVerdict: (cellId: string, now: number) => DeadCellVerdict | null
   stop: () => void
 }
 
@@ -641,6 +647,7 @@ export function startShadowSeatPoller(
     ((tokenAudience: string) => googleMetadataIdentityToken(tokenAudience, fetchImpl))
   const directory = new ShadowSeatDirectory()
   const reachability = new CellPollReachability()
+  const withheldLoggedAt = new Map<string, number>()
   const startedAt = now()
   const inFlight = new Set<string>()
   let cells: SeatFeedCell[] = []
@@ -782,7 +789,15 @@ export function startShadowSeatPoller(
     cells: () => cells,
     startedAt,
     tick: () => round(true),
-    pollsDead: (cellId, at) => reachability.dead(cellId, cells.length, at),
+    deadCellVerdict: (cellId, at) => {
+      const verdict = reachability.verdict(cellId, cells, at)
+      // A withheld verdict strands that cell's hosts until an operator fences it, so it alerts.
+      if (verdict?.withheld && at - (withheldLoggedAt.get(cellId) ?? -Infinity) >= WITHHELD_LOG_INTERVAL_MS) {
+        withheldLoggedAt.set(cellId, at)
+        log(JSON.stringify({ event: 'orca_relay_dead_cell_verdict_withheld', cellId, ...verdict }))
+      }
+      return verdict
+    },
     stop: () => {
       stopped = true
       clearInterval(timer)

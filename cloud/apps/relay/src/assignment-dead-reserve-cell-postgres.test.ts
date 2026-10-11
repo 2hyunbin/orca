@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { RelayAssignmentStore } from './assignment-store.js'
 import type { RelayCellConfig } from './config.js'
 import { openRelayDatabase, type RelayDatabase } from './database.js'
+import { ReserveLedgerWriter } from './reserve-ledger-writer.js'
 
 // A host that lost its control leaves a capped reserve cell this director proves dead (stale
 // heartbeat + its own polls unanswered) without an operator fence; every live-cell case keeps it.
@@ -110,8 +111,12 @@ describePostgres('a host leaving a dead reserve cell, on PostgreSQL', () => {
     await heartbeat(live)
   }
 
-  const hostAssign = async (relayHostId: string, hostRequested = true) =>
-    await store.assign({ userId: USER, relayHostId }, undefined, undefined, undefined, { hostRequested })
+  // As the step-5 plan hands it over: every epoch the director's map knows for the host.
+  const hostAssign = async (relayHostId: string, hostRequested = true, epochFloor: number | null = 0) =>
+    await store.assign({ userId: USER, relayHostId }, undefined, undefined, undefined, {
+      hostRequested,
+      ...(epochFloor === null ? {} : { epochFloor })
+    })
 
   const nextHost = () => `host${run}${String(++hostSerial).padStart(4, '0')}`
 
@@ -121,7 +126,10 @@ describePostgres('a host leaving a dead reserve cell, on PostgreSQL', () => {
     store = new RelayAssignmentStore(database, () => now, {
       requireLiveCells: true,
       heartbeatTtlMs: HEARTBEAT_TTL_MS,
-      cellPollsDead: (cellId) => pollsDead && cellId === dead.id
+      deadCellVerdict: (cellId) =>
+        pollsDead && cellId === dead.id
+          ? { dead: true, fleetUnreachable: 1, fleetPolled: 34, regionUnreachable: 1, regionPolled: 28 }
+          : null
     })
     await store.reconcileCells([dead, live], false)
     await heartbeat(dead)
@@ -156,6 +164,50 @@ describePostgres('a host leaving a dead reserve cell, on PostgreSQL', () => {
     await store.setCellAdmitMode(dead.id, 'reserve')
     await killDeadCell()
     expect(await hostAssign(host)).toMatchObject({ cellId: live.id, assignmentEpoch: 8 })
+  })
+
+  it('a seat ahead of the row: the move mints above it, and the revived cell\'s seat never wins the row back', async () => {
+    const host = nextHost()
+    await ledgerRow(host, 4)
+    await store.setCellAdmitMode(dead.id, 'reserve')
+    await killDeadCell()
+    // The map saw a later booking on the dead cell at 6 that the ledger never wrote.
+    expect(await hostAssign(host, true, 6)).toMatchObject({ cellId: live.id, assignmentEpoch: 7 })
+    // The cell revives in the same incarnation still holding that seat; the ledger mirror and the
+    // reconcile write it with the strict guard.
+    const ledger = new ReserveLedgerWriter(database, { now: () => now, log: () => undefined })
+    for (const epoch of [6, 7]) ledger.enqueue({ userId: USER, relayHostId: host, cellId: dead.id, epoch })
+    await ledger.flush()
+    expect(ledger.pending()).toBe(0)
+    expect(await rowOf(host)).toEqual({ cell_id: live.id, assignment_epoch: 7 })
+  })
+
+  it('without the step-5 plan\'s epoch floor (placement off), the fence is kept', async () => {
+    const host = nextHost()
+    await ledgerRow(host, 3)
+    await store.setCellAdmitMode(dead.id, 'reserve')
+    await killDeadCell()
+    await expect(hostAssign(host, true, null)).rejects.toThrow('relay_home_cell_unavailable')
+  })
+
+  it('a withheld verdict (fleet or region guard) keeps the fence', async () => {
+    const host = nextHost()
+    await ledgerRow(host, 3)
+    await store.setCellAdmitMode(dead.id, 'reserve')
+    await killDeadCell()
+    store = new RelayAssignmentStore(database, () => now, {
+      requireLiveCells: true,
+      heartbeatTtlMs: HEARTBEAT_TTL_MS,
+      deadCellVerdict: () => ({
+        dead: false,
+        withheld: 'region',
+        fleetUnreachable: 6,
+        fleetPolled: 34,
+        regionUnreachable: 6,
+        regionPolled: 6
+      })
+    })
+    await expect(hostAssign(host)).rejects.toThrow('relay_home_cell_unavailable')
   })
 
   it('LB drain: heartbeat fresh while polls fail, so the host is pinned to its cell', async () => {
