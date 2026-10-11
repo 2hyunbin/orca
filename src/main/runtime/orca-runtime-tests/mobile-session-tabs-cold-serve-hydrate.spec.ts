@@ -208,23 +208,23 @@ describe('OrcaRuntimeService', () => {
     runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
     await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
-    // The phone targets the right group, which also focuses it; the CLI create follows focus.
+    // The phone targets the right group; an untargeted CLI create joins the first, as on main.
     const phone = await runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
       targetGroupId: 'group-right'
     })
     const cli = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`)
-    const created = [phone.tab.parentTabId, cli.tabId]
-    const rightGroupOf = (session: WorkspaceSessionState) =>
-      session.tabGroups?.[TEST_WORKTREE_ID]?.find((group) => group.id === 'group-right')?.tabOrder
-    expect(rightGroupOf(getSession())).toEqual(expect.arrayContaining(created))
+    const tabOrderOf = (session: WorkspaceSessionState, groupId: string) =>
+      session.tabGroups?.[TEST_WORKTREE_ID]?.find((group) => group.id === groupId)?.tabOrder
+    expect(tabOrderOf(getSession(), 'group-right')).toContain(phone.tab.parentTabId)
+    expect(tabOrderOf(getSession(), 'group-left')).toContain(cli.tabId)
 
     const restarted = new OrcaRuntimeService(
       makeRuntimeStoreWithWorkspaceSession(getSession()).runtimeStore
     )
     const listed = await restarted.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     expect(listed.tabGroups?.map((group) => group.tabOrder)).toEqual([
-      ['serve-tab'],
-      ['daemon-tab', ...created]
+      ['serve-tab', cli.tabId],
+      ['daemon-tab', phone.tab.parentTabId]
     ])
   })
 })

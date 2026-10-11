@@ -305,8 +305,8 @@ const SCENARIOS: Scenario[] = [
     }
   },
   {
-    // #27083 review: a phone create joins the group it targets, and a CLI create the focused one,
-    // across a cold restart.
+    // #27083 review: a phone create joins the group it targets, and an untargeted CLI create the
+    // first group, across a cold restart.
     id: 'create-in-second-group-cold-restart',
     journey: async (run) => {
       const first = await createTab(run, run.a)
@@ -329,14 +329,13 @@ const SCENARIOS: Scenario[] = [
         'phone create joins the second group',
         joined === phoneExpected ? [] : [`groups ${joined}, expected ${phoneExpected}`]
       )
-      // The phone create focused the second group, so a CLI create joins it too.
       const cli = (await createTerminal(run)).tabId!
-      await run.check('CLI create in focused group', [1, 1, 1, 1])
+      await run.check('CLI create in first group', [1, 1, 1, 1])
       await run.restart('cold restart', [1, 1, 1, 1], true)
       const after = await membership()
-      const expected = JSON.stringify([[first], [second, phone, cli].toSorted()])
+      const expected = JSON.stringify([[first, cli].toSorted(), [second, phone].toSorted()])
       run.expectNone(
-        'created tabs stay in the second group after a cold restart',
+        'created tabs stay in their groups after a cold restart',
         after === expected ? [] : [`groups ${after}, expected ${expected}`]
       )
     }

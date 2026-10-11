@@ -67,7 +67,7 @@ export type TerminalCreateOptions = {
   terminalKittyKeyboardProtocol?: boolean
   terminalColorQueryReplies?: TerminalOscColorQueryReplyColors
   viewMode?: 'terminal' | 'chat'
-  /** The tab group a background create joins; defaults to the host's focused group. */
+  /** The tab group a background create joins; defaults to the first group. */
   targetGroupId?: string
   startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
   telemetry?: WorktreeStartupLaunch['telemetry']
