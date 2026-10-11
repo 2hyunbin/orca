@@ -165,12 +165,26 @@ describe('PairingTicketBook', () => {
     ])
   })
 
-  it('remembers reserved device ids until the ticket expires', () => {
+  it('reserves a device id only while its ticket can still be redeemed', () => {
     const { clock, tickets } = book()
     const minted = tickets.mint(cli)
     expect(tickets.isReservedDeviceId(minted.deviceId)).toBe(true)
     expect(tickets.isReservedDeviceId('other')).toBe(false)
-    clock.now = minted.expiresAt
+    const lease = tickets.beginRedemption(minted.ticket)
+    expect(tickets.isReservedDeviceId(minted.deviceId)).toBe(true)
+    if (lease.kind !== 'locked') {
+      throw new Error('expected a lock')
+    }
+    // Why: once committed, a missing row means the device was revoked.
+    lease.commit()
     expect(tickets.isReservedDeviceId(minted.deviceId)).toBe(false)
+
+    const burned = tickets.mint(cli)
+    tickets.revoke(burned.ticketId)
+    expect(tickets.isReservedDeviceId(burned.deviceId)).toBe(false)
+
+    const expiring = tickets.mint(cli)
+    clock.now = expiring.expiresAt
+    expect(tickets.isReservedDeviceId(expiring.deviceId)).toBe(false)
   })
 })

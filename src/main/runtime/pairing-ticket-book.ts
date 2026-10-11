@@ -182,11 +182,14 @@ export class PairingTicketBook {
     }
   }
 
-  /** A row with this id may not exist yet (or never will): never a revocation verdict until expiry. */
+  /** An open or in-flight redemption may still create this row, so its absence is not a revocation. */
   isReservedDeviceId(deviceId: string): boolean {
     this.sweep()
     for (const entry of this.entries.values()) {
-      if (entry.reservedDeviceId === deviceId) {
+      if (
+        entry.reservedDeviceId === deviceId &&
+        (entry.state === 'open' || entry.state === 'redeeming')
+      ) {
         return true
       }
     }
