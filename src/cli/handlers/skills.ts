@@ -12,7 +12,10 @@ import {
   WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL
 } from '../../shared/windows-batch-spawn'
 import { isUsableSkillsCliAgentKey } from '../../shared/skills-cli-agent-keys'
-import { detectSkillsCliAgentKeys } from '../../shared/skills-cli-agent-detection'
+import {
+  detectSkillsCliAgentKeys,
+  detectSkillsCliUpdateAgentKeys
+} from '../../shared/skills-cli-agent-detection'
 import { buildAgentFeatureSkillInstallArgs } from '../../shared/agent-feature-install-commands'
 import { readOrcaCliVersion } from '../cli-version'
 
@@ -109,7 +112,7 @@ function runNpxSkills(args: string[]): Promise<number> {
 
 type SkillMutationVerb = 'install' | 'update'
 
-function resolveInstallAgentKeys(flags: Map<string, string | boolean>): string[] {
+function resolveAgentKeys(verb: SkillMutationVerb, flags: Map<string, string | boolean>): string[] {
   const requested = flags.get('agent')
   if (flags.has('agent') && typeof requested !== 'string') {
     throw new RuntimeClientError('invalid_argument', 'Missing required --agent')
@@ -142,6 +145,9 @@ function resolveInstallAgentKeys(flags: Map<string, string | boolean>): string[]
       )
     }
     return keys
+  }
+  if (verb === 'update') {
+    return detectSkillsCliUpdateAgentKeys()
   }
   const detected = detectSkillsCliAgentKeys()
   if (detected.length > 0) {
@@ -219,7 +225,7 @@ function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
     const global = flags.get('local') !== true
     // Why: update is the same pinned `skills add`; `skills update` follows GitHub HEAD,
     // which runs ahead of the release this CLI judges freshness against.
-    const npxArgs = buildNpxSkillsArgs(skillNames, global, resolveInstallAgentKeys(flags))
+    const npxArgs = buildNpxSkillsArgs(skillNames, global, resolveAgentKeys(verb, flags))
     const command = formatNpxCommand(npxArgs)
     const dryRun = flags.get('dry-run') === true
 

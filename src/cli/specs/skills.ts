@@ -112,7 +112,8 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
         'replaces each selected skill with the copy this Orca release ships.',
       'Updates the global install (all projects, adds --global) by default. Use --local to ' +
         'update the current project instead.',
-      'Targets the same agents as `orca skills install`; use --agent to choose them yourself.',
+      'Targets the same agents as `orca skills install`, or only the shared ' +
+        '.agents/skills directory when none is detected; use --agent to choose them yourself.',
       'Use --dry-run to print the resolved command without running it.',
       'With --json, the skill listing and --dry-run emit JSON; a real update streams ' +
         "npx's own non-JSON output live and rejects --json.",

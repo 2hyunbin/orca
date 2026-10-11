@@ -810,6 +810,17 @@ describe('orca skills CLI', () => {
     )
   })
 
+  it('never refuses an update on a bare host; it targets the shared folder', async () => {
+    detectCommandsMock.mockReturnValue(new Set<string>())
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await main(['skills', 'update', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
+
+    expect(stdoutText(stdoutSpy)).toContain(
+      'npx --yes skills add https://github.com/stablyai/orca/tree/v1.4.222 --skill alpha --global --agent universal -y'
+    )
+  })
+
   it('refuses to run when the CLI cannot read its own release version', async () => {
     readOrcaCliVersionMock.mockReturnValue(null)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})

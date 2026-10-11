@@ -16,7 +16,6 @@ class FakeChild extends EventEmitter {
 
 function makeRunner(
   overrides: {
-    detectAgentKeys?: () => string[]
     rescanOutdatedNames?: (names: string[]) => Promise<string[]>
     resolveCommand?: (name: string) => string
     killTree?: (pid: number, killRoot: () => void) => Promise<void>
@@ -28,7 +27,7 @@ function makeRunner(
   const states: SkillUpdateRun[] = []
   const runner = new SkillUpdateRunner({
     appVersion: '1.4.222',
-    detectAgentKeys: overrides.detectAgentKeys ?? (() => ['claude-code', 'universal']),
+    detectAgentKeys: () => ['claude-code', 'universal'],
     now: () => 1000,
     resolveCommand: overrides.resolveCommand ?? (() => '/usr/local/bin/npx'),
     rescanOutdatedNames: overrides.rescanOutdatedNames,
@@ -72,13 +71,6 @@ describe('SkillUpdateRunner', () => {
       'universal',
       '-y'
     ])
-  })
-
-  it('targets the shared skills folder when no agent is detected', () => {
-    const { runner, spawnCalls } = makeRunner({ detectAgentKeys: () => [] })
-    runner.start(['orca-cli'])
-
-    expect(spawnCalls[0].args.slice(-3)).toEqual(['--agent', 'universal', '-y'])
   })
 
   it('ignores stdin so the CLI sees a non-TTY', () => {

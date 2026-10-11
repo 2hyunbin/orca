@@ -1,5 +1,5 @@
 import { detectCommandsInInstallDirs } from './local-agent-install-dir-detection'
-import { toSkillsCliAgentKeys } from './skills-cli-agent-keys'
+import { SKILLS_CLI_UNIVERSAL_AGENT_KEY, toSkillsCliAgentKeys } from './skills-cli-agent-keys'
 import {
   getTuiAgentDetectionProbeCommands,
   KNOWN_TUI_AGENT_DETECTION_COMMANDS,
@@ -16,4 +16,11 @@ export function detectSkillsCliAgentKeys(): string[] {
     runtime
   )
   return detected.length === 0 ? [] : toSkillsCliAgentKeys(detected)
+}
+
+// Why: an update rewrites a skill the shared folder already holds, so a host with no
+// detected agent still has a target, and never the CLI's all-agents default.
+export function detectSkillsCliUpdateAgentKeys(): string[] {
+  const detected = detectSkillsCliAgentKeys()
+  return detected.length > 0 ? detected : [SKILLS_CLI_UNIVERSAL_AGENT_KEY]
 }

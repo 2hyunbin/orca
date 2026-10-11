@@ -5,8 +5,7 @@ import {
   type SkillUpdateStartResult
 } from '../../shared/skill-freshness'
 import { buildAgentFeatureSkillInstallArgs } from '../../shared/agent-feature-install-commands'
-import { detectSkillsCliAgentKeys } from '../../shared/skills-cli-agent-detection'
-import { SKILLS_CLI_UNIVERSAL_AGENT_KEY } from '../../shared/skills-cli-agent-keys'
+import { detectSkillsCliUpdateAgentKeys } from '../../shared/skills-cli-agent-detection'
 import { resolveCliCommand } from '../codex-cli/command'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { killWithDescendantSweep } from '../pty-descendant-termination'
@@ -33,7 +32,7 @@ export const CANCEL_RELEASE_TIMEOUT_MS = 12_000
 export type SkillUpdateRunnerDeps = {
   /** The running build's version; the install is pinned to its release tag. */
   appVersion: string
-  /** Same targets `orca skills install` picks on this host. */
+  /** Same targets `orca skills update` picks on this host. */
   detectAgentKeys?: () => string[]
   spawnProcess?: typeof spawn
   resolveCommand?: (commandName: string) => string
@@ -102,15 +101,12 @@ export class SkillUpdateRunner {
     const resolveCommand = this.deps.resolveCommand ?? ((name: string) => resolveCliCommand(name))
     const spawnProcess = this.deps.spawnProcess ?? spawn
     const npxCommand = resolveCommand('npx')
-    const detectedAgents = (this.deps.detectAgentKeys ?? detectSkillsCliAgentKeys)()
     const npxArgs = [
       '--yes',
       ...buildAgentFeatureSkillInstallArgs(canonicalNames, {
         appVersion: this.deps.appVersion,
         yes: true,
-        // Why: the skill already lives in the shared folder, so a host with no detected
-        // agent still has a target that cannot widen into the CLI's all-agents branch.
-        agents: detectedAgents.length > 0 ? detectedAgents : [SKILLS_CLI_UNIVERSAL_AGENT_KEY]
+        agents: (this.deps.detectAgentKeys ?? detectSkillsCliUpdateAgentKeys)()
       })
     ]
 
