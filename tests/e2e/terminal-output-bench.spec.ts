@@ -267,7 +267,9 @@ async function installMainProbe(app: ElectronApplication): Promise<void> {
     net.Socket.prototype.emit = function (this: any, event: string | symbol, ...args: any[]) {
       const chunk = args[0]
       if (event === 'data' && chunk && typeof chunk.length === 'number') {
-        const key: string = this._pipeName || `${this.remoteAddress}:${this.remotePort}`
+        // One entry per socket object: unix sockets have no address to tell them apart.
+        this.__obenchId ??= (g.__obenchNextId = (g.__obenchNextId ?? 0) + 1)
+        const key = `socket-${this.__obenchId}-fd${this._handle?.fd ?? '?'}`
         let s = st.sockets.get(key)
         if (!s) {
           s = {
@@ -338,7 +340,7 @@ async function readMainProbe(app: ElectronApplication): Promise<Json[]> {
       .slice(0, 3)
       .map(({ turnBytes: _t, open: _o, ...rest }: any) => ({
         ...rest,
-        key: String(rest.key).split(/[\\/]/).at(-1)
+        key: String(rest.key)
       }))
   )
 }
