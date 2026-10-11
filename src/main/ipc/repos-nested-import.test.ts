@@ -239,14 +239,14 @@ describe('projectGroups IPC validation', () => {
         throw new Error(`secret backend path ${join(root, 'api')}`)
       })
 
-      const result = (await handlers.get('projectGroups:importNested')!(null, {
+      const result = await handlers.get('projectGroups:importNested')!(null, {
         parentPath: root,
         groupName: 'Platform',
         projectPaths: [join(root, 'api')],
         mode: 'group'
-      })) as { projects: { error?: string }[] }
+      })
 
-      expect(result.projects[0].error).toBe('Repository could not be imported')
+      expect(result).toMatchObject({ projects: [{ error: 'Repository could not be imported' }] })
     })
   })
 })

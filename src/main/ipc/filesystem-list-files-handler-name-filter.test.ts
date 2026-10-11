@@ -125,10 +125,9 @@ describe('fs:listFiles local name filter', () => {
 
       // Why: cancellation keys are scoped to the issuing webContents.
       const senderEvent = { sender: Object.assign(new EventEmitter(), { id: 7 }) }
-      const pending = handlers.get('fs:listFiles')!(senderEvent, {
-        rootPath: '/repo',
-        requestToken: 'token-1'
-      }) as Promise<string[]>
+      const pending = Promise.resolve(
+        handlers.get('fs:listFiles')!(senderEvent, { rootPath: '/repo', requestToken: 'token-1' })
+      )
 
       await Promise.resolve()
       expect(capturedSignal?.aborted).toBe(false)
