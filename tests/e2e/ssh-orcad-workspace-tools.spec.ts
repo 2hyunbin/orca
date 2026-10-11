@@ -109,8 +109,6 @@ for (const acrossReconnect of [false, true]) {
 
 test('a terminal link opens an image outside the managed workspace', async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
 {}, testInfo) => {
-  // Why fixme: in-workspace links work (ssh-orcad-terminal-root-owner); this path gets no link at all.
-  test.fixme(true, 'A managed terminal does not linkify a path outside its workspace')
   test.setTimeout(10 * 60_000)
   const imagePath = '/tmp/orca-ssh-external-preview.png'
   const imageBase64 =

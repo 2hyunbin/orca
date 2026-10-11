@@ -47,9 +47,14 @@ type EditorTabAccessFile = Pick<
 
 /** A read-only tab named by absolute path is this computer's file: an AI Vault log or a client-local link. */
 export function isClientLocalReadOnlyTab(
-  file: Pick<OpenFile, 'filePath' | 'relativePath' | 'readOnly' | 'liveTail'>
+  file: Pick<OpenFile, 'filePath' | 'relativePath' | 'readOnly' | 'liveTail'> &
+    Partial<Pick<OpenFile, 'terminalArtifactGrantId'>>
 ): boolean {
-  return file.readOnly === true && (file.liveTail === true || file.relativePath === file.filePath)
+  return (
+    file.readOnly === true &&
+    file.terminalArtifactGrantId === undefined &&
+    (file.liveTail === true || file.relativePath === file.filePath)
+  )
 }
 
 /**
