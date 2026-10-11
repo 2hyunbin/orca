@@ -33,7 +33,11 @@ describe('redirectIncomingPairingLink', () => {
       `orca://expo-development-client/?url=${encodeURIComponent('orca://pair-confirm?%2563ode=abc')}`,
       `orca://expo-development-client/?junk=%ZZ&url=${encodeURIComponent('orca://pair-confirm?code=x')}`,
       'orca://expo-development-client/?url=orca%3A%2F%2Fpair-confirm%3Fa%3D%E0%26code%3DSECRET',
-      'orca://expo-development-client/?url=orca://pair-confirm?a%3D%E0%26code%3DSECRET'
+      'orca://expo-development-client/?url=orca://pair-confirm?a%3D%E0%26code%3DSECRET',
+      'orca://expo-development-client/?url=orca://pair-confirm?co%09de=SECRET',
+      'orca://expo-development-client/?url=orca://pair-confirm?c%0Aode=SECRET',
+      'orca://expo-development-client/?url=orca://pair-confirm%3Fcode%0D=SECRET',
+      'orca://pair-con%09firm?x=1'
     ]) {
       expect(redirectIncomingPairingLink(url), url).toBe(refused)
     }

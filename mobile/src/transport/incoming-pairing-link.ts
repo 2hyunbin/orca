@@ -27,7 +27,7 @@ export function redirectIncomingPairingLink(url: string): string | null {
   }
   // Why: the router ignores an https link's host, and reads a custom scheme's host as the route.
   const path = /^https?$/i.test(scheme ?? '') ? location.replace(/^[^/]*/, '') : location
-  const segments = safeDecode(path)
+  const segments = stripUrlWhitespace(safeDecode(path))
     .toLowerCase()
     .split('/')
     .filter((segment) => segment !== '' && segment !== '.')
@@ -43,8 +43,10 @@ function fullyDecode(value: string): string {
   for (;;) {
     // Why byte by byte: an invalid UTF-8 escape must not shield a neighbouring `%26code%3D`, which
     // the router still decodes. Bytes are exact for the ASCII this check reads.
-    const next = decoded.replace(/%([0-9a-f]{2})/gi, (_, hex: string) =>
-      String.fromCharCode(Number.parseInt(hex, 16))
+    const next = stripUrlWhitespace(
+      decoded.replace(/%([0-9a-f]{2})/gi, (_, hex: string) =>
+        String.fromCharCode(Number.parseInt(hex, 16))
+      )
     )
     if (next === decoded) {
       break
@@ -52,6 +54,11 @@ function fullyDecode(value: string): string {
     decoded = next
   }
   return decoded
+}
+
+// Why: URL parsers silently drop tab, LF and CR, so `co%09de=` reaches the router as `code=`.
+function stripUrlWhitespace(value: string): string {
+  return value.replace(/[\t\n\r]/g, '')
 }
 
 function safeDecode(value: string): string {
