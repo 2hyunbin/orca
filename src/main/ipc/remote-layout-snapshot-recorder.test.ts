@@ -1,0 +1,142 @@
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import type { RemoteLayoutSnapshot } from '../../shared/remote-layout-snapshot'
+import type { RuntimeRpcResponse } from '../../shared/runtime-rpc-envelope'
+import { scanSourceTree, stripComments } from '../../shared/source-scan/source-tree-scan'
+import {
+  forgetRemoteLayoutSnapshot,
+  recordRemoteLayoutFrame,
+  type RemoteLayoutSnapshotStore
+} from './remote-layout-snapshot-recorder'
+
+const METHOD = 'session.tabs.subscribeAll'
+
+function memoryStore() {
+  const snapshots = new Map<string, RemoteLayoutSnapshot>()
+  let writes = 0
+  const store: RemoteLayoutSnapshotStore = {
+    getRemoteLayoutSnapshot: (environmentId) => snapshots.get(environmentId),
+    setRemoteLayoutSnapshot: (environmentId, snapshot) => {
+      writes += 1
+      if (snapshot) {
+        snapshots.set(environmentId, snapshot)
+      } else {
+        snapshots.delete(environmentId)
+      }
+    }
+  }
+  return { store, snapshots, writes: () => writes }
+}
+
+function tabs(worktree: string, title = 'shell') {
+  return {
+    worktree,
+    publicationEpoch: 'epoch',
+    snapshotVersion: 1,
+    activeGroupId: null,
+    activeTabId: null,
+    activeTabType: null,
+    tabs: [{ type: 'terminal', id: `${worktree}-tab`, title }]
+  }
+}
+
+function frame(result: unknown, runtimeId = 'server-1'): RuntimeRpcResponse<unknown> {
+  return { id: 'stream', ok: true, result, _meta: { runtimeId } }
+}
+
+function workspacesOf(snapshots: Map<string, RemoteLayoutSnapshot>, environmentId = 'env') {
+  return snapshots.get(environmentId)?.workspaces
+}
+
+describe('remote layout snapshot recorder', () => {
+  it('replaces the whole entry on each census, dropping worktrees it no longer lists', () => {
+    const { store, snapshots } = memoryStore()
+    recordRemoteLayoutFrame(
+      store,
+      'env',
+      METHOD,
+      frame({ type: 'snapshots', snapshots: [tabs('a'), tabs('b')] })
+    )
+    recordRemoteLayoutFrame(
+      store,
+      'env',
+      METHOD,
+      frame({ type: 'snapshots', snapshots: [tabs('b', 'renamed')] }, 'server-2')
+    )
+
+    expect(snapshots.get('env')).toMatchObject({
+      serverRuntimeId: 'server-2',
+      protocol: 'session-tabs',
+      workspaces: { b: tabs('b', 'renamed') }
+    })
+    expect(workspacesOf(snapshots)).not.toHaveProperty('a')
+  })
+
+  it('replaces one worktree on an update and drops it on a removal', () => {
+    const { store, snapshots } = memoryStore()
+    recordRemoteLayoutFrame(
+      store,
+      'env',
+      METHOD,
+      frame({ type: 'snapshots', snapshots: [tabs('a'), tabs('b')] })
+    )
+    recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'updated', ...tabs('a', 'vim') }))
+    expect(workspacesOf(snapshots)).toEqual({ a: tabs('a', 'vim'), b: tabs('b') })
+
+    recordRemoteLayoutFrame(
+      store,
+      'env',
+      METHOD,
+      frame({ type: 'updated', ...tabs('b'), tabs: [], removed: true })
+    )
+    expect(workspacesOf(snapshots)).toEqual({ a: tabs('a', 'vim') })
+  })
+
+  it('keeps each server in its own entry', () => {
+    const { store, snapshots } = memoryStore()
+    recordRemoteLayoutFrame(
+      store,
+      'one',
+      METHOD,
+      frame({ type: 'snapshots', snapshots: [tabs('a')] })
+    )
+    recordRemoteLayoutFrame(store, 'two', METHOD, frame({ type: 'snapshots', snapshots: [] }))
+    expect(workspacesOf(snapshots, 'one')).toEqual({ a: tabs('a') })
+    expect(workspacesOf(snapshots, 'two')).toEqual({})
+  })
+
+  it('records nothing from other streams, failures, ends or unreadable frames', () => {
+    const { store, writes } = memoryStore()
+    const census = { type: 'snapshots', snapshots: [tabs('a')] }
+    recordRemoteLayoutFrame(store, 'env', 'session.tabs.subscribe', frame(census))
+    recordRemoteLayoutFrame(store, 'env', 'terminal.multiplex', frame(census))
+    recordRemoteLayoutFrame(store, 'env', METHOD, {
+      id: 'stream',
+      ok: false,
+      error: { code: 'method_not_found', message: 'nope' },
+      _meta: { runtimeId: 'server-1' }
+    })
+    recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'end' }))
+    recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'snapshots', snapshots: [{}] }))
+    recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'updated', worktree: 'a' }))
+    expect(writes()).toBe(0)
+  })
+
+  it('forgets a removed server', () => {
+    const { store, snapshots } = memoryStore()
+    recordRemoteLayoutFrame(store, 'env', METHOD, frame({ type: 'snapshots', snapshots: [] }))
+    forgetRemoteLayoutSnapshot(store, 'env')
+    expect(snapshots.has('env')).toBe(false)
+  })
+
+  it('is the only code that writes the snapshot', () => {
+    const src = join(__dirname, '../..')
+    const writers = scanSourceTree(src)
+      .filter(({ source }) => stripComments(source).includes('setRemoteLayoutSnapshot('))
+      .map(({ relativePath }) => relativePath)
+    expect(writers.sort()).toEqual([
+      'main/ipc/remote-layout-snapshot-recorder.ts',
+      'main/persistence/loading-store/remote-layout-snapshot-persistence.ts'
+    ])
+  })
+})
