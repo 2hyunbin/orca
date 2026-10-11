@@ -9,7 +9,10 @@ import {
 } from './daemon-endpoint-adoption'
 import { createLegacyDaemonAdapters } from './daemon-legacy-adapters'
 import { discoverNewerProtocolDaemons } from './daemon-newer-protocol-discovery'
-import { setNewerProtocolDaemons } from './daemon-newer-protocol-hold'
+import {
+  isHoldingForNewerProtocolDaemon,
+  setNewerProtocolDaemons
+} from './daemon-newer-protocol-hold'
 import {
   getDaemonHistoryDir as getHistoryDir,
   getDaemonRuntimeDir as getRuntimeDir,
@@ -123,7 +126,7 @@ export async function initDaemonPtyProvider(
       discoverNewerProtocolDaemons(runtimeDir)
     ])
     legacyAdapters = discoveredLegacyAdapters
-    setNewerProtocolDaemons(runtimeDir, newerDaemons)
+    setNewerProtocolDaemons(newerDaemons)
     routedAdapter =
       launchMode === 'degraded-new-pty-fallback'
         ? new DegradedDaemonPtyProvider({
@@ -133,7 +136,7 @@ export async function initDaemonPtyProvider(
             probeCurrentDaemonSpawn: async () =>
               (await checkDaemonHealth(info.socketPath, info.tokenPath)) === 'healthy'
           })
-        : legacyAdapters.length > 0
+        : legacyAdapters.length > 0 || isHoldingForNewerProtocolDaemon()
           ? new DaemonPtyRouter({
               current: newAdapter,
               legacy: legacyAdapters

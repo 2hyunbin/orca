@@ -294,6 +294,6 @@ export function registerPtyHandlers(
   installPtyInspectIpcHandlers({ getLocalPtyProviderStartupPromise })
   installPtyCodexSharedServerIpcHandler({ getLocalPtyProviderStartupPromise })
   installPtyClaudeOldTerminalIpcHandler({ getLocalPtyProviderStartupPromise })
-  installPtyNewerDaemonHoldIpcHandlers({ getLocalPtyProviderStartupPromise })
+  installPtyNewerDaemonHoldIpcHandlers(mainWindow)
   installPtyKillIpcHandler(killDeps)
 }

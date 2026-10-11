@@ -48,6 +48,7 @@ export function createPtyApi(): NonNullable<Partial<PreloadApi>['pty']> {
     // Why: the paired host owns its daemons; this client has none to hold for.
     readNewerDaemonHold: () => Promise.resolve({ held: false }),
     reopenNewerDaemonTerminals: () => Promise.resolve({ reopened: false }),
+    onNewerDaemonReleased: () => noopUnsubscribe,
     getCwd: () => Promise.resolve('~'),
     getSize: () => Promise.resolve(null),
     listSessions: () => Promise.resolve([]),

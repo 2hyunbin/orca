@@ -1,10 +1,7 @@
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const stop = vi.hoisted(() => ({
-  identity: vi.fn<(pid: number) => Promise<'match' | 'mismatch' | 'unknown'>>(),
+  classify: vi.fn<(runtimeDir: string, protocolVersion: number) => Promise<string>>(),
   kill: vi.fn<
     (
       runtimeDir: string,
@@ -13,10 +10,11 @@ const stop = vi.hoisted(() => ({
       protocolVersion: number
     ) => Promise<{ killed: boolean; liveOwnerSurvived: boolean }>
   >(),
-  detectColdRestore: vi.fn<(sessionId: string) => Promise<unknown>>(),
-  sessions: vi.fn<() => Promise<{ sessionId: string }[] | null>>()
+  detectColdRestore: vi.fn<(sessionId: string) => Promise<unknown>>()
 }))
-vi.mock('./daemon-pid-identity', () => ({ inspectDaemonProcessIdentity: stop.identity }))
+vi.mock('./daemon-newer-protocol-discovery', () => ({
+  classifyNewerProtocolDaemon: stop.classify
+}))
 vi.mock('./daemon-stale-kill', () => ({ killStaleDaemon: stop.kill }))
 vi.mock('./history-reader', () => ({
   HistoryReader: class {
@@ -25,63 +23,41 @@ vi.mock('./history-reader', () => ({
     }
   }
 }))
-vi.mock('./daemon-provider-routing', () => ({
-  listEveryDaemonGeneration: () => stop.sessions()
+vi.mock('./daemon-launch-paths', () => ({
+  getDaemonHistoryDir: () => '/history',
+  getDaemonRuntimeDir: () => '/runtime'
 }))
-vi.mock('./daemon-launch-paths', () => ({ getDaemonHistoryDir: () => '/unused' }))
 
 import {
-  hasNewerProtocolDaemonHold,
+  isHoldingForNewerProtocolDaemon,
   readNewerDaemonHold,
   reopenNewerDaemonTerminals,
   setNewerProtocolDaemons
 } from './daemon-newer-protocol-hold'
-import type { DaemonProvider } from './daemon-provider-routing'
-import { getDaemonPidPath } from './daemon-spawner'
 import { PROTOCOL_VERSION } from './types'
 
 const NEWER = PROTOCOL_VERSION + 1
-// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census is mocked; the provider is only passed through.
-const provider = {} as DaemonProvider
-let runtimeDir: string
-
-function writeNewerRecord(): void {
-  writeFileSync(
-    getDaemonPidPath(runtimeDir, NEWER),
-    JSON.stringify({ pid: 4242, startedAtMs: 1, launchNonce: 'n' })
-  )
-  writeFileSync(join(runtimeDir, `daemon-v${NEWER}.token`), 'secret')
-}
 
 beforeEach(() => {
   vi.clearAllMocks()
-  runtimeDir = mkdtempSync(join(tmpdir(), 'orca-newer-hold-'))
-  stop.sessions.mockResolvedValue([])
   stop.detectColdRestore.mockResolvedValue(null)
   stop.kill.mockResolvedValue({ killed: true, liveOwnerSurvived: false })
-  setNewerProtocolDaemons(runtimeDir, [])
-})
-
-afterEach(() => {
-  rmSync(runtimeDir, { recursive: true, force: true })
+  setNewerProtocolDaemons([])
 })
 
 describe('readNewerDaemonHold', () => {
-  it('holds nothing without a newer daemon, so older-daemon adoption is untouched', async () => {
-    await expect(readNewerDaemonHold('s1', provider)).resolves.toEqual({ held: false })
-    expect(stop.sessions).not.toHaveBeenCalled()
-  })
-
-  it('holds nothing for stale newer artifacts', async () => {
-    setNewerProtocolDaemons(runtimeDir, [{ protocolVersion: NEWER, verdict: 'exited' }])
-    expect(hasNewerProtocolDaemonHold()).toBe(false)
-    await expect(readNewerDaemonHold('s1', provider)).resolves.toEqual({ held: false })
+  it('holds nothing without a newer daemon, or for stale newer artifacts', async () => {
+    await expect(readNewerDaemonHold('s1')).resolves.toEqual({ held: false })
+    setNewerProtocolDaemons([{ protocolVersion: NEWER, verdict: 'exited' }])
+    expect(isHoldingForNewerProtocolDaemon()).toBe(false)
+    await expect(readNewerDaemonHold('s1')).resolves.toEqual({ held: false })
+    expect(stop.detectColdRestore).not.toHaveBeenCalled()
   })
 
   it.each(['live', 'unverifiable'] as const)(
-    'holds an unclaimed session while a newer daemon is %s',
+    'returns the saved screen while a newer daemon is %s',
     async (verdict) => {
-      setNewerProtocolDaemons(runtimeDir, [{ protocolVersion: NEWER, verdict }])
+      setNewerProtocolDaemons([{ protocolVersion: NEWER, verdict }])
       stop.detectColdRestore.mockResolvedValue({
         snapshotAnsi: 'hello',
         scrollbackAnsi: '',
@@ -91,90 +67,57 @@ describe('readNewerDaemonHold', () => {
         rows: 24,
         modes: { alternateScreen: false }
       })
-      const hold = await readNewerDaemonHold('s1', provider)
-      expect(hold.held).toBe(true)
+      const hold = await readNewerDaemonHold('s1')
       expect(hold.held && hold.restoredScreen?.scrollback.startsWith('hello')).toBe(true)
     }
   )
-
-  it('releases a session an adopted daemon owns', async () => {
-    setNewerProtocolDaemons(runtimeDir, [{ protocolVersion: NEWER, verdict: 'live' }])
-    stop.sessions.mockResolvedValue([{ sessionId: 's1' }])
-    await expect(readNewerDaemonHold('s1', provider)).resolves.toEqual({ held: false })
-  })
-
-  it('holds when the adopted inventory cannot answer', async () => {
-    setNewerProtocolDaemons(runtimeDir, [{ protocolVersion: NEWER, verdict: 'live' }])
-    stop.sessions.mockResolvedValue(null)
-    await expect(readNewerDaemonHold('s1', provider)).resolves.toEqual({
-      held: true,
-      restoredScreen: null
-    })
-  })
 })
 
 describe('reopenNewerDaemonTerminals', () => {
-  beforeEach(() => {
-    writeNewerRecord()
-    setNewerProtocolDaemons(runtimeDir, [{ protocolVersion: NEWER, verdict: 'live' }])
-  })
+  beforeEach(() => setNewerProtocolDaemons([{ protocolVersion: NEWER, verdict: 'live' }]))
 
-  it('releases the hold once the verified daemon is confirmed exited', async () => {
-    stop.identity.mockResolvedValueOnce('match').mockResolvedValueOnce('mismatch')
+  it('releases once the verified daemon is stopped and reclassified exited', async () => {
+    stop.classify.mockResolvedValueOnce('live').mockResolvedValueOnce('exited')
     await expect(reopenNewerDaemonTerminals()).resolves.toEqual({ reopened: true })
     expect(stop.kill).toHaveBeenCalledWith(
-      runtimeDir,
+      '/runtime',
       expect.stringContaining(`v${NEWER}`),
-      join(runtimeDir, `daemon-v${NEWER}.token`),
+      expect.stringContaining(`daemon-v${NEWER}.token`),
       NEWER
     )
-    expect(hasNewerProtocolDaemonHold()).toBe(false)
+    expect(isHoldingForNewerProtocolDaemon()).toBe(false)
   })
 
   it('reopens nothing when the daemon survives the stop', async () => {
-    stop.identity.mockResolvedValue('match')
+    stop.classify.mockResolvedValue('live')
     stop.kill.mockResolvedValue({ killed: false, liveOwnerSurvived: true })
     await expect(reopenNewerDaemonTerminals()).resolves.toEqual({ reopened: false })
-    expect(hasNewerProtocolDaemonHold()).toBe(true)
+    expect(isHoldingForNewerProtocolDaemon()).toBe(true)
   })
 
-  it('reopens nothing when a stop reports success but the pid is still that daemon', async () => {
-    stop.identity.mockResolvedValue('match')
+  it('reopens nothing when a stop reports success but the daemon still reads live', async () => {
+    stop.classify.mockResolvedValue('live')
     await expect(reopenNewerDaemonTerminals()).resolves.toEqual({ reopened: false })
-    expect(hasNewerProtocolDaemonHold()).toBe(true)
+    expect(isHoldingForNewerProtocolDaemon()).toBe(true)
   })
 
-  it('never signals or edits files for a pid it cannot identify', async () => {
-    stop.identity.mockResolvedValue('unknown')
+  it('never signals an owner it cannot identify', async () => {
+    stop.classify.mockResolvedValue('unverifiable')
     await expect(reopenNewerDaemonTerminals()).resolves.toEqual({ reopened: false })
     expect(stop.kill).not.toHaveBeenCalled()
-    expect(readdirSync(runtimeDir).sort()).toEqual([
-      `daemon-v${NEWER}.pid`,
-      `daemon-v${NEWER}.token`
-    ])
-    expect(hasNewerProtocolDaemonHold()).toBe(true)
+    expect(isHoldingForNewerProtocolDaemon()).toBe(true)
   })
 
-  it('treats a daemon that already exited as confirmed without signalling', async () => {
-    stop.identity.mockResolvedValue('mismatch')
+  it('releases a daemon that already reads exited without signalling it', async () => {
+    stop.classify.mockResolvedValue('exited')
     await expect(reopenNewerDaemonTerminals()).resolves.toEqual({ reopened: true })
     expect(stop.kill).not.toHaveBeenCalled()
-  })
-
-  it('treats a record the daemon removed on exit as confirmed', async () => {
-    rmSync(getDaemonPidPath(runtimeDir, NEWER))
-    await expect(reopenNewerDaemonTerminals()).resolves.toEqual({ reopened: true })
-    expect(stop.identity).not.toHaveBeenCalled()
   })
 
   it('shares one stop between concurrent clicks', async () => {
-    stop.identity.mockResolvedValueOnce('match').mockResolvedValueOnce('mismatch')
-    const [first, second] = await Promise.all([
-      reopenNewerDaemonTerminals(),
-      reopenNewerDaemonTerminals()
-    ])
-    expect(first).toEqual({ reopened: true })
-    expect(second).toEqual({ reopened: true })
+    stop.classify.mockResolvedValueOnce('live').mockResolvedValueOnce('exited')
+    const results = await Promise.all([reopenNewerDaemonTerminals(), reopenNewerDaemonTerminals()])
+    expect(results).toEqual([{ reopened: true }, { reopened: true }])
     expect(stop.kill).toHaveBeenCalledTimes(1)
   })
 })

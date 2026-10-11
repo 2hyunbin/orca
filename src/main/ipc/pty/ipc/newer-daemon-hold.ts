@@ -1,35 +1,36 @@
-import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
-import type { NewerDaemonHold, NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
+import {
+  NEWER_DAEMON_RELEASED_CHANNEL,
+  type NewerDaemonHold,
+  type NewerDaemonReopenResult
+} from '../../../../shared/newer-daemon-hold'
 import {
   readNewerDaemonHold,
   reopenNewerDaemonTerminals
 } from '../../../daemon/daemon-newer-protocol-hold'
-import { getDaemonProvider } from '../../../daemon/daemon-provider-state'
-import { parseAppSshPtyId } from '../../../providers/ssh-pty-id'
 import { getPtyIpc } from '../../pty-host-bindings'
+import type { PtyRendererDelivery } from '../session'
 
-type Deps = { getLocalPtyProviderStartupPromise: () => Promise<void> | undefined }
+// Why the PTY delivery window: terminal panes live only in the renderer that receives pty events.
+function announceNewerDaemonReleased(mainWindow: PtyRendererDelivery | undefined): void {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send(NEWER_DAEMON_RELEASED_CHANNEL)
+  }
+}
 
-// Why local only: another host's terminal is held, or not, by that host's own daemon census.
-export function installPtyNewerDaemonHoldIpcHandlers(deps: Deps): void {
+export function installPtyNewerDaemonHoldIpcHandlers(mainWindow?: PtyRendererDelivery): void {
   const ipcMain = getPtyIpc()
   ipcMain.handle(
     'pty:readNewerDaemonHold',
-    async (_event, args: { sessionId: string }): Promise<NewerDaemonHold> => {
-      const sessionId = args?.sessionId
-      if (
-        typeof sessionId !== 'string' ||
-        isRemoteRuntimePtyId(sessionId) ||
-        parseAppSshPtyId(sessionId)
-      ) {
-        return { held: false }
-      }
-      // Why: the census and the adopted inventory are both set by the daemon provider swap.
-      await deps.getLocalPtyProviderStartupPromise()
-      return readNewerDaemonHold(sessionId, getDaemonProvider())
+    (_event, args: { sessionId: string }): Promise<NewerDaemonHold> =>
+      typeof args?.sessionId === 'string'
+        ? readNewerDaemonHold(args.sessionId)
+        : Promise.resolve({ held: false })
+  )
+  ipcMain.handle('pty:reopenNewerDaemonTerminals', async (): Promise<NewerDaemonReopenResult> => {
+    const result = await reopenNewerDaemonTerminals()
+    if (result.reopened) {
+      announceNewerDaemonReleased(mainWindow)
     }
-  )
-  ipcMain.handle('pty:reopenNewerDaemonTerminals', (): Promise<NewerDaemonReopenResult> =>
-    reopenNewerDaemonTerminals()
-  )
+    return result
+  })
 }

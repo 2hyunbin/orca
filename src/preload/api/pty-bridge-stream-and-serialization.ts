@@ -4,7 +4,11 @@ import type { TerminalSideEffectBatch } from '../../shared/terminal-side-effect-
 import type { PreloadApi } from '../api-types'
 import type { TerminalProcessInspection } from '../../shared/terminal-process-inspection'
 import type { CodexSharedServerStatus } from '../../shared/codex-shared-server-command'
-import type { NewerDaemonHold, NewerDaemonReopenResult } from '../../shared/newer-daemon-hold'
+import {
+  NEWER_DAEMON_RELEASED_CHANNEL,
+  type NewerDaemonHold,
+  type NewerDaemonReopenResult
+} from '../../shared/newer-daemon-hold'
 
 export const ptyStreamAndSerializationApi = {
   inspectProcess: (
@@ -32,6 +36,11 @@ export const ptyStreamAndSerializationApi = {
     ipcRenderer.invoke('pty:readNewerDaemonHold', { sessionId }),
   reopenNewerDaemonTerminals: (): Promise<NewerDaemonReopenResult> =>
     ipcRenderer.invoke('pty:reopenNewerDaemonTerminals'),
+  onNewerDaemonReleased: (callback: () => void): (() => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(NEWER_DAEMON_RELEASED_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(NEWER_DAEMON_RELEASED_CHANNEL, listener)
+  },
   getCwd: (id: string): Promise<string> => ipcRenderer.invoke('pty:getCwd', { id }),
   getSize: (id: string): Promise<{ cols: number; rows: number } | null> =>
     ipcRenderer.invoke('pty:getSize', { id }),

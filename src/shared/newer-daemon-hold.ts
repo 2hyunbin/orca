@@ -11,3 +11,6 @@ export type NewerDaemonHold =
     }
 
 export type NewerDaemonReopenResult = { reopened: boolean }
+
+/** Main → every renderer window: the newer daemons are confirmed stopped. */
+export const NEWER_DAEMON_RELEASED_CHANNEL = 'pty:newerDaemonReleased'

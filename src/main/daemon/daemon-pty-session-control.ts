@@ -48,6 +48,11 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     return this.activeSessionIds.has(id)
   }
 
+  /** Whether a spawn of this id would cold-restore saved history (the same probe spawn uses). */
+  hasRestorableHistory(id: string): boolean {
+    return this.historyReader?.hasRestorableHistory(id) ?? false
+  }
+
   async probePtyLiveness(id: string): Promise<boolean | null> {
     try {
       if (!this.getSizeUnsupported && this.protocolVersion >= GET_SIZE_PROTOCOL_VERSION) {

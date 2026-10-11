@@ -1,16 +1,14 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { probeDaemonSocket } from './daemon-launch-paths'
-import { parseDaemonPidFile, salvagePidFromCorruptDaemonRecord } from './daemon-pid-file-parse'
+import { endpointIsProvenDead, probeSocketConnect } from './daemon-endpoint-probe'
+import type { ProcessLivenessVerdict } from './daemon-incarnation-evidence-types'
+import { parseDaemonPidFile } from './daemon-pid-file-parse'
 import { inspectDaemonProcessIdentity } from './daemon-pid-identity'
-import { inspectProcessSignal } from './daemon-process-inspection'
 import { getDaemonPidPath, getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
 import { PROTOCOL_VERSION } from './types'
 
-export type NewerProtocolDaemonVerdict = 'live' | 'unverifiable' | 'exited'
-
 export type NewerProtocolDaemon = {
   protocolVersion: number
-  verdict: NewerProtocolDaemonVerdict
+  verdict: ProcessLivenessVerdict['status']
 }
 
 function hasErrorCode(error: unknown, code: string): boolean {
@@ -37,47 +35,43 @@ function listNewerProtocolVersions(runtimeDir: string): number[] {
   return versions.sort((a, b) => a - b)
 }
 
-async function classifyNewerProtocolDaemon(
+/**
+ * Reads only the newer daemon's PID record and endpoint; this build cannot speak its protocol
+ * and never touches its files. An unidentifiable owner falls back to the endpoint, the same
+ * tiebreaker killStaleDaemon uses, so a dead leftover never holds a tab forever.
+ */
+export async function classifyNewerProtocolDaemon(
   runtimeDir: string,
   protocolVersion: number
-): Promise<NewerProtocolDaemonVerdict> {
+): Promise<ProcessLivenessVerdict['status']> {
+  const socketPath = getDaemonSocketPath(runtimeDir, protocolVersion)
+  const byEndpoint = async (): Promise<ProcessLivenessVerdict['status']> =>
+    endpointIsProvenDead(await probeSocketConnect(socketPath)) ? 'exited' : 'unverifiable'
   let contents: string
   try {
     contents = readFileSync(getDaemonPidPath(runtimeDir, protocolVersion), 'utf8')
   } catch (error) {
-    // Why: a vanished record is the newer daemon's own exit cleanup; an unreadable one proves nothing.
-    return hasErrorCode(error, 'ENOENT') ? 'exited' : 'unverifiable'
+    // Why: a daemon removes its own record as it exits.
+    return hasErrorCode(error, 'ENOENT') ? 'exited' : byEndpoint()
   }
   const parsed = parseDaemonPidFile(contents)
-  // Why pid > 0: an empty record mid-publish parses as pid 0, which names no process.
+  // Why pid > 0: an empty record parses as pid 0, which names no process.
   if (!parsed || !Number.isInteger(parsed.pid) || parsed.pid <= 0) {
-    const salvaged = salvagePidFromCorruptDaemonRecord(contents)
-    if (salvaged === null) {
-      return contents.trim() === '' ? 'unverifiable' : 'exited'
-    }
-    return inspectProcessSignal(salvaged) === 'missing' ? 'exited' : 'unverifiable'
+    return byEndpoint()
   }
-  const socketPath = getDaemonSocketPath(runtimeDir, protocolVersion)
   const identity = await inspectDaemonProcessIdentity(
     parsed.pid,
     socketPath,
     getDaemonTokenPath(runtimeDir, protocolVersion),
     parsed.startedAtMs
   )
-  if (identity === 'mismatch') {
-    // Why exited: the pid is gone or now names another process, so that daemon is gone.
-    return 'exited'
+  if (identity === 'match') {
+    return 'live'
   }
-  if (identity === 'unknown') {
-    return 'unverifiable'
-  }
-  return (await probeDaemonSocket(socketPath)) ? 'live' : 'unverifiable'
+  // Why mismatch is exited: the pid is gone or now names another process.
+  return identity === 'mismatch' ? 'exited' : byEndpoint()
 }
 
-/**
- * Daemons from a newer build in this profile's runtime dir. This build cannot speak their
- * protocol, so it only reads their PID records and never touches their files.
- */
 export async function discoverNewerProtocolDaemons(
   runtimeDir: string
 ): Promise<NewerProtocolDaemon[]> {
