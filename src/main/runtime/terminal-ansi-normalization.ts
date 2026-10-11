@@ -197,7 +197,7 @@ function trimPendingAnsiControl(value: string): string {
   return `${introducer}${value.slice(-suffixBudget)}`
 }
 
-/** CSI controls that affect retained preview rows. */
+/** CSI finals that affect retained preview rows; the sole gate for isTerminalPreviewLineControl. */
 function isTerminalPreviewLineControlFinal(code: number): boolean {
   return (
     code === 0x4b ||
@@ -214,12 +214,16 @@ function isTerminalPreviewLineControl(parsed: {
   params: string
   firstParam: number | null
 }): boolean {
-  if (!hasCanonicalNumericCsiParams(parsed.params)) {
+  // Why: normalizeTerminalChunk pre-filters on this predicate, so any final accepted here must pass it first.
+  if (
+    !isTerminalPreviewLineControlFinal(parsed.final.charCodeAt(0)) ||
+    !hasCanonicalNumericCsiParams(parsed.params)
+  ) {
     return false
   }
   if (parsed.final === 'K') {
     const mode = parsed.firstParam ?? 0
     return mode === 0 || mode === 1 || mode === 2
   }
-  return isTerminalPreviewLineControlFinal(parsed.final.charCodeAt(0))
+  return true
 }
