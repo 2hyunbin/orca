@@ -192,11 +192,14 @@ async function spawnAndPublishSession(
   if (opts.isCanceled?.()) {
     // Retain cleanup ownership if the native child refuses to exit.
     deps.sessions.set(opts.sessionId, session)
+    // Why: a child that refuses to die stays charged against the live cap until it is reaped.
+    onPublished(opts.sessionId, session.isAlive)
     await session.forceKillAndDisposeSubprocess()
     if (deps.sessions.get(opts.sessionId) === session) {
       session.dispose()
       deps.sessions.delete(opts.sessionId)
       deps.onDeadSessionRemoved(opts.sessionId)
+      deps.spawnGate?.onSessionExit(opts.sessionId)
     }
     throw new TerminalAttachCanceledError(opts.sessionId)
   }

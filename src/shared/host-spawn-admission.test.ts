@@ -131,6 +131,16 @@ describe('decideSpawnAdmission', () => {
     })
   })
 
+  it('admits a user resume past its deadline instead of waiting forever for a slot', () => {
+    const state = createSpawnAdmissionState(LIMITS, 0)
+    const f = facts({ declaredIntent: 'user-resume', deadlineAt: 500 })
+    for (let i = 0; i < LIMITS.userResumeConcurrency; i++) {
+      applySpawnAdmission(state, f, 'user', LIMITS, 0)
+    }
+    expect(decide(state, f, 0)).toEqual({ kind: 'wait', charge: 'user', retryAt: null })
+    expect(decide(state, f, 500)).toEqual({ kind: 'admit', charge: 'user' })
+  })
+
   it('M-1: random arrivals keep the pacing and live-cap invariants', () => {
     for (let seed = 1; seed <= 25; seed++) {
       const rng = mulberry32(seed)

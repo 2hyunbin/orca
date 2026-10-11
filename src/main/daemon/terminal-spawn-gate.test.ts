@@ -117,4 +117,60 @@ describe('TerminalSpawnGate (observe-only)', () => {
     await expect(restore('restore-fails')).rejects.toThrow('spawn failed')
     expect(gate.snapshot()).toMatchObject({ liveAutomatic: 0, inFlight: { automatic: 0 } })
   })
+
+  it('keeps a canceled fork charged while its child refuses to die, and frees it once reaped', async () => {
+    let canceled = false
+    let release: (() => void) | undefined
+    spawnSubprocess.mockImplementationOnce(() => {
+      canceled = true
+      const pid = nextPid++
+      const handle: SubprocessHandle = {
+        pid,
+        getForegroundProcess: vi.fn(() => null),
+        write: vi.fn(),
+        resize: vi.fn(),
+        kill: vi.fn(),
+        terminateOwnedTree: () => 'unavailable' as const,
+        forceKill: vi.fn(() => {
+          release = () => exits.get(pid)?.(137)
+        }),
+        signal: vi.fn(),
+        onData: vi.fn(),
+        onExit: (callback) => {
+          exits.set(pid, callback)
+        },
+        dispose: vi.fn()
+      }
+      return handle
+    })
+    const pending = host.createOrAttach({
+      sessionId: 'canceled-restore',
+      cols: 80,
+      rows: 24,
+      historySeedChunks: ['seed'],
+      agentSessionEnsure: {
+        claim: {
+          digestVersion: 1 as const,
+          keyId: 'key',
+          identityDigest: 'c'.repeat(43),
+          worktreeScopeDigest: 'b'.repeat(43),
+          agent: 'codex' as const
+        },
+        surface: {
+          worktreeId: 'worktree',
+          tabId: 'tab-canceled',
+          leafId: '11111111-1111-4111-8111-111111111111',
+          terminalHandle: 'term_canceled'
+        }
+      },
+      isCanceled: () => canceled,
+      streamClient: stream()
+    })
+    await vi.waitFor(() => expect(release).toBeDefined())
+    expect(gate.snapshot()).toMatchObject({ liveAutomatic: 1, inFlight: { automatic: 0 } })
+
+    release?.()
+    await expect(pending).rejects.toThrow(/canceled/i)
+    expect(gate.snapshot()).toMatchObject({ liveAutomatic: 0, inFlight: { automatic: 0 } })
+  })
 })

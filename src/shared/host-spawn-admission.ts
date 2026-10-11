@@ -136,7 +136,8 @@ export function decideSpawnAdmission(args: {
     return { kind: 'admit', charge }
   }
   if (charge === 'user') {
-    return state.inFlight.user < limits.userResumeConcurrency
+    // Why: a user action is never refused; past its deadline it goes ahead regardless.
+    return state.inFlight.user < limits.userResumeConcurrency || now >= facts.deadlineAt
       ? { kind: 'admit', charge }
       : { kind: 'wait', charge, retryAt: null }
   }
