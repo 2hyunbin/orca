@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeStructuredSessionTabs } from './session-tabs/structured-session-tabs'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { OrcaRuntimeWithGetWorktreePs } from './orca-runtime-get-worktree-ps'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -285,22 +286,10 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
     }
   }
 
-  restoreStructuredAgentSessionTabs(): Promise<void> {
-    this.structuredAgentSessionTabRestorePromise ??=
-      this.restoreStructuredAgentSessionTabsOnce().then(
-        () => {
-          // Only a host's answer is final: without one, the next caller restores again, so a journal
-          // that opens later republishes the chats.
-          if (this.structuredAgentSessionInventoryUnverifiable) {
-            this.structuredAgentSessionTabRestorePromise = null
-          }
-        },
-        (error) => {
-          this.structuredAgentSessionTabRestorePromise = null
-          throw error
-        }
-      )
-    return this.structuredAgentSessionTabRestorePromise
+  restoreStructuredAgentSessionTabs(
+    ...args: Parameters<RuntimeStructuredSessionTabs['restoreStructuredAgentSessionTabs']>
+  ): ReturnType<RuntimeStructuredSessionTabs['restoreStructuredAgentSessionTabs']> {
+    return this.runtimeStructuredSessionTabs.restoreStructuredAgentSessionTabs(...args)
   }
 
   prepareStructuredAgentSessionStartupRestoration(): Promise<void> {

@@ -1,187 +1,52 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeSessionGraphLifecycle } from './session-graph/session-graph-lifecycle'
 import { OrcaRuntimeWithStopExactTerminalsForWorktree } from './orca-runtime-stop-exact-terminals-for-worktree'
-import type { RuntimeRendererReloadFence } from './orca-runtime-core'
-import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
 
 export class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntimeWithStopExactTerminalsForWorktree {
-  async hasTerminalsForWorktree(worktreeSelector: string): Promise<boolean> {
-    const graphEpoch = this.captureReadyGraphEpoch()
-    const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    this.assertStableReadyGraph(graphEpoch)
-    for (const leaf of this.leaves.values()) {
-      if (leaf.worktreeId === worktree.id && leaf.ptyId) {
-        return true
-      }
-    }
-    for (const pty of this.ptysById.values()) {
-      if (pty.worktreeId === worktree.id && pty.connected) {
-        return true
-      }
-    }
-    return false
+  hasTerminalsForWorktree(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['hasTerminalsForWorktree']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['hasTerminalsForWorktree']> {
+    return this.runtimeSessionGraphLifecycle.hasTerminalsForWorktree(...args)
   }
 
-  markRendererReloading(windowId: number): RuntimeRendererReloadFence | null {
-    if (
-      windowId !== HEADLESS_RUNTIME_WINDOW_ID &&
-      this.authoritativeWindowId === HEADLESS_RUNTIME_WINDOW_ID &&
-      this.headlessGraphFallbackAvailable
-    ) {
-      this.attachWindow(windowId)
-      const revision = this.graphReloadLifecycle.getActiveRevision()
-      return this.authoritativeWindowId === windowId && revision !== null
-        ? { revision, recovery: 'headless' }
-        : null
-    }
-    if (windowId !== this.authoritativeWindowId) {
-      return null
-    }
-    if (this.graphStatus === 'reloading') {
-      return {
-        revision: this.graphReloadLifecycle.begin(windowId),
-        recovery: this.shouldRestoreHeadlessGraph(windowId) ? 'headless' : 'reloading'
-      }
-    }
-    if (this.graphStatus !== 'ready') {
-      return null
-    }
-    return { revision: this.beginGraphReload(windowId), recovery: 'renderer' }
+  markRendererReloading(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['markRendererReloading']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['markRendererReloading']> {
+    return this.runtimeSessionGraphLifecycle.markRendererReloading(...args)
   }
 
-  protected beginGraphReload(windowId: number): number {
-    // Why: the rebuilt graph decides whether an incarnation survived; do not stale proven process identities before that comparison.
-    this.rendererGraphEpoch += 1
-    this.graphStatus = 'reloading'
-    const revision = this.graphReloadLifecycle.begin(windowId)
-    this.setTerminalSideEffectConsumerAvailable(false)
-    this.rememberDetachedPreAllocatedLeaves()
-    // A null incarnation is safe within one graph diff, but cannot prove a same-id PTY survived a renderer reload.
-    for (const [ptyId, retained] of this.handleByPtyIncarnation) {
-      if (retained.incarnationId === null) {
-        this.invalidatePtyIncarnationHandle(ptyId)
-      }
-    }
-    const retainedHandles = new Set([
-      ...this.handleByPtyId.values(),
-      ...[...this.handleByPtyIncarnation.values()].map((record) => record.handle)
-    ])
-    for (const handle of this.terminalWaiters.handles()) {
-      if (!retainedHandles.has(handle)) {
-        this.rejectWaitersForHandle(handle, 'terminal_handle_stale')
-      }
-    }
-    this.handles.clear()
-    this.handleByLeafKey.clear()
-    // Why: handleByPtyId (pre-allocated CLI handles) survives reloads so CLI agents keep control; adoptPreAllocatedHandle re-links on the new graph.
-    // Incarnation-scoped waiters survive a renderer reload; the rebuilt graph
-    // may re-adopt the same PTY and resolve them without a false stale error.
-    this.refreshWritableFlags()
-    return revision
+  protected beginGraphReload(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['beginGraphReload']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['beginGraphReload']> {
+    return this.runtimeSessionGraphLifecycle.beginGraphReload(...args)
   }
 
-  markRendererReloadCancelled(windowId: number, fence: RuntimeRendererReloadFence): boolean {
-    if (
-      windowId !== this.authoritativeWindowId ||
-      this.graphStatus !== 'reloading' ||
-      !this.graphReloadLifecycle.settle(fence.revision, 'cancelled')
-    ) {
-      return false
-    }
-    if (fence.recovery === 'headless' && this.shouldRestoreHeadlessGraph(windowId)) {
-      this.restoreHeadlessGraphAuthority()
-      return false
-    }
-    if (fence.recovery === 'renderer') {
-      const restoresPublishedInventory =
-        this.sessionTabsInventoryPublication.epoch === this.rendererGraphEpoch - 1
-      this.graphStatus = 'ready'
-      this.setTerminalSideEffectConsumerAvailable(true)
-      for (const leaf of this.leaves.values()) {
-        this.adoptPreAllocatedHandle(leaf)
-      }
-      this.reconcilePtyIncarnationHandles()
-      this.refreshWritableFlags()
-      if (restoresPublishedInventory) {
-        this.markSessionTabsInventoryPublished()
-      }
-      return true
-    }
-    this.graphReloadLifecycle.begin(windowId)
-    return false
+  markRendererReloadCancelled(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['markRendererReloadCancelled']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['markRendererReloadCancelled']> {
+    return this.runtimeSessionGraphLifecycle.markRendererReloadCancelled(...args)
   }
 
-  markGraphReady(windowId: number): void {
-    if (windowId !== this.authoritativeWindowId) {
-      return
-    }
-    this.graphReloadLifecycle.settleActive('success')
-    if (windowId !== HEADLESS_RUNTIME_WINDOW_ID) {
-      this.headlessGraphFallbackAvailable = false
-      this.pendingHeadlessPromotionWindowId = null
-    }
-    this.graphStatus = 'ready'
-    this.setTerminalSideEffectConsumerAvailable(windowId !== HEADLESS_RUNTIME_WINDOW_ID)
-    this.refreshWritableFlags()
+  markGraphReady(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['markGraphReady']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['markGraphReady']> {
+    return this.runtimeSessionGraphLifecycle.markGraphReady(...args)
   }
 
   markGraphReloadFailed(
-    windowId: number,
-    _reason: 'renderer-frame-unavailable' | 'renderer-process-gone'
-  ): void {
-    if (windowId !== this.authoritativeWindowId) {
-      return
-    }
-    if (this.graphStatus === 'ready') {
-      this.beginGraphReload(windowId)
-    }
-    this.graphReloadLifecycle.settleActive('failure')
-    this.transitionGraphReloadToTerminalState(windowId)
+    ...args: Parameters<RuntimeSessionGraphLifecycle['markGraphReloadFailed']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['markGraphReloadFailed']> {
+    return this.runtimeSessionGraphLifecycle.markGraphReloadFailed(...args)
   }
 
-  markGraphUnavailable(windowId: number): void {
-    if (
-      this.authoritativeWindowId === HEADLESS_RUNTIME_WINDOW_ID &&
-      windowId === this.pendingHeadlessPromotionWindowId
-    ) {
-      this.pendingHeadlessPromotionWindowId = null
-      return
-    }
-    if (windowId !== this.authoritativeWindowId) {
-      return
-    }
-    this.graphReloadLifecycle.settleActive('cancelled')
-    if (this.shouldRestoreHeadlessGraph(windowId)) {
-      this.pendingHeadlessPromotionWindowId = null
-      this.restoreHeadlessGraphAuthority()
-      return
-    }
-    // Why: once the authoritative renderer graph disappears, fail closed for live-terminal ops instead of guessing from old state.
-    if (this.graphStatus !== 'unavailable') {
-      this.rendererGraphEpoch += 1
-    }
-    this.graphStatus = 'unavailable'
-    this.setTerminalSideEffectConsumerAvailable(false)
-    this.authoritativeWindowId = null
-    this.rememberDetachedPreAllocatedLeaves()
-    for (const [ptyId, handle] of this.handleByPtyId) {
-      if (this.handleByPtyIncarnation.get(ptyId)?.handle === handle) {
-        this.handleByPtyId.delete(ptyId)
-      }
-    }
-    this.tabs.clear()
-    this.leaves.clear()
-    this.leavesByPtyId.clear()
-    this.handles.clear()
-    this.handleByLeafKey.clear()
-    this.clearPtyIncarnationHandles()
-    // Why: pre-allocated CLI handles must survive graph unavailability so they can be re-adopted on reconnect.
-    this.rejectAllWaiters('terminal_handle_stale')
+  markGraphUnavailable(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['markGraphUnavailable']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['markGraphUnavailable']> {
+    return this.runtimeSessionGraphLifecycle.markGraphUnavailable(...args)
   }
 
-  protected handleGraphReloadTimeout(windowId: number): void {
-    if (windowId !== this.authoritativeWindowId || this.graphStatus !== 'reloading') {
-      return
-    }
-    this.transitionGraphReloadToTerminalState(windowId)
+  protected handleGraphReloadTimeout(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['handleGraphReloadTimeout']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['handleGraphReloadTimeout']> {
+    return this.runtimeSessionGraphLifecycle.handleGraphReloadTimeout(...args)
   }
 }

@@ -1,6 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeSessionGraphLifecycle } from './session-graph/session-graph-lifecycle'
 import { OrcaRuntimeWithHasTerminalsForWorktree } from './orca-runtime-has-terminals-for-worktree'
-import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
+
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import {
   assertFolderWorkspacePathUsable,
@@ -19,60 +20,28 @@ import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
 import { getBrowserHostLeaseRegistry } from './browser-host-lease-registry-instance'
 
 export class OrcaRuntimeWithTransitionGraphReloadToTerminalState extends OrcaRuntimeWithHasTerminalsForWorktree {
-  protected transitionGraphReloadToTerminalState(windowId: number): void {
-    if (this.shouldRestoreHeadlessGraph(windowId)) {
-      this.restoreHeadlessGraphAuthority()
-      return
-    }
-    this.graphStatus = 'unavailable'
-    this.setTerminalSideEffectConsumerAvailable(false)
-    this.rememberDetachedPreAllocatedLeaves()
-    this.tabs.clear()
-    this.leaves.clear()
-    this.leavesByPtyId.clear()
-    this.handles.clear()
-    this.handleByLeafKey.clear()
-    this.clearPtyIncarnationHandles()
-    this.rejectAllWaiters('terminal_handle_stale')
-    this.refreshWritableFlags()
+  protected restoreHeadlessGraphAuthority(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['restoreHeadlessGraphAuthority']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['restoreHeadlessGraphAuthority']> {
+    return this.runtimeSessionGraphLifecycle.restoreHeadlessGraphAuthority(...args)
   }
 
-  protected shouldRestoreHeadlessGraph(windowId: number): boolean {
-    return windowId !== HEADLESS_RUNTIME_WINDOW_ID && this.headlessGraphFallbackAvailable
+  protected assertGraphReady(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['assertGraphReady']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['assertGraphReady']> {
+    return this.runtimeSessionGraphLifecycle.assertGraphReady(...args)
   }
 
-  protected restoreHeadlessGraphAuthority(): void {
-    this.rendererGraphEpoch += 1
-    this.authoritativeWindowId = HEADLESS_RUNTIME_WINDOW_ID
-    this.graphStatus = 'ready'
-    this.rendererGeneration = null
-    this.setTerminalSideEffectConsumerAvailable(false)
-    this.tabs.clear()
-    this.leaves.clear()
-    this.leavesByPtyId.clear()
-    this.handles.clear()
-    this.handleByLeafKey.clear()
-    this.clearPtyIncarnationHandles()
-    this.rejectAllWaiters('terminal_handle_stale')
-    this.refreshWritableFlags()
-    this.markSessionTabsInventoryPublished()
+  protected captureReadyGraphEpoch(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['captureReadyGraphEpoch']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['captureReadyGraphEpoch']> {
+    return this.runtimeSessionGraphLifecycle.captureReadyGraphEpoch(...args)
   }
 
-  protected assertGraphReady(): void {
-    if (this.graphStatus !== 'ready') {
-      throw new Error('runtime_unavailable')
-    }
-  }
-
-  protected captureReadyGraphEpoch(): number {
-    this.assertGraphReady()
-    return this.rendererGraphEpoch
-  }
-
-  protected assertStableReadyGraph(expectedGraphEpoch: number): void {
-    if (this.graphStatus !== 'ready' || this.rendererGraphEpoch !== expectedGraphEpoch) {
-      throw new Error('runtime_unavailable')
-    }
+  protected assertStableReadyGraph(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['assertStableReadyGraph']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['assertStableReadyGraph']> {
+    return this.runtimeSessionGraphLifecycle.assertStableReadyGraph(...args)
   }
 
   protected resolveFolderWorkspaceConnectionId(workspace: FolderWorkspace): string | null {
@@ -198,5 +167,17 @@ export class OrcaRuntimeWithTransitionGraphReloadToTerminalState extends OrcaRun
       leases: getBrowserHostLeaseRegistry(this),
       resolveWorkspace: (selector) => this.resolveBrowserWorkspace(selector)
     })
+  }
+
+  protected transitionGraphReloadToTerminalState(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['transitionGraphReloadToTerminalState']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['transitionGraphReloadToTerminalState']> {
+    return this.runtimeSessionGraphLifecycle.transitionGraphReloadToTerminalState(...args)
+  }
+
+  protected shouldRestoreHeadlessGraph(
+    ...args: Parameters<RuntimeSessionGraphLifecycle['shouldRestoreHeadlessGraph']>
+  ): ReturnType<RuntimeSessionGraphLifecycle['shouldRestoreHeadlessGraph']> {
+    return this.runtimeSessionGraphLifecycle.shouldRestoreHeadlessGraph(...args)
   }
 }

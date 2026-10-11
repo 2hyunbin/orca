@@ -1,7 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeStructuredSessionTabs } from './session-tabs/structured-session-tabs'
 import { OrcaRuntimeWithCloseMobileSessionTab } from './orca-runtime-close-mobile-session-tab'
 import type {
-  RuntimeMobileSessionAgentTab,
   RuntimeMobileSessionBrowserTab,
   RuntimeMobileSessionRetiredTerminalSurface,
   RuntimeMobileSessionTabsSnapshot,
@@ -12,34 +12,12 @@ import { getMobileSessionSnapshotTabIdentityKeys } from './mobile-session-tab-me
 import type { BrowserSessionTabSelectionOptions } from './browser-tab-create-publication'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
 import { applyBrowserSessionTabSelection } from './browser-session-tab-selection-snapshot'
-import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
-import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-tab-retirement'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
-  protected async closeStructuredAgentSessionTab(
-    tab: RuntimeMobileSessionAgentTab,
-    cause: StructuredAgentSessionCloseCause
-  ): Promise<void> {
-    const host = getStructuredAgentSessionHost()
-    if (host) {
-      if (typeof host.setSessionTabVisibility === 'function') {
-        // The restore index is bookkeeping: one that cannot be written (a newer Orca's records, a
-        // failing disk) is reported, and the tab still closes.
-        await host.setSessionTabVisibility(tab.sessionId, false).catch((error: unknown) => {
-          host.deps.logger.warn('recording a closed chat tab failed', {
-            scope: 'tab-visibility-close',
-            sessionId: tab.sessionId,
-            error
-          })
-        })
-      }
-    }
-    // Retire durable visibility and the runtime snapshot before stopping the provider.
-    this.retireStructuredAgentSessionTabFromSnapshot(tab.sessionId)
-    if (typeof host?.close === 'function') {
-      await host.close(tab.sessionId, cause)
-    }
+  protected closeStructuredAgentSessionTab(
+    ...args: Parameters<RuntimeStructuredSessionTabs['closeStructuredAgentSessionTab']>
+  ): ReturnType<RuntimeStructuredSessionTabs['closeStructuredAgentSessionTab']> {
+    return this.runtimeStructuredSessionTabs.closeStructuredAgentSessionTab(...args)
   }
 
   /**
@@ -54,17 +32,10 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
    * Snapshot-only and renderer-free: it never asks the renderer to close anything, so it is safe on
    * the startup release reconciler where no renderer exists.
    */
-  retireStructuredAgentSessionTabFromSnapshot(sessionId: string): boolean {
-    for (const [worktreeId, snapshot] of this.mobileSessionTabsByWorktree) {
-      const nextSnapshot = retireStructuredAgentSessionTabFrom(snapshot, sessionId)
-      if (!nextSnapshot) {
-        continue
-      }
-      this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
-      this.emitMobileSessionTabsSnapshot(nextSnapshot)
-      return true
-    }
-    return false
+  retireStructuredAgentSessionTabFromSnapshot(
+    ...args: Parameters<RuntimeStructuredSessionTabs['retireStructuredAgentSessionTabFromSnapshot']>
+  ): ReturnType<RuntimeStructuredSessionTabs['retireStructuredAgentSessionTabFromSnapshot']> {
+    return this.runtimeStructuredSessionTabs.retireStructuredAgentSessionTabFromSnapshot(...args)
   }
 
   // Why: a refused echoed close means the echoing client already pruned its

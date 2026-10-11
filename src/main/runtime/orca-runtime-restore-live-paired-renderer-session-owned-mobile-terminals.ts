@@ -1,109 +1,43 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeRendererSessionTerminalRescue } from './session-tabs/renderer-session-terminal-rescue'
 import { OrcaRuntimeWithWaitForMobileTerminalSurface } from './orca-runtime-wait-for-mobile-terminal-surface'
-import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
-import { parsePaneKey } from '../../shared/stable-pane-id'
-import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
-import type { RuntimeMobileSessionCreateTerminalResult } from '../../shared/runtime-types'
 
 export class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals extends OrcaRuntimeWithWaitForMobileTerminalSurface {
   protected restoreLivePairedRendererSessionOwnedMobileTerminals(
-    worktreeId: string | null,
-    options: { missingSnapshotOnly?: boolean; notify?: boolean } = {}
-  ): void {
-    for (const ptyId of this.pairedRendererSessionOwnedPtyIds) {
-      const pty = this.ptysById.get(ptyId)
-      if (
-        !pty?.connected ||
-        !pty.tabId ||
-        (worktreeId !== null && !runtimeWorktreeIdsEqual(pty.worktreeId, worktreeId))
-      ) {
-        continue
-      }
-      const targetWorktreeId = worktreeId ?? pty.worktreeId
-      const pane = parsePaneKey(pty.paneKey ?? '')
-      if (!pane || pane.tabId !== pty.tabId) {
-        continue
-      }
-      const existing = this.mobileSessionTabsByWorktree.get(targetWorktreeId)
-      if (existing && options.missingSnapshotOnly) {
-        continue
-      }
-      if (
-        existing?.tabs.some(
-          (tab) =>
-            tab.type === 'terminal' &&
-            (tab.ptyId === pty.ptyId ||
-              (tab.parentTabId === pty.tabId && tab.leafId === pane.leafId))
-        )
-      ) {
-        continue
-      }
-      if (!existing) {
-        this.storeMobileSessionSnapshot(targetWorktreeId, {
-          worktree: targetWorktreeId,
-          publicationEpoch: `renderer-rescue:${Date.now().toString(36)}`,
-          snapshotVersion: 0,
-          activeGroupId: null,
-          activeTabId: null,
-          activeTabType: null,
-          tabGroups: [],
-          tabs: []
-        })
-      }
-      this.publishPtyBackedMobileSessionTerminal(targetWorktreeId, pty, {
-        tabId: pty.tabId,
-        leafId: pane.leafId,
-        title: null,
-        activate: false,
-        selectIfNoActiveTab: false,
-        notify: options.notify
-      })
-    }
+    ...args: Parameters<
+      RuntimeRendererSessionTerminalRescue['restoreLivePairedRendererSessionOwnedMobileTerminals']
+    >
+  ): ReturnType<
+    RuntimeRendererSessionTerminalRescue['restoreLivePairedRendererSessionOwnedMobileTerminals']
+  > {
+    return this.runtimeRendererSessionTerminalRescue.restoreLivePairedRendererSessionOwnedMobileTerminals(
+      ...args
+    )
   }
 
-  protected setPairedRendererSessionOwnership(ptyId: string, owned: boolean): void {
-    if (owned) {
-      this.pairedRendererSessionOwnedPtyIds.add(ptyId)
-    } else {
-      this.pairedRendererSessionOwnedPtyIds.delete(ptyId)
-    }
+  protected setPairedRendererSessionOwnership(
+    ...args: Parameters<RuntimeRendererSessionTerminalRescue['setPairedRendererSessionOwnership']>
+  ): ReturnType<RuntimeRendererSessionTerminalRescue['setPairedRendererSessionOwnership']> {
+    return this.runtimeRendererSessionTerminalRescue.setPairedRendererSessionOwnership(...args)
   }
 
   protected findLiveRegisteredPtyForRendererTab(
-    worktreeId: string,
-    tabId: string
-  ): RuntimePtyWorktreeRecord | null {
-    for (const pty of this.ptysById.values()) {
-      if (
-        pty.worktreeId === worktreeId &&
-        pty.tabId === tabId &&
-        pty.connected &&
-        parsePaneKey(pty.paneKey ?? '')?.leafId
-      ) {
-        return pty
-      }
-    }
-    return null
+    ...args: Parameters<RuntimeRendererSessionTerminalRescue['findLiveRegisteredPtyForRendererTab']>
+  ): ReturnType<RuntimeRendererSessionTerminalRescue['findLiveRegisteredPtyForRendererTab']> {
+    return this.runtimeRendererSessionTerminalRescue.findLiveRegisteredPtyForRendererTab(...args)
   }
 
   // Why: looser rollback guard than findLiveRegisteredPtyForRendererTab — a shell without a registered pane key is still a real terminal the timeout must not kill (#7718).
-  protected hasLiveShellForRendererTab(worktreeId: string, tabId: string): boolean {
-    for (const pty of this.ptysById.values()) {
-      if (pty.worktreeId === worktreeId && pty.tabId === tabId && pty.connected) {
-        return true
-      }
-    }
-    return false
+  protected hasLiveShellForRendererTab(
+    ...args: Parameters<RuntimeRendererSessionTerminalRescue['hasLiveShellForRendererTab']>
+  ): ReturnType<RuntimeRendererSessionTerminalRescue['hasLiveShellForRendererTab']> {
+    return this.runtimeRendererSessionTerminalRescue.hasLiveShellForRendererTab(...args)
   }
 
   protected isReadyMobileTerminalSurface(
-    surface: RuntimeMobileSessionCreateTerminalResult | null
-  ): boolean {
-    return (
-      surface?.tab.status === 'ready' &&
-      typeof surface.tab.terminal === 'string' &&
-      surface.tab.terminal.length > 0
-    )
+    ...args: Parameters<RuntimeRendererSessionTerminalRescue['isReadyMobileTerminalSurface']>
+  ): ReturnType<RuntimeRendererSessionTerminalRescue['isReadyMobileTerminalSurface']> {
+    return this.runtimeRendererSessionTerminalRescue.isReadyMobileTerminalSurface(...args)
   }
 
   // Why: a create can settle over a renderer PTY that spawned without its

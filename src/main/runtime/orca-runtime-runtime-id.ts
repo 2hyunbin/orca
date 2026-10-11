@@ -1,63 +1,43 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+
+import { createSessionRuntimeMethodBinder } from './session-construction/session-runtime-method-readers'
+
+import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
+
+import { RuntimeSessionLifecycleOwners } from './session-construction/session-lifecycle-owners'
+import type { SessionLifecyclePorts } from './session-construction/session-lifecycle-ports'
 import { randomUUID } from 'node:crypto'
-import { SessionTabsInventoryPublication } from './session-tabs/session-tabs-inventory-publication'
-import { createHeadlessSessionTabCommands } from './session-tabs/headless-session-tab-commands'
-import { RuntimeTerminalIdentityOwner } from './terminal/identity/terminal-identity-owner'
-import { structuredWorkerTerminalRefusal } from './structured-worker-terminal-refusal'
-import { resolveStructuredWorkerAuthority } from './structured-worker-authority'
-import { preserveTerminalRetirementProofs } from './mobile-session-terminal-retirement-proof'
+
+import { createSessionTerminalIdentityOwner } from './session-construction/session-terminal-identity'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { RuntimeClientSettingsController } from './runtime-client-settings'
 import type { RuntimeAutomationController } from './runtime-automation-controller'
 import { RuntimeArtifactController } from './runtime-artifact-controller'
 import type { OrchestrationEnvironmentTransport } from './orchestration/environment-transport'
 import type { RuntimeOrchestrationFederation } from './runtime-orchestration-federation'
-import type {
-  RuntimeGraphStatus,
-  RuntimeMobileSessionCreateTerminalResult,
-  RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTabsSnapshot,
-  RuntimeSyncedTab,
-  RuntimeTerminalFocus,
-  RuntimeTerminalResolvePane,
-  RuntimeWorktreeTerminalSleepResult
-} from '../../shared/runtime-types'
-import {
-  RUNTIME_GRAPH_RELOAD_TIMEOUT_MS,
-  RuntimeGraphReloadLifecycle
-} from './runtime-graph-reload-lifecycle'
+
 import { ClientHostedPageReconciliationWindow } from './client-hosted-page-reconciliation-window'
-import { ClientSessionTabSelectionStore } from './client-session-tab-selection'
+
 import { WorktreeTerminalMutationLock } from './worktree-terminal-mutation-lock'
 import { RemoteRuntimeTerminalCreateIdempotency } from './remote-runtime-terminal-create-idempotency'
-import type { PtyIncarnationId } from '../../shared/pty-incarnation'
+
+import type { MobileSessionTabsNotifyCoalescer } from './mobile-session-tabs-notify-coalescer'
 import { createMobileSessionTabsNotifyCoalescer } from './mobile-session-tabs-notify-coalescer'
+import type { MobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
 import { createMobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
-import { TerminalFocusNavigationCoalescer } from './terminal-focus-navigation-coalescer'
-import type {
-  PtyControllerInventory,
-  RuntimePtyController
-} from './runtime-pty-controller-contract'
-import type { RuntimeLeafRecord } from './runtime-terminal-state-records'
 
 import { MailPointerRepointScheduler } from './orchestration/mail-pointer-repoint-scheduler'
 import { RuntimeTerminalWaiterRegistry } from './terminal/wait/terminal-waiter-registry'
 import { RuntimeTerminalWriter } from './runtime-terminal-writer'
 import { writeRefused } from '../../shared/pty-write-settlement'
-import { RuntimeTerminalIdlePolls } from './terminal/wait/terminal-idle-polls'
+import { createSessionTerminalIdlePolls } from './session-construction/session-terminal-idle-polls'
 import { TerminalIntentionalStops } from './terminal-intentional-stops'
 import { TerminalRunFactsRegister, type TerminalSpawnCommit } from './terminal-run-facts'
 import type { TuiIdleEvidenceSource } from './tui-idle-evidence-source'
-import { hasTerminalCommandPainted } from './terminal-command-paint'
-import {
-  TUI_IDLE_DEFAULT_TIMEOUT_MS,
-  TUI_IDLE_POLL_INTERVAL_MS,
-  TUI_IDLE_QUIESCENCE_MS
-} from './orca-runtime-postlude'
+import { TUI_IDLE_DEFAULT_TIMEOUT_MS, TUI_IDLE_QUIESCENCE_MS } from './orca-runtime-postlude'
 import { RuntimeTerminalWait as RuntimeTerminalWaitController } from './terminal/wait/terminal-wait'
-import type { PtyLivenessVerdict } from '../../shared/pty-liveness-verdict'
 
-export class OrcaRuntimeWithRuntimeId {
+export class OrcaRuntimeWithRuntimeId extends RuntimeSessionLifecycleOwners {
   protected readonly runtimeId = randomUUID()
 
   protected readonly startedAt = Date.now()
@@ -74,183 +54,186 @@ export class OrcaRuntimeWithRuntimeId {
 
   protected readonly orchestrationFederation: RuntimeOrchestrationFederation
 
-  protected rendererGraphEpoch = 0
-
-  protected graphStatus: RuntimeGraphStatus = 'unavailable'
-
-  protected authoritativeWindowId: number | null = null
-
-  protected headlessGraphFallbackAvailable = false
-
-  protected pendingHeadlessPromotionWindowId: number | null = null
-
-  protected rendererGeneration: string | null = null
-
-  protected readonly graphReloadLifecycle = new RuntimeGraphReloadLifecycle({
-    timeoutMs: RUNTIME_GRAPH_RELOAD_TIMEOUT_MS,
-    onSettled: ({ revision, windowId, outcome, durationMs }) => {
-      console.info(
-        `[runtime-graph] reload revision=${revision} window=${windowId} outcome=${outcome} durationMs=${durationMs}`
-      )
-    },
-    onTimeout: (_revision, windowId) => this.handleGraphReloadTimeout(windowId)
-  })
-
-  protected tabs = new Map<string, RuntimeSyncedTab>()
-
-  protected mobileSessionTabsByWorktree = new Map<string, RuntimeMobileSessionTabsSnapshot>()
-
-  /** Single host writer for mobile session snapshots; versions are total-order stamps. */
-  protected storeMobileSessionSnapshot(
-    worktreeId: string,
-    snapshot: RuntimeMobileSessionTabsSnapshot
-  ): RuntimeMobileSessionTabsSnapshot {
-    const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
-    snapshot = preserveTerminalRetirementProofs(snapshot, existing)
-    const snapshotVersion = existing
-      ? Math.max(snapshot.snapshotVersion, existing.snapshotVersion + 1)
-      : snapshot.snapshotVersion
-    const stamped =
-      snapshotVersion === snapshot.snapshotVersion ? snapshot : { ...snapshot, snapshotVersion }
-    this.mobileSessionTabsByWorktree.set(worktreeId, stamped)
-    return stamped
-  }
-
-  protected structuredAgentSessionTabRestorePromise: Promise<void> | null = null
-
-  // Whether the last tab restore ran with chats on disk but no host to list them.
-  protected structuredAgentSessionInventoryUnverifiable = false
-
-  protected structuredAgentSessionStartupRestorePromise: Promise<void> | null = null
-
-  protected mobileSessionTabsChangeSequence = 0
-
-  protected readonly sessionTabsInventoryPublication = new SessionTabsInventoryPublication({
-    getGraphStatus: () => this.graphStatus,
-    getRendererGraphEpoch: () => this.rendererGraphEpoch
-  })
-
-  protected readonly headlessSessionTabCommands = createHeadlessSessionTabCommands({
-    getWorkspaceSessionForWorktree: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
+  protected readonly sessionPorts: SessionLifecyclePorts = {
+    bindRuntimeMethod: createSessionRuntimeMethodBinder(this),
+    getValidatedExplicitWorktreeIdSelector: () => this.getValidatedExplicitWorktreeIdSelector,
+    resolveWorktreeSelector: () => this.resolveWorktreeSelector,
+    hydrateHeadlessMobileSessionTabsFromWorkspaceSession: () =>
+      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession,
+    refreshMobileSessionPtyRecords: () => this.refreshMobileSessionPtyRecords,
+    refreshMobileSessionPtyInventory: () => this.refreshMobileSessionPtyInventory,
+    restoreLivePairedRendererSessionOwnedMobileTerminals: () =>
+      this.restoreLivePairedRendererSessionOwnedMobileTerminals,
+    getMobileSessionTabsForWorktree: () => this.getMobileSessionTabsForWorktree,
+    getKnownWorkspaceSessionWorktreeIds: () => this.getKnownWorkspaceSessionWorktreeIds,
+    getSnapshotValues: () => this.mobileSessionTabsByWorktree.values(),
+    projectMobileSessionTabsForClient: () => this.projectMobileSessionTabsForClient,
+    toMobileSessionTabsResult: () => this.toMobileSessionTabsResult,
+    getChangeSequence: () => this.mobileSessionTabsChangeSequence,
+    listKnownExecutionHostIds: () => this.listKnownExecutionHostIds,
+    publication: this.sessionTabsInventoryPublication,
+    getStore: () => this.store,
+    tryGetWorkspaceSessionHostIdForWorktree: () => this.tryGetWorkspaceSessionHostIdForWorktree,
+    getPtyHandle: (ptyId) => this.handleByPtyId.get(ptyId),
+    findHandleForPtyRecord: () => this.findHandleForPtyRecord,
+    getSnapshots: () => this.mobileSessionTabsByWorktree,
+    getTopologyRevisions: () => this.terminalTopologyRevisionByRepoId,
+    storeMobileSessionSnapshot: () => this.storeMobileSessionSnapshot,
+    notifyMobileSessionTabsChanged: () => this.notifyMobileSessionTabsChanged,
+    prepareStructuredAgentSessionStartupRestoration: () =>
+      this.prepareStructuredAgentSessionStartupRestoration,
+    hasPersistedStructuredAgentSessionStore: () => this.hasPersistedStructuredAgentSessionStore,
+    notifyMobileSessionTabSnapshots: () => this.notifyMobileSessionTabSnapshots,
+    emitMobileSessionTabsSnapshot: () => this.emitMobileSessionTabsSnapshot,
+    getWorkspaceSessionForWorktree: () => this.getWorkspaceSessionForWorktree,
+    isMobileTerminalCreatePending: (key) => this.pendingMobileTerminalCreatesByKey.has(key),
+    hasLiveRuntimeSessionOwnedPtyBinding: () => this.hasLiveRuntimeSessionOwnedPtyBinding,
+    hasLiveOrPersistedServeOrSshOwnedPtyBinding: () =>
+      this.hasLiveOrPersistedServeOrSshOwnedPtyBinding,
+    clearRuntimeSessionOwnershipForMobileTab: () => this.clearRuntimeSessionOwnershipForMobileTab,
+    getPty: (ptyId) => this.ptysById.get(ptyId),
+    setPairedRendererSessionOwnership: () => this.setPairedRendererSessionOwnership,
+    getClientBrowserPage: (browserPageId) =>
+      getRuntimeBrowserPageRegistry(this).getPage(browserPageId),
+    hasOffscreenBrowserBackend: () => Boolean(this.offscreenBrowserBackend),
+    getLiveBrowserTabsByPageId: () => this.getLiveBrowserTabsByPageId,
+    hasAuthoritativeWindow: () => Boolean(this.getAvailableAuthoritativeWindow()),
+    countClientBrowserPages: (worktreeId) =>
+      getRuntimeBrowserPageRegistry(this).listPages(worktreeId).length,
+    workspaceSessionWorktreeHasRuntimeOwnedPtyCandidate: () =>
+      this.workspaceSessionWorktreeHasRuntimeOwnedPtyCandidate,
+    workspaceSessionHasRuntimeOwnedPtyCandidate: () =>
+      this.workspaceSessionHasRuntimeOwnedPtyCandidate,
+    getSnapshot: (worktreeId) => this.mobileSessionTabsByWorktree.get(worktreeId),
+    reconcileHeadlessMobileSessionBrowserTabs: () => this.reconcileHeadlessMobileSessionBrowserTabs,
+    hasServeOrSshOwnedBinding: () => this.hasServeOrSshOwnedBinding,
+    hasRecentExpiredSshLeasePane: () => this.hasRecentExpiredSshLeasePane,
+    buildHeadlessMobileSessionBrowserTabs: () => this.buildHeadlessMobileSessionBrowserTabs,
+    isHeadlessBuiltMobileSessionPublicationBase: () =>
+      this.isHeadlessBuiltMobileSessionPublicationBase,
+    getMergedMobileSessionPublicationEpoch: () => this.getMergedMobileSessionPublicationEpoch,
+    acceptedRendererSnapshots: () => this.acceptedRendererMobileSnapshotByWorktree,
+    removedWorktreeFences: () => this.removedMobileSessionWorktreeIds,
+    restoreLivePairedRendererSessionOwnedMobileTerminalsMobileSessionReconciliation: () =>
+      this.restoreLivePairedRendererSessionOwnedMobileTerminals,
+    getWorkspaceSessionHydrationTargets: () => this.getWorkspaceSessionHydrationTargets,
+    drafts: () => this.nativeChatDraftResolutions,
+    applyMobileSessionRetirementFences: () => this.applyMobileSessionRetirementFences,
+    removeHeartbeatWorktree: (worktreeId) =>
+      this.mobileSessionTabsAgentStatusHeartbeat.removeWorktree(worktreeId),
+    cancelScheduledMobileSessionTabsChanged: () => this.cancelScheduledMobileSessionTabsChanged,
+    notifyMobileSessionTabsRemoved: () => this.notifyMobileSessionTabsRemoved,
+    ownedPtyIds: () => this.pairedRendererSessionOwnedPtyIds,
+    ptyRecords: () => this.ptysById,
+    publishPtyBackedMobileSessionTerminal: () => this.publishPtyBackedMobileSessionTerminal,
+    state: this.runtimeGraphState,
+    reload: this.graphReloadLifecycle,
+    getWaiters: () => this.terminalWaiters,
+    handleByPtyIncarnation: () => this.handleByPtyIncarnation,
+    handleByPtyId: () => this.handleByPtyId,
+    handles: () => this.handles,
+    handleByLeafKey: () => this.handleByLeafKey,
+    attachWindow: () => this.attachWindow,
+    setTerminalSideEffectConsumerAvailable: () => this.setTerminalSideEffectConsumerAvailable,
+    rememberDetachedPreAllocatedLeaves: () => this.rememberDetachedPreAllocatedLeaves,
+    invalidatePtyIncarnationHandle: () => this.invalidatePtyIncarnationHandle,
+    rejectWaitersForHandle: () => this.rejectWaitersForHandle,
+    rejectAllWaiters: () => this.rejectAllWaiters,
+    refreshWritableFlags: () => this.refreshWritableFlags,
+    adoptPreAllocatedHandle: () => this.adoptPreAllocatedHandle,
+    reconcilePtyIncarnationHandles: () => this.reconcilePtyIncarnationHandles,
+    clearPtyIncarnationHandles: () => this.clearPtyIncarnationHandles,
+    handleGraphReloadTimeout: () => this.handleGraphReloadTimeout,
+    reconcileMobileSessionRetirementFences: () => this.reconcileMobileSessionRetirementFences,
+    nextTitleObservationSequence: () => this.nextTitleObservationSequence,
+    markPtyColdParked: (ptyId) => this.orchestrationMailboxPointerDelivery.markPtyColdParked(ptyId),
+    clearPtyColdParked: (ptyId) =>
+      this.orchestrationMailboxPointerDelivery.clearPtyColdParked(ptyId),
+    getLeafKey: () => this.getLeafKey,
+    getPtyLivenessVerdict: () => this.getPtyLivenessVerdict,
+    recordPtyWorktree: () => this.recordPtyWorktree,
+    makeRuntimePaneKey: () => this.makeRuntimePaneKey,
+    adoptFirstPtyForLeafHandle: () => this.adoptFirstPtyForLeafHandle,
+    invalidateLeafHandle: () => this.invalidateLeafHandle,
+    rebuildLeafPtyIndex: () => this.rebuildLeafPtyIndex,
+    scheduleMobileSessionTabsChanged: () => this.scheduleMobileSessionTabsChanged,
+    hasOrchestrationDb: () => Boolean(this._orchestrationDb),
+    checkDeliverySettledAndArmRecheck: () => this.checkDeliverySettledAndArmRecheck,
+    deliverPendingMessagesForLeaf: () => this.deliverPendingMessagesForLeaf,
+    agentOrchestration: () => this.agentOrchestrationProjection,
+    getStatus: () => this.getStatus,
+    getMobileSessionTerminalRetirementProof: () => this.getMobileSessionTerminalRetirementProof,
+    captureTerminalTabRetirement: () => this.captureTerminalTabRetirement,
+    closeTerminalSurface: () => this.closeTerminalSurface,
+    clearRuntimeSessionOwnershipForMobileTabHeadlessTerminalTabClose: () =>
+      this.clearRuntimeSessionOwnershipForMobileTab,
+    getMobileTerminalLeafPtyIds: () => this.getMobileTerminalLeafPtyIds,
+    findPtyForMobileTerminalTab: () => this.findPtyForMobileTerminalTab,
+    getPtyController: () => this.ptyController,
+    markPtyStopRequested: () => this.markPtyStopRequested,
+    markPtyLivenessUnverifiable: () => this.markPtyLivenessUnverifiable,
+    getMobileTerminalPaneKey: () => this.getMobileTerminalPaneKey,
+    leaves: () => this.leaves.values(),
+    markPtyLivenessLive: () => this.markPtyLivenessLive,
+    refreshPtyForegroundAgent: () => this.refreshPtyForegroundAgent,
+    leafExistsForPty: () => this.leafExistsForPty,
+    pruneDisconnectedPtyRecords: () => this.pruneDisconnectedPtyRecords,
+    getPtyValues: () => this.ptysById.values(),
+    getWorkspaceSessionHostIdForWorktree: () => this.getWorkspaceSessionHostIdForWorktree,
     canPersistWorkspaceSession: () => Boolean(this.store?.setWorkspaceSession),
-    setWorkspaceSessionForWorktree: (worktreeId, session) =>
-      this.setWorkspaceSessionForWorktree(worktreeId, session),
-    getMobileSessionSnapshot: (worktreeId) => this.mobileSessionTabsByWorktree.get(worktreeId),
-    resolveMobileSessionHostTabId: (snapshot, tabId) =>
-      this.resolveMobileSessionHostTabId(snapshot, tabId),
-    normalizeMobileSessionTabOrder: (snapshot, group, order) =>
-      this.normalizeMobileSessionTabOrder(snapshot, group, order),
-    toMobileSessionTabsResult: (snapshot) => this.toMobileSessionTabsResult(snapshot),
-    storeMobileSessionSnapshot: (worktreeId, snapshot) =>
-      this.storeMobileSessionSnapshot(worktreeId, snapshot),
-    emitMobileSessionTabsSnapshot: (snapshot) => this.emitMobileSessionTabsSnapshot(snapshot)
-  })
-
-  // Worktrees answered with the unpublished placeholder, owed their real answer once the graph publishes.
-  protected worktreesAwaitingSessionTabsPublication = new Set<string>()
+    readWorkspaceSessionWriter: () => this.setWorkspaceSessionForWorktree,
+    resolveMobileSessionHostTabId: () => this.resolveMobileSessionHostTabId,
+    normalizeMobileSessionTabOrder: () => this.normalizeMobileSessionTabOrder,
+    projectStructuredAgentSessionTab: () => this.projectStructuredAgentSessionTab,
+    retireStructuredAgentSessionTabFromSnapshot: () =>
+      this.retireStructuredAgentSessionTabFromSnapshot,
+    restoreStructuredAgentSessionTabsOnce: () => this.restoreStructuredAgentSessionTabsOnce,
+    listAllMobileSessionTabsWithChangeSequence: () =>
+      this.listAllMobileSessionTabsWithChangeSequence,
+    collectAllMobileSessionTabs: () => this.collectAllMobileSessionTabs,
+    listAllMobileSessionTabsInventoryWithChangeSequence: () =>
+      this.listAllMobileSessionTabsInventoryWithChangeSequence,
+    assertSessionTabsInventoryRequestActive: () => this.assertSessionTabsInventoryRequestActive,
+    getAuthoritativeSessionTabsInventoryEpoch: () => this.getAuthoritativeSessionTabsInventoryEpoch,
+    settleSessionTabsInventory: () => this.settleSessionTabsInventory,
+    waitForSessionTabsInventoryPublication: () => this.waitForSessionTabsInventoryPublication,
+    isCompleteSessionTabsPtyCensus: () => this.isCompleteSessionTabsPtyCensus,
+    stageTerminalSurfaceRetirements: () => this.stageTerminalSurfaceRetirements,
+    publishRetiredTerminalSurfaceProofs: () => this.publishRetiredTerminalSurfaceProofs,
+    persistStagedTerminalSurfaceRetirements: () => this.persistStagedTerminalSurfaceRetirements,
+    collectPreservedHeadlessMobileSessionTabs: () => this.collectPreservedHeadlessMobileSessionTabs,
+    mergeStructuredAgentSessionTabGroups: () => this.mergeStructuredAgentSessionTabGroups,
+    shouldPreserveHeadlessMobileSessionTab: () => this.shouldPreserveHeadlessMobileSessionTab,
+    storedMobileSnapshotHasStalePreservedTab: () => this.storedMobileSnapshotHasStalePreservedTab,
+    releaseRuntimeSessionOwnershipForRendererRetiredTabs: () =>
+      this.releaseRuntimeSessionOwnershipForRendererRetiredTabs,
+    mergePreservedHeadlessMobileSessionTabs: () => this.mergePreservedHeadlessMobileSessionTabs,
+    buildPreservedHeadlessMobileSessionSnapshot: () =>
+      this.buildPreservedHeadlessMobileSessionSnapshot,
+    persistWindowlessPtyBindingsForDesktopAttach: () =>
+      this.persistWindowlessPtyBindingsForDesktopAttach,
+    beginGraphReload: () => this.beginGraphReload,
+    shouldRestoreHeadlessGraph: () => this.shouldRestoreHeadlessGraph,
+    restoreHeadlessGraphAuthority: () => this.restoreHeadlessGraphAuthority,
+    markSessionTabsInventoryPublished: () => this.markSessionTabsInventoryPublished,
+    transitionGraphReloadToTerminalState: () => this.transitionGraphReloadToTerminalState,
+    assertGraphReady: () => this.assertGraphReady,
+    captureReadyGraphEpoch: () => this.captureReadyGraphEpoch,
+    assertStableReadyGraph: () => this.assertStableReadyGraph,
+    syncMobileSessionTabs: () => this.syncMobileSessionTabs,
+    collectMobileVisibleGraphChangedWorktrees: () => this.collectMobileVisibleGraphChangedWorktrees,
+    markGraphReady: () => this.markGraphReady,
+    getNativeChatLaunchDraftResolutionClientEventSnapshot: () =>
+      this.getNativeChatLaunchDraftResolutionClientEventSnapshot
+  }
 
   protected readonly clientHostedPageReconciliation = new ClientHostedPageReconciliationWindow(
     Date.now()
   )
 
-  // Main-local touches advance stored versions; reject unchanged renderer resends using
-  // the renderer's last accepted epoch/version instead.
-  protected acceptedRendererMobileSnapshotByWorktree = new Map<
-    string,
-    {
-      publicationEpoch: string
-      rendererVersion: number
-      rendererTabCount: number
-      rendererTabIdentityKeys: ReadonlySet<string>
-    }
-  >()
-
-  // Why: worktree ids are path-derived and get recreated, so a renderer frame
-  // that raced the delete must be rejected by the removed occupant's identity.
-  // Entries are cleared once a snapshot carrying the successor's instanceId
-  // is accepted; identity-less frames are fenced by renderer generation.
-  protected readonly removedMobileSessionWorktreeIds = new Map<
-    string,
-    {
-      removedPublicationEpoch?: string
-      // Why: a rejected frame is still "published" on the renderer side, so a
-      // later unchanged-list mention must not spiral into resync requests.
-      rejectedPublication?: boolean
-    }
-  >()
-
-  protected clientSessionTabSelections = new ClientSessionTabSelectionStore()
-
-  // Why: idempotency map for mobile terminal creation — a retried create with the
-  // same clientMutationId returns the in-flight operation instead of duplicating.
-  protected mobileTerminalCreateByMutationId = new Map<
-    string,
-    Promise<RuntimeMobileSessionCreateTerminalResult>
-  >()
-
   protected readonly terminalCreateIdempotency = new RemoteRuntimeTerminalCreateIdempotency()
 
-  // Why: concurrent clients sleeping one host workspace must share one physical teardown.
-  protected terminalSleepByWorktreeId = new Map<
-    string,
-    Promise<RuntimeWorktreeTerminalSleepResult>
-  >()
-
   protected readonly terminalMutationLock = new WorktreeTerminalMutationLock()
-
-  protected terminalSleepStateByWorktreeId = new Map<
-    string,
-    {
-      worktreeId: string
-      generation: number
-      phase: 'stopping' | 'partial' | 'sleeping'
-      ptyIds: string[]
-      terminalHandles: string[]
-      terminalHandlesByPtyId: Record<string, string[]>
-    }
-  >()
-
-  protected terminalSleepGeneration = 0
-
-  protected terminalPaneRecoveryByIdentity = new Map<string, Promise<RuntimeTerminalResolvePane>>()
-
-  // Why: idempotency map for worktree.create — a create interrupted by a mobile
-  // connection migration is retried with the same clientMutationId and returns
-  // the in-flight (or just-finished) operation instead of a duplicate worktree.
-  protected worktreeCreateByMutationId = new Map<string, Promise<unknown>>()
-
-  // Why: a mobile create waits for the renderer to publish the new tab's surface
-  // via graph-sync, but a throttled/hidden renderer can park that past the surface
-  // timeout and the create would then destroy the live PTY (#7587). This lets the
-  // renderer's own PTY spawn publish the surface main-side, scoped to in-flight
-  // creates so ordinary renderer spawns never publish here.
-  protected pendingMobileTerminalCreatesByKey = new Map<
-    string,
-    {
-      activate: boolean
-      paired: boolean
-      selectIfNoActiveTab: boolean
-      viewMode?: 'terminal' | 'chat'
-      /** Resolved agent launch command, kept so a settle over a bare renderer
-       *  PTY can still deliver the launch instead of succeeding silently (STA-3214). */
-      startupCommand?: string
-    }
-  >()
-
-  protected mobileSessionTabListeners = new Set<{
-    listener: (snapshot: RuntimeMobileSessionTabsResult, changeSequence: number) => void
-    clientNavigationId?: string
-  }>()
-
-  protected pendingMobileSessionTabsChangeSequenceByWorktree = new Map<string, number>()
-
-  // Why: one watermark per repo replaces per-closed-pane fences while preserving stale-write safety.
-  protected terminalTopologyRevisionByRepoId = new Map<string, number>()
-
-  // Why: provider exit can beat surface registration; that exact dead incarnation must never publish.
-  protected earlyExitedPtyIncarnations = new Map<string, PtyIncarnationId | null>()
-
-  protected pendingPtyRegistrationIncarnations = new Map<string, PtyIncarnationId | null>()
 
   // Why public: the PTY IPC layer's stop paths write it and its exit delivery reads it.
   readonly intentionalPtyStops = new TerminalIntentionalStops()
@@ -264,52 +247,26 @@ export class OrcaRuntimeWithRuntimeId {
   }
 
   // Coalesce title/status notifications and emit the latest session snapshot.
-  protected readonly mobileSessionTabsNotifyCoalescer = createMobileSessionTabsNotifyCoalescer(
-    (worktreeId) => this.flushScheduledMobileSessionTabsChanged(worktreeId)
-  )
+  protected readonly mobileSessionTabsNotifyCoalescer: MobileSessionTabsNotifyCoalescer =
+    createMobileSessionTabsNotifyCoalescer((worktreeId) =>
+      this.flushScheduledMobileSessionTabsChanged(worktreeId)
+    )
 
-  protected readonly mobileSessionTabsAgentStatusHeartbeat =
+  protected readonly mobileSessionTabsAgentStatusHeartbeat: MobileSessionTabsAgentStatusHeartbeat =
     createMobileSessionTabsAgentStatusHeartbeat(
       (ptyId) => this.getMobileSessionWorktreeIdsForPty(ptyId),
       (worktreeId) => this.touchMobileSessionTabsForWorktree(worktreeId)
     )
 
-  // Concurrent focus requests share one host reveal; the latest pane wins.
-  protected readonly terminalFocusNavigationCoalescer =
-    new TerminalFocusNavigationCoalescer<RuntimeTerminalFocus>()
-
-  protected pendingMobileSessionPtyAggregateInventoryRefresh: Promise<PtyControllerInventory | null> | null =
-    null
-
-  // Why: counts authoritative graph statements so a PTY's recorded surface can be told apart
-  // from one the graph has simply not published yet (pty-recorded-surface-topology.ts).
-  protected graphSequence = 0
-
-  protected leaves = new Map<string, RuntimeLeafRecord>()
-
-  // Why: PTY output is a per-keystroke hot path. Looking up affected leaves by
-  // ptyId keeps active TUI redraws independent of the total open terminal count.
-  protected leavesByPtyId = new Map<string, RuntimeLeafRecord[]>()
-
-  protected readonly terminalIdentity = new RuntimeTerminalIdentityOwner({
+  protected readonly terminalIdentity = createSessionTerminalIdentityOwner(this.sessionPorts, {
     runtimeId: () => this.runtimeId,
-    rendererGraphEpoch: () => this.rendererGraphEpoch,
-    graphSequence: () => this.graphSequence,
-    graphStatus: () => this.graphStatus,
-    leaves: () => this.leaves,
-    leavesByPtyId: () => this.leavesByPtyId,
-    ptysById: () => this.ptysById,
     wslDistroByPtyId: () => this.wslDistroByPtyId,
     titleObservationSequence: () => this.titleObservationSequence,
     setTitleObservationSequence: (sequence) => {
       this.titleObservationSequence = sequence
     },
     assertGraphReady: () => this.assertGraphReady(),
-    rejectWaitersForHandle: (handle, code) => this.rejectWaitersForHandle(handle, code),
-    structuredTerminalRefusal: (handle) =>
-      structuredWorkerTerminalRefusal(handle, this._orchestrationDb),
-    isLiveStructuredWorker: (handle) =>
-      Boolean(resolveStructuredWorkerAuthority(handle, this._orchestrationDb))
+    getOrchestrationDb: () => this._orchestrationDb
   })
 
   protected readonly handles = this.terminalIdentity.handles
@@ -325,12 +282,6 @@ export class OrcaRuntimeWithRuntimeId {
   protected readonly pendingPtyHandleReplacementFences =
     this.terminalIdentity.pendingPtyHandleReplacementFences
 
-  // Why: pointer state is process-local; one harmless replay after restart avoids a wire or schema change.
-  protected readonly lastPointedMessageSequenceByHandle = new Map<string, number>()
-
-  // Why: a waiter can reserve an older row while a newer row advances the sequence watermark.
-  protected readonly pointedMessageIdsByHandle = new Map<string, Set<string>>()
-
   protected readonly mailPointerRepointScheduler = new MailPointerRepointScheduler((handle) =>
     this.repointPendingMessagesForHandle(handle)
   )
@@ -338,8 +289,6 @@ export class OrcaRuntimeWithRuntimeId {
   protected readonly syntheticTerminalHandles = this.terminalIdentity.syntheticTerminalHandles
 
   protected readonly detachedPreAllocatedLeaves = this.terminalIdentity.detachedPreAllocatedLeaves
-
-  protected graphSyncCallbacks: (() => void)[] = []
 
   protected readonly terminalWaiters = new RuntimeTerminalWaiterRegistry()
 
@@ -367,24 +316,17 @@ export class OrcaRuntimeWithRuntimeId {
       (ptyId ? this.ptysById.get(ptyId)?.lastOscTitleEpochMs : null) ?? null
   }
 
-  protected readonly terminalIdlePolls = new RuntimeTerminalIdlePolls({
-    ...this.tuiIdleEvidenceSource,
-    intervalMs: TUI_IDLE_POLL_INTERVAL_MS,
-    getForegroundProcess: (ptyId) => this.ptyController?.getForegroundProcess(ptyId) ?? null,
-    hasCommandPainted: (ptyId) => {
-      const pty = this.ptysById.get(ptyId)
-      return pty === undefined || hasTerminalCommandPainted(pty)
-    },
+  protected readonly terminalIdlePolls = createSessionTerminalIdlePolls(
+    this.tuiIdleEvidenceSource,
+    this.sessionPorts,
     // Why the runtime's own emulator: a provider snapshot would be a host round trip per tick.
-    readVisibleScreen: (ptyId) =>
+    (ptyId) =>
       this.headlessTerminals.has(ptyId)
         ? this.readHeadlessVisibleTerminalState(ptyId).then(
             (screen) => screen?.lines.join('\n') ?? null
           )
-        : null,
-    getLiveLeaf: (leaf) => this.leaves.get(this.getLeafKey(leaf.tabId, leaf.leafId)) ?? leaf,
-    resolve: (waiter, result) => this.terminalWaiters.resolve(waiter, result)
-  })
+        : null
+  )
 
   protected readonly terminalWait = new RuntimeTerminalWaitController(
     {
@@ -398,13 +340,4 @@ export class OrcaRuntimeWithRuntimeId {
     this.terminalWaiters,
     this.terminalIdlePolls
   )
-
-  protected ptyController: RuntimePtyController | null = null
-
-  protected readonly ptyLivenessVerdictByPtyId = new Map<
-    string,
-    { verdict: PtyLivenessVerdict; observedAt: number }
-  >()
-
-  protected ptyLivenessObservationSequence = 0
 }

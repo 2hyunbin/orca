@@ -23,6 +23,9 @@ const LAYOUT_AUTHORITIES = [
   'src/main/persistence/loading-store/pty-binding-persistence.ts',
   'src/main/runtime/orca-runtime-split-pty-backed-terminal.ts',
   'src/main/runtime/session-tabs/headless-tab-group-moves.ts',
+  'src/main/runtime/session-tabs/mobile-session-hydration.ts',
+  'src/main/runtime/session-tabs/mobile-session-preservation.ts',
+  'src/main/runtime/session-tabs/mobile-session-reconciliation.ts',
   'src/main/runtime/orca-runtime-create-terminal.ts',
   'src/main/runtime/terminal/output/terminal-derived-agent-facts.ts',
   'src/main/runtime/terminal/output/terminal-osc-metadata.ts',
@@ -49,6 +52,7 @@ describe('workspace layout oracle PR E2E routing', () => {
     const source = `src/main/runtime/orca-runtime-${original}.ts`
     const destination = `src/main/runtime/session-tabs/mobile-session-${owner}.ts`
     expect(existsSync(join(projectDir, source)), source).toBe(true)
+    expect(existsSync(join(projectDir, destination)), destination).toBe(true)
     expect(selectPrE2eSpecs([source]), source).toEqual(ORACLE_ROUTE.specs.toSorted())
     expect(selectPrE2eSpecs([destination]), destination).toEqual(ORACLE_ROUTE.specs.toSorted())
     expect(shouldRunReusablePrE2e([destination]), destination).toBe(true)

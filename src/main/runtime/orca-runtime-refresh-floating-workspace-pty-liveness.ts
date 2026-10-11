@@ -1,72 +1,16 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeGraphState } from './session-graph/session-graph-state'
+import type { RuntimeFloatingSessionLiveness } from './terminal/lifecycle/floating-session-liveness'
 import { OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory } from './orca-runtime-refresh-pty-worktree-records-with-controller-inventory'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
-import { indexFloatingSnapshotPtyBindings } from './floating-snapshot-pty-bindings'
-import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { DISCONNECTED_PTY_RECORD_MAX } from './orca-runtime-postlude'
 
 export class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory {
-  protected refreshFloatingWorkspacePtyLiveness(): Set<string> | null {
-    const controller = this.ptyController
-    if (!controller?.hasPty) {
-      return null
-    }
-    const persistedBindingByPtyId = indexFloatingSnapshotPtyBindings(
-      this.mobileSessionTabsByWorktree.get(FLOATING_TERMINAL_WORKTREE_ID),
-      (tab) => this.getMobileTerminalPaneKey(tab)
-    )
-    const knownPtyIds = new Set<string>(persistedBindingByPtyId.keys())
-    for (const pty of this.ptysById.values()) {
-      if (pty.worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
-        knownPtyIds.add(pty.ptyId)
-      }
-    }
-    for (const leaf of this.leaves.values()) {
-      if (leaf.worktreeId === FLOATING_TERMINAL_WORKTREE_ID && leaf.ptyId) {
-        knownPtyIds.add(leaf.ptyId)
-      }
-    }
-
-    const liveness = new Map<string, boolean>()
-    try {
-      for (const ptyId of knownPtyIds) {
-        const live = controller.hasPty(ptyId)
-        if (live === null) {
-          return null
-        }
-        liveness.set(ptyId, live)
-      }
-    } catch {
-      return null
-    }
-
-    const livePtyIds = new Set<string>()
-    for (const [ptyId, live] of liveness) {
-      let pty = this.ptysById.get(ptyId)
-      if (live) {
-        livePtyIds.add(ptyId)
-        const binding = persistedBindingByPtyId.get(ptyId)
-        if (!pty && binding) {
-          // Why: a live daemon PTY restored from disk needs its pane identity before mobile can issue a safe handle.
-          pty = this.recordPtyWorktree(ptyId, FLOATING_TERMINAL_WORKTREE_ID, {
-            connected: true,
-            tabId: binding.tabId,
-            paneKey: binding.paneKey
-          })
-        }
-        if (pty) {
-          pty.connected = true
-          pty.disconnectedAt = null
-          this.markPtyLivenessLive(ptyId)
-          this.refreshPtyForegroundAgent(ptyId)
-        }
-      } else if (pty && !this.leafExistsForPty(ptyId)) {
-        pty.connected = false
-        pty.disconnectedAt ??= Date.now()
-      }
-    }
-    this.pruneDisconnectedPtyRecords()
-    return livePtyIds
+  protected refreshFloatingWorkspacePtyLiveness(
+    ...args: Parameters<RuntimeFloatingSessionLiveness['refreshFloatingWorkspacePtyLiveness']>
+  ): ReturnType<RuntimeFloatingSessionLiveness['refreshFloatingWorkspacePtyLiveness']> {
+    return this.runtimeFloatingSessionLiveness.refreshFloatingWorkspacePtyLiveness(...args)
   }
 
   protected pruneDisconnectedPtyTranscript(pty: RuntimePtyWorktreeRecord): void {
@@ -152,20 +96,10 @@ export class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends OrcaRunt
     return this.terminalIdentity.leafExistsForPty(ptyId)
   }
 
-  protected rebuildLeafPtyIndex(): void {
-    const next = new Map<string, RuntimeLeafRecord[]>()
-    for (const leaf of this.leaves.values()) {
-      if (!leaf.ptyId) {
-        continue
-      }
-      const leaves = next.get(leaf.ptyId)
-      if (leaves) {
-        leaves.push(leaf)
-      } else {
-        next.set(leaf.ptyId, [leaf])
-      }
-    }
-    this.leavesByPtyId = next
+  protected rebuildLeafPtyIndex(
+    ...args: Parameters<RuntimeGraphState['rebuildLeafPtyIndex']>
+  ): ReturnType<RuntimeGraphState['rebuildLeafPtyIndex']> {
+    return this.runtimeGraphState.rebuildLeafPtyIndex(...args)
   }
 
   protected getLeavesForPty(ptyId: string): RuntimeLeafRecord[] {
