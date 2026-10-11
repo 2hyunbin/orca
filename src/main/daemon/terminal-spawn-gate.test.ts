@@ -234,6 +234,39 @@ describe('TerminalSpawnGate', () => {
       ).resolves.toMatchObject({ isNew: true })
     })
 
+    it('holds declared automatic restores while paused, but never user resumes or old callers', async () => {
+      gate = new TerminalSpawnGate({
+        log,
+        mode: 'enforce',
+        now: () => Date.now(),
+        automaticWorkMode: () => ({ kind: 'paused', reason: 'unclean_host_death', since: 0 })
+      })
+      host = new TerminalHost({ spawnSubprocess, spawnGate: gate })
+      await expect(restore('declared', { declaredIntent: 'automatic-restore' })).rejects.toThrow(
+        'terminal_spawn_deferred:paused'
+      )
+      await expect(restore('opened', { declaredIntent: 'user-resume' })).resolves.toMatchObject({
+        isNew: true
+      })
+      await expect(restore('legacy')).resolves.toMatchObject({ isNew: true })
+      expect(spawnSubprocess).toHaveBeenCalledTimes(2)
+    })
+
+    it('arms the crash marker before the first automatic fork only', async () => {
+      const armAutomaticWork = vi.fn()
+      gate = new TerminalSpawnGate({
+        log,
+        mode: 'enforce',
+        now: () => Date.now(),
+        armAutomaticWork
+      })
+      host = new TerminalHost({ spawnSubprocess, spawnGate: gate })
+      await host.createOrAttach({ sessionId: 'shell', cols: 80, rows: 24, streamClient: stream() })
+      expect(armAutomaticWork).not.toHaveBeenCalled()
+      await restore('first')
+      expect(armAutomaticWork).toHaveBeenCalledOnce()
+    })
+
     it('never queues an interactive shell behind a restore storm', async () => {
       for (let i = 0; i < 3; i++) {
         await restore(`burst-${i}`)

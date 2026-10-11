@@ -30,6 +30,8 @@ export type DaemonServerOptions = {
   log?: DaemonFileLog
   /** Headless hosts enforce; desktop only observes until the client handles deferral. */
   spawnAdmission?: TerminalSpawnAdmissionMode
+  /** Where the daemon remembers whether automatic restores were running when it died. */
+  automaticWorkMarkerPath?: string
   spawnSubprocess: (opts: {
     sessionId: string
     cols: number

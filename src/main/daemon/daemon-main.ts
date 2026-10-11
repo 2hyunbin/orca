@@ -2,6 +2,8 @@ import { DaemonServer } from './daemon-server'
 import type { DaemonServerOptions } from './daemon-server-options'
 import type { DaemonFileLog } from './daemon-file-log'
 import { readTerminalSpawnAdmissionArg } from './terminal-spawn-gate'
+import { dirname, join } from 'node:path'
+import { AUTOMATIC_WORK_MARKER_FILE } from './automatic-work-run-marker-store'
 
 export type DaemonStartOptions = {
   socketPath: string
@@ -21,6 +23,7 @@ export type DaemonStartOptions = {
   onAuthenticatedClientPair?: DaemonServerOptions['onAuthenticatedClientPair']
   log?: DaemonFileLog
   spawnAdmission?: DaemonServerOptions['spawnAdmission']
+  automaticWorkMarkerPath?: string
   onIdleShutdown?: () => void
   onRpcShutdown?: () => void
   initialAdoptionTestConfig?: DaemonServerOptions['initialAdoptionTestConfig']
@@ -53,6 +56,14 @@ export async function startDaemon(opts: DaemonStartOptions): Promise<DaemonHandl
     ...(opts.log ? { log: opts.log } : {}),
     // Why argv: the launcher passes it on the daemon's own command line; tests pass it directly.
     spawnAdmission: opts.spawnAdmission ?? readTerminalSpawnAdmissionArg(process.argv),
+    // Why beside the PID record: only a launched daemon owns a runtime dir worth remembering.
+    ...(opts.automaticWorkMarkerPath || opts.pidPath
+      ? {
+          automaticWorkMarkerPath:
+            opts.automaticWorkMarkerPath ??
+            join(dirname(opts.pidPath ?? ''), AUTOMATIC_WORK_MARKER_FILE)
+        }
+      : {}),
     ...(opts.onIdleShutdown ? { onIdleShutdown: opts.onIdleShutdown } : {}),
     ...(opts.onRpcShutdown ? { onRpcShutdown: opts.onRpcShutdown } : {}),
     ...(opts.initialAdoptionTestConfig

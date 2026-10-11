@@ -22,6 +22,7 @@ import { checkPtySpawnHealth } from './pty-subprocess'
 import { TerminalHistorySeedTransferRegistry } from './terminal-history-seed-transfer-registry'
 import { TerminalHost } from './terminal-host'
 import { TerminalSpawnGate } from './terminal-spawn-gate'
+import { AutomaticWorkRunMarker } from './automatic-work-run-marker-store'
 import {
   CLEAN_DISCONNECT_PROTOCOL_VERSION,
   NOTIFY_PREFIX,
@@ -34,6 +35,7 @@ export class DaemonServer {
   private static readonly INITIAL_ADOPTION_TIMEOUT_MS = 2 * 60 * 1000
 
   private readonly log: DaemonFileLog
+  private readonly automaticWork: AutomaticWorkRunMarker
   private readonly host: TerminalHost
   private readonly transientFactRelay: BackgroundTransientFactRelay
   private readonly streamDataBatcher: DaemonStreamDataBatcher
@@ -49,11 +51,13 @@ export class DaemonServer {
 
   constructor(options: DaemonServerOptions) {
     this.log = options.log ?? createNoopDaemonFileLog()
+    this.automaticWork = new AutomaticWorkRunMarker(options.automaticWorkMarkerPath, this.log)
     this.host = new TerminalHost({
       spawnSubprocess: options.spawnSubprocess,
       spawnGate: new TerminalSpawnGate({
         log: (event, details) => this.log.log(event, details),
-        mode: options.spawnAdmission ?? 'observe'
+        mode: options.spawnAdmission ?? 'observe',
+        ...this.automaticWork.gateOptions()
       }),
       reportReadinessEvent: (event, details) => this.log.log(event, details),
       onSessionReaped: (sessionId) => {
@@ -235,8 +239,10 @@ export class DaemonServer {
     }))
   }
 
-  start(): Promise<void> {
-    return this.lifecycle.start((socket) => this.connections.accept(socket))
+  async start(): Promise<void> {
+    await this.lifecycle.start((socket) => this.connections.accept(socket))
+    // Why after start: only the daemon that won the endpoint may judge or rewrite the marker.
+    this.automaticWork.open()
   }
 
   shutdown(): Promise<void> {
@@ -267,6 +273,8 @@ export class DaemonServer {
     }
     this.streamDataBatcher.clear()
     this.historySeedTransfers.dispose()
+    // Why after host dispose: every automatic session is gone, so this exit was orderly.
+    this.automaticWork.markCleanExit()
     // Let canceled in-flight RPCs enqueue their protocol errors before transport destruction.
     await waitForImmediate()
     this.connections.dispose()

@@ -60,6 +60,8 @@ type TerminalSpawnGateOptions = {
   now?: () => number
   pressure?: () => HostPressureLevel
   automaticWorkMode?: () => AutomaticWorkMode
+  /** Runs synchronously before the first automatic fork is admitted. */
+  armAutomaticWork?: () => void
 }
 
 /**
@@ -167,6 +169,9 @@ export class TerminalSpawnGate {
   }
 
   private lease(facts: SpawnRequestFacts, charge: SpawnCharge, now: number): TerminalSpawnLease {
+    if (charge === 'automatic') {
+      this.options.armAutomaticWork?.()
+    }
     applySpawnAdmission(this.state, facts, charge, this.limits, now)
     let settled = false
     const settle = (sessionId: string | null, isAlive: boolean): void => {
