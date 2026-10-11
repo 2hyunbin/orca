@@ -20,6 +20,10 @@ import {
 } from './dev-electron-bundle-cache.mjs'
 
 const apply = process.argv.includes('--apply')
+const minAgeIndex = process.argv.indexOf('--min-age-days')
+const minAgeDays = minAgeIndex === -1 ? 0 : Number(process.argv[minAgeIndex + 1])
+const excludeIndex = process.argv.indexOf('--exclude-worktree')
+const excludeWorktree = excludeIndex === -1 ? null : path.resolve(process.argv[excludeIndex + 1])
 const repoRoot = process.argv.includes('--repo')
   ? path.resolve(process.argv[process.argv.indexOf('--repo') + 1])
   : process.cwd()
@@ -72,6 +76,9 @@ export function collectDevBundles(worktree) {
 }
 
 function main() {
+  if (!Number.isFinite(minAgeDays) || minAgeDays < 0) {
+    throw new Error('--min-age-days requires a non-negative number')
+  }
   // The patched dev bundle is only built on macOS; elsewhere the dev app runs from dist directly.
   if (process.platform !== 'darwin') {
     console.log('No dev Electron bundles on this platform; nothing to reclaim.')
@@ -86,14 +93,17 @@ function main() {
     return
   }
 
-  const bundles = listWorktrees(repoRoot).flatMap((worktree) => collectDevBundles(worktree))
+  const bundles = listWorktrees(repoRoot)
+    .filter((worktree) => path.resolve(worktree) !== excludeWorktree)
+    .flatMap((worktree) => collectDevBundles(worktree))
   // currentDir is null on purpose: unlike the dev runner, this sweep is not about to launch anything,
   // so the only thing protecting a bundle is a live process or an in-flight build.
   const stale = selectStaleDevBundleDirs({
     bundles,
     currentDir: null,
     processTable,
-    nowMs: Date.now()
+    nowMs: Date.now(),
+    minAgeMs: minAgeDays * 24 * 60 * 60 * 1000
   })
 
   let reclaimed = 0
@@ -107,20 +117,40 @@ function main() {
       continue
     }
     try {
+      const currentProcessTable = getDevBundleProcessTable()
+      if (currentProcessTable === null) {
+        throw new Error('Process ownership is unverifiable')
+      }
+      const currentBundle = collectDevBundles(path.resolve(dir, '..', '..', '..')).find(
+        (bundle) => bundle.dir === dir
+      )
+      if (
+        !currentBundle ||
+        !selectStaleDevBundleDirs({
+          bundles: [currentBundle],
+          currentDir: null,
+          processTable: currentProcessTable,
+          nowMs: Date.now(),
+          minAgeMs: minAgeDays * 24 * 60 * 60 * 1000
+        }).includes(dir)
+      ) {
+        continue
+      }
       rmSync(dir, { recursive: true, force: true })
       reclaimed += size
       removed += 1
       console.log(`removed  ${dir}  ${(size / 1024 ** 3).toFixed(2)} GiB`)
     } catch (error) {
       console.warn(`skip  ${dir}  (${error instanceof Error ? error.message : String(error)})`)
+      process.exitCode = 1
     }
   }
 
   const inUse = bundles.length - stale.length
   console.log(
     `\n${apply ? 'Removed' : 'Would remove'} ${removed} bundle(s); ` +
-      `${apply ? 'reclaimed' : 'reclaimable'} ~${(reclaimed / 1024 ** 3).toFixed(2)} GiB` +
-      `${inUse > 0 ? `; left ${inUse} in use or still building` : ''}` +
+      `logical file data ~${(reclaimed / 1024 ** 3).toFixed(2)} GiB (shared blocks affect disk savings)` +
+      `${inUse > 0 ? `; retained ${inUse} protected or recent bundle(s)` : ''}` +
       `${apply ? '' : '\nRe-run with --apply to do it.'}`
   )
 }
