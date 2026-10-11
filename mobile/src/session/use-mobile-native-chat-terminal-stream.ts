@@ -195,10 +195,6 @@ export function useMobileNativeChatTerminalStream(args: {
       return
     }
     if (coveredHandleRef.current === handle || streamIsLeaseOnly) {
-      // Why clear `initialized`: a lease-only stream delivered no scrollback, so xterm
-      // holds nothing — a stale mark would drop the replacement snapshot and the
-      // terminal would stay blank through the resubscribe.
-      args.initializedRef.current.delete(handle)
       args.unsubscribe(handle)
       coveredHandleRef.current = null
     }

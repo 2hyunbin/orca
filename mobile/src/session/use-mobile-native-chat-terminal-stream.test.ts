@@ -26,6 +26,7 @@ describe('useMobileNativeChatTerminalStream', () => {
   const unsubscribe = vi.fn((handle: string) => {
     subscriptionsRef.current.delete(handle)
     leaseOnlyRef.current.delete(handle)
+    initializedRef.current.delete(handle)
   })
   const notifyWebReadyRef = { current: (_handle: string, _wasAlreadyReady: boolean): void => {} }
   const notifyListedHandlesRef = { current: (_liveHandles: ReadonlySet<string>): void => {} }
