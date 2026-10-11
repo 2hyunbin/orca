@@ -33,6 +33,8 @@ describe.each([
     'Detect whether the ref ships the orcad template'
   ],
   ['release-cut.yml', 'cut', 'Resolve ref SHA'],
+  // Dispatchable on its own with any tag, so release-cut's refusal does not cover it.
+  ['release-mac-build.yml', 'build-mac', 'Build app'],
   ['dev-channel-win-build.yml', 'build-win', 'Build app']
 ])('%s refuses a relay-era ref', (workflow, job, laterStep) => {
   const jobSteps = steps(workflow, job)

@@ -48,6 +48,15 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.tag }}
 
+      # Why: a relay-era ref (before #27215) needs the Windows relay addon this build no longer compiles.
+      - name: Refuse a ref that still ships the SSH relay
+        shell: bash
+        run: |
+          if [[ -e config/tsconfig.relay.json ]]; then
+            echo "::error::This ref predates #27215 and still ships the SSH relay; build a commit at or after 2b4b60a87e."
+            exit 1
+          fi
+
       - name: Restore draft-publish scripts from the workflow ref
         env:
           WORKFLOW_SHA: ${{ github.workflow_sha }}
