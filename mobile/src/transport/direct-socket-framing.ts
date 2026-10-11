@@ -104,9 +104,14 @@ function createLegacyFraming(args: Parameters<typeof createDirectSocketFraming>[
   const sendAuth = async (): Promise<void> => {
     try {
       const frame = await handshake.sealAuth({ kind: 'token', deviceToken: args.deviceToken })
-      if (!disposed) {
-        socket.send(frame)
+      if (disposed) {
+        return
       }
+      // Why: another socket may have latched this host to v2 while the auth step ran.
+      if (!args.mayUseLegacy()) {
+        throw new PairedE2EEDowngradeError('auth')
+      }
+      socket.send(frame)
     } catch (error) {
       if (!disposed) {
         events.onProtocolError(error instanceof Error ? error : new Error(String(error)))
