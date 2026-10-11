@@ -7,10 +7,10 @@ import { useAppStore } from '@/store'
 import { getRuntimeEnvironmentIdForWorktree } from './worktree-runtime-owner'
 import {
   callRuntimeRpc,
-  getActiveRuntimeTarget,
   runtimeEnvironmentSupportsCapability,
   type RuntimeClientTarget
 } from '@/runtime/runtime-rpc-client'
+import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { refreshLocalStructuredSessionWorktreeTabs } from '@/runtime/local-structured-session-tabs-sync'
 import { STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
@@ -107,12 +107,9 @@ export async function activateAiVaultStructuredSession(
   // second click runs the whole sequence again and lands its own toast.
   const hostKey = executionHostIdForStructuredTarget(
     target ??
-      getActiveRuntimeTarget({
-        activeRuntimeEnvironmentId: getRuntimeEnvironmentIdForWorktree(
-          useAppStore.getState(),
-          structured.workspaceId
-        )
-      })
+      runtimeTargetForOwnerEnvironment(
+        getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), structured.workspaceId)
+      )
   )
   const key = `${hostKey}\0${structured.workspaceId}\0${structured.sessionId}`
   const inFlight = activationsInFlight.get(key)
@@ -201,12 +198,9 @@ export async function revealStructuredSession(target: {
 }): Promise<StructuredSessionRevealOutcome> {
   const host =
     target.target ??
-    getActiveRuntimeTarget({
-      activeRuntimeEnvironmentId: getRuntimeEnvironmentIdForWorktree(
-        useAppStore.getState(),
-        target.worktreeId
-      )
-    })
+    runtimeTargetForOwnerEnvironment(
+      getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), target.worktreeId)
+    )
   // Negotiated against the host that will answer this call, not the local one: a paired host runs
   // its own build, and its method-not-found is indistinguishable from a refusal we should surface.
   // A local host is this build, so it always has the method and needs no round trip to prove it.
@@ -265,9 +259,7 @@ async function refreshStructuredSessionTabs(
   const state = useAppStore.getState()
   const host =
     target ??
-    getActiveRuntimeTarget({
-      activeRuntimeEnvironmentId: getRuntimeEnvironmentIdForWorktree(state, worktreeId)
-    })
+    runtimeTargetForOwnerEnvironment(getRuntimeEnvironmentIdForWorktree(state, worktreeId))
   if (host.kind === 'local') {
     await withStructuredSessionRestoreTimeout(refreshLocalStructuredSessionWorktreeTabs(worktreeId))
     return
