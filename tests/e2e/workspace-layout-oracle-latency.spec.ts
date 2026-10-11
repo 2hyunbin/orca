@@ -47,7 +47,8 @@ import type {
 } from '../../src/shared/runtime-types'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-session-contracts'
 
-const SAMPLES = Number(process.env.ORCA_LAYOUT_ORACLE_LATENCY_SAMPLES ?? 100)
+// The baseline is taken with 100; routine runs keep 10, since a Linux CI sample waits ~1 s per frame.
+const SAMPLES = Number(process.env.ORCA_LAYOUT_ORACLE_LATENCY_SAMPLES ?? 10)
 const STARTUP_SAMPLES = Number(process.env.ORCA_LAYOUT_ORACLE_STARTUP_SAMPLES ?? 10)
 const FLOOD_COMMAND = 'yes orca-latency-flood'
 const CLOSE_CONFIRM = 'Stop and Close'

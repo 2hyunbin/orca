@@ -1,5 +1,5 @@
 {
-  "about": "Non-gating baseline from tests/e2e/workspace-layout-oracle-latency.spec.ts on main, with no layout subscriber. Milliseconds; inAppCommit/inAppDrawn are the in-window clock, outer includes one DevTools round trip. Event-loop delay is main's, beyond the 10 ms sampling interval.",
+  "about": "Non-gating baseline from tests/e2e/workspace-layout-oracle-latency.spec.ts on main, with no layout subscriber. Milliseconds; inAppCommit/inAppDrawn are the in-window clock, outer includes one DevTools round trip. Event-loop delay is main's, beyond the 10 ms sampling interval. Taken with ORCA_LAYOUT_ORACLE_LATENCY_SAMPLES=100.",
   "main": "73c53311dc03659f79375f79ac01dff1c9c66863",
   "darwin": {
     "machine": "Apple M5 Pro, macOS 27.0, hidden window (ORCA_BACKGROUND_LAUNCH=1)",
@@ -256,6 +256,265 @@
         "p95": 96,
         "max": 96
       }
+    }
+  },
+  "linux": {
+    "machine": "GitHub-hosted ubuntu-latest, Xvfb, hidden window; CI run 38165956663 job 114549487905",
+    "caveat": "Chromium runs a hidden window's animation frames at about 1 per second here, so inAppDrawn and outer are bounded by that throttle and only inAppCommit measures the app.",
+    "latency": {
+      "split (idle)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 22,
+          "p95": 29,
+          "max": 32
+        },
+        "inAppDrawn": {
+          "p50": 1011,
+          "p95": 1013,
+          "max": 1018
+        },
+        "outer": {
+          "p50": 1014,
+          "p95": 1016,
+          "max": 1022
+        }
+      },
+      "close pane (idle)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 30,
+          "p95": 51,
+          "max": 91
+        },
+        "inAppDrawn": {
+          "p50": 997,
+          "p95": 1000,
+          "max": 1002
+        },
+        "outer": {
+          "p50": 1001,
+          "p95": 1004,
+          "max": 1004
+        }
+      },
+      "new tab (idle)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 49,
+          "p95": 62,
+          "max": 83
+        },
+        "inAppDrawn": {
+          "p50": 1008,
+          "p95": 1012,
+          "max": 1012
+        },
+        "outer": {
+          "p50": 1009,
+          "p95": 1013,
+          "max": 1014
+        }
+      },
+      "rename (idle)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 13,
+          "p95": 16,
+          "max": 29
+        },
+        "inAppDrawn": {
+          "p50": 1010,
+          "p95": 1011,
+          "max": 1011
+        },
+        "outer": {
+          "p50": 1011,
+          "p95": 1012,
+          "max": 1014
+        }
+      },
+      "tab reorder (idle)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 12,
+          "p95": 18,
+          "max": 19
+        },
+        "inAppDrawn": {
+          "p50": 1012,
+          "p95": 1013,
+          "max": 1013
+        },
+        "outer": {
+          "p50": 1013,
+          "p95": 1014,
+          "max": 1014
+        }
+      },
+      "close tab (idle)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 21,
+          "p95": 25,
+          "max": 38
+        },
+        "inAppDrawn": {
+          "p50": 1014,
+          "p95": 1015,
+          "max": 1016
+        },
+        "outer": {
+          "p50": 1015,
+          "p95": 1016,
+          "max": 1017
+        }
+      },
+      "split (flood)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 44,
+          "p95": 77,
+          "max": 119
+        },
+        "inAppDrawn": {
+          "p50": 367,
+          "p95": 706,
+          "max": 962
+        },
+        "outer": {
+          "p50": 642,
+          "p95": 887,
+          "max": 1063
+        }
+      },
+      "close pane (flood)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 366,
+          "p95": 575,
+          "max": 2210
+        },
+        "inAppDrawn": {
+          "p50": 1014,
+          "p95": 1331,
+          "max": 3168
+        },
+        "outer": {
+          "p50": 1154,
+          "p95": 1493,
+          "max": 3344
+        }
+      },
+      "new tab (flood)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 570,
+          "p95": 2209,
+          "max": 2969
+        },
+        "inAppDrawn": {
+          "p50": 1261,
+          "p95": 2585,
+          "max": 3394
+        },
+        "outer": {
+          "p50": 1322,
+          "p95": 2719,
+          "max": 3505
+        }
+      },
+      "rename (flood)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 202,
+          "p95": 341,
+          "max": 377
+        },
+        "inAppDrawn": {
+          "p50": 539,
+          "p95": 1057,
+          "max": 1207
+        },
+        "outer": {
+          "p50": 587,
+          "p95": 1140,
+          "max": 1319
+        }
+      },
+      "tab reorder (flood)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 176,
+          "p95": 361,
+          "max": 397
+        },
+        "inAppDrawn": {
+          "p50": 577,
+          "p95": 743,
+          "max": 1334
+        },
+        "outer": {
+          "p50": 627,
+          "p95": 838,
+          "max": 1385
+        }
+      },
+      "close tab (flood)": {
+        "n": 100,
+        "inAppCommit": {
+          "p50": 207,
+          "p95": 363,
+          "max": 445
+        },
+        "inAppDrawn": {
+          "p50": 838,
+          "p95": 932,
+          "max": 965
+        },
+        "outer": {
+          "p50": 931,
+          "p95": 1147,
+          "max": 1333
+        }
+      }
+    },
+    "eventLoopDelay": {
+      "idle": {
+        "process": "main",
+        "windows": 713,
+        "p99": 138.9,
+        "max": 197.88
+      },
+      "flood": {
+        "process": "main",
+        "windows": 742,
+        "p99": 355.69,
+        "max": 355.69
+      }
+    },
+    "closeConfirms": {
+      "idle": 0,
+      "flood": 0
+    },
+    "firstDrawn": {
+      "profile": {
+        "hiddenWorktrees": 12,
+        "tabsPerWorktree": 3,
+        "activePanes": 4
+      },
+      "firstDrawn": {
+        "n": 10,
+        "p50": 3026,
+        "p95": 3086,
+        "max": 3086
+      },
+      "eventLoopDelayMax": {
+        "p50": 91,
+        "p95": 106,
+        "max": 106
+      },
+      "caveat": "first drawn is also read on an animation frame, so it can be up to ~1 s late here"
     }
   }
 }
