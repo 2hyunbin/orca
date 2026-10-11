@@ -77,7 +77,7 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     // Why: the dispatcher enforces this scope's permissions; it never trusts a request field.
     const callerScope: RpcCallerScope =
       device.scope === 'mobile'
-        ? { kind: 'mobile' }
+        ? { kind: 'mobile', delegated: device.parentDeviceId !== undefined }
         : { kind: 'runtime-paired', grants: device.grants ?? [] }
 
     // Why: bind deviceToken to this socket so ws.on('close') knows which mobile client disconnected.
