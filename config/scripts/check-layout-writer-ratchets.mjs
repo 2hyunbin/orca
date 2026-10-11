@@ -19,6 +19,7 @@ import {
 // - Renderer: writes of the window's layout and per-view selection fields, including computed
 //   keys (counted at the string key) and spreads (counted where the spread object is built).
 //   Content updates of existing editor and browser entries are not membership and are not counted.
+//   Shorthand keys count only in an object handed to `set`/`setState` or a Store writer.
 
 // Partition fields of the saved workspace session (census class 1).
 const SESSION_PARTITION_FIELDS = [
@@ -171,6 +172,11 @@ const ASSIGNMENT_OPERATORS = new Set([
   ts.SyntaxKind.AmpersandAmpersandEqualsToken
 ])
 
+/** A string-literal key; a variable key (`exitCodes[ptyId]`) names no field. */
+function literalKey(node) {
+  return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) ? node.text : null
+}
+
 function staticName(node) {
   if (ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) {
     return node.text
@@ -179,7 +185,7 @@ function staticName(node) {
     return node.text
   }
   if (ts.isComputedPropertyName(node)) {
-    return staticName(node.expression)
+    return literalKey(node.expression)
   }
   return null
 }
@@ -201,7 +207,7 @@ function targetedField(node, fields) {
       }
       current = current.expression
     } else if (ts.isElementAccessExpression(current)) {
-      const key = staticName(current.argumentExpression)
+      const key = literalKey(current.argumentExpression)
       if (key !== null && fields.has(key)) {
         return key
       }
@@ -270,6 +276,48 @@ function keepsMembership(node) {
   return false
 }
 
+const STORE_SET_CALLS = new Set(['set', 'setState'])
+
+/** Whether an object literal is a store write: `set({ … })`, `set((s) => ({ … }))` or a writer call. */
+function isPassedToWriter(objectLiteral, writerNames) {
+  let node = objectLiteral
+  for (;;) {
+    const parent = node.parent
+    if (
+      ts.isParenthesizedExpression(parent) ||
+      ts.isAsExpression(parent) ||
+      ts.isSatisfiesExpression(parent) ||
+      ts.isConditionalExpression(parent)
+    ) {
+      node = parent
+    } else if (ts.isArrowFunction(parent) && parent.body === node) {
+      node = parent
+    } else if (ts.isReturnStatement(parent)) {
+      let fn = parent.parent
+      while (fn && !ts.isFunctionLike(fn)) {
+        fn = fn.parent
+      }
+      if (!fn) {
+        return false
+      }
+      node = fn
+    } else {
+      break
+    }
+  }
+  const call = node.parent
+  if (!ts.isCallExpression(call) || !call.arguments.includes(node)) {
+    return false
+  }
+  const callee = unwrap(call.expression)
+  const name = ts.isIdentifier(callee)
+    ? callee.text
+    : ts.isPropertyAccessExpression(callee)
+      ? callee.name.text
+      : null
+  return name !== null && (STORE_SET_CALLS.has(name) || writerNames.has(name))
+}
+
 /** `{ tabsByWorktree: s.tabsByWorktree }` copies a value under its own name: a selector read. */
 function isSameNameCopy(property, name) {
   let value = property.initializer
@@ -315,7 +363,12 @@ export function countLayoutWrites(sourceText, ratchet, fileName = 'file.tsx') {
       targetedField(node.expression, ratchet.assignedFields) !== null
     ) {
       count += 1
-    } else if (ts.isShorthandPropertyAssignment(node) && ratchet.keyedFields.has(node.name.text)) {
+    } else if (
+      ts.isShorthandPropertyAssignment(node) &&
+      ratchet.keyedFields.has(node.name.text) &&
+      // A shorthand elsewhere passes a value on (`return { activeTabId, tabsByWorktree }`).
+      isPassedToWriter(node.parent, ratchet.writerNames)
+    ) {
       count += 1
     } else if (ts.isPropertyAssignment(node)) {
       const name = staticName(node.name)

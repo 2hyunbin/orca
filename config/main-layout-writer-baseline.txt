@@ -2,8 +2,6 @@
 # setters, plus assignments, deletes and object keys that edit session partitions directly.
 # This is a RATCHET: counts may only go DOWN. Layout moves to one runtime owner; do not add
 # writers. Prune after removing writers: pnpm check:layout-writer-ratchets --prune
-2 src/main/codex/codex-pane-account-registry-mutations.ts
-3 src/main/codex/codex-pane-account-registry.ts
 1 src/main/ipc/pty/ipc/leaf-move.ts
 2 src/main/ipc/pty/ipc/spawn-commit-persist.ts
 1 src/main/ipc/pty/pane/pane-owner-replacement.ts
@@ -24,7 +22,7 @@
 1 src/main/persistence/loading-store/loaded-state-parsing.ts
 1 src/main/persistence/loading-store/metadata-lineage-operations.ts
 1 src/main/persistence/loading-store/mobile-tab-selection-persistence.ts
-2 src/main/persistence/loading-store/normalize-loaded-profile-state.ts
+1 src/main/persistence/loading-store/normalize-loaded-profile-state.ts
 10 src/main/persistence/loading-store/pty-binding-persistence.ts
 10 src/main/persistence/loading-store/pty-binding-session-update.ts
 11 src/main/persistence/loading-store/repo-lifecycle-operations.ts
@@ -65,9 +63,7 @@
 2 src/main/runtime/orca-runtime-persist-headless-terminal-title.ts
 1 src/main/runtime/orca-runtime-persist-terminal-surface-retirements.ts
 1 src/main/runtime/orca-runtime-pty-foreground-process-reads.ts
-1 src/main/runtime/orca-runtime-sleep-resolved-worktree-terminals.ts
 3 src/main/runtime/orca-runtime-stop-terminals-for-worktree.ts
-1 src/main/runtime/orca-runtime-sync-mobile-session-tabs.ts
 4 src/main/runtime/runtime-legacy-worker-terminal-recovery-persistence.ts
 2 src/main/runtime/runtime-pane-admission.ts
 7 src/main/runtime/runtime-terminal-orphan-session-adoption.ts

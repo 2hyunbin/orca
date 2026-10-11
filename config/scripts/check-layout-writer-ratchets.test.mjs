@@ -17,7 +17,9 @@ describe('main layout writers', () => {
       'const next = { ...state, workspaceSession: merged }',
       'const tabs = session.tabsByWorktree[id]',
       'type T = { workspaceSession: Session }',
-      'const reply = { tabsByWorktree: tabs }'
+      'const reply = { tabsByWorktree: tabs }',
+      'exitCodes[ptyId] = code',
+      'const byPty = { [ptyId]: code }'
     ].join('\n')
     expect(countLayoutWrites(src, mainRatchet, 'a.ts')).toBe(8)
   })
@@ -31,6 +33,7 @@ describe('renderer layout writes', () => {
       "const KEYS = ['groupsByWorktree', 'layoutByWorktree'] as const",
       'patch[key] = value',
       'const picked = useAppStore((s) => ({ openFiles: s.openFiles }))',
+      'const useTabs = () => ({ activeTabId, tabsByWorktree })',
       "type Field = Pick<AppState, 'tabsByWorktree'>",
       "const read = state['unifiedTabsByWorktree']",
       'const { tabsByWorktree } = state'
