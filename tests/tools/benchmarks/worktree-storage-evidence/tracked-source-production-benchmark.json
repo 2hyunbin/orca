@@ -95,6 +95,6 @@
     "src/main/git/worktree-source-permissions.ts": "50e519c10854c3e18cf687831512cb718e719a591caa322797545291aa58e51e"
   },
   "implementation_notes": [
-    "Hashes identify the measured modules. A later path-handling fix preserves trailing whitespace in bare repository paths; it does not change these benchmark inputs."
+    "Hashes identify the measured modules. Later metadata-path fixes preserve trailing whitespace in bare repositories and accept Windows line endings; they do not change these benchmark inputs."
   ]
 }

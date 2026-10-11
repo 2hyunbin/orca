@@ -28,11 +28,11 @@ export async function readWorktreeSourceIdentity(
     }
     return result.value
   })
-  const commonPath = common.stdout.replace(/\n$/, '')
+  const commonPath = common.stdout.replace(process.platform === 'win32' ? /\r?\n$/ : /\n$/, '')
   if (index.stdout.includes('\uFFFD') || !commonPath || commonPath.includes('\n')) {
     return undefined
   }
-  const keys = config.stdout.split('\0').map((entry) => entry.split('\n')[0].toLowerCase())
+  const keys = config.stdout.split('\0').map((entry) => entry.split(/\r?\n/)[0].toLowerCase())
   if (keys.includes('core.sparsecheckout') || keys.includes('index.sparse')) {
     return undefined
   }

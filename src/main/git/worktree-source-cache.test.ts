@@ -220,19 +220,22 @@ it('keeps disabled, unsupported hosts and prepopulated worktrees on ordinary che
   expect(clones.copy).not.toHaveBeenCalled()
 })
 
-it('preserves whitespace in a bare repository common-directory path', async () => {
-  const { repo, root } = await fixture()
-  const bare = join(root, 'bare repo with trailing space ')
-  await git(repo, ['clone', '--bare', repo, bare])
-  const path = join(root, 'bare-checkout')
-  await git(bare, ['worktree', 'add', '--detach', '--no-checkout', path, 'HEAD'])
-  expect(await tryMaterializeSharedWorktreeSource(path, 'HEAD', {}, async () => {}, runtime)).toBe(
-    true
-  )
-  expect(
-    await readFile(
-      join(bare, 'orca-cache', 'tracked-source-v1', 'seed', 'source', 'version.txt'),
-      'utf8'
-    )
-  ).toBe('committed\n')
-})
+it.runIf(process.platform !== 'win32')(
+  'preserves whitespace in a bare repository common-directory path',
+  async () => {
+    const { repo, root } = await fixture()
+    const bare = join(root, 'bare repo with trailing space ')
+    await git(repo, ['clone', '--bare', repo, bare])
+    const path = join(root, 'bare-checkout')
+    await git(bare, ['worktree', 'add', '--detach', '--no-checkout', path, 'HEAD'])
+    expect(
+      await tryMaterializeSharedWorktreeSource(path, 'HEAD', {}, async () => {}, runtime)
+    ).toBe(true)
+    expect(
+      await readFile(
+        join(bare, 'orca-cache', 'tracked-source-v1', 'seed', 'source', 'version.txt'),
+        'utf8'
+      )
+    ).toBe('committed\n')
+  }
+)
