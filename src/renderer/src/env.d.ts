@@ -77,6 +77,8 @@ declare module 'monaco-editor/esm/vs/base/common/lifecycle.js' {
 }
 
 declare global {
+  /** package.json version, stamped by the renderer build. */
+  const ORCA_APP_VERSION: string
   var MonacoEnvironment:
     | {
         getWorker(workerId: string, label: string): Worker

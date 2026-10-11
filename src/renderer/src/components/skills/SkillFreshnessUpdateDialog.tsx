@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AlertTriangle, CheckCircle2, ChevronDown, Copy, Loader2, RefreshCw } from 'lucide-react'
 import {
-  buildTargetedSkillUpdateCommand,
+  canonicalizeSkillUpdateNames,
   isSkillScanIssueNeedingAttention,
   isSkillScanIssueTruncatingScan,
   type SkillFreshnessInventory
@@ -9,6 +9,7 @@ import {
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
+import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,6 +22,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { groupSkillFreshness } from './skill-freshness-grouping'
+import { useSkillUpdateSelection } from './use-skill-update-selection'
 import { SkillFreshnessScanIssues } from './skill-freshness-scan-issues'
 import { SkillUpdateRow } from './SkillUpdateRow'
 import { SummaryHeadline, summarizeInventory } from './skill-freshness-summary-headline'
@@ -54,7 +56,7 @@ function RunLog({ output }: { output: string }): React.JSX.Element | null {
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-1 min-w-0">
-        {/* Displayed verbatim, never parsed — `skills update` has no --json. */}
+        {/* Displayed verbatim, never parsed — `skills add` has no --json. */}
         <pre className="scrollbar-sleek max-h-40 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
           {output.trim()}
         </pre>
@@ -84,11 +86,11 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     lastInventoryRef.current = state.inventory
   }
   const inventory = state.inventory ?? (state.loading ? lastInventoryRef.current : null)
-  const eligibleNames = useMemo(() => state.inventory?.eligibleUpdateNames ?? [], [state.inventory])
-  // Display only. The action still fires `eligibleNames`, so a re-scan in flight
+  // Display only. The action fires the live `selectedNames`, so a re-scan in flight
   // can never authorize work — but the button keeps its place and its label
   // instead of vanishing and reflowing the footer every time one runs.
   const displayEligibleCount = inventory?.eligibleUpdateNames.length ?? 0
+  const selection = useSkillUpdateSelection(state.inventory, inventory)
   const isRunning = run.state === 'running'
   // The kill sweep can take seconds; without this the Stop button sits enabled
   // and inert, which reads as broken.
@@ -116,6 +118,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
   // available". Live means it says "Checking…" over the rows it kept on screen.
   const summaryKind = summarizeInventory(
     state.inventory,
+    selection.ownedEligibleCount,
     hasBlockedGroup,
     (state.inventory?.scanIssues ?? []).some(
       (issue) => isSkillScanIssueNeedingAttention(issue) || isSkillScanIssueTruncatingScan(issue)
@@ -151,6 +154,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     // status-bar segment carries it from here.
     consumeSkillFreshnessUpdateDialogRequest()
     setCopied(false)
+    selection.reset()
     // Don't carry a finished session's rows into the next open — but a live run
     // keeps its own, or reopening from the status segment mid-run would land on
     // an empty list while the close's own re-scan is still reading disk.
@@ -168,16 +172,14 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
   }
 
   const handleCopyCommand = (): void => {
-    const command = buildTargetedSkillUpdateCommand(
-      run.state === 'error' ? run.failedNames : eligibleNames
-    )
-    if (!command) {
+    const names = run.state === 'error' ? canonicalizeSkillUpdateNames(run.failedNames) : null
+    if (!names) {
       return
     }
     // Clipboard writes reject on a denied permission or an unfocused document;
     // without this the button just never flips to "Copied".
     void navigator.clipboard
-      .writeText(command)
+      .writeText(buildAgentFeatureSkillInstallCommand(names))
       .then(() => {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
@@ -259,8 +261,9 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     return (
       <SummaryHeadline
         kind={summaryKind}
-        eligibleCount={eligibleNames.length}
+        eligibleCount={selection.ownedEligibleCount}
         blockedCount={blockedCount}
+        unselectedForeignCount={selection.unselectedForeignCount}
       />
     )
   })()
@@ -308,7 +311,16 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
           <div className={`min-w-0 ${isRunning ? '' : 'border-t border-border/60'}`}>
             <TooltipProvider>
               {rows.map((row) => (
-                <SkillUpdateRow key={row.group.name} group={row.group} state={row.state} />
+                <SkillUpdateRow
+                  key={row.group.name}
+                  group={row.group}
+                  state={row.state}
+                  selection={
+                    row.state === 'available' && !isRunning && !showResult
+                      ? selection.checkboxFor(row.group.name)
+                      : undefined
+                  }
+                />
               ))}
             </TooltipProvider>
           </div>
@@ -408,8 +420,8 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
               <Button
                 type="button"
                 size="sm"
-                disabled={isRunning || eligibleNames.length === 0}
-                onClick={() => handleUpdate(eligibleNames)}
+                disabled={isRunning || selection.selectedNames.length === 0}
+                onClick={() => handleUpdate(selection.selectedNames)}
               >
                 {/* Not during a stop: the Stop button already carries the status,
                     and "Updating…" beside "Stopping…" says both at once. */}
@@ -418,7 +430,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
                       'auto.components.skills.SkillFreshnessUpdateDialog.updating',
                       'Updating…'
                     )
-                  : displayEligibleCount === 1
+                  : selection.displaySelectedCount === 1
                     ? translate(
                         'auto.components.skills.SkillFreshnessUpdateDialog.updateActionOne',
                         'Update 1 skill'
@@ -426,7 +438,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
                     : translate(
                         'auto.components.skills.SkillFreshnessUpdateDialog.updateActionMany',
                         'Update {{value0}} skills',
-                        { value0: displayEligibleCount }
+                        { value0: selection.displaySelectedCount }
                       )}
               </Button>
             ) : null}

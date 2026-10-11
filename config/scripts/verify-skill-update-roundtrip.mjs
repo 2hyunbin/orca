@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process'
 import {
-  chmod,
   cp,
   lstat,
   mkdir,
@@ -23,8 +22,8 @@ function option(name) {
 const cliVersion = option('cli')
 const autocrlf = option('autocrlf')
 const placement = option('shape')
-// Why: PR branch names are untrusted workflow input. Keep them out of the
-// generated shell command and pass them to Node through the environment.
+// Why: PR refs are untrusted workflow input. Keep them out of the generated shell
+// command and pass them to Node through the environment.
 const source = option('source') ?? process.env.SKILL_UPDATE_SOURCE
 const ref = option('ref') ?? process.env.SKILL_UPDATE_REF
 if (
@@ -33,105 +32,51 @@ if (
   (placement !== 'symlink' && placement !== 'copy') ||
   !source ||
   !ref ||
-  !/^[^/\s]+\/[^/\s]+$/.test(source)
+  !/^[^/\s]+\/[^/\s]+$/.test(source) ||
+  // Why: `tree/<ref>` cannot carry a slash; the CLI would read the rest as a subpath.
+  !/^[^/\s]+$/.test(ref)
 ) {
   throw new Error(
-    'Usage: verify-skill-update-roundtrip.mjs --cli=<version> --autocrlf=true|false --shape=symlink|copy --source=<owner/repo> --ref=<git-ref>'
+    'Usage: verify-skill-update-roundtrip.mjs --cli=<version> --autocrlf=true|false --shape=symlink|copy --source=<owner/repo> --ref=<tag-or-sha>'
   )
 }
 
 const sandbox = await mkdtemp(path.join(tmpdir(), 'orca-skill-update-roundtrip-'))
 const home = path.join(sandbox, 'home')
 const stateHome = path.join(home, '.state')
-const fakeBin = path.join(sandbox, 'bin')
 const targetName = 'orca-cli'
 const controlName = 'orchestration'
 const manifest = JSON.parse(await readFile('resources/skills/current-manifest.json', 'utf8'))
-const registry = JSON.parse(await readFile('resources/skills/snapshot-registry.json', 'utf8'))
-const releaseMapping = JSON.parse(await readFile('resources/skills/release-mapping.json', 'utf8'))
 
-function currentSkill(name) {
+function currentDigest(name) {
   const skill = manifest.skills.find((entry) => entry.name === name)
   if (!skill) {
     throw new Error(`Current manifest is missing ${name}`)
   }
-  return skill
+  return skill.packageDigest
 }
 
-function historicalRelease(name) {
-  const current = currentSkill(name)
-  for (const release of releaseMapping.releases.toReversed()) {
-    const revision = release.skills[name]
-    if (typeof revision !== 'number' || revision >= current.releaseRevision) {
-      continue
-    }
-    const snapshot = registry.skills[name]?.find((entry) => entry.releaseRevision === revision)
-    if (snapshot) {
-      return { tag: `v${release.appVersion}`, snapshot }
-    }
-  }
-  throw new Error(`No historical released snapshot is available for ${name}`)
+async function packageDigestAt(directory) {
+  return packageDigest(await collectPackageFiles(await realpath(directory)))
 }
 
-async function materializePackage(name, tag, destination) {
-  const prefix = `skills/${name}/`
-  const entries = execFileSync('git', ['ls-tree', '-r', '-z', tag, '--', `skills/${name}`])
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean)
-  if (entries.length === 0) {
-    throw new Error(`${tag} does not contain ${name}`)
-  }
-  for (const entry of entries) {
-    const match = /^(\d+) (\w+) ([a-f0-9]+)\t(.+)$/.exec(entry)
-    if (!match || match[2] !== 'blob') {
-      throw new Error(`Unsupported historical tree entry: ${entry}`)
-    }
-    const relativePath = match[4].slice(prefix.length)
-    const destinationPath = path.join(destination, ...relativePath.split('/'))
-    await mkdir(path.dirname(destinationPath), { recursive: true })
-    await writeFile(destinationPath, execFileSync('git', ['cat-file', 'blob', match[3]]))
-    if (process.platform !== 'win32' && match[1] === '100755') {
-      await chmod(destinationPath, 0o755)
-    }
-  }
-}
-
-async function seedPlacement(name, tag) {
+// Why: the copies #26841 stranded: CRLF bytes from no known release, edited, with a
+// sha256 lock hash. The pinned add must replace them all the same.
+async function seedStalePlacement(name) {
   const canonical = path.join(home, '.agents', 'skills', name)
-  await materializePackage(name, tag, canonical)
+  await mkdir(canonical, { recursive: true })
+  const markdown = await readFile(path.join('skills', name, 'SKILL.md'), 'utf8')
+  await writeFile(
+    path.join(canonical, 'SKILL.md'),
+    `${markdown}\nA line no Orca release ever shipped.\n`.replace(/\n/g, '\r\n')
+  )
   const providerRoot = path.join(home, '.claude', 'skills')
   const provider = path.join(providerRoot, name)
   await mkdir(providerRoot, { recursive: true })
   await (placement === 'copy'
     ? cp(canonical, provider, { recursive: true })
     : symlink(canonical, provider, process.platform === 'win32' ? 'junction' : 'dir'))
-}
-
-async function installFakeAgentCommands() {
-  await mkdir(fakeBin, { recursive: true })
-  for (const name of ['codex', 'claude']) {
-    const executable = path.join(fakeBin, process.platform === 'win32' ? `${name}.cmd` : name)
-    await writeFile(
-      executable,
-      process.platform === 'win32' ? '@exit /b 0\r\n' : '#!/bin/sh\nexit 0\n'
-    )
-    if (process.platform !== 'win32') {
-      await chmod(executable, 0o755)
-    }
-  }
-}
-
-async function packageDigestAt(pathValue) {
-  return packageDigest(await collectPackageFiles(pathValue))
-}
-
-async function assertCurrentCanonical(name) {
-  const expected = currentSkill(name).packageDigest
-  const canonical = path.join(home, '.agents', 'skills', name)
-  if ((await packageDigestAt(canonical)) !== expected) {
-    throw new Error(`${name} canonical placement did not update to the PR content`)
-  }
+  return { canonical, provider }
 }
 
 function execSkills(args) {
@@ -152,7 +97,6 @@ function execSkills(args) {
         GIT_CONFIG_COUNT: '1',
         GIT_CONFIG_KEY_0: 'core.autocrlf',
         GIT_CONFIG_VALUE_0: autocrlf,
-        PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ''}`,
         CI: '1'
       },
       stdio: 'inherit'
@@ -161,88 +105,61 @@ function execSkills(args) {
 }
 
 try {
-  const targetHistorical = historicalRelease(targetName)
-  const controlHistorical = historicalRelease(controlName)
-  await installFakeAgentCommands()
-  await mkdir(path.join(home, '.codex'), { recursive: true })
-  await mkdir(path.join(home, '.claude'), { recursive: true })
-  await seedPlacement(targetName, targetHistorical.tag)
-  await seedPlacement(controlName, controlHistorical.tag)
-  const targetProvider = path.join(home, '.claude', 'skills', targetName)
-  const controlCanonical = path.join(home, '.agents', 'skills', controlName)
-  const controlProvider = path.join(home, '.claude', 'skills', controlName)
-  const targetProviderBefore = await packageDigestAt(await realpath(targetProvider))
-  const controlBefore = await packageDigestAt(controlCanonical)
-  const controlProviderBefore = await packageDigestAt(await realpath(controlProvider))
-
-  const timestamp = new Date().toISOString()
+  const target = await seedStalePlacement(targetName)
+  const control = await seedStalePlacement(controlName)
+  const controlBefore = await packageDigestAt(control.canonical)
   const lock = {
     version: 3,
-    skills: {
-      [targetName]: {
-        source,
-        sourceType: 'github',
-        sourceUrl: `https://github.com/${source}.git`,
-        ref,
-        skillPath: `skills/${targetName}/SKILL.md`,
-        skillFolderHash: targetHistorical.snapshot.gitTreeSha,
-        installedAt: timestamp,
-        updatedAt: timestamp
-      },
-      [controlName]: {
-        source,
-        sourceType: 'github',
-        sourceUrl: `https://github.com/${source}.git`,
-        ref,
-        skillPath: `skills/${controlName}/SKILL.md`,
-        skillFolderHash: controlHistorical.snapshot.gitTreeSha,
-        installedAt: timestamp,
-        updatedAt: timestamp
-      }
-    }
+    skills: Object.fromEntries(
+      [targetName, controlName].map((name) => [
+        name,
+        {
+          source,
+          sourceType: 'github',
+          sourceUrl: `https://github.com/${source}.git`,
+          skillPath: `skills/${name}/SKILL.md`,
+          skillFolderHash: 'f'.repeat(64)
+        }
+      ])
+    )
   }
   const lockPath = path.join(stateHome, 'skills', '.skill-lock.json')
   await mkdir(path.dirname(lockPath), { recursive: true })
   await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`)
 
-  // Why: this is the exact user-visible rail. A bare update would include
-  // unrelated vendors, while this command must leave the control skill alone.
-  execSkills(['update', targetName, '--global'])
-  await assertCurrentCanonical(targetName)
-  const targetProviderAfter = await packageDigestAt(await realpath(targetProvider))
-  const targetProviderStat = await lstat(targetProvider)
-  if (placement === 'symlink' && !targetProviderStat.isSymbolicLink()) {
+  // Why: this is the exact rail Orca runs for both install and update.
+  execSkills([
+    'add',
+    `https://github.com/${source}/tree/${ref}`,
+    '--skill',
+    targetName,
+    '--global',
+    '--agent',
+    'universal',
+    '--agent',
+    'claude-code',
+    '-y'
+  ])
+
+  const expected = currentDigest(targetName)
+  if ((await packageDigestAt(target.canonical)) !== expected) {
+    throw new Error(`${targetName} canonical placement did not become the pinned content`)
+  }
+  if ((await packageDigestAt(target.provider)) !== expected) {
+    throw new Error(`${targetName} claude placement did not become the pinned content`)
+  }
+  if (placement === 'symlink' && !(await lstat(target.provider)).isSymbolicLink()) {
     throw new Error(`${targetName} provider alias was replaced with an independent copy`)
   }
-  if (placement === 'symlink' && targetProviderAfter !== currentSkill(targetName).packageDigest) {
-    throw new Error(`${targetName} provider alias did not converge with the canonical update`)
+  const recorded = JSON.parse(await readFile(lockPath, 'utf8')).skills?.[targetName]?.source
+  if (typeof recorded !== 'string' || recorded.toLowerCase() !== source.toLowerCase()) {
+    throw new Error(`${targetName} lock source is ${recorded}, not ${source}`)
   }
-  if (
-    placement === 'copy' &&
-    targetProviderAfter !== targetProviderBefore &&
-    targetProviderAfter !== currentSkill(targetName).packageDigest
-  ) {
-    throw new Error('Independent provider copy changed to an unexpected package identity')
+  if ((await packageDigestAt(control.canonical)) !== controlBefore) {
+    throw new Error('Targeted add changed the non-targeted control skill')
   }
-  if (placement === 'copy') {
-    // Why: hosted 1.5.17 replaces copies with aliases while equivalent local runs
-    // retain the copy. Both prove this input topology must remain ineligible.
-    const outcome = targetProviderStat.isSymbolicLink()
-      ? 'converged to an alias'
-      : targetProviderAfter === targetProviderBefore
-        ? 'remained a historical copy'
-        : 'converged as a copy'
-    console.log(`[skill-update-roundtrip] independent copy ${outcome}`)
-  }
-  if ((await packageDigestAt(controlCanonical)) !== controlBefore) {
-    throw new Error('Targeted update changed the non-targeted control skill')
-  }
-  if ((await packageDigestAt(await realpath(controlProvider))) !== controlProviderBefore) {
-    throw new Error('Targeted update changed the non-targeted control provider placement')
-  }
-  const controlProviderStat = await lstat(controlProvider)
-  if (placement === 'symlink' && !controlProviderStat.isSymbolicLink()) {
-    throw new Error('Targeted update changed the non-targeted control topology')
+  if (placement === 'symlink' && !(await lstat(control.provider)).isSymbolicLink()) {
+    throw new Error('Targeted add changed the non-targeted control topology')
   }
 } finally {
   await rm(sandbox, { recursive: true, force: true })

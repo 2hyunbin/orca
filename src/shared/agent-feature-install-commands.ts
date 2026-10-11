@@ -10,10 +10,18 @@ export const ORCA_LINEAR_SKILL_NAME = 'orca-linear'
 export const LINEAR_TICKETS_SKILL_NAME = 'linear-tickets'
 export const LINEAR_AGENT_SKILL_NAMES = [ORCA_LINEAR_SKILL_NAME, LINEAR_TICKETS_SKILL_NAME] as const
 
+// Why: pinned to the running build's release tag so the installed bytes are the ones its
+// bundled manifest judges freshness against. `skills add` always re-copies, so the same
+// command is both the install and the update.
+export function orcaSkillsSourceUrl(appVersion: string): string {
+  return `${ORCA_SKILLS_REPOSITORY_URL}/tree/v${appVersion}`
+}
+
 // Why: `yes` and `agents` default off so every Settings/onboarding string a human
 // pastes keeps its interactive prompts and the CLI's own agent detection. Only an
 // unattended spawn, which nothing can answer, opts in.
 export type AgentFeatureSkillCommandOptions = {
+  appVersion: string
   global?: boolean
   yes?: boolean
   agents?: readonly string[]
@@ -21,7 +29,7 @@ export type AgentFeatureSkillCommandOptions = {
 
 export function buildAgentFeatureSkillInstallArgs(
   skillNames: readonly string[],
-  options: AgentFeatureSkillCommandOptions = {}
+  options: AgentFeatureSkillCommandOptions
 ): string[] {
   if (skillNames.length === 0) {
     throw new Error('At least one skill name is required.')
@@ -44,7 +52,7 @@ export function buildAgentFeatureSkillInstallArgs(
   return [
     'skills',
     'add',
-    ORCA_SKILLS_REPOSITORY_URL,
+    orcaSkillsSourceUrl(options.appVersion),
     ...skillArgs,
     ...(global ? ['--global'] : []),
     // Why: an explicit --agent stops `skills add` calling its own detection, whose
@@ -59,76 +67,7 @@ export function buildAgentFeatureSkillInstallArgs(
 
 export function buildAgentFeatureSkillInstallCommand(
   skillNames: readonly string[],
-  options: AgentFeatureSkillCommandOptions = {}
+  options: AgentFeatureSkillCommandOptions
 ): string {
   return `npx ${buildAgentFeatureSkillInstallArgs(skillNames, options).join(' ')}`
 }
-
-export function buildAgentFeatureSkillUpdateArgs(
-  skillNames: string | readonly string[],
-  options: AgentFeatureSkillCommandOptions = {}
-): string[] {
-  const rawNames = typeof skillNames === 'string' ? [skillNames] : skillNames
-  const names = rawNames.map((name) => name.trim()).filter((name) => name.length > 0)
-  if (names.length === 0) {
-    throw new Error('A skill name is required.')
-  }
-  const global = options.global ?? true
-  return [
-    'skills',
-    'update',
-    ...names,
-    global ? '--global' : '--project',
-    ...(options.yes ? ['-y'] : [])
-  ]
-}
-
-export function buildAgentFeatureSkillUpdateCommand(
-  skillNames: string | readonly string[],
-  options: AgentFeatureSkillCommandOptions = {}
-): string {
-  return `npx ${buildAgentFeatureSkillUpdateArgs(skillNames, options).join(' ')}`
-}
-
-export const ORCA_CLI_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
-  ORCA_CLI_SKILL_NAME
-])
-
-export const ORCA_CLI_SKILL_UPDATE_COMMAND =
-  buildAgentFeatureSkillUpdateCommand(ORCA_CLI_SKILL_NAME)
-
-export const COMPUTER_USE_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
-  COMPUTER_USE_SKILL_NAME
-])
-
-export const COMPUTER_USE_SKILL_UPDATE_COMMAND =
-  buildAgentFeatureSkillUpdateCommand(COMPUTER_USE_SKILL_NAME)
-
-export const ORCHESTRATION_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
-  ORCHESTRATION_SKILL_NAME
-])
-
-export const ORCHESTRATION_SKILL_UPDATE_COMMAND =
-  buildAgentFeatureSkillUpdateCommand(ORCHESTRATION_SKILL_NAME)
-
-export const EPHEMERAL_VMS_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
-  EPHEMERAL_VMS_SKILL_NAME
-])
-
-export const EPHEMERAL_VMS_SKILL_UPDATE_COMMAND =
-  buildAgentFeatureSkillUpdateCommand(EPHEMERAL_VMS_SKILL_NAME)
-
-export const ORCA_CLI_ORCHESTRATION_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
-  ORCA_CLI_SKILL_NAME,
-  ORCHESTRATION_SKILL_NAME
-])
-
-export const ORCA_LINEAR_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
-  ORCA_LINEAR_SKILL_NAME
-])
-
-export const ORCA_LINEAR_SKILL_UPDATE_COMMAND =
-  buildAgentFeatureSkillUpdateCommand(ORCA_LINEAR_SKILL_NAME)
-
-export const LINEAR_TICKETS_SKILL_UPDATE_COMMAND =
-  buildAgentFeatureSkillUpdateCommand(LINEAR_TICKETS_SKILL_NAME)

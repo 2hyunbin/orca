@@ -4,14 +4,17 @@ import {
   type SkillUpdateRun,
   type SkillUpdateStartResult
 } from '../../shared/skill-freshness'
+import { buildAgentFeatureSkillInstallArgs } from '../../shared/agent-feature-install-commands'
+import { detectSkillsCliAgentKeys } from '../../shared/skills-cli-agent-detection'
+import { SKILLS_CLI_UNIVERSAL_AGENT_KEY } from '../../shared/skills-cli-agent-keys'
 import { resolveCliCommand } from '../codex-cli/command'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { killWithDescendantSweep } from '../pty-descendant-termination'
 import { getSpawnArgsForWindows, WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL } from '../win32-utils'
 
-// Why: `skills update` prints ANSI colour and \r + erase-line progress. We show
-// this log verbatim to the user but never parse it — `update` has no --json
-// (that flag exists only on `list`), so stdout is not a contract.
+// Why: `skills add` prints ANSI colour and \r + erase-line progress. We show
+// this log verbatim to the user but never parse it — `add` has no --json, so
+// stdout is not a contract.
 const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g // eslint-disable-line no-control-regex
 
 // Keep the tail: failures land at the end, and an unbounded buffer would pin
@@ -28,6 +31,10 @@ const OUTPUT_FLUSH_MS = 100
 export const CANCEL_RELEASE_TIMEOUT_MS = 12_000
 
 export type SkillUpdateRunnerDeps = {
+  /** The running build's version; the install is pinned to its release tag. */
+  appVersion: string
+  /** Same targets `orca skills install` picks on this host. */
+  detectAgentKeys?: () => string[]
   spawnProcess?: typeof spawn
   resolveCommand?: (commandName: string) => string
   /** Returns the subset of `names` that did not land, re-read from disk. */
@@ -48,7 +55,9 @@ function clampOutput(value: string): string {
 }
 
 /**
- * Runs `npx --yes skills update <names> --global -y` headlessly.
+ * Runs the pinned `npx --yes skills add <orca>/tree/v<version> --skill <name>... --global
+ * --agent ... -y` headlessly. `add` always re-copies, so the result is this build's bytes
+ * however the old copy was installed or edited.
  *
  * Both `--yes` flags are load-bearing and distinct: `npx --yes` skips the
  * install-this-package prompt, and `skills … -y` takes the CLI's own
@@ -68,7 +77,7 @@ export class SkillUpdateRunner {
   private killing = false
   private readonly deps: Required<Pick<SkillUpdateRunnerDeps, 'now'>> & SkillUpdateRunnerDeps
 
-  constructor(deps: SkillUpdateRunnerDeps = {}) {
+  constructor(deps: SkillUpdateRunnerDeps) {
     this.deps = { now: () => Date.now(), ...deps }
   }
 
@@ -93,7 +102,17 @@ export class SkillUpdateRunner {
     const resolveCommand = this.deps.resolveCommand ?? ((name: string) => resolveCliCommand(name))
     const spawnProcess = this.deps.spawnProcess ?? spawn
     const npxCommand = resolveCommand('npx')
-    const npxArgs = ['--yes', 'skills', 'update', ...canonicalNames, '--global', '-y']
+    const detectedAgents = (this.deps.detectAgentKeys ?? detectSkillsCliAgentKeys)()
+    const npxArgs = [
+      '--yes',
+      ...buildAgentFeatureSkillInstallArgs(canonicalNames, {
+        appVersion: this.deps.appVersion,
+        yes: true,
+        // Why: the skill already lives in the shared folder, so a host with no detected
+        // agent still has a target that cannot widen into the CLI's all-agents branch.
+        agents: detectedAgents.length > 0 ? detectedAgents : [SKILLS_CLI_UNIVERSAL_AGENT_KEY]
+      })
+    ]
 
     let spawnCmd: string
     let spawnArgs: string[]
@@ -176,11 +195,7 @@ export class SkillUpdateRunner {
     })
     child.on('close', (code) => {
       drain()
-      this.settle(
-        token,
-        canonicalNames,
-        code === 0 ? null : `skills update exited with code ${code}`
-      )
+      this.settle(token, canonicalNames, code === 0 ? null : `skills add exited with code ${code}`)
     })
 
     return { started: true }
@@ -199,7 +214,7 @@ export class SkillUpdateRunner {
     // Why: when the re-scan produces a verdict it *is* the answer — it re-hashes
     // what landed on disk, which is what the user actually cares about. The exit
     // code only decides the outcome when no verdict is available, because
-    // `skills update` reports nothing else we can trust.
+    // `skills add` reports nothing else we can trust.
     const finish = (failedNames: string[] | null): void => {
       // The re-scan is slow enough that a cancel — or a whole replacement run —
       // can land while it is still in flight; its verdict is about a run that no

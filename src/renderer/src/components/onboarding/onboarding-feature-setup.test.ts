@@ -110,7 +110,7 @@ describe('onboarding feature setup runner', () => {
 
     expect(text).toBe(ALL_SKILL_INSTALL_COMMAND)
     expect(text).toBe(
-      'npx skills add https://github.com/stablyai/orca --skill orca-cli --skill computer-use --skill orchestration --skill orca-linear --global'
+      `npx skills add https://github.com/stablyai/orca/tree/v${ORCA_APP_VERSION} --skill orca-cli --skill computer-use --skill orchestration --skill orca-linear --global`
     )
   })
 

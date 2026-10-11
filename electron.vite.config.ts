@@ -325,6 +325,11 @@ export const electronViteConfig: UserConfig = {
     }
   },
   renderer: {
+    // Why: the renderer has no synchronous app version, and skill install commands pin
+    // to this release's tag as they render.
+    define: {
+      ORCA_APP_VERSION: JSON.stringify(packageJson.version)
+    },
     resolve: {
       alias: {
         ...markdownParserAliases,

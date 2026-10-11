@@ -352,7 +352,7 @@ describe('LinearAgentSkillSetupPrompt', () => {
     expect(document.body.textContent).toContain('npx skills add')
     expect(mocks.panelProps.at(-1)).toEqual(
       expect.objectContaining({
-        installedCommand: 'npx skills update orca-linear --global',
+        installedCommand: `npx skills add https://github.com/stablyai/orca/tree/v${ORCA_APP_VERSION} --skill orca-linear --global`,
         terminalShellOverride: 'powershell.exe',
         terminalRuntime: expect.objectContaining({ runtime: 'wsl', wslDistro: 'Fedora' })
       })

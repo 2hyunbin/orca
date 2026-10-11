@@ -6,22 +6,15 @@ import { writeStdoutLine } from '../stdout-line'
 import { loadCanonicalGuides, type BundledSkillGuide } from './bundled-skill-guide-table'
 import { SKILL_GUIDE_GET_HANDLER } from './skill-guide-get'
 import { resolveCliCommand, withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
-import { detectCommandsInInstallDirs } from '../../shared/local-agent-install-dir-detection'
-import {
-  getTuiAgentDetectionProbeCommands,
-  KNOWN_TUI_AGENT_DETECTION_COMMANDS,
-  resolveDetectedTuiAgentIds
-} from '../../shared/tui-agent-detection-commands'
 import {
   getSpawnArgsForWindows,
   UnsafeWindowsBatchArgumentsError,
   WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL
 } from '../../shared/windows-batch-spawn'
-import { isUsableSkillsCliAgentKey, toSkillsCliAgentKeys } from '../../shared/skills-cli-agent-keys'
-import {
-  buildAgentFeatureSkillInstallArgs,
-  buildAgentFeatureSkillUpdateArgs
-} from '../../shared/agent-feature-install-commands'
+import { isUsableSkillsCliAgentKey } from '../../shared/skills-cli-agent-keys'
+import { detectSkillsCliAgentKeys } from '../../shared/skills-cli-agent-detection'
+import { buildAgentFeatureSkillInstallArgs } from '../../shared/agent-feature-install-commands'
+import { readOrcaCliVersion } from '../cli-version'
 
 function resolveSelectedSkillNames(
   flags: Map<string, string | boolean>,
@@ -116,18 +109,6 @@ function runNpxSkills(args: string[]): Promise<number> {
 
 type SkillMutationVerb = 'install' | 'update'
 
-/** Agents Orca can see on this host, as `skills --agent` keys. */
-function detectSkillsCliAgentKeys(): string[] {
-  const runtime = process.platform
-  const probes = getTuiAgentDetectionProbeCommands(KNOWN_TUI_AGENT_DETECTION_COMMANDS, runtime)
-  const detected = resolveDetectedTuiAgentIds(
-    KNOWN_TUI_AGENT_DETECTION_COMMANDS,
-    detectCommandsInInstallDirs(probes),
-    runtime
-  )
-  return detected.length === 0 ? [] : toSkillsCliAgentKeys(detected)
-}
-
 function resolveInstallAgentKeys(flags: Map<string, string | boolean>): string[] {
   const requested = flags.get('agent')
   if (flags.has('agent') && typeof requested !== 'string') {
@@ -177,19 +158,20 @@ function resolveInstallAgentKeys(flags: Map<string, string | boolean>): string[]
   )
 }
 
-function buildNpxSkillsArgs(
-  verb: SkillMutationVerb,
-  skillNames: string[],
-  global: boolean,
-  agents: string[]
-): string[] {
-  const skillArgs =
-    verb === 'install'
-      ? buildAgentFeatureSkillInstallArgs(skillNames, { global, yes: true, agents })
-      : buildAgentFeatureSkillUpdateArgs(skillNames, { global, yes: true })
+function buildNpxSkillsArgs(skillNames: string[], global: boolean, agents: string[]): string[] {
+  const appVersion = readOrcaCliVersion()
+  if (!appVersion) {
+    throw new RuntimeClientError(
+      'invalid_environment',
+      'Could not read the Orca version this CLI ships with, so there is no release to install skills from.'
+    )
+  }
   // Why: a cold package cache makes bare `npx` prompt before it will fetch
   // `skills`, which strands an unattended host just like the picker does.
-  return ['--yes', ...skillArgs]
+  return [
+    '--yes',
+    ...buildAgentFeatureSkillInstallArgs(skillNames, { appVersion, global, yes: true, agents })
+  ]
 }
 
 /** Render the exact argv a real run spawns, so --dry-run can never drift from it. */
@@ -235,9 +217,9 @@ function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
     }
 
     const global = flags.get('local') !== true
-    // Why: install scopes its targets; update only refreshes what is already placed.
-    const agents = verb === 'install' ? resolveInstallAgentKeys(flags) : []
-    const npxArgs = buildNpxSkillsArgs(verb, skillNames, global, agents)
+    // Why: update is the same pinned `skills add`; `skills update` follows GitHub HEAD,
+    // which runs ahead of the release this CLI judges freshness against.
+    const npxArgs = buildNpxSkillsArgs(skillNames, global, resolveInstallAgentKeys(flags))
     const command = formatNpxCommand(npxArgs)
     const dryRun = flags.get('dry-run') === true
 
