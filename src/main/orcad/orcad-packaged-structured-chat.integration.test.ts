@@ -18,7 +18,11 @@ import { spawnProcess } from '@orca/process-host'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import type { AgentSessionSubscribeEvent } from '../../shared/agent-session-wire'
 import type { AgentJournalRenderItem } from '../../shared/agent-session-journal-types'
-import { parsePairingCode, type PairingOffer } from '../../shared/pairing'
+import { parsePairingCode } from '../../shared/pairing'
+import {
+  pairedRuntimeConnectionFromOffer,
+  type PairedRuntimeConnection
+} from '../../shared/paired-runtime-connection'
 import {
   AGENT_SESSION_TURN_ITEM_CAPABILITY,
   CLAUDE_STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
@@ -101,7 +105,7 @@ function launch(slotDir: string, runtime: string, userData: string, home: string
   let output = ''
   let stderr = ''
   child.stderr.on('data', (data: Buffer) => (stderr += data.toString()))
-  const ready = new Promise<PairingOffer>((resolveReady, reject) => {
+  const ready = new Promise<PairedRuntimeConnection>((resolveReady, reject) => {
     const timer = setTimeout(() => reject(new Error(`No server readiness: ${stderr}`)), 30_000)
     child.once('error', (error) => {
       clearTimeout(timer)
@@ -123,7 +127,7 @@ function launch(slotDir: string, runtime: string, userData: string, home: string
         if (!pairing) {
           throw new Error('Invalid server pairing offer')
         }
-        resolveReady(pairing)
+        resolveReady(pairedRuntimeConnectionFromOffer(pairing))
       } catch (error) {
         reject(error)
       }
@@ -132,7 +136,11 @@ function launch(slotDir: string, runtime: string, userData: string, home: string
   return { child, ready, stderr: () => stderr }
 }
 
-async function call<T>(pairing: PairingOffer, method: string, params: unknown): Promise<T> {
+async function call<T>(
+  pairing: PairedRuntimeConnection,
+  method: string,
+  params: unknown
+): Promise<T> {
   const response = await sendRemoteRuntimeRequest<T>(
     pairing,
     method,
