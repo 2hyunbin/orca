@@ -85,6 +85,22 @@ describe('relay token keys while auth is down', () => {
     expect(await verify(await relayToken(key))).toBeNull()
   })
 
+  it('bounds the stale set at 30 minutes since the last served set', async () => {
+    expect(RELAY_JWKS_MAX_STALE_MS).toBe(30 * MINUTE)
+    const key = await signingKey('auth-1')
+    const authServer = auth(key)
+    const verify = createRelayTokenVerifier(
+      config as RelayConfig,
+      createStaleIfErrorJWKSet(new URL(config.jwksUrl), { fetch: authServer.fetch })
+    )
+    expect(await verify(await relayToken(key))).not.toBeNull()
+    authServer.state.up = false
+    vi.setSystemTime(Date.now() + 29 * MINUTE)
+    expect(await verify(await relayToken(key))).not.toBeNull()
+    vi.setSystemTime(Date.now() + 2 * MINUTE)
+    expect(await verify(await relayToken(key))).toBeNull()
+  })
+
   it('fails closed in a process that has not fetched a set yet, as after a restart', async () => {
     const key = await signingKey('auth-1')
     const authServer = auth(key)
