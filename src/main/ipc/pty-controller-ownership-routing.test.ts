@@ -63,6 +63,18 @@ describe('registerPtyHandlers', () => {
     registerAgentClaimController
   } = setupPtyIpcSuite()
 
+  it('fails closed instead of routing encoded SSH PTY writes locally', () => {
+    const ptyId = 'ssh:ssh-1@@remote-pty'
+    const localProvider = createAgentClaimProvider({})
+    setLocalPtyProvider(localProvider as never)
+    const controller = registerAgentClaimController()
+
+    expect(controller.write(ptyId, 'input')).toBe(false)
+    expect(controller.resize(ptyId, 100, 40)).toBe(false)
+    expect(localProvider.write).not.toHaveBeenCalled()
+    expect(localProvider.resize).not.toHaveBeenCalled()
+    clearProviderPtyState(ptyId)
+  })
   it('preserves a provider write refusal for callers that gate follow-up input', () => {
     const provider = createAgentClaimProvider({})
     provider.write.mockReturnValue(false)

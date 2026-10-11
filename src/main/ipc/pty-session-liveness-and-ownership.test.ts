@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
+import { onMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { AGENT_SESSION_CLAIM_DIGEST_VERSION } from '../../shared/agent-session-host-authority'
-import { registerPtyHandlers, setLocalPtyProvider } from './pty'
+import {
+  deletePtyOwnership,
+  registerPtyHandlers,
+  setPtyOwnership,
+  setLocalPtyProvider
+} from './pty'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -48,7 +54,7 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
 )
 
 describe('registerPtyHandlers', () => {
-  const { handlers, mainWindow } = setupPtyIpcSuite()
+  const { handlers, mainWindow, mainWindowIpcEvent } = setupPtyIpcSuite()
 
   it('never answers liveness for a paired-runtime handle from the local registry', async () => {
     const hasPty = vi.fn(() => false)
@@ -231,6 +237,64 @@ describe('registerPtyHandlers', () => {
 
     expect(localShutdown).not.toHaveBeenCalled()
     expect(store.markSshRemotePtyLease).toHaveBeenCalledWith('ssh-1', 'relay-pty', 'terminated')
+  })
+  it('ignores fire-and-forget IPC for SSH-owned PTYs this process cannot dispatch', () => {
+    const local = { write: vi.fn(), resize: vi.fn(), sendSignal: vi.fn() }
+    registerPtyHandlers(mainWindow as never)
+    setLocalPtyProvider(local as never)
+    setPtyOwnership('remote-pty', 'ssh:ssh-1')
+    const listenerFor = (channel: string): ((event: unknown, args: unknown) => void) => {
+      const call = onMock.mock.calls.find((entry: unknown[]) => entry[0] === channel)
+      if (!call) {
+        throw new Error(`missing ${channel} listener`)
+      }
+      return call[1] as (event: unknown, args: unknown) => void
+    }
+
+    try {
+      expect(() =>
+        listenerFor('pty:write')(mainWindowIpcEvent, { id: 'remote-pty', data: 'x' })
+      ).not.toThrow()
+      expect(() =>
+        listenerFor('pty:resize')(null, { id: 'remote-pty', cols: 100, rows: 30 })
+      ).not.toThrow()
+      expect(() => listenerFor('pty:ackColdRestore')(null, { id: 'remote-pty' })).not.toThrow()
+      expect(() =>
+        listenerFor('pty:signal')(null, { id: 'remote-pty', signal: 'SIGINT' })
+      ).not.toThrow()
+      expect(local.write).not.toHaveBeenCalled()
+      expect(local.resize).not.toHaveBeenCalled()
+      expect(local.sendSignal).not.toHaveBeenCalled()
+    } finally {
+      deletePtyOwnership('remote-pty')
+    }
+  })
+  it('returns idle process inspection results for SSH-owned PTYs without a provider', async () => {
+    const local = {
+      hasChildProcesses: vi.fn(),
+      getForegroundProcess: vi.fn(),
+      confirmForegroundProcess: vi.fn()
+    }
+    registerPtyHandlers(mainWindow as never)
+    setLocalPtyProvider(local as never)
+    setPtyOwnership('remote-pty', 'ssh:ssh-1')
+
+    try {
+      await expect(
+        handlers.get('pty:hasChildProcesses')!(null, { id: 'remote-pty' })
+      ).resolves.toBe(false)
+      await expect(
+        handlers.get('pty:getForegroundProcess')!(null, { id: 'remote-pty' })
+      ).resolves.toBeNull()
+      await expect(
+        handlers.get('pty:confirmForegroundProcess')!(null, { id: 'remote-pty' })
+      ).resolves.toBeNull()
+      expect(local.hasChildProcesses).not.toHaveBeenCalled()
+      expect(local.getForegroundProcess).not.toHaveBeenCalled()
+      expect(local.confirmForegroundProcess).not.toHaveBeenCalled()
+    } finally {
+      deletePtyOwnership('remote-pty')
+    }
   })
   it('preserves unavailable process inspection results from the provider', async () => {
     const inspectProcess = vi.fn(async () => ({
