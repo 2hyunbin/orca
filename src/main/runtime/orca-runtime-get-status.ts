@@ -267,10 +267,15 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     return { tabId, worktreeId: pty.worktreeId }
   }
 
-  protected notifyWorktreesChanged(repoId: string): void {
+  protected notifyWorktreesChanged(
+    repoId: string,
+    options?: { invalidateGitScans?: boolean }
+  ): void {
     // Why here: the listing re-runs a scan this generation overtook, and a headless host has no
     // window notifier to bump it, so the runtime's own change event bumps before it is sent.
-    runWorktreeChangeInvalidators(repoId)
+    if (options?.invalidateGitScans !== false) {
+      runWorktreeChangeInvalidators(repoId)
+    }
     this.notifier?.worktreesChanged(repoId)
     this.emitClientEvent({ type: 'worktreesChanged', repoId })
   }
