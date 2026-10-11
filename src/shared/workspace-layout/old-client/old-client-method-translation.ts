@@ -2,20 +2,20 @@
 // worktree selector and terminal handles, applies the commands and shapes today's reply.
 
 import type { z } from 'zod'
-import type { MoveTab } from '../rpc-contract/session-tabs-schemas-params'
-import { isTerminalLeafId } from '../stable-pane-id'
-import { isValidHostTerminalTabId } from '../terminal-tab-id'
-import type { TerminalPaneSplitDirection } from '../terminal-tab-types'
+import type { MoveTab } from '../../rpc-contract/session-tabs-schemas-params'
+import { isTerminalLeafId } from '../../stable-pane-id'
+import { isValidHostTerminalTabId } from '../../terminal-tab-id'
+import type { TerminalPaneSplitDirection } from '../../terminal-tab-types'
 import { resolveSessionTabRow } from './old-client-session-tab-rows'
-import { collectLayoutLeafIdsInOrder, layoutContainsLeafId } from './terminal-pane-tree'
+import { collectLayoutLeafIdsInOrder, layoutContainsLeafId } from '../terminal-pane-tree'
 import type { ProjectedSessionTabs } from './old-client-session-tabs-projection'
-import type { LayoutCommand, LayoutRefusalCode } from './workspace-layout-command-types'
+import type { LayoutCommand, LayoutRefusalCode } from '../workspace-layout-command-types'
 import {
   paneKeyOf,
   type LayoutTerminalTab,
   type WorkspaceLayout,
   type WorkspaceLayoutModel
-} from './workspace-layout-model'
+} from '../workspace-layout-model'
 
 /** Errors today's `session.tabs.move` throws, kept so old clients read the same codes. */
 export type SessionTabMoveErrorCode =

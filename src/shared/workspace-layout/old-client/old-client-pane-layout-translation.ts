@@ -2,16 +2,16 @@
 // they send becomes the commands that reach it, compared with the current tree in the owner's
 // order. A structure no single command reaches is refused; titles and the chat pane still apply.
 
-import type { TerminalPaneLayoutNode } from '../terminal-tab-types'
+import type { TerminalPaneLayoutNode } from '../../terminal-tab-types'
 import {
   collectLayoutLeafIdsInOrder,
   insertLeafBeside,
   removeLayoutLeaf,
   samePanesIgnoringRatios,
   type PaneSide
-} from './terminal-pane-tree'
-import type { LayoutCommand } from './workspace-layout-command-types'
-import type { LayoutTerminalTab, WorkspaceLayout } from './workspace-layout-model'
+} from '../terminal-pane-tree'
+import type { LayoutCommand } from '../workspace-layout-command-types'
+import type { LayoutTerminalTab, WorkspaceLayout } from '../workspace-layout-model'
 
 export type PaneLayoutTranslation = {
   /** In apply order; the runtime applies them as one change, so one update is published. */

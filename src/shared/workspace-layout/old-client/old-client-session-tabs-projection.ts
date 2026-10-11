@@ -4,8 +4,8 @@
 // page's certificate failure, a dirty markdown draft's document version, and the publication
 // epoch and version.
 
-import { defaultAgentChatLabel } from '../agent-session-chat-label'
-import { resolveTerminalTabTitle } from '../tab-title-resolution'
+import { defaultAgentChatLabel } from '../../agent-session-chat-label'
+import { resolveTerminalTabTitle } from '../../tab-title-resolution'
 import type {
   RuntimeMobileSessionAgentTab,
   RuntimeMobileSessionBrowserTab,
@@ -13,31 +13,31 @@ import type {
   RuntimeMobileSessionMarkdownTab,
   RuntimeMobileSessionSnapshotTab,
   RuntimeMobileSessionTerminalTab
-} from '../runtime-mobile-session-tab-contracts'
+} from '../../runtime-mobile-session-tab-contracts'
 import type {
   RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabsSnapshot
-} from '../runtime-session-contracts'
-import type { TabGroupLayoutNode } from '../tab-types'
-import type { TerminalLayoutSnapshot } from '../terminal-tab-types'
-import { pruneGroupLayout } from '../workspace-session-terminal-tab-close'
+} from '../../runtime-session-contracts'
+import type { TabGroupLayoutNode } from '../../tab-types'
+import type { TerminalLayoutSnapshot } from '../../terminal-tab-types'
+import { pruneGroupLayout } from '../../workspace-session-terminal-tab-close'
 import {
   agentSessionRowId,
   publishedTabOrderId,
   terminalRowId
 } from './old-client-session-tab-rows'
-import { collectLayoutLeafIdsInOrder } from './terminal-pane-tree'
+import { collectLayoutLeafIdsInOrder } from '../terminal-pane-tree'
 import {
   BLANK_BROWSER_TAB_STATE,
   type DesktopLayoutView,
   type LayoutContentFacts
-} from './workspace-layout-beside'
+} from '../workspace-layout-beside'
 import type {
   LayoutContentTab,
   LayoutTab,
   LayoutTerminalTab,
   WorkspaceLayout
-} from './workspace-layout-model'
+} from '../workspace-layout-model'
 
 /** One view's selection: the desktop's record today, a phone's own record once views exist. */
 export type SessionTabsView = Pick<

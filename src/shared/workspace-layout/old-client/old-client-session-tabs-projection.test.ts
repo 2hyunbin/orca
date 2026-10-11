@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { RuntimeMobileSessionTabsSnapshot } from '../runtime-session-contracts'
+import type { RuntimeMobileSessionTabsSnapshot } from '../../runtime-session-contracts'
 import { resolveSessionTabRow } from './old-client-session-tab-rows'
 import {
   projectSessionTabs,
   type SessionTabsFacts,
   type SessionTabsView
 } from './old-client-session-tabs-projection'
-import { BLANK_BROWSER_TAB_STATE } from './workspace-layout-beside'
-import { build, testContext, WS } from './workspace-layout-command.test-fixture'
-import type { WorkspaceLayoutModel } from './workspace-layout-model'
+import { BLANK_BROWSER_TAB_STATE } from '../workspace-layout-beside'
+import { build, testContext, WS } from '../workspace-layout-command.test-fixture'
+import type { WorkspaceLayoutModel } from '../workspace-layout-model'
 
 /**
  * A workspace as a desktop leaves it: a renamed terminal tab split in two (one pane titled, both

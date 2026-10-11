@@ -1,7 +1,7 @@
-import type { RemoteLayoutSnapshot } from '../../../shared/remote-layout-snapshot'
-import type { StoreRuntimeState } from './store-runtime-state'
-import type { WriteSchedulingOperations } from './write-scheduling'
-import { scheduleSave } from './write-scheduling'
+import type { RemoteLayoutSnapshot } from '../../shared/remote-layout-snapshot'
+import type { StoreRuntimeState } from '../persistence/loading-store/store-runtime-state'
+import type { WriteSchedulingOperations } from '../persistence/loading-store/write-scheduling'
+import { scheduleSave } from '../persistence/loading-store/write-scheduling'
 
 type RemoteLayoutSnapshotRuntime = Pick<StoreRuntimeState, 'state' | 'dirtyProfileStateDomains'>
 

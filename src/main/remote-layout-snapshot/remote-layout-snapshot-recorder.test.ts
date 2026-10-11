@@ -183,8 +183,8 @@ describe('remote layout snapshot recorder', () => {
       .filter(({ source }) => stripComments(source).includes('setRemoteLayoutSnapshot('))
       .map(({ relativePath }) => relativePath)
     expect(writers.sort()).toEqual([
-      'main/ipc/remote-layout-snapshot-recorder.ts',
-      'main/persistence/loading-store/remote-layout-snapshot-persistence.ts'
+      'main/remote-layout-snapshot/remote-layout-snapshot-persistence.ts',
+      'main/remote-layout-snapshot/remote-layout-snapshot-recorder.ts'
     ])
   })
 })

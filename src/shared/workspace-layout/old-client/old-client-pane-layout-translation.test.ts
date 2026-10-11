@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { UpdatePaneLayout } from '../rpc-contract/session-tabs-schemas-params'
-import type { TerminalPaneLayoutNode } from '../terminal-tab-types'
+import { UpdatePaneLayout } from '../../rpc-contract/session-tabs-schemas-params'
+import type { TerminalPaneLayoutNode } from '../../terminal-tab-types'
 import { translateUpdatePaneLayout } from './old-client-pane-layout-translation'
-import { build, terminalTab, testContext, WS } from './workspace-layout-command.test-fixture'
-import type { WorkspaceLayoutModel } from './workspace-layout-model'
+import { build, terminalTab, testContext, WS } from '../workspace-layout-command.test-fixture'
+import type { WorkspaceLayoutModel } from '../workspace-layout-model'
 
 const leafNode = (leafId: string): TerminalPaneLayoutNode => ({ type: 'leaf', leafId })
 const split = (

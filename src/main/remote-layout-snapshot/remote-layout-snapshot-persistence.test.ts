@@ -2,12 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { getDefaultPersistedState } from '../../../shared/constants'
-import { setSecretStore } from '../../../shared/secret-store'
-import { recordRemoteLayoutFrame } from '../../ipc/remote-layout-snapshot-recorder'
-import { openProfileStateDatabaseReadOnly } from '../profile-state/profile-state-database'
-import { ProfileStateSqliteAuthority } from '../profile-state/profile-state-sqlite-authority'
-import { Store } from './store'
+import { getDefaultPersistedState } from '../../shared/constants'
+import { setSecretStore } from '../../shared/secret-store'
+import { recordRemoteLayoutFrame } from './remote-layout-snapshot-recorder'
+import { openProfileStateDatabaseReadOnly } from '../persistence/profile-state/profile-state-database'
+import { ProfileStateSqliteAuthority } from '../persistence/profile-state/profile-state-sqlite-authority'
+import { Store } from '../persistence/loading-store/store'
 
 vi.mock('electron', () => ({
   app: {
@@ -21,8 +21,8 @@ vi.mock('electron', () => ({
   ipcMain: { on: () => {}, handle: () => {} },
   BrowserWindow: { getAllWindows: () => [] }
 }))
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../ssh/ssh-config-parser', () => ({
+vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../ssh/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []
 }))

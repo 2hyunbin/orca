@@ -2,8 +2,8 @@
 // client sends to the model tab (and pane) it names. Rows keep today's ids so old clients' keys and
 // selections stay valid (wire rule 3).
 
-import type { LayoutTab, WorkspaceLayout } from './workspace-layout-model'
-import { layoutContainsLeafId } from './terminal-pane-tree'
+import type { LayoutTab, WorkspaceLayout } from '../workspace-layout-model'
+import { layoutContainsLeafId } from '../terminal-pane-tree'
 
 const TERMINAL_ROW_SEPARATOR = '::'
 const AGENT_SESSION_ROW_PREFIX = 'agent-session:'

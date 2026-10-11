@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { MoveTab } from '../rpc-contract/session-tabs-schemas-params'
-import { TerminalCreateParams } from '../rpc-contract/terminal-unary-params'
+import { MoveTab } from '../../rpc-contract/session-tabs-schemas-params'
+import { TerminalCreateParams } from '../../rpc-contract/terminal-unary-params'
 import {
   translateCreateTerminalTab,
   translateSessionTabClose,
@@ -16,10 +16,10 @@ import {
 import { translateUpdatePaneLayout } from './old-client-pane-layout-translation'
 import { terminalRowId } from './old-client-session-tab-rows'
 import { projectSessionTabs } from './old-client-session-tabs-projection'
-import { applyLayoutCommand } from './workspace-layout-commands'
-import { build, terminalTab, testContext, WS } from './workspace-layout-command.test-fixture'
-import type { LayoutCommand } from './workspace-layout-command-types'
-import type { WorkspaceLayoutModel } from './workspace-layout-model'
+import { applyLayoutCommand } from '../workspace-layout-commands'
+import { build, terminalTab, testContext, WS } from '../workspace-layout-command.test-fixture'
+import type { LayoutCommand } from '../workspace-layout-command-types'
+import type { WorkspaceLayoutModel } from '../workspace-layout-model'
 
 const NEW_LEAF = '99999999-9999-4999-8999-999999999999'
 const NO_VIEW = { groups: {}, panes: {}, editorDrafts: {} }
