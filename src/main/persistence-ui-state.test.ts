@@ -784,9 +784,6 @@ describe('Store', () => {
   }
   const sealedOwnerLease = (lease: string) =>
     Buffer.from(`encrypted:${lease}`, 'utf-8').toString('base64')
-  const persistedRecoveries = () =>
-    (readDataFile() as { sshPtyConsumerRecoveries?: { ownerLease: string }[] })
-      .sshPtyConsumerRecoveries
 
   it('re-seals SSH PTY consumer ownership on every save so a downgrade can recover it', async () => {
     writeDataFile({
@@ -799,14 +796,14 @@ describe('Store', () => {
     store.updateUI({ sidebarWidth: 301 })
     store.flush()
 
-    expect(persistedRecoveries()).toEqual([
+    expect(readDataFile()).toHaveProperty('sshPtyConsumerRecoveries', [
       { ...legacyRecovery, ownerLease: sealedOwnerLease(legacyRecovery.ownerLease) }
     ])
 
     const reloaded = await createStore()
     reloaded.updateUI({ sidebarWidth: 302 })
     reloaded.flush()
-    expect(persistedRecoveries()).toEqual([
+    expect(readDataFile()).toHaveProperty('sshPtyConsumerRecoveries', [
       { ...legacyRecovery, ownerLease: sealedOwnerLease(legacyRecovery.ownerLease) }
     ])
   })
@@ -823,7 +820,7 @@ describe('Store', () => {
     store.updateUI({ sidebarWidth: 301 })
     store.flush()
 
-    expect(persistedRecoveries()).toEqual([])
+    expect(readDataFile()).toHaveProperty('sshPtyConsumerRecoveries', [])
   })
 
   it('removes persisted SSH PTY consumer ownership with its target', async () => {
@@ -841,7 +838,7 @@ describe('Store', () => {
     store.removeSshTarget('ssh-1')
     store.flush()
 
-    expect(persistedRecoveries()).toEqual([])
+    expect(readDataFile()).toHaveProperty('sshPtyConsumerRecoveries', [])
   })
 
   it('keeps plaintext Kagi session links readable for migration from older builds', async () => {
