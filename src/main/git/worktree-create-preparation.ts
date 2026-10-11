@@ -70,6 +70,21 @@ export async function prepareWorktreeCreateCheckout(
             materializationBase = stdout.trim()
             await verifyWorktreePreparationLockAtPath(lockPath, lockReason, options.signal)
           }
+          if (
+            process.env.ORCA_EXPERIMENTAL_SOURCE_SHARING === '1' &&
+            process.platform === 'darwin' &&
+            !options.wslDistro
+          ) {
+            const ownedLockPath = lockPath
+            const { tryMaterializeSharedWorktreeSource } = await import('./worktree-source-cache')
+            await tryMaterializeSharedWorktreeSource(
+              worktreePath,
+              materializationBase,
+              options,
+              () => verifyWorktreePreparationLockAtPath(ownedLockPath, lockReason, options.signal)
+            )
+            await verifyWorktreePreparationLockAtPath(lockPath, lockReason, options.signal)
+          }
           // Why: reset materializes files without running user post-checkout hooks before submit.
           await gitExecFileAsync(
             [...windowsLongPathGitArgs(worktreePath), 'reset', '--hard', materializationBase],

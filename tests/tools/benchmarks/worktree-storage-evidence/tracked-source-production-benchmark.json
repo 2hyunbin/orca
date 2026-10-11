@@ -1,0 +1,100 @@
+{
+  "commit": "d2ba67d1090a0e7707532ebbf4a12e935dbe0185",
+  "platform": "darwin",
+  "git": "git version 2.55.0",
+  "rows": [
+    {
+      "iteration": 1,
+      "method": "ordinary",
+      "seconds": 21.670337334,
+      "storage": {
+        "directories": 800,
+        "files": 35620,
+        "logical_bytes": 297483247,
+        "allocated_bytes_by_path": 374579200,
+        "allocated_bytes_unique_inodes": 374579200,
+        "apfs_private_bytes": 374579200,
+        "private_size_measured_files": 35620
+      }
+    },
+    {
+      "iteration": 1,
+      "method": "shared-cold",
+      "seconds": 42.832810165999994,
+      "storage": {
+        "directories": 800,
+        "files": 35620,
+        "logical_bytes": 297483250,
+        "allocated_bytes_by_path": 374579200,
+        "allocated_bytes_unique_inodes": 374579200,
+        "apfs_private_bytes": 4096,
+        "private_size_measured_files": 35620
+      }
+    },
+    {
+      "iteration": 1,
+      "method": "shared-warm",
+      "seconds": 26.453872874999995,
+      "storage": {
+        "directories": 800,
+        "files": 35620,
+        "logical_bytes": 297483250,
+        "allocated_bytes_by_path": 374579200,
+        "allocated_bytes_unique_inodes": 374579200,
+        "apfs_private_bytes": 4096,
+        "private_size_measured_files": 35620
+      }
+    },
+    {
+      "iteration": 2,
+      "method": "ordinary",
+      "seconds": 26.612641832999987,
+      "storage": {
+        "directories": 800,
+        "files": 35620,
+        "logical_bytes": 297483247,
+        "allocated_bytes_by_path": 374579200,
+        "allocated_bytes_unique_inodes": 374579200,
+        "apfs_private_bytes": 374579200,
+        "private_size_measured_files": 35620
+      }
+    },
+    {
+      "iteration": 2,
+      "method": "shared-cold",
+      "seconds": 35.30713045899999,
+      "storage": {
+        "directories": 800,
+        "files": 35620,
+        "logical_bytes": 297483250,
+        "allocated_bytes_by_path": 374579200,
+        "allocated_bytes_unique_inodes": 374579200,
+        "apfs_private_bytes": 4096,
+        "private_size_measured_files": 35620
+      }
+    },
+    {
+      "iteration": 2,
+      "method": "shared-warm",
+      "seconds": 11.958805167000014,
+      "storage": {
+        "directories": 800,
+        "files": 35620,
+        "logical_bytes": 297483250,
+        "allocated_bytes_by_path": 374579200,
+        "allocated_bytes_unique_inodes": 374579200,
+        "apfs_private_bytes": 4096,
+        "private_size_measured_files": 35620
+      }
+    }
+  ],
+  "implementation_base": "5e9fb931a106",
+  "implementation_files_sha256": {
+    "src/main/git/worktree-source-cache.ts": "cdc4956e5ecfe6f4d37a8279de71c85a99dfd4bd58013dc26b1eda18da36ec52",
+    "src/main/git/worktree-source-identity.ts": "e150e4532859aa14024b28b7abda2029593a524b53bc63426458646cefb01efc",
+    "src/main/git/worktree-source-permissions.ts": "50e519c10854c3e18cf687831512cb718e719a591caa322797545291aa58e51e"
+  },
+  "implementation_notes": [
+    "Hashes identify the measured modules. A later path-handling fix preserves trailing whitespace in bare repository paths; it does not change these benchmark inputs."
+  ]
+}
