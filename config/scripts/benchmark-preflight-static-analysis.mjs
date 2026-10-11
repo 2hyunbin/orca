@@ -1,8 +1,8 @@
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
-import { runProcess } from '@orca/process-host'
+import { fileURLToPath } from 'node:url'
+import { measurePreflightCommand } from './preflight-benchmark-command.mjs'
 import ts from 'typescript-api'
 import { buildCounterbalancedSchedule } from './counterbalanced-benchmark-schedule.mjs'
 import { summarizeBenchmarkSamples } from './benchmark-sample-summary.mjs'
@@ -14,28 +14,23 @@ const output = path.join(root, '.build/preflight-benchmark')
 const baseline = path.join(output, 'baseline')
 mkdirSync(output, { recursive: true })
 const report = {
+  sourceSha: process.env.GITHUB_SHA ?? null,
   host: { platform: process.platform, arch: process.arch, node: process.version },
   measurements: [],
   comparisons: {}
 }
 const save = () =>
   writeFileSync(path.join(output, 'static-analysis.json'), `${JSON.stringify(report, null, 2)}\n`)
-async function command(program, args, label) {
-  const resourceFile = path.join(output, `${label}.resources.txt`)
-  const start = performance.now()
-  const result = await runProcess({
-    program: process.platform === 'linux' ? '/usr/bin/time' : program,
-    args: process.platform === 'linux' ? ['-v', '-o', resourceFile, program, ...args] : args,
-    cwd: root,
+const command = (program, args, label) =>
+  measurePreflightCommand({
+    program,
+    args,
+    label,
+    root,
+    output,
     env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
-    timeoutMs: 180_000,
-    maxOutputBytes: 8 * 1024 * 1024
+    timeoutMs: 180_000
   })
-  const resources = process.platform === 'linux' ? readFileSync(resourceFile, 'utf8') : ''
-  const peakRssKiB =
-    Number(resources.match(/Maximum resident set size \(kbytes\): (\d+)/)?.[1]) || null
-  return { ...result, durationMs: performance.now() - start, peakRssKiB }
-}
 async function requireSuccess(program, args, label) {
   const result = await command(program, args, label)
   if (result.code !== 0 || result.signal || result.timedOut) {
@@ -134,17 +129,22 @@ const lintArgs = (arm) => [
 for (const [comparison, first, second] of [
   ['anti-slop-patch', 'baseline', 'patched'],
   ['anti-slop-runtime', 'node', 'bun'],
+  ['anti-slop-smol', 'node', 'bun-smol'],
   ['import-guard-runtime', 'node', 'bun']
 ]) {
   let diagnostics
   for (const [pair, arms] of buildCounterbalancedSchedule(4, first, second).entries()) {
     for (const arm of arms) {
-      const program = arm === 'bun' ? bun : process.execPath
+      const program = arm.startsWith('bun') ? bun : process.execPath
       const args =
         comparison === 'import-guard-runtime'
           ? ['config/scripts/check-process-host-imports.mjs']
           : lintArgs(comparison === 'anti-slop-patch' ? arm : 'patched')
-      const result = await requireSuccess(program, args, `${comparison}-${pair}-${arm}`)
+      const result = await requireSuccess(
+        program,
+        arm === 'bun-smol' ? ['--smol', ...args] : args,
+        `${comparison}-${pair}-${arm}`
+      )
       if (comparison !== 'import-guard-runtime') {
         const findings = JSON.stringify(JSON.parse(result.stdout).diagnostics)
         if (diagnostics !== undefined && diagnostics !== findings) {
@@ -177,6 +177,67 @@ for (const [comparison, first, second] of [
   )
   save()
 }
+const guardProbeDirectory = mkdtempSync(path.join(root, 'src/main/preflight-import-probe-'))
+const guardProbe = path.join(guardProbeDirectory, 'forbidden-process-import.ts')
+try {
+  writeFileSync(
+    guardProbe,
+    "import { spawn } from 'node:child_process'\nexport const forbiddenSpawn = spawn\n"
+  )
+  for (const runtime of [process.execPath, bun]) {
+    const result = await command(
+      runtime,
+      ['config/scripts/check-process-host-imports.mjs'],
+      `guard-invalid-${path.basename(runtime)}`
+    )
+    if (
+      result.code !== 1 ||
+      !`${result.stdout}${result.stderr}`.includes('forbidden-process-import.ts')
+    ) {
+      throw new Error(`Import guard did not reject its fixture: ${JSON.stringify(result)}`)
+    }
+  }
+} finally {
+  rmSync(guardProbeDirectory, { recursive: true, force: true })
+}
+for (const [pair, arms] of buildCounterbalancedSchedule(4, 'baseline', 'optimized').entries()) {
+  for (const arm of arms) {
+    const runtime = arm === 'optimized' ? bun : process.execPath
+    const start = performance.now()
+    const processes = await Promise.all([
+      requireSuccess(
+        process.execPath,
+        [...oxlint.prefixArgs, '--format=json'],
+        `early-${pair}-${arm}-root-lint`
+      ),
+      requireSuccess(
+        runtime,
+        arm === 'optimized' ? ['--smol', ...lintArgs('patched')] : lintArgs('baseline'),
+        `early-${pair}-${arm}-anti-slop`
+      ),
+      requireSuccess(
+        runtime,
+        ['config/scripts/check-process-host-imports.mjs'],
+        `early-${pair}-${arm}-import-guard`
+      )
+    ])
+    const durationMs = performance.now() - start
+    report.measurements.push({ comparison: 'early-phase', pair, arm, durationMs, processes })
+    save()
+    console.log(JSON.stringify({ comparison: 'early-phase', pair, arm, durationMs }))
+  }
+}
+report.comparisons['early-phase'] = Object.fromEntries(
+  ['baseline', 'optimized'].map((arm) => [
+    arm,
+    summarizeBenchmarkSamples(
+      report.measurements
+        .filter((sample) => sample.comparison === 'early-phase' && sample.arm === arm)
+        .map((sample) => sample.durationMs)
+    )
+  ])
+)
+save()
 const summary = `Static analysis comparisons on ${process.platform}/${process.arch}\n\n\`\`\`json\n${JSON.stringify(report.comparisons, null, 2)}\n\`\`\`\n\nBoth upstream rule suites pass under Node; real CLI fixtures agree under Node and Bun. Full-scan diagnostics agree between the compared arms.\n`
 writeFileSync(path.join(output, 'static-analysis.md'), summary)
 if (process.env.GITHUB_STEP_SUMMARY) {

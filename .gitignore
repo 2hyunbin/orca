@@ -172,3 +172,5 @@ ci-shards/
 
 # Paired CI timing reports and temporary baseline plugin.
 .build/preflight-benchmark/
+
+.local/static-analysis-research/

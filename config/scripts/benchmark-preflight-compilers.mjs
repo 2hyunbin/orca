@@ -3,7 +3,7 @@ import { availableParallelism, totalmem } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { performance } from 'node:perf_hooks'
-import { runProcess } from '@orca/process-host'
+import { measurePreflightCommand } from './preflight-benchmark-command.mjs'
 import { buildCounterbalancedSchedule } from './counterbalanced-benchmark-schedule.mjs'
 import { summarizeBenchmarkSamples } from './benchmark-sample-summary.mjs'
 import {
@@ -13,12 +13,18 @@ import {
   resolveProjectCompiler
 } from './run-typecheck-projects-in-parallel.mjs'
 
+const parityOnly = process.argv.slice(2).includes('--parity-only')
+if (process.argv.slice(2).some((argument) => argument !== '--parity-only')) {
+  throw new Error('Use --parity-only or no arguments')
+}
 const root = fileURLToPath(new URL('../..', import.meta.url))
 const output = path.join(root, '.build/preflight-benchmark')
+const reportName = parityOnly ? 'compiler-parity' : 'compilers'
 mkdirSync(output, { recursive: true })
 const bun = process.env.ORCA_BENCHMARK_BUN ?? 'bun'
 const env = { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', GOMAXPROCS: '4' }
 const report = {
+  sourceSha: process.env.GITHUB_SHA ?? null,
   host: {
     platform: process.platform,
     arch: process.arch,
@@ -33,23 +39,9 @@ const report = {
   parity: []
 }
 const save = () =>
-  writeFileSync(path.join(output, 'compilers.json'), `${JSON.stringify(report, null, 2)}\n`)
-async function command(program, args, label) {
-  const timeFile = path.join(output, `${label}.resources.txt`)
-  const start = performance.now()
-  const result = await runProcess({
-    program: process.platform === 'linux' ? '/usr/bin/time' : program,
-    args: process.platform === 'linux' ? ['-v', '-o', timeFile, program, ...args] : args,
-    cwd: root,
-    env,
-    timeoutMs: 240_000,
-    maxOutputBytes: 8 * 1024 * 1024
-  })
-  const resources = process.platform === 'linux' ? readFileSync(timeFile, 'utf8') : ''
-  const peakRssKiB =
-    Number(resources.match(/Maximum resident set size \(kbytes\): (\d+)/)?.[1]) || null
-  return { ...result, durationMs: performance.now() - start, peakRssKiB }
-}
+  writeFileSync(path.join(output, `${reportName}.json`), `${JSON.stringify(report, null, 2)}\n`)
+const command = (program, args, label) =>
+  measurePreflightCommand({ program, args, label, root, output, env })
 const version = await command(bun, ['--version'], 'bun-version')
 if (version.code !== 0 || version.stdout.trim() !== '1.4.3') {
   throw new Error('Pin Bun 1.4.3 for this comparison')
@@ -146,67 +138,72 @@ function clearBuildState() {
     rmSync(path.join(root, config.replace(/\.json$/, '.tsbuildinfo')), { force: true })
   }
 }
-for (const [comparison, first, second] of [
-  ['native-vs-bun', 'native', 'bun'],
-  ['bun-serial-vs-pair', 'bun', 'bun-pair']
-]) {
-  for (const [pair, arms] of buildCounterbalancedSchedule(4, first, second).entries()) {
-    for (const arm of arms) {
-      clearBuildState()
-      await suite(arm, arm === 'native' ? 'cold' : 'full', pair, comparison)
-      if (arm === 'native') {
-        await suite(arm, 'warm', pair, comparison)
+if (!parityOnly) {
+  for (const [comparison, first, second] of [
+    ['native-vs-bun', 'native', 'bun'],
+    ['bun-serial-vs-pair', 'bun', 'bun-pair']
+  ]) {
+    for (const [pair, arms] of buildCounterbalancedSchedule(4, first, second).entries()) {
+      for (const arm of arms) {
+        clearBuildState()
+        await suite(arm, arm === 'native' ? 'cold' : 'full', pair, comparison)
+        if (arm === 'native') {
+          await suite(arm, 'warm', pair, comparison)
+        }
       }
     }
-  }
-  report.comparisons[comparison] = {}
-  for (const arm of [first, second]) {
-    for (const state of arm === 'native' ? ['cold', 'warm'] : ['full']) {
-      const samples = report.measurements.filter(
-        (sample) => sample.comparison === comparison && sample.arm === arm && sample.state === state
-      )
-      report.comparisons[comparison][`${arm}-${state}`] = summarizeBenchmarkSamples(
-        samples.map((sample) => sample.durationMs)
-      )
+    report.comparisons[comparison] = {}
+    for (const arm of [first, second]) {
+      for (const state of arm === 'native' ? ['cold', 'warm'] : ['full']) {
+        const samples = report.measurements.filter(
+          (sample) =>
+            sample.comparison === comparison && sample.arm === arm && sample.state === state
+        )
+        report.comparisons[comparison][`${arm}-${state}`] = summarizeBenchmarkSamples(
+          samples.map((sample) => sample.durationMs)
+        )
+      }
     }
+    save()
   }
-  save()
 }
-// Override only the root-file selection; retain each project's actual compiler options.
+const probeRoots = new Map([
+  ['config/tsconfig.node.json', 'src/main'],
+  ['config/tsconfig.tc.web.json', 'src/renderer/src'],
+  ['config/tsconfig.tc.cli.json', 'src/cli'],
+  ['src/packages/process-host/tsconfig.test.json', 'src/packages/process-host/src']
+])
 for (const { config } of TYPECHECK_PROJECTS) {
-  const directory = mkdtempSync(
-    path.join(path.dirname(path.join(root, config)), '.preflight-probe-')
-  )
-  const probe = path.join(directory, 'preflight-typecheck-benchmark-probe.ts')
-  const probeConfig = path.join(directory, 'tsconfig.preflight-benchmark-probe.json')
-  if (readFileSync(path.join(root, config), 'utf8').includes('preflight-benchmark-probe')) {
-    throw new Error('Unexpected probe reference')
+  const probeRoot = probeRoots.get(config)
+  if (!probeRoot) {
+    throw new Error(`Register an included probe directory for ${config}`)
   }
+  const directory = mkdtempSync(path.join(root, probeRoot, 'preflight-benchmark-probe-'))
+  const probe = path.join(directory, 'preflight-typecheck-benchmark-probe.ts')
   try {
     writeFileSync(
       probe,
       'export const preflightBenchmarkValue: number = "typecheck must reject this"\n',
       { flag: 'wx' }
     )
-    writeFileSync(
-      probeConfig,
-      JSON.stringify({
-        extends: `../${path.basename(config)}`,
-        include: [path.basename(probe)],
-        exclude: [],
-        compilerOptions: { incremental: false, composite: false }
-      }),
-      { flag: 'wx' }
-    )
-    const relativeConfig = path.relative(root, probeConfig)
     for (const arm of ['native', 'bun']) {
-      const [program, args] = invocation(relativeConfig, arm)
+      const [program, args] = invocation(config, arm)
       const result = await command(program, args, `probe-${path.basename(config)}-${arm}`)
       report.parity.push({ config, arm, ...result })
       save()
       if (result.code !== 1 || !`${result.stdout}${result.stderr}`.includes('TS2322')) {
         throw new Error(`Missing expected diagnostic: ${arm} ${config}`)
       }
+    }
+    const errors = report.parity
+      .filter((sample) => sample.config === config && sample.code === 1)
+      .map((sample) =>
+        `${sample.stdout}${sample.stderr}`
+          .split(/\r?\n/)
+          .filter((line) => line.includes(': error TS'))
+      )
+    if (JSON.stringify(errors[0]) !== JSON.stringify(errors[1])) {
+      throw new Error(`Compiler diagnostics differ: ${config}`)
     }
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -222,21 +219,31 @@ for (const { config } of TYPECHECK_PROJECTS) {
       arm,
       files: result.stdout
         .split(/\r?\n/)
-        .filter((line) => path.isAbsolute(line.trim()))
-        .map((line) => path.normalize(line.trim()))
+        .map((line) => line.trim())
+        .filter((line) => path.isAbsolute(line) || line.startsWith('bundled:///libs/'))
+        // Bun embeds the standard library; compare its names with native TypeScript's disk paths.
+        .map((line) =>
+          line.startsWith('bundled:///libs/') ||
+          /\/(?:@typescript\/typescript-[^/]+|typescript)\/lib\/lib\.[^/]+\.d\.ts$/.test(
+            line.replaceAll('\\', '/')
+          )
+            ? `typescript-lib:${path.basename(line)}`
+            : path.normalize(line)
+        )
         .sort()
     })
   }
   const [nativeFiles, bunFiles] = report.parity
     .filter((sample) => sample.config === config && sample.files)
     .map((sample) => sample.files)
+  save()
   if (JSON.stringify(nativeFiles) !== JSON.stringify(bunFiles)) {
     throw new Error(`Compiler file selection differs: ${config}`)
   }
   save()
 }
-const summary = `Compiler comparison on ${process.platform}/${process.arch}, ${report.host.cores} cores\n\n\`\`\`json\n${JSON.stringify(report.comparisons, null, 2)}\n\`\`\`\n\nAll project file lists match; both compilers reject the assignment-error probe in every project.\n`
-writeFileSync(path.join(output, 'compilers.md'), summary)
+const summary = `Compiler comparison on ${process.platform}/${process.arch}, ${report.host.cores} cores\n\n\`\`\`json\n${JSON.stringify(report.comparisons, null, 2)}\n\`\`\`\n\nAll project file lists match after normalizing embedded standard-library names; both compilers reject the assignment-error probe in every project.\n`
+writeFileSync(path.join(output, `${reportName}.md`), summary)
 if (process.env.GITHUB_STEP_SUMMARY) {
   writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary, { flag: 'a' })
 }

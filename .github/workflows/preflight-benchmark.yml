@@ -4,6 +4,7 @@ on:
     paths:
       - .github/workflows/preflight-benchmark.yml
       - config/scripts/benchmark-preflight-*.mjs
+      - config/scripts/preflight-benchmark-command.mjs
   workflow_dispatch:
 permissions:
   contents: read
