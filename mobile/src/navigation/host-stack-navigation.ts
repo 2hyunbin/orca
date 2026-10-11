@@ -159,7 +159,7 @@ function landOverWorkspaceList(
       index: firstHostArea,
       routes: [
         ...rootStack.routes.slice(0, firstHostArea),
-        { ...hostArea.route, state: { key: hostStack.key, index: 1, routes } }
+        { ...hostArea.route, state: { index: 1, routes } }
       ]
     }
   }

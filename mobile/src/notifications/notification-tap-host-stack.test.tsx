@@ -20,13 +20,15 @@ type NavigatorModel = {
   listeners: Set<() => void>
   pushes: number
   dispatches: HostStackAction[]
+  pushedHostParams: HostStackNavigationRoute['params']
 }
 
 const model = vi.hoisted((): NavigatorModel => ({
   root: undefined,
   listeners: new Set(),
   pushes: 0,
-  dispatches: []
+  dispatches: [],
+  pushedHostParams: undefined
 }))
 
 function stackOf(routes: readonly HostStackNavigationRoute[], key: string) {
@@ -59,7 +61,7 @@ function commitPush(hostSegment: string): void {
           ...root.slice(0, -1),
           { ...focused, state: stackOf([...focused.state.routes, pushed], focused.state.key!) }
         ]
-      : [...root, hostArea(`host-stack-${model.pushes}`, pushed)]
+      : [...root, pushedHostArea(pushed)]
   emit()
 }
 
@@ -128,6 +130,14 @@ vi.mock('expo-router', () => ({
   })
 }))
 
+// A pushed `h` carries the nested-screen params expo-router builds (getPayloadFromStateRoute).
+// The host stack adopts a parent's RESET only while that same params object stays on the route.
+function pushedHostArea(pushed: HostStackNavigationRoute): HostStackNavigationRoute {
+  const params = { hostId: pushed.params?.hostId, screen: LIST, params: pushed.params }
+  model.pushedHostParams = params
+  return { ...hostArea(`host-stack-${model.pushes}`, pushed), params }
+}
+
 function hostArea(key: string, ...routes: HostStackNavigationRoute[]): HostStackNavigationRoute {
   return { key: `h-${key}`, name: 'h', state: stackOf(routes, key) }
 }
@@ -187,6 +197,7 @@ afterEach(() => {
   model.listeners.clear()
   model.pushes = 0
   model.dispatches = []
+  model.pushedHostParams = undefined
 })
 
 describe('a push tap for workspace Y lands on [workspace list, Y]', () => {
@@ -236,6 +247,11 @@ describe('a push tap for workspace Y lands on [workspace list, Y]', () => {
     await tapPush('host', 'Y')
     expect(rootScreens()).toEqual(['index', 'h[list:host, session:Y]'])
     expect(model.root?.[0]?.key).toBe('index')
+    const reset = model.dispatches.at(-1)
+    expect(reset?.type).toBe('RESET')
+    expect(reset?.type === 'RESET' && reset.payload.routes.at(-1)?.params).toBe(
+      model.pushedHostParams
+    )
   })
 
   it('on cold start, before the root navigator has committed', async () => {
