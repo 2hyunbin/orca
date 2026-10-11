@@ -48,7 +48,15 @@ const STACK_WRITERS = [
   'src/renderer/src/app-shell/use-runtime-graph-sync.ts',
   'src/renderer/src/components/tab-group/tab-drag-drop-commit.ts',
   'src/shared/remote-layout-snapshot.ts',
-  'src/shared/terminal-leaf-move.ts'
+  'src/shared/terminal-leaf-move.ts',
+  'src/main/ipc/pty/ipc/leaf-move.ts',
+  'src/main/persistence/closed-terminal-tab-write-fence.ts',
+  'src/main/runtime/runtime-workspace-session-controller.ts',
+  'src/main/runtime/terminal-surface-close.ts',
+  'src/renderer/src/components/terminal/terminal-tab-actions.ts',
+  'src/renderer/src/components/tab-bar/web-runtime-tab-move-mirror.ts',
+  'src/shared/rpc-contract/workspace-layout-params.ts',
+  'src/renderer/src/store/slices/recently-closed-tabs.ts'
 ]
 
 /** Every test file the oracle specs import, transitively: a change there can break the gate. */

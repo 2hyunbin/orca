@@ -31,6 +31,15 @@ const LAYOUT_ORACLE_PREFIXES = [
   'src/renderer/src/app-shell/use-runtime-graph-sync.ts',
   'src/renderer/src/runtime/sync-runtime-graph',
   'src/renderer/src/runtime/web-session-tabs-sync',
+  // Other layout writers the stack edits.
+  'src/main/ipc/pty/ipc/leaf-move.ts',
+  'src/main/persistence/closed-terminal-tab-write-fence.ts',
+  'src/main/runtime/runtime-workspace-session-controller.ts',
+  'src/main/runtime/terminal-surface-close.ts',
+  'src/renderer/src/components/terminal/terminal-tab-actions.ts',
+  'src/renderer/src/components/tab-bar/web-runtime-tab-move-mirror.ts',
+  'src/shared/rpc-contract/workspace-layout-params.ts',
+  'src/renderer/src/store/slices/recently-closed-tabs.ts',
   // The client the oracle reads every view through.
   'src/cli/runtime/client.ts',
   'src/shared/remote-runtime-client.ts',
