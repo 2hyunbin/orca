@@ -61,13 +61,13 @@ describePostgres('a host leaving a dead reserve cell, on PostgreSQL', () => {
     await database.close()
   })
 
-  const heartbeat = async (cell: RelayCellConfig) =>
+  const heartbeat = async (cell: RelayCellConfig, ready = true) =>
     await store.recordCellHeartbeat({
       cellId: cell.id,
       cellUrl: cell.url,
       cellIncarnation: INCARNATION,
       startedAt: 50,
-      ready: true,
+      ready,
       observedRequests: 0,
       totalConnections: 0,
       inFlightConnections: 0,
@@ -128,7 +128,7 @@ describePostgres('a host leaving a dead reserve cell, on PostgreSQL', () => {
       heartbeatTtlMs: HEARTBEAT_TTL_MS,
       deadCellVerdict: (cellId) =>
         pollsDead && cellId === dead.id
-          ? { dead: true, fleetUnreachable: 1, fleetPolled: 34, regionUnreachable: 1, regionPolled: 28 }
+          ? { dead: true, fleetFailing: 1, fleetPolled: 34, regionFailing: 1, regionPolled: 28 }
           : null
     })
     await store.reconcileCells([dead, live], false)
@@ -201,13 +201,39 @@ describePostgres('a host leaving a dead reserve cell, on PostgreSQL', () => {
       deadCellVerdict: () => ({
         dead: false,
         withheld: 'region',
-        fleetUnreachable: 6,
+        fleetFailing: 6,
         fleetPolled: 34,
-        regionUnreachable: 6,
+        regionFailing: 6,
         regionPolled: 6
       })
     })
     await expect(hostAssign(host)).rejects.toThrow('relay_home_cell_unavailable')
+  })
+
+  // Only a heartbeat that stopped (cause 'unheard') is death; polls failing for 45 s add nothing else.
+  it('a cell heartbeating but not ready keeps its hosts, however long its polls fail', async () => {
+    const host = nextHost()
+    await ledgerRow(host, 3)
+    await store.setCellAdmitMode(dead.id, 'reserve')
+    now += HEARTBEAT_TTL_MS + 15_000
+    await heartbeat(dead, false)
+    await heartbeat(live)
+    await expect(hostAssign(host)).rejects.toThrow('relay_home_cell_unavailable')
+    expect(await rowOf(host)).toEqual({ cell_id: dead.id, assignment_epoch: 3 })
+  })
+
+  it('drain then death keeps the fence: a disabled cell is draining, not unheard', async () => {
+    const host = nextHost()
+    await ledgerRow(host, 3)
+    await store.setCellAdmitMode(dead.id, 'reserve')
+    await database.query(`UPDATE relay_cells SET enabled = 0 WHERE cell_id = ?`, [dead.id])
+    try {
+      await killDeadCell()
+      await expect(hostAssign(host)).rejects.toThrow('relay_home_cell_unavailable')
+      expect(await rowOf(host)).toEqual({ cell_id: dead.id, assignment_epoch: 3 })
+    } finally {
+      await database.query(`UPDATE relay_cells SET enabled = 1 WHERE cell_id = ?`, [dead.id])
+    }
   })
 
   it('LB drain: heartbeat fresh while polls fail, so the host is pinned to its cell', async () => {

@@ -19,6 +19,8 @@ export function isNoBackendStatus(status: number): boolean {
   return NO_BACKEND_STATUSES.has(status)
 }
 
+// Only cells that have served this director a feed page: a legacy row that answers 404, or a cell
+// never heard from, would dilute both ratios and fill the sample.
 export type PolledCell = { cellId: string; region: string }
 
 export type DeadCellVerdict = {
@@ -26,9 +28,9 @@ export type DeadCellVerdict = {
   // Why an unreachable cell is not called dead: too few cells to judge, or the failure is too wide
   // to be the cell (this director's network, credential, or a cross-region partition).
   withheld?: 'sample' | 'fleet' | 'region'
-  fleetUnreachable: number
+  fleetFailing: number
   fleetPolled: number
-  regionUnreachable: number
+  regionFailing: number
   regionPolled: number
 }
 
@@ -55,6 +57,13 @@ export class CellPollReachability {
     for (const cellId of this.streaks.keys()) if (!cellIds.has(cellId)) this.streaks.delete(cellId)
   }
 
+  // Any current streak, however young: a staggered partition must not let its first cell cross 45 s
+  // while its neighbours are still a few seconds behind and read as healthy.
+  private failing(cellId: string, now: number): boolean {
+    const streak = this.streaks.get(cellId)
+    return streak !== undefined && now - streak.lastFailedAt <= CELL_POLL_DEAD_MAX_GAP_MS
+  }
+
   private unreachable(cellId: string, now: number): boolean {
     const streak = this.streaks.get(cellId)
     return (
@@ -70,23 +79,23 @@ export class CellPollReachability {
   verdict(cellId: string, polled: readonly PolledCell[], now: number): DeadCellVerdict | null {
     if (!this.unreachable(cellId, now)) return null
     const region = polled.find((cell) => cell.cellId === cellId)?.region
-    let fleetUnreachable = 0
-    let regionUnreachable = 0
+    let fleetFailing = 0
+    let regionFailing = 0
     let regionPolled = 0
     for (const cell of polled) {
-      const down = this.unreachable(cell.cellId, now)
-      if (down) fleetUnreachable += 1
+      const down = this.failing(cell.cellId, now)
+      if (down) fleetFailing += 1
       if (cell.region !== region) continue
       regionPolled += 1
-      if (down) regionUnreachable += 1
+      if (down) regionFailing += 1
     }
-    const counts = { fleetUnreachable, fleetPolled: polled.length, regionUnreachable, regionPolled }
+    const counts = { fleetFailing, fleetPolled: polled.length, regionFailing, regionPolled }
     const withheld =
       region === undefined || polled.length < CELL_POLL_DEAD_MIN_POLLED
         ? 'sample'
-        : fleetUnreachable * 3 > polled.length
+        : fleetFailing * 3 > polled.length
           ? 'fleet'
-          : regionUnreachable * 2 >= regionPolled
+          : regionFailing * 2 >= regionPolled
             ? 'region'
             : undefined
     return withheld ? { dead: false, withheld, ...counts } : { dead: true, ...counts }

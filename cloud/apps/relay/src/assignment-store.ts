@@ -1591,9 +1591,9 @@ export class RelayAssignmentStore {
             fromCellId: deadReserveSource.cell.cellId,
             toCellId: target.cellId,
             region: target.region,
-            fleetUnreachable: deadReserveSource.verdict.fleetUnreachable,
+            fleetFailing: deadReserveSource.verdict.fleetFailing,
             fleetPolled: deadReserveSource.verdict.fleetPolled,
-            regionUnreachable: deadReserveSource.verdict.regionUnreachable,
+            regionFailing: deadReserveSource.verdict.regionFailing,
             regionPolled: deadReserveSource.verdict.regionPolled
           })
         )
@@ -8286,6 +8286,7 @@ export class RelayAssignmentStore {
           optionalText(row, 'admission_state') === 'general' &&
           optionalInteger(row, 'roll_isolated_at') === undefined &&
           integer(row, 'capacity_requests') > 0,
+        capacityRequests: integer(row, 'capacity_requests'),
         ...incarnationField(optionalText(row, 'cell_incarnation'))
       }
     })

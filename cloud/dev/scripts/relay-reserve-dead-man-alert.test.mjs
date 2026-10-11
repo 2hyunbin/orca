@@ -69,11 +69,18 @@ test('the director alert counts its placement-off line on the director service',
   notifyingOnAnyLine('relay_reserve_placement_off_with_reserve_cells', event, 'cloud_run_revision', 'revision')
 })
 
-test('the withheld dead-cell verdict alert counts the director line for the region and fleet guards', () => {
+test('the withheld dead-cell verdict alert counts every director withheld line, gated off by default', () => {
   const event = 'orca_relay_dead_cell_verdict_withheld'
   assert.match(poller, new RegExp(`event: '${event}', cellId, \\.\\.\\.verdict`))
   const metric = block('google_logging_metric', 'relay_dead_cell_verdict_withheld')
-  assert.ok(metric.includes(`jsonPayload.event=\\"${event}\\" AND (jsonPayload.withheld=\\"region\\" OR jsonPayload.withheld=\\"fleet\\")`))
+  assert.ok(metric.includes(`jsonPayload.event=\\"${event}\\""`))
   assert.ok(metric.includes('withheld = "EXTRACT(jsonPayload.withheld)"'))
-  notifyingOnAnyLine('relay_dead_cell_verdict_withheld', event, 'cloud_run_revision', 'withheld')
+  const alert = block('google_monitoring_alert_policy', 'relay_dead_cell_verdict_withheld')
+  for (const body of [metric, alert]) assert.match(body, /count = var\.relay_dead_cell_verdict_alert \? 1 : 0/)
+  assert.match(alert, /threshold_value = 0\n/)
+  assert.match(alert, /notification_channels = var\.relay_alert_notification_channels/)
+  assert.ok(alert.includes('logging.googleapis.com/user/${google_logging_metric.relay_dead_cell_verdict_withheld[0].name}'))
+  assert.ok(alert.includes('group_by_fields      = ["metric.label.\\"withheld\\""]'))
+  assert.match(read('../../infra/terraform/variables.tf'), /variable "relay_dead_cell_verdict_alert" \{[\s\S]*?default     = false/)
+  assert.match(read('../../infra/terraform/environments/staging.tfvars'), /relay_dead_cell_verdict_alert\s+= true/)
 })

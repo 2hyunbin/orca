@@ -107,6 +107,8 @@ export type SeatFeedCell = {
   incarnation?: string
   // Admission state general and not roll-isolated: step 5 places only on these.
   general?: boolean
+  // Zero for a row that can hold no host; absent from callers that do not read it.
+  capacityRequests?: number
 }
 
 export type ShadowSeat = {
@@ -790,7 +792,13 @@ export function startShadowSeatPoller(
     startedAt,
     tick: () => round(true),
     deadCellVerdict: (cellId, at) => {
-      const verdict = reachability.verdict(cellId, cells, at)
+      const feedCells = cells.filter((cell) => {
+        const state = directory.cellState(cell.cellId)
+        return (
+          (cell.capacityRequests ?? 1) > 0 && state?.status !== 'no-feed' && state?.lastLiveAt !== undefined
+        )
+      })
+      const verdict = reachability.verdict(cellId, feedCells, at)
       // A withheld verdict strands that cell's hosts until an operator fences it, so it alerts.
       if (verdict?.withheld && at - (withheldLoggedAt.get(cellId) ?? -Infinity) >= WITHHELD_LOG_INTERVAL_MS) {
         withheldLoggedAt.set(cellId, at)
