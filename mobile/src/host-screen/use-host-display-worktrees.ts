@@ -1,7 +1,10 @@
 import { useMemo } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import { reachableServerClients } from '../transport/execution-host-scoped-rpc-client'
 import { useHostDescriptor } from '../transport/host-descriptor-store'
+import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
+import { useRelayHosts } from '../worktree/relay-hosts-feed'
 import { serverHostHealth } from '../worktree/server-workspaces'
 import { filterVisibleHostRows } from '../worktree/visible-host-rows'
 import {
@@ -38,6 +41,30 @@ export function useHostLabelSources(
     }),
     [state.repoHostIdByRepoId, hostLabelById, hostPlatform, hostHealthById]
   )
+}
+
+/**
+ * The servers the new-workspace sheet offers, and their names, read from the desktop's server-list
+ * feed while it is open: the list's own server rows stop refreshing behind the sheet.
+ */
+export function useNewWorkspaceServers(args: {
+  client: RpcClient | null
+  hostCapabilities: readonly string[]
+  hostLabelById: ReadonlyMap<ExecutionHostId, string>
+  open: boolean
+}): {
+  serverClients: ReadonlyMap<ExecutionHostId, RpcClient>
+  hostLabelById: ReadonlyMap<ExecutionHostId, string>
+} {
+  const { client, hostCapabilities, hostLabelById, open } = args
+  const hosts = useRelayHosts(open ? client : null)
+  return useMemo(() => {
+    const listed = hosts ?? []
+    return {
+      serverClients: reachableServerClients(client, hostCapabilities, listed),
+      hostLabelById: withServerHosts(hostLabelById, listed, (host) => host.label)
+    }
+  }, [client, hostCapabilities, hostLabelById, hosts])
 }
 
 /** The rows the host list renders: the live or last-known catalog with display state and host badges. */

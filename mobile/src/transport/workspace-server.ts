@@ -1,10 +1,7 @@
-import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import type { MobileRelayHost } from '../../../src/shared/mobile-relay-hosts-contract'
-import { relayHostsFeed } from '../worktree/relay-hosts-feed'
+import { useRelayHosts } from '../worktree/relay-hosts-feed'
 import { serverHostHealth } from '../worktree/server-workspaces'
 import {
-  reachableServerClients,
   scopeRpcClientToExecutionHost,
   workspaceRouteExecutionHost
 } from './execution-host-scoped-rpc-client'
@@ -32,19 +29,6 @@ export function useWorkspaceServer(args: {
   // No hostId: the desktop's recorded version and descriptor must not take the server's.
   const gates = useHostStatusGates({ hostId: undefined, client: serverClient, connState })
   return { routeHost, server: routeHost === undefined ? null : { client: serverClient, gates } }
-}
-
-const noSubscription = (): (() => void) => () => {}
-
-/** The desktop's servers from the shared feed while `client` is set; null before it answers. */
-function useRelayHosts(client: RpcClient | null): readonly MobileRelayHost[] | null {
-  const feed = client ? relayHostsFeed(client) : null
-  const subscribe = useCallback(
-    (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
-    [feed]
-  )
-  const readHosts = () => feed?.getSnapshot() ?? null
-  return useSyncExternalStore(subscribe, readHosts, readHosts)
 }
 
 /**
@@ -75,19 +59,4 @@ export function useWorkspaceServerConnState(args: {
     case 'error':
       return 'disconnected'
   }
-}
-
-/**
- * The servers a new workspace can run on, read from the desktop's server-list feed while `client`
- * is set (the sheet is open), not from the host list's rows, which pause while the sheet is open.
- */
-export function useReachableServerClients(
-  client: RpcClient | null,
-  hostCapabilities: readonly string[]
-): ReadonlyMap<ExecutionHostId, RpcClient> {
-  const hosts = useRelayHosts(client)
-  return useMemo(
-    () => reachableServerClients(client, hostCapabilities, hosts ?? []),
-    [client, hostCapabilities, hosts]
-  )
 }

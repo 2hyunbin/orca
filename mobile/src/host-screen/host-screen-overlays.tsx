@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native'
 import { Check, Moon } from 'lucide-react-native'
 import { buildWorktreeNavigationActions } from '../agent-history/worktree-navigation-actions'
 import { workspaceRouteHref } from '../navigation/workspace-execution-host'
-import { useReachableServerClients, useWorkspaceServer } from '../transport/workspace-server'
+import { useWorkspaceServer } from '../transport/workspace-server'
 import { ActionSheetContent } from '../components/ActionSheetModal'
 import { BottomDrawer } from '../components/BottomDrawer'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -19,6 +19,7 @@ import {
 } from '../worktree/workspace-list-picker-options'
 import { isWorktreePinned } from '../worktree/workspace-list-sections'
 import { hostScreenStyles as styles } from './host-screen-styles'
+import { useNewWorkspaceServers } from './use-host-display-worktrees'
 import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostScreenOverlays({ controller }: { controller: HostScreenController }) {
@@ -43,12 +44,13 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
     desktopCapabilities: hostCapabilities,
     executionHost: actionTarget?.hostId
   })
-  // Why its own read: the host list's rows stop refreshing while the sheet is open.
   const [newWorktreeVisible, setNewWorktreeVisible] = useState(false)
-  const serverClients = useReachableServerClients(
-    newWorktreeVisible ? client : null,
-    hostCapabilities
-  )
+  const newWorkspaceServers = useNewWorkspaceServers({
+    client,
+    hostCapabilities,
+    hostLabelById: hostLabels.hostLabelById,
+    open: newWorktreeVisible
+  })
 
   return (
     <>
@@ -229,9 +231,9 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         ref={state.newWorktreeModalRef}
         routeVisible={showNewWorktree}
         client={client}
-        serverClients={serverClients}
+        serverClients={newWorkspaceServers.serverClients}
         hostId={hostId}
-        hostLabelById={hostLabels.hostLabelById}
+        hostLabelById={newWorkspaceServers.hostLabelById}
         existingWorktreePaths={existingWorktreePaths}
         existingWorktrees={state.worktrees}
         // The seam, not react-native's `Linking`: this screen is in the tasks page closure, and

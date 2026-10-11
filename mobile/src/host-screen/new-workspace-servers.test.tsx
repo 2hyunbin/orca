@@ -3,18 +3,17 @@ import { act, create } from 'react-test-renderer'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('react-native', () => ({ AppState: { currentState: 'active' } }))
-// The server status gates beside this hook persist what a desktop reports; nothing here reads them.
-vi.mock('./host-app-version-store', () => ({ recordHostAppVersion: async () => {} }))
-vi.mock('./host-descriptor-recorder', () => ({ recordHostDescriptorFromStatus: () => {} }))
+vi.mock('../transport/host-descriptor-store', () => ({ useHostDescriptor: () => null }))
 
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
 import { MOBILE_RELAY_HOSTS_LIST_METHOD } from '../../../src/shared/mobile-relay-hosts-contract'
-import { FakeSession } from './mobile-endpoint-supervisor-test-fakes'
-import type { RpcClient } from './rpc-client'
-import { useReachableServerClients } from './workspace-server'
+import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import { useNewWorkspaceServers } from './use-host-display-worktrees'
 
 const RELAYS = [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY]
+// The host list's own labels: what a sheet opened from Home sees before the list loads a server.
+const DESKTOP_LABELS: ReadonlyMap<ExecutionHostId, string> = new Map()
 
 /** A desktop that lists one ready server. */
 function desktop(): FakeSession {
@@ -38,11 +37,16 @@ function listCalls(session: FakeSession): number {
 }
 
 describe('the servers a new workspace can run on', () => {
-  it('are offered when the sheet opens, whether or not the host list has loaded their rows', async () => {
+  it('are offered, by name, when the sheet opens before the host list has loaded them', async () => {
     const client = desktop()
-    const seen: { clients: ReadonlyMap<ExecutionHostId, RpcClient> | null } = { clients: null }
+    const seen: { value: ReturnType<typeof useNewWorkspaceServers> | null } = { value: null }
     function Sheet({ open }: { open: boolean }): null {
-      seen.clients = useReachableServerClients(open ? client : null, RELAYS)
+      seen.value = useNewWorkspaceServers({
+        client,
+        hostCapabilities: RELAYS,
+        hostLabelById: DESKTOP_LABELS,
+        open
+      })
       return null
     }
     const rendered: { tree: ReturnType<typeof create> | null } = { tree: null }
@@ -51,10 +55,11 @@ describe('the servers a new workspace can run on', () => {
     })
     // Closed, it asks nothing of the desktop.
     expect(listCalls(client)).toBe(0)
-    expect([...(seen.clients?.keys() ?? [])]).toEqual([])
+    expect([...(seen.value?.serverClients.keys() ?? [])]).toEqual([])
     await act(async () => {
       rendered.tree?.update(createElement(Sheet, { open: true }))
     })
-    expect([...(seen.clients?.keys() ?? [])]).toEqual(['runtime:vm'])
+    expect([...(seen.value?.serverClients.keys() ?? [])]).toEqual(['runtime:vm'])
+    expect(seen.value?.hostLabelById.get('runtime:vm')).toBe('vm')
   })
 })
