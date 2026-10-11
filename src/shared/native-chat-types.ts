@@ -1,3 +1,4 @@
+import type { AgentSessionProviderContextBoundary } from './agent-session-provider-context'
 // ─── Native chat conversation model (cross-process, IPC-serializable) ────────
 // The single renderer-facing conversation contract for the native chat view.
 // Assembled from layered sources in priority order: on-disk JSONL transcripts,
@@ -50,6 +51,7 @@ export type NativeChatTextBlock = {
   text: string
   /** Optional journal display hints; readers narrow only the values they know. */
   presentation?: string
+  contextClear?: AgentSessionProviderContextBoundary
   tone?: string
   /** Optional structured detail for an otherwise ordinary fallback line. */
   providerFrame?: {
@@ -217,6 +219,8 @@ export type NativeChatMessage = AgentJournalProducerLinkage & {
   source: NativeChatSource
   /** Optional provider row cursor; split projections share it for whole-row paging. */
   transcriptOffset?: number
+  /** Display order when the provider's sequence differs from its stable paging cursor. */
+  transcriptOrder?: number
   /** Model id that produced an assistant response, as the provider API names it. */
   model?: string
   /** The agent's provider that served `model`, where the agent records one. */
@@ -258,6 +262,8 @@ export type NativeChatMessage = AgentJournalProducerLinkage & {
   /** Set only by the tool fold, on a row that absorbed later tool rows: the newest
    *  absorbed row's journal position. The row still sorts by its own. */
   foldedJournalPosition?: AgentJournalPosition
+  /** Private presentation row; raw host messages never publish this fold-only marker. */
+  unpairedToolResults?: true
 }
 
 /** Split reasoning and its answer share the provider's row identity. */
