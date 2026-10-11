@@ -377,9 +377,10 @@ export const PR_E2E_SOURCE_ROUTES = [
     specs: ['tests/e2e/paired-client-hosted-browser-restart-survival.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
-      /^src\/.*(?:[Cc]lient-?[Hh]osted|browser-host-(?:lease|page|client-page)|browser-client-(?:host|page)|runtime-browser-(?:client-)?page|session-tabs-sync|host-session-snapshot-authority|orca-runtime(?:-browser)?\.ts|\/runtime-(?:status|types)\.ts)/.test(
-        file
-      )
+      (file === 'src/main/runtime/browser/browser-commands.ts' ||
+        /^src\/.*(?:[Cc]lient-?[Hh]osted|browser-host-(?:lease|page|client-page)|browser-client-(?:host|page)|runtime-browser-(?:client-)?page|session-tabs-sync|host-session-snapshot-authority|orca-runtime(?:-browser)?\.ts|\/runtime-(?:status|types)\.ts)/.test(
+          file
+        ))
   },
   {
     // Why: the oracle is the only check that reads every view of the stored layout back. Runtime
@@ -392,9 +393,12 @@ export const PR_E2E_SOURCE_ROUTES = [
     ],
     matches: (file) =>
       isLayoutOracleSource(file) &&
-      /^(?:src\/shared\/workspace-layout\/|src\/main\/persistence\/(?:terminal-topology\/|restoring-sessions\/|loading-store\/pty-binding-)|src\/(?:main|renderer\/src)\/runtime\/(?:[^/]+\/)*[^/]*(?:pane-admission|workspace-layout|session-tab|headless-[^/]*tab|layout-client|create-terminal|split-pty-backed-terminal|terminal-split-layout|spawn-placement)[^/]*\.ts$|tests\/e2e\/(?:helpers\/)?(?:workspace-layout-oracle|headless-layout-oracle|terminal-layout-journeys))/.test(
+      (/^src\/main\/runtime\/(?:session-tabs\/mobile-session-(?:hydration|preservation|reconciliation)|terminal\/output\/terminal-(?:derived-agent-facts|osc-metadata))\.ts$/.test(
         file
-      )
+      ) ||
+        /^(?:src\/shared\/workspace-layout\/|src\/main\/persistence\/(?:terminal-topology\/|restoring-sessions\/|loading-store\/pty-binding-)|src\/(?:main|renderer\/src)\/runtime\/(?:[^/]+\/)*[^/]*(?:pane-admission|workspace-layout|session-tab|headless-[^/]*tab|layout-client|create-terminal|split-pty-backed-terminal|terminal-split-layout|spawn-placement)[^/]*\.ts$|tests\/e2e\/(?:helpers\/)?(?:workspace-layout-oracle|headless-layout-oracle|terminal-layout-journeys))/.test(
+          file
+        ))
   },
   {
     // The window's tab store reaches SSH through the same layout writers, so not the SSH lane.

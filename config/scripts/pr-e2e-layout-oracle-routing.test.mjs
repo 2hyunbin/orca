@@ -24,6 +24,8 @@ const LAYOUT_AUTHORITIES = [
   'src/main/runtime/orca-runtime-split-pty-backed-terminal.ts',
   'src/main/runtime/session-tabs/headless-tab-group-moves.ts',
   'src/main/runtime/orca-runtime-create-terminal.ts',
+  'src/main/runtime/terminal/output/terminal-derived-agent-facts.ts',
+  'src/main/runtime/terminal/output/terminal-osc-metadata.ts',
   'src/renderer/src/runtime/mobile-session-tab-close.ts',
   'src/renderer/src/runtime/runtime-layout-client.ts',
   'tests/e2e/workspace-layout-oracle-known-on-main.ts',
@@ -37,6 +39,19 @@ describe('workspace layout oracle PR E2E routing', () => {
       expect(selectPrE2eSpecs([file]), file).toEqual(ORACLE_ROUTE.specs.toSorted())
       expect(shouldRunReusablePrE2e([file]), file).toBe(true)
     }
+  })
+
+  it.each([
+    ['hydrate-headless-mobile-session-tabs-from-workspace-session', 'hydration'],
+    ['merge-preserved-headless-mobile-session-tabs', 'preservation'],
+    ['sync-mobile-session-tabs', 'reconciliation']
+  ])('preserves oracle routing when %s moves to a session owner', (original, owner) => {
+    const source = `src/main/runtime/orca-runtime-${original}.ts`
+    const destination = `src/main/runtime/session-tabs/mobile-session-${owner}.ts`
+    expect(existsSync(join(projectDir, source)), source).toBe(true)
+    expect(selectPrE2eSpecs([source]), source).toEqual(ORACLE_ROUTE.specs.toSorted())
+    expect(selectPrE2eSpecs([destination]), destination).toEqual(ORACLE_ROUTE.specs.toSorted())
+    expect(shouldRunReusablePrE2e([destination]), destination).toBe(true)
   })
 
   it('runs the window and headless oracles, not the SSH lane, for the tab store', () => {
@@ -75,6 +90,16 @@ describe('workspace layout oracle PR E2E routing', () => {
       'src/main/runtime/rpc/methods/terminal/terminal-create.ts',
       'src/main/runtime/runtime-rpc-database.ts',
       'src/main/runtime/orca-runtime-files.ts',
+      'src/main/runtime/session-tabs/mobile-session-hydration.test.ts',
+      'src/main/runtime/session-tabs/mobile-session-preservation.spec.ts',
+      'src/main/runtime/session-tabs/mobile-session-reconciliation-fixture.ts',
+      'src/main/runtime/session-tabs/mobile-session-browser-group-projection.ts',
+      'src/main/runtime/terminal/output/terminal-derived-agent-facts.test.ts',
+      'src/main/runtime/terminal/output/terminal-osc-metadata.spec.ts',
+      'src/main/runtime/terminal/output/terminal-osc-metadata-fixture.ts',
+      'src/main/runtime/terminal/output/pty-output-ingestion.ts',
+      'src/main/runtime/terminal/layout/terminal-layout-application.ts',
+      'src/main/runtime/browser/browser-commands.ts',
       'src/renderer/src/runtime/sync-runtime-graph.ts',
       'src/renderer/src/runtime/remote-runtime-terminal-multiplexer.ts',
       'src/renderer/src/runtime/web-session-tabs-sync-test-harness.ts',
