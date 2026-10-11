@@ -6,7 +6,11 @@ import { makePaneKey } from '../shared/stable-pane-id'
 import { resolvePersistedStablePaneOwner } from './ipc/pty/pane/stable-owner'
 import { adoptStablePane } from './ipc/pty/pane/adopt-stable'
 import { PtyHostNotDispatchableError } from './ipc/pty/provider/registry'
-import { testState, createStore, makeTerminalTab } from './persistence-test-harness'
+import {
+  testState,
+  createStoreWithSshRemotePtyLeases,
+  makeTerminalTab
+} from './persistence-test-harness'
 import { TEST_LEAF_1 } from './persistence-session-fixtures'
 
 vi.mock('electron', () => ({
@@ -21,16 +25,17 @@ const WORKTREE = 'repo1::/worktree'
 const TAB = 'tab-1'
 const APP_PTY_ID = 'ssh:ssh-1@@remote-pty'
 
-function storeWithBoundRemotePane(): ReturnType<typeof createStore> {
-  const store = createStore()
-  store.upsertSshRemotePtyLease({
-    targetId: TARGET,
-    ptyId: 'remote-pty',
-    worktreeId: WORKTREE,
-    tabId: TAB,
-    leafId: TEST_LEAF_1,
-    state: 'attached'
-  })
+function storeWithBoundRemotePane(): ReturnType<typeof createStoreWithSshRemotePtyLeases> {
+  const store = createStoreWithSshRemotePtyLeases([
+    {
+      targetId: TARGET,
+      ptyId: 'remote-pty',
+      worktreeId: WORKTREE,
+      tabId: TAB,
+      leafId: TEST_LEAF_1,
+      state: 'attached'
+    }
+  ])
   store.setWorkspaceSession(
     {
       activeRepoId: 'repo1',
