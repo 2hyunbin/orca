@@ -21,6 +21,8 @@ export type E2EETicketRedemption = {
   devicePublicKeyB64: string
   deviceProofB64: string
   deviceLabel: string
+  // Session-only browsers: the host drops the row on restart or after idle.
+  ephemeral: boolean
   clientCapabilities?: unknown
 }
 
@@ -32,6 +34,7 @@ const V2_REDEMPTION_KEYS = new Set([
   'deviceLabel',
   'devicePublicKeyB64',
   'deviceProofB64',
+  'ephemeral',
   'ticket'
 ])
 const TICKET_PATTERN = /^[A-Za-z0-9_-]{43}$/
@@ -116,7 +119,8 @@ function classifyRedemption(
     isDevicePublicKeyB64(devicePublicKeyB64) &&
     isDeviceProofB64(deviceProofB64) &&
     typeof deviceLabel === 'string' &&
-    deviceLabel.length <= 256
+    deviceLabel.length <= 256 &&
+    (auth.ephemeral === undefined || auth.ephemeral === true)
     ? {
         kind: 'redemption',
         ticket,
@@ -124,6 +128,7 @@ function classifyRedemption(
         devicePublicKeyB64,
         deviceProofB64,
         deviceLabel,
+        ephemeral: auth.ephemeral === true,
         clientCapabilities: auth.clientCapabilities
       }
     : { kind: 'invalid' }

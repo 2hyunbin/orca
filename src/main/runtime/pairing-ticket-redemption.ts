@@ -134,7 +134,8 @@ export async function redeemPairingTicket(args: {
         scope: ticket.scope,
         grants: [...ticket.grants],
         pairingReach: ticket.reach,
-        devicePublicKeyB64: redemption.devicePublicKeyB64
+        devicePublicKeyB64: redemption.devicePublicKeyB64,
+        ephemeral: redemption.ephemeral
       })
     } catch (error) {
       if (error instanceof DeviceKeyForkError) {

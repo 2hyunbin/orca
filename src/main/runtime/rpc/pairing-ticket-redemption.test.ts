@@ -171,6 +171,15 @@ describe('pairing ticket redemption (host)', () => {
     expect(again.ws.close).toHaveBeenCalledWith(4001, 'Pairing ticket refused')
   })
 
+  it('accepts the optional ephemeral flag and keeps the row session-only', async () => {
+    const { registry, tickets, connect } = harness()
+    const minted = tickets.mint(cliTicket)
+    const key = nacl.sign.keyPair()
+    const session = connect((hash) => ({ ...redemptionFor(minted, key)(hash), ephemeral: true }))
+    expect(await session.reply()).toMatchObject({ type: 'e2ee_authenticated' })
+    expect(registry.getDevice(minted.deviceId)?.ephemeral).toBe(true)
+  })
+
   it('refuses a proof made for another purpose and burns the ticket after repeated failures', async () => {
     const { tickets, connect } = harness()
     const minted = tickets.mint(cliTicket)
@@ -360,6 +369,7 @@ describe('pairing ticket redemption failures never revoke a pending key', () => 
         signal: new AbortController().signal,
         redemption: {
           kind: 'redemption',
+          ephemeral: false,
           ...redemptionFor(minted, nacl.sign.keyPair())(transcriptHashB64)
         }
       })
@@ -384,6 +394,7 @@ describe('redeemPairingTicket approval rules', () => {
         signal: new AbortController().signal,
         redemption: {
           kind: 'redemption',
+          ephemeral: false,
           ...redemptionFor(minted, key, { deviceLabel })(transcriptHashB64)
         }
       })

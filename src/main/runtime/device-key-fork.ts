@@ -88,6 +88,7 @@ export type RedeemedDeviceKey = {
   grants: NonNullable<DeviceEntry['grants']>
   pairingReach: NonNullable<DeviceEntry['pairingReach']>
   devicePublicKeyB64: string
+  ephemeral?: boolean
 }
 
 /** A keyed row for a redeemed ticket; authority comes from the ticket, never from the client (I6). */
@@ -114,6 +115,7 @@ export function planRedeemedDeviceKey(
     pairingReach: redeemed.pairingReach,
     credentialKind: 'device-key',
     devicePublicKeyB64: redeemed.devicePublicKeyB64,
+    ...(redeemed.ephemeral ? { ephemeral: true as const } : {}),
     pairedAt: now,
     lastSeenAt: now
   }
