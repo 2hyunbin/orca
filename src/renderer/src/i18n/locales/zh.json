@@ -12382,7 +12382,7 @@
           }
         },
         "sshHostServer": {
-          "sourceChanged": "在较旧版本的 Orca 上发生了更改：会持续运行中继，直到再次迁移到其受管服务器。",
+          "sourceChanged": "较旧版本的 Orca 更改了此主机的项目。要重新连接，请将这些更改迁移到其受管服务器，或保留服务器版本。",
           "deploying": "正在设置受管的 Orca 服务器…",
           "converting": "正在将此主机的项目迁移到其受管的 Orca 服务器…",
           "connecting": "正在连接到受管的 Orca 服务器…",
