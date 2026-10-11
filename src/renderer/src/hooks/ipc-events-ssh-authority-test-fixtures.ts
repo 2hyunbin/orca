@@ -49,7 +49,6 @@ export function buildSshAuthorityReconciliationHarness(args: {
     retryDirectSshTargetPanes: vi.fn(() => 0),
     setSshTargetsMetadata: vi.fn(),
     setRemovedSshTargetLabels: vi.fn(),
-    setRemoteWorkspaceSyncStatus: vi.fn(),
     clearRemoteDetectedAgents: vi.fn(),
     clearDirectSshTargetPtyBindings: vi.fn(),
     clearRemovedSshTargetState: vi.fn()

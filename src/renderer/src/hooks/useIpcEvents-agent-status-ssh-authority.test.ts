@@ -208,7 +208,6 @@ describe('useIpcEvents agent status snapshot integration', () => {
         },
         setSshTargetsMetadata: vi.fn(),
         setRemovedSshTargetLabels: vi.fn(),
-        setRemoteWorkspaceSyncStatus: vi.fn(),
         clearRemoteDetectedAgents: vi.fn(),
         clearDirectSshTargetPtyBindings: vi.fn(),
         clearRemovedSshTargetState: vi.fn()
@@ -426,7 +425,6 @@ describe('useIpcEvents agent status snapshot integration', () => {
       setDetectedPorts,
       setSshTargetsMetadata: vi.fn(),
       setRemovedSshTargetLabels: vi.fn(),
-      setRemoteWorkspaceSyncStatus: vi.fn(),
       fetchRuntimeEnvironmentRepos: vi.fn(async () => []),
       fetchWorktreeLineage: vi.fn(async () => undefined),
       clearRemoteDetectedAgents: vi.fn(),
