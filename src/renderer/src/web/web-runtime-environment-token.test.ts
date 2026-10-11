@@ -58,4 +58,13 @@ describe('a migrated pairing never gets its code back', () => {
     saveStoredWebRuntimeEnvironment(environment('fresh-code', 6))
     expect(readStoredWebRuntimeEnvironment()?.endpoints[0]?.deviceToken).toBe('fresh-code')
   })
+
+  it('a stale tab never overwrites a newer pairing of the same environment', () => {
+    saveStoredWebRuntimeEnvironment(environment('fresh-code', 6))
+    saveStoredWebRuntimeEnvironment({ ...environment('old-code', 5), runtimeId: 'stale' })
+    expect(readStoredWebRuntimeEnvironment()).toMatchObject({
+      pairingRevision: 6,
+      endpoints: [{ deviceToken: 'fresh-code' }]
+    })
+  })
 })

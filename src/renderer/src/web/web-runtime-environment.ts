@@ -89,9 +89,14 @@ export function saveStoredWebRuntimeEnvironment(environment: StoredWebRuntimeEnv
     return
   }
   sessionEnvironment = null
+  const stored = readStoredWebRuntimeEnvironment()
+  // Why: a stale tab must not roll back another tab's re-pair of the same environment.
+  if (stored?.id === environment.id && pairingRevision(stored) > pairingRevision(environment)) {
+    return
+  }
   window.localStorage.setItem(
     ENVIRONMENT_STORAGE_KEY,
-    JSON.stringify(keepMigratedPlaceholders(environment, readStoredWebRuntimeEnvironment()))
+    JSON.stringify(keepMigratedPlaceholders(environment, stored))
   )
 }
 

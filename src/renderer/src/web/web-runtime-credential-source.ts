@@ -90,8 +90,13 @@ export function createWebRuntimeCredentialSource(args: {
 
   const storedKeyPlan = async (keySubtle: SubtleCrypto): Promise<WebRuntimeAuthPlan> => {
     let existing = await store.get(recordId)
+    const recordRevision = existing?.pairingRevision ?? -Infinity
+    // Why: another tab re-paired since this tab loaded; its key is not ours to use or delete.
+    if (existing && recordRevision > environment.pairingRevision) {
+      return legacy()
+    }
     // Why: a re-pair saved a fresh code; a key from an earlier pairing may be refused for good.
-    if (existing && existing.pairingRevision !== environment.pairingRevision && !tokenForgotten) {
+    if (existing && recordRevision < environment.pairingRevision && !tokenForgotten) {
       await store.remove(recordId)
       existing = undefined
     }

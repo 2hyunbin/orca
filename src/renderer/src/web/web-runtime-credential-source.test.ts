@@ -56,6 +56,18 @@ describe('browser credential plans', () => {
     expect(plan).toMatchObject({ kind: 'migrate', deviceToken: 'fresh-code' })
   })
 
+  it('a stale tab never deletes the key of a newer pairing', async () => {
+    const store = createMemoryWebDeviceKeyStore()
+    await migrateOnce(store, 2)
+    const stale = sourceFor({ store, deviceToken: 'old-code', pairingRevision: 1 })
+    expect(await stale.source.nextPlan(true)).toEqual({
+      kind: 'legacy-token',
+      deviceToken: 'old-code'
+    })
+    expect(await store.get('host-key|env-1')).toMatchObject({ state: 'active', pairingRevision: 2 })
+    expect(stale.forgetStoredToken).not.toHaveBeenCalled()
+  })
+
   it('a tab still holding the code forgets it once another tab activated the key', async () => {
     const store = createMemoryWebDeviceKeyStore()
     const deviceId = await migrateOnce(store, 1)
