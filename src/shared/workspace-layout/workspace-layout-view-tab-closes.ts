@@ -1,8 +1,11 @@
 // A view's shown tab after a layout change takes it away, chosen when the change is applied, with
 // the group's order from before it, as today's close does: the most recent remaining tab, else the
 // closed tab's neighbour. A read cannot do this: the record no longer knows where the tab sat.
+// An emptied group hands the view's active group to its sibling in the split, as the window's
+// collapseGroupLayout (tab-group-layout-tree.ts) does on close and move.
 
 import { pickNextActiveTabAfterClose } from '../workspace-session-terminal-tab-close'
+import { findSiblingGroupId, removeGroupLayoutLeaf } from './tab-group-layout-tree'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
 import type { LayoutViewRecord } from './workspace-layout-views'
 
@@ -43,5 +46,39 @@ export function followTabClosesInView(
       }
     }
   }
-  return groups === record.groups ? record : { ...record, groups }
+  const activeGroupIdByWorktree = followGroupClosesInView(record, before, after)
+  if (groups === record.groups && activeGroupIdByWorktree === record.activeGroupIdByWorktree) {
+    return record
+  }
+  return { ...record, groups, activeGroupIdByWorktree }
+}
+
+/** As collapseGroupLayout, once per emptied group: its sibling, else the first group left. */
+function followGroupClosesInView(
+  record: LayoutViewRecord,
+  before: WorkspaceLayoutModel,
+  after: WorkspaceLayoutModel
+): LayoutViewRecord['activeGroupIdByWorktree'] {
+  let activeGroups = record.activeGroupIdByWorktree
+  for (const [key, was] of Object.entries(before.workspaces)) {
+    const now = after.workspaces[key]?.groups ?? []
+    let layout = was.groupLayout ?? null
+    // The window collapses only a split it still has another group beside.
+    if (now.length === 0) {
+      continue
+    }
+    for (const group of was.groups) {
+      if (layout === null || now.some((candidate) => candidate.id === group.id)) {
+        continue
+      }
+      const sibling = findSiblingGroupId(layout, group.id)
+      layout = removeGroupLayoutLeaf(layout, group.id)
+      const current = activeGroups?.[key]
+      const next = sibling ?? now[0]?.id ?? current
+      if (next !== undefined && next !== current) {
+        activeGroups = { ...activeGroups, [key]: next }
+      }
+    }
+  }
+  return activeGroups
 }

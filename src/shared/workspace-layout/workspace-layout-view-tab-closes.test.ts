@@ -68,3 +68,59 @@ describe('followTabClosesInView', () => {
     })
   })
 })
+
+describe('followTabClosesInView, emptied groups', () => {
+  /** Groups a | (b over c), each holding one tab named after it. */
+  function split(groupIds: string[]): WorkspaceLayoutModel {
+    const leaf = (groupId: string) => ({ type: 'leaf' as const, groupId })
+    const right =
+      groupIds.includes('b') && groupIds.includes('c')
+        ? {
+            type: 'split' as const,
+            direction: 'vertical' as const,
+            first: leaf('b'),
+            second: leaf('c')
+          }
+        : leaf(groupIds.includes('b') ? 'b' : 'c')
+    const base = emptyModel()
+    return {
+      ...base,
+      workspaces: {
+        [WS]: {
+          worktreeId: WS,
+          groups: groupIds.map((id) => ({ id, tabOrder: [`t-${id}`] })),
+          tabs: groupIds.map((id) => tab(`t-${id}`)),
+          groupLayout: groupIds.includes('a')
+            ? { type: 'split', direction: 'horizontal', first: leaf('a'), second: right }
+            : right
+        }
+      }
+    }
+  }
+  function tab(id: string) {
+    return {
+      id,
+      entityId: id,
+      createdAt: 1,
+      customTitle: null,
+      color: null,
+      kind: 'browser' as const
+    }
+  }
+  const activeGroup = (groupId: string): LayoutViewRecord => ({
+    ...emptyLayoutViewRecord(),
+    activeGroupIdByWorktree: { [WS]: groupId }
+  })
+
+  it("moves the active group to the emptied group's sibling in the split, as the window does", () => {
+    const next = followTabClosesInView(activeGroup('b'), split(['a', 'b', 'c']), split(['a', 'c']))
+
+    expect(next.activeGroupIdByWorktree).toEqual({ [WS]: 'c' })
+  })
+
+  it("takes the sibling subtree's first group when the emptied group sat beside a split", () => {
+    const next = followTabClosesInView(activeGroup('a'), split(['a', 'b', 'c']), split(['b', 'c']))
+
+    expect(next.activeGroupIdByWorktree).toEqual({ [WS]: 'b' })
+  })
+})
