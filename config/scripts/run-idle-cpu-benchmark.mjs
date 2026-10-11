@@ -354,7 +354,7 @@ async function main() {
         return { error: added.error }
       }
       const store = window.__store
-      await store?.getState().fetchRepos()
+      await store?.getState().fetchRepos({ runtimeEnvironmentId: null })
       const repo = store?.getState().repos.find((candidate) => candidate.id === added.repo.id)
       if (repo) {
         const detected = await store
