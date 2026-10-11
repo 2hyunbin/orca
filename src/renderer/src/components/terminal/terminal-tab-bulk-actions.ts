@@ -42,14 +42,14 @@ export function closeOtherTerminalTabs(tabId: string, activeWorktreeId: string |
       continue
     }
     if (closeHostTerminalTabs) {
-      // Why: prune the mirror immediately, then close on its authoritative host so snapshots converge.
-      closeLocalTerminalTabState(tab.id, { remoteCloseOwnedByHost: true })
+      // Why: Begin the host close before pruning so its operation captures placement.
       void closeWebRuntimeSessionTab({
         worktreeId: activeWorktreeId,
         tabId: tab.id,
         environmentId: runtimeEnvironmentId,
         reason: 'user'
       })
+      closeLocalTerminalTabState(tab.id, { remoteCloseOwnedByHost: true })
     } else {
       state.closeTab(tab.id)
     }
@@ -90,14 +90,14 @@ export function closeTerminalTabsToRight(tabId: string, activeWorktreeId: string
     }
     if (terminalIdSet.has(id)) {
       if (closeHostTerminalTabs) {
-        // Why: prune the mirror immediately, then close on its authoritative host so snapshots converge.
-        closeLocalTerminalTabState(id, { remoteCloseOwnedByHost: true })
+        // Why: Begin the host close before pruning so its operation captures placement.
         void closeWebRuntimeSessionTab({
           worktreeId: activeWorktreeId,
           tabId: id,
           environmentId: runtimeEnvironmentId,
           reason: 'user'
         })
+        closeLocalTerminalTabState(id, { remoteCloseOwnedByHost: true })
       } else {
         state.closeTab(id)
       }

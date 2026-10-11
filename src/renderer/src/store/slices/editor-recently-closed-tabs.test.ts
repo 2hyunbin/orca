@@ -1,3 +1,5 @@
+// Match the app's store entry order before assembling isolated slice fixtures.
+import '../index'
 import type { StoreApi } from 'zustand/vanilla'
 import { describe, expect, it, vi } from 'vitest'
 import {

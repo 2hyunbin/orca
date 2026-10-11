@@ -18,7 +18,8 @@ import {
 import { knownStructuredSessionWorktreeIds } from '../local-structured-session-tab-retirement'
 import {
   localStructuredSessionEpochHistoryByWorktree,
-  localStructuredSessionVersionByWorktree
+  localStructuredSessionVersionByWorktree,
+  localStructuredSessionGeneration
 } from './inventory-generation-fence'
 import { forgetRetiredEpochRepairsOutside } from './retired-epoch-repair'
 import { projectLocalStructuredSessionTabs } from './snapshot-projection'
@@ -35,6 +36,7 @@ import {
 import { suppressCancelledStructuredSessionTabs } from '../structured-agent-session-tab-retirement'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from '../local-structured-session-owner'
 import { closeStructuredAgentSession } from '../structured-agent-session-close'
+import { mergeHostSessionTabSource } from '../host-session-tab-source'
 
 /** The host saying it no longer publishes this worktree at all, rather than publishing an empty one. */
 function isWorktreeRetraction(
@@ -59,6 +61,7 @@ export type StructuredSessionSnapshotApplyOptions = {
   onRetiredEpochDrop?: (worktreeId: string, publicationEpoch: string) => void
   /** Collects accepted publications so lifecycle listeners run after the store patch settles. */
   onAcceptedAgentSession?: (worktreeId: string, sessionId: string) => void
+  onAcceptedSource?: (snapshot: RuntimeMobileSessionTabsResult) => void
 }
 
 export function applyStructuredSessionTabSnapshots(
@@ -67,10 +70,15 @@ export function applyStructuredSessionTabSnapshots(
   options: StructuredSessionSnapshotApplyOptions = {}
 ): void {
   const acceptedAgentSessions: { worktreeId: string; sessionId: string }[] = []
+  const acceptedSources: RuntimeMobileSessionTabsResult[] = []
   const settleStructuredSessionMirror = applyWebSessionTabsStorePatch(
     (state) =>
       applyLocalStructuredSessionTabSnapshots(state, snapshots, owner, undefined, {
         ...options,
+        onAcceptedSource: (snapshot) => {
+          acceptedSources.push(snapshot)
+          options.onAcceptedSource?.(snapshot)
+        },
         onAcceptedAgentSession: (worktreeId, sessionId) => {
           acceptedAgentSessions.push({ worktreeId, sessionId })
           options.onAcceptedAgentSession?.(worktreeId, sessionId)
@@ -79,6 +87,17 @@ export function applyStructuredSessionTabSnapshots(
     { frames: [] }
   )
   settleStructuredSessionMirror()
+  for (const snapshot of acceptedSources) {
+    const accepted = localStructuredSessionVersionByWorktree.get(snapshot.worktree)
+    if (
+      accepted?.publicationEpoch === snapshot.publicationEpoch &&
+      accepted.snapshotVersion === snapshot.snapshotVersion &&
+      !isWorktreeRetraction(snapshot)
+    ) {
+      accepted.source = mergeHostSessionTabSource(accepted.source, snapshot)
+      accepted.generation = localStructuredSessionGeneration()
+    }
+  }
   markStructuredAgentSessionLaunchesPublished(LOCAL_EXECUTION_HOST_ID, acceptedAgentSessions)
   if (options.authoritative) {
     startStructuredAgentLaunchCancellationCleanup(LOCAL_EXECUTION_HOST_ID, (sessionId) =>
@@ -170,6 +189,9 @@ export function applyLocalStructuredSessionTabSnapshots<
     )
     next = patch === next ? next : ({ ...next, ...patch } as State)
     if (isWorktreeRetraction(effectiveSnapshot)) {
+      if (prior) {
+        delete prior.source
+      }
       // A retraction was applied above — the mirrored rows must go — but it is not a publication
       // to fence later frames against. Recording it would retire the renderer's own epoch, which
       // is one string for the whole process lifetime, and every republication afterwards would be
@@ -197,8 +219,11 @@ export function applyLocalStructuredSessionTabSnapshots<
     }
     localStructuredSessionVersionByWorktree.set(snapshot.worktree, {
       publicationEpoch: snapshot.publicationEpoch,
-      snapshotVersion: snapshot.snapshotVersion
+      snapshotVersion: snapshot.snapshotVersion,
+      source: prior?.source,
+      generation: localStructuredSessionGeneration()
     })
+    options.onAcceptedSource?.(snapshot)
     localStructuredSessionEpochHistoryByWorktree.set(
       snapshot.worktree,
       noteRetiredValue(epochHistory, snapshot.publicationEpoch, 8)

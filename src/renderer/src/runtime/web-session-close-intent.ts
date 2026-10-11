@@ -8,6 +8,12 @@ import {
 } from '../../../shared/session-tab-close-ledger'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
 import { webSessionIntentOwnerKey, type WebSessionIntentOwner } from './web-session-intent-owner'
+import { useAppStore } from '../store'
+import { localStructuredSessionGeneration } from './local-structured-session-tabs-sync/inventory-generation-fence'
+import {
+  captureHostSessionTabClosePlacement,
+  type HostSessionTabClosePlacement
+} from './host-session-tab-close-placement'
 
 const ledger = new SessionTabCloseLedger()
 // The pairing each partition was recorded under, so an ended pairing's closes can be found.
@@ -17,7 +23,12 @@ function closePartition(owner: WebSessionIntentOwner, worktreeId: string): strin
   return `${webSessionIntentOwnerKey(owner)}\0${worktreeId}`
 }
 
-export type WebSessionCloseIntentTicket = SessionTabCloseTicket
+export type WebSessionCloseIntentTicket = SessionTabCloseTicket & {
+  owner: WebSessionIntentOwner
+  worktreeId: string
+  localGeneration: number
+  placement?: HostSessionTabClosePlacement
+}
 
 export function beginWebSessionCloseIntent(
   owner: WebSessionIntentOwner,
@@ -34,7 +45,28 @@ export function beginWebSessionCloseIntent(
   if (pairingRevision !== undefined) {
     ownerByPartition.set(partition, { environmentId: owner.environmentId, pairingRevision })
   }
-  return ledger.begin(partition, hostTabId, now)
+  const ticket = ledger.begin(partition, hostTabId, now)
+  if (!ticket) {
+    return null
+  }
+  let placement: HostSessionTabClosePlacement | undefined
+  try {
+    placement = captureHostSessionTabClosePlacement(
+      useAppStore.getState(),
+      owner.environmentId,
+      worktreeId,
+      hostTabId
+    )
+  } catch (error) {
+    console.warn('[session-tabs] could not capture closed tab position', error)
+  }
+  return {
+    ...ticket,
+    owner: { environmentId: owner.environmentId, pairingRevision },
+    worktreeId,
+    localGeneration: localStructuredSessionGeneration(),
+    placement
+  }
 }
 
 export function settleWebSessionCloseIntent(
@@ -51,9 +83,10 @@ export function filterWebSessionCloseIntents<T extends { id: string }>(
   worktreeId: string,
   tabs: readonly T[],
   topLevelIdOf: (tab: T) => string,
-  now: number
+  now: number,
+  confirmOmission: boolean | ((closedId: string) => boolean) = true
 ): readonly T[] {
-  return ledger.filter(closePartition(owner, worktreeId), tabs, topLevelIdOf, now)
+  return ledger.filter(closePartition(owner, worktreeId), tabs, topLevelIdOf, now, confirmOmission)
 }
 
 export function isWebSessionCloseIntentPending(
@@ -78,7 +111,7 @@ export function clearEndedPairingWebSessionCloseIntents(): void {
     if (getRuntimeEnvironmentRevision(owner.environmentId) !== owner.pairingRevision) {
       ledger.clearPartition(partition)
     }
-    if (!ledger.hasPending(partition)) {
+    if (!ledger.hasPending(partition, Date.now())) {
       ownerByPartition.delete(partition)
     }
   }

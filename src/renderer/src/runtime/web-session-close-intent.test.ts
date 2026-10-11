@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type * as RuntimeEnvironmentRevision from './runtime-environment-revision'
 import {
   beginWebSessionCloseIntent,
   clearEndedPairingWebSessionCloseIntents,
@@ -16,7 +17,8 @@ import {
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 
 const revisions = vi.hoisted(() => new Map<string, number>())
-vi.mock('./runtime-environment-revision', () => ({
+vi.mock('./runtime-environment-revision', async (importOriginal) => ({
+  ...(await importOriginal<typeof RuntimeEnvironmentRevision>()),
   getRuntimeEnvironmentRevision: (environmentId: string) => revisions.get(environmentId)
 }))
 
@@ -27,6 +29,7 @@ const topLevel = (tab: { id: string; parentTabId?: string }): string => tab.pare
 afterEach(() => {
   resetWebSessionCloseIntentForTests()
   revisions.clear()
+  vi.restoreAllMocks()
 })
 
 describe('web session tab close records', () => {
@@ -71,6 +74,7 @@ describe('web session tab close records', () => {
   })
 
   it('drops only the closes of pairings that ended', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000)
     revisions.set('runtime-a', 1)
     revisions.set('runtime-b', 1)
     const otherOwner = { environmentId: 'runtime-b', pairingRevision: 1 }

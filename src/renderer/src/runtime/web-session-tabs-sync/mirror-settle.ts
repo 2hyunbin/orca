@@ -7,6 +7,7 @@ import {
 import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 import { getWebSessionTabsTrackingGeneration } from './tracking-lifecycle'
 import type { WebSessionTabsSnapshotDecision } from './tracking-decisions'
+import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 
 /** Proof that the store patch committed and its host evidence may be settled. */
 export type HostSessionMirrorSettle = () => void
@@ -15,6 +16,7 @@ export type HostSessionMirrorPatchFrame = {
   environmentId: string
   worktreeId: string
   decision: WebSessionTabsSnapshotDecision
+  source?: RuntimeMobileSessionTabsResult
   expectedEnvironmentConnectionGeneration?: number
   expectedEnvironmentPairingRevision?: number
   expectedTrackingGeneration?: number

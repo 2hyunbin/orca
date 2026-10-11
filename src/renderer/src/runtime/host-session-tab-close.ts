@@ -3,6 +3,8 @@ import {
   type SessionTabCloseOutcome
 } from '../../../shared/session-tab-close-ledger'
 import type { RuntimeClientTarget } from './runtime-rpc-client'
+import { sessionTabCloseAnswerOutcome } from '../../../shared/session-tab-close-answer'
+import { reprojectHostSessionTabSource } from './host-session-tab-source-projection'
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
 import {
   settleWebSessionCloseIntent,
@@ -20,6 +22,7 @@ export type HostSessionTabCloseResult = 'applied' | 'unknown-tab' | 'failed'
 export type HostSessionTabCloseAnswer = {
   refused?: boolean
   snapshotRepublished?: boolean
+  refusalReason?: string
 }
 
 const CLOSE_UNANSWERED = Symbol('close-unanswered')
@@ -71,7 +74,7 @@ export function rereadHostSessionTabs(
  */
 export async function settleHostSessionTabClose(args: {
   tickets: () => readonly WebSessionCloseIntentTicket[]
-  close: Promise<HostSessionTabCloseAnswer | undefined>
+  close: Promise<unknown>
   /** Never rejects. */
   reread: (acceptCurrent: boolean) => Promise<void>
   /** For hosts whose lists travel apart from the close answer: read once after an accepted close. */
@@ -83,14 +86,7 @@ export async function settleHostSessionTabClose(args: {
   let result: HostSessionTabCloseResult
   try {
     const answer = await withinCloseBound(args.close)
-    // Why: a refusal that republished means the host kept a live tab, so it must show again; one
-    // that did not (a dead leaf) stays hidden until the host's list drops it. Either way the host
-    // heard the close; only an unanswered close is a "not now".
-    outcome =
-      answer === CLOSE_UNANSWERED ||
-      (answer?.refused === true && answer.snapshotRepublished === true)
-        ? 'failed'
-        : 'closed'
+    outcome = answer === CLOSE_UNANSWERED ? 'failed' : sessionTabCloseAnswerOutcome(answer)
     result = answer === CLOSE_UNANSWERED ? 'failed' : 'applied'
   } catch (error) {
     const hostHasNoSuchTab =
@@ -105,7 +101,14 @@ export async function settleHostSessionTabClose(args: {
   }
   const now = Date.now()
   for (const ticket of args.tickets()) {
-    settleWebSessionCloseIntent(ticket, outcome, now)
+    const settled = settleWebSessionCloseIntent(ticket, outcome, now)
+    if (settled && outcome === 'failed') {
+      try {
+        reprojectHostSessionTabSource(ticket)
+      } catch (error) {
+        console.warn('[session-tabs] could not restore closed tab from its host source', error)
+      }
+    }
   }
   if (outcome === 'failed') {
     // Not awaited: the caller's own failure handling must not wait on a read of an unreachable host.

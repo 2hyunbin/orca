@@ -27,6 +27,7 @@ import {
 } from './host-session-tab-close'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import { captureWebSessionIntentOwner } from './web-runtime-session-environment'
+import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
 import {
   callRuntimeRpc,
   ensureRuntimeEnvironmentCompatible,
@@ -38,8 +39,19 @@ type HostTabCloseSettlement = PromiseSettledResult<HostSessionTabCloseAnswer | u
 
 const inFlightRetirements = new Map<string, Promise<HostTabCloseSettlement>>()
 
-function retirementKey(target: RuntimeClientTarget, worktreeId: string, sessionId: string): string {
-  return `${target.kind}:${target.kind === 'environment' ? target.environmentId : 'local'}:${worktreeId}:${sessionId}`
+function retirementKey(
+  target: RuntimeClientTarget,
+  worktreeId: string,
+  sessionId: string,
+  pairingRevision: number | undefined
+): string {
+  return JSON.stringify([
+    target.kind,
+    target.kind === 'environment' ? target.environmentId : 'local',
+    pairingRevision,
+    worktreeId,
+    sessionId
+  ])
 }
 
 /**
@@ -52,8 +64,17 @@ export function retireStructuredAgentSessionTab(args: {
   sessionId: string
   onError?: (error: unknown) => void
 }): Promise<HostTabCloseSettlement> {
+  const expectedEnvironmentPairingRevision =
+    args.target.kind === 'environment'
+      ? getRuntimeEnvironmentRevision(args.target.environmentId)
+      : undefined
   retireStructuredAgentSessionReadOwner(args.sessionId, args.target)
-  const key = retirementKey(args.target, args.worktreeId, args.sessionId)
+  const key = retirementKey(
+    args.target,
+    args.worktreeId,
+    args.sessionId,
+    expectedEnvironmentPairingRevision
+  )
   const existing = inFlightRetirements.get(key)
   if (existing) {
     return existing
@@ -66,11 +87,16 @@ export function retireStructuredAgentSessionTab(args: {
     }
   }
   const hostTabId = `agent-session:${args.sessionId}`
-  void closeStructuredAgentSession(args.target, args.sessionId).catch(report)
+  const closeOptions = { expectedEnvironmentPairingRevision }
+  void (
+    args.target.kind === 'environment'
+      ? closeStructuredAgentSession(args.target, args.sessionId, closeOptions)
+      : closeStructuredAgentSession(args.target, args.sessionId)
+  ).catch(report)
   let gaveUp = false
   const sendHostTabClose = async (): Promise<HostSessionTabCloseAnswer | undefined> => {
     if (args.target.kind === 'environment') {
-      await ensureRuntimeEnvironmentCompatible(args.target.environmentId)
+      await ensureRuntimeEnvironmentCompatible(args.target.environmentId, closeOptions)
     }
     // Why: a close the window already gave up on must not be sent late (after a slow
     // compatibility check), or the chat it showed again would vanish again.
@@ -82,7 +108,11 @@ export function retireStructuredAgentSessionTab(args: {
       args.target,
       'session.tabs.close',
       { worktree: toRuntimeWorktreeSelector(args.worktreeId), tabId: hostTabId, reason: 'user' },
-      { timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS, skipCompatibilityCheck: true }
+      {
+        timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS,
+        skipCompatibilityCheck: true,
+        expectedEnvironmentPairingRevision
+      }
     )
   }
   const promise: Promise<HostTabCloseSettlement> = withLocalSessionTabCloseOwner(

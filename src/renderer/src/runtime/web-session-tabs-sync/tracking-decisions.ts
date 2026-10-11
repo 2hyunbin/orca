@@ -3,6 +3,7 @@ import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-
 import {
   latestSessionTabsSnapshotByWorktree,
   replayableSessionTabsSnapshotByWorktree,
+  sessionTabsRuntimeHistoryByEnvironment,
   type SessionTabsStreamEvent
 } from './state'
 import {
@@ -22,6 +23,7 @@ import { clearWebSessionTabsTrackingForWorktree } from './tracking-lifecycle'
 import { queueAcceptedWebSessionTerminalSnapshot } from '../web-session-terminal-handle-events'
 import { shouldAutoCreateInitialTerminal } from '@/components/terminal/initial-terminal'
 import { hostSnapshotAffirmsWorktreeContents } from '../host-session-snapshot-authority'
+import { getRuntimeEnvironmentRevision } from '../runtime-environment-revision'
 
 /** A frame's fate, paired with whether that fate is host evidence for the worktree. */
 export type WebSessionTabsSnapshotDecision = {
@@ -123,7 +125,20 @@ export function decideWebSessionTabsSnapshot(
   }
   latestSessionTabsSnapshotByWorktree.set(key, {
     publicationEpoch: snapshot.publicationEpoch,
-    snapshotVersion: snapshot.snapshotVersion
+    snapshotVersion: snapshot.snapshotVersion,
+    runtimeId:
+      runtimeId ?? sessionTabsRuntimeHistoryByEnvironment.get(environmentId)?.current ?? undefined,
+    ...(currentSharesPublicationLineage &&
+    current?.pairingRevision === getRuntimeEnvironmentRevision(environmentId) &&
+    current?.sourceRuntimeId ===
+      (sessionTabsRuntimeHistoryByEnvironment.get(environmentId)?.current ?? undefined)
+      ? {
+          source: current?.source,
+          pairingRevision: current?.pairingRevision,
+          sourceRuntimeId: current?.sourceRuntimeId,
+          sourceReceivedFrame: current?.sourceReceivedFrame
+        }
+      : {})
   })
   trackWebSessionTabsWorktree(environmentId, snapshot.worktree)
   recordAcceptedWebSessionTabsEnvironment(environmentId, snapshot)

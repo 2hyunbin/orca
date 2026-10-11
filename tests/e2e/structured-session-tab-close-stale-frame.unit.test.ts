@@ -9,8 +9,13 @@
 
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type * as RuntimeRpcClient from '../../src/renderer/src/runtime/runtime-rpc-client'
+import { clearRuntimeCompatibilityCacheForTests } from '../../src/renderer/src/runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../src/renderer/src/runtime/runtime-client-target'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
+import {
+  MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION,
+  RUNTIME_PROTOCOL_VERSION
+} from '../../src/shared/protocol-version'
 import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
 import { setStructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import { useAppStore } from '../../src/renderer/src/store'
@@ -40,12 +45,14 @@ type ProcessBoundary = {
   closeHeld: Promise<void> | null
   // A paired server's answer to the close.
   pairedClose: Promise<void> | null
+  pairedCloseReached: boolean
 }
 
 const bridge = vi.hoisted((): ProcessBoundary => ({
   runtime: null,
   closeHeld: null,
-  pairedClose: null
+  pairedClose: null,
+  pairedCloseReached: false
 }))
 
 vi.mock('../../src/renderer/src/runtime/runtime-rpc-client', async (importOriginal) => {
@@ -58,6 +65,7 @@ vi.mock('../../src/renderer/src/runtime/runtime-rpc-client', async (importOrigin
       params: { worktree: string; tabId: string; reason?: 'user' }
     ) => {
       if (target.kind === 'environment' && method === 'session.tabs.close') {
+        bridge.pairedCloseReached = true
         return bridge.pairedClose
       }
       // The window's re-read of one worktree after a close the host could not do.
@@ -160,10 +168,12 @@ afterEach(() => {
   bridge.runtime = null
   bridge.closeHeld = null
   bridge.pairedClose = null
+  bridge.pairedCloseReached = false
   useAppStore.setState(initialStoreState, true)
   resetLocalStructuredSessionVersionForTests()
   resetWebSessionTabsSnapshotFreshnessForTests()
   resetWebSessionCloseIntentForTests()
+  clearRuntimeCompatibilityCacheForTests()
   vi.unstubAllGlobals()
 })
 
@@ -214,6 +224,19 @@ describe('a host frame published while a chat tab close is in flight', () => {
 
   it("does not bring a paired server's closed chat back either", async () => {
     const SERVER = 'server-1'
+    vi.stubGlobal('api', {
+      runtimeEnvironments: {
+        call: async () => ({
+          id: 'status',
+          ok: true,
+          result: {
+            runtimeProtocolVersion: RUNTIME_PROTOCOL_VERSION,
+            minCompatibleRuntimeClientVersion: MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION
+          },
+          _meta: { runtimeId: SERVER }
+        })
+      }
+    })
     const frame = (snapshotVersion: number): RuntimeMobileSessionTabsResult => ({
       worktree: WORKTREE,
       publicationEpoch: 'server-epoch',
@@ -264,6 +287,8 @@ describe('a host frame published while a chat tab close is in flight', () => {
     useAppStore.getState().closeUnifiedTab(chatB!.id)
     const after = before.filter((id) => id !== chatB!.id)
     expect(strip()).toEqual(after)
+
+    await vi.waitFor(() => expect(bridge.pairedCloseReached).toBe(true))
 
     // The server has not handled the close yet, so its next frame still lists chat-b.
     applyServerFrame(frame(2))
