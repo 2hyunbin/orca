@@ -66,7 +66,7 @@ describe('new workspace project targets', () => {
       displayName: 'orca',
       path: '/src/orca',
       executionHostId: 'runtime:20269ff3-60aa-4e79-a581-513a3f8e394b'
-    }
+    } as const
     const labels = new Map([[server.executionHostId, 'scratch-server']] as const)
     expect(getNewWorkspaceRunTarget(server, 'darwin', labels)).toEqual({
       hostId: server.executionHostId,
