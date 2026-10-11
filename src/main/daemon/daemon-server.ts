@@ -51,7 +51,10 @@ export class DaemonServer {
     this.log = options.log ?? createNoopDaemonFileLog()
     this.host = new TerminalHost({
       spawnSubprocess: options.spawnSubprocess,
-      spawnGate: new TerminalSpawnGate({ log: (event, details) => this.log.log(event, details) }),
+      spawnGate: new TerminalSpawnGate({
+        log: (event, details) => this.log.log(event, details),
+        mode: options.spawnAdmission ?? 'observe'
+      }),
       reportReadinessEvent: (event, details) => this.log.log(event, details),
       onSessionReaped: (sessionId) => {
         this.attachments.release(sessionId)

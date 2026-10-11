@@ -44,6 +44,7 @@ export async function startOrcadDaemon(
   // session dies. An orcad daemon must survive its SSH session ending — that is the point.
   const policy = {
     macosLoginSessionWatch: false,
+    spawnAdmission: 'enforce' as const,
     // A freshly uploaded node.exe plus conpty can take well over 10 s on its first, AV-scanned exec.
     ...(platform === 'win32' ? { startupTimeoutMs: WINDOWS_DAEMON_STARTUP_TIMEOUT_MS } : {})
   }

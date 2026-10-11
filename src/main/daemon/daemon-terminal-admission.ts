@@ -14,6 +14,7 @@ import type { DaemonStreamDataBatcher } from './daemon-stream-data-batcher'
 import type { TerminalHistorySeedTransferRegistry } from './terminal-history-seed-transfer-registry'
 import type { CreateOrAttachOptions, CreateOrAttachResult, TerminalHost } from './terminal-host'
 import { isTuiAgent } from '../../shared/tui-agent-config'
+import { isSpawnIntent } from '../../shared/host-spawn-admission'
 import { parsePtyStartupIngressIntent } from '../../shared/pty-startup-ingress'
 import {
   isAgentSessionExecutionClaim,
@@ -128,7 +129,7 @@ export class DaemonTerminalAdmission {
         ...(payload.agentSessionEnsure ? { agentSessionEnsure: payload.agentSessionEnsure } : {}),
         spawnAdmission: {
           clientId,
-          declaredIntent: null,
+          declaredIntent: isSpawnIntent(payload.spawnIntent) ? payload.spawnIntent : null,
           deadlineAt: resolveSpawnAdmissionDeadline(payload.cancelAfterMs)
         },
         isCanceled: () => spawnPreparation?.canceled === true,

@@ -109,16 +109,30 @@ export async function createOrAttachTerminalSession(
   deps.killedTombstones.clearForCreate(opts.sessionId)
   const size = normalizePtySize(opts.cols, opts.rows)
   const wslDistro = resolveWslSessionContext(opts)?.distro
-  const lease = deps.spawnGate?.admit({
-    clientId: opts.spawnAdmission?.clientId ?? 'in-process',
-    declaredIntent: opts.spawnAdmission?.declaredIntent ?? null,
-    hasAgentSessionClaim: opts.agentSessionEnsure !== undefined,
-    hasHistorySeed: (opts.historySeedChunks?.length ?? 0) > 0,
-    deadlineAt: opts.spawnAdmission?.deadlineAt ?? Number.POSITIVE_INFINITY
-  })
+  const sessionId = opts.sessionId
+  let lease = deps.spawnGate?.admit(
+    {
+      clientId: opts.spawnAdmission?.clientId ?? 'in-process',
+      declaredIntent: opts.spawnAdmission?.declaredIntent ?? null,
+      hasAgentSessionClaim: opts.agentSessionEnsure !== undefined,
+      hasHistorySeed: (opts.historySeedChunks?.length ?? 0) > 0,
+      deadlineAt: opts.spawnAdmission?.deadlineAt ?? Number.POSITIVE_INFINITY
+    },
+    opts.cancelSignal
+      ? { signal: opts.cancelSignal, error: () => new TerminalAttachCanceledError(sessionId) }
+      : undefined
+  )
+  const paced = lease instanceof Promise
+  if (lease instanceof Promise) {
+    lease = await lease
+  }
   try {
-    return await spawnAndPublishSession(opts, deps, { size, wslDistro }, (sessionId, isAlive) =>
-      lease?.commit(sessionId, isAlive)
+    if (paced) {
+      // Why: a paced wait can outlast the host's shutdown fence or the caller's cancellation.
+      deps.assertCreateAllowed()
+    }
+    return await spawnAndPublishSession(opts, deps, { size, wslDistro }, (publishedId, isAlive) =>
+      lease?.commit(publishedId, isAlive)
     )
   } finally {
     lease?.abandon()

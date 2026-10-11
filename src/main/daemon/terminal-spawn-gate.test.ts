@@ -2,7 +2,8 @@ import './mock-descendant-sweep'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { SubprocessHandle } from './session-subprocess-handle'
 import { TerminalHost, type TerminalHostOptions } from './terminal-host'
-import { TerminalSpawnGate } from './terminal-spawn-gate'
+import { TerminalSpawnGate, type TerminalSpawnAdmissionMode } from './terminal-spawn-gate'
+import type { SpawnIntent } from '../../shared/host-spawn-admission'
 
 type SpawnSubprocess = TerminalHostOptions['spawnSubprocess']
 
@@ -10,7 +11,7 @@ function stream() {
   return { onData: vi.fn(), onExit: vi.fn() }
 }
 
-describe('TerminalSpawnGate (observe-only)', () => {
+describe('TerminalSpawnGate', () => {
   let host: TerminalHost
   let gate: TerminalSpawnGate
   let log: Mock<(event: string, details: Record<string, unknown>) => void>
@@ -18,6 +19,7 @@ describe('TerminalSpawnGate (observe-only)', () => {
   let spawnSubprocess: Mock<SpawnSubprocess>
   let nextPid: number
   let now: number
+  let useGate: (mode: TerminalSpawnAdmissionMode) => void
 
   beforeEach(() => {
     exits = new Map()
@@ -25,6 +27,10 @@ describe('TerminalSpawnGate (observe-only)', () => {
     now = 0
     log = vi.fn()
     gate = new TerminalSpawnGate({ log, now: () => now })
+    useGate = (mode) => {
+      gate = new TerminalSpawnGate({ log, mode, now: () => Date.now() })
+      host = new TerminalHost({ spawnSubprocess, spawnGate: gate })
+    }
     spawnSubprocess = vi.fn<SpawnSubprocess>(() => {
       const pid = nextPid++
       const handle: SubprocessHandle = {
@@ -48,10 +54,14 @@ describe('TerminalSpawnGate (observe-only)', () => {
   })
 
   afterEach(async () => {
+    vi.useRealTimers()
     await host.dispose()
   })
 
-  function restore(sessionId: string) {
+  function restore(
+    sessionId: string,
+    admission: { declaredIntent?: SpawnIntent; deadlineAt?: number; signal?: AbortSignal } = {}
+  ) {
     return host.createOrAttach({
       sessionId,
       cols: 80,
@@ -72,7 +82,12 @@ describe('TerminalSpawnGate (observe-only)', () => {
           terminalHandle: `term_${sessionId}`
         }
       },
-      spawnAdmission: { clientId: 'client-a', declaredIntent: null, deadlineAt: Infinity },
+      spawnAdmission: {
+        clientId: 'client-a',
+        declaredIntent: admission.declaredIntent ?? null,
+        deadlineAt: admission.deadlineAt ?? Infinity
+      },
+      ...(admission.signal ? { cancelSignal: admission.signal } : {}),
       streamClient: stream()
     })
   }
@@ -83,7 +98,7 @@ describe('TerminalSpawnGate (observe-only)', () => {
     }
 
     expect(spawnSubprocess).toHaveBeenCalledTimes(5)
-    expect(gate.snapshot()).toMatchObject({ liveAutomatic: 5, wouldWait: 2, wouldDefer: 0 })
+    expect(gate.snapshot()).toMatchObject({ liveAutomatic: 5, waited: 2, deferred: 0 })
     expect(log).toHaveBeenCalledWith(
       'spawn-admission-observed',
       expect.objectContaining({ decision: 'wait', charge: 'automatic' })
@@ -172,5 +187,77 @@ describe('TerminalSpawnGate (observe-only)', () => {
     release?.()
     await expect(pending).rejects.toThrow(/canceled/i)
     expect(gate.snapshot()).toMatchObject({ liveAutomatic: 0, inFlight: { automatic: 0 } })
+  })
+
+  describe('enforce', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ now: 0 })
+      useGate('enforce')
+    })
+
+    it('paces an undeclared restore storm to the burst, then one per second', async () => {
+      const results = Array.from({ length: 5 }, (_, i) => restore(`storm-${i}`))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(spawnSubprocess).toHaveBeenCalledTimes(3)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(spawnSubprocess).toHaveBeenCalledTimes(4)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(spawnSubprocess).toHaveBeenCalledTimes(5)
+      await Promise.all(results)
+      expect(gate.snapshot()).toMatchObject({ liveAutomatic: 5, waiting: 0, waited: 2 })
+    })
+
+    it('admits an undeclared restore at its deadline instead of refusing it', async () => {
+      for (let i = 0; i < 3; i++) {
+        await restore(`burst-${i}`)
+      }
+      const late = restore('late', { deadlineAt: 400 })
+      await vi.advanceTimersByTimeAsync(400)
+      await expect(late).resolves.toMatchObject({ isNew: true })
+      expect(spawnSubprocess).toHaveBeenCalledTimes(4)
+    })
+
+    it('tells a declared caller to keep its pane sleeping beyond the live cap', async () => {
+      for (let i = 0; i < 8; i++) {
+        await restore(`live-${i}`, { declaredIntent: 'automatic-restore' })
+        await vi.advanceTimersByTimeAsync(1000)
+      }
+      await expect(restore('ninth', { declaredIntent: 'automatic-restore' })).rejects.toThrow(
+        'terminal_spawn_deferred:live_cap'
+      )
+      expect(spawnSubprocess).toHaveBeenCalledTimes(8)
+
+      exits.get(1000)?.(0)
+      await expect(
+        restore('ninth', { declaredIntent: 'automatic-restore' })
+      ).resolves.toMatchObject({ isNew: true })
+    })
+
+    it('never queues an interactive shell behind a restore storm', async () => {
+      for (let i = 0; i < 3; i++) {
+        await restore(`burst-${i}`)
+      }
+      const waiting = restore('waiting')
+      await expect(
+        host.createOrAttach({ sessionId: 'shell', cols: 80, rows: 24, streamClient: stream() })
+      ).resolves.toMatchObject({ isNew: true })
+      await vi.advanceTimersByTimeAsync(1000)
+      await waiting
+    })
+
+    it('leaves the queue without forking when the caller cancels', async () => {
+      for (let i = 0; i < 3; i++) {
+        await restore(`burst-${i}`)
+      }
+      const controller = new AbortController()
+      const canceled = restore('canceled', { signal: controller.signal })
+      const assertion = expect(canceled).rejects.toThrow(/canceled/i)
+      await vi.advanceTimersByTimeAsync(100)
+      controller.abort()
+      await assertion
+      expect(spawnSubprocess).toHaveBeenCalledTimes(3)
+      expect(gate.snapshot()).toMatchObject({ waiting: 0, inFlight: { automatic: 0 } })
+    })
   })
 })

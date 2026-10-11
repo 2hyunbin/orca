@@ -26,11 +26,43 @@ export type SpawnRequestFacts = {
   deadlineAt: number
 }
 
+export const SPAWN_INTENTS: readonly SpawnIntent[] = [
+  'interactive',
+  'user-resume',
+  'automatic-restore',
+  'automation'
+]
+
+export function isSpawnIntent(value: unknown): value is SpawnIntent {
+  return typeof value === 'string' && SPAWN_INTENTS.some((intent) => intent === value)
+}
+
+export type SpawnDeferralReason = 'paused' | 'live_cap' | 'pressure' | 'deadline'
+
+/** Sent only to requests that declared an intent; the fork never started. */
+export const TERMINAL_SPAWN_DEFERRED_PREFIX = 'terminal_spawn_deferred:'
+/** An undeclared caller at critical pressure; deliberately not a "daemon gone" message,
+ *  which would make the caller replace a healthy daemon. */
+export const TERMINAL_SPAWN_REFUSED_MESSAGE = 'terminal_spawn_refused: host under pressure'
+
+export function parseTerminalSpawnDeferral(message: string): SpawnDeferralReason | null {
+  if (!message.startsWith(TERMINAL_SPAWN_DEFERRED_PREFIX)) {
+    return null
+  }
+  const reason = message.slice(TERMINAL_SPAWN_DEFERRED_PREFIX.length)
+  return reason === 'paused' ||
+    reason === 'live_cap' ||
+    reason === 'pressure' ||
+    reason === 'deadline'
+    ? reason
+    : null
+}
+
 export type SpawnAdmissionDecision =
   | { kind: 'admit'; charge: SpawnCharge }
   /** `retryAt` null means "until a slot is released". */
   | { kind: 'wait'; charge: SpawnCharge; retryAt: number | null }
-  | { kind: 'defer'; reason: 'paused' | 'live_cap' | 'pressure' | 'deadline' }
+  | { kind: 'defer'; reason: SpawnDeferralReason }
   | { kind: 'refuse_retryable' }
 
 export type SpawnAdmissionLimits = {
