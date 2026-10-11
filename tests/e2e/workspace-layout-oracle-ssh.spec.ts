@@ -136,7 +136,7 @@ async function connectFolderOnlyTarget(
           parentPath: folderPath,
           connectionId: added.target.id
         })
-        await store.getState().fetchProjectGroups()
+        await store.getState().fetchProjectGroups({ runtimeEnvironmentId: null })
         const workspace = await store.getState().createFolderWorkspace({
           projectGroupId: group.id,
           name: 'Layout oracle SSH folder',

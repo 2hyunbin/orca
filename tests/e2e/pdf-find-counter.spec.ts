@@ -129,7 +129,7 @@ test.describe('PDF in a folder workspace', () => {
           parentPath: folderPath,
           createdFrom: 'folder-scan'
         })
-        await state.fetchProjectGroups()
+        await state.fetchProjectGroups({ runtimeEnvironmentId: null })
         const folder = await state.createFolderWorkspace({
           projectGroupId: group.id,
           name: 'PDF documents',

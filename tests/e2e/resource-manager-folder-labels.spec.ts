@@ -31,7 +31,7 @@ for (const theme of ['dark', 'light'] as const) {
             parentPath: folder.folderPath,
             createdFrom: 'folder-scan'
           })
-          await state.fetchProjectGroups()
+          await state.fetchProjectGroups({ runtimeEnvironmentId: null })
           if (!group) {
             throw new Error('Could not create project group')
           }
@@ -93,7 +93,7 @@ test('names a folder terminal recovered from the daemon after restart without an
         parentPath: folderPath,
         createdFrom: 'folder-scan'
       })
-      await state.fetchProjectGroups()
+      await state.fetchProjectGroups({ runtimeEnvironmentId: null })
       if (!group) {
         throw new Error('Could not create project group')
       }
