@@ -97,17 +97,35 @@ describe('workspaceLanding leaves [workspace list, Y] in one host area', () => {
   })
 })
 
+// app/_layout.tsx is a screen of Expo Router's internal navigator, one level above the root stack.
+function asSeenByRootLayout(root: HostStackNavigationState): HostStackNavigationState {
+  return { key: 'internal', index: 0, routes: [{ key: '__root', name: '__root', state: root }] }
+}
+
+// On a cold tap the root layout's own navigation sees the root stack as a stale partial state and
+// hears nothing when it commits; only the container reads and announces the hydrated tree.
+const STALE_ROOT_LAYOUT_VIEW = vi.hoisted(() => ({
+  key: 'internal',
+  index: 0,
+  routes: [{ key: '__root', name: '__root', state: { index: 0, routes: [{ name: 'index' }] } }]
+}))
+
 const navigator = vi.hoisted(() => {
-  const listeners = new Set<() => void>()
-  const state: { current: HostStackNavigationState | undefined } = { current: undefined }
+  const containerListeners = new Set<() => void>()
+  const tree: {
+    ready: boolean
+    root: HostStackNavigationState | undefined
+    rootLayoutView: HostStackNavigationState
+  } = { ready: false, root: undefined, rootLayoutView: STALE_ROOT_LAYOUT_VIEW }
   return {
-    listeners,
-    state,
+    containerListeners,
+    tree,
     dispatch: vi.fn(),
     push: vi.fn(),
     commit(next: HostStackNavigationState) {
-      state.current = next
-      for (const listener of listeners) {
+      tree.ready = true
+      tree.root = next
+      for (const listener of containerListeners) {
         listener()
       }
     }
@@ -116,20 +134,21 @@ const navigator = vi.hoisted(() => {
 
 vi.mock('expo-router', () => ({
   useNavigation: () => ({
+    addListener: () => () => {},
+    dispatch: navigator.dispatch,
+    getState: () => navigator.tree.rootLayoutView
+  }),
+  useNavigationContainerRef: () => ({
     addListener: (_event: 'state', listener: () => void) => {
-      navigator.listeners.add(listener)
-      return () => navigator.listeners.delete(listener)
+      navigator.containerListeners.add(listener)
+      return () => navigator.containerListeners.delete(listener)
     },
     dispatch: navigator.dispatch,
-    getState: () => navigator.state.current
+    getRootState: () => navigator.tree.root,
+    isReady: () => navigator.tree.ready
   }),
   useRouter: () => ({ push: navigator.push, replace: vi.fn() })
 }))
-
-// app/_layout.tsx is a screen of Expo Router's internal navigator, one level above the root stack.
-function asSeenByRootLayout(root: HostStackNavigationState): HostStackNavigationState {
-  return { key: 'internal', index: 0, routes: [{ key: '__root', name: '__root', state: root }] }
-}
 
 let renderer: ReactTestRenderer | null = null
 
@@ -152,8 +171,10 @@ async function tapPush(worktreeId: string): Promise<void> {
 afterEach(() => {
   act(() => renderer?.unmount())
   renderer = null
-  navigator.state.current = undefined
-  navigator.listeners.clear()
+  navigator.tree.ready = false
+  navigator.tree.root = undefined
+  navigator.tree.rootLayoutView = STALE_ROOT_LAYOUT_VIEW
+  navigator.containerListeners.clear()
   navigator.dispatch.mockReset()
   navigator.push.mockReset()
 })
@@ -161,9 +182,6 @@ afterEach(() => {
 describe('a push tap through the notification hook', () => {
   it('on cold start, lands only once the root stack has committed', async () => {
     await tapPush('Y')
-    expect(navigator.dispatch).not.toHaveBeenCalled()
-
-    navigator.commit({ key: 'internal', index: 0, routes: [{ key: '__root', name: '__root' }] })
     expect(navigator.dispatch).not.toHaveBeenCalled()
 
     navigator.commit(asSeenByRootLayout(rootStack(HOME)))
@@ -175,9 +193,11 @@ describe('a push tap through the notification hook', () => {
   })
 
   it('updates the workspace already on screen in place (#20310)', async () => {
-    navigator.state.current = asSeenByRootLayout(
+    navigator.tree.ready = true
+    navigator.tree.root = asSeenByRootLayout(
       rootStack(HOME, hostArea(list('host'), session('X'), session('Y')))
     )
+    navigator.tree.rootLayoutView = navigator.tree.root
     await tapPush('Y')
 
     expect(navigator.dispatch).toHaveBeenCalledExactlyOnceWith({

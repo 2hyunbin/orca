@@ -1,6 +1,7 @@
 export type HostStackNavigationState = Readonly<{
   key?: string
-  index: number
+  // Why optional: a navigator that has not committed yet holds a partial state without one.
+  index?: number
   routeNames?: readonly string[]
   routes: readonly HostStackNavigationRoute[]
 }>
@@ -97,13 +98,17 @@ function hostParamMatches(param: unknown, expectedHostId: string): boolean {
   }
 }
 
+function focusedRoute(state: HostStackNavigationState): HostStackNavigationRoute | undefined {
+  return state.index === undefined ? undefined : state.routes[state.index]
+}
+
 /** The focused `h` route, however deep the caller's navigator sits above it: a screen
  *  inside the root stack sees it at the top, but app/_layout.tsx is itself a screen of
  *  Expo Router's internal navigator, so from there the root stack is one level down. */
 function focusedHostRoute(state: HostStackNavigationState): HostStackNavigationRoute | null {
   let current: HostStackNavigationState | undefined = state
   while (current) {
-    const route: HostStackNavigationRoute | undefined = current.routes[current.index]
+    const route = focusedRoute(current)
     if (!route) {
       return null
     }
@@ -120,7 +125,7 @@ function mountedHostStack(
   expectedHostId: string
 ): { key: string; routeKey: string } | null {
   const hostState = hostContainer.state
-  const hostRoute = hostState?.routes[hostState.index]
+  const hostRoute = hostState && focusedRoute(hostState)
   if (
     !hostState?.key ||
     hostRoute?.name !== '[hostId]/index' ||
@@ -140,7 +145,7 @@ function updateFocusedTarget(
 ): boolean {
   const state = navigation.getState()
   const hostState = state && focusedHostRoute(state)?.state
-  const focused = hostState?.routes[hostState.index]
+  const focused = hostState && focusedRoute(hostState)
   if (
     hostState?.key &&
     focused?.key &&
@@ -273,7 +278,7 @@ function committedRootStack(
     if (isCommittedRootStack(current)) {
       return current
     }
-    current = current.routes[current.index]?.state
+    current = focusedRoute(current)?.state
   }
   return null
 }
