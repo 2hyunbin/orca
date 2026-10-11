@@ -25,15 +25,7 @@ export const MobileRelayHostWorktreesParamsSchema = z
 export type MobileRelayServerWorktreeRow = Record<string, unknown> & { hostId: `runtime:${string}` }
 
 /**
- * The server's own `worktree.ps` rows as the desktop last fetched them. `stale` means this call
- * could not refresh them; rows are never rewritten beyond their host id.
+ * The server's own `worktree.ps` rows as the desktop last fetched them, refreshed when the server
+ * answers; rows are never rewritten beyond their host id.
  */
-export type MobileRelayHostWorktreesResult =
-  | {
-      worktrees: MobileRelayServerWorktreeRow[]
-      totalCount: number
-      truncated: boolean
-      fetchedAt: number
-      stale: boolean
-    }
-  | { worktrees: null }
+export type MobileRelayHostWorktreesResult = { worktrees: MobileRelayServerWorktreeRow[] | null }
