@@ -1,9 +1,10 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { TerminalLayoutCommands } from './terminal/layout/terminal-layout-commands'
 import { sessionIdFromStructuredWorkerIncarnation } from './structured-worker-identity'
 import { observeStructuredWorker } from './rpc/methods/orchestration-structured-worker-lifecycle'
-import { OrcaRuntimeWithApplyMobileDisplayMode } from './orca-runtime-apply-mobile-display-mode'
-import { addListenerToMap } from './orca-runtime-core'
-import { notifyRuntimeListeners, withTimeoutResult } from './runtime-async-boundaries'
+import { OrcaRuntimeWithMarkPtyLivenessUnverifiable } from './orca-runtime-mark-pty-liveness-unverifiable'
+
+import { withTimeoutResult } from './runtime-async-boundaries'
 import type { TerminalExitCause } from '../../shared/terminal-exit-cause'
 import {
   describeTerminalExitCause,
@@ -26,29 +27,17 @@ import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { buildOrchestrationTaskDisplayMetadata } from '../../shared/orchestration-task-display'
 import { LOCAL_EXECUTION_HOST_ID, toSshExecutionHostId } from '../../shared/execution-host'
 
-export class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRuntimeWithApplyMobileDisplayMode {
+export class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRuntimeWithMarkPtyLivenessUnverifiable {
   subscribeToTerminalResize(
-    ptyId: string,
-    listener: (event: {
-      cols: number
-      rows: number
-      displayMode: string
-      reason: string
-      seq?: number
-    }) => void
-  ): () => void {
-    return addListenerToMap(this.resizeListeners, ptyId, listener)
+    ...args: Parameters<TerminalLayoutCommands['subscribeToTerminalResize']>
+  ): ReturnType<TerminalLayoutCommands['subscribeToTerminalResize']> {
+    return this.terminalLayout.commands.subscribeToTerminalResize(...args)
   }
 
   protected notifyTerminalResize(
-    ptyId: string,
-    event: { cols: number; rows: number; displayMode: string; reason: string; seq?: number }
-  ): void {
-    const listeners = this.resizeListeners.get(ptyId)
-    if (!listeners) {
-      return
-    }
-    notifyRuntimeListeners(listeners, (listener) => listener(event), 'pty-resize')
+    ...args: Parameters<TerminalLayoutCommands['notifyTerminalResize']>
+  ): ReturnType<TerminalLayoutCommands['notifyTerminalResize']> {
+    return this.terminalLayout.commands.notifyTerminalResize(...args)
   }
 
   // Why: Section 7.2 — the runtime detects agent exit directly and updates
@@ -221,5 +210,95 @@ export class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRuntimeWithApp
       }
       return this.adoptTerminalOrphansFromInventoryUnderMutation(request, workspace, inventory)
     })
+  }
+
+  protected applyLayout(
+    ...args: Parameters<TerminalLayoutCommands['applyLayout']>
+  ): ReturnType<TerminalLayoutCommands['applyLayout']> {
+    return this.terminalLayout.commands.applyLayout(...args)
+  }
+
+  setMobileDisplayMode(
+    ...args: Parameters<TerminalLayoutCommands['setMobileDisplayMode']>
+  ): ReturnType<TerminalLayoutCommands['setMobileDisplayMode']> {
+    return this.terminalLayout.commands.setMobileDisplayMode(...args)
+  }
+
+  getMobileDisplayMode(
+    ...args: Parameters<TerminalLayoutCommands['getMobileDisplayMode']>
+  ): ReturnType<TerminalLayoutCommands['getMobileDisplayMode']> {
+    return this.terminalLayout.commands.getMobileDisplayMode(...args)
+  }
+
+  isMobileSubscriberActive(
+    ...args: Parameters<TerminalLayoutCommands['isMobileSubscriberActive']>
+  ): ReturnType<TerminalLayoutCommands['isMobileSubscriberActive']> {
+    return this.terminalLayout.commands.isMobileSubscriberActive(...args)
+  }
+
+  updateMobileSubscriberViewport(
+    ...args: Parameters<TerminalLayoutCommands['updateMobileSubscriberViewport']>
+  ): ReturnType<TerminalLayoutCommands['updateMobileSubscriberViewport']> {
+    return this.terminalLayout.commands.updateMobileSubscriberViewport(...args)
+  }
+
+  handleMobileSubscribe(
+    ...args: Parameters<TerminalLayoutCommands['handleMobileSubscribe']>
+  ): ReturnType<TerminalLayoutCommands['handleMobileSubscribe']> {
+    return this.terminalLayout.commands.handleMobileSubscribe(...args)
+  }
+
+  protected handleMobileSubscribeInternal(
+    ...args: Parameters<TerminalLayoutCommands['handleMobileSubscribeInternal']>
+  ): ReturnType<TerminalLayoutCommands['handleMobileSubscribeInternal']> {
+    return this.terminalLayout.commands.handleMobileSubscribeInternal(...args)
+  }
+
+  handleMobileUnsubscribe(
+    ...args: Parameters<TerminalLayoutCommands['handleMobileUnsubscribe']>
+  ): ReturnType<TerminalLayoutCommands['handleMobileUnsubscribe']> {
+    return this.terminalLayout.commands.handleMobileUnsubscribe(...args)
+  }
+
+  applyMobileDisplayMode(
+    ...args: Parameters<TerminalLayoutCommands['applyMobileDisplayMode']>
+  ): ReturnType<TerminalLayoutCommands['applyMobileDisplayMode']> {
+    return this.terminalLayout.commands.applyMobileDisplayMode(...args)
+  }
+
+  onExternalPtyResize(
+    ...args: Parameters<TerminalLayoutCommands['onExternalPtyResize']>
+  ): ReturnType<TerminalLayoutCommands['onExternalPtyResize']> {
+    return this.terminalLayout.commands.onExternalPtyResize(...args)
+  }
+
+  recordRendererGeometry(
+    ...args: Parameters<TerminalLayoutCommands['recordRendererGeometry']>
+  ): ReturnType<TerminalLayoutCommands['recordRendererGeometry']> {
+    return this.terminalLayout.commands.recordRendererGeometry(...args)
+  }
+
+  getLastRendererSize(
+    ...args: Parameters<TerminalLayoutCommands['getLastRendererSize']>
+  ): ReturnType<TerminalLayoutCommands['getLastRendererSize']> {
+    return this.terminalLayout.commands.getLastRendererSize(...args)
+  }
+
+  protected refreshRendererGeometry(
+    ...args: Parameters<TerminalLayoutCommands['refreshRendererGeometry']>
+  ): ReturnType<TerminalLayoutCommands['refreshRendererGeometry']> {
+    return this.terminalLayout.commands.refreshRendererGeometry(...args)
+  }
+
+  isResizeSuppressed(
+    ...args: Parameters<TerminalLayoutCommands['isResizeSuppressed']>
+  ): ReturnType<TerminalLayoutCommands['isResizeSuppressed']> {
+    return this.terminalLayout.commands.isResizeSuppressed(...args)
+  }
+
+  protected suppressResizesForMs(
+    ...args: Parameters<TerminalLayoutCommands['suppressResizesForMs']>
+  ): ReturnType<TerminalLayoutCommands['suppressResizesForMs']> {
+    return this.terminalLayout.commands.suppressResizesForMs(...args)
   }
 }

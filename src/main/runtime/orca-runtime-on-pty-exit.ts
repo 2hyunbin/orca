@@ -124,11 +124,7 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
         0
       advertisedUrlWatcher.unbindPty(ptyId)
       // Clean up new mobile state for this PTY
-      this.mobileSubscribers.delete(ptyId)
-      this.terminalViewSubscribers.clearSubscribers(ptyId)
-      this.mobileDisplayModes.delete(ptyId)
-      this.resizeListeners.delete(ptyId)
-      this.lastRendererSizes.delete(ptyId)
+      this.terminalLayout.commands.clearPtyMobilePresence(ptyId)
       this.recentPtyOutputById.delete(ptyId)
       this.setupCompletionTokenByPtyId.delete(ptyId)
       this.clearWaitBlockedCheckState(ptyId)
@@ -164,10 +160,7 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
       // already-queued applyLayout work for this ptyId will run, but every
       // applyLayout re-checks `layouts.has(ptyId)` (or fresh-subscribe) and
       // short-circuits with `pty-exited`.
-      this.layouts.delete(ptyId)
-      this.layoutQueues.delete(ptyId)
-      this.freshSubscribeGuard.delete(ptyId)
-      this.cancelPendingDriverMutations(ptyId)
+      this.terminalLayout.commands.retirePtyLayoutQueue(ptyId)
       // Why: a cold restore can respawn under the same session id within the
       // delayed-Enter window; the armed Enter would inject \r into the
       // replacement and stamp rows it never received.
@@ -187,17 +180,12 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
         }
       }
 
-      if (this.terminalFitOverrides.has(ptyId)) {
-        this.terminalFitOverrides.delete(ptyId)
-        this.notifier?.terminalFitOverrideChanged(ptyId, 'desktop-fit', 0, 0)
-        this.notifyFitOverrideListeners(ptyId, 'desktop-fit', 0, 0)
-      }
+      this.terminalLayout.commands.releaseExitedPtyFitOverride(ptyId)
       // Why: clear driver state and notify the renderer so any lock banner on
       // this dead pane unmounts. Without this, the pane shows a stuck banner
       // until tab teardown, and `getDriver(deadPtyId)` would keep returning a
       // stale `mobile{X}` to any caller that hasn't yet seen the exit IPC.
-      this.terminalDrivers.clear(ptyId)
-      this.remoteDesktopFloor.clearPty(ptyId)
+      this.terminalLayout.commands.clearExitedPtyFloors(ptyId)
       this.disposeHeadlessTerminal(ptyId)
       if (processDeathCertified) {
         // The bounded verdict register also fences late graphs after the PTY record was pruned.

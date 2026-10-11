@@ -31,7 +31,7 @@ export function advancePtyLifecycleGeneration(
   output.host.agentPromptExplicitStatusFloorByPtyId.set(ptyId, Date.now())
   output.host.legacyWorkerRecovery.deleteRecoveredPty(ptyId)
   // Why: a respawn under the same session id needs its own subscriber-driven attach.
-  output.host.terminalViewSubscribers.resetGeneration(ptyId)
+  output.host.resetTerminalViewGeneration(ptyId)
   // Why: a provider response belongs to the process generation that issued
   // it; a respawn must neither reuse its frame nor join its in-flight call.
   output.providerBufferAcquisitionsByPtyId.delete(ptyId)

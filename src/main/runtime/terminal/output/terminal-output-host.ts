@@ -19,7 +19,6 @@ import type { OpenCodeRunLifetimeStatus } from '../../opencode-run-lifetime-stat
 import type { OrchestrationMailboxPointerDelivery } from '../../orchestration/mailbox-pointer-delivery'
 import type { RuntimePtyForegroundAgent } from '../../runtime-pty-foreground-agent'
 import type { RuntimeTerminalStreamConsumers } from '../../runtime-terminal-stream-consumers'
-import type { RuntimeTerminalViewSubscribers } from '../../runtime-terminal-view-subscribers'
 
 export type TerminalOutputHost = TerminalOutputRuntimeReentry & {
   readonly agentPromptExplicitStatusFloorByPtyId: Map<string, number>
@@ -70,7 +69,7 @@ export type TerminalOutputHost = TerminalOutputRuntimeReentry & {
   readonly reconcileAgentStatusForEndedProcessFn: ((paneKeys: Iterable<string>) => void) | null
   readonly store: Pick<RuntimeStore, 'getSettings'> | null
   readonly terminalStreamConsumers: Pick<RuntimeTerminalStreamConsumers, 'publish'>
-  readonly terminalViewSubscribers: Pick<RuntimeTerminalViewSubscribers, 'resetGeneration'>
+  resetTerminalViewGeneration(ptyId: string): void
   readonly stopRequestedPtyIds: Set<string>
   readonly wslDistroByPtyId: Map<string, string>
   readonly graphSequence: number
@@ -163,7 +162,6 @@ type LazyHostField =
   | 'reconcileAgentStatusForEndedProcessFn'
   | 'store'
   | 'terminalStreamConsumers'
-  | 'terminalViewSubscribers'
   | 'stopRequestedPtyIds'
   | 'wslDistroByPtyId'
   | 'graphSequence'
@@ -233,9 +231,6 @@ export function createTerminalOutputHost(
     },
     get terminalStreamConsumers() {
       return dependencies.terminalStreamConsumers()
-    },
-    get terminalViewSubscribers() {
-      return dependencies.terminalViewSubscribers()
     },
     get stopRequestedPtyIds() {
       return dependencies.stopRequestedPtyIds()

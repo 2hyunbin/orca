@@ -1,3 +1,4 @@
+import { getTerminalLayoutStateForTest } from '../terminal/layout/terminal-layout-test-fixture'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -77,7 +78,7 @@ vi.mock('../../git/worktree', () => {
 /** Exposes the per-terminal phone seats the runtime keeps behind a protected map. */
 class SeatObservableRuntime extends OrcaRuntimeService {
   seatClientIds(ptyId: string): string[] {
-    return [...(this.mobileSubscribers.get(ptyId)?.keys() ?? [])]
+    return [...(getTerminalLayoutStateForTest(this).mobileSubscribers.get(ptyId)?.keys() ?? [])]
   }
 }
 

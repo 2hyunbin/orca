@@ -1,3 +1,7 @@
+import {
+  getTerminalLayoutStateForTest,
+  getTerminalLayoutDriversForTest
+} from './terminal/layout/terminal-layout-test-fixture'
 /**
  * Integration tests for the server-authoritative mobile subscribe lifecycle.
  */
@@ -90,17 +94,17 @@ const store = {
 
 /** Reclaim clears protected retention maps that no public reader exposes. */
 class ObservableRuntime extends OrcaRuntimeService {
-  get restoreTimers(): typeof this.pendingRestoreTimers {
-    return this.pendingRestoreTimers
+  get restoreTimers() {
+    return getTerminalLayoutStateForTest(this).pendingRestoreTimers
   }
-  get softLeavers(): typeof this.pendingSoftLeavers {
-    return this.pendingSoftLeavers
+  get softLeavers() {
+    return getTerminalLayoutStateForTest(this).pendingSoftLeavers
   }
-  get fitOverrides(): typeof this.terminalFitOverrides {
-    return this.terminalFitOverrides
+  get fitOverrides() {
+    return getTerminalLayoutStateForTest(this).terminalFitOverrides
   }
-  get drivers(): typeof this.terminalDrivers {
-    return this.terminalDrivers
+  get drivers() {
+    return getTerminalLayoutDriversForTest(this)
   }
 }
 

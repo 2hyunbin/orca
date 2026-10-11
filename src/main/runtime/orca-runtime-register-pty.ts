@@ -74,7 +74,7 @@ export class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHand
       }
     }
     this.ptyLivenessVerdictByPtyId.delete(ptyId)
-    this.terminalViewSubscribers.markSpawnPublished(ptyId)
+    this.terminalLayout.commands.markTerminalSpawnPublished(ptyId)
     // Why: record the renderer pane identity at spawn time so a stalled graph
     // sync can't hide that a live PTY already backs a pending mobile create.
     const paneKey =

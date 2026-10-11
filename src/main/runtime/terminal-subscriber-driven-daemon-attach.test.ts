@@ -1,3 +1,4 @@
+import { getTerminalViewSubscribersForTest } from './terminal/layout/terminal-layout-test-fixture'
 import './rpc/unused-default-rpc-methods.test-fixture'
 /**
  * Subscriber-driven daemon attach (never-activated tab ingestion).
@@ -423,7 +424,7 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     sendSubscribe(harness, 1, handle)
     await waitForSubscribed(harness, 1)
     await vi.waitFor(() => expect(model.attachCalls).toEqual([PTY_ID]))
-    expect(internals(runtime).terminalViewSubscribers.hasPendingProviderAttach(PTY_ID)).toBe(true)
+    expect(getTerminalViewSubscribersForTest(runtime).hasPendingProviderAttach(PTY_ID)).toBe(true)
     expect(runtime.hasRemoteTerminalViewSubscriber(PTY_ID)).toBe(true)
     expect(model.emitData(PTY_ID, 'before inventory\r\n')).toBe(false)
 
@@ -431,12 +432,12 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
     await internals(runtime).refreshPtyWorktreeRecordsWithControllerInventory([], null)
     expect(model.attachCalls).toEqual([PTY_ID])
-    expect(internals(runtime).terminalViewSubscribers.attachInventoryWaiterIds()).toEqual([PTY_ID])
+    expect(getTerminalViewSubscribersForTest(runtime).attachInventoryWaiterIds()).toEqual([PTY_ID])
     refuseFirstAttach()
 
     await vi.waitFor(() => expect(model.attachCalls).toEqual([PTY_ID, PTY_ID]))
     await vi.waitFor(() =>
-      expect(internals(runtime).terminalViewSubscribers.attachInventoryWaiterIds()).not.toContain(
+      expect(getTerminalViewSubscribersForTest(runtime).attachInventoryWaiterIds()).not.toContain(
         PTY_ID
       )
     )

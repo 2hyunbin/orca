@@ -1,8 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { TerminalLayoutCommands } from './terminal/layout/terminal-layout-commands'
 import { OrcaRuntimeWithRecordAgentPromptLifecycleState } from './orca-runtime-record-agent-prompt-lifecycle-state'
-import type { DriverState } from './orca-runtime-core'
-import { addListenerToMap } from './orca-runtime-core'
-import { notifyRuntimeListeners } from './runtime-async-boundaries'
+
 import type { RuntimeTerminalBufferSnapshot } from './runtime-terminal-state-records'
 import { AUTHORITATIVE_TERMINAL_SNAPSHOT_TIMEOUT_MS } from './orca-runtime-postlude'
 import { assertTerminalInputWithinLimitWithYield } from './terminal-send-payload'
@@ -20,87 +19,70 @@ export class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged extends Orca
    *  view subscriber is attached its xterm answers queries with view
    *  authority and the model responder must stay silent. Returns an
    *  idempotent release. */
-  registerRemoteTerminalViewSubscriber(ptyId: string): () => void {
-    return this.terminalViewSubscribers.registerRemote(ptyId)
+  registerRemoteTerminalViewSubscriber(
+    ...args: Parameters<TerminalLayoutCommands['registerRemoteTerminalViewSubscriber']>
+  ): ReturnType<TerminalLayoutCommands['registerRemoteTerminalViewSubscriber']> {
+    return this.terminalLayout.commands.registerRemoteTerminalViewSubscriber(...args)
   }
 
   /** A local daemon session main knows is live but has never ingested a byte
    *  from — i.e. no pane ever attached it, so the daemon is not emitting.
    *  Headless state exists only after the first ingested byte; a snapshot
    *  reconcile in flight implies a spawn-path attach already happened. */
-  protected isKnownUnattachedLocalDaemonPty(ptyId: string): boolean {
-    return this.terminalViewSubscribers.isKnownUnattachedLocal(ptyId)
+  protected isKnownUnattachedLocalDaemonPty(
+    ...args: Parameters<TerminalLayoutCommands['isKnownUnattachedLocalDaemonPty']>
+  ): ReturnType<TerminalLayoutCommands['isKnownUnattachedLocalDaemonPty']> {
+    return this.terminalLayout.commands.isKnownUnattachedLocalDaemonPty(...args)
   }
 
-  protected reconcileSubscriberDrivenProviderAttach(ptyId: string): void {
-    this.terminalViewSubscribers.reconcileProviderAttach(ptyId)
+  protected reconcileSubscriberDrivenProviderAttach(
+    ...args: Parameters<TerminalLayoutCommands['reconcileSubscriberDrivenProviderAttach']>
+  ): ReturnType<TerminalLayoutCommands['reconcileSubscriberDrivenProviderAttach']> {
+    return this.terminalLayout.commands.reconcileSubscriberDrivenProviderAttach(...args)
   }
 
   /** Mark a raw-output viewer without transferring terminal query authority. */
-  registerRawTerminalViewSubscriber(ptyId: string): () => void {
-    return this.terminalViewSubscribers.registerRaw(ptyId)
+  registerRawTerminalViewSubscriber(
+    ...args: Parameters<TerminalLayoutCommands['registerRawTerminalViewSubscriber']>
+  ): ReturnType<TerminalLayoutCommands['registerRawTerminalViewSubscriber']> {
+    return this.terminalLayout.commands.registerRawTerminalViewSubscriber(...args)
   }
 
   /** Raw stream presence prevents provider thinning without changing reply ownership. */
-  hasRawTerminalViewSubscriber(ptyId: string): boolean {
-    return this.terminalViewSubscribers.hasRaw(ptyId)
+  hasRawTerminalViewSubscriber(
+    ...args: Parameters<TerminalLayoutCommands['hasRawTerminalViewSubscriber']>
+  ): ReturnType<TerminalLayoutCommands['hasRawTerminalViewSubscriber']> {
+    return this.terminalLayout.commands.hasRawTerminalViewSubscriber(...args)
   }
 
-  hasRemoteTerminalViewSubscriber(ptyId: string): boolean {
-    return this.terminalViewSubscribers.hasRemote(ptyId)
+  hasRemoteTerminalViewSubscriber(
+    ...args: Parameters<TerminalLayoutCommands['hasRemoteTerminalViewSubscriber']>
+  ): ReturnType<TerminalLayoutCommands['hasRemoteTerminalViewSubscriber']> {
+    return this.terminalLayout.commands.hasRemoteTerminalViewSubscriber(...args)
   }
 
-  isMobileTerminalQueryReplyAuthority(ptyId: string, clientId: string): boolean {
-    // Why: a passive phone watching desktop-sized output must not race the
-    // desktop xterm. Mobile becomes reply authority only with the mobile floor.
-    if (this.getDriver(ptyId).kind !== 'mobile') {
-      return false
-    }
-    const subscribers = this.mobileSubscribers.get(ptyId)
-    if (!subscribers) {
-      return false
-    }
-    // Why: soft-leave resubscribe preserves the original subscription time but
-    // reinserts the record. Elect fitted responders from that stable age, not
-    // mutable Map order or passive desktop-mode watchers.
-    let earliest: { clientId: string; subscribedAt: number } | null = null
-    for (const subscriber of subscribers.values()) {
-      if (!subscriber.wasResizedToPhone) {
-        continue
-      }
-      if (earliest === null || subscriber.subscribedAt < earliest.subscribedAt) {
-        earliest = subscriber
-      }
-    }
-    return earliest?.clientId === clientId
+  isMobileTerminalQueryReplyAuthority(
+    ...args: Parameters<TerminalLayoutCommands['isMobileTerminalQueryReplyAuthority']>
+  ): ReturnType<TerminalLayoutCommands['isMobileTerminalQueryReplyAuthority']> {
+    return this.terminalLayout.commands.isMobileTerminalQueryReplyAuthority(...args)
   }
 
   subscribeToFitOverrideChanges(
-    ptyId: string,
-    listener: (event: {
-      mode: 'mobile-fit' | 'remote-desktop-fit' | 'desktop-fit'
-      cols: number
-      rows: number
-    }) => void
-  ): () => void {
-    return addListenerToMap(this.fitOverrideListeners, ptyId, listener)
+    ...args: Parameters<TerminalLayoutCommands['subscribeToFitOverrideChanges']>
+  ): ReturnType<TerminalLayoutCommands['subscribeToFitOverrideChanges']> {
+    return this.terminalLayout.commands.subscribeToFitOverrideChanges(...args)
   }
 
-  subscribeToDriverChanges(ptyId: string, listener: (driver: DriverState) => void): () => void {
-    return this.terminalDrivers.subscribe(ptyId, listener)
+  subscribeToDriverChanges(
+    ...args: Parameters<TerminalLayoutCommands['subscribeToDriverChanges']>
+  ): ReturnType<TerminalLayoutCommands['subscribeToDriverChanges']> {
+    return this.terminalLayout.commands.subscribeToDriverChanges(...args)
   }
 
   protected notifyFitOverrideListeners(
-    ptyId: string,
-    mode: 'mobile-fit' | 'remote-desktop-fit' | 'desktop-fit',
-    cols: number,
-    rows: number
-  ): void {
-    const listeners = this.fitOverrideListeners.get(ptyId)
-    if (!listeners) {
-      return
-    }
-    notifyRuntimeListeners(listeners, (listener) => listener({ mode, cols, rows }), 'fit-override')
+    ...args: Parameters<TerminalLayoutCommands['notifyFitOverrideListeners']>
+  ): ReturnType<TerminalLayoutCommands['notifyFitOverrideListeners']> {
+    return this.terminalLayout.commands.notifyFitOverrideListeners(...args)
   }
 
   serializeTerminalBuffer(

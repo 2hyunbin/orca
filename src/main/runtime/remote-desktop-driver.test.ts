@@ -1,3 +1,4 @@
+import { getTerminalLayoutStateForTest } from './terminal/layout/terminal-layout-test-fixture'
 /**
  * Tests for the remote-desktop viewer width driver.
  *
@@ -55,7 +56,7 @@ vi.mock('../git/git-username', async () => {
 
 class TestOrcaRuntimeService extends OrcaRuntimeService {
   getLayoutQueues() {
-    return this.layoutQueues
+    return getTerminalLayoutStateForTest(this).layoutQueues
   }
 }
 

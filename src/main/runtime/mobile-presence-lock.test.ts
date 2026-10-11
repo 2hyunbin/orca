@@ -1,3 +1,7 @@
+import {
+  getTerminalLayoutStateForTest,
+  getTerminalLayoutCommandsForTest
+} from './terminal/layout/terminal-layout-test-fixture'
 /**
  * Tests for the presence-based mobile driver lock (see docs/mobile-presence-lock.md).
  */
@@ -237,7 +241,10 @@ describe('mobile presence lock — driver state machine', () => {
     await runtime.reclaimTerminalForDesktop('pty-1')
 
     let releaseFirstLayout!: () => void
-    vi.spyOn(runtime, 'applyMobileDisplayMode').mockImplementationOnce(
+    vi.spyOn(
+      getTerminalLayoutCommandsForTest(runtime),
+      'applyMobileDisplayMode'
+    ).mockImplementationOnce(
       () =>
         new Promise<boolean>((resolve) => {
           releaseFirstLayout = () => resolve(true)
@@ -776,21 +783,7 @@ describe('mobile presence lock — issue #7588 held-modal restore convergence', 
     const listenerEvents: { mode: string; cols: number; rows: number }[] = []
     runtime.subscribeToFitOverrideChanges('pty-1', (e) => listenerEvents.push(e))
 
-    const internal = runtime as unknown as {
-      terminalFitOverrides: Map<
-        string,
-        {
-          mode: string
-          cols: number
-          rows: number
-          previousCols: number | null
-          previousRows: number | null
-          updatedAt: number
-          clientId: string
-        }
-      >
-    }
-    internal.terminalFitOverrides.set('pty-1', {
+    getTerminalLayoutStateForTest(runtime).terminalFitOverrides.set('pty-1', {
       mode: 'mobile-fit',
       cols: 45,
       rows: 20,

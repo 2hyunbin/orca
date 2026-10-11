@@ -1,10 +1,8 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { TerminalLayoutCommands } from './terminal/layout/terminal-layout-commands'
 import { OrcaRuntimeWithOnPtyExit } from './orca-runtime-on-pty-exit'
 import type { PtyLivenessVerdict } from '../../shared/pty-liveness-verdict'
-import type { DriverState } from './orca-runtime-core'
-import type { TerminalInputKind } from '../../shared/terminal-input-kind'
-import { isUntypedTerminalInput } from './terminal-run-facts'
-import { clampTerminalViewport } from './terminal-viewport'
+
 import { getPtyTerminalState, getTerminalState } from './terminal-wait-results'
 
 // Orphaned verdicts are bounded; active PTYs retain theirs until new evidence resolves them.
@@ -178,12 +176,16 @@ export class OrcaRuntimeWithMarkPtyLivenessUnverifiable extends OrcaRuntimeWithO
   //
   // See docs/mobile-presence-lock.md.
 
-  getDriver(ptyId: string): DriverState {
-    return this.terminalDrivers.get(ptyId)
+  getDriver(
+    ...args: Parameters<TerminalLayoutCommands['getDriver']>
+  ): ReturnType<TerminalLayoutCommands['getDriver']> {
+    return this.terminalLayout.commands.getDriver(...args)
   }
 
-  protected setDriver(ptyId: string, next: DriverState): void {
-    this.terminalDrivers.set(ptyId, next)
+  protected setDriver(
+    ...args: Parameters<TerminalLayoutCommands['setDriver']>
+  ): ReturnType<TerminalLayoutCommands['setDriver']> {
+    return this.terminalLayout.commands.setDriver(...args)
   }
 
   // Why: the host's own fit cascade (window resize, split drag, tab reveal,
@@ -198,72 +200,78 @@ export class OrcaRuntimeWithMarkPtyLivenessUnverifiable extends OrcaRuntimeWithO
   // not perturb the presence-lock state machine. It also coexists with mobile:
   // while a phone drives, the registry still suppresses host resize, and when
   // the phone leaves the surviving viewer keeps the PTY suppressed.
-  isPtyResizeDrivenRemotely(ptyId: string): boolean {
-    if (this.getDriver(ptyId).kind === 'mobile') {
-      return true
-    }
-    return this.isRemoteDesktopResizeDriven(ptyId)
+  isPtyResizeDrivenRemotely(
+    ...args: Parameters<TerminalLayoutCommands['isPtyResizeDrivenRemotely']>
+  ): ReturnType<TerminalLayoutCommands['isPtyResizeDrivenRemotely']> {
+    return this.terminalLayout.commands.isPtyResizeDrivenRemotely(...args)
   }
 
-  isRemoteDesktopResizeDriven(ptyId: string): boolean {
-    return this.remoteDesktopFloor.isResizeDriven(ptyId)
+  isRemoteDesktopResizeDriven(
+    ...args: Parameters<TerminalLayoutCommands['isRemoteDesktopResizeDriven']>
+  ): ReturnType<TerminalLayoutCommands['isRemoteDesktopResizeDriven']> {
+    return this.terminalLayout.commands.isRemoteDesktopResizeDriven(...args)
   }
 
-  isRemoteDesktopViewerOwner(ptyId: string, subscriptionKey: string): boolean {
-    return this.remoteDesktopFloor.isViewerOwner(ptyId, subscriptionKey)
+  isRemoteDesktopViewerOwner(
+    ...args: Parameters<TerminalLayoutCommands['isRemoteDesktopViewerOwner']>
+  ): ReturnType<TerminalLayoutCommands['isRemoteDesktopViewerOwner']> {
+    return this.terminalLayout.commands.isRemoteDesktopViewerOwner(...args)
   }
 
   getRemoteDesktopFitHold(
-    ptyId: string,
-    subscriptionKey: string
-  ): { mode: 'remote-desktop-fit' | 'desktop-fit'; cols: number; rows: number } {
-    return this.remoteDesktopFloor.getFitHold(ptyId, subscriptionKey)
+    ...args: Parameters<TerminalLayoutCommands['getRemoteDesktopFitHold']>
+  ): ReturnType<TerminalLayoutCommands['getRemoteDesktopFitHold']> {
+    return this.terminalLayout.commands.getRemoteDesktopFitHold(...args)
   }
 
-  recordRemoteDesktopHostReclaimTarget(ptyId: string, cols: number, rows: number): void {
-    this.remoteDesktopFloor.recordHostReclaimTarget(ptyId, cols, rows)
+  recordRemoteDesktopHostReclaimTarget(
+    ...args: Parameters<TerminalLayoutCommands['recordRemoteDesktopHostReclaimTarget']>
+  ): ReturnType<TerminalLayoutCommands['recordRemoteDesktopHostReclaimTarget']> {
+    return this.terminalLayout.commands.recordRemoteDesktopHostReclaimTarget(...args)
   }
 
-  async applyRemoteDesktopLayout(ptyId: string): Promise<boolean> {
-    return this.remoteDesktopFloor.applyLayout(ptyId)
+  applyRemoteDesktopLayout(
+    ...args: Parameters<TerminalLayoutCommands['applyRemoteDesktopLayout']>
+  ): ReturnType<TerminalLayoutCommands['applyRemoteDesktopLayout']> {
+    return this.terminalLayout.commands.applyRemoteDesktopLayout(...args)
   }
 
   // Why: attachment only records geometry. Passive hydration/reconnect must not
   // steal the shared PTY from the desktop where the user is actively working.
-  async updateRemoteDesktopViewer(
-    ptyId: string,
-    subscriptionKey: string,
-    clientId: string,
-    cols: number,
-    rows: number,
-    claim = true
-  ): Promise<boolean> {
-    return this.remoteDesktopFloor.updateViewer(ptyId, subscriptionKey, clientId, cols, rows, claim)
+  updateRemoteDesktopViewer(
+    ...args: Parameters<TerminalLayoutCommands['updateRemoteDesktopViewer']>
+  ): ReturnType<TerminalLayoutCommands['updateRemoteDesktopViewer']> {
+    return this.terminalLayout.commands.updateRemoteDesktopViewer(...args)
   }
 
-  claimRemoteDesktopViewer(ptyId: string, subscriptionKey: string): Promise<boolean> {
-    return this.remoteDesktopFloor.claimViewer(ptyId, subscriptionKey)
+  claimRemoteDesktopViewer(
+    ...args: Parameters<TerminalLayoutCommands['claimRemoteDesktopViewer']>
+  ): ReturnType<TerminalLayoutCommands['claimRemoteDesktopViewer']> {
+    return this.terminalLayout.commands.claimRemoteDesktopViewer(...args)
   }
 
-  claimRemoteDesktopHost(ptyId: string, cols: number, rows: number): Promise<boolean> {
-    return this.remoteDesktopFloor.claimHost(ptyId, cols, rows)
+  claimRemoteDesktopHost(
+    ...args: Parameters<TerminalLayoutCommands['claimRemoteDesktopHost']>
+  ): ReturnType<TerminalLayoutCommands['claimRemoteDesktopHost']> {
+    return this.terminalLayout.commands.claimRemoteDesktopHost(...args)
   }
 
-  noteRemoteDesktopHostInput(ptyId: string, inputKind: TerminalInputKind, data: string): void {
-    if (inputKind === 'driving' && !isUntypedTerminalInput(data)) {
-      this.remoteDesktopFloor.noteHostInput(ptyId)
-    }
+  noteRemoteDesktopHostInput(
+    ...args: Parameters<TerminalLayoutCommands['noteRemoteDesktopHostInput']>
+  ): ReturnType<TerminalLayoutCommands['noteRemoteDesktopHostInput']> {
+    return this.terminalLayout.commands.noteRemoteDesktopHostInput(...args)
   }
 
-  unregisterRemoteDesktopViewer(ptyId: string, subscriptionKey: string): Promise<boolean> {
-    return this.unregisterRemoteDesktopViewers(ptyId, [subscriptionKey])
+  unregisterRemoteDesktopViewer(
+    ...args: Parameters<TerminalLayoutCommands['unregisterRemoteDesktopViewer']>
+  ): ReturnType<TerminalLayoutCommands['unregisterRemoteDesktopViewer']> {
+    return this.terminalLayout.commands.unregisterRemoteDesktopViewer(...args)
   }
 
   unregisterRemoteDesktopViewers(
-    ptyId: string,
-    subscriptionKeys: Iterable<string>
-  ): Promise<boolean> {
-    return this.remoteDesktopFloor.unregisterViewers(ptyId, subscriptionKeys)
+    ...args: Parameters<TerminalLayoutCommands['unregisterRemoteDesktopViewers']>
+  ): ReturnType<TerminalLayoutCommands['unregisterRemoteDesktopViewers']> {
+    return this.terminalLayout.commands.unregisterRemoteDesktopViewers(...args)
   }
 
   // Why: the one-shot `terminal.updateViewport` RPC has no disconnect hook, so
@@ -275,52 +283,128 @@ export class OrcaRuntimeWithMarkPtyLivenessUnverifiable extends OrcaRuntimeWithO
   // floor (passive/stream-less viewer) — a stream-less viewer must not lock host
   // resize.
   refreshRemoteDesktopViewer(
-    ptyId: string,
-    clientId: string,
-    cols: number,
-    rows: number,
-    claim = false
-  ): Promise<boolean> {
-    return this.remoteDesktopFloor.refreshViewer(ptyId, clientId, cols, rows, claim)
+    ...args: Parameters<TerminalLayoutCommands['refreshRemoteDesktopViewer']>
+  ): ReturnType<TerminalLayoutCommands['refreshRemoteDesktopViewer']> {
+    return this.terminalLayout.commands.refreshRemoteDesktopViewer(...args)
   }
 
-  async updateDesktopViewport(
-    ptyId: string,
-    viewport: { cols: number; rows: number }
-  ): Promise<boolean> {
-    const { cols, rows } = clampTerminalViewport(viewport.cols, viewport.rows)
-    if (this.terminalFitOverrides.has(ptyId) || this.getDriver(ptyId).kind === 'mobile') {
-      this.recordRendererGeometry(ptyId, cols, rows)
-      return true
-    }
-    if (this.isResizeSuppressed()) {
-      return false
-    }
-    this.freshSubscribeGuard.add(ptyId)
-    try {
-      const result = await this.enqueueLayout(ptyId, { kind: 'desktop', cols, rows })
-      if (result.ok) {
-        this.refreshRendererGeometry(ptyId, cols, rows)
-      }
-      return result.ok
-    } finally {
-      this.freshSubscribeGuard.delete(ptyId)
-    }
+  updateDesktopViewport(
+    ...args: Parameters<TerminalLayoutCommands['updateDesktopViewport']>
+  ): ReturnType<TerminalLayoutCommands['updateDesktopViewport']> {
+    return this.terminalLayout.commands.updateDesktopViewport(...args)
   }
 
-  markMobileActor(ptyId: string, clientId: string): void {
-    const inner = this.mobileSubscribers.get(ptyId)
-    const sub = inner?.get(clientId)
-    if (sub) {
-      sub.lastActedAt = Date.now()
-    }
-    this.setDriver(ptyId, { kind: 'mobile', clientId })
+  markMobileActor(
+    ...args: Parameters<TerminalLayoutCommands['markMobileActor']>
+  ): ReturnType<TerminalLayoutCommands['markMobileActor']> {
+    return this.terminalLayout.commands.markMobileActor(...args)
   }
 
   beginMobileInputFloor(
-    ptyId: string,
-    clientId: string
-  ): { commit: () => Promise<void>; rollback: () => void } | null {
-    return this.terminalDrivers.beginMobileInputFloor(ptyId, clientId)
+    ...args: Parameters<TerminalLayoutCommands['beginMobileInputFloor']>
+  ): ReturnType<TerminalLayoutCommands['beginMobileInputFloor']> {
+    return this.terminalLayout.commands.beginMobileInputFloor(...args)
+  }
+
+  mobileTookFloor(
+    ...args: Parameters<TerminalLayoutCommands['mobileTookFloor']>
+  ): ReturnType<TerminalLayoutCommands['mobileTookFloor']> {
+    return this.terminalLayout.commands.mobileTookFloor(...args)
+  }
+
+  updateMobileViewport(
+    ...args: Parameters<TerminalLayoutCommands['updateMobileViewport']>
+  ): ReturnType<TerminalLayoutCommands['updateMobileViewport']> {
+    return this.terminalLayout.commands.updateMobileViewport(...args)
+  }
+
+  reclaimTerminalForDesktop(
+    ...args: Parameters<TerminalLayoutCommands['reclaimTerminalForDesktop']>
+  ): ReturnType<TerminalLayoutCommands['reclaimTerminalForDesktop']> {
+    return this.terminalLayout.commands.reclaimTerminalForDesktop(...args)
+  }
+
+  protected cancelPendingDriverMutations(
+    ...args: Parameters<TerminalLayoutCommands['cancelPendingDriverMutations']>
+  ): ReturnType<TerminalLayoutCommands['cancelPendingDriverMutations']> {
+    return this.terminalLayout.commands.cancelPendingDriverMutations(...args)
+  }
+
+  protected releaseDesktopTakeBack(
+    ...args: Parameters<TerminalLayoutCommands['releaseDesktopTakeBack']>
+  ): ReturnType<TerminalLayoutCommands['releaseDesktopTakeBack']> {
+    return this.terminalLayout.commands.releaseDesktopTakeBack(...args)
+  }
+
+  protected getAutoRestoreFitMs(
+    ...args: Parameters<TerminalLayoutCommands['getAutoRestoreFitMs']>
+  ): ReturnType<TerminalLayoutCommands['getAutoRestoreFitMs']> {
+    return this.terminalLayout.commands.getAutoRestoreFitMs(...args)
+  }
+
+  cancelAllPendingFitRestoreTimers(
+    ...args: Parameters<TerminalLayoutCommands['cancelAllPendingFitRestoreTimers']>
+  ): ReturnType<TerminalLayoutCommands['cancelAllPendingFitRestoreTimers']> {
+    return this.terminalLayout.commands.cancelAllPendingFitRestoreTimers(...args)
+  }
+
+  getMobileAutoRestoreFitMs(
+    ...args: Parameters<TerminalLayoutCommands['getMobileAutoRestoreFitMs']>
+  ): ReturnType<TerminalLayoutCommands['getMobileAutoRestoreFitMs']> {
+    return this.terminalLayout.commands.getMobileAutoRestoreFitMs(...args)
+  }
+
+  setMobileAutoRestoreFitMs(
+    ...args: Parameters<TerminalLayoutCommands['setMobileAutoRestoreFitMs']>
+  ): ReturnType<TerminalLayoutCommands['setMobileAutoRestoreFitMs']> {
+    return this.terminalLayout.commands.setMobileAutoRestoreFitMs(...args)
+  }
+
+  protected pickMostRecentActor(
+    ...args: Parameters<TerminalLayoutCommands['pickMostRecentActor']>
+  ): ReturnType<TerminalLayoutCommands['pickMostRecentActor']> {
+    return this.terminalLayout.commands.pickMostRecentActor(...args)
+  }
+
+  protected pickEarliestRestoreTarget(
+    ...args: Parameters<TerminalLayoutCommands['pickEarliestRestoreTarget']>
+  ): ReturnType<TerminalLayoutCommands['pickEarliestRestoreTarget']> {
+    return this.terminalLayout.commands.pickEarliestRestoreTarget(...args)
+  }
+
+  getLayout(
+    ...args: Parameters<TerminalLayoutCommands['getLayout']>
+  ): ReturnType<TerminalLayoutCommands['getLayout']> {
+    return this.terminalLayout.commands.getLayout(...args)
+  }
+
+  protected isFreshSubscribe(
+    ...args: Parameters<TerminalLayoutCommands['isFreshSubscribe']>
+  ): ReturnType<TerminalLayoutCommands['isFreshSubscribe']> {
+    return this.terminalLayout.commands.isFreshSubscribe(...args)
+  }
+
+  protected resolveDesktopRestoreTarget(
+    ...args: Parameters<TerminalLayoutCommands['resolveDesktopRestoreTarget']>
+  ): ReturnType<TerminalLayoutCommands['resolveDesktopRestoreTarget']> {
+    return this.terminalLayout.commands.resolveDesktopRestoreTarget(...args)
+  }
+
+  protected coalescesWith(
+    ...args: Parameters<TerminalLayoutCommands['coalescesWith']>
+  ): ReturnType<TerminalLayoutCommands['coalescesWith']> {
+    return this.terminalLayout.commands.coalescesWith(...args)
+  }
+
+  protected enqueueLayout(
+    ...args: Parameters<TerminalLayoutCommands['enqueueLayout']>
+  ): ReturnType<TerminalLayoutCommands['enqueueLayout']> {
+    return this.terminalLayout.commands.enqueueLayout(...args)
+  }
+
+  protected runLayoutSlot(
+    ...args: Parameters<TerminalLayoutCommands['runLayoutSlot']>
+  ): ReturnType<TerminalLayoutCommands['runLayoutSlot']> {
+    return this.terminalLayout.commands.runLayoutSlot(...args)
   }
 }
