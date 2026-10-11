@@ -61,7 +61,7 @@ export function SshStatusSegment({
       return {
         id,
         label,
-        status: (state?.status ?? 'disconnected') as SshConnectionStatus
+        status: state?.status ?? ('disconnected' satisfies SshConnectionStatus)
       }
     })
   const runtimeHosts = runtimeEnvironments

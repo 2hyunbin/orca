@@ -226,7 +226,6 @@ describe('useIpcEvents agent status snapshot integration', () => {
           return { token: null }
         }),
         correctUnboundTerminals: vi.fn(() => 0),
-        finalizeHydratedTerminals: vi.fn(() => 0),
         invalidate: vi.fn(),
         stop: vi.fn()
       }
@@ -441,7 +440,6 @@ describe('useIpcEvents agent status snapshot integration', () => {
       replaceAuthority: vi.fn(),
       prepareOnly: vi.fn(async () => ({ token: null })),
       correctUnboundTerminals: vi.fn(() => 0),
-      finalizeHydratedTerminals: vi.fn(() => 0),
       invalidate: vi.fn(),
       stop: vi.fn()
     }

@@ -13,8 +13,6 @@ import {
   type WaiterLeaseId
 } from './direct-ssh-worktree-refresh-scheduler'
 import {
-  admitDirectSshSnapshotApplyToken,
-  buildDirectSshSnapshotApplyToken,
   createDirectSshReconnectCoordinator,
   type DirectSshLineageOutcome,
   type DirectSshPreparationInput,
@@ -145,7 +143,6 @@ function createCoordinatorHarness(fakeScheduler = createFakeScheduler()) {
       events.push(`retry:${owner.targetId}`)
       return 2
     }),
-    finalizeHydratedTerminalPanes: vi.fn(() => 1),
     correctUnboundTerminalPanes: vi.fn(() => 1),
     onTelemetry: vi.fn()
   }
@@ -412,24 +409,6 @@ describe('createDirectSshReconnectCoordinator', () => {
     expect(harness.deps.readHostScopedLineage).toHaveBeenCalledOnce()
   })
 
-  it('requires exact snapshot revision and authority admission', async () => {
-    const harness = createCoordinatorHarness()
-    const owner = authority('target-a')
-    harness.current.set(owner.targetId, owner)
-    harness.coordinator.replaceAuthority(owner)
-    const pending = harness.coordinator.prepareOnly(
-      preparationInput(owner, [], { snapshotRevision: 5 })
-    )
-    const prepared = await pending
-    const token = prepared.token!
-
-    expect(buildDirectSshSnapshotApplyToken(token, 6)).toBeNull()
-    const exact = buildDirectSshSnapshotApplyToken(token, 5)!
-    expect(admitDirectSshSnapshotApplyToken(exact, owner, 5)).toBe(true)
-    expect(admitDirectSshSnapshotApplyToken(exact, owner, 6)).toBe(false)
-    expect(admitDirectSshSnapshotApplyToken(exact, authority('target-a', 'other'), 5)).toBe(false)
-  })
-
   it('damps rapid rotations to the latest authority while terminal checks stay immediate', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)
@@ -485,7 +464,6 @@ describe('createDirectSshReconnectCoordinator', () => {
     void harness.coordinator.requestReconnect(latest)
 
     expect(harness.coordinator.correctUnboundTerminals(latest, 'wake-refresh')).toBe(1)
-    expect(harness.coordinator.finalizeHydratedTerminals(initial)).toBe(0)
     harness.coordinator.stop()
     await vi.advanceTimersByTimeAsync(5_000)
 

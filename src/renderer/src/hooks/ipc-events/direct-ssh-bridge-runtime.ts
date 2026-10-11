@@ -114,8 +114,6 @@ export function createDirectSshBridgeRuntime(): DirectSshBridgeRuntime {
     invalidateStaleTerminalBindings: (authority) =>
       terminalActions().invalidateStaleDirectSshTargetPtyBindings?.(authority) ?? 0,
     retryTargetPanes: (authority) => terminalActions().retryDirectSshTargetPanes?.(authority) ?? 0,
-    finalizeHydratedTerminalPanes: (authority) =>
-      terminalActions().retryDirectSshTargetPanes?.(authority) ?? 0,
     correctUnboundTerminalPanes: (authority) =>
       terminalActions().retryDirectSshTargetPanes?.(authority) ?? 0,
     onTelemetry: createDirectSshReconnectProductTelemetryAdapter()
