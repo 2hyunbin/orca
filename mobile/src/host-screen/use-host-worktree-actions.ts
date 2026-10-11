@@ -20,7 +20,6 @@ import {
   removeWorktreeRow
 } from '../worktree/worktree-host-row-identity'
 import { isWorktreePinned, type Worktree } from '../worktree/workspace-list-sections'
-import { relayHostWorktreeSleep } from '../worktree/server-workspace-operations'
 import {
   worktreeActivate,
   worktreePinWrite,
@@ -160,21 +159,13 @@ export function useHostWorktreeActions(args: {
     [client, clientForRow, worktrees, pinnedIds, updateLocalPins]
   )
 
-  const sleepWorktree = useCallback(
+  const putWorktreeToSleep = useCallback(
     (item: Worktree) => {
       if (!client) {
         return
       }
       setSleptIds((prev) => new Set(prev).add(getWorktreeRowIdentity(item)))
-      // Why: the desktop sleeps a server's workspace in its own renderer, as it does its own.
-      const serverHost = item.hostId
-      const sleep = serverHost?.startsWith('runtime:')
-        ? relayHostWorktreeSleep.request(client, {
-            hostId: serverHost,
-            worktreeId: item.worktreeId
-          })
-        : worktreeSleep.request(client, { worktree: `id:${item.worktreeId}` })
-      void sleep.catch(() => null)
+      void worktreeSleep.request(client, { worktree: `id:${item.worktreeId}` }).catch(() => null)
     },
     [client, setSleptIds]
   )
@@ -305,7 +296,7 @@ export function useHostWorktreeActions(args: {
     openNewWorktreeModal,
     openWorktreeSession,
     setShowNewWorktreeVisible,
-    sleepWorktree,
+    putWorktreeToSleep,
     togglePin
   }
 }

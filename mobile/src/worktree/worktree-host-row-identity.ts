@@ -1,8 +1,4 @@
-import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import {
-  composeWorktreeHostIdentity,
-  getExecutionHostIdFromWorktreeHostIdentity
-} from '../../../src/shared/worktree/host-qualified-identity'
+import { composeWorktreeHostIdentity } from '../../../src/shared/worktree/host-qualified-identity'
 import type { Worktree } from './workspace-list-types'
 
 type WorktreeRowIdentitySource = Pick<Worktree, 'worktreeId' | 'hostId'>
@@ -35,14 +31,9 @@ export function clearConfirmedActiveWorktreeIdentity(
     : pending
 }
 
-/**
- * Keeps an optimistic sleep until a list that speaks for the row's host shows it inactive. A list
- * judges only its own hosts' rows: the desktop's list never carries a server's, and vice versa.
- */
 export function retainLiveSleptWorktreeIdentities(
   previous: Set<string>,
-  confirmed: readonly Worktree[],
-  speaksFor: (host: ExecutionHostId | undefined) => boolean = () => true
+  confirmed: readonly Worktree[]
 ): Set<string> {
   if (previous.size === 0) {
     return previous
@@ -58,10 +49,7 @@ export function retainLiveSleptWorktreeIdentities(
   const still = new Set<string>()
   for (const id of previous) {
     const wt = confirmedByIdentity.get(id)
-    if (
-      !speaksFor(getExecutionHostIdFromWorktreeHostIdentity(id)) ||
-      (wt && wt.liveTerminalCount > 0)
-    ) {
+    if (wt && wt.liveTerminalCount > 0) {
       still.add(id)
     }
   }

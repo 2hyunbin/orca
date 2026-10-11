@@ -5,7 +5,6 @@ import { useRouteHandoff } from '../navigation/route-handoff'
 import { HOST_DOCK_MIN_WIDTH } from '../storage/preferences'
 import { useForceReconnect } from '../transport/client-context'
 import { useWorkspaceClient } from '../transport/use-workspace-client'
-import { useWorkspaceExecutionHost } from '../navigation/workspace-execution-host'
 import {
   useLastConnectedAt,
   useReconnectAttempt
@@ -39,8 +38,7 @@ export function useMobileSessionFoundation() {
   const router = useRouteHandoff()
   const insets = useSafeAreaInsets()
   // Why: shared client per host owned by RpcClientProvider (docs/mobile-shared-client-per-host.md).
-  const { client, clientId, state: connState, desktopClient } = useWorkspaceClient(hostId)
-  const executionHost = useWorkspaceExecutionHost()
+  const { client, clientId, state: connState } = useWorkspaceClient(hostId)
   const { hostCapabilities } = useHostProtocolGates()
   const reconnectAttempts = useReconnectAttempt(hostId)
   const lastConnectedAt = useLastConnectedAt(hostId)
@@ -104,8 +102,6 @@ export function useMobileSessionFoundation() {
     client,
     clientId,
     connState,
-    desktopClient,
-    executionHost,
     hostCapabilities,
     reconnectAttempts,
     lastConnectedAt,

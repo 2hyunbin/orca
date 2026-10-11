@@ -189,7 +189,7 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
                       label: 'Sleep',
                       icon: Moon,
                       onPress: () => {
-                        actions.sleepWorktree(actionTarget)
+                        actions.putWorktreeToSleep(actionTarget)
                         state.setActionTarget(null)
                       }
                     },

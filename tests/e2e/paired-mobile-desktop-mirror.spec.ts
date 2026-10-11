@@ -24,9 +24,6 @@ const CreatedTabSchema = z.object({ tab: z.looseObject({ id: z.string(), termina
 const ReposSchema = z.object({
   repos: z.array(z.looseObject({ id: z.string(), path: z.string() }))
 })
-const ServerTerminalsSchema = z.looseObject({
-  terminals: z.array(z.looseObject({ handle: z.string() }))
-})
 const ServerTabsSchema = z.looseObject({ tabs: z.array(z.looseObject({ id: z.string() })) })
 const SubscribedSchema = z.looseObject({ type: z.literal('subscribed'), streamId: z.number() })
 const HostsSchema = z.object({
@@ -324,7 +321,7 @@ function desktopTerminalHandles(desktop: { page: Page }, worktreeId: string): Pr
   )
 }
 
-test('phone tab, workspace and sleep actions on a server show on the server and the desktop', async (// oxlint-disable-next-line no-empty-pattern -- this test owns its topology launch.
+test('phone tab and workspace actions on a server show on the server and the desktop', async (// oxlint-disable-next-line no-empty-pattern -- this test owns its topology launch.
 {}, testInfo) => {
   test.setTimeout(180_000)
   const serverFolder = testInfo.outputPath('server-folder')
@@ -387,10 +384,6 @@ test('phone tab, workspace and sleep actions on a server show on the server and 
     const serverTabs = async () =>
       ServerTabsSchema.parse((await host.client.call('session.tabs.list', { worktree })).result)
         .tabs
-    const serverTerminals = async () =>
-      ServerTerminalsSchema.parse(
-        (await host.client.call('terminal.list', { worktree })).result
-      ).terminals.map((terminal) => terminal.handle)
     const create = (id: string) =>
       call(
         socket,
@@ -427,33 +420,6 @@ test('phone tab, workspace and sleep actions on a server show on the server and 
     await expect
       .poll(() => desktopTerminalHandles(desktop, worktreeId), { timeout: 30_000 })
       .toEqual([kept.terminal])
-
-    // Waking and sleeping are the desktop renderer's. The wake check proves delivery to it, not an
-    // agent resuming (none is slept here).
-    await desktop.page.evaluate(() => {
-      const woken: string[] = []
-      Object.assign(window, { __wokenWorktrees: woken })
-      window.api.ui.onResumeSleepingAgents(({ worktreeId }) => woken.push(worktreeId))
-    })
-    const target = { hostId: serverHostId, worktreeId }
-    const wake = await call(
-      socket,
-      { id: 'wake', method: 'mobileRelay.hosts.wakeSleepingAgents', params: target },
-      z.looseObject({ sleepingAgentWake: z.string() })
-    )
-    expect(wake.sleepingAgentWake).toBe('requested')
-    await expect
-      .poll(() => desktop.page.evaluate(() => Reflect.get(window, '__wokenWorktrees')))
-      .toEqual([worktreeId])
-    expect(await serverTerminals()).toEqual([kept.terminal])
-    await call(
-      socket,
-      { id: 'sleep', method: 'mobileRelay.hosts.sleepWorktree', params: target },
-      z.unknown()
-    )
-    // The desktop's sleep releases the workspace's processes on the server and keeps its tabs.
-    await expect.poll(serverTerminals, { timeout: 30_000 }).toEqual([])
-    expect(await desktopTerminalHandles(desktop, worktreeId)).toEqual([kept.terminal])
   } finally {
     await dispose()
   }
