@@ -346,8 +346,7 @@
 2 src/renderer/src/lib/provider-runtime-context.ts
 2 src/renderer/src/lib/remap-open-editor-tabs-for-path-change.ts
 1 src/renderer/src/lib/remote-workspace-drop-test-fixtures.ts
-4 src/renderer/src/lib/repo-runtime-owner.ts
-2 src/renderer/src/lib/resolve-owner.ts
+3 src/renderer/src/lib/repo-runtime-owner.ts
 2 src/renderer/src/lib/resume-sleeping-agent-session.ts
 1 src/renderer/src/lib/runtime-session-mirror-owners.ts
 1 src/renderer/src/lib/runtime-session-mirror-targets.ts
@@ -377,7 +376,7 @@
 1 src/renderer/src/lib/worktree-jump-navigation.ts
 2 src/renderer/src/lib/worktree-operation-route.ts
 1 src/renderer/src/lib/worktree-row-open-in-owner.ts
-6 src/renderer/src/lib/worktree-runtime-owner.ts
+5 src/renderer/src/lib/worktree-runtime-owner.ts
 1 src/renderer/src/lib/worktree-sort-order-host-split.ts
 1 src/renderer/src/runtime/close-mirrored-editor-tab.ts
 1 src/renderer/src/runtime/local-structured-session-tabs-sync/snapshot-apply.ts
