@@ -27,15 +27,14 @@ const ReposSchema = z.object({
 const ServerTabsSchema = z.looseObject({ tabs: z.array(z.looseObject({ id: z.string() })) })
 const SubscribedSchema = z.looseObject({ type: z.literal('subscribed'), streamId: z.number() })
 const HostsSchema = z.object({
-  hosts: z.array(z.looseObject({ hostId: z.string(), relay: z.string() }))
+  hosts: z.array(z.looseObject({ hostId: z.string(), health: z.string(), relay: z.string() }))
 })
 const DirectorySchema = z.array(z.looseObject({ name: z.string() }))
 const GitStatusSchema = z.looseObject({ entries: z.array(z.looseObject({ path: z.string() })) })
 const HostWorktreesSchema = z.looseObject({
   worktrees: z.array(
     z.looseObject({ worktreeId: z.string(), path: z.string(), hostId: z.string() })
-  ),
-  stale: z.boolean()
+  )
 })
 
 let pollId = 0
@@ -46,6 +45,18 @@ async function hostWorktrees(socket: PairedMobileSocket, hostId: string) {
   socket.send(id, 'mobileRelay.hosts.worktrees', { hostId })
   const listed = HostWorktreesSchema.safeParse((await reply(socket, id)).result)
   return listed.success ? listed.data : null
+}
+
+let hostsId = 0
+/** The server as the desktop reports it to the phone: its health and whether it relays. */
+async function listedHost(socket: PairedMobileSocket, hostId: string) {
+  hostsId += 1
+  const { hosts } = await call(
+    socket,
+    { id: `hosts-${hostsId}`, method: 'mobileRelay.hosts.list', params: {} },
+    HostsSchema
+  )
+  return hosts.find((entry) => entry.hostId === hostId)
 }
 
 async function reply(socket: PairedMobileSocket, id: string, timeout = 30_000): Promise<Frame> {
@@ -202,7 +213,7 @@ test('phone paired with a desktop lists, opens and types into a workspace on its
     await expect
       .poll(async () => {
         listed = await hostWorktrees(socket, serverHostId)
-        return listed?.stale === false && listed.worktrees.some((row) => row.path === serverRepo)
+        return listed?.worktrees.some((row) => row.path === serverRepo) ?? false
       })
       .toBe(true)
     const serverRow = listed!.worktrees.find((row) => row.path === serverFolder)
@@ -264,18 +275,15 @@ test('phone paired with a desktop lists, opens and types into a workspace on its
 
     await host.restartServeProcess({
       betweenProcesses: async () => {
-        // The server is down: its workspace stays listed, marked stale, never synthesized away.
+        // The server is down: the desktop says so, and its workspace stays listed from its last rows.
         await expect
-          .poll(
-            async () => {
-              const stale = await hostWorktrees(socket, serverHostId)
-              return (
-                stale?.stale === true && stale.worktrees.some((row) => row.path === serverFolder)
-              )
-            },
-            { timeout: 60_000, intervals: [1_000] }
-          )
-          .toBe(true)
+          .poll(async () => (await listedHost(socket, serverHostId))?.relay, {
+            timeout: 60_000,
+            intervals: [1_000]
+          })
+          .toBe('unavailable')
+        const lastRows = await hostWorktrees(socket, serverHostId)
+        expect(lastRows?.worktrees.map((row) => row.path)).toContain(serverFolder)
         // A relayed call fails as unavailable, and never runs on the desktop instead.
         socket.send('ps-stopped', 'worktree.ps', { limit: 1_000 }, serverHostId)
         const stopped = await reply(socket, 'ps-stopped', 60_000)
@@ -292,13 +300,13 @@ test('phone paired with a desktop lists, opens and types into a workspace on its
         }
       }
     })
-    // Back up: the listing is fresh again, and the same phone socket reaches the server.
+    // Back up: the desktop reports it available again, and the same phone socket reaches it.
     await expect
-      .poll(async () => (await hostWorktrees(socket, serverHostId))?.stale, {
+      .poll(async () => (await listedHost(socket, serverHostId))?.health, {
         timeout: 90_000,
         intervals: [2_000]
       })
-      .toBe(false)
+      .toBe('available')
     const reopened = await call(
       socket,
       { id: 'ps-restarted', ...list, executionHost: serverHostId },
