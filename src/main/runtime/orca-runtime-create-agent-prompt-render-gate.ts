@@ -1,4 +1,3 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithWriteTerminalAgentPrompt } from './orca-runtime-write-terminal-agent-prompt'
 import {
   CLAUDE_AGENT_PROMPT_RENDER_MARKER,

@@ -1,4 +1,3 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithCaptureProviderTerminalBuffer } from './orca-runtime-capture-provider-terminal-buffer'
 import type { RuntimeTerminalProjection } from './orca-runtime-core'
 import { buildPreview } from './terminal-tail-state'
