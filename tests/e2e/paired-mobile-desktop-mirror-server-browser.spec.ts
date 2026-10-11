@@ -10,8 +10,7 @@ import { z } from 'zod'
 type Frame = PairedMobileSocket['frames'][number]
 
 const HostWorktreesSchema = z.looseObject({
-  worktrees: z.array(z.looseObject({ worktreeId: z.string(), path: z.string() })),
-  stale: z.boolean()
+  worktrees: z.array(z.looseObject({ worktreeId: z.string(), path: z.string() }))
 })
 const CreatedSchema = z.looseObject({ browserPageId: z.string() })
 const TabsSchema = z.looseObject({
