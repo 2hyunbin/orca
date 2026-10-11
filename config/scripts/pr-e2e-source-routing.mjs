@@ -3,9 +3,9 @@ import { pathToFileURL } from 'node:url'
 import {
   DAEMON_INIT_TEST_SUPPORT,
   isDaemonInitTestSupportChange,
-  isUnitTestSupportSource,
-  WORKSPACE_LAYOUT_ORACLE_E2E_SPECS
+  isUnitTestSupportSource
 } from './pr-code-change-scope.mjs'
+import { LAYOUT_ORACLE_E2E_SPECS } from './pr-layout-oracle-route.mjs'
 
 const isProductSource = (file) => !/\.test\.tsx?$/.test(file) && !isUnitTestSupportSource(file)
 
@@ -397,8 +397,7 @@ export function selectPrE2eSpecs(
   // The required layout_oracle job owns the oracle specs; running them here too would double the cost.
   const specs = new Set(
     changedPaths.filter(
-      (file) =>
-        /^tests\/e2e\/.*\.spec\.ts$/.test(file) && !WORKSPACE_LAYOUT_ORACLE_E2E_SPECS.includes(file)
+      (file) => /^tests\/e2e\/.*\.spec\.ts$/.test(file) && !LAYOUT_ORACLE_E2E_SPECS.includes(file)
     )
   )
   for (const route of PR_E2E_SOURCE_ROUTES) {

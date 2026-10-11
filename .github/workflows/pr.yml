@@ -76,6 +76,7 @@ jobs:
             /.github/scripts/check-root-directory-entries.mjs
             /config/scripts/check-readme-local-links.mjs
             /config/scripts/pr-code-change-scope.mjs
+            /config/scripts/pr-layout-oracle-route.mjs
             /config/scripts/pr-e2e-source-routing.mjs
             /config/scripts/ci-e2e-job-selection.mjs
             /config/scripts/pr-ready-check-reuse.mjs
@@ -1394,7 +1395,8 @@ jobs:
       contents: read
     uses: ./.github/workflows/e2e.yml
     with:
-      ref: ${{ github.event.pull_request.head.sha }}
+      # Why the merge commit, unlike `e2e`: a gate must test what lands on main, not a stale head.
+      ref: ${{ github.sha }}
       test_files: '["tests/e2e/workspace-layout-oracle-headless.spec.ts","tests/e2e/workspace-layout-oracle.spec.ts"]'
       run_changed_e2e: true
       needs_build: true

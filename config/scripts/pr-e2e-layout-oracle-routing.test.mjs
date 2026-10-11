@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { parse } from 'yaml'
 import { classifyE2eJobs, selectGeneralE2eSpecs } from './ci-e2e-job-selection.mjs'
-import {
-  classifyPrJobs,
-  isWorkspaceLayoutOracleSource,
-  WORKSPACE_LAYOUT_ORACLE_E2E_SPECS
-} from './pr-code-change-scope.mjs'
+import { classifyPrJobs } from './pr-code-change-scope.mjs'
+import { isLayoutOracleSource, LAYOUT_ORACLE_E2E_SPECS } from './pr-layout-oracle-route.mjs'
 import { selectPrE2eSpecs, shouldRunReusablePrE2e } from './pr-e2e-source-routing.mjs'
 
 const projectDir = resolve(import.meta.dirname, '../..')
@@ -30,7 +27,7 @@ const LAYOUT_AUTHORITIES = [
   'src/renderer/src/store/slices/tabs/tabs-move-actions.ts',
   'tests/e2e/workspace-layout-oracle-known-on-main.ts',
   'tests/e2e/helpers/workspace-layout-oracle-compare.ts',
-  ...WORKSPACE_LAYOUT_ORACLE_E2E_SPECS
+  ...LAYOUT_ORACLE_E2E_SPECS
 ]
 
 /** Widened while the layout-holder stack is open: these still write layout. */
@@ -38,16 +35,59 @@ const STACK_WRITERS = [
   'src/renderer/src/store/slices/terminals.ts',
   'src/renderer/src/components/terminal-pane/TerminalPane.tsx',
   'src/renderer/src/runtime/sync-runtime-graph.ts',
-  'src/renderer/src/runtime/web-session-tabs-sync.ts'
+  'src/renderer/src/runtime/web-session-tabs-sync.ts',
+  'src/main/runtime/orca-runtime-split-terminal.ts',
+  'src/main/runtime/orca-runtime-sync-window-graph.ts',
+  'src/main/runtime/mobile-session-layout-projection.ts',
+  'src/main/runtime/headless-runtime-graph.ts',
+  'src/main/persistence/loading-store/session-host-partitions.ts',
+  'src/main/persistence/loading-store/workspace-session-snapshot-publication.ts',
+  'src/renderer/src/store/slices/tab-group-reference-repair.ts',
+  'src/renderer/src/store/slices/terminal-session-row-hydration.ts',
+  'src/renderer/src/store/workspace-layout-cache.ts',
+  'src/renderer/src/app-shell/use-runtime-graph-sync.ts',
+  'src/renderer/src/components/tab-group/tab-drag-drop-commit.ts',
+  'src/shared/remote-layout-snapshot.ts',
+  'src/shared/terminal-leaf-move.ts'
 ]
+
+/** Every test file the oracle specs import, transitively: a change there can break the gate. */
+function oracleHarnessFiles() {
+  const seen = new Set()
+  const pending = [...LAYOUT_ORACLE_E2E_SPECS]
+  while (pending.length > 0) {
+    const file = pending.pop()
+    if (seen.has(file)) {
+      continue
+    }
+    seen.add(file)
+    const source = readFileSync(join(projectDir, file), 'utf8')
+    for (const [, specifier] of source.matchAll(/(?:from|import)\s*\(?\s*'(\.[^']+)'/g)) {
+      const base = relative(projectDir, join(projectDir, dirname(file), specifier))
+      const resolved = [base, `${base}.ts`, `${base}.tsx`].find(
+        (candidate) => /\.tsx?$/.test(candidate) && existsSync(join(projectDir, candidate))
+      )
+      if (resolved?.startsWith('tests/')) {
+        pending.push(resolved)
+      }
+    }
+  }
+  return [...seen]
+}
 
 describe('workspace layout oracle merge gate', () => {
   it('routes each layout authority and stack writer on its own', () => {
     for (const file of [...LAYOUT_AUTHORITIES, ...STACK_WRITERS]) {
-      expect(isWorkspaceLayoutOracleSource(file), file).toBe(true)
+      expect(isLayoutOracleSource(file), file).toBe(true)
       expect(classifyPrJobs([file]).layout_oracle, file).toBe(true)
       expect(existsSync(join(projectDir, file)), file).toBe(true)
     }
+  })
+
+  it('routes every test file the oracle specs import', () => {
+    const harness = oracleHarnessFiles()
+    expect(harness.length).toBeGreaterThan(LAYOUT_ORACLE_E2E_SPECS.length)
+    expect(harness.filter((file) => !isLayoutOracleSource(file))).toEqual([])
   })
 
   it('leaves tests, fixtures, harnesses and unrelated runtime modules alone', () => {
@@ -66,7 +106,7 @@ describe('workspace layout oracle merge gate', () => {
       'src/renderer/src/runtime/sync-runtime-graph.test.ts',
       'tests/e2e/workspace-layout-oracle-latency.spec.ts'
     ]) {
-      expect(isWorkspaceLayoutOracleSource(file), file).toBe(false)
+      expect(isLayoutOracleSource(file), file).toBe(false)
     }
     expect(classifyPrJobs(['src/main/runtime/orca-runtime-files.ts']).layout_oracle).toBe(false)
   })
@@ -79,8 +119,10 @@ describe('workspace layout oracle merge gate', () => {
   it('runs exactly the oracle specs, each in the lane that can run it', () => {
     const job = prWorkflow.jobs.layout_oracle
     expect(job.uses).toBe('./.github/workflows/e2e.yml')
+    // The merge commit, so a stale-base PR cannot pass on an old main.
+    expect(job.with.ref).toBe('${{ github.sha }}')
     const specs = JSON.parse(job.with.test_files)
-    expect(specs.toSorted()).toEqual(WORKSPACE_LAYOUT_ORACLE_E2E_SPECS.toSorted())
+    expect(specs.toSorted()).toEqual(LAYOUT_ORACLE_E2E_SPECS.toSorted())
     // Window spec runs in the changed-spec lane; headless runs in the orcad lane.
     expect(selectGeneralE2eSpecs(specs)).toEqual(['tests/e2e/workspace-layout-oracle.spec.ts'])
     expect(classifyE2eJobs(job.with.test_files)).toEqual({
