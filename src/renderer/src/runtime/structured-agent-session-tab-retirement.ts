@@ -19,7 +19,10 @@ import {
   isHostIdentityFenceCurrent,
   type HostIdentityFence
 } from '@/store/host-catalog-fencing'
-import { resolveContinuedRuntimeEnvironmentRevision } from './runtime-environment-revision'
+import {
+  getRuntimeEnvironmentRevision,
+  resolveContinuedRuntimeEnvironmentRevision
+} from './runtime-environment-revision'
 import {
   executionHostIdForStructuredTarget,
   structuredAgentSessionFocusOwner
@@ -47,8 +50,19 @@ const inFlightRetirements = new Map<
   { fence: HostIdentityFence; promise: Promise<HostTabCloseSettlement> }
 >()
 
-function retirementKey(target: RuntimeClientTarget, worktreeId: string, sessionId: string): string {
-  return `${target.kind}:${target.kind === 'environment' ? target.environmentId : 'local'}:${worktreeId}:${sessionId}`
+function retirementKey(
+  target: RuntimeClientTarget,
+  worktreeId: string,
+  sessionId: string,
+  pairingRevision: number | undefined
+): string {
+  return JSON.stringify([
+    target.kind,
+    target.kind === 'environment' ? target.environmentId : 'local',
+    pairingRevision,
+    worktreeId,
+    sessionId
+  ])
 }
 
 /** A reveal must follow the close this client has already started, including its capability await. */
@@ -57,7 +71,16 @@ export function pendingStructuredAgentSessionTabRetirement(
   worktreeId: string,
   sessionId: string
 ): Promise<HostTabCloseSettlement> | undefined {
-  const pending = inFlightRetirements.get(retirementKey(target, worktreeId, sessionId))
+  const pending = inFlightRetirements.get(
+    retirementKey(
+      target,
+      worktreeId,
+      sessionId,
+      target.kind === 'environment'
+        ? getRuntimeEnvironmentRevision(target.environmentId)
+        : undefined
+    )
+  )
   return pending && isHostIdentityFenceCurrent(pending.fence) ? pending.promise : undefined
 }
 
@@ -71,9 +94,18 @@ export function retireStructuredAgentSessionTab(args: {
   sessionId: string
   onError?: (error: unknown) => void
 }): Promise<HostTabCloseSettlement> {
+  const expectedEnvironmentPairingRevision =
+    args.target.kind === 'environment'
+      ? getRuntimeEnvironmentRevision(args.target.environmentId)
+      : undefined
   retireStructuredAgentSessionReadOwner(args.sessionId, args.target)
   const fence = captureHostIdentityFence({ target: args.target, at: 'local' })
-  const key = retirementKey(args.target, args.worktreeId, args.sessionId)
+  const key = retirementKey(
+    args.target,
+    args.worktreeId,
+    args.sessionId,
+    expectedEnvironmentPairingRevision
+  )
   const existing = pendingStructuredAgentSessionTabRetirement(
     args.target,
     args.worktreeId,

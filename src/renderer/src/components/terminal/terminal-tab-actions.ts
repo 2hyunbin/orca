@@ -158,6 +158,20 @@ export function closeTerminalTab(
       wireReason === 'user'
         ? null
         : getLatestWebSessionTabsPublicationEpoch(runtimeEnvironmentId, owningWorktreeId)
+    void closeWebRuntimeSessionTab({
+      worktreeId: owningWorktreeId,
+      tabId: hostBackedTabId,
+      environmentId: runtimeEnvironmentId,
+      // Why: lifecycle evidence binds this stale-prone echo to the exact host
+      // publication and terminal incarnation that the renderer observed.
+      reason: wireReason,
+      ...(wireReason !== 'user'
+        ? {
+            publicationEpoch,
+            terminalHandle: lifecycleTerminalHandle
+          }
+        : {})
+    })
     // Why: prune local mirrors immediately so close feels responsive while the
     // host session snapshot catches up.
     closeLocalTerminalTabState(terminalTabId, {
@@ -171,20 +185,6 @@ export function closeTerminalTab(
         : {}),
       ...(options?.precomputedRetirementPlan
         ? { precomputedRetirementPlan: options.precomputedRetirementPlan }
-        : {})
-    })
-    void closeWebRuntimeSessionTab({
-      worktreeId: owningWorktreeId,
-      tabId: hostBackedTabId,
-      environmentId: runtimeEnvironmentId,
-      // Why: lifecycle evidence binds this stale-prone echo to the exact host
-      // publication and terminal incarnation that the renderer observed.
-      reason: wireReason,
-      ...(wireReason !== 'user'
-        ? {
-            publicationEpoch,
-            terminalHandle: lifecycleTerminalHandle
-          }
         : {})
     })
     options?.onClosed?.()

@@ -33,7 +33,7 @@ describe('SessionTabCloseLedger', () => {
     expect(ledger.settle(ticket, 'closed', NOW)).toBe(true)
     expect(apply(ledger, [{ id: 'a' }, { id: 'b' }])).toEqual(['a'])
     expect(apply(ledger, [{ id: 'a' }])).toEqual(['a'])
-    expect(ledger.hasPending(P)).toBe(false)
+    expect(ledger.hasPending(P, NOW)).toBe(false)
     expect(apply(ledger, [{ id: 'a' }, { id: 'b' }])).toEqual(['a', 'b'])
   })
 
@@ -42,7 +42,7 @@ describe('SessionTabCloseLedger', () => {
     const ticket = ledger.begin(P, 'b', NOW)!
     apply(ledger, [{ id: 'a' }])
     ledger.settle(ticket, 'closed', NOW)
-    expect(ledger.hasPending(P)).toBe(false)
+    expect(ledger.hasPending(P, NOW)).toBe(false)
   })
 
   it('lets the tab back when the close fails', () => {
@@ -77,7 +77,7 @@ describe('SessionTabCloseLedger', () => {
     const ticket = ledger.begin(P, 'b', NOW)!
     apply(ledger, [{ id: 'a' }])
     ledger.settle(ticket, 'absent', NOW)
-    expect(ledger.hasPending(P)).toBe(false)
+    expect(ledger.hasPending(P, NOW)).toBe(false)
   })
 
   it('drops an unanswered close after its expiry and ignores its late answer', () => {
@@ -94,6 +94,29 @@ describe('SessionTabCloseLedger', () => {
     const ticket = ledger.begin(P, 'b', NOW)!
     ledger.settle(ticket, 'closed', NOW)
     expect(apply(ledger, [{ id: 'b' }], NOW + SESSION_TAB_CLOSE_SETTLED_TTL_MS + 1)).toEqual(['b'])
+  })
+
+  it('ends ordinary pending polling when no inventory arrives after expiry', () => {
+    const ledger = new SessionTabCloseLedger()
+    const unanswered = ledger.begin(P, 'b', NOW)!
+    expect(ledger.hasPending(P, NOW + SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS)).toBe(true)
+    expect(ledger.hasPending(P, NOW + SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS + 1)).toBe(false)
+    expect(ledger.settle(unanswered, 'closed', NOW + 60_000)).toBe(false)
+
+    const accepted = ledger.begin(P, 'b', NOW)!
+    ledger.settle(accepted, 'closed', NOW)
+    expect(ledger.hasPending(P, NOW + SESSION_TAB_CLOSE_SETTLED_TTL_MS + 1)).toBe(false)
+  })
+
+  it('keeps absent suppression when expiring other entries without inventory', () => {
+    const ledger = new SessionTabCloseLedger()
+    const absent = ledger.begin(P, 'a', NOW)!
+    ledger.settle(absent, 'absent', NOW)
+    ledger.begin(P, 'b', NOW)
+    expect(ledger.hasPending(P, NOW + 60_000)).toBe(true)
+    expect(apply(ledger, [{ id: 'a' }, { id: 'b' }], NOW + 60_000)).toEqual(['b'])
+    expect(apply(ledger, [], NOW + 60_000)).toEqual([])
+    expect(ledger.hasPending(P, NOW + 60_000)).toBe(false)
   })
 
   it('hides every pane of a closed tab, and only the pane a pane close names', () => {
@@ -148,10 +171,10 @@ describe('SessionTabCloseLedger', () => {
     ledger.begin('p2', 'b', NOW)
     expect(ids(ledger.filter('p3', [{ id: 'b' }], topLevel, NOW))).toEqual(['b'])
     ledger.begin('p3', 'b', NOW)
-    expect(ledger.hasPending('p1')).toBe(false)
-    expect(ledger.hasPending('p2')).toBe(true)
+    expect(ledger.hasPending('p1', NOW)).toBe(false)
+    expect(ledger.hasPending('p2', NOW)).toBe(true)
     ledger.clearPartition('p2')
-    expect(ledger.hasPending('p2')).toBe(false)
+    expect(ledger.hasPending('p2', NOW)).toBe(false)
   })
 
   it('returns the same array when nothing is hidden', () => {

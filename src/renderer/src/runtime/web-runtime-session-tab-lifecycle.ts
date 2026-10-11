@@ -1,8 +1,4 @@
-import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
-import type {
-  RuntimeMobileSessionTabCloseResult,
-  RuntimeSessionTabCloseReason
-} from '../../../shared/runtime-types'
+import type { RuntimeSessionTabCloseReason } from '../../../shared/runtime-types'
 import { useAppStore } from '../store'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
@@ -21,6 +17,7 @@ import {
 } from './web-session-focus-intent'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import { toHostSessionTabId } from './web-terminal-surface-id'
+import { resolveHostSessionTabIdForWebSessionTab } from './web-session-tabs-sync/tracking-mappings'
 import {
   captureRuntimeEnvironmentCall,
   captureWebSessionIntentOwner,
@@ -113,12 +110,15 @@ export async function closeWebRuntimeSessionTab(args: {
   reason: RuntimeSessionTabCloseReason
   publicationEpoch?: string | null
   terminalHandle?: string | null
+  initialCloseTicket?: WebSessionCloseIntentTicket | null
 }): Promise<WebRuntimeSessionTabCloseOutcome> {
-  const environmentId = resolveSessionTabEnvironmentId(args.environmentId)
+  const environmentId =
+    args.initialCloseTicket?.owner.environmentId ??
+    resolveSessionTabEnvironmentId(args.environmentId)
   if (!environmentId) {
     return 'failed'
   }
-  const intentOwner = captureWebSessionIntentOwner(environmentId)
+  const intentOwner = args.initialCloseTicket?.owner ?? captureWebSessionIntentOwner(environmentId)
   const callEnvironment = captureRuntimeEnvironmentCall(environmentId, intentOwner.pairingRevision)
   const reread = (acceptCurrent: boolean): Promise<void> =>
     rereadHostSessionTabs(
@@ -138,25 +138,27 @@ export async function closeWebRuntimeSessionTab(args: {
     return 'failed'
   }
 
-  // Why: begin before async id resolution so a stale snapshot cannot flash the closed tab back.
+  // Capture aliases before local pruning can discard their host correspondence.
+  const hostTabId =
+    args.initialCloseTicket?.closedId ??
+    resolveHostSessionTabIdForWebSessionTab(useAppStore.getState(), {
+      environmentId,
+      worktreeId: args.worktreeId,
+      tabId: args.tabId
+    }) ??
+    toHostSessionTabId(args.tabId)
   const tickets: WebSessionCloseIntentTicket[] = []
-  let settled = false
-  const begin = (hostTabId: string): void => {
-    if (settled) {
-      return
-    }
-    const ticket = beginWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId, Date.now())
-    if (ticket) {
-      tickets.push(ticket)
+  if (args.initialCloseTicket) {
+    tickets.push(args.initialCloseTicket)
+  } else {
+    for (const closedId of new Set([toHostSessionTabId(args.tabId), hostTabId])) {
+      const ticket = beginWebSessionCloseIntent(intentOwner, args.worktreeId, closedId, Date.now())
+      if (ticket) {
+        tickets.push(ticket)
+      }
     }
   }
-  const immediateHostTabId = toHostSessionTabId(args.tabId)
-  begin(immediateHostTabId)
   const close = (async () => {
-    const hostTabId = await resolveHostTabId(environmentId, args.worktreeId, args.tabId)
-    if (hostTabId !== immediateHostTabId) {
-      begin(hostTabId)
-    }
     const response = await callEnvironment({
       // Why: old hosts cannot route this additive method, so a generation
       // cutover fails closed before their destructive legacy close handler.
@@ -171,15 +173,10 @@ export async function closeWebRuntimeSessionTab(args: {
       },
       timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
     })
-    return unwrapRuntimeRpcResult(
-      response as RuntimeRpcResponse<RuntimeMobileSessionTabCloseResult | undefined>
-    )
+    return unwrapRuntimeRpcResult(response)
   })()
   return settleHostSessionTabClose({
-    tickets: () => {
-      settled = true
-      return tickets
-    },
+    tickets: () => tickets,
     close,
     reread,
     // Why: a paired host's lists travel apart from its answer, so read once after the close.

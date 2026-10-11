@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type * as RuntimeEnvironmentRevision from './runtime-environment-revision'
 import {
   beginWebSessionCloseIntent,
   captureWebSessionCloseIntent,
@@ -18,7 +19,8 @@ import {
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 
 const revisions = vi.hoisted(() => new Map<string, number>())
-vi.mock('./runtime-environment-revision', () => ({
+vi.mock('./runtime-environment-revision', async (importOriginal) => ({
+  ...(await importOriginal<typeof RuntimeEnvironmentRevision>()),
   getRuntimeEnvironmentRevision: (environmentId: string) => revisions.get(environmentId)
 }))
 
@@ -29,6 +31,7 @@ const topLevel = (tab: { id: string; parentTabId?: string }): string => tab.pare
 afterEach(() => {
   resetWebSessionCloseIntentForTests()
   revisions.clear()
+  vi.restoreAllMocks()
 })
 
 describe('web session tab close records', () => {
@@ -74,7 +77,7 @@ describe('web session tab close records', () => {
 
   it('a reopen ends only that tab close in its own partition', () => {
     const ticket = beginWebSessionCloseIntent(OWNER, WT, 'host-tab-1', 1000)!
-    expect(captureWebSessionCloseIntent(OWNER, WT, 'host-tab-1')).toEqual(ticket)
+    expect(captureWebSessionCloseIntent(OWNER, WT, 'host-tab-1')?.entry).toBe(ticket.entry)
     beginWebSessionCloseIntent(OWNER, 'other-wt', 'host-tab-1', 1000)
     expect(reopenWebSessionCloseIntent(ticket)).toBe(true)
     expect(isWebSessionCloseIntentPending(OWNER, WT, 'host-tab-1', 1000)).toBe(false)
@@ -83,6 +86,7 @@ describe('web session tab close records', () => {
   })
 
   it('drops only the closes of pairings that ended', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000)
     revisions.set('runtime-a', 1)
     revisions.set('runtime-b', 1)
     const otherOwner = { environmentId: 'runtime-b', pairingRevision: 1 }

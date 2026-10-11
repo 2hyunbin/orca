@@ -1,5 +1,6 @@
 import type { SessionTabsPublicationEpochHistory } from '../web-session-tabs-sync/state'
 import type { StructuredSessionTabPublicationVersion } from '../local-structured-session-tab-retirement'
+import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 
 // Which publisher instance the renderer is listening to, which publication it
 // already accepted per worktree, and the one-shot startup restore. Every async
@@ -10,7 +11,10 @@ let restorePromise: Promise<void> | null = null
 
 export const localStructuredSessionVersionByWorktree = new Map<
   string,
-  StructuredSessionTabPublicationVersion
+  StructuredSessionTabPublicationVersion & {
+    source?: RuntimeMobileSessionTabsResult
+    generation?: number
+  }
 >()
 export const localStructuredSessionEpochHistoryByWorktree = new Map<
   string,

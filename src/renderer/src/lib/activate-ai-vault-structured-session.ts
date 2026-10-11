@@ -23,8 +23,7 @@ import {
 } from '@/runtime/structured-agent-session-owner'
 import {
   captureWebSessionCloseIntent,
-  reopenWebSessionCloseIntent,
-  type WebSessionCloseIntentTicket
+  reopenWebSessionCloseIntent
 } from '@/runtime/web-session-close-intent'
 import { captureWebSessionIntentOwner } from '@/runtime/web-runtime-session-environment'
 import { rereadHostSessionTabs } from '@/runtime/host-session-tab-close'
@@ -288,7 +287,7 @@ type AgentSessionRevealReply = { ok?: boolean; refusal?: { code?: string } }
 async function showReopenedChat(
   fence: HostIdentityFence,
   worktreeId: string,
-  ticket: WebSessionCloseIntentTicket | null,
+  ticket: ReturnType<typeof captureWebSessionCloseIntent>,
   closeSupported: boolean | undefined
 ): Promise<void> {
   const host = fence.route.target

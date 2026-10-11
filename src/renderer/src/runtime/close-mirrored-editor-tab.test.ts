@@ -67,7 +67,8 @@ describe('notifyHostOfMirroredEditorClose', () => {
       worktreeId: 'wt-1',
       tabId: 'host-tab-1',
       environmentId: 'env-1',
-      reason: 'user'
+      reason: 'user',
+      initialCloseTicket: expect.objectContaining({ closedId: 'host-tab-1', worktreeId: 'wt-1' })
     })
   })
 
@@ -117,7 +118,8 @@ describe('notifyHostOfMirroredEditorClose', () => {
         worktreeId: 'wt-1',
         tabId: 'host-tab-1',
         environmentId: 'env-2',
-        reason: 'user'
+        reason: 'user',
+        initialCloseTicket: expect.objectContaining({ closedId: 'host-tab-1', worktreeId: 'wt-1' })
       })
     )
     expect(getRuntimeEnvironmentIdForWorktreeMock).not.toHaveBeenCalled()

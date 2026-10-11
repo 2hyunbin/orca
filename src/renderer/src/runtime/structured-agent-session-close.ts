@@ -1,28 +1,38 @@
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import {
+  callRuntimeRpc,
   runtimeEnvironmentSupportsCapability,
   type RuntimeClientTarget
 } from './runtime-rpc-client'
-import { callStructuredAgentSession } from './structured-agent-session-client'
+import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
 
 export async function closeStructuredAgentSession(
   target: RuntimeClientTarget,
   sessionId: string,
-  options?: { expectedEnvironmentPairingRevision?: number; expectedEnvironmentRuntimeId?: string }
+  options: {
+    expectedEnvironmentPairingRevision?: number
+    expectedEnvironmentRuntimeId?: string
+  } = {}
 ): Promise<'closed' | 'unsupported'> {
+  const expectedEnvironmentPairingRevision =
+    target.kind === 'environment'
+      ? captureRuntimeEnvironmentRequestRevision(
+          target.environmentId,
+          options.expectedEnvironmentPairingRevision
+        )
+      : undefined
+  const requestOptions = { ...options, expectedEnvironmentPairingRevision }
   if (
     target.kind === 'environment' &&
     !(await runtimeEnvironmentSupportsCapability(
       target.environmentId,
       STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
       undefined,
-      options
+      requestOptions
     ))
   ) {
     return 'unsupported'
   }
-  await (options
-    ? callStructuredAgentSession(target, 'agentSession.close', { sessionId }, options)
-    : callStructuredAgentSession(target, 'agentSession.close', { sessionId }))
+  await callRuntimeRpc(target, 'agentSession.close', { sessionId }, requestOptions)
   return 'closed'
 }

@@ -27,6 +27,11 @@ import {
 } from './terminal-surfaces'
 import { buildMirroredTerminalTabs } from './terminal-build'
 import { hostSnapshotAffirmsWorktreeContents } from '../host-session-snapshot-authority'
+import { hostSessionTabSourceConfirmsOmission } from '../host-session-tab-source'
+import { latestSessionTabsSnapshotByWorktree } from './state'
+import { sessionTabsFreshnessKey } from './tracking'
+import { localStructuredSessionVersionByWorktree } from '../local-structured-session-tabs-sync/inventory-generation-fence'
+import { LOCAL_STRUCTURED_SESSION_OWNER } from '../local-structured-session-owner'
 
 export function prepareWebSessionTabsSnapshotBase(
   state: WebSessionTabsSyncState,
@@ -37,17 +42,27 @@ export function prepareWebSessionTabsSnapshotBase(
   batchContext: WebSessionTabsBatchContext | undefined,
   options: WebSessionTabsSnapshotApplyOptions | undefined
 ) {
+  const previousSource =
+    environmentId === LOCAL_STRUCTURED_SESSION_OWNER
+      ? localStructuredSessionVersionByWorktree.get(worktreeId)?.source
+      : latestSessionTabsSnapshotByWorktree.get(sessionTabsFreshnessKey(environmentId, worktreeId))
+          ?.source
   const visibleTabs = filterWebSessionCloseIntents(
     { environmentId },
     worktreeId,
     rawSnapshot.tabs,
     (tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id),
-    now
+    now,
+    options?.projectionOnly
+      ? false
+      : (closedId) => hostSessionTabSourceConfirmsOmission(rawSnapshot, previousSource, closedId)
   )
   const snapshot: RuntimeMobileSessionTabsResult =
     visibleTabs === rawSnapshot.tabs ? rawSnapshot : { ...rawSnapshot, tabs: [...visibleTabs] }
   // Why: only a caller-recorded create intent may focus its arriving tab; unsolicited server-active must not steal focus (#5435).
-  const focusIntent = peekWebSessionFocusIntent({ environmentId }, worktreeId)
+  const focusIntent = options?.projectionOnly
+    ? null
+    : peekWebSessionFocusIntent({ environmentId }, worktreeId)
   const focusIntentHostTabId = focusIntent?.hostTabId ?? null
   const matchingFocusIntentTab =
     focusIntentHostTabId === null
@@ -74,7 +89,7 @@ export function prepareWebSessionTabsSnapshotBase(
       ? matchingFocusIntentTab
       : null
   const followIntentTab =
-    snapshot.navigationIntent === 'follow'
+    !options?.projectionOnly && snapshot.navigationIntent === 'follow'
       ? (snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId) ?? null)
       : null
   const navigationIntentTab = callerFocusIntentTab ?? followIntentTab

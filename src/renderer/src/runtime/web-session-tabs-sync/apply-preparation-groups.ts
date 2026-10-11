@@ -102,6 +102,12 @@ export function prepareWebSessionTabsSnapshotGroups(
         })
       }
     }
+    if (options?.closeRestoration) {
+      const restoredTabId = hostToLocalTabId.get(options.closeRestoration.hostTabId)
+      if (restoredTabId) {
+        placementMoves.push({ tabId: restoredTabId, groupId: options.closeRestoration.groupId })
+      }
+    }
     const adoptedTabs = mirroredUnifiedTabs
       .filter((tab) => !knownGroupTabIds.has(tab.id))
       .map((tab) => ({

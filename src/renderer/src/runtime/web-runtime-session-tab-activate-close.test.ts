@@ -11,6 +11,7 @@ import {
 } from './web-session-close-intent'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import { toHostSessionTabId } from './web-terminal-surface-id'
+import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 import { ENVIRONMENT_ID, WORKTREE_ID, makeSnapshot } from './web-runtime-session-test-harness'
 
 const mocks = vi.hoisted(() => ({
@@ -54,6 +55,11 @@ vi.mock('./web-session-tabs-sync', () => ({
     return () => {}
   },
   resolveHostSessionTabIdForWebSessionTab: mocks.resolveHostSessionTabIdForWebSessionTab
+}))
+
+vi.mock('./web-session-tabs-sync/tracking-mappings', () => ({
+  resolveHostSessionTabIdForWebSessionTab: mocks.resolveHostSessionTabIdForWebSessionTab,
+  resolveLocalTabIdForHostSessionTab: () => null
 }))
 
 vi.mock('@/lib/feature-education-telemetry', () => ({
@@ -103,9 +109,42 @@ describe('web runtime session tab actions', () => {
   })
 
   afterEach(() => {
+    replaceRuntimeEnvironmentRevisions([])
     resetWebSessionFocusIntentForTests()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
+  })
+
+  it('keeps a deferred ticket on its original pairing and host tab', async () => {
+    replaceRuntimeEnvironmentRevisions([{ id: ENVIRONMENT_ID, createdAt: 0, pairingRevision: 3 }])
+    const ticket = beginWebSessionCloseIntent(
+      { environmentId: ENVIRONMENT_ID },
+      WORKTREE_ID,
+      'original-host-tab',
+      Date.now()
+    )!
+    replaceRuntimeEnvironmentRevisions([{ id: ENVIRONMENT_ID, createdAt: 0, pairingRevision: 4 }])
+    mocks.resolveHostSessionTabIdForWebSessionTab.mockImplementation(() => {
+      throw new Error('replacement mapping must not be read')
+    })
+    const call = vi.fn().mockResolvedValue({ id: 'close', ok: true, result: { closed: true } })
+    vi.stubGlobal('window', { api: { runtimeEnvironments: { call } } })
+    await expect(
+      closeWebRuntimeSessionTab({
+        worktreeId: WORKTREE_ID,
+        tabId: 'client-tab',
+        environmentId: 'replacement-env',
+        reason: 'user',
+        initialCloseTicket: ticket
+      })
+    ).resolves.toBe('applied')
+    expect(call).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selector: ENVIRONMENT_ID,
+        expectedEnvironmentPairingRevision: 3,
+        params: expect.objectContaining({ tabId: 'original-host-tab' })
+      })
+    )
   })
 
   it('maps mirrored local browser unified ids for activate and close', async () => {
@@ -576,7 +615,7 @@ describe('web runtime session tab actions', () => {
       .mockResolvedValueOnce({
         id: 'close',
         ok: true,
-        result: { closed: true, refused: true }
+        result: { closed: true, refused: true, refusalReason: 'live-host-pty' }
       })
       .mockResolvedValueOnce({ id: 'list', ok: true, result: makeSnapshot() })
 

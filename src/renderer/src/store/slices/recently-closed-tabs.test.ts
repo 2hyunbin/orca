@@ -3,6 +3,8 @@
  * stacks, and the unified dispatcher pops the most recently closed tab of any
  * kind (terminal/browser/editor) in true cross-type MRU order.
  */
+// Match the app's store entry order before assembling isolated slice fixtures.
+import '../index'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import { getDefaultSettings } from '../../../../shared/constants'
