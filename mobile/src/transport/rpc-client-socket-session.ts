@@ -1,4 +1,4 @@
-import type { DirectE2EEFraming } from './direct-e2ee-framing-policy'
+import type { DirectE2EEFraming, DirectE2EEFramingPolicy } from './direct-e2ee-framing-policy'
 import { createDirectSocketFraming, type DirectSocketFraming } from './direct-socket-framing'
 import { isRpcResponse } from './rpc-response-shape'
 import { isStaleRpcSocketEvent, logRpcSocketClose } from './rpc-socket-close-evidence'
@@ -15,7 +15,7 @@ type SocketSessionOptions = {
   deviceToken: string
   serverPublicKey: Uint8Array
   serverPublicKeyB64: string
-  framing: DirectE2EEFraming
+  framingPolicy: DirectE2EEFramingPolicy
   getCurrentSocket: () => WebSocket | null
   getState: () => ConnectionState
   getReconnectAttempt: () => number
@@ -30,14 +30,14 @@ type SocketSessionOptions = {
   onAuthenticatedInbound: (session: RpcClientSocketSession) => void
   onClosed: (session: RpcClientSocketSession, closeCode?: number) => void
   onForcedClose: (session: RpcClientSocketSession) => void
-  onV2Authenticated: () => void
-  onV2HelloRefused: () => void
 }
 
 export class RpcClientSocketSession {
   readonly socket: WebSocket
   readonly constructedAt = Date.now()
   private framing: DirectSocketFraming | null = null
+  // Why: chosen when the socket opens, so a latch recorded while it was dialing applies.
+  private framingKind: DirectE2EEFraming | null = null
   private readyAccepted = false
   private authenticated = false
   private lastInboundAt: number | null = null
@@ -133,15 +133,7 @@ export class RpcClientSocketSession {
         authenticated: this.authenticated,
         lastInboundAt: this.lastInboundAt
       })
-      // Why: hosts that predate direct v2 refuse the v2 hello with 4001 before any ready.
-      if (
-        this.options.framing === 'v2' &&
-        !this.readyAccepted &&
-        closeCode === UNAUTHORIZED_CLOSE_CODE
-      ) {
-        this.options.onV2HelloRefused()
-      }
-      this.options.onClosed(this, closeCode)
+      this.options.onClosed(this, this.classifyClose(closeCode))
     }
     this.socket.onerror = (event) => {
       if (this.isStale('error')) {
@@ -159,10 +151,25 @@ export class RpcClientSocketSession {
     }
   }
 
+  // Why: hosts that predate direct v2 refuse the v2 hello with 4001 before any ready;
+  // that is an auth verdict only for a host already proven to speak v2.
+  private classifyClose(closeCode: number | undefined): number | undefined {
+    if (this.framingKind !== 'v2' || this.readyAccepted || closeCode !== UNAUTHORIZED_CLOSE_CODE) {
+      return closeCode
+    }
+    const policy = this.options.framingPolicy
+    const countsAsAuthFailure = policy.helloRefusalIsAuthFailure()
+    policy.noteV2HelloRefused()
+    return countsAsAuthFailure ? closeCode : undefined
+  }
+
   private startHandshake(): void {
     const isCurrent = () => this.options.getCurrentSocket() === this.socket
+    const policy = this.options.framingPolicy
+    this.framingKind = policy.framingForNextDial()
     this.framing = createDirectSocketFraming({
-      framing: this.options.framing,
+      framing: this.framingKind,
+      mayUseLegacy: policy.mayUseLegacy,
       socket: this.socket,
       serverPublicKey: this.options.serverPublicKey,
       serverPublicKeyB64: this.options.serverPublicKeyB64,
@@ -176,8 +183,8 @@ export class RpcClientSocketSession {
           this.clearHandshakeTimer()
           this.authenticated = true
           // Why: latch only once the host proved its key; an unauthenticated ready is forgeable.
-          if (this.options.framing === 'v2') {
-            this.options.onV2Authenticated()
+          if (this.framingKind === 'v2') {
+            policy.noteV2Authenticated()
           }
           this.options.onAuthenticated(this)
         },

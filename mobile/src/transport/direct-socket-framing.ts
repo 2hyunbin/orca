@@ -35,6 +35,7 @@ export type DirectSocketFraming = {
 
 export function createDirectSocketFraming(args: {
   framing: DirectE2EEFraming
+  mayUseLegacy: () => boolean
   socket: WebSocket
   serverPublicKey: Uint8Array
   serverPublicKeyB64: string
@@ -102,6 +103,10 @@ function createLegacyFraming(args: Parameters<typeof createDirectSocketFraming>[
     try {
       const message = JSON.parse(raw) as { type?: unknown }
       if (message.type === 'e2ee_ready') {
+        if (!args.mayUseLegacy()) {
+          events.onProtocolError(new Error('host is latched to E2EE v2; refusing legacy auth'))
+          return
+        }
         args.emitLog('success', 'Received e2ee_ready', 'Sending device token')
         events.onReadyAccepted()
         try {
@@ -167,6 +172,9 @@ function createLegacyFraming(args: Parameters<typeof createDirectSocketFraming>[
 
   return {
     start: () => {
+      if (!args.mayUseLegacy()) {
+        throw new Error('host is latched to E2EE v2; refusing legacy hello')
+      }
       const ephemeral = generateKeyPair()
       socket.send(
         JSON.stringify({ type: 'e2ee_hello', publicKeyB64: publicKeyToBase64(ephemeral.publicKey) })

@@ -67,6 +67,14 @@ const sockets: MockWebSocket[] = []
 const originalWebSocket = globalThis.WebSocket
 const flush = () => vi.advanceTimersByTimeAsync(0)
 
+async function nextSocket(): Promise<MockWebSocket> {
+  const count = sockets.length
+  for (let elapsed = 0; sockets.length === count && elapsed < 60_000; elapsed += 100) {
+    await vi.advanceTimersByTimeAsync(100)
+  }
+  return sockets.at(-1)!
+}
+
 function firstFrame(socket: MockWebSocket): unknown {
   return JSON.parse(String(socket.sent[0]))
 }
@@ -178,6 +186,63 @@ describe('direct connections use E2EE v2 framing', () => {
     expect(socket.close).toHaveBeenCalled()
     expect(socket.sent).toHaveLength(1)
     expect(client.getState()).not.toBe('connected')
+    client.close()
+  })
+
+  it('does not exhaust the auth budget on an old host while the latch store is still loading', async () => {
+    let releaseStorage!: () => void
+    const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage')
+    vi.mocked(AsyncStorage.getItem).mockImplementationOnce(
+      () => new Promise((resolve) => (releaseStorage = () => resolve(null)))
+    )
+    const client = connect('ws://desktop.invalid', 'device-token', desktopPublicKeyB64)
+    let socket = sockets[0]!
+    for (let attempt = 0; attempt < 4; attempt++) {
+      socket.open()
+      expect(firstFrame(socket)).toMatchObject({ v: 2 })
+      socket.serverClose(4001)
+      socket = await nextSocket()
+    }
+    expect(client.getState()).not.toBe('auth-failed')
+
+    releaseStorage()
+    await flush()
+    socket.serverClose(1006)
+    socket = await nextSocket()
+    socket.open()
+    expect(firstFrame(socket)).toEqual({ type: 'e2ee_hello', publicKeyB64: expect.any(String) })
+    client.close()
+  })
+
+  it('applies a latch recorded while a legacy dial was pending', async () => {
+    await hydrateE2EEV2HostLatch()
+    const client = connect('ws://desktop.invalid', 'device-token', desktopPublicKeyB64)
+    sockets[0]!.open()
+    sockets[0]!.serverClose(4001)
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // The retry chose legacy, but another connection proves v2 before this one opens.
+    latchHostToE2EEV2(desktopPublicKeyB64)
+    sockets[1]!.open()
+    expect(firstFrame(sockets[1]!)).toMatchObject({ type: 'e2ee_hello', v: 2 })
+    client.close()
+  })
+
+  it('sends no legacy credential when the host latches between hello and ready', async () => {
+    await hydrateE2EEV2HostLatch()
+    const client = connect('ws://desktop.invalid', 'device-token', desktopPublicKeyB64)
+    sockets[0]!.open()
+    sockets[0]!.serverClose(4001)
+    await vi.advanceTimersByTimeAsync(2_000)
+    const legacy = sockets[1]!
+    legacy.open()
+    expect(firstFrame(legacy)).toEqual({ type: 'e2ee_hello', publicKeyB64: expect.any(String) })
+
+    latchHostToE2EEV2(desktopPublicKeyB64)
+    legacy.receive(JSON.stringify({ type: 'e2ee_ready' }))
+    await flush()
+    expect(legacy.sent).toHaveLength(1)
+    expect(legacy.close).toHaveBeenCalled()
     client.close()
   })
 

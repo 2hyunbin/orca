@@ -13,11 +13,13 @@ let writeChain: Promise<void> = Promise.resolve()
 
 export function hydrateE2EEV2HostLatch(): Promise<void> {
   hydration ??= (async () => {
-    let stored: string[] = []
+    let stored: string[]
     try {
       stored = parseLatchedHosts(await AsyncStorage.getItem(STORAGE_KEY))
     } catch {
-      // Unreadable storage only means no host is known to be latched yet.
+      // Why: unreadable is not "nothing latched" — stay unknown (no fallback) and retry later.
+      hydration = null
+      return
     }
     latched = new Set(stored)
     if (pendingLatches.size > 0) {

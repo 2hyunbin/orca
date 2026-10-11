@@ -65,7 +65,7 @@ export class RpcClientSocketFactory {
       deviceToken: this.options.deviceToken,
       serverPublicKey: this.serverPublicKey,
       serverPublicKeyB64: this.options.serverPublicKeyB64,
-      framing: this.framingPolicy.framingForNextDial(),
+      framingPolicy: this.framingPolicy,
       getCurrentSocket: this.options.getCurrentSocket,
       getState: this.options.getState,
       getReconnectAttempt: this.options.getReconnectAttempt,
@@ -79,9 +79,7 @@ export class RpcClientSocketFactory {
       onAnyInbound: (receivedAt) => (this.lastInboundAt = receivedAt),
       onAuthenticatedInbound: this.options.onAuthenticatedInbound,
       onClosed: this.options.onClosed,
-      onForcedClose: this.options.onForcedClose,
-      onV2Authenticated: this.framingPolicy.noteV2Authenticated,
-      onV2HelloRefused: this.framingPolicy.noteV2HelloRefused
+      onForcedClose: this.options.onForcedClose
     })
   }
 

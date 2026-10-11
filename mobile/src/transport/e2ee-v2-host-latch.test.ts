@@ -62,12 +62,24 @@ describe('E2EE v2 host latch', () => {
     )
   })
 
-  it('treats unreadable storage as no latch and ignores malformed entries', async () => {
-    vi.mocked(AsyncStorage.getItem).mockRejectedValueOnce(new Error('native module missing'))
+  it('keeps unreadable storage unknown (no fallback) and retries the read', async () => {
+    vi.mocked(AsyncStorage.getItem)
+      .mockRejectedValueOnce(new Error('transient read failure'))
+      .mockResolvedValueOnce(JSON.stringify(['host-key']))
+    const policy = createDirectE2EEFramingPolicy('host-key')
     await hydrateE2EEV2HostLatch()
-    expect(isHostLatchedToE2EEV2('host-key')).toBe(false)
+    expect(isHostLatchedToE2EEV2('host-key')).toBeNull()
+    policy.noteV2HelloRefused()
+    expect(policy.framingForNextDial()).toBe('v2')
+    expect(policy.helloRefusalIsAuthFailure()).toBe(false)
 
-    resetE2EEV2HostLatchForTests()
+    await hydrateE2EEV2HostLatch()
+    expect(isHostLatchedToE2EEV2('host-key')).toBe(true)
+    expect(policy.framingForNextDial()).toBe('v2')
+    expect(policy.helloRefusalIsAuthFailure()).toBe(true)
+  })
+
+  it('ignores malformed persisted entries', async () => {
     vi.mocked(AsyncStorage.getItem).mockResolvedValueOnce(JSON.stringify(['a', 7, '', null]))
     await hydrateE2EEV2HostLatch()
     expect(isHostLatchedToE2EEV2('a')).toBe(true)
