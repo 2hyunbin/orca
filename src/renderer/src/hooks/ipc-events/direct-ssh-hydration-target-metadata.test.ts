@@ -54,7 +54,7 @@ function bridgeRuntime(): DirectSshBridgeRuntime {
     },
     currentAuthority: () => null,
     terminalActions: () => ({}),
-    prepareAndSync: vi.fn(async () => {}),
+    prepareHost: vi.fn(async () => {}),
     isStopped: () => false,
     addDeadline: vi.fn(),
     removeDeadline: vi.fn(),

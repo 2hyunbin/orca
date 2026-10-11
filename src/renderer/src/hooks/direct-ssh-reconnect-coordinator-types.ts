@@ -130,7 +130,6 @@ export type DirectSshReconnectCoordinatorDeps = {
     authority: DirectSshAuthority,
     reason: DirectSshCorrectionReason
   ) => number
-  syncRemoteWorkspaceAfterConnect: (token: DirectSshPreparationToken) => void | Promise<void>
   onTelemetry?: (event: DirectSshCoordinatorTelemetry) => void
   now?: () => number
   setTimer?: (callback: () => void, delayMs: number) => DirectSshReconnectTimer

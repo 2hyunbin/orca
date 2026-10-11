@@ -147,7 +147,6 @@ function createCoordinatorHarness(fakeScheduler = createFakeScheduler()) {
     }),
     finalizeHydratedTerminalPanes: vi.fn(() => 1),
     correctUnboundTerminalPanes: vi.fn(() => 1),
-    syncRemoteWorkspaceAfterConnect: vi.fn(),
     onTelemetry: vi.fn()
   }
   const coordinator = createDirectSshReconnectCoordinator(deps)
@@ -205,7 +204,7 @@ describe('createDirectSshReconnectCoordinator', () => {
 
     harness.complete(1)
     await expect(pendingB).resolves.toMatchObject({ status: 'complete' })
-    expect(harness.deps.syncRemoteWorkspaceAfterConnect).toHaveBeenCalledTimes(1)
+    expect(harness.deps.correctUnboundTerminalPanes).toHaveBeenCalledTimes(1)
 
     let targetASettled = false
     void pendingA.then(() => {
@@ -274,7 +273,7 @@ describe('createDirectSshReconnectCoordinator', () => {
 
     lineage.resolve('complete')
     await flush()
-    expect(harness.deps.syncRemoteWorkspaceAfterConnect).not.toHaveBeenCalled()
+    expect(harness.deps.correctUnboundTerminalPanes).not.toHaveBeenCalled()
   })
 
   it('joins exact overlapping preparation and reruns after completion', async () => {
@@ -300,7 +299,7 @@ describe('createDirectSshReconnectCoordinator', () => {
     harness.coordinator.stop()
   })
 
-  it('keeps prepare-only isolated from terminal retry and reconnect sync', async () => {
+  it('keeps prepare-only isolated from terminal retry and correction', async () => {
     const harness = createCoordinatorHarness()
     const owner = authority('target-a')
     harness.current.set(owner.targetId, owner)
@@ -315,7 +314,6 @@ describe('createDirectSshReconnectCoordinator', () => {
     expect(harness.deps.invalidateStaleTerminalBindings).not.toHaveBeenCalled()
     expect(harness.deps.retryTargetPanes).not.toHaveBeenCalled()
     expect(harness.deps.correctUnboundTerminalPanes).not.toHaveBeenCalled()
-    expect(harness.deps.syncRemoteWorkspaceAfterConnect).not.toHaveBeenCalled()
   })
 
   it('rejects repo refs for another SSH host before scheduler admission', async () => {

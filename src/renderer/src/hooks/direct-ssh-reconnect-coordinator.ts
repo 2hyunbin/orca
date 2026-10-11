@@ -106,14 +106,6 @@ export function createDirectSshReconnectCoordinator(
     return normalizeDirectSshPreparationInput({ ...captured, reason })
   }
 
-  const startSync = (token: NonNullable<DirectSshPreparationOutcome['token']>): void => {
-    try {
-      void Promise.resolve(deps.syncRemoteWorkspaceAfterConnect(token)).catch(() => {})
-    } catch {
-      // Sync failure is reported by its owning boundary.
-    }
-  }
-
   const runPreparedReconnect = async (
     authority: DirectSshAuthority,
     staleBindingsCleared: number,
@@ -146,9 +138,6 @@ export function createDirectSshReconnectCoordinator(
     let correctedTerminals = 0
     if (prepared.token && isCurrent(authority)) {
       correctedTerminals = deps.correctUnboundTerminalPanes(authority, 'preparation-complete')
-      if (isCurrent(authority)) {
-        startSync(prepared.token)
-      }
     }
     const outcome = combineDirectSshReconnectOutcome(
       prepared,
