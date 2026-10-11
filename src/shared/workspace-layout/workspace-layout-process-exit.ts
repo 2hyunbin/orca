@@ -32,13 +32,11 @@ export function exitVerdict(facts: ProcessExitFacts, paneCount: number): ExitVer
   if (facts.attachAbsent || !isProvenProcessExit(facts.exitCode)) {
     return 'unbind'
   }
-  if (facts.exitCode === 0) {
-    return 'retire'
-  }
-  if (facts.local) {
+  if (facts.local && facts.exitCode !== 0) {
     return 'keep'
   }
-  // A newborn that dies before any input keeps its error visible; a split one only if it printed nothing.
+  // A newborn that dies before any input keeps its error visible, whatever the code; a split one
+  // only if it printed nothing. The runtime sees output for hidden panes too, so no visibility gate.
   const newborn = facts.spawnedFresh && !facts.inputWritten
   return newborn && (paneCount === 1 || !facts.outputReceived) ? 'keep' : 'retire'
 }

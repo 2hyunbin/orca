@@ -134,21 +134,27 @@ describe('processExited', () => {
     }
   }
 
-  it('retires the pane on exit code 0, closing a tab left without panes', () => {
-    expect(
-      exitPane(1, exit({ exitCode: 0, local: true, spawnedFresh: true, inputWritten: false }))
-    ).toMatchObject({ pane: 'retired', tabClosed: true, outcome: null })
+  it('retires an ordinary pane on exit code 0, closing a tab left without panes', () => {
+    expect(exitPane(1, exit({ exitCode: 0, local: true }))).toMatchObject({
+      pane: 'retired',
+      tabClosed: true,
+      outcome: null
+    })
     expect(exitPane(2, exit({ exitCode: 0 }))).toMatchObject({ pane: 'retired', tabClosed: false })
   })
 
   it("keeps today's keep cases as exited, with the same ids and binding", () => {
+    const newborn = { spawnedFresh: true, inputWritten: false }
     const keeps = [
+      // A local process that exits non-zero.
       { panes: 2 as const, facts: exit({ local: true }) },
-      { panes: 1 as const, facts: exit({ spawnedFresh: true, inputWritten: false }) },
-      {
-        panes: 2 as const,
-        facts: exit({ spawnedFresh: true, inputWritten: false, outputReceived: false })
-      }
+      // A sole newborn that dies before input, whatever the code.
+      { panes: 1 as const, facts: exit(newborn) },
+      { panes: 1 as const, facts: exit({ ...newborn, exitCode: 0, local: true }) },
+      { panes: 1 as const, facts: exit({ ...newborn, exitCode: 0 }) },
+      // A fresh split that dies before input or output, whatever the code.
+      { panes: 2 as const, facts: exit({ ...newborn, outputReceived: false }) },
+      { panes: 2 as const, facts: exit({ ...newborn, exitCode: 0, outputReceived: false }) }
     ]
     for (const { panes, facts } of keeps) {
       const kept = exitPane(panes, facts)
@@ -161,7 +167,9 @@ describe('processExited', () => {
     const retires = [
       { panes: 1 as const, facts: exit({}) },
       { panes: 1 as const, facts: exit({ spawnedFresh: true }) },
-      { panes: 2 as const, facts: exit({ spawnedFresh: true, inputWritten: false }) }
+      { panes: 1 as const, facts: exit({ exitCode: 0, spawnedFresh: true }) },
+      { panes: 2 as const, facts: exit({ spawnedFresh: true, inputWritten: false }) },
+      { panes: 2 as const, facts: exit({ exitCode: 0, local: true, spawnedFresh: true }) }
     ]
     for (const { panes, facts } of retires) {
       expect(exitPane(panes, facts)).toMatchObject({ pane: 'retired', outcome: null })
