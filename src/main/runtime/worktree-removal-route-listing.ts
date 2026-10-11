@@ -6,7 +6,10 @@ import type { LocalProjectWorktreeGitOptions } from '../project-runtime-git-opti
 import { getLocalProjectWorktreeGitOptions } from '../project-runtime-git-options'
 import { listWorktreesStrict } from '../git/worktree'
 
-/** Lists a repo's worktrees on the local host the removal routed to, with its git options. */
+/**
+ * Lists a repo's worktrees on the local host the removal routed to, with its git options. The route
+ * is required so a caller cannot list before routing has refused a non-local host.
+ */
 export async function listWorktreesOnRemovalRoute(
   _route: WorktreeRemovalRoute,
   repo: Repo,
