@@ -103,6 +103,7 @@ export async function launchMacDaemonFromStableBundle(
   options: MacDaemonLaunchOptions,
   deadlineMs: number
 ): Promise<DaemonProcessHandle | null> {
+  // `macosLoginSessionWatch` is set only for the macOS GUI desktop, never for serve mode.
   if (
     process.platform !== 'darwin' ||
     !options.macosLoginSessionWatch ||
