@@ -1,4 +1,9 @@
-import type { FullDiskAccessStatusRequest } from './daemon-permission-requests'
+import type {
+  FullDiskAccessStatusRequest,
+  PingRequest,
+  PtySpawnHealthRequest,
+  SystemResolverHealthRequest
+} from './daemon-health-requests'
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
 import type {
   ConfirmForegroundProcessRequest,
@@ -220,21 +225,6 @@ export type ShutdownRequest = {
   payload: {
     killSessions: boolean
   }
-}
-
-export type PingRequest = {
-  id: string
-  type: 'ping'
-}
-
-export type SystemResolverHealthRequest = {
-  id: string
-  type: 'systemResolverHealth'
-}
-
-export type PtySpawnHealthRequest = {
-  id: string
-  type: 'ptySpawnHealth'
 }
 
 export type GetSnapshotRequest = {
