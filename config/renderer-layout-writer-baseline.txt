@@ -17,7 +17,7 @@
 3 src/renderer/src/components/tab-bar/use-tab-bar-runtime-model-worktree-write-probe.ts
 23 src/renderer/src/components/tab-group/tab-drag-preview-activation.ts
 1 src/renderer/src/components/tab-group/useTabGroupWorkspaceModel.ts
-2 src/renderer/src/components/terminal-pane/pty-connection-test-deps.ts
+1 src/renderer/src/components/terminal-pane/pty-connection-test-deps.ts
 4 src/renderer/src/components/terminal-pane/terminal-recovery-ledger-test-store.ts
 3 src/renderer/src/components/worktree-jump-palette-status-inputs.ts
 9 src/renderer/src/lib/agent-background-session-test-state.ts
