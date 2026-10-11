@@ -86,3 +86,14 @@ export function isStillAuthenticated(
     (principal.deviceToken !== undefined || device.credentialKind === 'device-key')
   )
 }
+
+export function mobilePairingConnectionModeOf(
+  device: DeviceEntry | null
+): MobilePairingConnectionMode | null {
+  if (device?.scope !== 'mobile') {
+    return null
+  }
+  // Why: pairings created before this preference existed used automatic
+  // direct-first Relay fallback, so missing state must preserve that behavior.
+  return device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic'
+}

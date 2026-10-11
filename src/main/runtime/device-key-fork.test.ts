@@ -1,10 +1,11 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { planDeviceKeyFork } from './device-key-fork'
 import { devicePrincipalOf } from './device-principal'
 import { DeviceRegistry, type DeviceEntry } from './device-registry'
+import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 
 const KEY_A = Buffer.alloc(32, 1).toString('base64')
 const KEY_B = Buffer.alloc(32, 2).toString('base64')
@@ -79,5 +80,18 @@ describe('planDeviceKeyFork', () => {
     expect(() => registry.forkDeviceKey(legacy.deviceId, KEY_A, 'Mac')).toThrow()
     expect(registry.listDevices()).toHaveLength(1)
     expect(registry.lookupDeviceKey('anything')).toEqual({ kind: 'unavailable' })
+  })
+
+  it('keeps a corrupt registry aside and never calls an unlisted key revoked while it exists', () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-key-fork-'))
+    writeFileSync(join(userDataPath, DEVICE_REGISTRY_FILENAME), '[{"deviceId":"keyed",')
+    const afterCrash = new DeviceRegistry(userDataPath)
+    expect(afterCrash.lookupDeviceKey('keyed')).toEqual({ kind: 'unavailable' })
+    afterCrash.getOrCreatePendingDevice('Re-pair', 'mobile')
+    expect(readdirSync(userDataPath).some((name) => name.includes('.corrupt-'))).toBe(true)
+
+    const nextLaunch = new DeviceRegistry(userDataPath)
+    expect(nextLaunch.listDevices()).toHaveLength(1)
+    expect(nextLaunch.lookupDeviceKey('keyed')).toEqual({ kind: 'unavailable' })
   })
 })

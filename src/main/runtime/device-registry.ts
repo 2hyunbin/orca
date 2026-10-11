@@ -15,6 +15,11 @@ import { removeStaleDurableWriteTempFiles } from '../durable-file-write'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 import { mintDeviceCredential } from './device-credential'
 import { planDeviceKeyFork } from './device-key-fork'
+import {
+  corruptRegistryCopyExists,
+  isMissingFileError,
+  quarantineCorruptRegistry
+} from './device-registry-corruption'
 import type { RelayDeviceBinding } from './relay/relay-revoke-outbox'
 import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
@@ -27,6 +32,7 @@ import type { RuntimeDeviceGrant } from './rpc/rpc-method-permission'
 import { normalizeLoadedDeviceRow, validGrants } from './device-registry-row-validation'
 import {
   isPendingTokenRow,
+  mobilePairingConnectionModeOf,
   isStillAuthenticated,
   type AuthenticatedPrincipalBinding,
   lookupDeviceKeyRow,
@@ -51,7 +57,9 @@ export class DeviceRegistry {
   private devices: DeviceEntry[] = []
   /** Set when the registry exists but could not be read, which makes `devices` a lie to save from. */
   private registryUnreadable = false
-  private loadedIntact = true
+  /** A parse failure, now or in an earlier run, means an unlisted device may still exist. */
+  private registryDoubtful = false
+  private corruptFilePending = false
   private pendingLastSeenFlush: NodeJS.Timeout | null = null
 
   constructor(userDataPath: string) {
@@ -216,13 +224,7 @@ export class DeviceRegistry {
   }
 
   getMobilePairingConnectionMode(deviceId: string): MobilePairingConnectionMode | null {
-    const device = this.devices.find((candidate) => candidate.deviceId === deviceId)
-    if (!device || device.scope !== 'mobile') {
-      return null
-    }
-    // Why: pairings created before this preference existed used automatic
-    // direct-first Relay fallback, so missing state must preserve that behavior.
-    return device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic'
+    return mobilePairingConnectionModeOf(this.getDevice(deviceId))
   }
 
   listDevices(): readonly DeviceEntry[] {
@@ -238,9 +240,10 @@ export class DeviceRegistry {
 
   // Why: "unknown" must mean "readable and absent" — clients delete their key only on that verdict.
   lookupDeviceKey(deviceId: string): DeviceKeyLookup {
-    return this.registryUnreadable || !this.loadedIntact
+    const lookup = lookupDeviceKeyRow(this.getDevice(deviceId))
+    return lookup.kind === 'unknown' && (this.registryUnreadable || this.registryDoubtful)
       ? { kind: 'unavailable' }
-      : lookupDeviceKeyRow(this.getDevice(deviceId))
+      : lookup
   }
 
   /** Forks `legacyDeviceId` into a keyed row; durable before it returns (security transition). */
@@ -253,7 +256,7 @@ export class DeviceRegistry {
       Date.now()
     )
     if (fork.created) {
-      this.saveDurably(fork.nextDevices)
+      this.save(fork.nextDevices, { durable: true })
       this.devices = fork.nextDevices
     }
     return fork.entry
@@ -278,17 +281,13 @@ export class DeviceRegistry {
    * never scanned, so only that 0 -> non-zero transition is load-bearing.
    */
   updateLastSeenDeferred(deviceId: string): void {
-    const index = this.devices.findIndex((d) => d.deviceId === deviceId)
-    if (index === -1) {
-      return
-    }
-    if (this.devices[index]!.lastSeenAt === 0) {
-      this.updateLastSeen(deviceId)
-      return
+    const existing = this.getDevice(deviceId)
+    if (!existing || existing.lastSeenAt === 0) {
+      return existing ? this.updateLastSeen(deviceId) : undefined
     }
     const seenAt = Date.now()
-    this.devices = this.devices.map((device, candidateIndex) =>
-      candidateIndex === index ? { ...device, lastSeenAt: seenAt } : device
+    this.devices = this.devices.map((device) =>
+      device === existing ? { ...device, lastSeenAt: seenAt } : device
     )
     if (this.pendingLastSeenFlush) {
       return
@@ -328,6 +327,7 @@ export class DeviceRegistry {
       const parsed = JSON.parse(readFileSync(this.registryPath, 'utf-8')) as DeviceEntry[]
       this.devices = parsed.map(normalizeLoadedDeviceRow)
       this.registryUnreadable = false
+      this.registryDoubtful = corruptRegistryCopyExists(this.registryPath)
     } catch (error) {
       this.devices = []
       if (isMissingFileError(error)) {
@@ -337,7 +337,8 @@ export class DeviceRegistry {
       // denied would erase every paired device's bearer token, and the write would succeed.
       this.registryUnreadable = isUnreadableError(error)
       // Why: a corrupt file is not evidence any device was revoked; never tell a keyed client so.
-      this.loadedIntact = false
+      this.registryDoubtful = true
+      this.corruptFilePending = !this.registryUnreadable
     }
   }
 
@@ -361,22 +362,18 @@ export class DeviceRegistry {
         `Cannot read the device registry at ${this.registryPath}: the read failed. Refusing to overwrite it, which would revoke every paired device.`
       )
     }
+    if (this.corruptFilePending) {
+      quarantineCorruptRegistry(this.registryPath)
+      this.corruptFilePending = false
+    }
   }
 
-  private save(devices: DeviceEntry[]): void {
+  // Why: durable (fsync'd) for security transitions such as a device-key fork.
+  private save(devices: DeviceEntry[], options: { durable?: boolean } = {}): void {
     this.assertReadable()
-    writeSecureJsonFile(this.registryPath, devices)
+    const write = options.durable ? writeDurableSecureJsonFile : writeSecureJsonFile
+    write(this.registryPath, devices)
     // Why: every registry save includes the latest in-memory timestamps, so a later timer would rewrite it.
     this.cancelPendingLastSeenFlush()
   }
-
-  private saveDurably(devices: DeviceEntry[]): void {
-    this.assertReadable()
-    writeDurableSecureJsonFile(this.registryPath, devices)
-    this.cancelPendingLastSeenFlush()
-  }
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
