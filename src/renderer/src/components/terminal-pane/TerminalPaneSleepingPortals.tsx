@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager'
-import { usePaneSpawnDeferral } from './pane-spawn-deferral-registry'
+import { usePaneSpawnDeferral } from '@/lib/pane-spawn-deferral-registry'
 import { TerminalSleepingPaneOverlay } from './TerminalSleepingPaneOverlay'
 import type { TerminalPaneController } from './use-terminal-pane-controller'
 

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { SpawnDeferralReason } from '../../../../shared/host-spawn-admission'
+import type { SpawnDeferralReason } from '../../../shared/host-spawn-admission'
 
 export type PaneSpawnDeferral = {
   reason: SpawnDeferralReason
@@ -29,6 +29,11 @@ export function clearPaneSpawnDeferral(paneKey: string): void {
 
 export function getPaneSpawnDeferral(paneKey: string): PaneSpawnDeferral | undefined {
   return deferralsByPaneKey.get(paneKey)
+}
+
+/** A mounted pane holding a restore its host deferred; it owns that session's resume. */
+export function isPaneSpawnDeferred(paneKey: string): boolean {
+  return deferralsByPaneKey.has(paneKey)
 }
 
 function subscribe(listener: () => void): () => void {

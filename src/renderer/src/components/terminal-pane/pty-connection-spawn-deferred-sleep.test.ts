@@ -176,7 +176,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
 
   it('keeps the pane sleeping with its resume handle and resumes it when opened', async () => {
     const { connectPanePty } = await import('./pty-connection')
-    const { getPaneSpawnDeferral } = await import('./pane-spawn-deferral-registry')
+    const { getPaneSpawnDeferral } = await import('@/lib/pane-spawn-deferral-registry')
     const transport = deferringTransport()
     transportFactoryQueue.push(transport)
     const pane = createPane(1)
@@ -203,7 +203,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       paneKey,
       agent: 'claude',
       providerSession: RESUME,
-      origin: 'live',
+      origin: 'quit',
       restoreOnTabOpenOnly: true
     })
     expect(deps.onPtyErrorRef.current).not.toHaveBeenCalled()
@@ -221,7 +221,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
 
   it('does not remount a deferred pane, which would only be deferred again', async () => {
     const { connectPanePty } = await import('./pty-connection')
-    const { getPaneSpawnDeferral } = await import('./pane-spawn-deferral-registry')
+    const { getPaneSpawnDeferral } = await import('@/lib/pane-spawn-deferral-registry')
     const { requestTerminalPaneRecovery } = await import('./terminal-pane-recovery')
     transportFactoryQueue.push(deferringTransport())
     const deps = createDeps({
@@ -243,5 +243,54 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     expect(requestTerminalPaneRecovery).not.toHaveBeenCalled()
     binding.dispose()
     expect(getPaneSpawnDeferral(paneKey)).toBeUndefined()
+  })
+
+  it('does not resume a session that meanwhile started in another tab', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    const { getPaneSpawnDeferral } = await import('@/lib/pane-spawn-deferral-registry')
+    const transport = deferringTransport()
+    transportFactoryQueue.push(transport)
+    const pane = createPane(1)
+    const paneKey = makePaneKey('tab-1', pane.leafId)
+    const deps = createDeps({
+      isVisibleRef: { current: false },
+      startup: {
+        command: "claude '--resume' 'provider-session-1'",
+        launchAgent: 'claude',
+        resumeProviderSession: RESUME
+      }
+    })
+
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
+    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    await flushAsyncTicks(20)
+    expect(getPaneSpawnDeferral(paneKey)).toBeDefined()
+
+    const otherLeaf = '22222222-2222-4222-8222-222222222222'
+    mockStoreState.agentStatusByPaneKey[makePaneKey('tab-2', otherLeaf)] = {
+      paneKey: makePaneKey('tab-2', otherLeaf),
+      agentType: 'claude',
+      providerSession: RESUME,
+      state: 'working'
+    }
+    mockStoreState = {
+      ...mockStoreState,
+      ptyIdsByTabId: { ...mockStoreState.ptyIdsByTabId, 'tab-2': ['pty-elsewhere'] },
+      terminalLayoutsByTabId: {
+        ...mockStoreState.terminalLayoutsByTabId,
+        'tab-2': {
+          root: { type: 'leaf', leafId: otherLeaf },
+          activeLeafId: otherLeaf,
+          expandedLeafId: null
+        }
+      }
+    }
+    deps.isVisibleRef.current = true
+    binding.noteVisibilityResume()
+    await flushAsyncTicks(20)
+
+    expect(freshSpawns(transport)).toHaveLength(1)
+    expect(getPaneSpawnDeferral(paneKey)).toBeUndefined()
+    binding.dispose()
   })
 })
