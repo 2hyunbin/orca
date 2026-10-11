@@ -93,28 +93,32 @@ function codexListsServiceTier(
 
 /** Codex also takes the thread's reported tier when no model lists it, such as a configured `flex`. */
 export function codexOffersServiceTier(
-  session: CodexSession,
+  tier: string,
+  reportedTier: string | null | undefined,
   model: AgentSessionModelOption | undefined,
-  models: readonly AgentSessionModelOption[],
-  tier: string
+  models: readonly AgentSessionModelOption[]
 ): boolean {
   return (
     tier === CODEX_DEFAULT_SERVICE_TIER ||
     codexListsServiceTier(model, tier) ||
-    (tier === session.reportedOptions.serviceTier &&
-      !models.some((entry) => codexListsServiceTier(entry, tier)))
+    (tier === reportedTier && !models.some((entry) => codexListsServiceTier(entry, tier)))
   )
 }
 
-/** The chat's tier, picked or reported, falls back to standard where the model does not offer it. */
+/** A picked tier the model does not offer falls back to standard. With no pick nothing is written:
+ *  Codex applies the user's configured tier per model, and the picker derives what it shows. */
 export function dropUnlistedCodexServiceTier(
   session: CodexSession,
   modelId: string | undefined,
   models: readonly AgentSessionModelOption[]
 ): void {
-  const tier = session.options.get('serviceTier') ?? session.reportedOptions.serviceTier
+  const tier = session.options.get('serviceTier')
   const model = models.find((entry) => entry.id === modelId)
-  if (tier && model?.serviceTiers && !codexOffersServiceTier(session, model, models, tier)) {
+  if (
+    tier &&
+    model?.serviceTiers &&
+    !codexOffersServiceTier(tier, session.reportedOptions.serviceTier, model, models)
+  ) {
     session.options.set('serviceTier', CODEX_DEFAULT_SERVICE_TIER)
   }
 }

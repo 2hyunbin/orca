@@ -10,6 +10,7 @@ import {
   codexFastModeOfServiceTier,
   codexFastModeSupport,
   codexFastServiceTier,
+  codexOffersServiceTier,
   readCodexServiceTiers
 } from './codex-structured-service-tier'
 import {
@@ -151,15 +152,20 @@ export function composeCodexSessionOptionCatalog(
   if (!model) {
     throw new Error('codex app-server returned no available models')
   }
-  const reportedTier = input.reportedServiceTierKnown
+  const modelEntry = models.find((entry) => entry.id === model)
+  const reported = input.reportedServiceTierKnown
     ? (input.reportedServiceTier ?? CODEX_DEFAULT_SERVICE_TIER)
     : undefined
+  // Codex omits the thread's tier on a model that does not offer it, so that model runs standard.
+  const reportedTier =
+    reported === undefined ||
+    !modelEntry?.serviceTiers ||
+    codexOffersServiceTier(reported, input.reportedServiceTier, modelEntry, models)
+      ? reported
+      : CODEX_DEFAULT_SERVICE_TIER
   const serviceTier = input.current.serviceTier ?? reportedTier
   // Older clients only read Fast; any other tier leaves their toggle unset.
-  const fastMode = codexFastModeOfServiceTier(
-    serviceTier,
-    models.find((entry) => entry.id === model)
-  )
+  const fastMode = codexFastModeOfServiceTier(serviceTier, modelEntry)
   const support = codexFastModeSupport(models)
   return {
     models,

@@ -653,31 +653,61 @@ describe('Codex reported tier', () => {
     })
   })
 
-  it.each([
-    ['untouched', []],
-    ['re-picked', ['priority', 'ultrafast']]
-  ])(
-    'resets a %s reported tier another model lists on a switch to a model without it',
-    async (_case, picks) => {
-      const session = optionSession(vi.fn(async () => listing))
-      session.reportedOptions = {
-        model: 'gpt-6.1-sol',
-        serviceTier: 'ultrafast',
-        serviceTierKnown: true
-      }
-      await primePicker(session)
-      for (const pick of picks) {
-        await applyCodexStructuredSessionOption(session, 'serviceTier', pick)
-      }
-
-      await expect(
-        applyCodexStructuredSessionOption(session, 'model', 'gpt-6-luna')
-      ).resolves.toEqual({ model: 'gpt-6-luna', serviceTier: 'default' })
-      await expect(
-        applyCodexStructuredSessionOption(session, 'serviceTier', 'ultrafast')
-      ).rejects.toThrow('does not offer the ultrafast tier')
+  it('resets a re-picked reported tier on a switch to a model without it', async () => {
+    const session = optionSession(vi.fn(async () => listing))
+    session.reportedOptions = {
+      model: 'gpt-6.1-sol',
+      serviceTier: 'ultrafast',
+      serviceTierKnown: true
     }
-  )
+    await primePicker(session)
+    await applyCodexStructuredSessionOption(session, 'serviceTier', 'priority')
+    await applyCodexStructuredSessionOption(session, 'serviceTier', 'ultrafast')
+
+    await expect(
+      applyCodexStructuredSessionOption(session, 'model', 'gpt-6-luna')
+    ).resolves.toEqual({ model: 'gpt-6-luna', serviceTier: 'default' })
+    await expect(
+      applyCodexStructuredSessionOption(session, 'serviceTier', 'ultrafast')
+    ).rejects.toThrow('does not offer the ultrafast tier')
+  })
+
+  it('shows a configured tier the model cannot use as Standard without saving or sending it', async () => {
+    const requests: { method: string; params?: Record<string, unknown> }[] = []
+    const session = optionSession(
+      vi.fn(async (method: string, params?: Record<string, unknown>) => {
+        requests.push({ method, params })
+        return method === 'model/list' ? listing : { turn: { id: `turn-${requests.length}` } }
+      })
+    )
+    session.reportedOptions = {
+      model: 'gpt-6-luna',
+      serviceTier: 'ultrafast',
+      serviceTierKnown: true
+    }
+    await primePicker(session)
+    const send = async (clientMessageId: string) => {
+      await startCodexTurn(session, {
+        clientMessageId,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'go' }] }
+      })
+      return requests.findLast((entry) => entry.method === 'turn/start')?.params
+    }
+
+    await expect(readLiveCodexSessionOptions(session, undefined)).resolves.toMatchObject({
+      current: { model: 'gpt-6-luna', serviceTier: 'default' }
+    })
+    expect(await send('on-luna')).not.toHaveProperty('serviceTier')
+
+    await expect(
+      applyCodexStructuredSessionOption(session, 'model', 'gpt-6.1-sol')
+    ).resolves.toEqual({ model: 'gpt-6.1-sol' })
+    await expect(readLiveCodexSessionOptions(session, undefined)).resolves.toMatchObject({
+      current: { model: 'gpt-6.1-sol', serviceTier: 'ultrafast' }
+    })
+    expect(await send('on-sol')).not.toHaveProperty('serviceTier')
+    expect(session.options.has('serviceTier')).toBe(false)
+  })
 })
 
 describe('Codex option picks before the model list arrives', () => {

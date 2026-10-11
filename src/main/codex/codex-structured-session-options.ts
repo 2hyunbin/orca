@@ -203,7 +203,9 @@ function applyValidatedCodexStructuredSessionOption(
   const modelId = key === 'model' ? value : catalog.current.model
   const model = catalog.models.find((entry) => entry.id === modelId)
   if (key === 'serviceTier') {
-    if (!codexOffersServiceTier(session, model, catalog.models, value)) {
+    if (
+      !codexOffersServiceTier(value, session.reportedOptions.serviceTier, model, catalog.models)
+    ) {
       throw new Error(`codex app-server model ${modelId} does not offer the ${value} tier`)
     }
     session.options.set(key, value)
