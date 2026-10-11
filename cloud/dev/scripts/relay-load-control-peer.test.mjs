@@ -1034,3 +1034,22 @@ test('a twin shares its host keys and connects with a given assignment, not the 
   assert.equal(JSON.parse(socket.sent[0]).assignmentEpoch, 7)
   assert.equal(fetched.some((url) => url.endsWith('/v1/assign')), false)
 })
+
+test('declares a reconnect only after an established control', async (context) => {
+  const originalFetch = global.fetch
+  context.after(() => {
+    global.fetch = originalFetch
+  })
+  const bodies = []
+  global.fetch = async (_url, { body }) => {
+    bodies.push(JSON.parse(body))
+    return response({ cellUrl: 'https://cell.test', assignmentEpoch: 1 })
+  }
+  const peer = new RelayLoadControlPeer(0, peerOptions(), () => undefined)
+  const token = await peer.relayToken()
+  await peer.assignment(token)
+  peer.generation = 1
+  await peer.assignment(token)
+  assert.equal(bodies[0].reconnect, undefined)
+  assert.equal(bodies[1].reconnect, true)
+})

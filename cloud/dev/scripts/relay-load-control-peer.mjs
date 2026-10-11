@@ -741,7 +741,9 @@ export class RelayLoadControlPeer {
         body: JSON.stringify({
           v: 1,
           relayHostId: this.relayHostId,
-          ...(preferredRegion ? { preferredRegion } : {})
+          ...(preferredRegion ? { preferredRegion } : {}),
+          // Desktops declare a reconnect after an established control; the director's sticky lane needs it.
+          ...(this.generation === undefined ? {} : { reconnect: true })
         })
       },
       'relay assignment timeout',
