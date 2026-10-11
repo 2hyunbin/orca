@@ -18,6 +18,10 @@ relay_staging_power_auth_service_name = "orca-cloud-auth-staging"
 relay_base_url                        = "https://relay-staging.onorca.dev"
 relay_min_instances                   = 0
 relay_max_instances                   = 2
+
+# Staging proves these before production turns them on.
+relay_director_cloud_sql_proxy_sidecar = true
+relay_event_loop_stall_alert           = true
 # Staging now exercises the production-shaped GCE data plane exclusively.
 relay_cells = {}
 # Keep the stable director mapping Terraform-owned while removing cell mappings.

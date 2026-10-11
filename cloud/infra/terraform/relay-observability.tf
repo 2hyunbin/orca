@@ -158,6 +158,22 @@ locals {
     "asia-east2"  = "AsiaEast2"
   }
   relay_region_columns = { for key in local.relay_region_keys : key => replace(key, "-", "_") }
+  # Gated so production gains no metric or policy until staging has proved them.
+  relay_event_loop_stall_metrics = var.relay_event_loop_stall_alert ? {
+    event_loop_ms_max = { field = "eventLoopDelayMsMax", description = "Longest Node.js event-loop delay in the interval: one freeze is one sample, so p99 misses it." }
+  } : {}
+  relay_event_loop_stall_alerts = var.relay_event_loop_stall_alert ? {
+    event_loop_stall = {
+      pages_oncall  = false
+      metric        = "event_loop_ms_max"
+      threshold_run = 5000
+      threshold_gce = 5000
+      duration      = "0s"
+      aligner       = "ALIGN_PERCENTILE_99"
+      reducer       = "REDUCE_MAX"
+      documentation = "A relay process froze its event loop for 5 s or more: nothing it serves, polls or times out runs while frozen. On a director, look for Cloud SQL connection failures in the same window (a blocking connect on the built-in /cloudsql socket); otherwise look for a long synchronous task."
+    }
+  } : {}
   relay_region_share_metrics = merge(
     {
       for key in local.relay_region_keys :
@@ -340,7 +356,7 @@ locals {
 resource "google_logging_metric" "relay_snapshot" {
   # Region-request metrics ride the same event and shape; merging adds map entries only, so the
   # existing metric instances are untouched (a label change, not a new key, is what recreates them).
-  for_each = merge(local.relay_runtime_metrics, local.relay_region_share_metrics)
+  for_each = merge(local.relay_runtime_metrics, local.relay_region_share_metrics, local.relay_event_loop_stall_metrics)
 
   project         = var.project_id
   name            = "orca_relay_${each.key}"
@@ -357,7 +373,7 @@ resource "google_logging_metric" "relay_snapshot" {
   metric_descriptor {
     metric_kind = "DELTA"
     value_type  = "DISTRIBUTION"
-    unit        = contains(["sql_latency_ms", "control_rtt_ms_p50", "control_rtt_ms_p95", "control_rtt_ms_max", "client_accept_total_ms_p50", "client_accept_total_ms_p95", "client_accept_total_ms_max", "client_accept_assignment_ms_p95", "client_accept_credential_ms_p95", "client_accept_activity_ms_p95", "client_accept_attach_ms_p95", "client_accept_basis_ms_p95", "control_renewal_latency_ms_p50", "control_renewal_latency_ms_p95", "control_renewal_latency_ms_max", "http_latency_ms", "event_loop_ms_p99", "db_oldest_wait_ms", "db_wait_ms_max", "inventory_hold_ms_p99", "rehome_target_row_hold_ms_p99", "isolated_replacement_hold_ms_p99", "drain_return_service_ms_p50", "drain_return_service_ms_p95", "sticky_service_ms_p50", "sticky_service_ms_p99"], each.key) ? "ms" : each.key == "queued_bytes" || each.key == "heap_used_bytes" || each.key == "forwarded_bytes" ? "By" : "1"
+    unit        = contains(["sql_latency_ms", "control_rtt_ms_p50", "control_rtt_ms_p95", "control_rtt_ms_max", "client_accept_total_ms_p50", "client_accept_total_ms_p95", "client_accept_total_ms_max", "client_accept_assignment_ms_p95", "client_accept_credential_ms_p95", "client_accept_activity_ms_p95", "client_accept_attach_ms_p95", "client_accept_basis_ms_p95", "control_renewal_latency_ms_p50", "control_renewal_latency_ms_p95", "control_renewal_latency_ms_max", "http_latency_ms", "event_loop_ms_p99", "event_loop_ms_max", "db_oldest_wait_ms", "db_wait_ms_max", "inventory_hold_ms_p99", "rehome_target_row_hold_ms_p99", "isolated_replacement_hold_ms_p99", "drain_return_service_ms_p50", "drain_return_service_ms_p95", "sticky_service_ms_p50", "sticky_service_ms_p99"], each.key) ? "ms" : each.key == "queued_bytes" || each.key == "heap_used_bytes" || each.key == "forwarded_bytes" ? "By" : "1"
 
     labels {
       key         = "role"
@@ -436,7 +452,7 @@ resource "google_logging_metric" "relay_long_cell_inventory_hold" {
 }
 
 resource "google_monitoring_alert_policy" "relay_custom" {
-  for_each = local.relay_custom_alerts
+  for_each = merge(local.relay_custom_alerts, local.relay_event_loop_stall_alerts)
 
   project      = var.project_id
   display_name = "Orca Relay: ${replace(each.key, "_", " ")}"
