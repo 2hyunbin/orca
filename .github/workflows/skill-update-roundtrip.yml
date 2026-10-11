@@ -34,7 +34,9 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
         shape: [symlink, copy]
         autocrlf: ['false', 'true']
-        skills-cli: ['1.5.17']
+        # Why: 1.5.x clones `tree/<ref>` with --branch, which cannot fetch the commit
+        # sha a PR is pinned to. Release tags work on both.
+        skills-cli: ['1.7.2']
         include:
           - os: ubuntu-latest
             shape: symlink
