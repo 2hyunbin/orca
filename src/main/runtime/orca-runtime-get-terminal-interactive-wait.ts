@@ -1,14 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { TerminalInteractiveWait } from './terminal/wait/terminal-interactive-wait'
 import { resolveStructuredWorkerAuthority } from './structured-worker-authority'
 import { OrcaRuntimeWithAdoptTerminalOrphansFromInventory } from './orca-runtime-adopt-terminal-orphans-from-inventory'
-import type {
-  RuntimeTerminalAgentStatus,
-  RuntimeTerminalInteractiveWait
-} from '../../shared/runtime-types'
-import type { RuntimeTerminalAgentStatusSnapshot } from './runtime-terminal-agent-status-query'
-import type { AgentStatus } from '../../shared/agent-detection'
-import { withTimeout } from './runtime-async-boundaries'
-import { TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS } from './orca-runtime-core'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { ExactWorkerProviderSession } from '../../shared/orchestration-worker-output'
 import { selectExactWorkerProviderSession } from './orchestration/worker-provider-session'
@@ -21,75 +14,25 @@ import { isTuiAgent } from '../../shared/tui-agent-config'
 import { resolveConfiguredWorkerAgent } from './orchestration/configured-worker-agent-selector'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { resolveLocalProjectRuntimeForRepo } from '../project-runtime-git-options'
-
 import { prepareOpenCodeModelStartupInputs } from '../opencode/opencode-model-startup-plan'
 import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
 
 export class OrcaRuntimeWithGetTerminalInteractiveWait extends OrcaRuntimeWithAdoptTerminalOrphansFromInventory {
-  async getTerminalInteractiveWait(
-    handle: string
-  ): Promise<RuntimeTerminalInteractiveWait | null | undefined> {
-    let ptyId: string
-    let inputs: {
-      terminal: RuntimeTerminalAgentStatusSnapshot
-      lifecycle: { status: AgentStatus | null; updatedAt: number } | null | undefined
-    }
-    try {
-      ptyId = this.getTerminalAgentStatusPtyId(handle)
-      inputs = this.getTerminalWaitPermissionInputs(handle, ptyId)
-    } catch {
-      return undefined
-    }
-    const { terminal, lifecycle } = inputs
-    const explicitStatus = this.getFreshExplicitAgentStatusForHandle(handle)
-    const promptReason = this.resolveAuthoritativeTerminalWaitPermission(
-      terminal,
-      explicitStatus,
-      lifecycle
-    )
-    if (promptReason) {
-      return {
-        source: 'prompt-text',
-        reason: promptReason,
-        ...(terminal.waitBlockedAt !== null ? { since: terminal.waitBlockedAt } : {})
-      }
-    }
-    if (terminal.titleStatus === 'permission' && terminal.titleStatusIsLive) {
-      return { source: 'title' }
-    }
-    if (explicitStatus?.status !== 'permission') {
-      return null
-    }
-    const status = await withTimeout(
-      this.probeAgentStatusOncePerPty(handle, ptyId),
-      TERMINAL_INTERACTIVE_WAIT_PROBE_TIMEOUT_MS,
-      undefined
-    )
-    if (!status) {
-      return undefined
-    }
-    return status.isRunningAgent && status.status === 'permission'
-      ? { source: 'hook', since: explicitStatus.updatedAt }
-      : null
-  }
+  private readonly interactiveWait = new TerminalInteractiveWait({
+    getTerminalAgentStatusPtyId: (handle) => this.getTerminalAgentStatusPtyId(handle),
+    getTerminalWaitPermissionInputs: (handle, id) =>
+      this.getTerminalWaitPermissionInputs(handle, id),
+    getFreshExplicitAgentStatusForHandle: (handle) =>
+      this.getFreshExplicitAgentStatusForHandle(handle),
+    resolveAuthoritativeTerminalWaitPermission: (terminal, explicit, lifecycle) =>
+      this.resolveAuthoritativeTerminalWaitPermission(terminal, explicit, lifecycle),
+    getTerminalAgentStatus: (handle) => this.getTerminalAgentStatus(handle)
+  })
 
-  protected probeAgentStatusOncePerPty(
-    handle: string,
-    ptyId: string
-  ): Promise<RuntimeTerminalAgentStatus | undefined> {
-    const inFlight = this.interactiveWaitProbesByPtyId.get(ptyId)
-    if (inFlight) {
-      return inFlight
-    }
-    const probe = this.getTerminalAgentStatus(handle)
-      .catch(() => undefined)
-      .finally(() => {
-        if (this.interactiveWaitProbesByPtyId.get(ptyId) === probe) {
-          this.interactiveWaitProbesByPtyId.delete(ptyId)
-        }
-      })
-    this.interactiveWaitProbesByPtyId.set(ptyId, probe)
-    return probe
+  getTerminalInteractiveWait(
+    ...args: Parameters<TerminalInteractiveWait['getTerminalInteractiveWait']>
+  ) {
+    return this.interactiveWait.getTerminalInteractiveWait(...args)
   }
 
   getTerminalWorktreeIdForPaneKey(paneKey: string): string | null {

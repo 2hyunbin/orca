@@ -5,7 +5,6 @@ import { nativeChatTranscriptIncludesPath } from '../native-chat/native-chat-fil
 import { createRuntimeFileWatcherRemoval } from './runtime-file-watcher-removal'
 import { RuntimeGitCommands } from './orca-runtime-git'
 import type { GlobalSettings } from '../../shared/global-settings-types'
-import type { RuntimeTerminalAgentStatus } from '../../shared/runtime-types'
 import { RuntimeHostedReviewCommands } from './runtime-hosted-review-commands'
 import { RuntimeGitHubRepositoryQueryCommands } from './runtime-github-repository-query-commands'
 import { RuntimeGitLabQueryCommands } from './runtime-gitlab-query-commands'
@@ -121,11 +120,6 @@ export class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreservedBranchC
    *  live mobile/web view consumes raw bytes and must never be thinned, even
    *  while the desktop pane is hidden. */
   onRemoteTerminalViewPresenceChanged: ((ptyId: string) => void) | null = null
-
-  protected readonly interactiveWaitProbesByPtyId = new Map<
-    string,
-    Promise<RuntimeTerminalAgentStatus | undefined>
-  >()
 
   // Why a cache: leaf-branch sends may arrive per keystroke; one proven-absent
   // verdict per ptyId serves the burst instead of a probe round-trip each call.

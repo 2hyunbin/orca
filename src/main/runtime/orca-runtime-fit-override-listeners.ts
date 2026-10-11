@@ -11,7 +11,6 @@ import type {
 } from './runtime-terminal-state-records'
 import type { TerminalKittyKeyboardModeTracker } from '../../shared/terminal-kitty-keyboard-mode-tracker'
 import type { PtyProviderBufferSnapshot } from '../providers/types'
-import type { WaitBlockedCheckState } from './wait-blocked-check-state'
 import type { createAgentStatusOscProcessor } from '../../shared/agent-status-osc'
 import { RuntimeTerminalViewSubscribers } from './runtime-terminal-view-subscribers'
 import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
@@ -84,17 +83,7 @@ export class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWithStopRequ
   // mobile/remote client authenticates (sticky, backfilled on activation).
   protected recentPtyPathCandidateTrackingActive = false
 
-  // Why: OSC 9999 status can span PTY chunks. Keeping parser state in the
-  // runtime lets hidden/model-owned terminals observe agent state without a
-  // mounted xterm view.
-  // Why a throttle: the blocked-reason check builds and scans two full wait
-  // texts (<=256KB each, lowercased) — measured at ~85% of onPtyData's cost
-  // under a TUI flood (findings log 2026-07-03). PTY chunk boundaries are
-  // arbitrary, so running the identical computation over coalesced chunks at
-  // a bounded cadence (plus a trailing-edge timer so burst-final state is
-  // always evaluated) preserves semantics while removing it from the hot path.
-  protected waitBlockedCheckStateByPtyId = new Map<string, WaitBlockedCheckState>()
-
+  // OSC 9999 status frames can span PTY chunks.
   protected agentStatusOscProcessorsByPtyId = new Map<
     string,
     ReturnType<typeof createAgentStatusOscProcessor>

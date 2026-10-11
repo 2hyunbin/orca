@@ -31,9 +31,7 @@ import { ClientSessionTabSelectionStore } from './client-session-tab-selection'
 import { WorktreeTerminalMutationLock } from './worktree-terminal-mutation-lock'
 import { RemoteRuntimeTerminalCreateIdempotency } from './remote-runtime-terminal-create-idempotency'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
-import type { MobileSessionTabsNotifyCoalescer } from './mobile-session-tabs-notify-coalescer'
 import { createMobileSessionTabsNotifyCoalescer } from './mobile-session-tabs-notify-coalescer'
-import type { MobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
 import { createMobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
 import { TerminalFocusNavigationCoalescer } from './terminal-focus-navigation-coalescer'
 import type {
@@ -43,10 +41,10 @@ import type {
 import type { RuntimeLeafRecord } from './runtime-terminal-state-records'
 
 import { MailPointerRepointScheduler } from './orchestration/mail-pointer-repoint-scheduler'
-import { RuntimeTerminalWaiterRegistry } from './runtime-terminal-waiter-registry'
+import { RuntimeTerminalWaiterRegistry } from './terminal/wait/terminal-waiter-registry'
 import { RuntimeTerminalWriter } from './runtime-terminal-writer'
 import { writeRefused } from '../../shared/pty-write-settlement'
-import { RuntimeTerminalIdlePolls } from './runtime-terminal-idle-polls'
+import { RuntimeTerminalIdlePolls } from './terminal/wait/terminal-idle-polls'
 import { TerminalIntentionalStops } from './terminal-intentional-stops'
 import { TerminalRunFactsRegister, type TerminalSpawnCommit } from './terminal-run-facts'
 import type { TuiIdleEvidenceSource } from './tui-idle-evidence-source'
@@ -56,7 +54,7 @@ import {
   TUI_IDLE_POLL_INTERVAL_MS,
   TUI_IDLE_QUIESCENCE_MS
 } from './orca-runtime-postlude'
-import { RuntimeTerminalWait as RuntimeTerminalWaitController } from './runtime-terminal-wait'
+import { RuntimeTerminalWait as RuntimeTerminalWaitController } from './terminal/wait/terminal-wait'
 import type { PtyLivenessVerdict } from '../../shared/pty-liveness-verdict'
 
 export class OrcaRuntimeWithRuntimeId {
@@ -266,12 +264,11 @@ export class OrcaRuntimeWithRuntimeId {
   }
 
   // Coalesce title/status notifications and emit the latest session snapshot.
-  protected readonly mobileSessionTabsNotifyCoalescer: MobileSessionTabsNotifyCoalescer =
-    createMobileSessionTabsNotifyCoalescer((worktreeId) =>
-      this.flushScheduledMobileSessionTabsChanged(worktreeId)
-    )
+  protected readonly mobileSessionTabsNotifyCoalescer = createMobileSessionTabsNotifyCoalescer(
+    (worktreeId) => this.flushScheduledMobileSessionTabsChanged(worktreeId)
+  )
 
-  protected readonly mobileSessionTabsAgentStatusHeartbeat: MobileSessionTabsAgentStatusHeartbeat =
+  protected readonly mobileSessionTabsAgentStatusHeartbeat =
     createMobileSessionTabsAgentStatusHeartbeat(
       (ptyId) => this.getMobileSessionWorktreeIdsForPty(ptyId),
       (worktreeId) => this.touchMobileSessionTabsForWorktree(worktreeId)
@@ -283,9 +280,6 @@ export class OrcaRuntimeWithRuntimeId {
 
   protected pendingMobileSessionPtyAggregateInventoryRefresh: Promise<PtyControllerInventory | null> | null =
     null
-
-  /** One-shot delivery retries, keyed by leaf. See checkDeliverySettledAndArmRecheck. */
-  protected deliveryRecheckTimersByLeafKey = new Map<string, ReturnType<typeof setTimeout>>()
 
   // Why: counts authoritative graph statements so a PTY's recorded surface can be told apart
   // from one the graph has simply not published yet (pty-recorded-surface-topology.ts).

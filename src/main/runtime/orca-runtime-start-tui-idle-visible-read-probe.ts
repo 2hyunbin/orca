@@ -1,30 +1,5 @@
+import { TerminalWaitVisibleProbe } from './terminal/wait/terminal-wait-visible-probe'
 import { OrcaRuntimeWithCreateAgentPromptRenderGate } from './orca-runtime-create-agent-prompt-render-gate'
-import type {
-  RuntimeProviderSnapshotReadOptions,
-  TerminalWaiter
-} from './runtime-terminal-contracts'
-import {
-  TUI_IDLE_VISIBLE_PROBE_SETTLE_MARGIN_MS,
-  VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS
-} from './orca-runtime-postlude'
-import { withTimeout } from './runtime-async-boundaries'
-import {
-  detectTerminalWaitBlockedReason,
-  isKnownReadyPromptBody,
-  isKnownReadyPromptSettled
-} from './terminal-wait-detection'
-import { readsTrustedScreen } from './agent-state-rules/agent-state-rules-engine'
-import { restoreProjectedComposerDraft } from './orca-runtime-terminal-projection'
-import type {
-  RuntimeTerminalWait,
-  RuntimeTerminalWaitBlockedReason
-} from '../../shared/runtime-types'
-import {
-  buildPtyTerminalWaitBlockedResult,
-  buildPtyTerminalWaitResult,
-  buildTerminalWaitBlockedResult,
-  buildTerminalWaitResult
-} from './terminal-wait-results'
 import { createSetupCompletionScanner } from './orchestration/setup-completion-signal'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
@@ -41,92 +16,25 @@ export class OrcaRuntimeWithStartTuiIdleVisibleReadProbe extends OrcaRuntimeWith
     return isTuiAgent(agent) ? agent : null
   }
 
-  /** One bounded look at the provider's screen for an adopted PTY whose retained
-   *  readiness metadata was lost. Deliberately single-shot: it answers "is the
-   *  screen already showing a settled prompt", and the poll above owns every
-   *  later transition. A provider screen that is still working when this fires
-   *  resolves through the poll, not here. */
+  private readonly waitVisibleProbe = new TerminalWaitVisibleProbe(
+    {
+      readTerminal: (handle, opts, snapshot) => this.readTerminal(handle, opts, snapshot),
+      getLivePtyForHandle: (handle) => this.getLivePtyForHandle(handle),
+      getLiveLeafForHandle: (handle) => this.getLiveLeafForHandle(handle)
+    },
+    this.terminalWaiters
+  )
+
   protected startTuiIdleVisibleReadProbe(
-    waiter: TerminalWaiter,
-    waiterTimeoutMs: number,
-    agent: TuiAgent | null
-  ): void {
-    const settleMarginMs = Math.min(
-      TUI_IDLE_VISIBLE_PROBE_SETTLE_MARGIN_MS,
-      Math.max(1, Math.floor(waiterTimeoutMs / 3))
-    )
-    const probeTimeoutMs = Math.min(
-      VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS + settleMarginMs,
-      Math.max(0, waiterTimeoutMs - settleMarginMs)
-    )
-    const providerTimeoutMs = Math.min(
-      VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS,
-      Math.max(0, probeTimeoutMs - settleMarginMs)
-    )
-    if (providerTimeoutMs < 1) {
-      return
-    }
-    const screenRule = readsTrustedScreen(agent)
-    void withTimeout(
-      this.readTerminal(waiter.handle, screenRule ? { screen: true } : {}, {
-        timeoutMs: providerTimeoutMs,
-        retireOnTimeout: true,
-        // Why: the ready banner stays in scrollback for the whole session, so
-        // classifying history would call a working agent idle (#15569 review).
-        visibleScreenOnly: true
-      } satisfies RuntimeProviderSnapshotReadOptions),
-      probeTimeoutMs,
-      null
-    )
-      .then((projection) => {
-        if (
-          !projection ||
-          projection.source !== 'screen' ||
-          !this.terminalWaiters.get(waiter.handle)?.has(waiter)
-        ) {
-          return
-        }
-        const snapshotText = projection.tail.join('\n')
-        const blockedReason = detectTerminalWaitBlockedReason(snapshotText)
-        // Why the shared tier-1 rule: a probe must not settle what the live screen would refuse.
-        const ready = screenRule
-          ? isKnownReadyPromptBody(
-              snapshotText,
-              agent,
-              () => restoreProjectedComposerDraft(projection.tail, projection.draft),
-              // Why read now: output since the probe started makes the pane clocked.
-              (
-                this.getLivePtyForHandle(waiter.handle)?.pty ??
-                this.getLiveLeafForHandle(waiter.handle).leaf
-              ).lastOutputAt !== null
-            )
-          : isKnownReadyPromptSettled(snapshotText)
-        if (!blockedReason && !ready) {
-          return
-        }
-        const result = this.buildTuiIdleProbeResult(waiter.handle, blockedReason)
-        if (waiter.cancelIdlePoll) {
-          waiter.cancelIdlePoll()
-        }
-        this.terminalWaiters.resolve(waiter, result)
-      })
-      .catch(() => {})
+    ...args: Parameters<TerminalWaitVisibleProbe['startTuiIdleVisibleReadProbe']>
+  ) {
+    return this.waitVisibleProbe.startTuiIdleVisibleReadProbe(...args)
   }
 
   protected buildTuiIdleProbeResult(
-    handle: string,
-    blockedReason: RuntimeTerminalWaitBlockedReason | null
-  ): RuntimeTerminalWait {
-    const pty = this.getLivePtyForHandle(handle)
-    if (pty) {
-      return blockedReason
-        ? buildPtyTerminalWaitBlockedResult(handle, 'tui-idle', pty.pty, blockedReason)
-        : buildPtyTerminalWaitResult(handle, 'tui-idle', pty.pty)
-    }
-    const { leaf } = this.getLiveLeafForHandle(handle)
-    return blockedReason
-      ? buildTerminalWaitBlockedResult(handle, 'tui-idle', leaf, blockedReason)
-      : buildTerminalWaitResult(handle, 'tui-idle', leaf)
+    ...args: Parameters<TerminalWaitVisibleProbe['buildTuiIdleProbeResult']>
+  ) {
+    return this.waitVisibleProbe.buildTuiIdleProbeResult(...args)
   }
 
   async waitForSetupTerminalCompletion(
