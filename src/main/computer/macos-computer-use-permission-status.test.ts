@@ -2,6 +2,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { escapeRegex } from '../../shared/string-utils'
 
 const resolveHelperAppPathMock = vi.hoisted(() => vi.fn())
 const resolveHelperExecutablePathMock = vi.hoisted(() => vi.fn())
@@ -290,7 +291,7 @@ describe('getComputerUsePermissionStatus', () => {
         program: '/usr/bin/pkill',
         args: [
           '-f',
-          `(^|[[:space:]/])orca-computer-use-macos[[:space:]]+--permission-status-file[[:space:]]+${directory}/status\\.json$`
+          `(^|[[:space:]/])orca-computer-use-macos[[:space:]]+--permission-status-file[[:space:]]+${escapeRegex(join(directory, 'status.json'))}$`
         ],
         timeoutMs: 2000,
         stdio: 'ignore'
@@ -305,7 +306,7 @@ function expectOnlyOwnStatusHelperStopped(): void {
     program: '/usr/bin/pkill',
     args: [
       '-f',
-      '(^|[[:space:]/])orca-computer-use-macos[[:space:]]+--permission-status-file[[:space:]]+/tmp/orca-computer-use-permissions-test/status\\.json$'
+      `(^|[[:space:]/])orca-computer-use-macos[[:space:]]+--permission-status-file[[:space:]]+${escapeRegex(permissionStatusPath)}$`
     ],
     timeoutMs: 2000,
     stdio: 'ignore'
