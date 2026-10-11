@@ -213,7 +213,9 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
       if (!result.ok) {
         throw new Error(result.error)
       }
-      if (!result.skipped && runtime.runtimeEnvironmentId) {
+      const connection = getEphemeralVmRecipeResultConnection(result.runtime.recipeResult)
+      // Why: an SSH VM's server is reached through its target, so it has no pairing to refresh.
+      if (!result.skipped && connection.type !== 'ssh' && runtime.runtimeEnvironmentId) {
         const pairingCode = getEphemeralVmRecipeResultPairingCode(result.runtime.recipeResult)
         if (!pairingCode) {
           throw new Error('Resume result did not include an Orca Server pairing code.')
@@ -223,7 +225,6 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
         })
         invalidateRuntimeEnvironmentTransport(runtime.runtimeEnvironmentId)
       }
-      const connection = getEphemeralVmRecipeResultConnection(result.runtime.recipeResult)
       if (!result.skipped && connection.type === 'ssh') {
         try {
           const ssh = await connectRuntimeOwnedSshTarget({
@@ -232,7 +233,8 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
           })
           return updateEphemeralVmRuntimeStatus(userDataPath, result.runtime.id, {
             connectionMode: 'ssh',
-            sshTargetId: ssh.targetId
+            sshTargetId: ssh.targetId,
+            ...(ssh.environmentId ? { runtimeEnvironmentId: ssh.environmentId } : {})
           })
         } catch (error) {
           updateEphemeralVmRuntimeStatus(userDataPath, result.runtime.id, {

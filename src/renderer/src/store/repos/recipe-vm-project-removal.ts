@@ -1,4 +1,4 @@
-import { isRuntimeOwnedSshTargetId } from '../../../../shared/execution-host'
+import { isRuntimeOwnedSshTargetId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { cleanupEphemeralVmRuntimesForDeleted } from '@/lib/ephemeral-vm-runtime-cleanup'
 import { getRecipeVmSshTargetForHost } from '@/lib/recipe-vm-managed-host'
 
@@ -8,7 +8,7 @@ import { getRecipeVmSshTargetForHost } from '@/lib/recipe-vm-managed-host'
  */
 export async function destroyRecipeVmBeforeProjectRemoval(args: {
   runtimeEnvironments: Parameters<typeof getRecipeVmSshTargetForHost>[0]
-  ownerHostId: string
+  ownerHostId: ExecutionHostId
   connectionId: string | null | undefined
   workspaceIds: string[]
 }): Promise<boolean> {
@@ -21,8 +21,12 @@ export async function destroyRecipeVmBeforeProjectRemoval(args: {
   if (!targetId || !isRuntimeOwnedSshTargetId(targetId)) {
     return false
   }
+  // Why host-scoped: another VM's server can publish the same raw workspace id.
   const cleanup = await cleanupEphemeralVmRuntimesForDeleted({
-    workspaceIds: args.workspaceIds,
+    hostScopedWorkspaces: args.workspaceIds.map((workspaceId) => ({
+      workspaceId,
+      executionHostId: args.ownerHostId
+    })),
     runtimeOwnedSshTargetIds: [targetId]
   })
   if (cleanup.retainedSshTargetIds.includes(targetId)) {

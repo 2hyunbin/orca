@@ -121,3 +121,48 @@ it("retains a recipe VM's managed-server project when VM cleanup fails", async (
 
   expect(store.getState().repos).toEqual([vmServerRepo])
 })
+
+it('never destroys another VM whose server publishes the same workspace id', async () => {
+  const sharedWorkspaceId = `${vmServerRepo.id}::/home/orca/project`
+  ephemeralVmListRuntimes.mockResolvedValue([
+    {
+      id: 'runtime-1',
+      cleanupStatus: 'not_started',
+      sshTargetId: 'runtime-ssh-runtime-1',
+      runtimeEnvironmentId: 'env-vm',
+      workspaceId: sharedWorkspaceId
+    },
+    {
+      id: 'runtime-2',
+      cleanupStatus: 'not_started',
+      sshTargetId: 'runtime-ssh-runtime-2',
+      runtimeEnvironmentId: 'env-vm-2',
+      workspaceId: sharedWorkspaceId
+    }
+  ])
+  ephemeralVmCleanup.mockResolvedValue({ status: 'cleaned', cleanupStatus: 'succeeded' })
+  const store = createTestStore()
+  store.setState({
+    repos: [vmServerRepo],
+    runtimeEnvironments: [vmServer],
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: removal reads only each row's id and hostId.
+    worktreesByRepo: {
+      [vmServerRepo.id]: [
+        {
+          id: sharedWorkspaceId,
+          repoId: vmServerRepo.id,
+          path: '/home/orca/project',
+          hostId: 'runtime:env-vm'
+        }
+      ]
+    } as never
+  })
+
+  await store.getState().removeProject(vmServerRepo.id, {
+    hostId: 'runtime:env-vm',
+    errorFeedback: 'toast'
+  })
+
+  expect(ephemeralVmCleanup).toHaveBeenCalledTimes(1)
+  expect(ephemeralVmCleanup).toHaveBeenCalledWith({ runtimeId: 'runtime-1' })
+})
