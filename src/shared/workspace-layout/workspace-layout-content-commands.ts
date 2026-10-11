@@ -1,6 +1,6 @@
 // Opening editor, browser and agent-session tabs: the tab and its content record in one apply.
 
-import type { VirtualEditorTabView } from '../editor-tab-view-types'
+import type { EditorTabView } from '../editor-tab-view-types'
 import { applied, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
@@ -57,7 +57,7 @@ function withEditorView(
   model: WorkspaceLayoutModel,
   key: string,
   tabId: string,
-  view: VirtualEditorTabView | undefined
+  view: EditorTabView | undefined
 ): WorkspaceLayoutModel {
   if (!view) {
     return model

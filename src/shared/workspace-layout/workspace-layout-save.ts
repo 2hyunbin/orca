@@ -104,15 +104,12 @@ function saveWorkspace(
         tab.kind === 'editor' && tab.isPreview ? [tab.entityId] : []
       )
     )
-    // The view is not saved.
-    session.openFilesByWorktree[key] = workspace.editorFiles.map(
-      ({ view: _view, ...file }): PersistedOpenFile => ({
-        ...file,
-        worktreeId,
-        ...(previewFiles.has(file.filePath) ? { isPreview: true } : {}),
-        ...view.editorDrafts[key]?.[file.filePath]
-      })
-    )
+    session.openFilesByWorktree[key] = workspace.editorFiles.map((file): PersistedOpenFile => ({
+      ...file,
+      worktreeId,
+      ...(previewFiles.has(file.filePath) ? { isPreview: true } : {}),
+      ...view.editorDrafts[key]?.[file.filePath]
+    }))
   }
   if (workspace.browserTabs) {
     session.browserTabsByWorktree[key] = workspace.browserTabs.map((tab): BrowserWorkspace => ({

@@ -119,9 +119,3 @@ export type EditorTabView =
   | { mode: 'conflict-review'; conflictReview?: ConflictReviewState }
   | { mode: 'check-details'; checkRunDetails?: OpenCheckRunDetailsState }
   | { mode: 'chat-visual'; chatVisual?: OpenChatVisualTabState }
-
-/** The view an edit tab's file record carries. */
-export type EditorFileView = Extract<EditorTabView, { mode: 'edit' }>
-
-/** The view of a tab that is not a file on disk; its file path is a worktree root or a synthetic id. */
-export type VirtualEditorTabView = Exclude<EditorTabView, { mode: 'edit' }>

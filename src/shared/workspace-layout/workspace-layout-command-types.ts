@@ -7,7 +7,7 @@
 import type { SleepingAgentSessionRecord } from '../agent-session-resume'
 import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
-import type { VirtualEditorTabView } from '../editor-tab-view-types'
+import type { EditorTabView } from '../editor-tab-view-types'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
 import type { TerminalPaneLayoutNode, TerminalPaneSplitDirection } from '../terminal-tab-types'
 import type { PaneSide } from './terminal-pane-tree'
@@ -80,8 +80,8 @@ export type LayoutCommand =
       contentType: Exclude<TabContentType, 'terminal' | 'browser' | 'agent-session' | 'simulator'>
       /** Present for edit-mode files, which are restored after restart. */
       file?: LayoutEditorFile
-      /** Present for tabs that are not a file: diff, preview, conflict review, check details, chat visual. */
-      view?: VirtualEditorTabView
+      /** What the tab shows beyond its file; not saved. */
+      view?: EditorTabView
       groupId?: string
       preview?: boolean
       /** Editor tabs whose view reported an unsaved draft: a preview among them is not replaced. */
