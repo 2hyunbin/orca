@@ -89,15 +89,20 @@ function optionDescriptor(args: {
   const showDefault = !tracked && (cliStatesDefault || (mode === 'draft' && !modelIsCliDefault))
   const valueSource = tracked?.source ?? (showDefault ? 'default' : 'unknown')
   if (option.kind.type === 'select') {
-    const choices = choiceWithCurrent(option.kind.choices, tracked)
+    const { choices: listed, defaultValue, unlistedRunsDefault } = option.kind
+    const tracksUnlisted =
+      typeof tracked?.value === 'string' && !listed.some((choice) => choice.value === tracked.value)
+    const runsDefault = unlistedRunsDefault === true && tracksUnlisted
+    const choices = runsDefault ? [...listed] : choiceWithCurrent(listed, tracked)
     if (choices.length <= 1) {
       return null
     }
-    const currentValue =
-      typeof tracked?.value === 'string'
+    const currentValue = runsDefault
+      ? defaultValue
+      : typeof tracked?.value === 'string'
         ? tracked.value
         : showDefault
-          ? option.kind.defaultValue
+          ? defaultValue
           : undefined
     return {
       id: option.id,

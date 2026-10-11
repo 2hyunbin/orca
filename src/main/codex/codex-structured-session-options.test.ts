@@ -648,8 +648,11 @@ describe('Codex reported tier', () => {
     await expect(
       applyCodexStructuredSessionOption(session, 'serviceTier', 'flex')
     ).resolves.toEqual({ serviceTier: 'flex' })
-    await expect(readLiveCodexSessionOptions(session, undefined)).resolves.toMatchObject({
-      current: { serviceTier: 'flex' }
+    const shown = await readLiveCodexSessionOptions(session, undefined)
+    expect(shown.current).toMatchObject({ serviceTier: 'flex' })
+    expect(shown.models.find((entry) => entry.id === 'gpt-6.1-sol')?.serviceTiers).toContainEqual({
+      value: 'flex',
+      label: 'Flex'
     })
     await expect(
       applyCodexStructuredSessionOption(session, 'model', 'gpt-6-luna')

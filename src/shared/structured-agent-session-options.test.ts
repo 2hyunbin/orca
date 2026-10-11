@@ -6,6 +6,7 @@ import { createNativeChatSessionOptionRecord } from './native-chat-session-optio
 import {
   applyStructuredAgentSessionModelCatalog,
   applyStructuredAgentSessionOptions,
+  commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
   settleStructuredAgentSessionBuiltinCatalog,
   structuredAgentSessionOptionSnapshot
@@ -226,6 +227,45 @@ describe('structured agent session options', () => {
         },
         valueSource: 'reported',
         settable: true
+      })
+    )
+  })
+
+  it('shows a speed the model does not list as Standard, since that is what runs', () => {
+    const live = applyStructuredAgentSessionOptions(
+      createStructuredAgentSessionOptionState('codex'),
+      CODEX_SESSION_OPTION_CATALOG,
+      {
+        models: [
+          {
+            id: 'gpt-6-luna',
+            label: 'GPT-6 Luna',
+            isDefault: true,
+            efforts: [],
+            supportsFastMode: true,
+            serviceTiers: [{ value: 'priority', label: 'Fast' }]
+          }
+        ],
+        fastModeSupport: { supported: true },
+        current: { model: 'gpt-6-luna' }
+      }
+    )
+    // A pick carried from a model that lists it, before the host's next read.
+    const carried = commitStructuredAgentSessionOptionValues(live, {
+      model: 'gpt-6-luna',
+      serviceTier: 'ultrafast'
+    })
+    expect(structuredAgentSessionOptionSnapshot(carried)).toContainEqual(
+      expect.objectContaining({
+        id: 'serviceTier',
+        kind: {
+          type: 'select',
+          currentValue: 'default',
+          choices: [
+            { value: 'default', label: 'Standard' },
+            { value: 'priority', label: 'Fast' }
+          ]
+        }
       })
     )
   })

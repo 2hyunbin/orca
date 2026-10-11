@@ -40,7 +40,8 @@ function serviceTierOption(tiers: readonly AgentSessionOptionChoice[]): CatalogO
     kind: {
       type: 'select',
       choices: [{ value: 'default', label: 'Standard' }, ...tiers],
-      defaultValue: 'default'
+      defaultValue: 'default',
+      unlistedRunsDefault: true
     },
     apply: {}
   }
