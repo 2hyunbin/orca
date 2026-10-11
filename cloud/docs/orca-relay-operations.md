@@ -474,14 +474,18 @@ Cloud SQL starts or fails over), onto a Cloud SQL Auth Proxy sidecar on `127.0.0
 runs it since 2026-10-11 (serving `orca-cloud-relay-staging-00177-qur`); production keeps the socket
 until it is enabled through this sequence.
 
-1. Plan with exactly these targets and review it: `google_cloud_run_v2_service.relay`, the three
+1. In production, only after a reviewed `production.tfvars` PR sets the variable (and
+   `relay_event_loop_stall_alert`) and a staging Cloud SQL stop/start drill on the sidecar has passed.
+   Plan with exactly these targets and review it: `google_cloud_run_v2_service.relay`, the three
    `relay_director_database_url` resources (secret, version, accessor),
    `google_logging_metric.relay_event_loop_stall` and
    `google_monitoring_alert_policy.relay_event_loop_stall`. Expect `5 to add, 1 to change`. The
    director change also carries the template drift already on `main` (`ORCA_RELAY_IMAGE_DIGEST`
    dropped, which the deploy restores; reordered or default-valued environment entries); stop on
    anything else, such as concurrency, timeout or image.
-2. Apply the saved plan. **The metric must exist before its alert policy**: a new log-based metric
+2. Apply the saved plan; in production, only while holding the production Cloud SQL rollout lease
+   (`terraform/state/cloud-sql-rollout/production.lock` in `onorca-cloud-terraform-state`, the
+   `cloud-sql-rollout-lease` action). **The metric must exist before its alert policy**: a new log-based metric
    takes minutes to become visible, and the first apply can fail on the policy with `404 Cannot
    find metric(s)`. Re-plan and apply the policy alone a few minutes later, or apply the metric in
    an earlier run. Staging hit this on 2026-10-11.
