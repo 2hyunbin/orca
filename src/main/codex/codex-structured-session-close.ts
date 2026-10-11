@@ -57,7 +57,7 @@ export function handleCodexSessionExit(input: {
       ? {
           processExit: {
             root: input.connection.closeResult.root,
-            workload: input.connection.closeResult.tree
+            workload: input.connection.closeResult.tree ?? 'unverifiable'
           }
         }
       : {}),

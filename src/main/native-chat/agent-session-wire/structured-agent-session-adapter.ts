@@ -198,7 +198,7 @@ export type StructuredAgentSessionEndedEvent = {
   /** Execution-host observations from a requested provider close, when available. */
   processExit?: {
     root: 'live' | 'unverifiable' | 'exited'
-    workload: 'live' | 'unverifiable' | 'exited' | null
+    workload: 'live' | 'unverifiable' | 'exited'
   }
   fence: number
   acquisitionGeneration: string
