@@ -69,7 +69,7 @@ describe('createManagedWorktree execution-host routing', () => {
     const runtime = makeRuntime({ id: 'repo-remote', path: REMOTE_PATH, kind: 'git', ...host })
 
     await expect(
-      runtime.createManagedWorktree({ repoSelector: 'repo-remote', name: 'feature' } as never)
+      runtime.createManagedWorktree({ repoSelector: 'repo-remote', name: 'feature' })
     ).rejects.toThrow(SshHostNotServedError)
 
     // A local `git worktree add` against a remote path is the silent-substitution failure.
