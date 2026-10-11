@@ -286,7 +286,7 @@ export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntime
     return { tabId, worktreeId: pty.worktreeId }
   }
 
-  protected notifyWorktreesChanged(
+  notifyWorktreesChanged(
     repoId: string,
     options?: { invalidateGitScans?: boolean; sortOrderOnly?: boolean }
   ): void {
