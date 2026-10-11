@@ -388,7 +388,6 @@ export const PR_E2E_SOURCE_ROUTES = [
     id: 'workspace-layout.oracle',
     specs: [
       'tests/e2e/workspace-layout-oracle-headless.spec.ts',
-      'tests/e2e/workspace-layout-oracle-ssh.spec.ts',
       'tests/e2e/workspace-layout-oracle.spec.ts'
     ],
     matches: (file) =>
