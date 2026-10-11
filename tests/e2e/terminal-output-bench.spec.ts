@@ -395,10 +395,21 @@ async function newTab(ctx: Ctx, panes: number): Promise<string[]> {
     await waitForBoundPanes(ctx.page, count)
   }
   await waitForBoundPanes(ctx.page, panes)
-  const ptyIds: string[] = await ctx.page.evaluate(() =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
-    (window as any).__obench.ptyIdsOfActiveTab()
-  )
+  // The store can bind a PTY before the pane's DOM carries it (seen on Windows).
+  let ptyIds: string[] = []
+  for (const deadline = Date.now() + 30_000; ; ) {
+    ptyIds = await ctx.page.evaluate(() =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- probe installed above
+      (window as any).__obench.ptyIdsOfActiveTab()
+    )
+    if (ptyIds.length === panes && ptyIds.every(Boolean)) {
+      break
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`panes never exposed PTY ids: ${JSON.stringify(ptyIds)}`)
+    }
+    await new Promise((r) => setTimeout(r, 100))
+  }
   // Every shell must be at a prompt before timing starts.
   const n = nonce()
   await runAndWait(
