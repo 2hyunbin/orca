@@ -333,7 +333,7 @@ test('opens a remote pane link on the pane runtime and refuses to fall back to t
 }, testInfo) => {
   test.setTimeout(300_000)
   const fixture = await startLinkFixtureServer()
-  const host: HeadlessPairedRuntimeHost = await launchHeadlessPairedRuntimeHost()
+  const host: HeadlessPairedRuntimeHost = await launchHeadlessPairedRuntimeHost({ testInfo })
   let client: PairedElectronClient | null = null
 
   try {

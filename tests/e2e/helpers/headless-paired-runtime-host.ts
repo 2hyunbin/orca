@@ -4,7 +4,11 @@ import { createServer } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { _electron as electron, type ElectronApplication } from '@stablyai/playwright-test'
+import {
+  _electron as electron,
+  type ElectronApplication,
+  type TestInfo
+} from '@stablyai/playwright-test'
 import { RuntimeClient } from '../../../src/cli/runtime/client'
 import { getE2ECompletedOnboardingProfile } from './e2e-completed-onboarding-profile'
 import { getOrcaElectronLaunchArgs } from './electron-launch-args'
@@ -14,7 +18,11 @@ import {
   createElectronHomeIsolation
 } from './electron-home-isolation'
 import type { RuntimeDesktopPairingOffer } from './paired-electron-client'
-import { readPairingOffer, readServeReadiness } from './headless-paired-runtime-serve-readiness'
+import {
+  HeadlessPairedRuntimeStartupDiagnosticBuffer,
+  readPairingOffer,
+  readServeReadiness
+} from './headless-paired-runtime-serve-readiness'
 import { retryTransientMainEvaluate } from './electron-main-evaluate-retry'
 
 export type HeadlessPairedRuntimeHost = {
@@ -44,6 +52,59 @@ export type HeadlessPairedRuntimeHost = {
 }
 
 type HeadlessHostCleanup = () => Promise<void> | void
+
+function observeHeadlessHostProcess(app: ElectronApplication) {
+  const child = app.process()
+  const stdout = new HeadlessPairedRuntimeStartupDiagnosticBuffer()
+  const stderr = new HeadlessPairedRuntimeStartupDiagnosticBuffer()
+  let exitCode = child.exitCode
+  let signalCode = child.signalCode
+  let closeObserved = false
+  let shutdownRequested = false
+  let shutdownRequestedAtExit: boolean | null = null
+  let exitObservedAt: string | null = null
+  const detach = (): void => {
+    child.stdout?.off('data', onStdout)
+    child.stderr?.off('data', onStderr)
+    child.off('exit', onExit)
+    child.off('close', onClose)
+  }
+  const onStdout = (chunk: Buffer): void => stdout.append(chunk)
+  const onStderr = (chunk: Buffer): void => stderr.append(chunk)
+  const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+    exitCode = code
+    signalCode = signal
+    shutdownRequestedAtExit = shutdownRequested
+    exitObservedAt = new Date().toISOString()
+  }
+  const onClose = (code: number | null, signal: NodeJS.Signals | null): void => {
+    exitCode = code
+    signalCode = signal
+    closeObserved = true
+    detach()
+  }
+  child.stdout?.on('data', onStdout)
+  child.stderr?.on('data', onStderr)
+  child.on('exit', onExit)
+  child.on('close', onClose)
+  return {
+    requestShutdown: (): void => {
+      shutdownRequested = true
+    },
+    snapshot: () => ({
+      pid: child.pid,
+      shutdownRequested,
+      shutdownRequestedAtExit,
+      exitObservedAt,
+      exitCode,
+      signalCode,
+      closeObserved,
+      stdout: stdout.read(),
+      stderr: stderr.read()
+    }),
+    detach
+  }
+}
 
 // Why: Windows keeps a just-killed daemon's handles on the profile briefly, so removal sees EPERM.
 const PROFILE_REMOVAL: RmOptions = { recursive: true, force: true, maxRetries: 50, retryDelay: 100 }
@@ -103,6 +164,7 @@ export async function launchHeadlessPairedRuntimeHost(
     pairingScope?: 'runtime' | 'mobile'
     /** Bind a stable loopback port so `restartServeProcess` can reclaim it. */
     pinnedServePort?: boolean
+    testInfo?: TestInfo
     userDataParent?: string
   } = {}
 ): Promise<HeadlessPairedRuntimeHost> {
@@ -112,6 +174,30 @@ export async function launchHeadlessPairedRuntimeHost(
   const servePort = options.pinnedServePort === true ? await reserveFreeLoopbackPort() : 0
   let agentBrowserSocketDir: string | null = null
   let app: ElectronApplication | undefined
+  const observations = new Map<ElectronApplication, ReturnType<typeof observeHeadlessHostProcess>>()
+  const requestShutdown = (host: ElectronApplication): Promise<void> => {
+    observations.get(host)?.requestShutdown()
+    return closeElectronAppForE2E(host)
+  }
+  const attachDiagnostics = async (): Promise<void> => {
+    try {
+      if (!options.testInfo) {
+        return
+      }
+      for (const [index, observation] of [...observations.values()].entries()) {
+        await options.testInfo.attach(`headless-runtime-${index + 1}.json`, {
+          body: Buffer.from(JSON.stringify(observation.snapshot())),
+          contentType: 'application/json'
+        })
+      }
+    } catch {
+      console.warn('[e2e] Could not attach headless runtime diagnostics')
+    } finally {
+      for (const observation of observations.values()) {
+        observation.detach()
+      }
+    }
+  }
   try {
     agentBrowserSocketDir = options.agentBrowserSocketParent
       ? mkdtempSync(path.join(options.agentBrowserSocketParent, 'orca-ab-'))
@@ -136,8 +222,8 @@ export async function launchHeadlessPairedRuntimeHost(
       isolation.env.AGENT_BROWSER_SOCKET_DIR = agentBrowserSocketDir
     }
     const mainPath = path.join(process.cwd(), 'out', 'main', 'index.js')
-    const launchServeProcess = (): Promise<ElectronApplication> =>
-      electron.launch({
+    const launchServeProcess = async (): Promise<ElectronApplication> => {
+      const launched = await electron.launch({
         ...(options.executablePath ? { executablePath: options.executablePath } : {}),
         args: [
           ...(options.executablePath ? [] : getOrcaElectronLaunchArgs(mainPath, false)),
@@ -151,6 +237,11 @@ export async function launchHeadlessPairedRuntimeHost(
         ],
         env: isolation.env
       })
+      if (options.testInfo) {
+        observations.set(launched, observeHeadlessHostProcess(launched))
+      }
+      return launched
+    }
     app = await launchServeProcess()
     const [offer] = await Promise.all([
       readPairingOffer(app),
@@ -177,7 +268,7 @@ export async function launchHeadlessPairedRuntimeHost(
             'restartServeProcess requires launchHeadlessPairedRuntimeHost({ pinnedServePort: true })'
           )
         }
-        await closeElectronAppForE2E(serveProcess)
+        await requestShutdown(serveProcess)
         serveProcessOpen = false
         await restartOptions.betweenProcesses?.()
         const relaunched = await launchServeProcess()
@@ -186,27 +277,31 @@ export async function launchHeadlessPairedRuntimeHost(
         await readServeReadiness(relaunched, { requirePairingOffer: false })
       },
       dispose: async () => {
-        await cleanupHeadlessHostResources([
-          ...(serveProcessOpen ? [() => closeElectronAppForE2E(serveProcess)] : []),
-          () => cleanupE2EDaemons(userDataDir),
-          () => preserveProfileLogs(userDataDir),
-          () => rmSync(userDataDir, PROFILE_REMOVAL),
-          ...(agentBrowserSocketDir
-            ? [
-                () =>
-                  rmSync(agentBrowserSocketDir, {
-                    recursive: true,
-                    force: true
-                  })
-              ]
-            : [])
-        ])
+        try {
+          await cleanupHeadlessHostResources([
+            ...(serveProcessOpen ? [() => requestShutdown(serveProcess)] : []),
+            () => cleanupE2EDaemons(userDataDir),
+            () => preserveProfileLogs(userDataDir),
+            () => rmSync(userDataDir, PROFILE_REMOVAL),
+            ...(agentBrowserSocketDir
+              ? [
+                  () =>
+                    rmSync(agentBrowserSocketDir, {
+                      recursive: true,
+                      force: true
+                    })
+                ]
+              : [])
+          ])
+        } finally {
+          await attachDiagnostics()
+        }
       }
     }
   } catch (error) {
     try {
       await cleanupHeadlessHostResources([
-        ...(app ? [() => closeElectronAppForE2E(app)] : []),
+        ...(app ? [() => requestShutdown(app)] : []),
         () => cleanupE2EDaemons(userDataDir),
         () => preserveProfileLogs(userDataDir),
         () => rmSync(userDataDir, PROFILE_REMOVAL),
@@ -216,6 +311,8 @@ export async function launchHeadlessPairedRuntimeHost(
       ])
     } catch (cleanupError) {
       throw new AggregateError([error, cleanupError], 'Headless runtime startup and cleanup failed')
+    } finally {
+      await attachDiagnostics()
     }
     throw error
   }
