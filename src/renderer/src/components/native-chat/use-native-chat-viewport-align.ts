@@ -5,7 +5,6 @@
 import { useCallback, useRef } from 'react'
 import type { Virtualizer } from '@tanstack/react-virtual'
 import type { ProgrammaticScrollMarks } from '@/hooks/programmatic-scroll-marks'
-import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion'
 
 /** How close to its target a jump counts as arrived: sub-pixel and zoom rounding. */
 const ALIGN_ARRIVED_PX = 2
@@ -58,7 +57,6 @@ export function useNativeChatViewportAlign({
   /** Whether the view is still the jump's: travelling, or resting where it landed. */
   isAlignHeld: () => boolean
 } {
-  const alignBehavior = usePrefersReducedMotion() ? 'auto' : 'smooth'
   /** The row or offset `alignToViewportTop` scrolled to, until something else takes the scroll. */
   const alignRef = useRef<(({ index: number } | { offset: number }) & { arrived: boolean }) | null>(
     null
@@ -78,14 +76,14 @@ export function useNativeChatViewportAlign({
         // By index for a row: rows measured on the way move the target, and the
         // virtualizer re-aims at an index where a fixed offset would land beside it.
         alignRef.current = { index, arrived: false }
-        virtualizer.scrollToIndex(index, { align: 'start', behavior: alignBehavior })
+        virtualizer.scrollToIndex(index, { align: 'start', behavior: 'auto' })
         return
       }
       const top =
         nativeChatScrollOffsetWithin(element, container) ?? rectOffsetWithin(element, container)
       alignRef.current = { offset: top, arrived: false }
       if (virtualizer.scrollElement) {
-        virtualizer.scrollToOffset(top, { align: 'start', behavior: alignBehavior })
+        virtualizer.scrollToOffset(top, { align: 'start', behavior: 'auto' })
         return
       }
       const max = Math.max(0, container.scrollHeight - container.clientHeight)
@@ -93,9 +91,9 @@ export function useNativeChatViewportAlign({
       if (container.scrollTop !== landing) {
         programmaticScrollMarks.mark(landing)
       }
-      container.scrollTo({ top, behavior: alignBehavior })
+      container.scrollTo({ top, behavior: 'auto' })
     },
-    [alignBehavior, finishReaderTakeover, programmaticScrollMarks, scrollRef, virtualizer]
+    [finishReaderTakeover, programmaticScrollMarks, scrollRef, virtualizer]
   )
 
   // Read from where the view is, not from a landing event: a stale mark or a

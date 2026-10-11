@@ -147,10 +147,7 @@ function rowText(row: HTMLElement): string {
   return /(?:prompt|marker)-\d+/.exec(row.querySelector('p')?.textContent ?? '')?.[0] ?? ''
 }
 
-// A rail jump scrolls smoothly. Started by a reader following the end — which is
-// exactly where paging older history in leaves them — its first frames used to
-// re-arm follow and the next one rebased the view, cancelling the jump a few
-// pixels from the bottom.
+// A jump must detach end-follow and retain its landing as older history arrives.
 describe('jumping from the rail while following the end', () => {
   let restore: (() => void)[] = []
   let scrollModel: ReturnType<typeof installScrollModel>
@@ -427,27 +424,6 @@ describe('jumping from the rail while following the end', () => {
     expect(pages.asked()).toBe(1)
     expect(screen.queryByText('prompt-5')).toBeNull()
     expect(distanceFromBottom()).toBe(0)
-  })
-
-  it('jumps to a message without animating when the reader asks for reduced motion', async () => {
-    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
-      matches: query === '(prefers-reduced-motion: reduce)',
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false
-    }))
-    render(<PagedTranscript />)
-    await settle(10)
-
-    fireEvent.click(screen.getByRole('button', { name: 'prompt-45' }))
-    await frame()
-
-    // A smooth scroll would still be easing in here, a few pixels from where it started.
-    expect(Math.abs(rowOffsetFromViewportTop('prompt-45'))).toBeLessThanOrEqual(2)
   })
 })
 
