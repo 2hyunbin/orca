@@ -207,7 +207,11 @@ export function bindSettlePaneSerializer(session: ConnectPanePtySession): void {
       armStartupDraftQuietTimer()
     }
   }
-  if (session.ownsStartupDraftPaste && !session.shouldDeliverStartupViaTerminalPaste) {
+  if (
+    session.ownsStartupDraftPaste &&
+    !session.unservedSshTargetId &&
+    !session.shouldDeliverStartupViaTerminalPaste
+  ) {
     session.armStartupDraftReadinessObservation()
   }
   let sessionRestoredBannerShown: SessionRestoredBannerReason | null = null
