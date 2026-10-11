@@ -181,6 +181,29 @@ describe('direct connections use E2EE v2 framing', () => {
     client.close()
   })
 
+  it('latches auth-failed when a re-keyed host answers, as a legacy 4001 did', async () => {
+    const client = connect('ws://desktop.invalid', 'device-token', desktopPublicKeyB64)
+    const rekeyed = nacl.box.keyPair()
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await vi.advanceTimersByTimeAsync(2_000)
+      }
+      const socket = sockets.at(-1)!
+      socket.open()
+      const host = DesktopMobileE2EEV2Session.create({
+        hello: firstFrame(socket),
+        serverSecretKey: rekeyed.secretKey,
+        expectedContext: { transport: 'direct' }
+      })
+      socket.receive(JSON.stringify(host!.ready))
+      await flush()
+      expect(socket.sent).toHaveLength(1)
+    }
+    expect(client.getState()).toBe('auth-failed')
+    expect(isHostLatchedToE2EEV2(desktopPublicKeyB64)).toBe(false)
+    client.close()
+  })
+
   it('persists the latch so a later app session refuses to fall back', async () => {
     await hydrateE2EEV2HostLatch()
     latchHostToE2EEV2(desktopPublicKeyB64)

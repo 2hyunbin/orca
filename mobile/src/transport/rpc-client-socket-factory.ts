@@ -80,7 +80,7 @@ export class RpcClientSocketFactory {
       onAuthenticatedInbound: this.options.onAuthenticatedInbound,
       onClosed: this.options.onClosed,
       onForcedClose: this.options.onForcedClose,
-      onV2Ready: this.framingPolicy.noteV2Ready,
+      onV2Authenticated: this.framingPolicy.noteV2Authenticated,
       onV2HelloRefused: this.framingPolicy.noteV2HelloRefused
     })
   }

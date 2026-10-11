@@ -30,7 +30,7 @@ type SocketSessionOptions = {
   onAuthenticatedInbound: (session: RpcClientSocketSession) => void
   onClosed: (session: RpcClientSocketSession, closeCode?: number) => void
   onForcedClose: (session: RpcClientSocketSession) => void
-  onV2Ready: () => void
+  onV2Authenticated: () => void
   onV2HelloRefused: () => void
 }
 
@@ -171,13 +171,14 @@ export class RpcClientSocketSession {
       events: {
         onReadyAccepted: () => {
           this.readyAccepted = true
-          if (this.options.framing === 'v2') {
-            this.options.onV2Ready()
-          }
         },
         onAuthenticated: () => {
           this.clearHandshakeTimer()
           this.authenticated = true
+          // Why: latch only once the host proved its key; an unauthenticated ready is forgeable.
+          if (this.options.framing === 'v2') {
+            this.options.onV2Authenticated()
+          }
           this.options.onAuthenticated(this)
         },
         onText: (plaintext) => {

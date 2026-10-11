@@ -8,7 +8,7 @@ export type DirectE2EEFraming = 'v2' | 'legacy'
 
 export type DirectE2EEFramingPolicy = {
   framingForNextDial: () => DirectE2EEFraming
-  noteV2Ready: () => void
+  noteV2Authenticated: () => void
   noteV2HelloRefused: () => void
 }
 
@@ -20,7 +20,7 @@ export function createDirectE2EEFramingPolicy(hostPublicKeyB64: string): DirectE
     // direct v2; anything else falling back would be a downgrade.
     framingForNextDial: () =>
       helloRefused && isHostLatchedToE2EEV2(hostPublicKeyB64) === false ? 'legacy' : 'v2',
-    noteV2Ready: () => {
+    noteV2Authenticated: () => {
       helloRefused = false
       latchHostToE2EEV2(hostPublicKeyB64)
     },

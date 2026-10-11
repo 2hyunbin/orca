@@ -5,7 +5,7 @@ import type { DirectE2EEFramingPolicy } from './direct-e2ee-framing-policy'
 export function createDirectE2EEFramingPolicy(): DirectE2EEFramingPolicy {
   return {
     framingForNextDial: () => 'legacy',
-    noteV2Ready: () => {},
+    noteV2Authenticated: () => {},
     noteV2HelloRefused: () => {}
   }
 }

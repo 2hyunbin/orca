@@ -47,6 +47,7 @@ export function createDirectSocketFraming(args: {
 
 function createV2Framing(args: Parameters<typeof createDirectSocketFraming>[0]) {
   const { events } = args
+  let authenticated = false
   const channel = new MobileE2EEV2PhysicalChannel({
     session: MobileE2EEV2ClientSession.create({
       desktopPublicKeyB64: args.serverPublicKeyB64,
@@ -59,12 +60,16 @@ function createV2Framing(args: Parameters<typeof createDirectSocketFraming>[0]) 
       args.emitLog('success', 'Received e2ee_ready (v2)', 'Sending device token')
       events.onReadyAccepted()
     },
-    onAuthenticated: events.onAuthenticated,
+    onAuthenticated: () => {
+      authenticated = true
+      events.onAuthenticated()
+    },
     onText: events.onText,
     onBinary: events.onBinary,
-    // Why: a legacy e2ee_ready answering a v2 hello lands here — never downgrade.
+    // Why: a handshake failure (a re-keyed host, or a legacy e2ee_ready answering a v2
+    // hello) counts against the auth retry budget, as a legacy 4001 did — never a downgrade.
     onError: (error) =>
-      error instanceof MobileE2EEAuthenticationError
+      error instanceof MobileE2EEAuthenticationError || !authenticated
         ? events.onAuthRejected()
         : events.onProtocolError(error)
   })
