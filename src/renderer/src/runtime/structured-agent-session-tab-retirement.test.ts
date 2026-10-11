@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
         options?: { signal?: AbortSignal }
       ) => Promise<unknown>
     >(),
+  ensureCompatible: vi.fn<(environmentId: string) => Promise<void>>(),
   discardOutbox: vi.fn<(sessionId: string) => void>(),
   stopSends: vi.fn<(sessionId: string) => void>(),
   hasTombstone: vi.fn<(worktreeId: string, sessionId: string) => boolean>(),
@@ -45,7 +46,8 @@ vi.mock('./structured-agent-session-close', () => ({
   closeStructuredAgentSession: mocks.closeSession
 }))
 vi.mock('./runtime-rpc-client', () => ({
-  callRuntimeRpc: mocks.callRuntime
+  callRuntimeRpc: mocks.callRuntime,
+  ensureRuntimeEnvironmentCompatible: mocks.ensureCompatible
 }))
 vi.mock('./local-session-tab-close-owner', () => ({
   withLocalSessionTabCloseOwner: async (
@@ -120,6 +122,7 @@ beforeEach(() => {
   replaceRuntimeEnvironmentRevisions([])
   mocks.closeSession.mockResolvedValue('closed')
   mocks.callRuntime.mockResolvedValue(undefined)
+  mocks.ensureCompatible.mockResolvedValue(undefined)
   mocks.hasTombstone.mockReturnValue(false)
   mocks.reacceptLocal.mockResolvedValue(undefined)
   mocks.refreshPaired.mockResolvedValue(undefined)
@@ -372,14 +375,10 @@ describe('structured agent session tab retirement', () => {
     await first
   })
 
-  it('gives up on a hung local close after the bound: aborts it, shows the chat, allows a retry', async () => {
+  it('gives up on a hung local close after the bound: shows the chat, allows a retry', async () => {
     vi.useFakeTimers()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    let signal: AbortSignal | undefined
-    mocks.callRuntime.mockImplementation((_target, _method, _params, options) => {
-      signal = options?.signal
-      return new Promise(() => {})
-    })
+    mocks.callRuntime.mockImplementation(() => new Promise(() => {}))
     beginStructuredAgentSessionTabClose({
       target,
       worktreeId: 'wt-1',
@@ -388,13 +387,35 @@ describe('structured agent session tab retirement', () => {
     })
     expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(true)
     await vi.advanceTimersByTimeAsync(15_000)
-    expect(signal?.aborted).toBe(true)
     expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(false)
     expect(mocks.reacceptLocal).toHaveBeenCalledWith('wt-1', { reacceptCurrentVersion: true })
     retireStructuredAgentSessionTab({ target, worktreeId: 'wt-1', sessionId: 'session-1' })
     expect(mocks.callRuntime).toHaveBeenCalledTimes(2)
     // Release the retry's in-flight slot so later tests start clean.
     await vi.advanceTimersByTimeAsync(15_000)
+    vi.useRealTimers()
+    warn.mockRestore()
+  })
+
+  it('never sends a paired close the window gave up on during a slow compatibility check', async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let compatible!: () => void
+    mocks.ensureCompatible.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          compatible = () => resolve()
+        })
+    )
+    void retireStructuredAgentSessionTab({
+      target: { kind: 'environment', environmentId: 'server-1' },
+      worktreeId: 'wt-1',
+      sessionId: 'session-1'
+    })
+    await vi.advanceTimersByTimeAsync(15_000)
+    compatible()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.callRuntime).not.toHaveBeenCalled()
     vi.useRealTimers()
     warn.mockRestore()
   })

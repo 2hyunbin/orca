@@ -27,7 +27,11 @@ import {
 } from './host-session-tab-close'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import { captureWebSessionIntentOwner } from './web-runtime-session-environment'
-import { callRuntimeRpc, type RuntimeClientTarget } from './runtime-rpc-client'
+import {
+  callRuntimeRpc,
+  ensureRuntimeEnvironmentCompatible,
+  type RuntimeClientTarget
+} from './runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 
 type HostTabCloseSettlement = PromiseSettledResult<HostSessionTabCloseAnswer | undefined>
@@ -63,20 +67,28 @@ export function retireStructuredAgentSessionTab(args: {
   }
   const hostTabId = `agent-session:${args.sessionId}`
   void closeStructuredAgentSession(args.target, args.sessionId).catch(report)
-  // Why: a close the window already gave up on must not be sent late (e.g. after a slow
-  // compatibility check), or the chat it re-showed would vanish again.
-  const giveUp = new AbortController()
-  // Why: main echoes the host tab id it was asked to close, never this window's tab id.
+  let gaveUp = false
+  const sendHostTabClose = async (): Promise<HostSessionTabCloseAnswer | undefined> => {
+    if (args.target.kind === 'environment') {
+      await ensureRuntimeEnvironmentCompatible(args.target.environmentId)
+    }
+    // Why: a close the window already gave up on must not be sent late (after a slow
+    // compatibility check), or the chat it showed again would vanish again.
+    if (gaveUp) {
+      throw new Error('session_tab_close_abandoned')
+    }
+    // Why: main echoes the host tab id it was asked to close, never this window's tab id.
+    return callRuntimeRpc<HostSessionTabCloseAnswer | undefined>(
+      args.target,
+      'session.tabs.close',
+      { worktree: toRuntimeWorktreeSelector(args.worktreeId), tabId: hostTabId, reason: 'user' },
+      { timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS, skipCompatibilityCheck: true }
+    )
+  }
   const promise: Promise<HostTabCloseSettlement> = withLocalSessionTabCloseOwner(
     args.worktreeId,
     hostTabId,
-    () =>
-      callRuntimeRpc<HostSessionTabCloseAnswer | undefined>(
-        args.target,
-        'session.tabs.close',
-        { worktree: toRuntimeWorktreeSelector(args.worktreeId), tabId: hostTabId, reason: 'user' },
-        { timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS, signal: giveUp.signal }
-      )
+    sendHostTabClose
   ).then(
     (value) => ({ status: 'fulfilled' as const, value }),
     (reason: unknown) => {
@@ -92,7 +104,7 @@ export function retireStructuredAgentSessionTab(args: {
   }
   // Why: a hung local close must not hold back every later retry of this chat's close.
   const bound = setTimeout(() => {
-    giveUp.abort()
+    gaveUp = true
     forget()
   }, SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS)
   void promise.finally(() => {

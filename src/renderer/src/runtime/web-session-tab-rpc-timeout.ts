@@ -1,5 +1,4 @@
-/**
- * The budget for a `session.tabs.*` RPC. Client-side suppression that has to outlive one of these
- * calls (the close intent) derives its own lifetime from this, so the two cannot drift apart.
- */
-export const WEB_SESSION_TAB_RPC_TIMEOUT_MS = 15_000
+import { SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS } from '../../../shared/session-tab-close-ledger'
+
+/** The budget for a `session.tabs.*` RPC; a pending tab close gives up on its host at the same time. */
+export const WEB_SESSION_TAB_RPC_TIMEOUT_MS = SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS
