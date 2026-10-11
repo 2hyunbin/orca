@@ -40,6 +40,34 @@ describe('daemon spawn intent wire', () => {
     }
   })
 
+  it('passes a deferral back as-is instead of treating the daemon as gone', async () => {
+    const ensureConnectedSpy = vi
+      .spyOn(DaemonClient.prototype, 'ensureConnected')
+      .mockResolvedValue()
+    const requestSpy = vi
+      .spyOn(DaemonClient.prototype, 'request')
+      .mockRejectedValue(new Error('terminal_spawn_deferred:paused'))
+    const adapter = new DaemonPtyAdapter({
+      socketPath: '/tmp/orca-intent-deferred.sock',
+      tokenPath: '/tmp/orca-intent-deferred.token'
+    })
+    try {
+      await expect(
+        adapter.spawn({
+          sessionId: 'deferred',
+          cols: 80,
+          rows: 24,
+          spawnIntent: 'automatic-restore'
+        })
+      ).rejects.toThrow('terminal_spawn_deferred:paused')
+      expect(createPayloads(requestSpy)).toHaveLength(1)
+    } finally {
+      adapter.dispose()
+      requestSpy.mockRestore()
+      ensureConnectedSpy.mockRestore()
+    }
+  })
+
   it('reads the launcher flag and observes for anything else', () => {
     expect(readTerminalSpawnAdmissionArg(['node', 'entry', '--spawn-admission', 'enforce'])).toBe(
       'enforce'

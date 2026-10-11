@@ -26,12 +26,12 @@ export type SpawnRequestFacts = {
   deadlineAt: number
 }
 
-export const SPAWN_INTENTS: readonly SpawnIntent[] = [
+export const SPAWN_INTENTS = [
   'interactive',
   'user-resume',
   'automatic-restore',
   'automation'
-]
+] as const satisfies readonly SpawnIntent[]
 
 export function isSpawnIntent(value: unknown): value is SpawnIntent {
   return typeof value === 'string' && SPAWN_INTENTS.some((intent) => intent === value)
@@ -40,7 +40,8 @@ export function isSpawnIntent(value: unknown): value is SpawnIntent {
 export type SpawnDeferralReason = 'paused' | 'live_cap' | 'pressure' | 'deadline'
 
 /** Sent only to requests that declared an intent; the fork never started. */
-export const TERMINAL_SPAWN_DEFERRED_PREFIX = 'terminal_spawn_deferred:'
+export const TERMINAL_SPAWN_DEFERRED_CODE = 'terminal_spawn_deferred'
+export const TERMINAL_SPAWN_DEFERRED_PREFIX = `${TERMINAL_SPAWN_DEFERRED_CODE}:`
 /** An undeclared caller at critical pressure; deliberately not a "daemon gone" message,
  *  which would make the caller replace a healthy daemon. */
 export const TERMINAL_SPAWN_REFUSED_MESSAGE = 'terminal_spawn_refused: host under pressure'
