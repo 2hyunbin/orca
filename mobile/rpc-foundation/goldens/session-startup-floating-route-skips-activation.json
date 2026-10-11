@@ -21,6 +21,21 @@
       "ordinal": 1,
       "value": {}
     },
+    "7c9972b4364d": {
+      "actionSheetRequestSeq": 1,
+      "activeHandle": {
+        "$rpc": "null"
+      },
+      "appliedSnapshotMarker": {
+        "epoch": {
+          "$rpc": "null"
+        },
+        "version": -1
+      },
+      "initializedHandles": [],
+      "pendingTabCloses": false,
+      "terminalsLoaded": false
+    },
     "817acfcc1646": {
       "name": "clear-delayed-action-timers",
       "ordinal": 12,
@@ -49,21 +64,6 @@
       "name": "diagnostics-reset-route",
       "ordinal": 2,
       "value": {}
-    },
-    "acf0370bfacc": {
-      "actionSheetRequestSeq": 1,
-      "activeHandle": {
-        "$rpc": "null"
-      },
-      "appliedSnapshotMarker": {
-        "epoch": {
-          "$rpc": "null"
-        },
-        "version": -1
-      },
-      "closedTabTombstones": 0,
-      "initializedHandles": [],
-      "terminalsLoaded": false
     },
     "dd4d898535bd": {
       "name": "clear-pending-restorations",
@@ -105,7 +105,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "acf0370bfacc",
+          "state": "7c9972b4364d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -125,7 +125,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "acf0370bfacc",
+          "state": "7c9972b4364d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -147,7 +147,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "acf0370bfacc",
+          "state": "7c9972b4364d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",

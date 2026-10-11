@@ -5,6 +5,7 @@ import {
   sessionTerminalRename
 } from './mobile-session-write-operations'
 import type { MobileSessionTab, Terminal } from './mobile-session-route-types'
+import { recordAcceptedTabClose } from './session-tab-snapshot-gate'
 import type { MobileSessionContentCreateActionsModel } from './use-mobile-session-content-create-actions'
 
 export function useMobileSessionCloseActions(scope: MobileSessionContentCreateActionsModel) {
@@ -19,7 +20,7 @@ export function useMobileSessionCloseActions(scope: MobileSessionContentCreateAc
     setMarkdownDocs,
     sessionTabsRef,
     reconcileBufferedDraftsRef,
-    closedTabTombstonesRef,
+    closedTabLedger,
     clearTerminalLiveInputDefault,
     setActiveHandle,
     setActiveSessionTabId,
@@ -155,8 +156,8 @@ export function useMobileSessionCloseActions(scope: MobileSessionContentCreateAc
         }
         sessionTabsRef.current = remainingTabs
         setSessionTabs(remainingTabs)
-        // Why: tombstone the closed tab and rely on the snapshot, not a blind refetch that often re-added the not-yet-closed tab.
-        closedTabTombstonesRef.current.set(tab.id, Date.now() + 10_000)
+        // Why: hide the closed tab and rely on the snapshot, not a blind refetch that often re-added the not-yet-closed tab.
+        recordAcceptedTabClose(closedTabLedger, worktreeId, tab.id, Date.now())
         // Why: bulk close re-activates the anchor before awaiting each close;
         // the render-synced ref sees that switch while this closure would not,
         // so comparing against the ref keeps the anchor from being nulled out.

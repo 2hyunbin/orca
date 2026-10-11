@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SESSION_TAB_CLOSE_SETTLED_TTL_MS,
+  SessionTabCloseLedger
+} from '../../../src/shared/session-tab-close-ledger'
+import type { MobileSessionTab } from './mobile-session-route-types'
+import {
   acceptSessionSnapshot,
-  applyClosedTabTombstones,
   confirmsMirroredTabSelection,
+  hidePendingTabCloses,
+  recordAcceptedTabClose,
   type AppliedSnapshotMarker
 } from './session-tab-snapshot-gate'
 
@@ -23,10 +29,10 @@ describe('acceptSessionSnapshot', () => {
     expect(marker).toEqual({ epoch: 'renderer:a', version: 42 })
   })
 
-  it('accepts an equal version (reprocess) so close tombstones can expire and clear', () => {
+  it('accepts an equal version (reprocess) so pending tab closes can expire and clear', () => {
     const marker: AppliedSnapshotMarker = { epoch: 'renderer:a', version: 42 }
     // Polling returns the same cached version repeatedly; reprocessing is needed
-    // so applyClosedTabTombstones can run its TTL/clear pass.
+    // so hidePendingTabCloses can run its TTL/clear pass.
     expect(
       acceptSessionSnapshot({ publicationEpoch: 'renderer:a', snapshotVersion: 42 }, marker)
     ).toBe(true)
@@ -63,33 +69,76 @@ describe('confirmsMirroredTabSelection', () => {
   })
 })
 
-describe('applyClosedTabTombstones', () => {
-  const tab = (id: string): { id: string } => ({ id })
+describe('hidePendingTabCloses', () => {
+  const WT = 'wt-1'
+  const NOW = 1_000_000
+  const file = (id: string): MobileSessionTab => ({
+    type: 'file',
+    id,
+    title: id,
+    filePath: `/w/${id}`,
+    relativePath: id,
+    isDirty: false,
+    isActive: false
+  })
+  const pane = (parent: string, leaf: string): MobileSessionTab => ({
+    type: 'terminal',
+    id: `${parent}::${leaf}`,
+    parentTabId: parent,
+    leafId: leaf,
+    title: 'T',
+    terminal: `term-${leaf}`,
+    isActive: false
+  })
+  const ids = (tabs: readonly MobileSessionTab[]): string[] => tabs.map((tab) => tab.id)
 
-  it('returns the tabs untouched when there are no tombstones', () => {
-    const tabs = [tab('a'), tab('b')]
-    expect(applyClosedTabTombstones(tabs, new Map(), 1000)).toBe(tabs)
+  it('returns the tabs untouched when nothing is pending', () => {
+    const tabs = [file('a'), file('b')]
+    expect(hidePendingTabCloses(new SessionTabCloseLedger(), WT, tabs, NOW)).toBe(tabs)
   })
 
-  it('suppresses a tombstoned tab while it is still present and not expired', () => {
-    const tombstones = new Map([['a', 5000]])
-    const result = applyClosedTabTombstones([tab('a'), tab('b')], tombstones, 1000)
-    expect(result.map((t) => t.id)).toEqual(['b'])
-    // Still present in the publisher snapshot → tombstone retained for next time.
-    expect(tombstones.has('a')).toBe(true)
+  it('keeps a closed tab hidden from every snapshot that still lists it', () => {
+    const ledger = new SessionTabCloseLedger()
+    recordAcceptedTabClose(ledger, WT, 'a', NOW)
+    expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], NOW))).toEqual(['b'])
+    expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], NOW + 1000))).toEqual(['b'])
+    expect(ledger.hasPending(WT)).toBe(true)
   })
 
-  it('clears the tombstone once the publisher snapshot no longer includes the tab', () => {
-    const tombstones = new Map([['a', 5000]])
-    const result = applyClosedTabTombstones([tab('b')], tombstones, 1000)
-    expect(result.map((t) => t.id)).toEqual(['b'])
-    expect(tombstones.has('a')).toBe(false)
+  it('ends the close at the first snapshot that omits the tab', () => {
+    const ledger = new SessionTabCloseLedger()
+    recordAcceptedTabClose(ledger, WT, 'a', NOW)
+    expect(ids(hidePendingTabCloses(ledger, WT, [file('b')], NOW))).toEqual(['b'])
+    expect(ledger.hasPending(WT)).toBe(false)
+    // A later tab with the same id (reopened) is shown.
+    expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], NOW))).toEqual(['a', 'b'])
   })
 
-  it('stops suppressing and clears an expired tombstone even if still present', () => {
-    const tombstones = new Map([['a', 5000]])
-    const result = applyClosedTabTombstones([tab('a'), tab('b')], tombstones, 5000)
-    expect(result.map((t) => t.id)).toEqual(['a', 'b'])
-    expect(tombstones.has('a')).toBe(false)
+  it('stops hiding a tab no snapshot confirmed gone after the backstop', () => {
+    const ledger = new SessionTabCloseLedger()
+    recordAcceptedTabClose(ledger, WT, 'a', NOW)
+    const late = NOW + SESSION_TAB_CLOSE_SETTLED_TTL_MS + 1
+    expect(ids(hidePendingTabCloses(ledger, WT, [file('a'), file('b')], late))).toEqual(['a', 'b'])
+    expect(ledger.hasPending(WT)).toBe(false)
+  })
+
+  it('hides only the closed pane of a split terminal', () => {
+    const ledger = new SessionTabCloseLedger()
+    recordAcceptedTabClose(ledger, WT, 'tab::left', NOW)
+    const tabs = [pane('tab', 'left'), pane('tab', 'right'), file('b')]
+    expect(ids(hidePendingTabCloses(ledger, WT, tabs, NOW))).toEqual(['tab::right', 'b'])
+  })
+
+  it('hides every pane of a terminal tab closed as a whole', () => {
+    const ledger = new SessionTabCloseLedger()
+    recordAcceptedTabClose(ledger, WT, 'tab', NOW)
+    const tabs = [pane('tab', 'left'), pane('tab', 'right'), file('b')]
+    expect(ids(hidePendingTabCloses(ledger, WT, tabs, NOW))).toEqual(['b'])
+  })
+
+  it('never hides a tab in another worktree', () => {
+    const ledger = new SessionTabCloseLedger()
+    recordAcceptedTabClose(ledger, 'wt-2', 'a', NOW)
+    expect(ids(hidePendingTabCloses(ledger, WT, [file('a')], NOW))).toEqual(['a'])
   })
 })

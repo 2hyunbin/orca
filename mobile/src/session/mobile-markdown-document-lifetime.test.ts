@@ -6,6 +6,7 @@ import type { RpcResponse } from '../transport/types'
 import type { MarkdownDocState, MobileSessionTab } from './mobile-session-route-types'
 import { useMobileSessionDocumentReaders } from './use-mobile-session-document-readers'
 import { useMobileSessionCloseActions } from './use-mobile-session-close-actions'
+import { SessionTabCloseLedger } from '../../../src/shared/session-tab-close-ledger'
 
 type ReaderScope = Parameters<typeof useMobileSessionDocumentReaders>[0]
 type CloseScope = Parameters<typeof useMobileSessionCloseActions>[0]
@@ -51,7 +52,7 @@ function mountDocuments(readReply: () => Promise<RpcResponse>) {
         setFileDocs: () => {},
         setMarkdownDocs: setDocs,
         reconcileBufferedDraftsRef: { current: () => {} },
-        closedTabTombstonesRef: { current: new Map() },
+        closedTabLedger: new SessionTabCloseLedger(),
         activeSessionTabIdRef: { current: null },
         selectedSessionTabIdRef: { current: null },
         activeSessionTabTypeRef: { current: null },

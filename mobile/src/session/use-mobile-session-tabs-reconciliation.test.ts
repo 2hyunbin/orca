@@ -1,6 +1,7 @@
 import { createElement, useEffect } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SessionTabCloseLedger } from '../../../src/shared/session-tab-close-ledger'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import type { SessionTabsApplyOutcome } from './mobile-session-tabs-stream-health'
@@ -51,7 +52,12 @@ const applySessionTabs = vi.fn((value: TestResult): SessionTabsApplyOutcome<stri
 const consumeAcceptedSessionTabs = vi.fn()
 let recoveryNeeded = false
 let clearRecoveryAt = Number.POSITIVE_INFINITY
-const hasRecoveryNeed = () => recoveryNeeded
+// The screen keys polling on its pending tab closes; the host lists the closed tab until it commits.
+let closeLedger: SessionTabCloseLedger | null = null
+let hostListsClosedTabUntil = 0
+const CLOSE_PARTITION = 'repo::worktree'
+const CLOSED_TAB = 'closed-tab'
+const hasRecoveryNeed = () => recoveryNeeded || (closeLedger?.hasPending(CLOSE_PARTITION) ?? false)
 const subscribe = vi.fn()
 const unsubscribe = vi.fn()
 let streamListener: ((payload: unknown) => void) | null = null
@@ -83,6 +89,15 @@ let currentWorktreeId = 'repo::worktree'
 let currentTerminalInventoryRecoveryScopeKey = 'host::repo::worktree'
 
 function applyWithRecovery(value: TestResult): SessionTabsApplyOutcome<string> {
+  if (closeLedger) {
+    const listed = Date.now() < hostListsClosedTabUntil ? [...value.tabs, CLOSED_TAB] : value.tabs
+    closeLedger.filter(
+      CLOSE_PARTITION,
+      listed.map((id) => ({ id })),
+      (tab) => tab.id,
+      Date.now()
+    )
+  }
   const outcome = applySessionTabs(value)
   if (outcome.accepted && Date.now() >= clearRecoveryAt) {
     recoveryNeeded = false
@@ -163,6 +178,8 @@ describe('useMobileSessionTabsReconciliation', () => {
     currentTerminalInventoryRecoveryScopeKey = 'host::repo::worktree'
     recoveryNeeded = false
     clearRecoveryAt = Number.POSITIVE_INFINITY
+    closeLedger = null
+    hostListsClosedTabUntil = 0
     listSequence = 0
     fetchTerminals.mockReset()
     fetchTerminals.mockImplementation(async (options?: MobileTerminalInventoryRefreshOptions) => {
@@ -558,7 +575,7 @@ describe('useMobileSessionTabsReconciliation', () => {
     expect(fetchTerminals).toHaveBeenCalledTimes(1)
   })
 
-  it('polls five times through a ten-second close tombstone and then stops', async () => {
+  it('polls five times through a ten-second recovery need and then stops', async () => {
     await mount()
     await emitStream({ type: 'updated', snapshotVersion: 1, tabs: ['tab-1'] })
     sendRequest.mockClear()
@@ -573,6 +590,42 @@ describe('useMobileSessionTabsReconciliation', () => {
     expect(sendRequest).toHaveBeenCalledTimes(5)
     expect(fetchTerminals).toHaveBeenCalledTimes(5)
     expect(recoveryNeeded).toBe(false)
+  })
+
+  it('polls while a tab close is pending and stops at the first list without the tab', async () => {
+    await mount()
+    await emitStream({ type: 'updated', snapshotVersion: 1, tabs: ['tab-1'] })
+    sendRequest.mockClear()
+    closeLedger = new SessionTabCloseLedger()
+    hostListsClosedTabUntil = 5_000
+    const ticket = closeLedger.begin(CLOSE_PARTITION, CLOSED_TAB, Date.now())
+    closeLedger.settle(ticket!, 'closed', Date.now())
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+
+    // Lists at 2 s and 4 s still name the tab; the 6 s list omits it and ends the close.
+    expect(sendRequest).toHaveBeenCalledTimes(3)
+    expect(closeLedger.hasPending(CLOSE_PARTITION)).toBe(false)
+  })
+
+  it('stops polling for a close no list confirms once its backstop passes', async () => {
+    await mount()
+    await emitStream({ type: 'updated', snapshotVersion: 1, tabs: ['tab-1'] })
+    sendRequest.mockClear()
+    closeLedger = new SessionTabCloseLedger()
+    hostListsClosedTabUntil = Number.POSITIVE_INFINITY
+    const ticket = closeLedger.begin(CLOSE_PARTITION, CLOSED_TAB, Date.now())
+    closeLedger.settle(ticket!, 'closed', Date.now())
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+
+    // The 22 s list is the first past the 20 s backstop; it drops the entry and polling ends.
+    expect(sendRequest).toHaveBeenCalledTimes(11)
+    expect(closeLedger.hasPending(CLOSE_PARTITION)).toBe(false)
   })
 
   it('keeps the controller and physical subscription stable across route rerenders', async () => {

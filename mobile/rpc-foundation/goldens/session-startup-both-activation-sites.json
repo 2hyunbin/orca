@@ -133,6 +133,21 @@
       "ordinal": 11,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"worktree.activate\",\"params\":{\"worktree\":\"id:wt-1\",\"notifyClients\":false,\"navigation\":\"caller\"}}"
     },
+    "7c9972b4364d": {
+      "actionSheetRequestSeq": 1,
+      "activeHandle": {
+        "$rpc": "null"
+      },
+      "appliedSnapshotMarker": {
+        "epoch": {
+          "$rpc": "null"
+        },
+        "version": -1
+      },
+      "initializedHandles": [],
+      "pendingTabCloses": false,
+      "terminalsLoaded": false
+    },
     "83de0c92427d": {
       "name": "fetch-terminals",
       "ordinal": 9,
@@ -172,21 +187,6 @@
       "ordinal": 2,
       "value": {}
     },
-    "acf0370bfacc": {
-      "actionSheetRequestSeq": 1,
-      "activeHandle": {
-        "$rpc": "null"
-      },
-      "appliedSnapshotMarker": {
-        "epoch": {
-          "$rpc": "null"
-        },
-        "version": -1
-      },
-      "closedTabTombstones": 0,
-      "initializedHandles": [],
-      "terminalsLoaded": false
-    },
     "b804d344d320": {
       "name": "toast",
       "ordinal": 27,
@@ -211,21 +211,6 @@
       "name": "diagnostics-reset-route",
       "ordinal": 19,
       "value": {}
-    },
-    "e2a7de11a524": {
-      "actionSheetRequestSeq": 3,
-      "activeHandle": {
-        "$rpc": "null"
-      },
-      "appliedSnapshotMarker": {
-        "epoch": {
-          "$rpc": "null"
-        },
-        "version": -1
-      },
-      "closedTabTombstones": 0,
-      "initializedHandles": [],
-      "terminalsLoaded": false
     },
     "eb79a9b3682a": {
       "status": "fulfilled",
@@ -314,6 +299,21 @@
       "ordinal": 21,
       "value": {}
     },
+    "faf6ef04886d": {
+      "actionSheetRequestSeq": 3,
+      "activeHandle": {
+        "$rpc": "null"
+      },
+      "appliedSnapshotMarker": {
+        "epoch": {
+          "$rpc": "null"
+        },
+        "version": -1
+      },
+      "initializedHandles": [],
+      "pendingTabCloses": false,
+      "terminalsLoaded": false
+    },
     "fd193547f35e": {
       "name": "worktree.activate#1",
       "ordinal": 10,
@@ -362,7 +362,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "acf0370bfacc",
+          "state": "7c9972b4364d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -382,7 +382,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "acf0370bfacc",
+          "state": "7c9972b4364d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -404,7 +404,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "acf0370bfacc",
+          "state": "7c9972b4364d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -428,7 +428,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "acf0370bfacc",
+          "state": "7c9972b4364d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -454,7 +454,7 @@
             "mount": "eb79a9b3682a",
             "consume-route": "51ae204eb34b"
           },
-          "state": "e2a7de11a524",
+          "state": "faf6ef04886d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -490,7 +490,7 @@
             "mount": "eb79a9b3682a",
             "consume-route": "51ae204eb34b"
           },
-          "state": "e2a7de11a524",
+          "state": "faf6ef04886d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -527,7 +527,7 @@
             "mount": "eb79a9b3682a",
             "consume-route": "51ae204eb34b"
           },
-          "state": "e2a7de11a524",
+          "state": "faf6ef04886d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",
@@ -566,7 +566,7 @@
             "mount": "eb79a9b3682a",
             "consume-route": "51ae204eb34b"
           },
-          "state": "e2a7de11a524",
+          "state": "faf6ef04886d",
           "effects": [
             "6419a011f13b",
             "aab012c297bd",

@@ -1,3 +1,4 @@
+import { SessionTabCloseLedger } from '../../../../../src/shared/session-tab-close-ledger'
 import { hookMount } from '../hook-mount'
 import { mountFixture } from '../recorder-fixture-shape'
 import type { operationModuleLoader } from '../operation-module-loader'
@@ -52,7 +53,9 @@ export function sessionStartupMountAdapters(
       const activeHandleRef: { current: string | null } = { current: 'terminal-0' }
       const initializedHandlesRef = { current: new Set<string>() }
       const appliedSnapshotMarkerRef = { current: { epoch: 'epoch-0', version: 7 } }
-      const closedTabTombstonesRef = { current: new Map<string, number>() }
+      const closedTabLedger = new SessionTabCloseLedger()
+      // A close pending from the previous route, which the reset must drop.
+      closedTabLedger.begin(WORKTREE_ID, 'tab-closed-on-previous-route', 0)
       const terminalGestureInputQueuesRef = { current: new Map<string, never>() }
       const terminalGestureInputInFlightRef = { current: new Set<string>() }
       const sessionTabActionSheetRequestSeqRef = { current: 0 }
@@ -70,7 +73,7 @@ export function sessionStartupMountAdapters(
             terminalsRef: { current: [] },
             setSessionTabs: () => {},
             appliedSnapshotMarkerRef,
-            closedTabTombstonesRef,
+            closedTabLedger,
             setTerminalsLoaded: (value: boolean) => {
               terminalsLoaded = value
             },
@@ -146,7 +149,7 @@ export function sessionStartupMountAdapters(
           activeHandle,
           initializedHandles: [...initializedHandlesRef.current].sort(),
           appliedSnapshotMarker: appliedSnapshotMarkerRef.current,
-          closedTabTombstones: closedTabTombstonesRef.current.size,
+          pendingTabCloses: closedTabLedger.hasPending(WORKTREE_ID),
           actionSheetRequestSeq: sessionTabActionSheetRequestSeqRef.current
         }),
         dispose: hook.unmount

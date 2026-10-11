@@ -1,3 +1,4 @@
+import { SessionTabCloseLedger } from '../../../../../src/shared/session-tab-close-ledger'
 import { hookMount, performHookAction } from '../hook-mount'
 import type { MobileSessionTab } from '../../../session/mobile-session-route-types'
 import type { TerminalRecord } from '../../../session/mobile-terminal-records'
@@ -129,7 +130,7 @@ export function sessionScreenTabMountAdapters(
               sessionTabs = typeof update === 'function' ? update(sessionTabs) : update
             },
             reconcileBufferedDraftsRef: { current: () => {} },
-            closedTabTombstonesRef: { current: new Map() },
+            closedTabLedger: new SessionTabCloseLedger(),
             clearTerminalLiveInputDefault: (handle: string) =>
               effect('clear-live-input', { handle }),
             setActiveHandle: (value) => {

@@ -5,6 +5,7 @@ import type { RpcClient } from '../transport/rpc-client'
 import type { MobileSessionTab, SessionTabsResult } from './mobile-session-route-types'
 import { launchedSelection, type PendingSessionSelection } from './pending-session-selection'
 import { useMobileSessionTabApplication } from './use-mobile-session-tab-application'
+import { SessionTabCloseLedger } from '../../../src/shared/session-tab-close-ledger'
 
 function terminalTab(id: string, terminal: string, isActive = false): MobileSessionTab {
   return { type: 'terminal', id, parentTabId: id, leafId: 'leaf', title: 'T', terminal, isActive }
@@ -67,7 +68,8 @@ function scope(pending: PendingSessionSelection | null) {
       sessionTabsRef: { current: [] },
       appliedSnapshotMarkerRef: { current: { epoch: null, version: -1 } },
       appliedSessionTabsRevisionRef: { current: 0 },
-      closedTabTombstonesRef: { current: new Map() },
+      worktreeId: 'workspace-1',
+      closedTabLedger: new SessionTabCloseLedger(),
       reconcileBufferedDraftsRef: { current: vi.fn() },
       setTerminalsLoaded: vi.fn(),
       defaultTerminalHandlesToLiveInput: vi.fn(),

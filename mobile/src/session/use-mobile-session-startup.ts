@@ -17,7 +17,7 @@ export function useMobileSessionStartup(scope: MobileSessionKeyboardStateModel) 
     terminalsRef,
     setSessionTabs,
     appliedSnapshotMarkerRef,
-    closedTabTombstonesRef,
+    closedTabLedger,
     setTerminalsLoaded,
     setActiveHandle,
     setActiveSessionTabId,
@@ -59,7 +59,7 @@ export function useMobileSessionStartup(scope: MobileSessionKeyboardStateModel) 
     initialSessionAutoCreateRef.current = createInitialSessionAutoCreateState()
     terminalDiagnosticsRef.current.resetRoute()
     appliedSnapshotMarkerRef.current = { epoch: null, version: -1 }
-    closedTabTombstonesRef.current.clear()
+    closedTabLedger.reset()
     bufferedTerminalDraftState.resetDrafts()
     for (const queued of terminalGestureInputQueuesRef.current.values()) {
       if (queued.timer) {

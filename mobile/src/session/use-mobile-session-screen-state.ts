@@ -10,6 +10,7 @@ import type { CustomKey } from '../components/CustomKeyModal'
 import type { MobileNewTabAgentOption } from './mobile-new-tab-agent-options'
 import { useTerminalLiveInputModePreference } from './use-terminal-live-input-mode-preference'
 import type { AppliedSnapshotMarker } from './session-tab-snapshot-gate'
+import { SessionTabCloseLedger } from '../../../src/shared/session-tab-close-ledger'
 import { useWorktreeSessionTabsLoaded } from './use-initial-session-terminal-autocreate'
 import { createMobileSessionCreateWarningState } from './mobile-session-create-warning-state'
 import type { DiffComment } from '../../../src/shared/diff-comment-types'
@@ -35,8 +36,8 @@ export function useMobileSessionScreenState(scope: MobileSessionFoundationModel)
   // Why: track the last applied (epoch, version) so a late older snapshot can't overwrite a newer one and resurrect closed tabs (session-tab-snapshot-gate).
   const appliedSnapshotMarkerRef = useRef<AppliedSnapshotMarker>({ epoch: null, version: -1 })
   const appliedSessionTabsRevisionRef = useRef(0)
-  // Why: after an optimistic close, suppress the tab (with expiry) until the publisher confirms, so an in-flight snapshot can't flash it back.
-  const closedTabTombstonesRef = useRef<Map<string, number>>(new Map())
+  // Why: after the host accepts a close, hide the tab until a snapshot omits it, so an in-flight snapshot can't flash it back.
+  const [closedTabLedger] = useState(() => new SessionTabCloseLedger())
   const [terminalsLoaded, setTerminalsLoaded] = useWorktreeSessionTabsLoaded(worktreeId)
   const [input, setInput] = useState('')
   // Why: baseline terminal zoom reloaded on focus so a Settings → Terminal change applies in place (panes stay mounted).
@@ -136,7 +137,7 @@ export function useMobileSessionScreenState(scope: MobileSessionFoundationModel)
     sessionTabsRef,
     appliedSnapshotMarkerRef,
     appliedSessionTabsRevisionRef,
-    closedTabTombstonesRef,
+    closedTabLedger,
     terminalsLoaded,
     setTerminalsLoaded,
     input,

@@ -6,6 +6,7 @@ import type { RpcResponse } from '../transport/types'
 import type { FileDocState, MobileSessionTab } from './mobile-session-route-types'
 import { useMobileSessionCloseActions } from './use-mobile-session-close-actions'
 import { useMobileSessionDocumentReaders } from './use-mobile-session-document-readers'
+import { SessionTabCloseLedger } from '../../../src/shared/session-tab-close-ledger'
 
 type FileTab = Extract<MobileSessionTab, { type: 'file' }>
 const META = { runtimeId: 'runtime-1' }
@@ -86,7 +87,7 @@ function previewSession() {
         setSessionTabs: () => {},
         setFileDocs,
         reconcileBufferedDraftsRef: { current: () => {} },
-        closedTabTombstonesRef: { current: new Map() },
+        closedTabLedger: new SessionTabCloseLedger(),
         pendingBrowserFocusPageIdRef: { current: null },
         activeSessionTabIdRef: { current: keptTab.id }
       })
