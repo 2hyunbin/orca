@@ -33,8 +33,7 @@ export type TerminalFileGrant = {
   id: string
   worktreeId: string
   absolutePath: string
-  provider: 'local' | 'ssh'
-  connectionId?: string
+  provider: 'local'
   clientId?: string
   expiresAt: number
   statIdentity: string | null
@@ -53,8 +52,6 @@ export class RuntimeTerminalFileGrants {
   createTerminalFileGrant(args: {
     worktreeId: string
     absolutePath: string
-    provider: 'local' | 'ssh'
-    connectionId?: string
     clientId?: string
     readOnly?: boolean
     provenance: TerminalFileGrant['provenance']
@@ -66,8 +63,7 @@ export class RuntimeTerminalFileGrants {
       id: randomUUID(),
       worktreeId: args.worktreeId,
       absolutePath: args.absolutePath,
-      provider: args.provider,
-      ...(args.connectionId ? { connectionId: args.connectionId } : {}),
+      provider: 'local',
       ...(args.clientId ? { clientId: args.clientId } : {}),
       expiresAt: Date.now() + TERMINAL_FILE_GRANT_TTL_MS,
       statIdentity: terminalFileStatIdentity(args.stats),
@@ -99,7 +95,8 @@ export class RuntimeTerminalFileGrants {
     if (
       grant.worktreeId !== target.worktree.id ||
       grant.absolutePath !== absolutePath ||
-      grant.connectionId !== runtimeFileSshTargetId(target) ||
+      // Grants are only minted for local paths; an SSH target never matches one.
+      runtimeFileSshTargetId(target) !== undefined ||
       grant.clientId !== clientId
     ) {
       throw new Error('terminal_file_grant_mismatch')

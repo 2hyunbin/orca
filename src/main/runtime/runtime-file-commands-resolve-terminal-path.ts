@@ -1,6 +1,5 @@
 // @ts-nocheck -- mechanically split class members.
 import { RuntimeFileCommandsWithReadMobileFile } from './runtime-file-commands-read-mobile-file'
-import { RuntimeFileCommandAccess as RuntimeFileCommands } from './runtime-file-command-access'
 import type {
   RuntimeNativeChatFileContext,
   RuntimeTerminalPathResolution
@@ -89,11 +88,9 @@ export class RuntimeFileCommandsWithResolveTerminalPath extends RuntimeFileComma
       ) {
         const isDirectory =
           (
-            await requireRuntimeFileProvider(
-              knownWorkspaceTarget ?? target,
-              this.host,
-              ownedRoute
-            ).stat(absolutePath)
+            await requireRuntimeFileProvider(knownWorkspaceTarget ?? target, this.host).stat(
+              absolutePath
+            )
           ).type === 'directory'
         return {
           worktree: ownedWorktree.id,
@@ -125,7 +122,6 @@ export class RuntimeFileCommandsWithResolveTerminalPath extends RuntimeFileComma
         return await this.resolveAbsoluteFileGrant({
           worktreeId: worktree.id,
           artifactPath,
-          connectionId,
           clientId,
           readOnly: true,
           provenance: 'native-chat'
@@ -165,15 +161,11 @@ export class RuntimeFileCommandsWithResolveTerminalPath extends RuntimeFileComma
         worktreeId: worktree.id,
         artifactPath,
         rejectedAbsolutePath: absolutePath,
-        connectionId,
         clientId
       })
     } catch (error) {
       // Report genuine not-found as missing; let transport/permission errors surface so remote taps aren't all reported missing.
-      if (
-        isENOENT(error) ||
-        (ownedRoute.kind === 'ssh' && RuntimeFileCommands.isRemoteNotFoundErrorMessage(error))
-      ) {
+      if (isENOENT(error)) {
         return {
           ...empty,
           worktree: ownedWorktree.id,

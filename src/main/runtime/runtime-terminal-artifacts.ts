@@ -2,7 +2,6 @@ import { constants } from 'node:fs/promises'
 import {
   RuntimeTerminalFileGrants,
   type RuntimeTerminalFileGrantHost,
-  type RuntimeFileStatLike,
   type TerminalFileGrant
 } from './runtime-terminal-file-grants'
 import type {
@@ -21,19 +20,11 @@ import {
   readLocalTerminalArtifactFileFromHandle,
   readLocalTerminalArtifactPreviewFromHandle
 } from './runtime-file-commands-terminal-file-paths'
-import { statLocalTerminalArtifact, statRemoteTerminalPath } from './runtime-terminal-artifact-stat'
-import {
-  resolveAllowedRemoteTerminalArtifactPath,
-  assertRemoteTerminalFileGrantFreshForRead,
-  readRemoteTerminalArtifactFile,
-  readRemoteTerminalArtifactPreview
-} from './runtime-terminal-artifact-remote'
+import { statLocalTerminalArtifact } from './runtime-terminal-artifact-stat'
 import { requireReachableFilesystemRoute } from '../providers/execution-host-provider-dispatch'
 import { getConnectionExecutionHostId } from '../../shared/execution-host'
-import {
-  MOBILE_FILE_READ_MAX_BYTES,
-  assertPreviewWithinTransportBudget
-} from './runtime-file-commands-mobile-file-list-limit'
+import { assertPreviewWithinTransportBudget } from './runtime-file-commands-mobile-file-list-limit'
+import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import { isMobileBinaryPath } from './runtime-file-command-host'
 import { writeTerminalArtifactFile } from './runtime-terminal-artifact-write'
 
@@ -50,7 +41,7 @@ export class RuntimeTerminalArtifacts {
     worktreePath: string
   }): Promise<string | null> {
     if (args.connectionId) {
-      return resolveAllowedRemoteTerminalArtifactPath(args.absolutePath, args.connectionId)
+      throw new SshHostNotServedError(args.connectionId)
     }
     return resolveAllowedLocalTerminalArtifactPath(args.absolutePath, args.worktreePath)
   }
@@ -59,30 +50,19 @@ export class RuntimeTerminalArtifacts {
     absolutePath: string,
     connectionId?: string
   ): Promise<string> {
-    const route = requireReachableFilesystemRoute(getConnectionExecutionHostId(connectionId))
-    return route.kind === 'ssh'
-      ? route.provider.realpath(absolutePath)
-      : canonicalPathForArtifactComparison(absolutePath)
+    requireReachableFilesystemRoute(getConnectionExecutionHostId(connectionId))
+    return canonicalPathForArtifactComparison(absolutePath)
   }
 
   async resolveAbsoluteFileGrant(args: {
     worktreeId: string
     artifactPath: string
     rejectedAbsolutePath?: string
-    connectionId?: string
     clientId?: string
     readOnly?: boolean
     provenance?: TerminalFileGrant['provenance']
   }): Promise<RuntimeTerminalPathResolution> {
-    let contentDigest: string | null = null
-    let stats: RuntimeFileStatLike & { isDirectory: () => boolean }
-    if (args.connectionId) {
-      stats = await statRemoteTerminalPath(args.artifactPath, args.connectionId)
-    } else {
-      const local = await statLocalTerminalArtifact(args.artifactPath)
-      stats = local.stats
-      contentDigest = local.contentDigest
-    }
+    const { stats, contentDigest } = await statLocalTerminalArtifact(args.artifactPath)
     const isDirectory = stats.isDirectory()
     if (!isDirectory && isTerminalArtifactHardLinked(stats)) {
       return {
@@ -98,8 +78,6 @@ export class RuntimeTerminalArtifacts {
       : this.grants.createTerminalFileGrant({
           worktreeId: args.worktreeId,
           absolutePath: args.artifactPath,
-          provider: args.connectionId ? 'ssh' : 'local',
-          connectionId: args.connectionId,
           clientId: args.clientId,
           readOnly: args.readOnly === true,
           provenance: args.provenance ?? 'terminal-output',
@@ -140,16 +118,11 @@ export class RuntimeTerminalArtifacts {
       throw new Error('binary_file')
     }
     let content: string
-    if (grant.connectionId) {
-      const provider = await assertRemoteTerminalFileGrantFreshForRead(grant)
-      content = await readRemoteTerminalArtifactFile(provider, grant, MOBILE_FILE_READ_MAX_BYTES)
-    } else {
-      const handle = await openLocalTerminalArtifactGrant(grant, constants.O_RDONLY)
-      try {
-        content = await readLocalTerminalArtifactFileFromHandle(handle, grant)
-      } finally {
-        await handle.close()
-      }
+    const handle = await openLocalTerminalArtifactGrant(grant, constants.O_RDONLY)
+    try {
+      content = await readLocalTerminalArtifactFileFromHandle(handle, grant)
+    } finally {
+      await handle.close()
     }
     this.grants.refreshTerminalFileGrant(grant)
     const truncated = truncateMobileFilePreview(content)
@@ -176,14 +149,6 @@ export class RuntimeTerminalArtifacts {
       absolutePath,
       clientId
     )
-    if (grant.connectionId) {
-      const provider = await assertRemoteTerminalFileGrantFreshForRead(grant)
-      this.grants.refreshTerminalFileGrant(grant)
-      return assertPreviewWithinTransportBudget(
-        await readRemoteTerminalArtifactPreview(provider, grant, maxContentBytes),
-        maxContentBytes
-      )
-    }
     const handle = await openLocalTerminalArtifactGrant(grant, constants.O_RDONLY)
     try {
       const preview = await readLocalTerminalArtifactPreviewFromHandle(

@@ -28,7 +28,6 @@ function mint(grants: RuntimeTerminalFileGrants, clientId?: string) {
   return grants.createTerminalFileGrant({
     worktreeId: 'folder-1',
     absolutePath: artifactPath,
-    provider: 'local',
     clientId,
     provenance: 'terminal-output',
     stats: { dev: 1, ino: 2, nlink: 1, size: 12, mtimeMs: 3 }

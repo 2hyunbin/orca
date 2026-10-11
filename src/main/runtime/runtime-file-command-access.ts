@@ -20,7 +20,6 @@ import { joinWorktreeRelativePath, normalizeRuntimeRelativePath } from './runtim
 import { isENOENT } from '../ipc/filesystem-path-containment'
 import {
   requireRuntimeFileProvider,
-  runtimeFileRouteForTarget,
   type RuntimeFileExplorerPath
 } from './runtime-file-command-target'
 import { parseExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
@@ -132,15 +131,11 @@ export class RuntimeFileCommandAccess {
     filePath: string,
     target: { executionHostId: ExecutionHostId }
   ): Promise<void> {
-    const route = runtimeFileRouteForTarget(target)
     let stats: FileStat
     try {
-      stats = await requireRuntimeFileProvider(target, this.host, route).stat(filePath)
+      stats = await requireRuntimeFileProvider(target, this.host).stat(filePath)
     } catch (error) {
-      if (
-        isENOENT(error) ||
-        (route.kind === 'ssh' && RuntimeFileCommandAccess.isRemoteNotFoundErrorMessage(error))
-      ) {
+      if (isENOENT(error)) {
         throw new Error(`ENOENT: no such file or directory, open '${filePath}'`)
       }
       throw error
@@ -230,12 +225,6 @@ export class RuntimeFileCommandAccess {
       mtime: fileStat.mtime,
       ...(fileStat.ctimeMs === undefined ? {} : { ctime: fileStat.ctimeMs })
     }
-  }
-
-  // The mux drops ErrnoException.code, so match not-found by message shape (vs transport/permission/provider errors).
-  protected static isRemoteNotFoundErrorMessage(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error)
-    return /\bENOENT\b|no such file|not found|does not exist/i.test(message)
   }
 }
 

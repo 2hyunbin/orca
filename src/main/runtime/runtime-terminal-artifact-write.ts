@@ -12,10 +12,6 @@ import {
   readFileHandleBufferBounded,
   terminalFileStatIdentity
 } from './runtime-terminal-artifact-integrity'
-import {
-  assertRemoteTerminalFileGrantFresh,
-  terminalArtifactAccessOptions
-} from './runtime-terminal-artifact-remote'
 import { statLocalTerminalArtifact } from './runtime-terminal-artifact-stat'
 
 export async function writeTerminalArtifactFile(
@@ -41,27 +37,6 @@ export async function writeTerminalArtifactFile(
   if (isMobileBinaryPath(grant.absolutePath)) {
     throw new Error('binary_file')
   }
-  if (grant.connectionId) {
-    const { provider, fileStat } = await assertRemoteTerminalFileGrantFresh(grant)
-    if (fileStat.type === 'directory') {
-      throw new Error('Cannot write to a directory')
-    }
-    if (fileStat.size > MOBILE_FILE_READ_MAX_BYTES) {
-      throw new Error('file_too_large')
-    }
-    if (!provider.writeTerminalArtifact) {
-      throw new Error('terminal_file_grant_unavailable')
-    }
-    const nextStat = await provider.writeTerminalArtifact(
-      grant.absolutePath,
-      content,
-      terminalArtifactAccessOptions(grant, MOBILE_FILE_READ_MAX_BYTES)
-    )
-    grant.statIdentity = terminalFileStatIdentity(nextStat)
-    grants.refreshTerminalFileGrant(grant)
-    return { ok: true }
-  }
-
   let originalMode: number | null = null
   const handle = await openLocalTerminalArtifactGrant(grant, constants.O_RDONLY)
   try {
