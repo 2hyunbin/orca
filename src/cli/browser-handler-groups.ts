@@ -60,7 +60,6 @@ export const BROWSER_HANDLER_GROUPS: readonly HandlerGroup[] = [
     name: 'browser-tab',
     keys: [
       'open-url',
-      'tab list',
       'browser page show',
       'browser page current',
       'tab switch',

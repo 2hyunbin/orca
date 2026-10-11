@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { CommandSpec } from './args'
-import { suggestCommands, unknownCommandData } from './command-suggestion'
+import { suggestCommands, unknownCommandData, unknownFlagData } from './command-suggestion'
 
 const specs: CommandSpec[] = [
   {
@@ -127,5 +127,24 @@ describe('unknownCommandData', () => {
     const data = unknownCommandData(specs, ['worktree', 'move'])
     expect(data.suggestions).not.toContain('worktree remove')
     expect(data.nextSteps.join(' ')).not.toContain('remove')
+  })
+})
+
+describe('commands that moved off orca tab', () => {
+  it.each([
+    [['tab', 'create'], 'browser page create'],
+    [['tab', 'current'], 'browser page current'],
+    [['tab', 'show'], 'browser page show'],
+    [['tab', 'profile', 'delete'], 'browser profile rm'],
+    [['tab', 'profile', 'clone'], 'browser profile clone']
+  ])('points %j at its new name', (commandPath, renamed) => {
+    const data = unknownCommandData(specs, commandPath)
+    expect(data.suggestions).toEqual([renamed])
+    expect(data.nextSteps).toEqual([`orca ${commandPath.join(' ')} is now orca ${renamed}`])
+  })
+
+  it('answers --index with --page where only --page is accepted', () => {
+    const data = unknownFlagData('index', ['json', 'page', 'worktree'])
+    expect(data.suggestions[0]).toBe('page')
   })
 })

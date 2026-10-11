@@ -116,6 +116,11 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     ],
     load: async () => (await import('./handlers/terminal.js')).TERMINAL_HANDLERS
   },
+  {
+    name: 'workspace-tabs',
+    keys: ['tab list'],
+    load: async () => (await import('./handlers/workspace-tabs.js')).WORKSPACE_TAB_HANDLERS
+  },
   ...BROWSER_HANDLER_GROUPS,
   {
     name: 'orchestration',

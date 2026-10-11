@@ -36,8 +36,8 @@ ORCA wait --load networkidle --json
 ORCA eval --expression <js> --json
 ORCA tab list --json
 ORCA browser page create --url <url> --json
-ORCA tab switch --index <n> --json
-ORCA tab close --index <n> --json
+ORCA tab switch --page <browserPageId> --json
+ORCA tab close --page <browserPageId> --json
 ORCA cookie get --json
 ORCA capture start --json
 ORCA console --limit 50 --json
@@ -50,7 +50,7 @@ Browser rules:
 - Re-snapshot after navigation, tab switches, clicks that change the page, and any `browser_stale_ref`.
 - Refs like `@e1` are assigned by `snapshot`, scoped to one tab, and invalidated by navigation or tab switch.
 - Browser commands default to the current worktree and its active tab. Use `--worktree all` only intentionally.
-- For concurrent browser work, run `ORCA tab list --json`, read `tabs[].browserPageId`, and pass `--page <browserPageId>` on later commands.
+- `ORCA tab list --json` lists every Orca tab; browser rows have `kind: "browser"`. For concurrent browser work, read their `browserPageId` and pass `--page <browserPageId>` on later commands.
 - Use typed tab commands (`ORCA tab list/switch/close`, `ORCA browser page create`), not `ORCA exec --command "tab ..."`, so Orca keeps UI state synchronized.
 - Prefer `wait --text`, `--url`, `--selector`, or `--load` after async page changes instead of bare timeouts.
 - Anything not listed above goes through `ORCA exec --command "<agent-browser command>"`.

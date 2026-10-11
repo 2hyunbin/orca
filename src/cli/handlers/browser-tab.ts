@@ -1,17 +1,11 @@
 import type {
   BrowserTabCurrentResult,
-  BrowserTabListResult,
   BrowserTabShowResult,
   BrowserTabSwitchResult
 } from '../../shared/runtime-types'
 import type { CommandHandler } from '../dispatch'
-import { formatTabList, formatTabListWithProfiles, formatTabShow, printResult } from '../format'
-import {
-  getOptionalNonNegativeIntegerFlag,
-  getOptionalStringFlag,
-  getRequiredStringFlag
-} from '../flags'
-import { RuntimeClientError } from '../runtime-client'
+import { formatTabShow, printResult } from '../format'
+import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
 import { getBrowserCommandTarget, getBrowserWorktreeSelector } from '../selectors'
 
 export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
@@ -25,14 +19,6 @@ export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
     )
     printResult(result, json, (v) => `Opened URL in tab ${v.browserPageId}`)
   },
-  'tab list': async ({ flags, client, cwd, json }) => {
-    const worktree = await getBrowserWorktreeSelector(flags, cwd, client)
-    const result = await client.call<BrowserTabListResult>('browser.tabList', { worktree })
-    const showProfile = flags.has('show-profile')
-    printResult(result, json, (value) =>
-      showProfile ? formatTabListWithProfiles(value, true) : formatTabList(value)
-    )
-  },
   'browser page show': async ({ flags, client, cwd, json }) => {
     const target = await getBrowserCommandTarget(flags, cwd, client)
     const result = await client.call<BrowserTabShowResult>('browser.tabShow', target)
@@ -44,11 +30,7 @@ export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatTabShow)
   },
   'tab switch': async ({ flags, client, cwd, json }) => {
-    const index = getOptionalNonNegativeIntegerFlag(flags, 'index')
-    const page = getOptionalStringFlag(flags, 'page')
-    if (index === undefined && !page) {
-      throw new RuntimeClientError('invalid_argument', 'Missing required --index or --page')
-    }
+    const page = getRequiredStringFlag(flags, 'page')
     // Why: a stable browser page id is globally unique across Orca, so page-
     // targeted tab switches should match the rest of the --page command model:
     // global by default, with --worktree only acting as explicit validation.
@@ -59,7 +41,6 @@ export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
     // Spread conditionally so the RPC payload stays shape-identical to the
     // pre-flag form when --focus is absent.
     const result = await client.call<BrowserTabSwitchResult>('browser.tabSwitch', {
-      index,
       page,
       ...(flags.has('focus') ? { focus: true } : {}),
       ...target
@@ -78,12 +59,8 @@ export const BROWSER_TAB_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, (v) => `Created tab ${v.browserPageId}`)
   },
   'tab close': async ({ flags, client, cwd, json }) => {
-    const index = getOptionalNonNegativeIntegerFlag(flags, 'index')
     const target = await getBrowserCommandTarget(flags, cwd, client)
-    const result = await client.call<{ closed: boolean }>('browser.tabClose', {
-      index,
-      ...target
-    })
+    const result = await client.call<{ closed: boolean }>('browser.tabClose', target)
     printResult(result, json, () => 'Tab closed')
   },
   exec: async ({ flags, client, cwd, json }) => {

@@ -171,21 +171,13 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'element', 'files', 'worktree']
   },
   {
-    path: ['tab', 'list'],
-    summary: 'List open browser tabs',
-    usage: 'orca tab list [--worktree <selector|all>] [--show-profile] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'show-profile']
-  },
-  {
     path: ['browser', 'page', 'show'],
-    aliases: [['tab', 'show']],
     summary: 'Show one browser page by page id',
     usage: 'orca browser page show --page <id> [--worktree <selector>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'page', 'worktree']
   },
   {
     path: ['browser', 'page', 'current'],
-    aliases: [['tab', 'current']],
     summary: 'Show the current browser page',
     usage: 'orca browser page current [--worktree <selector|all>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree']
@@ -193,12 +185,11 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['tab', 'switch'],
     summary: 'Switch the active browser tab',
-    usage: 'orca tab switch (--index <n> | --page <id>) [--worktree <selector>] [--focus] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'index', 'page', 'worktree', 'focus']
+    usage: 'orca tab switch --page <id> [--worktree <selector>] [--focus] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'page', 'worktree', 'focus']
   },
   {
     path: ['browser', 'page', 'create'],
-    aliases: [['tab', 'create']],
     summary: 'Open a new browser tab in the current worktree',
     usage:
       'orca browser page create [--url <url>] [--worktree <selector>] [--profile <id>] [--json]',
@@ -206,21 +197,18 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['browser', 'profile', 'list'],
-    aliases: [['tab', 'profile', 'list']],
     summary: 'List browser session profiles available to browser tabs',
     usage: 'orca browser profile list [--json]',
     allowedFlags: [...GLOBAL_FLAGS]
   },
   {
     path: ['browser', 'profile', 'create'],
-    aliases: [['tab', 'profile', 'create']],
     summary: 'Create a browser session profile for browser tabs',
     usage: 'orca browser profile create --label <name> [--scope <isolated|imported>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'label', 'scope']
   },
   {
     path: ['browser', 'profile', 'rm'],
-    aliases: [['tab', 'profile', 'delete']],
     destructive: true,
     summary: 'Delete a browser session profile used by browser tabs',
     usage: 'orca browser profile rm --profile <id> [--json]',
@@ -228,28 +216,24 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['browser', 'profile', 'set'],
-    aliases: [['tab', 'profile', 'set']],
     summary: 'Switch a browser page to a different browser profile',
     usage: 'orca browser profile set (--page <id> | --worktree <selector>) --profile <id> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'profile', 'page', 'worktree']
   },
   {
     path: ['browser', 'profile', 'show'],
-    aliases: [['tab', 'profile', 'show']],
     summary: 'Show the browser profile bound to a page',
     usage: 'orca browser profile show --page <id> [--worktree <selector>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'page', 'worktree']
   },
   {
     path: ['browser', 'profile', 'use-default'],
-    aliases: [['tab', 'profile', 'use-default']],
     summary: 'Switch a browser page back to the default browser profile',
     usage: 'orca browser profile use-default --page <id> [--worktree <selector>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'page', 'worktree']
   },
   {
     path: ['browser', 'profile', 'clone'],
-    aliases: [['tab', 'profile', 'clone']],
     summary: 'Clone a browser page into a new tab with a different browser profile',
     usage:
       'orca browser profile clone --profile <id> [--page <id>] [--worktree <selector>] [--json]',
@@ -259,8 +243,8 @@ export const BROWSER_BASIC_COMMAND_SPECS: CommandSpec[] = [
     path: ['tab', 'close'],
     destructive: true,
     summary: 'Close a browser tab',
-    usage: 'orca tab close [--index <n>] [--worktree <selector>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'index', 'worktree']
+    usage: 'orca tab close [--page <id>] [--worktree <selector>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'page', 'worktree']
   },
   {
     path: ['exec'],

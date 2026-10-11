@@ -4,7 +4,6 @@ import type {
   BrowserScreenshotResult,
   BrowserSnapshotResult,
   BrowserTabCurrentResult,
-  BrowserTabListResult,
   BrowserTabProfileCloneResult,
   BrowserTabProfileShowResult,
   BrowserTabShowResult
@@ -17,26 +16,6 @@ export function formatSnapshot(result: BrowserSnapshotResult): string {
 
 export function formatScreenshot(result: BrowserScreenshotResult): string {
   return `Screenshot captured (${result.format}, ${formatBase64PayloadByteCount(result.data)})`
-}
-
-export function formatTabList(result: BrowserTabListResult): string {
-  return formatTabListWithProfiles(result, false)
-}
-
-export function formatTabListWithProfiles(
-  result: BrowserTabListResult,
-  showProfile: boolean
-): string {
-  if (result.tabs.length === 0) {
-    return 'No browser tabs open.'
-  }
-  return result.tabs
-    .map((t) => {
-      const marker = t.active ? '* ' : '  '
-      const profile = showProfile ? `  [${t.profileLabel ?? t.profileId ?? 'Unknown'}]` : ''
-      return `${marker}[${t.index}] ${t.browserPageId}  ${t.title} — ${t.url}${profile}`
-    })
-    .join('\n')
 }
 
 export function formatBrowserProfileList(result: BrowserProfileListResult): string {

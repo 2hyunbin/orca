@@ -93,7 +93,29 @@ export function suggestCommands(specs: CommandSpec[], commandPath: string[]): st
   return rankByDistance(scored)
 }
 
+// Why: edit distance cannot recover a rename. `orca tab` now means every Orca tab, so the
+// browser-only commands it used to hold moved under `orca browser`.
+const COMMAND_RENAMES: Readonly<Record<string, string>> = {
+  'tab create': 'browser page create',
+  'tab current': 'browser page current',
+  'tab show': 'browser page show',
+  'tab profile list': 'browser profile list',
+  'tab profile create': 'browser profile create',
+  'tab profile delete': 'browser profile rm',
+  'tab profile set': 'browser profile set',
+  'tab profile show': 'browser profile show',
+  'tab profile use-default': 'browser profile use-default',
+  'tab profile clone': 'browser profile clone'
+}
+
 export function unknownCommandData(specs: CommandSpec[], commandPath: string[]): CommandErrorData {
+  const renamed = COMMAND_RENAMES[commandPath.join(' ')]
+  if (renamed) {
+    return {
+      suggestions: [renamed],
+      nextSteps: [`orca ${commandPath.join(' ')} is now orca ${renamed}`]
+    }
+  }
   const suggestions = suggestCommands(specs, commandPath)
   const nextSteps = suggestions.length
     ? [`Did you mean: ${suggestions.map((path) => `orca ${path}`).join(', ')}`]
@@ -110,8 +132,10 @@ export type FlagErrorData = {
 // Why: edit distance cannot recover a rename. `orchestration check` is the one verb
 // that identifies its caller with `--terminal` while every sibling uses `--from`, so
 // the near-miss ranking answered `--json`/`--run` and left the caller stuck (#16904).
+// `tab switch/close --index` counted browser pages only, which stopped matching once
+// `tab list` listed every tab kind; a page id names the same page unambiguously.
 // A synonym only fires where the typed flag is rejected and its partner is accepted.
-const FLAG_SYNONYMS: Readonly<Record<string, string>> = { from: 'terminal' }
+const FLAG_SYNONYMS: Readonly<Record<string, string>> = { from: 'terminal', index: 'page' }
 
 function suggestFlags(flag: string, validFlags: string[]): string[] {
   const synonym = FLAG_SYNONYMS[flag]

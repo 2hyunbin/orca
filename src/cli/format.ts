@@ -9,8 +9,6 @@ export {
   formatBrowserProfileList,
   formatScreenshot,
   formatSnapshot,
-  formatTabList,
-  formatTabListWithProfiles,
   formatTabProfileClone,
   formatTabProfileShow,
   formatTabShow

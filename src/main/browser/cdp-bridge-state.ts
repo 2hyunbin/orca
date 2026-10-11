@@ -65,7 +65,7 @@ export class CdpBridgeState {
     } else {
       throw new BrowserError(
         'browser_no_tab',
-        "Multiple browser tabs are open. Run 'orca tab list' and 'orca tab switch --index <n>' to select one."
+        "Multiple browser tabs are open. Run 'orca tab list' and 'orca tab switch --page <browserPageId>' to select one."
       )
     }
 
