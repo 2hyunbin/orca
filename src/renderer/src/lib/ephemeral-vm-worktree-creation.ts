@@ -73,10 +73,11 @@ export async function prepareRequestForCreate(
   appendProvisioningWarnings(creationId, preparedTarget.warnings)
   if (preparedTarget.environmentId) {
     // Why: the VM's first connect may have just deployed this server; host badges and removal read it.
-    await window.api.runtimeEnvironments
-      .list()
-      .then((environments) => useAppStore.getState().setRuntimeEnvironments(environments))
-      .catch(() => undefined)
+    try {
+      useAppStore.getState().setRuntimeEnvironments(await window.api.runtimeEnvironments.list())
+    } catch {
+      // A stale catalog only delays host badges; removal re-reads it.
+    }
   }
   const preparedRequest: WorktreeCreationRequest = {
     ...request,
