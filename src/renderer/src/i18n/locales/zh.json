@@ -4583,7 +4583,7 @@
         "SkillFreshnessRow": {
           "statusUpdateAvailable": "有更新",
           "statusCantUpdate": "无法更新",
-          "cantUpdateReason": "此技能安装在 Orca 无法安全更新的位置，因此 npx skills update 命令不会更改它。",
+          "cantUpdateReason": "此技能安装在 Orca 无法安全更新的位置，因此 更新命令不会更改它。",
           "chipCurrent": "最新",
           "chipInaccessible": "无法访问",
           "chipDuplicate": "重复",
@@ -4594,7 +4594,7 @@
           "chipPluginCache": "插件缓存",
           "tipCurrent": "这里的技能已是最新，更新不会更改它。",
           "tipInaccessible": "Orca 无法读取这里的技能（权限或文件错误），因此无法检查或更新它。",
-          "tipDuplicate": "此技能除主副本外还安装在这里，因此 npx skills update 命令无法访问它。请移除它以允许更新。",
+          "tipDuplicate": "此技能除主副本外还安装在这里，因此 更新命令无法访问它。请移除它以允许更新。",
           "tipExternalLink": "这是一个指向 Orca 技能文件夹之外的快捷方式；更新不会跟随它。",
           "tipBrokenLink": "这是一个指向已不存在内容的快捷方式，可以安全删除。",
           "tipReadOnly": "这里的技能位于只读位置，需更改其权限后才能更新。",

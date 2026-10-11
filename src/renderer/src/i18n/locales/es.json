@@ -4583,7 +4583,7 @@
         "SkillFreshnessRow": {
           "statusUpdateAvailable": "Actualización disponible",
           "statusCantUpdate": "No se puede actualizar",
-          "cantUpdateReason": "Esta skill está instalada en un lugar que Orca no puede actualizar de forma segura, así que el comando npx skills update la deja sin cambios.",
+          "cantUpdateReason": "Esta skill está instalada en un lugar que Orca no puede actualizar de forma segura, así que el comando de actualización la deja sin cambios.",
           "chipCurrent": "Actual",
           "chipInaccessible": "Inaccesible",
           "chipDuplicate": "Duplicada",
@@ -4594,7 +4594,7 @@
           "chipPluginCache": "Caché de plugin",
           "tipCurrent": "La skill aquí ya está actualizada; la actualización no la cambiará.",
           "tipInaccessible": "Orca no pudo leer la skill aquí (un error de permisos o de archivo), así que no puede comprobarla ni actualizarla.",
-          "tipDuplicate": "La skill también está instalada aquí, aparte de la principal, así que el comando npx skills update no puede alcanzarla. Elimínala para permitir las actualizaciones.",
+          "tipDuplicate": "La skill también está instalada aquí, aparte de la principal, así que el comando de actualización no puede alcanzarla. Elimínala para permitir las actualizaciones.",
           "tipExternalLink": "Es un acceso directo que apunta fuera de las carpetas de skills de Orca; la actualización no lo seguirá.",
           "tipBrokenLink": "Es un acceso directo a algo que ya no existe; puedes eliminarlo sin problema.",
           "tipReadOnly": "La skill aquí está en una ubicación de solo lectura, así que no se puede actualizar hasta que cambies sus permisos.",
