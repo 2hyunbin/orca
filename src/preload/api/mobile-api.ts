@@ -3,6 +3,11 @@ import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-co
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
 import type { MobileRelayMintFailure } from '../../shared/mobile-relay-mint-failure'
 import type { RuntimeAccessGrant } from '../../shared/runtime-access-grants'
+import type {
+  LocalPairingTicketResult,
+  PairingApprovalAnswer,
+  PairingApprovalPrompt
+} from '../../shared/pairing-approval-prompt'
 
 export type MobileApi = {
   listNetworkInterfaces: () => Promise<{
@@ -86,4 +91,9 @@ export type MobileApi = {
   consumePendingUnpairedDeviceAuthFailure?: () => Promise<boolean>
   /** Fires (throttled, once per session) when an unpaired phone repeatedly fails direct-transport auth. */
   onUnpairedDeviceAuthFailure?: (callback: () => void) => () => void
+  /** A single-use, owner-approved pairing code for another computer's browser. */
+  createLocalPairingTicket: (args?: { address?: string }) => Promise<LocalPairingTicketResult>
+  answerPairingApproval: (answer: PairingApprovalAnswer) => Promise<boolean>
+  onPairingApprovalRequested: (callback: (prompt: PairingApprovalPrompt) => void) => () => void
+  onPairingApprovalCancelled: (callback: (detail: { requestId: string }) => void) => () => void
 }

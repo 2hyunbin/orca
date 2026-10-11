@@ -8,6 +8,7 @@ import { parseServerShareAddress } from '../../../../shared/network/server-share
 import { GeneratedUrlRow, UnavailableUrlRow } from './RuntimePairingGeneratedUrlRows'
 import type { RuntimePairingIntent } from './runtime-pairing-link-state'
 import { translate } from '@/i18n/i18n'
+import { SingleUsePairingCodeButton } from './SingleUsePairingCodeButton'
 
 export type { RuntimePairingIntent } from './runtime-pairing-link-state'
 
@@ -369,6 +370,10 @@ export function RuntimePairingGeneratorForm({
           copied={copiedTarget === 'pairing'}
           onCopy={() => onCopy('pairing', runtimePairingUrl)}
         />
+      ) : null}
+
+      {intent === 'another' ? (
+        <SingleUsePairingCodeButton address={selectedAddress.trim()} />
       ) : null}
     </>
   )

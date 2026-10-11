@@ -6,6 +6,9 @@ import {
 } from '../persistence'
 import { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { registerMobileHandlers } from '../ipc/mobile'
+import { registerPairingTicketHandlers } from '../ipc/pairing-tickets'
+import { PairingApprovalBroker } from '../runtime/pairing-approval-broker'
+import { hostname } from 'node:os'
 import { createRuntimeEnvironmentMobileRelayHosts } from '../ipc/runtime-environment-mobile-relay-hosts'
 import { getLocalPtyProvider, registerHeadlessPtyRuntime } from '../ipc/pty'
 import { LocalPtyProvider } from '../providers/local-pty-provider'
@@ -111,6 +114,7 @@ function installRuntimeRpc(
       return true
     }
   })
+  registerDesktopPairingApproval(runtimeRpc)
   // Why: repeated direct auth failures otherwise look like a client that never connects; point users to re-pairing.
   runtimeRpc.setOnUnpairedDeviceAuthFailure(() => {
     // Why: runtime startup races renderer mount; retain the one-shot until the listener consumes it.
@@ -321,4 +325,22 @@ export async function initializeMainProcessRuntimeLaunch(
     return
   }
   await launchDesktopMode(runtimeRpc, shellPathReady, desktopWindow, options.openMainWindow)
+}
+
+// Why: a GUI-minted pairing ticket redeems only after the owner approves it in this window.
+function registerDesktopPairingApproval(runtimeRpc: OrcaRuntimeRpcServer): void {
+  const mainWebContents = () =>
+    state.mainWindow && !state.mainWindow.isDestroyed() ? state.mainWindow.webContents : null
+  const broker = new PairingApprovalBroker({
+    send: (channel, payload) => {
+      const webContents = mainWebContents()
+      webContents?.send(channel, payload)
+      return webContents !== null
+    },
+    hostName: () => hostname()
+  })
+  runtimeRpc.setPairingTicketApprover(broker.approver)
+  registerPairingTicketHandlers(runtimeRpc, broker, {
+    isTrustedSender: (event) => event.sender === mainWebContents()
+  })
 }

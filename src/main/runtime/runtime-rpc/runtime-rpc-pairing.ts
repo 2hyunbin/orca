@@ -10,7 +10,13 @@ import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
 import { RuntimeRpcNetworkExposure } from './runtime-rpc-network-exposure'
 import type { PairingTicketOwnerContext } from '../pairing-ticket-owner-context'
 import type { PairingTicketApprover } from '../pairing-ticket-redemption'
-import { createOwnerPairingTicketContext } from './runtime-rpc-pairing-ticket-owner'
+import {
+  createOwnerPairingTicketContext,
+  mintPairingTicketOffer,
+  type PairingTicketHost
+} from './runtime-rpc-pairing-ticket-owner'
+import type { LocalPairingTicketResult } from '../../../shared/pairing-approval-prompt'
+import { PAIRING_TICKET_QR_TTL_MS } from '../../../shared/pairing-ticket-contract'
 import { MobileDesktopRelay } from '../mobile-desktop-relay/mobile-desktop-relay'
 import type { MobileDesktopRelayHosts } from '../mobile-desktop-relay/mobile-desktop-relay-hosts'
 import { MobileRelayHostCatalog } from '../mobile-desktop-relay/mobile-relay-host-catalog'
@@ -214,29 +220,52 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
   protected override ownerPairingTicketContext(): PairingTicketOwnerContext {
     return createOwnerPairingTicketContext({
       tickets: this.pairingTickets,
-      resolveHost: () => {
-        const rawEndpoint = this.getWebSocketEndpoint()
-        const publicKeyB64 = this.getE2EEPublicKey()
-        if (this.pairingInitializationFailure) {
-          return this.pairingInitializationFailure
-        }
-        if (!rawEndpoint) {
-          return pairingUnavailable('websocket_unavailable', WEBSOCKET_UNAVAILABLE_GUIDANCE)
-        }
-        if (!publicKeyB64) {
-          return pairingUnavailable('e2ee_key_unavailable', E2EE_KEY_UNAVAILABLE_GUIDANCE)
-        }
-        const advertised = resolveAdvertisedPairingEndpoint(rawEndpoint, null)
-        return advertised.ok
-          ? {
-              available: true,
-              endpoint: advertised.endpoint,
-              publicKeyB64,
-              hostDescriptor: this.hostDescriptor
-            }
-          : pairingUnavailable(advertised.reason, advertised.guidance)
-      }
+      resolveHost: () => this.resolvePairingTicketHost(null)
     })
+  }
+
+  /** A desktop-minted ticket: single use, 10 minutes, and redeemed only after the owner approves. */
+  createLocalUiPairingTicket(address: string | null): LocalPairingTicketResult {
+    const host = this.resolvePairingTicketHost(address)
+    if (!host.available) {
+      return { available: false, guidance: host.guidance }
+    }
+    const minted = mintPairingTicketOffer({
+      tickets: this.pairingTickets,
+      host,
+      issuedVia: 'local-ui',
+      ttlMs: PAIRING_TICKET_QR_TTL_MS
+    })
+    return {
+      available: true,
+      ticketId: minted.ticketId,
+      code: minted.code,
+      link: minted.link,
+      expiresAt: minted.expiresAt
+    }
+  }
+
+  private resolvePairingTicketHost(address: string | null): PairingTicketHost {
+    const rawEndpoint = this.getWebSocketEndpoint()
+    const publicKeyB64 = this.getE2EEPublicKey()
+    if (this.pairingInitializationFailure) {
+      return this.pairingInitializationFailure
+    }
+    if (!rawEndpoint) {
+      return pairingUnavailable('websocket_unavailable', WEBSOCKET_UNAVAILABLE_GUIDANCE)
+    }
+    if (!publicKeyB64) {
+      return pairingUnavailable('e2ee_key_unavailable', E2EE_KEY_UNAVAILABLE_GUIDANCE)
+    }
+    const advertised = resolveAdvertisedPairingEndpoint(rawEndpoint, address)
+    return advertised.ok
+      ? {
+          available: true,
+          endpoint: advertised.endpoint,
+          publicKeyB64,
+          hostDescriptor: this.hostDescriptor
+        }
+      : pairingUnavailable(advertised.reason, advertised.guidance)
   }
 
   protected queueOrRetainRelayDeviceRevoke(deviceId: string, binding: RelayDeviceBinding): void {

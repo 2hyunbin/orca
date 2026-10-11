@@ -4,6 +4,15 @@ import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-co
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
 import type { MobileRelayMintFailure } from '../../shared/mobile-relay-mint-failure'
 import type { PreloadApi } from '../api-types'
+import {
+  CREATE_LOCAL_PAIRING_TICKET_CHANNEL,
+  PAIRING_APPROVAL_ANSWER_CHANNEL,
+  PAIRING_APPROVAL_CANCELLED_CHANNEL,
+  PAIRING_APPROVAL_REQUESTED_CHANNEL,
+  type LocalPairingTicketResult,
+  type PairingApprovalAnswer,
+  type PairingApprovalPrompt
+} from '../../shared/pairing-approval-prompt'
 
 export const mobileApi = {
   listNetworkInterfaces: (): Promise<{
@@ -93,5 +102,25 @@ export const mobileApi = {
     const listener = () => callback()
     ipcRenderer.on('mobile:unpairedDeviceAuthFailure', listener)
     return () => ipcRenderer.removeListener('mobile:unpairedDeviceAuthFailure', listener)
+  },
+
+  createLocalPairingTicket: (args?: { address?: string }): Promise<LocalPairingTicketResult> =>
+    ipcRenderer.invoke(CREATE_LOCAL_PAIRING_TICKET_CHANNEL, args),
+
+  answerPairingApproval: (answer: PairingApprovalAnswer): Promise<boolean> =>
+    ipcRenderer.invoke(PAIRING_APPROVAL_ANSWER_CHANNEL, answer),
+
+  onPairingApprovalRequested: (callback: (prompt: PairingApprovalPrompt) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, prompt: PairingApprovalPrompt) =>
+      callback(prompt)
+    ipcRenderer.on(PAIRING_APPROVAL_REQUESTED_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(PAIRING_APPROVAL_REQUESTED_CHANNEL, listener)
+  },
+
+  onPairingApprovalCancelled: (callback: (detail: { requestId: string }) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, detail: { requestId: string }) =>
+      callback(detail)
+    ipcRenderer.on(PAIRING_APPROVAL_CANCELLED_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(PAIRING_APPROVAL_CANCELLED_CHANNEL, listener)
   }
 } satisfies PreloadApi['mobile']

@@ -30,6 +30,7 @@ vi.mock('../runtime/runtime-rpc', () => ({
       launchOrder.push('rpc-start')
     })
     setOnUnpairedDeviceAuthFailure = vi.fn()
+    setPairingTicketApprover = vi.fn()
     setMobileDesktopRelayHosts = vi.fn()
   }
 }))
@@ -40,6 +41,7 @@ vi.mock('./headless-serve-ssh-registration', () => ({
   })
 }))
 vi.mock('../ipc/mobile', () => ({ registerMobileHandlers: vi.fn() }))
+vi.mock('../ipc/pairing-tickets', () => ({ registerPairingTicketHandlers: vi.fn() }))
 vi.mock('../ipc/runtime-environment-mobile-relay-hosts', () => ({
   createRuntimeEnvironmentMobileRelayHosts: vi.fn()
 }))

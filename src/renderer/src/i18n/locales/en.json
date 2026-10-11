@@ -12700,6 +12700,13 @@
           "unavailable": "{{value0}} (unavailable)",
           "description": "Accounts, detected agents and terminal options below are for this host.",
           "unavailableNotice": "This server is no longer saved, so nothing can be shown for it. Choose another host at the top of Settings."
+        },
+        "SingleUsePairingCodeButton": {
+          "unavailable": "Could not create a pairing code. Check that Orca can listen on the network.",
+          "copied": "Copied a single-use pairing code. It expires in 10 minutes.",
+          "failed": "Failed to copy the pairing code.",
+          "label": "Copy single-use pairing code",
+          "help": "Works once and expires in 10 minutes. When a device uses it, you approve it here after comparing a code."
         }
       },
       "right": {
@@ -17914,6 +17921,21 @@
         "attention": "Need you",
         "running": "Running {{value0}}",
         "filter": "Show chats"
+      },
+      "pairing": {
+        "PairingApprovalDialog": {
+          "authorityMobile": "It will be able to use Orca from a phone: open terminals, read files and run agents on this computer as you.",
+          "authorityRuntime": "It will be able to run commands, open terminals, edit files and run agents on this computer as you.",
+          "authorityDesktopControl": "It can also control this computer's screen and keyboard.",
+          "title": "Allow a new device to pair with {{hostName}}?",
+          "device": "Device",
+          "fingerprint": "Key",
+          "compareInstruction": "Allow only if the device shows this same code:",
+          "replaceWarning": "Allowing this replaces {{devices}}, which will be signed out.",
+          "typeCodeLabel": "Type the code shown on the new device",
+          "deny": "Deny",
+          "allow": "Allow"
+        }
       }
     },
     "i18n": {

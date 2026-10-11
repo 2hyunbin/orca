@@ -20,7 +20,12 @@ export function createWebMobileApi(): Partial<PreloadApi> {
       getRelayStatus: () => Promise.resolve({ status: 'offline' as const }),
       onRelayStatusChanged: () => noopUnsubscribe,
       consumePendingUnpairedDeviceAuthFailure: () => Promise.resolve(false),
-      onUnpairedDeviceAuthFailure: () => noopUnsubscribe
+      onUnpairedDeviceAuthFailure: () => noopUnsubscribe,
+      // Why: a browser client is never the host owner, so it neither mints nor approves pairings.
+      createLocalPairingTicket: () => Promise.resolve({ available: false }),
+      answerPairingApproval: () => Promise.resolve(false),
+      onPairingApprovalRequested: () => noopUnsubscribe,
+      onPairingApprovalCancelled: () => noopUnsubscribe
     }
   }
 }
