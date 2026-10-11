@@ -41,7 +41,10 @@ const h = vi.hoisted(() => {
         }
       )
     },
-    hostServerStatus: vi.fn(() => ({ kind: 'managed', environmentId: 'env-1' })),
+    hostServerStatus: vi.fn<() => { kind: 'managed'; environmentId: string } | undefined>(() => ({
+      kind: 'managed',
+      environmentId: 'env-1'
+    })),
     broadcastPortForwards: vi.fn()
   }
 })
@@ -90,7 +93,7 @@ describe('saved port forward restore', () => {
   })
 
   it('does nothing for a host that is not managed', async () => {
-    h.hostServerStatus.mockReturnValueOnce(undefined as never)
+    h.hostServerStatus.mockReturnValueOnce(undefined)
     await restoreManagedHostPortForwards('t1')
     expect(h.portForwardManager.addForward).not.toHaveBeenCalled()
   })
