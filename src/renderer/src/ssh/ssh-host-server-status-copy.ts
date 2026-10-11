@@ -4,8 +4,9 @@ import type {
   SshConnectionState,
   SshManagedServerUpdateNote,
   SshTarget
-} from '../../../../shared/ssh-types'
+} from '../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 
 export type SshHostServerStatusLine = {
   text: string
@@ -53,14 +54,22 @@ export function sshHostServerStatusLine(
 
 /** A failed connect's toast: an unserved host's translated reason, else main's message. */
 export function sshConnectFailureText(
-  target: Pick<SshTarget, 'orcadFence' | 'managedServerUnavailable'> | undefined,
   state: Pick<SshConnectionState, 'managedServer'> | undefined,
   fallback: string
 ): string {
-  if (target && state?.managedServer?.kind === 'relay') {
-    return sshHostServerStatusLine(target, state)?.text ?? fallback
-  }
-  return fallback
+  const status = state?.managedServer
+  return status?.kind === 'relay' ? unservedLine(status).text : fallback
+}
+
+export function sshTargetConnectFailureText(
+  targetId: string,
+  error: unknown,
+  fallback: string
+): string {
+  return sshConnectFailureText(
+    useAppStore.getState().sshConnectionStates.get(targetId),
+    error instanceof Error ? error.message : fallback
+  )
 }
 
 // Mirror main's ORCAD_TUNNEL_UNAVAILABLE_REASON.
@@ -71,7 +80,7 @@ function sourceChangedLine(): SshHostServerStatusLine {
     tone: 'warning',
     text: translate(
       'auto.components.settings.sshHostServer.sourceChanged',
-      'Changed on an older Orca: runs the relay until it is moved to its managed server again.'
+      'An older version of Orca changed this host’s projects. Move those changes to its managed server, or keep the server’s version, to connect again.'
     )
   }
 }

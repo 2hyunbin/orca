@@ -7752,7 +7752,7 @@
       "src/renderer/src/components/settings/source-control-ai-settings-persistence.test.tsx": 3192,
       "src/renderer/src/components/settings/sparse-preset-date.test.ts": 66,
       "src/renderer/src/components/settings/sparse-preset-operation-error.test.ts": 53,
-      "src/renderer/src/components/settings/ssh-host-server-status-copy.test.ts": 107,
+      "src/renderer/src/ssh/ssh-host-server-status-copy.test.ts": 107,
       "src/renderer/src/components/settings/ssh-target-action-state.test.ts": 47,
       "src/renderer/src/components/settings/ssh-target-draft.test.ts": 66,
       "src/renderer/src/components/settings/ssh-target-save-payload.test.ts": 114,

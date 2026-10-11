@@ -158,7 +158,22 @@ describe('SSH host server status line', () => {
     const state = {
       managedServer: { kind: 'relay' as const, reason: 'orcad_unavailable' as const }
     }
-    expect(sshConnectFailureText(plain, state, 'raw')).toContain('install an older version of Orca')
-    expect(sshConnectFailureText(plain, undefined, 'raw')).toBe('raw')
+    expect(sshConnectFailureText(state, 'raw')).toContain('install an older version of Orca')
+    expect(sshConnectFailureText(undefined, 'raw')).toBe('raw')
+  })
+
+  it('says a host an older Orca changed is blocked until moved, not served by the relay', () => {
+    const changed = sshHostServerStatusLine(
+      { orcadFence: { environmentId: 'e', sourceChangedAt: '2026-10-05T00:00:00Z' } },
+      undefined
+    )
+    const unserved = sshConnectFailureText(
+      { managedServer: { kind: 'relay', reason: 'source_changed' } },
+      'raw'
+    )
+    for (const text of [changed?.text, unserved]) {
+      expect(text).toContain('to connect again')
+      expect(text).not.toContain('relay')
+    }
   })
 })

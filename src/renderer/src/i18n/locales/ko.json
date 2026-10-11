@@ -12369,7 +12369,7 @@
           }
         },
         "sshHostServer": {
-          "sourceChanged": "이전 Orca에서 변경됨: 관리형 서버로 다시 이동할 때까지 릴레이를 실행합니다.",
+          "sourceChanged": "이전 버전의 Orca가 이 호스트의 프로젝트를 변경했습니다. 다시 연결하려면 해당 변경 사항을 관리형 서버로 이동하거나 서버 버전을 유지하세요.",
           "deploying": "관리형 Orca 서버 설정 중…",
           "converting": "이 호스트의 프로젝트를 관리형 Orca 서버로 이동하는 중…",
           "connecting": "관리형 Orca 서버에 연결 중…",
