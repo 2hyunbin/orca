@@ -99,17 +99,7 @@ function fakeHosts(
 }
 
 function catalog(hosts: MobileDesktopRelayHosts, labels = new Map()) {
-  let now = 1_000
-  return {
-    catalog: new MobileRelayHostCatalog({
-      hosts,
-      hostLabelOverrides: () => labels,
-      now: () => now
-    }),
-    advance: (ms: number) => {
-      now += ms
-    }
-  }
+  return { catalog: new MobileRelayHostCatalog({ hosts, hostLabelOverrides: () => labels }) }
 }
 
 describe('mobile relay host catalog', () => {
@@ -205,11 +195,7 @@ describe('mobile relay host catalog', () => {
         { worktreeId: 'w-local', hostId: 'runtime:env', status: 'working' },
         { worktreeId: 'w-ssh', hostId: 'runtime:env', status: 'inactive' },
         { worktreeId: 'w-legacy', hostId: 'runtime:env', status: 'done' }
-      ],
-      totalCount: 3,
-      truncated: false,
-      fetchedAt: 1_000,
-      stale: false
+      ]
     })
     expect(call).toHaveBeenCalledWith(
       expect.objectContaining({ environmentId: 'env' }),
@@ -220,34 +206,27 @@ describe('mobile relay host catalog', () => {
     )
   })
 
-  it('keeps the last rows, unchanged and marked stale, once the server stops answering', async () => {
+  it('keeps the last rows, unchanged, once the server stops answering', async () => {
     const { hosts, call, state } = fakeHosts([
       { id: 'env', name: 'Box', snapshot: snapshot('env', 'live') }
     ])
     call.mockResolvedValue(psReply([{ worktreeId: 'w', hostId: 'local', status: 'working' }]))
-    const { catalog: hostCatalog, advance } = catalog(hosts)
+    const { catalog: hostCatalog } = catalog(hosts)
     await hostCatalog.worktrees('runtime:env')
-    advance(5_000)
 
     state.environments = [{ id: 'env', name: 'Box', snapshot: snapshot('env', 'unreachable') }]
     const offline = await hostCatalog.worktrees('runtime:env')
     // Never re-fetched while the desktop itself cannot reach it, and never rewritten as idle.
     expect(call).toHaveBeenCalledTimes(1)
     expect(offline).toEqual({
-      worktrees: [{ worktreeId: 'w', hostId: 'runtime:env', status: 'working' }],
-      totalCount: 1,
-      truncated: false,
-      fetchedAt: 1_000,
-      stale: true
+      worktrees: [{ worktreeId: 'w', hostId: 'runtime:env', status: 'working' }]
     })
 
-    // A failed fetch on a server that looks reachable also serves the last rows as stale.
+    // A failed fetch on a server that looks reachable also serves the last rows.
     state.environments = [{ id: 'env', name: 'Box', snapshot: snapshot('env', 'live') }]
     call.mockRejectedValueOnce(new Error('socket closed'))
-    await expect(hostCatalog.worktrees('runtime:env')).resolves.toMatchObject({
-      fetchedAt: 1_000,
-      stale: true
-    })
+    await expect(hostCatalog.worktrees('runtime:env')).resolves.toEqual(offline)
+    expect(call).toHaveBeenCalledTimes(2)
   })
 
   it('omits rows mid-delete, as a phone asking the server itself would never see them', async () => {
@@ -267,10 +246,8 @@ describe('mobile relay host catalog', () => {
       },
       _meta: { runtimeId: 'runtime-a' }
     })
-    await expect(catalog(hosts).catalog.worktrees('runtime:env')).resolves.toMatchObject({
-      worktrees: [{ worktreeId: 'kept', hostId: 'runtime:env' }],
-      totalCount: 4,
-      truncated: true
+    await expect(catalog(hosts).catalog.worktrees('runtime:env')).resolves.toEqual({
+      worktrees: [{ worktreeId: 'kept', hostId: 'runtime:env' }]
     })
   })
 
@@ -279,9 +256,8 @@ describe('mobile relay host catalog', () => {
       { id: 'old', name: 'ThinkPad', snapshot: snapshot('old', 'live', false) }
     ])
     call.mockResolvedValue(psReply([{ worktreeId: 'w', hostId: 'local' }]))
-    await expect(catalog(hosts).catalog.worktrees('runtime:old')).resolves.toMatchObject({
-      worktrees: [{ worktreeId: 'w', hostId: 'runtime:old' }],
-      stale: false
+    await expect(catalog(hosts).catalog.worktrees('runtime:old')).resolves.toEqual({
+      worktrees: [{ worktreeId: 'w', hostId: 'runtime:old' }]
     })
   })
 
@@ -345,7 +321,7 @@ describe('mobile relay host catalog', () => {
     await expect(hostCatalog.worktrees('runtime:env')).resolves.toEqual({ worktrees: null })
   })
 
-  it('keeps the last rows, stale, for a server manually disconnected but still configured', async () => {
+  it('keeps the last rows for a server manually disconnected but still configured', async () => {
     const { hosts, call, state } = fakeHosts([
       { id: 'env', name: 'Box', snapshot: snapshot('env', 'live') }
     ])
@@ -361,9 +337,8 @@ describe('mobile relay host catalog', () => {
       }
     ]
     state.retire('env')
-    await expect(hostCatalog.worktrees('runtime:env')).resolves.toMatchObject({
-      worktrees: [{ worktreeId: 'w', hostId: 'runtime:env' }],
-      stale: true
+    await expect(hostCatalog.worktrees('runtime:env')).resolves.toEqual({
+      worktrees: [{ worktreeId: 'w', hostId: 'runtime:env' }]
     })
     expect(call).toHaveBeenCalledTimes(1)
   })
@@ -374,8 +349,7 @@ describe('mobile relay host catalog', () => {
     ])
     call.mockResolvedValue(psReply([{ worktreeId: 'w', hostId: 'local' }]))
     await expect(catalog(hosts).catalog.worktrees('runtime:env')).resolves.toMatchObject({
-      worktrees: [{ worktreeId: 'w' }],
-      stale: false
+      worktrees: [{ worktreeId: 'w' }]
     })
     expect(call).toHaveBeenCalledWith(expect.anything(), 'worktree.ps', expect.anything(), {
       timeoutMs: 5_000,
@@ -383,7 +357,7 @@ describe('mobile relay host catalog', () => {
     })
   })
 
-  it('answers with the last rows, marked stale, when the server never answers the fetch', async () => {
+  it('answers with the last rows when the server never answers the fetch', async () => {
     vi.useFakeTimers()
     try {
       const { hosts, call } = fakeHosts([
@@ -398,10 +372,8 @@ describe('mobile relay host catalog', () => {
       await vi.advanceTimersByTimeAsync(4_999)
       expect(settled).toBe(false)
       await vi.advanceTimersByTimeAsync(1)
-      await expect(rows).resolves.toMatchObject({
-        worktrees: [{ worktreeId: 'w', hostId: 'runtime:env' }],
-        fetchedAt: 1_000,
-        stale: true
+      await expect(rows).resolves.toEqual({
+        worktrees: [{ worktreeId: 'w', hostId: 'runtime:env' }]
       })
     } finally {
       vi.useRealTimers()
@@ -419,10 +391,8 @@ describe('mobile relay host catalog', () => {
     const second = hostCatalog.worktrees('runtime:env')
     await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1))
     answerFetch(psReply([{ worktreeId: 'w', hostId: 'local' }]))
-    await expect(Promise.all([first, second])).resolves.toMatchObject([
-      { stale: false },
-      { stale: false }
-    ])
+    const rows = { worktrees: [{ worktreeId: 'w', hostId: 'runtime:env' }] }
+    await expect(Promise.all([first, second])).resolves.toEqual([rows, rows])
     expect(call).toHaveBeenCalledTimes(1)
   })
 })
