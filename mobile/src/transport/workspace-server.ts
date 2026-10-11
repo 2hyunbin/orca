@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react'
-import { AppState } from 'react-native'
+import { useCallback, useSyncExternalStore } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
+import { relayHostsFeed } from '../worktree/relay-hosts-feed'
 import { serverHostHealth } from '../worktree/server-workspaces'
-import { relayHostsListRead } from '../worktree/server-workspace-operations'
 import {
   scopeRpcClientToExecutionHost,
   workspaceRouteExecutionHost
@@ -34,8 +32,7 @@ export function useWorkspaceServer(args: {
   return { routeHost, server: routeHost === undefined ? null : { client: serverClient, gates } }
 }
 
-// The host list's poll cadence, so a workspace screen and its row agree within one tick.
-const SERVER_HEALTH_POLL_MS = 3000
+const noSubscription = (): (() => void) => () => {}
 
 /**
  * The connection state a server workspace's screens see: the desktop's, unless the desktop reports
@@ -47,50 +44,20 @@ export function useWorkspaceServerConnState(args: {
   routeHost: ExecutionHostId | undefined | null
 }): ConnectionState {
   const { client, connState, routeHost } = args
-  const [reported, setReported] = useState<{
-    client: RpcClient
-    routeHost: ExecutionHostId
-    health: ExecutionHostHealth
-  } | null>(null)
-
-  useEffect(() => {
-    if (!client || connState !== 'connected' || !routeHost) {
-      return
-    }
-    let stopped = false
-    const read = async (): Promise<void> => {
-      if (AppState.currentState !== 'active') {
-        return
-      }
-      try {
-        const listed = relayHostsListRead.interpret(await relayHostsListRead.request(client))
-        if (stopped || !listed.accepted) {
-          return
-        }
-        const host = listed.value.find((entry) => entry.hostId === routeHost)
-        // A server the desktop no longer lists cannot be reached through it.
-        setReported({ client, routeHost, health: host ? serverHostHealth(host) : 'disconnected' })
-      } catch {
-        // Keeps the last answer; the next poll retries.
-      }
-    }
-    void read()
-    const timer = setInterval(() => void read(), SERVER_HEALTH_POLL_MS)
-    return () => {
-      stopped = true
-      clearInterval(timer)
-    }
-  }, [client, connState, routeHost])
-
-  // Why: keyed by client and server so a reused route never shows another server's answer.
-  if (
-    connState !== 'connected' ||
-    reported?.client !== client ||
-    reported.routeHost !== routeHost
-  ) {
+  // The same feed the host list reads, so a row's badge and its screens agree.
+  const feed = client && routeHost ? relayHostsFeed(client) : null
+  const subscribe = useCallback(
+    (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
+    [feed]
+  )
+  const readHosts = () => feed?.getSnapshot() ?? null
+  const hosts = useSyncExternalStore(subscribe, readHosts, readHosts)
+  if (connState !== 'connected' || !routeHost || !hosts) {
     return connState
   }
-  switch (reported.health) {
+  const host = hosts.find((entry) => entry.hostId === routeHost)
+  // A server the desktop no longer lists cannot be reached through it.
+  switch (host ? serverHostHealth(host) : 'disconnected') {
     case 'local':
     case 'available':
       return 'connected'

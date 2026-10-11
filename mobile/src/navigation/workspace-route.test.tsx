@@ -230,7 +230,7 @@ describe('a server workspace', () => {
   })
 
   it('reads as disconnected while the desktop reports its server down, and recovers', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     try {
       route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
       desktop()
