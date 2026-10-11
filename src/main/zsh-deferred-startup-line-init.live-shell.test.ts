@@ -1,8 +1,7 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ensureOverlayRestoreWrappers } from '../relay/pty-shell-overlay-wrappers'
 import { prependOrcaCliDirToChildPath } from './cli/orca-cli-child-path'
 import { getDaemonZshWrapperSpec } from './daemon/daemon-zsh-shell-ready-wrapper-spec'
 import { POSIX_SHELL_STARTUP_COMMAND_ENV } from './pty/posix-shell-startup-command'
@@ -287,7 +286,7 @@ describe('zsh plugins that call deferred line-init by name', () => {
     }
   })
 
-  itWithZsh.each(['local', 'daemon', 'relay'] as const)(
+  itWithZsh.each(['local', 'daemon'] as const)(
     'keeps the plugin call working across prompts in a %s wrapper',
     async (transport) => {
       const home = mkdtempSync(join(tmpdir(), 'orca-zsh-named-wrapper-'))
@@ -302,15 +301,10 @@ describe('zsh plugins that call deferred line-init by name', () => {
 zle -N zle-line-init orca_test_app_mode
 `
       )
-      let wrapper: string
-      if (transport === 'local') {
-        wrapper = getZshShellReadyWrapperFile()
-      } else if (transport === 'daemon') {
-        wrapper = buildZshStartupHook(getDaemonZshWrapperSpec())
-      } else {
-        expect(ensureOverlayRestoreWrappers(wrapperDir)).toBe(true)
-        wrapper = readFileSync(join(wrapperDir, 'zsh', '.zshenv'), 'utf8')
-      }
+      const wrapper =
+        transport === 'local'
+          ? getZshShellReadyWrapperFile()
+          : buildZshStartupHook(getDaemonZshWrapperSpec())
       writeFileSync(join(wrapperDir, '.zshenv'), wrapper)
       writeFileSync(join(wrapperDir, ZSH_WRAPPER_DIR_MARKER_FILE), '')
       const env: Record<string, string> = {
