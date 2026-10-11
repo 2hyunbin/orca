@@ -168,6 +168,16 @@ function payload(raw: RawData, expectedType: string): unknown {
   }
 }
 
+// Who the token speaks for; only its expiry may change across a refresh or a resume.
+function sameHostIdentity(current: RelayTokenClaims, next: RelayTokenClaims): boolean {
+  return (
+    next.sub === current.sub &&
+    next.prof === current.prof &&
+    next.org === current.org &&
+    next.relayHostId === current.relayHostId
+  )
+}
+
 function send(socket: WebSocket, type: string, message: object): void {
   socket.send(JSON.stringify({ type, ...message }))
 }
@@ -1465,7 +1475,8 @@ export class HostSessionRegistry {
       existing &&
       hello.data.controlResumeSecret &&
       hello.data.controlResumeSecret === existing.controlResumeSecret &&
-      (existing.state === 'orphaned' || existing.state === 'active')
+      (existing.state === 'orphaned' || existing.state === 'active') &&
+      sameHostIdentity(existing.identity, identity)
     )
     const generation = rebind ? existing!.generation : (existing?.generation ?? 0) + 1
     const ephemeral = nacl.box.keyPair()
@@ -1663,6 +1674,9 @@ export class HostSessionRegistry {
       // id today, since a rebind keeps its generation).
       if (controlActivityId) existing.controlActivityId = controlActivityId
       existing.socket = socket
+      // The hello's token was just verified; keeping the predecessor's would let the next
+      // heartbeat expire a control that proved itself, and every resume would repeat it.
+      if (identity.exp > existing.identity.exp) existing.identity = identity
       existing.state = existing.regionalDrainAttemptId ? 'drain-only' : 'active'
       existing.appVersion = appVersion
       existing.leaseExpiresAt = this.controlLeaseExpiresAt()
@@ -1889,13 +1903,7 @@ export class HostSessionRegistry {
     const parsed = AuthRefreshSchema.safeParse(payload(raw, 'auth-refresh'))
     if (!parsed.success) return
     const refreshed = await this.verifyRelayToken(parsed.data.relayJwt)
-    const sameIdentity =
-      refreshed &&
-      refreshed.sub === session.identity.sub &&
-      refreshed.prof === session.identity.prof &&
-      refreshed.org === session.identity.org &&
-      refreshed.relayHostId === session.identity.relayHostId
-    if (!sameIdentity) {
+    if (!refreshed || !sameHostIdentity(session.identity, refreshed)) {
       session.socket?.close(RELAY_CLOSE_CODE.BAD_OUTER_CREDENTIAL, 'refresh identity changed')
       return
     }
