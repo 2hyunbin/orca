@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { MAX_SESSION_TAB_CLOSE_PARTITIONS } from '../../../shared/session-tab-close-ledger'
 import {
-  isWebSessionTabClosePending,
-  beginWebSessionTabClose,
+  isWebSessionCloseIntentPending,
+  beginWebSessionCloseIntent,
   resetWebSessionCloseIntentForTests
 } from './web-session-close-intent'
 import {
@@ -63,18 +63,18 @@ describe('web session intent ownership', () => {
   })
 
   it('isolates close intents across runtimes and same-id re-pairs', () => {
-    beginWebSessionTabClose(OWNER_A, WORKTREE_ID, 'host-tab', 1_000)
+    beginWebSessionCloseIntent(OWNER_A, WORKTREE_ID, 'host-tab', 1_000)
 
-    expect(isWebSessionTabClosePending(OWNER_A, WORKTREE_ID, 'host-tab', 1_000)).toBe(true)
-    expect(isWebSessionTabClosePending(OWNER_A_REPAIRED, WORKTREE_ID, 'host-tab', 1_000)).toBe(
+    expect(isWebSessionCloseIntentPending(OWNER_A, WORKTREE_ID, 'host-tab', 1_000)).toBe(true)
+    expect(isWebSessionCloseIntentPending(OWNER_A_REPAIRED, WORKTREE_ID, 'host-tab', 1_000)).toBe(
       false
     )
-    expect(isWebSessionTabClosePending(OWNER_B, WORKTREE_ID, 'host-tab', 1_000)).toBe(false)
+    expect(isWebSessionCloseIntentPending(OWNER_B, WORKTREE_ID, 'host-tab', 1_000)).toBe(false)
   })
 
   it('bounds close-intent partition churn', () => {
     for (let index = 0; index < MAX_SESSION_TAB_CLOSE_PARTITIONS + 4; index += 1) {
-      beginWebSessionTabClose(
+      beginWebSessionCloseIntent(
         { environmentId: `env-${index}`, pairingRevision: 1 },
         WORKTREE_ID,
         `host-tab-${index}`,
@@ -83,7 +83,7 @@ describe('web session intent ownership', () => {
     }
 
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: 'env-0', pairingRevision: 1 },
         WORKTREE_ID,
         'host-tab-0',
@@ -91,7 +91,7 @@ describe('web session intent ownership', () => {
       )
     ).toBe(false)
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: `env-${MAX_SESSION_TAB_CLOSE_PARTITIONS + 3}`, pairingRevision: 1 },
         WORKTREE_ID,
         `host-tab-${MAX_SESSION_TAB_CLOSE_PARTITIONS + 3}`,

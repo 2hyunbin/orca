@@ -6,7 +6,7 @@ import type {
   WebSessionTabsSnapshotApplyOptions,
   WebSessionTabsSyncState
 } from './state'
-import { filterWebSessionTabCloses } from '../web-session-close-intent'
+import { filterWebSessionCloseIntents } from '../web-session-close-intent'
 import {
   peekWebSessionFocusIntent,
   resolveWebSessionVisibleTabId,
@@ -37,7 +37,7 @@ export function prepareWebSessionTabsSnapshotBase(
   batchContext: WebSessionTabsBatchContext | undefined,
   options: WebSessionTabsSnapshotApplyOptions | undefined
 ) {
-  const visibleTabs = filterWebSessionTabCloses(
+  const visibleTabs = filterWebSessionCloseIntents(
     { environmentId },
     worktreeId,
     rawSnapshot.tabs,

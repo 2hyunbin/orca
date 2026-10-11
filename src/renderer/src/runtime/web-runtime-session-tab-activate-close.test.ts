@@ -5,8 +5,8 @@ import {
   resetWebSessionFocusIntentForTests
 } from './web-session-focus-intent'
 import {
-  isWebSessionTabClosePending,
-  beginWebSessionTabClose,
+  isWebSessionCloseIntentPending,
+  beginWebSessionCloseIntent,
   resetWebSessionCloseIntentForTests
 } from './web-session-close-intent'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
@@ -360,7 +360,7 @@ describe('web runtime session tab actions', () => {
 
     const hostTabId = toHostSessionTabId('local-browser-unified')
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: ENVIRONMENT_ID },
         WORKTREE_ID,
         hostTabId,
@@ -386,7 +386,7 @@ describe('web runtime session tab actions', () => {
         .mockImplementationOnce(() => {
           clock = startedAt + WEB_SESSION_TAB_RPC_TIMEOUT_MS - 1
           pendingWhileHostRepublished = hostTabIds.map((hostTabId) =>
-            isWebSessionTabClosePending(owner, WORKTREE_ID, hostTabId, clock)
+            isWebSessionCloseIntentPending(owner, WORKTREE_ID, hostTabId, clock)
           )
           return Promise.resolve({
             id: 'close',
@@ -408,7 +408,7 @@ describe('web runtime session tab actions', () => {
       expect(pendingWhileHostRepublished).toEqual([true, true])
       expect(
         hostTabIds.map((hostTabId) =>
-          isWebSessionTabClosePending(owner, WORKTREE_ID, hostTabId, clock + 60_000)
+          isWebSessionCloseIntentPending(owner, WORKTREE_ID, hostTabId, clock + 60_000)
         )
       ).toEqual([true, true])
     } finally {
@@ -441,6 +441,12 @@ describe('web runtime session tab actions', () => {
         terminalHandle: 'term-1'
       })
     ).resolves.toBe('failed')
+    // The failure re-read is not awaited by the close; wait for it to reach the host.
+    await vi.waitFor(() =>
+      expect(runtimeCall).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'session.tabs.list' })
+      )
+    )
 
     expect(runtimeCall).toHaveBeenNthCalledWith(
       1,
@@ -454,7 +460,7 @@ describe('web runtime session tab actions', () => {
       WORKTREE_ID
     )
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: ENVIRONMENT_ID },
         WORKTREE_ID,
         'host-browser-unified',
@@ -492,9 +498,15 @@ describe('web runtime session tab actions', () => {
         terminalHandle: 'term-1'
       })
     ).resolves.toBe('applied')
+    // The failure re-read is not awaited by the close; wait for it to reach the host.
+    await vi.waitFor(() =>
+      expect(runtimeCall).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'session.tabs.list' })
+      )
+    )
 
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: ENVIRONMENT_ID },
         WORKTREE_ID,
         'host-browser-unified',
@@ -541,13 +553,15 @@ describe('web runtime session tab actions', () => {
     expect(refused).toBe('applied')
     expect(refused).toBe(committed)
 
-    // The un-hide that makes the tab come back.
-    expect(mocks.acceptReplayedWebSessionTabsSnapshot).toHaveBeenCalledWith(
-      ENVIRONMENT_ID,
-      WORKTREE_ID
+    // The un-hide that makes the tab come back (the re-read is not awaited by the close).
+    await vi.waitFor(() =>
+      expect(mocks.acceptReplayedWebSessionTabsSnapshot).toHaveBeenCalledWith(
+        ENVIRONMENT_ID,
+        WORKTREE_ID
+      )
     )
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: ENVIRONMENT_ID },
         WORKTREE_ID,
         'host-browser-unified',
@@ -574,7 +588,7 @@ describe('web runtime session tab actions', () => {
       }
     })
 
-    beginWebSessionTabClose(
+    beginWebSessionCloseIntent(
       { environmentId: ENVIRONMENT_ID },
       WORKTREE_ID,
       'other-host-tab',
@@ -591,7 +605,7 @@ describe('web runtime session tab actions', () => {
     ).resolves.toBe('applied')
 
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: ENVIRONMENT_ID },
         WORKTREE_ID,
         'host-browser-unified',
@@ -599,7 +613,7 @@ describe('web runtime session tab actions', () => {
       )
     ).toBe(true)
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: ENVIRONMENT_ID },
         WORKTREE_ID,
         'other-host-tab',
@@ -626,7 +640,7 @@ describe('web runtime session tab actions', () => {
     ).resolves.toBe('failed')
 
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: ENVIRONMENT_ID },
         WORKTREE_ID,
         'host-browser-unified',
@@ -651,6 +665,12 @@ describe('web runtime session tab actions', () => {
         reason: 'user'
       })
     ).resolves.toBe('failed')
+    // The failure re-read is not awaited by the close; wait for it to reach the host.
+    await vi.waitFor(() =>
+      expect(runtimeCall).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'session.tabs.list' })
+      )
+    )
 
     expect(mocks.acceptReplayedWebSessionTabsSnapshot).toHaveBeenCalledWith(
       ENVIRONMENT_ID,

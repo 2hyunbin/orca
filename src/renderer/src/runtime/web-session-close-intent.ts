@@ -17,14 +17,14 @@ function closePartition(owner: WebSessionIntentOwner, worktreeId: string): strin
   return `${webSessionIntentOwnerKey(owner)}\0${worktreeId}`
 }
 
-export type WebSessionTabCloseTicket = SessionTabCloseTicket
+export type WebSessionCloseIntentTicket = SessionTabCloseTicket
 
-export function beginWebSessionTabClose(
+export function beginWebSessionCloseIntent(
   owner: WebSessionIntentOwner,
   worktreeId: string,
   hostTabId: string,
   now: number
-): WebSessionTabCloseTicket | null {
+): WebSessionCloseIntentTicket | null {
   if (!worktreeId) {
     return null
   }
@@ -37,8 +37,8 @@ export function beginWebSessionTabClose(
   return ledger.begin(partition, hostTabId, now)
 }
 
-export function settleWebSessionTabClose(
-  ticket: WebSessionTabCloseTicket,
+export function settleWebSessionCloseIntent(
+  ticket: WebSessionCloseIntentTicket,
   outcome: SessionTabCloseOutcome,
   now: number
 ): boolean {
@@ -46,7 +46,7 @@ export function settleWebSessionTabClose(
 }
 
 /** Ends closes the host has confirmed and drops tabs whose close is still pending. */
-export function filterWebSessionTabCloses<T extends { id: string }>(
+export function filterWebSessionCloseIntents<T extends { id: string }>(
   owner: WebSessionIntentOwner,
   worktreeId: string,
   tabs: readonly T[],
@@ -56,20 +56,13 @@ export function filterWebSessionTabCloses<T extends { id: string }>(
   return ledger.filter(closePartition(owner, worktreeId), tabs, topLevelIdOf, now)
 }
 
-export function isWebSessionTabClosePending(
+export function isWebSessionCloseIntentPending(
   owner: WebSessionIntentOwner,
   worktreeId: string,
   hostTabId: string,
   now: number
 ): boolean {
   return ledger.isPending(closePartition(owner, worktreeId), hostTabId, now)
-}
-
-export function hasPendingWebSessionTabClose(
-  owner: WebSessionIntentOwner,
-  worktreeId: string
-): boolean {
-  return ledger.hasPending(closePartition(owner, worktreeId))
 }
 
 export function clearWebSessionCloseIntentsForWorktree(

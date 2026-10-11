@@ -6,8 +6,15 @@ import type {
 import { useAppStore } from '../store'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
-import { settleHostSessionTabClose, type HostSessionTabCloseResult } from './host-session-tab-close'
-import { beginWebSessionTabClose, type WebSessionTabCloseTicket } from './web-session-close-intent'
+import {
+  rereadHostSessionTabs,
+  settleHostSessionTabClose,
+  type HostSessionTabCloseResult
+} from './host-session-tab-close'
+import {
+  beginWebSessionCloseIntent,
+  type WebSessionCloseIntentTicket
+} from './web-session-close-intent'
 import {
   clearWebSessionFocusIntentIfMatches,
   recordWebSessionFocusIntent
@@ -19,7 +26,6 @@ import {
   captureWebSessionIntentOwner,
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
-import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
 
 function resolveSessionTabEnvironmentId(environmentId: string | null | undefined): string | null {
   const resolved =
@@ -42,18 +48,6 @@ async function resolveHostTabId(
       tabId
     }) ?? toHostSessionTabId(tabId)
   )
-}
-
-async function rereadAcceptingCurrent(
-  environmentId: string,
-  worktreeId: string,
-  expectedEnvironmentPairingRevision: number | undefined
-): Promise<void> {
-  const { acceptReplayedWebSessionTabsSnapshot } = await import('./web-session-tabs-sync')
-  acceptReplayedWebSessionTabsSnapshot(environmentId, worktreeId)
-  await refreshWebRuntimeSessionTabsSnapshot(environmentId, worktreeId, {
-    expectedEnvironmentPairingRevision
-  })
 }
 
 export async function activateWebRuntimeSessionTab(args: {
@@ -96,7 +90,7 @@ export async function activateWebRuntimeSessionTab(args: {
       },
       timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
     })
-    unwrapRuntimeRpcResult(response as RuntimeRpcResponse<unknown>)
+    unwrapRuntimeRpcResult(response)
     return true
   } catch (error) {
     if (hostTabId) {
@@ -126,13 +120,18 @@ export async function closeWebRuntimeSessionTab(args: {
   }
   const intentOwner = captureWebSessionIntentOwner(environmentId)
   const callEnvironment = captureRuntimeEnvironmentCall(environmentId, intentOwner.pairingRevision)
-  const reread = (): Promise<void> =>
-    rereadAcceptingCurrent(environmentId, args.worktreeId, intentOwner.pairingRevision)
+  const reread = (acceptCurrent: boolean): Promise<void> =>
+    rereadHostSessionTabs(
+      { kind: 'environment', environmentId },
+      args.worktreeId,
+      intentOwner.pairingRevision,
+      acceptCurrent
+    )
   const isLifecycleClose = args.reason !== 'user'
   if (isLifecycleClose && (!args.publicationEpoch || !args.terminalHandle)) {
     // Why: missing host-generation or terminal-incarnation evidence means keep;
     // a tab id alone can be stale or reused after reconnect.
-    await reread()
+    await reread(true)
     console.warn('[web-runtime-session] suppressed lifecycle close without incarnation evidence', {
       closeReason: args.reason
     })
@@ -140,9 +139,13 @@ export async function closeWebRuntimeSessionTab(args: {
   }
 
   // Why: begin before async id resolution so a stale snapshot cannot flash the closed tab back.
-  const tickets: WebSessionTabCloseTicket[] = []
+  const tickets: WebSessionCloseIntentTicket[] = []
+  let settled = false
   const begin = (hostTabId: string): void => {
-    const ticket = beginWebSessionTabClose(intentOwner, args.worktreeId, hostTabId, Date.now())
+    if (settled) {
+      return
+    }
+    const ticket = beginWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId, Date.now())
     if (ticket) {
       tickets.push(ticket)
     }
@@ -173,13 +176,13 @@ export async function closeWebRuntimeSessionTab(args: {
     )
   })()
   return settleHostSessionTabClose({
-    tickets: () => tickets,
+    tickets: () => {
+      settled = true
+      return tickets
+    },
     close,
-    rereadAcceptingCurrent: reread,
+    reread,
     // Why: a paired host's lists travel apart from its answer, so read once after the close.
-    readAfterClose: () =>
-      refreshWebRuntimeSessionTabsSnapshot(environmentId, args.worktreeId, {
-        expectedEnvironmentPairingRevision: intentOwner.pairingRevision
-      })
+    readAfterClose: true
   })
 }

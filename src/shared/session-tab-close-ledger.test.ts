@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SESSION_TAB_CLOSE_SETTLED_TTL_MS,
   SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS,
+  SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS,
   SessionTabCloseLedger
 } from './session-tab-close-ledger'
 
@@ -61,10 +62,28 @@ describe('SessionTabCloseLedger', () => {
     expect(apply(ledger, [{ id: 'b' }], later)).toEqual(['b'])
   })
 
-  it('treats an unanswered close as failed after the bound and ignores its late answer', () => {
+  it("honours an answer that arrives by the caller's own limit", () => {
     const ledger = new SessionTabCloseLedger()
     const ticket = ledger.begin(P, 'b', NOW)!
-    const late = NOW + SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS + 1
+    expect(SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS).toBeGreaterThan(
+      SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS
+    )
+    expect(ledger.settle(ticket, 'absent', NOW + SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS)).toBe(true)
+    expect(apply(ledger, [{ id: 'b' }], NOW + 60_000)).toEqual([])
+  })
+
+  it('ends an absent entry at once when the host list already omitted the tab', () => {
+    const ledger = new SessionTabCloseLedger()
+    const ticket = ledger.begin(P, 'b', NOW)!
+    apply(ledger, [{ id: 'a' }])
+    ledger.settle(ticket, 'absent', NOW)
+    expect(ledger.hasPending(P)).toBe(false)
+  })
+
+  it('drops an unanswered close after its expiry and ignores its late answer', () => {
+    const ledger = new SessionTabCloseLedger()
+    const ticket = ledger.begin(P, 'b', NOW)!
+    const late = NOW + SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS + 1
     expect(apply(ledger, [{ id: 'b' }], late)).toEqual(['b'])
     expect(ledger.settle(ticket, 'closed', late)).toBe(false)
     expect(apply(ledger, [{ id: 'b' }], late)).toEqual(['b'])
@@ -90,14 +109,6 @@ describe('SessionTabCloseLedger', () => {
     expect(apply(ledger, panes)).toEqual(['t1::l1'])
   })
 
-  it('a reopen of the same id wins over its earlier close', () => {
-    const ledger = new SessionTabCloseLedger()
-    const ticket = ledger.begin(P, 'b', NOW)!
-    ledger.reopen(P, 'b')
-    expect(apply(ledger, [{ id: 'b' }])).toEqual(['b'])
-    expect(ledger.settle(ticket, 'closed', NOW)).toBe(false)
-  })
-
   it('a newer close of the same id supersedes the older answer', () => {
     const ledger = new SessionTabCloseLedger()
     const first = ledger.begin(P, 'b', NOW)!
@@ -114,7 +125,7 @@ describe('SessionTabCloseLedger', () => {
     ledger.begin('p3', 'b', NOW)
     expect(ledger.hasPending('p1')).toBe(false)
     expect(ledger.hasPending('p2')).toBe(true)
-    ledger.clearPartitions((partition) => partition === 'p2')
+    ledger.clearPartition('p2')
     expect(ledger.hasPending('p2')).toBe(false)
   })
 

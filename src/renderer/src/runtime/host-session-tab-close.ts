@@ -2,8 +2,12 @@ import {
   SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS,
   type SessionTabCloseOutcome
 } from '../../../shared/session-tab-close-ledger'
+import type { RuntimeClientTarget } from './runtime-rpc-client'
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
-import { settleWebSessionTabClose, type WebSessionTabCloseTicket } from './web-session-close-intent'
+import {
+  settleWebSessionCloseIntent,
+  type WebSessionCloseIntentTicket
+} from './web-session-close-intent'
 
 /**
  * Why 'unknown-tab' is its own outcome: it is the host's definitive answer that it has no such
@@ -20,7 +24,6 @@ export type HostSessionTabCloseAnswer = {
 
 const CLOSE_UNANSWERED = Symbol('close-unanswered')
 
-/** Resolves to `CLOSE_UNANSWERED` once the close has run past the close record's own bound. */
 function withinCloseBound<T>(close: Promise<T>): Promise<T | typeof CLOSE_UNANSWERED> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const bound = new Promise<typeof CLOSE_UNANSWERED>((resolve) => {
@@ -29,13 +32,36 @@ function withinCloseBound<T>(close: Promise<T>): Promise<T | typeof CLOSE_UNANSW
   return Promise.race([close, bound]).finally(() => clearTimeout(timer))
 }
 
-function closeOutcome(answer: HostSessionTabCloseAnswer | undefined): SessionTabCloseOutcome {
-  if (answer?.refused !== true) {
-    return 'closed'
-  }
-  // Why: a refusal that republished means the host kept a live tab, so the window must show it
-  // again; one that did not (a dead leaf) stays hidden until the host's list drops it.
-  return answer.snapshotRepublished === true ? 'failed' : 'refused'
+/**
+ * Re-reads one worktree from its host. `acceptCurrent` re-applies the version this window already
+ * has, which a failed close needs because the host's unchanged list is never republished.
+ */
+export function rereadHostSessionTabs(
+  target: RuntimeClientTarget,
+  worktreeId: string,
+  expectedEnvironmentPairingRevision: number | undefined,
+  acceptCurrent: boolean
+): Promise<void> {
+  // Lazy imports: both refresh paths apply frames through modules that import this one.
+  const reread =
+    target.kind === 'environment'
+      ? import('./web-runtime-session-snapshot').then(({ refreshWebRuntimeSessionTabsSnapshot }) =>
+          refreshWebRuntimeSessionTabsSnapshot(target.environmentId, worktreeId, {
+            acceptCurrentSnapshot: acceptCurrent,
+            // A read that began before the close would still list the tab.
+            afterCurrentInFlight: true,
+            expectedEnvironmentPairingRevision
+          })
+        )
+      : import('./local-structured-session-tabs-sync/inventory-refresh').then(
+          ({ refreshLocalStructuredSessionWorktreeTabs }) =>
+            refreshLocalStructuredSessionWorktreeTabs(worktreeId, {
+              reacceptCurrentVersion: acceptCurrent
+            })
+        )
+  return reread.catch((error: unknown) =>
+    console.warn('[session-tabs] tab re-read after a close failed', error)
+  )
 }
 
 /**
@@ -44,25 +70,33 @@ function closeOutcome(answer: HostSessionTabCloseAnswer | undefined): SessionTab
  * them from the host's answer, and on failure re-reads the host so the tab comes back at once.
  */
 export async function settleHostSessionTabClose(args: {
-  tickets: () => readonly WebSessionTabCloseTicket[]
+  tickets: () => readonly WebSessionCloseIntentTicket[]
   close: Promise<HostSessionTabCloseAnswer | undefined>
-  /** Re-reads this worktree from the host, re-applying the version the window already has. */
-  rereadAcceptingCurrent: () => Promise<void> | void
-  /** A read after a close the host accepted, for hosts whose lists travel apart from the answer. */
-  readAfterClose?: () => Promise<void> | void
+  /** Never rejects. */
+  reread: (acceptCurrent: boolean) => Promise<void>
+  /** For hosts whose lists travel apart from the close answer: read once after an accepted close. */
+  readAfterClose: boolean
+  /** A chat's host answers "no such tab" while its list is not yet restored, then lists it again. */
+  absentTabMayReturn?: boolean
 }): Promise<HostSessionTabCloseResult> {
   let outcome: SessionTabCloseOutcome
   let result: HostSessionTabCloseResult
   try {
     const answer = await withinCloseBound(args.close)
-    outcome = answer === CLOSE_UNANSWERED ? 'failed' : closeOutcome(answer)
-    // A refusal was still heard by the host; only an unanswered close is a "not now".
+    // Why: a refusal that republished means the host kept a live tab, so it must show again; one
+    // that did not (a dead leaf) stays hidden until the host's list drops it. Either way the host
+    // heard the close; only an unanswered close is a "not now".
+    outcome =
+      answer === CLOSE_UNANSWERED ||
+      (answer?.refused === true && answer.snapshotRepublished === true)
+        ? 'failed'
+        : 'closed'
     result = answer === CLOSE_UNANSWERED ? 'failed' : 'applied'
   } catch (error) {
     const hostHasNoSuchTab =
       hasRuntimeRpcErrorCode(error, 'tab_not_found') ||
       hasRuntimeRpcErrorCode(error, 'terminal_tab_not_found')
-    outcome = hostHasNoSuchTab ? 'absent' : 'failed'
+    outcome = !hostHasNoSuchTab ? 'failed' : args.absentTabMayReturn ? 'closed' : 'absent'
     result = hostHasNoSuchTab ? 'unknown-tab' : 'failed'
     console.warn(
       '[session-tabs] tab close failed:',
@@ -71,12 +105,13 @@ export async function settleHostSessionTabClose(args: {
   }
   const now = Date.now()
   for (const ticket of args.tickets()) {
-    settleWebSessionTabClose(ticket, outcome, now)
+    settleWebSessionCloseIntent(ticket, outcome, now)
   }
   if (outcome === 'failed') {
-    await args.rereadAcceptingCurrent()
-  } else if (outcome !== 'absent') {
-    await args.readAfterClose?.()
+    // Not awaited: the caller's own failure handling must not wait on a read of an unreachable host.
+    void args.reread(true)
+  } else if (outcome === 'closed' && args.readAfterClose) {
+    await args.reread(false)
   }
   return result
 }

@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS } from '../../../shared/session-tab-close-ledger'
+import {
+  SESSION_TAB_CLOSE_SETTLED_TTL_MS,
+  SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS
+} from '../../../shared/session-tab-close-ledger'
 import { settleHostSessionTabClose } from './host-session-tab-close'
 import {
-  beginWebSessionTabClose,
-  filterWebSessionTabCloses,
-  isWebSessionTabClosePending,
+  beginWebSessionCloseIntent,
+  filterWebSessionCloseIntents,
+  isWebSessionCloseIntentPending,
   resetWebSessionCloseIntentForTests
 } from './web-session-close-intent'
 
@@ -17,21 +20,22 @@ function rpcError(code: string): Error {
 }
 
 function closeWith(
-  close: Promise<{ refused?: boolean; snapshotRepublished?: boolean } | undefined>
+  close: Promise<{ refused?: boolean; snapshotRepublished?: boolean } | undefined>,
+  absentTabMayReturn = false
 ) {
-  const ticket = beginWebSessionTabClose(OWNER, WT, TAB, Date.now())!
-  const rereadAcceptingCurrent = vi.fn()
-  const readAfterClose = vi.fn()
+  const ticket = beginWebSessionCloseIntent(OWNER, WT, TAB, Date.now())!
+  const reread = vi.fn(async (_acceptCurrent: boolean) => {})
   const result = settleHostSessionTabClose({
     tickets: () => [ticket],
     close,
-    rereadAcceptingCurrent,
-    readAfterClose
+    reread,
+    readAfterClose: true,
+    absentTabMayReturn
   })
-  return { result, rereadAcceptingCurrent, readAfterClose }
+  return { result, reread }
 }
 
-const pending = (): boolean => isWebSessionTabClosePending(OWNER, WT, TAB, Date.now())
+const pending = (): boolean => isWebSessionCloseIntentPending(OWNER, WT, TAB, Date.now())
 
 afterEach(() => {
   resetWebSessionCloseIntentForTests()
@@ -41,56 +45,65 @@ afterEach(() => {
 
 describe('settleHostSessionTabClose', () => {
   it('keeps an accepted close hiding the tab until a host list omits it', async () => {
-    const { result, rereadAcceptingCurrent, readAfterClose } = closeWith(Promise.resolve(undefined))
+    const { result, reread } = closeWith(Promise.resolve(undefined))
     await expect(result).resolves.toBe('applied')
     expect(pending()).toBe(true)
-    expect(readAfterClose).toHaveBeenCalledOnce()
-    expect(rereadAcceptingCurrent).not.toHaveBeenCalled()
-    filterWebSessionTabCloses(OWNER, WT, [], (tab: { id: string }) => tab.id, Date.now())
+    // The read after an accepted close, for hosts whose lists travel apart from the answer.
+    expect(reread).toHaveBeenCalledOnce()
+    filterWebSessionCloseIntents(OWNER, WT, [], (tab: { id: string }) => tab.id, Date.now())
     expect(pending()).toBe(false)
   })
 
   it('brings the tab back at once when the close fails, for every tab kind', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { result, rereadAcceptingCurrent, readAfterClose } = closeWith(
-      Promise.reject(rpcError('runtime_unavailable'))
-    )
+    const { result, reread } = closeWith(Promise.reject(rpcError('runtime_unavailable')))
     await expect(result).resolves.toBe('failed')
     expect(pending()).toBe(false)
-    expect(rereadAcceptingCurrent).toHaveBeenCalledOnce()
-    expect(readAfterClose).not.toHaveBeenCalled()
+    expect(reread).toHaveBeenCalledOnce()
   })
 
   it('keeps hiding a tab the host says it does not have, with no read', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { result, rereadAcceptingCurrent } = closeWith(
-      Promise.reject(rpcError('terminal_tab_not_found'))
-    )
+    const { result, reread } = closeWith(Promise.reject(rpcError('terminal_tab_not_found')))
     await expect(result).resolves.toBe('unknown-tab')
-    expect(isWebSessionTabClosePending(OWNER, WT, TAB, Date.now() + 10 * 60_000)).toBe(true)
-    expect(rereadAcceptingCurrent).not.toHaveBeenCalled()
+    expect(isWebSessionCloseIntentPending(OWNER, WT, TAB, Date.now() + 10 * 60_000)).toBe(true)
+    expect(reread).not.toHaveBeenCalled()
+  })
+
+  it('limits a "no such tab" answer in time when the host may list the tab again', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { result } = closeWith(Promise.reject(rpcError('tab_not_found')), true)
+    await expect(result).resolves.toBe('unknown-tab')
+    expect(pending()).toBe(true)
+    expect(
+      isWebSessionCloseIntentPending(
+        OWNER,
+        WT,
+        TAB,
+        Date.now() + SESSION_TAB_CLOSE_SETTLED_TTL_MS + 1
+      )
+    ).toBe(false)
   })
 
   it('shows a tab the host refused to close and republished, and still reports it heard', async () => {
-    const { result, rereadAcceptingCurrent } = closeWith(
+    const { result, reread } = closeWith(
       Promise.resolve({ refused: true, snapshotRepublished: true })
     )
     await expect(result).resolves.toBe('applied')
     expect(pending()).toBe(false)
-    expect(rereadAcceptingCurrent).toHaveBeenCalledOnce()
+    expect(reread).toHaveBeenCalledOnce()
   })
 
   it('keeps hiding a refused close that republished nothing', async () => {
-    const { result, rereadAcceptingCurrent } = closeWith(Promise.resolve({ refused: true }))
+    const { result } = closeWith(Promise.resolve({ refused: true }))
     await expect(result).resolves.toBe('applied')
     expect(pending()).toBe(true)
-    expect(rereadAcceptingCurrent).not.toHaveBeenCalled()
   })
 
   it('fails a close nobody answers within the bound and ignores its late answer', async () => {
     vi.useFakeTimers()
     let answer!: () => void
-    const { result, rereadAcceptingCurrent } = closeWith(
+    const { result, reread } = closeWith(
       new Promise((resolve) => {
         answer = () => resolve(undefined)
       })
@@ -98,9 +111,12 @@ describe('settleHostSessionTabClose', () => {
     await vi.advanceTimersByTimeAsync(SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS)
     await expect(result).resolves.toBe('failed')
     expect(pending()).toBe(false)
-    expect(rereadAcceptingCurrent).toHaveBeenCalledOnce()
+    expect(reread).toHaveBeenCalledOnce()
+    // A newer close of the same tab must not be settled by the old call's late answer.
+    beginWebSessionCloseIntent(OWNER, WT, TAB, Date.now())
     answer()
     await vi.advanceTimersByTimeAsync(0)
-    expect(pending()).toBe(false)
+    expect(pending()).toBe(true)
+    expect(reread).toHaveBeenCalledOnce()
   })
 })

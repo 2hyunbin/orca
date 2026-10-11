@@ -17,7 +17,7 @@ import {
   type MirroredEditorCloseState
 } from './close-mirrored-editor-tab'
 import {
-  isWebSessionTabClosePending,
+  isWebSessionCloseIntentPending,
   resetWebSessionCloseIntentForTests
 } from './web-session-close-intent'
 import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
@@ -47,7 +47,7 @@ describe('notifyHostOfMirroredEditorClose', () => {
     notifyHostOfMirroredEditorClose(buildState(), 'wt-1', 'file-1')
 
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: 'env-1' },
         'wt-1',
         toHostSessionTabId('host-tab-1'),
@@ -84,7 +84,7 @@ describe('notifyHostOfMirroredEditorClose', () => {
     expect(notifyHostOfMirroredEditorClose(state, 'wt-1', 'file-1')).toBe(true)
     for (const tabId of ['host-tab-1', 'host-tab-2']) {
       expect(
-        isWebSessionTabClosePending(
+        isWebSessionCloseIntentPending(
           { environmentId: 'env-1' },
           'wt-1',
           toHostSessionTabId(tabId),
@@ -105,7 +105,7 @@ describe('notifyHostOfMirroredEditorClose', () => {
 
     expect(notifyHostOfMirroredEditorClose(state, 'wt-1', 'file-1')).toBe(true)
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: 'env-2' },
         'wt-1',
         toHostSessionTabId('host-tab-1'),

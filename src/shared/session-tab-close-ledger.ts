@@ -2,11 +2,13 @@
 // tab until it has handled the close. One record per close hides the tab from those lists until the
 // host's own list stops naming it, and lets it back the moment the close fails.
 
-/** How the host answered a close. `refused` keeps the tab hidden; a refusal that republished is `failed`. */
-export type SessionTabCloseOutcome = 'closed' | 'absent' | 'refused' | 'failed'
+/** How the host answered a close: accepted, has no such tab, or did not close it. */
+export type SessionTabCloseOutcome = 'closed' | 'absent' | 'failed'
 
 /** Matches a close call's own timeout; an entry no answer settled by then counts as failed. */
 export const SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS = 15_000
+// Why: the record outlives its caller's limit, so an answer the caller still accepts always lands.
+export const SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS = SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS + 5_000
 /** Only bounds memory when no list arrives after the host accepted the close. */
 export const SESSION_TAB_CLOSE_SETTLED_TTL_MS = 20_000
 export const MAX_SESSION_TAB_CLOSE_PARTITIONS = 512
@@ -42,7 +44,7 @@ export class SessionTabCloseLedger {
   private readonly maxPartitions: number
 
   constructor(options: SessionTabCloseLedgerOptions = {}) {
-    this.unsettledBoundMs = options.unsettledBoundMs ?? SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS
+    this.unsettledBoundMs = options.unsettledBoundMs ?? SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS
     this.settledTtlMs = options.settledTtlMs ?? SESSION_TAB_CLOSE_SETTLED_TTL_MS
     this.maxPartitions = options.maxPartitions ?? MAX_SESSION_TAB_CLOSE_PARTITIONS
   }
@@ -69,7 +71,7 @@ export class SessionTabCloseLedger {
     return { partition, closedId: id, entry }
   }
 
-  /** Returns false when the entry was already replaced, reopened or expired; the answer is then ignored. */
+  /** Returns false when the entry was already replaced or expired; the answer is then ignored. */
   settle(ticket: SessionTabCloseTicket, outcome: SessionTabCloseOutcome, now: number): boolean {
     const entries = this.partitions.get(ticket.partition)
     const entry = entries?.get(ticket.closedId)
@@ -83,18 +85,13 @@ export class SessionTabCloseLedger {
       this.remove(ticket.partition, ticket.closedId)
       return true
     }
-    if (outcome !== 'absent' && entry.omittedByLatest) {
+    if (entry.omittedByLatest) {
       this.remove(ticket.partition, ticket.closedId)
       return true
     }
     entry.state = outcome === 'absent' ? 'absent' : 'closed'
     entry.since = now
     return true
-  }
-
-  /** An explicit reopen of the same id must never be hidden by that id's earlier close. */
-  reopen(partition: string, closedId: string): void {
-    this.remove(partition, closedId.trim())
   }
 
   /** Whether a close of exactly this id is still hiding it; reads only, ends nothing. */
@@ -143,14 +140,6 @@ export class SessionTabCloseLedger {
 
   clearPartition(partition: string): void {
     this.partitions.delete(partition)
-  }
-
-  clearPartitions(matches: (partition: string) => boolean): void {
-    for (const partition of this.partitions.keys()) {
-      if (matches(partition)) {
-        this.partitions.delete(partition)
-      }
-    }
   }
 
   reset(): void {

@@ -24,7 +24,7 @@ import { acceptPairedHostStructuredSessions } from '../../src/renderer/src/runti
 import { LOCAL_STRUCTURED_SESSION_OWNER } from '../../src/renderer/src/runtime/local-structured-session-owner'
 import { registerSessionTabIpcBridge } from '../../src/renderer/src/hooks/ipc-events/session-tab-ipc-bridge'
 import {
-  isWebSessionTabClosePending,
+  isWebSessionCloseIntentPending,
   resetWebSessionCloseIntentForTests
 } from '../../src/renderer/src/runtime/web-session-close-intent'
 
@@ -189,7 +189,7 @@ describe('a host frame published while a chat tab close is in flight', () => {
     await vi.waitFor(() => expect(hostSessionCloses).toEqual(['chat-b']))
     // The host published its removal before it stopped the chat, and that frame lifted the hide.
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
         WORKTREE,
         'agent-session:chat-b',

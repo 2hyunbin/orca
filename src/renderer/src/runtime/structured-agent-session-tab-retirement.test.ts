@@ -6,7 +6,14 @@ const mocks = vi.hoisted(() => ({
   closeSession:
     vi.fn<(target: RuntimeClientTarget, sessionId: string) => Promise<'closed' | 'unsupported'>>(),
   callRuntime:
-    vi.fn<(target: RuntimeClientTarget, method: string, params?: unknown) => Promise<unknown>>(),
+    vi.fn<
+      (
+        target: RuntimeClientTarget,
+        method: string,
+        params?: unknown,
+        options?: { signal?: AbortSignal }
+      ) => Promise<unknown>
+    >(),
   discardOutbox: vi.fn<(sessionId: string) => void>(),
   stopSends: vi.fn<(sessionId: string) => void>(),
   hasTombstone: vi.fn<(worktreeId: string, sessionId: string) => boolean>(),
@@ -68,8 +75,8 @@ import {
   resetStructuredAgentSessionReadOwnersForTests
 } from '@/components/native-chat/structured-agent-session-read-owner'
 import {
-  isWebSessionTabClosePending,
-  filterWebSessionTabCloses,
+  isWebSessionCloseIntentPending,
+  filterWebSessionCloseIntents,
   resetWebSessionCloseIntentForTests
 } from './web-session-close-intent'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from './local-structured-session-owner'
@@ -120,7 +127,7 @@ beforeEach(() => {
 
 // A host frame for wt-1 listing exactly these host tab ids, as the window applies it.
 const applyHostFrame = (owner: { environmentId: string }, hostTabIds: readonly string[]): void => {
-  filterWebSessionTabCloses(
+  filterWebSessionCloseIntents(
     owner,
     'wt-1',
     hostTabIds.map((id) => ({ id })),
@@ -130,7 +137,7 @@ const applyHostFrame = (owner: { environmentId: string }, hostTabIds: readonly s
 }
 
 const closing = (owner: string): boolean =>
-  isWebSessionTabClosePending(
+  isWebSessionCloseIntentPending(
     { environmentId: owner },
     'wt-1',
     'agent-session:session-1',
@@ -176,7 +183,7 @@ describe('structured agent session tab retirement', () => {
       target,
       'session.tabs.close',
       expect.objectContaining({ tabId: 'agent-session:session-1' }),
-      { timeoutMs: 15_000 }
+      expect.objectContaining({ timeoutMs: 15_000 })
     )
   })
 
@@ -220,7 +227,7 @@ describe('structured agent session tab retirement', () => {
       provisional: false
     })
     expect(
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
         FLOATING_TERMINAL_WORKTREE_ID,
         'agent-session:session-1',
@@ -292,7 +299,8 @@ describe('structured agent session tab retirement', () => {
     })
     await vi.waitFor(() =>
       expect(mocks.refreshPaired).toHaveBeenCalledWith('server-1', 'wt-1', {
-        acceptCurrentSnapshot: true,
+        // The host's removal is a newer version; only an older read in flight must be waited out.
+        acceptCurrentSnapshot: false,
         afterCurrentInFlight: true
       })
     )
@@ -319,7 +327,7 @@ describe('structured agent session tab retirement', () => {
       provisional: false
     })
     const pendingUnder = (pairingRevision: number): boolean =>
-      isWebSessionTabClosePending(
+      isWebSessionCloseIntentPending(
         { environmentId: 'server-1', pairingRevision },
         'wt-1',
         'agent-session:session-1',
@@ -342,26 +350,79 @@ describe('structured agent session tab retirement', () => {
     warn.mockRestore()
   })
 
-  it('deduplicates concurrent host retirement', async () => {
+  it('deduplicates concurrent host retirement while the host tab close is in flight', async () => {
     let release!: () => void
-    mocks.closeSession.mockImplementation(
+    mocks.callRuntime.mockImplementation(
       () =>
         new Promise((resolve) => {
-          release = () => resolve('closed')
+          release = () => resolve(undefined)
         })
     )
-    retireStructuredAgentSessionTab({
+    const first = retireStructuredAgentSessionTab({
       target,
       worktreeId: 'wt-1',
       sessionId: 'session-1'
     })
-    retireStructuredAgentSessionTab({
-      target,
-      worktreeId: 'wt-1',
-      sessionId: 'session-1'
-    })
+    await vi.waitFor(() => expect(mocks.callRuntime).toHaveBeenCalledTimes(1))
+    expect(
+      retireStructuredAgentSessionTab({ target, worktreeId: 'wt-1', sessionId: 'session-1' })
+    ).toBe(first)
     expect(mocks.closeSession).toHaveBeenCalledTimes(1)
     release()
+    await first
+  })
+
+  it('gives up on a hung local close after the bound: aborts it, shows the chat, allows a retry', async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let signal: AbortSignal | undefined
+    mocks.callRuntime.mockImplementation((_target, _method, _params, options) => {
+      signal = options?.signal
+      return new Promise(() => {})
+    })
+    beginStructuredAgentSessionTabClose({
+      target,
+      worktreeId: 'wt-1',
+      sessionId: 'session-1',
+      provisional: false
+    })
+    expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(true)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(signal?.aborted).toBe(true)
+    expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(false)
+    expect(mocks.reacceptLocal).toHaveBeenCalledWith('wt-1', { reacceptCurrentVersion: true })
+    retireStructuredAgentSessionTab({ target, worktreeId: 'wt-1', sessionId: 'session-1' })
+    expect(mocks.callRuntime).toHaveBeenCalledTimes(2)
+    // Release the retry's in-flight slot so later tests start clean.
+    await vi.advanceTimersByTimeAsync(15_000)
+    vi.useRealTimers()
+    warn.mockRestore()
+  })
+
+  it('keeps a chat the host says it does not list hidden only for a limited time, with no read', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mocks.callRuntime.mockRejectedValue(
+      Object.assign(new Error('tab_not_found'), { code: 'tab_not_found' })
+    )
+    beginStructuredAgentSessionTabClose({
+      target,
+      worktreeId: 'wt-1',
+      sessionId: 'session-1',
+      provisional: false
+    })
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(closing(LOCAL_STRUCTURED_SESSION_OWNER)).toBe(true)
+    expect(mocks.reacceptLocal).not.toHaveBeenCalled()
+    expect(
+      isWebSessionCloseIntentPending(
+        { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
+        'wt-1',
+        'agent-session:session-1',
+        Date.now() + 20_001
+      )
+    ).toBe(false)
+    warn.mockRestore()
   })
 
   it('retires an unmounted created reader only on the owning host', async () => {
