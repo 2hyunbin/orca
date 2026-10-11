@@ -143,6 +143,25 @@ describe('serveOrcaApp', () => {
     }
   })
 
+  it('keeps the real keychain when only HOME is overridden', async () => {
+    const previousUserData = process.env.ORCA_E2E_USER_DATA_DIR
+    const previousHome = process.env.ORCA_E2E_HOME_DIR
+    delete process.env.ORCA_E2E_USER_DATA_DIR
+    process.env.ORCA_E2E_HOME_DIR = '/tmp/orca-e2e-home-only'
+    try {
+      const { child, result } = startRecipeJsonServer()
+      queueMicrotask(() => child.stdout.emit('data', `${RECIPE_JSON}\n`))
+      await expect(result).resolves.toBe(0)
+
+      const args = firstServeSpawnArgs()
+      expect(args).not.toContain('--use-mock-keychain')
+      expect(args).not.toContain('--password-store=basic')
+    } finally {
+      restoreEnv('ORCA_E2E_USER_DATA_DIR', previousUserData)
+      restoreEnv('ORCA_E2E_HOME_DIR', previousHome)
+    }
+  })
+
   it('leaves a normal profile on the real keychain', async () => {
     const previousUserData = process.env.ORCA_E2E_USER_DATA_DIR
     const previousHome = process.env.ORCA_E2E_HOME_DIR
