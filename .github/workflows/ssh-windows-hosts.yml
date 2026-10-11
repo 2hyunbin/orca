@@ -15,7 +15,6 @@ on:
       - 'src/main/ssh/ssh-remote-*'
       - 'src/main/ssh/ssh-hostile-host-*'
       - 'src/main/ssh/ssh-windows-host-*'
-      - 'src/main/ssh/ssh-session-command-audit.ts'
       - 'src/wsl-guest/**'
       - 'src/packages/process-host/**'
       - 'pnpm-workspace.yaml'
