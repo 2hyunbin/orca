@@ -117,7 +117,8 @@ test('a terminal link opens an image outside the managed workspace', async (// o
     fixture.host.exec!(
       `printf '%s' ${shellQuote(imageBase64)} | base64 -d > ${shellQuote(imagePath)}`
     )
-    const { page, seeded } = await launchManagedWorkspace(fixture)
+    // Why /root: the default folder workspace is /tmp, which would make the image a workspace file.
+    const { page, seeded } = await launchManagedWorkspace(fixture, { folderPath: '/root' })
     // A link is only clickable once the shell has printed it, so wait for one that answers.
     await expectTerminalAnswers(page, await openTerminalTab(page, seeded.worktreeId))
     await openTerminalWorkspaceRootLink(page, testInfo, imagePath, 'open')
