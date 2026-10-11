@@ -23,7 +23,10 @@ function makeSession(overrides: Record<string, unknown> = {}): ConnectPanePtySes
     waitTeardowns: new Array<() => void>(),
     writeReplayData: vi.fn(),
     buildColdRestoreAgentResumeStartup: vi.fn(() => ({ command: 'claude --resume x' })),
-    deps: { paneTransportsRef: { current: new Map([[1, transport]]) } },
+    deps: {
+      paneTransportsRef: { current: new Map([[1, transport]]) },
+      restoredViewportBlankingPanesRef: { current: new Set<number>() }
+    },
     ...overrides
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hold reads only the fields stubbed above.
@@ -38,7 +41,8 @@ beforeEach(() => {
     value: {
       pty: {
         readNewerDaemonHold,
-        reopenNewerDaemonTerminals: vi.fn(() => Promise.resolve({ reopened: true }))
+        reopenNewerDaemonTerminals: vi.fn(() => Promise.resolve({ reopened: true })),
+        onNewerDaemonReleased: vi.fn(() => () => {})
       }
     }
   })
@@ -70,6 +74,23 @@ describe('holdForNewerDaemon', () => {
     expect(connect).toHaveBeenCalledTimes(1)
     expect(session.pane.terminal.options.disableStdin).toBe(false)
     expect(session.writeReplayData).toHaveBeenLastCalledWith('\x1b[0m\x1b[2J\x1b[3J\x1b[H')
+  })
+
+  it('does not repeat a screen the layout restore already painted, nor clear it on release', async () => {
+    readNewerDaemonHold.mockResolvedValue({
+      held: true,
+      restoredScreen: { scrollback: 'saved screen', cols: 80, rows: 24 }
+    })
+    const session = makeSession()
+    session.deps.restoredViewportBlankingPanesRef?.current.add(1)
+    const connect = vi.fn()
+    holdForNewerDaemon(session, 's1', connect)
+    await flush()
+    expect(session.writeReplayData).not.toHaveBeenCalled()
+    void reopenHeldTerminals()
+    await flush()
+    expect(connect).toHaveBeenCalledTimes(1)
+    expect(session.writeReplayData).not.toHaveBeenCalled()
   })
 
   it('reconnects at once when the hold was released before the screen read', async () => {

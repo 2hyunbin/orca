@@ -3,7 +3,7 @@ import { holdPaneForNewerDaemon, type HeldPaneReopenOutcome } from '../newer-dae
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
-// Clears the read-only screen and its scrollback so the restore below paints it once.
+// Clears the history screen the hold painted so the restore below paints it once.
 const CLEAR_HELD_SCREEN = '\x1b[0m\x1b[2J\x1b[3J\x1b[H'
 
 type ReopenConnect = (onSettled: (outcome: HeldPaneReopenOutcome) => void) => void
@@ -25,22 +25,28 @@ export function holdForNewerDaemon(
     generation === session.transportStreamGeneration &&
     session.deps.paneTransportsRef.current.get(session.pane.id) === session.transport
   let released = false
-  const release = (onSettled: (outcome: HeldPaneReopenOutcome) => void): void => {
-    released = true
-    forget()
-    if (!isCurrent()) {
-      onSettled({ reopened: false, agentResumed: false })
-      return
-    }
-    terminal.options.disableStdin = false
-    session.writeReplayData(CLEAR_HELD_SCREEN)
-    connect(onSettled)
-  }
+  // Why: a layout restore already painted this pane's saved buffer; the history screen would repeat it.
+  const layoutPainted = session.deps.restoredViewportBlankingPanesRef?.current.has(session.pane.id)
+  let paintedHistory = false
+  const release = (): Promise<HeldPaneReopenOutcome> =>
+    new Promise((resolve) => {
+      released = true
+      forget()
+      if (!isCurrent()) {
+        resolve({ reopened: false, agentResumed: false })
+        return
+      }
+      terminal.options.disableStdin = false
+      if (paintedHistory) {
+        session.writeReplayData(CLEAR_HELD_SCREEN)
+      }
+      connect(resolve)
+    })
   // Why: nothing backs this pane, so keystrokes have nowhere to go.
   terminal.options.disableStdin = true
   const forget = holdPaneForNewerDaemon(session.cacheKey, {
     resumable: Boolean(session.buildColdRestoreAgentResumeStartup()),
-    release: () => new Promise<HeldPaneReopenOutcome>(release)
+    release
   })
   session.waitTeardowns.push(forget)
   void window.api.pty
@@ -52,8 +58,9 @@ export function holdForNewerDaemon(
       }
       if (!hold.held) {
         // Why: the newer daemon stopped between main's refusal and this read.
-        release(() => {})
-      } else if (hold.restoredScreen) {
+        void release()
+      } else if (hold.restoredScreen && !layoutPainted) {
+        paintedHistory = true
         session.writeReplayData(hold.restoredScreen.scrollback)
       }
     })

@@ -68,7 +68,8 @@ describe('restored pane refused for a newer daemon', () => {
         pty: {
           declarePendingPaneSerializer: vi.fn().mockResolvedValue(null),
           readNewerDaemonHold: vi.fn().mockResolvedValue({ held: true, restoredScreen: null }),
-          reopenNewerDaemonTerminals: vi.fn().mockResolvedValue({ reopened: true })
+          reopenNewerDaemonTerminals: vi.fn().mockResolvedValue({ reopened: true }),
+          onNewerDaemonReleased: vi.fn(() => () => {})
         }
       }
     })
