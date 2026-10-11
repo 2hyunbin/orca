@@ -12,6 +12,7 @@ on:
       - 'config/scripts/verify-skill-update-roundtrip.mjs'
       - 'src/main/skills/skill-freshness-eligibility.ts'
       - 'src/shared/agent-feature-install-commands.ts'
+      - 'src/shared/skills-cli-version.ts'
       - 'src/shared/skill-freshness.ts'
       - '.github/workflows/skill-update-roundtrip.yml'
   # Why unfiltered: GitHub ignores `paths` on merge_group. We do not run a merge
@@ -34,9 +35,8 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
         shape: [symlink, copy]
         autocrlf: ['false', 'true']
-        # Why: 1.5.x clones `tree/<ref>` with --branch, which cannot fetch the commit
-        # sha a PR is pinned to. Release tags work on both.
-        skills-cli: ['1.7.2']
+        # Why: `pinned` runs the version in src/shared/skills-cli-version.ts, the one Orca ships.
+        skills-cli: [pinned]
         include:
           - os: ubuntu-latest
             shape: symlink
@@ -55,10 +55,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SKILL_UPDATE_SOURCE: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          # A commit, not a branch: `tree/<ref>` cannot carry a slash.
+          # A commit, the same kind of ref Orca pins official skills to.
           SKILL_UPDATE_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
-          node config/scripts/verify-skill-update-roundtrip.mjs
-          --cli=${{ matrix.skills-cli }}
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON config/scripts/verify-skill-update-roundtrip.mjs
+          ${{ matrix.skills-cli == 'latest' && '--cli=latest' || '' }}
           --autocrlf=${{ matrix.autocrlf }}
           --shape=${{ matrix.shape }}
