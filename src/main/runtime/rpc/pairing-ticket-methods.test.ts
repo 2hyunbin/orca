@@ -30,32 +30,36 @@ function dispatch(method: string, params: unknown, options?: RpcDispatchStreamin
   )
 }
 
-function result<T>(response: RpcResponse): T {
+function result(response: RpcResponse): Record<string, unknown> {
   if (!response.ok) {
     throw new Error(response.error.message)
   }
-  return response.result as T
+  const value: unknown = response.result
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('expected an object result')
+  }
+  return { ...value }
 }
 
 describe('pairing ticket RPCs', () => {
   it('lets the owner mint, list and revoke tickets without ever listing the secret', async () => {
     const pairingTickets = ownerContext()
-    const created = result<{ ticketId: string; code: string; link: string; expiresAt: number }>(
+    const created = result(
       await dispatch('pairing.createTicket', { ttlMs: 15 * 60_000 }, { pairingTickets })
     )
-    const offer = decodePairingTicketCode(created.code)
+    const code = String(created.code)
+    const ticketId = String(created.ticketId)
+    const offer = decodePairingTicketCode(code)
     expect(offer).toMatchObject({ v: 3, scope: 'runtime', publicKeyB64: HOST_KEY })
-    expect(created.link).toBe(buildVerifiedPairingLink(created.code))
+    expect(created.link).toBe(buildVerifiedPairingLink(code))
 
     const listed = await dispatch('pairing.listTickets', undefined, { pairingTickets })
     expect(JSON.stringify(listed)).not.toContain(offer!.ticket)
-    expect(result<{ tickets: { ticketId: string }[] }>(listed).tickets).toEqual([
-      expect.objectContaining({ ticketId: created.ticketId, issuedVia: 'owner-cli' })
+    expect(result(listed).tickets).toEqual([
+      expect.objectContaining({ ticketId, issuedVia: 'owner-cli' })
     ])
     expect(
-      result(
-        await dispatch('pairing.revokeTicket', { ticketId: created.ticketId }, { pairingTickets })
-      )
+      result(await dispatch('pairing.revokeTicket', { ticketId }, { pairingTickets }))
     ).toEqual({ revoked: true })
   })
 
