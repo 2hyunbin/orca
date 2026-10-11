@@ -61,7 +61,8 @@ const { TERMINAL_SCROLLBACK_SESSION_BUFFER_BYTE_LIMIT } = await import(
   pathToFileURL(path.join(ROOT, 'src/shared/terminal-scrollback-limits.ts')).href
 )
 const { remapAcknowledgedAgentPaneKeys } = await import(
-  pathToFileURL(path.join(ROOT, 'src/main/persistence/restoring-sessions/pane-key-remapping.ts')).href
+  pathToFileURL(path.join(ROOT, 'src/main/persistence/restoring-sessions/pane-key-remapping.ts'))
+    .href
 )
 const { clampUtf8TextTail, measureUtf8ByteLength } = await import(
   pathToFileURL(path.join(ROOT, 'src/shared/utf8-byte-limits.ts')).href
