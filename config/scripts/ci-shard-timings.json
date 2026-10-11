@@ -5117,7 +5117,6 @@
       "src/main/runtime/windows-drive-listing.test.ts": 54,
       "src/main/runtime/windows-firewall-remote-scope.test.ts": 81,
       "src/main/runtime/windows-mobile-firewall.test.ts": 99,
-      "src/main/runtime/workspace-layout-round-trip-watch.test.ts": 254,
       "src/main/runtime/workspace-layout-stream.test.ts": 257,
       "src/main/runtime/workspace-session-membership-scaling.test.ts": 99,
       "src/main/runtime/workspace-session-worktree-id.test.ts": 254,
