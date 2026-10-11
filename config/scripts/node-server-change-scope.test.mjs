@@ -338,21 +338,21 @@ it.each([
 })
 
 const registry = 'config/scripts/vitest-node-runtime-files.mjs'
-const unrelatedRelayUnit = 'src/relay/agent-status-store-relay-context.test.ts'
+const unrelatedProviderUnit = 'src/main/providers/local-filesystem-provider.test.ts'
 
 function qualificationTree(extra = {}) {
   return moduleTree({
     'entry.ts': `import './${registry}'; throw Error('never execute')`,
     [registry]: 'export const NODE_RUNTIME_INCLUDE = []',
-    [unrelatedRelayUnit]: 'throw Error("never execute unrelated test")',
+    [unrelatedProviderUnit]: 'throw Error("never execute unrelated test")',
     ...extra
   })
 }
 
-it('keeps a Node harness smoke without widening it for an unrelated modified relay unit', async () => {
+it('keeps a Node harness smoke without widening it for an unrelated modified provider unit', async () => {
   const root = qualificationTree()
   writeFileSync(join(root, registry), 'export const NODE_RUNTIME_INCLUDE = ["new.unit.test.ts"]')
-  const changed = [registry, unrelatedRelayUnit]
+  const changed = [registry, unrelatedProviderUnit]
   const scope = await classifyNodeServerChanges(
     changed,
     () => collectNodeServerInputs({ root, entryPoints: ['entry.ts'] }),
@@ -378,7 +378,7 @@ it.each([
   ]
 ])('retains daemon platform coverage: %s', async (daemon, runners, qualification) => {
   const root = qualificationTree({ [daemon]: 'throw Error("unselected")' })
-  const diff = [registry, daemon, unrelatedRelayUnit]
+  const diff = [registry, daemon, unrelatedProviderUnit]
   const g = await collectNodeServerInputs({ root, entryPoints: ['entry.ts'] })
   expect(g.has(registry)).toBe(true)
   expect(g.has(daemon)).toBe(false)
@@ -387,19 +387,20 @@ it.each([
   expect(nodeServerQualification(diff, s)).toEqual({ qualification, runners })
 })
 
-it('keeps every host when the modified relay production module is an actual consumer', async () => {
-  const relay = 'src/relay/agent-status-store.ts'
+it('keeps every host when the modified SSH production module is an actual consumer', async () => {
+  const ssh = 'src/main/ssh/runtime-ssh-access-verification.ts'
   const root = qualificationTree({
-    'entry.ts': `import './${registry}'; import './${relay}'; throw Error('never execute')`,
-    [relay]: 'export const store = 1'
+    'entry.ts': `import './${registry}'; import './${ssh}'; throw Error('never execute')`,
+    [ssh]: 'export const store = 1'
   })
-  const changed = [registry, relay, unrelatedRelayUnit]
+  const changed = [registry, ssh, unrelatedProviderUnit]
   const scope = await classifyNodeServerChanges(
     changed,
     () => collectNodeServerInputs({ root, entryPoints: ['entry.ts'] }),
     { modifiedFiles: changed }
   )
   expect(scope.shouldRun).toBe(true)
+  expect(scope).toMatchObject({ graphResolved: true, matchedFiles: [registry, ssh] })
   expect(nodeServerQualification(changed, scope)).toEqual({
     qualification: true,
     runners: NODE_SERVER_RUNNERS
@@ -410,13 +411,13 @@ it.each(['added', 'deleted', 'renamed', 'unknown', 'duplicate', 'foreign'])(
   'retains complete-path qualification when modification evidence is %s',
   async (status) => {
     const root = qualificationTree()
-    const changed = [registry, unrelatedRelayUnit]
+    const changed = [registry, unrelatedProviderUnit]
     let modifiedFiles = [registry]
     if (status === 'deleted' || status === 'renamed') {
-      rmSync(join(root, unrelatedRelayUnit))
+      rmSync(join(root, unrelatedProviderUnit))
     }
     if (status === 'renamed') {
-      const renamed = 'src/relay/renamed-context.test.ts'
+      const renamed = 'src/main/providers/renamed-provider.test.ts'
       writeFileSync(join(root, renamed), 'throw Error("never execute renamed test")')
       changed.push(renamed)
     }
@@ -424,7 +425,7 @@ it.each(['added', 'deleted', 'renamed', 'unknown', 'duplicate', 'foreign'])(
       modifiedFiles = [registry, registry]
     }
     if (status === 'foreign') {
-      modifiedFiles = [registry, 'src/relay/foreign.test.ts']
+      modifiedFiles = [registry, 'src/main/providers/foreign.test.ts']
     }
     const scope = await classifyNodeServerChanges(
       changed,
@@ -442,7 +443,7 @@ it.each(['added', 'deleted', 'renamed', 'unknown', 'duplicate', 'foreign'])(
 it('retains protected server tests and broken imports despite complete modification evidence', async () => {
   const protectedTest = 'src/main/sqlite/example.test.ts'
   const root = qualificationTree({ [protectedTest]: 'export const value = 1' })
-  const changed = [registry, protectedTest, unrelatedRelayUnit]
+  const changed = [registry, protectedTest, unrelatedProviderUnit]
   const collect = () => collectNodeServerInputs({ root, entryPoints: ['entry.ts'] })
   const protectedScope = await classifyNodeServerChanges(changed, collect, {
     modifiedFiles: changed
@@ -452,7 +453,7 @@ it('retains protected server tests and broken imports despite complete modificat
     runners: NODE_SERVER_RUNNERS
   })
   writeFileSync(join(root, 'entry.ts'), `import './${registry}'; import './missing'`)
-  const brokenChanged = [registry, unrelatedRelayUnit]
+  const brokenChanged = [registry, unrelatedProviderUnit]
   const brokenScope = await classifyNodeServerChanges(brokenChanged, collect, {
     modifiedFiles: brokenChanged
   })
