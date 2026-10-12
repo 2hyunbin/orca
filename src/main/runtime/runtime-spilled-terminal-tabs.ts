@@ -13,10 +13,14 @@ import type { LoadedWorkspaceLayout } from '../../shared/workspace-layout/worksp
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import { closeTerminalTabInWorkspaceSession } from '../../shared/workspace-session-terminal-tab-close'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import { parseWorkspaceKey } from '../../shared/workspace-scope'
+import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import type { RuntimeStore } from './runtime-store-contract'
 import type { HolderStore, RuntimeWorkspaceLayoutWriter } from './runtime-workspace-layout-writer'
 
 type SpillStore = Pick<HolderStore, 'getWorkspaceSession' | 'getWorkspaceSessionHostIds'>
-type HomeHostId = (key: string) => ExecutionHostId | null
+/** Only a repo or folder the Store records as local: a server workspace's key also routes local. */
+type KnownLocal = (key: string) => boolean
 type HolderWriter = Pick<
   RuntimeWorkspaceLayoutWriter,
   'noteRead' | 'savedSession' | 'write' | 'dropSpillCopies'
@@ -34,14 +38,14 @@ function runtimePartitionHostIds(store: SpillStore): ExecutionHostId[] {
 export function spilledTerminalTabsFor(
   store: SpillStore,
   hostId: ExecutionHostId,
-  homeHostId: HomeHostId
+  knownLocal: KnownLocal
 ): SpilledTerminalTabs | undefined {
   if (hostId !== LOCAL_EXECUTION_HOST_ID) {
     return undefined
   }
   return {
     sessions: runtimePartitionHostIds(store).map((id) => store.getWorkspaceSession(id)),
-    ownsKey: (key) => homeHostId(key) === hostId
+    ownsKey: knownLocal
   }
 }
 
@@ -50,14 +54,14 @@ export function loadHeldPartition(
   store: SpillStore,
   writer: HolderWriter,
   hostId: ExecutionHostId,
-  homeHostId: HomeHostId
+  knownLocal: KnownLocal
 ): LoadedWorkspaceLayout {
   const session = store.getWorkspaceSession(hostId)
   const { changes: _changes, ...loaded } = loadWorkspaceLayout(
     hostId,
     session,
     nameBasedLoadContext(),
-    spilledTerminalTabsFor(store, hostId, homeHostId)
+    spilledTerminalTabsFor(store, hostId, knownLocal)
   )
   writer.noteRead(hostId, session)
   return loaded
@@ -94,13 +98,13 @@ export function retireSpilledTerminalTabs(
   store: HolderStore,
   writer: HolderWriter,
   loaded: LoadedWorkspaceLayout,
-  homeHostId: HomeHostId
+  knownLocal: KnownLocal
 ): void {
   const hostId = loaded.layout.hostId
   if (hostId !== LOCAL_EXECUTION_HOST_ID) {
     return
   }
-  const stripped = withoutSpilledTerminalTabs(store, (key) => homeHostId(key) === hostId)
+  const stripped = withoutSpilledTerminalTabs(store, knownLocal)
   if (stripped.size === 0) {
     return
   }
@@ -112,4 +116,24 @@ export function retireSpilledTerminalTabs(
   for (const [spillHostId, next] of stripped) {
     writer.dropSpillCopies(spillHostId, next)
   }
+}
+
+/** A key whose repo or folder record the Store holds, routed to the local partition. */
+export function isStoreRecordedLocalWorkspace(
+  store: Pick<RuntimeStore, 'getRepo' | 'getFolderWorkspaces'> | null | undefined,
+  key: string,
+  homeHostId: (key: string) => ExecutionHostId | null
+): boolean {
+  const scope = parseWorkspaceKey(key)
+  const recorded =
+    scope?.type === 'folder'
+      ? Boolean(
+          store?.getFolderWorkspaces?.().some((folder) => folder.id === scope.folderWorkspaceId)
+        )
+      : Boolean(
+          store?.getRepo?.(
+            getRepoIdFromWorktreeId(scope?.type === 'worktree' ? scope.worktreeId : key)
+          )
+        )
+  return recorded && homeHostId(key) === LOCAL_EXECUTION_HOST_ID
 }

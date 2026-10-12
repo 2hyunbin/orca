@@ -279,7 +279,7 @@ describe('an explicit close of one pane never widens into its tab', () => {
 
 describe('a pane close during the window-save race', () => {
   it.each(['cli-graph', 'phone-desktop'] as const)(
-    'from %s, reads the split from the window graph before the held layout has it',
+    "from %s, reads the split from the window's published tree before the held layout has it",
     async (entry) => {
       showDesktopWindow()
       const harness = createHarness({
@@ -311,7 +311,27 @@ describe('a pane close during the window-save race', () => {
           leafId,
           paneRuntimeId: 7 + index,
           ptyId: leafId === LEAF_ID ? PTY_ID : SIBLING_PTY_ID
-        }))
+        })),
+        // Its phone rows, published with the graph, carry the same tree.
+        mobileSessionTabs: [
+          {
+            worktree: WORKTREE_ID,
+            publicationEpoch: 'window',
+            snapshotVersion: 1,
+            activeGroupId: null,
+            activeTabId: null,
+            activeTabType: null,
+            tabs: [LEAF_ID, SIBLING_LEAF_ID].map((leafId) => ({
+              type: 'terminal' as const,
+              id: `${TAB_ID}::${leafId}`,
+              title: 'Fixture shell',
+              parentTabId: TAB_ID,
+              leafId,
+              parentLayout: { root: split, activeLeafId: LEAF_ID, expandedLeafId: null },
+              isActive: false
+            }))
+          }
+        ]
       })
 
       await closePane(entry, harness)

@@ -27,6 +27,8 @@ export type RuntimeWorkspaceLayoutsDeps = {
   store: () => HolderStore | null
   /** The partition that owns a workspace key; null when none does. */
   homeHostId: (key: string) => ExecutionHostId | null
+  /** #18202 spill fold: the Store records this key's repo or folder as local (a fallback route is no evidence). */
+  isKnownLocalWorkspace: (key: string) => boolean
   /** A partition an orcad conversion froze for downgrade; it can be fenced mid-session. */
   isFrozenPartition: (hostId: ExecutionHostId) => boolean
   /** What the PTY registry knows of a bound pane's terminal. */

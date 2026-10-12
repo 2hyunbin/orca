@@ -287,6 +287,8 @@ export class RuntimeWorkspaceLayouts {
     return this.deps.homeHostId(key)
   }
 
+  readonly isKnownLocalWorkspace = (key: string): boolean => this.deps.isKnownLocalWorkspace(key)
+
   private partition(hostId: ExecutionHostId): LoadedWorkspaceLayout | null {
     if (this.partitions.has(hostId)) {
       this.externalWriteCheck?.(hostId)
@@ -296,9 +298,9 @@ export class RuntimeWorkspaceLayouts {
     if (!store || !this.holds(hostId)) {
       return null
     }
-    const loaded = loadHeldPartition(store, this.writer, hostId, this.deps.homeHostId)
+    const loaded = loadHeldPartition(store, this.writer, hostId, this.deps.isKnownLocalWorkspace)
     this.partitions.set(hostId, loaded)
-    retireSpilledTerminalTabs(store, this.writer, loaded, this.deps.homeHostId)
+    retireSpilledTerminalTabs(store, this.writer, loaded, this.deps.isKnownLocalWorkspace)
     for (const key of Object.keys(loaded.layout.workspaces)) {
       this.publish(key)
     }

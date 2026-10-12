@@ -11,6 +11,7 @@ import type {
   RuntimeMobileSessionSnapshotTab,
   RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
+import type { TerminalLayoutSnapshot } from '../../shared/terminal-tab-types'
 import { DESKTOP_VIEW_ID } from '../../shared/workspace-layout/workspace-layout-views'
 import type { LayoutViewContentFacts, RuntimeLayoutViews } from './runtime-layout-views'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
@@ -24,6 +25,8 @@ type RowContentFacts = Pick<LayoutViewContentFacts, 'terminalTheme'> & {
 export class WindowPublishedPhoneRowFacts {
   private readonly viewsByWorktree = new Map<string, Map<string, EditorTabView>>()
   private readonly contentFactsByWorktree = new Map<string, RowContentFacts>()
+  /** The window's own pane trees, synced with its graph: a close it lists resolves against them, as on main. */
+  private readonly paneTreesByWorktree = new Map<string, Map<string, TerminalLayoutSnapshot>>()
 
   constructor(
     private readonly holder: Holder,
@@ -43,6 +46,7 @@ export class WindowPublishedPhoneRowFacts {
   noteWindowRows(snapshots: readonly RuntimeMobileSessionTabsSnapshot[]): void {
     for (const snapshot of snapshots) {
       this.noteContentFacts(snapshot)
+      this.paneTreesByWorktree.set(snapshot.worktree, paneTreesOf(snapshot.tabs))
       const views = viewsOf(snapshot.tabs)
       if (views.size === 0) {
         this.viewsByWorktree.delete(snapshot.worktree)
@@ -51,6 +55,11 @@ export class WindowPublishedPhoneRowFacts {
       this.viewsByWorktree.set(snapshot.worktree, views)
       this.applyTo(snapshot.worktree)
     }
+  }
+
+  /** The tab's pane tree as the window last published it; undefined when it published none. */
+  windowPaneTree(worktreeId: string, tabId: string): TerminalLayoutSnapshot | undefined {
+    return this.paneTreesByWorktree.get(worktreeId)?.get(tabId)
   }
 
   private noteContentFacts(snapshot: RuntimeMobileSessionTabsSnapshot): void {
@@ -132,4 +141,16 @@ function viewsOf(rows: readonly RuntimeMobileSessionSnapshotTab[]): Map<string, 
     }
   }
   return views
+}
+
+function paneTreesOf(
+  rows: readonly RuntimeMobileSessionSnapshotTab[]
+): Map<string, TerminalLayoutSnapshot> {
+  const trees = new Map<string, TerminalLayoutSnapshot>()
+  for (const row of rows) {
+    if (row.type === 'terminal' && row.parentLayout && !trees.has(row.parentTabId)) {
+      trees.set(row.parentTabId, row.parentLayout)
+    }
+  }
+  return trees
 }

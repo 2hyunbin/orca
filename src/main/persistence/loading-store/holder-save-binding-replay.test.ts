@@ -40,6 +40,7 @@ describe('the Store binding replay', () => {
     const holder = new RuntimeWorkspaceLayouts({
       store: () => store,
       homeHostId: () => 'local',
+      isKnownLocalWorkspace: () => false,
       isFrozenPartition: () => false,
       terminal: () => ({ fact: null }),
       stopTerminals: () => {}

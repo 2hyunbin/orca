@@ -201,6 +201,26 @@ describe('terminal close across local and runtime session partitions (#18202)', 
     expect(onClosed).not.toHaveBeenCalled()
   })
 
+  it("leaves a server workspace's tabs in its runtime partition: only a local record proves a spill", () => {
+    const serverWorktree = 'server-repo::/srv/wt'
+    const server = sessionWithTab('srv-tab', 'remote:env-1@@srv-pty')
+    server.tabsByWorktree = {
+      [serverWorktree]: server.tabsByWorktree[WORKTREE_ID]!.map((tab) => ({
+        ...tab,
+        worktreeId: serverWorktree
+      }))
+    }
+    const sessions = new Map<ExecutionHostId, WorkspaceSessionState>([
+      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty', UNRELATED_LEAF)],
+      [SPILL_HOST_ID, server]
+    ])
+    const { runtime } = harness(sessions)
+
+    const local = runtime['layoutHolder'].model(LOCAL_EXECUTION_HOST_ID)
+    expect(local?.workspaces[serverWorktree]).toBeUndefined()
+    expect(sessions.get(SPILL_HOST_ID)).toBe(server)
+  })
+
   it('keeps the pin guard of the partition that holds the tab', async () => {
     const spill = sessionWithTab('target', 'target-pty')
     spill.tabsByWorktree[WORKTREE_ID] = [{ ...terminalTab('target', 'target-pty'), isPinned: true }]

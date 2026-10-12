@@ -77,12 +77,27 @@ describe('resolveTerminalCloseTarget', () => {
     ).toBe('pane')
   })
 
-  it("keeps a pane the window's synced tree splits when the published copy still shows one", () => {
-    const published = [{ leafId: 'leaf-a', parentLayout: layout('leaf-a') }]
-    const race = { rendererListsTab: true, snapshotRows: published }
-    const graphLayout = layout('leaf-a', 'leaf-b').root
-    expect(resolveTerminalCloseTarget(PANE, copies({ ...race, graphLayout }))).toBe('pane')
-    expect(resolveTerminalCloseTarget(PANE, copies(race))).toBe('last-pane')
+  it("reads the window's own published tree before the held copy, in both directions", () => {
+    const one = {
+      rendererListsTab: true,
+      snapshotRows: [{ leafId: 'leaf-a', parentLayout: layout('leaf-a') }]
+    }
+    const two = {
+      rendererListsTab: true,
+      snapshotRows: [{ leafId: 'leaf-a', parentLayout: layout('leaf-a', 'leaf-b') }]
+    }
+    // The window split the tab before its save reached the held layout.
+    expect(
+      resolveTerminalCloseTarget(
+        PANE,
+        copies({ ...one, windowPaneTree: layout('leaf-a', 'leaf-b') })
+      )
+    ).toBe('pane')
+    // The window closed the sibling before its save did: the tab path and its pin guard apply.
+    expect(
+      resolveTerminalCloseTarget(PANE, copies({ ...two, windowPaneTree: layout('leaf-a') }))
+    ).toBe('last-pane')
+    expect(resolveTerminalCloseTarget(PANE, copies(one))).toBe('last-pane')
   })
 
   it('treats a pane the owner copy lacks as absent', () => {

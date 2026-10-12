@@ -56,8 +56,8 @@ export function resolvePaneClose(
 export type TerminalCloseLayoutCopies = {
   /** The desktop renderer lists the tab, so it owns the tab's panes. */
   rendererListsTab: boolean
-  /** The tab's pane tree as the window last synced it. */
-  graphLayout?: TerminalPaneLayoutNode | null
+  /** The tab's pane tree in the rows the window last published (until 6e), synced with its graph. */
+  windowPaneTree?: TerminalLayoutSnapshot
   /** The tab's rows in the published session snapshot. */
   snapshotRows: readonly { leafId: string; parentLayout?: TerminalLayoutSnapshot }[]
   /** The tab's panes in the renderer-published runtime graph. */
@@ -72,10 +72,16 @@ function readLayoutOwnerLeafIds(copies: TerminalCloseLayoutCopies): readonly str
       .map((row) => collectTerminalLayoutLeafIds(row.parentLayout?.root))
       .find((leafIds) => leafIds.length > 0) ?? []
   const rows = copies.snapshotRows.map((row) => row.leafId)
-  // Why: main's saved layout lacks a renderer split whose PTY binding has not committed yet;
-  // the published layout outranks the graph, which relay recovery can leave with stale panes.
+  // Why: main's saved layout lacks a renderer split whose PTY binding has not committed yet, and
+  // the held layout trails the window's debounced save: the window's own published tree comes first.
+  // The published layout outranks the graph's panes, which relay recovery can leave stale.
   const ownerCopies = copies.rendererListsTab
-    ? [published, copies.graphLeafIds, rows]
+    ? [
+        collectTerminalLayoutLeafIds(copies.windowPaneTree?.root),
+        published,
+        copies.graphLeafIds,
+        rows
+      ]
     : [collectTerminalLayoutLeafIds(copies.sessionLayout?.root), published, rows]
   // Why: a layout saved before its pane mounted (or a graph before its panes register) is empty.
   return ownerCopies.find((leafIds) => leafIds.length > 0) ?? null
@@ -93,13 +99,7 @@ export function resolveTerminalCloseTarget(
   if (target.kind === 'tab') {
     return 'tab'
   }
-  const resolution = resolvePaneClose(readLayoutOwnerLeafIds(copies), target.leafId)
-  // Why: the published layout trails the window's debounced save, so a split the window already
-  // synced is not its tab's last pane.
-  const windowTree = collectTerminalLayoutLeafIds(copies.graphLayout)
-  return resolution === 'last-pane' && resolvePaneClose(windowTree, target.leafId) === 'pane'
-    ? 'pane'
-    : resolution
+  return resolvePaneClose(readLayoutOwnerLeafIds(copies), target.leafId)
 }
 
 export type TerminalSurfaceCloseResult = WorkspaceSessionTerminalTabCloseResult & {

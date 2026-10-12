@@ -51,6 +51,7 @@ export function holderFor(
   const holder = new RuntimeWorkspaceLayouts({
     store: () => store,
     homeHostId: (key) => (key === SERVER_KEY ? SERVER_HOST : key === SSH_KEY ? SSH_HOST : 'local'),
+    isKnownLocalWorkspace: () => false,
     isFrozenPartition: (hostId) => hostId === options.frozen,
     terminal: (ptyId) => ({
       fact: live.has(ptyId) ? 'live' : null,

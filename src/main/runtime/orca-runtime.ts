@@ -46,12 +46,17 @@ import {
 } from './runtime-held-pane-exits'
 import type { Worktree } from '../../shared/worktree/types'
 import { closedPaneTerminals } from './closed-pane-terminal-stop'
+import { isStoreRecordedLocalWorkspace } from './runtime-spilled-terminal-tabs'
 
 class OrcaRuntimeService extends OrcaRuntimeWithHeldLayout {
   /** The one copy of every host partition's tab layout (PR 6). */
   protected readonly layoutHolder = new RuntimeWorkspaceLayouts({
     store: () => holderStoreOf(this.store),
     homeHostId: (key) => this.layoutHomeHostId(key),
+    isKnownLocalWorkspace: (key) =>
+      isStoreRecordedLocalWorkspace(this.store, key, (candidate) =>
+        this.layoutHomeHostId(candidate)
+      ),
     isFrozenPartition: (hostId) => {
       const store = this.store
       return store?.getSshTarget

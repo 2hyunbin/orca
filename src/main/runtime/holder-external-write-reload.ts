@@ -38,7 +38,7 @@ export function reloadHolderOnExternalWrites(
       hostId,
       session,
       nameBasedLoadContext(),
-      spilledTerminalTabsFor(store, hostId, (key) => holder.hostIdOf(key))
+      spilledTerminalTabsFor(store, hostId, holder.isKnownLocalWorkspace)
     )
     keepUnsavedEditorViews(holder, loaded.layout)
     for (const page of liveClientPages()) {

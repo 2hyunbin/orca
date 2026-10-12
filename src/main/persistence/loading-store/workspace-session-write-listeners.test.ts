@@ -79,6 +79,7 @@ async function runScenario(mode: Mode) {
     const holder = new RuntimeWorkspaceLayouts({
       store: () => store,
       homeHostId: (key) => homeOf(store, key),
+      isKnownLocalWorkspace: () => false,
       isFrozenPartition: () => false,
       terminal: () => ({ fact: null }),
       stopTerminals: () => {}

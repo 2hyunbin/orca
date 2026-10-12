@@ -175,6 +175,7 @@ describe('RuntimeWorkspaceLayouts: the holder', () => {
     const holder = new RuntimeWorkspaceLayouts({
       store: () => store,
       homeHostId: () => SSH_HOST,
+      isKnownLocalWorkspace: () => false,
       isFrozenPartition: (hostId) => hostId === frozen,
       terminal: () => ({ fact: null }),
       stopTerminals: () => {}
