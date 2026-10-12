@@ -95,7 +95,7 @@ describe('orca cli worktree awareness', () => {
       callMock,
       worktreeListFixture([buildWorktree('/tmp/repo', 'main', 'abc', 'repo-1')]),
       agentLaunchHostFixture(),
-      agentLaunchFixture('repo-1::/tmp/repo/agent-task'),
+      agentLaunchFixture('repo-1::/tmp/repo/agent-task', 'The inferred parent contexts conflict.'),
       okFixture('req_show', {
         worktree: buildWorktree('/tmp/repo/agent-task', 'agent-task', 'abc', 'repo-1')
       })
@@ -163,6 +163,7 @@ describe('orca cli worktree awareness', () => {
       sessionId: 'codex_1',
       handle: 'agent_1'
     })
+    expect(printed.result.launch.warning).toBe('The inferred parent contexts conflict.')
   })
 
   it('rejects an empty retry identity before creating a worktree', async () => {
@@ -192,56 +193,63 @@ describe('orca cli worktree awareness', () => {
     expect(callMock).not.toHaveBeenCalled()
   })
 
-  it('falls back to the startup terminal on a host older than agent.launch', async () => {
-    queueFixtures(
-      callMock,
-      worktreeListFixture([buildWorktree('/tmp/repo', 'main', 'abc', 'repo-1')]),
-      okFixture('req_status', { capabilities: [] }),
-      okFixture('req_create', {
-        worktree: buildWorktree('/tmp/repo/agent-task', 'agent-task', 'abc', 'repo-1'),
-        lineage: null,
-        warnings: []
+  it.each([
+    { capabilities: [] },
+    { capabilities: ['agent.launch.v2'] },
+    { capabilities: ['agent.launch.v2', 'agent.launch.local-presentation.v1'] }
+  ])(
+    'falls back to the startup terminal when the host lacks a required launch capability: $capabilities',
+    async ({ capabilities }) => {
+      queueFixtures(
+        callMock,
+        worktreeListFixture([buildWorktree('/tmp/repo', 'main', 'abc', 'repo-1')]),
+        okFixture('req_status', { capabilities }),
+        okFixture('req_create', {
+          worktree: buildWorktree('/tmp/repo/agent-task', 'agent-task', 'abc', 'repo-1'),
+          lineage: null,
+          warnings: []
+        })
+      )
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      await main(
+        [
+          'worktree',
+          'create',
+          '--name',
+          'agent-task',
+          '--agent',
+          'codex',
+          '--prompt',
+          'hi',
+          '--activate',
+          '--json'
+        ],
+        '/tmp/repo/src'
+      )
+
+      expect(callMock).toHaveBeenNthCalledWith(3, 'worktree.create', {
+        repo: 'id:repo-1',
+        name: 'agent-task',
+        displayName: 'agent-task',
+        displayNameKind: 'user',
+        baseBranch: undefined,
+        linkedIssue: undefined,
+        comment: undefined,
+        runHooks: false,
+        activate: true,
+        navigation: 'host',
+        parentWorktree: undefined,
+        cwdParentWorktree: 'id:repo-1::/tmp/repo',
+        noParent: false,
+        callerTerminalHandle: undefined,
+        cliProvenanceRequest: {},
+        startupAgent: 'codex',
+        startupPrompt: 'hi',
+        launchSource: 'cli'
       })
-    )
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-
-    await main(
-      [
-        'worktree',
-        'create',
-        '--name',
-        'agent-task',
-        '--agent',
-        'codex',
-        '--prompt',
-        'hi',
-        '--activate',
-        '--json'
-      ],
-      '/tmp/repo/src'
-    )
-
-    expect(callMock).toHaveBeenNthCalledWith(3, 'worktree.create', {
-      repo: 'id:repo-1',
-      name: 'agent-task',
-      displayName: 'agent-task',
-      displayNameKind: 'user',
-      baseBranch: undefined,
-      linkedIssue: undefined,
-      comment: undefined,
-      runHooks: false,
-      activate: true,
-      navigation: 'host',
-      parentWorktree: undefined,
-      cwdParentWorktree: 'id:repo-1::/tmp/repo',
-      noParent: false,
-      callerTerminalHandle: undefined,
-      cliProvenanceRequest: {},
-      startupAgent: 'codex',
-      startupPrompt: 'hi',
-      launchSource: 'cli'
-    })
-  })
+    }
+  )
 
   it('rejects prompt without agent on worktree.create', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})

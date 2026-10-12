@@ -5,6 +5,10 @@
  */
 
 import type { AgentLaunchResult } from '../../shared/agent-launch-intent'
+import {
+  AGENT_LAUNCH_LOCAL_PRESENTATION_RUNTIME_CAPABILITY,
+  AGENT_LAUNCH_PROMPT_CARRY_RUNTIME_CAPABILITY
+} from '../../shared/agent-launch-runtime-capability'
 import type { RuntimeWorktreeCreateResult, RuntimeWorktreeRecord } from '../../shared/runtime-types'
 import {
   callAgentLaunch,
@@ -39,7 +43,10 @@ export async function createWorktreeWithAgent(args: {
 }): Promise<void> {
   const { client, flags, create, launch, json, rawArgs } = args
   const capabilities = await getAgentLaunchCapabilities(client)
-  if (!capabilities) {
+  if (
+    !capabilities?.includes(AGENT_LAUNCH_LOCAL_PRESENTATION_RUNTIME_CAPABILITY) ||
+    (launch.prompt && !capabilities.includes(AGENT_LAUNCH_PROMPT_CARRY_RUNTIME_CAPABILITY))
+  ) {
     if (launch.operationId) {
       throw new RuntimeClientError(
         'agent_session_operation_unknown',
