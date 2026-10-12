@@ -143,7 +143,6 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
   const bridged = (): boolean => mode === 'bridge'
   const innerRecoveryState = inner.getRecoveryState?.bind(inner)
   const innerSnapshotOutcome = inner.serializeBufferOutcome?.bind(inner)
-  const innerSetConnectForRecovery = inner.setConnectForRecovery?.bind(inner)
 
   return {
     ...(innerRecoveryState
@@ -165,7 +164,6 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
               : innerSnapshotOutcome(opts)
         }
       : {}),
-    ...(innerSetConnectForRecovery ? { setConnectForRecovery: innerSetConnectForRecovery } : {}),
     getConnectionId: () => (bridged() ? null : inner.getConnectionId?.()),
     ownsRecovery: () => (bridged() ? false : (inner.ownsRecovery?.() ?? false)),
     retryRecovery: () => (bridged() ? false : (inner.retryRecovery?.() ?? false)),
