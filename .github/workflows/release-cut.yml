@@ -732,6 +732,12 @@ jobs:
           # message and tag name explicitly (avoids npm's `v1.2.3` prefix
           # assumptions and any lifecycle scripts that would run on bump).
           npm version "$VERSION" --no-git-tag-version --allow-same-version
+          # Why: freshness compares installs against the bundled manifest, so a tag must
+          # never ship skill bytes it doesn't describe. Node built-ins only; no install.
+          if ! node config/scripts/generate-skill-bundle-manifest.mjs; then
+            echo "::error::Refusing to tag v$VERSION: the committed skill manifest does not match skills/. Land a regeneration on main, then re-run the cut." >&2
+            exit 1
+          fi
           git add package.json
           commit_message="release: v$VERSION"
           if [[ "$EVENT_NAME" == "schedule" ]]; then
