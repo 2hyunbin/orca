@@ -19,8 +19,9 @@ const Id = z.string().min(1).max(512)
 
 const isObject = (value: unknown): boolean => typeof value === 'object' && value !== null
 
+// The view a report comes from is the sender's own (`desktop` for the local window, its paired
+// device otherwise), never a param: one client cannot change another view's record.
 export const ViewSetStateParams = z.object({
-  viewId: LayoutViewIdParam,
   record: z.custom<LayoutViewRecord>(isLayoutViewRecord, 'Invalid view record')
 })
 
@@ -44,13 +45,13 @@ export const ViewPageStateParams = z.object({
 })
 
 export const ViewContentFactsParams = z.object({
-  viewId: LayoutViewIdParam,
   terminalTheme: z.custom<RuntimeMobileTerminalTheme>(isObject).optional(),
   launchDrafts: z
     .record(z.string(), z.object({ text: z.string(), createdAt: z.number() }))
     .optional()
 })
 
+/** Addressed to another view by design: the CLI's `terminal focus` asks the window to show a pane. */
 export const ViewNavigateParams = z.object({
   viewId: LayoutViewIdParam,
   request: z

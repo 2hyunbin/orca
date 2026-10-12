@@ -98,13 +98,7 @@ export class RuntimeLayoutViews {
       return
     }
     for (const hostId of this.serverPartitions()) {
-      const part = desktopViewForPartition(record, hostId, owners)
-      const fields = pickStoredFields(part, VIEW_SESSION_FIELDS)
-      const stored = store.getWorkspaceSession(hostId)
-      const written = pickStoredFields({ ...stored, ...fields }, VIEW_SESSION_FIELDS)
-      if (!isDeepStrictEqual(written, pickStoredFields(stored, VIEW_SESSION_FIELDS))) {
-        writeUnheldViewFields(store, hostId, fields)
-      }
+      writeUnheldViewFields(store, hostId, desktopViewForPartition(record, hostId, owners))
     }
   }
 

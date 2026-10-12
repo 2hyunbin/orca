@@ -7,6 +7,7 @@ import {
 } from '../../../../shared/rpc-contract/workspace-layout-params'
 import type { WorkspaceLayoutStreamFrame } from '../../../../shared/workspace-layout/workspace-layout-stream-frames'
 import { defineMethod, defineStreamingMethod } from '../core'
+import { senderViewId } from './workspace-layout-commands'
 
 let layoutSubscriptionSeq = 0
 
@@ -19,11 +20,18 @@ export const WORKSPACE_LAYOUT_METHODS = [
     name: 'layout.subscribe',
     permission: 'workspace',
     params: LayoutSubscribeParams,
-    handler: async (params, { runtime, connectionId, signal }, emitFrame) => {
+    handler: async (params, ctx, emitFrame) => {
+      const { runtime, connectionId, signal } = ctx
       // Typed so the frames stay the contract the client reads.
       const emit = (frame: WorkspaceLayoutStreamFrame): void => emitFrame(frame)
       const keys = params?.workspaces
       const viewId = params?.viewId
+      // A client reads only its own view's record and navigation.
+      if (viewId && viewId !== senderViewId(ctx)) {
+        throw Object.assign(new Error('A client can subscribe only as its own view.'), {
+          code: 'forbidden'
+        })
+      }
       const wanted = (key: string) => !Array.isArray(keys) || keys.includes(key)
       await new Promise<void>((resolve) => {
         const subscriptionId = `layout-${connectionId ?? 'inproc'}-${++layoutSubscriptionSeq}`

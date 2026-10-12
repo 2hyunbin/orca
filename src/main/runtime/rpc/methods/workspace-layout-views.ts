@@ -10,14 +10,15 @@ import {
   ViewSetStateParams
 } from '../../../../shared/rpc-contract/workspace-layout-view-params'
 import { defineMethod } from '../core'
+import { senderViewId } from './workspace-layout-commands'
 
 export const WORKSPACE_LAYOUT_VIEW_METHODS = [
   defineMethod({
     name: 'view.setState',
     permission: 'workspace',
     params: ViewSetStateParams,
-    handler: async ({ viewId, record }, { runtime }) => {
-      runtime.layoutCommands.views.setRecord(viewId, record)
+    handler: async ({ record }, ctx) => {
+      ctx.runtime.layoutCommands.views.setRecord(senderViewId(ctx), record)
       return { ok: true }
     }
   }),
@@ -52,8 +53,8 @@ export const WORKSPACE_LAYOUT_VIEW_METHODS = [
     name: 'view.contentFacts',
     permission: 'workspace',
     params: ViewContentFactsParams,
-    handler: async ({ viewId, ...facts }, { runtime }) => {
-      runtime.layoutCommands.views.setContentFacts(viewId, facts)
+    handler: async (facts, ctx) => {
+      ctx.runtime.layoutCommands.views.setContentFacts(senderViewId(ctx), facts)
       return { ok: true }
     }
   }),

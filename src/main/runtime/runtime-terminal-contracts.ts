@@ -104,7 +104,11 @@ export type TerminalCreateOptions = {
     launchAgent?: TuiAgent
   }) => void
   deferMobileSessionPublish?: boolean
-  /** Main-internal: the start a layout command's apply began for this pane (its J attempt). */
+  /**
+   * Main-internal: the start a layout command's apply began for this pane (its J attempt). Its
+   * `shellOverride` is the tab's saved pick, applied as the window's spawn applies it today
+   * (rewritten by the project runtime), never refused as a `--shell` request.
+   */
   paneStart?: PaneStart
   /** The issuing view measured its pane; 120x40 otherwise, as today. */
   initialSize?: { cols: number; rows: number }

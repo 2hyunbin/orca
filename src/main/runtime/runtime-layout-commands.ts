@@ -1,6 +1,5 @@
 // A view's layout command (`layout.*`, design 2.1). The holder applies it in arrival order; this
-// adds what only the runtime knows: the in-memory catalog, refusals from host facts, the drafts
-// views report, what a user's close or move does beyond the layout, the starts, and the sender's
+// adds what only the runtime knows: the in-memory catalog, the drafts views report, what a user's close or move does beyond the layout, the starts, and the sender's
 // navigation. Every command republishes its workspace, applied or not, so a view's local gesture
 // drawing is always replaced by the next frame.
 
@@ -32,13 +31,6 @@ export type LayoutCommandOptions = PaneStartInput & {
 export type LayoutCommandHost = {
   holder: RuntimeWorkspaceLayouts
   views: RuntimeLayoutViews
-  /** Today's synchronous shell check; a refused create adds nothing. */
-  shellOverrideRefusal: (
-    hostId: ExecutionHostId,
-    workspace: string,
-    shellOverride: string,
-    cwd: string | undefined
-  ) => Error | null
   startPanes: (
     hostId: ExecutionHostId,
     workspace: string,
@@ -63,13 +55,6 @@ export function applyClientLayoutCommand(
   const before = hostId ? holder.model(hostId) : null
   if (!hostId || !before) {
     return { ok: false, code: 'workspace_not_found' }
-  }
-  if (command.type === 'createTerminalTab' && command.creation?.shellOverride) {
-    const { shellOverride, startupCwd } = command.creation
-    const refusal = host.shellOverrideRefusal(hostId, workspace, shellOverride, startupCwd)
-    if (refusal) {
-      return { ok: false, code: 'shell_override_refused', message: refusal.message }
-    }
   }
   const publishedBefore = holder.published(workspace)
   const applied = holder.apply(withViewDrafts(command, views), hostId)

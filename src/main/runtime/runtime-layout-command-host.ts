@@ -2,8 +2,6 @@
 // effects a view's layout command reaches beyond the holder.
 
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
-import { parseExecutionHostId } from '../../shared/execution-host'
-import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
 import { followMovedPane } from './moved-pane-records'
 import type { OrchestrationDb } from './orchestration/db'
 import type {
@@ -18,7 +16,6 @@ import {
 import { RuntimeLayoutViews } from './runtime-layout-views'
 import { startPanes, type PaneStartHost } from './runtime-pane-starts'
 import type { RuntimeStore } from './runtime-store-contract'
-import { terminalShellOverrideRefusal } from './terminal-shell-override-host-support'
 
 type LayoutCommandRuntime = PaneStartHost & {
   store: () => RuntimeStore | null
@@ -42,22 +39,6 @@ function layoutCommandHost(
   return {
     holder: runtime.holder,
     views,
-    shellOverrideRefusal: (hostId, workspace, shellOverride, cwd) => {
-      const host = parseExecutionHostId(hostId)
-      const store = runtime.store()
-      // The workspace path needs a scan, which a reply never waits for: the create path checks
-      // it again before spawning and leaves the pane `failed` with the same message.
-      return terminalShellOverrideRefusal({
-        shellOverride,
-        connectionId: host?.kind === 'ssh' ? host.targetId : null,
-        platform: process.platform,
-        projectRuntime: store
-          ? resolveLocalProjectRuntimeForWorktreeId(store, workspace)
-          : undefined,
-        cwd: cwd ?? '',
-        workspacePath: ''
-      })
-    },
     startPanes: (hostId, workspace, starts, input) =>
       startPanes(runtime, hostId, workspace, starts, input),
     closedByUser: markAgentLaunchesClosedByUser,

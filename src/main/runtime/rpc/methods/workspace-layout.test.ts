@@ -84,6 +84,21 @@ describe('layout.subscribe', () => {
     expect(navigateListeners.size).toBe(0)
   })
 
+  it("refuses to subscribe as another client's view", async () => {
+    const { runtime } = harness()
+    if (!subscribe || !isStreamingMethod(subscribe)) {
+      throw new Error('layout.subscribe is not a streaming method')
+    }
+    await expect(
+      subscribe.handler(
+        { viewId: 'desktop' },
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only runtime, connectionId and pairedDeviceId from its context.
+        { runtime, connectionId: 'conn-2', pairedDeviceId: 'phone-1' } as RpcContext,
+        () => {}
+      )
+    ).rejects.toMatchObject({ code: 'forbidden' })
+  })
+
   it('sends the snapshot, then the named workspaces’ changes, and ends on unsubscribe', async () => {
     const { runtime, cleanups, unsubscribe, publish } = harness()
     const emitted: unknown[] = []

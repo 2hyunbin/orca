@@ -90,6 +90,15 @@ describe('RuntimeLayoutViews', () => {
     expect(store.sessions[SERVER_HOST]!.tabsByWorktree).toBe(serverTabs)
   })
 
+  it("clears a server partition's selection field the view no longer has", () => {
+    const { store, views } = setup()
+    const key = `worktree:${SERVER_KEY}` as const
+    views.setRecord('desktop', { ...desktopRecord(), activeWorkspaceKey: key })
+    expect(store.sessions[SERVER_HOST]!.activeWorkspaceKey).toBe(key)
+    views.setRecord('desktop', desktopRecord())
+    expect(store.sessions[SERVER_HOST]).not.toHaveProperty('activeWorkspaceKey')
+  })
+
   it('saves nothing when the record did not change', () => {
     const { store, views } = setup()
     views.setRecord('desktop', desktopRecord())

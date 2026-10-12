@@ -257,19 +257,22 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
     opts: TerminalCreateOptions
   ): Promise<TerminalCreateOptions> {
     // Before any early return: every create lane funnels through here, and a host that cannot
-    // apply the requested shell must refuse rather than spawn its default one.
-    const shellRefusal = terminalShellOverrideRefusal({
-      shellOverride: opts.shellOverride,
-      connectionId: workspace.connectionId,
-      platform: process.platform,
-      projectRuntime:
-        opts.shellOverride && this.store
-          ? resolveLocalProjectRuntimeForWorktreeId(this.store, workspace.id)
-          : undefined,
-      // Same resolution as the spawn lanes below, so the refusal judges the cwd the PTY gets.
-      cwd: resolveTerminalStartupCwd(workspace.path, opts.cwd) ?? workspace.path,
-      workspacePath: workspace.path
-    })
+    // apply the requested shell must refuse rather than spawn its default one. A view's start of
+    // a saved tab is the window's pick, which the spawn rewrites instead (`paneStart`).
+    const shellRefusal = opts.paneStart
+      ? null
+      : terminalShellOverrideRefusal({
+          shellOverride: opts.shellOverride,
+          connectionId: workspace.connectionId,
+          platform: process.platform,
+          projectRuntime:
+            opts.shellOverride && this.store
+              ? resolveLocalProjectRuntimeForWorktreeId(this.store, workspace.id)
+              : undefined,
+          // Same resolution as the spawn lanes below, so the refusal judges the cwd the PTY gets.
+          cwd: resolveTerminalStartupCwd(workspace.path, opts.cwd) ?? workspace.path,
+          workspacePath: workspace.path
+        })
     if (shellRefusal) {
       throw shellRefusal
     }

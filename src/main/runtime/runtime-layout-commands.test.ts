@@ -17,7 +17,6 @@ function setup(session = gitSession(), live = new Set<string>(['pty-1'])) {
   const host = {
     holder,
     views,
-    shellOverrideRefusal: vi.fn<LayoutCommandHost['shellOverrideRefusal']>(() => null),
     startPanes: vi.fn<LayoutCommandHost['startPanes']>(),
     closedByUser: vi.fn<LayoutCommandHost['closedByUser']>(),
     paneMoved: vi.fn<LayoutCommandHost['paneMoved']>()
@@ -40,22 +39,6 @@ describe('applyClientLayoutCommand', () => {
     expect(reply).toEqual({ ok: false, code: 'workspace_not_found' })
     expect(holder.published('repo-9::/unknown')).toBeUndefined()
     expect(host.startPanes).not.toHaveBeenCalled()
-  })
-
-  it('refuses a shell the host cannot apply before anything is admitted', () => {
-    const { host, holder } = setup()
-    host.shellOverrideRefusal.mockReturnValue(new Error('no such shell here'))
-    const reply = applyClientLayoutCommand(
-      host,
-      { type: 'createTerminalTab', workspace: GIT_KEY, creation: { shellOverride: 'cmd.exe' } },
-      fromDesktop
-    )
-    expect(reply).toEqual({
-      ok: false,
-      code: 'shell_override_refused',
-      message: 'no such shell here'
-    })
-    expect(holder.published(GIT_KEY)?.tabs).toHaveLength(1)
   })
 
   it('starts a created pane after the reply and shows it in the sender view only on select', () => {
