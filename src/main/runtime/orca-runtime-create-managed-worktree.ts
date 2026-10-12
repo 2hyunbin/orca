@@ -13,6 +13,7 @@ import type { PreparationRearmHolder } from '../worktree-create-preparation'
 import { prepareRuntimeLocalWorktreeSetup } from './runtime-local-worktree-setup'
 import { invalidateAuthorizedRootsCacheForRepo } from '../ipc/filesystem-auth'
 import { startRuntimeLocalWorktreeTerminals } from './runtime-local-worktree-terminal-startup'
+import { openRuntimeWorkspaceDefaultAgentChat } from './workspace-default-agent-chat'
 import { trackRuntimeWorkspaceCreate } from '../workspace-create-telemetry'
 import { assertOpenCodeModelLaunchPreferencesAbsent } from '../opencode/opencode-model-startup-plan'
 import { resolveWorktreeCreateAgentStartup } from './runtime-worktree-agent-startup'
@@ -219,6 +220,7 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
         pasteDraft: (handle, draft) => this.pasteStartupDraftWhenReady(handle, draft),
         sendFollowup: (handle, followup) => this.sendStartupFollowupWhenReady(handle, followup),
         provision: (options) => this.provisionManagedWorktreeTerminals(options, worktree),
+        openDefaultChat: () => openRuntimeWorkspaceDefaultAgentChat(this, repo, worktree.id),
         activate: (repoId, worktreeId, activationSetup, startup, activationDefaultTabs) =>
           this.notifyActivateWorktree(
             repoId,

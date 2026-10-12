@@ -47,6 +47,8 @@ export type WorktreeTerminalProvisioningArgs = {
   // Why: setup and startup must use the same wrapper when startup waits for setup.
   wrappedSetupCommand?: string
   surfaceOwner?: false
+  // Opens the workspace's first surface instead of the plain shell; false when it opened nothing.
+  openDefaultChat?: () => Promise<boolean>
 }
 
 export async function createWorktreeDefaultTabTerminals(
@@ -131,7 +133,12 @@ export async function provisionWorktreeTerminals(
     const setupLaunchMode =
       (host.getSettings() as Partial<Pick<GlobalSettings, 'setupScriptLaunchMode'>>)
         .setupScriptLaunchMode ?? 'new-tab'
-    if (!args.hasStartupTerminal && !primaryHandle) {
+    // As the window's rule: the default chat replaces the shell only when no setup needs one.
+    const openedDefaultChat =
+      !args.hasStartupTerminal && !primaryHandle && !args.setup
+        ? await args.openDefaultChat?.()
+        : false
+    if (!args.hasStartupTerminal && !primaryHandle && !openedDefaultChat) {
       primaryHandle = (await host.createTerminal(args.worktreeSelector, surfacing)).handle
     }
     if (args.setup) {

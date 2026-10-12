@@ -30,6 +30,7 @@ type Ports = {
   provision: (
     options: WorktreeTerminalProvisioningArgs
   ) => Promise<{ setupSpawned: boolean; setupTerminalHandle: string | null }>
+  openDefaultChat?: () => Promise<boolean>
   activate: (
     repoId: string,
     worktreeId: string,
@@ -131,7 +132,11 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
     if (runtimeWillProvision) {
       const provisioned = await ports.provision({
         ...provisionArgs(args, startupTerminalHandle, didSpawnStartup, wrappedSetupCommand),
-        ...(provisionInBackground ? { surfaceOwner: false as const } : {})
+        ...(provisionInBackground ? { surfaceOwner: false as const } : {}),
+        // Plan O2: a deliberate activation seeds the user's default surface, as opening it does.
+        ...(request.activate === true && ports.openDefaultChat
+          ? { openDefaultChat: ports.openDefaultChat }
+          : {})
       })
       didSpawnSetup = provisioned.setupSpawned
       setupTerminalHandle = provisioned.setupTerminalHandle
