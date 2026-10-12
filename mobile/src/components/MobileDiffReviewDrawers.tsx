@@ -17,7 +17,7 @@ import { reviewSheetKey, type ReviewSheet } from '../session/mobile-diff-review-
 import type { useMobileDiffReviewController } from '../session/use-mobile-diff-review-controller'
 import { mobileDiffReviewStyles as styles } from './mobile-diff-review-screen-styles'
 import { hostOs } from '../platform/host-os'
-import { useWorkspaceExecutionHost } from '../navigation/workspace-execution-host'
+import { useWorkspaceHostOpensEditorTabs } from '../navigation/workspace-execution-host'
 
 type Props = {
   controller: ReturnType<typeof useMobileDiffReviewController>
@@ -133,8 +133,7 @@ function useSendActions(
 }
 
 function useOverflowActions(controller: ReturnType<typeof useMobileDiffReviewController>) {
-  // Why: a server workspace's host has no editor tabs to open the diff in (yet), so it isn't offered.
-  const sessionTabsAvailable = useWorkspaceExecutionHost() === undefined
+  const sessionTabsAvailable = useWorkspaceHostOpensEditorTabs()
   return useMemo<ActionSheetAction[]>(
     () => [
       {

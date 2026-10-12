@@ -9,6 +9,12 @@ export function useWorkspaceExecutionHost(): ExecutionHostId | undefined {
   return useContext(WorkspaceExecutionHostContext)
 }
 
+/** Whether this workspace's host can open a desktop editor tab (Open in Session, New Note). */
+export function useWorkspaceHostOpensEditorTabs(): boolean {
+  // Why the route, not a host signal: no host advertises a desktop window, and a server workspace's calls go to its own host.
+  return useWorkspaceExecutionHost() === undefined
+}
+
 /** The params a push into another screen of this workspace carries, so it stays on the server. */
 export function workspaceRouteParams(executionHost: ExecutionHostId | undefined): {
   executionHost?: ExecutionHostId

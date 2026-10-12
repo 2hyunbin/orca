@@ -181,9 +181,12 @@ async function openMobileFileTapAsync<T extends FileTapSessionTab>(
     { worktree: resolvedWorktree, relativePath: openedPath },
     { timeoutMs: 15_000 }
   )
-  // Why: a headless server has no editor tabs; the preview route reads the file through files.read.
+  // Why: a host with no desktop window opens no editor tabs; the preview route reads the file through files.read.
   if (isRendererUnavailableReply(openResponse)) {
-    pushWorktreePreview()
+    // Not a failure: the user moved off the source tab during the call.
+    if (shouldActivateOpenedMobileSessionTab(options.getActivationState(false))) {
+      pushWorktreePreview()
+    }
     return
   }
   const opened = fileTapOpenRun.interpret(openResponse)
