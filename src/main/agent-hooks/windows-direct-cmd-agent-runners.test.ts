@@ -1,7 +1,7 @@
-// Why: Gemini, DSH, Kiro, Droid and Command Code register the managed `.cmd` path directly on a
-// cmd-safe profile. Each vendor starts that string through its own shell, so this suite installs
-// into a temp profile and runs the registered command the way each runner does, following a
-// non-ASCII payload to a mock listener byte-for-byte.
+// Why: Gemini, DSH, Kiro, Droid, Command Code and Kimi register the managed `.cmd` path directly
+// on a cmd-safe profile and the encoded launcher otherwise. Each vendor starts that string through
+// its own shell, so this suite installs into a temp profile and runs the registered command the way
+// each runner does, following a non-ASCII payload to a mock listener byte-for-byte.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runProcess } from '@orca/process-host'
 import { createServer, type Server } from 'node:http'
@@ -33,6 +33,7 @@ import { CommandCodeHookService } from '../command-code/hook-service'
 import { DroidHookService } from '../droid/hook-service'
 import { DshHookService } from '../dsh/hook-service'
 import { GeminiHookService } from '../gemini/hook-service'
+import { KimiHookService } from '../kimi/hook-service'
 import { KiroHookService } from '../kiro/hook-service'
 import { WINDOWS_CMD_SAFE_PATH } from './installer-utils'
 
@@ -90,6 +91,13 @@ const POWERSHELL_DSH: Runner = {
     `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;${command}`
   ]
 }
+// CPython's shell=True: `{ComSpec} /c "{command}"`, without `/d`.
+const CMD_PYTHON_SHELL: Runner = {
+  name: 'cmd.exe (Python shell=True)',
+  program: CMD,
+  args: (command) => ['/c', `"${command}"`],
+  verbatim: true
+}
 const POWERSHELL_PLAIN: Runner = {
   name: 'Windows PowerShell',
   program: POWERSHELL,
@@ -100,6 +108,12 @@ type JsonHooks = { hooks: Record<string, { hooks?: { command: string }[]; comman
 
 function readJson(path: string): JsonHooks {
   return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+// Orca's TOML basic strings use only escapes that a JSON string decodes identically.
+function readTomlCommand(path: string): string | undefined {
+  const literal = readFileSync(path, 'utf8').match(/^command = ("(?:[^"\\]|\\.)*")$/m)?.[1]
+  return literal === undefined ? undefined : String(JSON.parse(literal))
 }
 
 const PROVIDERS = [
@@ -153,8 +167,21 @@ const PROVIDERS = [
     },
     command: (home: string) =>
       readJson(join(home, '.kiro', 'agents', 'mine.json')).hooks.userPromptSubmit[0].command
+  },
+  {
+    name: 'Kimi',
+    script: 'kimi-hook.cmd',
+    runners: [CMD_PYTHON_SHELL],
+    stdout: '',
+    install: () => new KimiHookService().install(),
+    command: (home: string) => readTomlCommand(join(home, '.kimi-code', 'config.toml'))
   }
 ]
+
+// A space keeps the bare path off the command line, so that profile takes the encoded launcher.
+const CASES = PROVIDERS.flatMap((provider) =>
+  ['user', 'user name'].map((homeName) => ({ ...provider, homeName }))
+)
 
 type HookPost = { payload: string | null; paneKey: string | null; token: string | null }
 
@@ -191,44 +218,52 @@ async function startHookListener(): Promise<{ server: Server; port: number; post
 // hook's POST away from this listener.
 function hookEnvironment(extra: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const base = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith('ORCA_'))
+    Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('ORCA_'))
   )
   return { ...base, ORCA_BACKGROUND_LAUNCH: '1', ...extra }
 }
 
 describe.skipIf(process.platform !== 'win32')('direct .cmd hooks under each agent runner', () => {
-  let home = ''
+  let root = ''
   let server: Server | null = null
 
   afterEach(() => {
     vi.unstubAllEnvs()
     server?.close()
     server = null
-    if (home) {
-      removeTreeSync(home)
-      home = ''
+    if (root) {
+      removeTreeSync(root)
+      root = ''
     }
   })
 
-  it.each(PROVIDERS)(
-    '$name delivers the payload byte-exact through its runner',
+  it.each(CASES)(
+    '$name delivers the payload byte-exact through its runner (home "$homeName")',
     async (provider) => {
-      home = mkdtempSync(join(tmpdir(), 'orca-direct-cmd-runner-'))
+      root = mkdtempSync(join(tmpdir(), 'orca-direct-cmd-runner-'))
+      const home = join(root, provider.homeName)
+      mkdirSync(home)
       homedirMock.mockReturnValue(home)
       vi.stubEnv('USERPROFILE', home)
       vi.stubEnv('HOME', home)
       vi.stubEnv('KIRO_HOME', undefined)
       vi.stubEnv('DSH_HOME', undefined)
+      vi.stubEnv('KIMI_CODE_HOME', undefined)
       // A host cmd AutoRun (HKCU) runs for the .cmd child PowerShell starts without `/d`.
       writeFileSync(join(home, '.cmd_aliases.cmd'), '@echo off\r\n', 'utf8')
       expect(provider.install(home).state).toBe('installed')
 
       const scriptPath = join(home, '.orca', 'agent-hooks', provider.script)
-      expect(WINDOWS_CMD_SAFE_PATH.test(scriptPath), 'test home must be cmd-safe').toBe(true)
+      const direct = provider.homeName === 'user'
+      expect(WINDOWS_CMD_SAFE_PATH.test(scriptPath), 'test home cmd-safety').toBe(direct)
       const command = provider.command(home)
-      expect(command).toBe(scriptPath.replaceAll('\\', '/'))
       if (!command) {
         throw new Error(`Missing managed ${provider.name} command`)
+      }
+      if (direct) {
+        expect(command).toBe(scriptPath.replaceAll('\\', '/'))
+      } else {
+        expect(command).toContain('-EncodedCommand')
       }
 
       const listener = await startHookListener()
@@ -257,6 +292,20 @@ describe.skipIf(process.platform !== 'win32')('direct .cmd hooks under each agen
           { payload: PAYLOAD, paneKey: PANE_KEY, token: HOOK_TOKEN }
         ])
         expect(result.stdout.trim(), `${runner.name} stdout`).toBe(provider.stdout)
+        expect(result.stderr, `${runner.name} stderr`).toBe('')
+
+        // Outside an Orca pane the hook exits without posting or waiting on stdin (#11549).
+        const outside = await runProcess({
+          program: runner.program,
+          args: runner.args(command),
+          windowsVerbatimArguments: runner.verbatim,
+          env: hookEnvironment({ USERPROFILE: home, HOME: home }),
+          input: PAYLOAD,
+          timeoutMs: 15_000
+        })
+        expect(outside.timedOut, `${runner.name} outside Orca timed out`).toBe(false)
+        expect(outside.code, `${runner.name} outside Orca exit code`).toBe(0)
+        expect(listener.posts, `${runner.name} outside Orca posted`).toHaveLength(before + 1)
       }
     },
     60_000
