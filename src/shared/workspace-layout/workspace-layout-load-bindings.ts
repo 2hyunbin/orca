@@ -25,8 +25,10 @@ import {
 import { retireExitedSurface } from './workspace-layout-removal'
 
 function terminalTabsInOrder(model: WorkspaceLayoutModel) {
-  return Object.values(model.workspaces).flatMap((workspace) =>
-    tabsInOrder(workspace).flatMap((tab) => (tab.kind === 'terminal' ? [{ workspace, tab }] : []))
+  return Object.entries(model.workspaces).flatMap(([key, workspace]) =>
+    tabsInOrder(workspace).flatMap((tab) =>
+      tab.kind === 'terminal' ? [{ key, workspace, tab }] : []
+    )
   )
 }
 
@@ -111,7 +113,7 @@ export function loadLeaves(
     incarnations: { ...stored.session.terminalPtyIncarnationsByPaneKey }
   }
   const seen = new Set<string>()
-  for (const { workspace, tab } of terminalTabsInOrder(model)) {
+  for (const { key, workspace, tab } of terminalTabsInOrder(model)) {
     const layout = stored.layouts.get(tab.entityId)!
     const renamed = new Map<string, string>()
     // Loaded objects are fresh copies, so editing them in place touches no stored data.
@@ -135,6 +137,14 @@ export function loadLeaves(
       if (leafId !== storedId) {
         // A pane given a new id starts unbound: its terminal was started for the old one.
         delete leaf.ptyId
+      } else if (leaf.ptyId === undefined && renamed.size === 1) {
+        // A sole pane whose layout lost its binding keeps its row's terminal, as today's lists read it.
+        const rowPtyId = stored.session.tabsByWorktree[key]?.find(
+          (row) => row.id === tab.entityId
+        )?.ptyId
+        if (rowPtyId) {
+          leaf.ptyId = rowPtyId
+        }
       }
       if (Object.keys(leaf).length > 0) {
         workspace.leaves = { ...workspace.leaves, [leafId]: leaf }

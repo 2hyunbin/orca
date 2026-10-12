@@ -149,7 +149,9 @@ function rebaseIncarnationBindings(
 
 export function rebaseWorkspaceSessionTerminalMembership(
   incoming: WorkspaceSessionState,
-  prior: WorkspaceSessionState | undefined
+  prior: WorkspaceSessionState | undefined,
+  /** The runtime's layout holder writes bindings; only a renderer's stale row terminal is ignored. */
+  incomingOwnsRowTerminals = false
 ): WorkspaceSessionState {
   if (!prior?.terminalTopologyRevisionByRepoId) {
     return incoming
@@ -193,7 +195,9 @@ export function rebaseWorkspaceSessionTerminalMembership(
     const terminalTabIds = new Set(currentTabs.map((tab) => tab.id))
     const tabs = currentTabs.map((current) => {
       const candidate = candidateTabsById.get(current.id)
-      return candidate ? { ...candidate, ptyId: current.ptyId } : current
+      return candidate
+        ? { ...candidate, ptyId: incomingOwnsRowTerminals ? candidate.ptyId : current.ptyId }
+        : current
     })
     for (const candidate of incoming.tabsByWorktree[worktreeId] ?? []) {
       if (!terminalTabIds.has(candidate.id)) {

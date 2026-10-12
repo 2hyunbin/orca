@@ -145,8 +145,15 @@ describe('Loader precedence for stored data that disagrees with itself, and its 
       (row) => row.id !== 'tab-b'
     )
     const loaded = load(stored)
+    // The kept row's sole pane lost its binding to the repeated layout; it keeps the row's terminal.
     expect(changed(loaded)).toEqual(
-      expect.arrayContaining(['row.*', 'terminalEntry.*', 'group.*', 'group.tabOrder', 'row.ptyId'])
+      expect.arrayContaining([
+        'row.*',
+        'terminalEntry.*',
+        'group.*',
+        'group.tabOrder',
+        'layout.ptyIdsByLeafId'
+      ])
     )
     // tab-b's pane layout outlived its row: carried as stored, outside the model, so the disk
     // rules still report it.
@@ -341,6 +348,16 @@ describe('Loader precedence for stored data that disagrees with itself, and its 
       { table: 'row', record: `${GIT_KEY}|tab-a`, field: 'ptyId', before: null, after: 'pty-a' }
     ])
     expect(saveWorkspaceLayout(loaded).tabsByWorktree[GIT_KEY]![0]!.ptyId).toBe('pty-a')
+  })
+
+  it("binds a sole pane whose layout lost its binding to its row's terminal, and keeps it on save", () => {
+    const stored = twoTabs()
+    stored.terminalLayoutsByTabId['tab-a']!.ptyIdsByLeafId = {}
+    const loaded = load(stored)
+    expect(loaded.layout.workspaces[GIT_KEY]!.leaves?.[leaf(1)]?.ptyId).toBe('pty-a')
+    const saved = saveWorkspaceLayout(loaded)
+    expect(saved.tabsByWorktree[GIT_KEY]![0]!.ptyId).toBe('pty-a')
+    expect(saved.terminalLayoutsByTabId['tab-a']!.ptyIdsByLeafId).toEqual({ [leaf(1)]: 'pty-a' })
   })
 
   it('re-mints the tab-bar id of a row whose own id another tab already uses, and reports it', () => {

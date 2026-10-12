@@ -206,7 +206,7 @@ export function setHostWorkspaceSession(
   // straight through, so a per-caller guard leaves the quit write erasing runtime-authored rows.
   session = dropClosedTerminalTabs(preserveRuntimeAuthoredWorkspaceSessionFields(session, prior))
   // Why: each partition owns its topology fence; renderer writes omit it and must rebase locally.
-  session = sanitizeWorkspaceSessionTerminalRetirements(session, prior)
+  session = sanitizeWorkspaceSessionTerminalRetirements(session, prior, options.fromLayoutHolder)
   if (!options.fromLayoutHolder) {
     session = preserveMissingWorkspaceSessionTerminalBindings(
       session,

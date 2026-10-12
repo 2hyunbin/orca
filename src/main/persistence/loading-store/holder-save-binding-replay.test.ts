@@ -65,3 +65,31 @@ describe('the Store binding replay', () => {
     expect(ptyIdsOf(saved())).toEqual({ [TEST_LEAF_1]: 'dead-pty' })
   })
 })
+
+describe('a holder save that binds a pane without a topology change', () => {
+  it("writes the row's terminal, which the membership rebase keeps for renderer saves", async () => {
+    const { store, readState } = await fixture()
+    const holder = new RuntimeWorkspaceLayouts({
+      store: () => store,
+      homeHostId: () => 'local',
+      isFrozenPartition: () => false,
+      terminal: () => ({ fact: null }),
+      stopTerminals: () => {}
+    })
+    holder.load()
+    holder.addCatalogWorkspaces([WT])
+    // The create advances the repo's topology revision and saves the row with no terminal yet.
+    const created = holder.apply({ type: 'createTerminalTab', workspace: WT })
+    const start = created.ok ? created.starts?.[0] : undefined
+    expect(start).toBeDefined()
+
+    const started = { workspace: WT, paneKey: start!.paneKey, ptyId: 'live-pty' }
+    expect(holder.bindStarted('local', started, start!.attempt)).toBe('bound')
+    await store.flushPendingOrThrowAsync()
+
+    const state: Saved = readState()
+    const rows = state.workspaceSession.tabsByWorktree[WT] ?? []
+    const row = rows.find(({ id }) => start!.paneKey.startsWith(`${id}:`))
+    expect(row?.ptyId).toBe('live-pty')
+  })
+})

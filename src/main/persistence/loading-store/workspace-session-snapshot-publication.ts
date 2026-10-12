@@ -41,7 +41,7 @@ export function setLocalWorkspaceSession(
   // Why here and not at the callers: the before-unload stage path writes the renderer's payload
   // straight through, so a per-caller guard leaves the quit write erasing runtime-authored rows.
   session = dropClosedTerminalTabs(preserveRuntimeAuthoredWorkspaceSessionFields(session, prior))
-  session = sanitizeWorkspaceSessionTerminalRetirements(session, prior)
+  session = sanitizeWorkspaceSessionTerminalRetirements(session, prior, options.fromLayoutHolder)
   session = pruneWorkspaceSessionBrowserHistory(
     pruneLocalTerminalScrollbackBuffers(session, context.runtime.state.repos)
   )

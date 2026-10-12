@@ -222,7 +222,8 @@ export function retireTerminalSurfaceFromPersistence(
 
 export function sanitizeWorkspaceSessionTerminalRetirements(
   incoming: WorkspaceSessionState,
-  prior: WorkspaceSessionState | undefined
+  prior: WorkspaceSessionState | undefined,
+  fromLayoutHolder = false
 ): WorkspaceSessionState {
   if (
     !prior?.terminalSurfaceTombstonesByPaneKey &&
@@ -252,6 +253,7 @@ export function sanitizeWorkspaceSessionTerminalRetirements(
   }
   return rebaseWorkspaceSessionTerminalMembership(
     { ...next, terminalSurfaceTombstonesByPaneKey: {} },
-    prior
+    prior,
+    fromLayoutHolder
   )
 }
