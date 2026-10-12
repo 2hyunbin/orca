@@ -80,6 +80,7 @@ import {
 } from '../../../src/shared/mobile-relay-hosts-contract'
 import type { HostStatusGates } from '../transport/host-status-gates'
 import type { ConnectionState } from '../transport/types'
+import { createBridgePortPair } from '../mobile-web-shell/bridge/bridge-port-pair-test-harness'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { RpcClient } from '../transport/rpc-client'
 import { useWorkspaceClient } from '../transport/use-workspace-client'
@@ -293,6 +294,26 @@ describe('a server workspace', () => {
       "Your phone can't reach this workspace's server through this desktop."
     )
     expect(session.sendRequest).not.toHaveBeenCalled()
+  })
+
+  it('says so for a deep link under an app without the envelope, never running on the desktop', async () => {
+    route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
+    const shell = desktop()
+    // An app built before `rpcEnvelope` grants everything else, so the page drops just that name.
+    const pair = createBridgePortPair({
+      rpc: shell,
+      rewriteToPage: (json) => json.replace(',"rpcEnvelope"', '')
+    })
+    await pair.flush()
+    expect(pair.client.carriesRpcEnvelope?.()).toBe(false)
+    route.client = pair.client
+    const renderer = await render(screen, desktopGates(RELAYS))
+    await pair.flush()
+    expect(route.seen).toEqual([])
+    expect(texts(renderer)).toContain(
+      "Your phone can't reach this workspace's server through this desktop."
+    )
+    expect(shell.sendRequest).not.toHaveBeenCalled()
   })
 
   it('waits, never on the desktop, while the desktop has not answered', async () => {
