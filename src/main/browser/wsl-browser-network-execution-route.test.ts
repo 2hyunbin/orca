@@ -51,7 +51,7 @@ class PacedDestination extends EventEmitter implements BrowserNetworkTunnelSocke
   paused = true
   emitted = 0
 
-  constructor(private readonly payload: Buffer) {
+  constructor(readonly payload: Buffer) {
     super()
   }
 
@@ -134,8 +134,16 @@ function patternedPayload(bytes: number): Buffer {
 }
 
 async function waitForQuiescence(destination: PacedDestination): Promise<void> {
+  const deadline = Date.now() + 5_000
   let previous = -1
   while (previous !== destination.emitted || !destination.paused) {
+    // Fail instead of spinning when backpressure never reaches the destination.
+    if (destination.emitted >= destination.payload.byteLength) {
+      throw new Error('destination emitted its whole payload without being paused')
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`destination never quiesced (emitted ${destination.emitted} bytes)`)
+    }
     previous = destination.emitted
     for (let tick = 0; tick < 20; tick += 1) {
       await new Promise((resolve) => setImmediate(resolve))
