@@ -12,6 +12,16 @@ import {
 } from '../../shared/quit-teardown-deadline'
 import { serveSignalExitError } from './serve-signal-exit-diagnostic'
 import { waitForMacBundleVersion } from './mac-app-update-bundle'
+import {
+  isSupervisedStopRequested,
+  mayRespawn,
+  supervisedStopSignal
+} from './serve-supervised-stop'
+import {
+  decideAfterServeChildExit,
+  type InstallRequestedHandoff,
+  type ServeReadiness
+} from './serve-supervisor-policy'
 
 export const SERVE_REPLACEMENT_READY_TIMEOUT_MS = 60_000
 export const SERVE_CHILD_FORCE_KILL_SCHEDULING_MARGIN_MS = 5_000
@@ -19,9 +29,6 @@ export const SERVE_CHILD_FORCE_KILL_GRACE_MS =
   QUIT_RENDERER_ACK_TIMEOUT_MS +
   WILL_QUIT_TEARDOWN_DEADLINE_MS +
   SERVE_CHILD_FORCE_KILL_SCHEDULING_MARGIN_MS
-
-type InstallRequestedHandoff = Extract<ServeUpdateHandoffState, { phase: 'install-requested' }>
-type ServeReadiness = 'not-expected' | 'pending' | 'verified' | 'failed'
 
 type ServeSupervisorArgs = {
   executable: string
@@ -39,6 +46,9 @@ export async function resumeInterruptedServeUpdate(
     args.handoffPath,
     args.handoff
   )
+  if (!(await mayRespawn())) {
+    return 0
+  }
   const child = args.spawnChild(args.executable, args.childArgs, args.spawnOptions)
   return superviseForegroundServe({ ...args, child, expectedHandoff })
 }
@@ -48,8 +58,13 @@ async function awaitInstalledHandoff(
   handoffPath: string,
   handoff: InstallRequestedHandoff
 ): Promise<InstallRequestedHandoff | null> {
-  if (await waitForMacBundleVersion(executable, handoff.targetVersion)) {
+  const stop = supervisedStopSignal()
+  if (await waitForMacBundleVersion(executable, handoff.targetVersion, undefined, stop)) {
     return handoff
+  }
+  if (stop.aborted) {
+    // A stop is not a failed update: the next start resumes this handoff.
+    return null
   }
   await recordServeUpdateHandoffFailure(
     handoffPath,
@@ -75,35 +90,41 @@ export async function superviseForegroundServe(
         ? { handoffPath: args.handoffPath, handoff: expectedHandoff }
         : null
     )
-
-    if (result.readiness === 'failed') {
-      return 1
-    }
-    if (expectedHandoff && result.readiness !== 'verified') {
-      if (args.handoffPath) {
-        await recordServeUpdateHandoffFailure(
+    const decision = decideAfterServeChildExit({
+      exit: { ...result, childPid: child.pid },
+      expectedHandoff,
+      handoff:
+        result.readiness === 'failed' || (expectedHandoff && result.readiness !== 'verified')
+          ? null
+          : args.handoffPath
+            ? await readServeUpdateHandoff(args.handoffPath)
+            : null,
+      hasHandoffPath: args.handoffPath !== null
+    })
+    switch (decision.kind) {
+      case 'exit':
+        return decision.code
+      case 'fail-replacement':
+        if (args.handoffPath) {
+          await recordServeUpdateHandoffFailure(args.handoffPath, decision.handoff, decision.reason)
+        }
+        return 1
+      case 'signal-exit':
+        throw serveSignalExitError(decision.signal)
+      case 'await-install':
+        if (!args.handoffPath) {
+          return 1
+        }
+        expectedHandoff = await awaitInstalledHandoff(
+          args.executable,
           args.handoffPath,
-          expectedHandoff,
-          `Replacement exited before serving version ${expectedHandoff.targetVersion}.`
+          decision.handoff
         )
-      }
-      return 1
+        if (!(await mayRespawn())) {
+          return 0
+        }
+        child = args.spawnChild(args.executable, args.childArgs, args.spawnOptions)
     }
-
-    const handoff = args.handoffPath ? await readServeUpdateHandoff(args.handoffPath) : null
-    if (
-      !args.handoffPath ||
-      handoff?.phase !== 'install-requested' ||
-      (child.pid !== undefined && handoff.servingPid !== child.pid)
-    ) {
-      if (typeof result.code === 'number' || result.signalWasForwarded) {
-        return result.code ?? 0
-      }
-      throw serveSignalExitError(result.signal)
-    }
-
-    expectedHandoff = await awaitInstalledHandoff(args.executable, args.handoffPath, handoff)
-    child = args.spawnChild(args.executable, args.childArgs, args.spawnOptions)
   }
 }
 
@@ -212,6 +233,9 @@ function waitForForegroundChild(
     }
     if (typeof child.on === 'function') {
       child.on('message', handleMessage)
+    }
+    if (isSupervisedStopRequested()) {
+      forwardSignal('SIGTERM')
     }
     if (expected) {
       readyTimer = setTimeout(() => {
