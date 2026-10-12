@@ -83,7 +83,6 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
         )
       )
     } else {
-      // Why: the target is phone-asserted; only a configured server that granted this phone opens.
       this.mobileDesktopRelay.forward(
         {
           connectionId: socket.connectionId,
