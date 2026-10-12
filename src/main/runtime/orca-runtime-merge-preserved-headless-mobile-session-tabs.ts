@@ -2,7 +2,7 @@ import { mergeStructuredAgentSessionTabGroups } from './session-tabs/structured-
 import type { RuntimeMobileSessionPreservation } from './session-tabs/mobile-session-preservation'
 import { OrcaRuntimeWithSyncMobileSessionTabs } from './orca-runtime-sync-mobile-session-tabs'
 
-export class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs extends OrcaRuntimeWithSyncMobileSessionTabs {
+export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs extends OrcaRuntimeWithSyncMobileSessionTabs {
   protected mergePreservedHeadlessMobileSessionTabs(
     ...args: Parameters<RuntimeMobileSessionPreservation['mergePreservedHeadlessMobileSessionTabs']>
   ): ReturnType<RuntimeMobileSessionPreservation['mergePreservedHeadlessMobileSessionTabs']> {

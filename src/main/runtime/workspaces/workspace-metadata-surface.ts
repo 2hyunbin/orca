@@ -1,7 +1,7 @@
 import { RuntimeWorkspaceCreationSurface } from './workspace-creation-surface'
 import type { RuntimeWorkspaceMetadata } from './workspace-metadata'
 
-export class RuntimeWorkspaceMetadataSurface extends RuntimeWorkspaceCreationSurface {
+export abstract class RuntimeWorkspaceMetadataSurface extends RuntimeWorkspaceCreationSurface {
   getCanonicalFetchKey(
     ...args: Parameters<RuntimeWorkspaceMetadata['getCanonicalFetchKey']>
   ): ReturnType<RuntimeWorkspaceMetadata['getCanonicalFetchKey']> {

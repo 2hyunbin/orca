@@ -1,28 +1,12 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import type { RuntimeWorkspaceActivation } from './workspaces/workspace-activation'
-import { OrcaRuntimeWithListManagedWorktrees } from './orca-runtime-list-managed-worktrees'
-import type { Repo } from '../../shared/repo-types'
+
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { RuntimeTerminalWait } from '../../shared/runtime-terminal-contracts'
-import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type {
   WorktreeStartupDraftPaste,
   WorktreeStartupFollowup
 } from './runtime-worktree-agent-startup'
-import {
-  buildWorktreeStartupForAgent,
-  buildWorktreeStartupForDraft,
-  resolveWorktreeStartupDraftAgent
-} from './runtime-worktree-agent-startup'
-import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
 import type { Worktree } from '../../shared/worktree/types'
-import type { WorktreeLineageResolution } from './runtime-worktree-lineage-resolution'
-import type {
-  WorkspaceLineage,
-  WorktreeLineage,
-  WorktreeLineageWarning
-} from '../../shared/worktree/lineage-types'
-import { recordCreatedWorktreeLineage as recordCreatedWorktreeLineageState } from './runtime-worktree-lineage-recording'
 import {
   deliverWorktreeStartupFollowup,
   pasteWorktreeStartupDraftWhenReady,
@@ -37,89 +21,40 @@ import {
   readLaunchedAgentForeground,
   type LaunchedAgentForeground
 } from './launched-agent-foreground'
+import { RuntimeWorktreeStartupPlans } from './workspaces/startup/workspace-startup-plans'
+import type { OrcaRuntimeWithBuildPtyTerminalSummary } from './orca-runtime-build-pty-terminal-summary'
+import type { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
+import type { OrcaRuntimeWithGetWorktreeTerminalProvisioningHost } from './orca-runtime-get-worktree-terminal-provisioning-host'
 
-export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListManagedWorktrees {
+export abstract class OrcaRuntimeWithActivateManagedWorktree extends RuntimeWorktreeStartupPlans {
+  protected abstract getWorktreeStartupReadinessHost(
+    ...args: Parameters<
+      OrcaRuntimeWithGetWorktreeTerminalProvisioningHost['getWorktreeStartupReadinessHost']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithGetWorktreeTerminalProvisioningHost['getWorktreeStartupReadinessHost']
+  >
+  protected abstract assertLiveTerminalHandleTargetsPty(
+    ...args: Parameters<
+      OrcaRuntimeWithBuildPtyTerminalSummary['assertLiveTerminalHandleTargetsPty']
+    >
+  ): ReturnType<OrcaRuntimeWithBuildPtyTerminalSummary['assertLiveTerminalHandleTargetsPty']>
+
+  protected abstract getAvailableAuthoritativeWindow(
+    ...args: Parameters<OrcaRuntimeWithResolveWaiter['getAvailableAuthoritativeWindow']>
+  ): ReturnType<OrcaRuntimeWithResolveWaiter['getAvailableAuthoritativeWindow']>
+
+  protected abstract getWorktreeTerminalProvisioningHost(
+    ...args: Parameters<
+      OrcaRuntimeWithGetWorktreeTerminalProvisioningHost['getWorktreeTerminalProvisioningHost']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithGetWorktreeTerminalProvisioningHost['getWorktreeTerminalProvisioningHost']
+  >
   activateManagedWorktree(
     ...args: Parameters<RuntimeWorkspaceActivation['activateManagedWorktree']>
   ): ReturnType<RuntimeWorkspaceActivation['activateManagedWorktree']> {
     return this.workspaceActivation.activateManagedWorktree(...args)
-  }
-
-  /** The agent a create's linked draft starts, chosen as `buildStartupForDraft` chooses it, so a
-   *  launch can name the agent before the create runs. */
-  async resolveStartupDraftAgent(repo: Repo, requestedAgent?: TuiAgent): Promise<TuiAgent | null> {
-    if (!this.store) {
-      return null
-    }
-    return resolveWorktreeStartupDraftAgent({
-      repo,
-      settings: this.store.getSettings(),
-      ...(requestedAgent ? { requestedAgent } : {})
-    })
-  }
-
-  protected async buildStartupForDraft(
-    repo: Repo,
-    draft: string,
-    requestedAgent?: TuiAgent,
-    launchSource?: string
-  ): Promise<{
-    agent: TuiAgent
-    startup: WorktreeStartupLaunch
-    draftPaste?: WorktreeStartupDraftPaste
-  } | null> {
-    if (!this.store) {
-      return null
-    }
-    return buildWorktreeStartupForDraft({
-      repo,
-      draft,
-      ...(requestedAgent ? { requestedAgent } : {}),
-      ...(launchSource ? { launchSource } : {}),
-      settings: this.store.getSettings(),
-      getLaunchPlatform: () => this.getAgentLaunchPlatformForRepo(repo)
-    })
-  }
-
-  protected buildStartupForAgent(
-    repo: Repo,
-    agent: TuiAgent,
-    prompt: string | undefined,
-    launchPreferences?: AgentLaunchPreferences,
-    launchInputs?: {
-      agentArgs?: string | null
-      extraAgentArgs?: string
-      launchSource?: string
-      onPromptCarry?: (carried: boolean) => void
-    }
-  ): { agent: TuiAgent; startup: WorktreeStartupLaunch; followup?: WorktreeStartupFollowup } {
-    if (!this.store) {
-      throw new Error('runtime_unavailable')
-    }
-    return buildWorktreeStartupForAgent({
-      repo,
-      agent,
-      ...(prompt !== undefined ? { prompt } : {}),
-      ...(launchPreferences ? { launchPreferences } : {}),
-      ...(launchInputs?.agentArgs !== undefined ? { agentArgs: launchInputs.agentArgs } : {}),
-      ...(launchInputs?.extraAgentArgs ? { extraAgentArgs: launchInputs.extraAgentArgs } : {}),
-      ...(launchInputs?.launchSource ? { launchSource: launchInputs.launchSource } : {}),
-      ...(launchInputs?.onPromptCarry ? { onPromptCarry: launchInputs.onPromptCarry } : {}),
-      settings: this.store.getSettings(),
-      getLaunchPlatform: () => this.getAgentLaunchPlatformForRepo(repo),
-      toSessionOptions: (preferences) => this.toAgentSessionOptions(preferences)
-    })
-  }
-
-  protected recordCreatedWorktreeLineage(
-    worktree: Pick<Worktree, 'id' | 'instanceId'>,
-    lineageResolution: WorktreeLineageResolution
-  ): {
-    lineage: WorktreeLineage | null
-    workspaceLineage: WorkspaceLineage | null
-    warnings: WorktreeLineageWarning[]
-  } {
-    return recordCreatedWorktreeLineageState(this.store, worktree, lineageResolution)
   }
 
   protected pasteStartupDraftWhenReady(handle: string, draft: WorktreeStartupDraftPaste): void {

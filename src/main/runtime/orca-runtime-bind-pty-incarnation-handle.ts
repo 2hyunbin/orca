@@ -2,7 +2,7 @@ import { OrcaRuntimeWithBuildPtyTerminalSummary } from './orca-runtime-build-pty
 import type { PtyIncarnationHandleRecord } from './orca-runtime-core'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
-export class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntimeWithBuildPtyTerminalSummary {
+export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntimeWithBuildPtyTerminalSummary {
   protected bindPtyIncarnationHandle(
     retained: PtyIncarnationHandleRecord,
     leaf: RuntimeLeafRecord

@@ -4,7 +4,7 @@ import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
 import type { RuntimeSyncedLeaf } from '../../shared/runtime-types'
 
-export class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceQuerySurface {
+export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceQuerySurface {
   protected recordPtyWorktree(
     ptyId: string,
     worktreeId: string,

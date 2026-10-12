@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import { OrcaRuntimeWithRuntimeId } from '../../orca-runtime-runtime-id'
-import { OrcaRuntimeWithGetPtyRecordForPaneKey } from '../../orca-runtime-get-pty-record-for-pane-key'
 
 class MailSchedulerPhaseProbe extends OrcaRuntimeWithRuntimeId {
   readonly pendingMailDuringConstruction = this.mailPointerRepointScheduler.pendingCount
 }
 
-class MailControlSchedulerIdentityProbe extends OrcaRuntimeWithGetPtyRecordForPaneKey {
+class MailControlSchedulerIdentityProbe extends OrcaRuntimeService {
   readonly sharesOriginalScheduler =
     this.mailboxControl.mailPointerRepointScheduler === this.mailPointerRepointScheduler
 }
 
 class ConstructorMailStatusProbe extends OrcaRuntimeService {
   protected override get canonicalFetchKeyCache(): ReadonlyMap<string, string> {
+    expect(this.mailboxControl.mailPointerRepointScheduler).toBe(this.mailPointerRepointScheduler)
     this.onStructuredSessionStatusForMail({ sessionId: 'construction', status: 'working' })
     return super.canonicalFetchKeyCache
   }

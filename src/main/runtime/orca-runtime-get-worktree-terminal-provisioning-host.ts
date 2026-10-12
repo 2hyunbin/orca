@@ -1,4 +1,3 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithActivateManagedWorktree } from './orca-runtime-activate-managed-worktree'
 import type { WorktreeTerminalProvisioningHost } from './runtime-worktree-terminal-provisioning'
 import type { WorktreeStartupReadinessHost } from './runtime-worktree-startup-readiness'
@@ -10,8 +9,43 @@ import {
   navigationTargetsHost,
   type RuntimeNavigationTarget
 } from '../../shared/runtime-navigation'
+import type { OrcaRuntimeWithTerminalCreateDeduplication } from './orca-runtime-terminal-create-deduplication'
+import type { RuntimeWorkspaceQuerySurface } from './workspaces/workspace-query-surface'
+import type { RuntimeWorkspaceMetadataSurface } from './workspaces/workspace-metadata-surface'
 
-export class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends OrcaRuntimeWithActivateManagedWorktree {
+export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends OrcaRuntimeWithActivateManagedWorktree {
+  public abstract createTerminal(
+    ...args: Parameters<OrcaRuntimeWithTerminalCreateDeduplication['createTerminal']>
+  ): ReturnType<OrcaRuntimeWithTerminalCreateDeduplication['createTerminal']>
+
+  public abstract splitTerminal(
+    ...args: Parameters<OrcaRuntimeWithTerminalCreateDeduplication['splitTerminal']>
+  ): ReturnType<OrcaRuntimeWithTerminalCreateDeduplication['splitTerminal']>
+
+  protected abstract requireStore(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['requireStore']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['requireStore']>
+
+  protected abstract resolveRepoSelector(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['resolveRepoSelector']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['resolveRepoSelector']>
+
+  public abstract resolveRemoteTrackingBase(
+    ...args: Parameters<RuntimeWorkspaceMetadataSurface['resolveRemoteTrackingBase']>
+  ): ReturnType<RuntimeWorkspaceMetadataSurface['resolveRemoteTrackingBase']>
+
+  public abstract hasRemoteTrackingRef(
+    ...args: Parameters<RuntimeWorkspaceMetadataSurface['hasRemoteTrackingRef']>
+  ): ReturnType<RuntimeWorkspaceMetadataSurface['hasRemoteTrackingRef']>
+
+  public abstract getOrStartRemoteTrackingBaseRefresh(
+    ...args: Parameters<RuntimeWorkspaceMetadataSurface['getOrStartRemoteTrackingBaseRefresh']>
+  ): ReturnType<RuntimeWorkspaceMetadataSurface['getOrStartRemoteTrackingBaseRefresh']>
+
+  public abstract fetchRemoteWithCache(
+    ...args: Parameters<RuntimeWorkspaceMetadataSurface['fetchRemoteWithCache']>
+  ): ReturnType<RuntimeWorkspaceMetadataSurface['fetchRemoteWithCache']>
+
   protected shouldProvisionWorktreeInBackground(navigation?: RuntimeNavigationTarget): boolean {
     return (
       navigationTargetsHost(navigation ?? 'host') &&

@@ -15,7 +15,7 @@ import type { RuntimeWorkspaceCatalog } from './workspace-catalog'
 import type { RuntimeWorkspaceSelectors } from './workspace-selectors'
 import type { RuntimeWorkspaceRepoScans } from './workspace-repo-scans'
 
-export class RuntimeWorkspaceQuerySurface extends OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree {
+export abstract class RuntimeWorkspaceQuerySurface extends OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree {
   protected resolveWorktreeSelector(
     ...args: Parameters<RuntimeWorkspaceSelectors['resolveWorktreeSelector']>
   ): ReturnType<RuntimeWorkspaceSelectors['resolveWorktreeSelector']> {

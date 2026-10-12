@@ -1,7 +1,7 @@
 import type { RuntimeSessionGraphLifecycle } from './session-graph/session-graph-lifecycle'
 import { OrcaRuntimeWithStopExactTerminalsForWorktree } from './orca-runtime-stop-exact-terminals-for-worktree'
 
-export class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntimeWithStopExactTerminalsForWorktree {
+export abstract class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntimeWithStopExactTerminalsForWorktree {
   hasTerminalsForWorktree(
     ...args: Parameters<RuntimeSessionGraphLifecycle['hasTerminalsForWorktree']>
   ): ReturnType<RuntimeSessionGraphLifecycle['hasTerminalsForWorktree']> {
