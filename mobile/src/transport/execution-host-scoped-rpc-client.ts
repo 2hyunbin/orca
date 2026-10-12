@@ -66,7 +66,7 @@ export function scopeRpcClientToExecutionHost(
     getLastConnectedAt: () => client.getLastConnectedAt(),
     getLastInboundAt: client.getLastInboundAt && (() => client.getLastInboundAt?.() ?? null),
     getGeneration: client.getGeneration && (() => client.getGeneration?.() ?? 0),
-    carriesRpcEnvelope: () => client.carriesRpcEnvelope?.() ?? true,
+    carriesRpcEnvelope: client.carriesRpcEnvelope && (() => client.carriesRpcEnvelope?.() ?? true),
     onStateChange: (listener) => client.onStateChange(listener),
     notifyForeground: (reason) => client.notifyForeground(reason),
     close: () => {}

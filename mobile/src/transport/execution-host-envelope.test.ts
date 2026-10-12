@@ -2,14 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
 import {
   reachableServerClients,
+  relaysToServers,
   scopeRpcClientToExecutionHost,
   workspaceRouteExecutionHost
 } from './execution-host-scoped-rpc-client'
 import { MobileRelayRpcStreams } from './mobile-relay-rpc-streams'
 import type { RpcClient } from './rpc-client'
-import { RpcClientRequestTracker } from './rpc-client-request-tracker'
-import { RpcClientStreamRegistry } from './rpc-client-stream-registry'
-import { buildDirectRpcWireRequest, type RpcRequestFrame } from './rpc-envelope-fields'
+import { directWire, directWireRegistry, directWireTracker } from './direct-rpc-wire-test-harness'
 import type { RpcResponse } from './types'
 
 const SERVER = 'runtime:env-1' as const
@@ -43,20 +42,38 @@ describe('executionHost on the envelope', () => {
   })
 })
 
+describe('a relay stream slot', () => {
+  it('reads an envelope in any key order as one slot', async () => {
+    const sent: Frame[] = []
+    let id = 0
+    const streams = new MobileRelayRpcStreams({
+      nextId: () => `relay-${++id}`,
+      sendFrame: (frame) => {
+        sent.push(frame)
+        return true
+      },
+      waitForConnected: async () => {}
+    })
+    const params = { terminal: 't1', client: { id: 'phone', type: 'mobile' } }
+    const disposeOlder = streams.subscribe('terminal.subscribe', params, () => {}, {
+      envelope: { executionHost: SERVER, trace: 't' }
+    })
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    streams.subscribe('terminal.subscribe', params, () => {}, {
+      envelope: { trace: 't', executionHost: SERVER }
+    })
+    await vi.waitFor(() => expect(sent).toHaveLength(2))
+    // The newer sibling already holds the slot on the server, so the older one sends no unsubscribe.
+    disposeOlder()
+    expect(sent.map((frame) => frame.method)).toEqual(['terminal.subscribe', 'terminal.subscribe'])
+  })
+})
+
 describe('a server workspace call on the direct wire', () => {
   it('reaches the desktop as the same top-level executionHost frame as before the envelope', async () => {
-    const sent: string[] = []
-    let id = 0
-    const socket = {
-      nextId: () => `rpc-${++id}`,
-      getState: () => 'connected' as const,
-      sendFrame: (frame: RpcRequestFrame) => {
-        sent.push(JSON.stringify(buildDirectRpcWireRequest(frame, 'device-token')))
-        return true
-      }
-    }
-    const requests = new RpcClientRequestTracker({ ...socket, waitForConnected: async () => {} })
-    const streams = new RpcClientStreamRegistry(socket)
+    const socket = directWire()
+    const requests = directWireTracker(socket)
+    const streams = directWireRegistry(socket)
     const direct: RpcClient = {
       ...fakeClient(),
       sendRequest: (method, params, options) => requests.sendRequest(method, params, options),
@@ -65,10 +82,10 @@ describe('a server workspace call on the direct wire', () => {
     }
     const server = scopeRpcClientToExecutionHost(direct, SERVER)
     void server.sendRequest('worktree.ps', { limit: 1 })
-    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
     server.subscribe('terminal.subscribe', { terminal: 't1' }, () => {})
     // What #26501 wrote with its own `executionHost` option; the desktop parses JSON, so key order is not read.
-    expect(sent.map((json) => JSON.parse(json))).toStrictEqual([
+    expect(socket.frames()).toStrictEqual([
       JSON.parse(
         '{"id":"rpc-1","deviceToken":"device-token","method":"worktree.ps","params":{"limit":1},"executionHost":"runtime:env-1"}'
       ),
@@ -135,6 +152,11 @@ describe('scopeRpcClientToExecutionHost', () => {
     expect(workspaceRouteExecutionHost(fakeClient(), relays, 'local')).toBeUndefined()
     expect(workspaceRouteExecutionHost(fakeClient(), relays, 'ssh:box')).toBeUndefined()
     expect(workspaceRouteExecutionHost(fakeClient(), relays, undefined)).toBeUndefined()
+    // A server's view answers as its client does, so a native one still reaches servers.
+    expect(relaysToServers(scopeRpcClientToExecutionHost(fakeClient(), SERVER), relays)).toBe(true)
+    expect(relaysToServers(scopeRpcClientToExecutionHost(fakeClient(false), SERVER), relays)).toBe(
+      false
+    )
   })
 
   it('offers only the servers the desktop can relay to now, each as its scoped view', () => {
