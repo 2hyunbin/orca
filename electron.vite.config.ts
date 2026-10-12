@@ -211,7 +211,8 @@ function createMainBootstrapPlugin() {
  * main process attributes self time to real function names. Release builds never
  * set this, and `pnpm build` does not read it.
  */
-const MAIN_MINIFY: 'oxc' | false = process.env.ORCA_UNMINIFIED_MAIN === '1' ? false : 'oxc'
+// SPIKE (option B): unminified so the layout audit names its writers.
+const MAIN_MINIFY: 'oxc' | false = false
 
 export const electronViteConfig: UserConfig = {
   main: {

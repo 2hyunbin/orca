@@ -15,11 +15,11 @@ function writerLabel(): string {
   Error.stackTraceLimit = 40
   const stack = new Error('layout-audit').stack ?? ''
   Error.stackTraceLimit = limit
-  // Positions, not names: main is minified; the CI artifact's sourcemap resolves them.
+  // The spike builds main unminified so these are real function names.
   return stack
     .split('\n')
     .slice(1)
-    .map((line) => /index\.js:(\d+:\d+)/.exec(line)?.[1] ?? '?')
+    .map((line) => /at (?:async )?([^\s(]+)/.exec(line.trim())?.[1] ?? '?')
     .join('<')
 }
 
