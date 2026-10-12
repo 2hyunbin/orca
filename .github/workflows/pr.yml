@@ -348,7 +348,7 @@ jobs:
 
       - name: Check compatibility-folder imports
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run check:compat-boundary-imports
+        run: bun config/scripts/check-compat-boundary-imports.mjs
 
       - name: Check Node runtime pin
         if: needs.code_paths.outputs.static_analysis == 'true'
@@ -372,7 +372,8 @@ jobs:
             scope="$(node config/scripts/localization-extraction-change-scope.mjs "$RUNNER_TEMP/localization-changes")" && [ "$scope" = false ]; then
             echo "Localization extraction inputs are unchanged."
           else
-            pnpm run verify:localization-extraction
+            # Use preflight's pinned Bun even when the optional local pin differs.
+            bun config/scripts/verify-localization-extraction.mjs
           fi
 
       # Why both: the ratchet proves nothing reachable from the runtime imports electron,
