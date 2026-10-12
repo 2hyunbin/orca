@@ -47,8 +47,10 @@ export function scanResidentExecutables(
         executables.push(proc.readExe(pid))
       }
     } catch (error) {
-      // A process that exited mid-scan is not a resident; anything else could hide one.
-      if (!hasErrorCode(error, 'ENOENT') && !hasErrorCode(error, 'ESRCH')) {
+      // Exited mid-scan: not a resident. Denied: a non-dumpable process, which /proc reports as
+      // root-owned and which root without CAP_SYS_PTRACE cannot read; Orca's own processes are
+      // dumpable and also hold leases. Anything else could hide a resident.
+      if (!['ENOENT', 'ESRCH', 'EACCES', 'EPERM'].some((code) => hasErrorCode(error, code))) {
         unreadablePid = pid
       }
     }

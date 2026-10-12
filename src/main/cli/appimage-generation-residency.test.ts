@@ -50,8 +50,17 @@ describe('AppImage generation residency', () => {
     ).toEqual({ status: 'exited' })
   })
 
+  it('skips non-dumpable processes it may not read', () => {
+    expect(
+      residency({
+        '1': { uid: 1000, exe: errorWithCode('EACCES') },
+        '2': { uid: 1000, exe: errorWithCode('EPERM') }
+      })
+    ).toEqual({ status: 'exited' })
+  })
+
   it('is unverifiable when a same-user process or /proc cannot be read', () => {
-    expect(residency({ '1': { uid: 1000, exe: errorWithCode('EACCES') } })).toMatchObject({
+    expect(residency({ '1': { uid: 1000, exe: errorWithCode('EIO') } })).toMatchObject({
       status: 'unverifiable'
     })
     const unreadable: ProcReader = {
@@ -73,5 +82,13 @@ describe('AppImage generation residency', () => {
     expect(residencyOfGeneration(scanResidentExecutables({ platform: 'darwin' }), ROOT)).toEqual({
       status: 'exited'
     })
+  })
+})
+
+describe.runIf(process.platform === 'linux')('AppImage generation residency on this host', () => {
+  it('reads every same-user process, including this one', () => {
+    const scan = scanResidentExecutables()
+    expect(scan).toMatchObject({ status: 'scanned', unreadablePid: null })
+    expect(scan.status === 'scanned' && scan.executables.length).toBeGreaterThan(0)
   })
 })
