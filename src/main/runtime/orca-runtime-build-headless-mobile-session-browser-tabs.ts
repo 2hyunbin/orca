@@ -176,6 +176,7 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
     }
     return resolveTerminalCloseTarget(target, {
       rendererListsTab: this.tabs.has(target.tabId),
+      graphLayout: this.tabs.get(target.tabId)?.layout ?? null,
       snapshotRows: (this.readSessionTabsSnapshot(worktreeId)?.tabs ?? []).filter(
         (row) => row.type === 'terminal' && row.parentTabId === target.tabId
       ),

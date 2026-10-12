@@ -110,7 +110,16 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
         incarnationId
       })
     }
-    for (const [worktreeId, snapshot] of this.sessionTabsSnapshots()) {
+    // Only a worktree holding an exact surface, or binding the PTY when none is exact, can retire.
+    const worktreeIds =
+      exactSurfaces.length > 0
+        ? new Set(exactSurfaces.map((surface) => surface.worktreeId))
+        : this.sessionTabsWorktreeIdsBindingPty(ptyId, null)
+    for (const worktreeId of worktreeIds) {
+      const snapshot = this.readSessionTabsSnapshot(worktreeId)
+      if (!snapshot) {
+        continue
+      }
       const retired = retireTerminalSurfacesFromSnapshot({
         snapshot,
         ptyId,

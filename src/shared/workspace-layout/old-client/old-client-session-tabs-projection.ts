@@ -65,6 +65,8 @@ type Scope = {
   key: string
   workspace: WorkspaceLayout
   view: SessionTabsView
+  /** This workspace's resolved pane selection; the view's own map is read only as a fallback. */
+  panes: Partial<SessionTabsView['panes']>
   facts: SessionTabsFacts
   /** The tab shown in the view's active group; its rows are the active ones. */
   activeTabId: string | null
@@ -87,7 +89,8 @@ export function projectSessionTabs(
   const scope: Scope = {
     key,
     workspace,
-    view: { ...view, panes: { ...view.panes, ...selection.panes } },
+    view,
+    panes: selection.panes,
     facts,
     generatedTitlesEnabled,
     activeTabId: activeGroupId ? (groupViews[activeGroupId]?.activeTabId ?? null) : null
@@ -188,7 +191,7 @@ const tabProps = (tab: LayoutTab) => ({
 function terminalRows(tab: LayoutTerminalTab, scope: Scope): RuntimeMobileSessionTerminalTab[] {
   const leafIds = collectLayoutLeafIdsInOrder(tab.panes.root)
   const leaves = scope.workspace.leaves ?? {}
-  const paneView = scope.view.panes[tab.entityId]
+  const paneView = scope.panes[tab.entityId] ?? scope.view.panes[tab.entityId]
   const activeLeafId = paneView?.activeLeafId ?? leafIds[0] ?? null
   const ptyIdsByLeafId = recordOf(leafIds, (leafId) => leaves[leafId]?.ptyId)
   const titlesByLeafId = recordOf(leafIds, (leafId) => leaves[leafId]?.title)
@@ -204,8 +207,8 @@ function terminalRows(tab: LayoutTerminalTab, scope: Scope): RuntimeMobileSessio
   // also the focused one, as the window publishes it.
   const root = tab.panes.root
   const tabWide = root?.type === 'leaf' && activeLeafId === root.leafId
-  const liveTitle =
-    scope.facts.terminalRows[tab.entityId]?.title ?? tab.terminal.defaultTitle ?? 'Terminal'
+  // Not the tab's "Terminal N" default: today a row with no saved or live title reads "Terminal".
+  const liveTitle = scope.facts.terminalRows[tab.entityId]?.title ?? 'Terminal'
   return leafIds.map((leafId) => {
     const leaf = leaves[leafId]
     const paneTitle = leaf?.title?.trim() || undefined

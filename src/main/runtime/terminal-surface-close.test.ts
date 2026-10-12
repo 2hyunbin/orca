@@ -77,6 +77,14 @@ describe('resolveTerminalCloseTarget', () => {
     ).toBe('pane')
   })
 
+  it("keeps a pane the window's synced tree splits when the published copy still shows one", () => {
+    const published = [{ leafId: 'leaf-a', parentLayout: layout('leaf-a') }]
+    const race = { rendererListsTab: true, snapshotRows: published }
+    const graphLayout = layout('leaf-a', 'leaf-b').root
+    expect(resolveTerminalCloseTarget(PANE, copies({ ...race, graphLayout }))).toBe('pane')
+    expect(resolveTerminalCloseTarget(PANE, copies(race))).toBe('last-pane')
+  })
+
   it('treats a pane the owner copy lacks as absent', () => {
     expect(
       resolveTerminalCloseTarget(PANE, copies({ rendererListsTab: true, graphLeafIds: ['leaf-b'] }))

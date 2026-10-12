@@ -158,8 +158,14 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
         }
       }
       this.mobileSessionTabsAgentStatusHeartbeat.removeWorktree(worktreeId)
-      this.cancelScheduledMobileSessionTabsChanged(worktreeId)
-      this.notifyMobileSessionTabsRemoved(worktreeId)
+      // Out of the catalog, so a later Store write or reload cannot republish it as empty.
+      const listed = this.sessionTabsStream.has(worktreeId)
+      this.layoutHolder.removeWorkspaces([worktreeId])
+      // The holder's removal already sent the removed frame for a worktree it published.
+      if (!listed || this.sessionTabsStream.has(worktreeId)) {
+        this.cancelScheduledMobileSessionTabsChanged(worktreeId)
+        this.notifyMobileSessionTabsRemoved(worktreeId)
+      }
       advertisedUrlWatcher.forgetWorktree(worktreeId)
       deleteWorktreeHistoryDir(worktreeId)
       this.closeHeadlessBrowserPagesForWorktree(worktreeId)

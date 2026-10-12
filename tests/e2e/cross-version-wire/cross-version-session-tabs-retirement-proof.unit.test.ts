@@ -1,4 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest'
+import { OldSessionTabsStream } from '../../../src/main/runtime/old-session-tabs-stream'
+import type {
+  PublishedPane,
+  PublishedWorkspaceLayout
+} from '../../../src/shared/workspace-layout/workspace-layout-published'
+import type { WorkspaceLayoutEvent } from '../../../src/shared/workspace-layout/workspace-layout-stream-frames'
 import { importReleaseCheckoutModule, materializeReleaseCheckout } from './release-checkout'
 
 /**
@@ -9,16 +15,16 @@ import { importReleaseCheckoutModule, materializeReleaseCheckout } from './relea
  * session-tabs frame, which is where a paired client learns that a mirrored terminal
  * is gone. This pairs the two halves of that surface across versions:
  *
- *  - the HOST half changed — a host now ships a retirement proof on its own frame when
- *    no surface removal carries one (`attachRetirementProofsToSnapshot`);
- *  - the CLIENT half did not change, which this asserts by running both builds' ledger
- *    over the same frames rather than by reading the diff.
+ *  - the HOST half changed — the old-client stream now derives proofs from the held layout:
+ *    a bound pane whose terminal a client holds a handle for, and that leaves the published
+ *    layout, rides out as `retiredTerminalSurfaces` on the frame that drops it;
+ *  - the CLIENT half did not change, which this asserts by running both builds' ledger and
+ *    orphan-recovery proof reader over the same frames rather than by reading the diff.
  *
- * The claim under test is the one written into the change: that this is Rule 1, because
- * `retiredTerminalSurfaces` is an existing optional field on an existing path. Rule 3's
- * fourth bullet says "a frame the host ... starts sending, on an existing path" is a wire
- * change even with no codec movement, so the claim is checked against an actual old
- * build rather than accepted.
+ * The claim under test is that this is Rule 1, because `retiredTerminalSurfaces` is an
+ * existing optional field on an existing path. Rule 3's fourth bullet says "a frame the
+ * host ... starts sending, on an existing path" is a wire change even with no codec
+ * movement, so the claim is checked against an actual old build rather than accepted.
  *
  * The pre-stack ref is pinned rather than derived: this contract needs a release from
  * before the proof-only frame existed, which is the fallback
@@ -56,11 +62,15 @@ type ProofLedger = {
   ) => Record<string, unknown>[]
 }
 
-type HostProofPublisher = {
-  attachRetirementProofsToSnapshot?: (
-    snapshot: Snapshot,
-    proofs: readonly Record<string, unknown>[]
-  ) => Snapshot | null
+type OrphanRecoveryReader = {
+  hasTerminalHandleRetirementProof: (
+    snapshot: { retiredTerminalSurfaces?: readonly Record<string, unknown>[] },
+    surface: { tabId: string; leafId: string; handle: string }
+  ) => boolean
+}
+
+type OldHostProofPublisher = {
+  attachRetirementProofsToSnapshot?: unknown
   retireTerminalSurfacesFromSnapshot: (
     args: Record<string, unknown>
   ) => { snapshot: Snapshot } | null
@@ -69,8 +79,10 @@ type HostProofPublisher = {
 type Build = {
   label: string
   ledger: ProofLedger
-  host: HostProofPublisher
+  reader: OrphanRecoveryReader
 }
+
+type PreStackBuild = Build & { host: OldHostProofPublisher }
 
 /** The surface as the host still holds it, before the close's two halves land. */
 function liveSnapshot(): Snapshot {
@@ -114,24 +126,22 @@ function exitProof(): Record<string, unknown> {
   }
 }
 
-async function loadBuild(ref: string | null): Promise<Build> {
-  if (ref === null) {
-    const [ledger, proof, retirement] = await Promise.all([
-      import('../../../src/shared/terminal-retirement-proof-ledger'),
-      import('../../../src/main/runtime/mobile-session-terminal-retirement-proof'),
-      import('../../../src/main/runtime/mobile-session-terminal-retirement')
-    ])
-    return {
-      label: 'stack',
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a dynamic import is typed unknown; this module is the proof ledger by path.
-      ledger: ledger as unknown as ProofLedger,
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a dynamic import is typed unknown; the two modules together are the host publisher surface this spec drives.
-      host: { ...proof, ...retirement } as unknown as HostProofPublisher
-    }
-  }
+const LEDGER_PATH = 'src/shared/terminal-retirement-proof-ledger.ts'
+const READER_PATH = 'src/renderer/src/runtime/web-session-terminal-orphan-recovery-surface-index.ts'
+
+async function loadStackBuild(): Promise<Build> {
+  const [ledger, reader] = await Promise.all([
+    import('../../../src/shared/terminal-retirement-proof-ledger'),
+    import('../../../src/renderer/src/runtime/web-session-terminal-orphan-recovery-surface-index')
+  ])
+  return { label: 'stack', ledger, reader }
+}
+
+async function loadPreStackBuild(ref: string): Promise<PreStackBuild> {
   const checkout = await materializeReleaseCheckout(ref)
-  const [ledger, proof, retirement] = await Promise.all([
-    importReleaseCheckoutModule(checkout, 'src/shared/terminal-retirement-proof-ledger.ts'),
+  const [ledger, reader, proof, retirement] = await Promise.all([
+    importReleaseCheckoutModule(checkout, LEDGER_PATH),
+    importReleaseCheckoutModule(checkout, READER_PATH),
     importReleaseCheckoutModule(
       checkout,
       'src/main/runtime/mobile-session-terminal-retirement-proof.ts'
@@ -143,30 +153,93 @@ async function loadBuild(ref: string | null): Promise<Build> {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the release checkout is loaded by path, so its exports arrive unknown.
     ledger: ledger as unknown as ProofLedger,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the release checkout is loaded by path, so its exports arrive unknown.
-    host: { ...proof, ...retirement } as unknown as HostProofPublisher
+    reader: reader as unknown as OrphanRecoveryReader,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the release checkout is loaded by path; the two modules together are the old host publisher surface.
+    host: { ...proof, ...retirement } as unknown as OldHostProofPublisher
   }
 }
 
 /**
- * What a host of this build publishes when the PTY exit lands after the renderer already
- * dropped the surface. `null` means it publishes nothing, which is the stuck-pane defect.
+ * What an old host publishes when the PTY exit lands after the renderer already dropped the
+ * surface. `null` means it publishes nothing, which is the stuck-pane defect.
  */
-function hostPublishesOnExit(build: Build, snapshot: Snapshot): Snapshot | null {
-  const attach = build.host.attachRetirementProofsToSnapshot
-  if (typeof attach !== 'function') {
-    // Derived, not written down: this build's only route to a proof is the removal helper,
-    // and with nothing left to remove it declines to produce a frame.
-    return (
-      build.host.retireTerminalSurfacesFromSnapshot({
-        snapshot,
-        ptyId: PTY_ID,
-        exactSurfaces: [],
-        exactOnly: true,
-        retirementProofs: [exitProof()]
-      })?.snapshot ?? null
-    )
+function oldHostPublishesOnExit(build: PreStackBuild, snapshot: Snapshot): Snapshot | null {
+  // This build's only route to a proof is the removal helper, and with nothing left to
+  // remove it declines to produce a frame.
+  return (
+    build.host.retireTerminalSurfacesFromSnapshot({
+      snapshot,
+      ptyId: PTY_ID,
+      exactSurfaces: [],
+      exactOnly: true,
+      retirementProofs: [exitProof()]
+    })?.snapshot ?? null
+  )
+}
+
+function publishedLayout(panes: PublishedPane[]): PublishedWorkspaceLayout {
+  return {
+    worktreeId: WORKTREE_ID,
+    groups: [{ id: 'group', tabIds: ['layout-tab'] }],
+    tabs: [
+      {
+        id: 'layout-tab',
+        kind: 'terminal',
+        entityId: PARENT_TAB_ID,
+        executionHostId: 'local',
+        createdAt: 1,
+        customTitle: null,
+        color: null,
+        terminal: { root: null, panes }
+      }
+    ],
+    editorFiles: [],
+    browserTabs: []
   }
-  return attach(snapshot, [exitProof()])
+}
+
+const BOUND_PANE: PublishedPane = { leafId: LEAF_ID, ptyId: PTY_ID, status: 'running' }
+
+/** The proof today's host derives: the pane's identity and the handle a client was issued. */
+function layoutProof(): Record<string, unknown> {
+  return { parentTabId: PARENT_TAB_ID, leafId: LEAF_ID, ptyId: PTY_ID, terminal: TERMINAL_HANDLE }
+}
+
+/**
+ * Today's host: the old-client stream over a held layout that showed the bound pane, then
+ * republished without it (the pane closed). Returns each frame it serves after `publish`es.
+ */
+function stackHostFrames(...republished: PublishedPane[][]): Snapshot[] {
+  let listener: (event: WorkspaceLayoutEvent) => void = () => {}
+  const stream = new OldSessionTabsStream({
+    holder: {
+      subscribe: (next) => {
+        listener = next
+        return {
+          snapshot: [{ key: WORKTREE_ID, layout: publishedLayout([BOUND_PANE]) }],
+          unsubscribe: () => {}
+        }
+      },
+      // The proof stamps are independent of the projected rows, so the model stays unloaded.
+      hostIdOf: () => null,
+      model: () => null,
+      beside: () => null
+    },
+    contentFacts: () => ({}),
+    generatedTitlesEnabled: () => false,
+    issuedHandleOf: (ptyId) => (ptyId === PTY_ID ? TERMINAL_HANDLE : null),
+    changed: () => {},
+    flush: () => {}
+  })
+  const frames: Snapshot[] = []
+  for (const panes of republished) {
+    listener({ type: 'workspace', key: WORKTREE_ID, layout: publishedLayout(panes) })
+    const frame = stream.snapshot(WORKTREE_ID)
+    if (frame) {
+      frames.push({ ...frame, activeGroupId: null })
+    }
+  }
+  return frames
 }
 
 /** What this build's client retains after the host frame, i.e. the evidence it can act on. */
@@ -180,61 +253,69 @@ function clientRetains(build: Build, frame: Snapshot | null): Record<string, unk
   )
 }
 
-let preStack: Build
+let preStack: PreStackBuild
 let stack: Build
 
 beforeAll(async () => {
-  ;[preStack, stack] = await Promise.all([loadBuild(PRE_STACK_REF), loadBuild(null)])
+  ;[preStack, stack] = await Promise.all([loadPreStackBuild(PRE_STACK_REF), loadStackBuild()])
 }, SUITE_TIMEOUT_MS)
 
 describe('cross-version session-tabs retirement proof', () => {
   it('pairs the stack against a real pre-stack release', () => {
     expect(preStack.label).toBe(PRE_STACK_REF)
     expect(typeof preStack.ledger.dropRetirementProofsForLiveSurfaces).toBe('function')
-    expect(typeof stack.ledger.dropRetirementProofsForLiveSurfaces).toBe('function')
+    expect(typeof preStack.reader.hasTerminalHandleRetirementProof).toBe('function')
     // The anti-vacuous-pass oracle. Two builds that resolved to one module would make every
     // pairing below a same-version run wearing a skew label, and all of them would pass.
     expect(preStack.ledger).not.toBe(stack.ledger)
     expect(preStack.ledger.dropRetirementProofsForLiveSurfaces).not.toBe(
       stack.ledger.dropRetirementProofsForLiveSurfaces
     )
+    expect(preStack.reader.hasTerminalHandleRetirementProof).not.toBe(
+      stack.reader.hasTerminalHandleRetirementProof
+    )
     // Load-bearing for reading the old-host cells: they mean "this release cannot publish a
-    // proof-only frame", not "the helper happened to decline". Safe to state against a pinned
-    // legacy ref, which is what PRE_STACK_REF is.
+    // proof-only frame", not "the helper happened to decline".
     expect(preStack.host.attachRetirementProofsToSnapshot).toBeUndefined()
-    expect(typeof stack.host.attachRetirementProofsToSnapshot).toBe('function')
   })
 
   it('old host against old client publishes no proof on the renderer-first close (the defect)', () => {
-    const frame = hostPublishesOnExit(preStack, snapshotAfterRendererRepublished())
+    const frame = oldHostPublishesOnExit(preStack, snapshotAfterRendererRepublished())
     expect(frame).toBeNull()
     expect(clientRetains(preStack, frame)).toEqual([])
   })
 
-  it('new host against new client publishes a proof the client retains (the fix)', () => {
-    const frame = hostPublishesOnExit(stack, snapshotAfterRendererRepublished())
-    expect(frame).not.toBeNull()
-    expect(clientRetains(stack, frame)).toEqual([exitProof()])
+  it('new host against new client publishes the proof on the frame that drops the pane', () => {
+    const [frame] = stackHostFrames([])
+    expect(frame?.tabs).toEqual([])
+    expect(clientRetains(stack, frame ?? null)).toEqual([layoutProof()])
   })
 
-  it('new host against OLD client: the old client acts on the proof-only frame', () => {
-    const frame = hostPublishesOnExit(stack, snapshotAfterRendererRepublished())
-    expect(frame).not.toBeNull()
+  it('new host against OLD client: the old ledger and orphan recovery act on the proof', () => {
+    const [frame] = stackHostFrames([])
     // The claim under test. An old client that cannot act on this frame would leave the
     // dead pane in its tab bar exactly as before the fix.
-    expect(clientRetains(preStack, frame)).toEqual([exitProof()])
+    expect(clientRetains(preStack, frame ?? null)).toEqual([layoutProof()])
+    expect(
+      preStack.reader.hasTerminalHandleRetirementProof(frame ?? {}, {
+        tabId: PARENT_TAB_ID,
+        leafId: LEAF_ID,
+        handle: TERMINAL_HANDLE
+      })
+    ).toBe(true)
   })
 
   it('new host bumps snapshotVersion so a version-gating old client accepts the frame', () => {
-    const before = snapshotAfterRendererRepublished()
-    const frame = hostPublishesOnExit(stack, before)
+    const [first, second] = stackHostFrames([BOUND_PANE], [])
     // A client that drops a frame whose version did not advance would silently ignore the
-    // proof; this is what makes the proof-only frame reachable at all.
-    expect(frame?.snapshotVersion).toBeGreaterThan(before.snapshotVersion)
+    // proof; this is what makes the proof frame reachable at all.
+    expect(first?.retiredTerminalSurfaces).toBeUndefined()
+    expect(second?.snapshotVersion).toBeGreaterThan(first?.snapshotVersion ?? Infinity)
+    expect(second?.retiredTerminalSurfaces).toEqual([layoutProof()])
   })
 
   it('old host against NEW client degrades to the two-inventory route, with no crash', () => {
-    const frame = hostPublishesOnExit(preStack, snapshotAfterRendererRepublished())
+    const frame = oldHostPublishesOnExit(preStack, snapshotAfterRendererRepublished())
     expect(frame).toBeNull()
     expect(clientRetains(stack, frame)).toEqual([])
   })
@@ -248,11 +329,8 @@ describe('cross-version session-tabs retirement proof', () => {
     expect(stack.ledger.dropRetirementProofsForLiveSurfaces(proofs, stillLive.tabs)).toEqual([])
   })
 
-  it('re-delivering the same exit does not fan out a second frame', () => {
-    const first = hostPublishesOnExit(stack, snapshotAfterRendererRepublished())
-    expect(first).not.toBeNull()
-    // A version bump carrying nothing new would wake every paired client for no reason.
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the assertion above already proves `first` is a published snapshot, not null.
-    expect(hostPublishesOnExit(stack, first as Snapshot)).toBeNull()
+  it('a later republish without the pane does not duplicate the proof', () => {
+    const [, again] = stackHostFrames([], [])
+    expect(again?.retiredTerminalSurfaces).toEqual([layoutProof()])
   })
 })

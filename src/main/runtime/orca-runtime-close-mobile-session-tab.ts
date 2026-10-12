@@ -243,9 +243,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
           )
         }
         if (!remainingTab && !options.localPtyTeardownOwnedExternally) {
-          // The window removed the tab; a process it left running (relay recovery) still stops.
-          const parentPtyIds = tab.parentLayout?.ptyIdsByLeafId ?? { [tab.leafId]: tab.ptyId }
-          this.stopClosedTerminals(Object.values(parentPtyIds).filter(Boolean))
+          this.stopTerminalsTheWindowLeft(worktreeId, tab)
         }
         if (!acknowledgeRetirement().matches) {
           this.republishMobileSessionTabsSnapshot(worktreeId)

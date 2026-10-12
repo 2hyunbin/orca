@@ -31,7 +31,8 @@ export type RuntimeWorkspaceLayoutsDeps = {
   isFrozenPartition: (hostId: ExecutionHostId) => boolean
   /** What the PTY registry knows of a bound pane's terminal. */
   terminal: TerminalFacts
-  stopTerminals: (ptyIds: readonly string[]) => void
+  /** Terminals an apply unbound; `before` is the model whose panes bound them. */
+  stopTerminals: (ptyIds: readonly string[], before: WorkspaceLayoutModel) => void
 }
 
 /** A catalog workspace with no tabs. */

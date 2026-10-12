@@ -15,6 +15,7 @@ import {
   translateSetTabProps,
   translateUpdatePaneLayout
 } from '../../shared/workspace-layout/old-client'
+import { closedTabTerminals } from './closed-pane-terminal-stop'
 
 export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithCloseStructuredAgentSessionTab {
   /** Closes a terminal row's whole tab in the holder; its terminals stop as the close applies. */
@@ -32,9 +33,9 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
       // A dormant SSH session the tab last attached (no pane binds it) stops with the tab, as today.
       const dormant =
         this.getWorkspaceSessionForWorktree(worktreeId)?.remoteSessionIdsByTabId?.[tab.parentTabId]
-      close()
+      this.withClosedTerminalAuthority(options.authorizedPty?.ptyId, close)
       if (dormant) {
-        this.stopClosedTerminals([dormant])
+        this.stopClosedTerminals([{ ptyId: dormant }])
       }
     }
     // As today, the close replies once it is on disk.
@@ -44,6 +45,19 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
       options.authorizedPty.runtimeSessionOwned = false
       this.setPairedRendererSessionOwnership(options.authorizedPty.ptyId, false)
     }
+  }
+
+  /** A tab the window closed: what it left running (relay recovery) stops; its own kills are not repeated. */
+  protected stopTerminalsTheWindowLeft(
+    worktreeId: string,
+    tab: RuntimeMobileSessionTerminalTab
+  ): void {
+    const ptyIdsByLeafId = tab.parentLayout?.ptyIdsByLeafId ?? { [tab.leafId]: tab.ptyId }
+    this.stopClosedTerminals(
+      closedTabTerminals(worktreeId, tab.parentTabId, ptyIdsByLeafId).filter(
+        (terminal) => !this.isPtyStopRequested(terminal.ptyId)
+      )
+    )
   }
 
   /**

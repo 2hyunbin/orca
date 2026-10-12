@@ -235,7 +235,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
       } catch (error) {
         // Why: publication latency (hidden renderer) can trip the surface timeout; rescue only when a live PTY backs the tab, else a ghost tab skips rollback (#7587).
         if (this.findLiveRegisteredPtyForRendererTab(worktreeId, reply.tabId)) {
-          const rescued = this.ensurePtyBackedMobileSurfaceForRendererTab(worktreeId, reply.tabId)
+          const rescued = this.rescuePtyBackedMobileSurfaceForRendererTab(worktreeId, reply.tabId)
           if (rescued) {
             this.deliverPendingStartupCommandToBareRendererPty(worktreeId, reply.tabId)
             return rescued

@@ -7,7 +7,6 @@ import {
   type RuntimeNavigationTarget
 } from '../../shared/runtime-navigation'
 import type { RuntimeTerminalPresentation } from '../../shared/runtime-types'
-import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { TuiAgent } from '../../shared/tui-agent'
 import {
@@ -28,39 +27,49 @@ import {
   DESKTOP_VIEW_ID,
   resolveWorkspaceSelection
 } from '../../shared/workspace-layout/workspace-layout-views'
+import { mayStopClosedPaneTerminal, type ClosedPaneTerminal } from './closed-pane-terminal-stop'
 import { OldSessionTabsStream } from './old-session-tabs-stream'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import type { LayoutCommandOptions } from './runtime-layout-commands'
 import type { layoutCommandsFor } from './runtime-layout-command-host'
 import { newTabIn, runtimeSplitPlacement } from './runtime-terminal-spawn-placement'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
-import { WindowPublishedEditorViews } from './window-published-editor-views'
+import { WindowPublishedPhoneRowFacts } from './window-published-phone-row-facts'
 
 export abstract class OrcaRuntimeWithHeldLayout extends OrcaRuntimeWithMigrationCatalog {
   protected abstract readonly layoutHolder: RuntimeWorkspaceLayouts
   abstract readonly layoutCommands: ReturnType<typeof layoutCommandsFor>
   private oldSessionTabsStream: OldSessionTabsStream | null = null
-  private windowPublishedEditorViews: WindowPublishedEditorViews | null = null
+  private windowPublishedPhoneRowFacts: WindowPublishedPhoneRowFacts | null = null
   /** Set while a caller that stops and reports the closed tabs' processes itself applies a close. */
   private closedTerminalsStoppedByCaller = false
+  /** The terminal a close's caller proved it addresses (main's `authorizedPty`), while it applies. */
+  private closeAuthorizedPtyId: string | null = null
 
   /** Old clients' `session.tabs.*`: a projection of the holder with today's stream fields. */
   protected get sessionTabsStream(): OldSessionTabsStream {
-    this.oldSessionTabsStream ??= new OldSessionTabsStream({
-      holder: this.layoutHolder,
-      contentFacts: () => this.layoutCommands.views.contentFacts(DESKTOP_VIEW_ID),
-      generatedTitlesEnabled: () => this.store?.getSettings?.().tabAutoGenerateTitle === true,
-      issuedHandleOf: (ptyId) => this.getExistingTerminalHandlesForPtyId(ptyId)[0] ?? null,
-      changed: (worktreeId, removed) => this.sessionTabsLayoutChanged(worktreeId, removed),
-      flush: (worktreeId) => this.flushScheduledMobileSessionTabsChanged(worktreeId)
-    })
+    if (!this.oldSessionTabsStream) {
+      this.oldSessionTabsStream = new OldSessionTabsStream({
+        holder: this.layoutHolder,
+        contentFacts: () => this.layoutCommands.views.contentFacts(DESKTOP_VIEW_ID),
+        generatedTitlesEnabled: () => this.store?.getSettings?.().tabAutoGenerateTitle === true,
+        issuedHandleOf: (ptyId) => this.getExistingTerminalHandlesForPtyId(ptyId)[0] ?? null,
+        changed: (worktreeId, removed) => this.sessionTabsLayoutChanged(worktreeId, removed),
+        flush: (worktreeId) => this.flushScheduledMobileSessionTabsChanged(worktreeId)
+      })
+      this.watchGeneratedTitlesSetting()
+    }
     return this.oldSessionTabsStream
   }
 
-  /** Stack-internal until 6e: the window's published diff and preview rows as holder views. */
-  protected get windowEditorViews(): WindowPublishedEditorViews {
-    this.windowPublishedEditorViews ??= new WindowPublishedEditorViews(this.layoutHolder)
-    return this.windowPublishedEditorViews
+  /** Stack-internal until 6e: the window's published phone rows as holder views and content facts. */
+  protected get windowPhoneRowFacts(): WindowPublishedPhoneRowFacts {
+    this.windowPublishedPhoneRowFacts ??= new WindowPublishedPhoneRowFacts(
+      this.layoutHolder,
+      this.layoutCommands.views,
+      (worktreeId) => this.scheduleMobileSessionTabsChanged(worktreeId)
+    )
+    return this.windowPublishedPhoneRowFacts
   }
 
   /** A workspace's layout as the holder holds it; absent for a workspace it does not hold. */
@@ -77,18 +86,29 @@ export abstract class OrcaRuntimeWithHeldLayout extends OrcaRuntimeWithMigration
   }
 
   /** The holder closed panes bound to these terminals. The close is committed; each stop is best-effort. */
-  protected stopClosedTerminals(ptyIds: readonly string[]): void {
+  protected stopClosedTerminals(closed: readonly ClosedPaneTerminal[]): void {
     if (this.closedTerminalsStoppedByCaller) {
       return
     }
-    for (const ptyId of ptyIds) {
-      // A dormant local id can name another session after a restart; only a live or SSH id is stop authority.
-      if (!this.ptysById.get(ptyId)?.connected && !parseAppSshPtyId(ptyId)) {
+    for (const terminal of closed) {
+      const { ptyId } = terminal
+      const authorized = ptyId === this.closeAuthorizedPtyId
+      if (!authorized && !mayStopClosedPaneTerminal(terminal, this.ptysById.get(ptyId))) {
         continue
       }
       this.stopExplicitlyClosedTabPtys([ptyId], '').catch((error: unknown) => {
         console.warn(`[runtime] failed to stop terminal ${ptyId}`, error)
       })
+    }
+  }
+
+  /** Applies a close whose caller proved it addresses this terminal, which stops even if spawned for another tab. */
+  protected withClosedTerminalAuthority<T>(ptyId: string | undefined, apply: () => T): T {
+    this.closeAuthorizedPtyId = ptyId ?? null
+    try {
+      return apply()
+    } finally {
+      this.closeAuthorizedPtyId = null
     }
   }
 

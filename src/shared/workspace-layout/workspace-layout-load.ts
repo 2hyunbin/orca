@@ -21,6 +21,7 @@ import {
   unbindDuplicateTerminals
 } from './workspace-layout-load-bindings'
 import { diffStoredSession } from './workspace-layout-load-report'
+import { foldSpilledTerminalTabs, type SpilledTerminalTabs } from './workspace-layout-load-spill'
 import type {
   WorkspaceLayoutLoadContext,
   WorkspaceLayoutLoadResult
@@ -118,10 +119,14 @@ function placeClosedTabs(
 export function loadWorkspaceLayout(
   hostId: ExecutionHostId,
   stored: WorkspaceSessionState,
-  context: WorkspaceLayoutLoadContext
+  context: WorkspaceLayoutLoadContext,
+  spilled?: SpilledTerminalTabs
 ): WorkspaceLayoutLoadResult {
   // The Loader edits its own copy; the Store's object stays untouched.
   const session = structuredClone(stored)
+  if (spilled) {
+    foldSpilledTerminalTabs(session, spilled)
+  }
   const desktopView: DesktopLayoutView = {
     ...pickStoredFields(session, VIEW_SESSION_FIELDS),
     activeRepoId: session.activeRepoId,

@@ -50,6 +50,10 @@ export class OldSessionTabsStream {
     return [...this.keys]
   }
 
+  has(worktreeId: string): boolean {
+    return this.keys.has(worktreeId)
+  }
+
   /** Something a snapshot shows changed (layout, a terminal, a title, agent status). */
   bump(worktreeId: string): void {
     this.versions.set(worktreeId, this.nextVersion++)

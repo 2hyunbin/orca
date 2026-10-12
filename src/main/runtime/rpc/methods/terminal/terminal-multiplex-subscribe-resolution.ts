@@ -96,6 +96,10 @@ export function resolveMultiplexSubscribePty(
       }
       unregisterPendingHandler()
     }
+    // Why: a cancelled pane start resolves null; its canceller owns the stream, so no no_connected_pty.
+    if (!leaf?.ptyId && (state.closed || signal?.aborted || waitController.signal.aborted)) {
+      return null
+    }
     return finalizeResolvedMultiplexPty(state, request, leaf)
   })()
 }

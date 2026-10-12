@@ -20,8 +20,27 @@ import { isWslUncPath } from '../../shared/wsl-paths'
 import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
+import type { LayoutCommandReply } from '../../shared/workspace-layout/workspace-layout-command-types'
+
+type RestoredSessionTab = { workspaceId: string; sessionId: string; agent: StructuredAgentId }
+
+// Every session here is of an agent this host registered: its store holds no other agent's records.
+function restoredSessionTabs(
+  host: ReturnType<typeof getStructuredAgentSessionHost>
+): RestoredSessionTab[] {
+  return (host?.listSessionTabs() ?? []).map((session) => {
+    let sessionId = session.sessionId
+    while (sessionId.startsWith('agent-session:')) {
+      sessionId = sessionId.slice('agent-session:'.length)
+    }
+    return { ...session, agent: session.agent, sessionId }
+  })
+}
 
 export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRuntimeWithGetStructuredAgentSessionCreateSupport {
+  /** Workspaces whose restored chats the layout refused: only a later scan adds them to the catalog. */
+  private readonly restoredChatWorkspacesAwaitingCatalog = new Set<string>()
+
   protected async restoreStructuredAgentSessionTabsOnce(): Promise<void> {
     await this.prepareStructuredAgentSessionStartupRestoration()
     const host = getStructuredAgentSessionHost()
@@ -34,14 +53,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     )
     const targets = persistedVisibleIndex.present ? persistedVisibleIndex.sessionIds : profileIds
     await host?.restoreReadableSessions(targets)
-    // Every session here is of an agent this host registered: its store holds no other agent's records.
-    const restored = (host?.listSessionTabs() ?? []).flatMap((session) => {
-      let sessionId = session.sessionId
-      while (sessionId.startsWith('agent-session:')) {
-        sessionId = sessionId.slice('agent-session:'.length)
-      }
-      return [{ ...session, agent: session.agent, sessionId }]
-    })
+    const restored = restoredSessionTabs(host)
     await seedStructuredAgentSessionTabIndex(
       host,
       targets,
@@ -49,7 +61,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     )
     // Past the seed, projecting records nothing; a chat the loaded layout already shows is kept.
     for (const session of restored) {
-      this.projectStructuredAgentSessionTab({ ...session, activate: false, notify: false })
+      this.projectRestoredStructuredAgentSessionTab(session)
     }
     const wasUnverifiable = this.structuredAgentSessionInventoryUnverifiable
     // No host means no one can say which chats exist; with none on disk, empty is the answer.
@@ -58,6 +70,33 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     // This restore published quietly; subscribers still hold the frames that said "cannot tell".
     if (wasUnverifiable && !this.structuredAgentSessionInventoryUnverifiable) {
       this.notifyMobileSessionTabSnapshots()
+    }
+  }
+
+  /** A scan added these worktrees to the catalog: chats restored before it open now, as on main. */
+  restoreStructuredAgentSessionTabsForJoinedWorkspaces(keys: readonly string[]): void {
+    const joined = new Set(
+      keys.filter((key) => this.restoredChatWorkspacesAwaitingCatalog.delete(key))
+    )
+    if (joined.size === 0) {
+      return
+    }
+    // Re-read the host: a chat closed while its worktree was unlisted stays closed.
+    for (const session of restoredSessionTabs(getStructuredAgentSessionHost())) {
+      if (joined.has(session.workspaceId)) {
+        this.projectRestoredStructuredAgentSessionTab(session)
+      }
+    }
+  }
+
+  private projectRestoredStructuredAgentSessionTab(session: RestoredSessionTab): void {
+    const reply = this.projectStructuredAgentSessionTab({
+      ...session,
+      activate: false,
+      notify: false
+    })
+    if (!reply.ok && reply.code === 'workspace_not_found') {
+      this.restoredChatWorkspacesAwaitingCatalog.add(session.workspaceId)
     }
   }
 
@@ -94,7 +133,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     agent: StructuredAgentId
     activate: boolean
     notify?: boolean
-  }): void {
+  }): LayoutCommandReply {
     // A new chat tab opens in the group the desktop view shows, as the window opens it.
     const reply = this.applyTranslatedLayoutCommands([
       {
@@ -109,6 +148,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     if (input.activate && tabId) {
       this.focusInDesktopView(input.workspaceId, { tabId })
     }
+    return reply
   }
 
   async inspectTerminalProcess(

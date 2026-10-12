@@ -2,7 +2,6 @@ import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
-import { hasClosedTerminalTabRecord } from '../../shared/closed-terminal-tab-tombstones'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { terminalSurfaceCloseMutation } from './terminal-surface-close'
@@ -17,6 +16,7 @@ const REPO = {
 } as const
 const WORKTREE_ID = 'repo::/worktree'
 const LEAF = '11111111-1111-4111-8111-111111111111'
+const UNRELATED_LEAF = '22222222-2222-4222-8222-222222222222'
 const SPILL_HOST_ID: ExecutionHostId = 'runtime:env-1'
 
 function terminalTab(id: string, ptyId: string) {
@@ -32,19 +32,19 @@ function terminalTab(id: string, ptyId: string) {
   }
 }
 
-function sessionWithTab(id: string, ptyId: string): WorkspaceSessionState {
+function sessionWithTab(id: string, ptyId: string, leaf = LEAF): WorkspaceSessionState {
   return {
     ...getDefaultWorkspaceSession(),
     tabsByWorktree: { [WORKTREE_ID]: [terminalTab(id, ptyId)] },
     terminalLayoutsByTabId: {
       [id]: {
-        root: { type: 'leaf', leafId: LEAF },
-        activeLeafId: LEAF,
+        root: { type: 'leaf', leafId: leaf },
+        activeLeafId: leaf,
         expandedLeafId: null,
-        ptyIdsByLeafId: { [LEAF]: ptyId }
+        ptyIdsByLeafId: { [leaf]: ptyId }
       }
     },
-    terminalPtyIncarnationsByPaneKey: { [`${id}:${LEAF}`]: `${id}-incarnation` }
+    terminalPtyIncarnationsByPaneKey: { [`${id}:${leaf}`]: `${id}-incarnation` }
   }
 }
 
@@ -73,14 +73,29 @@ function harness(sessions: Map<ExecutionHostId, WorkspaceSessionState>) {
   return { runtime, kill }
 }
 
+/** The tab ids a fresh runtime over these partitions loads into the local worktree. */
+function localTabIds(sessions: Map<ExecutionHostId, WorkspaceSessionState>): string[] {
+  const workspace =
+    harness(sessions).runtime['layoutHolder'].model(LOCAL_EXECUTION_HOST_ID)?.workspaces[
+      WORKTREE_ID
+    ]
+  return workspace?.tabs.map((tab) => tab.id) ?? []
+}
+
+const listsTarget = (session: WorkspaceSessionState | undefined): boolean =>
+  session?.tabsByWorktree[WORKTREE_ID]?.some((tab) => tab.id === 'target') === true
+
+// The local load moves a spill copy into the local partition, so the close runs on the local tab
+// and no spill copy is left to bring it back. Held closes record no tombstone (deleted in 6h).
 describe('terminal close across local and runtime session partitions (#18202)', () => {
   it('closes a tab persisted only in a runtime spill partition', async () => {
-    const local = sessionWithTab('unrelated', 'unrelated-pty')
     const sessions = new Map<ExecutionHostId, WorkspaceSessionState>([
-      [LOCAL_EXECUTION_HOST_ID, local],
+      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty', UNRELATED_LEAF)],
       [SPILL_HOST_ID, sessionWithTab('target', 'target-pty')]
     ])
     const { runtime, kill } = harness(sessions)
+    expect(listsTarget(sessions.get(LOCAL_EXECUTION_HOST_ID))).toBe(true)
+    expect(listsTarget(sessions.get(SPILL_HOST_ID))).toBe(false)
     runtime.registerPty('target-pty', WORKTREE_ID, null, {
       tabId: 'target',
       leafId: LEAF,
@@ -94,24 +109,22 @@ describe('terminal close across local and runtime session partitions (#18202)', 
       tabId: 'target'
     })
 
-    const spill = sessions.get(SPILL_HOST_ID)!
-    expect(spill.tabsByWorktree[WORKTREE_ID]).toEqual([])
-    expect(spill.terminalLayoutsByTabId.target).toBeUndefined()
-    expect(hasClosedTerminalTabRecord(spill.closedTerminalTabTombstonesByTabId, 'target')).toBe(
-      true
-    )
+    const local = sessions.get(LOCAL_EXECUTION_HOST_ID)!
+    expect(local.tabsByWorktree[WORKTREE_ID]?.map((tab) => tab.id)).toEqual(['unrelated'])
+    expect(local.terminalLayoutsByTabId.target).toBeUndefined()
     expect(kill).toHaveBeenCalledWith('target-pty')
-    // The unrelated tab and its partition are untouched.
-    expect(sessions.get(LOCAL_EXECUTION_HOST_ID)).toBe(local)
+    expect(localTabIds(sessions)).toEqual(['unrelated'])
   })
 
-  it('closes and records every copy when legacy reattach left one in two partitions', async () => {
+  it('closes the one folded tab when legacy reattach left a copy in two partitions', async () => {
     const sessions = new Map<ExecutionHostId, WorkspaceSessionState>([
-      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty')],
+      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty', UNRELATED_LEAF)],
       [SPILL_HOST_ID, sessionWithTab('target', 'target-pty')],
       ['runtime:env-0', sessionWithTab('target', 'target-pty')]
     ])
-    const { runtime } = harness(sessions)
+    const { runtime, kill } = harness(sessions)
+    expect(listsTarget(sessions.get(SPILL_HOST_ID))).toBe(false)
+    expect(listsTarget(sessions.get('runtime:env-0'))).toBe(false)
     runtime.registerPty('target-pty', WORKTREE_ID, null, {
       tabId: 'target',
       leafId: LEAF,
@@ -125,14 +138,28 @@ describe('terminal close across local and runtime session partitions (#18202)', 
       tabId: 'target'
     })
 
-    for (const hostId of [SPILL_HOST_ID, 'runtime:env-0'] as const) {
-      const session = sessions.get(hostId)!
-      expect(session.tabsByWorktree[WORKTREE_ID]).toEqual([])
-      expect(hasClosedTerminalTabRecord(session.closedTerminalTabTombstonesByTabId, 'target')).toBe(
-        true
-      )
+    expect(kill).toHaveBeenCalledWith('target-pty')
+    expect(localTabIds(sessions)).toEqual(['unrelated'])
+  })
+
+  it('keeps a spill copy when the local partition cannot take it', () => {
+    const spill = sessionWithTab('target', 'target-pty')
+    const sessions = new Map<ExecutionHostId, WorkspaceSessionState>([
+      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty', UNRELATED_LEAF)],
+      [SPILL_HOST_ID, spill]
+    ])
+    const refusing = new Map(sessions)
+    refusing.set = (hostId, session) => {
+      if (hostId === LOCAL_EXECUTION_HOST_ID) {
+        throw new Error('profile_write_refused')
+      }
+      return Map.prototype.set.call(refusing, hostId, session)
     }
-    expect(sessions.get(LOCAL_EXECUTION_HOST_ID)?.tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    harness(refusing)
+
+    expect(refusing.get(SPILL_HOST_ID)).toBe(spill)
   })
 
   it('refuses when a second copy was rebound after the close was asked', () => {
@@ -178,15 +205,19 @@ describe('terminal close across local and runtime session partitions (#18202)', 
     const spill = sessionWithTab('target', 'target-pty')
     spill.tabsByWorktree[WORKTREE_ID] = [{ ...terminalTab('target', 'target-pty'), isPinned: true }]
     const sessions = new Map<ExecutionHostId, WorkspaceSessionState>([
-      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty')],
+      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty', UNRELATED_LEAF)],
       [SPILL_HOST_ID, spill]
     ])
     const { runtime, kill } = harness(sessions)
+    const local = sessions.get(LOCAL_EXECUTION_HOST_ID)
 
     await expect(runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, 'target')).rejects.toThrow(
       'terminal_tab_pinned'
     )
-    expect(sessions.get(SPILL_HOST_ID)).toBe(spill)
+    expect(sessions.get(LOCAL_EXECUTION_HOST_ID)).toEqual(local)
+    expect(local?.tabsByWorktree[WORKTREE_ID]?.find((tab) => tab.id === 'target')?.isPinned).toBe(
+      true
+    )
     expect(kill).not.toHaveBeenCalled()
   })
 })

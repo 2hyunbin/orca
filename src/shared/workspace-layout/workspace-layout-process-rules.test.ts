@@ -202,10 +202,24 @@ describe('processExited', () => {
     }
   })
 
-  it('unbinds and keeps the pane on -1 or attach absence, whatever else is known', () => {
+  it('changes nothing on -1, whatever else is known: the binding stays for liveness to report', () => {
+    for (const panes of [1, 2] as const) {
+      for (const facts of [
+        exit({ exitCode: -1 }),
+        exit({ exitCode: -1, local: true }),
+        exit({ exitCode: -1, spawnedFresh: true, inputWritten: false, outputReceived: false })
+      ]) {
+        const kept = exitPane(panes, facts)
+        expect(kept).toMatchObject({ pane: 'bound', tabClosed: false, outcome: undefined })
+        expect(kept.leaf).toEqual({ ptyId: 'pty-1', incarnationId: 'inc-1' })
+        expect(kept.model).toBe(kept.bound)
+      }
+    }
+  })
+
+  it('unbinds and keeps the pane on attach absence, whatever the code', () => {
     for (const facts of [
-      exit({ exitCode: -1 }),
-      exit({ exitCode: -1, local: true }),
+      exit({ exitCode: -1, attachAbsent: true }),
       exit({ exitCode: 0, attachAbsent: true })
     ]) {
       const unbound = exitPane(1, facts)

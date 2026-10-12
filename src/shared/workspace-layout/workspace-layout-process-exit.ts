@@ -1,6 +1,6 @@
 // What a terminal's exit does to its pane: today's window rules, decided from facts the runtime
 // holds. A proven exit retires the pane unless it is one the user needs to see fail; an unproven
-// one (a negative code, attach absence) keeps the pane and only unbinds it.
+// code (-1, lost contact) changes nothing; only attach absence, a positive absence, unbinds it.
 
 import { isProvenProcessExit } from '../terminal-exit-cause'
 import { omitStoredFields } from './stored-record-fields'
@@ -31,11 +31,15 @@ export type ProcessExitFacts = {
   attachAbsent?: boolean
 }
 
-type ExitVerdict = 'retire' | 'keep' | 'unbind'
+type ExitVerdict = 'retire' | 'keep' | 'unbind' | 'unchanged'
 
 function exitVerdict(facts: ProcessExitFacts, paneCount: number): ExitVerdict {
-  if (facts.attachAbsent || !isProvenProcessExit(facts.exitCode)) {
+  if (facts.attachAbsent) {
     return 'unbind'
+  }
+  // Loss of contact is never evidence of death: the binding stays and liveness reports it.
+  if (!isProvenProcessExit(facts.exitCode)) {
+    return 'unchanged'
   }
   if (facts.local && facts.exitCode !== 0) {
     return 'keep'
@@ -63,12 +67,15 @@ export function applyProcessExit(
   }
   if (location === 'gone') {
     // A proven exit advances the revision even when its pane was already gone, as today.
-    return exitVerdict(facts, 1) === 'unbind'
+    const verdict = exitVerdict(facts, 1)
+    return verdict === 'unbind' || verdict === 'unchanged'
       ? applied(model)
       : applied(updateLegacyPersistence(model, model, [surface.worktreeId]))
   }
   const { leafId } = surface
   switch (exitVerdict(facts, leafIdsOf(location.tab).length)) {
+    case 'unchanged':
+      return applied(model)
     case 'keep':
       return applied(model, {}, {}, { [leafId]: 'exited' })
     case 'unbind': {

@@ -72,7 +72,7 @@ describe('RuntimeWorkspaceLayouts: the holder', () => {
     expect(events.at(-1)).toMatchObject({ type: 'workspace', key: GIT_KEY })
   })
 
-  it('applies the exit rule: a failed local process stays, an unproven exit unbinds, a used one retires', () => {
+  it('applies the exit rule: a failed local process stays, an unproven exit keeps its binding, a used one retires', () => {
     const store = fakeStore({
       local: addWorkspace(emptySession(), GIT_KEY, [
         {
@@ -110,7 +110,8 @@ describe('RuntimeWorkspaceLayouts: the holder', () => {
     expect(holder.processExited('local', surface(3), { ...facts, exitCode: 0 })).toBe('gone')
     expect(panesOf(holder)).toEqual([
       { leafId: leaf(1), ptyId: 'pty-1', status: 'exited' },
-      { leafId: leaf(2), status: 'restorable' }
+      // Status is the liveness verdict's, not the exit's.
+      { leafId: leaf(2), ptyId: 'pty-2', status: 'restorable' }
     ])
   })
 

@@ -56,6 +56,8 @@ export function resolvePaneClose(
 export type TerminalCloseLayoutCopies = {
   /** The desktop renderer lists the tab, so it owns the tab's panes. */
   rendererListsTab: boolean
+  /** The tab's pane tree as the window last synced it. */
+  graphLayout?: TerminalPaneLayoutNode | null
   /** The tab's rows in the published session snapshot. */
   snapshotRows: readonly { leafId: string; parentLayout?: TerminalLayoutSnapshot }[]
   /** The tab's panes in the renderer-published runtime graph. */
@@ -88,9 +90,16 @@ export function resolveTerminalCloseTarget(
   target: TerminalSurfaceCloseTarget,
   copies: TerminalCloseLayoutCopies
 ): PaneCloseResolution | 'tab' {
-  return target.kind === 'tab'
-    ? 'tab'
-    : resolvePaneClose(readLayoutOwnerLeafIds(copies), target.leafId)
+  if (target.kind === 'tab') {
+    return 'tab'
+  }
+  const resolution = resolvePaneClose(readLayoutOwnerLeafIds(copies), target.leafId)
+  // Why: the published layout trails the window's debounced save, so a split the window already
+  // synced is not its tab's last pane.
+  const windowTree = collectTerminalLayoutLeafIds(copies.graphLayout)
+  return resolution === 'last-pane' && resolvePaneClose(windowTree, target.leafId) === 'pane'
+    ? 'pane'
+    : resolution
 }
 
 export type TerminalSurfaceCloseResult = WorkspaceSessionTerminalTabCloseResult & {

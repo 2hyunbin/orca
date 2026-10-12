@@ -51,7 +51,7 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
    * Keys without a repo (floating terminals) never read the inventory, and a store that cannot
    * report repos removes none.
    */
-  private isSavedUnderRemovedRepo(worktreeId: string): boolean {
+  protected isSavedUnderRemovedRepo(worktreeId: string): boolean {
     const repoId = splitWorktreeIdForFilesystem(worktreeId)?.repoId
     const repos = repoId ? this.store?.getRepos?.() : undefined
     return Array.isArray(repos) && !repos.some((repo) => repo.id === repoId)
@@ -143,6 +143,22 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
         )
       }
     }
+  }
+
+  /** Terminal row titles read the generated-titles setting, so a toggle re-emits every worktree. */
+  protected watchGeneratedTitlesSetting(): void {
+    let enabled = this.store?.getSettings?.().tabAutoGenerateTitle === true
+    this.store?.onSettingsChanged?.((_updates, settings) => {
+      if ((settings.tabAutoGenerateTitle === true) === enabled) {
+        return
+      }
+      enabled = !enabled
+      // Listing clients too must see a newer version, so bump even with no subscriber.
+      for (const worktreeId of this.sessionTabsStream.worktreeIds()) {
+        this.sessionTabsStream.bump(worktreeId)
+      }
+      this.notifyMobileSessionTabSnapshots()
+    })
   }
 
   protected getMobileSessionTabsForWorktree(

@@ -11,9 +11,6 @@ import type {
   RuntimeWorktreeTerminalSleepResult
 } from '../../shared/runtime-types'
 import type { WorktreeTerminalMutationKind } from './worktree-terminal-mutation-lock'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { cloneWorkspaceSessionState } from '../persistence/restoring-sessions/session-owner-fields'
-import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../persistence/restoring-sessions/workspace-session-write-rollback'
 import {
   getWorktreeExecutionHostId,
   parseExecutionHostId,
@@ -22,6 +19,10 @@ import {
 import { worktreePtyBelongsToHost, type WorktreePtyHostFence } from './worktree-pty-host-fence'
 import { summarizeWorktreePtyStopVerdict } from './worktree-pty-stop-verdict'
 import { describeMobileSessionTabCloseRefusal } from './mobile-session-tab-close-refusal-message'
+import {
+  clearHeldWorktreeResumeRecords,
+  clearStoredWorktreeResumeRecords
+} from './worktree-terminal-resume-records'
 
 export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithResolveTerminalSplitSourceAuthority {
   private collectWorktreePtyIds(
@@ -71,6 +72,8 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
       // Why: emptying a rotated runtime partition re-routes the session owner, so the
       // records cleared below live in the partition that owned the tabs at the start.
       const sessionHostId = this.getWorkspaceSessionHostIdForWorktree(worktree.id)
+      // Why: after an orcad/serve restart no list has seen a still-running daemon session yet.
+      await this.refreshMobileSessionPtyRecords(worktree.id)
       const targetPtyIds = this.collectWorktreePtyIds(worktree.id, hostFence, true)
       const parentTabIds = (this.heldWorkspaceLayout(worktree.id)?.tabs ?? []).flatMap((tab) =>
         tab.kind === 'terminal' ? [tab.entityId] : []
@@ -113,64 +116,12 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
     hostId: ExecutionHostId,
     closedTabIds: readonly string[]
   ): Promise<void> {
-    if (!this.getAvailableAuthoritativeWindow()) {
-      return this.assertHeldTerminalsClosed(worktreeId)
+    const args = { worktreeId, hostId, closedTabIds }
+    if (this.getAvailableAuthoritativeWindow()) {
+      return clearStoredWorktreeResumeRecords(this.store, args)
     }
-    if (
-      !this.store?.getWorkspaceSession ||
-      !this.store.setWorkspaceSession ||
-      !this.store.runDurableMutation
-    ) {
-      throw new Error('workspace_session_unavailable')
-    }
-    const refusal = await this.store.runDurableMutation<Error | undefined>(() => {
-      const session = cloneWorkspaceSessionState(this.store.getWorkspaceSession(hostId))
-      const sleepingAgentSessionsByPaneKey = Object.fromEntries(
-        Object.entries(session.sleepingAgentSessionsByPaneKey ?? {}).filter(
-          ([, record]) => record.worktreeId !== worktreeId
-        )
-      )
-      const terminalPtyIncarnationsByPaneKey = Object.fromEntries(
-        Object.entries(session.terminalPtyIncarnationsByPaneKey ?? {}).filter(
-          ([paneKey]) => !closedTabIds.some((tabId) => paneKey.startsWith(`${tabId}:`))
-        )
-      )
-      const remainingTerminalRows = session.tabsByWorktree[worktreeId] ?? []
-      const remainingUnifiedTerminalTabs = (session.unifiedTabs?.[worktreeId] ?? []).filter(
-        (tab) => tab.contentType === 'terminal'
-      )
-      if (remainingTerminalRows.length > 0 || remainingUnifiedTerminalTabs.length > 0) {
-        return { value: new Error('terminal_close_incomplete'), persist: false }
-      }
-      const hasChanges =
-        Object.keys(sleepingAgentSessionsByPaneKey).length !==
-          Object.keys(session.sleepingAgentSessionsByPaneKey ?? {}).length ||
-        Object.keys(terminalPtyIncarnationsByPaneKey).length !==
-          Object.keys(session.terminalPtyIncarnationsByPaneKey ?? {}).length
-      if (!hasChanges) {
-        return { value: undefined, persist: false }
-      }
-      const next: WorkspaceSessionState = {
-        ...session,
-        sleepingAgentSessionsByPaneKey,
-        terminalPtyIncarnationsByPaneKey
-      }
-      this.store.setWorkspaceSession(next, hostId)
-      const staged = cloneWorkspaceSessionState(this.store.getWorkspaceSession(hostId))
-      return {
-        value: undefined,
-        rollback: () => {
-          const current = this.store.getWorkspaceSession(hostId)
-          const rolledBack = rollbackWorkspaceSessionAfterFailedAsyncWrite(session, staged, current)
-          if (rolledBack !== current) {
-            this.store.setWorkspaceSession(rolledBack, hostId)
-          }
-        }
-      }
-    })
-    if (refusal) {
-      throw refusal
-    }
+    this.assertHeldTerminalsClosed(worktreeId)
+    await clearHeldWorktreeResumeRecords(this.layoutHolder, this.store, args)
   }
 
   async stopTerminalsForWorktree(

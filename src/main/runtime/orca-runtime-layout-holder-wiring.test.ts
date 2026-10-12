@@ -100,9 +100,15 @@ describe('the runtime wired to its layout holder', () => {
       return true
     })
     runtime.setPtyController({ write: () => true, kill, getForegroundProcess: async () => null })
-    // A close stops only live PTYs.
-    runtime.registerPty('pty-a', TEST_WORKTREE_ID)
-    runtime.registerPty('pty-b', TEST_WORKTREE_ID)
+    // A close stops only live PTYs bound to the closed panes.
+    runtime.registerPty('pty-a', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: HEADLESS_LEAF_ID
+    })
+    runtime.registerPty('pty-b', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: HEADLESS_SECOND_LEAF_ID
+    })
 
     runtime['layoutHolder'].apply({
       type: 'closeTabs',

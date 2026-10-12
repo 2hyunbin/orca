@@ -368,7 +368,9 @@ describe('projectSessionTabs', () => {
     })
     expect(projected.tabGroups).toHaveLength(1)
     expect(projected).not.toHaveProperty('tabGroupLayout')
-    expect(projected.tabs[0]).toMatchObject({ title: 'Terminal 1', isActive: false })
+    // As on main: a row with no saved or live title reads "Terminal", not the tab's ordinal default.
+    expect(workspace.tabs[0]).toMatchObject({ terminal: { defaultTitle: 'Terminal 1' } })
+    expect(projected.tabs[0]).toMatchObject({ title: 'Terminal', isActive: false })
   })
 
   it('round-trips every row id to the tab (and pane) it names', () => {

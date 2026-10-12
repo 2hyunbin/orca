@@ -190,4 +190,22 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
     }
     return this.findMobileTerminalSurface(worktreeId, tabId)
   }
+
+  /** The create's wait failed: a live PTY that the window has not placed yet gets its pane admitted (#7587). */
+  protected rescuePtyBackedMobileSurfaceForRendererTab(
+    worktreeId: string,
+    tabId: string
+  ): RuntimeMobileSessionCreateTerminalResult | null {
+    const pty = this.pendingMobileTerminalCreatesByKey.has(`${worktreeId}::${tabId}`)
+      ? this.findLiveRegisteredPtyForRendererTab(worktreeId, tabId)
+      : null
+    const placed = this.heldWorkspaceLayout(worktreeId)?.tabs.some(
+      (tab) => tab.kind === 'terminal' && tab.entityId === tabId
+    )
+    if (pty && !placed) {
+      // A stalled window save must not turn a running shell into a failed create.
+      this.admitRecoveredTerminal(worktreeId, pty, {})
+    }
+    return this.ensurePtyBackedMobileSurfaceForRendererTab(worktreeId, tabId)
+  }
 }

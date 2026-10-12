@@ -12,9 +12,7 @@ import type {
   LayoutRefusalCode
 } from '../../shared/workspace-layout/workspace-layout-command-types'
 import { applyLayoutCommand } from '../../shared/workspace-layout/workspace-layout-commands'
-import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import type { LoadedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load-types'
-import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { PaneOutcome } from '../../shared/workspace-layout/workspace-layout-pane-outcomes'
 import {
   publishWorkspaceLayout,
@@ -43,6 +41,7 @@ import {
 } from './runtime-workspace-layout-pane-facts'
 import { RuntimeWorkspaceLayoutPublication } from './runtime-workspace-layout-publication'
 import { DURABLE_COMMANDS, RuntimeWorkspaceLayoutWriter } from './runtime-workspace-layout-writer'
+import { loadHeldPartition, retireSpilledTerminalTabs } from './runtime-spilled-terminal-tabs'
 
 export type HolderApplied = Applied & { starts?: PaneStart[] }
 
@@ -297,14 +296,9 @@ export class RuntimeWorkspaceLayouts {
     if (!store || !this.holds(hostId)) {
       return null
     }
-    const session = store.getWorkspaceSession(hostId)
-    const { changes: _changes, ...loaded } = loadWorkspaceLayout(
-      hostId,
-      session,
-      nameBasedLoadContext()
-    )
+    const loaded = loadHeldPartition(store, this.writer, hostId, this.deps.homeHostId)
     this.partitions.set(hostId, loaded)
-    this.writer.noteRead(hostId, session)
+    retireSpilledTerminalTabs(store, this.writer, loaded, this.deps.homeHostId)
     for (const key of Object.keys(loaded.layout.workspaces)) {
       this.publish(key)
     }
@@ -324,7 +318,7 @@ export class RuntimeWorkspaceLayouts {
     const remaining = terminalLeafIds(result.model)
     this.starts.forget([...terminalLeafIds(before.layout)].filter((id) => !remaining.has(id)))
     if (result.effects.stopPtyIds.length > 0) {
-      this.deps.stopTerminals(result.effects.stopPtyIds)
+      this.deps.stopTerminals(result.effects.stopPtyIds, before.layout)
     }
     this.save(hostId, durable)
     for (const key of changedWorkspaceKeys(before.layout, result.model, result.outcomes)) {

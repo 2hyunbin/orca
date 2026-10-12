@@ -92,7 +92,7 @@ const TASK_PAGE = { agent_kind: 'claude-code', launch_source: 'task_page', reque
 const aiButtonSource = (workspace: LaunchWorkspace): string =>
   workspace.kind === 'repo' ? 'task_page' : 'notes_send'
 const QUICK_COMMAND = { agent_kind: 'codex', launch_source: 'quick_command', request_kind: 'new' }
-export const AGENT_PHONE = { title: 'Terminal 1', launchAgent: 'claude', isActive: true }
+export const AGENT_PHONE = { title: 'Terminal', launchAgent: 'claude', isActive: true }
 const POSIX_CLAUDE = "claude '--dangerously-skip-permissions'"
 // main today: a local POSIX host hands the provider the settings shell untrimmed.
 export const ZSH = { shellOverride: '  /bin/zsh  ', terminalWindowsWslDistro: null }
