@@ -26,16 +26,33 @@ export type NativeChatRailVirtualItem = {
 /** Only the fields the rail reads, so a test needs no slot builder. */
 export type NativeChatRailSlot = {
   turnKey: string | undefined
-  /** A user row in no turn (one shown as not sent) lights its own tick. */
+  /** A user row in no turn (one shown as not sent) lights its own tick, as does one the rail ticks. */
   message?: { id: string; role: string }
 }
 
-function railTickOf(slot: NativeChatRailSlot | undefined): string | null {
+/** The newest tick at or above a row, within its turn: a message sent mid-turn joins
+ *  that turn's key but keeps its own tick, so the opener alone would never light it. */
+function railTickOf(
+  slots: readonly NativeChatRailSlot[],
+  index: number,
+  tickIds: ReadonlySet<string>
+): string | null {
+  const slot = slots[index]
+  for (let at = index; at >= 0; at -= 1) {
+    const candidate = slots[at]
+    if (candidate?.message && tickIds.has(candidate.message.id)) {
+      return candidate.message.id
+    }
+    if (slot?.turnKey === undefined || candidate?.turnKey !== slot.turnKey) {
+      break
+    }
+  }
   return slot?.turnKey ?? (slot?.message?.role === 'user' ? slot.message.id : null)
 }
 
 export function findActiveNativeChatRailItem({
   slots,
+  tickIds,
   virtualItems,
   scrollTop,
   clientHeight,
@@ -43,6 +60,8 @@ export function findActiveNativeChatRailItem({
   previousActiveId
 }: {
   slots: readonly NativeChatRailSlot[]
+  /** Messages the rail draws a tick for. */
+  tickIds: ReadonlySet<string>
   virtualItems: readonly NativeChatRailVirtualItem[]
   scrollTop: number
   clientHeight: number
@@ -60,7 +79,7 @@ export function findActiveNativeChatRailItem({
   const atBottom = scrollHeight - clientHeight - scrollTop <= NATIVE_CHAT_FOLLOW_REARM_PX
   if (atBottom) {
     const last = virtualItems.at(-1)
-    return last === undefined ? previousActiveId : railTickOf(slots[last.index])
+    return last === undefined ? previousActiveId : railTickOf(slots, last.index, tickIds)
   }
 
   let fold: NativeChatRailVirtualItem | undefined
@@ -72,12 +91,12 @@ export function findActiveNativeChatRailItem({
   // Scrolled above everything the window holds: the first windowed row is the
   // nearest thing to the fold.
   if (fold === undefined) {
-    return railTickOf(slots[virtualItems[0]?.index ?? -1])
+    return railTickOf(slots, virtualItems[0]?.index ?? -1, tickIds)
   }
   // The window lags the scroll by a commit, so a fold past every row it holds is
   // a stale read, not an answer. Holding the previous tick beats blanking one.
   if (fold.end <= scrollTop) {
     return previousActiveId
   }
-  return railTickOf(slots[fold.index])
+  return railTickOf(slots, fold.index, tickIds)
 }

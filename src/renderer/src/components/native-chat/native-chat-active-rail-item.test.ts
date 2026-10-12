@@ -27,9 +27,15 @@ const TURNS: NativeChatRailSlot[] = [
   { turnKey: 'u2' }
 ]
 
+const NO_TICKS: ReadonlySet<string> = new Set()
+
 const VIEWPORT = 300
 /** Ten 100px rows against a 300px viewport, scrolled off the bottom. */
-const MID_SCROLL = { clientHeight: VIEWPORT, scrollHeight: 1000, previousActiveId: null }
+const MID_SCROLL = {
+  clientHeight: VIEWPORT,
+  scrollHeight: 1000,
+  previousActiveId: null
+}
 
 describe('active rail item', () => {
   // The whole point of resolving through `turnKey`: most of a transcript is reply,
@@ -38,6 +44,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
+        tickIds: NO_TICKS,
         virtualItems: rows(10),
         scrollTop: 250,
         ...MID_SCROLL
@@ -49,6 +56,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
+        tickIds: NO_TICKS,
         virtualItems: rows(10),
         scrollTop: 450,
         ...MID_SCROLL
@@ -60,6 +68,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
+        tickIds: NO_TICKS,
         virtualItems: rows(10),
         scrollTop: 400,
         ...MID_SCROLL
@@ -73,6 +82,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
+        tickIds: NO_TICKS,
         virtualItems: rows(10),
         scrollTop: 700,
         clientHeight: VIEWPORT,
@@ -88,6 +98,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: [{ turnKey: 'u1' }, { turnKey: 'u1' }, { turnKey: 'u2' }, { turnKey: 'u2' }],
+        tickIds: NO_TICKS,
         virtualItems: rows(4),
         // 30px short of the end, with a `u1` row at the top edge.
         scrollTop: 100,
@@ -102,6 +113,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: [{ turnKey: undefined }, { turnKey: undefined }, ...TURNS],
+        tickIds: NO_TICKS,
         virtualItems: rows(12),
         scrollTop: 50,
         clientHeight: VIEWPORT,
@@ -117,6 +129,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
+        tickIds: NO_TICKS,
         virtualItems: [{ index: 0, start: 0, end: 100 }],
         scrollTop: 600,
         clientHeight: VIEWPORT,
@@ -130,6 +143,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
+        tickIds: NO_TICKS,
         virtualItems: [],
         scrollTop: 0,
         clientHeight: VIEWPORT,
@@ -148,6 +162,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots,
+        tickIds: NO_TICKS,
         virtualItems: rows(11),
         scrollTop: 800,
         clientHeight: VIEWPORT,
@@ -158,11 +173,44 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots,
+        tickIds: NO_TICKS,
         virtualItems: rows(11),
         scrollTop: 1010,
         ...MID_SCROLL,
         scrollHeight: 2000
       })
     ).toBe('rejected')
+  })
+
+  // A message sent mid-turn takes the running turn's key but has its own tick.
+  describe('a message sent into a running turn', () => {
+    const slots: NativeChatRailSlot[] = [
+      { turnKey: 'u1', message: { id: 'u1', role: 'user' } },
+      { turnKey: 'u1' },
+      { turnKey: 'u1', message: { id: 'steer', role: 'user' } },
+      { turnKey: 'u1' },
+      { turnKey: 'u1' }
+    ]
+    const tickIds = new Set(['u1', 'steer'])
+
+    it('lights it when pinned to the bottom', () => {
+      expect(
+        findActiveNativeChatRailItem({
+          slots,
+          tickIds,
+          virtualItems: rows(5),
+          scrollTop: 200,
+          clientHeight: VIEWPORT,
+          scrollHeight: 500,
+          previousActiveId: null
+        })
+      ).toBe('steer')
+    })
+
+    it('lights the opener above it and itself from its row on', () => {
+      const scroll = { slots, tickIds, virtualItems: rows(5), ...MID_SCROLL }
+      expect(findActiveNativeChatRailItem({ ...scroll, scrollTop: 150 })).toBe('u1')
+      expect(findActiveNativeChatRailItem({ ...scroll, scrollTop: 250 })).toBe('steer')
+    })
   })
 })

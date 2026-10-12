@@ -85,6 +85,9 @@ export function useNativeChatMessageRail({
   virtualItemsRef.current = virtualItems
   const slotsRef = useRef(slots)
   slotsRef.current = slots
+  const tickIds = useMemo(() => new Set(loadedItems.map((item) => item.id)), [loadedItems])
+  const tickIdsRef = useRef(tickIds)
+  tickIdsRef.current = tickIds
 
   const readActiveId = useCallback(() => {
     const element = scrollRef.current
@@ -94,6 +97,7 @@ export function useNativeChatMessageRail({
     setActiveId((previous) =>
       findActiveNativeChatRailItem({
         slots: slotsRef.current,
+        tickIds: tickIdsRef.current,
         virtualItems: virtualItemsRef.current,
         scrollTop: element.scrollTop,
         clientHeight: element.clientHeight,
@@ -153,7 +157,12 @@ export function useNativeChatMessageRail({
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
   const ticks = useMemo(
-    () => selectNativeChatRailTicks({ items, keepIds: [activeId, focusId, previewId], maxTicks }),
+    () =>
+      selectNativeChatRailTicks({
+        items,
+        keepIds: [activeId, focusId, previewId],
+        maxTicks
+      }),
     [items, activeId, focusId, previewId, maxTicks]
   )
   const previewReply =
