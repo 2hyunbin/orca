@@ -18,6 +18,7 @@ import { wrapWindowsDirectCmdHookCommand } from './windows-direct-cmd-hook-comma
 import { AntigravityHookService } from '../antigravity/hook-service'
 import { ANTIGRAVITY_EVENTS } from '../antigravity/hook-events'
 import { getWindowsPowerShellExecutablePath } from './windows-powershell-hook-launcher'
+import { findGitBash } from './windows-git-bash-path.test-fixture'
 
 const { homedirMock } = vi.hoisted(() => ({ homedirMock: vi.fn<() => string>() }))
 vi.mock('electron', () => ({ app: { getPath: () => process.cwd() } }))
@@ -152,7 +153,9 @@ describe.skipIf(
         for (const event of ANTIGRAVITY_EVENTS) {
           const command = installedCommand(configPath, event.eventName)
           const scriptPath = join(home, '.orca', 'agent-hooks', event.windowsWrapperFileName)
-          expect(command).toBe(wrapWindowsCmdHookCommand(scriptPath))
+          const directCommand = wrapWindowsDirectCmdHookCommand(scriptPath)
+          // Why: an ASCII profile registers the forward-slash path Git Bash can start too.
+          expect(command).toBe(directCommand ?? wrapWindowsCmdHookCommand(scriptPath))
           if (!WINDOWS_CMD_SAFE_PATH.test(scriptPath)) {
             expect(decodeCommand(command)).not.toContain('Set-ExecutionPolicy')
           }
@@ -164,7 +167,8 @@ describe.skipIf(
             {
               program: getWindowsPowerShellExecutablePath(),
               args: ['-NoProfile', '-Command', command]
-            }
+            },
+            ...(directCommand ? [{ program: findGitBash(), args: ['-c', command] }] : [])
           ]
           for (const host of hosts) {
             const before = posts.length
