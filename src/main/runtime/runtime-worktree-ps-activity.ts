@@ -141,7 +141,9 @@ export function applyRuntimeWorktreePsTerminalActivity(args: {
     summary.hasAttachedPty = true
     summary.hasHostSidebarActivity = true
     summary.lastOutputAt = maxTimestamp(summary.lastOutputAt, pty.lastOutputAt)
-    const ptyStatus = getSavedTabWorktreeStatus(owner.title, true)
+    // The saved row title is a snapshot (a new tab's is its default "Terminal N"); the PTY's
+    // live title, with its clears applied, outranks it as it does on the leaf path above.
+    const ptyStatus = getSavedTabWorktreeStatus(displayTitle ?? owner.title, true)
     if (ptyStatus === 'working') {
       addWorkingTerminalEvidence(workingEvidence, summary.worktreeId, {
         paneKey: pty.paneKey,

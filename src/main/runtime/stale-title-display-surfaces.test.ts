@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
 import './orca-runtime-test-lifecycle.spec'
 import { assertTerminalAgentSendable } from './rpc/terminal-agent-send-guard'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
 import {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
+  makeRuntimeStoreWithWorkspaceSession,
   store,
   syncSinglePty
 } from './orca-runtime-test-fixtures.spec'
@@ -21,6 +23,69 @@ describe('display surfaces after the stale-working title clear', () => {
     vi.useFakeTimers()
     try {
       const runtime = new OrcaRuntimeService(store)
+      runtime.setPtyController({
+        spawn: vi.fn().mockResolvedValue({ id: 'bg-pty' }),
+        write: () => true,
+        kill: () => true,
+        getForegroundProcess: async () => null
+      })
+      runtime.attachWindow(1)
+      runtime.syncWindowGraph(1, {
+        tabs: [],
+        leaves: [],
+        mobileSessionTabs: [
+          {
+            worktree: TEST_WORKTREE_ID,
+            publicationEpoch: 'renderer-empty',
+            snapshotVersion: 1,
+            activeGroupId: null,
+            activeTabId: null,
+            activeTabType: null,
+            tabs: []
+          }
+        ]
+      })
+      const terminal = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
+        command: 'codex',
+        tabId: 'bg-tab',
+        leafId: HEADLESS_LEAF_ID
+      })
+      const psStatus = async () =>
+        (await runtime.getWorktreePs()).worktrees.find((w) => w.worktreeId === TEST_WORKTREE_ID)
+          ?.status
+      const phoneTabs = async () =>
+        (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs.map((tab) => ({
+          title: 'title' in tab ? tab.title : undefined,
+          state: 'agentStatus' in tab ? tab.agentStatus?.state : undefined
+        }))
+      runtime.onPtyData('bg-pty', '\x1b]0;Codex working\x07', Date.now())
+      runtime.onPtyData('bg-pty', 'output without a title\r\n', Date.now())
+      expect(await psStatus()).toBe('working')
+      expect(await phoneTabs()).toEqual([{ title: 'Codex working', state: 'working' }])
+
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(await psStatus()).toBe('active')
+      expect(await phoneTabs()).toEqual([{ title: 'Codex', state: 'done' }])
+      const listed = (await runtime.listTerminals()).terminals.find(
+        (candidate) => candidate.handle === terminal.handle
+      )
+      expect(listed?.title).toBe('Codex')
+
+      // The agent's next genuine title retires the clear.
+      runtime.onPtyData('bg-pty', '\x1b]0;Codex working\x07', Date.now())
+      expect(await psStatus()).toBe('working')
+      expect(await phoneTabs()).toEqual([{ title: 'Codex working', state: 'working' }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('the same, once the runtime has saved the created tab into a stored session', async () => {
+    vi.useFakeTimers()
+    try {
+      const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
+      const runtime = new OrcaRuntimeService(runtimeStore)
       runtime.setPtyController({
         spawn: vi.fn().mockResolvedValue({ id: 'bg-pty' }),
         write: () => true,
