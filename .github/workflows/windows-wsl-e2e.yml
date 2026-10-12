@@ -42,6 +42,7 @@ jobs:
           tests/e2e/terminal-inline-images-windows.spec.ts
           --config tests/playwright.config.ts
           --project=electron-headless
+          --project=electron-headful
           --workers=1
           --reporter=list,json
       - name: Require all fourteen executions
