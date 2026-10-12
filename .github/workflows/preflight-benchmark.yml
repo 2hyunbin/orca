@@ -16,7 +16,7 @@ jobs:
       with:
         fetch-depth: 50
         persist-credentials: false
-        ref: a1c94a9080826bb6a665e520be0b86e225002a2f
+        ref: ea44810149e9c68e2718163aeffe83eff96efa6e
     - uses: ./.github/actions/install-node-dependencies
       if: '''false'' != ''true'''
       with:
@@ -37,13 +37,13 @@ jobs:
       with:
         bun-version: 1.4.3
     - name: Select check implementations
-      run: 'git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:package.json > package.json
+      run: 'git show 845b723258c0502365ef8ea29392a3badc8cbeae:package.json > package.json
 
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
 
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
 
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -115,12 +115,12 @@ jobs:
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
-        pnpm run check:code-quality:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+        pnpm run check:code-quality:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
 
         '
     - name: Enforce React Doctor on changed lines
       if: '''true'' == ''true'''
-      run: pnpm run check:react-doctor:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+      run: pnpm run check:react-doctor:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
     - wait: changed-code-quality
     - name: Typecheck
       if: '!cancelled()'
@@ -146,7 +146,7 @@ jobs:
     - name: Check VM runtime rollback compatibility
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts; then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
     - name: Enforce max-lines ratchet
       if: '''true'' == ''true'''
@@ -176,12 +176,12 @@ jobs:
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
     - name: Boot orcad and round-trip a terminal
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
         ORCA_BACKGROUND_LAUNCH: '1'
       run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm run smoke:orcad-terminal\nfi\n"
     - name: Verify the generated RPC params catalog
@@ -236,7 +236,7 @@ jobs:
 
         cat > "$RUNNER_TEMP/replay-event.json" <<''JSON''
 
-        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "1104402f5e85063c3f99dc5b5cb140bb2b299ebb", "ref": "main"}, "head": {"sha": "a1c94a9080826bb6a665e520be0b86e225002a2f", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
+        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "845b723258c0502365ef8ea29392a3badc8cbeae", "ref": "main"}, "head": {"sha": "ea44810149e9c68e2718163aeffe83eff96efa6e", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
 
         JSON
 
@@ -277,7 +277,7 @@ jobs:
       with:
         fetch-depth: 50
         persist-credentials: false
-        ref: a1c94a9080826bb6a665e520be0b86e225002a2f
+        ref: ea44810149e9c68e2718163aeffe83eff96efa6e
     - uses: ./.github/actions/install-node-dependencies
       if: '''false'' != ''true'''
       with:
@@ -298,13 +298,13 @@ jobs:
       with:
         bun-version: 1.4.3
     - name: Select check implementations
-      run: 'git show a1c94a9080826bb6a665e520be0b86e225002a2f:package.json > package.json
+      run: 'git show ea44810149e9c68e2718163aeffe83eff96efa6e:package.json > package.json
 
-        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+        git show ea44810149e9c68e2718163aeffe83eff96efa6e:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
 
-        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+        git show ea44810149e9c68e2718163aeffe83eff96efa6e:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
 
-        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
+        git show ea44810149e9c68e2718163aeffe83eff96efa6e:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -376,12 +376,12 @@ jobs:
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
-        pnpm run check:code-quality:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+        pnpm run check:code-quality:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
 
         '
     - name: Enforce React Doctor on changed lines
       if: '''true'' == ''true'''
-      run: pnpm run check:react-doctor:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+      run: pnpm run check:react-doctor:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
     - wait: changed-code-quality
     - name: Typecheck
       if: '!cancelled()'
@@ -407,7 +407,7 @@ jobs:
     - name: Check VM runtime rollback compatibility
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts; then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
     - name: Enforce max-lines ratchet
       if: '''true'' == ''true'''
@@ -437,12 +437,12 @@ jobs:
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
     - name: Boot orcad and round-trip a terminal
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
         ORCA_BACKGROUND_LAUNCH: '1'
       run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm run smoke:orcad-terminal\nfi\n"
     - name: Verify the generated RPC params catalog
@@ -497,7 +497,7 @@ jobs:
 
         cat > "$RUNNER_TEMP/replay-event.json" <<''JSON''
 
-        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "1104402f5e85063c3f99dc5b5cb140bb2b299ebb", "ref": "main"}, "head": {"sha": "a1c94a9080826bb6a665e520be0b86e225002a2f", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
+        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "845b723258c0502365ef8ea29392a3badc8cbeae", "ref": "main"}, "head": {"sha": "ea44810149e9c68e2718163aeffe83eff96efa6e", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
 
         JSON
 
@@ -538,7 +538,7 @@ jobs:
       with:
         fetch-depth: 50
         persist-credentials: false
-        ref: a1c94a9080826bb6a665e520be0b86e225002a2f
+        ref: ea44810149e9c68e2718163aeffe83eff96efa6e
     - uses: ./.github/actions/install-node-dependencies
       if: '''false'' != ''true'''
       with:
@@ -559,13 +559,13 @@ jobs:
       with:
         bun-version: 1.4.3
     - name: Select check implementations
-      run: 'git show a1c94a9080826bb6a665e520be0b86e225002a2f:package.json > package.json
+      run: 'git show ea44810149e9c68e2718163aeffe83eff96efa6e:package.json > package.json
 
-        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+        git show ea44810149e9c68e2718163aeffe83eff96efa6e:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
 
-        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+        git show ea44810149e9c68e2718163aeffe83eff96efa6e:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
 
-        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
+        git show ea44810149e9c68e2718163aeffe83eff96efa6e:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -637,12 +637,12 @@ jobs:
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
-        pnpm run check:code-quality:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+        pnpm run check:code-quality:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
 
         '
     - name: Enforce React Doctor on changed lines
       if: '''true'' == ''true'''
-      run: pnpm run check:react-doctor:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+      run: pnpm run check:react-doctor:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
     - wait: changed-code-quality
     - name: Typecheck
       if: '!cancelled()'
@@ -668,7 +668,7 @@ jobs:
     - name: Check VM runtime rollback compatibility
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts; then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
     - name: Enforce max-lines ratchet
       if: '''true'' == ''true'''
@@ -698,12 +698,12 @@ jobs:
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
     - name: Boot orcad and round-trip a terminal
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
         ORCA_BACKGROUND_LAUNCH: '1'
       run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm run smoke:orcad-terminal\nfi\n"
     - name: Verify the generated RPC params catalog
@@ -758,7 +758,7 @@ jobs:
 
         cat > "$RUNNER_TEMP/replay-event.json" <<''JSON''
 
-        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "1104402f5e85063c3f99dc5b5cb140bb2b299ebb", "ref": "main"}, "head": {"sha": "a1c94a9080826bb6a665e520be0b86e225002a2f", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
+        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "845b723258c0502365ef8ea29392a3badc8cbeae", "ref": "main"}, "head": {"sha": "ea44810149e9c68e2718163aeffe83eff96efa6e", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
 
         JSON
 
@@ -799,7 +799,7 @@ jobs:
       with:
         fetch-depth: 50
         persist-credentials: false
-        ref: a1c94a9080826bb6a665e520be0b86e225002a2f
+        ref: ea44810149e9c68e2718163aeffe83eff96efa6e
     - uses: ./.github/actions/install-node-dependencies
       if: '''false'' != ''true'''
       with:
@@ -820,13 +820,13 @@ jobs:
       with:
         bun-version: 1.4.3
     - name: Select check implementations
-      run: 'git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:package.json > package.json
+      run: 'git show 845b723258c0502365ef8ea29392a3badc8cbeae:package.json > package.json
 
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
 
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
 
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -898,12 +898,12 @@ jobs:
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
-        pnpm run check:code-quality:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+        pnpm run check:code-quality:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
 
         '
     - name: Enforce React Doctor on changed lines
       if: '''true'' == ''true'''
-      run: pnpm run check:react-doctor:changed -- "1104402f5e85063c3f99dc5b5cb140bb2b299ebb"
+      run: pnpm run check:react-doctor:changed -- "845b723258c0502365ef8ea29392a3badc8cbeae"
     - wait: changed-code-quality
     - name: Typecheck
       if: '!cancelled()'
@@ -929,7 +929,7 @@ jobs:
     - name: Check VM runtime rollback compatibility
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts; then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
     - name: Enforce max-lines ratchet
       if: '''true'' == ''true'''
@@ -959,12 +959,12 @@ jobs:
       env:
         PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
       run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
     - name: Boot orcad and round-trip a terminal
       if: '''true'' == ''true'''
       env:
-        BASE_SHA: 1104402f5e85063c3f99dc5b5cb140bb2b299ebb
+        BASE_SHA: 845b723258c0502365ef8ea29392a3badc8cbeae
         ORCA_BACKGROUND_LAUNCH: '1'
       run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm run smoke:orcad-terminal\nfi\n"
     - name: Verify the generated RPC params catalog
@@ -1019,7 +1019,7 @@ jobs:
 
         cat > "$RUNNER_TEMP/replay-event.json" <<''JSON''
 
-        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "1104402f5e85063c3f99dc5b5cb140bb2b299ebb", "ref": "main"}, "head": {"sha": "a1c94a9080826bb6a665e520be0b86e225002a2f", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
+        {"pull_request": {"number": 28106, "draft": false, "base": {"sha": "845b723258c0502365ef8ea29392a3badc8cbeae", "ref": "main"}, "head": {"sha": "ea44810149e9c68e2718163aeffe83eff96efa6e", "ref": "nwparker/preflight-critical-path"}, "title": "Speed up daemon smoke checks and keep compiler slots busy", "body": ""}, "repository": {"full_name": "stablyai/orca"}}
 
         JSON
 
