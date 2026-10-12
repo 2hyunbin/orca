@@ -30,6 +30,7 @@ import {
   sendPreparation,
   structuredAgentSessionSendBlock
 } from './structured-agent-session-send-preparation'
+import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import {
   cancelPlan,
   promptPlan,
@@ -184,7 +185,9 @@ export async function setStructuredAgentSessionOption(
   // starting child takes it before it is handed anything. Never a write the pick waits on.
   const recordsIntent = () => {
     const child = context.sessions.get(params.envelope.sessionId)?.child
-    return !child || child.phase === 'starting'
+    return (
+      params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID || !child || child.phase === 'starting'
+    )
   }
   return mutateStructuredAgentSession(
     context,
