@@ -8,6 +8,7 @@
 import type { ExecutionHostId } from '../../shared/execution-host'
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
+import type { WorkspaceLayoutModel } from '../../shared/workspace-layout/workspace-layout-model'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
 import type { HolderStore } from './runtime-workspace-layout-writer'
 import type { RuntimeStore } from './runtime-store-contract'
@@ -26,6 +27,7 @@ export function reloadHolderOnExternalWrites(
       session,
       nameBasedLoadContext()
     )
+    keepUnsavedEditorViews(holder, loaded.layout)
     holder.replacePartition(hostId, session, loaded)
   }
   holder.setExternalWriteCheck(reloadIfWrittenElsewhere)
@@ -39,4 +41,21 @@ export function reloadHolderOnExternalWrites(
       }
     }
   })
+}
+
+/** Editor tab views are not saved, so a reload keeps each view whose tab it still holds. */
+function keepUnsavedEditorViews(
+  holder: Pick<RuntimeWorkspaceLayouts, 'published'>,
+  layout: WorkspaceLayoutModel
+): void {
+  for (const [key, workspace] of Object.entries(layout.workspaces)) {
+    const tabIds = new Set(workspace.tabs.map((tab) => tab.id))
+    const kept = Object.entries(holder.published(key)?.editorViews ?? {}).filter(([tabId]) =>
+      tabIds.has(tabId)
+    )
+    if (kept.length > 0) {
+      // The loaded layout is a fresh copy, so this touches no stored data.
+      workspace.editorViews = Object.fromEntries(kept)
+    }
+  }
 }

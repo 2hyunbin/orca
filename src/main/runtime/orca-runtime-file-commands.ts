@@ -52,8 +52,9 @@ export class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreservedBranchC
       this.notifier.openFile(worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation)
     },
     openDiff: (worktreeId, filePath, relativePath, staged, runtimeEnvironmentId, navigation) => {
-      if (!this.notifier?.openDiff) {
-        throw new Error('renderer_unavailable')
+      if (!this.notifier?.openDiff || !this.getAvailableAuthoritativeWindow()) {
+        this.openHeldEditorFile(worktreeId, { filePath, relativePath }, navigation, { staged })
+        return
       }
       this.notifier.openDiff(
         worktreeId,

@@ -12,6 +12,7 @@ export {
   type MethodTranslation,
   type SessionTabMoveErrorCode
 } from './old-client-method-translation'
+export { translateFileOpen } from './old-client-editor-tabs'
 export {
   translateUpdatePaneLayout,
   type PaneLayoutTranslation,

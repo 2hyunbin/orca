@@ -71,11 +71,12 @@ it.each([false, true])(
     const nextReservation = reserveIdlePaneSpawn(reservationKey)
     clearProviderPtyState(binding.ptyId)
     ptyOwnership.delete(binding.ptyId)
-    await runtime.onPtyExit(binding.ptyId, -1, binding.incarnationId, {
+    // Why not awaited: the exit's durable retirement queues behind the paused save.
+    const exited = runtime.onPtyExit(binding.ptyId, -1, binding.incarnationId, {
       providerExitObserved: true
     })
     gate.finish.resolve()
-    await pending
+    await Promise.all([pending, exited])
     expect(ptyOwnership.has(binding.ptyId)).toBe(false)
     expect(ptyIncarnationById.has(binding.ptyId)).toBe(false)
     expect(ptySizes.has(binding.ptyId)).toBe(false)

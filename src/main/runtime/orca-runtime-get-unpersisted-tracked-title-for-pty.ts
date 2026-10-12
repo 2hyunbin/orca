@@ -96,7 +96,8 @@ export class OrcaRuntimeWithGetUnpersistedTrackedTitleForPty extends OrcaRuntime
             })
           }
           const changed = this.applyTrackedPtyTitle(ptyId, rawTitle, normalizedTitle, meta)
-          if (changed) {
+          // A spinner frame alone republishes nothing, as today's phone list never fanned them out.
+          if (changed && !(live?.applyingChunk && decorativeOnly)) {
             this.paneTitleFacts.terminalTitleObserved(ptyId)
           }
           const identityOnlyTitle = this.isLiveCursorNativeTitle(rawTitle, meta)

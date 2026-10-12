@@ -63,10 +63,12 @@ describe('ipc failed reattach routing', () => {
       const pending = expect(commit()).rejects.toThrow('ORCA_TERMINAL_SESSION_STATE_SAVE_FAILED')
       await gate.started.promise
       const ownerWhileSaving = ptyOwnership.get(binding.ptyId)
+      let exited: unknown
       if (outcome !== 'live') {
         clearProviderPtyState(binding.ptyId)
         ptyOwnership.delete(binding.ptyId)
-        await runtime.onPtyExit(binding.ptyId, 0, incarnationId, { providerExitObserved: true })
+        // Why not awaited: the exit's durable retirement queues behind the paused save.
+        exited = runtime.onPtyExit(binding.ptyId, 0, incarnationId, { providerExitObserved: true })
         if (outcome === 'replaced') {
           runtime.onPtySpawned(binding.ptyId, successorIncarnation)
           ptyOwnership.set(binding.ptyId, 'local')
@@ -74,7 +76,7 @@ describe('ipc failed reattach routing', () => {
         }
       }
       gate.finish.reject(new Error('disk full'))
-      await pending
+      await Promise.all([pending, exited])
       expect(ownerWhileSaving).toBe('local')
       expect(ptyOwnership.get(binding.ptyId)).toBe(outcome === 'exited' ? undefined : 'local')
       expect(ptyIncarnationById.get(binding.ptyId)).toBe(

@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTabsSnapshot
-} from '../../src/shared/runtime-types'
+import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
+import { getDefaultWorkspaceSession } from '../../src/shared/constants'
+import type { WorkspaceSessionState } from '../../src/shared/workspace-session-state-types'
 import { detectAgentStatusFromTitle } from '../../src/shared/agent-detection'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../src/shared/agent-status-types'
 import { isExplicitAgentStatusFresh } from '../../src/renderer/src/lib/agent-status'
@@ -27,7 +26,6 @@ const WORKTREE_COUNT = 24
 const DECORATIVE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 type RuntimeInternals = {
-  mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
   ptysById: Map<string, { launchAgent: 'grok-build' | 'pi' | null }>
   ptyForegroundAgent: { hasDelayedSnapshot: (ptyId: string) => boolean }
   resetTrackedTerminalStateForProviderGeneration: (ptyId: string) => void
@@ -77,38 +75,82 @@ function makeViewerState(): WebSessionTabsSyncState {
   }
 }
 
-function seedWorktree(runtime: OrcaRuntimeService, index: number): string {
-  const worktreeId = `workspace-${index}`
-  const ptyId = `pty-${index}`
-  const tabId = `host-tab-${index}`
-  const leafId = `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`
-  runtime.registerPty(ptyId, worktreeId)
-  ;(runtime as unknown as RuntimeInternals).mobileSessionTabsByWorktree.set(worktreeId, {
-    worktree: worktreeId,
-    publicationEpoch: 'epoch-1',
-    snapshotVersion: 1,
-    activeGroupId: `group-${index}`,
-    activeTabId: `${tabId}::${leafId}`,
-    activeTabType: 'terminal',
-    tabs: [
+function leafIdFor(index: number): string {
+  return `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`
+}
+
+/** A runtime whose saved session holds one `Cursor Agent` terminal per worktree, bound to `pty-N`. */
+function createRuntime(
+  worktreeCount = 1,
+  deps?: ConstructorParameters<typeof OrcaRuntimeService>[2]
+): { runtime: OrcaRuntimeService; ptyIds: string[] } {
+  const session: WorkspaceSessionState = {
+    ...getDefaultWorkspaceSession(),
+    tabsByWorktree: {},
+    terminalLayoutsByTabId: {}
+  }
+  for (let index = 0; index < worktreeCount; index += 1) {
+    const worktreeId = `workspace-${index}`
+    const tabId = `host-tab-${index}`
+    const leafId = leafIdFor(index)
+    session.tabsByWorktree[worktreeId] = [
       {
-        type: 'terminal',
-        id: `${tabId}::${leafId}`,
-        parentTabId: tabId,
-        leafId,
-        ptyId,
+        id: tabId,
+        ptyId: `pty-${index}`,
+        worktreeId,
         title: 'Cursor Agent',
-        parentLayout: {
-          root: { type: 'leaf', leafId },
-          activeLeafId: leafId,
-          expandedLeafId: null,
-          ptyIdsByLeafId: { [leafId]: ptyId }
-        },
-        isActive: true
+        customTitle: null,
+        color: null,
+        sortOrder: 0,
+        createdAt: 1
       }
     ]
+    session.terminalLayoutsByTabId[tabId] = {
+      root: { type: 'leaf', leafId },
+      activeLeafId: leafId,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [leafId]: `pty-${index}` }
+    }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the paths under test read only the workspace session and settings of this partial Store.
+  const store = {
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: () => {},
+    getSettings: () => ({})
+  } as never
+  const runtime = new OrcaRuntimeService(store, undefined, deps)
+  const ptyIds = Array.from({ length: worktreeCount }, (_, index) => {
+    runtime.registerPty(`pty-${index}`, `workspace-${index}`)
+    return `pty-${index}`
   })
-  return ptyId
+  return { runtime, ptyIds }
+}
+
+/** `pty-0` bound to its pane and wired to the hook-status store, where phone rows read rich status. */
+function createHookRuntime(): { runtime: OrcaRuntimeService; ptyId: string; dispose: () => void } {
+  const statusWiring = makeAgentStatusStoreWiring()
+  const {
+    runtime,
+    ptyIds: [ptyId]
+  } = createRuntime(1, statusWiring.deps)
+  const uninstallStatusRepublish = statusWiring.attach(runtime)
+  runtime.registerPty(ptyId!, 'workspace-0', null, { tabId: 'host-tab-0', leafId: leafIdFor(0) })
+  return {
+    runtime,
+    ptyId: ptyId!,
+    dispose: () => {
+      uninstallStatusRepublish()
+      statusWiring.statusStore.stop()
+    }
+  }
+}
+
+function reportHookStatus(
+  runtime: OrcaRuntimeService,
+  ptyId: string,
+  payload: Record<string, string>
+): void {
+  runtime.onPtyData(ptyId, `\x1b]9999;${JSON.stringify(payload)}\x07`, Date.now())
 }
 
 function resetCounters(counters: FanoutCounters): void {
@@ -141,10 +183,7 @@ describe('real PTY decorative session-tabs fanout', () => {
   })
 
   it('bounds host publication and renderer application across remote worktrees', () => {
-    const runtime = new OrcaRuntimeService()
-    const ptyIds = Array.from({ length: WORKTREE_COUNT }, (_, index) =>
-      seedWorktree(runtime, index)
-    )
+    const { runtime, ptyIds } = createRuntime(WORKTREE_COUNT)
     const counters: FanoutCounters = {
       hostPublications: 0,
       serializedBytes: 0,
@@ -264,7 +303,7 @@ describe('real PTY decorative session-tabs fanout', () => {
       expect(terminal).toMatchObject({
         type: 'terminal',
         parentTabId: `host-tab-${index}`,
-        leafId: `00000000-0000-4000-8000-${index.toString().padStart(12, '0')}`,
+        leafId: leafIdFor(index),
         ptyId: `pty-${index}`,
         title: 'Cursor ready'
       })
@@ -306,8 +345,7 @@ describe('real PTY decorative session-tabs fanout', () => {
     ['build ⠁', 'build ⠂'],
     ['Codex working task ⠁', 'Codex working task ⠂']
   ])('publishes meaningful real-title changes from %j to %j', (firstTitle, secondTitle) => {
-    const runtime = new OrcaRuntimeService()
-    seedWorktree(runtime, 0)
+    const { runtime } = createRuntime()
     const published: RuntimeMobileSessionTabsResult[] = []
     const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => published.push(snapshot))
 
@@ -323,11 +361,8 @@ describe('real PTY decorative session-tabs fanout', () => {
   })
 
   it('globally caps decorative freshness while every working status stays fresh', () => {
-    const runtime = new OrcaRuntimeService()
     const firstWorkingTitleAt = Date.now()
-    const ptyIds = Array.from({ length: WORKTREE_COUNT }, (_, index) =>
-      seedWorktree(runtime, index)
-    )
+    const { runtime, ptyIds } = createRuntime(WORKTREE_COUNT)
     const publications: {
       worktreeId: string
       at: number
@@ -438,24 +473,13 @@ describe('real PTY decorative session-tabs fanout', () => {
       expectedTitle: '⠋ Grok'
     }
   ])('renews exact and normalized $agent frames beyond the viewer stale boundary', (testCase) => {
-    const runtime = new OrcaRuntimeService()
     const firstWorkingTitleAt = Date.now()
-    const ptyId = seedWorktree(runtime, 0)
+    const {
+      runtime,
+      ptyIds: [ptyId]
+    } = createRuntime()
     const internals = runtime as unknown as RuntimeInternals
-    internals.ptysById.get(ptyId)!.launchAgent = testCase.agent
-    const seededTab = internals.mobileSessionTabsByWorktree.get('workspace-0')?.tabs[0]
-    if (seededTab?.type !== 'terminal') {
-      throw new Error('expected seeded terminal')
-    }
-    seededTab.agentStatus = {
-      state: 'working',
-      prompt: 'task',
-      updatedAt: firstWorkingTitleAt,
-      stateStartedAt: firstWorkingTitleAt,
-      agentType: testCase.agent,
-      paneKey: seededTab.id,
-      stateHistory: []
-    }
+    internals.ptysById.get(ptyId!)!.launchAgent = testCase.agent
     const publications: RuntimeMobileSessionTabsResult[] = []
     let viewerState = makeViewerState()
     const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => {
@@ -515,28 +539,18 @@ describe('real PTY decorative session-tabs fanout', () => {
     const completedTerminal = publications[0]?.tabs[0]
     const completedStatus =
       completedTerminal?.type === 'terminal' ? completedTerminal.agentStatus : undefined
-    expect(completedStatus).toMatchObject({ state: 'done', prompt: '' })
-    expect(completedStatus?.stateStartedAt).toBeGreaterThan(finalAgentStatus!.stateStartedAt)
+    // Title-only agent: the shell title retires its status (#1437); no window row keeps a `done`.
+    expect(completedStatus).toBeUndefined()
     unsubscribe()
   })
 
   it('does not publish a stored working row over a later permission title', () => {
-    const runtime = new OrcaRuntimeService()
-    const ptyId = seedWorktree(runtime, 0)
-    const internals = runtime as unknown as RuntimeInternals
-    const seededTab = internals.mobileSessionTabsByWorktree.get('workspace-0')?.tabs[0]
-    if (seededTab?.type !== 'terminal') {
-      throw new Error('expected seeded terminal')
-    }
-    seededTab.agentStatus = {
+    const { runtime, ptyId, dispose } = createHookRuntime()
+    reportHookStatus(runtime, ptyId, {
       state: 'working',
       prompt: 'previous task',
-      updatedAt: Date.now(),
-      stateStartedAt: Date.now(),
-      agentType: 'cursor',
-      paneKey: seededTab.id,
-      stateHistory: []
-    }
+      agentType: 'cursor'
+    })
     const publications: RuntimeMobileSessionTabsResult[] = []
     const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => {
       publications.push(structuredClone(snapshot))
@@ -559,25 +573,16 @@ describe('real PTY decorative session-tabs fanout', () => {
       stateStartedAt: permissionAt
     })
     unsubscribe()
+    dispose()
   })
 
   it('does not publish a prior done row over a newer working title', () => {
-    const runtime = new OrcaRuntimeService()
-    const ptyId = seedWorktree(runtime, 0)
-    const internals = runtime as unknown as RuntimeInternals
-    const seededTab = internals.mobileSessionTabsByWorktree.get('workspace-0')?.tabs[0]
-    if (seededTab?.type !== 'terminal') {
-      throw new Error('expected seeded terminal')
-    }
-    seededTab.agentStatus = {
+    const { runtime, ptyId, dispose } = createHookRuntime()
+    reportHookStatus(runtime, ptyId, {
       state: 'working',
       prompt: 'first task',
-      updatedAt: Date.now(),
-      stateStartedAt: Date.now(),
-      agentType: 'cursor',
-      paneKey: seededTab.id,
-      stateHistory: []
-    }
+      agentType: 'cursor'
+    })
     const publications: RuntimeMobileSessionTabsResult[] = []
     const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => {
       publications.push(structuredClone(snapshot))
@@ -589,16 +594,8 @@ describe('real PTY decorative session-tabs fanout', () => {
     runtime.onPtyData(ptyId, '\x1b]0;bash\x07', Date.now())
     vi.advanceTimersByTime(50)
     vi.advanceTimersByTime(1)
-    const doneAt = Date.now()
-    seededTab.agentStatus = {
-      state: 'done',
-      prompt: 'first task',
-      updatedAt: doneAt,
-      stateStartedAt: doneAt,
-      agentType: 'cursor',
-      paneKey: seededTab.id,
-      stateHistory: []
-    }
+    reportHookStatus(runtime, ptyId, { state: 'done', prompt: 'first task', agentType: 'cursor' })
+    vi.advanceTimersByTime(50)
     publications.length = 0
 
     vi.advanceTimersByTime(1)
@@ -615,6 +612,7 @@ describe('real PTY decorative session-tabs fanout', () => {
       stateStartedAt: nextWorkingAt
     })
     unsubscribe()
+    dispose()
   })
 
   it('holds decorative heartbeats behind unresolved foreground ownership', async () => {
@@ -623,14 +621,16 @@ describe('real PTY decorative session-tabs fanout', () => {
       resolveForegroundProcess = resolve
     })
     const getForegroundProcess = vi.fn(() => foregroundProcess)
-    const runtime = new OrcaRuntimeService()
+    const {
+      runtime,
+      ptyIds: [ptyId]
+    } = createRuntime()
     runtime.setPtyController({
       spawn: vi.fn().mockResolvedValue({ id: 'pty-0' }),
       write: () => true,
       kill: () => true,
       getForegroundProcess
     })
-    const ptyId = seedWorktree(runtime, 0)
     const publications: RuntimeMobileSessionTabsResult[] = []
     const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => {
       publications.push(structuredClone(snapshot))
@@ -667,14 +667,16 @@ describe('real PTY decorative session-tabs fanout', () => {
     const foregroundProcess = new Promise<string | null>((resolve) => {
       resolveForegroundProcess = resolve
     })
-    const runtime = new OrcaRuntimeService()
+    const {
+      runtime,
+      ptyIds: [ptyId]
+    } = createRuntime()
     runtime.setPtyController({
       spawn: vi.fn().mockResolvedValue({ id: 'pty-0' }),
       write: () => true,
       kill: () => true,
       getForegroundProcess: () => foregroundProcess
     })
-    const ptyId = seedWorktree(runtime, 0)
     const internals = runtime as unknown as RuntimeInternals
 
     runtime.onPtyData(ptyId, '\x1b]0;⠋ Pi\x07', Date.now())
@@ -688,19 +690,7 @@ describe('real PTY decorative session-tabs fanout', () => {
   })
 
   it('renews retained hook status without resetting its state start', () => {
-    const statusWiring = makeAgentStatusStoreWiring()
-    const runtime = new OrcaRuntimeService(null, undefined, statusWiring.deps)
-    const uninstallStatusRepublish = statusWiring.attach(runtime)
-    const ptyId = seedWorktree(runtime, 0)
-    const internals = runtime as unknown as RuntimeInternals
-    const seededTab = internals.mobileSessionTabsByWorktree.get('workspace-0')?.tabs[0]
-    if (seededTab?.type !== 'terminal') {
-      throw new Error('expected seeded terminal')
-    }
-    runtime.registerPty(ptyId, 'workspace-0', null, {
-      tabId: seededTab.parentTabId,
-      leafId: seededTab.leafId
-    })
+    const { runtime, ptyId, dispose } = createHookRuntime()
     const publications: RuntimeMobileSessionTabsResult[] = []
     let viewerState = makeViewerState()
     const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => {
@@ -714,11 +704,11 @@ describe('real PTY decorative session-tabs fanout', () => {
       viewerState = { ...viewerState, ...patch }
     })
 
-    runtime.onPtyData(
-      ptyId,
-      '\x1b]9999;{"state":"working","prompt":"retained work","agentType":"codex"}\x07',
-      Date.now()
-    )
+    reportHookStatus(runtime, ptyId, {
+      state: 'working',
+      prompt: 'retained work',
+      agentType: 'codex'
+    })
     vi.advanceTimersByTime(50)
     expect(publications).toHaveLength(1)
     const initialTerminal = publications[0]?.tabs[0]
@@ -770,7 +760,6 @@ describe('real PTY decorative session-tabs fanout', () => {
       true
     )
     unsubscribe()
-    uninstallStatusRepublish()
-    statusWiring.statusStore.stop()
+    dispose()
   })
 })

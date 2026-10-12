@@ -24,6 +24,20 @@ import {
   createEncryptedWsResponseReader
 } from './runtime-rpc-mobile-ws-test-harness'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+
+// The phone list projects the runtime's layout holder, which loads from the Store's workspace session.
+function makeStoreWithWorkspaceSession() {
+  const sessions = new Map<string, WorkspaceSessionState>()
+  return {
+    ...makeStore(),
+    getWorkspaceSession: (hostId = 'local') => sessions.get(hostId) ?? getDefaultWorkspaceSession(),
+    setWorkspaceSession: (session: WorkspaceSessionState, hostId = 'local') => {
+      sessions.set(hostId, session)
+    }
+  }
+}
 
 vi.mock('../git/worktree', () => {
   const worktrees = [
@@ -44,7 +58,8 @@ vi.mock('../git/worktree', () => {
 describe('OrcaRuntimeRpcServer', () => {
   it('mirrors laptop-created remote runtime terminals into phone session tabs over RPC', async () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the paths under test read only the workspace session and settings of this partial Store.
+    const runtime = new OrcaRuntimeService(makeStoreWithWorkspaceSession() as never)
     const spawn = vi.fn().mockResolvedValue({ id: 'laptop-created-pty' })
     runtime.setPtyController({
       spawn,
@@ -157,7 +172,8 @@ describe('OrcaRuntimeRpcServer', () => {
   it('streams laptop-created runtime terminals to a paired phone WebSocket client', async () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
     const writes: string[] = []
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the paths under test read only the workspace session and settings of this partial Store.
+    const runtime = new OrcaRuntimeService(makeStoreWithWorkspaceSession() as never)
     const spawn = vi.fn().mockResolvedValue({ id: 'paired-laptop-pty' })
     runtime.setPtyController({
       spawn,

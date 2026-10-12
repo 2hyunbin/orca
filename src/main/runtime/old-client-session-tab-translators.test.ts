@@ -1,5 +1,6 @@
 import './orca-runtime-test-lifecycle.spec'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { RuntimeMobileSessionTabsSnapshot } from '../../shared/runtime-types'
 import type { TerminalTab } from '../../shared/terminal-tab-types'
 import { OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
 import {
@@ -127,5 +128,183 @@ describe("old clients' session-tab methods on a host with no window", () => {
 
     const listed = await runtime.listMobileSessionTabs(WORKTREE)
     expect(listed.tabs[0]).toMatchObject({ type: 'terminal', title: 'Deploy watcher' })
+  })
+
+  it('carries the retirement proof old desktops read after a pane leaves the layout', async () => {
+    const split = makeHeadlessTerminalLayout({
+      [HEADLESS_LEAF_ID]: 'pty-a',
+      [HEADLESS_SECOND_LEAF_ID]: 'pty-b'
+    })
+    const { runtime } = headlessHost([terminalRow('split', 0, { ptyId: 'pty-a' })], {
+      terminalLayoutsByTabId: { split }
+    })
+    runtime.registerPty('pty-a', TEST_WORKTREE_ID, null, {
+      tabId: 'split',
+      leafId: HEADLESS_LEAF_ID
+    })
+    runtime.registerPty('pty-b', TEST_WORKTREE_ID, null, {
+      tabId: 'split',
+      leafId: HEADLESS_SECOND_LEAF_ID
+    })
+    const handle = (await runtime.listTerminals()).terminals.find(
+      (terminal) => terminal.leafId === HEADLESS_SECOND_LEAF_ID
+    )!.handle
+    const closing = (await runtime.listMobileSessionTabs(WORKTREE)).tabs.find(
+      (tab) => tab.type === 'terminal' && tab.leafId === HEADLESS_SECOND_LEAF_ID
+    )!
+
+    await runtime.closeMobileSessionTab(WORKTREE, closing.id)
+
+    const listed = await runtime.listMobileSessionTabs(WORKTREE)
+    expect(listed.tabs.map((tab) => tab.id)).not.toContain(closing.id)
+    expect(listed.retiredTerminalSurfaces).toEqual([
+      { parentTabId: 'split', leafId: HEADLESS_SECOND_LEAF_ID, ptyId: 'pty-b', terminal: handle }
+    ])
+  })
+
+  it('opens a diff with no window and lists it as main does, across a reload', async () => {
+    const { runtime, getSession, setSession } = headlessHost([terminalRow('first', 0)])
+    const diffRow = {
+      type: 'file',
+      mode: 'diff',
+      diffSource: 'staged',
+      filePath: '/repo/src/a.ts',
+      relativePath: 'src/a.ts',
+      language: 'typescript',
+      title: 'a.ts'
+    }
+
+    runtime.openHeldEditorFile(
+      TEST_WORKTREE_ID,
+      { filePath: '/repo/src/a.ts', relativePath: 'src/a.ts' },
+      undefined,
+      { staged: true }
+    )
+    expect((await runtime.listMobileSessionTabs(WORKTREE)).tabs).toContainEqual(
+      expect.objectContaining(diffRow)
+    )
+
+    // Another writer's save reloads the holder; the unsaved view stays with its tab.
+    setSession({ ...getSession() })
+    expect((await runtime.listMobileSessionTabs(WORKTREE)).tabs).toContainEqual(
+      expect.objectContaining(diffRow)
+    )
+  })
+})
+
+describe("the window's diff and markdown-preview rows while it keeps its own paths (until 6e)", () => {
+  const DIFF_TAB = 'diff-tab'
+  const PREVIEW_TAB = 'preview-tab'
+
+  function windowSession() {
+    const tab = (id: string, contentType: 'diff' | 'editor', sortOrder: number) => ({
+      id,
+      entityId: `${id}-file`,
+      groupId: 'group',
+      worktreeId: TEST_WORKTREE_ID,
+      contentType,
+      label: id,
+      customLabel: null,
+      color: null,
+      sortOrder,
+      createdAt: sortOrder + 1
+    })
+    return makeWorkspaceSessionWithHeadlessTerminal({
+      unifiedTabs: {
+        [TEST_WORKTREE_ID]: [tab(DIFF_TAB, 'diff', 0), tab(PREVIEW_TAB, 'editor', 1)]
+      },
+      tabGroups: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'group',
+            worktreeId: TEST_WORKTREE_ID,
+            activeTabId: DIFF_TAB,
+            tabOrder: [DIFF_TAB, PREVIEW_TAB]
+          }
+        ]
+      }
+    })
+  }
+
+  const publishedRows: RuntimeMobileSessionTabsSnapshot = {
+    worktree: TEST_WORKTREE_ID,
+    publicationEpoch: 'window',
+    snapshotVersion: 1,
+    activeGroupId: 'group',
+    activeTabId: DIFF_TAB,
+    activeTabType: 'file',
+    tabs: [
+      {
+        type: 'file',
+        id: DIFF_TAB,
+        title: 'a.ts',
+        filePath: '/repo/src/a.ts',
+        relativePath: 'src/a.ts',
+        language: 'typescript',
+        mode: 'diff',
+        diffSource: 'unstaged',
+        isDirty: false,
+        isActive: true
+      },
+      {
+        type: 'markdown',
+        id: PREVIEW_TAB,
+        title: 'README.md',
+        filePath: '/repo/README.md',
+        relativePath: 'README.md',
+        language: 'markdown',
+        mode: 'markdown-preview',
+        isDirty: false,
+        isActive: false,
+        sourceFileId: 'source-file',
+        sourceFilePath: '/repo/README.md',
+        sourceRelativePath: 'README.md',
+        documentVersion: 'file:source-file'
+      }
+    ]
+  }
+
+  const expectedRows = [
+    expect.objectContaining({
+      id: DIFF_TAB,
+      type: 'file',
+      mode: 'diff',
+      diffSource: 'unstaged',
+      filePath: '/repo/src/a.ts'
+    }),
+    expect.objectContaining({
+      id: PREVIEW_TAB,
+      type: 'markdown',
+      mode: 'markdown-preview',
+      filePath: '/repo/README.md',
+      sourceFilePath: '/repo/README.md'
+    })
+  ]
+
+  it('lists the rows the window publishes for tabs its session saved', async () => {
+    const harness = makeRuntimeStoreWithWorkspaceSession(windowSession())
+    const runtime = new OrcaRuntimeService(harness.runtimeStore)
+    runtime.attachWindow(1)
+
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [publishedRows] })
+
+    const listed = await runtime.listMobileSessionTabs(WORKTREE)
+    expect(listed.tabs).toEqual(expect.arrayContaining(expectedRows))
+  })
+
+  it('lists them once the session save that adds their tabs lands after the rows', async () => {
+    const harness = makeRuntimeStoreWithWorkspaceSession(makeWorkspaceSessionWithHeadlessTerminal())
+    const runtime = new OrcaRuntimeService(harness.runtimeStore)
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [publishedRows] })
+
+    harness.setSession(windowSession())
+    await runtime.listMobileSessionTabs(WORKTREE)
+
+    await vi.waitFor(async () =>
+      expect((await runtime.listMobileSessionTabs(WORKTREE)).tabs).toEqual(
+        expect.arrayContaining(expectedRows)
+      )
+    )
   })
 })

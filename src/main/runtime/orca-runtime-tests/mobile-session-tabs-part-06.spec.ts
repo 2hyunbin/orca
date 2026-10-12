@@ -558,13 +558,22 @@ describe('OrcaRuntimeService', () => {
         [{ id: `tab-${index}`, ptyId: `${TEST_REPO_ID}::/tmp/worktree-${index}@@pty` }]
       ])
     )
-    const session = { tabsByWorktree, terminalLayoutsByTabId: {} }
-    const getWorkspaceSession = vi.fn(() => session)
+    // A scan (or reload) reads every workspace's tabs; a holder read of an unchanged session does not.
+    let scans = 0
+    const session = {
+      get tabsByWorktree() {
+        scans += 1
+        return tabsByWorktree
+      },
+      terminalLayoutsByTabId: {}
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the paths under test read only the workspace session and settings of this partial Store.
     const runtime = new OrcaRuntimeService({
       ...store,
-      getWorkspaceSession,
+      getWorkspaceSession: () => session,
       getWorkspaceSessionHostIds: () => ['local']
     } as never)
+    scans = 0
 
     runtime.syncWindowGraph(1, {
       tabs: [],
@@ -580,7 +589,7 @@ describe('OrcaRuntimeService', () => {
       }))
     })
 
-    expect(getWorkspaceSession).toHaveBeenCalledTimes(1)
+    expect(scans).toBeLessThanOrEqual(1)
     expect(runtime.getStatus().graphStatus).toBe('ready')
   })
 

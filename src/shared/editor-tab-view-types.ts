@@ -94,12 +94,16 @@ export type OpenChatVisualTabState = {
   title: string | null
 }
 
+/** The file a diff or markdown-preview tab shows; old clients list the tab by it. */
+export type EditorTabViewFile = { filePath: string; relativePath: string; language: string }
+
 /** An editor tab's view, keyed by its mode, with exactly the open-file fields that mode uses today. The view is not saved. */
 export type EditorTabView =
   /** An edit tab opened on a conflicted file. */
   | { mode: 'edit'; conflict: OpenConflictMetadata }
   | {
       mode: 'diff'
+      file?: EditorTabViewFile
       diffSource?: DiffSource
       branchCompare?: BranchCompareSnapshot
       commitCompare?: CommitCompareSnapshot
@@ -113,6 +117,7 @@ export type EditorTabView =
     }
   | {
       mode: 'markdown-preview'
+      file?: EditorTabViewFile
       markdownPreviewSourceFileId?: string
       markdownPreviewAnchor?: string
     }

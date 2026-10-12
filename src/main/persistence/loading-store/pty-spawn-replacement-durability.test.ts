@@ -74,7 +74,10 @@ it.each(
       gate.finish.reject(Object.assign(new Error('worker exited'), { code }))
       await shutdownStarted.promise
     }
-    await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, { providerExitObserved: true })
+    // Why not awaited: the exit's durable retirement queues behind the paused save.
+    const exited = runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, {
+      providerExitObserved: true
+    })
     runtime.onPtySpawned(binding.ptyId, replacementIncarnation)
     ptyIncarnationById.set(binding.ptyId, replacementIncarnation)
     ptyOwnership.set(binding.ptyId, 'ssh:successor-host')
@@ -83,6 +86,7 @@ it.each(
     }
     shutdownFinished.resolve()
     expect(await pending).toBe('rejected')
+    await exited
     if (replacementDuring === 'save') {
       expect(shutdown).not.toHaveBeenCalled()
     } else {
@@ -115,12 +119,14 @@ it('keeps replacement provider identity when an exited ipc spawn finishes saving
   const gate = authority.pause()
   const pending = expect(commit()).rejects.toThrow('agent_session_exited_during_start')
   await gate.started.promise
-  await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, { providerExitObserved: true })
+  const exited = runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, {
+    providerExitObserved: true
+  })
   runtime.onPtySpawned(binding.ptyId, replacementIncarnation)
   runtime.seedHeadlessTerminal(binding.ptyId, 'replacement history', { cols: 112, rows: 37 })
   ptyIncarnationById.set(binding.ptyId, replacementIncarnation)
   gate.finish.resolve()
-  await pending
+  await Promise.all([pending, exited])
   expect(ptyIncarnationById.get(binding.ptyId)).toBe(replacementIncarnation)
   expect(await runtime.serializeMainTerminalBuffer(binding.ptyId)).toMatchObject({
     cols: 112,

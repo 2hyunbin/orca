@@ -12,6 +12,8 @@ import type * as RuntimeRpcClient from '../../src/renderer/src/runtime/runtime-r
 import type { RuntimeClientTarget } from '../../src/renderer/src/runtime/runtime-client-target'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
 import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
+import { getDefaultWorkspaceSession } from '../../src/shared/constants'
+import type { WorkspaceSessionState } from '../../src/shared/workspace-session-state-types'
 import { setStructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import { useAppStore } from '../../src/renderer/src/store'
 import { applyStructuredSessionTabSnapshots } from '../../src/renderer/src/runtime/local-structured-session-tabs-sync/snapshot-apply'
@@ -82,7 +84,19 @@ vi.mock('../../src/renderer/src/runtime/structured-agent-session-close', () => (
 async function setup(options: { hostFailsClose?: boolean } = {}) {
   let closeRequest: ((request: CloseRequest) => void) | undefined
   const pendingResponses = new Map<string, (error?: string) => void>()
-  const runtime = new OrcaRuntimeService()
+  // The saved workspace session the runtime's tab layout loads from and writes to.
+  let session: WorkspaceSessionState = getDefaultWorkspaceSession()
+  const runtime = new OrcaRuntimeService(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tab layout reads and writes only the workspace session.
+    {
+      getWorkspaceSession: () => session,
+      setWorkspaceSession: (next: WorkspaceSessionState) => {
+        session = next
+      }
+    } as never
+  )
+  // The worktree as a scan lists it: the runtime's layout holds it, still without tabs.
+  runtime.addCatalogWorkspaces([WORKTREE])
   bridge.runtime = runtime
   vi.stubGlobal('api', {
     ui: {
@@ -118,7 +132,6 @@ async function setup(options: { hostFailsClose?: boolean } = {}) {
   Object.assign(runtime, {
     hasPersistedStructuredAgentSessionStore: () => true,
     getKnownWorkspaceSessionWorktreeIds: () => new Set(),
-    hydrateHeadlessMobileSessionTabsFromWorkspaceSession: () => new Set(),
     refreshMobileSessionPtyRecords: async () => new Set(),
     ensureStructuredAgentSessionHost: async () => undefined
   })
@@ -145,8 +158,10 @@ async function setup(options: { hostFailsClose?: boolean } = {}) {
 
   useAppStore.setState({ activeWorktreeId: WORKTREE })
   applyStructuredSessionTabSnapshots([await runtime.listMobileSessionTabs(`id:${WORKTREE}`)])
-  // The window's live subscription to the host's tab list.
-  runtime.onMobileSessionTabsChanged((snapshot) => applyStructuredSessionTabSnapshots([snapshot]))
+  // The window's live subscription; a late coalesced frame must not reach the next test's window.
+  onTestFinished(
+    runtime.onMobileSessionTabsChanged((snapshot) => applyStructuredSessionTabSnapshots([snapshot]))
+  )
 
   const strip = (): string[] =>
     (useAppStore.getState().groupsByWorktree[WORKTREE] ?? []).flatMap((group) => group.tabOrder)
@@ -187,15 +202,17 @@ describe('a host frame published while a chat tab close is in flight', () => {
 
     handleClose()
     await vi.waitFor(() => expect(hostSessionCloses).toEqual(['chat-b']))
-    // The host published its removal before it stopped the chat, and that frame lifted the hide.
-    expect(
-      isWebSessionCloseIntentPending(
-        { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
-        WORKTREE,
-        'agent-session:chat-b',
-        Date.now()
-      )
-    ).toBe(false)
+    // The host's coalesced frame without the chat lifts the hide.
+    await vi.waitFor(() =>
+      expect(
+        isWebSessionCloseIntentPending(
+          { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
+          WORKTREE,
+          'agent-session:chat-b',
+          Date.now()
+        )
+      ).toBe(false)
+    )
     runtime.touchMobileSessionTabsForWorktree(WORKTREE, { immediate: true })
     expect(strip()).toEqual([tabIdOf('chat-a'), tabIdOf('chat-c')])
   })

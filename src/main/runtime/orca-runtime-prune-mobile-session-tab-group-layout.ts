@@ -77,7 +77,8 @@ export class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntime
       getUserTitle: (worktreeId, parentTabId, leafId) =>
         this.heldUserTitle(worktreeId, parentTabId, leafId),
       getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId),
-      issuePtyHandle: (pty) => this.issuePtyHandle(pty),
+      issuePtyHandle: (pty) =>
+        this.pendingPtyRegistrationIncarnations.has(pty.ptyId) ? null : this.issuePtyHandle(pty),
       recordPty: (ptyId, worktreeId, state) => this.recordPtyWorktree(ptyId, worktreeId, state),
       buildPtyStatus: (pty, tab, terminalHandle, retained, getRows) =>
         this.buildPtyMobileAgentStatus(pty, tab, terminalHandle, retained, getRows),

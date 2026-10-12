@@ -249,6 +249,7 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
       (windowId === HEADLESS_RUNTIME_WINDOW_ID || graph.mobileSessionTabs !== undefined)
     ) {
       this.markSessionTabsInventoryPublished()
+      this.windowEditorViews.noteWindowRows(graph.mobileSessionTabs ?? [])
     }
     if (rendererGeneration !== undefined) {
       this.rendererGeneration = rendererGeneration

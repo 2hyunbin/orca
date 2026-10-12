@@ -2,7 +2,6 @@
 // read a held workspace, apply translated commands, start a pane a client opened, and move the
 // desktop view, which old clients see as the host's selection.
 
-import { detectLanguage } from '../../shared/language-detect'
 import {
   navigationTargetsHost,
   type RuntimeNavigationTarget
@@ -11,7 +10,10 @@ import type { RuntimeTerminalPresentation } from '../../shared/runtime-types'
 import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { TuiAgent } from '../../shared/tui-agent'
-import { translateTerminalCreate } from '../../shared/workspace-layout/old-client'
+import {
+  translateFileOpen,
+  translateTerminalCreate
+} from '../../shared/workspace-layout/old-client'
 import type {
   LayoutCommand,
   LayoutCommandReply
@@ -32,11 +34,13 @@ import type { LayoutCommandOptions } from './runtime-layout-commands'
 import type { layoutCommandsFor } from './runtime-layout-command-host'
 import { newTabIn, runtimeSplitPlacement } from './runtime-terminal-spawn-placement'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
+import { WindowPublishedEditorViews } from './window-published-editor-views'
 
 export abstract class OrcaRuntimeWithHeldLayout extends OrcaRuntimeWithMigrationCatalog {
   protected abstract readonly layoutHolder: RuntimeWorkspaceLayouts
   abstract readonly layoutCommands: ReturnType<typeof layoutCommandsFor>
   private oldSessionTabsStream: OldSessionTabsStream | null = null
+  private windowPublishedEditorViews: WindowPublishedEditorViews | null = null
   /** Set while a caller that stops and reports the closed tabs' processes itself applies a close. */
   private closedTerminalsStoppedByCaller = false
 
@@ -51,6 +55,12 @@ export abstract class OrcaRuntimeWithHeldLayout extends OrcaRuntimeWithMigration
       flush: (worktreeId) => this.flushScheduledMobileSessionTabsChanged(worktreeId)
     })
     return this.oldSessionTabsStream
+  }
+
+  /** Stack-internal until 6e: the window's published diff and preview rows as holder views. */
+  protected get windowEditorViews(): WindowPublishedEditorViews {
+    this.windowPublishedEditorViews ??= new WindowPublishedEditorViews(this.layoutHolder)
+    return this.windowPublishedEditorViews
   }
 
   /** A workspace's layout as the holder holds it; absent for a workspace it does not hold. */
@@ -187,21 +197,14 @@ export abstract class OrcaRuntimeWithHeldLayout extends OrcaRuntimeWithMigration
       : newTabIn(opts)
   }
 
-  /** `files.open` with no window to open it: the runtime's layout opens the file's editor tab. */
+  /** `files.open`, or `files.openDiff` when `diff` is given, with no window: the runtime's layout opens the tab. */
   openHeldEditorFile(
     worktreeId: string,
     file: { filePath: string; relativePath: string },
-    navigation: RuntimeNavigationTarget | undefined
+    navigation: RuntimeNavigationTarget | undefined,
+    diff?: { staged: boolean }
   ): void {
-    const reply = this.applyTranslatedLayoutCommands([
-      {
-        type: 'openEditorTab',
-        workspace: worktreeId,
-        fileId: file.filePath,
-        contentType: 'editor',
-        file: { ...file, language: detectLanguage(file.filePath) }
-      }
-    ])
+    const reply = this.applyTranslatedLayoutCommands([translateFileOpen(worktreeId, file, diff)])
     if (!reply.ok) {
       throw new Error(reply.code)
     }

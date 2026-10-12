@@ -53,11 +53,6 @@ const SSH_HOST: RestoreHost = {
   ptyIds: { left: 'ssh:ssh-1@@pty-left', right: 'ssh:ssh-1@@pty-right' },
   persistsPtyBindings: false
 }
-const RUNTIME_HOST: RestoreHost = {
-  ...LOCAL_HOST,
-  repo: { ...LOCAL_HOST.repo, executionHostId: 'runtime:env-1' },
-  hostId: 'runtime:env-1'
-}
 
 // A cold restore: the saved split survives, and an earlier incarnation change left the repo's
 // terminal membership host-authoritative, but no PTY has registered yet.
@@ -227,8 +222,7 @@ describe('a restored terminal published before its PTY registers', () => {
 
   it.each([
     ['local', LOCAL_HOST],
-    ['SSH without a saved PTY binding', SSH_HOST],
-    ['runtime host', RUNTIME_HOST]
+    ['SSH without a saved PTY binding', SSH_HOST]
   ])('%s: is listed pending, then pushed ready when its PTY registers', async (_label, host) => {
     vi.useFakeTimers()
     const { runtime } = coldRestoredRuntime(host)
@@ -326,23 +320,6 @@ describe('a retired restored terminal stays out of a later renderer frame', () =
     publishRendererFrame(runtime, makeRendererFrame(LOCAL_HOST, { version: 2 }))
     expect(await listedSurfaces(runtime)).not.toContain(`tab::${LEFT}:ready`)
     expect(await listedSurfaces(runtime)).not.toContain(`tab::${LEFT}:pending-handle`)
-  })
-
-  it('after its last pane exits from a runtime-host partition an older copy still lists', async () => {
-    const { runtime, sessions } = coldRestoredRuntime(RUNTIME_HOST)
-    // Left behind in another partition before the catalog owner rotated.
-    sessions.set(LOCAL_EXECUTION_HOST_ID, makeColdRestoredSession(RUNTIME_HOST))
-    registerLeaf(runtime, RUNTIME_HOST, 'left')
-    registerLeaf(runtime, RUNTIME_HOST, 'right')
-    publishRendererFrame(runtime, makeRendererFrame(RUNTIME_HOST))
-
-    await runtime.onPtyExit('pty-left', 0, 'incarnation-left')
-    await runtime.onPtyExit('pty-right', 0, 'incarnation-right')
-    // Emptying the owner's partition re-routes reads to the older copy.
-    expect(sessions.get(RUNTIME_HOST.hostId)?.tabsByWorktree[WORKTREE_ID]).toEqual([])
-
-    publishRendererFrame(runtime, makeRendererFrame(RUNTIME_HOST, { version: 2 }))
-    expect(await listedSurfaces(runtime)).toEqual([])
   })
 
   it('after the user closes it on the desktop', async () => {

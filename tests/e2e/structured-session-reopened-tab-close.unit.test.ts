@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
 import type * as RuntimeRpcClient from '../../src/renderer/src/runtime/runtime-rpc-client'
 import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
+import { getDefaultWorkspaceSession } from '../../src/shared/constants'
+import type { WorkspaceSessionState } from '../../src/shared/workspace-session-state-types'
 import { setStructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
 import { useAppStore } from '../../src/renderer/src/store'
 import { applyStructuredSessionTabSnapshots } from '../../src/renderer/src/runtime/local-structured-session-tabs-sync/snapshot-apply'
@@ -101,7 +103,19 @@ async function setup() {
 
   const hostSessionCloses: string[] = []
   const closeResponses: (string | undefined)[] = []
-  const runtime = new OrcaRuntimeService()
+  // The saved workspace session the runtime's tab layout loads from and writes to.
+  let session: WorkspaceSessionState = getDefaultWorkspaceSession()
+  const runtime = new OrcaRuntimeService(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tab layout reads and writes only the workspace session.
+    {
+      getWorkspaceSession: () => session,
+      setWorkspaceSession: (next: WorkspaceSessionState) => {
+        session = next
+      }
+    } as never
+  )
+  // The worktree as a scan lists it: the runtime's layout holds it, still without tabs.
+  runtime.addCatalogWorkspaces([WORKTREE])
   bridge.runtime = runtime
   let nextRequest = 0
   runtime.setNotifier(
@@ -125,7 +139,6 @@ async function setup() {
   Object.assign(runtime, {
     hasPersistedStructuredAgentSessionStore: () => true,
     getKnownWorkspaceSessionWorktreeIds: () => new Set(),
-    hydrateHeadlessMobileSessionTabsFromWorkspaceSession: () => new Set(),
     refreshMobileSessionPtyRecords: async () => new Set(),
     ensureStructuredAgentSessionHost: async () => undefined
   })
