@@ -10,16 +10,17 @@ const versionAtLastWindowSaveByHost = new Map<string, number>()
 const mainWritersSinceWindowSaveByHost = new Map<string, string[]>()
 const lastRefByHost = new Map<string, unknown>()
 
-const STORE_FRAMES =
-  /^(?:Object\.|Store\.|SessionHostPartitionOperations\.|SessionSnapshotOperations\.|WriteSchedulingOperations\.)?(?:scheduleSave|notifyWorkspaceSessionWritten|recordLayoutPartitionWrites|setLocalWorkspaceSession|setHostWorkspaceSession|publishSession|setWorkspaceSession|patchWorkspaceSession|listener|Set\.forEach|new Promise|Array\.forEach)$/
-
 function writerLabel(): string {
-  const frames = (new Error('layout-audit').stack ?? '')
+  const limit = Error.stackTraceLimit
+  Error.stackTraceLimit = 40
+  const stack = new Error('layout-audit').stack ?? ''
+  Error.stackTraceLimit = limit
+  // Positions, not names: main is minified; the CI artifact's sourcemap resolves them.
+  return stack
     .split('\n')
     .slice(1)
-    .map((line) => /at (?:async )?([^\s(]+)/.exec(line.trim())?.[1] ?? '?')
-    .filter((name) => name !== '?' && !STORE_FRAMES.test(name))
-  return frames.slice(0, 4).join('<') || 'unknown'
+    .map((line) => /index\.js:(\d+:\d+)/.exec(line)?.[1] ?? '?')
+    .join('<')
 }
 
 export function beginWindowLayoutSave(hostId: string, kind: string): void {
