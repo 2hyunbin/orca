@@ -179,7 +179,12 @@ export function normalizeClaudeEvent(
       eventName === 'PostToolUseFailure')
       ? eventAgentId
       : undefined
-  if (eventAgentId && (subagentOriginId || isWaitingInducing)) {
+  // Why: hook-spawned agents (`"type": "agent"` hooks, ids `hook-agent-<uuid>`) and long-lived async agents emit tool hooks with no agent_type and never send SubagentStop; minting a row from those leaves it working forever. Tool activity only refreshes a known row or creates a typed one.
+  const isMintableChildEvent =
+    !subagentOriginId ||
+    readString(hookPayload, 'agent_type') !== undefined ||
+    state.claudeSubagentRosterByPaneKey.get(paneKey)?.has(subagentOriginId) === true
+  if (eventAgentId && (subagentOriginId || isWaitingInducing) && isMintableChildEvent) {
     upsertWorkingClaudeSubagent(
       getOrCreateClaudeSubagentRoster(state, paneKey),
       eventAgentId,
