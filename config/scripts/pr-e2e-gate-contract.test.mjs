@@ -36,7 +36,7 @@ describe('restart-survival E2E routing', () => {
     'src/main/runtime/rpc/methods/browser-client-host.ts',
     'src/main/browser/browser-client-host-authority-replacement-wait.ts',
     'src/main/browser/paired-runtime-browser-client-host-composition.ts',
-    'src/renderer/src/runtime/web-session-tabs-sync.ts',
+    'src/renderer/src/runtime/web-session-tabs-sync/snapshot-api.ts',
     'src/renderer/src/runtime/host-session-snapshot-authority.ts',
     'src/renderer/src/runtime/restored-client-hosted-browser-host-attach.ts',
     'src/renderer/src/store/slices/runtime-status.ts',
@@ -129,8 +129,9 @@ describe('PR E2E gate contract', () => {
       'src/main/daemon/daemon-pty-spawn-result.ts',
       'src/renderer/src/components/terminal-pane/remote-runtime-pty-transport.ts',
       'src/renderer/src/components/terminal-pane/terminal-error-accumulation.ts',
-      'src/renderer/src/runtime/web-runtime-session.ts',
-      'src/renderer/src/runtime/web-session-tabs-sync.ts',
+      'src/renderer/src/runtime/web-runtime-terminal-creation.ts',
+      'src/renderer/src/runtime/web-runtime-session-tab-lifecycle.ts',
+      'src/renderer/src/runtime/web-session-tabs-sync/use-web-session-tabs-sync.ts',
       'src/renderer/src/runtime/web-session-terminal-orphan-recovery.ts',
       'src/renderer/src/runtime/web-session-terminal-orphan-recovery-adoption.ts',
       'src/renderer/src/runtime/web-session-terminal-orphan-recovery-surface.ts',
@@ -187,7 +188,7 @@ describe('PR E2E gate contract', () => {
         'src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-test-harness.ts'
       ])
     ).not.toContain('tests/e2e/paired-remote-terminal-materialization-reconnect.spec.ts')
-    expect(selectPrE2eSpecs(['src/main/ipc/pty.ts'])).not.toContain(
+    expect(selectPrE2eSpecs(['src/main/ipc/pty/register-handlers.ts'])).not.toContain(
       'tests/e2e/paired-remote-terminal-materialization-reconnect.spec.ts'
     )
   })
@@ -235,5 +236,27 @@ describe('PR E2E gate contract', () => {
     expect(selectPrE2eSpecs(['src/shared/terminal-unicode-provider.ts'])).toContain(
       'tests/e2e/terminal-ibus-hangul-native.spec.ts'
     )
+  })
+})
+
+describe('Daemon mock modified-only source routing', () => {
+  const helper = 'src/main/daemon/daemon-init-dependency-mocks.ts'
+  const verified = { allowDaemonInitTestSupport: true }
+  it('omits the real D7 route only for the proven unit-support scope', () => {
+    expect(selectPrE2eSpecs([helper])).toContain('tests/e2e/orcad-serve-mode-switch.spec.ts')
+    expect(selectPrE2eSpecs([helper], undefined, verified)).toEqual([])
+    const companion = 'src/main/codex/codex-app-server-connection.test.ts'
+    expect(selectPrE2eSpecs([helper, companion], undefined, verified)).toEqual(
+      selectPrE2eSpecs([companion])
+    )
+  })
+  it.each([
+    { files: [] },
+    { files: [helper, 'src/main/daemon/daemon-init.ts'] },
+    { files: [helper, 'package.json'] },
+    { files: [helper, 'src/main/daemon/unknown-support.ts'] },
+    { files: [helper, helper] }
+  ])('retains existing routes for an uncertain or mixed vector $files', ({ files }) => {
+    expect(selectPrE2eSpecs(files, undefined, verified)).toEqual(selectPrE2eSpecs(files))
   })
 })

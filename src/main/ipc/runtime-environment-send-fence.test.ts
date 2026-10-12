@@ -10,7 +10,7 @@ import {
   decrypt
 } from '../../shared/e2ee-crypto'
 import type { KnownRuntimeEnvironment } from '../../shared/runtime-environments'
-import { getPreferredPairingOffer } from '../../shared/runtime-environments'
+import { getPreferredPairedRuntimeConnection } from '../../shared/runtime-environments'
 import { getRemoteRuntimeRequestAdmissionEvidence } from '../../shared/remote-runtime-prepared-request-admission'
 import {
   applyRuntimeEnvironmentCapabilityVerdict,
@@ -89,7 +89,7 @@ async function fixture(verdict: 'capable' | 'absent', runtimeId = 'original') {
     applyRuntimeEnvironmentCapabilityVerdict({
       evidence: captureRuntimeEnvironmentCapabilityEvidence(
         environment.id,
-        getPreferredPairingOffer(environment)
+        getPreferredPairedRuntimeConnection(environment)
       ),
       verdict,
       runtimeId: owner

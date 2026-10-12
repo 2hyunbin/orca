@@ -7,7 +7,7 @@ import { hostSessionTabSourceMatchesWorkspaceOwner } from '../host-session-tab-s
 import type { ClientOwnedAdoptedTab } from '../web-session-client-owned-tab-placement'
 import type { TabGroup } from '../../../../shared/tab-types'
 import type { prepareWebSessionTabsSnapshotUnified } from './apply-preparation-unified'
-import { toWebTerminalSurfaceTabId } from '../web-runtime-session'
+import { toWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
 import {
   isWebSessionBrowserPlacementGroupReserved,
   peekWebSessionBrowserPlacementGroup

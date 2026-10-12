@@ -1,4 +1,4 @@
-import type { PairingOffer } from './pairing'
+import type { PairedRuntimeConnection } from './paired-runtime-connection'
 import type { RuntimeCapability } from './protocol-version'
 import type { RemoteRuntimeClientError } from './remote-runtime-client-error'
 import { sendRemoteRuntimeRequestOnSocket } from './remote-runtime-request-socket'
@@ -43,7 +43,7 @@ export type RemoteRuntimeSubscriptionCallbacks<TResult = unknown> = {
 export type RemoteRuntimeSendValidation = () => RuntimeRpcFailure | null
 
 export function sendRemoteRuntimeRequest<TResult>(
-  pairing: PairingOffer,
+  connection: PairedRuntimeConnection,
   method: string,
   params: unknown,
   timeoutMs: number,
@@ -52,7 +52,7 @@ export function sendRemoteRuntimeRequest<TResult>(
   clientCapabilities: readonly RuntimeCapability[] = []
 ): Promise<RuntimeRpcResponse<TResult>> {
   return sendRemoteRuntimeRequestOnSocket(
-    pairing,
+    connection,
     method,
     params,
     timeoutMs,
@@ -64,7 +64,7 @@ export function sendRemoteRuntimeRequest<TResult>(
 }
 
 export function sendRemoteRuntimeRequestWithStatusPreflight<TResult>(
-  pairing: PairingOffer,
+  connection: PairedRuntimeConnection,
   method: string,
   params: unknown,
   timeoutMs: number,
@@ -75,7 +75,7 @@ export function sendRemoteRuntimeRequestWithStatusPreflight<TResult>(
   validateBeforeSend?: RemoteRuntimeSendValidation
 ): Promise<RuntimeRpcResponse<TResult>> {
   return sendRemoteRuntimeRequestOnSocket(
-    pairing,
+    connection,
     method,
     params,
     timeoutMs,
@@ -88,7 +88,7 @@ export function sendRemoteRuntimeRequestWithStatusPreflight<TResult>(
 }
 
 export function subscribeRemoteRuntimeRequest<TResult>(
-  pairing: PairingOffer,
+  connection: PairedRuntimeConnection,
   method: string,
   params: unknown,
   timeoutMs: number,
@@ -96,7 +96,7 @@ export function subscribeRemoteRuntimeRequest<TResult>(
   options?: RemoteRuntimeSubscriptionOptions
 ): Promise<RemoteRuntimeSubscription> {
   return subscribeRemoteRuntimeTransport(
-    pairing,
+    connection,
     method,
     params,
     timeoutMs,

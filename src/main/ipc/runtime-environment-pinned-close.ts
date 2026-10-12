@@ -1,4 +1,4 @@
-import type { PairingOffer } from '../../shared/pairing'
+import type { PairedRuntimeConnection } from '../../shared/paired-runtime-connection'
 import type { KnownRuntimeEnvironment } from '../../shared/runtime-environments'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
 import { sendRemoteRuntimeRequestWithStatusPreflight } from '../../shared/remote-runtime-client'
@@ -16,7 +16,7 @@ import {
 export function sendRuntimeEnvironmentPinnedClose(args: {
   userDataPath: string
   environment: KnownRuntimeEnvironment
-  pairing: PairingOffer
+  connection: PairedRuntimeConnection
   outcome: RuntimeEnvironmentCapabilityOutcome
   method: string
   params: unknown
@@ -44,7 +44,7 @@ export function sendRuntimeEnvironmentPinnedClose(args: {
     )
   }
   return sendRemoteRuntimeRequestWithStatusPreflight(
-    args.pairing,
+    args.connection,
     args.method,
     args.params,
     timeoutMs,

@@ -20,9 +20,9 @@ import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../shared
 import {
   callRuntimeRpc,
   getRuntimeEnvironmentCapabilityStatus,
-  runtimeEnvironmentSupportsCapability,
-  type RuntimeClientTarget
+  runtimeEnvironmentSupportsCapability
 } from './runtime-rpc-client'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
   ensureLocalRuntimeCapabilities,
   readLocalRuntimeCapabilitiesOrUnknown

@@ -1,9 +1,6 @@
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
-import {
-  callRuntimeRpc,
-  runtimeEnvironmentSupportsCapability,
-  type RuntimeClientTarget
-} from './runtime-rpc-client'
+import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
 
 export async function closeStructuredAgentSession(

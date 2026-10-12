@@ -5,7 +5,7 @@ import { createRuntimeRpcAbortError } from './abortable-runtime-environment-call
 import { callRuntimeEnvironmentWithRevision } from './runtime-rpc-environment-call'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
 import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
-import type { RuntimeClientTarget } from './runtime-client-target'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
 import { ensureRuntimeEnvironmentCompatible } from './runtime-environment-compatibility'
 export {
@@ -19,13 +19,6 @@ export {
   assertRuntimeEnvironmentCapability,
   clearRuntimeCompatibilityCacheForTests
 } from './runtime-environment-compatibility'
-
-export { type RuntimeClientTarget } from './runtime-client-target'
-export {
-  hasRuntimeRpcErrorCode,
-  RuntimeRpcCallError,
-  unwrapRuntimeRpcResult
-} from './runtime-rpc-result'
 
 export async function callRuntimeRpc<TResult>(
   target: RuntimeClientTarget,

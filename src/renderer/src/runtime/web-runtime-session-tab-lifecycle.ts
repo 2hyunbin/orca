@@ -1,6 +1,6 @@
 import type { RuntimeSessionTabCloseReason } from '../../../shared/runtime-types'
 import { useAppStore } from '../store'
-import { unwrapRuntimeRpcResult } from './runtime-rpc-client'
+import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   rereadHostSessionTabs,
@@ -12,11 +12,12 @@ import {
   type WebSessionCloseIntentTicket
 } from './web-session-close-intent'
 import {
+  clearWebSessionFocusIntent,
   clearWebSessionFocusIntentIfMatches,
   recordWebSessionFocusIntent
 } from './web-session-focus-intent'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
-import { toHostSessionTabId } from './web-terminal-surface-id'
+import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import { resolveHostSessionTabIdForWebSessionTab } from './web-session-tabs-sync/tracking-mappings'
 import {
   captureRuntimeEnvironmentCall,
@@ -37,7 +38,8 @@ async function resolveHostTabId(
   worktreeId: string,
   tabId: string
 ): Promise<string> {
-  const { resolveHostSessionTabIdForWebSessionTab } = await import('./web-session-tabs-sync')
+  const { resolveHostSessionTabIdForWebSessionTab } =
+    await import('./web-session-tabs-sync/tracking-mappings')
   return (
     resolveHostSessionTabIdForWebSessionTab(useAppStore.getState(), {
       environmentId,
@@ -57,11 +59,32 @@ export async function activateWebRuntimeSessionTab(args: {
   expectedCurrentLocalTabId?: string | null
 }): Promise<boolean> {
   const environmentId = resolveSessionTabEnvironmentId(args.environmentId)
-  if (!environmentId) {
+  const intentOwner = environmentId ? captureWebSessionIntentOwner(environmentId) : null
+  const callEnvironment =
+    environmentId && intentOwner
+      ? captureRuntimeEnvironmentCall(environmentId, intentOwner.pairingRevision)
+      : null
+  // COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay runs a pane in this tab, and
+  // activating that pane on the managed server would start a second shell there that no tab shows.
+  // A click names no leaf, so the pane on screen does; the server would otherwise pick the first.
+  // Loaded lazily: the module subscribes to main's pane list on import, and terminal panes load it.
+  const { hasLegacyRelayBridgedPane, isLegacyRelayBridgedTab } =
+    await import('../components/terminal-pane/legacy-relay-bridge-panes')
+  const leafId =
+    args.leafId ??
+    (hasLegacyRelayBridgedPane(args.tabId)
+      ? useAppStore.getState().terminalLayoutsByTabId?.[args.tabId]?.activeLeafId
+      : null)
+  if (isLegacyRelayBridgedTab(args.tabId, leafId)) {
+    // This gesture still supersedes an earlier tab's pending focus, as recording its own would.
+    if (intentOwner) {
+      clearWebSessionFocusIntent(intentOwner, args.worktreeId)
+    }
+    return true
+  }
+  if (!intentOwner || !callEnvironment || !environmentId) {
     return false
   }
-  const intentOwner = captureWebSessionIntentOwner(environmentId)
-  const callEnvironment = captureRuntimeEnvironmentCall(environmentId, intentOwner.pairingRevision)
   let hostTabId: string | null = null
   try {
     hostTabId = await resolveHostTabId(environmentId, args.worktreeId, args.tabId)
@@ -69,7 +92,7 @@ export async function activateWebRuntimeSessionTab(args: {
       intentOwner,
       args.worktreeId,
       hostTabId,
-      args.leafId ?? undefined,
+      leafId ?? undefined,
       args.expectedCurrentLocalTabId
     )
     const response = await callEnvironment({
@@ -77,7 +100,7 @@ export async function activateWebRuntimeSessionTab(args: {
       params: {
         worktree: toRuntimeWorktreeSelector(args.worktreeId),
         tabId: hostTabId,
-        ...(args.leafId ? { leafId: args.leafId } : {}),
+        ...(leafId ? { leafId } : {}),
         // Why: the additive navigation target protects new hosts while notifyClients:false protects old hosts.
         notifyClients: false,
         navigation: 'caller' as const,
