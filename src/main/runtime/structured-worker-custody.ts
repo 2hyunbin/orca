@@ -12,6 +12,7 @@
  */
 
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
+import { buildOrchestrationTaskDisplayMetadata } from '../../shared/orchestration-task-display'
 import { isOrcaSessionId } from '../../shared/orca-session-address'
 import { canonicalOrcaSessionId } from './orchestration/canonical-orca-session-id'
 import type { RunningStructuredSession } from './orchestration/structured-session-lineage'
@@ -137,18 +138,18 @@ export function structuredWorkerOwesWork(
   )
 }
 
-/** The title of the first task this worker still owes, which names its chat. */
+/** The first task this worker still owes, which names its chat. */
 export function structuredWorkerOpenTaskTitle(
   db: OrchestrationDb | null,
   record: AgentSessionRecord
-): string | null {
+): { title: string } | null {
   const incarnation = db && ownedWorkerIncarnation(db, record)
   if (!db || !incarnation) {
     return null
   }
   const row: unknown = db.db
     .prepare(
-      `SELECT task.task_title FROM dispatch_contexts dispatch
+      `SELECT task.task_title, task.spec FROM dispatch_contexts dispatch
         JOIN tasks task ON task.id = dispatch.task_id
         WHERE dispatch.process_incarnation = ? AND dispatch.status IN ('pending', 'dispatched')
         ORDER BY dispatch.rowid LIMIT 1`
@@ -157,8 +158,15 @@ export function structuredWorkerOpenTaskTitle(
   return typeof row === 'object' &&
     row !== null &&
     'task_title' in row &&
-    typeof row.task_title === 'string'
-    ? row.task_title
+    (typeof row.task_title === 'string' || row.task_title === null) &&
+    'spec' in row &&
+    typeof row.spec === 'string'
+    ? {
+        title: buildOrchestrationTaskDisplayMetadata({
+          taskTitle: row.task_title,
+          spec: row.spec
+        }).taskTitle
+      }
     : null
 }
 

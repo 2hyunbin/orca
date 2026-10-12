@@ -119,7 +119,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
 
   it('names an orchestration worker after its task without generating', async () => {
     const state = rig(provider)
-    state.deps.workerTaskTitle = () => 'PR27814 final readiness review'
+    state.deps.workerTaskTitle = () => ({ title: 'PR27814 final readiness review' })
     state.handle(state.summary, { replay: false })
     await settle()
     expect(state.read()?.conversationName).toBe('PR27814 final readiness review')
@@ -130,11 +130,21 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
 
   it('leaves a worker unnamed when naming is off', async () => {
     const state = rig(provider)
-    state.deps.workerTaskTitle = () => 'PR27814 final readiness review'
+    state.deps.workerTaskTitle = () => ({ title: 'PR27814 final readiness review' })
     state.deps.getSettings = () => ({ nativeChatAutoName: false })
     state.handle(state.summary, { replay: false })
     await settle()
     expect(state.read()?.conversationName).toBeUndefined()
+  })
+
+  it('does not generate from a worker preamble when its task has no usable title', async () => {
+    const state = rig(provider)
+    state.deps.workerTaskTitle = () => ({ title: '' })
+    state.handle(state.summary, { replay: false })
+    await settle()
+    expect(state.read()?.conversationName).toBeUndefined()
+    expect(state.deps.readFirstPrompt).not.toHaveBeenCalled()
+    expect(state.deps.generate).not.toHaveBeenCalled()
   })
 
   it('stays unnamed when disabled, including after enabling', async () => {

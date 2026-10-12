@@ -19,7 +19,7 @@ export type StructuredChatNamingDeps = {
   readFirstPrompt: (sessionId: string, hostStartedAt: number) => Promise<string>
   now?: () => number
   /** An orchestration worker's chat takes its task's title instead of a generated name. */
-  workerTaskTitle: (record: AgentSessionRecord) => string | null
+  workerTaskTitle: (record: AgentSessionRecord) => { title: string } | null
   generate: (record: AgentSessionRecord, firstPrompt: string) => Promise<string | null>
   onNamed: (workspaceId: string, sessionId: string) => void
   logger: StructuredAgentSessionLogger
@@ -66,7 +66,8 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
     if (!store || !record || record.conversationName !== undefined) {
       return
     }
-    const chatName = deps.workerTaskTitle(record) ?? (await generateName(store, record))
+    const workerTask = deps.workerTaskTitle(record)
+    const chatName = workerTask ? workerTask.title : await generateName(store, record)
     if (!chatName || deps.getSettings().nativeChatAutoName === false) {
       return
     }
