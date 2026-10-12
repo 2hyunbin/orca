@@ -1439,8 +1439,8 @@
             "activeTab": "<first listed>",
             "groups": [
               {
-                "tabs": ["tab1", "tab2", "tab3"],
-                "active": "tab1"
+                "active": "<desktop tab or first listed>",
+                "tabs": ["tab1", "tab2", "tab3"]
               }
             ],
             "rows": [
