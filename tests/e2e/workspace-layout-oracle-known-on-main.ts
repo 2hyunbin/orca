@@ -24,19 +24,6 @@ type KnownOnMain = {
 const TRANSIENT = /\(transient\)$/
 
 export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
-  // STA-9417: first activation of a host-created setup split mints a second tab for the setup
-  // terminal (one terminal in two panes) or leaves that terminal with no pane.
-  ...(['view', 'client'] as const).map((check) => ({
-    scenario: 'setup-split-first-activation',
-    check,
-    cause: 'STA-9417'
-  })),
-  ...(['rules', 'expected'] as const).map((check) => ({
-    scenario: 'setup-split-first-activation',
-    check,
-    platform: 'darwin' as const,
-    cause: 'STA-9417'
-  })),
   // The in-app daemon restart drops the worktree's tabs from main while the window keeps them.
   ...(['view', 'expected', 'restart', 'marker'] as const).map((check) => ({
     scenario: 'live-daemon-restart',

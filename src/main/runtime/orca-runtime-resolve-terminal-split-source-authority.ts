@@ -25,6 +25,7 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
   ): {
     persisted: boolean
     rendererMounted: boolean
+    rendererRunsOtherPty: boolean
     persistedWorktreeId: string | null
     persistedIncarnationId: string | null
     liveIncarnationId: string | null
@@ -62,10 +63,13 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
       runtimeWorktreeIdsEqual(rendererLeaf.worktreeId, worktreeId) &&
       (rendererLeaf.ptyId === ptyId || (persisted && rendererLeaf.ptyId === null))
     )
+    // Only a contradiction is trusted: the window's graph lags, so an unlisted pane proves nothing.
+    const rendererRunsOtherPty = Boolean(rendererLeaf?.ptyId && rendererLeaf.ptyId !== ptyId)
     if (persisted && persistedLayout) {
       return {
         persisted: true,
         rendererMounted,
+        rendererRunsOtherPty,
         persistedWorktreeId: sessionWorktreeId,
         persistedIncarnationId,
         liveIncarnationId
@@ -89,6 +93,7 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
     return {
       persisted: false,
       rendererMounted,
+      rendererRunsOtherPty,
       persistedWorktreeId: null,
       persistedIncarnationId: null,
       liveIncarnationId
