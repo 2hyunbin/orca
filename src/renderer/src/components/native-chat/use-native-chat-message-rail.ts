@@ -86,9 +86,10 @@ export function useNativeChatMessageRail({
   virtualItemsRef.current = virtualItems
   const slotsRef = useRef(slots)
   slotsRef.current = slots
-  // A clicked tick stays lit while the view rests where its jump settled: a jump
-  // clamped short of the top leaves another row at the fold, or the last at the bottom.
-  const clickedRef = useRef<{ id: string; settledTop: number | null } | null>(null)
+  // A clicked tick stays lit while its row stays on screen where the jump settled it:
+  // a jump clamped short of the top leaves another row at the fold, or the last at the
+  // bottom. `offset` is the row's distance below the viewport top, once settled.
+  const clickedRef = useRef<{ id: string; offset: number | null } | null>(null)
 
   const readActiveId = useCallback(() => {
     const element = scrollRef.current
@@ -97,15 +98,14 @@ export function useNativeChatMessageRail({
     }
     const clicked = clickedRef.current
     if (clicked !== null) {
-      if (clicked.settledTop === null) {
-        clicked.settledTop = element.scrollTop
-        return
-      }
-      if (
-        Math.abs(element.scrollTop - clicked.settledTop) <= ALIGN_ARRIVED_PX &&
-        previousItemsRef.current.some((item) => item.id === clicked.id)
-      ) {
-        return
+      const top = element.scrollTop
+      const slotIndex = previousItemsRef.current.find((item) => item.id === clicked.id)?.slotIndex
+      const row = virtualItemsRef.current.find((item) => item.index === slotIndex)
+      if (row && row.end > top && row.start < top + element.clientHeight) {
+        clicked.offset ??= row.start - top
+        if (Math.abs(row.start - top - clicked.offset) <= ALIGN_ARRIVED_PX) {
+          return
+        }
       }
       clickedRef.current = null
     }
@@ -156,7 +156,7 @@ export function useNativeChatMessageRail({
   // Re-read when the set of prompts actually changes, so a transcript that grew
   // updates without waiting for the next scroll. A click still landing is read once it settles.
   useEffect(() => {
-    if (clickedRef.current?.settledTop !== null) {
+    if (clickedRef.current?.offset !== null) {
       readActiveId()
     }
   }, [items, readActiveId])
@@ -183,7 +183,7 @@ export function useNativeChatMessageRail({
   // A jump that does not move the view fires no scroll, so its landing is read from here.
   const onActivate = useCallback(
     (id: string) => {
-      clickedRef.current = { id, settledTop: null }
+      clickedRef.current = { id, offset: null }
       setActiveId(id)
       scheduleRead()
     },
