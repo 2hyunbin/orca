@@ -99,7 +99,7 @@ describe('production Relay capacity cell admission', () => {
       'production-gce-c27', 'production-gce-c28', 'production-gce-c29', 'production-gce-c30',
       'production-gce-c31', 'production-gce-c34',
       // Migration-only canaries: the US-only capacity rollout never touches them either.
-      'production-gce-c17', 'production-gce-c18',
+      'production-gce-c17', 'production-gce-c18', 'production-gce-c35',
       // US cells at the Asia shape: the 1,000-cap capacity rollout never touches them.
       'production-gce-c32', 'production-gce-c33'
     ]) {
