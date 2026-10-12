@@ -55,6 +55,9 @@ describe('commandProgramIndex', () => {
     [['env', '-i', 'A=1', 'claude'], 3],
     [['sudo', '-E', 'claude'], 2],
     [['pnpm', 'dlx', 'claude'], 2],
+    [['nohup', 'claude'], 1],
+    [['time', 'codex', 'resume', 'x'], 1],
+    [['wsl.exe', '--', 'claude'], 2],
     [['/usr/bin/env', 'claude'], 1],
     [['A=1'], -1]
   ])('finds the program of %j at %i', (words, index) => {

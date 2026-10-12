@@ -102,10 +102,22 @@ export function commandName(word: string): string {
 }
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
-const LAUNCHERS = new Set(['env', 'exec', 'command', 'sudo', 'npx', 'bunx'])
+const LAUNCHERS = new Set([
+  'env',
+  'exec',
+  'command',
+  'sudo',
+  'nohup',
+  'time',
+  'npx',
+  'bunx',
+  'wsl',
+  'wsl.exe'
+])
 
 /** The index of the program a command runs: its first word past `VAR=x` prefixes and launchers
- *  (`env`, `exec`, `command`, `sudo`, `npx`, `bunx`, `pnpm dlx`) with their options; -1 if none. */
+ *  (`env`, `exec`, `command`, `sudo`, `nohup`, `time`, `npx`, `bunx`, `pnpm dlx`, `wsl --`) with their
+ *  options; -1 if none. */
 export function commandProgramIndex(words: readonly string[]): number {
   let launched = false
   for (let index = 0; index < words.length; index += 1) {
