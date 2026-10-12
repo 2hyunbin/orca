@@ -18,7 +18,9 @@ vi.mock('../transport/use-worktree-resync', () => ({
 }))
 
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
+import { createBridgePortPair } from '../mobile-web-shell/bridge/bridge-port-pair-test-harness'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import type { RpcClient } from '../transport/rpc-client'
 import type { RpcResponse } from '../transport/types'
 import { readVisibleHostIds } from '../worktree/visible-host-rows'
 import type { Worktree } from '../worktree/workspace-list-types'
@@ -58,13 +60,13 @@ const HOSTS = [
 
 type Desktop = {
   hostWorktrees?: (hostId: string) => unknown
-  carriesExecutionHost?: boolean
+  carriesRpcEnvelope?: boolean
 }
 
-function desktop({ hostWorktrees, carriesExecutionHost }: Desktop = {}): FakeSession {
+function desktop({ hostWorktrees, carriesRpcEnvelope }: Desktop = {}): FakeSession {
   const client = new FakeSession('connected')
-  if (carriesExecutionHost !== undefined) {
-    Object.assign(client, { carriesExecutionHost: () => carriesExecutionHost })
+  if (carriesRpcEnvelope !== undefined) {
+    Object.assign(client, { carriesRpcEnvelope: () => carriesRpcEnvelope })
   }
   client.sendRequest.mockImplementation(async (method: string, params?: unknown) => {
     switch (method) {
@@ -98,11 +100,11 @@ type Screen = {
   catalogError: () => string | null
   pin: (worktreeId: string) => void
   serverWorkspaces: () => unknown
-  swapClient: (next: FakeSession) => Promise<void>
+  swapClient: (next: RpcClient) => Promise<void>
   navigations: string[]
 }
 
-async function mountScreen(first: FakeSession, hostCapabilities: string[]): Promise<Screen> {
+async function mountScreen(first: RpcClient, hostCapabilities: string[]): Promise<Screen> {
   let client = first
   let rerender: (() => void) | null = null
   const navigations: string[] = []
@@ -206,7 +208,7 @@ describe("a desktop's server workspaces on the phone", () => {
 
   it('keeps showing today’s view under an older desktop or an older shell', async () => {
     const oldDesktop = desktop()
-    const oldShell = desktop({ carriesExecutionHost: false })
+    const oldShell = desktop({ carriesRpcEnvelope: false })
     for (const [client, capabilities] of [
       [oldDesktop, []],
       [oldShell, RELAYS]
@@ -216,6 +218,31 @@ describe("a desktop's server workspaces on the phone", () => {
       expect(calledMethods(client).filter((method) => method.startsWith('mobileRelay.'))).toEqual(
         []
       )
+    }
+  })
+
+  it('lists them on the page only when its shell carries the envelope', async () => {
+    // An app built before `rpcEnvelope` grants everything else, so the page drops just that name.
+    const oldApp = (json: string) => json.replace(',"rpcEnvelope"', '')
+    for (const [rewriteToPage, expected] of [
+      [oldApp, [['mac-wt', 'local', undefined]]],
+      [
+        undefined,
+        [
+          ['mac-wt', 'local', undefined],
+          ['runtime:vm-wt', 'runtime:vm', undefined],
+          ['runtime:old-wt', 'runtime:old', 'Update needed']
+        ]
+      ]
+    ] as const) {
+      const shell = desktop()
+      const pair = createBridgePortPair({ rpc: shell, ...(rewriteToPage ? { rewriteToPage } : {}) })
+      await pair.flush()
+      expect(pair.client.carriesRpcEnvelope?.()).toBe(!rewriteToPage)
+      const screen = await mountScreen(pair.client, RELAYS)
+      await screen.poll()
+      expect(listed(screen.rows())).toEqual(expected)
+      expect(calledMethods(shell).includes('mobileRelay.hosts.list')).toBe(!rewriteToPage)
     }
   })
 
@@ -282,7 +309,7 @@ describe("a desktop's server workspaces on the phone", () => {
       expect(client.sendRequest).toHaveBeenCalledWith(
         'worktree.activate',
         expect.objectContaining({ worktree: 'id:runtime:vm-wt' }),
-        { executionHost: 'runtime:vm' }
+        { envelope: { executionHost: 'runtime:vm' } }
       )
     )
     screen.open('runtime:old-wt')
@@ -292,7 +319,7 @@ describe("a desktop's server workspaces on the phone", () => {
 
   it('opens nothing for a listed server workspace once the phone can no longer reach it', async () => {
     const screen = await mountScreen(desktop(), RELAYS)
-    const oldShell = desktop({ carriesExecutionHost: false })
+    const oldShell = desktop({ carriesRpcEnvelope: false })
     await screen.swapClient(oldShell)
     expect(screen.rows().map((entry) => entry.worktreeId)).toContain('runtime:vm-wt')
     screen.open('runtime:vm-wt')
@@ -307,7 +334,7 @@ describe("a desktop's server workspaces on the phone", () => {
     expect(client.sendRequest).toHaveBeenCalledWith(
       'worktree.set',
       { worktree: 'id:runtime:vm-wt', isPinned: true },
-      { executionHost: 'runtime:vm' }
+      { envelope: { executionHost: 'runtime:vm' } }
     )
     expect(screen.rows().find((entry) => entry.worktreeId === 'runtime:vm-wt')?.isPinned).toBe(true)
   })
