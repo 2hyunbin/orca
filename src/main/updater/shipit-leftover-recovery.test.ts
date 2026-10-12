@@ -31,6 +31,7 @@ describe('prepareShipItStaging', () => {
   })
 
   const deps = (overrides: Partial<ShipItStagingDeps> = {}): ShipItStagingDeps => ({
+    bundleId: 'com.stablyai.orca',
     cacheDir,
     coordinationDir,
     pid: 500,
@@ -72,6 +73,14 @@ describe('prepareShipItStaging', () => {
     })
     await expect(prepareShipItStaging(deps())).resolves.toMatchObject({ kind: 'recovered' })
     expect(await readdir(shipItStagingOwnersDir(coordinationDir))).toEqual(['500'])
+  })
+
+  it('ignores the ShipIt of another app', async () => {
+    const other = deps({
+      listProcesses: async () =>
+        '/Applications/Other.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt com.other.ShipIt /x\n'
+    })
+    await expect(prepareShipItStaging(other)).resolves.toMatchObject({ kind: 'recovered' })
   })
 
   it('never clears while ShipIt runs, or when that cannot be checked', async () => {

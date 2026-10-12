@@ -9,11 +9,15 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir, open, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises'
 import { isProcessAlive, macCoordinationRoot } from '../../shared/serve-bundle-coordination'
-import { isAnyShipItRunning, listProcessCommands } from '../../shared/shipit-process-listing'
+import {
+  isShipItRunningForBundleId,
+  listProcessCommands
+} from '../../shared/shipit-process-listing'
 import { LOCAL_BUILD_COMPATIBILITY_CONTRACT } from '../../shared/local-build-compatibility-contract'
 import { recordUpdaterLifecycle } from '../updater-lifecycle-diagnostics'
 
 export type ShipItStagingDeps = {
+  bundleId: string
   cacheDir: string
   coordinationDir: string
   pid: number
@@ -138,9 +142,13 @@ async function recoverUnderLock(deps: ShipItStagingDeps): Promise<ShipItStagingR
   if (listing === null) {
     return { kind: 'skipped', reason: 'installer-unknown' }
   }
-  // Why any ShipIt: the request names its target by bundle id, and another copy of Orca may own it.
-  if (isAnyShipItRunning(listing)) {
+  // Why by bundle id: the cache is shared by every copy of Orca, and other apps' ShipIt is irrelevant.
+  if (isShipItRunningForBundleId(listing, deps.bundleId)) {
     return { kind: 'skipped', reason: 'installer-running' }
+  }
+  // Why again: an owner may have registered while the process list was read.
+  if ((await otherLiveOwners(deps)).length > 0) {
+    return { kind: 'skipped', reason: 'owner-live' }
   }
   const removed = (await leftoverNames(deps.cacheDir)).sort()
   for (const name of removed) {
@@ -158,8 +166,10 @@ export function prepareThisProcessShipItStaging(): Promise<void> | null {
     return null
   }
   const home = homedir()
+  const bundleId = LOCAL_BUILD_COMPATIBILITY_CONTRACT.appId
   return prepareShipItStaging({
-    cacheDir: join(home, 'Library', 'Caches', `${LOCAL_BUILD_COMPATIBILITY_CONTRACT.appId}.ShipIt`),
+    bundleId,
+    cacheDir: join(home, 'Library', 'Caches', `${bundleId}.ShipIt`),
     coordinationDir: join(macCoordinationRoot(home), 'bundle-coordination'),
     pid: process.pid,
     isProcessAlive,

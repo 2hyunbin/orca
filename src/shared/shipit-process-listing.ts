@@ -30,10 +30,10 @@ export function isShipItRunningForBundle(listing: string, bundlePath: string): b
   )
 }
 
-/** Any app's ShipIt; bundle paths may contain spaces, so match the binary suffix, not a token. */
-export function isAnyShipItRunning(listing: string): boolean {
+/** ShipIt for this bundle id: launchd starts it with its `<bundle id>.ShipIt` job label. */
+export function isShipItRunningForBundleId(listing: string, bundleId: string): boolean {
+  const label = ` ${bundleId}.ShipIt`
   return lines(listing).some(
-    (command) =>
-      command.endsWith(SHIPIT_BINARY_SUFFIX) || command.includes(`${SHIPIT_BINARY_SUFFIX} `)
+    (command) => command.includes(`${SHIPIT_BINARY_SUFFIX} `) && command.includes(label)
   )
 }
