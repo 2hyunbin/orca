@@ -127,7 +127,7 @@ export async function acquireOwner(
     const proved = await input.store.proveOwner({
       sessionId: record.sessionId,
       fence,
-      link: acquired.link,
+      ...(acquired.link ? { link: acquired.link } : {}),
       now: input.now(),
       ...(options ? { options } : {})
     })

@@ -207,7 +207,7 @@ export class AgentSessionRecordStore {
   async proveOwner(args: {
     sessionId: string
     fence: number
-    link: AgentSessionProviderHandleLink
+    link?: AgentSessionProviderHandleLink
     now: number
     leaseTtlMs?: number
     options?: Readonly<Record<string, string>>
@@ -216,7 +216,7 @@ export class AgentSessionRecordStore {
       const proved = proveAgentSessionOwner({
         record,
         fence: args.fence,
-        link: args.link,
+        ...(args.link ? { link: args.link } : {}),
         now: args.now,
         leaseTtlMs: args.leaseTtlMs ?? AGENT_SESSION_LEASE_TTL_MS
       })

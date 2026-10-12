@@ -49,13 +49,12 @@ async function runningTurn(): Promise<AgentSessionJournal> {
   return journal
 }
 
-/** A child the adapter published before proving its startup, so a Stop ends the start. */
+/** A child whose handshake never answers, so a Stop ends the start. */
 async function startingChild(): Promise<{ journal: AgentSessionJournal; closeSession: Mock }> {
-  const acquired = acquire.getMockImplementation()!
-  acquire.mockImplementationOnce(async (input) => ({
-    ...(await acquired(input)),
-    providerChildPhase: 'starting' as const
-  }))
+  const handle = host.handleAdapterEvent.bind(host)
+  vi.spyOn(host, 'handleAdapterEvent').mockImplementation(async (event) =>
+    event.type === 'started' ? undefined : handle(event)
+  )
   const closeSession = vi.fn(async () => true)
   Object.assign(host.deps.adapter, { closeSession })
   await attach()

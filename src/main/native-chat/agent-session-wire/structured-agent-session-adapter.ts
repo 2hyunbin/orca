@@ -106,7 +106,7 @@ export {
  *  the process the host can probe, and the provider handle it was minted with. */
 export type AgentSessionAcquisition = {
   process: AgentSessionProcessIdentity
-  link: AgentSessionProviderHandleLink
+  link?: AgentSessionProviderHandleLink
   /** Host-local identity for this exact provider child, distinct even when the durable fence is
    *  reused by a superseding acquisition. */
   acquisitionGeneration?: string
@@ -210,6 +210,8 @@ export type StructuredAgentSessionEndedEvent = {
 /** The child a publish-first acquire handed over has now proven its start: startup facts applied.
  *  What it reports from here on is fact, not a catalog guess. */
 export type StructuredAgentSessionStartedEvent = {
+  /** The handle supplied when the provider finishes starting. */
+  link?: AgentSessionProviderHandleLink
   type: 'started'
   sessionId: string
   fence: number
@@ -243,7 +245,7 @@ export type StructuredAgentSessionOptionsSkippedEvent = {
  *  after `started`: persisted as the start's report is. Never delays a start. */
 export type StructuredAgentSessionOptionsReportedEvent = Omit<
   StructuredAgentSessionStartedEvent,
-  'type'
+  'type' | 'link'
 > & { type: 'options-reported' }
 
 export type StructuredAgentSessionLifecycleEvent =

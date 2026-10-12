@@ -25,6 +25,91 @@ function restingRecord(): AgentSessionRecord {
 }
 
 describe('options at rest', () => {
+  it('uses the folder default while the child is still starting', async () => {
+    const record = restingRecord()
+    const read = vi.fn(async () => ({
+      origin: 'probe' as const,
+      models: [
+        { id: 'gpt-folder', label: 'Folder', isDefault: true, defaultEffort: 'high', efforts: [] }
+      ],
+      fetchedAt: 1
+    }))
+    const prepareReadOptions = vi.fn()
+    const starting = {
+      child: { phase: 'starting' },
+      params: { provider: 'codex' },
+      journal: { context: { floor: () => null } }
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
+    const context = {
+      deps: {
+        adapter: { prepareReadOptions },
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => record },
+        modelCatalog: { read }
+      },
+      serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => starting,
+      conversation: async () => starting
+    } as unknown as StructuredAgentSessionMutationContext
+
+    const result = await readStructuredAgentSessionOptions(context, SESSION, {
+      readsWithoutModel: true
+    })
+    expect(result.current).toEqual({ model: 'gpt-folder', effort: 'high' })
+    expect(read).toHaveBeenCalledWith({
+      agent: 'codex',
+      sessionId: SESSION,
+      inSessionWorkspace: true,
+      savedOnly: true
+    })
+    expect(prepareReadOptions).not.toHaveBeenCalled()
+  })
+
+  it('keeps the account model for an older client when the starting child has no folder default', async () => {
+    const record = restingRecord()
+    const read = vi.fn(async (params: { inSessionWorkspace?: true }) => ({
+      origin: 'probe' as const,
+      models: [
+        {
+          id: params.inSessionWorkspace ? 'gpt-folder' : 'gpt-account',
+          label: 'Model',
+          isDefault: !params.inSessionWorkspace,
+          efforts: []
+        }
+      ],
+      fetchedAt: 1
+    }))
+    const starting = {
+      child: { phase: 'starting' },
+      params: { provider: 'codex' },
+      journal: { context: { floor: () => null } }
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
+    const context = {
+      deps: {
+        adapter: {},
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => record },
+        modelCatalog: { read }
+      },
+      serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => starting,
+      conversation: async () => starting
+    } as unknown as StructuredAgentSessionMutationContext
+
+    const current = await readStructuredAgentSessionOptions(context, SESSION, {
+      readsWithoutModel: true
+    })
+    expect(current.current).toEqual({})
+    expect(read).toHaveBeenCalledTimes(1)
+    const older = await readStructuredAgentSessionOptions(context, SESSION, {
+      readsWithoutModel: false
+    })
+    expect(older.current).toEqual({ model: 'gpt-account' })
+    expect(read).toHaveBeenLastCalledWith({ agent: 'codex', sessionId: SESSION, savedOnly: true })
+  })
+
   it.each(['codex', 'omp', 'grok', 'opencode'] as const)(
     'omits an unknown model for %s while the catalog is unavailable',
     async (provider) => {
@@ -58,7 +143,7 @@ describe('options at rest', () => {
       const result = await readStructuredAgentSessionOptions(context, SESSION, {
         readsWithoutModel: true
       })
-      expect(probe).toHaveBeenCalledTimes(provider === 'codex' ? 1 : 0)
+      expect(probe).not.toHaveBeenCalled()
       expect(result.models).toEqual([])
       expect(result.current).not.toHaveProperty('model')
       record.options = { model: 'later-model', effort: 'off' }

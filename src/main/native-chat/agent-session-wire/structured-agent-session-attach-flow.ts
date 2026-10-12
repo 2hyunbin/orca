@@ -51,7 +51,10 @@ import type { StructuredAgentSessionStartupAttempt } from './structured-agent-se
 import type { StructuredAgentSessionStartupProgress } from './structured-agent-session-startup-attempt'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
+
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
+
+export type AttachedOwner = 'acquired' | 'kept'
 
 export type AttachFlowInput = {
   store: AgentSessionRecordStore
@@ -71,17 +74,16 @@ export type AttachFlowInput = {
   onStartupAttempt?: (
     attempt: StructuredAgentSessionStartupAttempt
   ) => StructuredAgentSessionStartupProgress
-  /** A `ready` child's start listing, handed over once its owner is proven. */
+  /** A completed acquisition's start listing. */
   onStartCatalogListing?: (listing: AgentModelCatalogLiveListing) => void
   /** The conversation's option revision, which the child's reports are stamped with. */
   optionRevision: () => number
-  /** Publishes the journal before clients can send against the new owner. `acquiredOwner` is
-   *  true only when this attach spawned the provider child, so a re-attach to a live one is not
-   *  mistaken for a cold acquire. */
+  /** Publishes the journal before clients can send against the new owner. `owner` says whether
+   *  this attach spawned the child, kept a live one, or left the chat at rest. */
   onAttached: (
     attached: AttachedJournal,
     acquisitionGeneration: string | null,
-    acquiredOwner: boolean,
+    owner: AttachedOwner,
     providerChildPhase: StructuredAgentSessionProviderChildPhase
   ) => Promise<void> | void
   /** Host-owned provider sink, bound to the journal inside `onAttached`. */
@@ -131,7 +133,7 @@ export async function performAttach(
 
   let record: AgentSessionRecord
   let acquisitionGeneration: string | null = null
-  let acquiredOwner = false
+  let owner: AttachedOwner = 'kept'
   let providerChildPhase: StructuredAgentSessionProviderChildPhase = 'ready'
   let reservedRecord: AgentSessionRecord | null = null
   let unsupportedReservationSettlementAttempted = false
@@ -196,14 +198,16 @@ export async function performAttach(
       accountHome: record.accountHome,
       ownerAlreadyAdmitted: agentSessionLeaseAdmitsWriter(record.lease)
     })
-    if (!agentSessionLeaseAdmitsWriter(record.lease)) {
+    if (agentSessionLeaseAdmitsWriter(record.lease)) {
+      // Kept: re-attached to the live child.
+    } else {
       const acquired = await withAgentSessionCreatePhase('acquire_owner', input.recordPhase, () =>
         acquireOwner(input, record)
       )
       record = acquired.record
       acquisitionGeneration = acquired.acquisitionGeneration
       providerChildPhase = acquired.providerChildPhase
-      acquiredOwner = true
+      owner = 'acquired'
     }
   } catch (error) {
     const wording = {
@@ -264,7 +268,7 @@ export async function performAttach(
       providerHistoryWindow
     })
     await importAdoptedTranscript(params, attached, record, preparedTranscript.items)
-    await input.onAttached(attached, acquisitionGeneration, acquiredOwner, providerChildPhase)
+    await input.onAttached(attached, acquisitionGeneration, owner, providerChildPhase)
     await store.recordOperationOutcome({
       callerKey: input.callerKey,
       operationId: params.envelope.clientOperationId,

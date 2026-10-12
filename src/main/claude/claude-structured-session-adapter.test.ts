@@ -442,7 +442,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
       spawnToken: 'spawn-9'
     })
 
-    expect(acquisition.link.handle).toEqual(claudeProviderHandle(PROVIDER_SESSION_ID, null))
+    expect(acquisition.link?.handle).toEqual(claudeProviderHandle(PROVIDER_SESSION_ID, null))
     expect(events[0]).toMatchObject({
       type: 'message',
       message: { subtype: 'hook_started', hook_name: 'SessionStart:startup' }
@@ -489,8 +489,8 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
       fence: 9,
       spawnToken: 'spawn-9'
     })
-    expect(acquisition.link.origin).toBe('resumed')
-    expect(acquisition.link.handle).toEqual(
+    expect(acquisition.link?.origin).toBe('resumed')
+    expect(acquisition.link?.handle).toEqual(
       claudeProviderHandle(PROVIDER_SESSION_ID, 'leaf-before')
     )
 
