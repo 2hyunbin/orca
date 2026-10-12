@@ -13,7 +13,7 @@ import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults
 import { resolveHostAgentBaseEnvironment } from './structured-agent-shell-environment'
 import { resolveHostStructuredAgentCreateSupport } from './structured-agent-launch-support'
 import { structuredAgentRuntimeRegistration } from './structured-agent-runtime-registrations'
-import { resolveStructuredLaunchSeedOptions } from '../../shared/native-chat-session-option-defaults'
+import { structuredLaunchSeedOptions } from '../../shared/native-chat-session-option-defaults'
 import { hasPersistedStructuredAgentSessionStore as hasPersistedStructuredAgentSessionStoreOnDisk } from './structured-agent-session-runtime'
 import { ensureStructuredAgentSessionHostUnlessRefused } from './structured-agent-session-host-refusal'
 import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
@@ -94,10 +94,7 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
   structuredAgentSessionLaunchSeedOptions(
     agent: StructuredAgentId
   ): Record<string, string> | undefined {
-    return resolveStructuredLaunchSeedOptions(
-      this.requireStore().getSettings().nativeChatSessionOptions,
-      agent
-    )
+    return structuredLaunchSeedOptions(this.requireStore().getSettings(), agent)
   }
 
   protected async resolveStructuredAgentSessionLocation(worktreeSelector: string) {
