@@ -14,6 +14,7 @@ import {
   type PendingPromptValidation
 } from './structured-agent-session-prompt-state'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
+import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 
 type CancelOutcome = TurnOutcome<AgentSessionCancelResult>
 type PendingPrompt = Extract<PendingPromptValidation, { ok: true }>
@@ -64,7 +65,7 @@ export async function cancelStructuredAgentSessionPrompt(
 }
 
 function raisedByLiveTurn(ctx: AgentSessionTurnContext, pending: PendingPrompt): boolean {
-  const live = ctx.journal.liveTurnScope()
+  const live = contextStructuredAgentSessionCurrentWork(ctx).turnScope()
   const raised = pending.item.turnScope
   return live.kind === 'turn' && raised?.kind === 'turn' && raised.turnItemId === live.turnItemId
 }
@@ -102,7 +103,7 @@ async function dismissPrompt(
         }
       },
       // A revision: the prompt keeps the turn it was raised in.
-      { fence: ctx.fence, turnScope: ctx.journal.liveTurnScope() }
+      { fence: ctx.fence, turnScope: contextStructuredAgentSessionCurrentWork(ctx).turnScope() }
     )
     committed = true
   }
@@ -128,7 +129,7 @@ async function dismissPrompt(
             surface: 'row'
           })
         },
-        { fence: ctx.fence, turnScope: ctx.journal.liveTurnScope() }
+        { fence: ctx.fence, turnScope: contextStructuredAgentSessionCurrentWork(ctx).turnScope() }
       )
     }
   }
