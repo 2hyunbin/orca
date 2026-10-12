@@ -112,7 +112,9 @@ export class RuntimeBrowserCommandsWithBrowserTabClose extends RuntimeBrowserCom
     }
     // Why: headless serve destroys its offscreen page here; a window's <webview> goes when the
     // layout's tab does.
-    await this.host.getOffscreenBrowserBackend()?.closeTab(resolvedTabId)
+    if (!this.host.getAvailableAuthoritativeWindow()) {
+      await this.host.getOffscreenBrowserBackend()?.closeTab(resolvedTabId)
+    }
     const pageWorktreeId = worktreeId ?? browserManager.getWorktreeIdForTab(resolvedTabId)
     // Why: without retirement, paired clients keep a dead session tab until an unrelated republish.
     if (pageWorktreeId) {

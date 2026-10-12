@@ -40,6 +40,9 @@ vi.mock('../browser/browser-session-registry', () => ({
   }
 }))
 
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create paths only test that a window is attached.
+const ATTACHED_WINDOW = {} as never
+
 function createCommandHost(
   overrides: Partial<RuntimeBrowserCommandHost>
 ): RuntimeBrowserCommandHost {
@@ -55,7 +58,7 @@ function createCommandHost(
         setActiveTab: vi.fn()
       }) as unknown as AgentBrowserBridge,
     getAuthoritativeWindow: vi.fn(),
-    getAvailableAuthoritativeWindow: vi.fn(() => ({})),
+    getAvailableAuthoritativeWindow: vi.fn(() => null),
     getOffscreenBrowserBackend: vi.fn(() => null),
     ...overrides
   } as unknown as RuntimeBrowserCommandHost
@@ -419,12 +422,40 @@ describe('browser tab-create placement census', () => {
       expect(markHeadlessBrowserSessionTabActive).not.toHaveBeenCalled()
     })
 
+    it('gives the page to a window a serve has opened, not to its offscreen backend', async () => {
+      const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
+      const offscreenCreate = vi.fn()
+      const addHeadlessBrowserLayoutTab = vi.fn()
+      const commands = new RuntimeBrowserCommands(
+        createCommandHost({
+          addHeadlessBrowserLayoutTab,
+          getAvailableAuthoritativeWindow: vi.fn(() => ATTACHED_WINDOW),
+          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create path calls only createTab on the backend.
+          getOffscreenBrowserBackend: vi.fn(() => ({ createTab: offscreenCreate }) as never)
+        })
+      )
+
+      await commands.browserTabCreate({ worktree: 'id:wt-1', url: 'about:blank', page: 'page-w' })
+
+      expect(offscreenCreate).not.toHaveBeenCalled()
+      expect(addHeadlessBrowserLayoutTab).toHaveBeenCalledWith(
+        'wt-1',
+        'page-w',
+        undefined,
+        undefined
+      )
+    })
+
     it('adds a window-backed page to the layout and moves the host to it on a user create', async () => {
       const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
       const addHeadlessBrowserLayoutTab = vi.fn()
       const markHeadlessBrowserSessionTabActive = vi.fn()
       const commands = new RuntimeBrowserCommands(
-        createCommandHost({ addHeadlessBrowserLayoutTab, markHeadlessBrowserSessionTabActive })
+        createCommandHost({
+          addHeadlessBrowserLayoutTab,
+          markHeadlessBrowserSessionTabActive,
+          getAvailableAuthoritativeWindow: vi.fn(() => ATTACHED_WINDOW)
+        })
       )
 
       const { browserPageId } = await commands.browserTabCreate({
@@ -453,7 +484,10 @@ describe('browser tab-create placement census', () => {
       const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
       const markHeadlessBrowserSessionTabActive = vi.fn()
       const commands = new RuntimeBrowserCommands(
-        createCommandHost({ markHeadlessBrowserSessionTabActive })
+        createCommandHost({
+          markHeadlessBrowserSessionTabActive,
+          getAvailableAuthoritativeWindow: vi.fn(() => ATTACHED_WINDOW)
+        })
       )
 
       await commands.browserTabCreate(
@@ -472,7 +506,11 @@ describe('browser tab-create placement census', () => {
       const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
       const addHeadlessBrowserLayoutTab = vi.fn()
       const commands = new RuntimeBrowserCommands(
-        createCommandHost({ addHeadlessBrowserLayoutTab, desktopViewWorkspaceId: () => 'wt-shown' })
+        createCommandHost({
+          addHeadlessBrowserLayoutTab,
+          desktopViewWorkspaceId: () => 'wt-shown',
+          getAvailableAuthoritativeWindow: vi.fn(() => ATTACHED_WINDOW)
+        })
       )
 
       await commands.browserTabCreate({ url: 'about:blank', page: 'page-created' })

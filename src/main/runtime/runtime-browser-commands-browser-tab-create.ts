@@ -111,8 +111,11 @@ export class RuntimeBrowserCommandsWithBrowserTabCreate extends RuntimeBrowserCo
       }
       return { browserPageId }
     }
-    // Why: headless serve has no renderer <webview>, so back the page with a main-process offscreen WebContents instead.
-    const offscreen = this.host.getOffscreenBrowserBackend()
+    // Why: headless serve has no renderer <webview>, so back the page with a main-process offscreen
+    // WebContents instead; a serve that has since opened a window gives the page to the window.
+    const offscreen = this.host.getAvailableAuthoritativeWindow()
+      ? null
+      : this.host.getOffscreenBrowserBackend()
     if (offscreen) {
       // Why: the offscreen backend registers synchronously, so there is no webview-mount wait.
       const created = await offscreen.createTab({

@@ -197,7 +197,8 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
     }
     const held = heldTab()
     if (activate && held) {
-      this.focusInDesktopView(worktreeId, { tabId: held.id, ...(leafId ? { leafId } : {}) })
+      // The desktop goes to the phone's new terminal, as main's window did.
+      this.navigateDesktopView(worktreeId, { tabId: held.id, ...(leafId ? { leafId } : {}) })
     }
     const result = this.getMobileSessionTabsForWorktree(worktreeId)
     const created = result.tabs.find(

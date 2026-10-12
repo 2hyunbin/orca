@@ -4,11 +4,7 @@ import type { SpawnIntent } from '../../shared/host-spawn-admission'
 export type { TerminalCreateOptions }
 export type { Worktree } from '../../shared/worktree/types'
 export type { RuntimeTerminalCreate } from '../../shared/runtime-types'
-export {
-  createTerminalRevealWarning,
-  ownerSurfacing,
-  resolveTerminalPresentation
-} from './orca-runtime-core'
+export { ownerSurfacing, resolveTerminalPresentation } from './orca-runtime-core'
 export { makePaneKey } from '../../shared/stable-pane-id'
 export { randomUUID } from 'node:crypto'
 export {

@@ -156,6 +156,8 @@ describe('a desktop launch through the host', () => {
 
     await expect(outcome).resolves.toEqual({ kind: 'started' })
     expect(launchTab(tabId)).toBeDefined()
+    // Settled: nothing is left for its pane to offer.
+    expect(agentLaunchPanePrompt(tabId)).toBeNull()
   })
 
   it('takes its tab back on a refusal, before the pane ever spawns', async () => {
@@ -183,6 +185,7 @@ describe('a desktop launch through the host', () => {
 
     await expect(outcome).resolves.toEqual({ kind: 'pane-says' })
     expect(launchTab(tabId)).toBeDefined()
+    expect(agentLaunchPanePrompt(tabId)).toBe('fix the failing checks')
   })
 
   it('never leaves a pane the host did not take, which would open as a shell', async () => {

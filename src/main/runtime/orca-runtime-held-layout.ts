@@ -21,7 +21,6 @@ import {
   paneKeyOf,
   type WorkspaceLayout
 } from '../../shared/workspace-layout/workspace-layout-model'
-import type { PublishedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-published'
 import {
   focusInViewRecord,
   navigateRequestFor
@@ -38,6 +37,7 @@ import type { layoutCommandsFor } from './runtime-layout-command-host'
 import { newTabIn, runtimeSplitPlacement } from './runtime-terminal-spawn-placement'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
 import { WindowPublishedPhoneRowFacts } from './window-published-phone-row-facts'
+import { waitForHeldPaneTerminal } from './held-pane-terminal-wait'
 
 export abstract class OrcaRuntimeWithHeldLayout extends OrcaRuntimeWithMigrationCatalog {
   protected abstract readonly layoutHolder: RuntimeWorkspaceLayouts
@@ -147,53 +147,21 @@ export abstract class OrcaRuntimeWithHeldLayout extends OrcaRuntimeWithMigration
    */
   async startPaneForHandle(handle: string, signal?: AbortSignal): Promise<string | null> {
     const record = this.handles.get(handle)
-    if (!record || signal?.aborted) {
+    if (!record) {
       return null
     }
-    const workspace = record.worktreeId
+    const pane = { workspace: record.worktreeId, tabId: record.tabId, leafId: record.leafId }
     const paneKey = paneKeyOf(record.tabId, record.leafId)
-    const paneOf = (layout: PublishedWorkspaceLayout | undefined) =>
-      layout?.tabs
-        .flatMap((tab) => (tab.entityId === record.tabId ? (tab.terminal?.panes ?? []) : []))
-        .find((pane) => pane.leafId === record.leafId)
-    const settled = (pane: ReturnType<typeof paneOf>): string | null | undefined => {
-      if (!pane) {
-        return null
-      }
-      if (pane.status === 'running' && pane.ptyId) {
-        return pane.ptyId
-      }
-      return pane.status === 'starting' || pane.status === 'restorable' ? undefined : null
-    }
-    const now = settled(paneOf(this.layoutHolder.published(workspace)))
-    if (now !== undefined) {
-      return now
-    }
-    return await new Promise<string | null>((resolve) => {
-      const finish = (ptyId: string | null): void => {
-        unsubscribe()
-        signal?.removeEventListener('abort', onAbort)
-        resolve(ptyId)
-      }
-      const onAbort = (): void => finish(null)
-      const { unsubscribe } = this.layoutHolder.subscribe((event) => {
-        if (event.key !== workspace) {
-          return
-        }
-        const result = settled(event.type === 'workspace' ? paneOf(event.layout) : undefined)
-        if (result !== undefined) {
-          finish(result)
-        }
-      })
-      signal?.addEventListener('abort', onAbort, { once: true })
-      const reply = this.layoutCommands.apply(
-        { type: 'startPane', workspace, paneKey },
-        { viewId: null }
-      )
-      if (!reply.ok) {
-        finish(null)
-      }
-    })
+    return await waitForHeldPaneTerminal(
+      this.layoutHolder,
+      pane,
+      () =>
+        this.layoutCommands.apply(
+          { type: 'startPane', workspace: pane.workspace, paneKey },
+          { viewId: null }
+        ).ok,
+      { signal }
+    )
   }
 
   /**

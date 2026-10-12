@@ -129,7 +129,6 @@ describe('RuntimeBrowserCommands headless close and forwarding', () => {
     expect(closeTab).toHaveBeenCalledWith('page-offscreen')
     // Why: without retirement, paired clients keep a dead session tab after an RPC close.
     expect(retireRuntimeOwnedBrowserSessionTab).toHaveBeenCalledWith('wt-1', 'page-offscreen')
-    expect(ipcMainOnMock).not.toHaveBeenCalledWith('browser:tabCloseReply', expect.anything())
     await expect(
       commands.browserTabClose({ worktree: 'id:wt-1', page: 'page-other' })
     ).rejects.toMatchObject({ code: 'browser_tab_not_found' })

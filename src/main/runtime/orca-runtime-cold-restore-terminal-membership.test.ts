@@ -9,6 +9,8 @@ import type {
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
+import type { LayoutNavigateRequest } from '../../shared/workspace-layout/workspace-layout-stream-frames'
+import { DESKTOP_VIEW_ID } from '../../shared/workspace-layout/workspace-layout-views'
 import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
 
 const WORKTREE_ID = 'repo::/worktree'
@@ -482,8 +484,12 @@ describe('a surface the host retired stays retired when a restored sibling regis
 
 // A phone creates a terminal while the desktop's frame still lacks it: the runtime's layout holds
 // the tab it spawned.
-async function runtimeWithPhoneCreate(): Promise<{ runtime: OrcaRuntimeService; row: string }> {
+async function runtimeWithPhoneCreate(
+  activate = false
+): Promise<{ runtime: OrcaRuntimeService; row: string; navigations: LayoutNavigateRequest[] }> {
   const { runtime } = coldRestoredRuntime()
+  const navigations: LayoutNavigateRequest[] = []
+  runtime.layoutCommands.views.onNavigate(DESKTOP_VIEW_ID, (request) => navigations.push(request))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create path spawns, writes and reads the foreground process only.
   runtime.setPtyController({
     spawn: vi.fn(async () => ({ id: 'pty-phone' })),
@@ -502,13 +508,18 @@ async function runtimeWithPhoneCreate(): Promise<{ runtime: OrcaRuntimeService; 
   })
   publishRendererFrame(runtime, makeRendererFrame(LOCAL_HOST))
   const created = await runtime.createMobileSessionTerminal(`id:${WORKTREE_ID}`, {
-    activate: false,
+    activate,
     clientNavigationId: 'phone'
   })
-  return { runtime, row: created.tab.id }
+  return { runtime, row: created.tab.id, navigations }
 }
 
 describe('a surface the host added stays listed when a restored sibling registers', () => {
+  it('brings the desktop to a terminal a phone creates and activates, as main did', async () => {
+    const { navigations } = await runtimeWithPhoneCreate(true)
+    expect(navigations).toEqual([expect.objectContaining({ kind: 'focusPane' })])
+  })
+
   it('keeps a phone-created terminal listed', async () => {
     const { runtime, row } = await runtimeWithPhoneCreate()
     expect(await listedSurfaces(runtime)).toContain(`${row}:ready`)

@@ -22,7 +22,10 @@ export class RuntimeLegacyWorkerTerminalRecoveryPersistence {
     return this.getPlan(dispatchIds) ?? { candidates: [], ambiguousDispatchIds: [] }
   }
 
-  /** The holder applies each resolution; the database hears only once the layout is on disk. */
+  /**
+   * The holder applies each resolution; the database hears once its write has ended. Q4: a failed
+   * write is logged, not rolled back, and the next save writes it.
+   */
   async persist(
     resolutions: readonly LegacyWorkerRecoveryResolution[]
   ): Promise<ReadonlySet<string>> {

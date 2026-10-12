@@ -97,16 +97,7 @@ it.each([
         kill,
         getForegroundProcess: async () => null
       })
-      const send = vi.fn((channel: string, payload: { command?: string }) => {
-        if (channel === 'terminal:requestTabCreate') {
-          if (payload.command) {
-            acceptedCommands.push(payload.command)
-          }
-          if (failure === 'client_disconnected') {
-            connection.abort()
-          }
-        }
-      })
+      const send = vi.fn()
       runtime.attachWindow(1)
       runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
       electronMocks.BrowserWindow.fromId.mockReturnValue({

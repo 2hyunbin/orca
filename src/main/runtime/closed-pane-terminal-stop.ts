@@ -37,17 +37,6 @@ export function closedPaneTerminals(
   })
 }
 
-/** A window-published tab's panes, as the terminals its close unbound. */
-export function closedTabTerminals(
-  worktreeId: string,
-  tabId: string,
-  ptyIdsByLeafId: Record<string, string | null | undefined>
-): ClosedPaneTerminal[] {
-  return Object.entries(ptyIdsByLeafId).flatMap(([leafId, ptyId]) =>
-    ptyId ? [{ ptyId, pane: { worktreeId, tabId, paneKey: paneKeyOf(tabId, leafId) } }] : []
-  )
-}
-
 /**
  * Local ids restart at each launch, so a saved id can name another pane's process: only a live
  * one spawned for this pane is stop authority (main's `mobileTerminalTabMatchesPty`).

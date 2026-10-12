@@ -11,7 +11,10 @@
 import { useAppStore } from '@/store'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
-import { rememberAgentLaunchPanePrompt } from '@/lib/agent-launch-pane-prompt'
+import {
+  forgetAgentLaunchPanePrompt,
+  rememberAgentLaunchPanePrompt
+} from '@/lib/agent-launch-pane-prompt'
 import {
   holdAgentLaunchPaneSpawn,
   isAgentLaunchPaneSpawnHeld
@@ -112,6 +115,19 @@ async function settleLaunch(
   send: Promise<unknown>,
   releaseHold: () => void
 ): Promise<HostAgentLaunchOutcome> {
+  const outcome = await launchOutcome(args, pane, send).finally(releaseHold)
+  // Only a pane that says why its agent is not running offers the prompt to copy.
+  if (outcome.kind !== 'pane-says') {
+    forgetAgentLaunchPanePrompt(pane.tabId)
+  }
+  return outcome
+}
+
+async function launchOutcome(
+  args: HostAgentLaunchArgs,
+  pane: { tabId: string; leafId: string },
+  send: Promise<unknown>
+): Promise<HostAgentLaunchOutcome> {
   try {
     return outcomeFromResult(await send)
   } catch (error) {
@@ -131,8 +147,6 @@ async function settleLaunch(
       }
     }
     return { kind: 'pane-says' }
-  } finally {
-    releaseHold()
   }
 }
 

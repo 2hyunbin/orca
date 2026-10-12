@@ -67,8 +67,6 @@ export const MOBILE_TERMINAL_CREATE_RESULT_TTL_MS = 60_000
 // and reuses the just-created worktree instead of spawning a duplicate.
 export const WORKTREE_CREATE_RESULT_TTL_MS = 60_000
 
-export const MOBILE_TERMINAL_SURFACE_TIMEOUT_MS = 10_000
-
 // Why: the split already failed; the caller waits on this teardown only to learn whether the
 // fallback kill is needed, so keep it short — an unreachable host must not stall the rejection.
 export const REJECTED_SPLIT_PTY_STOP_TIMEOUT_MS = 2_000
@@ -83,8 +81,6 @@ export const CLAUDE_AGENT_PROMPT_RENDER_QUIET_MS = 1500
 
 // Why: Claude emits show-cursor while rendering its composer; output must settle afterward.
 export const CLAUDE_AGENT_PROMPT_RENDER_MARKER = '\x1b[?25h'
-
-export const MOBILE_TERMINAL_READY_FALLBACK_MS = 1000
 
 export const SSH_PANE_RECOVERY_GRACE_MS = 30_000
 
@@ -214,17 +210,6 @@ export function findLastCompleteOscTitleRange(data: string): { start: number; en
 
 export function isClientDisconnectedError(error: unknown): boolean {
   return error instanceof Error && error.message === 'client_disconnected'
-}
-
-export function createTerminalRevealWarning(handle: string, error?: unknown): string {
-  const reason =
-    error instanceof Error && error.message.trim().length > 0
-      ? ` Reason: ${error.message.trim()}.`
-      : ''
-  return [
-    `Terminal ${handle} is running, but Orca could not make it discoverable.${reason}`,
-    `Run \`orca terminal focus --terminal ${handle}\` to reveal and focus it.`
-  ].join(' ')
 }
 
 // Why: an absent `surfaceOwner` means "default", so surfacing callers must omit

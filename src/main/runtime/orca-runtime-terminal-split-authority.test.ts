@@ -222,9 +222,24 @@ describe('remote runtime terminal split authority', () => {
   it("splits a window terminal addressed by its leaf's handle", async () => {
     const harness = createHarness(true, { rendererMounted: true, leafHandle: true })
     const split = await harness.runtime.splitTerminal(harness.handle, { direction: 'vertical' })
-    expect(split.tabId).toBe(TAB_ID)
+    expect(split).toMatchObject({ tabId: TAB_ID, paneRuntimeId: 1 })
     expect(harness.spawn).toHaveBeenCalledOnce()
     expect(harness.getSession().terminalLayoutsByTabId[TAB_ID]?.root?.type).toBe('split')
+    // Main split a window terminal in the window, which neither activated nor revealed it.
+    expect(harness.navigations).toEqual([])
+  })
+
+  it('splits a window leaf whose terminal is not running yet, starting the new pane', async () => {
+    const harness = createHarness(true, {
+      rendererMounted: true,
+      rendererPtyId: null,
+      graphOnlySource: true
+    })
+    const split = await harness.runtime.splitTerminal(harness.handle, { direction: 'vertical' })
+    expect(split).toMatchObject({ tabId: TAB_ID, paneRuntimeId: 1 })
+    expect(split.handle).toMatch(/^term_/)
+    expect(harness.spawn).toHaveBeenCalledOnce()
+    expect(harness.navigations).toEqual([])
   })
 
   it('shows a persisted split in the desktop view while its mounted source is still publishing its PTY binding', async () => {

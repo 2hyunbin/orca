@@ -177,7 +177,6 @@ Generation-aware **latest-wins single-flight** for exclusive host focus:
 | `config/scripts/live-remote-freeze-rpc.mjs`                    | Cross-platform bounded CLI runner  |
 | `config/scripts/live-remote-bulk-open-freeze-metrics.mjs`      | Shared thresholds / handle extract |
 | `config/scripts/live-remote-bulk-open-freeze-metrics.test.mjs` | Unit tests                         |
-| `src/main/runtime/terminal-focus-navigation-coalescer.ts`      | Host focus single-flight           |
 | `pnpm run repro:live-remote-realistic-freeze`                  | package entry                      |
 | `pnpm run repro:live-remote-bulk-open-freeze`                  | package entry                      |
 
