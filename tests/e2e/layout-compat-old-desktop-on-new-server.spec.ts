@@ -18,6 +18,7 @@ import {
 } from './helpers/packaged-old-orca'
 import {
   expectLayoutCompatBaseline,
+  expectReconnectedPaneEcho,
   IdLabels,
   publishedLayoutShape,
   readPublishedLayout,
@@ -114,7 +115,14 @@ test.describe('layout compat: released desktop and CLI on the current server', (
         await record('old desktop closes the new pane')
 
         await host.restartServeProcess()
-        await expect(client.page.locator(PANE)).toHaveCount(1, { timeout: 60_000 })
+        await expectReconnectedPaneEcho({
+          page: client.page,
+          environmentId: client.environmentId,
+          leafId: firstLeaf!,
+          host: host.client,
+          worktree
+        })
+        await expect(client.page.locator(PANE)).toHaveCount(1)
         await record('after server restart')
 
         await expectLayoutCompatBaseline(testInfo, 'old-desktop-on-new-server', {

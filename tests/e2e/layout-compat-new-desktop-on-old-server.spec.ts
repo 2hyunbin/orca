@@ -17,6 +17,7 @@ import {
 } from './helpers/packaged-old-orca'
 import {
   expectLayoutCompatBaseline,
+  expectReconnectedPaneEcho,
   IdLabels,
   paneTreeShape,
   readSessionTabs,
@@ -133,6 +134,10 @@ test.describe('layout compat: current desktop on a released server', () => {
         await expect(page.locator(PANE)).toHaveCount(1, { timeout: 60_000 })
         await record('desktop shows the server workspace')
 
+        const firstLeaf = await page
+          .locator(PANE)
+          .first()
+          .evaluate((pane) => pane.dataset.leafId ?? '')
         await page.locator(`${PANE} .xterm`).first().click()
         await page.keyboard.press(SPLIT_RIGHT)
         await expect(page.locator(PANE)).toHaveCount(2, { timeout: 30_000 })
@@ -145,7 +150,13 @@ test.describe('layout compat: current desktop on a released server', () => {
         await record('desktop renames a pane')
 
         await host.restart()
-        await expect(page.locator(PANE).first()).toBeVisible({ timeout: 60_000 })
+        await expectReconnectedPaneEcho({
+          page,
+          environmentId: desktop.environmentId,
+          leafId: firstLeaf,
+          host: host.client,
+          worktree: `path:${testRepoPath}`
+        })
         await record('after the server restarts and the desktop reconnects')
 
         await expectLayoutCompatBaseline(testInfo, 'new-desktop-on-old-server', {

@@ -6,14 +6,17 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import type { TestInfo } from '@stablyai/playwright-test'
+import type { Page, TestInfo } from '@stablyai/playwright-test'
 import { expect } from './orca-app'
 import type { RuntimeClient } from '../../../src/cli/runtime/client'
 import { decodePairingOffer } from '../../../src/shared/pairing'
 import { pairedRuntimeConnectionFromOffer } from '../../../src/shared/paired-runtime-connection'
 import { subscribeRemoteRuntimeRequest } from '../../../src/shared/remote-runtime-client'
 import type { RuntimeMobileSessionTabsResult } from '../../../src/shared/runtime-session-contracts'
-import type { RuntimeTerminalListResult } from '../../../src/shared/runtime-terminal-contracts'
+import type {
+  RuntimeTerminalListResult,
+  RuntimeTerminalRead
+} from '../../../src/shared/runtime-terminal-contracts'
 import type { TerminalPaneLayoutNode } from '../../../src/shared/terminal-tab-types'
 import type { PublishedWorkspaceLayout } from '../../../src/shared/workspace-layout/workspace-layout-published'
 import { readWorkspaceLayoutStreamFrame } from '../../../src/shared/workspace-layout/workspace-layout-stream-frames'
@@ -251,4 +254,72 @@ export async function readSettled<T>(read: () => Promise<T>, timeoutMs = 20_000)
     last = next
   }
   return JSON.parse(last)
+}
+
+/**
+ * Reads until `ready` holds, or returns the last read at the deadline: for a step whose outcome
+ * the baseline records either way (it differs by platform), so neither outcome is a race.
+ */
+export async function readUntil<T>(
+  read: () => Promise<T>,
+  ready: (value: T) => boolean,
+  timeoutMs = 20_000
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  let value = await read()
+  while (!ready(value) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    value = await read()
+  }
+  return value
+}
+
+/**
+ * After a server restart: waits until the client's own status call is answered, which only the
+ * new server process can do, then types an `echo` into one of its panes and reads the output back
+ * on the host, so input and output both cross the reconnected link.
+ */
+export async function expectReconnectedPaneEcho(args: {
+  page: Page
+  environmentId: string
+  leafId: string
+  host: RuntimeClient
+  worktree: string
+}): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        args.page.evaluate(
+          async (selector) =>
+            (await window.api.runtimeEnvironments.getStatus({ selector, timeoutMs: 5_000 })).ok,
+          args.environmentId
+        ),
+      { timeout: 60_000 }
+    )
+    .toBe(true)
+  await args.page.locator(`.pane[data-leaf-id="${args.leafId}"] .xterm`).click()
+  // The shell prints 42 only by running the line, so the echoed input alone cannot match.
+  await args.page.keyboard.type('echo P3_RECONNECT_$((40+2))')
+  await args.page.keyboard.press('Enter')
+  await expect
+    .poll(
+      async () => {
+        const { terminals } = (
+          await args.host.call<RuntimeTerminalListResult>('terminal.list', {
+            worktree: args.worktree
+          })
+        ).result
+        const handle = terminals.find((terminal) => terminal.leafId === args.leafId)?.handle
+        if (!handle) {
+          return ''
+        }
+        const read = await args.host.call<{ terminal: RuntimeTerminalRead }>('terminal.read', {
+          terminal: handle,
+          limit: 200
+        })
+        return read.result.terminal.tail.join('\n')
+      },
+      { timeout: 30_000 }
+    )
+    .toContain('P3_RECONNECT_42')
 }

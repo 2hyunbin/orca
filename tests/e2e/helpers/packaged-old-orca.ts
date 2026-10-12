@@ -112,9 +112,7 @@ export async function launchPackagedPairedClient(args: {
     const page = await app.firstWindow({ timeout: 120_000 })
     await page.waitForLoadState('domcontentloaded')
     const [status, version, environmentId] = await Promise.all([
-      page.evaluate(async () => ({
-        capabilities: (await window.api.runtime.getStatus()).capabilities ?? []
-      })),
+      page.evaluate(() => window.api.runtime.getStatus()),
       app.evaluate(({ app: electronApp }) => electronApp.getVersion()),
       page.evaluate(
         async ({ pairingUrl, name }) => {
@@ -134,12 +132,16 @@ export async function launchPackagedPairedClient(args: {
         { pairingUrl: args.offer.pairingUrl, name: args.name ?? 'packaged old client' }
       )
     ])
+    // A capability check against a missing list would pass vacuously.
+    if (!status.capabilities) {
+      throw new Error(`packaged Orca ${version} reported no runtime capabilities`)
+    }
     const launched = app
     return {
       app: launched,
       environmentId,
       page,
-      status,
+      status: { capabilities: status.capabilities },
       version,
       dispose: async () => {
         const failures = await collectCleanupFailures([

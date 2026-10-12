@@ -1,8 +1,9 @@
 /**
- * Layout rework P3 baseline: a released phone paired straight to the current `orca serve`. The
- * phone speaks with the capabilities and request shapes of mobile-android-v0.0.52: it creates,
- * activates, renames, focuses and closes terminals (one of them pinned on the host), opens a file,
- * and reads its own selection again after the server restarts. Each step records the phone's and
+ * Layout rework P3 baseline: an old phone paired straight to the current `orca serve`. Not the
+ * released app: a capability-list client that advertises mobile-android-v0.0.52's capabilities
+ * and sends that release's request shapes. It creates, activates, renames, focuses and closes
+ * terminals (one of them pinned on the host), opens a file, and reads its own selection again
+ * after the server restarts. Each step records the phone's and
  * the server's tab lists; the shapes are compared with main's.
  */
 import { expect, test } from './helpers/orca-app'
@@ -13,6 +14,7 @@ import {
   IdLabels,
   readSessionTabs,
   readSettled,
+  readUntil,
   sessionTabsShape
 } from './helpers/layout-compat-baseline'
 import type { RuntimeCapability } from '../../src/shared/protocol-version'
@@ -21,7 +23,7 @@ import type { RuntimeTerminalListResult } from '../../src/shared/runtime-termina
 import type { RuntimeWorktreePsSummary } from '../../src/shared/runtime-worktree-contracts'
 
 /** What mobile-android-v0.0.52 advertises (its mobile-runtime-client-capabilities.ts). */
-const RELEASED_PHONE_CAPABILITIES: readonly RuntimeCapability[] = [
+const OLD_PHONE_CAPABILITIES: readonly RuntimeCapability[] = [
   'agent-session.background-task-stop.v1',
   'agent-session.background-task-row-stop.v1',
   'agent-session.turn-item.v1',
@@ -56,7 +58,10 @@ function fieldsOf(value: unknown): string[] {
 async function reply(phone: PairedMobileClient, method: string, params: unknown) {
   const response = await phone.request<unknown>(method, params)
   if (!response.ok) {
-    return { ok: false, error: response.error.code }
+    // runtime_error is generic; its message names the actual refusal.
+    return response.error.code === 'runtime_error'
+      ? { ok: false, error: response.error.code, message: response.error.message }
+      : { ok: false, error: response.error.code }
   }
   return { ok: true, fields: fieldsOf(response.result) }
 }
@@ -100,7 +105,7 @@ test('old-phone-on-new-server: create, activate, rename, focus, close, open a fi
     pairingScope: 'mobile',
     pinnedServePort: true
   })
-  const phone = pairMobileClient(host.offer, RELEASED_PHONE_CAPABILITIES)
+  const phone = pairMobileClient(host.offer, OLD_PHONE_CAPABILITIES)
   try {
     await host.client.call('repo.add', { path: testRepoPath, kind: 'git' })
     const { worktrees } = await phone.call<{ worktrees: RuntimeWorktreePsSummary[] }>(
@@ -126,7 +131,7 @@ test('old-phone-on-new-server: create, activate, rename, focus, close, open a fi
     const create = (n: number) =>
       phone.call<{ tab: { id: string; parentTabId: string } }>('session.tabs.createTerminal', {
         worktree,
-        clientMutationId: `released-phone-create-${n}`,
+        clientMutationId: `old-phone-create-${n}`,
         activate: false,
         select: true,
         navigation: 'caller'
@@ -177,13 +182,22 @@ test('old-phone-on-new-server: create, activate, rename, focus, close, open a fi
     })
     await record('phone closes the pinned tab', closedPinned)
 
+    // Today a headless server refuses: runtime_error "renderer_unavailable" (no window to open in).
     const opened = await reply(phone, 'files.open', { worktree, relativePath: 'README.md' })
     await record('phone opens a file', opened)
 
     const selectedBefore = sessionTabsShape(await firstSnapshot(phone, worktree), labels)
+    const tabsOf = (terminals: { tabId: string }[]) =>
+      JSON.stringify(terminals.map((terminal) => terminal.tabId).sort())
+    const tabsBefore = tabsOf(await phoneTerminals(phone, worktree))
     await host.restartServeProcess()
     const selectedAfter = sessionTabsShape(await firstSnapshot(phone, worktree), labels)
-    const listedAfter = await phoneTerminals(phone, worktree)
+    // Linux: the server lists every terminal again shortly after it answers. macOS (no baseline):
+    // in this harness the list stayed empty for the 60 s measured, with the tabs still listed.
+    const listedAfter = await readUntil(
+      () => phoneTerminals(phone, worktree),
+      (terminals) => tabsOf(terminals) === tabsBefore
+    )
     steps.push({
       step: 'phone reconnects after a server restart',
       snapshotBefore: selectedBefore,
@@ -205,7 +219,7 @@ test('old-phone-on-new-server: create, activate, rename, focus, close, open a fi
 
     await expectLayoutCompatBaseline(testInfo, 'old-phone-on-new-server', {
       steps,
-      // The payload the released phone parses: its snapshot and terminal-row fields.
+      // The payload the old phone parses: its snapshot and terminal-row fields.
       snapshotFields: fieldsOf(snapshot),
       terminalRowFields: [
         ...new Set(snapshot.tabs.flatMap((tab) => (tab.type === 'terminal' ? fieldsOf(tab) : [])))

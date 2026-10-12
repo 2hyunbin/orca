@@ -21,6 +21,20 @@ import type { RuntimeTerminalCreate } from '../../src/shared/runtime-terminal-co
 
 const PANE = '.pane[data-leaf-id]:visible'
 const TAB = '[data-testid="sortable-tab"]'
+// tab1 is the desktop's, tab2 the CLI's, tab3 serve's; the published orders seen after a restart.
+const RESTART_ORDERS = [
+  ['tab1', 'tab2', 'tab3'],
+  ['tab1', 'tab3', 'tab2']
+]
+
+/** An untitled row is named by its list position ("Terminal 2"); kept, but position-free. */
+function positionalTitle(title: string, index: number): string {
+  if (!/^Terminal \d+$/.test(title)) {
+    return title
+  }
+  expect(title).toBe(`Terminal ${index + 1}`)
+  return 'Terminal <position>'
+}
 
 test('serve-restart-keeps-@@-terminals: desktop, CLI and serve terminals survive a serve restart', async ({
   testRepoPath
@@ -82,22 +96,45 @@ test('serve-restart-keeps-@@-terminals: desktop, CLI and serve terminals survive
 
       await host.restartServeProcess()
       await expect(page.locator(TAB)).not.toHaveCount(0, { timeout: 60_000 })
+      // The restarted server lists its terminals a moment after it answers; this scenario is that they come back.
+      await expect
+        .poll(async () => (await readTerminals(host.client, worktree, labels)).length, {
+          timeout: 60_000
+        })
+        .toBe(before.terminals.length)
       const settled = await readSettled(read)
-      // Main races here: after the restart, the CLI's tab comes second or last, in session.tabs.list
-      // and in the published layout alike (both seen in repeated runs). Recorded order-free, so the
-      // baseline holds membership; the rework makes this order exact.
-      const byTab = (a: { tab: string | null }, b: { tab: string | null }) =>
-        String(a.tab).localeCompare(String(b.tab))
+      // Bug on main: the order changes on restart. Repeated macOS runs saw session.tabs.list in
+      // four of the six orders, and the published layout with the CLI's tab (tab2) second or
+      // last. So the list must hold the same tabs in any order, the published layout one of those
+      // two orders; both are recorded in creation order. Any other change still fails.
+      expect(settled.server.groups).toHaveLength(1)
+      expect(settled.server.groups[0]!.tabs.toSorted()).toEqual(RESTART_ORDERS[0])
+      // The list's selected tab follows that order: it is whichever tab comes first.
+      expect(settled.server.activeTab).toBe(settled.server.groups[0]!.tabs[0])
+      const published = settled.published?.groups
+      expect(published).toHaveLength(1)
+      expect(
+        RESTART_ORDERS.some((order) => JSON.stringify(order) === JSON.stringify(published?.[0])),
+        `published order after the restart: ${JSON.stringify(published)}`
+      ).toBe(true)
+      expect(settled.published?.tabs.map((tab) => tab.tab)).toEqual(published?.[0])
+      const canonical = RESTART_ORDERS[0]!
+      const byCanonical = (a: { tab: string | null }, b: { tab: string | null }) =>
+        canonical.indexOf(a.tab ?? '') - canonical.indexOf(b.tab ?? '')
       const after = {
         ...settled,
         server: {
           ...settled.server,
-          groups: settled.server.groups.map((group) => ({ ...group, tabs: group.tabs.toSorted() })),
-          rows: settled.server.rows.toSorted(byTab)
+          activeTab: '<first listed>',
+          groups: [{ ...settled.server.groups[0]!, tabs: canonical }],
+          rows: settled.server.rows
+            .map((row, index) => ({ ...row, title: positionalTitle(row.title, index) }))
+            .toSorted(byCanonical)
         },
         published: settled.published && {
-          groups: settled.published.groups.map((group) => group.toSorted()),
-          tabs: settled.published.tabs.toSorted(byTab)
+          ...settled.published,
+          groups: [canonical],
+          tabs: settled.published.tabs.toSorted(byCanonical)
         }
       }
 
