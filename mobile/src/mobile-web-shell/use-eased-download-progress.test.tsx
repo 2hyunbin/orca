@@ -78,6 +78,22 @@ describe('useEasedDownloadProgress', () => {
     expect(motion.set).toEqual([])
   })
 
+  it('keeps the glide for a burst of replies instead of letting their tiny gaps shorten it', async () => {
+    const burst = async (startMs: number, fractions: number[]): Promise<void> => {
+      for (const [index, fraction] of fractions.entries()) {
+        vi.setSystemTime(startMs + index * 5)
+        await render(fraction)
+      }
+    }
+    await render(0)
+    await burst(1600, [0.1, 0.15, 0.2, 0.25])
+    await burst(3200, [0.35, 0.4, 0.45, 0.5])
+    expect(motion.timings.map((timing) => timing.duration)).toEqual(Array(8).fill(1600))
+    expect(motion.timings.map((timing) => timing.toValue)).toEqual([
+      0.1, 0.15, 0.2, 0.25, 0.35, 0.4, 0.45, 0.5
+    ])
+  })
+
   it('does not count a re-render with the same fraction as an update', async () => {
     await render(0.1)
     vi.setSystemTime(300)

@@ -1,31 +1,33 @@
 import { useEffect, useRef } from 'react'
 import { Animated, Easing } from 'react-native'
 import { useReducedMotionEnabled } from '../onboarding/use-reduced-motion'
-import { nextDownloadEase } from './download-progress-easing'
+import { nextDownloadEase, type DownloadEase } from './download-progress-easing'
 
 /**
  * The received fraction as the bar shows it: each update glides from what is on screen to the new
- * value, never past it, over about the time updates have been taking. Mount is the download's start.
+ * value, never past it, over about the time bursts of updates have been taking. Mount is the start.
  */
 export function useEasedDownloadProgress(fraction: number): Animated.Value {
   const shown = useRef(new Animated.Value(fraction)).current
   const target = useRef(fraction)
-  const lastUpdateAt = useRef<number | null>(null)
-  const averageGapMs = useRef<number | null>(null)
+  const burstStartedAt = useRef<number | null>(null)
+  const ease = useRef<DownloadEase | null>(null)
   const reduceMotion = useReducedMotionEnabled()
 
   useEffect(() => {
     const now = Date.now()
-    if (lastUpdateAt.current === null) {
-      lastUpdateAt.current = now
+    if (burstStartedAt.current === null) {
+      burstStartedAt.current = now
       return
     }
     if (fraction === target.current) {
       return
     }
-    const ease = nextDownloadEase(averageGapMs.current, now - lastUpdateAt.current)
-    averageGapMs.current = ease.averageGapMs
-    lastUpdateAt.current = now
+    const next = nextDownloadEase(ease.current, now - burstStartedAt.current)
+    ease.current = next
+    if (next.newBurst) {
+      burstStartedAt.current = now
+    }
     // A fraction that went down would glide through values above it, so it snaps like reduced motion.
     const snap = reduceMotion === true || fraction < target.current
     target.current = fraction
@@ -36,7 +38,7 @@ export function useEasedDownloadProgress(fraction: number): Animated.Value {
     }
     Animated.timing(shown, {
       toValue: fraction,
-      duration: ease.durationMs,
+      duration: next.durationMs,
       easing: Easing.linear,
       useNativeDriver: true
     }).start()
