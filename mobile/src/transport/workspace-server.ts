@@ -41,12 +41,19 @@ export function useWorkspaceServer(args: {
 }
 
 /**
- * Whether the desktop can relay calls to the server now. A stopped server reads `connecting`, which
- * matches the desktop's own reconnecting banner; one it no longer lists is unreachable.
+ * Whether the desktop can relay calls to the server now. A server it is reaching or has just
+ * reached (status not answered yet) reads `connecting`, matching the desktop's reconnecting banner;
+ * one too old to relay to, or no longer listed, is unreachable.
  */
 function serverConnState(host: MobileRelayHost | undefined): ConnectionState {
   if (host?.relay === 'ready') {
     return 'connected'
   }
-  return host?.health === 'connecting' ? 'connecting' : 'disconnected'
+  if (
+    host?.relay === 'unavailable' &&
+    (host.health === 'connecting' || host.health === 'available')
+  ) {
+    return 'connecting'
+  }
+  return 'disconnected'
 }
