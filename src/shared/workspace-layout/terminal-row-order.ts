@@ -22,7 +22,7 @@ export function orderTerminalRowsByTabGroups(
     const rowIds = new Set(rows.map((row) => row.id))
     const position = new Map<string, number>()
     for (const tabId of groups.flatMap((group) => group.tabOrder)) {
-      // A headless save may list a row id in a group with no tab-bar entry for it.
+      // A headless host saves rows but no tab bar; its group moves list the row ids directly.
       const rowId = rowIdByTabId.get(tabId) ?? (rowIds.has(tabId) ? tabId : undefined)
       if (rowId && !position.has(rowId)) {
         position.set(rowId, position.size)
