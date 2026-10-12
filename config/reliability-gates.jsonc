@@ -15968,20 +15968,22 @@
       "providers": ["local", "daemon", "ssh", "remote-runtime"],
       "coveredPlatforms": ["macos", "windows"],
       "coveredProviders": [],
-      "coverageNotes": "Renderer-unit convergence corpus over a real xterm parser, plus manual CDP pixel evidence on the macOS WebGL renderer. The delayed native-Windows repeat is covered by the same corpus and a controllable terminal double, not by Windows pixel evidence. The repaint span is provider-independent because it is computed from xterm's parse, not from the transport; SSH/WSL/remote were not exercised live.",
+      "coverageNotes": "Renderer-unit convergence corpus over a real xterm parser, plus manual CDP pixel evidence on the macOS WebGL renderer. The delayed native-Windows repeat is covered by the same corpus and a controllable terminal double, plus a happy-dom contract test pinning the xterm repaints it relies on, not by Windows pixel evidence. The repaint span is provider-independent because it is computed from xterm's parse, not from the transport; SSH/WSL/remote were not exercised live.",
       "motivatingLinks": [
         "https://github.com/stablyai/orca/pull/2669",
         "https://github.com/stablyai/orca/pull/4669",
         "https://github.com/stablyai/orca/pull/8178",
         "https://github.com/stablyai/orca/issues/19622"
       ],
-      "invariant": "The row span Orca asks xterm to repaint after a forced foreground refresh must cover every viewport row whose rendered content changed during that write, plus the cursor row before and after it; when the span cannot be established — unobservable parse, viewport scroll, or a normal/alternate buffer flip — the whole viewport must be repainted. The delayed next-frame repeat must cover at least the immediate span plus rows parsed since and the current cursor row, and must repaint the whole viewport after a scroll, row or column resize, buffer flip, renderer swap, xterm whole-viewport request, or while the viewport sits in scrollback.",
+      "invariant": "The row span Orca asks xterm to repaint after a forced foreground refresh must cover every viewport row whose rendered content changed during that write, plus the cursor row before and after it; when the span cannot be established — unobservable parse, viewport scroll, or a normal/alternate buffer flip — the whole viewport must be repainted. The delayed next-frame repeat must cover at least the immediate span, the span of any repeat it supersedes, and the current cursor row; it must repaint the whole viewport when either it or a superseded repeat is whole-grid, after a scroll, row or column resize, or buffer flip, or while the viewport sits in scrollback. Rows later writes parse, renderer swaps, and resizes are left to xterm, which repaints them itself.",
       "oracle": "A real @xterm/headless parser replays an adversarial corpus (in-place bottom-row redraws, standalone CR overwrite, backspace, erase-in-line, erase-in-display above and below the cursor, full clear, wide CJK, emoji, combining marks, ZWJ sequences, scroll-region insert/delete, reverse index, DEC 2026 frames, alternate-screen enter and exit, viewport scroll, narrow panes). Each viewport row is serialized cell-by-cell with its attributes before and after the write, and every row that differs must fall inside the span the settle path requested. A vacuity guard asserts each case actually moves the screen.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/pane-manager/terminal-foreground-repair-convergence.test.ts"
+        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/pane-manager/terminal-foreground-repair-convergence.test.ts",
+        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/pane-manager/terminal-foreground-repair-xterm-contract.test.ts"
       ],
       "testFiles": [
-        "src/renderer/src/lib/pane-manager/terminal-foreground-repair-convergence.test.ts"
+        "src/renderer/src/lib/pane-manager/terminal-foreground-repair-convergence.test.ts",
+        "src/renderer/src/lib/pane-manager/terminal-foreground-repair-xterm-contract.test.ts"
       ],
       "assertionRefs": [
         {
@@ -15993,7 +15995,15 @@
             "an unobservable parse span falls back to the whole grid",
             "an in-place bottom-row redraw narrows well below the full grid",
             "the delayed repeat never covers less than the immediate repair and does not widen a narrowed repair to the full grid",
-            "the delayed repeat repaints the whole viewport after a scroll, resize, buffer flip, renderer swap, xterm whole-viewport request, or while scrolled into scrollback"
+            "a repeat that supersedes a whole-grid repeat stays whole-grid",
+            "the delayed repeat repaints the whole viewport after a scroll, resize, or buffer flip, or while scrolled into scrollback"
+          ]
+        },
+        {
+          "file": "src/renderer/src/lib/pane-manager/terminal-foreground-repair-xterm-contract.test.ts",
+          "assertions": [
+            "xterm renders the rows a write parses, and the whole viewport on its own whole-viewport request",
+            "xterm renders the whole viewport on a renderer swap and on a row or column resize"
           ]
         }
       ],
@@ -16015,6 +16025,15 @@
           "command": "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/pane-manager/terminal-foreground-repair-convergence.test.ts",
           "durationSeconds": 2,
           "summary": "58 cases passed on Windows 11, including the delayed-repeat corpus; the #19622 one-row rewrite repeats as rows 55..55 instead of 0..59."
+        },
+        {
+          "date": "2026-10-11",
+          "runner": "local",
+          "platform": "windows",
+          "result": "passed",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/pane-manager/terminal-foreground-repair-xterm-contract.test.ts",
+          "durationSeconds": 2,
+          "summary": "5 cases passed against the vendored @xterm/xterm 6.1.0-beta.303 DOM renderer under happy-dom."
         }
       ],
       "runtimeBudget": {
