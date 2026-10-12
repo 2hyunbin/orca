@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { getCompiledSchema } from './zod-schema-compilation'
 
@@ -41,5 +41,24 @@ describe('getCompiledSchema', () => {
     expect(getCompiledSchema(schema)).toBe(schema)
     expect((await getCompiledSchema(schema).safeParseAsync('ok')).success).toBe(true)
     expect((await getCompiledSchema(schema).safeParseAsync('bad')).success).toBe(false)
+  })
+
+  it('keeps parsing when the host refuses code generation', () => {
+    const jitless = z.config().jitless
+    z.config({ jitless: true })
+    vi.stubGlobal('Function', function () {
+      throw new EvalError('Code generation refused')
+    })
+    try {
+      const schema = z.object({ value: z.string() })
+      const compiled = getCompiledSchema(schema)
+      expect(compiled).toBe(schema)
+      expect(getCompiledSchema(schema)).toBe(compiled)
+      expect(compiled.parse({ value: 'ok', extra: true })).toEqual({ value: 'ok' })
+      expect(compiled.safeParse({ value: 1 }).success).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+      z.config({ jitless })
+    }
   })
 })

@@ -1,3 +1,4 @@
+import { readdir } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { readAcpFixture } from './acp-timeline-fixture.test-support'
 import { readAcpSessionEvent } from './acp-session-events'
@@ -5,19 +6,35 @@ import { SessionNotificationSchema } from './generated/acp-protocol.generated'
 
 describe('compiled ACP session notifications', () => {
   it('matches the runtime parser across the captured session updates', async () => {
-    const frames = await readAcpFixture('s1-full-notifications')
-    const notifications = frames.filter((frame) => frame.message.method === 'session/update')
-    expect(notifications.length).toBeGreaterThan(0)
-    for (const frame of notifications) {
-      const params = frame.message.params
-      const original = SessionNotificationSchema.safeParse(params)
-      const event = readAcpSessionEvent(params)
-      if (original.success) {
-        expect(event).toEqual({ kind: 'known', notification: original.data })
-      } else {
-        expect(event).toMatchObject({ kind: 'unrecognized', raw: params })
+    const files = await readdir(new URL('./fixtures/', import.meta.url))
+    let compared = 0
+    for (const file of files) {
+      if (
+        !file.endsWith('.jsonl') ||
+        file.endsWith('.journal.jsonl') ||
+        file.endsWith('.render.jsonl')
+      ) {
+        continue
+      }
+      const frames = await readAcpFixture(file.slice(0, -'.jsonl'.length))
+      for (const frame of frames) {
+        if (frame.message.method !== 'session/update') {
+          continue
+        }
+        const params = frame.message.params
+        const snapshot = structuredClone(params)
+        const original = SessionNotificationSchema.safeParse(params)
+        const event = readAcpSessionEvent(params)
+        if (original.success) {
+          expect(event).toEqual({ kind: 'known', notification: original.data })
+        } else {
+          expect(event).toMatchObject({ kind: 'unrecognized', raw: params })
+        }
+        expect(params).toEqual(snapshot)
+        compared++
       }
     }
+    expect(compared).toBeGreaterThan(500)
   })
 
   it('preserves additive fields and open enum values without mutating the input', () => {
