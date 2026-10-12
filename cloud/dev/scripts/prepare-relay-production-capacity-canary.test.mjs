@@ -118,7 +118,7 @@ describe('production Relay capacity cell admission', () => {
         paceWindowMs: 0
       })
     }
-    for (const cellId of ['production-gce-c12', 'production-gce-c35']) {
+    for (const cellId of ['production-gce-c12', 'production-gce-c36']) {
       const hostname = cellId.slice('production-gce-'.length)
       assert.throws(() => parseProductionCapacityCellArguments([
         '--director-origin', 'https://relay.onorca.dev',
