@@ -184,9 +184,10 @@ async function openMobileFileTapAsync<T extends FileTapSessionTab>(
   // Why: a host with no desktop window opens no editor tabs; the preview route reads the file through files.read.
   if (isRendererUnavailableReply(openResponse)) {
     // Not a failure: the user moved off the source tab during the call.
-    if (shouldActivateOpenedMobileSessionTab(options.getActivationState(false))) {
-      pushWorktreePreview()
+    if (!shouldActivateOpenedMobileSessionTab(options.getActivationState(false))) {
+      return
     }
+    pushWorktreePreview()
     return
   }
   const opened = fileTapOpenRun.interpret(openResponse)
