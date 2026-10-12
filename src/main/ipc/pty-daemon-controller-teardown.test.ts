@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { registerPtyHandlers, setPtyOwnership, setLocalPtyProvider } from './pty'
+import { registerPtyHandlers } from './pty/register-handlers'
+import { setPtyOwnership } from './pty/provider/ownership-state'
+import { setLocalPtyProvider } from './pty/provider/registry'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -278,7 +280,7 @@ describe('registerPtyHandlers', () => {
           getDefaultShell: vi.fn(),
           getProfiles: vi.fn()
         } as never)
-        const store = { markSshRemotePtyLease: vi.fn(), clearSshRemotePtyKillIntent: vi.fn() }
+        const store = { markSshRemotePtyLease: vi.fn() }
         const runtime = {
           setPtyController: vi.fn(),
           onPtyExit: vi.fn()
@@ -305,10 +307,7 @@ describe('registerPtyHandlers', () => {
         expect(runtime.onPtyExit).toHaveBeenCalledWith('ssh:ssh-1@@relay-pty', -1, undefined)
       })
       it('marks a detached SSH lease terminated when runtime controller kill has no provider', async () => {
-        const store = {
-          markSshRemotePtyLease: vi.fn(),
-          clearSshRemotePtyKillIntent: vi.fn()
-        }
+        const store = { markSshRemotePtyLease: vi.fn() }
         const runtime = {
           setPtyController: vi.fn(),
           onPtyExit: vi.fn()

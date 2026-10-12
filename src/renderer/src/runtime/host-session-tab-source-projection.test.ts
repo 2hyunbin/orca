@@ -186,6 +186,7 @@ describe('failed host close projection', () => {
       })
       await vi.advanceTimersByTimeAsync(15_000)
       await result
+      await vi.dynamicImportSettled()
       expect(strip()).toEqual(['a', 'b', 'c'])
       expect(useAppStore.getState().worktreesByRepo).toEqual({})
     }
@@ -206,6 +207,7 @@ describe('failed host close projection', () => {
     })
     await vi.advanceTimersByTimeAsync(15_000)
     await result
+    await vi.dynamicImportSettled()
     expect(strip()).toEqual(['a', 'b', 'c'])
   })
 
@@ -246,6 +248,7 @@ describe('failed host close projection', () => {
       })
       await vi.advanceTimersByTimeAsync(15_000)
       await result
+      await vi.dynamicImportSettled()
       expect(strip()).toEqual(['a', 'b', 'c'])
     }
   )
@@ -276,6 +279,7 @@ describe('failed host close projection', () => {
       })
       await vi.advanceTimersByTimeAsync(15_000)
       await result
+      await vi.dynamicImportSettled()
       expect(strip()).toEqual(['a', 'c'])
     }
   )
@@ -344,6 +348,7 @@ describe('failed host close projection', () => {
       })
       await vi.advanceTimersByTimeAsync(15_000)
       await result
+      await vi.dynamicImportSettled()
       expect(strip()).toEqual(
         ['conflict', 'ambiguous', 'ssh-local'].includes(kind) ? ['a', 'c'] : ['a', 'b', 'c']
       )
@@ -359,6 +364,7 @@ describe('failed host close projection', () => {
       expect(strip()).toEqual(['a', 'c'])
       await vi.advanceTimersByTimeAsync(15_000)
       await expect(result).resolves.toBe('failed')
+      await vi.dynamicImportSettled()
       expect(strip()).toEqual(['a', 'b', 'c'])
       expect(reread).toHaveBeenCalledWith(true)
       await vi.advanceTimersByTimeAsync(0)
@@ -380,6 +386,7 @@ describe('failed host close projection', () => {
     }))
     await vi.advanceTimersByTimeAsync(15_000)
     await result
+    await vi.dynamicImportSettled()
     expect(strip()).toEqual(['b', 'c', 'd'])
     expect(
       useAppStore.getState().unifiedTabsByWorktree[WT].find((tab) => tab.entityId === 'c')?.label
@@ -393,6 +400,7 @@ describe('failed host close projection', () => {
     apply({ ...frame(2, ['c']), agentSessionsUnverifiable: true })
     await vi.advanceTimersByTimeAsync(15_000)
     await result
+    await vi.dynamicImportSettled()
     expect(strip()).toEqual(['a', 'b', 'c'])
   })
 
@@ -407,6 +415,7 @@ describe('failed host close projection', () => {
     )!
     await vi.advanceTimersByTimeAsync(15_000)
     await result
+    await vi.dynamicImportSettled()
     settleWebSessionCloseIntent(other, 'closed', Date.now())
     expect(
       isWebSessionCloseIntentPending({ environmentId: ENV }, WT, 'agent-session:new', Date.now())
@@ -432,6 +441,7 @@ describe('failed host close projection', () => {
       }
       await vi.advanceTimersByTimeAsync(15_000)
       await result
+      await vi.dynamicImportSettled()
       expect(strip()).toEqual(['a', 'c'])
     }
   )
@@ -442,6 +452,7 @@ describe('failed host close projection', () => {
     apply(frame(2, ['b', 'd']))
     await vi.advanceTimersByTimeAsync(15_000)
     await result
+    await vi.dynamicImportSettled()
     expect(strip()).toEqual(['d', 'b'])
   })
 })

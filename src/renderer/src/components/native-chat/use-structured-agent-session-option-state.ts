@@ -11,7 +11,7 @@ import {
   createStructuredAgentSessionOptionState,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
-import type { RuntimeClientTarget } from '@/runtime/runtime-rpc-client'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
 import {
@@ -71,6 +71,7 @@ export function useStructuredAgentSessionOptionState(args: {
     commands: readonly AgentSessionConversationCommand[]
     threadGoal: AgentSessionOptionsResult['threadGoal']
     contextUsage: AgentSessionOptionsResult['contextUsage']
+    acceptsImages: boolean | undefined
     rewind: AgentSessionRewindSupport
     /** The fence the read answered for; rewind support is only that runtime's. */
     fence: number | null
@@ -147,6 +148,7 @@ export function useStructuredAgentSessionOptionState(args: {
           commands: result.conversationCommands ?? [],
           threadGoal: result.threadGoal,
           contextUsage: result.contextUsage,
+          acceptsImages: result.acceptsImages,
           // A host that predates rewind does not name it.
           rewind: result.rewind ?? { supported: false, reason: 'unsupported' },
           fence

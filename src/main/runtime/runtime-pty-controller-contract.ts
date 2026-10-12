@@ -15,7 +15,11 @@ import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { PtyBindingSourceExpectation } from '../persistence'
 import type { TerminalPanePlacement } from '../../shared/terminal-pane-placement'
 import type { ExecutionHostId } from '../../shared/execution-host'
-import type { PtyProviderBufferSnapshot, PtyProcessInfo, PtySpawnResult } from '../providers/types'
+import type {
+  PtyProviderBufferSnapshot,
+  PtyProcessInfo,
+  PtySpawnResult
+} from '../providers/pty-provider-contract'
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 import type { WriteSettlement } from '../../shared/pty-write-settlement'
 import type { TerminalInputKind } from '../../shared/terminal-input-kind'
@@ -128,9 +132,6 @@ export type RuntimePtyController = {
     ptyId: string,
     opts?: { keepHistory?: boolean; deadlineMs?: number }
   ): Promise<boolean>
-  /** Durably records a kill order for an explicit close's unconfirmed stop, replayed when its SSH
-   *  host reconnects. True only when an order was written; local PTYs have no later host to ask. */
-  recordUnconfirmedStop?(ptyId: string): boolean
   getCwd?(ptyId: string): Promise<string | null>
   getForegroundProcess(ptyId: string): Promise<string | null>
   inspectProcess?(
