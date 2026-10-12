@@ -1,0 +1,227 @@
+name: WSL2 hosted-runner spike
+
+# Spike (WSL via orcad, step C10): can GitHub-hosted Windows runners run WSL2 reliably enough for an
+# e2e lane? Every probe records an outcome and a timing; the summary step renders the per-run table.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/wsl2-hosted-spike.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wsl2-hosted-spike-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # wsl.exe prints UTF-16LE to pipes unless told otherwise.
+  WSL_UTF8: '1'
+  ROOTFS_URL: https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-wsl-amd64.wsl
+  ROOTFS_SHA256: 9b2f7730dc68227dd04a9f3e5eab86ad85caf556b8606ad94f1f29ff5c4fd3f5
+  NODE_ARCHIVE: node-v24.21.0-linux-x64.tar.gz
+  NODE_SHA256: 6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025, attempt: 1 }
+          - { runner: windows-2025, attempt: 2 }
+          - { runner: windows-2025, attempt: 3 }
+          - { runner: windows-latest, attempt: 1 }
+    name: '${{ matrix.runner }} run ${{ matrix.attempt }}'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - name: Runner and WSL versions
+        id: versions
+        continue-on-error: true
+        run: |
+          "ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion"
+          [Environment]::OSVersion.VersionString
+          Get-CimInstance Win32_Processor | Select-Object Name,VirtualizationFirmwareEnabled,SecondLevelAddressTranslationExtensions | Format-List
+          Get-CimInstance Win32_ComputerSystem | Select-Object Model,HypervisorPresent | Format-List
+          Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform,Microsoft-Windows-Subsystem-Linux | Select-Object FeatureName,State | Format-Table
+          wsl.exe --version; "wsl --version exit=$LASTEXITCODE"
+          wsl.exe --status; "wsl --status exit=$LASTEXITCODE"
+          wsl.exe --list --verbose; "wsl --list exit=$LASTEXITCODE"
+          New-Item -ItemType File -Force (Join-Path $env:RUNNER_TEMP 'timings.csv') | Out-Null
+
+      - name: Cache the pinned rootfs and guest Node
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/wsl-spike-cache
+          key: wsl2-spike-${{ env.ROOTFS_SHA256 }}-${{ env.NODE_SHA256 }}
+
+      - name: Fetch and verify artifacts
+        id: fetch
+        run: |
+          $cache = Join-Path $env:RUNNER_TEMP 'wsl-spike-cache'
+          New-Item -ItemType Directory -Force $cache | Out-Null
+          $pins = @(
+            @{ Url = $env:ROOTFS_URL; File = 'ubuntu.wsl'; Sha = $env:ROOTFS_SHA256 },
+            @{ Url = "https://nodejs.org/dist/v24.21.0/$env:NODE_ARCHIVE"; File = $env:NODE_ARCHIVE; Sha = $env:NODE_SHA256 }
+          )
+          foreach ($pin in $pins) {
+            $path = Join-Path $cache $pin.File
+            if (-not (Test-Path $path)) { Invoke-WebRequest $pin.Url -OutFile $path }
+            if ((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pin.Sha) { Remove-Item $path; throw "checksum mismatch: $($pin.File)" }
+          }
+
+      - name: Import plain distro as WSL2 and cold-boot it
+        id: import
+        timeout-minutes: 8
+        run: |
+          $rootfs = Join-Path $env:RUNNER_TEMP 'wsl-spike-cache/ubuntu.wsl'
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          wsl.exe --import wsl2a (Join-Path $env:RUNNER_TEMP 'wsl2a') $rootfs --version 2
+          if ($LASTEXITCODE -ne 0) { throw "import failed: $LASTEXITCODE" }
+          "import_ms,$($sw.ElapsedMilliseconds)" | Add-Content (Join-Path $env:RUNNER_TEMP 'timings.csv')
+          $sw.Restart()
+          wsl.exe -d wsl2a -u root --exec uname -a
+          if ($LASTEXITCODE -ne 0) { throw "first exec failed: $LASTEXITCODE" }
+          "cold_boot_ms,$($sw.ElapsedMilliseconds)" | Add-Content (Join-Path $env:RUNNER_TEMP 'timings.csv')
+          wsl.exe --list --verbose
+          if (-not ((wsl.exe --list --verbose) -match 'wsl2a\s+\S+\s+2\s*$')) { throw 'wsl2a is not a version-2 distro' }
+          # Pin systemd off so this distro tests the plain init path; Ubuntu's image may default it on.
+          wsl.exe -d wsl2a -u root --exec sh -c "printf '[boot]\nsystemd=false\n' > /etc/wsl.conf"
+          wsl.exe --terminate wsl2a
+          $sw.Restart()
+          wsl.exe -d wsl2a -u root --exec true
+          "warm_vm_distro_boot_ms,$($sw.ElapsedMilliseconds)" | Add-Content (Join-Path $env:RUNNER_TEMP 'timings.csv')
+          $sw.Restart()
+          wsl.exe -d wsl2a -u root --exec true
+          "warm_exec_ms,$($sw.ElapsedMilliseconds)" | Add-Content (Join-Path $env:RUNNER_TEMP 'timings.csv')
+          wsl.exe -d wsl2a -u root --exec sh -c 'ps -p 1 -o comm=; cat /proc/version'
+
+      - name: Start a detached holder
+        id: holder
+        timeout-minutes: 2
+        run: |
+          $p = Start-Process wsl.exe -ArgumentList @('-d','wsl2a','-u','root','--exec','sleep','infinity') -WindowStyle Hidden -PassThru
+          "HOLDER_PID=$($p.Id)" | Add-Content $env:GITHUB_ENV
+          "HOLDER_STARTED=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" | Add-Content $env:GITHUB_ENV
+          Start-Sleep 3
+          if ($p.HasExited) { throw "holder exited early: $($p.ExitCode)" }
+          wsl.exe --list --running
+
+      - name: Byte-exact 4 MB stdio echo through wsl.exe (guest Node 24)
+        id: echo
+        if: ${{ !cancelled() && steps.import.outcome == 'success' }}
+        timeout-minutes: 4
+        run: |
+          wsl.exe -d wsl2a -u root --cd (Join-Path $env:RUNNER_TEMP 'wsl-spike-cache') --exec sh -c "mkdir -p /opt/node && tar -xzf $env:NODE_ARCHIVE -C /opt/node --strip-components=1"
+          if ($LASTEXITCODE -ne 0) { throw 'guest node extract failed' }
+          wsl.exe -d wsl2a -u root --exec /opt/node/bin/node --version
+          $script = @'
+          const { spawn } = require('node:child_process')
+          const { randomBytes } = require('node:crypto')
+          const input = randomBytes(4 * 1024 * 1024)
+          const start = Date.now()
+          const child = spawn('wsl.exe', ['-d', 'wsl2a', '-u', 'root', '--exec', '/opt/node/bin/node', '-e', 'process.stdin.pipe(process.stdout)'], { windowsHide: true })
+          const chunks = []
+          child.stdout.on('data', (c) => chunks.push(c))
+          child.stderr.pipe(process.stderr)
+          child.on('close', (code) => {
+            const out = Buffer.concat(chunks)
+            const ms = Date.now() - start
+            console.log(`exit=${code} in=${input.length} out=${out.length} equal=${out.equals(input)} ms=${ms}`)
+            require('node:fs').appendFileSync(process.env.TIMINGS, `echo_4mb_ms,${ms}\n`)
+            process.exit(code === 0 && out.equals(input) ? 0 : 1)
+          })
+          child.stdin.end(input)
+          '@
+          $path = Join-Path $env:RUNNER_TEMP 'echo.cjs'
+          Set-Content $path $script
+          $env:TIMINGS = Join-Path $env:RUNNER_TEMP 'timings.csv'
+          node --version
+          node $path
+          if ($LASTEXITCODE -ne 0) { throw 'echo mismatch' }
+
+      - name: Holder keeps the distro Running for 60 s across steps
+        id: holder-survives
+        if: ${{ !cancelled() && steps.holder.outcome == 'success' }}
+        timeout-minutes: 3
+        run: |
+          $wait = 65 - ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [long]$env:HOLDER_STARTED)
+          if ($wait -gt 0) { Start-Sleep $wait }
+          $holder = Get-Process -Id $env:HOLDER_PID -ErrorAction SilentlyContinue
+          "holder alive: $([bool]$holder)"
+          wsl.exe --list --verbose
+          if (-not ((wsl.exe --list --verbose) -match 'wsl2a\s+Running')) { throw 'wsl2a not Running after 60 s' }
+          if (-not $holder) { throw 'holder wsl.exe process gone' }
+
+      - name: systemd distro boots with systemd as PID 1
+        id: systemd
+        if: ${{ !cancelled() && steps.import.outcome == 'success' }}
+        timeout-minutes: 8
+        run: |
+          $rootfs = Join-Path $env:RUNNER_TEMP 'wsl-spike-cache/ubuntu.wsl'
+          wsl.exe --import wsl2s (Join-Path $env:RUNNER_TEMP 'wsl2s') $rootfs --version 2
+          if ($LASTEXITCODE -ne 0) { throw "import failed: $LASTEXITCODE" }
+          wsl.exe -d wsl2s -u root --exec sh -c "printf '[boot]\nsystemd=true\n' > /etc/wsl.conf"
+          wsl.exe --terminate wsl2s
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          $pid1 = (wsl.exe -d wsl2s -u root --exec ps -p 1 -o comm=) -join ''
+          "systemd_boot_ms,$($sw.ElapsedMilliseconds)" | Add-Content (Join-Path $env:RUNNER_TEMP 'timings.csv')
+          "pid1=$pid1"
+          wsl.exe -d wsl2s -u root --exec sh -c 'systemctl is-system-running --wait 2>&1 | head -1; systemctl --failed --no-legend | head -20'
+          if ($pid1.Trim() -ne 'systemd') { throw "PID 1 is '$pid1'" }
+
+      - name: Interop (WSLInterop binfmt) survives a systemd distro terminate
+        id: binfmt
+        if: ${{ !cancelled() && steps.systemd.outcome == 'success' }}
+        timeout-minutes: 4
+        run: |
+          wsl.exe --terminate wsl2s
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          wsl.exe -d wsl2s -u root --exec ls /proc/sys/fs/binfmt_misc/
+          "systemd_reboot_ms,$($sw.ElapsedMilliseconds)" | Add-Content (Join-Path $env:RUNNER_TEMP 'timings.csv')
+          wsl.exe -d wsl2s -u root --exec test -e /proc/sys/fs/binfmt_misc/WSLInterop
+          $interop = $LASTEXITCODE
+          wsl.exe -d wsl2s -u root --exec /mnt/c/Windows/System32/cmd.exe /c ver
+          $run = $LASTEXITCODE
+          "WSLInterop exists exit=$interop; cmd.exe from guest exit=$run"
+          if ($interop -ne 0 -or $run -ne 0) { throw 'interop broken after systemd terminate' }
+
+      - name: Terminate is detected
+        id: terminate
+        if: ${{ !cancelled() && steps.import.outcome == 'success' }}
+        timeout-minutes: 3
+        run: |
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          wsl.exe --terminate wsl2a
+          if ($LASTEXITCODE -ne 0) { throw "terminate failed: $LASTEXITCODE" }
+          while ($sw.Elapsed.TotalSeconds -lt 30) {
+            $running = @(wsl.exe --list --running --quiet) -contains 'wsl2a'
+            $holderGone = -not $env:HOLDER_PID -or -not (Get-Process -Id $env:HOLDER_PID -ErrorAction SilentlyContinue)
+            if (-not $running -and $holderGone) { break }
+            Start-Sleep -Milliseconds 250
+          }
+          "terminate_detect_ms,$($sw.ElapsedMilliseconds)" | Add-Content (Join-Path $env:RUNNER_TEMP 'timings.csv')
+          wsl.exe --list --verbose
+          if ($running -or -not $holderGone) { throw "not detected: running=$running holderGone=$holderGone" }
+
+      - name: Summary
+        if: always()
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          $steps = $env:STEPS | ConvertFrom-Json
+          $lines = @("### ${{ matrix.runner }} #${{ matrix.attempt }} — $env:ImageOS $env:ImageVersion", '', '| probe | outcome |', '|---|---|')
+          foreach ($p in $steps.PSObject.Properties) { $lines += "| $($p.Name) | $($p.Value.outcome) |" }
+          $lines += '', '| timing | ms |', '|---|---|'
+          $csv = Join-Path $env:RUNNER_TEMP 'timings.csv'
+          if (Test-Path $csv) { foreach ($l in Get-Content $csv) { $k, $v = $l -split ','; $lines += "| $k | $v |" } }
+          $lines | Add-Content $env:GITHUB_STEP_SUMMARY
+          $lines
+          $failed = @($steps.PSObject.Properties | Where-Object { $_.Value.outcome -ne 'success' } | ForEach-Object Name)
+          if ($failed.Count) { throw "failed probes: $($failed -join ', ')" }
