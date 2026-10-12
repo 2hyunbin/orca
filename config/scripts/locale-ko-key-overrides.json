@@ -5130,7 +5130,7 @@
     "ko": "워크스페이스 {{count}}개 연결됨"
   },
   "auto.components.settings.GitPane.refreshLocalBaseDescription": {
-    "ko": "워크스페이스를 만들면 Orca가 원격 기준 브랜치를 새로고침하고 <mainBranch>main</mainBranch>이나 <masterBranch>master</masterBranch> 같은 해당 로컬 브랜치를 안전하게 앞으로 이동(fast-forward)합니다. 그러면 <diffCommand>git diff main...HEAD</diffCommand> 같은 명령이 오래된 이력과 비교하지 않습니다. 해당 브랜치에 커밋되지 않은 변경 사항이나 로컬에만 있는 커밋이 있으면 업데이트를 건너뜁니다."
+    "ko": "워크스페이스를 만들면 Orca가 원격 기준 브랜치를 새로고침하고 <mainBranch>main</mainBranch>이나 <masterBranch>master</masterBranch> 같은 해당 로컬 브랜치를 안전하게 앞으로 이동(fast-forward)합니다. 그러면 <diffCommand>git diff main...HEAD</diffCommand> 같은 명령이 오래된 이력과 비교하지 않습니다. 해당 로컬 브랜치에 로컬에만 있는 커밋이 있거나, 체크아웃된 작업 트리에 추적 중인 파일의 커밋되지 않은 변경 사항이 있으면 업데이트를 건너뜁니다. 체크아웃된 작업 트리에서 fast-forward가 미추적 파일을 덮어쓰게 되는 경우에도 업데이트할 수 없습니다."
   },
   "auto.components.settings.AutoRenameBranchFromWorkSetting.commandTemplateDescription": {
     "ko": "<basePrompt>{basePrompt}</basePrompt> 변수를 사용하면 Orca의 <promptLink>내장 브랜치 이름 프롬프트</promptLink>를 포함할 수 있습니다. <firstPrompt>{firstPrompt}</firstPrompt>와 <assistantMessage>{assistantMessage}</assistantMessage> 변수도 참조할 수 있습니다. Orca는 <example>fix-login-flow</example> 같은 마지막 세그먼트만 생성하며, 브랜치 접두사 설정은 계속 적용됩니다."
