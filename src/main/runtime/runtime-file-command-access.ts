@@ -1,6 +1,6 @@
+import { RuntimeTerminalArtifacts } from './terminal/artifacts/terminal-artifacts'
+import { RuntimeFileSearch } from './files/search/file-search'
 import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
-import { RuntimeTerminalArtifacts } from './runtime-terminal-artifacts'
-import { RuntimeFileSearch } from './runtime-file-search'
 import { listFilesystemMarkdownDocuments } from '../providers/filesystem-markdown-listing'
 import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
 import {
@@ -19,10 +19,7 @@ import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
 import { isMobilePreviewableImagePath } from './runtime-file-commands-mobile-file-list-limit'
 import { joinWorktreeRelativePath, normalizeRuntimeRelativePath } from './runtime-relative-paths'
 import { isENOENT } from '../ipc/filesystem-path-containment'
-import {
-  requireRuntimeFileProvider,
-  type RuntimeFileExplorerPath
-} from './runtime-file-command-target'
+import { requireRuntimeFileProvider, type RuntimeFileExplorerPath } from './files/file-target'
 import { parseExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import type { FileStat } from '../providers/filesystem-provider-contract'
 
