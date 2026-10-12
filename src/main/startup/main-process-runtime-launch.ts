@@ -39,6 +39,8 @@ import { triggerStartupNotificationRegistration } from '../ipc/startup-notificat
 import { startDesktopPushService } from './main-process-push-startup'
 import { mainProcessState as state } from './main-process-state'
 import { logStartupMilestone } from './startup-diagnostics'
+import { setupHeadlessServeAutoUpdater } from '../window/main-window-updater'
+import { resolveUpdateInstallMode } from '../updater'
 import { scheduleAgentLaunchRecordWarmup } from './agent-launch-record-warmup'
 import { emitServeBrowserIdentityActionLine } from '../server/serve-stdout-boundary'
 import { getBrowserIdentityModeStatus } from '../browser/browser-identity-mode-store'
@@ -214,6 +216,12 @@ async function launchServeMode(
   void scheduleAllPendingHistoryTreeRemovals()
   emitServeBrowserIdentityActionLine(getBrowserIdentityModeStatus())
   await printServeReady(serveOptions)
+  const store = state.store!
+  setupHeadlessServeAutoUpdater(store, {
+    onBeforeUpdateQuit: () => store.flushPendingOrThrowAsync({ fullCheckpoint: true }),
+    onBeforeUpdateQuitFailure: 'abort',
+    updateInstallMode: resolveUpdateInstallMode(true)
+  })
 }
 
 async function launchDesktopMode(
