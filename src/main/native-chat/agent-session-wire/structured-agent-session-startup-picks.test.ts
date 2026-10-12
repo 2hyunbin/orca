@@ -34,6 +34,7 @@ let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let acquires = 0
 let phases: (string | undefined)[]
+let selections: (Readonly<Record<string, string>> | undefined)[]
 const setOption = vi.fn<StructuredAgentSessionAdapter['setOption']>()
 const dispatch = vi.fn<StructuredAgentSessionAdapter['dispatch']>()
 const closeSession = vi.fn(async () => true)
@@ -45,6 +46,7 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   acquires = 0
   phases = []
+  selections = []
   setOption.mockReset().mockResolvedValue(undefined)
   dispatch.mockReset().mockResolvedValue({ state: 'unknown', reason: 'unused' })
   closeSession.mockClear()
@@ -95,6 +97,7 @@ beforeEach(async () => {
     emit: (event) => {
       if (event.type === 'status' && event.session.sessionId === SESSION) {
         phases.push(event.session.hostExecutionPhase)
+        selections.push(event.session.optionSelection)
       }
     }
   })
@@ -173,6 +176,7 @@ async function dispatchState(clientMessageId: string) {
 
 it('shows what the agent runs when it refuses a pick made while it started', async () => {
   await pick('picked-model')
+  expect(selections.at(-1)).toEqual({ model: 'picked-model' })
   expect(store.getRecord(SESSION)?.options?.model).toBe('picked-model')
   setOption.mockRejectedValueOnce(new Error('model not available'))
 
@@ -180,7 +184,16 @@ it('shows what the agent runs when it refuses a pick made while it started', asy
 
   expect(setOption).toHaveBeenCalledWith(expect.objectContaining({ value: 'picked-model' }))
   expect(store.getRecord(SESSION)?.options?.model).toBe('launched-model')
+  expect(selections.at(-1)).toEqual({ model: 'launched-model' })
   expect(phases.at(-1)).toBe('ready')
+})
+
+it('publishes a pick made while the first message starts its child', async () => {
+  await sendHeld('start')
+  await pick('picked-model')
+  expect(selections.at(-1)).toEqual({ model: 'picked-model' })
+  await started()
+  expect(selections.at(-1)).toEqual({ model: 'picked-model' })
 })
 
 it('never accepts a start whose limit passes while a pick is applying; the pick stays for the next start', async () => {

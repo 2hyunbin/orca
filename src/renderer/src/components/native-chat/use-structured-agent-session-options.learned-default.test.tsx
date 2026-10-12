@@ -23,7 +23,10 @@ import type {
   AgentSessionOptionsResult
 } from '../../../../shared/agent-session-wire'
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
-import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
+import {
+  readHostModelCatalogSnapshot,
+  resetHostModelCatalogSnapshotsForTests
+} from '@/runtime/host-model-catalog-snapshots'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
 import { useStructuredAgentSessionOptions } from './use-structured-agent-session-options'
 
@@ -37,6 +40,7 @@ const EFFORTS = [
 ]
 
 const CASES = {
+  claude: { ids: ['opus', 'sonnet'], runs: 'sonnet', holdsEverywhere: false },
   grok: { ids: ['grok-4.7', 'grok-4.6'], runs: 'grok-4.6', holdsEverywhere: true },
   opencode: {
     ids: ['github-copilot/gpt-6', 'github-copilot/claude-fable-5'],
@@ -90,7 +94,12 @@ const NO_HELD = {}
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: no pick is made, so mutate is never called.
 const NO_MUTATE = vi.fn() as unknown as StructuredAgentSessionMutate
 
-function renderChat(agent: string, sessionId: string, worktree: string) {
+function renderChat(
+  agent: string,
+  sessionId: string,
+  worktree: string,
+  selection?: () => Readonly<Record<string, string>>
+) {
   const frames: Pill[] = []
   // Stable across renders, as the pane's own props are: a new object would re-run every read.
   const launch = { kind: 'new' as const, heldOptions: NO_HELD, worktree }
@@ -103,6 +112,7 @@ function renderChat(agent: string, sessionId: string, worktree: string) {
         transportEnabled: running !== null,
         isVisible: true,
         providerVisible: running !== null,
+        ...(selection ? { optionSelection: selection() } : {}),
         fence: running?.fence ?? null,
         turnId: null,
         unloadedTurnRevisions: undefined,
@@ -159,7 +169,10 @@ describe('a second new chat after one that named no model', () => {
         await new Promise((resolve) => setTimeout(resolve, 5))
         reported = true
         const answer: AgentSessionOptionsResult = {
-          models: rows(entry, false),
+          models: rows(entry, false).map((row) => ({
+            ...row,
+            isDefault: agent === 'claude' && row.id === entry.ids[0]
+          })),
           current: { model: entry.runs, effort: 'high', confirmed: ['model', 'effort'] }
         }
         return answer
@@ -193,4 +206,43 @@ describe('a second new chat after one that named no model', () => {
     first.unmount()
     elsewhere.unmount()
   })
+
+  it.each(['pi', 'claude'] as const)(
+    'keeps a learned %s default through the next start on the current status path',
+    async (agent) => {
+      hostFor(agent)
+      let selection: Readonly<Record<string, string>> = {}
+      const first = renderChat(agent, `${agent}-1`, 'id:wt-1', () => selection)
+      first.rerender({ running: { fence: 1 } })
+      await waitFor(() =>
+        expect(mocks.call.mock.calls.some(([, method]) => method === 'agentSession.options')).toBe(
+          true
+        )
+      )
+      selection = { model: CASES[agent].runs, effort: 'high' }
+      first.rerender({ running: { fence: 1 } })
+      await waitFor(() => expect(first.frames.at(-1)).toEqual(selection))
+      await waitFor(() => {
+        const catalog = readHostModelCatalogSnapshot(LOCAL, agent, {
+          newLaunch: true,
+          worktree: 'id:wt-1',
+          seedsModel: false
+        })
+        expect(catalog?.origin === 'unknown' ? false : catalog?.listingNamesConfiguredModel).toBe(
+          true
+        )
+      })
+      const next = renderChat(agent, `${agent}-2`, 'id:wt-1', () => ({}))
+      expect(next.frames[0]).toEqual(selection)
+      next.rerender({ running: { fence: 1 } })
+      await waitFor(() => expect(next.result.current.rewind).toBeDefined())
+      expect(
+        next.frames.filter(
+          (frame) => frame.model !== selection.model || frame.effort !== selection.effort
+        )
+      ).toEqual([])
+      first.unmount()
+      next.unmount()
+    }
+  )
 })

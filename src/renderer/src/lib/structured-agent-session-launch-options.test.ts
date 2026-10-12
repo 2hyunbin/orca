@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-session-contracts'
 import type { StructuredAgentSessionLaunchIntent } from '@/lib/launch-structured-agent-session'
@@ -78,6 +79,12 @@ import {
   subscribeStructuredAgentLaunchStatus
 } from './structured-agent-session-launch-registry'
 import { markStructuredAgentSessionLaunchPublished } from './structured-agent-session-launch-publication'
+import {
+  recordHostModelCatalogSnapshot,
+  resetHostModelCatalogSnapshotsForTests
+} from '@/runtime/host-model-catalog-snapshots'
+import { useStructuredAgentSessionOptions } from '@/components/native-chat/use-structured-agent-session-options'
+import type { StructuredAgentSessionMutate } from '@/components/native-chat/use-structured-agent-session-mutate'
 
 const WORKTREE_ID = 'wt-1'
 const SESSION_ID = 'session-1'
@@ -165,6 +172,7 @@ describe('picks made while a chat launches', () => {
     localStorage.clear()
     resetStructuredAgentLaunchPersistenceForTests()
     resetStructuredAgentLaunchRegistryForTests()
+    resetHostModelCatalogSnapshotsForTests()
     setOptionReplies = []
     mocks.createIntent.mockReturnValue(launchIntent({ model: 'gpt-seeded' }))
     mocks.retryIntent.mockImplementation((intent: StructuredAgentSessionLaunchIntent) => ({
@@ -223,6 +231,74 @@ describe('picks made while a chat launches', () => {
       { method: 'agentSession.send' }
     ])
     expect(lifecycle()).toBeNull()
+  })
+
+  it('shows real held picks before create and during start until host status owns them', async () => {
+    recordHostModelCatalogSnapshot({ kind: 'local' }, 'codex', 'id:wt-1', {
+      origin: 'live-session',
+      models: [
+        {
+          id: 'gpt-seeded',
+          label: 'Seeded',
+          isDefault: true,
+          efforts: [{ value: 'high', label: 'High' }]
+        },
+        {
+          id: 'gpt-picked',
+          label: 'Picked',
+          isDefault: false,
+          efforts: [{ value: 'high', label: 'High' }]
+        }
+      ],
+      fetchedAt: 1,
+      listingNamesConfiguredModel: true
+    })
+    const created = deferred<{ sessionId: string; fence: number }>()
+    mocks.launch.mockReturnValue(created.promise)
+    startStructuredAgentLaunch(WORKTREE_ID, 'codex', { requestId: 'held-status' })
+    const picked = holdStructuredAgentSessionLaunchOption(SESSION_ID, 'model', 'gpt-picked')
+    let selection: Readonly<Record<string, string>> | undefined
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this probe uses the real hold registry and sends no direct mutation.
+    const mutate = vi.fn() as unknown as StructuredAgentSessionMutate
+    const view = renderHook(() => {
+      const launch = getStructuredAgentSessionLaunchSelection(SESSION_ID)
+      return useStructuredAgentSessionOptions({
+        agent: 'codex',
+        sessionId: SESSION_ID,
+        target: { kind: 'local' },
+        transportEnabled: false,
+        isVisible: false,
+        providerVisible: false,
+        optionSelection: selection,
+        fence: null,
+        turnId: null,
+        unloadedTurnRevisions: undefined,
+        mutate,
+        launch: { kind: 'new', seedOptions: launch?.seed, heldOptions: launch?.held ?? {} }
+      })
+    })
+    const model = () => {
+      const row = view.result.current.optionSnapshot.find((entry) => entry.id === 'model')
+      return row?.kind.type === 'select' ? row.kind.currentValue : null
+    }
+    expect(model()).toBe('gpt-picked')
+    created.resolve({ sessionId: SESSION_ID, fence: 7 })
+    await settle()
+    selection = {}
+    view.rerender()
+    expect(model()).toBe('gpt-picked')
+    selection = { model: 'gpt-picked' }
+    view.rerender()
+    await act(async () => {
+      setOptionReplies[0]!.resolve({
+        ok: true,
+        value: { key: 'model', value: 'gpt-picked', options: selection }
+      })
+      await picked
+    })
+    view.rerender()
+    expect(model()).toBe('gpt-picked')
+    view.unmount()
   })
 
   it('applies a pick made while the earlier ones are being applied', async () => {

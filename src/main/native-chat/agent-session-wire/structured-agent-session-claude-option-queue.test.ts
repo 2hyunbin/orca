@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
-import type { AgentSessionMutationEnvelope } from '../../../shared/agent-session-wire'
+import type {
+  AgentSessionMutationEnvelope,
+  AgentSessionStatusEvent
+} from '../../../shared/agent-session-wire'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
@@ -34,6 +37,7 @@ let activeModel: string
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let order: string[]
 let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
+let statusEvents: AgentSessionStatusEvent[]
 
 function envelope(method: string, fields: Record<string, unknown>): AgentSessionMutationEnvelope {
   return {
@@ -93,6 +97,7 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   activeModel = DEFAULT_MODEL
   order = []
+  statusEvents = []
   store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
     agents: claudeAndCodexDeclared(),
@@ -104,6 +109,7 @@ beforeEach(async () => {
     mintSpawnToken: () => 'spawn-claude',
     now: () => NOW
   })
+  host.subscribeStatus({ id: 'option-frames', emit: (event) => statusEvents.push(event) })
   expect(
     await host.attach(
       CALLER,
@@ -134,6 +140,11 @@ describe('Claude structured session options', () => {
     // Answered at once: nothing waits on a provider still starting.
     expect(await pick('effort', 'high')).toMatchObject({ ok: true })
     expect(await pick('model', PICKED_MODEL)).toMatchObject({ ok: true })
+    const afterPick = statusEvents.filter((event) => event.type === 'status')
+    expect(afterPick.at(-1)).toMatchObject({
+      session: { optionSelection: { model: PICKED_MODEL, effort: 'high' } }
+    })
+    const pickedFrame = afterPick.length - 1
     expect(setOption).not.toHaveBeenCalled()
     expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
 
@@ -158,5 +169,11 @@ describe('Claude structured session options', () => {
     expect(activeModel).toBe(PICKED_MODEL)
     await host.flushAllStreamedEvents()
     expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
+    expect(
+      statusEvents
+        .filter((event) => event.type === 'status')
+        .slice(pickedFrame)
+        .every((event) => event.session.optionSelection?.model === PICKED_MODEL)
+    ).toBe(true)
   })
 })

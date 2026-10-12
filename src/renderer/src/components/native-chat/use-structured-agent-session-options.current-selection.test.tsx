@@ -29,7 +29,13 @@ const EFFORTS = [
   { value: 'high', label: 'High' }
 ]
 const MODELS = [
-  { id: 'gpt-one', label: 'One', isDefault: true, defaultEffort: 'medium', efforts: EFFORTS },
+  {
+    id: 'gpt-one',
+    label: 'One',
+    isDefault: true,
+    defaultEffort: 'medium',
+    efforts: EFFORTS.filter((effort) => effort.value !== 'high')
+  },
   { id: 'gpt-two', label: 'Two', efforts: EFFORTS }
 ]
 const PICK = { model: 'gpt-two', effort: 'high' }
@@ -71,13 +77,16 @@ beforeEach(() => {
   )
 })
 
-function renderSelection(options: { capable: boolean }) {
+function renderSelection(options: {
+  capable: boolean
+  selection?: Readonly<Record<string, string>>
+}) {
   const frames: ReturnType<typeof pill>[] = []
   const launch = { kind: 'new' as const, heldOptions: {}, seedOptions: PICK }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this proof makes no option mutation.
   const mutate = vi.fn() as unknown as StructuredAgentSessionMutate
   mocks.summary.mockImplementation(() =>
-    options.capable ? { optionSelection: PICK } : { status: 'idle' }
+    options.capable ? { optionSelection: options.selection ?? PICK } : { status: 'idle' }
   )
   const initialProps: { fence: number; turnId: string | null } = { fence: 1, turnId: null }
   const view = renderHook(
@@ -133,15 +142,13 @@ it('uses the existing options read when an older host omits the selection field'
 })
 
 it('treats an empty selection field as capable rather than an older host', async () => {
-  mocks.summary.mockImplementation(() => ({ optionSelection: {} }))
-  const view = renderSelection({ capable: true })
-  mocks.summary.mockImplementation(() => ({ optionSelection: {} }))
+  const view = renderSelection({ capable: true, selection: {} })
   view.rerender({ fence: 1, turnId: null })
-  await waitFor(() => expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one'))
+  await waitFor(() => expect(pill(view.result.current.optionSnapshot).model).toBeNull())
   view.unmount()
 })
 
-it('retires a picked value after host acknowledgment so a later host change wins', async () => {
+it('retires an accepted pick on reply even when another host change arrived first', async () => {
   let selection: Readonly<Record<string, string>> = { model: 'gpt-one' }
   mocks.summary.mockImplementation(() => ({ optionSelection: selection }))
   const write = deferred<{ options: Record<string, string> }>()
@@ -172,16 +179,54 @@ it('retires a picked value after host acknowledgment so a later host change wins
     request = view.result.current.setStructuredOption('model', 'gpt-two')
   })
   expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-two')
-  await act(async () => {
-    write.resolve({ options: { model: 'gpt-two' } })
-    await request
-  })
-  expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-two')
   selection = { model: 'gpt-two' }
   view.rerender('session-1')
   selection = { model: 'gpt-one' }
   view.rerender('session-1')
+  expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-two')
+  await act(async () => {
+    write.resolve({ options: { model: 'gpt-two' } })
+    await request
+  })
   expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one')
+  view.unmount()
+})
+
+it('admits one pending pick, including after the picker re-renders', async () => {
+  mocks.summary.mockImplementation(() => ({ optionSelection: { model: 'gpt-one' } }))
+  const write = deferred<{ options: Record<string, string> }>()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the deferred result is the setOption reply the hook reads.
+  const mutate = vi.fn(() => write.promise) as unknown as StructuredAgentSessionMutate
+  const view = renderHook(() =>
+    useStructuredAgentSessionOptions({
+      agent: 'codex',
+      sessionId: 'session-1',
+      target: LOCAL,
+      transportEnabled: true,
+      isVisible: true,
+      providerVisible: true,
+      optionSelection: mocks.summary()?.optionSelection,
+      fence: 1,
+      turnId: null,
+      unloadedTurnRevisions: undefined,
+      mutate,
+      launch: { kind: 'new', heldOptions: {} }
+    })
+  )
+  await waitFor(() => expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one'))
+  let first!: Promise<boolean>
+  let second!: Promise<boolean>
+  act(() => {
+    first = view.result.current.setStructuredOption('model', 'gpt-two')
+    second = view.result.current.setStructuredOption('model', 'gpt-two')
+  })
+  await expect(second).resolves.toBe(false)
+  await act(async () => {
+    expect(await view.result.current.setStructuredOption('model', 'gpt-two')).toBe(false)
+    write.resolve({ options: { model: 'gpt-two' } })
+    await first
+  })
+  expect(mutate).toHaveBeenCalledOnce()
   view.unmount()
 })
 
@@ -223,6 +268,8 @@ it('drops refused and previous-chat picks without overriding current host select
     await request
   })
   expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one')
+  view.rerender('session-1')
+  expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one')
   selection = { model: 'gpt-two' }
   view.rerender('session-2')
   expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-two')
@@ -230,11 +277,11 @@ it('drops refused and previous-chat picks without overriding current host select
 })
 
 it('shows the value the host accepted when it normalizes a pick', async () => {
-  mocks.summary.mockImplementation(() => ({ optionSelection: { model: 'gpt-one' } }))
+  let selection: Readonly<Record<string, string>> = { model: 'gpt-one' }
+  mocks.summary.mockImplementation(() => ({ optionSelection: selection }))
+  const write = deferred<{ options: Record<string, string> }>()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the reply is the setOption result this hook reads.
-  const mutate = vi.fn(async () => ({
-    options: { model: 'gpt-one' }
-  })) as unknown as StructuredAgentSessionMutate
+  const mutate = vi.fn(() => write.promise) as unknown as StructuredAgentSessionMutate
   const view = renderHook(() =>
     useStructuredAgentSessionOptions({
       agent: 'codex',
@@ -252,18 +299,32 @@ it('shows the value the host accepted when it normalizes a pick', async () => {
     })
   )
   await waitFor(() => expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one'))
+  let request!: Promise<{ snapshot: readonly SessionOptionDescriptor[] }>
+  act(() => {
+    request = view.result.current.optionSurface.setOption('model', 'gpt-two')
+  })
+  selection = { model: 'gpt-one' }
+  view.rerender()
+  let returned!: { snapshot: readonly SessionOptionDescriptor[] }
   await act(async () => {
-    await view.result.current.setStructuredOption('model', 'gpt-two')
+    write.resolve({ options: { model: 'gpt-one' } })
+    returned = await request
   })
   expect(pill(view.result.current.optionSnapshot).model).toBe('gpt-one')
+  expect(pill(returned.snapshot).model).toBe('gpt-one')
+  expect(mocks.settings).toHaveBeenCalledWith(LOCAL, {
+    type: 'apply-picks',
+    agent: 'codex',
+    picks: [{ modelId: 'gpt-one', optionId: 'model', value: 'gpt-one' }]
+  })
   view.unmount()
 })
 
 it('binds an effort-only pick and its returned snapshot to the host-selected model', async () => {
-  mocks.summary.mockImplementation(() => ({ optionSelection: PICK }))
+  mocks.summary.mockImplementation(() => ({ optionSelection: { model: 'gpt-two', effort: 'low' } }))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the reply is the setOption result this hook reads.
   const mutate = vi.fn(async () => ({
-    options: { effort: 'low' }
+    options: { effort: 'high' }
   })) as unknown as StructuredAgentSessionMutate
   const launch = { kind: 'new' as const, heldOptions: {} }
   const view = renderHook(() =>
@@ -282,16 +343,18 @@ it('binds an effort-only pick and its returned snapshot to the host-selected mod
       launch
     })
   )
-  await waitFor(() => expect(pill(view.result.current.optionSnapshot)).toEqual(PICK))
+  await waitFor(() =>
+    expect(pill(view.result.current.optionSnapshot)).toEqual({ model: 'gpt-two', effort: 'low' })
+  )
   let returned: { snapshot: readonly SessionOptionDescriptor[] } | undefined
   await act(async () => {
-    returned = await view.result.current.optionSurface.setOption('effort', 'low')
+    returned = await view.result.current.optionSurface.setOption('effort', 'high')
   })
-  expect(pill(returned?.snapshot ?? [])).toEqual({ model: 'gpt-two', effort: 'low' })
+  expect(pill(returned?.snapshot ?? [])).toEqual({ model: 'gpt-two', effort: 'high' })
   expect(mocks.settings).toHaveBeenCalledWith(LOCAL, {
     type: 'apply-picks',
     agent: 'codex',
-    picks: [{ modelId: 'gpt-two', optionId: 'effort', value: 'low' }]
+    picks: [{ modelId: 'gpt-two', optionId: 'effort', value: 'high' }]
   })
   view.unmount()
 })

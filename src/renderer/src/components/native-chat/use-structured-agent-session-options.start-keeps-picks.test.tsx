@@ -66,83 +66,95 @@ beforeEach(() => {
 })
 
 for (const [agent, entry] of Object.entries(CASES)) {
-  it(`keeps showing a ${agent} chat's pick while its first message starts the agent`, async () => {
-    const models = entry.listed.map((id, index) => ({
-      id,
-      label: `${id} label`,
-      isDefault: index === 0,
-      efforts: EFFORTS,
-      ...(index === 0 ? { defaultEffort: 'medium' } : {})
-    }))
-    const catalog: AgentSessionModelCatalogResult = {
-      origin: 'live-session',
-      models,
-      fetchedAt: 1_000,
-      listingNamesConfiguredModel: true
-    }
-    // The host's answer: the listing's default until the pick is saved, then the pick.
-    let saved: Readonly<Record<string, string>> = {}
-    const options = (): AgentSessionOptionsResult => ({
-      models,
-      current: { model: saved.model ?? entry.listed[0], effort: saved.effort ?? 'medium' },
-      rewind: { supported: false, reason: 'unsupported' }
-    })
-    mocks.call.mockImplementation(async (_target: unknown, method: string) =>
-      method === 'agentSession.modelCatalog' ? catalog : options()
-    )
-    const mutate = vi.fn(async (_method: string, _op: string, fields: unknown) => {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook sends { key, value } to setOption.
-      const { key, value } = fields as { key: string; value: string }
-      saved = { ...saved, [key]: value }
-      return { key, value, options: saved }
-    })
-    const frames: Pill[] = []
-    // Stable across renders, as the pane's own props are.
-    const launch = { kind: 'new' as const, heldOptions: {} }
-    const { result, rerender, unmount } = renderHook(
-      (props: { fence: number; starting: boolean }) => {
-        const view = useStructuredAgentSessionOptions({
-          agent,
-          sessionId: `${agent}-session`,
-          target: LOCAL,
-          transportEnabled: true,
-          isVisible: true,
-          providerVisible: true,
-          providerStarting: props.starting,
-          fence: props.fence,
-          turnId: null,
-          unloadedTurnRevisions: undefined,
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the reply is the AgentSessionOptionResult shape the hook reads.
-          mutate: mutate as unknown as StructuredAgentSessionMutate,
-          launch
-        })
-        frames.push(pill(view.optionSnapshot))
-        return view
-      },
-      { initialProps: { fence: 1, starting: false } }
-    )
-    await waitFor(() => expect(pill(result.current.optionSnapshot).model).toBe(entry.listed[0]))
-    await act(async () => {
-      await result.current.setStructuredOption('model', entry.pick.model)
-    })
-    await act(async () => {
-      await result.current.setStructuredOption('effort', entry.pick.effort)
-    })
-    await waitFor(() => expect(pill(result.current.optionSnapshot)).toEqual(entry.pick))
+  for (const selectionFromStatus of [false, true]) {
+    it(`keeps showing a ${agent} chat's pick while its first message starts the agent (${selectionFromStatus ? 'status' : 'legacy'})`, async () => {
+      const models = entry.listed.map((id, index) => ({
+        id,
+        label: `${id} label`,
+        isDefault: index === 0,
+        efforts: EFFORTS,
+        ...(index === 0 ? { defaultEffort: 'medium' } : {})
+      }))
+      const catalog: AgentSessionModelCatalogResult = {
+        origin: 'live-session',
+        models,
+        fetchedAt: 1_000,
+        listingNamesConfiguredModel: true
+      }
+      // The host's answer: the listing's default until the pick is saved, then the pick.
+      let saved: Readonly<Record<string, string>> = {}
+      const options = (): AgentSessionOptionsResult => ({
+        models,
+        current: { model: saved.model ?? entry.listed[0], effort: saved.effort ?? 'medium' },
+        rewind: { supported: false, reason: 'unsupported' }
+      })
+      mocks.call.mockImplementation(async (_target: unknown, method: string) =>
+        method === 'agentSession.modelCatalog' ? catalog : options()
+      )
+      const mutate = vi.fn(async (_method: string, _op: string, fields: unknown) => {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook sends { key, value } to setOption.
+        const { key, value } = fields as { key: string; value: string }
+        saved = { ...saved, [key]: value }
+        return { key, value, options: saved }
+      })
+      const frames: Pill[] = []
+      // Stable across renders, as the pane's own props are.
+      const launch = { kind: 'new' as const, heldOptions: {} }
+      const { result, rerender, unmount } = renderHook(
+        (props: { fence: number; starting: boolean }) => {
+          const view = useStructuredAgentSessionOptions({
+            agent,
+            sessionId: `${agent}-session`,
+            target: LOCAL,
+            transportEnabled: true,
+            isVisible: true,
+            providerVisible: true,
+            providerStarting: props.starting,
+            ...(selectionFromStatus ? { optionSelection: saved } : {}),
+            fence: props.fence,
+            turnId: null,
+            unloadedTurnRevisions: undefined,
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the reply is the AgentSessionOptionResult shape the hook reads.
+            mutate: mutate as unknown as StructuredAgentSessionMutate,
+            launch
+          })
+          frames.push(pill(view.optionSnapshot))
+          return view
+        },
+        { initialProps: { fence: 1, starting: false } }
+      )
+      await waitFor(() =>
+        expect(pill(result.current.optionSnapshot).model).toBe(
+          selectionFromStatus ? null : entry.listed[0]
+        )
+      )
+      await waitFor(() =>
+        expect(
+          result.current.optionSnapshot.find((option) => option.id === 'model')?.settable
+        ).toBe(true)
+      )
+      await act(async () => {
+        await result.current.setStructuredOption('model', entry.pick.model)
+      })
+      await act(async () => {
+        await result.current.setStructuredOption('effort', entry.pick.effort)
+      })
+      await waitFor(() => expect(pill(result.current.optionSnapshot)).toEqual(entry.pick))
 
-    // The first message: the host publishes the agent it is starting under the next fence.
-    const sent = frames.length
-    rerender({ fence: 2, starting: true })
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20))
+      // The first message: the host publishes the agent it is starting under the next fence.
+      const sent = frames.length
+      rerender({ fence: 2, starting: true })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      })
+      // The start is proven and the host's live answer names the pick.
+      rerender({ fence: 2, starting: false })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      })
+      expect(frames.slice(sent).filter((frame) => frame.model !== entry.pick.model)).toEqual([])
+      expect(frames.slice(sent).filter((frame) => frame.effort !== entry.pick.effort)).toEqual([])
+      unmount()
     })
-    // The start is proven and the host's live answer names the pick.
-    rerender({ fence: 2, starting: false })
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    })
-    expect(frames.slice(sent).filter((frame) => frame.model !== entry.pick.model)).toEqual([])
-    expect(frames.slice(sent).filter((frame) => frame.effort !== entry.pick.effort)).toEqual([])
-    unmount()
-  })
+  }
 }

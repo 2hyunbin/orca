@@ -63,49 +63,59 @@ export function useStructuredAgentSessionStatusSummary(
   return { summary, observation }
 }
 
-/** Only the host's startup phase, so a chat re-renders when that changes, not on every status. */
-export function useStructuredAgentSessionHostExecutionPhase(
-  sessionId: string,
-  target: RuntimeClientTarget
-): NonNullable<AgentSessionStatusSummary['hostExecutionPhase']> | null {
-  const feed = useMemo(() => getStructuredAgentSessionStatusFeed(target), [target])
-  useEffect(() => feed.activate(), [feed])
-  return useSyncExternalStore(
-    feed.subscribe,
-    () => feed.getSnapshot().get(sessionId)?.hostExecutionPhase ?? null,
-    () => null
-  )
+type HostExecutionSelection = {
+  phase: AgentSessionStatusSummary['hostExecutionPhase'] | null
+  stopping: boolean
+  optionSelection: AgentSessionStatusSummary['optionSelection']
 }
 
-/** Whether the host says a person's Stop is still ending the work; an older host never does. */
-export function useStructuredAgentSessionHostStopping(
-  sessionId: string,
-  target: RuntimeClientTarget
+const EMPTY_HOST_EXECUTION: HostExecutionSelection = {
+  phase: null,
+  stopping: false,
+  optionSelection: undefined
+}
+
+function sameSelection(
+  a: HostExecutionSelection['optionSelection'],
+  b: HostExecutionSelection['optionSelection']
 ): boolean {
-  const feed = useMemo(() => getStructuredAgentSessionStatusFeed(target), [target])
-  useEffect(() => feed.activate(), [feed])
-  return useSyncExternalStore(
-    feed.subscribe,
-    () => feed.getSnapshot().get(sessionId)?.stopping === true,
-    () => false
-  )
+  if (a === undefined || b === undefined) {
+    return a === b
+  }
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
 }
 
-/** The host's startup phase and its word on a Stop, each re-rendering the chat only on a change. */
+/** Select only the host facts the chat renders. */
 export function useStructuredAgentSessionHostExecution(
   sessionId: string,
   target: RuntimeClientTarget
-): {
-  phase: ReturnType<typeof useStructuredAgentSessionHostExecutionPhase>
-  stopping: boolean
-  optionSelection: AgentSessionStatusSummary['optionSelection']
-} {
-  const { summary } = useStructuredAgentSessionStatusSummary(sessionId, target)
-  return {
-    phase: summary?.hostExecutionPhase ?? null,
-    stopping: summary?.stopping === true,
-    optionSelection: summary?.optionSelection
-  }
+): HostExecutionSelection {
+  const feed = useMemo(() => getStructuredAgentSessionStatusFeed(target), [target])
+  useEffect(() => feed.activate(), [feed])
+  const snapshot = useMemo(() => {
+    let previous = EMPTY_HOST_EXECUTION
+    return (): HostExecutionSelection => {
+      const summary = feed.getSnapshot().get(sessionId)
+      const next = {
+        phase: summary?.hostExecutionPhase ?? null,
+        stopping: summary?.stopping === true,
+        optionSelection: sameSelection(previous.optionSelection, summary?.optionSelection)
+          ? previous.optionSelection
+          : summary?.optionSelection
+      }
+      if (
+        previous.phase === next.phase &&
+        previous.stopping === next.stopping &&
+        previous.optionSelection === next.optionSelection
+      ) {
+        return previous
+      }
+      previous = next
+      return next
+    }
+  }, [feed, sessionId])
+  return useSyncExternalStore(feed.subscribe, snapshot, () => EMPTY_HOST_EXECUTION)
 }
 
 /** Only the host's rewind recovery latch, so a chat re-renders when that changes, not on every status. */

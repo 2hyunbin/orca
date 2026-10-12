@@ -23,6 +23,7 @@ import type { SessionOptionDescriptor } from '../../../../shared/native-chat-ses
 import type { RuntimeClientTarget } from '@/runtime/runtime-rpc-client'
 import {
   preloadHostModelCatalogSnapshots,
+  recordHostModelCatalogSnapshot,
   resetHostModelCatalogSnapshotsForTests
 } from '@/runtime/host-model-catalog-snapshots'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
@@ -91,6 +92,8 @@ function renderNewChat(args: {
   target?: RuntimeClientTarget
   seedOptions?: Record<string, string>
   sessionId?: string
+  optionSelection?: Record<string, string>
+  worktree?: string
 }) {
   const frames: Pill[] = []
   const view = renderHook(() => {
@@ -101,6 +104,7 @@ function renderNewChat(args: {
       transportEnabled: false,
       isVisible: true,
       providerVisible: false,
+      ...(args.optionSelection ? { optionSelection: args.optionSelection } : {}),
       fence: null,
       turnId: null,
       unloadedTurnRevisions: undefined,
@@ -109,7 +113,7 @@ function renderNewChat(args: {
       launch: {
         kind: 'new',
         heldOptions: {},
-        worktree: 'id:wt-1',
+        worktree: args.worktree ?? 'id:wt-1',
         ...(args.seedOptions ? { seedOptions: args.seedOptions } : {})
       }
     })
@@ -152,6 +156,39 @@ describe('a new chat picker’s first frame', () => {
     expect(frames[0]).toEqual(final)
     // The pane's own read lands the same list: no frame ever showed anything else.
     expect(frames.every((frame) => JSON.stringify(frame) === JSON.stringify(final))).toBe(true)
+    unmount()
+  })
+
+  it('uses the status selection and the saved host list on the first frame', async () => {
+    catalogAnswers(() => Promise.resolve(CLAUDE_LIST))
+    await preloadHostModelCatalogSnapshots(LOCAL_TARGET, ['claude'])
+    const { frames, unmount } = renderNewChat({
+      agent: 'claude',
+      optionSelection: { model: 'opus[1m]', effort: 'high' }
+    })
+    expect(frames[0]).toEqual({
+      model: 'opus[1m]',
+      label: 'Opus (1M context)',
+      effort: 'high',
+      usable: true
+    })
+    unmount()
+  })
+
+  it('keeps a folder-scoped first frame on the status path', () => {
+    catalogAnswers(() => Promise.resolve(CODEX_LIST))
+    recordHostModelCatalogSnapshot(LOCAL_TARGET, 'codex', 'id:wt-1', CODEX_LIST)
+    const { frames, unmount } = renderNewChat({
+      agent: 'codex',
+      worktree: 'id:wt-1',
+      optionSelection: { model: 'gpt-6.1-sol', effort: 'low' }
+    })
+    expect(frames[0]).toEqual({
+      model: 'gpt-6.1-sol',
+      label: 'GPT-6.1 Sol',
+      effort: 'low',
+      usable: true
+    })
     unmount()
   })
 

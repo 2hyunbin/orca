@@ -15,6 +15,7 @@ import type { AppState } from '@/store/types'
 import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 
 const mocks = vi.hoisted(() => ({
+  call: vi.fn(),
   removeAgentStatus: vi.fn(),
   setAgentStatus: vi.fn(),
   store: null as null | {
@@ -58,7 +59,7 @@ vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => ({
 }))
 
 vi.mock('@/runtime/structured-agent-session-client', () => ({
-  callStructuredAgentSession: vi.fn(),
+  callStructuredAgentSession: mocks.call,
   subscribeStructuredAgentSession: mocks.subscribeTranscript,
   subscribeStructuredAgentSessionStatus: mocks.subscribeStatus
 }))
@@ -66,10 +67,11 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 import {
   getStructuredAgentSessionTabs,
   StructuredAgentSessionStatusBridge,
-  useStructuredAgentSessionHostExecutionPhase,
-  useStructuredAgentSessionHostStopping
+  useStructuredAgentSessionHostExecution
 } from './StructuredAgentSessionStatusBridge'
 import { resetStructuredAgentSessionStatusFeedsForTests } from '@/runtime/structured-agent-session-status-feed'
+import { useStructuredAgentSessionOptions } from './use-structured-agent-session-options'
+import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
 
 const structuredTab = {
   id: 'structured-tab-1',
@@ -118,6 +120,15 @@ function feed(index = 0): { target: unknown; emit: (event: AgentSessionStatusEve
 describe('StructuredAgentSessionStatusBridge', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.call.mockImplementation(async () => ({
+      origin: 'live-session',
+      models: [
+        { id: 'one', label: 'One', isDefault: true, efforts: [] },
+        { id: 'two', label: 'Two', efforts: [] }
+      ],
+      fetchedAt: 1,
+      listingNamesConfiguredModel: true
+    }))
     resetStructuredAgentSessionStatusFeedsForTests()
     mocks.subscribeStatus.mockResolvedValue({ unsubscribe: mocks.unsubscribe })
     mocks.supportsCapability.mockResolvedValue(true)
@@ -730,61 +741,90 @@ describe('StructuredAgentSessionStatusBridge', () => {
     expect(mocks.setAgentStatus).not.toHaveBeenCalled()
   })
 
-  it('re-renders a startup reader only when its phase changes', async () => {
-    const phases: ReturnType<typeof useStructuredAgentSessionHostExecutionPhase>[] = []
+  it('updates chat execution only for phase, Stop, or selection changes', async () => {
+    const views: ReturnType<typeof useStructuredAgentSessionHostExecution>[] = []
+    const publish = (overrides: Partial<AgentSessionStatusSummary>) =>
+      act(() => feed().emit({ type: 'status', session: summary(overrides) }))
     function PhaseProbe(): null {
-      phases.push(useStructuredAgentSessionHostExecutionPhase('session-1', { kind: 'local' }))
+      views.push(useStructuredAgentSessionHostExecution('session-1', { kind: 'local' }))
       return null
     }
     render(<PhaseProbe />)
     await waitFor(() => expect(mocks.subscribeStatus).toHaveBeenCalledOnce())
 
-    act(() => feed().emit({ type: 'status', session: summary({ hostExecutionPhase: 'starting' }) }))
-    const rendersWhileStarting = phases.length
-    act(() =>
-      feed().emit({
-        type: 'status',
-        session: summary({ hostExecutionPhase: 'starting', latestPrompt: 'next', updatedAt: 2 })
-      })
-    )
-    expect(phases).toHaveLength(rendersWhileStarting)
+    publish({ hostExecutionPhase: 'starting', optionSelection: { model: 'one' } })
+    const rendersWhileStarting = views.length
+    publish({
+      hostExecutionPhase: 'starting',
+      optionSelection: { model: 'one' },
+      latestPrompt: 'next',
+      toolName: 'shell',
+      toolInput: 'ls',
+      lastAssistantMessage: 'done',
+      backgroundTasks: [{ id: 'task-1', kind: 'command', state: 'working' }],
+      updatedAt: 2
+    })
+    expect(views).toHaveLength(rendersWhileStarting)
+    const selection = views.at(-1)?.optionSelection
     // Older hosts (v1.4.218 on) also send which provider child is starting; nothing reads it.
     const olderHostChild = { hostExecutionChild: { generation: 'child-1', fence: 2 } }
-    act(() =>
-      feed().emit({
-        type: 'status',
-        session: summary({ hostExecutionPhase: 'starting', ...olderHostChild })
-      })
-    )
-    expect(phases).toHaveLength(rendersWhileStarting)
+    publish({
+      hostExecutionPhase: 'starting',
+      optionSelection: { model: 'one' },
+      ...olderHostChild
+    })
+    expect(views).toHaveLength(rendersWhileStarting)
 
-    act(() => feed().emit({ type: 'status', session: summary({ hostExecutionPhase: 'ready' }) }))
-    expect(phases.at(-1)).toBe('ready')
-    act(() => feed().emit({ type: 'status', session: summary({ hostExecutionPhase: 'starting' }) }))
-    expect(phases.at(-1)).toBe('starting')
+    publish({ hostExecutionPhase: 'ready', optionSelection: { model: 'one' } })
+    expect(views.at(-1)?.phase).toBe('ready')
+    expect(views.at(-1)?.optionSelection).toBe(selection)
+    publish({
+      hostExecutionPhase: 'ready',
+      stopping: true,
+      optionSelection: { model: 'one' }
+    })
+    expect(views.at(-1)?.stopping).toBe(true)
+    publish({
+      hostExecutionPhase: 'ready',
+      stopping: true,
+      optionSelection: { model: 'two' }
+    })
+    expect(views.at(-1)?.optionSelection).toEqual({ model: 'two' })
   })
 
-  it('re-renders a Stopping reader only when the host starts or stops saying so', async () => {
-    const stops: boolean[] = []
-    function StoppingProbe(): null {
-      stops.push(useStructuredAgentSessionHostStopping('session-1', { kind: 'local' }))
+  it('carries a host status selection through the feed into the chat picker', async () => {
+    const models: (string | null)[] = []
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this probe never makes an option mutation.
+    const mutate = vi.fn() as unknown as StructuredAgentSessionMutate
+    function ChatProbe(): null {
+      const host = useStructuredAgentSessionHostExecution('session-1', { kind: 'local' })
+      const options = useStructuredAgentSessionOptions({
+        agent: 'codex',
+        sessionId: 'session-1',
+        target: { kind: 'local' },
+        transportEnabled: false,
+        isVisible: true,
+        providerVisible: false,
+        optionSelection: host.optionSelection,
+        fence: null,
+        turnId: null,
+        unloadedTurnRevisions: undefined,
+        mutate,
+        launch: { kind: 'new', heldOptions: {} }
+      })
+      const model = options.optionSnapshot.find((entry) => entry.id === 'model')
+      models.push(model?.kind.type === 'select' ? (model.kind.currentValue ?? null) : null)
       return null
     }
-    render(<StoppingProbe />)
+    render(<ChatProbe />)
     await waitFor(() => expect(mocks.subscribeStatus).toHaveBeenCalledOnce())
-
-    act(() => feed().emit({ type: 'status', session: summary({ stopping: true }) }))
-    expect(stops.at(-1)).toBe(true)
-    const rendersWhileStopping = stops.length
     act(() =>
-      feed().emit({
-        type: 'status',
-        session: summary({ stopping: true, latestPrompt: 'next', updatedAt: 2 })
-      })
+      feed().emit({ type: 'status', session: summary({ optionSelection: { model: 'two' } }) })
     )
-    expect(stops).toHaveLength(rendersWhileStopping)
-    act(() => feed().emit({ type: 'status', session: summary({}) }))
-    expect(stops.at(-1)).toBe(false)
+    await waitFor(() => expect(models.at(-1)).toBe('two'))
+    const renders = models.length
+    act(() => feed().emit({ type: 'status', session: { ...summary(), sessionId: 'session-2' } }))
+    expect(models).toHaveLength(renders)
   })
 })
 

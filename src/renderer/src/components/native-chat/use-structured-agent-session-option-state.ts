@@ -10,6 +10,7 @@ import {
   applyStructuredAgentSessionOptions,
   commitStructuredAgentSessionOptionValues,
   createStructuredAgentSessionOptionState,
+  structuredAgentSessionOptionCatalog,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '@/runtime/runtime-rpc-client'
@@ -36,15 +37,6 @@ function firstFrameOptionState(
   const seeded = createStructuredAgentSessionOptionState(agent, seed)
   const snapshot = readHostModelCatalogSnapshot(target, agent, launch)
   return snapshot ? applyStructuredAgentSessionModelCatalog(seeded, seed, snapshot, launch) : seeded
-}
-
-function selectionIncludes(
-  selection: Readonly<Record<string, string>> | undefined,
-  values: Readonly<Record<string, string>>
-): boolean {
-  return selection
-    ? Object.entries(values).every(([key, value]) => selection[key] === value)
-    : false
 }
 
 /** The picker's catalog and selection for one conversation on its execution host. */
@@ -89,24 +81,9 @@ export function useStructuredAgentSessionOptionState(args: {
   } = args
   const selectionFromStatus = hostSelection !== undefined
   const [pendingPick, setPendingPick] = useState<{
-    identity: string
+    generation: number
     values: Readonly<Record<string, string>>
-    settled: boolean
   } | null>(null)
-  useEffect(() => {
-    if (
-      pendingPick &&
-      (pendingPick.identity !== identity ||
-        (pendingPick.settled && selectionIncludes(hostSelection, pendingPick.values)))
-    ) {
-      setPendingPick((current) => (current === pendingPick ? null : current))
-    }
-  }, [hostSelection, identity, pendingPick])
-  const activePendingPick =
-    pendingPick?.identity === identity &&
-    (!pendingPick.settled || !selectionIncludes(hostSelection, pendingPick.values))
-      ? pendingPick.values
-      : null
   const [conversationSupport, setConversationSupport] = useState<{
     sessionId: string
     commands: readonly AgentSessionConversationCommand[]
@@ -134,7 +111,6 @@ export function useStructuredAgentSessionOptionState(args: {
   }, [newLaunch, seedsModel, target, worktree])
   const optionStateRef = useRef(optionState)
   const activeOptionRecordRef = useRef(optionState.record)
-  const pendingOptionRef = useRef<string | null>(null)
   const optionMutationGeneration = useRef(0)
   const updateOptionState = useCallback(
     (update: (current: StructuredAgentSessionOptionState) => StructuredAgentSessionOptionState) => {
@@ -145,6 +121,11 @@ export function useStructuredAgentSessionOptionState(args: {
     []
   )
   const optionIdentityRef = useRef(identity)
+  const activePendingPick =
+    optionIdentityRef.current === identity &&
+    pendingPick?.generation === optionMutationGeneration.current
+      ? pendingPick.values
+      : null
   useEffect(() => {
     const previous = optionStateRef.current
     const sameSession = optionIdentityRef.current === identity
@@ -169,11 +150,9 @@ export function useStructuredAgentSessionOptionState(args: {
           }
         : seeded
     optionMutationGeneration.current += 1
-    pendingOptionRef.current = null
-    optionStateRef.current = next
     activeOptionRecordRef.current = next.record
-    setOptionState(next)
-  }, [agent, fence, identity, selectionFromStatus])
+    updateOptionState(() => next)
+  }, [agent, fence, identity, selectionFromStatus, updateOptionState])
 
   const optionsReadRef = useRef<CoalescedPollRunner | null>(null)
   // The read also carries commands, goal, context, image and rewind support. A capable host's
@@ -205,14 +184,32 @@ export function useStructuredAgentSessionOptionState(args: {
           if (current.record !== activeOptionRecordRef.current) {
             return current
           }
-          const applied = applyStructuredAgentSessionOptions(
-            selectionFromStatus
-              ? { ...current, record: cloneNativeChatSessionOptionRecord(current.record) }
-              : current,
-            optionCatalog,
-            result
-          )
-          return selectionFromStatus ? { ...applied, record: current.record } : applied
+          if (!selectionFromStatus) {
+            return applyStructuredAgentSessionOptions(current, optionCatalog, result)
+          }
+          // A live listing owns choices; only the scoped host catalog owns defaults.
+          const configured =
+            current.catalogSource !== 'seed' && current.catalog?.defaultModelIsCliDefault
+              ? current.catalog.models.find((model) => model.isDefault)
+              : undefined
+          const effort = configured?.options.find((option) => option.id === 'effort')?.kind
+          const catalog = structuredAgentSessionOptionCatalog(optionCatalog, {
+            ...result,
+            models: result.models.map((model) => ({
+              ...model,
+              isDefault: model.id === configured?.id,
+              ...(model.id === configured?.id &&
+              effort?.type === 'select' &&
+              effort.defaultIsCliDefault &&
+              model.efforts.some((choice) => choice.value === effort.defaultValue)
+                ? { defaultEffort: effort.defaultValue }
+                : {})
+            }))
+          })
+          if (!configured) {
+            delete catalog.defaultModelIsCliDefault
+          }
+          return { ...current, catalog, catalogSource: 'live' }
         })
       }
     })
@@ -274,7 +271,6 @@ export function useStructuredAgentSessionOptionState(args: {
     setPendingPick,
     optionStateRef,
     activeOptionRecordRef,
-    pendingOptionRef,
     optionMutationGeneration,
     updateOptionState
   }
