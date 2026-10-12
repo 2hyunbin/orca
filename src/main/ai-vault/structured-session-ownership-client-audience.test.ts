@@ -6,6 +6,7 @@ import {
   buildAiVaultResumeShellCommand
 } from '../../shared/ai-vault-resume-command'
 import { buildAgentResumeStartupPlan } from '../../shared/tui-agent-resume-startup'
+import { agentForksConversations } from '../../shared/agent-resume-argv'
 import { isResumableTuiAgent } from '../../shared/agent-session-resume'
 import type { AgentStartupShell } from '../../shared/tui-agent-startup-shell'
 import {
@@ -67,7 +68,11 @@ const CONVERSATIONS: OwnedConversation[] = [
     rowAgent: 'pi',
     sessionId: UUID,
     filePath: SESSION_FILE('.pi'),
-    handle: { transport: 'jsonl-rpc', agent: 'pi', nativeId: SESSION_FILE('.pi') }
+    handle: {
+      transport: 'jsonl-rpc',
+      agent: 'pi',
+      nativeId: SESSION_FILE('.pi')
+    }
   }
 ]
 
@@ -111,7 +116,10 @@ describe('Session History rows a paired client cannot open as a chat', () => {
     for (const provider of ['claude', 'codex'] as const) {
       installOwnership({ provider })
       const result = listResult()
-      result.sessions = result.sessions.map((row) => ({ ...row, agent: provider }))
+      result.sessions = result.sessions.map((row) => ({
+        ...row,
+        agent: provider
+      }))
       const owned = projectStructuredAiVaultSessions(result, (agent) =>
         clientOpensStructuredChatFromHistory(
           { clientKind: 'mobile', clientCapabilities: caps },
@@ -141,20 +149,22 @@ describe('resume commands Orca builds for an owned row', () => {
     cmd: [undefined, `"C:\\Program Files\\${binary}\\${binary}.exe"`]
   })
 
-  function builtCommands(conversation: OwnedConversation): string[] {
+  function builtCommands(conversation: OwnedConversation, fork = false): string[] {
     const agent = conversation.rowAgent
     if (!isResumableTuiAgent(agent)) {
       return []
     }
     return shells.flatMap(({ platform, shell }) => {
-      const vault = buildAiVaultResumeCommand({
-        agent,
-        sessionId: conversation.sessionId,
-        cwd: '/Users/me/repo',
-        platform,
-        shell,
-        resumeFilePath: conversation.filePath
-      })
+      const vault = fork
+        ? null
+        : buildAiVaultResumeCommand({
+            agent,
+            sessionId: conversation.sessionId,
+            cwd: '/Users/me/repo',
+            platform,
+            shell,
+            resumeFilePath: conversation.filePath
+          })
       const tabs = overrides(agent)[shell].map((override) => {
         const plan = buildAgentResumeStartupPlan({
           agent,
@@ -166,7 +176,8 @@ describe('resume commands Orca builds for an owned row', () => {
           cmdOverrides: override ? { [agent]: override } : {},
           platform,
           shell,
-          ompResumeFilePath: conversation.filePath
+          ompResumeFilePath: conversation.filePath,
+          fork
         })
         return plan
           ? buildAiVaultResumeShellCommand({
@@ -177,25 +188,27 @@ describe('resume commands Orca builds for an owned row', () => {
             })
           : null
       })
-      return [vault, ...tabs.filter((tab): tab is string => tab !== null)]
+      return [vault, ...tabs].filter((command): command is string => command !== null)
     })
   }
 
-  it.each([
+  const everyAgent: OwnedConversation[] = [
     ...CONVERSATIONS,
     {
-      rowAgent: 'claude' as const,
+      rowAgent: 'claude',
       sessionId: UUID,
       filePath: `/Users/me/.claude/projects/-Users-me-repo/${UUID}.jsonl`,
       handle: claudeProviderHandle(UUID, null)
     },
     {
-      rowAgent: 'codex' as const,
+      rowAgent: 'codex',
       sessionId: UUID,
       filePath: `/Users/me/.codex/sessions/2026/10/09/rollout-2026-10-09T10-00-00-${UUID}.jsonl`,
       handle: codexProviderHandle(UUID)
     }
-  ])('refuses each one for the $rowAgent row', async (conversation) => {
+  ]
+
+  it.each(everyAgent)('refuses each one for the $rowAgent row', async (conversation) => {
     installOwnership({ handle: conversation.handle })
     const commands = builtCommands(conversation)
     expect(commands.length).toBe(10)
@@ -206,4 +219,20 @@ describe('resume commands Orca builds for an owned row', () => {
       ).rejects.toThrow('agent_session_conflict')
     }
   })
+
+  // "Resume in New CLI" opens a copy, so it is no second writer of the chat's conversation.
+  it.each(everyAgent.filter(({ rowAgent }) => agentForksConversations(rowAgent)))(
+    'allows each copy it opens for the $rowAgent row',
+    async (conversation) => {
+      installOwnership({ handle: conversation.handle })
+      const commands = builtCommands(conversation, true)
+      expect(commands.length).toBe(7)
+      for (const command of commands) {
+        await expect(
+          assertLegacyAiVaultResumeCommandAllowed(command, async () => undefined),
+          command
+        ).resolves.toBeUndefined()
+      }
+    }
+  )
 })

@@ -17,15 +17,38 @@ describe('Resume in New CLI eligibility', () => {
     ).toBe('repo-1::worktree-2')
   })
 
+  it.each(['grok', 'pi'] as const)('offers the fork for a %s chat row', (agent) => {
+    expect(aiVaultSessionCliForkWorktreeId({ agent, structuredSession: OWNED }, RESUMABLE)).toBe(
+      'repo-1::worktree-2'
+    )
+  })
+
+  it.each(['opencode', 'opencode2', 'omp'] as const)(
+    'withholds it from a %s chat row, whose CLI cannot open a copy',
+    (agent) => {
+      expect(
+        aiVaultSessionCliForkWorktreeId({ agent, structuredSession: OWNED }, RESUMABLE)
+      ).toBeNull()
+    }
+  )
+
   it('leaves rows no chat owns to plain Resume', () => {
     expect(aiVaultSessionCliForkWorktreeId({ agent: 'claude' }, RESUMABLE)).toBeNull()
   })
 
   it('withholds the fork when resume is blocked or has no target', () => {
     const session = { agent: 'claude' as const, structuredSession: OWNED }
-    expect(aiVaultSessionCliForkWorktreeId(session, { worktreeId: 'w', disabled: true })).toBeNull()
     expect(
-      aiVaultSessionCliForkWorktreeId(session, { worktreeId: null, disabled: false })
+      aiVaultSessionCliForkWorktreeId(session, {
+        worktreeId: 'w',
+        disabled: true
+      })
+    ).toBeNull()
+    expect(
+      aiVaultSessionCliForkWorktreeId(session, {
+        worktreeId: null,
+        disabled: false
+      })
     ).toBeNull()
   })
 })

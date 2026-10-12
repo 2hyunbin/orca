@@ -15,10 +15,8 @@ import {
   parseExecutionHostId,
   type ExecutionHostScope
 } from '../../../../shared/execution-host'
-import {
-  isAgentSessionHandleProvider,
-  type AgentSessionHandleProvider
-} from '../../../../shared/agent-session-provider-handle'
+import type { AgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
+import { agentForksConversations } from '../../../../shared/agent-resume-argv'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { resolveAiVaultSessionSurfaceSwitchTargets } from '../right-sidebar/ai-vault-session-surface-switch'
 import { resolveAiVaultHistoryRowResume } from '../right-sidebar/ai-vault-session-resume-in-chat-workspace'
@@ -82,10 +80,11 @@ export function resolveTabSessionHistorySubject(
       : null
   }
   if (args.structuredSessionId !== undefined) {
-    // Only these providers have history rows either move can act on.
-    const target = isAgentSessionHandleProvider(args.tab.launchAgent)
-      ? workspace(args.tab.worktreeId, 'chat')
-      : null
+    // A chat tab's only move is opening a copy in its CLI.
+    const target =
+      args.tab.launchAgent && agentForksConversations(args.tab.launchAgent)
+        ? workspace(args.tab.worktreeId, 'chat')
+        : null
     return target ? { ...target, kind: 'chat', sessionId: args.structuredSessionId } : null
   }
   // The same pane-to-conversation mapping tab titles use: live agent, then sleeping, then retained.
