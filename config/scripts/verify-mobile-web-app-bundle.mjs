@@ -52,7 +52,7 @@ export const MOBILE_WEB_APP_BUNDLE_MAX_TOTAL_BYTES = 9 * 1024 * 1024
  * `routes.slice(0, n)` for every n, which is what the fence below is derived from rather than
  * fitted to. The spread it shows is 1 to 11: `pr` and `web` add one script each, `tasks` adds eleven.
  * The root `./_layout.tsx` (the page's web sibling of the native root) sorts first; with it the
- * swept tree reads 81 scripts at 16 routes.
+ * swept tree reads 79 scripts at 16 routes.
  *
  * This table is the fence's only input, so a route added to the tree stales it and the pins beside
  * the fence fail until it is re-measured. That is the point: the bound is re-derived, never bumped.
@@ -66,14 +66,14 @@ export const MOBILE_WEB_APP_BUNDLE_SCRIPT_SWEEP = [
   ['./h/[hostId]/files/[worktreeId].tsx', 23],
   ['./h/[hostId]/files/preview/[worktreeId].tsx', 31],
   ['./h/[hostId]/history/[worktreeId].tsx', 34],
-  ['./h/[hostId]/index.tsx', 41],
-  ['./h/[hostId]/pr/[worktreeId].tsx', 42],
-  ['./h/[hostId]/review/[worktreeId].tsx', 51],
-  ['./h/[hostId]/session/[worktreeId].tsx', 61],
-  ['./h/[hostId]/source-control/[worktreeId].tsx', 66],
-  ['./h/[hostId]/tasks.tsx', 77],
-  ['./h/[hostId]/web.tsx', 78],
-  ['./h/_layout.tsx', 81]
+  ['./h/[hostId]/index.tsx', 39],
+  ['./h/[hostId]/pr/[worktreeId].tsx', 40],
+  ['./h/[hostId]/review/[worktreeId].tsx', 49],
+  ['./h/[hostId]/session/[worktreeId].tsx', 59],
+  ['./h/[hostId]/source-control/[worktreeId].tsx', 64],
+  ['./h/[hostId]/tasks.tsx', 75],
+  ['./h/[hostId]/web.tsx', 76],
+  ['./h/_layout.tsx', 79]
 ]
 
 const sweptScripts = MOBILE_WEB_APP_BUNDLE_SCRIPT_SWEEP.map(([, scripts]) => scripts)
@@ -89,9 +89,10 @@ export const MOBILE_WEB_APP_BUNDLE_ROUTE_SCRIPT_SPREAD = sweptScripts
  * Measured, not chosen, and per head rather than cumulative: at 8, 10, 12 and 14 routes the head
  * that wrote the old `4r + 16` read 32, 43, 61 and 69, and one refactor with no route added moved
  * the 12-route prefix by four (61 to 57). Four is the worst step a refactor alone has cost. The
- * previous sweep read 34, 40, 58 and 71 and this head reads 34, 42, 61 and 77: six at 14 routes,
- * from main's own drift plus the server-workspace modules this head adds, so it re-measured the
- * sweep rather than fitting inside the margin, which is what a step past four is meant to force.
+ * sweep before this branch read 34, 40, 58 and 71 and this head reads 34, 40, 59 and 75: four at
+ * 14 routes, from main's own drift plus the server-workspace modules this head adds. A head
+ * between them read 77 there, six past that sweep, and re-measured rather than fitting inside the
+ * margin, which is what a step past four is meant to force.
  * Summing the steps instead would grow this number every head and loosen the fence for free.
  */
 export const MOBILE_WEB_APP_BUNDLE_SCRIPT_MARGIN = 4
