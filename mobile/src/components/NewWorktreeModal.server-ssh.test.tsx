@@ -266,10 +266,13 @@ describe('NewWorktreeModal on a server SSH repo', () => {
     expect(runTargetPicker(renderer).props.selectedId).toBe('runtime:env-1')
     expect(server).toHaveBeenCalledWith('ssh.getState', { targetId: 'devbox' })
     expect(gate()).toMatchObject({ status: null, requiresConnection: true })
-    expect(server).not.toHaveBeenCalledWith('worktree.create', expect.anything(), expect.anything())
+    act(() => sourceInputs(renderer)[0]!.props.onChangeText('same-id-wt'))
+    expect(
+      renderer.root.find((node) => typeof node.props.onCreate === 'function').props.canCreate
+    ).toBe(false)
   })
 
-  it("never offers a server's per-workspace-environment SSH repo, even last visited", async () => {
+  it("never offers a server's per-workspace-environment SSH repo, and maps it to its project", async () => {
     const vmRepo = {
       ...repos[0]!,
       id: 'vm-repo',
@@ -277,6 +280,13 @@ describe('NewWorktreeModal on a server SSH repo', () => {
       connectionId: 'runtime-ssh-vm-1'
     }
     const serverRepo = { ...repos[0]!, id: 'server-repo', path: '/srv/orca' }
+    const otherProject = {
+      ...repos[0]!,
+      id: 'noqa',
+      displayName: 'noqa',
+      path: '/srv/noqa',
+      upstream: { owner: 'stablyai', repo: 'noqa' }
+    }
     asyncStorage.getItem.mockResolvedValueOnce(
       JSON.stringify({ hostId: 'host-vm', worktreeId: 'vm-repo::/home/dev/vm-orca/wt' })
     )
@@ -292,8 +302,9 @@ describe('NewWorktreeModal on a server SSH repo', () => {
         createElement(NewWorktreeModal, {
           visible: true,
           client: requestsOnly(listing([])),
-          // Listed first, it would otherwise win the server's row.
-          serverClients: serversOf(requestsOnly(listing([vmRepo, serverRepo]))),
+          // Listed before its project's copy, it would otherwise win the server's row; the last
+          // visited, it picks its project's copy rather than the first project listed.
+          serverClients: serversOf(requestsOnly(listing([otherProject, vmRepo, serverRepo]))),
           hostId: 'host-vm',
           onCreated: () => {},
           openExternalUrl: () => {},
@@ -340,7 +351,7 @@ describe('NewWorktreeModal on a server SSH repo', () => {
     ])
   })
 
-  it("drops a connect reply that arrives after the server's target changed", async () => {
+  it('drops a late connect reply, keeping the newly picked target connected', async () => {
     const sshRepo = (id: string, connectionId: string) => ({
       ...repos[0]!,
       id,
@@ -362,7 +373,8 @@ describe('NewWorktreeModal on a server SSH repo', () => {
         })
       }
       if (method === 'ssh.getState') {
-        return Promise.resolve(state(params!.targetId!, 'disconnected'))
+        const targetId = params!.targetId!
+        return Promise.resolve(state(targetId, targetId === 'box-b' ? 'connected' : 'disconnected'))
       }
       if (method === 'ssh.connect') {
         return new Promise((resolve) => {
@@ -404,11 +416,15 @@ describe('NewWorktreeModal on a server SSH repo', () => {
     const connectable = renderer.root.find((node) => typeof node.props.onConnect === 'function')
     await act(async () => connectable.props.onConnect())
     await pickProject('beta')
-    expect(gate().status).toBe('disconnected')
+    const canCreate = () =>
+      renderer.root.find((node) => typeof node.props.onCreate === 'function').props.canCreate
+    expect(gate().status).toBe('connected')
+    expect(canCreate()).toBe(true)
 
     await act(async () => finishConnect!(state('box-a', 'connected')))
     await flushUpdates()
 
-    expect(gate()).toMatchObject({ status: 'disconnected', requiresConnection: true })
+    expect(gate()).toMatchObject({ status: 'connected', requiresConnection: false })
+    expect(canCreate()).toBe(true)
   })
 })

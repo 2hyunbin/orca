@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { getNewWorkspaceDialogEligibleRepos } from '../../../src/shared/new-workspace-dialog-repo'
+import {
+  getNewWorkspaceDialogEligibleRepos,
+  resolveNewWorkspaceDialogActiveRepoId,
+  resolveNewWorkspaceDialogRepoId
+} from '../../../src/shared/new-workspace-dialog-repo'
 import type { RpcClient } from '../transport/rpc-client'
 import { nativeChatRepoListRead } from '../session/mobile-session-read-operations'
 import { getCachedRepos, setCachedRepos } from '../cache/repo-cache'
 import { useLastVisitedWorktreeRepoId } from '../worktree/use-last-visited-worktree-repo'
-import {
-  refreshMobileNewWorkspaceDialogSelectedRepo,
-  resolveMobileNewWorkspaceDialogRepoId
-} from '../worktree/new-workspace-dialog-repo-selection'
+import { refreshMobileNewWorkspaceDialogSelectedRepo } from '../worktree/new-workspace-dialog-repo-selection'
 import type { MobileWorkspaceRepo } from './new-worktree-modal-types'
 
 const NO_SERVER_CLIENTS: ReadonlyMap<ExecutionHostId, RpcClient> = new Map()
@@ -58,12 +59,12 @@ export function useNewWorkspaceRepositories(args: {
   const [pickedRepo, setSelectedRepo] = useState<MobileWorkspaceRepo | null>(null)
   const [loading, setLoading] = useState(initialRepos == null)
   const lastVisitedRepo = useLastVisitedWorktreeRepoId(hostId, visible)
-  // The desktop's rule: a per-workspace-environment SSH repo is plumbing, never a pick.
-  const repos = useMemo(
-    () =>
-      getNewWorkspaceDialogEligibleRepos([...desktopRepos, ...[...serverRepos.values()].flat()]),
+  const listedRepos = useMemo(
+    () => [...desktopRepos, ...[...serverRepos.values()].flat()],
     [desktopRepos, serverRepos]
   )
+  // The desktop's rule: a per-workspace-environment SSH repo is plumbing, never a pick.
+  const repos = useMemo(() => getNewWorkspaceDialogEligibleRepos(listedRepos), [listedRepos])
   // Why derived: the pick follows its repo's latest listing, and goes once its host stops listing it.
   const selectedRepo = useMemo(
     () => refreshMobileNewWorkspaceDialogSelectedRepo(repos, pickedRepo),
@@ -74,15 +75,19 @@ export function useNewWorkspaceRepositories(args: {
     if (!visible || !lastVisitedRepo.loaded || selectedRepo || repos.length === 0) {
       return
     }
-    const preferredRepoId = resolveMobileNewWorkspaceDialogRepoId({
+    const preferredRepoId = resolveNewWorkspaceDialogRepoId({
       eligibleRepos: repos,
-      activeRepoId: lastVisitedRepo.repoId
+      activeRepoId: resolveNewWorkspaceDialogActiveRepoId(
+        listedRepos,
+        repos,
+        lastVisitedRepo.repoId
+      )
     })
     const preferredRepo = repos.find((repo) => repo.id === preferredRepoId) ?? null
     if (preferredRepo) {
       setSelectedRepo(preferredRepo)
     }
-  }, [lastVisitedRepo.loaded, lastVisitedRepo.repoId, repos, selectedRepo, visible])
+  }, [lastVisitedRepo.loaded, lastVisitedRepo.repoId, listedRepos, repos, selectedRepo, visible])
 
   useEffect(() => {
     if (!visible || !client) {

@@ -47,7 +47,7 @@ export function useNewWorkspaceExecutionTarget(args: {
   const target = workspaceSshTargetKey(server, connectionId)
   const [sshState, setSshEntry] = useState<SshStateEntry | null>(null)
   const setSshState = (record: WorkspaceSshRecord) => setSshEntry({ target, record })
-  // A connect reply lands only while its target is still the one shown, so it never overwrites another's.
+  // Lands only if no other target's state replaced it.
   const settleSshState = (record: WorkspaceSshRecord) =>
     setSshEntry((current) => (current?.target === target ? { target, record } : current))
   const [connectingTarget, setConnectingTarget] = useState<string | null>(null)

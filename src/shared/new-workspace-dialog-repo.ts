@@ -4,6 +4,7 @@ import {
   isRuntimeOwnedSshTargetId,
   type ExecutionHostScope
 } from './execution-host'
+import { getProjectIdentityKey } from './project-host-setup-projection'
 import { isGitRepoKind } from './repo-kind'
 import type { Repo } from './repo-types'
 
@@ -22,6 +23,34 @@ export function getNewWorkspaceDialogEligibleRepos<T extends Pick<Repo, 'path' |
   return repos.filter((repo) => Boolean(repo.path) && !isRuntimeOwnedSshTargetId(repo.connectionId))
 }
 
+type ActiveRepoCandidate = Pick<
+  Repo,
+  'id' | 'connectionId' | 'upstream' | 'repoIcon' | 'gitRemoteIdentity'
+>
+
+/**
+ * After creating a per-workspace-env, its runtime-owned SSH repo becomes the active repo — but it's
+ * excluded from the eligible repos (hidden plumbing). Without this, the dialog can't match
+ * `activeRepoId`, so it falls back to the first eligible repo (a different project). Map the active
+ * runtime repo to its sibling in the same project so the dialog stays on that project.
+ */
+export function resolveNewWorkspaceDialogActiveRepoId(
+  repos: readonly ActiveRepoCandidate[],
+  eligibleRepos: readonly ActiveRepoCandidate[],
+  activeRepoId: string | null | undefined
+): string | null {
+  if (!activeRepoId) {
+    return activeRepoId ?? null
+  }
+  const activeRepo = repos.find((repo) => repo.id === activeRepoId)
+  if (!activeRepo || !isRuntimeOwnedSshTargetId(activeRepo.connectionId)) {
+    return activeRepoId
+  }
+  const projectKey = getProjectIdentityKey(activeRepo)
+  const sibling = eligibleRepos.find((repo) => getProjectIdentityKey(repo) === projectKey)
+  return sibling?.id ?? activeRepoId
+}
+
 export function resolveNewWorkspaceDialogRepoId({
   eligibleRepos,
   draftRepoId,
@@ -35,8 +64,7 @@ export function resolveNewWorkspaceDialogRepoId({
   activeRepoId?: string | null
   focusedHostScope?: ExecutionHostScope | null
 }): string {
-  // Why: every new-workspace dialog should seed the repo the same way. Mobile
-  // mirrors this locally because Metro cannot bundle root shared runtime modules.
+  // Why: every new-workspace dialog, desktop and mobile, seeds the repo the same way.
   const focusedHostRepo =
     focusedHostScope && focusedHostScope !== ALL_EXECUTION_HOSTS_SCOPE
       ? eligibleRepos.find((repo) => getRepoExecutionHostId(repo) === focusedHostScope)
