@@ -20,7 +20,6 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
         View: 'Animated.View',
         Value: class {
           setValue(): void {}
-          stopAnimation(): void {}
         },
         timing: () => ({
           start: (done?: (result: { finished: boolean }) => void) => done?.({ finished: true }),
