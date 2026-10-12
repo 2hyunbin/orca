@@ -13,6 +13,18 @@ on:
         description: Branch whose src/main/daemon is the P9 build
         required: false
         type: string
+      only:
+        description: Comma-separated scenario names (empty runs the group)
+        required: false
+        type: string
+      os:
+        description: JSON array of runners
+        required: false
+        type: string
+      groups:
+        description: JSON array of groups
+        required: false
+        type: string
 
 jobs:
   output-bench:
@@ -20,13 +32,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2022]
-        group: [realistic, stress]
+        os: ${{ fromJSON(inputs.os || '["ubuntu-latest","windows-2022"]') }}
+        group: ${{ fromJSON(inputs.groups || '["realistic","stress"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 170
     env:
       NODE_OPTIONS: --max-old-space-size=4096
       ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_OUTPUT_BENCH_ONLY: ${{ inputs.only }}
     steps:
       - uses: actions/checkout@v6
         with:
