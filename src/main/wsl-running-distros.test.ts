@@ -59,12 +59,7 @@ describe('running WSL distro discovery', () => {
   it('confirms an empty list when no distro runs', async () => {
     // Captured on WSL 2.7: with nothing running, `--quiet` exits 0 with empty stdout in both
     // encodings; only the non-quiet form prints the localized message and exits -1.
-    execFileMock.mockImplementationOnce((_command, _args, _options, callback) => {
-      callback(null, 'Ubuntu\r\n')
-    })
-    execFileMock.mockImplementationOnce((_command, _args, _options, callback) => {
-      callback(null, '')
-    })
+    runProcessMock.mockResolvedValueOnce(exited('Ubuntu\r\n')).mockResolvedValueOnce(exited(''))
 
     await withPlatform('win32', async () => {
       await expect(listRunningWslDistrosAsync()).resolves.toEqual(['Ubuntu'])
