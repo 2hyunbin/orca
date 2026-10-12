@@ -6,12 +6,12 @@ const scopedViews = new WeakMap<RpcClient, Map<ExecutionHostId, RpcClient>>()
 
 /**
  * Whether this phone can reach the desktop's servers: the desktop relays, over a transport that
- * keeps `executionHost` (a shell older than it would strip it and run the call on the desktop).
+ * carries the `envelope` naming the server (an older shell would refuse every such call).
  */
 export function relaysToServers(client: RpcClient, hostCapabilities: readonly string[]): boolean {
   return (
     hostCapabilities.includes(MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY) &&
-    (client.carriesExecutionHost?.() ?? true)
+    (client.carriesRpcEnvelope?.() ?? true)
   )
 }
 
@@ -50,9 +50,15 @@ export function scopeRpcClientToExecutionHost(
   }
   const view: RpcClient = {
     sendRequest: (method, params, options) =>
-      client.sendRequest(method, params, { ...options, executionHost }),
+      client.sendRequest(method, params, {
+        ...options,
+        envelope: { ...options?.envelope, executionHost }
+      }),
     subscribe: (method, params, onData, options) =>
-      client.subscribe(method, params, onData, { ...options, executionHost }),
+      client.subscribe(method, params, onData, {
+        ...options,
+        envelope: { ...options?.envelope, executionHost }
+      }),
     updateTerminalSubscriptionViewport: (terminal, viewport) =>
       client.updateTerminalSubscriptionViewport(terminal, viewport),
     getState: () => client.getState(),
@@ -60,7 +66,7 @@ export function scopeRpcClientToExecutionHost(
     getLastConnectedAt: () => client.getLastConnectedAt(),
     getLastInboundAt: client.getLastInboundAt && (() => client.getLastInboundAt?.() ?? null),
     getGeneration: client.getGeneration && (() => client.getGeneration?.() ?? 0),
-    carriesExecutionHost: () => client.carriesExecutionHost?.() ?? true,
+    carriesRpcEnvelope: () => client.carriesRpcEnvelope?.() ?? true,
     onStateChange: (listener) => client.onStateChange(listener),
     notifyForeground: (reason) => client.notifyForeground(reason),
     close: () => {}

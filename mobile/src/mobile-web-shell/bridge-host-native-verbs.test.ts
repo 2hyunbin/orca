@@ -294,7 +294,7 @@ describe('grants scoped to the route the page was opened for', () => {
     const init = bridge.last()
     expect(init.type === 'init' && init.grants.native).toEqual([
       'fault',
-      'executionHost',
+      'rpcEnvelope',
       'navigate',
       'storage'
     ])
