@@ -1,5 +1,6 @@
 import type { IPtyProvider } from '../providers/types'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { OrcaRuntimeWithStopTerminalsForWorktree } from './orca-runtime-stop-terminals-for-worktree'
+import type { OrcaRuntimeWithMarkPtyLivenessUnverifiable } from './orca-runtime-mark-pty-liveness-unverifiable'
 import {
   isUnstoppedPtyRemovalError,
   RUNNING_AGENT_SESSION_REMOVAL_PREFIX,
@@ -20,6 +21,7 @@ import {
   listStructuredSessionsForWorktree,
   retireStructuredSessionTabsForWorktree,
   unclosedStructuredSessions,
+  type StructuredWorktreeSweepRuntime,
   type StructuredSessionInWorkspace
 } from './structured-session-worktree-teardown'
 import {
@@ -34,8 +36,12 @@ import {
   resolveUnstoppedPtyVerdict
 } from './unstopped-pty-verification'
 
+type WorktreeTeardownRuntime = StructuredWorktreeSweepRuntime &
+  Pick<OrcaRuntimeWithStopTerminalsForWorktree, 'stopTerminalsForWorktree'> &
+  Pick<OrcaRuntimeWithMarkPtyLivenessUnverifiable, 'getPtyLivenessVerdict'>
+
 export type WorktreeTeardownDeps = {
-  runtime?: OrcaRuntimeService
+  runtime?: WorktreeTeardownRuntime
   /** Authoritative id for callers whose selector no longer resolves (orphaned workspace). */
   resolvedWorktreeId?: string
   /** SSH connection owning `resolvedWorktreeId`; prevents same-id cross-host graph matches. */

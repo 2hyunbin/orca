@@ -1,7 +1,7 @@
 import type { RuntimeSessionGraphPromotion } from './session-graph/session-graph-promotion'
 import { OrcaRuntimeWithNotifySshStateChanged } from './orca-runtime-notify-ssh-state-changed'
 
-export class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifySshStateChanged {
+export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifySshStateChanged {
   attachWindow(
     ...args: Parameters<RuntimeSessionGraphPromotion['attachWindow']>
   ): ReturnType<RuntimeSessionGraphPromotion['attachWindow']> {

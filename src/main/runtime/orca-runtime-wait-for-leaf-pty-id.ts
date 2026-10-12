@@ -1,8 +1,19 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeTerminalIdentityOwner } from './terminal/identity/terminal-identity-owner'
+import type { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
 import { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals } from './orca-runtime-restore-live-paired-renderer-session-owned-mobile-terminals'
 import type { TerminalOscLinkRange } from '../../shared/terminal-osc-link-ranges'
 
-export class OrcaRuntimeWithWaitForLeafPtyId extends OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals {
+export abstract class OrcaRuntimeWithWaitForLeafPtyId extends OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals {
+  protected abstract getLeafKey(
+    ...args: Parameters<RuntimeTerminalIdentityOwner['getLeafKey']>
+  ): ReturnType<RuntimeTerminalIdentityOwner['getLeafKey']>
+  protected abstract getAuthoritativeWindow(
+    ...args: Parameters<OrcaRuntimeWithResolveWaiter['getAuthoritativeWindow']>
+  ): ReturnType<OrcaRuntimeWithResolveWaiter['getAuthoritativeWindow']>
+  protected abstract issueHandle(
+    ...args: Parameters<RuntimeTerminalIdentityOwner['issueHandle']>
+  ): ReturnType<RuntimeTerminalIdentityOwner['issueHandle']>
+
   // Why: mobile may subscribe before the PTY spawns; wait for it so subscribe proceeds with phone-fit instead of a bare scrollback+end.
   waitForLeafPtyId(handle: string, timeoutMs = 10_000, signal?: AbortSignal): Promise<string> {
     const leaf = this.resolveLeafForHandle(handle)

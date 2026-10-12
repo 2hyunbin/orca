@@ -6,7 +6,6 @@
 src/main/runtime/orca-runtime-adopt-terminal-orphans-from-inventory.ts
 src/main/runtime/orca-runtime-apply-mobile-session-tab-navigation.ts
 src/main/runtime/orca-runtime-build-headless-mobile-session-browser-tabs.ts
-src/main/runtime/orca-runtime-build-pty-terminal-summary.ts
 src/main/runtime/orca-runtime-close-headless-mobile-terminal-tab.ts
 src/main/runtime/orca-runtime-close-mobile-session-tab.ts
 src/main/runtime/orca-runtime-close-structured-agent-session-tab.ts
@@ -29,14 +28,12 @@ src/main/runtime/orca-runtime-has-live-or-persisted-serve-or-ssh-owned-pty-bindi
 src/main/runtime/orca-runtime-has-recent-terminal-output-path.ts
 src/main/runtime/orca-runtime-linear-commands.ts
 src/main/runtime/orca-runtime-list-managed-worktrees.ts
-src/main/runtime/orca-runtime-notify-remote-terminal-view-presence-changed.ts
 src/main/runtime/orca-runtime-notify-ssh-state-changed.ts
 src/main/runtime/orca-runtime-on-client-disconnected.ts
 src/main/runtime/orca-runtime-perform-mobile-session-pty-records-refresh.ts
 src/main/runtime/orca-runtime-persist-headless-terminal-title.ts
 src/main/runtime/orca-runtime-preserved-branch-cleanup.ts
 src/main/runtime/orca-runtime-prune-mobile-session-tab-group-layout.ts
-src/main/runtime/orca-runtime-pty-foreground-process-reads.ts
 src/main/runtime/orca-runtime-publish-pty-backed-mobile-session-terminal.ts
 src/main/runtime/orca-runtime-reconcile-headless-mobile-session-browser-tabs.ts
 src/main/runtime/orca-runtime-record-agent-prompt-lifecycle-state.ts
@@ -64,6 +61,4 @@ src/main/runtime/orca-runtime-terminal-drivers.ts
 src/main/runtime/orca-runtime-touch-mobile-session-tabs-for-worktree.ts
 src/main/runtime/orca-runtime-transition-graph-reload-to-terminal-state.ts
 src/main/runtime/orca-runtime-verify-orchestration-compatibility-caller.ts
-src/main/runtime/orca-runtime-wait-for-leaf-pty-id.ts
-src/main/runtime/orca-runtime-wait-for-mobile-terminal-surface.ts
 src/main/runtime/orca-runtime-write-orchestration-pointer-pty.ts

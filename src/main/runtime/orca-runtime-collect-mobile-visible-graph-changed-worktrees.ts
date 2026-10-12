@@ -3,7 +3,7 @@ import type { RuntimeSessionWindowGraphHost } from './session-graph/session-wind
 import type { RuntimeSessionTabsInventory } from './session-tabs/session-tabs-inventory'
 import { OrcaRuntimeWithSyncWindowGraph } from './orca-runtime-sync-window-graph'
 
-export class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends OrcaRuntimeWithSyncWindowGraph {
+export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends OrcaRuntimeWithSyncWindowGraph {
   // Why: toMobileSessionTabsResult resolves handles/titles from this.tabs and
   // this.leaves, so any tab/leaf delta a graph sync installs can flip the
   // client payload (pending-handle → ready, tab title) with zero change to the

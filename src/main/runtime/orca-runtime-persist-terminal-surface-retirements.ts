@@ -1,7 +1,7 @@
 import type { RuntimeTerminalSurfaceRetirements } from './session-tabs/terminal-surface-retirements'
 import { OrcaRuntimeWithTouchMobileSessionTabsForWorktree } from './orca-runtime-touch-mobile-session-tabs-for-worktree'
 
-export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntimeWithTouchMobileSessionTabsForWorktree {
+export abstract class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntimeWithTouchMobileSessionTabsForWorktree {
   /**
    * Retires each surface in the in-memory session partition of the host that owns its worktree.
    * Why: an SSH pane's durable surface lives in that connection's partition; retiring it

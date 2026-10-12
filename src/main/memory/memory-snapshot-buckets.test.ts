@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
-import type { ProjectGroup } from '../../shared/project-group-types'
 import type { MemorySnapshotStore } from './collector'
 import { resolveWorktreeMemoryNames } from './memory-snapshot-buckets'
 
@@ -19,15 +18,15 @@ const folder: FolderWorkspace = {
   createdAt: 0,
   updatedAt: 0
 }
-const group = { id: 'documentation', name: 'Documentation' } as ProjectGroup
+const group = { id: 'documentation', name: 'Documentation' }
 
-function makeStore(): MemorySnapshotStore {
+function makeStore() {
   return {
     getRepo: vi.fn(),
     getWorktreeMeta: vi.fn(),
     getFolderWorkspace: vi.fn((id) => (id === folder.id ? folder : undefined)),
     getProjectGroups: vi.fn(() => [group])
-  }
+  } satisfies MemorySnapshotStore
 }
 
 describe('memory snapshot workspace names', () => {
@@ -75,5 +74,42 @@ describe('memory snapshot workspace names', () => {
       repoId: 'repo',
       repoName: 'repo'
     })
+  })
+
+  it('keeps a partial store failure at its first folder lookup', () => {
+    const reads: string[] = []
+    const store: MemorySnapshotStore = {
+      getRepo: vi.fn(),
+      getWorktreeMeta: vi.fn(),
+      get getFolderWorkspace() {
+        reads.push('folder')
+        return undefined
+      },
+      get getProjectGroups() {
+        reads.push('groups')
+        return undefined
+      }
+    }
+    expect(() => resolveWorktreeMemoryNames('folder:notes-folder', store)).toThrow(TypeError)
+    expect(reads).toEqual(['folder'])
+  })
+
+  it('keeps the folder reader receiver before a missing project-group lookup fails', () => {
+    const reads: string[] = []
+    const store: MemorySnapshotStore = {
+      getRepo: vi.fn(),
+      getWorktreeMeta: vi.fn(),
+      getFolderWorkspace(id) {
+        expect(this).toBe(store)
+        reads.push(id)
+        return folder
+      },
+      get getProjectGroups() {
+        reads.push('groups')
+        return undefined
+      }
+    }
+    expect(() => resolveWorktreeMemoryNames('folder:notes-folder', store)).toThrow(TypeError)
+    expect(reads).toEqual(['notes-folder', 'groups'])
   })
 })

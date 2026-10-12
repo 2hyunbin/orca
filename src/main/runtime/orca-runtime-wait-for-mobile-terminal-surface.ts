@@ -1,5 +1,7 @@
+import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from './orca-runtime-prune-mobile-session-tab-group-layout'
+import type { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals } from './orca-runtime-restore-live-paired-renderer-session-owned-mobile-terminals'
+import type { OrcaRuntimeWithResolveTerminalSplitSourceAuthority } from './orca-runtime-resolve-terminal-split-source-authority'
 /* eslint-disable unicorn/no-useless-spread */
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal } from './orca-runtime-create-runtime-owned-mobile-session-terminal'
 import type {
   RuntimeMobileSessionCreateTerminalResult,
@@ -14,7 +16,41 @@ import type {
   RuntimePtyWorktreeRecord
 } from './runtime-terminal-state-records'
 
-export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal {
+export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal {
+  protected abstract toMobileSessionTabsResult(
+    ...args: Parameters<
+      OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']
+    >
+  ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']>
+  protected abstract isReadyMobileTerminalSurface(
+    ...args: Parameters<
+      OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['isReadyMobileTerminalSurface']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['isReadyMobileTerminalSurface']
+  >
+  protected abstract resolveTerminalSplitSourceAuthority(
+    ...args: Parameters<
+      OrcaRuntimeWithResolveTerminalSplitSourceAuthority['resolveTerminalSplitSourceAuthority']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithResolveTerminalSplitSourceAuthority['resolveTerminalSplitSourceAuthority']
+  >
+  protected abstract findLiveRegisteredPtyForRendererTab(
+    ...args: Parameters<
+      OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['findLiveRegisteredPtyForRendererTab']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['findLiveRegisteredPtyForRendererTab']
+  >
+  protected abstract setPairedRendererSessionOwnership(
+    ...args: Parameters<
+      OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['setPairedRendererSessionOwnership']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['setPairedRendererSessionOwnership']
+  >
+
   protected waitForMobileTerminalSurface(
     worktreeId: string,
     parentTabId: string,

@@ -1,4 +1,8 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithGetRuntimeId } from './orca-runtime-get-runtime-id'
+import type { OrcaRuntimeWithStopTerminalsForWorktree } from './orca-runtime-stop-terminals-for-worktree'
+import type { OrcaRuntimeWithMarkPtyLivenessUnverifiable } from './orca-runtime-mark-pty-liveness-unverifiable'
+import type { OrcaRuntimeWithGetPtyRecordForPaneKey } from './orca-runtime-get-pty-record-for-pane-key'
+import type { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './orca-runtime-close-structured-agent-session-tab'
 import { OrcaRuntimeWithStateFields } from './orca-runtime-state-fields'
 import {
   persistClientHostedBrowserPages,
@@ -11,7 +15,6 @@ import type { ExecutionHostId } from '../../shared/execution-host'
 import { LOCAL_EXECUTION_HOST_ID, getRepoExecutionHostId } from '../../shared/execution-host'
 import type { IPtyProvider } from '../providers/types'
 import { killAllProcessesForWorktree } from './worktree-teardown'
-import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type { MemorySnapshot, StatsSummary } from '../../shared/process-stats-types'
 import { collectMemorySnapshot } from '../memory/collector'
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
@@ -22,7 +25,30 @@ import type { TerminalQuickCommandMutation } from '../../shared/terminal-quick-c
 import type { NativeChatSessionOptionSettingsMutation } from '../../shared/native-chat-session-options'
 import type { Automation } from '../../shared/automations-types'
 
-export class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithStateFields {
+export abstract class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithStateFields {
+  protected abstract getWorkspaceSessionForWorktree(
+    ...args: Parameters<OrcaRuntimeWithGetRuntimeId['getWorkspaceSessionForWorktree']>
+  ): ReturnType<OrcaRuntimeWithGetRuntimeId['getWorkspaceSessionForWorktree']>
+  protected abstract setWorkspaceSessionForWorktree(
+    ...args: Parameters<OrcaRuntimeWithGetRuntimeId['setWorkspaceSessionForWorktree']>
+  ): ReturnType<OrcaRuntimeWithGetRuntimeId['setWorkspaceSessionForWorktree']>
+  abstract stopTerminalsForWorktree(
+    ...args: Parameters<OrcaRuntimeWithStopTerminalsForWorktree['stopTerminalsForWorktree']>
+  ): ReturnType<OrcaRuntimeWithStopTerminalsForWorktree['stopTerminalsForWorktree']>
+  abstract getPtyLivenessVerdict(
+    ...args: Parameters<OrcaRuntimeWithMarkPtyLivenessUnverifiable['getPtyLivenessVerdict']>
+  ): ReturnType<OrcaRuntimeWithMarkPtyLivenessUnverifiable['getPtyLivenessVerdict']>
+  abstract forgetStructuredSessionMail(
+    ...args: Parameters<OrcaRuntimeWithGetPtyRecordForPaneKey['forgetStructuredSessionMail']>
+  ): ReturnType<OrcaRuntimeWithGetPtyRecordForPaneKey['forgetStructuredSessionMail']>
+  abstract retireStructuredAgentSessionTabFromSnapshot(
+    ...args: Parameters<
+      OrcaRuntimeWithCloseStructuredAgentSessionTab['retireStructuredAgentSessionTabFromSnapshot']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithCloseStructuredAgentSessionTab['retireStructuredAgentSessionTabFromSnapshot']
+  >
+
   get ptyForegroundProcessReads() {
     return this.ptyForegroundAgent.getReads()
   }
@@ -137,7 +163,7 @@ export class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithSta
       throw new Error(`PTY provider unavailable for worktree deletion: ${worktreeId}`)
     }
     const teardownResult = await killAllProcessesForWorktree(worktreeId, {
-      runtime: this as RuntimeCommandSurfaceHost<this>,
+      runtime: this,
       // Why: `repoId::path` ids repeat across hosts, so an unfenced sweep stops a same-id
       // workspace's terminals on another connection (mirrors the IPC removal path).
       resolvedWorktreeId: worktreeId,

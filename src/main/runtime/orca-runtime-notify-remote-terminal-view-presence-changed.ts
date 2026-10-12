@@ -1,12 +1,42 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import type { TerminalLayoutCommands } from './terminal/layout/terminal-layout-commands'
 import { OrcaRuntimeWithRecordAgentPromptLifecycleState } from './orca-runtime-record-agent-prompt-lifecycle-state'
 
 import type { RuntimeTerminalBufferSnapshot } from './runtime-terminal-state-records'
 import { AUTHORITATIVE_TERMINAL_SNAPSHOT_TIMEOUT_MS } from './orca-runtime-postlude'
 import { assertTerminalInputWithinLimitWithYield } from './terminal-send-payload'
+import type { OrcaRuntimeWithSerializeTerminalBufferFromAvailableState } from './orca-runtime-serialize-terminal-buffer-from-available-state'
+import type { OrcaRuntimeWithMarkPtyLivenessUnverifiable } from './orca-runtime-mark-pty-liveness-unverifiable'
+import type { OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission } from './orca-runtime-resolve-authoritative-terminal-wait-permission'
 
-export class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged extends OrcaRuntimeWithRecordAgentPromptLifecycleState {
+export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged extends OrcaRuntimeWithRecordAgentPromptLifecycleState {
+  protected abstract serializeTerminalBufferFromAvailableState(
+    ...args: Parameters<
+      OrcaRuntimeWithSerializeTerminalBufferFromAvailableState['serializeTerminalBufferFromAvailableState']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithSerializeTerminalBufferFromAvailableState['serializeTerminalBufferFromAvailableState']
+  >
+
+  protected abstract serializeProviderTerminalBuffer(
+    ...args: Parameters<
+      OrcaRuntimeWithSerializeTerminalBufferFromAvailableState['serializeProviderTerminalBuffer']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithSerializeTerminalBufferFromAvailableState['serializeProviderTerminalBuffer']
+  >
+
+  abstract getDriver(
+    ...args: Parameters<OrcaRuntimeWithMarkPtyLivenessUnverifiable['getDriver']>
+  ): ReturnType<OrcaRuntimeWithMarkPtyLivenessUnverifiable['getDriver']>
+
+  protected abstract writeTerminalInputChunks(
+    ...args: Parameters<
+      OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['writeTerminalInputChunks']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['writeTerminalInputChunks']
+  >
+
   protected notifyRemoteTerminalViewPresenceChanged(ptyId: string): void {
     try {
       this.onRemoteTerminalViewPresenceChanged?.(ptyId)

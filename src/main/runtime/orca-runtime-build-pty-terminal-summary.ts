@@ -1,4 +1,4 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { RuntimeTerminalIdentityOwner } from './terminal/identity/terminal-identity-owner'
 import { OrcaRuntimeWithGetPtyRecordForPaneKey } from './orca-runtime-get-pty-record-for-pane-key'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { runtimeWorktreeIdentityKey, type ResolvedWorktree } from './runtime-worktree-path-identity'
@@ -9,7 +9,11 @@ import { ptyHoldsRecordedSurface, type PtySurfaceTopology } from './pty-recorded
 import type { TerminalHandleRecord } from './runtime-terminal-contracts'
 import { readTerminalTail } from './terminal-tail-read'
 
-export class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPtyRecordForPaneKey {
+export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPtyRecordForPaneKey {
+  protected abstract issuePtyHandle(
+    ...args: Parameters<RuntimeTerminalIdentityOwner['issuePtyHandle']>
+  ): ReturnType<RuntimeTerminalIdentityOwner['issuePtyHandle']>
+
   protected ptySurfaceTopology(): PtySurfaceTopology {
     return {
       graphSequence: this.graphSequence,
@@ -46,7 +50,8 @@ export class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPt
       worktreePath: worktree?.path ?? '',
       branch: worktree?.branch ?? '',
       tabId: orphaned ? `pty:${pty.ptyId}` : pty.tabId!,
-      leafId: orphaned ? `pty:${pty.ptyId}` : pane.leafId,
+      // SAFETY: Erased narrowing preserves the existing failure when mutable PTY metadata disagrees.
+      leafId: orphaned ? `pty:${pty.ptyId}` : pane!.leafId,
       title,
       connected: pty.connected,
       writable: pty.connected,
