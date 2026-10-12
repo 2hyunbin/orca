@@ -61,11 +61,11 @@ export async function clearHeldWorktreeResumeRecords(
 /** A window's close (until PR 6d) leaves the records in the Store; they are cleared there. */
 export async function clearStoredWorktreeResumeRecords(
   store: RuntimeStore | null | undefined,
-  args: { worktreeId: string; hostId: ExecutionHostId; closedTabIds: readonly string[] }
+  args: { worktreeId: string; hostId: ExecutionHostId; closedTabIds: readonly string[] },
+  setSession: ((session: WorkspaceSessionState, hostId: ExecutionHostId) => void) | undefined
 ): Promise<void> {
   const { worktreeId, hostId, closedTabIds } = args
   const getSession = store?.getWorkspaceSession?.bind(store)
-  const setSession = store?.setWorkspaceSession?.bind(store)
   if (!getSession || !setSession || !store?.runDurableMutation) {
     throw new Error('workspace_session_unavailable')
   }

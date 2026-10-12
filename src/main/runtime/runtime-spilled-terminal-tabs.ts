@@ -17,7 +17,10 @@ import type { HolderStore, RuntimeWorkspaceLayoutWriter } from './runtime-worksp
 
 type SpillStore = Pick<HolderStore, 'getWorkspaceSession' | 'getWorkspaceSessionHostIds'>
 type HomeHostId = (key: string) => ExecutionHostId | null
-type HolderWriter = Pick<RuntimeWorkspaceLayoutWriter, 'noteRead' | 'savedSession' | 'write'>
+type HolderWriter = Pick<
+  RuntimeWorkspaceLayoutWriter,
+  'noteRead' | 'savedSession' | 'write' | 'dropSpillCopies'
+>
 
 /** Sorted, so the first partition's copy is the one folded. */
 function runtimePartitionHostIds(store: SpillStore): ExecutionHostId[] {
@@ -107,10 +110,6 @@ export function retireSpilledTerminalTabs(
     return
   }
   for (const [spillHostId, next] of stripped) {
-    try {
-      store.setWorkspaceSession(next, spillHostId)
-    } catch (error) {
-      console.error('[workspace-layout] could not retire spilled terminal tabs:', error)
-    }
+    writer.dropSpillCopies(spillHostId, next)
   }
 }

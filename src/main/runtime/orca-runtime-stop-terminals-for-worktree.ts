@@ -118,7 +118,13 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
   ): Promise<void> {
     const args = { worktreeId, hostId, closedTabIds }
     if (this.getAvailableAuthoritativeWindow()) {
-      return clearStoredWorktreeResumeRecords(this.store, args)
+      const store = this.store
+      // The window's close leaves the records in the Store (until PR 6d), so they are cleared there.
+      return clearStoredWorktreeResumeRecords(
+        store,
+        args,
+        store?.setWorkspaceSession ? (next, id) => store.setWorkspaceSession?.(next, id) : undefined
+      )
     }
     this.assertHeldTerminalsClosed(worktreeId)
     await clearHeldWorktreeResumeRecords(this.layoutHolder, this.store, args)

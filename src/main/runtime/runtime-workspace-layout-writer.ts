@@ -147,6 +147,15 @@ export class RuntimeWorkspaceLayoutWriter {
     }
   }
 
+  /** #18202: a `runtime:<env>` partition without the spill copies the local load folded in. */
+  dropSpillCopies(hostId: ExecutionHostId, session: WorkspaceSessionState): void {
+    try {
+      this.store()?.setWorkspaceSession(session, hostId)
+    } catch (error) {
+      console.error('[workspace-layout] could not retire spilled terminal tabs:', error)
+    }
+  }
+
   private logFailure(error: unknown): void {
     if (!this.failureLogged) {
       this.failureLogged = true
