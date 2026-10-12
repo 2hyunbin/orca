@@ -1,4 +1,4 @@
-import { spawn as spawnProcess, type ChildProcess, type SpawnOptions } from 'node:child_process'
+import { spawn as spawnProcess, type SpawnOptions } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
@@ -38,7 +38,11 @@ import { MacServeStartupAbortError } from './serve-signal-exit-diagnostic'
 import { superviseServeService } from './serve-supervised-service'
 import { isSupervisedSpawnHeld } from './serve-supervised-stop'
 import { openServeBundlePark } from './serve-bundle-park'
-import { redactingSpawn, shouldRedactSupervisedStdout } from './serve-pairing-redaction'
+import {
+  redactingSpawn,
+  shouldRedactSupervisedStdout,
+  type ServeSpawnChild
+} from './serve-pairing-redaction'
 
 const USER_NAMESPACE_PROBE_TIMEOUT_MS = 2_000
 const STARTUP_ABORT_MS = 30_000
@@ -230,10 +234,9 @@ function spawnElectronServe(
     ...getExecutableSpawnOptions(executable),
     env: childEnv
   }
-  const spawnServeChild: (program: string, args: string[], options: SpawnOptions) => ChildProcess =
-    shouldRedactSupervisedStdout(args.supervise === true)
-      ? redactingSpawn(spawnProcess)
-      : spawnProcess
+  const spawnServeChild: ServeSpawnChild = shouldRedactSupervisedStdout(args.supervise === true)
+    ? redactingSpawn(spawnProcess)
+    : spawnProcess
   const interruptedHandoff = handoffPath ? readServeUpdateHandoffSync(handoffPath) : null
   if (interruptedHandoff?.phase === 'install-requested') {
     // Why: the node-mode CLI is not an NSRunningApplication, so it can retain launchd ownership while ShipIt swaps the app.

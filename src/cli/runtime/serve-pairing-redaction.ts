@@ -1,4 +1,4 @@
-import type { ChildProcess, SpawnOptions } from 'node:child_process'
+import type { superviseForegroundServe } from './serve-update-supervisor'
 import { createInterface } from 'node:readline'
 
 export const PAIRING_HIDDEN_LINE =
@@ -37,12 +37,12 @@ export function shouldRedactSupervisedStdout(
   return supervise && !stdoutIsTty
 }
 
+export type ServeSpawnChild = Parameters<typeof superviseForegroundServe>[0]['spawnChild']
+
 /** Pipes the child's stdout through the redactor; stdio slots other than stdout are kept. */
-export function redactingSpawn<TOptions extends SpawnOptions>(
-  spawn: (program: string, args: string[], options: TOptions) => ChildProcess
-): (program: string, args: string[], options: TOptions) => ChildProcess {
+export function redactingSpawn(spawn: ServeSpawnChild): ServeSpawnChild {
   return (program, args, options) => {
-    const stdio = Array.isArray(options.stdio)
+    const stdio: Parameters<ServeSpawnChild>[2]['stdio'] = Array.isArray(options.stdio)
       ? options.stdio.map((slot, index) => (index === 1 ? 'pipe' : slot))
       : ['inherit', 'pipe', 'inherit']
     const child = spawn(program, args, { ...options, stdio })
