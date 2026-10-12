@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { NativeChatBlock, NativeChatMessage } from '../../../../shared/native-chat-types'
 import { foldToolMessages } from './native-chat-tool-fold'
 import { buildDiffSummaries, buildEditCards } from './native-chat-edit-cards'
-import { nativeChatTurnDiffs } from './native-chat-turn-diffs'
+import { nativeChatTurnDiffEditFile, nativeChatTurnDiffs } from './native-chat-turn-diffs'
 
 function diff(id: string, path: string, patch = '@@ -1 +1 @@\n-old\n+new'): NativeChatMessage {
   return {
@@ -33,6 +33,11 @@ describe('turn diff rollups', () => {
       added: 2,
       target: { messageId: 'first', editKey: 'Diff:1', fileIndex: 0 }
     })
+    expect(turn.files[0]?.edits).toHaveLength(2)
+    expect(turn.files[0]?.edits.map(nativeChatTurnDiffEditFile)).toMatchObject([
+      { path: 'a.ts', added: 1, removed: 1 },
+      { path: 'a.ts', added: 1, removed: 1 }
+    ])
   })
 
   it('folds edits through chained renames into the destination and counts a deletion once', () => {
@@ -61,6 +66,30 @@ describe('turn diff rollups', () => {
     expect(turn.files.map((file) => file.path)).toEqual(['final.ts', 'gone.ts'])
     expect(turn).toMatchObject({ added: 1, removed: 2 })
     expect(turn.files[0]?.target.messageId).toBe('rename-again')
+    expect(turn.files[0]?.edits.map((edit) => edit.target.messageId)).toEqual([
+      'edit',
+      'rename',
+      'rename-again'
+    ])
+  })
+
+  it('keeps every patch in order when a rename joins two already edited paths', () => {
+    const messages = [
+      diff('destination', 'new.ts'),
+      diff('source', 'old.ts'),
+      diff('rename', 'old.ts', 'diff --git a/old.ts b/new.ts\nrename from old.ts\nrename to new.ts')
+    ]
+    const turn = nativeChatTurnDiffs(
+      messages,
+      messages.map(() => 'turn')
+    ).get('turn')!
+    expect(turn.files).toHaveLength(1)
+    expect(turn.files[0]?.edits.map((edit) => edit.target.messageId)).toEqual([
+      'destination',
+      'source',
+      'rename'
+    ])
+    expect(turn).toMatchObject({ added: 2, removed: 2 })
   })
 
   it('keeps turns separate and excludes history without a known boundary', () => {

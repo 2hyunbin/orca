@@ -18273,7 +18273,8 @@
         "one": "1 fichier modifié",
         "many": "{{count}} a modifié les fichiers",
         "partial": "Différence partielle",
-        "recorded": "Totaux des modifications enregistrées à ce tour."
+        "showDiff": "Afficher les différences",
+        "hideDiff": "Masquer les différences"
       },
       "receipt": {
         "unavailable": "Réponse sélectionnée indisponible",

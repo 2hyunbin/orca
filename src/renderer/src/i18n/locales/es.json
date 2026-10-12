@@ -18304,7 +18304,8 @@
         "one": "1 archivo modificado",
         "many": "{{count}} archivos modificados",
         "partial": "Diff parcial",
-        "recorded": "Totales de las ediciones registradas en este turno."
+        "showDiff": "Mostrar diferencias",
+        "hideDiff": "Ocultar diferencias"
       },
       "notices": {
         "contextCleared": "Contexto borrado",
