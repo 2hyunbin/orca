@@ -1,74 +1,56 @@
-name: Windows WSL terminal E2E
-
+name: Windows inline image verification
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Commit to validate
+        description: Exact image candidate to validate
         type: string
-        required: false
-  workflow_call:
-    inputs:
-      ref:
-        type: string
-        required: false
-
+        required: true
 permissions:
   contents: read
-
-concurrency:
-  group: windows-wsl-e2e-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  wsl-terminal:
+  images:
     runs-on: windows-2022
     timeout-minutes: 30
     env:
       NODE_OPTIONS: --max-old-space-size=4096
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_E2E_HEADLESS: '1'
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - uses: ./.github/actions/setup-wsl-test-runtime
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: electron
-      - name: Build relay and Electron
+      - name: Build current application and CLI
         run: |
-          pnpm run build:relay
-          if ($LASTEXITCODE -ne 0) { throw 'Relay build failed' }
           pnpm exec electron-vite build --mode e2e
           if ($LASTEXITCODE -ne 0) { throw 'Electron build failed' }
-      - name: Exercise real WSL launch and paste
+          pnpm run build:cli
+          if ($LASTEXITCODE -ne 0) { throw 'CLI build failed' }
+      - name: Validate native and WSL images
         env:
           SKIP_BUILD: '1'
           ORCA_E2E_FORWARD_APP_LOGS: '1'
-          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/wsl-results.json
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/images.json
         run: >-
           pnpm exec playwright test
-          tests/e2e/golden-tab-bar-agent-launch.spec.ts
-          tests/e2e/terminal-windows-shell-paste-ownership.spec.ts
+          tests/e2e/terminal-kitty-placeholders.spec.ts
+          tests/e2e/terminal-inline-images-windows.spec.ts
           --config tests/playwright.config.ts
           --project=electron-headless
-          --grep "WSL"
-          --repeat-each=3
           --workers=1
           --reporter=list,json
-      - name: Require all nine WSL executions
+      - name: Require all fourteen executions
         if: always()
-        run: node config/scripts/verify-wsl-e2e-participation.mjs test-results/wsl-results.json
-      - name: Upload WSL participation report
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: windows-wsl-participation-report
-          path: test-results/wsl-results.json
-          retention-days: 3
+        run: >-
+          node -e "const fs=require('node:fs');const r=JSON.parse(fs.readFileSync('test-results/images.json','utf8'));if(r.stats.expected!==14||r.stats.unexpected||r.stats.skipped||r.stats.flaky)throw Error(JSON.stringify(r.stats));console.log(r.stats)"
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: always()
         with:
-          name: windows-wsl-terminal-traces
+          name: windows-inline-image-evidence
           path: test-results/
           retention-days: 7
