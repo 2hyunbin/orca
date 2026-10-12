@@ -66,6 +66,8 @@ export type HostServerTerminalVerdict = {
   count: number
   /** Counted only by the host-wide census: another desktop or session runs them. */
   elsewhere?: boolean
+  /** COMPAT(legacy-relay-bridge): the host converts anyway and the bridge serves them. */
+  bridged?: true
 }
 
 export type HostServerOnConnectDeps = {
@@ -202,7 +204,7 @@ async function convertHost(
 ): Promise<HostServerOnConnectResult> {
   try {
     const terminals = options.checkTerminals ? await deps.relayTerminals(target) : null
-    if (terminals && terminals.verdict !== 'exited') {
+    if (terminals && terminals.verdict !== 'exited' && !terminals.bridged) {
       // Why unverifiable too: loss of contact is never evidence that a relay terminal exited.
       return {
         route: 'relay',

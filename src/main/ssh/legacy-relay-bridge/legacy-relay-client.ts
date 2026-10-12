@@ -1,6 +1,6 @@
 /**
  * The minimum relay protocol needed to drive terminals an already-running older relay holds.
- * COMPAT(legacy-relay-bridge): remove after 2026-11-15.
+ * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  *
  * The old relay compares bundle hashes exactly, so this build's handshake is refused. Its own
  * `relay.js --connect`, run from its own version directory, presents its own hash, so any later
@@ -26,14 +26,11 @@ const OWNER_RETRY_BUDGET_MS = 35_000
 export type LegacyRelayOwnerClaim = { ownerGeneration: number; ownerLease: string }
 
 export type LegacyRelayClientOptions = {
-  /** `cd <relay-dir> && <node> relay.js --connect …`, already built for this endpoint. */
-  connectCommand: string
-  /** The version the old relay's handshake answers with (`<relay-dir>/.version`). */
-  serverBuildId: string
   clientInstanceId: string
   /** A claim this client held before a drop, so the owner role resumes without waiting. */
   resume?: LegacyRelayOwnerClaim | null
-  openTransport: (command: string) => Promise<MultiplexerTransport>
+  /** Runs the relay's own `relay.js --connect` and hands back the stream after its sentinel. */
+  openTransport: () => Promise<MultiplexerTransport>
   /** Test seam for the owner-claim retry wait. */
   sleep?: (ms: number) => Promise<void>
 }
@@ -60,14 +57,14 @@ function errorCode(error: unknown): unknown {
   return typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
 }
 
-function parseOwnerGrant(value: unknown, serverBuildId: string): LegacyRelayOwnerClaim {
+/** Any build's grant is accepted: the bridge talks to whichever relay is already there. */
+function parseOwnerGrant(value: unknown): LegacyRelayOwnerClaim {
   const grant = typeof value === 'object' && value !== null ? value : {}
   const field = (name: string): unknown => (name in grant ? Reflect.get(grant, name) : undefined)
   const ownerGeneration = field('ownerGeneration')
   const ownerLease = field('ownerLease')
   if (
     field('protocolVersion') !== PROTOCOL_VERSION ||
-    field('serverBuildId') !== serverBuildId ||
     field('role') !== 'session-owner' ||
     typeof ownerGeneration !== 'number' ||
     !Number.isSafeInteger(ownerGeneration) ||
@@ -119,7 +116,7 @@ export class LegacyRelayClient {
   }
 
   static async open(options: LegacyRelayClientOptions): Promise<LegacyRelayClient> {
-    const mux = new SshChannelMultiplexer(await options.openTransport(options.connectCommand))
+    const mux = new SshChannelMultiplexer(await options.openTransport())
     try {
       const claim = await claimOwner(mux, options)
       return new LegacyRelayClient(mux, claim)
@@ -222,7 +219,7 @@ async function claimOwner(
         },
         { timeoutMs: OPEN_CLIENT_TIMEOUT_MS }
       )
-      return parseOwnerGrant(grant, options.serverBuildId)
+      return parseOwnerGrant(grant)
     } catch (error) {
       const code = errorCode(error)
       if (code === METHOD_NOT_FOUND) {

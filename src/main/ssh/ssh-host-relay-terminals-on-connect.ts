@@ -29,13 +29,17 @@ export async function relayTerminalsOnConnect(args: {
   const proof = await assessOrcadMigrationTerminals(args.store, args.targetId, async () =>
     hostTerminalProofFromCensus(await args.censusHost())
   )
-  return proof.verdict === 'exited'
-    ? { verdict: 'exited', count: 0 }
-    : {
-        verdict: proof.verdict,
-        count: proof.ptyIds.length || (proof.hostTerminals ?? 0),
-        ...(terminalsRunElsewhere(proof) ? { elsewhere: true } : {})
-      }
+  if (proof.verdict === 'exited') {
+    return { verdict: 'exited', count: 0 }
+  }
+  if (proof.verdict === 'bridged') {
+    return { verdict: proof.relayVerdict, count: proof.hostTerminals, bridged: true }
+  }
+  return {
+    verdict: proof.verdict,
+    count: proof.ptyIds.length || (proof.hostTerminals ?? 0),
+    ...(terminalsRunElsewhere(proof) ? { elsewhere: true } : {})
+  }
 }
 
 /** Only a listing that found no endpoint, or only idle ones, proves exit; `unenumerable` does not. */

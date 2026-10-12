@@ -78,7 +78,12 @@ export async function runOrcadDeltaMove(args: OrcadDeltaMoveArgs): Promise<Orcad
   }
   const terminals = await assessOrcadMigrationTerminals(store, target.id, args.censusHost)
   if (terminals.verdict !== 'exited') {
-    return refuse('orcad_migration_terminals', terminals.reason)
+    return refuse(
+      'orcad_migration_terminals',
+      terminals.verdict === 'bridged'
+        ? "the host's relays still run or may run terminals"
+        : terminals.reason
+    )
   }
   retireProvenExitedLeases(store, target.id, terminals)
   return args.runTargetLifecycle(target.id, async () => {
