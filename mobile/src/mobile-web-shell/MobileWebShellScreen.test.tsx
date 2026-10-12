@@ -50,6 +50,21 @@ import { MobileWebShellScreen } from './MobileWebShellScreen'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 import type { ReactTestInstance, ReactTestRenderer } from 'react-test-renderer'
 
+const fetching = (receivedBytes: number, totalBytes: number): MobileWebShellSessionState => ({
+  kind: 'fetching',
+  completedAssets: 0,
+  totalAssets: 128,
+  receivedBytes,
+  totalBytes
+})
+
+/** The width the bar's fill is given, which is its style's second entry. */
+function fillWidthOf(tree: ReactTestRenderer): unknown {
+  const bar = tree.root.find((node) => node.props.testID === 'mobile-web-shell-progress-bar')
+  const [fill] = bar.findAll((node) => node !== bar && String(node.type) === 'View')
+  return fill.props.style[1].width
+}
+
 const renderScreen = (state: MobileWebShellSessionState): Promise<ReactTestRenderer> =>
   mountScreen(MobileWebShellScreen, dependencies, state)
 
@@ -141,7 +156,20 @@ describe('the hybrid shell screen', () => {
     expect(bar).toHaveLength(1)
     expect(bar[0].props.accessibilityRole).toBe('progressbar')
     expect(bar[0].props.accessibilityValue).toEqual({ min: 0, max: 100, now: 25 })
+    expect(fillWidthOf(tree)).toBe('25%')
     expect(byName(tree, 'ActivityIndicator')).toEqual([])
+  })
+
+  it('fills the bar to exactly what the caption counts, with no easing behind it', async () => {
+    const tree = await renderScreen(fetching(2_020_592, 8_082_368))
+    expect(fillWidthOf(tree)).toBe('25%')
+    await updateScreen(tree, fetching(8_000_000, 8_082_368))
+    expect(textOf(tree)).toContain('8.0 of 8.1 MB')
+    expect(fillWidthOf(tree)).toBe(`${(8_000_000 / 8_082_368) * 100}%`)
+  })
+
+  it('caps the fill at a full bar when more bytes arrive than the total named', async () => {
+    expect(fillWidthOf(await renderScreen(fetching(9_000_000, 8_082_368)))).toBe('100%')
   })
 
   it('reads an empty download as no progress rather than dividing by zero', async () => {
@@ -154,6 +182,7 @@ describe('the hybrid shell screen', () => {
     })
     const bar = tree.root.findAll((node) => node.props.testID === 'mobile-web-shell-progress-bar')
     expect(bar[0].props.accessibilityValue).toEqual({ min: 0, max: 100, now: 0 })
+    expect(fillWidthOf(tree)).toBe('0%')
     expect(textOf(tree)).toContain('0.0 of 0.0 MB')
   })
 
