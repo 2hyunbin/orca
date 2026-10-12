@@ -78,6 +78,7 @@ export type DaemonIdleRetirementResult =
   | { state: 'unverifiable' }
 
 export abstract class DaemonPtyRuntimeState {
+  readonly windowsAdministrator?: true
   readonly protocolVersion: number
   protected socketPath: string
   protected tokenPath: string

@@ -79,6 +79,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const fingerprint = windowsCliLauncherFingerprint(
     [
       join(crateRoot, 'src', 'main.rs'),
+      join(crateRoot, 'src', 'terminal_host.rs'),
+      join(crateRoot, 'src', 'terminal_host_security.rs'),
+      join(crateRoot, 'src', 'terminal_host_process.rs'),
       join(crateRoot, 'build.rs'),
       manifestPath,
       join(crateRoot, 'app.manifest'),

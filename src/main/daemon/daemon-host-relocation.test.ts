@@ -751,6 +751,23 @@ describe('pruneOldDaemonHosts', () => {
 })
 
 describe('collectPinnedDaemonVersions', () => {
+  it('also pins administrator hosts and refuses pruning when that inventory is unreadable', () => {
+    const runtimeDir = join(userDataDir, 'daemon')
+    const adminDir = join(userDataDir, 'daemon-admin')
+    mkdirSync(runtimeDir, { recursive: true })
+    mkdirSync(adminDir, { recursive: true })
+    writeFileSync(
+      join(adminDir, 'daemon-v45.pid'),
+      JSON.stringify({ pid: process.pid, appVersion: '7.0.0' })
+    )
+    expect(collectPinnedDaemonVersions(runtimeDir, [adminDir])).toEqual({
+      status: 'complete',
+      versionLiveness: new Map([['7.0.0', { status: 'live' }]])
+    })
+    expect(collectPinnedDaemonVersions(runtimeDir, [join(userDataDir, 'unreadable')]).status).toBe(
+      'unverifiable'
+    )
+  })
   it('pins the app version of a live daemon pid file and skips dead ones', () => {
     const runtimeDir = join(userDataDir, 'daemon')
     mkdirSync(runtimeDir, { recursive: true })

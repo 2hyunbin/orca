@@ -21,7 +21,8 @@ import {
 import {
   getTerminalRightClickToPasteSearchEntry,
   getTerminalWindowsPowershellImplementationSearchEntry,
-  getTerminalWindowsShellSearchEntry
+  getTerminalWindowsShellSearchEntry,
+  getTerminalWindowsAdministratorSearchEntry
 } from './terminal-windows-search'
 import { ManageSessionsSection } from './ManageSessionsSection'
 import { TerminalAdvancedSection } from './TerminalAdvancedSection'
@@ -301,12 +302,16 @@ export function TerminalPane({
   const visibleSections = [
     defaultShellSection,
     showWindowsHostSettings &&
-    matchesSettingsSearch(searchQuery, getTerminalWindowsShellSearchEntry()) ? (
+    matchesSettingsSearch(searchQuery, [
+      ...getTerminalWindowsShellSearchEntry(),
+      ...getTerminalWindowsAdministratorSearchEntry()
+    ]) ? (
       <TerminalWindowsShellSection
         key="windows-shell"
         updateSettings={updateSettings}
         windowsShell={windowsShell}
         gitBashAvailable={gitBashAvailable}
+        administrator={settings.terminalWindowsPowerShellAdministrator}
       />
     ) : null,
     matchesSettingsSearch(searchQuery, getTerminalRenderingSearchEntries()) ? (

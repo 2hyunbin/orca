@@ -8,6 +8,17 @@ import {
 import { matchesSettingsSearch } from './settings-search'
 
 describe('getTerminalPaneSearchEntries', () => {
+  it('finds administrator PowerShell on a Windows execution host only', () => {
+    const windows = getTerminalPaneSearchEntries({
+      isWindows: false,
+      isWindowsTerminalHost: true,
+      isMac: true
+    })
+    const unix = getTerminalPaneSearchEntries({ isWindows: false, isMac: true })
+    expect(matchesSettingsSearch('administrator', windows)).toBe(true)
+    expect(matchesSettingsSearch('uac', windows)).toBe(true)
+    expect(matchesSettingsSearch('administrator', unix)).toBe(false)
+  })
   it('includes the Windows right-click setting on Windows', () => {
     const entries = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })
     expect(entries.some((entry) => entry.title === 'Right-click to paste')).toBe(true)

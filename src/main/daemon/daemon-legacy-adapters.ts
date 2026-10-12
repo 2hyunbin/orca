@@ -7,6 +7,7 @@ import { parseDaemonPidFile } from './daemon-pid-file-parse'
 import { DaemonPtyAdapter } from './daemon-pty-adapter'
 import { getDaemonPidPath, getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
 import { PREVIOUS_DAEMON_PROTOCOL_VERSIONS } from './types'
+import { inspectProcessSignal } from './daemon-process-inspection'
 
 function legacyDaemonProcessMayBeAlive(runtimeDir: string, protocolVersion: number): boolean {
   try {
@@ -14,12 +15,11 @@ function legacyDaemonProcessMayBeAlive(runtimeDir: string, protocolVersion: numb
       readFileSync(getDaemonPidPath(runtimeDir, protocolVersion), 'utf8')
     )
     if (!parsed) {
-      return false
+      return true
     }
-    process.kill(parsed.pid, 0)
-    return true
-  } catch {
-    return false
+    return inspectProcessSignal(parsed.pid) !== 'missing'
+  } catch (error) {
+    return !(error instanceof Error && 'code' in error && error.code === 'ENOENT')
   }
 }
 

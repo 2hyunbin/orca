@@ -20,6 +20,7 @@ import { DaemonRouterRetirement } from './daemon-router-retirement'
 import { routeSpawnOrHold } from './daemon-router-newer-daemon-hold'
 import type { WriteSettlement } from '../../shared/pty-write-settlement'
 import type { TerminalOscColorQueryReplyColors } from '../../shared/terminal-osc-color-reply'
+import { freshDaemonSpawnAdapter } from './windows-admin-spawn-routing'
 
 export class DaemonPtyRouter implements IPtyProvider {
   private current: DaemonPtyAdapter
@@ -60,7 +61,8 @@ export class DaemonPtyRouter implements IPtyProvider {
         return await this.ownerResolver.spawnAttachOnly({ ...opts, sessionId: opts.sessionId })
       }
       const adapter = opts.sessionId ? this.sessionAdapters.get(opts.sessionId) : undefined
-      const target = await routeSpawnOrHold(opts, adapter, this.current, this.ownerResolver)
+      const freshTarget = freshDaemonSpawnAdapter(opts, this.current, this.legacy, adapter)
+      const target = await routeSpawnOrHold(opts, adapter, freshTarget, this.ownerResolver)
       const result = await target.spawn(opts)
       // Why: the adapter filters intentional recovery exits and canonical-ID races before publishing proof.
       if (!result.exitedBeforeSpawnReply) {

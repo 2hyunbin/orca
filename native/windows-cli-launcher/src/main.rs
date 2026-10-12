@@ -20,11 +20,20 @@ use std::process::{exit, Command};
 
 const SERVER_CONFIG_FILENAME: &str = "orca-launcher.cfg";
 
+#[cfg(windows)]
+mod terminal_host;
+#[cfg(windows)]
+mod terminal_host_security;
+#[cfg(windows)]
+mod terminal_host_process;
+
 fn main() {
     let launcher = match env::current_exe() {
         Ok(path) => path,
         Err(error) => fail(&format!("Unable to start the Orca CLI: {error}")),
     };
+    #[cfg(windows)]
+    terminal_host::run_if_requested(&launcher);
     if let Some(config) = launcher
         .parent()
         .map(|directory| directory.join(SERVER_CONFIG_FILENAME))

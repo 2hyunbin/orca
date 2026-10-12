@@ -40,6 +40,10 @@ import {
   createSeveredDaemonController,
   hasSeveredDaemonBeenReplaced
 } from './daemon-severed-restart'
+import {
+  getWindowsAdminDaemonRuntimeDir,
+  WindowsAdminPtyAdapter
+} from './windows-admin-pty-adapter'
 
 // Why: daemon init runs concurrent with window load, so an in-process t timestamp (not harness stderr timing) measures cold-start.
 function logDaemonMilestone(event: string, details: Record<string, unknown> = {}): void {
@@ -71,7 +75,12 @@ export async function initDaemonPtyProvider(
   // Why: assign the module-level spawner/adapter only after both succeed, so a failed ensureRunning() leaves no stale spawner.
   const info = await newSpawner.ensureRunning()
   // Why: reclaim superseded daemon-host copies on EVERY launch (spawns are rare), keeping current + live-daemon-pinned versions.
-  pruneOldDaemonHosts(collectPinnedDaemonVersions(runtimeDir))
+  pruneOldDaemonHosts(
+    collectPinnedDaemonVersions(
+      runtimeDir,
+      process.platform === 'win32' ? [getWindowsAdminDaemonRuntimeDir()] : []
+    )
+  )
   const launchMode = newSpawner.getHandle()?.mode
   const quarantine = newSpawner.getHandle()?.quarantine
   logDaemonMilestone('daemon-current-ready')
@@ -132,6 +141,11 @@ export async function initDaemonPtyProvider(
       discoverNewerProtocolHolds(runtimeDir)
     ])
     legacyAdapters = discoveredLegacyAdapters
+    if (process.platform === 'win32') {
+      const adminRuntimeDir = getWindowsAdminDaemonRuntimeDir()
+      legacyAdapters.push(...(await createLegacyDaemonAdapters(adminRuntimeDir, getHistoryDir())))
+      legacyAdapters.push(new WindowsAdminPtyAdapter(adminRuntimeDir))
+    }
     routedAdapter =
       launchMode === 'degraded-new-pty-fallback'
         ? new DegradedDaemonPtyProvider({

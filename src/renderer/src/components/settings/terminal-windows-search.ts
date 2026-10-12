@@ -2,6 +2,29 @@ import { translate } from '@/i18n/i18n'
 import { translateSearchKeyword } from './settings-search-keywords'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 
+export const getTerminalWindowsAdministratorSearchEntry = createLocalizedCatalog(() => [
+  {
+    title: translate(
+      'settings.terminal.windows.administrator',
+      'Run new PowerShell terminals as administrator'
+    ),
+    description: translate(
+      'settings.terminal.windows.administratorDescription',
+      'Windows asks for approval when the administrator terminal host starts. Existing terminals keep their permissions. Applies to PowerShell on this host; Orca does not need administrator permissions.'
+    ),
+    keywords: [
+      'terminal',
+      'windows',
+      'powershell',
+      'admin',
+      'administrator',
+      'elevated',
+      'permissions',
+      'uac'
+    ]
+  }
+])
+
 export const getTerminalWindowsShellSearchEntry = createLocalizedCatalog(() => [
   {
     title: translate(
