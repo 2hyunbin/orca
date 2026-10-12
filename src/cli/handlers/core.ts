@@ -4,6 +4,7 @@ import { formatCliStatus, formatStatus, printResult } from '../format'
 import { RuntimeClientError, serveOrcaApp } from '../runtime-client'
 import { stripElectronRunAsNode } from '../runtime/launch'
 import { resolveCliStatusCaller } from '../runtime/status-caller'
+import { getServeSuperviseValidationError } from '../runtime/serve-supervised-service'
 import { getServeOptionValidationError } from '../../shared/serve-option-validation'
 
 function envRecord(): Record<string, string> {
@@ -104,6 +105,12 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
     const mobilePairing = flags.get('mobile-pairing') === true
     const grantDesktopControl = flags.get('grant-desktop-control') === true
     const recipeJson = flags.get('recipe-json') === true
+    const force = flags.get('force') === true
+    const supervise = flags.get('supervise') === true
+    const superviseError = getServeSuperviseValidationError({ supervise, recipeJson })
+    if (superviseError) {
+      throw new RuntimeClientError('invalid_argument', superviseError)
+    }
     const validationError = getServeOptionValidationError({
       noPairing,
       mobilePairing,
@@ -124,7 +131,9 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
       mobilePairing,
       grantDesktopControl,
       recipeJson,
-      projectRoot
+      projectRoot,
+      ...(force ? { force: true } : {}),
+      ...(supervise ? { supervise: true } : {})
     })
     process.exitCode = exitCode
   },

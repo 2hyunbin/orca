@@ -1,4 +1,5 @@
 import { MOBILE_RUNTIME_CLIENT_CAPABILITIES } from '../../../mobile/src/transport/mobile-runtime-client-capabilities'
+import { pairedRuntimeConnectionFromOffer } from '../../../src/shared/paired-runtime-connection'
 import { decodePairingOffer, type PairingOffer } from '../../../src/shared/pairing'
 import {
   sendRemoteRuntimeRequest,
@@ -8,6 +9,7 @@ import {
 } from '../../../src/shared/remote-runtime-client'
 import type { RuntimeRpcResponse } from '../../../src/shared/runtime-rpc-envelope'
 import { openRemoteRuntimePassthroughSocket } from '../../../src/shared/remote-runtime-passthrough-socket'
+import type { RuntimeCapability } from '../../../src/shared/protocol-version'
 import {
   decodeBrowserScreencastFrame,
   type BrowserScreencastFrame
@@ -62,12 +64,17 @@ export type PairedMobileSocket = {
   close: () => void
 }
 
-export function pairMobileClient(offer: RuntimeDesktopPairingOffer): PairedMobileClient {
+/** `capabilities` defaults to this build's phone; a mixed-version test passes a released phone's. */
+export function pairMobileClient(
+  offer: RuntimeDesktopPairingOffer,
+  capabilities: readonly RuntimeCapability[] = MOBILE_RUNTIME_CLIENT_CAPABILITIES
+): PairedMobileClient {
   const pairing = decodePairingOffer(offer.pairingUrl)
   // Why: a runtime-scope token skips the mobile allowlist, so the oracle would not be a phone.
   if (pairing.scope !== 'mobile') {
     throw new Error(`Expected a mobile-scoped pairing offer, got scope ${String(pairing.scope)}`)
   }
+  const connection = pairedRuntimeConnectionFromOffer(pairing)
   const open = new Set<{ close: () => void }>()
   const request = <T>(
     method: string,
@@ -75,13 +82,13 @@ export function pairMobileClient(offer: RuntimeDesktopPairingOffer): PairedMobil
     timeoutMs = DEFAULT_TIMEOUT_MS
   ): Promise<RuntimeRpcResponse<T>> =>
     sendRemoteRuntimeRequest<T>(
-      pairing,
+      connection,
       method,
       params,
       timeoutMs,
       undefined,
       undefined,
-      MOBILE_RUNTIME_CLIENT_CAPABILITIES
+      capabilities
     )
   return {
     request,
@@ -94,18 +101,18 @@ export function pairMobileClient(offer: RuntimeDesktopPairingOffer): PairedMobil
     },
     subscribe: async (method, params, callbacks, timeoutMs = DEFAULT_TIMEOUT_MS) => {
       const subscription = await subscribeRemoteRuntimeRequest(
-        pairing,
+        connection,
         method,
         params,
         timeoutMs,
         callbacks,
-        { clientCapabilities: MOBILE_RUNTIME_CLIENT_CAPABILITIES }
+        { clientCapabilities: capabilities }
       )
       open.add(subscription)
       return subscription
     },
     openSocket: async () => {
-      const socket = await openPairedSocket(pairing)
+      const socket = await openPairedSocket(pairing, capabilities)
       open.add(socket)
       return socket
     },
@@ -118,15 +125,18 @@ export function pairMobileClient(offer: RuntimeDesktopPairingOffer): PairedMobil
   }
 }
 
-/** A persistent socket for `pairing` (any scope), speaking the phone's capabilities. */
-export async function openPairedSocket(pairing: PairingOffer): Promise<PairedMobileSocket> {
+/** A persistent socket for `pairing` (any scope), speaking the phone's capabilities by default. */
+export async function openPairedSocket(
+  pairing: PairingOffer,
+  capabilities: readonly RuntimeCapability[] = MOBILE_RUNTIME_CLIENT_CAPABILITIES
+): Promise<PairedMobileSocket> {
   const frames: PairedMobileSocket['frames'] = []
   const output = new Map<number, string>()
   const screencastFrames: BrowserScreencastFrame[] = []
   const waiters = new Set<() => void>()
   const socket = await openRemoteRuntimePassthroughSocket(
-    pairing,
-    MOBILE_RUNTIME_CLIENT_CAPABILITIES,
+    pairedRuntimeConnectionFromOffer(pairing),
+    capabilities,
     {
       onText: (plaintext) => frames.push(JSON.parse(plaintext)),
       onBinary: (bytes) => {
