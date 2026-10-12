@@ -9048,7 +9048,9 @@
           "f9a9cf6928": "L'autorisation d'accès au micro est requise avant d'activer la dictée vocale.",
           "1eac933202": "Panneau Confidentialité et sécurité de macOS ouvert. Réactivez la dictée après avoir accordé l'accès.",
           "cd9fe37556": "Autorisation d'accès au micro accordée",
-          "openAiKeyName": "Votre clé de transcription OpenAI"
+          "openAiKeyName": "Votre clé de transcription OpenAI",
+          "dictationShortcutDescription": "Appuyez {{shortcut}} pour dicter du texte dans n'importe quel volet actif.",
+          "dictationModesDescription": "Bascule : appuyez {{shortcut}} une fois pour démarrer, à nouveau pour arrêter. Maintien : dictez tant que {{shortcut}} est maintenu."
         },
         "WorktreeSymlinksSection": {
           "1c1e35b219": "Supprimer {{value0}}",

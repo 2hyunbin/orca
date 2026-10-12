@@ -8922,7 +8922,9 @@
           "1eac933202": "macOS のプライバシーとセキュリティを開きました。アクセスを許可した後、ディクテーションを再度有効にします。",
           "cd9fe37556": "マイクの許可が与えられました",
           "6fa734ed95": "{{value0}} を削除",
-          "openAiKeyName": "OpenAI 転写キー"
+          "openAiKeyName": "OpenAI 転写キー",
+          "dictationShortcutDescription": "プレス {{shortcut}} フォーカスされたペインにテキストを書き込むことができます。",
+          "dictationModesDescription": "トグル: 押す {{shortcut}} 一度開始し、もう一度停止します。ホールド: 言いながら言い続ける {{shortcut}} が開催されます。"
         },
         "WorktreeSymlinksSection": {
           "1c1e35b219": "{{value0}} を削除",

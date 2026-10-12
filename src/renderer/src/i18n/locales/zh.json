@@ -8885,7 +8885,9 @@
           "1eac933202": "打开 macOS 隐私和安全。授予访问权限后再次启用听写。",
           "cd9fe37556": "已授予麦克风权限",
           "6fa734ed95": "删除 {{value0}}",
-          "openAiKeyName": "您的 OpenAI 转录密钥"
+          "openAiKeyName": "您的 OpenAI 转录密钥",
+          "dictationShortcutDescription": "按 {{shortcut}} 将文本听写到任何焦点窗格中。",
+          "dictationModesDescription": "切换：按下 {{shortcut}} 一次开始，再次停止。按住：指示同时 {{shortcut}} 举行。"
         },
         "WorktreeSymlinksSection": {
           "1c1e35b219": "删除 {{value0}}",

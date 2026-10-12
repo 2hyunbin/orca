@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultVoiceSettings } from '../../../../shared/constants'
-import { i18n } from '@/i18n/i18n'
+import { i18n, translate } from '@/i18n/i18n'
 import { VoiceDictationSettingsSection } from './VoiceDictationSettingsSection'
 
 const { shortcutLabel } = vi.hoisted(() => ({ shortcutLabel: vi.fn() }))
@@ -16,6 +16,33 @@ afterEach(async () => {
 })
 
 describe('dictation shortcut explanations', () => {
+  it.each(['es', 'fr', 'ja', 'zh'])('preserves the existing %s explanations', async (language) => {
+    await i18n.changeLanguage(language)
+    shortcutLabel.mockReturnValue('Ctrl+E')
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(
+        <VoiceDictationSettingsSection
+          voiceSettings={getDefaultVoiceSettings()}
+          permissionPending={false}
+          onToggleVoiceDictation={vi.fn()}
+          onUpdateVoiceSettings={vi.fn()}
+        />
+      )
+    })
+    try {
+      const legacy = (suffix: string) =>
+        translate(`auto.components.settings.VoicePane.${suffix}`, '')
+      expect(Array.from(container.querySelectorAll('p'), (p) => p.textContent)).toEqual([
+        `${legacy('4465596675')} Ctrl+E ${legacy('366e1b4f36')}`,
+        `${legacy('ff9a680010')} Ctrl+E ${legacy('295d84b849')} Ctrl+E ${legacy('7cf715f891')}`
+      ])
+    } finally {
+      await act(async () => root.unmount())
+    }
+  })
+
   it.each([
     ['en', '⌘E'],
     ['en', 'Ctrl+E'],
