@@ -2558,9 +2558,9 @@
             "3eed73394f": "Your keyboard is paused"
           },
           "TerminalErrorToast": {
+            "hostTerminalCap": "The host is already running as many terminals as Orca allows. Close a terminal you no longer need, then try again.",
             "ptyAllocationLimit": "Your system cannot allocate any more pty devices. Close some terminals you are not using, in Orca or another program, then try again.",
-            "terminalProcessLimit": "Your system cannot start another terminal process. Close unused terminals or quit unused processes, then try again.",
-            "hostTerminalCap": "The host is already running as many terminals as Orca allows. Close a terminal you no longer need, then try again."
+            "terminalProcessLimit": "Your system cannot start another terminal process. Close unused terminals or quit unused processes, then try again."
           },
           "TerminalSessionStateSaveFailureDialog": {
             "678c780a2c": "Disk space is unavailable",
@@ -2685,8 +2685,13 @@
         "nativeDropTempCopyFailed_other": "Orca couldn't copy {{count}} dropped files."
       },
       "useIpcEvents": {
+        "2f6637fe6c": "Browser tab {{value0}} is pinned",
         "60428567b4": "Local terminal reveal is unavailable while a remote runtime is active",
-        "f6300deb8b": "New Browser Tab"
+        "7a64b31991": "Local terminal creation is unavailable while a remote runtime is active",
+        "a8d2bf8e9e": "No active browser tab to close",
+        "f000b2ff76": "No active worktree",
+        "f6300deb8b": "New Browser Tab",
+        "unresolvedTerminalWorktreeOwner": "Terminal creation is unavailable because the worktree owner could not be resolved"
       },
       "useSettingsNavigationMetadata": {
         "5235c215ca": "Choose which task providers appear in the Tasks page and sidebar."
