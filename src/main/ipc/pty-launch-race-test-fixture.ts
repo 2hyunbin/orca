@@ -35,7 +35,8 @@ type LaunchRaceRuntimeBase = Record<
   | 'onPtySpawned'
   | 'onPtyExit'
   | 'onPtyData'
-  | 'unbindAbsentTerminal',
+  | 'unbindAbsentTerminal'
+  | 'retireExitedDuringRegistration',
   Mock
 >
 
@@ -95,7 +96,8 @@ export function createLaunchRaceRuntime<T extends object = Record<never, never>>
     onPtySpawned: vi.fn(),
     onPtyExit: vi.fn(),
     onPtyData: vi.fn(),
-    unbindAbsentTerminal: vi.fn(() => 'gone')
+    unbindAbsentTerminal: vi.fn(() => 'gone'),
+    retireExitedDuringRegistration: vi.fn(async () => {})
   }
   return Object.assign(base, overrides)
 }

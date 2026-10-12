@@ -31,13 +31,16 @@ import type { RuntimeReferenceFindParams } from '../../shared/runtime-reference-
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
-  toSshExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
-import { UNVERIFIED_PROCESS_EXIT_CODE } from '../../shared/terminal-exit-cause'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import { getRepoMainWorktreeId } from '../../shared/worktree/id'
+import {
+  retireExitedDuringRegistration,
+  unbindAbsentPane,
+  type HeldPane
+} from './runtime-held-pane-exits'
 import type { Worktree } from '../../shared/worktree/types'
 
 class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
@@ -236,35 +239,14 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     )
   }
 
-  /** Attach found no process for this pane: never proof that it exited, so the pane stays, unbound. */
-  unbindAbsentTerminal(pane: {
-    worktreeId: string
-    connectionId?: string | null
-    tabId: string
-    leafId: string
-    ptyId: string
-    incarnationId?: string
-  }): 'gone' | 'kept' | 'replaced' {
-    const hostId = pane.connectionId ? toSshExecutionHostId(pane.connectionId) : 'local'
-    return this.layoutHolder.processExited(
-      hostId,
-      {
-        worktreeId: pane.worktreeId,
-        terminalTabId: pane.tabId,
-        leafId: pane.leafId,
-        ptyId: pane.ptyId,
-        ...(pane.incarnationId ? { incarnationId: pane.incarnationId } : {})
-      },
-      {
-        exitCode: UNVERIFIED_PROCESS_EXIT_CODE,
-        attachAbsent: true,
-        local: !pane.connectionId,
-        spawnedFresh: false,
-        restored: true,
-        inputWritten: false,
-        outputReceived: false
-      }
-    )
+  /** A process that exited while its binding was written retires its pane, as on main. */
+  retireExitedDuringRegistration(pane: HeldPane): Promise<void> {
+    retireExitedDuringRegistration(this.layoutHolder, pane)
+    return this.persistStagedTerminalSurfaceRetirements()
+  }
+
+  unbindAbsentTerminal(pane: HeldPane): 'gone' | 'kept' | 'replaced' {
+    return unbindAbsentPane(this.layoutHolder, pane)
   }
 
   /** The layout stream (`layout.subscribe`, not advertised yet), published by the holder. */

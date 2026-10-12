@@ -7,7 +7,6 @@ import {
   setAdoptedPtyOwnership
 } from '../provider/ownership-state'
 import { clearProviderPtyState } from '../provider/state-cleanup'
-import { unbindAbsentStablePaneOwner } from './stable-owner'
 
 export function admitPtyReattachOwnership(
   runtime: OrcaRuntimeService | undefined,
@@ -66,13 +65,10 @@ export function registerPersistedPtySpawn(
       runtime?.getPtyLivenessVerdict?.(ptyId)?.status === 'exited' &&
       binding
     ) {
-      unbindAbsentStablePaneOwner(
-        runtime,
-        { ...binding, ptyId, persistedIncarnationId: binding.incarnationId },
-        worktreeId,
-        connectionId
-      )
-      return Promise.reject(error)
+      const pane = { ...binding, worktreeId, connectionId, ptyId }
+      return runtime.retireExitedDuringRegistration(pane).then(() => {
+        throw error
+      })
     }
     throw error
   }

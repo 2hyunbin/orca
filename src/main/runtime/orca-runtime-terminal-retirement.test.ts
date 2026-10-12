@@ -722,7 +722,7 @@ describe('OrcaRuntimeService terminal surface retirement', () => {
     ])
     expect(events).not.toEqual([])
     expect(errorSpy).toHaveBeenCalledWith(
-      '[workspace-layout] could not save the layout:',
+      '[runtime] terminal retirement is not yet durable:',
       expect.any(Error)
     )
     unsubscribe()

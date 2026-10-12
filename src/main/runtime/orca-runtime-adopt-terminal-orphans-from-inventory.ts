@@ -83,7 +83,7 @@ export class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends OrcaRuntim
               adopted: layout.workspaces[workspace.id]
             },
             // The adoption also sets focus and the topology revision, which live beside the layout.
-            { desktopView, facts, carried }
+            { beside: { desktopView, facts, carried } }
           )
           return this.store.getWorkspaceSession(hostId)
         },

@@ -24,7 +24,7 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
        * as -1, so the numeric code alone cannot tell a dead process from a failed stop. */
       providerExitObserved?: boolean
     } = {}
-  ): void {
+  ): void | Promise<void> {
     const pty = this.ptysById.get(ptyId)
     if (exitIncarnationId && pty?.incarnationId && exitIncarnationId !== pty.incarnationId) {
       return
@@ -78,6 +78,7 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
       pty?.incarnationId ??
       `runtime:${this.runtimeId}:${this.getPtyLifecycleGeneration(ptyId)}`
     this.advancePtyLifecycleGeneration(ptyId)
+    let retirement: Promise<void> | undefined
     try {
       const exactSurfaceByKey = new Map<
         string,
@@ -234,7 +235,12 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
         // Why: permanent process exit is absence, not a starting/sleeping tab.
         // Retire before publishing so paired clients never persist a ghost.
         try {
-          this.retireMobileSessionSurfacesForPty(ptyId, incarnationId, exactSurfaces, exitFacts)
+          retirement = this.retireMobileSessionSurfacesForPty(
+            ptyId,
+            incarnationId,
+            exactSurfaces,
+            exitFacts
+          )
         } catch (error) {
           console.error('[runtime] failed to publish terminal retirement:', error)
         }
@@ -273,6 +279,7 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
       }
     }
     this.pruneDisconnectedPtyRecords()
+    return retirement
   }
 
   private notifyPtyExitListeners(ptyId: string): void {

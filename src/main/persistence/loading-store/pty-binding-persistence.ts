@@ -274,29 +274,28 @@ function writePtyBinding(
   paneKey: string
 ): () => void {
   const { runtime, sessions } = owner[ptyBindingPersistenceOperationsContext]
-  const sessionBeforeBinding = cloneWorkspaceSessionState(session)
-  const restore = (restoredSession = sessionBeforeBinding): void => {
+  // Why a new partition object, not an edit in place: the layout holder's stack-internal bridge
+  // (holder-external-write-reload.ts, until 6g) reloads only a partition whose identity changed.
+  const sessionBeforeBinding = session
+  const bound = cloneWorkspaceSessionState(session)
+  const publish = (next: WorkspaceSessionState): void => {
     if (resolvedHostId === LOCAL_EXECUTION_HOST_ID) {
-      runtime.state.workspaceSession = restoredSession
+      runtime.state.workspaceSession = next
     } else {
       runtime.state.workspaceSessionsByHostId = {
         ...runtime.state.workspaceSessionsByHostId,
-        [resolvedHostId]: restoredSession
+        [resolvedHostId]: next
       }
     }
   }
+  const restore = (restoredSession = sessionBeforeBinding): void => publish(restoredSession)
   try {
-    if (resolvedHostId !== LOCAL_EXECUTION_HOST_ID) {
-      runtime.state.workspaceSessionsByHostId = {
-        ...runtime.state.workspaceSessionsByHostId,
-        [resolvedHostId]: session
-      }
-    }
-    applyPtyBinding(args, session, bindingWorktreeId, paneKey)
+    applyPtyBinding(args, bound, bindingWorktreeId, paneKey)
+    publish(bound)
     runtime.dirtyProfileStateDomains?.add(
       resolvedHostId === LOCAL_EXECUTION_HOST_ID ? 'workspaceSession' : 'workspaceSessionsByHostId'
     )
-    const boundSession = cloneWorkspaceSessionState(session)
+    const boundSession = cloneWorkspaceSessionState(bound)
     return () => {
       const current = sessions.getWorkspaceSession(resolvedHostId)
       const ownerState = (value: WorkspaceSessionState) => {

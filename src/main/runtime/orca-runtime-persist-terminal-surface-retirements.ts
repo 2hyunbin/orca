@@ -13,7 +13,8 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
   /**
    * Applies the exit to each surface's pane in the holder, in the partition of the host that owns
    * its worktree. `accepted` left the layout (retired, or already gone); a pane the exit rule keeps
-   * or only unbinds is in neither list. `unpersisted` had no partition to hold it.
+   * or only unbinds is in neither list. `unpersisted` had no partition to hold it. `changed` says
+   * whether anything was staged for the caller's durable write.
    */
   protected stageTerminalSurfaceRetirements(
     retiredSurfaces: readonly RetiredTerminalSurface[],
@@ -21,9 +22,11 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
   ): {
     accepted: RetiredTerminalSurface[]
     unpersisted: RetiredTerminalSurface[]
+    changed: boolean
   } {
     const accepted: RetiredTerminalSurface[] = []
     const unpersisted: RetiredTerminalSurface[] = []
+    let heldChange = false
     for (const surface of retiredSurfaces) {
       const hostId =
         this.tryGetWorkspaceSessionHostIdForWorktree(surface.worktreeId) ?? LOCAL_EXECUTION_HOST_ID
@@ -39,11 +42,25 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
         ptyId: surface.ptyId,
         ...(surface.incarnationId ? { incarnationId: surface.incarnationId } : {})
       }
-      if (this.layoutHolder.processExited(hostId, exited, exit) === 'gone') {
+      if (this.layoutHolder.processExited(hostId, exited, exit, false) === 'gone') {
         accepted.push(surface)
       }
+      heldChange = true
     }
-    return { accepted, unpersisted }
+    return { accepted, unpersisted, changed: heldChange || accepted.length > 0 }
+  }
+
+  // Why no rollback: the process is gone, so a failed write leaves the retirement for the next one.
+  protected async persistStagedTerminalSurfaceRetirements(): Promise<void> {
+    if (!this.store?.runDurableMutation) {
+      return
+    }
+    try {
+      // Why if-dirty: an earlier write, or another exit's, may already carry this retirement.
+      await this.store.runDurableMutation(() => ({ value: undefined, persist: 'if-dirty' }))
+    } catch (error) {
+      console.error('[runtime] terminal retirement is not yet durable:', error)
+    }
   }
 
   private retireSurfaceInStore(
@@ -77,7 +94,7 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
     incarnationId: string,
     exactSurfaces: readonly Pick<RetiredTerminalSurface, 'worktreeId' | 'parentTabId' | 'leafId'>[],
     exit: Omit<ProcessExitFacts, 'tabHadPaneAtConnect'>
-  ): void {
+  ): Promise<void> | undefined {
     const terminalHandle =
       this.handleByPtyId.get(ptyId) ?? this.findHandleForPtyRecord(ptyId) ?? undefined
     const retiredSurfaceByKey = new Map<string, RetiredTerminalSurface>()
@@ -107,7 +124,7 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
     }
     const retiredSurfaces = [...retiredSurfaceByKey.values()]
     if (retiredSurfaces.length === 0) {
-      return
+      return undefined
     }
     const staged = this.stageTerminalSurfaceRetirements(retiredSurfaces, exit)
     for (const surface of staged.unpersisted) {
@@ -155,6 +172,7 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
       }
       this.publishRetiredTerminalSurfaceProofs(worktreeId, retirementProofs)
     }
+    return staged.changed ? this.persistStagedTerminalSurfaceRetirements() : undefined
   }
 
   /** Ships durable retirement proofs on their own frame when no surface removal carries them. */

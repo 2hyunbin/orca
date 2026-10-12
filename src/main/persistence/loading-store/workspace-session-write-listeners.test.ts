@@ -168,11 +168,21 @@ describe('the holder reloading external writes (stack-internal bridge) is inert'
     )
     expect(bindings).toEqual([
       [[TEST_LEAF_1, 'observed-pty']],
+      // The bridge republishes the partition on every write it did not make, a patch included.
+      [[TEST_LEAF_1, 'observed-pty']],
       [
         [TEST_LEAF_1, 'observed-pty'],
         [TEST_LEAF_2, 'split-pty']
       ],
-      // The failed write was rolled back before the holder reloaded: nothing changed to publish.
+      // Memory is published before the disk write; the failed write's rollback republishes.
+      [
+        [TEST_LEAF_1, 'failed-pty'],
+        [TEST_LEAF_2, 'split-pty']
+      ],
+      [
+        [TEST_LEAF_1, 'observed-pty'],
+        [TEST_LEAF_2, 'split-pty']
+      ],
       [
         [TEST_LEAF_1, undefined],
         [TEST_LEAF_2, 'split-pty']

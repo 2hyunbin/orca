@@ -108,21 +108,24 @@ export class RuntimeWorkspaceLayouts {
     return result.ok ? this.commit(hostId, result, DURABLE_COMMANDS.has(command.type)) : result
   }
 
-  /** `beside`: the view and facts a producer rebuilt with the whole partition (orphan adoption). */
+  /**
+   * `beside`: the view and facts a producer rebuilt with the whole partition (orphan adoption).
+   * `durable: false` leaves the flush to a caller that awaits it (an exit's retirement).
+   */
   transition(
     hostId: ExecutionHostId,
     transition: LayoutTransition,
-    beside?: Omit<LoadedWorkspaceLayout, 'layout'>
+    options: { beside?: Omit<LoadedWorkspaceLayout, 'layout'>; durable?: boolean } = {}
   ): HolderApplied {
     const loaded = this.partition(hostId)
     if (!loaded) {
       return { ok: false, code: 'workspace_not_found' }
     }
     const result = applyLayoutTransition(loaded.layout, transition)
-    if (result.ok && beside) {
-      this.partitions.set(hostId, { ...beside, layout: loaded.layout })
+    if (result.ok && options.beside) {
+      this.partitions.set(hostId, { ...options.beside, layout: loaded.layout })
     }
-    return result.ok ? this.commit(hostId, result, true) : result
+    return result.ok ? this.commit(hostId, result, options.durable ?? true) : result
   }
 
   /** The workspace and tab-bar id of a terminal tab, by its terminal tab id. */
@@ -175,18 +178,19 @@ export class RuntimeWorkspaceLayouts {
   processExited(
     hostId: ExecutionHostId,
     surface: ExitedSurface,
-    exit: Omit<ProcessExitFacts, 'tabHadPaneAtConnect'>
+    exit: Omit<ProcessExitFacts, 'tabHadPaneAtConnect'>,
+    durable = true
   ): 'gone' | 'kept' | 'replaced' {
     const model = this.partition(hostId)?.layout
     if (!model || locateExitedSurface(model, surface) === 'replaced') {
       return model ? 'replaced' : 'gone'
     }
     const tabHadPaneAtConnect = this.starts.hadSiblingAtConnect(surface.leafId)
-    this.transition(hostId, {
-      type: 'processExited',
-      surface,
-      exit: { ...exit, tabHadPaneAtConnect }
-    })
+    this.transition(
+      hostId,
+      { type: 'processExited', surface, exit: { ...exit, tabHadPaneAtConnect } },
+      { durable }
+    )
     const after = this.partitions.get(hostId)?.layout
     return !after || locateExitedSurface(after, surface) === 'gone' ? 'gone' : 'kept'
   }
