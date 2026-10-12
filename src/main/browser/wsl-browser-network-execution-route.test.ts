@@ -216,17 +216,11 @@ describe('WSL browser network execution route', () => {
       { launchRelay }
     )
 
-    const socket = route.connect({
-      host: 'split-horizon.internal',
-      port: 8443
-    })
+    const socket = route.connect({ host: 'split-horizon.internal', port: 8443 })
     socket.on('error', () => {})
     const connected = once(socket as unknown as EventEmitter, 'connect')
     await vi.waitFor(() => expect(connect).toHaveBeenCalledOnce())
-    expect(connect).toHaveBeenCalledWith({
-      host: 'split-horizon.internal',
-      port: 8443
-    })
+    expect(connect).toHaveBeenCalledWith({ host: 'split-horizon.internal', port: 8443 })
     destination.emit('connect')
     await connected
     expect(launchRelay).toHaveBeenCalledWith('Ubuntu', expect.any(AbortSignal))
@@ -264,10 +258,7 @@ describe('WSL browser network execution route', () => {
     child.emit('close', 1, null)
     await route.whenInvalidated
     expect(route.isValid()).toBe(false)
-    const socket = route.connect({
-      host: 'must-not-fallback.internal',
-      port: 443
-    })
+    const socket = route.connect({ host: 'must-not-fallback.internal', port: 443 })
     socket.on('error', () => {})
     await vi.waitFor(() => expect(socket.destroyed).toBe(true))
     await route.close()
