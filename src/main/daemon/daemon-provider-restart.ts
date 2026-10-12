@@ -4,6 +4,7 @@ import {
 } from '../ipc/pty/provider/listener-lifecycle'
 import { DegradedDaemonPtyProvider } from './degraded-daemon-pty-provider'
 import {
+  DaemonEndpointOwnershipError,
   cleanupFailedDaemonAdoption,
   releaseDaemonAdoptionLease,
   takeDaemonAdoptionLeaseRelease
@@ -39,7 +40,6 @@ import {
   type DaemonSpawner
 } from './daemon-spawner'
 import { DaemonClient } from './client'
-import { DaemonEndpointOwnershipError } from './daemon-endpoint-adoption'
 import { clearSeveredDaemon } from './daemon-host-image-state'
 import { PROTOCOL_VERSION } from './types'
 
