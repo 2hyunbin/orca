@@ -1,14 +1,14 @@
-// Why: Gemini, DSH, Kiro, Droid, Command Code and Kimi register the managed `.cmd` path directly
-// on a cmd-safe profile and the encoded launcher otherwise. Each vendor starts that string through
-// its own shell, so this suite installs into a temp profile and runs the registered command the way
-// each runner does, following a non-ASCII payload to a mock listener byte-for-byte.
+// Why: Gemini, DSH, Kiro, Droid, Command Code, Kimi and Copilot register the managed `.cmd` path
+// directly on a cmd-safe profile and the encoded launcher otherwise. Each vendor starts that string
+// through its own shell, so this suite installs into a temp profile and runs the registered command
+// the way each runner does, following a non-ASCII payload to a mock listener byte-for-byte.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runProcess } from '@orca/process-host'
 import { createServer, type Server } from 'node:http'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type * as osModule from 'node:os'
 
 const { homedirMock } = vi.hoisted(() => ({
@@ -30,6 +30,7 @@ vi.mock('os', async (importOriginal) => {
 })
 
 import { CommandCodeHookService } from '../command-code/hook-service'
+import { CopilotHookService } from '../copilot/hook-service'
 import { DroidHookService } from '../droid/hook-service'
 import { DshHookService } from '../dsh/hook-service'
 import { GeminiHookService } from '../gemini/hook-service'
@@ -104,7 +105,31 @@ const POWERSHELL_PLAIN: Runner = {
   args: (command) => ['-NoProfile', '-Command', command]
 }
 
-type JsonHooks = { hooks: Record<string, { hooks?: { command: string }[]; command?: string }[]> }
+function findPwsh(): string | undefined {
+  const candidates = [
+    join(process.env.ProgramFiles ?? 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe'),
+    join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'WindowsApps', 'pwsh.exe')
+  ]
+  // lstat: the Store install is an app-execution alias that existsSync cannot follow.
+  return candidates.find((candidate) => lstatSync(candidate, { throwIfNoEntry: false }))
+}
+
+// Copilot's `<pwsh|powershell> -nop -nol -c <command>`; pwsh only where it is installed.
+const COPILOT_RUNNERS: Runner[] = [POWERSHELL, findPwsh()].flatMap((program) =>
+  program
+    ? [
+        {
+          name: `${basename(program)} (Copilot)`,
+          program,
+          args: (command: string) => ['-nop', '-nol', '-c', command]
+        }
+      ]
+    : []
+)
+
+type JsonHooks = {
+  hooks: Record<string, { hooks?: { command: string }[]; command?: string; powershell?: string }[]>
+}
 
 function readJson(path: string): JsonHooks {
   return JSON.parse(readFileSync(path, 'utf8'))
@@ -175,6 +200,18 @@ const PROVIDERS = [
     stdout: '',
     install: () => new KimiHookService().install(),
     command: (home: string) => readTomlCommand(join(home, '.kimi-code', 'config.toml'))
+  },
+  {
+    // One event stands in for all: each registration differs only in the event argument.
+    name: 'Copilot',
+    script: 'copilot-hook.cmd',
+    runners: COPILOT_RUNNERS,
+    stdout: '{}',
+    commandSuffix: ' Stop',
+    hookEventName: 'Stop',
+    install: () => new CopilotHookService().install(),
+    command: (home: string) =>
+      readJson(join(home, '.copilot', 'hooks', 'orca.json')).hooks.Stop[0].powershell
   }
 ]
 
@@ -183,7 +220,12 @@ const CASES = PROVIDERS.flatMap((provider) =>
   ['user', 'user name'].map((homeName) => ({ ...provider, homeName }))
 )
 
-type HookPost = { payload: string | null; paneKey: string | null; token: string | null }
+type HookPost = {
+  payload: string | null
+  paneKey: string | null
+  token: string | null
+  hookEventName: string | null
+}
 
 async function startHookListener(): Promise<{ server: Server; port: number; posts: HookPost[] }> {
   const posts: HookPost[] = []
@@ -199,7 +241,8 @@ async function startHookListener(): Promise<{ server: Server; port: number; post
       posts.push({
         payload: form.get('payload'),
         paneKey: form.get('paneKey'),
-        token: typeof token === 'string' ? token : null
+        token: typeof token === 'string' ? token : null,
+        hookEventName: form.get('hookEventName')
       })
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end('{}')
@@ -249,6 +292,7 @@ describe.skipIf(process.platform !== 'win32')('direct .cmd hooks under each agen
       vi.stubEnv('KIRO_HOME', undefined)
       vi.stubEnv('DSH_HOME', undefined)
       vi.stubEnv('KIMI_CODE_HOME', undefined)
+      vi.stubEnv('COPILOT_HOME', undefined)
       // A host cmd AutoRun (HKCU) runs for the .cmd child PowerShell starts without `/d`.
       writeFileSync(join(home, '.cmd_aliases.cmd'), '@echo off\r\n', 'utf8')
       expect(provider.install(home).state).toBe('installed')
@@ -261,7 +305,7 @@ describe.skipIf(process.platform !== 'win32')('direct .cmd hooks under each agen
         throw new Error(`Missing managed ${provider.name} command`)
       }
       if (direct) {
-        expect(command).toBe(scriptPath.replaceAll('\\', '/'))
+        expect(command).toBe(`${scriptPath.replaceAll('\\', '/')}${provider.commandSuffix ?? ''}`)
       } else {
         expect(command).toContain('-EncodedCommand')
       }
@@ -289,7 +333,12 @@ describe.skipIf(process.platform !== 'win32')('direct .cmd hooks under each agen
         expect(result.timedOut, `${runner.name} timed out`).toBe(false)
         expect(result.code, `${runner.name} exit code; stderr: ${result.stderr}`).toBe(0)
         expect(listener.posts.slice(before), runner.name).toEqual([
-          { payload: PAYLOAD, paneKey: PANE_KEY, token: HOOK_TOKEN }
+          {
+            payload: PAYLOAD,
+            paneKey: PANE_KEY,
+            token: HOOK_TOKEN,
+            hookEventName: provider.hookEventName ?? null
+          }
         ])
         expect(result.stdout.trim(), `${runner.name} stdout`).toBe(provider.stdout)
         expect(result.stderr, `${runner.name} stderr`).toBe('')
