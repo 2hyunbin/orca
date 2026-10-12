@@ -135,7 +135,9 @@ export function useStructuredAgentSessionOptionState(args: {
     // The chat's next runtime starts with the picks the host saved, which this view last showed,
     // and a starting agent is not read: keep them, and the account's list, until a read replaces them.
     const next =
-      sameSession && previous.catalogSource !== 'seed' && previous.catalogSource !== null
+      sameSession &&
+      (previous.record.model !== undefined ||
+        (previous.catalogSource !== 'seed' && previous.catalogSource !== null))
         ? {
             ...previous,
             record: cloneNativeChatSessionOptionRecord(previous.record),

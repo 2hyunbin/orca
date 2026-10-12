@@ -181,4 +181,68 @@ describe('structured option state from the host model catalog', () => {
     )
     expect(effort?.kind).toMatchObject({ currentValue: 'medium' })
   })
+
+  it.each([
+    ['claude', 'opus'],
+    ['codex', 'gpt-5.5']
+  ])(
+    '%s shows a saved effort before its catalog loads and accepts the later list',
+    (agent, model) => {
+      const seed = getAgentSessionOptionCatalog(agent)!
+      const state = applyStructuredAgentSessionOptions(
+        createStructuredAgentSessionOptionState(agent, seed),
+        seed,
+        { models: [], modelsKnown: false, current: { model, effort: 'high' } }
+      )
+      expect(state.catalog).toBe(seed)
+      expect(state.catalogSource).toBe('seed')
+      expect(structuredAgentSessionOptionSnapshot(state)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'model',
+            kind: expect.objectContaining({ currentValue: model })
+          }),
+          expect.objectContaining({
+            id: 'effort',
+            kind: expect.objectContaining({ currentValue: 'high' })
+          })
+        ])
+      )
+      const loaded = applyStructuredAgentSessionModelCatalog(
+        state,
+        seed,
+        { ...HOST_CATALOG, models: [{ ...HOST_CATALOG.models[0]!, id: model }] },
+        LAUNCH
+      )
+      expect(loaded.catalogSource).toBe('host')
+      expect(
+        structuredAgentSessionOptionSnapshot(loaded).find((option) => option.id === 'effort')?.kind
+      ).toMatchObject({ currentValue: 'high' })
+      expect(loaded.catalog?.models.map((row) => row.label)).toEqual(['GPT Hosted'])
+    }
+  )
+
+  it('keeps an unrecognized saved model quiet until the host lists it', () => {
+    const state = applyStructuredAgentSessionOptions(
+      createStructuredAgentSessionOptionState('codex', SEED),
+      SEED,
+      { models: [], modelsKnown: false, current: { model: 'gpt-hosted', effort: 'high' } }
+    )
+    expect(structuredAgentSessionOptionSnapshot(state)).toEqual([
+      expect.objectContaining({ id: 'model', settable: false, valueSource: 'unknown' })
+    ])
+    const loaded = applyStructuredAgentSessionModelCatalog(state, SEED, HOST_CATALOG, LAUNCH)
+    expect(structuredAgentSessionOptionSnapshot(loaded)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'model',
+          kind: expect.objectContaining({ currentValue: 'gpt-hosted' })
+        }),
+        expect.objectContaining({
+          id: 'effort',
+          kind: expect.objectContaining({ currentValue: 'high' })
+        })
+      ])
+    )
+  })
 })

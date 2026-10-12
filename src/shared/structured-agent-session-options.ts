@@ -164,8 +164,11 @@ export function structuredAgentSessionOptionSnapshot(
   if (!state.catalog) {
     return []
   }
-  // Until the host answers, the built-in list would paint a label its list may replace.
-  if (state.catalogSource === 'seed') {
+  // A built-in list can name a saved model it recognizes, never a guessed default.
+  if (
+    state.catalogSource === 'seed' &&
+    !state.catalog.models.some((model) => model.id === state.record.model?.value)
+  ) {
     return [PROVIDER_DEFAULT_MODEL_PLACEHOLDER]
   }
   const snapshot = buildNativeChatSessionOptionSnapshot({
