@@ -21,6 +21,20 @@ import {
   store
 } from '../orca-runtime-test-fixtures.spec'
 
+// The fixture holds one partition: the holder's saves of the empty local one must not replace it.
+function sshPartitionOnly(runtimeStore: {
+  setWorkspaceSession: (session: WorkspaceSessionState, hostId?: string) => void
+}) {
+  return {
+    getWorkspaceSessionHostIds: () => ['local', 'ssh:ssh-1'],
+    setWorkspaceSession: (session: WorkspaceSessionState, hostId?: string) => {
+      if (hostId === 'ssh:ssh-1') {
+        runtimeStore.setWorkspaceSession(session, hostId)
+      }
+    }
+  }
+}
+
 describe('OrcaRuntimeService', () => {
   describe('deliberately parked pane activation (STA-3465)', () => {
     function makeParkedSessionStore(
@@ -298,6 +312,7 @@ describe('OrcaRuntimeService', () => {
       const { runtimeStore } = makeParkedSessionStore('worktree-sleep', {}, 'ssh:ssh-1')
       const { runtime, spawn } = makeParkedRuntime({
         ...runtimeStore,
+        getWorkspaceSessionHostIds: () => ['local', 'ssh:ssh-1'],
         getRepos: () => [sshRepo],
         getRepo: (id: string) => (id === TEST_REPO_ID ? sshRepo : undefined)
       })
@@ -337,6 +352,7 @@ describe('OrcaRuntimeService', () => {
     const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const remoteStore = {
       ...runtimeStore,
+      ...sshPartitionOnly(runtimeStore),
       getRepos: () => [remoteRepo],
       getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }
@@ -391,6 +407,7 @@ describe('OrcaRuntimeService', () => {
     const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const remoteStore = {
       ...runtimeStore,
+      ...sshPartitionOnly(runtimeStore),
       getRepos: () => [remoteRepo],
       getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }
@@ -549,46 +566,14 @@ describe('OrcaRuntimeService', () => {
       webContents: { send: vi.fn() }
     })
 
+    // A read reloads the creates' own Store writes, so their republish lands before listening.
+    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const events: RuntimeMobileSessionTabsResult[] = []
     runtime.onMobileSessionTabsChanged((snapshot) => events.push(snapshot))
 
     await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-b')
 
     // The headless persist is gated off by the authoritative window — nothing emitted.
-    expect(events).toHaveLength(0)
-  })
-
-  it('does not persist active server-side for a `:headless-merge:` snapshot after renderer detach', async () => {
-    // Why: after renderer detach, merged snapshots have no authoritative window but still carry renderer-owned group state.
-    let nextPty = 0
-    const spawn = vi.fn().mockImplementation(async () => ({ id: `merge-pty-${++nextPty}` }))
-    const runtime = new OrcaRuntimeService(store)
-    runtime.setPtyController({
-      spawn,
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null
-    })
-
-    const LEAF_A = '77777777-7777-4777-8777-777777777777'
-    const LEAF_B = '88888888-8888-4888-8888-888888888888'
-    // tab-a (first-created) is the snapshot's active tab.
-    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { tabId: 'tab-a', leafId: LEAF_A })
-    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { tabId: 'tab-b', leafId: LEAF_B })
-
-    // Simulate a post-detach merged snapshot with no authoritative window.
-    const current = runtime['mobileSessionTabsByWorktree'].get(TEST_WORKTREE_ID)!
-    runtime['mobileSessionTabsByWorktree'].set(TEST_WORKTREE_ID, {
-      ...current,
-      publicationEpoch: `renderer:headless-merge:${current.publicationEpoch}`
-    })
-
-    const events: RuntimeMobileSessionTabsResult[] = []
-    runtime.onMobileSessionTabsChanged((snapshot) => events.push(snapshot))
-
-    // The merge exclusion must suppress server-side active rewrites.
-    await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-b')
-
     expect(events).toHaveLength(0)
   })
 
@@ -618,6 +603,7 @@ describe('OrcaRuntimeService', () => {
     const remoteRepo = { ...store.getRepo(TEST_REPO_ID)!, connectionId: 'ssh-1' }
     const remoteStore = {
       ...runtimeStore,
+      ...sshPartitionOnly(runtimeStore),
       getRepos: () => [remoteRepo],
       getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined)
     }

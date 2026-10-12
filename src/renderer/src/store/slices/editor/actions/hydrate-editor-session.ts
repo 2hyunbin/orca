@@ -1,6 +1,6 @@
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../../../shared/language-detect'
 import { addAdditionalValidWorkspaceKeys } from '@/lib/workspace-session-hydration-keys'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../../shared/constants'
 import { folderWorkspaceKey } from '../../../../../../shared/workspace-scope'

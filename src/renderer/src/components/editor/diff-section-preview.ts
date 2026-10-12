@@ -1,4 +1,4 @@
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { canPreviewLanguage } from '@/lib/file-preview'
 
 // Why: HTML preview renders the on-disk working-tree file, so combined-diff

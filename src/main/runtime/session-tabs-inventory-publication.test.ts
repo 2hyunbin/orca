@@ -1,22 +1,63 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 type InventoryInternals = {
   sessionTabsInventoryWaiters: Set<() => void>
 }
 
-function createInventoryRuntime(): OrcaRuntimeService {
-  const runtime = new OrcaRuntimeService()
+const TAB_ID = '11111111-1111-4111-8111-111111111111'
+const LEAF_ID = '22222222-2222-4222-8222-222222222222'
+
+/** A saved session with one terminal tab in `worktreeId`: what a window's session save leaves. */
+function sessionWithTerminal(worktreeId: string, ptyId: string): WorkspaceSessionState {
+  return {
+    ...getDefaultWorkspaceSession(),
+    tabsByWorktree: {
+      [worktreeId]: [
+        {
+          id: TAB_ID,
+          ptyId,
+          worktreeId,
+          title: 'Terminal 1',
+          customTitle: null,
+          color: null,
+          sortOrder: 0,
+          createdAt: 1
+        }
+      ]
+    },
+    terminalLayoutsByTabId: {
+      [TAB_ID]: {
+        root: { type: 'leaf', leafId: LEAF_ID },
+        activeLeafId: LEAF_ID,
+        expandedLeafId: null,
+        ptyIdsByLeafId: { [LEAF_ID]: ptyId }
+      }
+    }
+  }
+}
+
+function createInventoryRuntime(session?: WorkspaceSessionState): OrcaRuntimeService {
+  let saved = session
+  const store = saved && {
+    getRepos: () => [{ id: 'repo' }],
+    getAllWorktreeMeta: () => ({}),
+    getWorkspaceSession: () => saved,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      saved = next
+    }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these tests read only the store members defined above.
+  const runtime = new OrcaRuntimeService(store as never)
   runtime.setPtyController({ listProcesses: vi.fn(async () => []) } as never)
   return runtime
 }
 
 async function waitForInventoryWaiter(runtime: OrcaRuntimeService): Promise<void> {
   const internals = runtime as unknown as InventoryInternals
-  for (let index = 0; index < 20 && internals.sessionTabsInventoryWaiters.size === 0; index += 1) {
-    await Promise.resolve()
-  }
-  expect(internals.sessionTabsInventoryWaiters.size).toBe(1)
+  await vi.waitFor(() => expect(internals.sessionTabsInventoryWaiters.size).toBe(1))
 }
 
 describe('authoritative session tab inventory publication', () => {
@@ -56,30 +97,21 @@ describe('authoritative session tab inventory publication', () => {
   })
 
   it('returns a non-empty headed publication normally', async () => {
-    const runtime = createInventoryRuntime()
+    const runtime = createInventoryRuntime(sessionWithTerminal('repo::/worktree', 'pty-1'))
     runtime.attachWindow(1)
     const pending = runtime.listAllMobileSessionTabsInventory()
     await waitForInventoryWaiter(runtime)
 
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: 'repo::/worktree',
-          publicationEpoch: 'renderer-epoch',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: null,
-          activeTabType: null,
-          tabs: []
-        }
-      ]
-    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [] })
 
     await expect(pending).resolves.toMatchObject({
       authoritative: true,
-      snapshots: [{ worktree: 'repo::/worktree', publicationEpoch: 'renderer-epoch' }]
+      snapshots: expect.arrayContaining([
+        expect.objectContaining({
+          worktree: 'repo::/worktree',
+          tabs: [expect.objectContaining({ ptyId: 'pty-1' })]
+        })
+      ])
     })
   })
 
@@ -199,11 +231,12 @@ describe('authoritative session tab inventory publication', () => {
   })
 
   it('restores a renderer-owned PTY discovered by the authoritative inventory refresh', async () => {
-    const runtime = createInventoryRuntime()
     const ptyId = 'pty-survived-host-relaunch'
     const worktreeId = 'repo::/survived'
-    const tabId = '11111111-1111-4111-8111-111111111111'
-    const leafId = '22222222-2222-4222-8222-222222222222'
+    const tabId = TAB_ID
+    const leafId = LEAF_ID
+    // The window saved the tab before the host relaunched; the daemon kept its PTY.
+    const runtime = createInventoryRuntime(sessionWithTerminal(worktreeId, ptyId))
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [] })
     ;(
@@ -232,24 +265,25 @@ describe('authoritative session tab inventory publication', () => {
 
     expect(result).toMatchObject({
       authoritative: true,
-      snapshots: [
-        {
+      snapshots: expect.arrayContaining([
+        expect.objectContaining({
           worktree: worktreeId,
           tabs: [
             expect.objectContaining({
               type: 'terminal',
               parentTabId: tabId,
               leafId,
-              ptyId
+              ptyId,
+              incarnationId: 'incarnation-survived-host-relaunch'
             })
           ]
-        }
-      ]
+        })
+      ])
     })
   })
 
   it('requires the current headed renderer generation to publish', async () => {
-    const runtime = createInventoryRuntime()
+    const runtime = createInventoryRuntime(sessionWithTerminal('repo::/restored', 'pty-1'))
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [],
@@ -268,62 +302,15 @@ describe('authoritative session tab inventory publication', () => {
     await Promise.resolve()
     expect(settled).toBe(false)
 
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: 'repo::/restored',
-          publicationEpoch: 'renderer-reloaded',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: null,
-          activeTabType: null,
-          tabs: []
-        }
-      ]
-    })
-    await expect(pending).resolves.toMatchObject({
-      authoritative: true,
-      snapshots: [{ worktree: 'repo::/restored', publicationEpoch: 'renderer-reloaded' }]
-    })
-  })
-
-  it('withholds authority while the renderer owes a requested worktree resync', async () => {
-    const runtime = createInventoryRuntime()
-    const worktree = 'repo::/resync'
-    runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [] })
-
-    const incomplete = runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [],
-      unchangedMobileSessionWorktrees: [worktree]
-    })
-    expect(incomplete.mobileSessionResyncWorktrees).toEqual([worktree])
-    const pending = runtime.listAllMobileSessionTabsInventory()
-    await waitForInventoryWaiter(runtime)
-
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree,
-          publicationEpoch: 'renderer-resynced',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: null,
-          activeTabType: null,
-          tabs: []
-        }
-      ]
-    })
-
     await expect(pending).resolves.toMatchObject({
       authoritative: true,
-      snapshots: [{ worktree, publicationEpoch: 'renderer-resynced' }]
+      snapshots: expect.arrayContaining([
+        expect.objectContaining({
+          worktree: 'repo::/restored',
+          tabs: [expect.objectContaining({ ptyId: 'pty-1' })]
+        })
+      ])
     })
   })
 

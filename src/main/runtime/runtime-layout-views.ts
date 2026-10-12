@@ -137,7 +137,19 @@ export class RuntimeLayoutViews {
 
   /** Editor tabs with an unsaved draft: a close refuses them unless forced (rule 10). */
   draftTabIds(workspace: string): string[] {
-    return [...(this.draftTabs.get(workspace) ?? [])]
+    const tabIds = new Set(this.draftTabs.get(workspace))
+    // Drafts the desktop view saved count until a view reports them clean (a host with no window).
+    const hostId = this.holder.hostIdOf(workspace)
+    const saved = hostId
+      ? this.holder.beside(hostId)?.desktopView.editorDrafts[workspace]
+      : undefined
+    const tabs = hostId ? this.holder.model(hostId)?.workspaces[workspace]?.tabs : undefined
+    for (const tab of tabs ?? []) {
+      if (tab.kind === 'editor' && saved?.[tab.entityId]?.dirtyDraftContent !== undefined) {
+        tabIds.add(tab.id)
+      }
+    }
+    return [...tabIds]
   }
 
   /** A closed tab's draft went with it; a reopened tab starts clean. */

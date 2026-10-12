@@ -94,7 +94,8 @@ describe('editor tabs a headless host persisted', () => {
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-readme')
 
     expect(getSession().openFilesByWorktree?.[TEST_WORKTREE_ID]).toEqual([])
-    expect(getSession().unifiedTabs?.[TEST_WORKTREE_ID]).toEqual([])
+    // The host's save drops an emptied worktree's key rather than writing [].
+    expect(getSession().unifiedTabs?.[TEST_WORKTREE_ID] ?? []).toEqual([])
     expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([])
   })
 

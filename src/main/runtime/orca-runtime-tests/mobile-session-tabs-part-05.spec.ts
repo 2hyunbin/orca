@@ -14,7 +14,7 @@ import {
 } from '../orca-runtime-test-fixtures.spec'
 
 describe('OrcaRuntimeService', () => {
-  it('uses fresh PTY management titles over stale mobile snapshot and OSC titles', async () => {
+  it('uses fresh PTY management titles over stale renderer and OSC titles', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'laptop-created-pty' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
@@ -40,37 +40,7 @@ describe('OrcaRuntimeService', () => {
           layout: null
         }
       ],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'renderer-stale',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: `laptop-tab::${leafId}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `laptop-tab::${leafId}`,
-              parentTabId: 'laptop-tab',
-              leafId,
-              title: 'Claude working',
-              agentStatus: {
-                state: 'working',
-                prompt: 'stale task',
-                updatedAt: 1_700_000_000_000,
-                stateStartedAt: 1_699_999_999_000,
-                agentType: 'claude',
-                paneKey: `laptop-tab:${leafId}`,
-                terminalTitle: 'Claude working',
-                stateHistory: []
-              },
-              isActive: true
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
     runtime.onPtyData('laptop-created-pty', '\x1b]0;claude agents\x07', 124)
 
@@ -82,14 +52,9 @@ describe('OrcaRuntimeService', () => {
         title: 'claude agents'
       })
     )
-    // Stale "working" suppressed; agent identity retained for native chat.
-    const suppressed = result.tabs[0]
-    expect(suppressed?.type === 'terminal' && suppressed.agentStatus?.state).toBe('done')
-    expect(suppressed?.type === 'terminal' && suppressed.agentStatus?.agentType).toBe('claude')
-    expect(suppressed?.type === 'terminal' && suppressed.agentStatus?.terminalTitle).toBeUndefined()
   })
 
-  it('uses fresh neutral PTY titles over stale mobile snapshot and OSC titles', async () => {
+  it('uses fresh neutral PTY titles over stale renderer and OSC titles', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'laptop-created-pty' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
@@ -115,37 +80,7 @@ describe('OrcaRuntimeService', () => {
           layout: null
         }
       ],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'renderer-stale',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: `laptop-tab::${leafId}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `laptop-tab::${leafId}`,
-              parentTabId: 'laptop-tab',
-              leafId,
-              title: 'Claude working',
-              agentStatus: {
-                state: 'working',
-                prompt: 'stale task',
-                updatedAt: 1_700_000_000_000,
-                stateStartedAt: 1_699_999_999_000,
-                agentType: 'claude',
-                paneKey: `laptop-tab:${leafId}`,
-                terminalTitle: 'Claude working',
-                stateHistory: []
-              },
-              isActive: true
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
     runtime.onPtyData('laptop-created-pty', '\x1b]0;zsh\x07', 124)
 
@@ -157,11 +92,6 @@ describe('OrcaRuntimeService', () => {
         title: 'zsh'
       })
     )
-    // Stale "working" suppressed; agent identity retained for native chat.
-    const suppressed = result.tabs[0]
-    expect(suppressed?.type === 'terminal' && suppressed.agentStatus?.state).toBe('done')
-    expect(suppressed?.type === 'terminal' && suppressed.agentStatus?.agentType).toBe('claude')
-    expect(suppressed?.type === 'terminal' && suppressed.agentStatus?.terminalTitle).toBeUndefined()
   })
 
   it('pushes PTY-backed mobile session retirement when a server PTY exits', async () => {
@@ -403,27 +333,6 @@ describe('OrcaRuntimeService', () => {
           leafId: HEADLESS_LEAF_ID,
           paneRuntimeId: 1,
           ptyId: 'persisted-pty'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'renderer:paired-close',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: `host-tab::${HEADLESS_LEAF_ID}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `host-tab::${HEADLESS_LEAF_ID}`,
-              parentTabId: 'host-tab',
-              leafId: HEADLESS_LEAF_ID,
-              ptyId: 'persisted-pty',
-              title: 'Durable',
-              isActive: true
-            }
-          ]
         }
       ]
     })

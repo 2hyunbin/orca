@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { getConnectionIdForFileFromState } from '@/lib/connection-owner-resolution'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../../shared/language-detect'
 import {
   buildWorkspaceFileContextForFile,
   canClientOsOpenWorkspaceFile

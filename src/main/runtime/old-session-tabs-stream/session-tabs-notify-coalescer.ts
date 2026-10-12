@@ -10,7 +10,7 @@
 import {
   createKeyedTrailingEdgeCoalescer,
   type KeyedTrailingEdgeCoalescer
-} from './keyed-trailing-edge-coalescer'
+} from '../keyed-trailing-edge-coalescer'
 
 // Trailing-edge window: title/status is latency-sensitive UI, so this is
 // tighter than files.watch's 150ms but looser than native-chat's 40ms.

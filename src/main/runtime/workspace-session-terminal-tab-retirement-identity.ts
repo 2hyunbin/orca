@@ -1,6 +1,6 @@
 import type { RuntimeMobileSessionTabsSnapshot } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { collectPersistedTerminalLeafIds } from './mobile-session-layout-projection'
+import { collectPersistedTerminalLeafIds } from './persisted-terminal-leaf-ids'
 
 type PersistedTerminalTabIdentity = {
   createdAt: number

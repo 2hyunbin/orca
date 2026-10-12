@@ -24,49 +24,24 @@ class RetirementRuntime extends OrcaRuntimeService {
     return this.readVisibleTerminalState(binding.ptyId)
   }
   snapshot(): RuntimeMobileSessionTabsSnapshot | undefined {
-    return this.mobileSessionTabsByWorktree.get(binding.worktreeId)
+    return this.readSessionTabsSnapshot(binding.worktreeId)
+  }
+  /** The fixture's own tab shares the worktree, so phone rows are scoped to the binding's tab. */
+  bindingRows() {
+    return (this.snapshot()?.tabs ?? []).filter(
+      (tab) => tab.type === 'terminal' && tab.parentTabId === binding.tabId
+    )
   }
   generations(): number {
     return this.ptyLifecycleGenerationById.size
   }
   async closeTab(): Promise<void> {
     const snapshot = this.snapshot()
-    const tab = snapshot?.tabs[0]
+    const tab = this.bindingRows()[0]
     if (!snapshot || tab?.type !== 'terminal') {
       throw new Error('missing test tab')
     }
     await this.closeHeadlessMobileTerminalTab(binding.worktreeId, snapshot, tab)
-  }
-  publish(layoutOnly = false): void {
-    this.storeMobileSessionSnapshot(binding.worktreeId, {
-      worktree: binding.worktreeId,
-      publicationEpoch: 'retirement-test',
-      snapshotVersion: 1,
-      activeGroupId: null,
-      activeTabId: `${binding.tabId}::${binding.leafId}`,
-      activeTabType: 'terminal',
-      tabs: [
-        {
-          type: 'terminal',
-          id: `${binding.tabId}::${binding.leafId}`,
-          parentTabId: binding.tabId,
-          leafId: binding.leafId,
-          ptyId: layoutOnly ? null : binding.ptyId,
-          ...(layoutOnly
-            ? {
-                parentLayout: {
-                  root: { type: 'leaf' as const, leafId: binding.leafId },
-                  activeLeafId: binding.leafId,
-                  expandedLeafId: null,
-                  ptyIdsByLeafId: { [binding.leafId]: binding.ptyId }
-                }
-              }
-            : {}),
-          title: 'Terminal',
-          isActive: true
-        }
-      ]
-    })
   }
 }
 
@@ -77,7 +52,7 @@ it.each(['read', 'replacement', 'legacy-replacement'] as const)(
     await store.persistPtyBinding(binding)
     const runtime = new RetirementRuntime(store)
     runtime.registerPty(binding.ptyId, binding.worktreeId, null, binding)
-    runtime.publish()
+    expect(runtime.bindingRows()).toHaveLength(1)
     const gate = authority.pause()
     const exiting = runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, {
       providerExitObserved: true
@@ -94,15 +69,15 @@ it.each(['read', 'replacement', 'legacy-replacement'] as const)(
     await exiting
     expect(readState().workspaceSession.terminalLayoutsByTabId[binding.tabId]).toBeUndefined()
     // Why every action: the exit retired the leaf in memory before any of them could run.
-    expect(runtime.snapshot()?.tabs).toHaveLength(0)
+    expect(runtime.bindingRows()).toHaveLength(0)
   }
 )
 
-it('publishes an exit whose only live ownership is the mobile parent layout', async () => {
+it('publishes an exit of a terminal bound only in its saved layout', async () => {
   const { store, authority, readState } = await fixture()
   await store.persistPtyBinding(binding)
   const runtime = new RetirementRuntime(store)
-  runtime.publish(true)
+  expect(runtime.bindingRows()).toHaveLength(1)
   const gate = authority.pause()
   const exiting = runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, {
     providerExitObserved: true
@@ -111,7 +86,7 @@ it('publishes an exit whose only live ownership is the mobile parent layout', as
   gate.finish.resolve()
   await exiting
   expect(readState().workspaceSession.terminalLayoutsByTabId[binding.tabId]).toBeUndefined()
-  expect(runtime.snapshot()?.tabs).toEqual([])
+  expect(runtime.bindingRows()).toEqual([])
   expect(runtime.generations()).toBe(0)
 })
 
@@ -122,7 +97,6 @@ it('completes a durable close and refuses a split queued behind it', async () =>
   const kill = vi.fn(() => true)
   runtime.setPtyController({ write: () => true, kill, getForegroundProcess: async () => null })
   runtime.registerPty(binding.ptyId, binding.worktreeId, null, binding)
-  runtime.publish()
   const gate = authority.pause()
   const close = runtime.closeTab()
   await gate.started.promise
@@ -136,6 +110,6 @@ it('completes a durable close and refuses a split queued behind it', async () =>
   await close
   await expect(split).resolves.toBe(false)
   expect(kill).toHaveBeenCalledExactlyOnceWith(binding.ptyId)
-  expect(runtime.snapshot()?.tabs).toEqual([])
+  expect(runtime.bindingRows()).toEqual([])
   expect(readState().workspaceSession.terminalLayoutsByTabId[binding.tabId]).toBeUndefined()
 })

@@ -19,7 +19,7 @@ vi.mock('@/store', () => ({
   }
 }))
 
-vi.mock('@/lib/language-detect', () => ({
+vi.mock('../../../../shared/language-detect', () => ({
   detectLanguage: () => 'plaintext'
 }))
 

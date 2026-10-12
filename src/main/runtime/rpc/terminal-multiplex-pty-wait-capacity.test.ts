@@ -13,12 +13,23 @@ import {
   TERMINAL_MULTIPLEX_MAX_ACTIVE_STREAMS_PER_CONNECTION,
   TERMINAL_MULTIPLEX_MAX_PENDING_PTY_WAITS_PER_CONNECTION
 } from '../../../shared/terminal-multiplex-flow-control'
+import type { OrcaRuntimeService } from '../orca-runtime'
 import {
   makeRequest,
   sendDesktopMultiplexSubscribe,
-  startDesktopMultiplexSubscribe,
-  stubRuntime
+  startDesktopMultiplexSubscribe as startHarnessDesktopMultiplexSubscribe,
+  stubRuntime as stubHarnessRuntime
 } from './terminal-multiplex-test-harness'
+
+// Why: these PTY waits are the window-attached path; a windowless runtime starts the pane instead.
+const windowAttached = (overrides: Partial<OrcaRuntimeService>): Partial<OrcaRuntimeService> => ({
+  startsPanesForSubscribers: vi.fn(() => false),
+  ...overrides
+})
+const stubRuntime = (overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService =>
+  stubHarnessRuntime(windowAttached(overrides))
+const startDesktopMultiplexSubscribe = (overrides: Partial<OrcaRuntimeService> = {}) =>
+  startHarnessDesktopMultiplexSubscribe(windowAttached(overrides))
 
 describe('terminal multiplex RPC', () => {
   it('settles mobile multiplex PTY waits when the stream signal aborts before PTY spawn', async () => {

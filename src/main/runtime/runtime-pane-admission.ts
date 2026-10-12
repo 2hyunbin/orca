@@ -14,8 +14,12 @@ type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
   leafId: string
   /** The group a new tab joins; a split stays in its parent's. */
   groupId?: string
+  /** The tab a new tab follows. */
+  afterTabId?: string
   /** The start a layout command's apply began for a pane already in the layout. */
   paneStart?: PaneStart
+  /** Runs once the process spawned, before its pane binds; a throw fails the start like a spawn error. */
+  onSpawned?: (spawned: Awaited<ReturnType<Spawn>>) => void
 }
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
@@ -44,8 +48,16 @@ function admissionFor(args: AdmittedSpawnArgs): TerminalPaneAdmission {
     tabId,
     leafId,
     ...(args.groupId ? { groupId: args.groupId } : {}),
+    ...(args.afterTabId ? { afterTabId: args.afterTabId } : {}),
     ...(viewMode ? { viewMode } : {}),
-    ...(args.cwd ? { creation: { startupCwd: args.cwd } } : {})
+    ...(args.cwd || args.launchAgent
+      ? {
+          creation: {
+            ...(args.cwd ? { startupCwd: args.cwd } : {}),
+            ...(args.launchAgent ? { launchAgent: args.launchAgent } : {})
+          }
+        }
+      : {})
   }
 }
 
@@ -105,15 +117,26 @@ export async function spawnInAdmittedPane(
   controller: Required<Pick<RuntimePtyController, 'spawn' | 'kill'>>,
   args: AdmittedSpawnArgs
 ): ReturnType<Spawn> {
-  const { groupId: _groupId, paneStart: _paneStart, ...spawnArgs } = args
+  const {
+    groupId: _groupId,
+    afterTabId: _afterTabId,
+    paneStart: _paneStart,
+    onSpawned,
+    ...spawnArgs
+  } = args
+  const spawnStarted = async (): ReturnType<Spawn> => {
+    const spawned = await controller.spawn(spawnArgs)
+    onSpawned?.(spawned)
+    return spawned
+  }
   if (!holder.model(hostIdOf(args))) {
     // No partition holds this host's layout (a runtime without a profile): nothing to admit.
-    return controller.spawn(spawnArgs)
+    return spawnStarted()
   }
   const { start, admitted } = admit(holder, args)
   let result: Awaited<ReturnType<Spawn>>
   try {
-    result = await controller.spawn(spawnArgs)
+    result = await spawnStarted()
   } catch (error) {
     if (admitted) {
       withdrawRuntimePane(holder, args)

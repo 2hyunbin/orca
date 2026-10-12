@@ -52,7 +52,6 @@ export const addSparseWorktree = importedValues.exportedAddSparseWorktree
 export const addWorktree = importedValues.exportedAddWorktree
 export const advertisedUrlWatcher = importedValues.exportedAdvertisedUrlWatcher
 export const afterEach = importedValues.exportedAfterEach
-export const appendBrowserTabOrder = importedValues.exportedAppendBrowserTabOrder
 export const appendNormalizedToTailBuffer = importedValues.exportedAppendNormalizedToTailBuffer
 export const appendRecentPtyPathCandidates = importedValues.exportedAppendRecentPtyPathCandidates
 export const assertWorktreeCleanForRemoval = importedValues.exportedAssertWorktreeCleanForRemoval
@@ -67,7 +66,6 @@ export const clearConfiguredWorktreeSharedDirectoriesCacheForTests =
   importedValues.exportedClearConfiguredWorktreeSharedDirectoriesCacheForTests
 export const clearSubmodulePathsCacheForTests =
   importedValues.exportedClearSubmodulePathsCacheForTests
-export const collectBrowserGroupAssignment = importedValues.exportedCollectBrowserGroupAssignment
 export const createHash = importedValues.exportedCreateHash
 export const createRootDispatch = importedValues.exportedCreateRootDispatch
 export const createSetupRunnerScript = importedValues.exportedCreateSetupRunnerScript
@@ -88,7 +86,6 @@ export const getRuntimeBrowserPageRegistry = importedValues.exportedGetRuntimeBr
 export const getTerminalPasteIngestMs = importedValues.exportedGetTerminalPasteIngestMs
 export const gitRunner = importedValues.exportedGitRunner
 export const hasHooksFile = importedValues.exportedHasHooksFile
-export const headlessBrowserTabsUnchanged = importedValues.exportedHeadlessBrowserTabsUnchanged
 export const homedir = importedValues.exportedHomedir
 export const inspectPtyProviderProcess = importedValues.exportedInspectPtyProviderProcess
 export const installFakeAppEnvironment = importedValues.exportedInstallFakeAppEnvironment

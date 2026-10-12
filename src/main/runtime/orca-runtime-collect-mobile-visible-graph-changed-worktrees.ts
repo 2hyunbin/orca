@@ -52,23 +52,11 @@ export class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends Or
   ): Promise<RuntimeMobileSessionTabsResult> {
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     if (explicitWorktreeId) {
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(explicitWorktreeId, {
-        allowAttachedWindow: true,
-        onlyRuntimeOwnedTerminals: true
-      })
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(explicitWorktreeId)
       await this.refreshMobileSessionPtyRecords(explicitWorktreeId)
-      this.restoreLivePairedRendererSessionOwnedMobileTerminals(explicitWorktreeId)
       return this.getMobileSessionTabsForWorktree(explicitWorktreeId, clientNavigationId)
     }
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id, {
-      allowAttachedWindow: true,
-      onlyRuntimeOwnedTerminals: true
-    })
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id)
     await this.refreshMobileSessionPtyRecords()
-    this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktree.id)
     return this.getMobileSessionTabsForWorktree(worktree.id, clientNavigationId)
   }
 
@@ -91,16 +79,8 @@ export class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends Or
     ptyInventory: PtyControllerInventory | null
     changeSequence: number
   }> {
-    for (const worktreeId of this.getKnownWorkspaceSessionWorktreeIds()) {
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
-        allowAttachedWindow: true,
-        onlyRuntimeOwnedTerminals: true
-      })
-    }
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession()
     const ptyInventory = await this.refreshMobileSessionPtyInventory()
-    this.restoreLivePairedRendererSessionOwnedMobileTerminals(null)
-    const snapshots = [...this.mobileSessionTabsByWorktree.values()].map((snapshot) =>
+    const snapshots = this.sessionTabsSnapshots().map(([, snapshot]) =>
       this.projectMobileSessionTabsForClient(
         this.toMobileSessionTabsResult(snapshot),
         clientNavigationId

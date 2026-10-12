@@ -7,13 +7,57 @@ import {
   listWorktrees
 } from '../orca-runtime-test-mocks.spec'
 import {
+  HEADLESS_LEAF_ID,
   TEST_REPO_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
+  makeHeadlessTerminalLayout,
   makeWorktreeMeta,
   store
 } from '../orca-runtime-test-fixtures.spec'
 import { createMobileCreateTestNotifier } from '../orca-runtime-test-scenario-builders.spec'
+
+// What reaches the Store for a renderer tab: the window's session save, or pty:spawn's binding.
+function storeRendererTab(
+  runtime: OrcaRuntimeService,
+  tab: {
+    tabId: string
+    leafId: string
+    ptyId?: string
+    worktreeId?: string
+    viewMode?: 'terminal' | 'chat'
+  }
+): void {
+  const worktreeId = tab.worktreeId ?? TEST_WORKTREE_ID
+  const session = store.getWorkspaceSession()
+  const others = (session.tabsByWorktree[worktreeId] ?? []).filter((row) => row.id !== tab.tabId)
+  store.setWorkspaceSession({
+    ...session,
+    tabsByWorktree: {
+      ...session.tabsByWorktree,
+      [worktreeId]: [
+        ...others,
+        {
+          id: tab.tabId,
+          ptyId: tab.ptyId ?? null,
+          worktreeId,
+          title: 'Terminal',
+          customTitle: null,
+          color: null,
+          sortOrder: others.length,
+          createdAt: 1,
+          ...(tab.viewMode ? { viewMode: tab.viewMode } : {})
+        }
+      ]
+    },
+    terminalLayoutsByTabId: {
+      ...session.terminalLayoutsByTabId,
+      [tab.tabId]: makeHeadlessTerminalLayout({ [tab.leafId]: tab.ptyId })
+    }
+  })
+  // Stands in for the Store's write notice, which the base fixture does not emit.
+  runtime['layoutHolder'].model('local')
+}
 
 describe('OrcaRuntimeService', () => {
   it('does not dedupe mobile terminal creates across worktrees with the same clientMutationId', async () => {
@@ -83,13 +127,24 @@ describe('OrcaRuntimeService', () => {
       )
       expect(createRequests).toHaveLength(2)
     })
+    storeRendererTab(runtime, {
+      tabId: 'tab-renderer-a',
+      leafId: HEADLESS_LEAF_ID,
+      ptyId: 'pty-renderer-a'
+    })
+    storeRendererTab(runtime, {
+      tabId: 'tab-renderer-b',
+      leafId: HEADLESS_LEAF_ID,
+      ptyId: 'pty-renderer-b',
+      worktreeId: otherWorktreeId
+    })
     runtime.syncWindowGraph(1, {
       tabs: [],
       leaves: [
         {
           tabId: 'tab-renderer-a',
           worktreeId: TEST_WORKTREE_ID,
-          leafId: 'pane:1',
+          leafId: HEADLESS_LEAF_ID,
           paneRuntimeId: 1,
           ptyId: 'pty-renderer-a',
           paneTitle: null
@@ -97,48 +152,10 @@ describe('OrcaRuntimeService', () => {
         {
           tabId: 'tab-renderer-b',
           worktreeId: otherWorktreeId,
-          leafId: 'pane:1',
+          leafId: HEADLESS_LEAF_ID,
           paneRuntimeId: 2,
           ptyId: 'pty-renderer-b',
           paneTitle: null
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-a',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: null,
-          activeTabType: null,
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-renderer-a::pane:1',
-              parentTabId: 'tab-renderer-a',
-              leafId: 'pane:1',
-              title: 'Terminal',
-              isActive: false
-            }
-          ]
-        },
-        {
-          worktree: otherWorktreeId,
-          publicationEpoch: 'epoch-b',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: null,
-          activeTabType: null,
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-renderer-b::pane:1',
-              parentTabId: 'tab-renderer-b',
-              leafId: 'pane:1',
-              title: 'Terminal',
-              isActive: false
-            }
-          ]
         }
       ]
     })
@@ -207,30 +224,13 @@ describe('OrcaRuntimeService', () => {
       })
       await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'renderer-pending',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: `tab-pending::${pendingLeafId}`,
-            activeTabType: 'terminal',
-            tabs: [
-              {
-                type: 'terminal',
-                id: `tab-pending::${pendingLeafId}`,
-                parentTabId: 'tab-pending',
-                leafId: pendingLeafId,
-                title: 'Terminal',
-                isActive: true
-              }
-            ]
-          }
-        ]
+      // The window saves the tab it created with the mode it was asked for.
+      storeRendererTab(runtime, {
+        tabId: 'tab-pending',
+        leafId: pendingLeafId,
+        viewMode: 'terminal'
       })
+      runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
       await vi.advanceTimersByTimeAsync(999)
 
       expect(settled).toBe(false)
@@ -368,30 +368,8 @@ describe('OrcaRuntimeService', () => {
       await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
       // Only the tab shell publishes (no ptyId → never ready); no PTY ever binds.
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'renderer-pending',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: `tab-pending::${pendingLeafId}`,
-            activeTabType: 'terminal',
-            tabs: [
-              {
-                type: 'terminal',
-                id: `tab-pending::${pendingLeafId}`,
-                parentTabId: 'tab-pending',
-                leafId: pendingLeafId,
-                title: 'Terminal',
-                isActive: true
-              }
-            ]
-          }
-        ]
-      })
+      storeRendererTab(runtime, { tabId: 'tab-pending', leafId: pendingLeafId })
+      runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
       // Ready-fallback (1s) expires → materialize runs → spawn rejects → catch.
       await vi.advanceTimersByTimeAsync(2_000)
@@ -438,33 +416,17 @@ describe('OrcaRuntimeService', () => {
       })
       await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
-      // A shell-only snapshot can win the first race but omit launch props; the later PTY rescue must fill the explicit mode.
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'renderer-shell',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: `tab-alive::${leafId}`,
-            activeTabType: 'terminal',
-            tabs: [
-              {
-                type: 'terminal',
-                id: `tab-alive::${leafId}`,
-                parentTabId: 'tab-alive',
-                leafId,
-                title: 'Terminal',
-                isActive: true
-              }
-            ]
-          }
-        ]
-      })
+      // The window saves the tab it created with the mode it was asked for.
+      storeRendererTab(runtime, { tabId: 'tab-alive', leafId, viewMode: 'chat' })
+      runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
-      // The renderer's PTY spawn registers with the tab binding (as the pty IPC layer now does) after the shell-only snapshot.
+      // The renderer's PTY spawn registers with the tab binding (as the pty IPC layer now does).
+      storeRendererTab(runtime, {
+        tabId: 'tab-alive',
+        leafId,
+        ptyId: 'pty-alive',
+        viewMode: 'chat'
+      })
       runtime.registerPty('pty-alive', TEST_WORKTREE_ID, null, {
         tabId: 'tab-alive',
         leafId
@@ -499,6 +461,7 @@ describe('OrcaRuntimeService', () => {
       // Why: spawn and tabCreate reply are independent IPC channels; here the PTY registers before the reply, so the pre-wait check resolves it.
       const webContents = { send: vi.fn() }
       const send = vi.fn((_channel: string, payload: { requestId: string }) => {
+        storeRendererTab(runtime, { tabId: 'tab-early', leafId, ptyId: 'pty-early' })
         runtime.registerPty('pty-early', TEST_WORKTREE_ID, null, {
           tabId: 'tab-early',
           leafId
@@ -568,6 +531,7 @@ describe('OrcaRuntimeService', () => {
       const send = vi.fn((_channel: string, payload: { requestId: string }) => {
         // Why: the pane spawned before its startup queue landed (the #7587
         // renderer-stall class), so no spawn command is recorded for the PTY.
+        storeRendererTab(runtime, { tabId: 'tab-bare', leafId, ptyId: 'pty-bare' })
         runtime.registerPty('pty-bare', TEST_WORKTREE_ID, null, { tabId: 'tab-bare', leafId })
         ipcMain.emit(
           'terminal:tabCreateReply',

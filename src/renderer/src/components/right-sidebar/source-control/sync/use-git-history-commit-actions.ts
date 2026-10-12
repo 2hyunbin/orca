@@ -8,7 +8,7 @@ import {
   getRuntimeGitRemoteCommitUrl
 } from '@/runtime/runtime-git-client'
 import { getConnectionId } from '@/lib/connection-context'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../../../shared/language-detect'
 import { launchAgentInNewTab } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { resolveDefaultAgentForNewTab } from '@/lib/agent-tab-shortcuts'

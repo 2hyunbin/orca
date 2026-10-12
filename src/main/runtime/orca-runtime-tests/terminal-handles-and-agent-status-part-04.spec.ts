@@ -1,16 +1,123 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { Tab } from '../../../shared/tab-types'
+import type { TerminalTab } from '../../../shared/terminal-tab-types'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   createRuntime,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
   store,
   syncSinglePty
 } from '../orca-runtime-test-fixtures.spec'
 
+const terminalTab = (id: string, title: string, extra: Partial<TerminalTab> = {}): TerminalTab => ({
+  id,
+  ptyId: null,
+  worktreeId: TEST_WORKTREE_ID,
+  title,
+  customTitle: null,
+  color: null,
+  sortOrder: 0,
+  createdAt: 1,
+  ...extra
+})
+
+const unifiedTab = (
+  id: string,
+  entityId: string,
+  contentType: 'terminal' | 'browser',
+  label = id
+): Tab => ({
+  id,
+  entityId,
+  groupId: 'group-1',
+  worktreeId: TEST_WORKTREE_ID,
+  contentType,
+  label,
+  customLabel: null,
+  color: null,
+  sortOrder: 0,
+  createdAt: 1
+})
+
+// One terminal tab whose single pane has no PTY yet.
+function sessionWithPendingTerminal(
+  tabId: string,
+  title: string,
+  extra: Partial<TerminalTab> = {}
+): WorkspaceSessionState {
+  return sessionWith([unifiedTab(tabId, tabId, 'terminal', title)], tabId, {
+    tabsByWorktree: { [TEST_WORKTREE_ID]: [terminalTab(tabId, title, extra)] },
+    terminalLayoutsByTabId: {
+      [tabId]: makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: undefined })
+    }
+  })
+}
+
+// The host's saved session: these tabs in one group, `activeTabId` focused.
+function sessionWith(
+  tabs: Tab[],
+  activeTabId: string,
+  overrides: Partial<WorkspaceSessionState>
+): WorkspaceSessionState {
+  return makeWorkspaceSessionWithHeadlessTerminal({
+    activeTabId,
+    activeTabIdByWorktree: { [TEST_WORKTREE_ID]: activeTabId },
+    unifiedTabs: { [TEST_WORKTREE_ID]: tabs },
+    tabGroups: {
+      [TEST_WORKTREE_ID]: [
+        {
+          id: 'group-1',
+          worktreeId: TEST_WORKTREE_ID,
+          activeTabId,
+          tabOrder: tabs.map((tab) => tab.id)
+        }
+      ]
+    },
+    activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-1' },
+    ...overrides
+  })
+}
+
 describe('OrcaRuntimeService', () => {
   it('does not let the active browser webContents steal session focus from terminals', async () => {
+    store.setWorkspaceSession(
+      sessionWith(
+        [
+          { ...unifiedTab('browser-unified-1', 'browser-workspace-1', 'browser'), sortOrder: 0 },
+          { ...unifiedTab('terminal-tab', 'terminal-tab', 'terminal'), sortOrder: 1 }
+        ],
+        'terminal-tab',
+        {
+          tabsByWorktree: { [TEST_WORKTREE_ID]: [terminalTab('terminal-tab', 'Terminal 2')] },
+          terminalLayoutsByTabId: {
+            'terminal-tab': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: undefined })
+          },
+          browserTabsByWorktree: {
+            [TEST_WORKTREE_ID]: [
+              {
+                id: 'browser-workspace-1',
+                worktreeId: TEST_WORKTREE_ID,
+                activePageId: 'browser-page-1',
+                pageIds: ['browser-page-1'],
+                url: 'https://stale.example/',
+                title: 'Stale Browser',
+                loading: false,
+                faviconUrl: null,
+                canGoBack: false,
+                canGoForward: false,
+                loadError: null,
+                createdAt: 1
+              }
+            ]
+          }
+        }
+      )
+    )
     const runtime = new OrcaRuntimeService(store)
     const tabList = vi.fn(() => ({
       tabs: [
@@ -25,46 +132,11 @@ describe('OrcaRuntimeService', () => {
     }))
     runtime.setAgentBrowserBridge({ tabList } as never)
     runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'terminal-tab::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'browser',
-              id: 'browser-unified-1',
-              title: 'Stale Browser',
-              browserWorkspaceId: 'browser-workspace-1',
-              browserPageId: 'browser-page-1',
-              url: 'https://stale.example/',
-              loading: false,
-              canGoBack: false,
-              canGoForward: false,
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: 'terminal-tab::pane:1',
-              parentTabId: 'terminal-tab',
-              leafId: 'pane:1',
-              title: 'Terminal 2',
-              isActive: true
-            }
-          ]
-        }
-      ]
-    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
-    expect(result.activeTabId).toBe('terminal-tab::pane:1')
+    expect(result.activeTabId).toBe(`terminal-tab::${HEADLESS_LEAF_ID}`)
     expect(result.activeTabType).toBe('terminal')
     expect(result.tabs).toEqual([
       expect.objectContaining({
@@ -75,51 +147,35 @@ describe('OrcaRuntimeService', () => {
       }),
       expect.objectContaining({
         type: 'terminal',
-        id: 'terminal-tab::pane:1',
+        id: `terminal-tab::${HEADLESS_LEAF_ID}`,
         isActive: true
       })
     ])
   })
 
   it('publishes terminal surface agent status for paired web clients', async () => {
-    const runtime = new OrcaRuntimeService(store)
-    const leafId = '11111111-1111-4111-8111-111111111111'
+    const leafId = HEADLESS_LEAF_ID
     const hostPaneKey = `tab-1:${leafId}`
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
+    store.setWorkspaceSession(sessionWithPendingTerminal('tab-1', 'codex [working]'))
+    // The hook server's status store is the source of a pane's agent status.
+    const now = Date.now()
+    const runtime = new OrcaRuntimeService(store, undefined, {
+      getAgentStatusSnapshot: () => [
         {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: `tab-1::${leafId}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `tab-1::${leafId}`,
-              parentTabId: 'tab-1',
-              leafId,
-              title: 'codex [working]',
-              agentStatus: {
-                state: 'working',
-                prompt: 'fix parity',
-                updatedAt: 1_700_000_000_000,
-                stateStartedAt: 1_699_999_999_000,
-                agentType: 'codex',
-                paneKey: hostPaneKey,
-                terminalTitle: 'codex [working]',
-                stateHistory: []
-              },
-              isActive: true
-            }
-          ]
+          paneKey: hostPaneKey,
+          state: 'working',
+          prompt: 'fix parity',
+          agentType: 'codex',
+          connectionId: null,
+          receivedAt: now,
+          stateStartedAt: now - 1_000,
+          tabId: 'tab-1',
+          worktreeId: TEST_WORKTREE_ID
         }
       ]
     })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
@@ -139,168 +195,29 @@ describe('OrcaRuntimeService', () => {
     ])
   })
 
-  it.each([
-    {
-      behavior: 'fills a missing renderer session',
-      hookAgentType: 'codex',
-      hookOffset: 0,
-      rendererSessionId: null,
-      expectedSessionId: 'hook-session'
-    },
-    {
-      behavior: 'replaces a stale renderer session at the same event timestamp',
-      hookAgentType: 'codex',
-      hookOffset: 0,
-      rendererSessionId: 'stale-renderer-session',
-      expectedSessionId: 'hook-session'
-    },
-    {
-      behavior: 'preserves a renderer session newer than the hook row',
-      hookAgentType: 'codex',
-      hookOffset: -1,
-      rendererSessionId: 'newer-renderer-session',
-      expectedSessionId: 'newer-renderer-session'
-    },
-    {
-      behavior: 'rejects a hook session owned by another agent',
-      hookAgentType: 'claude',
-      hookOffset: 1,
-      rendererSessionId: null,
-      expectedSessionId: null
-    }
-  ] as const)(
-    '$behavior',
-    async ({ hookAgentType, hookOffset, rendererSessionId, expectedSessionId }) => {
-      const leafId = '11111111-1111-4111-8111-111111111111'
-      const paneKey = `codex-tab:${leafId}`
-      const providerSession = {
-        key: 'session_id' as const,
-        id: 'hook-session'
-      }
-      const now = Date.now()
-      const runtime = new OrcaRuntimeService(store, undefined, {
-        getAgentStatusSnapshot: () => [
-          {
-            paneKey,
-            state: 'done',
-            prompt: '',
-            agentType: hookAgentType,
-            connectionId: null,
-            receivedAt: now + hookOffset,
-            stateStartedAt: now + hookOffset,
-            tabId: 'codex-tab',
-            worktreeId: TEST_WORKTREE_ID,
-            providerSession
-          }
-        ]
-      })
-      runtime.attachWindow(1)
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'epoch-1',
-            snapshotVersion: 1,
-            activeGroupId: null,
-            activeTabId: `codex-tab::${leafId}`,
-            activeTabType: 'terminal',
-            tabs: [
-              {
-                type: 'terminal',
-                id: `codex-tab::${leafId}`,
-                parentTabId: 'codex-tab',
-                leafId,
-                title: 'Codex',
-                launchAgent: 'codex',
-                agentStatus: {
-                  state: 'working',
-                  prompt: 'Reply with MOBILE QA OK and nothing else.',
-                  updatedAt: now,
-                  stateStartedAt: now,
-                  agentType: 'codex',
-                  paneKey,
-                  stateHistory: [],
-                  ...(rendererSessionId
-                    ? {
-                        providerSession: {
-                          key: 'session_id' as const,
-                          id: rendererSessionId
-                        }
-                      }
-                    : {})
-                },
-                isActive: true
-              }
-            ]
-          }
-        ]
-      })
-
-      const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-
-      expect(result.tabs[0]).toEqual(
-        expect.objectContaining({
-          type: 'terminal',
-          agentStatus: expect.objectContaining({
-            state: 'working',
-            prompt: 'Reply with MOBILE QA OK and nothing else.',
-            agentType: 'codex'
-          })
-        })
-      )
-      if (expectedSessionId) {
-        expect(result.tabs[0]).toHaveProperty('agentStatus.providerSession', {
-          key: 'session_id',
-          id: expectedSessionId
-        })
-      } else {
-        expect(result.tabs[0]).not.toHaveProperty('agentStatus.providerSession')
-      }
-    }
-  )
-
   it('preserves authoritative OMP identity for Pi-compatible remote terminal snapshots', async () => {
-    const runtime = new OrcaRuntimeService(store)
-    const leafId = '11111111-1111-4111-8111-111111111111'
-    const hostPaneKey = `tab-1:${leafId}`
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
+    const hostPaneKey = `tab-1:${HEADLESS_LEAF_ID}`
+    store.setWorkspaceSession(
+      sessionWithPendingTerminal('tab-1', '\u280b Pi', { launchAgent: 'omp' })
+    )
+    const now = Date.now()
+    const runtime = new OrcaRuntimeService(store, undefined, {
+      getAgentStatusSnapshot: () => [
         {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: `tab-1::${leafId}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `tab-1::${leafId}`,
-              parentTabId: 'tab-1',
-              leafId,
-              title: '\u280b Pi',
-              launchAgent: 'omp',
-              agentStatus: {
-                state: 'working',
-                prompt: 'fix parity',
-                updatedAt: 1_700_000_000_000,
-                stateStartedAt: 1_699_999_999_000,
-                agentType: 'pi',
-                paneKey: hostPaneKey,
-                terminalTitle: '\u280b Pi',
-                stateHistory: []
-              },
-              isActive: true
-            }
-          ]
+          paneKey: hostPaneKey,
+          state: 'working',
+          prompt: 'fix parity',
+          agentType: 'pi',
+          connectionId: null,
+          receivedAt: now,
+          stateStartedAt: now - 1_000,
+          tabId: 'tab-1',
+          worktreeId: TEST_WORKTREE_ID
         }
       ]
     })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
@@ -319,7 +236,7 @@ describe('OrcaRuntimeService', () => {
     )
   })
 
-  it('normalizes a remote OMP title without republishing omitted launch identity', async () => {
+  it('normalizes a remote OMP title', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-omp' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
@@ -396,7 +313,6 @@ describe('OrcaRuntimeService', () => {
         title: '\u280b OMP - tmp'
       })
     )
-    expect(result.tabs[0]).not.toHaveProperty('launchAgent')
   })
 
   it('skips the foreground-process probe when the PTY launch agent is already known', async () => {

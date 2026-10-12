@@ -9,6 +9,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
+import { getDefaultWorkspaceSession } from '../../../../shared/constants'
+import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import type { OrchestrationDb } from '../../orchestration/db'
 import type { WorkerTerminalResourceRow } from '../../orchestration/worker-terminal-ownership'
@@ -72,17 +74,34 @@ function installHost(options: { closeThrows?: boolean; lease?: Record<string, un
 type RuntimeInternals = {
   ensureStructuredAgentSessionHost(): Promise<void>
   notifyMessageArrived(...args: unknown[]): void
-  emitMobileSessionTabsSnapshot(snapshot: unknown): void
+}
+
+/** A runtime whose layout holder loads and saves an in-memory Store session. */
+function runtimeWithStore(): OrcaRuntimeService {
+  let session: WorkspaceSessionState = getDefaultWorkspaceSession()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the holder reads only the workspace session members this store defines.
+  const runtime = new OrcaRuntimeService({
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      session = next
+    },
+    getRepos: () => [],
+    getRepo: () => undefined,
+    // The holder lays out only workspaces its catalog knows.
+    getAllWorktreeMetaForHost: () => ({ [WORKTREE]: {} }),
+    getSettings: () => ({ workspaceDir: '/tmp/workspaces' })
+  } as never)
+  const internal = runtime as unknown as RuntimeInternals
+  internal.ensureStructuredAgentSessionHost = async () => undefined
+  internal.notifyMessageArrived = vi.fn()
+  return runtime
 }
 
 async function runtimeShowingStructuredTab(): Promise<{
   runtime: OrcaRuntimeService
   emit: ReturnType<typeof vi.fn>
 }> {
-  const runtime = new OrcaRuntimeService()
-  const internal = runtime as unknown as RuntimeInternals
-  internal.ensureStructuredAgentSessionHost = async () => undefined
-  internal.notifyMessageArrived = vi.fn()
+  const runtime = runtimeWithStore()
   await runtime.publishStructuredAgentSessionTab({
     workspaceId: WORKTREE,
     sessionId: SESSION,
@@ -90,11 +109,7 @@ async function runtimeShowingStructuredTab(): Promise<{
     activate: true
   })
   const emit = vi.fn()
-  const original = internal.emitMobileSessionTabsSnapshot.bind(runtime)
-  internal.emitMobileSessionTabsSnapshot = (snapshot: unknown) => {
-    emit(snapshot)
-    original(snapshot)
-  }
+  runtime.onMobileSessionTabsChanged(emit)
   return { runtime, emit }
 }
 
@@ -143,7 +158,10 @@ describe('structured worker stop retires the chat tab', () => {
     expect(published.tabGroups?.[0]?.tabOrder ?? []).toEqual([])
     expect(published.activeTabId).toBeNull()
     expect(published.activeTabType).toBeNull()
-    expect(emit).toHaveBeenCalled()
+    // Subscribers hear the retirement through the session-tabs coalescer.
+    await vi.waitFor(() =>
+      expect(emit).toHaveBeenCalledWith(expect.objectContaining({ tabs: [] }), expect.any(Number))
+    )
   })
 
   it('leaves the tab alone when the close was NOT proven', async () => {
@@ -189,6 +207,7 @@ describe('structured worker release retires the chat tab', () => {
     installHost()
     const identity = registerIdentity()
     const { runtime } = await runtimeShowingStructuredTab()
+    expect(await structuredTabIds(runtime)).toEqual([`agent-session:${SESSION}`])
     const resource = {
       id: 'resource-1',
       terminal_handle: HANDLE,
@@ -296,10 +315,9 @@ describe('structured worker release retires the chat tab', () => {
 describe('structured worker discard retires the chat tab', () => {
   it('prunes the tab a half-started worker published', async () => {
     const { close } = installHost()
-    const runtime = new OrcaRuntimeService()
-    const internal = runtime as unknown as RuntimeInternals
-    internal.ensureStructuredAgentSessionHost = async () => undefined
+    const runtime = runtimeWithStore()
     let createdSessionId = ''
+    let publishedTabIds: string[] = []
     createSpy.mockImplementation(async (args: { envelope: { sessionId: string } }) => {
       // The create is what publishes the background tab, and it publishes BEFORE the start can
       // fail — which is exactly the tab the discard has to take back.
@@ -310,6 +328,7 @@ describe('structured worker discard retires the chat tab', () => {
         agent: 'claude',
         activate: false
       })
+      publishedTabIds = await structuredTabIds(runtime)
       return { ok: false, refusal: { code: 'agent_session_operation_unknown', message: 'unknown' } }
     })
 
@@ -324,6 +343,7 @@ describe('structured worker discard retires the chat tab', () => {
     ).rejects.toThrow(/was refused/)
 
     expect(close).toHaveBeenCalledWith(createdSessionId, 'evict')
+    expect(publishedTabIds).toEqual([`agent-session:${createdSessionId}`])
     expect(await structuredTabIds(runtime)).toEqual([])
   })
 })

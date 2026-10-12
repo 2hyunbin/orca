@@ -66,7 +66,7 @@ export class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends OrcaRuntim
           recordPtySurface(pty, tabId, paneKey, SURFACE_CLAIM_WITHOUT_STANDING),
         recordAdoptedSurface: (pty, tabId, paneKey) =>
           recordPtySurface(pty, tabId, paneKey, spawnSurfaceClaimSequence(this.graphSequence)),
-        getMobileSnapshots: () => this.mobileSessionTabsByWorktree.values(),
+        getMobileSnapshots: () => this.sessionTabsSnapshots().map(([, snapshot]) => snapshot),
         adoptSession: (from, adopted) => {
           const hostId = this.getWorkspaceSessionHostIdForWorktree(workspace.id)
           const { layout, desktopView, facts, carried } = loadWorkspaceLayout(
@@ -87,12 +87,6 @@ export class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends OrcaRuntim
           )
           return this.store.getWorkspaceSession(hostId)
         },
-        hydrateSession: (worktreeId) =>
-          this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
-            force: true,
-            allowAttachedWindow: true,
-            onlyRuntimeOwnedTerminals: true
-          }),
         notifySessionChanged: (worktreeId) => this.notifyMobileSessionTabsChanged(worktreeId),
         getSnapshot: (worktreeId) => this.getTerminalOrphanAdoptionSnapshot(worktreeId)
       }
@@ -100,11 +94,6 @@ export class OrcaRuntimeWithAdoptTerminalOrphansFromInventory extends OrcaRuntim
   }
 
   protected getTerminalOrphanAdoptionSnapshot(worktreeId: string): RuntimeMobileSessionTabsResult {
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
-      allowAttachedWindow: true,
-      onlyRuntimeOwnedTerminals: true
-    })
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     return this.getMobileSessionTabsForWorktree(worktreeId)
   }
 

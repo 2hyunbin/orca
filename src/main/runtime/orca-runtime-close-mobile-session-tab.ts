@@ -21,7 +21,6 @@ import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import { SESSION_TAB_NOT_FOUND_ERROR } from '../../shared/session-tab-close'
 import { rendererPublicationThrottle } from '../window/renderer-publication-throttle'
 import { structuredAgentSessionTabCloseCause } from './structured-agent-session-tab-close-cause'
-import { retireHeadlessMobileSessionEditorTab } from './mobile-session-editor-projection'
 
 export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose {
   async closeMobileSessionTab(
@@ -41,14 +40,14 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
-    const observedPtyIds = await this.refreshMobileSessionPtyRecords()
+    // Only a lifecycle echo needs liveness proof; a user's close does not wait on the PTY inventory.
+    const lifecycleEcho = options.reason !== undefined && options.reason !== 'user'
+    const observedPtyIds = lifecycleEcho ? await this.refreshMobileSessionPtyRecords() : null
     if (graphEpoch !== null) {
       this.assertStableReadyGraph(graphEpoch)
     }
-    this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktreeId)
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
-    if (options.reason !== undefined && options.reason !== 'user' && observedPtyIds === null) {
+    const snapshot = this.readSessionTabsSnapshot(worktreeId)
+    if (lifecycleEcho && observedPtyIds === null) {
       // Why: keep-on-unknown must also restore the mirror the caller already pruned.
       this.republishMobileSessionTabsSnapshot(worktreeId)
       return refusedMobileSessionTabClose('unknown-liveness', {
@@ -207,7 +206,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         } finally {
           releasePublicationThrottle()
         }
-        const remainingSnapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+        const remainingSnapshot = this.readSessionTabsSnapshot(worktreeId)
         const retirement = acknowledgeRetirement()
         if (!retirement.matches) {
           this.republishMobileSessionTabsSnapshot(worktreeId)
@@ -243,6 +242,11 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
             { allowMissing: true, force: options.force }
           )
         }
+        if (!remainingTab && !options.localPtyTeardownOwnedExternally) {
+          // The window removed the tab; a process it left running (relay recovery) still stops.
+          const parentPtyIds = tab.parentLayout?.ptyIdsByLeafId ?? { [tab.leafId]: tab.ptyId }
+          this.stopClosedTerminals(Object.values(parentPtyIds).filter(Boolean))
+        }
         if (!acknowledgeRetirement().matches) {
           this.republishMobileSessionTabsSnapshot(worktreeId)
           return refusedMobileSessionTabClose('stale-terminal', { snapshotRepublished: true })
@@ -268,7 +272,11 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         this.clearRuntimeSessionOwnershipForMobileTab(worktreeId, snapshot, tab.parentTabId)
         return delegatedMobileSessionTabClose()
       }
-      await this.closeMobileSessionTerminalPane(worktreeId, tab)
+      if (this.getAvailableAuthoritativeWindow()) {
+        await this.closeMobileSessionTerminalPane(worktreeId, tab)
+      } else {
+        this.closeHeldSessionTab(worktreeId, tab.id, { force: options.force })
+      }
       return finishCommittedClose()
     } else if (tab.type === 'browser') {
       // Why: a browser tab can be hosted by a client, by the offscreen backend,
@@ -281,9 +289,11 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
           worktree: `id:${worktreeId}`,
           page: clientPage.browserPageId
         })
-      } else if (this.isOffscreenMobileSessionBrowserTab(snapshot, tab)) {
-        await this.offscreenBrowserBackend!.closeTab(tab.browserPageId!).catch(() => {})
-        this.retireRuntimeOwnedBrowserSessionTab(worktreeId, tab.browserPageId!)
+      } else if (!this.getAvailableAuthoritativeWindow()) {
+        if (tab.browserPageId) {
+          await this.offscreenBrowserBackend?.closeTab(tab.browserPageId).catch(() => {})
+        }
+        this.closeHeldSessionTab(worktreeId, tab.id, { force: options.force })
       } else {
         if (!this.notifier?.closeSessionTab) {
           throw new Error('runtime_unavailable')
@@ -306,11 +316,10 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
         tab,
         structuredAgentSessionTabCloseCause(options.reason)
       )
+    } else if (!this.getAvailableAuthoritativeWindow()) {
+      this.closeHeldSessionTab(worktreeId, tab.id, { force: options.force })
     } else if (!this.notifier?.closeSessionTab) {
-      // Why: a headless host listed this editor from its own session, so it retires it there.
-      if (!retireHeadlessMobileSessionEditorTab(this, worktreeId, tab, options.force)) {
-        throw new Error('runtime_unavailable')
-      }
+      throw new Error('runtime_unavailable')
     } else {
       await this.notifier.closeSessionTab(tab.id, worktreeId)
     }

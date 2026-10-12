@@ -18,6 +18,11 @@ export {
   type SentPaneLayout
 } from './old-client-pane-layout-translation'
 export {
+  resolveSessionTabRow,
+  terminalRowId,
+  type SessionTabRowTarget
+} from './old-client-session-tab-rows'
+export {
   projectSessionTabs,
   type ProjectedSessionTabs,
   type SessionTabsFacts,

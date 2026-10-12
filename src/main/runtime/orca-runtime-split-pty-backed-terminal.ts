@@ -151,15 +151,6 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
         // exit handler closes non-final panes. Never close it by tabId: that drops the whole tab.
         revalidateSourceAuthority()
       }
-      if (createdPty) {
-        this.publishPtyBackedMobileSessionTerminal(workspace.id, createdPty, {
-          tabId: parentTabId,
-          leafId,
-          title: null,
-          activate: opts.activate !== false,
-          split: { splitFromLeafId: parsedPaneKey.leafId, direction }
-        })
-      }
     } catch (error) {
       this.setPairedRendererSessionOwnership(result.id, false)
       let stopped = false

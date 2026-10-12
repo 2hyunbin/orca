@@ -1,7 +1,7 @@
 // Opening editor, browser and agent-session tabs: the tab and its content record in one apply.
 
 import type { EditorTabView } from '../editor-tab-view-types'
-import { applied, type Applied } from './workspace-layout-command-steps'
+import { applied, updateTab, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
 import type { LayoutContentTab, WorkspaceLayoutModel } from './workspace-layout-model'
@@ -75,9 +75,10 @@ export function openBrowserTab(
   context: LayoutContext
 ): Applied {
   const key = command.workspace
-  // The tab-bar id and the browser tab record share one id, as the window mints them.
-  const browserTabId = context.mintId()
-  const pageId = context.mintId()
+  // The tab-bar id and the browser tab record share one id, as the window mints them; a page a
+  // host created alone names both, as its session row always has.
+  const browserTabId = command.pageId ?? context.mintId()
+  const pageId = command.pageId ?? context.mintId()
   const tab = contentTab(context, {
     kind: 'browser',
     id: browserTabId,
@@ -107,6 +108,20 @@ export function openAgentSessionTab(
 ): Applied {
   if (command.initial && !admitsInitialSurface(model, command.workspace, command.initial)) {
     return applied(model)
+  }
+  const existing = model.workspaces[command.workspace]?.tabs.find(
+    (entry) => entry.kind === 'agent-session' && entry.entityId === command.sessionId
+  )
+  if (existing) {
+    // A chat keeps its one tab; a tab saved before tabs named their agent learns it here.
+    return existing.agentSessionAgent
+      ? applied(model, { tabId: existing.id })
+      : updateTab(
+          model,
+          command.workspace,
+          { ...existing, agentSessionAgent: command.agent },
+          { tabId: existing.id }
+        )
   }
   const tab = contentTab(context, {
     kind: 'agent-session',

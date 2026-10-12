@@ -368,7 +368,10 @@ describe('OrcaRuntimeService terminal retirement host partitioning (STA-3463)', 
       { closed: 1 }
     )
     expect(sessions.get(LOCAL_EXECUTION_HOST_ID)?.tabsByWorktree[SSH_WORKTREE_ID]).toEqual([])
-    expect(sessions.get(LOCAL_EXECUTION_HOST_ID)?.terminalPtyIncarnationsByPaneKey).toEqual({})
+    expect(
+      sessions.get(LOCAL_EXECUTION_HOST_ID)?.terminalPtyIncarnationsByPaneKey?.['tab:left']
+    ).toBeUndefined()
+    expect(sessions.get(staleHostId)?.tabsByWorktree[SSH_WORKTREE_ID]).toEqual([])
   })
 
   it('hydrates the persisted owner when a folder host is absent from the host index', () => {

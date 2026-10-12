@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
-import { TEST_WORKTREE_ID, store } from '../orca-runtime-test-fixtures.spec'
+import {
+  TEST_WORKTREE_ID,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
+  store
+} from '../orca-runtime-test-fixtures.spec'
 import { makeAgentStatusStoreWiring } from '../agent-status-store-wiring.test-fixture'
 
 /**
@@ -48,6 +53,38 @@ function wiredRuntime(incarnationId?: string): {
     })
   }
   return { runtime, statusWiring }
+}
+
+/** The window saved a session showing this terminal tab; the holder reloads it on its next read. */
+function saveTerminalTab(
+  runtime: OrcaRuntimeService,
+  tabId: string,
+  leafId: string,
+  ptyId: string
+): void {
+  store.setWorkspaceSession(
+    makeWorkspaceSessionWithHeadlessTerminal({
+      activeTabId: tabId,
+      activeTabIdByWorktree: { [TEST_WORKTREE_ID]: tabId },
+      tabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: tabId,
+            ptyId,
+            worktreeId: TEST_WORKTREE_ID,
+            title: 'Codex',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      terminalLayoutsByTabId: { [tabId]: makeHeadlessTerminalLayout({ [leafId]: ptyId }) }
+    })
+  )
+  // The fixture store has no write notice; a held read stands in for the Store's.
+  runtime.heldWorkspaceLayout(TEST_WORKTREE_ID)
 }
 
 function emitWorkingStatus(runtime: OrcaRuntimeService, sequence: number): void {
@@ -172,29 +209,9 @@ describe('worktree ps follows a dismissal out of the agent-status store', () => 
           paneRuntimeId: 1,
           ptyId: 'dismiss-pty'
         }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'reminted-epoch',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: `tab-reminted::${REMINTED_LEAF_ID}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `tab-reminted::${REMINTED_LEAF_ID}`,
-              parentTabId: 'tab-reminted',
-              leafId: REMINTED_LEAF_ID,
-              ptyId: 'dismiss-pty',
-              title: 'Codex',
-              isActive: true
-            }
-          ]
-        }
       ]
     })
+    saveTerminalTab(runtime, 'tab-reminted', REMINTED_LEAF_ID, 'dismiss-pty')
 
     const before = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const events: Awaited<ReturnType<typeof runtime.listMobileSessionTabs>>[] = []
@@ -233,7 +250,8 @@ describe('worktree ps follows a dismissal out of the agent-status store', () => 
 
       runtime.onPtyExit('dismiss-pty', 0)
       await vi.waitFor(() => expect(events).toHaveLength(3))
-      expect(events[2]).toMatchObject({ snapshotVersion: before.snapshotVersion + 4 })
+      // Clients only need a newer version; an exit's layout publishes each take one.
+      expect(events[2]!.snapshotVersion).toBeGreaterThan(events[1]!.snapshotVersion)
       expect(
         events[2]?.tabs.every((tab) => tab.type !== 'terminal' || tab.agentStatus === undefined)
       ).toBe(true)
@@ -267,29 +285,9 @@ describe('worktree ps follows a dismissal out of the agent-status store', () => 
           paneRuntimeId: 7,
           ptyId: 'legacy-pty'
         }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'legacy-epoch',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: 'legacy-tab::pane:7',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'legacy-tab::pane:7',
-              parentTabId: 'legacy-tab',
-              leafId: 'pane:7',
-              ptyId: 'legacy-pty',
-              title: 'Codex',
-              isActive: true
-            }
-          ]
-        }
       ]
     })
+    saveTerminalTab(runtime, 'legacy-tab', 'pane:7', 'legacy-pty')
     runtime.onPtyData(
       'legacy-pty',
       '\x1b]9999;{"state":"working","prompt":"legacy task","agentType":"codex"}\x07',

@@ -1,13 +1,46 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
-import type { TerminalLayoutSnapshot } from '../orca-runtime-test-mocks.spec'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import {
+  HEADLESS_LEAF_ID,
+  HEADLESS_SECOND_LEAF_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   antigravityPromptBeforeModelReadyScreen,
   antigravityReadyScreen,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
   store
 } from '../orca-runtime-test-fixtures.spec'
+
+// The host's saved session holds terminal tab `tab-1` with these pane bindings.
+function seedTerminalTab(
+  ptyIdsByLeafId: Record<string, string | undefined>,
+  overrides: Partial<WorkspaceSessionState> = {}
+): void {
+  store.setWorkspaceSession(
+    makeWorkspaceSessionWithHeadlessTerminal({
+      activeTabId: 'tab-1',
+      activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-1' },
+      tabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'tab-1',
+            ptyId: Object.values(ptyIdsByLeafId).find(Boolean) ?? null,
+            worktreeId: TEST_WORKTREE_ID,
+            title: 'Terminal 1',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      terminalLayoutsByTabId: { 'tab-1': makeHeadlessTerminalLayout(ptyIdsByLeafId) },
+      ...overrides
+    })
+  )
+}
 
 describe('OrcaRuntimeService', () => {
   it('allows non-Claude foreground agents after preserved Claude agents management evidence', async () => {
@@ -357,41 +390,19 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('keeps mobile terminal surfaces visible while their leaf handle is pending', async () => {
+    seedTerminalTab({ [HEADLESS_LEAF_ID]: undefined })
     const runtime = new OrcaRuntimeService(store)
     runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Terminal 1',
-              isActive: true
-            }
-          ]
-        }
-      ]
-    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
     expect(result.tabs).toEqual([
       expect.objectContaining({
         type: 'terminal',
-        id: 'tab-1::pane:1',
+        id: `tab-1::${HEADLESS_LEAF_ID}`,
         parentTabId: 'tab-1',
-        leafId: 'pane:1',
+        leafId: HEADLESS_LEAF_ID,
         status: 'pending-handle',
         terminal: null
       })
@@ -399,6 +410,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('keeps mobile terminal surfaces pending while a live leaf has no PTY', async () => {
+    seedTerminalTab({ [HEADLESS_LEAF_ID]: undefined })
     const runtime = new OrcaRuntimeService(store)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
@@ -407,7 +419,7 @@ describe('OrcaRuntimeService', () => {
           tabId: 'tab-1',
           worktreeId: TEST_WORKTREE_ID,
           title: 'Terminal 1',
-          activeLeafId: 'pane:1',
+          activeLeafId: HEADLESS_LEAF_ID,
           layout: null
         }
       ],
@@ -415,30 +427,10 @@ describe('OrcaRuntimeService', () => {
         {
           tabId: 'tab-1',
           worktreeId: TEST_WORKTREE_ID,
-          leafId: 'pane:1',
+          leafId: HEADLESS_LEAF_ID,
           paneRuntimeId: 1,
           ptyId: null,
           paneTitle: 'Terminal 1'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Terminal 1',
-              isActive: true
-            }
-          ]
         }
       ]
     })
@@ -448,7 +440,7 @@ describe('OrcaRuntimeService', () => {
     expect(result.tabs).toEqual([
       expect.objectContaining({
         type: 'terminal',
-        id: 'tab-1::pane:1',
+        id: `tab-1::${HEADLESS_LEAF_ID}`,
         status: 'pending-handle',
         terminal: null
       })
@@ -456,18 +448,40 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('selects a visible active pane when terminal visual layout prunes a stale leaf', async () => {
+    // The saved focus is the first (stale) pane; only the second has a live PTY.
+    seedTerminalTab(
+      { [HEADLESS_LEAF_ID]: undefined, [HEADLESS_SECOND_LEAF_ID]: 'pty-2' },
+      {
+        unifiedTabs: {
+          [TEST_WORKTREE_ID]: [
+            {
+              id: 'tab-1',
+              entityId: 'tab-1',
+              groupId: 'group-1',
+              worktreeId: TEST_WORKTREE_ID,
+              contentType: 'terminal',
+              label: 'Split terminal',
+              customLabel: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 1
+            }
+          ]
+        },
+        tabGroups: {
+          [TEST_WORKTREE_ID]: [
+            {
+              id: 'group-1',
+              worktreeId: TEST_WORKTREE_ID,
+              activeTabId: 'missing-tab',
+              tabOrder: ['missing-tab', 'tab-1']
+            }
+          ]
+        },
+        activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-1' }
+      }
+    )
     const runtime = new OrcaRuntimeService(store)
-    const parentLayout: TerminalLayoutSnapshot = {
-      root: {
-        type: 'split',
-        direction: 'vertical',
-        first: { type: 'leaf', leafId: 'pane:1' },
-        second: { type: 'leaf', leafId: 'pane:2' }
-      },
-      activeLeafId: 'pane:1',
-      expandedLeafId: null,
-      ptyIdsByLeafId: { 'pane:2': 'pty-2' }
-    }
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [
@@ -475,7 +489,7 @@ describe('OrcaRuntimeService', () => {
           tabId: 'tab-1',
           worktreeId: TEST_WORKTREE_ID,
           title: 'Split terminal',
-          activeLeafId: 'pane:1',
+          activeLeafId: HEADLESS_LEAF_ID,
           layout: null
         }
       ],
@@ -483,47 +497,10 @@ describe('OrcaRuntimeService', () => {
         {
           tabId: 'tab-1',
           worktreeId: TEST_WORKTREE_ID,
-          leafId: 'pane:2',
+          leafId: HEADLESS_SECOND_LEAF_ID,
           paneRuntimeId: 2,
           ptyId: 'pty-2',
           paneTitle: 'Live pane'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabGroups: [
-            {
-              id: 'group-1',
-              activeTabId: 'missing-tab',
-              tabOrder: ['missing-tab', 'tab-1']
-            }
-          ],
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Stale pane',
-              parentLayout,
-              isActive: true
-            },
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:2',
-              parentTabId: 'tab-1',
-              leafId: 'pane:2',
-              title: 'Live pane',
-              parentLayout,
-              isActive: false
-            }
-          ]
         }
       ]
     })
@@ -539,10 +516,10 @@ describe('OrcaRuntimeService', () => {
           tabs: [
             {
               tabId: 'tab-1',
-              activeLeafId: 'pane:2',
+              activeLeafId: HEADLESS_SECOND_LEAF_ID,
               panes: {
                 type: 'terminal',
-                leafId: 'pane:2',
+                leafId: HEADLESS_SECOND_LEAF_ID,
                 active: true
               }
             }
@@ -553,6 +530,58 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('omits stale browser session tabs that no longer have live webContents', async () => {
+    const browserWorkspace = (name: string, title: string, url: string) => ({
+      id: `browser-workspace-${name}`,
+      worktreeId: TEST_WORKTREE_ID,
+      activePageId: `browser-page-${name}`,
+      pageIds: [`browser-page-${name}`],
+      url,
+      title,
+      loading: false,
+      faviconUrl: null,
+      canGoBack: false,
+      canGoForward: false,
+      loadError: null,
+      createdAt: 1
+    })
+    const browserTab = (name: string, sortOrder: number) => ({
+      id: `browser-unified-${name}`,
+      entityId: `browser-workspace-${name}`,
+      groupId: 'group-1',
+      worktreeId: TEST_WORKTREE_ID,
+      contentType: 'browser' as const,
+      label: name,
+      customLabel: null,
+      color: null,
+      sortOrder,
+      createdAt: 1
+    })
+    store.setWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        activeTabId: null,
+        activeTabIdByWorktree: {},
+        tabsByWorktree: {},
+        terminalLayoutsByTabId: {},
+        browserTabsByWorktree: {
+          [TEST_WORKTREE_ID]: [
+            browserWorkspace('stale', 'Dead Browser', 'about:blank'),
+            browserWorkspace('live', 'Stale Title', 'https://stale.example/')
+          ]
+        },
+        unifiedTabs: { [TEST_WORKTREE_ID]: [browserTab('stale', 0), browserTab('live', 1)] },
+        tabGroups: {
+          [TEST_WORKTREE_ID]: [
+            {
+              id: 'group-1',
+              worktreeId: TEST_WORKTREE_ID,
+              activeTabId: 'browser-unified-stale',
+              tabOrder: ['browser-unified-stale', 'browser-unified-live']
+            }
+          ]
+        },
+        activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-1' }
+      })
+    )
     const runtime = new OrcaRuntimeService(store)
     const tabList = vi.fn(() => ({
       tabs: [
@@ -567,46 +596,7 @@ describe('OrcaRuntimeService', () => {
     }))
     runtime.setAgentBrowserBridge({ tabList } as never)
     runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'browser-unified-stale',
-          activeTabType: 'browser',
-          tabs: [
-            {
-              type: 'browser',
-              id: 'browser-unified-stale',
-              title: 'Dead Browser',
-              browserWorkspaceId: 'browser-workspace-stale',
-              browserPageId: 'browser-page-stale',
-              url: 'about:blank',
-              loading: false,
-              canGoBack: false,
-              canGoForward: false,
-              isActive: true
-            },
-            {
-              type: 'browser',
-              id: 'browser-unified-live',
-              title: 'Stale Title',
-              browserWorkspaceId: 'browser-workspace-live',
-              browserPageId: 'browser-page-live',
-              url: 'https://stale.example/',
-              loading: false,
-              canGoBack: false,
-              canGoForward: false,
-              isActive: false
-            }
-          ]
-        }
-      ]
-    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 

@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SESSION_TABS_AUTHORITATIVE_INVENTORY_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
-import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-session-contracts'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import { subscribeSessionTabsInventory } from './session-tabs-inventory'
@@ -59,10 +58,16 @@ function terminalTab(id: string): RuntimeMobileSessionTabsResult['tabs'][number]
 
 type RuntimeInventoryInternals = {
   refreshMobileSessionPtyInventory: () => Promise<PtyInventory>
-  mobileSessionTabsNotifyCoalescer: { flushAll: () => void }
-  mobileSessionTabListeners: Set<unknown>
-  mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-  emitMobileSessionTabsSnapshot: (snapshot: RuntimeMobileSessionTabsSnapshot) => void
+  sessionTabsStream: { coalescer: { flushAll: () => void } }
+  layoutHolder: {
+    addCatalogWorkspaces: (keys: string[]) => void
+    removeWorkspaces: (keys: string[]) => void
+  }
+  scheduleMobileSessionTabsChanged: (worktreeId: string) => void
+  mobileSessionTabListeners: Set<{
+    listener: (result: RuntimeMobileSessionTabsResult, changeSequence: number) => void
+  }>
+  mobileSessionTabsChangeSequence: number
   emitMobileSessionTabsSnapshotToClient: (
     snapshot: RuntimeMobileSessionTabsResult,
     clientNavigationId: string,
@@ -86,21 +91,6 @@ function completePtyInventory(): PtyInventory {
   }
 }
 
-function runtimeSnapshot(
-  worktree: string,
-  snapshotVersion: number
-): RuntimeMobileSessionTabsSnapshot {
-  return {
-    worktree,
-    publicationEpoch: 'epoch-current',
-    snapshotVersion,
-    activeGroupId: null,
-    activeTabId: null,
-    activeTabType: null,
-    tabs: []
-  }
-}
-
 function deferredPtyInventory(): {
   promise: Promise<PtyInventory>
   resolve: (inventory: PtyInventory) => void
@@ -114,11 +104,14 @@ function deferredPtyInventory(): {
   }
 }
 
-function createRuntimeHarness(initialSnapshots: RuntimeMobileSessionTabsSnapshot[] = []) {
+/** A real runtime whose phone list is its layout holder; catalog adds and removals publish. */
+function createRuntimeHarness(initialWorktrees: string[] = []) {
   const runtime = new OrcaRuntimeService()
-  runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: initialSnapshots })
-  const census = deferredPtyInventory()
   const internals = runtime as unknown as RuntimeInventoryInternals
+  const holder = internals.layoutHolder
+  holder.addCatalogWorkspaces(initialWorktrees)
+  runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+  const census = deferredPtyInventory()
   vi.spyOn(internals, 'refreshMobileSessionPtyInventory').mockReturnValue(census.promise)
   const emit = vi.fn<(event: unknown) => void>()
   const pending = subscribeSessionTabsInventory(
@@ -134,19 +127,48 @@ function createRuntimeHarness(initialSnapshots: RuntimeMobileSessionTabsSnapshot
     },
     emit
   )
+  const flush = (): void => internals.sessionTabsStream.coalescer.flushAll()
   return {
     census,
     emit,
+    flush,
     internals,
     pending,
-    publish: (snapshots: RuntimeMobileSessionTabsSnapshot[], flush = true): void => {
-      runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: snapshots })
-      if (flush) {
-        internals.mobileSessionTabsNotifyCoalescer.flushAll()
+    /** Holder publishes reach subscribers through the coalescer; `flush: false` leaves them pending. */
+    create: (worktree: string, options = { flush: true }): void => {
+      holder.addCatalogWorkspaces([worktree])
+      if (options.flush) {
+        flush()
       }
     },
+    /** A coalesced change to what a published worktree shows (a title, a status). */
+    change: (worktree: string, options = { flush: true }): void => {
+      internals.scheduleMobileSessionTabsChanged(worktree)
+      if (options.flush) {
+        flush()
+      }
+    },
+    remove: (worktree: string): void => holder.removeWorkspaces([worktree]),
     runtime
   }
+}
+
+/** The emitted event's snapshotVersion; a census event reads its first snapshot's. */
+function emittedVersion(harness: { emit: ReturnType<typeof vi.fn> }, index: number): number {
+  const versionOf = (value: unknown): number => {
+    if (typeof value === 'object' && value !== null && 'snapshots' in value) {
+      return versionOf(Array.isArray(value.snapshots) ? value.snapshots[0] : undefined)
+    }
+    const version =
+      typeof value === 'object' && value !== null && 'snapshotVersion' in value
+        ? value.snapshotVersion
+        : undefined
+    if (typeof version === 'number') {
+      return version
+    }
+    throw new Error('expected an event carrying a snapshotVersion')
+  }
+  return versionOf(harness.emit.mock.calls[index]?.[0])
 }
 
 function createHarness() {
@@ -196,9 +218,8 @@ function createHarness() {
 describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundary', () => {
   it('subsumes a delivered change already captured by the census', async () => {
     const harness = createRuntimeHarness()
-    const created = runtimeSnapshot('wt-census-race', 1)
 
-    harness.publish([created])
+    harness.create('wt-census-race')
     harness.census.resolve(completePtyInventory())
     await harness.pending
 
@@ -206,16 +227,15 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
       expect.objectContaining({
         type: 'snapshots',
         authoritative: true,
-        snapshots: [expect.objectContaining({ worktree: created.worktree, snapshotVersion: 1 })]
+        snapshots: [expect.objectContaining({ worktree: 'wt-census-race' })]
       })
     ])
   })
 
   it('subsumes a removal that precedes the final census snapshot', async () => {
-    const existing = runtimeSnapshot('wt-census-race', 1)
-    const harness = createRuntimeHarness([existing])
+    const harness = createRuntimeHarness(['wt-census-race'])
 
-    harness.publish([])
+    harness.remove('wt-census-race')
     harness.census.resolve(completePtyInventory())
     await harness.pending
 
@@ -225,22 +245,20 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
   })
 
   it('subsumes creation and removal at the census release edge', async () => {
-    const created = runtimeSnapshot('wt-created', 1)
     const creation = createRuntimeHarness()
     creation.census.resolve(completePtyInventory())
-    creation.publish([created])
+    creation.create('wt-created')
 
-    const existing = runtimeSnapshot('wt-removed', 1)
-    const removal = createRuntimeHarness([existing])
+    const removal = createRuntimeHarness(['wt-removed'])
     removal.census.resolve(completePtyInventory())
-    removal.publish([])
+    removal.remove('wt-removed')
 
     await Promise.all([creation.pending, removal.pending])
 
     expect(creation.emit).toHaveBeenCalledOnce()
     expect(creation.emit.mock.calls[0]?.[0]).toMatchObject({
       type: 'snapshots',
-      snapshots: [expect.objectContaining({ worktree: created.worktree })]
+      snapshots: [expect.objectContaining({ worktree: 'wt-created' })]
     })
     expect(removal.emit.mock.calls.map(([event]) => event)).toEqual([
       { type: 'snapshots', snapshots: [], authoritative: true }
@@ -249,57 +267,50 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
 
   it('does not replay a delayed pre-boundary change after initialization', async () => {
     const harness = createRuntimeHarness()
-    const created = runtimeSnapshot('wt-census-race', 1)
 
-    harness.publish([created], false)
+    harness.create('wt-census-race', { flush: false })
     harness.census.resolve(completePtyInventory())
     await harness.pending
-    harness.internals.mobileSessionTabsNotifyCoalescer.flushAll()
+    harness.flush()
 
     expect(harness.emit.mock.calls.map(([event]) => event)).toEqual([
       expect.objectContaining({
         type: 'snapshots',
         authoritative: true,
-        snapshots: [expect.objectContaining({ worktree: created.worktree, snapshotVersion: 1 })]
+        snapshots: [expect.objectContaining({ worktree: 'wt-census-race' })]
       })
     ])
   })
 
   it('delivers a creation after the effective snapshot boundary', async () => {
     const harness = createRuntimeHarness()
-    const created = runtimeSnapshot('wt-census-race', 1)
 
     harness.census.resolve(completePtyInventory())
-    queueMicrotask(() => harness.publish([created]))
+    queueMicrotask(() => harness.create('wt-census-race'))
     await harness.pending
 
     expect(harness.emit.mock.calls.map(([event]) => event)).toEqual([
       { type: 'snapshots', snapshots: [], authoritative: true },
-      expect.objectContaining({
-        type: 'updated',
-        worktree: created.worktree,
-        snapshotVersion: created.snapshotVersion
-      })
+      expect.objectContaining({ type: 'updated', worktree: 'wt-census-race' })
     ])
   })
 
   it('delivers a removal after the effective snapshot boundary', async () => {
-    const existing = runtimeSnapshot('wt-census-race', 1)
-    const harness = createRuntimeHarness([existing])
+    const harness = createRuntimeHarness(['wt-census-race'])
 
     harness.census.resolve(completePtyInventory())
-    queueMicrotask(() => harness.publish([]))
+    queueMicrotask(() => harness.remove('wt-census-race'))
     await harness.pending
 
     expect(harness.emit.mock.calls.map(([event]) => event)).toEqual([
       expect.objectContaining({
         type: 'snapshots',
         authoritative: true,
-        snapshots: [expect.objectContaining({ worktree: existing.worktree, snapshotVersion: 1 })]
+        snapshots: [expect.objectContaining({ worktree: 'wt-census-race' })]
       }),
       expect.objectContaining({
         type: 'updated',
-        worktree: existing.worktree,
+        worktree: 'wt-census-race',
         removed: true,
         tabs: []
       })
@@ -308,103 +319,89 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
 
   it('coalesces ordinary same-structure churn and replays worktrees in sequence order', async () => {
     const harness = createRuntimeHarness()
-    const worktreeB1 = runtimeSnapshot('wt-b', 1)
-    const worktreeA = runtimeSnapshot('wt-a', 1)
-    const worktreeB2 = runtimeSnapshot('wt-b', 2)
 
     harness.census.resolve(completePtyInventory())
     queueMicrotask(() => {
-      harness.publish([worktreeB1])
-      harness.publish([worktreeB1, worktreeA])
-      harness.publish([worktreeB2, worktreeA])
+      harness.create('wt-b')
+      harness.create('wt-a')
+      harness.change('wt-b')
     })
     await harness.pending
 
     expect(harness.emit.mock.calls.map(([event]) => event)).toEqual([
       { type: 'snapshots', snapshots: [], authoritative: true },
-      expect.objectContaining({ type: 'updated', worktree: 'wt-a', snapshotVersion: 1 }),
-      expect.objectContaining({ type: 'updated', worktree: 'wt-b', snapshotVersion: 2 })
+      expect.objectContaining({ type: 'updated', worktree: 'wt-a' }),
+      expect.objectContaining({ type: 'updated', worktree: 'wt-b' })
     ])
+    // The replayed wt-b is its latest change, not its creation.
+    expect(emittedVersion(harness, 2)).toBeGreaterThan(emittedVersion(harness, 1))
   })
 
   it('replays create, remove, and recreate transitions without collapsing them', async () => {
     const harness = createRuntimeHarness()
-    const created = runtimeSnapshot('wt-census-race', 1)
-    const recreated = runtimeSnapshot('wt-census-race', 2)
 
     harness.census.resolve(completePtyInventory())
     queueMicrotask(() => {
-      harness.publish([created])
-      harness.publish([])
-      harness.publish([recreated])
+      harness.create('wt-census-race')
+      harness.remove('wt-census-race')
+      harness.create('wt-census-race')
     })
     await harness.pending
 
     expect(harness.emit.mock.calls.map(([event]) => event)).toEqual([
       { type: 'snapshots', snapshots: [], authoritative: true },
-      expect.objectContaining({ type: 'updated', worktree: created.worktree, snapshotVersion: 1 }),
-      expect.objectContaining({ type: 'updated', worktree: created.worktree, removed: true }),
-      expect.objectContaining({ type: 'updated', worktree: recreated.worktree, snapshotVersion: 2 })
+      expect.objectContaining({ type: 'updated', worktree: 'wt-census-race' }),
+      expect.objectContaining({ type: 'updated', worktree: 'wt-census-race', removed: true }),
+      expect.objectContaining({ type: 'updated', worktree: 'wt-census-race' })
     ])
+    expect(emittedVersion(harness, 3)).toBeGreaterThan(emittedVersion(harness, 1))
   })
 
   it('cancels a stale coalesced callback before removal and later recreation', async () => {
-    const initial = runtimeSnapshot('wt-census-race', 1)
-    const harness = createRuntimeHarness([initial])
-    const pending = runtimeSnapshot('wt-census-race', 2)
-    const recreated = runtimeSnapshot('wt-census-race', 3)
+    const harness = createRuntimeHarness(['wt-census-race'])
 
     harness.census.resolve(completePtyInventory())
     await harness.pending
-    harness.publish([pending], false)
-    harness.publish([])
-    harness.internals.mobileSessionTabsNotifyCoalescer.flushAll()
-    harness.publish([recreated])
+    harness.change('wt-census-race', { flush: false })
+    harness.remove('wt-census-race')
+    harness.flush()
+    harness.create('wt-census-race')
 
     expect(harness.emit.mock.calls.map(([event]) => event)).toEqual([
       expect.objectContaining({
         type: 'snapshots',
-        snapshots: [expect.objectContaining({ snapshotVersion: initial.snapshotVersion })]
+        snapshots: [expect.objectContaining({ worktree: 'wt-census-race' })]
       }),
-      expect.objectContaining({ type: 'updated', worktree: initial.worktree, removed: true }),
-      expect.objectContaining({
-        type: 'updated',
-        worktree: recreated.worktree,
-        snapshotVersion: recreated.snapshotVersion
-      })
+      expect.objectContaining({ type: 'updated', worktree: 'wt-census-race', removed: true }),
+      expect.objectContaining({ type: 'updated', worktree: 'wt-census-race' })
     ])
+    expect(harness.emit.mock.calls[2]?.[0]).not.toHaveProperty('removed')
   })
 
   it('keeps a newer immediate change when an older coalesced callback arrives last', async () => {
     const harness = createRuntimeHarness()
-    const scheduled = runtimeSnapshot('wt-census-race', 1)
-    const immediate = runtimeSnapshot('wt-census-race', 2)
 
-    harness.publish([scheduled], false)
+    harness.create('wt-census-race', { flush: false })
     harness.census.resolve(completePtyInventory())
     queueMicrotask(() => {
-      harness.internals.mobileSessionTabsByWorktree.set(immediate.worktree, immediate)
-      harness.internals.emitMobileSessionTabsSnapshot(immediate)
-      harness.internals.mobileSessionTabsNotifyCoalescer.flushAll()
+      harness.runtime.notifyMobileSessionTabsChanged('wt-census-race')
+      harness.flush()
     })
     await harness.pending
 
     expect(harness.emit.mock.calls.map(([event]) => event)).toEqual([
       expect.objectContaining({
         type: 'snapshots',
-        snapshots: [expect.objectContaining({ snapshotVersion: scheduled.snapshotVersion })]
+        snapshots: [expect.objectContaining({ worktree: 'wt-census-race' })]
       }),
-      expect.objectContaining({
-        type: 'updated',
-        worktree: immediate.worktree,
-        snapshotVersion: immediate.snapshotVersion
-      })
+      expect.objectContaining({ type: 'updated', worktree: 'wt-census-race' })
     ])
+    expect(emittedVersion(harness, 1)).toBeGreaterThan(emittedVersion(harness, 0))
   })
 
   it('preserves caller-only follow intent when a later shared snapshot is buffered', async () => {
     const runtime = new OrcaRuntimeService()
-    runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: [] })
+    runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
     const census = deferredInventory()
     vi.spyOn(runtime, 'listAllMobileSessionTabsInventoryWithChangeSequence').mockImplementation(
       () => census.promise
@@ -436,9 +433,11 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
     census.resolve({ snapshots: [], authoritative: true, changeSequence: 0 })
     queueMicrotask(() => {
       internals.emitMobileSessionTabsSnapshotToClient(followed, 'device-caller', true)
-      const latestRuntimeSnapshot = latest as RuntimeMobileSessionTabsSnapshot
-      internals.mobileSessionTabsByWorktree.set(latest.worktree, latestRuntimeSnapshot)
-      internals.emitMobileSessionTabsSnapshot(latestRuntimeSnapshot)
+      // A shared change every subscriber receives, as the runtime fans one out.
+      const changeSequence = ++internals.mobileSessionTabsChangeSequence
+      for (const subscription of internals.mobileSessionTabListeners) {
+        subscription.listener(latest, changeSequence)
+      }
     })
     await Promise.all([callerPending, bystanderPending])
 
@@ -469,7 +468,7 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
 
   it('subsumes pre-boundary follow intent into the census selection', async () => {
     const runtime = new OrcaRuntimeService()
-    runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: [] })
+    runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
     const census = deferredInventory()
     vi.spyOn(runtime, 'listAllMobileSessionTabsInventoryWithChangeSequence').mockImplementation(
       () => census.promise
@@ -498,7 +497,7 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
 
   it('uses one change sequence across subscribers without duplicate fanout', async () => {
     const runtime = new OrcaRuntimeService()
-    const created = runtimeSnapshot('wt-census-race', 1)
+    const internals = runtime as unknown as RuntimeInventoryInternals
     const first: number[] = []
     const second: number[] = []
     const unsubscribeFirst = runtime.onMobileSessionTabsChanged((_snapshot, sequence) =>
@@ -508,8 +507,8 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
       second.push(sequence)
     )
 
-    runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: [created] })
-    ;(runtime as unknown as RuntimeInventoryInternals).mobileSessionTabsNotifyCoalescer.flushAll()
+    internals.layoutHolder.addCatalogWorkspaces(['wt-census-race'])
+    internals.sessionTabsStream.coalescer.flushAll()
 
     expect(first).toEqual([expect.any(Number)])
     expect(second).toEqual(first)
@@ -519,7 +518,7 @@ describe.skipIf(runningBaselineOracle)('real runtime session tabs census boundar
 
   it('aborts the census and removes the real runtime listener on disconnect', async () => {
     const runtime = new OrcaRuntimeService()
-    runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: [] })
+    runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
     const census = deferredPtyInventory()
     const internals = runtime as unknown as RuntimeInventoryInternals
     vi.spyOn(internals, 'refreshMobileSessionPtyInventory').mockReturnValue(census.promise)

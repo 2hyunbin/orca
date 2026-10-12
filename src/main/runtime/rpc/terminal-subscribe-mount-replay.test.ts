@@ -299,6 +299,8 @@ describe('terminal subscribe mount replay', () => {
     const runtime = asRuntime({
       getRuntimeId: () => 'test-runtime',
       subscribeToPtyExit: vi.fn(() => vi.fn()),
+      // Why: the renderer mount replay only exists while a window owns the pane.
+      startsPanesForSubscribers: vi.fn(() => false),
       resolveLeafForHandle: vi.fn().mockReturnValue(null),
       waitForLeafPtyId: vi.fn(async () => {
         // A redraw may reach main before the PTY wait completes, but it does

@@ -42,7 +42,6 @@ describe('startPanes', () => {
       leafId: leaf(1),
       paneStart: starts[0],
       presentation: 'background',
-      deferMobileSessionPublish: true,
       sessionId: 'pty-1',
       initialSize: { cols: 80, rows: 24 }
     })

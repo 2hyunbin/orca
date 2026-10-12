@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 // Measures the real `terminal.list` wire payload for a large listing, so the
 // visualLayouts opt-out keeps paying for itself. Sized against a live
@@ -24,7 +26,11 @@ const ptyIdFor = (index: number): string => `pty-${uuid(2_000 + index)}`
 const groupIdFor = (tab: number): string => `group-${uuid(3_000 + (tab % 2))}`
 const titleFor = (index: number): string => `claude — orca/perf-terminal-list-diet #${index}`
 
-const makeStore = () => ({
+const makeStore = (session: WorkspaceSessionState = getDefaultWorkspaceSession()) => ({
+  getWorkspaceSession: () => session,
+  setWorkspaceSession: (next: WorkspaceSessionState) => {
+    session = next
+  },
   getRepo: (id: string) => makeStore().getRepos()[0] ?? (id as never),
   getRepos: () => [
     { id: REPO_ID, path: '/tmp/repo', displayName: 'repo', badgeColor: 'blue', addedAt: 1 }
@@ -78,27 +84,33 @@ type GraphLeaf = {
   title: string
 }
 
-type MobileTab = {
-  type: 'terminal'
-  id: string
-  title: string
-  parentTabId: string
-  leafId: string
-  ptyId: string
-  parentLayout: {
-    root: PaneLayout
-    activeLeafId: string
-    expandedLeafId: string | null
-    ptyIdsByLeafId: Record<string, string>
-  }
-  isActive: boolean
-}
-
 function buildLoadedRuntime(): OrcaRuntimeService {
-  const runtime = new OrcaRuntimeService(makeStore() as never)
   const tabs: GraphTab[] = []
   const leaves: GraphLeaf[] = []
-  const mobileTabs: MobileTab[] = []
+  const groupIds = [groupIdFor(0), groupIdFor(1)]
+  // The window's saved session, which the phone list and visualLayouts project.
+  const session: WorkspaceSessionState = {
+    ...getDefaultWorkspaceSession(),
+    tabsByWorktree: { [WORKTREE_ID]: [] },
+    unifiedTabs: { [WORKTREE_ID]: [] },
+    tabGroups: {
+      [WORKTREE_ID]: groupIds.map((id, groupIndex) => ({
+        id,
+        worktreeId: WORKTREE_ID,
+        activeTabId: tabIdFor(groupIndex),
+        tabOrder: []
+      }))
+    },
+    tabGroupLayouts: {
+      [WORKTREE_ID]: {
+        type: 'split',
+        direction: 'horizontal',
+        first: { type: 'leaf', groupId: groupIds[0]! },
+        second: { type: 'leaf', groupId: groupIds[1]! }
+      }
+    },
+    activeGroupIdByWorktree: { [WORKTREE_ID]: groupIds[0]! }
+  }
 
   for (let tab = 0; tab < TAB_COUNT; tab += 1) {
     const tabId = tabIdFor(tab)
@@ -117,68 +129,60 @@ function buildLoadedRuntime(): OrcaRuntimeService {
       activeLeafId: second,
       layout: root
     })
+    const groupId = groupIds[tab % 2]!
+    session.tabsByWorktree[WORKTREE_ID]!.push({
+      id: tabId,
+      ptyId: ptyIdFor(tab * PANES_PER_TAB),
+      worktreeId: WORKTREE_ID,
+      title: `Tab ${tab}`,
+      customTitle: null,
+      color: null,
+      sortOrder: tab,
+      createdAt: 1
+    })
+    session.unifiedTabs![WORKTREE_ID]!.push({
+      id: tabId,
+      entityId: tabId,
+      groupId,
+      worktreeId: WORKTREE_ID,
+      contentType: 'terminal',
+      label: `Tab ${tab}`,
+      customLabel: null,
+      color: null,
+      sortOrder: tab,
+      createdAt: 1
+    })
+    session.tabGroups![WORKTREE_ID]!.find((group) => group.id === groupId)!.tabOrder.push(tabId)
+    session.terminalLayoutsByTabId[tabId] = {
+      root,
+      activeLeafId: second,
+      expandedLeafId: null,
+      ptyIdsByLeafId: {
+        [first]: ptyIdFor(tab * PANES_PER_TAB),
+        [second]: ptyIdFor(tab * PANES_PER_TAB + 1)
+      },
+      titlesByLeafId: {
+        [first]: titleFor(tab * PANES_PER_TAB),
+        [second]: titleFor(tab * PANES_PER_TAB + 1)
+      }
+    }
     for (let pane = 0; pane < PANES_PER_TAB; pane += 1) {
       const index = tab * PANES_PER_TAB + pane
-      const leafId = leafIdFor(index)
       leaves.push({
         tabId,
         worktreeId: WORKTREE_ID,
-        leafId,
+        leafId: leafIdFor(index),
         paneRuntimeId: pane + 1,
         ptyId: ptyIdFor(index),
         title: titleFor(index)
       })
-      mobileTabs.push({
-        type: 'terminal',
-        id: `${tabId}::${leafId}`,
-        title: titleFor(index),
-        parentTabId: tabId,
-        leafId,
-        ptyId: ptyIdFor(index),
-        parentLayout: {
-          root,
-          activeLeafId: second,
-          expandedLeafId: null,
-          ptyIdsByLeafId: {
-            [first]: ptyIdFor(tab * PANES_PER_TAB),
-            [second]: ptyIdFor(tab * PANES_PER_TAB + 1)
-          }
-        },
-        isActive: index === 0
-      })
     }
   }
 
-  const groupIds = [groupIdFor(0), groupIdFor(1)]
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime never calls getGitHubCache, the one RuntimeStore member this stub omits.
+  const runtime = new OrcaRuntimeService(makeStore(session) as never)
   runtime.attachWindow(1)
-  runtime.syncWindowGraph(1, {
-    tabs,
-    leaves,
-    mobileSessionTabs: [
-      {
-        worktree: WORKTREE_ID,
-        publicationEpoch: 'test',
-        snapshotVersion: 1,
-        activeGroupId: groupIds[0],
-        activeTabId: mobileTabs[0]!.id,
-        activeTabType: 'terminal',
-        tabGroups: groupIds.map((id, groupIndex) => ({
-          id,
-          activeTabId: tabIdFor(groupIndex),
-          tabOrder: tabs
-            .filter((_tab, tabIndex) => tabIndex % 2 === groupIndex)
-            .map((tab) => tab.tabId)
-        })),
-        tabGroupLayout: {
-          type: 'split',
-          direction: 'horizontal',
-          first: { type: 'leaf', groupId: groupIds[0] },
-          second: { type: 'leaf', groupId: groupIds[1] }
-        },
-        tabs: mobileTabs
-      }
-    ]
-  } as never)
+  runtime.syncWindowGraph(1, { tabs, leaves })
 
   // Realistic previews: the live sample carried ~27 B of tail text per terminal.
   for (let index = 0; index < TERMINAL_COUNT; index += 1) {

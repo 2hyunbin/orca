@@ -2,8 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { HEADLESS_RUNTIME_WINDOW_ID, OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import type { RuntimeClientEvent } from '../orca-runtime-test-mocks.spec'
 import {
+  HEADLESS_LEAF_ID,
   TEST_REPO_ID,
   TEST_WORKTREE_ID,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
   store,
   syncSinglePty
 } from '../orca-runtime-test-fixtures.spec'
@@ -322,6 +325,28 @@ describe('terminal side-effect fact channel', () => {
   })
 
   it('keeps live Cursor identity in mobile titles without making it agent liveness', async () => {
+    store.setWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        tabsByWorktree: {
+          [TEST_WORKTREE_ID]: [
+            {
+              id: 'tab-1',
+              ptyId: 'pty-1',
+              worktreeId: TEST_WORKTREE_ID,
+              title: 'Terminal 1',
+              customTitle: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 1
+            }
+          ]
+        },
+        activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-1' },
+        terminalLayoutsByTabId: {
+          'tab-1': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: 'pty-1' })
+        }
+      })
+    )
     const runtime = new OrcaRuntimeService(store)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
@@ -330,7 +355,7 @@ describe('terminal side-effect fact channel', () => {
           tabId: 'tab-1',
           worktreeId: TEST_WORKTREE_ID,
           title: 'Terminal 1',
-          activeLeafId: 'pane:1',
+          activeLeafId: HEADLESS_LEAF_ID,
           layout: null
         }
       ],
@@ -338,30 +363,9 @@ describe('terminal side-effect fact channel', () => {
         {
           tabId: 'tab-1',
           worktreeId: TEST_WORKTREE_ID,
-          leafId: 'pane:1',
+          leafId: HEADLESS_LEAF_ID,
           paneRuntimeId: 1,
           ptyId: 'pty-1'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-cursor',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              ptyId: 'pty-1',
-              title: 'Terminal 1',
-              isActive: true
-            }
-          ]
         }
       ]
     })

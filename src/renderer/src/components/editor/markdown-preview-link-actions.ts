@@ -1,7 +1,7 @@
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { toast } from 'sonner'
 import { getConnectionIdForFile } from '@/lib/connection-context'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { isLocalPathOpenBlocked, showLocalPathOpenBlockedToast } from '@/lib/local-path-open-guard'
 import { getLinkSourceLocalOpenOwner } from '@/lib/link-source-local-open-owner'
 import { openHttpLink } from '@/lib/http-link-routing'

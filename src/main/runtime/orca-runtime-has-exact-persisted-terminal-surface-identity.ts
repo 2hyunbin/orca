@@ -6,9 +6,7 @@ import {
 } from './runtime-worktree-path-identity'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { layoutContainsLeafId } from '../persistence/restoring-sessions/terminal-layout-normalization'
 import type { LegacyWorkerTerminalRecoveryPlan } from './orchestration/orchestration-legacy-worker-terminal-recovery'
-import { retireTerminalSurfacesFromSnapshot } from './mobile-session-terminal-retirement'
 import type {
   LegacyWorkerRecoveryCandidate,
   LegacyWorkerRecoveryInventory,
@@ -43,21 +41,6 @@ export class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends Orc
       : null
   }
 
-  protected hasPersistedTerminalSurfaceMembership(
-    worktreeId: string,
-    tabId: string,
-    leafId: string
-  ): boolean {
-    // Why own partition: emptying a rotated runtime partition re-routes reads to an older copy
-    // that can still list a surface retirement just removed.
-    const layout = this.getPersistedSessionListingTerminalTab(
-      worktreeId,
-      tabId,
-      this.getOwnWorkspaceSessionForWorktree(worktreeId)
-    )?.terminalLayoutsByTabId[tabId]
-    return Boolean(layout && layoutContainsLeafId(layout.root, leafId))
-  }
-
   protected hasExactPersistedTerminalSurfaceIdentity(expected: {
     worktreeId: string
     tabId: string
@@ -78,20 +61,6 @@ export class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends Orc
   protected rollbackLegacyWorkerTerminalSurface(
     candidate: LegacyWorkerTerminalRecoveryPlan['candidates'][number]
   ): void {
-    const snapshot = this.mobileSessionTabsByWorktree.get(candidate.worktreeId)
-    if (snapshot) {
-      const retired = retireTerminalSurfacesFromSnapshot({
-        snapshot,
-        ptyId: candidate.ptyId,
-        exactSurfaces: [{ parentTabId: candidate.tabId, leafId: candidate.leafId }],
-        exactOnly: true
-      })
-      if (retired) {
-        this.storeMobileSessionSnapshot(candidate.worktreeId, retired.snapshot)
-        this.notifyMobileSessionTabsChanged(candidate.worktreeId)
-      }
-    }
-
     const leafKey = this.getLeafKey(candidate.tabId, candidate.leafId)
     const leaf = this.leaves.get(leafKey)
     const pty = this.ptysById.get(candidate.ptyId)
@@ -120,6 +89,7 @@ export class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends Orc
       pty.tabId = null
       pty.paneKey = null
     }
+    this.notifyMobileSessionTabsChanged(candidate.worktreeId)
     this.notifier?.resolveLegacyWorkerTerminalRecovery?.(
       candidate.paneKey,
       'rolled_back',

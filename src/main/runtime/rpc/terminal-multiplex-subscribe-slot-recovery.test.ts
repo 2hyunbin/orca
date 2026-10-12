@@ -31,6 +31,8 @@ describe('terminal multiplex RPC', () => {
     const resolveLeaf = (): { ptyId: string | null } =>
       leafResolved ? { ptyId: 'pty-1' } : { ptyId: null }
     const runtime = stubRuntime({
+      // Why: window-attached path; subscribe A blocks in the window's PTY wait.
+      startsPanesForSubscribers: vi.fn(() => false),
       resolveLeafForHandle: vi.fn(resolveLeaf),
       resolveLiveLeafForHandle: vi.fn(resolveLeaf),
       waitForLeafPtyId: vi.fn(

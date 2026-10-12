@@ -22,7 +22,7 @@ vi.mock('@/store', () => ({
   }
 }))
 
-vi.mock('@/lib/language-detect', () => ({
+vi.mock('../../../../shared/language-detect', () => ({
   detectLanguage: (filePath: string) => (filePath.endsWith('.md') ? 'markdown' : 'plaintext')
 }))
 

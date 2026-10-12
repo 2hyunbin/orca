@@ -1,6 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { randomUUID } from 'node:crypto'
-import { preserveTerminalRetirementProofs } from './mobile-session-terminal-retirement-proof'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import type { RuntimeStore } from './runtime-store-contract'
@@ -13,7 +12,6 @@ import type {
   RuntimeGraphStatus,
   RuntimeMobileSessionCreateTerminalResult,
   RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTabsSnapshot,
   RuntimeSyncedTab,
   RuntimeTerminalFocus,
   RuntimeTerminalResolvePane,
@@ -28,8 +26,6 @@ import { ClientSessionTabSelectionStore } from './client-session-tab-selection'
 import { WorktreeTerminalMutationLock } from './worktree-terminal-mutation-lock'
 import { RemoteRuntimeTerminalCreateIdempotency } from './remote-runtime-terminal-create-idempotency'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
-import type { MobileSessionTabsNotifyCoalescer } from './mobile-session-tabs-notify-coalescer'
-import { createMobileSessionTabsNotifyCoalescer } from './mobile-session-tabs-notify-coalescer'
 import type { MobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
 import { createMobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
 import { TerminalFocusNavigationCoalescer } from './terminal-focus-navigation-coalescer'
@@ -98,24 +94,6 @@ export class OrcaRuntimeWithRuntimeId {
 
   protected tabs = new Map<string, RuntimeSyncedTab>()
 
-  protected mobileSessionTabsByWorktree = new Map<string, RuntimeMobileSessionTabsSnapshot>()
-
-  /** Single host writer for mobile session snapshots; versions are total-order stamps. */
-  protected storeMobileSessionSnapshot(
-    worktreeId: string,
-    snapshot: RuntimeMobileSessionTabsSnapshot
-  ): RuntimeMobileSessionTabsSnapshot {
-    const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
-    snapshot = preserveTerminalRetirementProofs(snapshot, existing)
-    const snapshotVersion = existing
-      ? Math.max(snapshot.snapshotVersion, existing.snapshotVersion + 1)
-      : snapshot.snapshotVersion
-    const stamped =
-      snapshotVersion === snapshot.snapshotVersion ? snapshot : { ...snapshot, snapshotVersion }
-    this.mobileSessionTabsByWorktree.set(worktreeId, stamped)
-    return stamped
-  }
-
   protected structuredAgentSessionTabRestorePromise: Promise<void> | null = null
 
   // Whether the last tab restore ran with chats on disk but no host to list them.
@@ -135,32 +113,6 @@ export class OrcaRuntimeWithRuntimeId {
   protected readonly clientHostedPageReconciliation = new ClientHostedPageReconciliationWindow(
     Date.now()
   )
-
-  // Main-local touches advance stored versions; reject unchanged renderer resends using
-  // the renderer's last accepted epoch/version instead.
-  protected acceptedRendererMobileSnapshotByWorktree = new Map<
-    string,
-    {
-      publicationEpoch: string
-      rendererVersion: number
-      rendererTabCount: number
-      rendererTabIdentityKeys: ReadonlySet<string>
-    }
-  >()
-
-  // Why: worktree ids are path-derived and get recreated, so a renderer frame
-  // that raced the delete must be rejected by the removed occupant's identity.
-  // Entries are cleared once a snapshot carrying the successor's instanceId
-  // is accepted; identity-less frames are fenced by renderer generation.
-  protected readonly removedMobileSessionWorktreeIds = new Map<
-    string,
-    {
-      removedPublicationEpoch?: string
-      // Why: a rejected frame is still "published" on the renderer side, so a
-      // later unchanged-list mention must not spiral into resync requests.
-      rejectedPublication?: boolean
-    }
-  >()
 
   protected clientSessionTabSelections = new ClientSessionTabSelectionStore()
 
@@ -245,12 +197,6 @@ export class OrcaRuntimeWithRuntimeId {
     this.terminalRunFacts.recordSpawnCommit(commit, expectedSourceBinding)
     this.intentionalPtyStops.noteSpawnCommit(commit.id)
   }
-
-  // Coalesce title/status notifications and emit the latest session snapshot.
-  protected readonly mobileSessionTabsNotifyCoalescer: MobileSessionTabsNotifyCoalescer =
-    createMobileSessionTabsNotifyCoalescer((worktreeId) =>
-      this.flushScheduledMobileSessionTabsChanged(worktreeId)
-    )
 
   protected readonly mobileSessionTabsAgentStatusHeartbeat: MobileSessionTabsAgentStatusHeartbeat =
     createMobileSessionTabsAgentStatusHeartbeat(

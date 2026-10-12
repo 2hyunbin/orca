@@ -46,7 +46,13 @@ export const TERMINAL_SUBSCRIBE_METHODS = [
         emit
       })
       try {
-        if (!leaf?.ptyId && params.client) {
+        if (!leaf?.ptyId && params.client && runtime.startsPanesForSubscribers()) {
+          // No window owns the pane: the runtime starts it and streams once it is bound.
+          leaf = { ptyId: await runtime.startPaneForHandle(params.terminal, registration.signal) }
+          if (registration.released) {
+            return
+          }
+        } else if (!leaf?.ptyId && params.client) {
           rendererMountRequestedBeforePty = runtime.requestRendererTerminalTabMount(params.terminal)
           const ptyId = await runtime
             .waitForLeafPtyId(params.terminal, 10_000, registration.signal)

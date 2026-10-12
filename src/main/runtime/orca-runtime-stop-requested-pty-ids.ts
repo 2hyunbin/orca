@@ -68,9 +68,6 @@ export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId
 
   protected readonly nativeChatDraftResolutions = new RuntimeNativeChatDraftResolutions({
     resolveOwner: (handle) => this.resolveNativeChatLaunchDraftOwner(handle),
-    listMobileSnapshots: () => this.mobileSessionTabsByWorktree,
-    setMobileSnapshot: (worktreeId, snapshot) =>
-      this.storeMobileSessionSnapshot(worktreeId, snapshot),
     scheduleMobileSnapshot: (worktreeId) => this.scheduleMobileSessionTabsChanged(worktreeId),
     notifyResolved: (tabId, resolution, event) => {
       this.notifier?.nativeChatLaunchDraftResolved?.(tabId, resolution)
@@ -138,8 +135,11 @@ export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId
     buildLeafSummary: (leaf, worktrees, livePtyIds) =>
       this.buildTerminalSummary(leaf, worktrees, livePtyIds),
     buildPtySummary: (pty, worktrees) => this.buildPtyTerminalSummary(pty, worktrees),
-    getSnapshots: () => this.mobileSessionTabsByWorktree,
-    getTabTitle: (tabId) => this.tabs.get(tabId)?.title ?? null,
+    getSnapshots: (worktreeId) =>
+      worktreeId
+        ? [this.readSessionTabsSnapshot(worktreeId)].filter((snapshot) => snapshot !== undefined)
+        : this.sessionTabsSnapshots().map(([, snapshot]) => snapshot),
+    getTabTitle: (tabId) => this.heldTabCustomTitle(tabId) ?? this.tabs.get(tabId)?.title ?? null,
     getTopologyRevision: (worktreeId) => this.getTerminalTopologyRevision(worktreeId),
     buildHostScope: (targetWorktreeId, terminals, worktrees, queriedHostIds) =>
       this.buildTerminalListHostScope(targetWorktreeId, terminals, worktrees, queriedHostIds)
@@ -200,7 +200,7 @@ export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId
     getLivePty: (handle) => this.getLivePtyForHandle(handle),
     getLiveLeaf: (handle) => this.getLiveLeafForHandle(handle),
     getPrimaryLeaf: (ptyId) => this.getPrimaryLeafForPty(ptyId),
-    getTabTitle: (tabId) => this.tabs.get(tabId)?.title ?? null,
+    getTabTitle: (tabId) => this.heldTabCustomTitle(tabId) ?? this.tabs.get(tabId)?.title ?? null,
     getExplicitStatus: (handle) => this.getFreshExplicitAgentStatusForHandle(handle),
     getLifecycleStatus: (ptyId) => this.agentPromptLifecycleByPtyId.get(ptyId),
     isRunning: (handle) => this.isTerminalRunningAgent(handle),

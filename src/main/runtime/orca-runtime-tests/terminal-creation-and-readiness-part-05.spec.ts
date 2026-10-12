@@ -111,7 +111,7 @@ describe('OrcaRuntimeService', () => {
     await expect(vertical).resolves.toMatchObject({ leafId: verticalLeafId })
   })
 
-  it('splits visible pty-backed terminal sessions through the parent renderer tab', async () => {
+  it('splits a saved pty-backed terminal session into its parent tab', async () => {
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-source' })
@@ -161,18 +161,20 @@ describe('OrcaRuntimeService', () => {
     expect(splitTerminal).not.toHaveBeenCalled()
     expect(splitEnv.ORCA_TAB_ID).toBe(sourceEnv.ORCA_TAB_ID)
     expect(splitEnv.ORCA_WORKTREE_ID).toBe(TEST_WORKTREE_ID)
-    expect(revealTerminalSession).toHaveBeenLastCalledWith(TEST_WORKTREE_ID, {
-      ptyId: 'pty-split',
-      title: null,
-      activate: true,
-      tabId: sourceEnv.ORCA_TAB_ID,
-      leafId: splitLeafId,
-      splitFromLeafId: sourceLeafId,
-      splitDirection: 'vertical'
-    })
+    // The source tab is saved and the window has not mounted it, so the split is saved beside it
+    // rather than revealed; the window shows both when it mounts the tab.
+    expect(revealTerminalSession).not.toHaveBeenCalledWith(
+      TEST_WORKTREE_ID,
+      expect.objectContaining({ leafId: splitLeafId, splitFromLeafId: sourceLeafId })
+    )
+    expect(
+      runtime
+        .heldWorkspaceLayout(TEST_WORKTREE_ID)
+        ?.tabs.find((tab) => tab.kind === 'terminal' && tab.entityId === sourceEnv.ORCA_TAB_ID)
+    ).toMatchObject({ panes: { root: { type: 'split', direction: 'vertical' } } })
 
     // Why: client renders the tab from one sibling's parentLayout, so all siblings must carry the direction or Split Right flips down.
-    const publishedTabs = runtime['mobileSessionTabsByWorktree'].get(TEST_WORKTREE_ID)!.tabs
+    const publishedTabs = (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs
     const siblingSurfaces = publishedTabs.filter(
       (tab): tab is Extract<typeof tab, { type: 'terminal' }> =>
         tab.type === 'terminal' && tab.parentTabId === sourceEnv.ORCA_TAB_ID
@@ -356,7 +358,7 @@ describe('OrcaRuntimeService', () => {
     expect(getSession().terminalLayoutsByTabId[tabId]).toBeUndefined()
   })
 
-  it('rejects a projected split retired during spawn before publishing the new pane', async () => {
+  it('rejects a split whose runtime-created source closed during spawn before publishing it', async () => {
     let resolveSplitSpawn!: (result: { id: string }) => void
     const spawn = vi
       .fn()
@@ -381,15 +383,16 @@ describe('OrcaRuntimeService', () => {
     const split = runtime.splitTerminal(handle, { direction: 'vertical' })
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2))
 
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    resolveSplitSpawn({ id: 'retired-projected-split-pty' })
+    // Another writer (the window) saves a session without the source tab.
+    store.setWorkspaceSession(getDefaultWorkspaceSession())
+    resolveSplitSpawn({ id: 'orphaned-split-pty' })
 
     await expect(split).rejects.toThrow('terminal_split_source_not_found')
-    expect(kill).toHaveBeenCalledWith('retired-projected-split-pty')
-    expect(runtime['mobileSessionTabsByWorktree'].has(TEST_WORKTREE_ID)).toBe(false)
+    expect(kill).toHaveBeenCalledWith('orphaned-split-pty')
+    expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([])
   })
 
-  it('splits folder workspace pty-backed terminal sessions with folder cwd and env', async () => {
+  it('splits a saved folder workspace pty-backed terminal session with folder cwd and env', async () => {
     const folderPath = await mkdtemp(join(tmpdir(), 'orca-runtime-folder-split-'))
     const spawn = vi
       .fn()
@@ -456,15 +459,17 @@ describe('OrcaRuntimeService', () => {
     expect(splitEnv.ORCA_PROJECT_GROUP_ID).toBe(TEST_FOLDER_PROJECT_GROUP_ID)
     expect(splitEnv.ORCA_WORKSPACE_ROOT).toBe(folderPath)
     expect(splitEnv.ORCA_WORKTREE_ID).toBe(TEST_FOLDER_WORKSPACE_KEY)
-    expect(revealTerminalSession).toHaveBeenLastCalledWith(TEST_FOLDER_WORKSPACE_KEY, {
-      ptyId: 'pty-folder-split',
-      title: null,
-      activate: true,
-      tabId: sourceEnv.ORCA_TAB_ID,
-      leafId: splitLeafId,
-      splitFromLeafId: sourceLeafId,
-      splitDirection: 'vertical'
-    })
+    // The source tab is saved and the window has not mounted it, so the split is saved beside it
+    // rather than revealed; the window shows both when it mounts the tab.
+    expect(revealTerminalSession).not.toHaveBeenCalledWith(
+      TEST_FOLDER_WORKSPACE_KEY,
+      expect.objectContaining({ leafId: splitLeafId, splitFromLeafId: sourceLeafId })
+    )
+    expect(
+      runtime
+        .heldWorkspaceLayout(TEST_FOLDER_WORKSPACE_KEY)
+        ?.tabs.find((tab) => tab.kind === 'terminal' && tab.entityId === sourceEnv.ORCA_TAB_ID)
+    ).toMatchObject({ panes: { root: { type: 'split', direction: 'vertical' } } })
   })
 
   it('atomically admits persisted SSH splits in the SSH host partition', async () => {

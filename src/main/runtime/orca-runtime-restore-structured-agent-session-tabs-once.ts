@@ -1,16 +1,10 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { defaultAgentChatLabel } from '../../shared/agent-session-chat-label'
 import { OrcaRuntimeWithGetStructuredAgentSessionCreateSupport } from './orca-runtime-get-structured-agent-session-create-support'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { collectSavedStructuredAgentSessionIds } from './saved-structured-agent-session-restoration'
 import { seedStructuredAgentSessionTabIndex } from './structured-agent-session-tab-index-seed'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
-import type {
-  RuntimeMobileSessionAgentTab,
-  RuntimeMobileSessionTabsSnapshot,
-  RuntimeRepoSearchRefs
-} from '../../shared/runtime-types'
-import { getHeadlessMobileSessionGroupId } from './mobile-session-layout-projection'
+import type { RuntimeRepoSearchRefs } from '../../shared/runtime-types'
 import { DEFAULT_REPO_SEARCH_REFS_LIMIT } from './orca-runtime-postlude'
 import type { Repo } from '../../shared/repo-types'
 import type { GitAdmissionTier } from '../git/command-runner/git-exec-options'
@@ -40,13 +34,6 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     )
     const targets = persistedVisibleIndex.present ? persistedVisibleIndex.sessionIds : profileIds
     await host?.restoreReadableSessions(targets)
-    for (const worktreeId of this.getKnownWorkspaceSessionWorktreeIds()) {
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
-        allowAttachedWindow: true,
-        onlyRuntimeOwnedTerminals: true
-      })
-    }
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession()
     // Every session here is of an agent this host registered: its store holds no other agent's records.
     const restored = (host?.listSessionTabs() ?? []).flatMap((session) => {
       let sessionId = session.sessionId
@@ -60,7 +47,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
       targets,
       restored.map((session) => session.sessionId)
     )
-    // Past the seed, projecting records nothing.
+    // Past the seed, projecting records nothing; a chat the loaded layout already shows is kept.
     for (const session of restored) {
       this.projectStructuredAgentSessionTab({ ...session, activate: false, notify: false })
     }
@@ -100,7 +87,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     this.projectStructuredAgentSessionTab(input)
   }
 
-  /** The runtime's own snapshot of a chat tab. Records nothing: the caller owns the store write. */
+  /** The chat's tab in the runtime's layout, added once. Records nothing: the caller owns the store write. */
   projectStructuredAgentSessionTab(input: {
     workspaceId: string
     sessionId: string
@@ -108,83 +95,19 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     activate: boolean
     notify?: boolean
   }): void {
-    const existing = this.mobileSessionTabsByWorktree.get(input.workspaceId)
-    const id = `agent-session:${input.sessionId}`
-    if (existing?.tabs.some((tab) => tab.id === id)) {
-      // A background re-publish is a no-op — no store write, no emit — so it cannot re-surface a
-      // client whose mirror lost the tab; healing one needs `activate` or an explicit republish.
-      if (!input.activate) {
-        return
-      }
-      const priorGroups = existing.tabGroups ?? []
-      const groupId =
-        priorGroups.find((group) => group.tabOrder.includes(id))?.id ??
-        (priorGroups.some((group) => group.id === existing.activeGroupId)
-          ? existing.activeGroupId
-          : priorGroups[0]?.id)
-      const snapshot: RuntimeMobileSessionTabsSnapshot = {
-        ...existing,
-        snapshotVersion: existing.snapshotVersion + 1,
-        activeGroupId: groupId ?? existing.activeGroupId,
-        activeTabId: id,
-        activeTabType: 'agent-session',
-        tabGroups: priorGroups.map((group) =>
-          group.id === groupId ? { ...group, activeTabId: id } : group
-        ),
-        tabs: existing.tabs.map((tab) => ({ ...tab, isActive: tab.id === id }))
-      }
-      const stored = this.storeMobileSessionSnapshot(input.workspaceId, snapshot)
-      if (input.notify !== false) {
-        this.emitMobileSessionTabsSnapshot(stored)
-      }
-      return
-    }
-    const tab: RuntimeMobileSessionAgentTab = {
-      type: 'agent-session',
-      id,
-      title: defaultAgentChatLabel(input.agent),
-      sessionId: input.sessionId,
-      agent: input.agent,
-      isActive: input.activate
-    }
-    const tabs = [...(existing?.tabs ?? [])].map((candidate) => ({
-      ...candidate,
-      isActive: input.activate ? false : candidate.isActive
-    }))
-    tabs.push(tab)
-    const priorGroups = existing?.tabGroups ?? [
+    // A new chat tab opens in the group the desktop view shows, as the window opens it.
+    const reply = this.applyTranslatedLayoutCommands([
       {
-        id: getHeadlessMobileSessionGroupId(input.workspaceId),
-        activeTabId: existing?.activeTabId ?? null,
-        tabOrder: []
+        type: 'openAgentSessionTab',
+        workspace: input.workspaceId,
+        sessionId: input.sessionId,
+        agent: input.agent,
+        ...this.desktopActiveGroup(input.workspaceId)
       }
-    ]
-    const groupId = priorGroups.some((group) => group.id === existing?.activeGroupId)
-      ? existing!.activeGroupId!
-      : priorGroups[0]!.id
-    const tabGroups = priorGroups.map((group) =>
-      group.id === groupId
-        ? {
-            ...group,
-            activeTabId: input.activate ? id : group.activeTabId,
-            tabOrder: [...group.tabOrder, id]
-          }
-        : group
-    )
-    const snapshot: RuntimeMobileSessionTabsSnapshot = {
-      worktree: input.workspaceId,
-      publicationEpoch: existing?.publicationEpoch ?? `structured:${Date.now().toString(36)}`,
-      snapshotVersion: (existing?.snapshotVersion ?? 0) + 1,
-      activeGroupId: input.activate ? groupId : (existing?.activeGroupId ?? groupId),
-      activeTabId: input.activate ? id : (existing?.activeTabId ?? null),
-      activeTabType: input.activate ? 'agent-session' : (existing?.activeTabType ?? null),
-      tabGroups,
-      ...(existing?.tabGroupLayout ? { tabGroupLayout: existing.tabGroupLayout } : {}),
-      tabs
-    }
-    const stored = this.storeMobileSessionSnapshot(input.workspaceId, snapshot)
-    if (input.notify !== false) {
-      this.emitMobileSessionTabsSnapshot(stored)
+    ])
+    const tabId = reply.ok ? reply.tabId : undefined
+    if (input.activate && tabId) {
+      this.focusInDesktopView(input.workspaceId, { tabId })
     }
   }
 

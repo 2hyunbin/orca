@@ -2,6 +2,11 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import {
+  addWorkspace,
+  emptySession,
+  leaf
+} from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import { OrcaRuntimeService } from './orca-runtime'
 import { readRuntimeMetadata } from './runtime-metadata'
 import { OrcaRuntimeRpcServer } from './runtime-rpc'
@@ -165,12 +170,39 @@ describe('OrcaRuntimeRpcServer', () => {
 
   it('serves terminal.list with visual split-group and pane nesting', async () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService(makeStore() as never)
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath })
     const worktreeId = 'repo-1::/tmp/worktree-a'
-    const leftLeaf = '11111111-1111-4111-8111-111111111111'
-    const topLeaf = '22222222-2222-4222-8222-222222222222'
-    const bottomLeaf = '33333333-3333-4333-8333-333333333333'
+    const leftLeaf = leaf(1)
+    const topLeaf = leaf(2)
+    const bottomLeaf = leaf(3)
+    // The window's saved session is what the visual layout is projected from.
+    const session = addWorkspace(emptySession(), worktreeId, [
+      {
+        id: 'group-left',
+        tabs: [{ id: 'tab-left', title: 'Left', leaves: [[leftLeaf, 'pty-left']] }]
+      },
+      {
+        id: 'group-right',
+        tabs: [
+          {
+            id: 'tab-right',
+            title: 'Right',
+            leaves: [
+              [topLeaf, 'pty-top'],
+              [bottomLeaf, 'pty-bottom']
+            ],
+            layout: { activeLeafId: bottomLeaf }
+          }
+        ]
+      }
+    ])
+    session.activeGroupIdByWorktree = { [worktreeId]: 'group-right' }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime never calls getGitHubCache, the one RuntimeStore member this stub omits.
+    const runtime = new OrcaRuntimeService({
+      ...makeStore(),
+      getWorkspaceSession: () => session,
+      setWorkspaceSession: vi.fn()
+    } as never)
+    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath })
 
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
@@ -219,89 +251,6 @@ describe('OrcaRuntimeRpcServer', () => {
           paneRuntimeId: 2,
           ptyId: 'pty-bottom',
           title: 'Right bottom'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: worktreeId,
-          publicationEpoch: 'test',
-          snapshotVersion: 1,
-          activeGroupId: 'group-right',
-          activeTabId: `tab-right::${bottomLeaf}`,
-          activeTabType: 'terminal',
-          tabGroups: [
-            { id: 'group-left', activeTabId: 'tab-left', tabOrder: ['tab-left'] },
-            { id: 'group-right', activeTabId: 'tab-right', tabOrder: ['tab-right'] }
-          ],
-          tabGroupLayout: {
-            type: 'split',
-            direction: 'horizontal',
-            first: { type: 'leaf', groupId: 'group-left' },
-            second: { type: 'leaf', groupId: 'group-right' }
-          },
-          tabs: [
-            {
-              type: 'terminal',
-              id: `tab-left::${leftLeaf}`,
-              title: 'Left',
-              parentTabId: 'tab-left',
-              leafId: leftLeaf,
-              ptyId: 'pty-left',
-              parentLayout: {
-                root: { type: 'leaf', leafId: leftLeaf },
-                activeLeafId: leftLeaf,
-                expandedLeafId: null,
-                ptyIdsByLeafId: { [leftLeaf]: 'pty-left' }
-              },
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: `tab-right::${topLeaf}`,
-              title: 'Right top',
-              parentTabId: 'tab-right',
-              leafId: topLeaf,
-              ptyId: 'pty-top',
-              parentLayout: {
-                root: {
-                  type: 'split',
-                  direction: 'vertical',
-                  first: { type: 'leaf', leafId: topLeaf },
-                  second: { type: 'leaf', leafId: bottomLeaf }
-                },
-                activeLeafId: bottomLeaf,
-                expandedLeafId: null,
-                ptyIdsByLeafId: {
-                  [topLeaf]: 'pty-top',
-                  [bottomLeaf]: 'pty-bottom'
-                }
-              },
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: `tab-right::${bottomLeaf}`,
-              title: 'Right bottom',
-              parentTabId: 'tab-right',
-              leafId: bottomLeaf,
-              ptyId: 'pty-bottom',
-              parentLayout: {
-                root: {
-                  type: 'split',
-                  direction: 'vertical',
-                  first: { type: 'leaf', leafId: topLeaf },
-                  second: { type: 'leaf', leafId: bottomLeaf }
-                },
-                activeLeafId: bottomLeaf,
-                expandedLeafId: null,
-                ptyIdsByLeafId: {
-                  [topLeaf]: 'pty-top',
-                  [bottomLeaf]: 'pty-bottom'
-                }
-              },
-              isActive: true
-            }
-          ]
         }
       ]
     })

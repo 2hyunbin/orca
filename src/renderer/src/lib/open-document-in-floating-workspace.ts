@@ -1,7 +1,7 @@
 import type { FileDocument } from '../../../shared/filesystem-entry-types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import type { EditorFilesSlice } from '@/store/slices/editor/types/editor-files-slice'
-import { detectLanguage } from './language-detect'
+import { detectLanguage } from '../../../shared/language-detect'
 
 /**
  * Opens a local document that belongs to no workspace as a floating-workspace editor tab.

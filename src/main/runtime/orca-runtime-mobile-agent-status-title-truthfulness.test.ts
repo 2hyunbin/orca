@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
+import { getDefaultSettings, getDefaultWorkspaceSession } from '../../shared/constants'
+import type { TerminalTab } from '../../shared/terminal-tab-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -27,8 +30,38 @@ const PROVIDER_SESSION = {
   transcriptPath: '/transcripts/ac1f6b90.jsonl'
 }
 
-async function createRuntime(rows: AgentStatusIpcPayload[] = []): Promise<OrcaRuntimeService> {
-  const runtime = new OrcaRuntimeService(null, undefined, {
+/** A Store holding one workspace session, so the created terminal is a tab in the phone list. */
+function sessionStore(): {
+  store: ConstructorParameters<typeof OrcaRuntimeService>[0]
+  saveTab: (edit: (tab: TerminalTab) => TerminalTab) => void
+} {
+  let session = getDefaultWorkspaceSession()
+  const store = {
+    getSettings: () => getDefaultSettings('/tmp'),
+    getRepo: () => undefined,
+    getRepos: () => [],
+    getAllWorktreeMeta: () => ({}),
+    getWorktreeMeta: () => undefined,
+    getWorkspaceSessionHostIds: () => ['local'],
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      session = next
+    }
+  }
+  // A window session save, which the holder reloads on its next read.
+  const saveTab = (edit: (tab: TerminalTab) => TerminalTab): void => {
+    const tabs = session.tabsByWorktree[WORKTREE_ID] ?? []
+    session = { ...session, tabsByWorktree: { [WORKTREE_ID]: tabs.map(edit) } }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The layout holder reads only the session members this store defines.
+  return { store: store as never, saveTab }
+}
+
+async function createRuntime(
+  rows: AgentStatusIpcPayload[] = [],
+  sessions = sessionStore()
+): Promise<OrcaRuntimeService> {
+  const runtime = new OrcaRuntimeService(sessions.store, undefined, {
     getAgentStatusSnapshot: () => rows
   })
   const internals = runtime as unknown as {
@@ -56,107 +89,22 @@ async function createRuntime(rows: AgentStatusIpcPayload[] = []): Promise<OrcaRu
   return runtime
 }
 
-/** Publish a renderer graph: one terminal pane with a live title and the
- *  renderer's own byte-derived agent status (what a paired host mirrors). */
-function publishRendererWorkingPane(runtime: OrcaRuntimeService, paneTitle: string): void {
-  runtime.attachWindow(1)
-  runtime.syncWindowGraph(1, {
-    tabs: [
-      {
-        tabId: TAB_ID,
-        worktreeId: WORKTREE_ID,
-        title: 'Terminal',
-        activeLeafId: LEAF_ID,
-        layout: null
-      }
-    ],
-    leaves: [
-      {
-        tabId: TAB_ID,
-        worktreeId: WORKTREE_ID,
-        leafId: LEAF_ID,
-        paneRuntimeId: 1,
-        ptyId: PTY_ID,
-        paneTitle
-      }
-    ],
-    mobileSessionTabs: [
-      {
-        worktree: WORKTREE_ID,
-        publicationEpoch: 'epoch-1',
-        snapshotVersion: 1,
-        activeGroupId: null,
-        activeTabId: `${TAB_ID}::${LEAF_ID}`,
-        activeTabType: 'terminal',
-        tabs: [
-          {
-            type: 'terminal',
-            id: `${TAB_ID}::${LEAF_ID}`,
-            parentTabId: TAB_ID,
-            leafId: LEAF_ID,
-            title: paneTitle,
-            launchAgent: 'claude',
-            agentStatus: {
-              state: 'working',
-              prompt: 'Configurar y entender los comprobantes',
-              updatedAt: T0,
-              stateStartedAt: T0,
-              agentType: 'claude',
-              paneKey: PANE_KEY,
-              stateHistory: []
-            },
-            isActive: true
-          }
-        ]
-      }
-    ]
-  })
-}
-
-function publishRendererReleasedPane(runtime: OrcaRuntimeService, title: string): void {
-  runtime.attachWindow(1)
-  runtime.syncWindowGraph(1, {
-    tabs: [
-      {
-        tabId: TAB_ID,
-        worktreeId: WORKTREE_ID,
-        title,
-        activeLeafId: LEAF_ID,
-        layout: null
-      }
-    ],
-    leaves: [
-      {
-        tabId: TAB_ID,
-        worktreeId: WORKTREE_ID,
-        leafId: LEAF_ID,
-        paneRuntimeId: 1,
-        ptyId: PTY_ID,
-        paneTitle: 'zsh'
-      }
-    ],
-    mobileSessionTabs: [
-      {
-        worktree: WORKTREE_ID,
-        publicationEpoch: 'epoch-released',
-        snapshotVersion: 1,
-        activeGroupId: null,
-        activeTabId: `${TAB_ID}::${LEAF_ID}`,
-        activeTabType: 'terminal',
-        tabs: [
-          {
-            type: 'terminal',
-            id: `${TAB_ID}::${LEAF_ID}`,
-            parentTabId: TAB_ID,
-            leafId: LEAF_ID,
-            ptyId: PTY_ID,
-            title,
-            isActive: true
-          }
-        ]
-      }
-    ]
-  })
+/** A working hook row, then a live pane title observed after it (phones get status from the hook store). */
+async function createWorkingPane(paneTitle: string): Promise<OrcaRuntimeService> {
+  const workingRow: AgentStatusIpcPayload = {
+    paneKey: PANE_KEY,
+    state: 'working',
+    prompt: 'Configurar y entender los comprobantes',
+    agentType: 'claude',
+    connectionId: null,
+    receivedAt: Date.now() - 1_000,
+    stateStartedAt: Date.now() - 1_000,
+    tabId: TAB_ID,
+    worktreeId: WORKTREE_ID
+  }
+  const runtime = await createRuntime([workingRow])
+  runtime.onPtyData(PTY_ID, `\x1b]0;${paneTitle}\x07`, Date.now())
+  return runtime
 }
 
 async function projectAgentStatus(
@@ -171,17 +119,24 @@ async function projectAgentStatus(
 
 describe('mobile session tabs: live-title evidence vs published agent status', () => {
   it('does not resurrect launch identity after the renderer clears it', async () => {
-    const runtime = await createRuntime()
-    publishRendererReleasedPane(runtime, '[Image #1] Inspect this')
+    const sessions = sessionStore()
+    const runtime = await createRuntime([], sessions)
+    expect((await runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)).tabs[0]).toHaveProperty(
+      'launchAgent',
+      'claude'
+    )
+    sessions.saveTab(({ launchAgent: _launchAgent, ...tab }) => ({
+      ...tab,
+      title: '[Image #1] Inspect this'
+    }))
 
     const result = await runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
     expect(result.tabs[0]).toEqual(expect.objectContaining({ type: 'terminal' }))
     expect(result.tabs[0]).not.toHaveProperty('launchAgent')
   })
 
-  it('keeps renderer-published working under a neutral live title', async () => {
-    const runtime = await createRuntime()
-    publishRendererWorkingPane(runtime, 'Terminal')
+  it('keeps a hook-reported working under a neutral live title', async () => {
+    const runtime = await createWorkingPane('Terminal')
 
     expect(await projectAgentStatus(runtime)).toEqual(
       expect.objectContaining({
@@ -195,8 +150,7 @@ describe('mobile session tabs: live-title evidence vs published agent status', (
   it.each(['zsh', 'bash', 'pwsh'])(
     'clears a stale working to identity-only done under the shell title %s',
     async (shell) => {
-      const runtime = await createRuntime()
-      publishRendererWorkingPane(runtime, shell)
+      const runtime = await createWorkingPane(shell)
 
       const agentStatus = await projectAgentStatus(runtime)
       expect(agentStatus).toEqual(expect.objectContaining({ state: 'done', prompt: '' }))
@@ -205,8 +159,7 @@ describe('mobile session tabs: live-title evidence vs published agent status', (
   )
 
   it('clears a stale working under a Claude management title', async () => {
-    const runtime = await createRuntime()
-    publishRendererWorkingPane(runtime, 'claude agents')
+    const runtime = await createWorkingPane('claude agents')
 
     expect(await projectAgentStatus(runtime)).toEqual(
       expect.objectContaining({ state: 'done', prompt: '' })

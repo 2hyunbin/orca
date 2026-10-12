@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+import {
+  addWorkspace,
+  emptySession
+} from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from './orca-runtime'
 
 const WORKTREE = 'repo::/tmp/graph-exit'
@@ -32,7 +37,7 @@ class ExitAuthorityRuntime extends OrcaRuntimeService {
 
   history() {
     return {
-      surfaces: this.mobileSessionTabsByWorktree.get(WORKTREE)?.tabs.length,
+      surfaces: this.sessionTabsStream.snapshot(WORKTREE)?.tabs.length,
       leaves: this.getLeavesForPty(PTY).map((leaf) => ({
         connected: leaf.connected,
         writable: leaf.writable
@@ -42,42 +47,20 @@ class ExitAuthorityRuntime extends OrcaRuntimeService {
   }
 }
 
-function graph(
-  runtime: OrcaRuntimeService,
-  ptyId: string | null = PTY,
-  snapshotVersion?: number
-): void {
+function graph(runtime: OrcaRuntimeService, ptyId: string | null = PTY): void {
   runtime.syncWindowGraph(1, {
     tabs: [
       { tabId: TAB, worktreeId: WORKTREE, title: 'terminal', activeLeafId: LEAF, layout: null }
     ],
-    leaves: [{ tabId: TAB, worktreeId: WORKTREE, leafId: LEAF, paneRuntimeId: 1, ptyId }],
-    ...(snapshotVersion === undefined
-      ? {}
-      : {
-          mobileSessionTabs: [
-            {
-              worktree: WORKTREE,
-              publicationEpoch: 'renderer:retained-history',
-              snapshotVersion,
-              activeGroupId: null,
-              activeTabId: `${TAB}::${LEAF}`,
-              activeTabType: 'terminal' as const,
-              tabs: [
-                {
-                  type: 'terminal' as const,
-                  id: `${TAB}::${LEAF}`,
-                  parentTabId: TAB,
-                  leafId: LEAF,
-                  ...(ptyId ? { ptyId } : {}),
-                  title: 'Terminal',
-                  isActive: true
-                }
-              ]
-            }
-          ]
-        })
+    leaves: [{ tabId: TAB, worktreeId: WORKTREE, leafId: LEAF, paneRuntimeId: 1, ptyId }]
   })
+}
+
+/** The window's saved session, which the phone list projects; `ptyId: null` is the cleared binding. */
+function savedSession(ptyId: string | null): WorkspaceSessionState {
+  return addWorkspace(emptySession(), WORKTREE, [
+    { id: 'group', tabs: [{ id: TAB, leaves: [[LEAF, ptyId ?? undefined]] }] }
+  ])
 }
 
 function register(runtime: OrcaRuntimeService, incarnationId = FIRST): void {
@@ -86,7 +69,15 @@ function register(runtime: OrcaRuntimeService, incarnationId = FIRST): void {
 
 describe('host exit authority over queued renderer graphs', () => {
   it('keeps exact-stop history addressable through a changed snapshot before binding clears', async () => {
-    const runtime = new ExitAuthorityRuntime()
+    let session = savedSession(PTY)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the exit-authority path reads only the repo list and workspace session from this store.
+    const runtime = new ExitAuthorityRuntime({
+      getRepos: () => [],
+      getWorkspaceSession: () => session,
+      setWorkspaceSession: (next: WorkspaceSessionState) => {
+        session = next
+      }
+    } as never)
     const git = {
       path: '/tmp/graph-exit',
       head: 'abc',
@@ -140,13 +131,13 @@ describe('host exit authority over queued renderer graphs', () => {
     let pending: Promise<unknown> | undefined
     try {
       register(runtime)
-      graph(runtime, PTY, 1)
+      graph(runtime, PTY)
       pending = runtime.stopExactTerminalsForWorktree(`id:${WORKTREE}`, [PTY], {
         keepHistory: true,
         targetOnly: true
       })
       await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce())
-      graph(runtime, PTY, 2)
+      graph(runtime, PTY)
       expect(runtime.history()).toEqual({
         surfaces: 1,
         leaves: [{ connected: false, writable: false }],
@@ -154,7 +145,8 @@ describe('host exit authority over queued renderer graphs', () => {
       })
       finishStop()
       await expect(pending).resolves.toMatchObject({ postStopVerified: true })
-      graph(runtime, null, 3)
+      session = savedSession(null)
+      graph(runtime, null)
       expect(runtime.history().surfaces).toBe(1)
     } finally {
       finishStop()

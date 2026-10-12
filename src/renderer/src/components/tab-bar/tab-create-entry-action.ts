@@ -1,4 +1,4 @@
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { joinPath } from '@/lib/path'
 import { getRendererAppPlatform } from '@/lib/renderer-app-platform'
 import {

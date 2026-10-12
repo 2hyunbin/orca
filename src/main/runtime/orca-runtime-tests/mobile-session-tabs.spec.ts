@@ -9,9 +9,48 @@ import {
   TEST_REPO_ID,
   TEST_WINDOW_ID,
   TEST_WORKTREE_ID,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
   makeWorktreeMeta,
   store
 } from '../orca-runtime-test-fixtures.spec'
+
+// The phone list projects the Store's workspace session, so a window's tabs are seeded there.
+function seedTerminalTab(
+  ptyIdsByLeafId: Record<string, string | undefined>,
+  activeLeafId?: string
+) {
+  const layout = makeHeadlessTerminalLayout(ptyIdsByLeafId)
+  store.setWorkspaceSession(
+    makeWorkspaceSessionWithHeadlessTerminal({
+      activeTabId: 'tab-1',
+      activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-1' },
+      tabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'tab-1',
+            ptyId: null,
+            worktreeId: TEST_WORKTREE_ID,
+            title: 'Terminal 1',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      terminalLayoutsByTabId: {
+        'tab-1': { ...layout, activeLeafId: activeLeafId ?? layout.activeLeafId }
+      },
+      tabGroups: {
+        [TEST_WORKTREE_ID]: [
+          { id: 'group-1', worktreeId: TEST_WORKTREE_ID, activeTabId: 'tab-1', tabOrder: ['tab-1'] }
+        ]
+      },
+      activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-1' }
+    })
+  )
+}
 
 describe('OrcaRuntimeService', () => {
   it('retires exited saved PTY bindings instead of publishing a pending ghost', async () => {
@@ -57,6 +96,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('resolves mobile terminal surfaces by exact split leaf', async () => {
+    seedTerminalTab({ 'pane:1': 'pty-1', 'pane:2': 'pty-2' }, 'pane:2')
     const runtime = new OrcaRuntimeService(store)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
@@ -86,34 +126,6 @@ describe('OrcaRuntimeService', () => {
           ptyId: 'pty-2',
           paneTitle: 'right'
         }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:2',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Terminal 1',
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:2',
-              parentTabId: 'tab-1',
-              leafId: 'pane:2',
-              title: 'Terminal 1',
-              isActive: true
-            }
-          ]
-        }
       ]
     })
 
@@ -133,6 +145,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('keeps published mobile terminal handles usable across renderer graph epochs', async () => {
+    seedTerminalTab({ 'pane:1': 'pty-1' })
     const runtime = new OrcaRuntimeService(store)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
@@ -153,26 +166,6 @@ describe('OrcaRuntimeService', () => {
           paneRuntimeId: 1,
           ptyId: 'pty-1',
           paneTitle: 'Terminal 1'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Terminal 1',
-              isActive: true
-            }
-          ]
         }
       ]
     })
@@ -203,26 +196,6 @@ describe('OrcaRuntimeService', () => {
           ptyId: 'pty-1',
           paneTitle: 'Terminal 1'
         }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-2',
-          snapshotVersion: 2,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Terminal 1',
-              isActive: true
-            }
-          ]
-        }
       ]
     })
     runtime.onPtyData('pty-1', 'after graph sync\n', 100)
@@ -234,6 +207,9 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('closes the matching mobile terminal UUID leaf without closing the whole tab', async () => {
+    const leftLeafId = '11111111-1111-4111-8111-111111111111'
+    const rightLeafId = '22222222-2222-4222-8222-222222222222'
+    seedTerminalTab({ [leftLeafId]: 'pty-left', [rightLeafId]: 'pty-right' }, rightLeafId)
     const closeTerminal = vi.fn()
     const closeTerminalPane = vi.fn()
     const kill = vi.fn(() => true)
@@ -259,8 +235,8 @@ describe('OrcaRuntimeService', () => {
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
-    const leftLeafId = '11111111-1111-4111-8111-111111111111'
-    const rightLeafId = '22222222-2222-4222-8222-222222222222'
+    // A live window owns the layout, so it is told to drop the pane.
+    electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [
@@ -289,26 +265,6 @@ describe('OrcaRuntimeService', () => {
           ptyId: 'pty-right',
           paneTitle: 'right'
         }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: `tab-1::${rightLeafId}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `tab-1::${rightLeafId}`,
-              parentTabId: 'tab-1',
-              leafId: rightLeafId,
-              title: 'right',
-              isActive: true
-            }
-          ]
-        }
       ]
     })
 
@@ -321,6 +277,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('closes the whole mobile terminal tab when addressed by parent tab id', async () => {
+    seedTerminalTab({ 'pane:1': 'pty-1' })
     const closeTerminal = vi.fn()
     const kill = vi.fn(() => true)
     const runtime = new OrcaRuntimeService(store)
@@ -364,26 +321,6 @@ describe('OrcaRuntimeService', () => {
           ptyId: 'pty-1',
           paneTitle: 'Terminal 1'
         }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Terminal 1',
-              isActive: true
-            }
-          ]
-        }
       ]
     })
 
@@ -394,6 +331,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('activates the active split leaf when addressed by parent tab id', async () => {
+    seedTerminalTab({ 'pane:1': undefined, 'pane:2': undefined }, 'pane:2')
     const focusTerminal = vi.fn()
     const runtime = new OrcaRuntimeService(store)
     runtime.setNotifier({
@@ -410,38 +348,12 @@ describe('OrcaRuntimeService', () => {
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
+    // A live window owns the layout, so it focuses the pane rather than the runtime spawning one.
+    electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:2',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'left',
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:2',
-              parentTabId: 'tab-1',
-              leafId: 'pane:2',
-              title: 'right',
-              isActive: true
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
 
     await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-1')
@@ -450,6 +362,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('activates mobile session tabs without focusing desktop clients when requested', async () => {
+    seedTerminalTab({ 'pane:1': 'pty-pane-1', 'pane:2': 'pty-pane-2' }, 'pane:2')
     const focusTerminal = vi.fn()
     const runtime = new OrcaRuntimeService(store)
     runtime.setNotifier({
@@ -469,38 +382,7 @@ describe('OrcaRuntimeService', () => {
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:2',
-          activeTabType: 'terminal',
-          tabGroups: [{ id: 'group-1', activeTabId: 'tab-1', tabOrder: ['tab-1'] }],
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              ptyId: 'pty-pane-1',
-              title: 'left',
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:2',
-              parentTabId: 'tab-1',
-              leafId: 'pane:2',
-              ptyId: 'pty-pane-2',
-              title: 'right',
-              isActive: true
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
     runtime.registerPty('pty-pane-1', TEST_WORKTREE_ID)
     runtime.registerPty('pty-pane-2', TEST_WORKTREE_ID)

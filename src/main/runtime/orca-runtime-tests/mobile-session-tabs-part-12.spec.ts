@@ -2,13 +2,49 @@ import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService, electronMocks, ipcMain } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
-  HEADLESS_SECOND_LEAF_ID,
   TEST_REPO_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   store,
+  makeHeadlessTerminalLayout,
   withPlatform
 } from '../orca-runtime-test-fixtures.spec'
+
+// What the window's session save puts in the Store once the renderer created a tab.
+function storeRendererTab(
+  runtime: OrcaRuntimeService,
+  tabId: string,
+  leafId: string,
+  ptyId: string,
+  viewMode?: 'chat'
+): void {
+  const session = store.getWorkspaceSession()
+  store.setWorkspaceSession({
+    ...session,
+    tabsByWorktree: {
+      ...session.tabsByWorktree,
+      [TEST_WORKTREE_ID]: [
+        {
+          id: tabId,
+          ptyId,
+          worktreeId: TEST_WORKTREE_ID,
+          title: 'Terminal',
+          customTitle: null,
+          color: null,
+          sortOrder: 0,
+          createdAt: 1,
+          ...(viewMode ? { viewMode } : {})
+        }
+      ]
+    },
+    terminalLayoutsByTabId: {
+      ...session.terminalLayoutsByTabId,
+      [tabId]: makeHeadlessTerminalLayout({ [leafId]: ptyId })
+    }
+  })
+  // Stands in for the Store's write notice, which the base fixture does not emit.
+  runtime['layoutHolder'].model('local')
+}
 
 describe('OrcaRuntimeService', () => {
   it('rejects startup prompts for agents that require post-ready stdin', async () => {
@@ -296,6 +332,7 @@ describe('OrcaRuntimeService', () => {
         { sender: { send: vi.fn() } },
         { requestId: payload.requestId, error: 'spoofed renderer reply' }
       )
+      storeRendererTab(runtime, 'tab-renderer', HEADLESS_LEAF_ID, 'pty-renderer', 'chat')
       runtime.syncWindowGraph(1, {
         tabs: [],
         leaves: [
@@ -306,28 +343,6 @@ describe('OrcaRuntimeService', () => {
             paneRuntimeId: 1,
             ptyId: 'pty-renderer',
             paneTitle: null
-          }
-        ],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'epoch-1',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: null,
-            activeTabType: null,
-            tabs: [
-              {
-                type: 'terminal',
-                id: `tab-renderer::${HEADLESS_LEAF_ID}`,
-                parentTabId: 'tab-renderer',
-                leafId: HEADLESS_LEAF_ID,
-                ptyId: 'pty-renderer',
-                title: 'Terminal',
-                viewMode: 'chat',
-                isActive: false
-              }
-            ]
           }
         ]
       })
@@ -365,86 +380,6 @@ describe('OrcaRuntimeService', () => {
     )
     expect(focusTerminal).not.toHaveBeenCalled()
     expect(result.tab).toMatchObject({ parentTabId: 'tab-renderer', isActive: false })
-
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [
-        {
-          tabId: 'tab-renderer',
-          worktreeId: TEST_WORKTREE_ID,
-          leafId: HEADLESS_LEAF_ID,
-          paneRuntimeId: 1,
-          ptyId: 'pty-renderer',
-          paneTitle: null
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 2,
-          activeGroupId: 'group-1',
-          activeTabId: null,
-          activeTabType: null,
-          tabs: []
-        }
-      ]
-    })
-
-    expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([
-      expect.objectContaining({ parentTabId: 'tab-renderer', ptyId: 'pty-renderer' })
-    ])
-
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [
-        {
-          tabId: 'tab-renderer',
-          worktreeId: TEST_WORKTREE_ID,
-          leafId: HEADLESS_SECOND_LEAF_ID,
-          paneRuntimeId: 1,
-          ptyId: 'pty-renderer',
-          paneTitle: null
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 3,
-          activeGroupId: 'group-1',
-          activeTabId: null,
-          activeTabType: null,
-          tabs: []
-        }
-      ]
-    })
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [
-        {
-          tabId: 'tab-renderer',
-          worktreeId: TEST_WORKTREE_ID,
-          leafId: HEADLESS_SECOND_LEAF_ID,
-          paneRuntimeId: 1,
-          ptyId: 'pty-renderer',
-          paneTitle: null
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 4,
-          activeGroupId: 'group-1',
-          activeTabId: null,
-          activeTabType: null,
-          tabs: []
-        }
-      ]
-    })
-
-    expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([])
   })
 
   it('dedupes concurrent mobile terminal creates that share a clientMutationId', async () => {
@@ -466,36 +401,17 @@ describe('OrcaRuntimeService', () => {
     })
     const webContents = { send: vi.fn() }
     const send = vi.fn((_channel: string, payload: { requestId: string }) => {
+      storeRendererTab(runtime, 'tab-renderer', HEADLESS_LEAF_ID, 'pty-renderer')
       runtime.syncWindowGraph(1, {
         tabs: [],
         leaves: [
           {
             tabId: 'tab-renderer',
             worktreeId: TEST_WORKTREE_ID,
-            leafId: 'pane:1',
+            leafId: HEADLESS_LEAF_ID,
             paneRuntimeId: 1,
             ptyId: 'pty-renderer',
             paneTitle: null
-          }
-        ],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'epoch-1',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: null,
-            activeTabType: null,
-            tabs: [
-              {
-                type: 'terminal',
-                id: 'tab-renderer::pane:1',
-                parentTabId: 'tab-renderer',
-                leafId: 'pane:1',
-                title: 'Terminal',
-                isActive: false
-              }
-            ]
           }
         ]
       })
@@ -551,36 +467,17 @@ describe('OrcaRuntimeService', () => {
     })
     const webContents = { send: vi.fn() }
     const send = vi.fn((_channel: string, payload: { requestId: string }) => {
+      storeRendererTab(runtime, 'tab-renderer', HEADLESS_LEAF_ID, 'pty-renderer')
       runtime.syncWindowGraph(1, {
         tabs: [],
         leaves: [
           {
             tabId: 'tab-renderer',
             worktreeId: TEST_WORKTREE_ID,
-            leafId: 'pane:1',
+            leafId: HEADLESS_LEAF_ID,
             paneRuntimeId: 1,
             ptyId: 'pty-renderer',
             paneTitle: null
-          }
-        ],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'epoch-1',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: null,
-            activeTabType: null,
-            tabs: [
-              {
-                type: 'terminal',
-                id: 'tab-renderer::pane:1',
-                parentTabId: 'tab-renderer',
-                leafId: 'pane:1',
-                title: 'Terminal',
-                isActive: false
-              }
-            ]
           }
         ]
       })

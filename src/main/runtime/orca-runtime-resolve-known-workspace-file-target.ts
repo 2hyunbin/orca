@@ -89,13 +89,13 @@ export class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeW
     // into the initial snapshot it was just sent. Draining it here — before the
     // listener joins — keeps that pending timer from landing as a redundant
     // `updated` frame carrying pre-subscribe state. Mirrors the unsubscribe flush.
-    this.mobileSessionTabsNotifyCoalescer.flushAll()
+    this.sessionTabsStream.coalescer.flushAll()
     const subscription = { listener, clientNavigationId }
     this.mobileSessionTabListeners.add(subscription)
     return () => {
       // Why: flush pending coalesced notifies before dropping this listener so a
       // subscriber closing mid-window still receives the latest settled state.
-      this.mobileSessionTabsNotifyCoalescer.flushAll()
+      this.sessionTabsStream.coalescer.flushAll()
       this.mobileSessionTabListeners.delete(subscription)
       if (this.mobileSessionTabListeners.size === 0) {
         this.mobileSessionTabsAgentStatusHeartbeat.cancelPending()

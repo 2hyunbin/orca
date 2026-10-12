@@ -4,6 +4,7 @@ import type { WorkspaceSessionState } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   HEADLESS_SECOND_LEAF_ID,
+  TEST_REPO_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   deferred,
@@ -410,6 +411,8 @@ describe('OrcaRuntimeService', () => {
       // refuse→republish→re-echo loop.
       const { runtime, getSession, kill, closeTerminal } = makeSplitLeafRuntime()
       await runtime.onPtyExit('serve-right', 0)
+      // Else the worktree scan the close starts publishes the worktree's first catalog entry.
+      runtime.addCatalogWorktrees([{ id: TEST_WORKTREE_ID, repoId: TEST_REPO_ID }])
       const events: { worktree: string }[] = []
       const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => events.push(snapshot))
 

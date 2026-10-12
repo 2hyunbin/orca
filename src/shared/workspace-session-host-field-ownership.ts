@@ -95,8 +95,8 @@ export const GLOBAL_WORKSPACE_SESSION_FIELDS = (
  *    and the deregistered-repo residue sweep read them out of EVERY partition. Dropping one
  *    un-owns a worktree, and an un-owned worktree gets its metadata pruned.
  *  - `activeTabId`, `activeConnectionIdsAtShutdown` and `activeRepoId` have live main-side readers
- *    on a partition: `isPersistedTerminalLeafActive` falls back to `activeTabId` for the mobile
- *    projection, and the runtime attach-window handoff unions `activeConnectionIdsAtShutdown`.
+ *    on a partition: the Loader falls back to `activeTabId` for a pre-tab-group session's shown
+ *    terminal, and the runtime attach-window handoff unions `activeConnectionIdsAtShutdown`.
  *
  * `workspace-session-partitions.test.ts` re-checks both gates for every field listed here.
  */

@@ -1,7 +1,6 @@
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import type {
   RuntimeMobileSessionTabsSnapshot,
-  RuntimeMobileSessionTerminalTab,
   RuntimeNativeChatLaunchDraftResolution
 } from '../../shared/runtime-types'
 import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
@@ -10,8 +9,6 @@ type DraftResolutionTombstone = RuntimeNativeChatLaunchDraftResolution & { workt
 
 type RuntimeNativeChatDraftResolutionsDeps = {
   resolveOwner: (handle: string) => { tabId: string; worktreeId: string } | null
-  listMobileSnapshots: () => Iterable<[string, RuntimeMobileSessionTabsSnapshot]>
-  setMobileSnapshot: (worktreeId: string, snapshot: RuntimeMobileSessionTabsSnapshot) => void
   scheduleMobileSnapshot: (worktreeId: string) => void
   notifyResolved: (
     tabId: string,
@@ -85,42 +82,8 @@ export class RuntimeNativeChatDraftResolutions {
     return changed ? { ...snapshot, tabs } : snapshot
   }
 
-  reconcile(snapshot: RuntimeMobileSessionTabsSnapshot): void {
-    for (const [tabId, resolution] of this.byTabId) {
-      if (!runtimeWorktreeIdsEqual(snapshot.worktree, resolution.worktreeId)) {
-        continue
-      }
-      const surfaces = snapshot.tabs.filter(
-        (tab): tab is RuntimeMobileSessionTerminalTab =>
-          tab.type === 'terminal' && tab.parentTabId === tabId
-      )
-      if (
-        surfaces.length === 0 ||
-        !surfaces.some(
-          (tab) =>
-            tab.launchDraft === resolution.text && tab.launchDraftCreatedAt === resolution.createdAt
-        )
-      ) {
-        this.byTabId.delete(tabId)
-      }
-    }
-  }
-
+  /** The resolved draft leaves the worktree's rows at the next emit, which `applyFence` shapes. */
   private retireFromMobileSnapshot(resolution: DraftResolutionTombstone): void {
-    for (const [worktreeId, snapshot] of this.deps.listMobileSnapshots()) {
-      if (!runtimeWorktreeIdsEqual(worktreeId, resolution.worktreeId)) {
-        continue
-      }
-      const next = this.applyFence(snapshot)
-      if (next === snapshot) {
-        return
-      }
-      this.deps.setMobileSnapshot(worktreeId, {
-        ...next,
-        snapshotVersion: snapshot.snapshotVersion + 1
-      })
-      this.deps.scheduleMobileSnapshot(worktreeId)
-      return
-    }
+    this.deps.scheduleMobileSnapshot(resolution.worktreeId)
   }
 }

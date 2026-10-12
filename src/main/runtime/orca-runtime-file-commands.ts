@@ -45,8 +45,9 @@ export class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreservedBranchC
       }),
     resolveRuntimeGitTarget: (selector) => this.resolveRuntimeGitTarget(selector),
     openFile: (worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation) => {
-      if (!this.notifier?.openFile) {
-        throw new Error('renderer_unavailable')
+      if (!this.notifier?.openFile || !this.getAvailableAuthoritativeWindow()) {
+        this.openHeldEditorFile(worktreeId, { filePath, relativePath }, navigation)
+        return
       }
       this.notifier.openFile(worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation)
     },

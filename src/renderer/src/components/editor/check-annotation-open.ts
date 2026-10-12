@@ -1,4 +1,4 @@
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { useAppStore } from '@/store'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'

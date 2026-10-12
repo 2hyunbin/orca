@@ -5,53 +5,111 @@ import {
   electronMocks,
   getRuntimeBrowserPageRegistry,
   ipcMain,
-  listWorktrees
+  listWorktrees,
+  type RuntimeMobileSessionTabsResult,
+  type WorkspaceSessionState
 } from '../orca-runtime-test-mocks.spec'
-import type { RuntimeMobileSessionTabsResult } from '../orca-runtime-test-mocks.spec'
 import {
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   UUID_RE,
   deferred,
+  makeHeadlessTerminalLayout,
   makeRuntimeStoreWithWorkspaceSession,
   store
 } from '../orca-runtime-test-fixtures.spec'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 
+// The phone list projects the Store's workspace session, so a window's terminals are seeded there.
+function sessionWithTerminals(tabs: Record<string, Record<string, string | undefined>>) {
+  const ids = Object.keys(tabs)
+  return {
+    ...getDefaultWorkspaceSession(),
+    tabsByWorktree: {
+      [TEST_WORKTREE_ID]: ids.map((id, sortOrder) => ({
+        id,
+        ptyId: null,
+        worktreeId: TEST_WORKTREE_ID,
+        title: id,
+        customTitle: null,
+        color: null,
+        sortOrder,
+        createdAt: sortOrder + 1
+      }))
+    },
+    terminalLayoutsByTabId: Object.fromEntries(
+      ids.map((id) => [id, makeHeadlessTerminalLayout(tabs[id]!)])
+    ),
+    tabGroups: {
+      [TEST_WORKTREE_ID]: [
+        { id: 'group-1', worktreeId: TEST_WORKTREE_ID, activeTabId: ids[0]!, tabOrder: ids }
+      ]
+    },
+    activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-1' }
+  } satisfies WorkspaceSessionState
+}
+
+// The phone list projects the Store's workspace session, so a window's browser tab is seeded there.
+function sessionWithBrowserTab(tabId: string, workspaceId: string, pageId: string) {
+  return {
+    ...getDefaultWorkspaceSession(),
+    unifiedTabs: {
+      [TEST_WORKTREE_ID]: [
+        {
+          id: tabId,
+          entityId: workspaceId,
+          groupId: 'group-1',
+          worktreeId: TEST_WORKTREE_ID,
+          contentType: 'browser' as const,
+          label: 'Browser',
+          customLabel: null,
+          color: null,
+          sortOrder: 0,
+          createdAt: 1
+        }
+      ]
+    },
+    browserTabsByWorktree: {
+      [TEST_WORKTREE_ID]: [
+        {
+          id: workspaceId,
+          worktreeId: TEST_WORKTREE_ID,
+          activePageId: pageId,
+          pageIds: [pageId],
+          url: 'https://example.com/',
+          title: 'Browser',
+          loading: false,
+          faviconUrl: null,
+          canGoBack: false,
+          canGoForward: false,
+          loadError: null,
+          createdAt: 1
+        }
+      ]
+    },
+    tabGroups: {
+      [TEST_WORKTREE_ID]: [
+        { id: 'group-1', worktreeId: TEST_WORKTREE_ID, activeTabId: tabId, tabOrder: [tabId] }
+      ]
+    }
+  } satisfies WorkspaceSessionState
+}
+
 describe('OrcaRuntimeService', () => {
   it('keeps client selection when a renderer session-tab close cannot commit', async () => {
     const closeSessionTab = vi.fn().mockRejectedValue(new Error('session_tab_close_canceled'))
+    store.setWorkspaceSession(
+      sessionWithBrowserTab('browser-unified-1', 'browser-workspace-1', 'browser-page-1')
+    )
+    // A live window owns the browser tab, so its close is the renderer's to commit.
+    electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
     const runtime = new OrcaRuntimeService(store)
     const forgetTabs = vi.spyOn(runtime['clientSessionTabSelections'], 'forgetTabs')
     runtime.setNotifier({ closeSessionTab } as never)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'browser-unified-1',
-          activeTabType: 'browser',
-          tabs: [
-            {
-              type: 'browser',
-              id: 'browser-unified-1',
-              title: 'Browser',
-              browserWorkspaceId: 'browser-workspace-1',
-              browserPageId: 'browser-page-1',
-              url: 'https://example.com/',
-              loading: false,
-              canGoBack: false,
-              canGoForward: false,
-              isActive: true
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
 
     await expect(
@@ -88,6 +146,10 @@ describe('OrcaRuntimeService', () => {
         loading: false,
         active: true
       })
+      // A client-placed create with no window: the scan has cataloged the worktree, and the
+      // holder adds the page's tab.
+      await runtime['listResolvedWorktrees']()
+      runtime.addHeadlessBrowserLayoutTab(TEST_WORKTREE_ID, 'client-page-1')
       const closeOffscreenTab = vi.fn()
       if (withOffscreen) {
         runtime.setOffscreenBrowserBackend({
@@ -97,34 +159,7 @@ describe('OrcaRuntimeService', () => {
       }
       runtime.syncWindowGraph(0, {
         tabs: [],
-        leaves: [],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'headless:test',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: 'client-page-1',
-            activeTabType: 'browser',
-            tabs: [
-              {
-                type: 'browser',
-                id: 'client-page-1',
-                title: 'Client page',
-                browserWorkspaceId: 'client-page-1',
-                browserPageId: 'client-page-1',
-                browserProfileId: 'default',
-                executionHostKey: 'native:runtime-a:1',
-                placement,
-                url: 'https://remote.internal/',
-                loading: false,
-                canGoBack: false,
-                canGoForward: false,
-                isActive: true
-              }
-            ]
-          }
-        ]
+        leaves: []
       })
       const closeClientPage = vi
         .spyOn(runtime, 'browserTabClose')
@@ -154,6 +189,8 @@ describe('OrcaRuntimeService', () => {
     const closeProof = deferred<void>()
     const closeOffscreenTab = vi.fn(() => closeProof.promise)
     const closeSessionTab = vi.fn()
+    const seeded = sessionWithBrowserTab('offscreen-page-1', 'offscreen-page-1', 'offscreen-page-1')
+    store.setWorkspaceSession(seeded)
     const runtime = new OrcaRuntimeService(store)
     runtime.setOffscreenBrowserBackend({
       createTab: vi.fn(),
@@ -174,78 +211,55 @@ describe('OrcaRuntimeService', () => {
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
-    const browserTab = {
-      type: 'browser' as const,
-      id: 'offscreen-page-1',
-      title: 'Offscreen page',
-      browserWorkspaceId: 'offscreen-page-1',
-      browserPageId: 'offscreen-page-1',
-      url: 'https://remote.internal/',
-      loading: false,
-      canGoBack: false,
-      canGoForward: false,
-      isActive: true
+    runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+
+    const closing = runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'offscreen-page-1')
+    await vi.waitFor(() => expect(closeOffscreenTab).toHaveBeenCalledWith('offscreen-page-1'))
+
+    // Another writer opens a file while the close waits on the offscreen backend.
+    const notes = {
+      filePath: '/worktree/notes.md',
+      relativePath: 'notes.md',
+      worktreeId: TEST_WORKTREE_ID,
+      language: 'markdown'
     }
-    runtime.syncWindowGraph(0, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'headless:test',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: browserTab.id,
-          activeTabType: 'browser',
-          tabs: [browserTab]
-        }
-      ]
-    })
-
-    const closing = runtime.closeMobileSessionTab(
-      `id:${TEST_WORKTREE_ID}`,
-      browserTab.browserPageId
-    )
-    await vi.waitFor(() => expect(closeOffscreenTab).toHaveBeenCalledWith(browserTab.browserPageId))
-
-    runtime.syncWindowGraph(0, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'headless:test',
-          snapshotVersion: 2,
-          activeGroupId: 'group-1',
-          activeTabId: browserTab.id,
-          activeTabType: 'browser',
-          tabs: [
-            browserTab,
-            {
-              type: 'markdown',
-              id: 'notes',
-              title: 'Notes',
-              filePath: '/worktree/notes.md',
-              relativePath: 'notes.md',
-              language: 'markdown',
-              mode: 'edit',
-              isDirty: false,
-              sourceFileId: 'notes.md',
-              sourceFilePath: '/worktree/notes.md',
-              sourceRelativePath: 'notes.md',
-              documentVersion: '1',
-              isActive: false
-            }
-          ]
-        }
-      ]
+    store.setWorkspaceSession({
+      ...seeded,
+      openFilesByWorktree: { [TEST_WORKTREE_ID]: [notes] },
+      unifiedTabs: {
+        [TEST_WORKTREE_ID]: [
+          ...seeded.unifiedTabs[TEST_WORKTREE_ID],
+          {
+            id: notes.filePath,
+            entityId: notes.filePath,
+            groupId: 'group-1',
+            worktreeId: TEST_WORKTREE_ID,
+            contentType: 'editor',
+            label: 'notes.md',
+            customLabel: null,
+            color: null,
+            sortOrder: 1,
+            createdAt: 2
+          }
+        ]
+      },
+      tabGroups: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'group-1',
+            worktreeId: TEST_WORKTREE_ID,
+            activeTabId: 'offscreen-page-1',
+            tabOrder: ['offscreen-page-1', notes.filePath]
+          }
+        ]
+      }
     })
     closeProof.resolve()
     await expect(closing).resolves.toEqual({ closed: true })
 
     expect(closeSessionTab).not.toHaveBeenCalled()
     expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([
-      expect.objectContaining({ id: 'notes', type: 'markdown' })
+      expect.objectContaining({ id: notes.filePath, type: 'markdown' })
     ])
   })
 
@@ -323,6 +337,12 @@ describe('OrcaRuntimeService', () => {
       ]
     }
   ])('places a runtime-owned terminal $label', async (testCase) => {
+    store.setWorkspaceSession(
+      sessionWithTerminals({
+        split: { left: undefined, right: undefined },
+        trailing: { leaf: undefined }
+      })
+    )
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
       spawn: vi.fn().mockResolvedValue({ id: 'pty-created-after-split' }),
@@ -332,43 +352,7 @@ describe('OrcaRuntimeService', () => {
     })
     runtime.syncWindowGraph(0, {
       tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'headless:split-placement',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'split::left',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'split::left',
-              parentTabId: 'split',
-              leafId: 'left',
-              title: 'Split',
-              isActive: true
-            },
-            {
-              type: 'terminal',
-              id: 'split::right',
-              parentTabId: 'split',
-              leafId: 'right',
-              title: 'Split',
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: 'trailing::leaf',
-              parentTabId: 'trailing',
-              leafId: 'leaf',
-              title: 'Trailing',
-              isActive: false
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
 
     const created = await runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
@@ -383,6 +367,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('asks a headed host to append for an older client', async () => {
+    store.setWorkspaceSession(sessionWithTerminals({ split: { left: undefined } }))
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
       spawn: vi.fn(),
@@ -393,27 +378,7 @@ describe('OrcaRuntimeService', () => {
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'renderer:legacy-placement',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'split::left',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'split::left',
-              parentTabId: 'split',
-              leafId: 'left',
-              title: 'Split',
-              isActive: true
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
     runtime['waitForMobileTerminalSurface'] = vi.fn().mockResolvedValue({
       tab: {
@@ -472,7 +437,15 @@ describe('OrcaRuntimeService', () => {
     const leafId = '91919191-9191-4919-8919-919191919191'
     const spawn = vi.fn()
     const setBackgroundThrottling = vi.fn()
-    const runtime = new OrcaRuntimeService(store)
+    // The Store tells the holder about writes it did not make, as the real one does.
+    let sessionWritten = (): void => {}
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      onWorkspaceSessionWritten: (listener: () => void) => {
+        sessionWritten = listener
+        return () => {}
+      }
+    })
     runtime.setPtyController({
       spawn,
       write: () => true,
@@ -498,6 +471,20 @@ describe('OrcaRuntimeService', () => {
         tabId: 'tab-paired-headed',
         leafId
       })
+      // The window saves its new tab to the Store, which the holder reloads.
+      const session = sessionWithTerminals({
+        'tab-paired-headed': { [leafId]: 'pty-paired-headed' }
+      })
+      store.setWorkspaceSession({
+        ...session,
+        tabsByWorktree: {
+          [TEST_WORKTREE_ID]: session.tabsByWorktree[TEST_WORKTREE_ID].map((tab) => ({
+            ...tab,
+            viewMode: 'chat' as const
+          }))
+        }
+      })
+      sessionWritten()
       ipcMain.emit(
         'terminal:tabCreateReply',
         { sender: webContents },
@@ -520,28 +507,6 @@ describe('OrcaRuntimeService', () => {
             leafId,
             paneRuntimeId: 1,
             ptyId: 'pty-paired-headed'
-          }
-        ],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'renderer:paired-headed',
-            snapshotVersion: 1,
-            activeGroupId: 'group-1',
-            activeTabId: null,
-            activeTabType: null,
-            tabs: [
-              {
-                type: 'terminal',
-                id: `tab-paired-headed::${leafId}`,
-                parentTabId: 'tab-paired-headed',
-                leafId,
-                ptyId: 'pty-paired-headed',
-                title: 'Terminal',
-                viewMode: 'chat',
-                isActive: false
-              }
-            ]
           }
         ]
       })
@@ -590,27 +555,6 @@ describe('OrcaRuntimeService', () => {
     expect(inventory(clientA)).toEqual(inventory(host))
     expect(inventory(clientB)).toEqual(inventory(host))
 
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    expect(runtime['syncMobileSessionTabs']([])).toEqual(new Set([TEST_WORKTREE_ID]))
-    expect(runtime['mobileSessionTabsByWorktree'].get(TEST_WORKTREE_ID)?.tabs).toEqual([
-      expect.objectContaining({
-        parentTabId: 'tab-paired-headed',
-        leafId,
-        ptyId: 'pty-paired-headed'
-      })
-    ])
-    const restoredHost = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-    const restoredClientA = await runtime.listMobileSessionTabs(
-      `id:${TEST_WORKTREE_ID}`,
-      'device-a'
-    )
-    const restoredClientB = await runtime.listMobileSessionTabs(
-      `id:${TEST_WORKTREE_ID}`,
-      'device-b'
-    )
-    expect(inventory(restoredHost)).toEqual(inventory(host))
-    expect(inventory(restoredClientA)).toEqual(inventory(host))
-    expect(inventory(restoredClientB)).toEqual(inventory(host))
     expect(spawn).not.toHaveBeenCalled()
   })
 

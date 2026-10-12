@@ -179,11 +179,14 @@ export function projectRuntimeMobileSessionTabs(
     const ownerAgent =
       ownerRecord?.agent ?? liveLeafPty?.foregroundAgent ?? pty?.foregroundAgent ?? null
     const ownerOptions = { ownerIsLaunch: ownerRecord?.ownerIsLaunch === true }
-    const title = normalizeCompatibleAgentTitleForOwner(
-      trackerOnlyTitle ?? leafTitle ?? ptyTitle ?? syncedTab?.title ?? tab.title,
-      ownerAgent,
-      ownerOptions
-    )
+    // A user's rename beats every live title (#19582).
+    const title =
+      host.getUserTitle(snapshot.worktree, tab.parentTabId, tab.leafId) ??
+      normalizeCompatibleAgentTitleForOwner(
+        trackerOnlyTitle ?? leafTitle ?? ptyTitle ?? syncedTab?.title ?? tab.title,
+        ownerAgent,
+        ownerOptions
+      )
     const liveTitleEvidence = leafTitle ?? ptyTitle
     // Why: renderer status can precede hook session identity, leaving native chat with no transcript address.
     const rendererStatusAgent =

@@ -28,6 +28,7 @@ export type BrowserTabCreatePublicationHost = {
     options: BrowserSessionTabSelectionOptions
   ): void
   notifyHeadlessBrowserSessionTabsChanged?(worktreeId: string): void
+  addHeadlessBrowserLayoutTab?(worktreeId: string, browserPageId: string, groupId?: string): void
 }
 
 export type BrowserSessionTabSelectionOptions = {
@@ -67,6 +68,8 @@ export type BrowserTabCreatePublication = {
 export type BrowserTabCreateHostRowSource = 'create-ipc' | 'session-notify' | 'none'
 
 type BrowserTabCreatePublicationRules = {
+  /** No window owns this page's tab, so the runtime's layout adds it. */
+  addsLayoutTab: boolean
   activatesBridgeTab: boolean
   marksSessionTabFocus: boolean
   notifiesSessionTabsChanged: boolean
@@ -81,6 +84,7 @@ export const BROWSER_TAB_CREATE_PUBLICATION_RULES: Record<
   BrowserTabCreatePublicationRules
 > = {
   client: {
+    addsLayoutTab: true,
     // Why: client pages are driven over the host lease, so no bridge-registered WebContents exists.
     activatesBridgeTab: false,
     marksSessionTabFocus: true,
@@ -88,6 +92,7 @@ export const BROWSER_TAB_CREATE_PUBLICATION_RULES: Record<
     hostRowSource: 'session-notify'
   },
   offscreen: {
+    addsLayoutTab: true,
     activatesBridgeTab: true,
     marksSessionTabFocus: true,
     // Why: the offscreen snapshot is republished by hydration and by navigation; a bare create
@@ -97,6 +102,8 @@ export const BROWSER_TAB_CREATE_PUBLICATION_RULES: Record<
     hostRowSource: 'none'
   },
   renderer: {
+    // Why: the renderer adds the tab to its own model and saves it.
+    addsLayoutTab: false,
     activatesBridgeTab: true,
     // Why: the renderer owns its own tab model — `activate` rides the create IPC and the renderer
     // publishes the resulting session snapshot itself.
@@ -222,6 +229,13 @@ export function publishCreatedBrowserSessionTab(
   publication: BrowserTabCreatePublication
 ): void {
   const rules = BROWSER_TAB_CREATE_PUBLICATION_RULES[publication.placementKind]
+  if (rules.addsLayoutTab && publication.worktreeId !== undefined) {
+    host.addHeadlessBrowserLayoutTab?.(
+      publication.worktreeId,
+      publication.browserPageId,
+      publication.targetGroupId
+    )
+  }
   if (rules.notifiesSessionTabsChanged && publication.worktreeId !== undefined) {
     host.notifyHeadlessBrowserSessionTabsChanged?.(publication.worktreeId)
   }

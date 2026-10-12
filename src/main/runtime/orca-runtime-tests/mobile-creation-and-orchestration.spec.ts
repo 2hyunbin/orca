@@ -4,9 +4,41 @@ import {
   TEST_WORKTREE_ID,
   createRuntime,
   deferred,
+  makeWorkspaceSessionWithHeadlessTerminal,
+  makeHeadlessTerminalLayout,
   store
 } from '../orca-runtime-test-fixtures.spec'
 import { createMobileCreateTestNotifier } from '../orca-runtime-test-scenario-builders.spec'
+
+// What pty:spawn persists before it registers the PTY: the tab binding, in the Store.
+function storeSpawnBinding(
+  runtime: OrcaRuntimeService,
+  tabId: string,
+  leafId: string,
+  ptyId: string
+): void {
+  store.setWorkspaceSession(
+    makeWorkspaceSessionWithHeadlessTerminal({
+      tabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: tabId,
+            ptyId,
+            worktreeId: TEST_WORKTREE_ID,
+            title: 'Terminal',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      terminalLayoutsByTabId: { [tabId]: makeHeadlessTerminalLayout({ [leafId]: ptyId }) }
+    })
+  )
+  // Stands in for the Store's write notice, which the base fixture does not emit.
+  runtime['layoutHolder'].model('local')
+}
 
 describe('OrcaRuntimeService', () => {
   it('does not re-deliver the agent launch command when the adopted renderer PTY spawned with one', async () => {
@@ -31,8 +63,9 @@ describe('OrcaRuntimeService', () => {
       runtime.setNotifier(createMobileCreateTestNotifier(vi.fn()))
       const webContents = { send: vi.fn() }
       const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-        // Why: mirrors the spawn IPC handler — a command-carrying spawn records
-        // its launch command right after registering the PTY.
+        // Why: mirrors the spawn IPC handler — it persists the binding, registers the PTY, then a
+        // command-carrying spawn records its launch command.
+        storeSpawnBinding(runtime, 'tab-carried', leafId, 'pty-carried')
         runtime.registerPty('pty-carried', TEST_WORKTREE_ID, null, { tabId: 'tab-carried', leafId })
         runtime.noteTerminalSpawnCommand('pty-carried', 'codex')
         ipcMain.emit(
@@ -59,109 +92,6 @@ describe('OrcaRuntimeService', () => {
 
       expect(result.tab).toMatchObject({ type: 'terminal', parentTabId: 'tab-carried' })
       expect(write).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('keeps a mobile-created terminal alive when the renderer snapshot is rejected by the version guard', async () => {
-    vi.useFakeTimers()
-    try {
-      const leafId = '66666666-6666-4666-8666-666666666666'
-      const closeTerminal = vi.fn()
-      const runtime = new OrcaRuntimeService(store)
-      runtime.setNotifier(createMobileCreateTestNotifier(closeTerminal))
-      const webContents = { send: vi.fn() }
-      const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-        ipcMain.emit(
-          'terminal:tabCreateReply',
-          { sender: webContents },
-          { requestId: payload.requestId, tabId: 'tab-guard', title: 'Terminal' }
-        )
-      })
-      webContents.send = send
-      runtime.attachWindow(1)
-      electronMocks.BrowserWindow.fromId.mockReturnValue({
-        isDestroyed: () => false,
-        webContents
-      })
-      // Why: seed an inflated stored version under a stable epoch (the state prior renderer publications leave behind).
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'epoch-guard',
-            snapshotVersion: 50,
-            activeGroupId: 'group-guard',
-            activeTabId: null,
-            activeTabType: null,
-            tabs: []
-          }
-        ]
-      })
-
-      const create = runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
-        activate: true
-      })
-      let settled = false
-      const settledCreate = create.finally(() => {
-        settled = true
-      })
-      await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
-
-      // Renderer republishes with a stale (lower) version under the same epoch, so syncMobileSessionTabs rejects it — the reporter's stall variant (#7587).
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [],
-        mobileSessionTabs: [
-          {
-            worktree: TEST_WORKTREE_ID,
-            publicationEpoch: 'epoch-guard',
-            snapshotVersion: 1,
-            activeGroupId: 'group-guard',
-            activeTabId: `tab-guard::${leafId}`,
-            activeTabType: 'terminal',
-            tabs: [
-              {
-                type: 'terminal',
-                id: `tab-guard::${leafId}`,
-                parentTabId: 'tab-guard',
-                leafId,
-                title: 'Terminal',
-                isActive: true
-              }
-            ]
-          }
-        ]
-      })
-      await vi.advanceTimersByTimeAsync(50)
-      // The rejected renderer sync must not have resolved the create.
-      expect(settled).toBe(false)
-      // Prove the rejection: the stored snapshot still lacks the tab.
-      const beforeRescue = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-      expect(
-        beforeRescue.tabs.some((tab) => tab.type === 'terminal' && tab.parentTabId === 'tab-guard')
-      ).toBe(false)
-
-      // The renderer's own PTY spawn registers with the binding and rescues it.
-      runtime.registerPty('pty-guard', TEST_WORKTREE_ID, null, {
-        tabId: 'tab-guard',
-        leafId
-      })
-      await vi.advanceTimersByTimeAsync(50)
-      const result = await settledCreate
-
-      expect(settled).toBe(true)
-      expect(result.tab).toMatchObject({
-        type: 'terminal',
-        parentTabId: 'tab-guard',
-        leafId,
-        status: 'ready',
-        terminal: expect.stringMatching(/^term_/)
-      })
-      expect(closeTerminal).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -216,6 +146,8 @@ describe('OrcaRuntimeService', () => {
           }
         ]
       })
+      // pty:spawn's binding then reaches the Store with no graph sync after it.
+      storeSpawnBinding(runtime, 'tab-catch', leafId, 'pty-catch')
 
       // Surface still unpublished, so the create is still pending.
       expect(settled).toBe(false)

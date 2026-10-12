@@ -34,9 +34,10 @@ describe('remote terminal chat ownership', () => {
     // An older client changing geometry must not clear the owner.
     await update(undefined)
     expect(getSession().terminalLayoutsByTabId['host-tab']?.chatLeafId).toBe(HEADLESS_LEAF_ID)
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
-    const rehydrated = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    // A restart: a fresh runtime loads the phone list from the saved session.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: as above.
+    const restarted = new OrcaRuntimeService(runtimeStore as RuntimeStore)
+    const rehydrated = await restarted.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const surface = rehydrated.tabs.find(
       (tab) => tab.type === 'terminal' && tab.parentTabId === 'host-tab'
     )

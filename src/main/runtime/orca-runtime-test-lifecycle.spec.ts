@@ -7,6 +7,7 @@ import {
   _settlePendingWorktreeRemovalsForTests
 } from '../worktree-background-removal'
 import { _resetCanonicalRepoKeyCacheForTests } from '../git/canonical-repo-key'
+import { resetBaseWorkspaceSessions } from './orca-runtime-test-fixtures.spec'
 
 const { MOCK_GIT_WORKTREES, RuntimeBrowserCommands, _resetTerminalViewAttributesForTest } = mocks
 const { addGitHubIssueCommentMock, addGitHubPRReviewCommentMock } = mocks
@@ -68,6 +69,7 @@ const { updateGitLabIssueMock, updateGitLabMRMock, updateGitLabMRReviewersMock, 
 awaitBackgroundRemovalsInRuntimeTests(mocks.OrcaRuntimeService.prototype as never)
 
 function resetRuntimeTestMocks(): void {
+  resetBaseWorkspaceSessions()
   _resetCanonicalRepoKeyCacheForTests()
   _resetPendingWorktreeRemovalsForTests()
   // Why: constructing the browser commands is what pulls the Chromium cluster in, so

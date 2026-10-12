@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../shared/language-detect'
 import { basename } from '@/lib/path'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import {

@@ -3,7 +3,6 @@ import { OrcaRuntimeWithPersistTerminalSurfaceRetirements } from './orca-runtime
 import type {
   RuntimeMobileSessionBrowserTab,
   RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
 import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
@@ -21,7 +20,7 @@ import type {
   TerminalPaneCloseTarget,
   TerminalSurfaceCloseTarget
 } from '../../shared/terminal-surface-close-target'
-import { retireTerminalSurfacesFromSnapshot } from './mobile-session-terminal-retirement'
+import { terminalRowId } from '../../shared/workspace-layout/old-client'
 import type { PtyControllerInventory } from './runtime-pty-controller-contract'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
 import { captureAcknowledgedTerminalTabRetirement } from './workspace-session-terminal-tab-retirement-identity'
@@ -105,7 +104,7 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
       return {
         hostId,
         session: this.store?.getWorkspaceSession?.(hostId) ?? null,
-        snapshot: this.mobileSessionTabsByWorktree.get(worktreeId),
+        snapshot: this.readSessionTabsSnapshot(worktreeId),
         incarnationOf: (ptyId) => this.ptysById.get(ptyId)?.incarnationId
       }
     })
@@ -177,7 +176,7 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
     }
     return resolveTerminalCloseTarget(target, {
       rendererListsTab: this.tabs.has(target.tabId),
-      snapshotRows: (this.mobileSessionTabsByWorktree.get(worktreeId)?.tabs ?? []).filter(
+      snapshotRows: (this.readSessionTabsSnapshot(worktreeId)?.tabs ?? []).filter(
         (row) => row.type === 'terminal' && row.parentTabId === target.tabId
       ),
       graphLeafIds,
@@ -194,6 +193,13 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
     worktreeId: string,
     target: TerminalPaneCloseTarget
   ): Promise<void> {
+    if (!this.getAvailableAuthoritativeWindow()) {
+      // The holder's close also tells a launch there that the user closed it.
+      this.closeHeldSessionTab(worktreeId, terminalRowId(target.tabId, target.leafId), {
+        allowMissing: true
+      })
+      return
+    }
     // An explicit close (a phone's, the CLI's): a launch still starting or delivering there stops.
     markAgentLaunchesClosedByUser(worktreeId, target)
     try {
@@ -205,7 +211,6 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
     }
     // Why: no exit may ever arrive to remove the pane. The notice is leaf-addressed, so it and the
     // renderer's exit handling are each a no-op after the other.
-    this.retireClosedTerminalLeafFromMobileSnapshot(worktreeId, target.tabId, target.leafId)
     this.notifier?.closeTerminalPane?.(target.tabId, target.leafId)
   }
 
@@ -227,50 +232,6 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
       tabId: tab.parentTabId,
       leafId: tab.leafId
     })
-  }
-
-  private retireClosedTerminalLeafFromMobileSnapshot(
-    worktreeId: string,
-    tabId: string,
-    leafId: string
-  ): void {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
-    const tab = snapshot?.tabs.find(
-      (candidate) =>
-        candidate.type === 'terminal' &&
-        candidate.parentTabId === tabId &&
-        candidate.leafId === leafId
-    )
-    // Why: a renderer that lists the tab republishes its own snapshot once it drops the pane.
-    if (!snapshot || !tab || this.tabs.has(tabId)) {
-      return
-    }
-    const proof = this.getMobileSessionTerminalRetirementProof(worktreeId, tab)
-    const retired = retireTerminalSurfacesFromSnapshot({
-      snapshot,
-      ptyId: tab.ptyId ?? tab.parentLayout?.ptyIdsByLeafId?.[leafId] ?? '',
-      exactSurfaces: [{ parentTabId: tabId, leafId }],
-      exactOnly: true,
-      ...(proof ? { retirementProofs: [proof] } : {})
-    })
-    if (retired) {
-      this.storeMobileSessionSnapshot(worktreeId, retired.snapshot)
-      this.notifyMobileSessionTabsChanged(worktreeId)
-    }
-  }
-
-  protected emitMobileSessionTabsSnapshot(snapshot: RuntimeMobileSessionTabsSnapshot): void {
-    if (this.mobileSessionTabListeners.size === 0) {
-      return
-    }
-    const result = this.toMobileSessionTabsResult(snapshot)
-    const changeSequence = ++this.mobileSessionTabsChangeSequence
-    for (const subscription of this.mobileSessionTabListeners) {
-      subscription.listener(
-        this.projectMobileSessionTabsForClient(result, subscription.clientNavigationId),
-        changeSequence
-      )
-    }
   }
 
   /**

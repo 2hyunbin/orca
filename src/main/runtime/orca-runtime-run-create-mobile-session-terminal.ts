@@ -43,7 +43,6 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector)
     const worktreeId = workspace.id
     const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     // Older mobile clients append their optimistic tab, so make the host append too until the
     // client advertises the grouped placement contract.
     const requestedAfterTabId = opts.afterTabId
@@ -53,7 +52,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         : requestedAfterTabId
     let afterDesktopTabId: string | undefined
     if (requestedAfterTabId) {
-      const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+      const snapshot = this.readSessionTabsSnapshot(worktreeId)
       const anchor = snapshot?.tabs.find((tab) => tab.id === requestedAfterTabId)
       if (!anchor) {
         throw new Error('after_tab_not_found')
@@ -85,7 +84,6 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
           createMutation: { clientIdentity, id: opts.clientMutationId },
           viewMode: opts.viewMode,
           targetGroupId: opts.targetGroupId,
-          supportsSplitGroupPlacement: opts.supportsSplitGroupPlacement,
           signal: opts.signal
         }
       )
@@ -105,7 +103,6 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
           launchAgent: startupCommand.launchAgent,
           viewMode: opts.viewMode,
           targetGroupId: opts.targetGroupId,
-          supportsSplitGroupPlacement: opts.supportsSplitGroupPlacement,
           launchConfig: startupCommand.launchConfig,
           signal: opts.signal
         }
@@ -231,7 +228,6 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
             launchAgent: startupCommand.launchAgent,
             viewMode: opts.viewMode,
             targetGroupId: opts.targetGroupId,
-            supportsSplitGroupPlacement: opts.supportsSplitGroupPlacement,
             launchConfig: startupCommand.launchConfig,
             signal: opts.signal
           }

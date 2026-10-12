@@ -169,16 +169,29 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
               ? { onPtySpawnCommitted: reportPtySpawnCommitted }
               : {}),
             ...(adoptedBeforeLaunch ? { adoptedStablePane: adoptedBeforeLaunch } : {}),
-            ...dependencies.newTabIn(launchOpts),
+            onSpawned: (spawned) => {
+              if (!spawned.stablePaneOwner) {
+                reportPtySpawnCommitted()
+              }
+              try {
+                this.assertPtyDidNotExitBeforeRegistration(spawned.id, spawned.incarnationId)
+              } catch (error) {
+                if (
+                  error instanceof Error &&
+                  error.message === 'agent_session_exited_during_start'
+                ) {
+                  this.releaseRejectedPtyRegistrationFence(spawned.id, spawned.incarnationId)
+                }
+                throw error
+              }
+            },
+            ...this.terminalCreatePlacement(workspace.id, tabId, leafId, launchOpts),
             ...(launchOpts.sessionId ? { sessionId: launchOpts.sessionId } : {}),
             ...(!adoptedBeforeLaunch && launchOpts.isNewSession ? { isNewSession: true } : {}),
             ...dependencies.BACKGROUND_TERMINAL_SPAWN_FLAGS
           })
         } finally {
           releaseStablePaneCreate?.()
-        }
-        if (!result.stablePaneOwner) {
-          reportPtySpawnCommitted()
         }
         // Why here: refused before a handle, snapshot or reveal could pose the live PTY as new.
         const adoptedStablePane = dependencies.admitStablePaneAdoption(result, launchOpts)
@@ -193,14 +206,6 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
           tabId = result.stablePaneOwner.tabId
           leafId = result.stablePaneOwner.leafId
           paneKey = dependencies.makePaneKey(tabId, leafId)
-        }
-        try {
-          this.assertPtyDidNotExitBeforeRegistration(result.id, result.incarnationId)
-        } catch (error) {
-          if (error instanceof Error && error.message === 'agent_session_exited_during_start') {
-            this.releaseRejectedPtyRegistrationFence(result.id, result.incarnationId)
-          }
-          throw error
         }
         this.registerPreAllocatedHandleForPty(result.id, preAllocatedHandle)
         if (result.wslDistro) {
@@ -235,16 +240,8 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
           recordPtySurface(pty, tabId, paneKey, spawnSurfaceClaimSequence(this.graphSequence))
         }
         const handle = pty ? this.issuePtyHandle(pty) : preAllocatedHandle
-        if (pty && !adoptedStablePane && launchOpts.deferMobileSessionPublish !== true) {
-          this.publishPtyBackedMobileSessionTerminal(workspace.id, pty, {
-            tabId,
-            leafId,
-            title: launchOpts.title ?? null,
-            activate: presentation === 'focused',
-            selectIfNoActiveTab: presentation !== 'background',
-            ...(launchOpts.viewMode ? { viewMode: launchOpts.viewMode } : {}),
-            ...(cwd !== workspace.path ? { startupCwd: cwd } : {})
-          })
+        if (pty && this.desktopViewShowsCreatedTerminal(workspace.id, presentation)) {
+          this.focusHeldTerminalInDesktopView(pty)
         }
         let surface: dependencies.RuntimeTerminalCreate['surface'] = 'background'
         let warning: string | undefined

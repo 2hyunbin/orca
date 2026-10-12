@@ -6,7 +6,6 @@ import { OrcaRuntimeService } from './orca-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { createMinimalPersistedTerminalTab } from '../persistence/restoring-sessions/session-owner-fields'
-import { buildHeadlessMobileSessionTerminalTabs } from './mobile-session-terminal-projection'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
@@ -99,7 +98,8 @@ function notifierWithRename(renameTerminal: RuntimeNotifier['renameTerminal']): 
 
 async function createHeadlessRuntimeWithAgent(
   connectionId: string | null = null,
-  store: RuntimeStore | null = null
+  // The phone list projects the saved session, so even a fresh host has a Store.
+  store: RuntimeStore = sessionStore(getDefaultWorkspaceSession()).store
 ): Promise<{ runtime: DefaultTabRuntime; handle: string }> {
   const runtime = new DefaultTabRuntime(store, connectionId)
   let spawned = 0
@@ -173,7 +173,7 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
 
   it('titles the tab, never the pane, and keeps the title across a restart', async () => {
     // The spawn's pty binding has already saved the agent's tab when provisioning runs.
-    const { store, getSession } = sessionStore({
+    const { store } = sessionStore({
       ...getDefaultWorkspaceSession(),
       tabsByWorktree: {
         [WORKTREE_ID]: [
@@ -195,16 +195,9 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
     expect(renameTerminal).toHaveBeenCalledWith(AGENT_TAB_ID, 'Dev', { recordInteraction: false })
     expect(runtime.ptyTitle(AGENT_PTY_ID)).toBeNull()
     // A restarted headless host rebuilds the phone's tabs from the saved session.
-    const session = getSession()
-    expect(
-      buildHeadlessMobileSessionTerminalTabs(
-        WORKTREE_ID,
-        session.tabsByWorktree[WORKTREE_ID] ?? [],
-        session
-      )
-    ).toEqual([
+    expect(await agentTab(new OrcaRuntimeService(store))).toEqual(
       expect.objectContaining({ parentTabId: AGENT_TAB_ID, title: 'Dev', color: '#ff0000' })
-    ])
+    )
   })
 
   it("still titles the tab once the window's graph has taken over the handle", async () => {

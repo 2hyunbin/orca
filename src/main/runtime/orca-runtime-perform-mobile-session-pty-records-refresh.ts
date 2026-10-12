@@ -15,8 +15,8 @@ import { parseExecutionHostId } from '../../shared/execution-host'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { navigationTargetsHost } from '../../shared/runtime-navigation'
 import { isAutomaticTabActivation } from '../../shared/tab-activation-intent'
-import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import { isWorktreeTerminalsSleepingError } from './worktree-terminals-sleeping-error'
+import { makePaneKey } from '../../shared/stable-pane-id'
 
 export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs {
   protected async performMobileSessionPtyRecordsRefresh(
@@ -111,9 +111,8 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     await this.refreshMobileSessionPtyRecords(worktreeId)
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.readSessionTabsSnapshot(worktreeId)
     const directTab = snapshot?.tabs.find((candidate) => candidate.id === tabId)
     const tab = leafId
       ? ((directTab?.type === 'terminal' && directTab.leafId === leafId ? directTab : undefined) ??
@@ -210,11 +209,6 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
               opts.clientNavigationId
             )
           }
-          if (sessionId && parseAppSshPtyId(sessionId)) {
-            // Why: an expired SSH reattach clears durable bindings in the store,
-            // but this in-memory headless snapshot can still carry the old id.
-            this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, { force: true })
-          }
           throw err
         }
         return this.applyMobileSessionTabNavigation(
@@ -239,11 +233,12 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
             ) as RuntimeMobileSessionTerminalTab | undefined)
       const targetTab = activeSibling ?? tab
       if (targetsHost && !this.notifier?.focusTerminal) {
-        if (
-          !targetTab.isActive &&
-          this.shouldPersistHeadlessMobileSessionActivation(snapshot!, targetTab)
-        ) {
-          this.activateHeadlessMobileSessionTerminalTab(worktreeId, snapshot!, targetTab)
+        if (!targetTab.isActive && !this.getAvailableAuthoritativeWindow()) {
+          this.focusHeldTerminalInDesktopView({
+            worktreeId,
+            tabId: targetTab.parentTabId,
+            paneKey: makePaneKey(targetTab.parentTabId, targetTab.leafId)
+          })
         }
       } else if (targetsHost) {
         this.notifier?.focusTerminal?.(targetTab.parentTabId, worktreeId, targetTab.leafId)

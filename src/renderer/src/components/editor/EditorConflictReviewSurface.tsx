@@ -1,5 +1,5 @@
 import React from 'react'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { joinPath } from '@/lib/path'
 import { useAppStore } from '@/store'
 import type { OpenFile, PendingEditorReveal } from '@/store/slices/editor'

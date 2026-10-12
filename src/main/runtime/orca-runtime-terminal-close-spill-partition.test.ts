@@ -3,9 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import { hasClosedTerminalTabRecord } from '../../shared/closed-terminal-tab-tombstones'
-import type { RuntimeMobileSessionTabsSnapshot } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { buildHeadlessMobileSessionTerminalTabs } from './mobile-session-terminal-projection'
 import { OrcaRuntimeService } from './orca-runtime'
 import { terminalSurfaceCloseMutation } from './terminal-surface-close'
 import { capturePersistedTerminalTabCopy } from './workspace-session-terminal-tab-retirement-identity'
@@ -72,28 +70,6 @@ function harness(sessions: Map<ExecutionHostId, WorkspaceSessionState>) {
     getForegroundProcess: async () => null,
     listProcesses: async () => [{ id: 'target-pty', cwd: REPO.path, title: 'Terminal' }]
   })
-  // The published snapshot lists both partitions' tabs, as the Web UI sees them.
-  const tabs = [...sessions.values()].flatMap((session) =>
-    buildHeadlessMobileSessionTerminalTabs(
-      WORKTREE_ID,
-      session.tabsByWorktree[WORKTREE_ID] ?? [],
-      session
-    )
-  )
-  const snapshot: RuntimeMobileSessionTabsSnapshot = {
-    worktree: WORKTREE_ID,
-    publicationEpoch: 'headless',
-    snapshotVersion: 1,
-    activeGroupId: null,
-    activeTabId: tabs[0]?.id ?? null,
-    activeTabType: 'terminal',
-    tabs: tabs.filter((tab, index) => tabs.findIndex((other) => other.id === tab.id) === index)
-  }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the published snapshot map is protected; seeding it stands in for a prior publication.
-  const internals = runtime as unknown as {
-    mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-  }
-  internals.mobileSessionTabsByWorktree.set(WORKTREE_ID, snapshot)
   return { runtime, kill }
 }
 

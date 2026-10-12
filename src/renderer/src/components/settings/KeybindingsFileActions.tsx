@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { useAppStore } from '../../store'
 import { revealFloatingWorkspacePanel } from '../../lib/floating-workspace-panel-reveal'
-import { detectLanguage } from '../../lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { Button } from '../ui/button'
 import {
   DropdownMenu,

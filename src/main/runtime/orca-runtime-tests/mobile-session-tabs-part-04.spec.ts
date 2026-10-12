@@ -1,4 +1,5 @@
 import { withDurableRuntimeStore } from '../runtime-durable-store-fixture'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { describe, expect, it, vi } from 'vitest'
 import {
   OrcaRuntimeService,
@@ -184,6 +185,8 @@ describe('OrcaRuntimeService', () => {
         flushOrThrow: vi.fn(),
         getRepos: () => [remoteRepo],
         getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+        // The Store lists its partitions, so the holder loads the SSH one.
+        getWorkspaceSessionHostIds: (): ExecutionHostId[] => ['local', 'ssh:ssh-1'],
         getWorkspaceSession
       })
     )
@@ -237,6 +240,7 @@ describe('OrcaRuntimeService', () => {
         ...store,
         getRepos: () => [remoteRepo],
         getRepo: (id: string) => (id === TEST_REPO_ID ? remoteRepo : undefined),
+        getWorkspaceSessionHostIds: (): ExecutionHostId[] => ['local', 'ssh:ssh-1'],
         getWorkspaceSession: (hostId?: string | null) =>
           hostId === 'ssh:ssh-1' ? sshSession : localSession,
         setWorkspaceSession,

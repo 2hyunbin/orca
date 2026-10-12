@@ -17,6 +17,8 @@ import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire
 import Database from '../sqlite/sync-database'
 import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { requireStructuredHost } from './rpc/methods/structured-agent-session-gate'
 import { assertLegacyAiVaultResumeCommandAllowed } from '../ai-vault/structured-session-ownership'
@@ -189,23 +191,32 @@ describe('logging a journal that will not open', () => {
 // and only structured requests are refused.
 describe('startup and other non-chat work without a structured host', () => {
   function startupRuntime(ensureHost: () => Promise<unknown> = install) {
-    const runtime = new OrcaRuntimeService()
+    // The window's saved session: workspace-1 is open with no chat tabs.
+    let saved: WorkspaceSessionState = {
+      ...getDefaultWorkspaceSession(),
+      tabsByWorktree: { 'workspace-1': [] }
+    }
+    const store = {
+      getRepos: () => [],
+      getAllWorktreeMeta: () => ({}),
+      getWorkspaceSession: () => saved,
+      setWorkspaceSession: (next: WorkspaceSessionState) => {
+        saved = next
+      }
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: startup and the inventory read only the store members defined above.
+    const runtime = new OrcaRuntimeService(store as never)
     const refreshPtyRecords = vi.fn(async () => new Set<string>())
-    const hydrateTabs = vi.fn(() => new Set<string>())
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root` and stubs the PTY daemon.
     const internal = runtime as unknown as {
       hasPersistedStructuredAgentSessionStore(): boolean
       ensureStructuredAgentSessionHost(): Promise<unknown>
       refreshMobileSessionPtyRecords(): Promise<Set<string> | null>
-      getKnownWorkspaceSessionWorktreeIds(): Set<string>
-      hydrateHeadlessMobileSessionTabsFromWorkspaceSession(): Set<string>
     }
     internal.hasPersistedStructuredAgentSessionStore = () => true
     internal.ensureStructuredAgentSessionHost = ensureHost
     internal.refreshMobileSessionPtyRecords = refreshPtyRecords
-    internal.getKnownWorkspaceSessionWorktreeIds = () => new Set(['workspace-1'])
-    internal.hydrateHeadlessMobileSessionTabsFromWorkspaceSession = hydrateTabs
-    return { runtime, refreshPtyRecords, hydrateTabs }
+    return { runtime, refreshPtyRecords }
   }
 
   async function expectStartupWithoutHost(runtime: OrcaRuntimeService): Promise<void> {
@@ -222,15 +233,11 @@ describe('startup and other non-chat work without a structured host', () => {
   it('goes ahead when its journal will not open', async () => {
     await writeJunkJournal()
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    const { runtime, refreshPtyRecords, hydrateTabs } = startupRuntime()
+    const { runtime, refreshPtyRecords } = startupRuntime()
 
     await expectStartupWithoutHost(runtime)
 
     expect(refreshPtyRecords).toHaveBeenCalledOnce()
-    expect(hydrateTabs).toHaveBeenCalledWith('workspace-1', {
-      allowAttachedWindow: true,
-      onlyRuntimeOwnedTerminals: true
-    })
     expect(gateRefusal()).toEqual({
       reason: 'journalCorrupt',
       message: 'Unable to load this chat.'
@@ -240,7 +247,7 @@ describe('startup and other non-chat work without a structured host', () => {
   // The inventory must say "cannot tell", never "no chats": a client culls what an answer omits,
   // and the desktop then saves its chat tabs away.
   describe('the session-tabs inventory', () => {
-    /** The worktree's frame as the renderer's own graph publication leaves it: no chat rows. */
+    /** The worktree's frame with no chat rows, as a navigation reply starts from. */
     const WORKTREE_FRAME: RuntimeMobileSessionTabsResult = {
       worktree: 'workspace-1',
       publicationEpoch: 'renderer-epoch',
@@ -251,24 +258,18 @@ describe('startup and other non-chat work without a structured host', () => {
       tabs: []
     }
 
-    function publishWorktreeFrame(runtime: OrcaRuntimeService): void {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime's own protected store, called as its graph publication does.
-      const internal = runtime as unknown as {
-        storeMobileSessionSnapshot(worktreeId: string, snapshot: unknown): unknown
-      }
-      internal.storeMobileSessionSnapshot('workspace-1', WORKTREE_FRAME)
-    }
-
     async function listInventory(runtime: OrcaRuntimeService) {
       await runtime.restoreStructuredAgentSessionTabs()
-      return runtime.listAllMobileSessionTabs()
+      // The holder also lists the (empty) floating-terminal workspace.
+      return (await runtime.listAllMobileSessionTabs()).filter(
+        (frame) => frame.worktree === 'workspace-1'
+      )
     }
 
     it('marks chats unverifiable when its journal will not open', async () => {
       await writeJunkJournal()
       vi.spyOn(console, 'warn').mockImplementation(() => undefined)
       const { runtime } = startupRuntime()
-      publishWorktreeFrame(runtime)
 
       const frames = await listInventory(runtime)
 
@@ -284,7 +285,6 @@ describe('startup and other non-chat work without a structured host', () => {
         await writeJunkJournal()
         vi.spyOn(console, 'warn').mockImplementation(() => undefined)
         const { runtime } = startupRuntime()
-        publishWorktreeFrame(runtime)
         await listInventory(runtime)
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime's own protected navigation step, called as `session.tabs.activate` does.
         const internal = runtime as unknown as {
@@ -309,7 +309,6 @@ describe('startup and other non-chat work without a structured host', () => {
 
     it('lists no chats as a real answer once there is a host', async () => {
       const { runtime } = startupRuntime()
-      publishWorktreeFrame(runtime)
 
       const frames = await listInventory(runtime)
 
@@ -323,10 +322,13 @@ describe('startup and other non-chat work without a structured host', () => {
       await writeJunkJournal()
       vi.spyOn(console, 'warn').mockImplementation(() => undefined)
       const { runtime } = startupRuntime()
-      publishWorktreeFrame(runtime)
       expect((await listInventory(runtime))[0]).toMatchObject({ agentSessionsUnverifiable: true })
       const pushed: RuntimeMobileSessionTabsResult[] = []
-      const unsubscribe = runtime.onMobileSessionTabsChanged((frame) => pushed.push(frame))
+      const unsubscribe = runtime.onMobileSessionTabsChanged((frame) => {
+        if (frame.worktree === 'workspace-1') {
+          pushed.push(frame)
+        }
+      })
 
       // Once a person moves the file aside, a chat request installs the host.
       await unlink(journalDatabasePath(root))

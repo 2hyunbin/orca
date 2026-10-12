@@ -1,13 +1,6 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession } from './orca-runtime-hydrate-headless-mobile-session-tabs-from-workspace-session'
-import type {
-  RuntimeMobileSessionBrowserTab,
-  RuntimeMobileSessionSnapshotTab,
-  RuntimeMobileSessionTabsSnapshot,
-  RuntimeMobileSessionTerminalTab
-} from '../../shared/runtime-types'
-import { headlessBrowserTabsUnchanged } from './mobile-session-browser-equality'
-import { appendBrowserTabOrder } from './mobile-session-browser-group-projection'
+import { OrcaRuntimeWithWaitForSessionTabsInventoryPublication } from './orca-runtime-wait-for-session-tabs-inventory-publication'
+import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
 import { parseAppSshPtyId, toComparableRelaySshPtyId } from '../../shared/ssh-pty-id'
 import { toSshExecutionHostId } from '../../shared/execution-host'
 import { parsePaneKey } from '../../shared/stable-pane-id'
@@ -17,80 +10,13 @@ import type { RuntimeStore } from './runtime-store-contract'
 import { SSH_PANE_RECOVERY_GRACE_MS } from './orca-runtime-core'
 import { findTerminalTabIdForLeaf } from '../persistence/terminal-topology/terminal-topology-membership'
 
-export class OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession {
-  // Why: keep an existing snapshot's browser tabs in sync with the live bridge
-  // without rebuilding stable terminal state. Replaces browser entries with the
-  // current live set and rewrites the browser portion of the primary group order.
-  protected reconcileHeadlessMobileSessionBrowserTabs(
-    worktreeId: string,
-    existing: RuntimeMobileSessionTabsSnapshot
-  ): void {
-    const existingBrowserTabs = existing.tabs.filter(
-      (tab): tab is RuntimeMobileSessionBrowserTab => tab.type === 'browser'
-    )
-    const publishedBrowserTabs = this.buildHeadlessMobileSessionBrowserTabs(worktreeId)
-    // An attached renderer owns its browser rows; the client-page registry cannot retire them.
-    const rendererBrowserTabs =
-      this.getAvailableAuthoritativeWindow() && !this.offscreenBrowserBackend
-        ? existingBrowserTabs.filter((tab) => tab.placement?.kind !== 'client')
-        : []
-    // Keyed by id so no row can publish twice whatever the two sources overlap on; a freshly
-    // built row wins over the retained one it replaces.
-    const liveById = new Map(
-      [...rendererBrowserTabs, ...publishedBrowserTabs].map((tab) => [tab.id, tab])
-    )
-    // Emit in the order the snapshot already had, because the equality check below compares by
-    // index: rebuilding renderer-first would read a pure reordering as a change and republish.
-    const retainedInOrder = existingBrowserTabs.flatMap((tab) => {
-      const live = liveById.get(tab.id)
-      return live && liveById.delete(tab.id) ? [live] : []
-    })
-    const liveBrowserTabs = [...retainedInOrder, ...liveById.values()]
-    const liveIds = liveBrowserTabs.map((tab) => tab.id)
-    const existingBrowserIds = existingBrowserTabs.map((tab) => tab.id)
-    if (headlessBrowserTabsUnchanged(liveBrowserTabs, existingBrowserTabs)) {
-      return
-    }
-    const nonBrowserTabs = existing.tabs.filter((tab) => tab.type !== 'browser')
-    const nextTabs: RuntimeMobileSessionSnapshotTab[] = [...nonBrowserTabs, ...liveBrowserTabs]
-    const liveIdSet = new Set(liveIds)
-    const tabGroups = appendBrowserTabOrder(
-      (existing.tabGroups ?? []).map((group) => ({
-        ...group,
-        // Drop closed browser ids; appendBrowserTabOrder re-adds the live ones.
-        tabOrder: group.tabOrder.filter(
-          (id) => liveIdSet.has(id) || !existingBrowserIds.includes(id)
-        )
-      })),
-      liveIds
-    )
-    const activeStillPresent = nextTabs.some((tab) => tab.id === existing.activeTabId)
-    const active = activeStillPresent
-      ? null
-      : (nextTabs.find((tab) => tab.isActive) ?? nextTabs[0] ?? null)
-    this.storeMobileSessionSnapshot(worktreeId, {
-      ...existing,
-      snapshotVersion: existing.snapshotVersion + 1,
-      ...(activeStillPresent
-        ? {}
-        : { activeTabId: active?.id ?? null, activeTabType: active?.type ?? null }),
-      tabGroups,
-      tabs: nextTabs
-    })
-  }
-
+export class OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithWaitForSessionTabsInventoryPublication {
   protected isServeOwnedPtyId(ptyId: string | null | undefined): boolean {
     return typeof ptyId === 'string' && ptyId.startsWith('serve-')
   }
 
   protected isSshOwnedPtyId(ptyId: string | null | undefined): boolean {
     return typeof ptyId === 'string' && parseAppSshPtyId(ptyId) !== null
-  }
-
-  protected workspaceSessionHasRuntimeOwnedPtyCandidate(session: WorkspaceSessionState): boolean {
-    return Object.entries(session.tabsByWorktree ?? {}).some(([worktreeId, tabs]) =>
-      this.workspaceSessionWorktreeHasRuntimeOwnedPtyCandidate(session, worktreeId, tabs)
-    )
   }
 
   protected workspaceSessionWorktreeHasRuntimeOwnedPtyCandidate(
@@ -222,13 +148,6 @@ export class OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs extends Or
         )
       }) ?? null
     )
-  }
-
-  protected hasRecentExpiredSshLeasePane(
-    worktreeId: string,
-    tab: RuntimeMobileSessionTerminalTab
-  ): boolean {
-    return this.getRecentExpiredSshLease(worktreeId, tab.parentTabId, tab.leafId) !== null
   }
 
   // Why: serve-* (local serve) and ssh:<conn>@@<relay> (SSH relay) ids are minted

@@ -110,7 +110,14 @@ function resolveGroupTab(
 
 /** What a view shows in one workspace, with every id that no longer exists fallen back. */
 export function resolveWorkspaceSelection(
-  record: LayoutViewRecord,
+  record: Pick<
+    LayoutViewRecord,
+    | 'groups'
+    | 'panes'
+    | 'activeGroupIdByWorktree'
+    | 'activeFileIdByWorktree'
+    | 'activeBrowserTabIdByWorktree'
+  >,
   workspaceKey: string,
   workspace: WorkspaceLayout
 ): ResolvedWorkspaceSelection {

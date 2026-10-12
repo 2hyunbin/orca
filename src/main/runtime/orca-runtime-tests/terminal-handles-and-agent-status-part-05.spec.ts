@@ -10,6 +10,8 @@ import {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   deferred,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
   store
 } from '../orca-runtime-test-fixtures.spec'
 
@@ -609,45 +611,48 @@ describe('OrcaRuntimeService', () => {
     expect(result.tabs[0]).not.toHaveProperty('launchAgent')
   })
 
-  it('keeps renderer-vetted mobile agent status for custom-titled terminals', async () => {
-    const runtime = new OrcaRuntimeService(store)
-    const leafId = '11111111-1111-4111-8111-111111111111'
+  it('keeps hook agent status for custom-titled terminals', async () => {
+    const leafId = HEADLESS_LEAF_ID
     const hostPaneKey = `tab-1:${leafId}`
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: `tab-1::${leafId}`,
-          activeTabType: 'terminal',
-          tabs: [
+    store.setWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        activeTabId: 'tab-1',
+        activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-1' },
+        tabsByWorktree: {
+          [TEST_WORKTREE_ID]: [
             {
-              type: 'terminal',
-              id: `tab-1::${leafId}`,
-              parentTabId: 'tab-1',
-              leafId,
-              title: 'claude agents',
-              agentStatus: {
-                state: 'working',
-                prompt: 'fix parity',
-                updatedAt: 1_700_000_000_000,
-                stateStartedAt: 1_699_999_999_000,
-                agentType: 'codex',
-                paneKey: hostPaneKey,
-                terminalTitle: 'codex [working]',
-                stateHistory: []
-              },
-              isActive: true
+              id: 'tab-1',
+              ptyId: null,
+              worktreeId: TEST_WORKTREE_ID,
+              title: 'codex [working]',
+              customTitle: 'claude agents',
+              color: null,
+              sortOrder: 0,
+              createdAt: 1
             }
           ]
+        },
+        terminalLayoutsByTabId: { 'tab-1': makeHeadlessTerminalLayout({ [leafId]: undefined }) }
+      })
+    )
+    const now = Date.now()
+    const runtime = new OrcaRuntimeService(store, undefined, {
+      getAgentStatusSnapshot: () => [
+        {
+          paneKey: hostPaneKey,
+          state: 'working',
+          prompt: 'fix parity',
+          agentType: 'codex',
+          connectionId: null,
+          receivedAt: now,
+          stateStartedAt: now - 1_000,
+          tabId: 'tab-1',
+          worktreeId: TEST_WORKTREE_ID
         }
       ]
     })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 

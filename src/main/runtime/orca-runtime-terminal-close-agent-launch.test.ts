@@ -12,9 +12,11 @@ import {
   WORKTREE_ID,
   createHarness
 } from './__fixtures__/orca-runtime-terminal-close-continuity-fixtures'
+import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
 
 afterEach(() => {
   resetAgentLaunchPanesForTests()
+  setRuntimeDesktopSurface(null)
 })
 
 function launchIn(leafId: string) {
@@ -24,8 +26,27 @@ function launchIn(leafId: string) {
   })
 }
 
+function showDesktopWindow(): void {
+  setRuntimeDesktopSurface({
+    showNotification: () => false,
+    findWindowById: () => {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane close path only checks window and WebContents destruction.
+      return { isDestroyed: () => false, webContents: { isDestroyed: () => false } } as never
+    },
+    onIpc: () => {},
+    removeIpcListener: () => {}
+  })
+}
+
 describe("a pane close main starts (a phone's, the CLI's)", () => {
-  it('stops a launch still running in that pane, and only that one', async () => {
+  // The window path closes the pane through the renderer; a headless host closes it in the holder.
+  it.each([
+    { host: 'with a desktop window', desktop: true },
+    { host: 'with no desktop window', desktop: false }
+  ])('stops a launch still running in that pane, and only that one, $host', async ({ desktop }) => {
+    if (desktop) {
+      showDesktopWindow()
+    }
     const harness = createHarness({ publishMobileSurface: true })
     harness.syncSplitFixtureGraph()
     const closed = launchIn(LEAF_ID)
@@ -39,7 +60,12 @@ describe("a pane close main starts (a phone's, the CLI's)", () => {
 
     await harness.runtime.closeTerminal(terminal.handle)
 
-    expect(harness.closeTerminalPane).toHaveBeenCalledWith(TAB_ID, LEAF_ID)
+    if (desktop) {
+      expect(harness.closeTerminalPane).toHaveBeenCalledWith(TAB_ID, LEAF_ID)
+    }
+    expect(
+      (await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)).tabs.map((tab) => tab.id)
+    ).toEqual([`${TAB_ID}::${SIBLING_LEAF_ID}`])
     expect(closed.closedByUser()).toBe(true)
     expect(sibling.closedByUser()).toBe(false)
   })

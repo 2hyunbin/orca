@@ -7,6 +7,43 @@ import {
   syncSinglePty
 } from '../orca-runtime-test-fixtures.spec'
 
+// The window adopts the pane the runtime created, under the ids the host saved for it.
+function adoptCreatedPane(
+  runtime: InstanceType<typeof OrcaRuntimeService>,
+  ptyId: string,
+  options: { paneTitle: string }
+): void {
+  const session = store.getWorkspaceSession()
+  const tab = session.tabsByWorktree[TEST_WORKTREE_ID]?.find((entry) => entry.ptyId === ptyId)
+  const leafId = Object.entries(
+    session.terminalLayoutsByTabId[tab?.id ?? '']?.ptyIdsByLeafId ?? {}
+  ).find(([, boundPtyId]) => boundPtyId === ptyId)?.[0]
+  if (!tab || !leafId) {
+    throw new Error('expected a saved pane for the created terminal')
+  }
+  runtime.syncWindowGraph(1, {
+    tabs: [
+      {
+        tabId: tab.id,
+        worktreeId: TEST_WORKTREE_ID,
+        title: 'Codex',
+        activeLeafId: leafId,
+        layout: null
+      }
+    ],
+    leaves: [
+      {
+        tabId: tab.id,
+        worktreeId: TEST_WORKTREE_ID,
+        leafId,
+        paneRuntimeId: 1,
+        ptyId,
+        paneTitle: options.paneTitle
+      }
+    ]
+  })
+}
+
 describe('OrcaRuntimeService', () => {
   it('lets Claude agents management titles clear stale runtime-created title status', async () => {
     const runtime = new OrcaRuntimeService(store)
@@ -206,7 +243,7 @@ describe('OrcaRuntimeService', () => {
     })
     runtime.onPtyData('pty-bg', '\x1b]0;claude working\x07', 100)
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'claude agents' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'claude agents' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(false)
   })
@@ -227,7 +264,7 @@ describe('OrcaRuntimeService', () => {
     })
     runtime.onPtyData('pty-bg', '\x1b]0;claude working\x07', 100)
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(false)
   })
@@ -247,7 +284,7 @@ describe('OrcaRuntimeService', () => {
       title: 'bash'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(true)
   })
@@ -271,7 +308,7 @@ describe('OrcaRuntimeService', () => {
       title: 'bash'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(true)
     expect(getForegroundProcess).toHaveBeenCalledTimes(2)
@@ -296,10 +333,12 @@ describe('OrcaRuntimeService', () => {
       title: 'bash'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
 
     await expect(
-      runtime.isTerminalRunningAgent(handle, { retryForegroundWrappers: false })
+      runtime.isTerminalRunningAgent(handle, {
+        retryForegroundWrappers: false
+      })
     ).resolves.toBe(false)
     expect(getForegroundProcess).toHaveBeenCalledTimes(1)
   })
@@ -368,7 +407,7 @@ describe('OrcaRuntimeService', () => {
       title: 'bash'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
     vi.useFakeTimers()
     vi.setSystemTime(0)
     try {
@@ -397,7 +436,7 @@ describe('OrcaRuntimeService', () => {
       title: 'bash'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(false)
   })
@@ -418,7 +457,7 @@ describe('OrcaRuntimeService', () => {
       title: 'bash'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
 
     vi.useFakeTimers()
     try {
@@ -469,7 +508,7 @@ describe('OrcaRuntimeService', () => {
       title: 'claude agents'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'claude agents' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'claude agents' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(false)
     expect(getForegroundProcess).toHaveBeenCalledTimes(2)
@@ -490,7 +529,7 @@ describe('OrcaRuntimeService', () => {
       title: 'claude agents'
     })
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'claude agents' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'claude agents' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(true)
   })
@@ -509,7 +548,7 @@ describe('OrcaRuntimeService', () => {
       command: 'codex',
       title: 'Codex working'
     })
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'bash' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'bash' })
     runtime.onPtyData(
       'pty-bg',
       ['OpenAI Codex', 'Model: gpt-5.4', 'Directory: /tmp/worktree-a'].join('\n'),
@@ -535,7 +574,7 @@ describe('OrcaRuntimeService', () => {
     })
     runtime.onPtyData('pty-bg', '\x1b]0;claude agents\x07', 100)
 
-    syncSinglePty(runtime, 'pty-bg', { paneTitle: 'claude working' })
+    adoptCreatedPane(runtime, 'pty-bg', { paneTitle: 'claude working' })
 
     await expect(runtime.isTerminalRunningAgent(handle)).resolves.toBe(true)
   })

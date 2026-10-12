@@ -188,6 +188,7 @@ export type RuntimeBrowserCommandHost = {
     options?: BrowserSessionTabSelectionOptions
   ): void
   notifyHeadlessBrowserSessionTabsChanged?(worktreeId: string): void
+  addHeadlessBrowserLayoutTab?(worktreeId: string, browserPageId: string, groupId?: string): void
   /** True when a runtime-owned session row for that page existed and was retired. */
   retireRuntimeOwnedBrowserSessionTab?(worktreeId: string, browserPageId: string): boolean | void
 }

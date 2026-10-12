@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
+import { OrcaRuntimeService, electronMocks } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   HEADLESS_SECOND_LEAF_ID,
@@ -488,6 +488,11 @@ describe('OrcaRuntimeService', () => {
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these close paths call only the listed notifier methods.
     runtime.setNotifier({ closeTerminal, closeTerminalPane } as never)
+    electronMocks.BrowserWindow.fromId.mockReturnValue({
+      isDestroyed: () => false,
+      webContents: { send: vi.fn() }
+    })
+    runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [
         {

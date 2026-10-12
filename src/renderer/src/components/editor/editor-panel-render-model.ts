@@ -1,4 +1,4 @@
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { canPreviewLanguage } from '@/lib/file-preview'
 import type { useAppStore } from '@/store'
 import type { MarkdownViewMode, OpenFile } from '@/store/slices/editor'

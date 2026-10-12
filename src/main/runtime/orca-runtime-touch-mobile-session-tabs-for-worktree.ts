@@ -3,29 +3,18 @@ import { OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal } from './orca-run
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { hasHostAuthoritativeTerminalMembership } from '../persistence/terminal-topology/terminal-topology-membership'
-import type {
-  RuntimeMobileSessionTabsSnapshot,
-  RuntimeSyncedLeaf
-} from '../../shared/runtime-types'
-import { retireTerminalSurfacesFromSnapshot } from './mobile-session-terminal-retirement'
+import type { RuntimeSyncedLeaf } from '../../shared/runtime-types'
 
 export class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal {
-  /** Bump the snapshot version and emit, coalesced unless `immediate`.
-   *  Why the bump: clients gate mirrored snapshots on a strictly increasing
-   *  `snapshotVersion`, so a re-emit at the same version is silently dropped. */
+  /** Emit at a new snapshot version, coalesced unless `immediate`. */
   touchMobileSessionTabsForWorktree(
     worktreeId: string,
     options: { immediate?: boolean } = {}
   ): void {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
-    if (!snapshot) {
+    if (!this.sessionTabsWorktreeIds().includes(worktreeId)) {
       return
     }
     this.mobileSessionTabsAgentStatusHeartbeat.observeWorktreeRefresh(worktreeId)
-    this.storeMobileSessionSnapshot(worktreeId, {
-      ...snapshot,
-      snapshotVersion: snapshot.snapshotVersion + 1
-    })
     if (options.immediate) {
       // Why: an exit is structural and must not wait behind the title/status window. A
       // registration's ready flip coalesces so it merges with the spawn's graph update.
@@ -60,12 +49,9 @@ export class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends OrcaRuntim
     leafId: string
   ): boolean {
     return Boolean(
-      this.mobileSessionTabsByWorktree
-        .get(worktreeId)
-        ?.tabs.some(
-          (tab) =>
-            tab.type === 'terminal' && tab.parentTabId === parentTabId && tab.leafId === leafId
-        )
+      this.readSessionTabsSnapshot(worktreeId)?.tabs.some(
+        (tab) => tab.type === 'terminal' && tab.parentTabId === parentTabId && tab.leafId === leafId
+      )
     )
   }
 
@@ -112,38 +98,5 @@ export class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends OrcaRuntim
         leaf.ptyId
       )
     )
-  }
-
-  protected applyMobileSessionRetirementFences(
-    snapshot: RuntimeMobileSessionTabsSnapshot
-  ): RuntimeMobileSessionTabsSnapshot {
-    let next = snapshot
-    for (const tab of snapshot.tabs) {
-      if (
-        tab.type !== 'terminal' ||
-        this.isMobileSessionSurfaceMembershipAllowed(
-          snapshot.worktree,
-          tab.parentTabId,
-          tab.leafId,
-          tab.ptyId
-        ) ||
-        // Why: after a cold restore the saved session is the only membership record until the PTY
-        // registers. Frame-only; once listed, the surface's graph leaves pass the shared predicate
-        // like any listed surface's. Host-side single-writer membership absorbs this.
-        this.hasPersistedTerminalSurfaceMembership(snapshot.worktree, tab.parentTabId, tab.leafId)
-      ) {
-        continue
-      }
-      const retired = retireTerminalSurfacesFromSnapshot({
-        snapshot: next,
-        ptyId: tab.ptyId ?? '',
-        exactSurfaces: [{ parentTabId: tab.parentTabId, leafId: tab.leafId }],
-        exactOnly: true
-      })
-      if (retired) {
-        next = retired.snapshot
-      }
-    }
-    return next
   }
 }

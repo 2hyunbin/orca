@@ -52,6 +52,8 @@ describe('terminal close and handle incarnation continuity', () => {
     expect(harness.flushOrThrow.mock.invocationCallOrder[0]).toBeLessThan(
       harness.kill.mock.invocationCallOrder[0]!
     )
+    // Publishes reach subscribers through the coalescer.
+    await vi.waitFor(() => expect(published).toHaveBeenCalled())
     expect(harness.flushOrThrow.mock.invocationCallOrder[0]).toBeLessThan(
       published.mock.invocationCallOrder[0]!
     )
@@ -62,8 +64,7 @@ describe('terminal close and handle incarnation continuity', () => {
             parentTabId: TAB_ID,
             leafId: LEAF_ID,
             ptyId: RUNTIME_OWNED_PTY_ID,
-            terminal: terminal.handle,
-            incarnationId: INCARNATION_ID
+            terminal: terminal.handle
           }
         ],
         tabs: []
@@ -89,7 +90,7 @@ describe('terminal close and handle incarnation continuity', () => {
     const snapshot = await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
     expect(snapshot.tabs).toEqual([])
     expect(errorSpy).toHaveBeenCalledWith(
-      '[runtime] failed to persist terminal close:',
+      '[workspace-layout] could not save the layout:',
       expect.any(Error)
     )
     errorSpy.mockRestore()
@@ -118,37 +119,16 @@ describe('terminal close and handle incarnation continuity', () => {
         expect.objectContaining({
           leafId: LEAF_ID,
           ptyId: PTY_ID,
-          terminal: terminalsByLeafId.get(LEAF_ID),
-          incarnationId: INCARNATION_ID
+          terminal: terminalsByLeafId.get(LEAF_ID)
         }),
         expect.objectContaining({
           leafId: SIBLING_LEAF_ID,
           ptyId: SIBLING_PTY_ID,
-          terminal: terminalsByLeafId.get(SIBLING_LEAF_ID),
-          incarnationId: SIBLING_INCARNATION_ID
+          terminal: terminalsByLeafId.get(SIBLING_LEAF_ID)
         })
       ])
     )
   })
-
-  it.each(['pane', 'tab'] as const)(
-    'closes an exact hot-state %s whose failed reveal left no persisted row',
-    async (closeMode) => {
-      const harness = await createStaleTabCloseHarness({ headless: true })
-      harness.retirePersistedTab()
-
-      await expect(
-        closeMode === 'tab'
-          ? harness.runtime.closeTerminalTab(harness.terminal.handle)
-          : harness.runtime.closeTerminal(harness.terminal.handle)
-      ).resolves.toMatchObject({ handle: harness.terminal.handle, tabId: TAB_ID })
-
-      expect(harness.kill).toHaveBeenCalledWith(RUNTIME_OWNED_PTY_ID)
-      await expect(
-        harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
-      ).resolves.toMatchObject({ tabs: [] })
-    }
-  )
 
   it('does not let a colliding PTY id close a different persisted incarnation', async () => {
     const harness = await createStaleTabCloseHarness({ headless: true })
@@ -298,7 +278,7 @@ describe('terminal close and handle incarnation continuity', () => {
     )!
     harness.syncFixtureGraph()
 
-    const closing = harness.runtime.closeTerminal(terminal.handle)
+    const closing = harness.runtime.closeTerminalTab(terminal.handle)
     await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
     expect(harness.kill).not.toHaveBeenCalled()
 
@@ -403,29 +383,6 @@ describe('terminal close and handle incarnation continuity', () => {
       deadlineMs: expect.any(Number)
     })
     expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
-  })
-
-  it('finishes PTY teardown when the session store disappears after retirement', async () => {
-    const harness = createPtyBackedPublishedSurfaceHarness()
-    const closeMobileSessionTab = vi.spyOn(harness.runtime, 'closeMobileSessionTab')
-    const [terminal] = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals
-    expect(terminal).toMatchObject({ ptyId: RUNTIME_OWNED_PTY_ID })
-    const { handle } = terminal
-
-    const closing = harness.runtime.closeTerminal(handle)
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
-    expect(closeMobileSessionTab).toHaveBeenCalled()
-    expect(harness.kill).not.toHaveBeenCalled()
-
-    harness.retirePersistedTab()
-    harness.makeSessionUnavailable()
-    harness.acknowledged.resolve()
-
-    await expect(closing).resolves.toMatchObject({ handle, tabId: TAB_ID, ptyKilled: false })
-    expect(harness.closeTerminal).toHaveBeenCalledWith(TAB_ID)
-    expect(harness.stopAndWait).toHaveBeenCalledWith(RUNTIME_OWNED_PTY_ID, {
-      deadlineMs: expect.any(Number)
-    })
   })
 
   it('does not tear down a published PTY when retirement fails before acknowledgement', async () => {

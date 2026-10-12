@@ -83,7 +83,7 @@ export const CALLER_LAUNCH_CASES: HostLaunchCase[] = [
       launch_source: 'unknown',
       request_kind: 'new'
     },
-    phone: { title: 'Terminal', launchAgent: String(params.agent), isActive: false }
+    phone: { title: 'Terminal 1', launchAgent: String(params.agent), isActive: false }
   })),
   {
     // C4/C5: worktree-remote.ts spawnLocalStartupAndSetupTerminals runs the caller's command and env
@@ -143,6 +143,6 @@ export const CALLER_LAUNCH_CASES: HostLaunchCase[] = [
     provider: { command, ...shell },
     // main today: the pane's own launch_source never reaches the host.
     telemetry: { agent_kind: 'opencode', launch_source: 'unknown', request_kind: 'new' },
-    phone: { title: 'Terminal', launchAgent: 'opencode', isActive: false }
+    phone: { title: 'Terminal 1', launchAgent: 'opencode', isActive: false }
   }))
 ]

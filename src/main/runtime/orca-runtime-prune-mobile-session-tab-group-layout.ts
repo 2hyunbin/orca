@@ -3,14 +3,10 @@ import { selectFreshAgentRowForMobileTab } from './runtime-hook-agent-row-select
 import { OrcaRuntimeWithScheduleMobileSessionTabsChanged } from './orca-runtime-schedule-mobile-session-tabs-changed'
 import type { TabGroupLayoutNode } from '../../shared/tab-types'
 import type {
-  RuntimeMobileSessionSnapshotTab,
-  RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
-import { mergeMobileSessionTabGroups } from './mobile-session-tab-merge'
-import { buildHeadlessMobileSessionTabGroups } from './mobile-session-layout-projection'
 import { projectRuntimeMobileSessionTabs } from './runtime-mobile-session-projection'
 import type { RuntimeMobileSessionProjectionHost } from './runtime-mobile-session-projection-contract'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
@@ -25,10 +21,7 @@ import { FIRST_PANE_ID } from '../../shared/pane-key'
 import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { structuredWorkerHandleAgentStatus } from './orchestration/structured-worker-group-addressing'
-import {
-  retitleStructuredConversationTab,
-  titleStructuredConversationTabs
-} from './structured-conversation-tab-title'
+import { titleStructuredConversationTabs } from './structured-conversation-tab-title'
 
 export class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntimeWithScheduleMobileSessionTabsChanged {
   protected pruneMobileSessionTabGroupLayout(
@@ -49,33 +42,6 @@ export class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntime
     return first ?? second
   }
 
-  // Instance seams over the tab-group projections so callers (and tests) can
-  // reach them through the runtime the way the rest of this surface is reached.
-  protected mergeMobileSessionTabGroups(
-    worktreeId: string,
-    groups: readonly RuntimeMobileSessionTabGroup[],
-    terminalTabs: readonly RuntimeMobileSessionTerminalTab[],
-    activeTab: RuntimeMobileSessionTerminalTab | null
-  ): RuntimeMobileSessionTabGroup[] {
-    return mergeMobileSessionTabGroups(worktreeId, groups, terminalTabs, activeTab)
-  }
-
-  protected buildHeadlessMobileSessionTabGroups(
-    worktreeId: string,
-    tabs: readonly RuntimeMobileSessionSnapshotTab[],
-    activeTab: RuntimeMobileSessionSnapshotTab | null,
-    existingGroups?: readonly RuntimeMobileSessionTabGroup[],
-    newTabAssignment?: { tabId: string; groupId: string }
-  ): RuntimeMobileSessionTabGroup[] {
-    return buildHeadlessMobileSessionTabGroups(
-      worktreeId,
-      tabs,
-      activeTab,
-      existingGroups,
-      newTabAssignment
-    )
-  }
-
   /** Transforms an internal mobile session tab snapshot into a sanitized client payload, resolving launch-agent ownership and normalizing titles. */
   protected toMobileSessionTabsResult(
     snapshot: RuntimeMobileSessionTabsSnapshot
@@ -88,17 +54,9 @@ export class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntime
     return projectRuntimeMobileSessionTabs(snapshot, this.getMobileSessionProjectionHost())
   }
 
-  refreshStructuredConversationTabTitle(workspaceId: string, sessionId: string): void {
-    const snapshot = this.mobileSessionTabsByWorktree.get(workspaceId)
-    if (!snapshot) {
-      return
-    }
-    const record = getStructuredAgentSessionHost()?.deps?.store?.getRecord(sessionId)
-    const name = record?.location.workspaceId === workspaceId ? record.conversationName : null
-    const next = retitleStructuredConversationTab(snapshot, sessionId, name)
-    if (next) {
-      this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(workspaceId, next))
-    }
+  /** A conversation's name changed: its chat row is retitled at the next emit. */
+  refreshStructuredConversationTabTitle(workspaceId: string, _sessionId: string): void {
+    this.notifyMobileSessionTabsChanged(workspaceId)
   }
 
   protected getMobileSessionProjectionHost(): RuntimeMobileSessionProjectionHost {
@@ -116,6 +74,8 @@ export class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends OrcaRuntime
       getRetainedStatus: (paneKey, pty, tab, getRows) =>
         this.getFreshRetainedAgentStatusForMobileTab(paneKey, pty, tab, getRows),
       getTrackedTitle: (ptyId) => this.getUnpersistedTrackedTitleForPty(ptyId),
+      getUserTitle: (worktreeId, parentTabId, leafId) =>
+        this.heldUserTitle(worktreeId, parentTabId, leafId),
       getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId),
       issuePtyHandle: (pty) => this.issuePtyHandle(pty),
       recordPty: (ptyId, worktreeId, state) => this.recordPtyWorktree(ptyId, worktreeId, state),

@@ -71,11 +71,6 @@ import {
   recentTerminalOutputIncludesPath
 } from '../terminal-output-path-candidates'
 import { RecentPtyOutputBuffer } from '../recent-pty-output-buffer'
-import { headlessBrowserTabsUnchanged } from '../mobile-session-browser-equality'
-import {
-  appendBrowserTabOrder,
-  collectBrowserGroupAssignment
-} from '../mobile-session-browser-group-projection'
 import { HeadlessEmulator } from '../../daemon/headless-emulator'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import {
@@ -165,7 +160,6 @@ export const exportedAddSparseWorktree = addSparseWorktree
 export const exportedAddWorktree = addWorktree
 export const exportedAdvertisedUrlWatcher = advertisedUrlWatcher
 export const exportedAfterEach = afterEach
-export const exportedAppendBrowserTabOrder = appendBrowserTabOrder
 export const exportedAppendNormalizedToTailBuffer = appendNormalizedToTailBuffer
 export const exportedAppendRecentPtyPathCandidates = appendRecentPtyPathCandidates
 export const exportedAssertWorktreeCleanForRemoval = assertWorktreeCleanForRemoval
@@ -179,7 +173,6 @@ export const exportedCancelLegacyWorkerTerminalRecoveryRetriesForTests =
 export const exportedClearConfiguredWorktreeSharedDirectoriesCacheForTests =
   clearConfiguredWorktreeSharedDirectoriesCacheForTests
 export const exportedClearSubmodulePathsCacheForTests = clearSubmodulePathsCacheForTests
-export const exportedCollectBrowserGroupAssignment = collectBrowserGroupAssignment
 export const exportedCreateHash = createHash
 export const exportedCreateRootDispatch = createRootDispatch
 export const exportedCreateSetupRunnerScript = createSetupRunnerScript
@@ -200,7 +193,6 @@ export const exportedGetRuntimeBrowserPageRegistry = getRuntimeBrowserPageRegist
 export const exportedGetTerminalPasteIngestMs = getTerminalPasteIngestMs
 export const exportedGitRunner = gitRunner
 export const exportedHasHooksFile = hasHooksFile
-export const exportedHeadlessBrowserTabsUnchanged = headlessBrowserTabsUnchanged
 export const exportedHomedir = homedir
 export const exportedInspectPtyProviderProcess = inspectPtyProviderProcess
 export const exportedInstallFakeAppEnvironment = installFakeAppEnvironment

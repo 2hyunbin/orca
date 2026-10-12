@@ -84,7 +84,7 @@ export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnecte
         string,
         Pick<RetiredTerminalSurface, 'worktreeId' | 'parentTabId' | 'leafId'>
       >()
-      for (const [worktreeId, snapshot] of this.mobileSessionTabsByWorktree) {
+      for (const [worktreeId, snapshot] of this.sessionTabsSnapshots()) {
         for (const tab of snapshot.tabs) {
           if (
             tab.type === 'terminal' &&

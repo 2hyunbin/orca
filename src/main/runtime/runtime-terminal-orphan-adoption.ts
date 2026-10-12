@@ -28,7 +28,6 @@ type RuntimeTerminalOrphanAdoptionPorts = {
   getMobileSnapshots: () => Iterable<RuntimeMobileSessionTabsSnapshot>
   /** Applies the adopted layout in the holder; returns the partition as saved after it. */
   adoptSession: (from: string, adopted: WorkspaceSessionState) => WorkspaceSessionState | null
-  hydrateSession: (worktreeId: string) => void
   notifySessionChanged: (worktreeId: string) => void
   getSnapshot: (worktreeId: string) => RuntimeMobileSessionTabsResult
 }
@@ -200,7 +199,8 @@ export async function adoptRuntimeTerminalOrphansFromInventory(args: {
       )
       if (
         surfaceOwner?.type === 'terminal' &&
-        (snapshot.worktree !== workspace.id || surfaceOwner.ptyId !== claim.ptyId)
+        (!runtimeWorktreeIdsEqual(snapshot.worktree, workspace.id) ||
+          surfaceOwner.ptyId !== claim.ptyId)
       ) {
         throw new Error('terminal_orphan_surface_occupied')
       }
@@ -209,7 +209,7 @@ export async function adoptRuntimeTerminalOrphansFromInventory(args: {
       )
       if (
         owner?.type === 'terminal' &&
-        (snapshot.worktree !== workspace.id ||
+        (!runtimeWorktreeIdsEqual(snapshot.worktree, workspace.id) ||
           owner.parentTabId !== claim.tabId ||
           owner.leafId !== claim.leafId)
       ) {
@@ -232,7 +232,6 @@ export async function adoptRuntimeTerminalOrphansFromInventory(args: {
   for (const { claim, pty, paneKey } of validated) {
     ports.recordAdoptedSurface(pty, claim.tabId, paneKey)
   }
-  ports.hydrateSession(workspace.id)
   ports.notifySessionChanged(workspace.id)
   return {
     adopted: true,

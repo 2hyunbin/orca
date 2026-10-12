@@ -27,6 +27,7 @@ import {
   terminalRowId
 } from './old-client-session-tab-rows'
 import { collectLayoutLeafIdsInOrder } from '../terminal-pane-tree'
+import { resolveWorkspaceSelection } from '../workspace-layout-views'
 import {
   BLANK_BROWSER_TAB_STATE,
   type DesktopLayoutView,
@@ -42,7 +43,12 @@ import type {
 /** One view's selection: the desktop's record today, a phone's own record once views exist. */
 export type SessionTabsView = Pick<
   DesktopLayoutView,
-  'activeGroupIdByWorktree' | 'groups' | 'panes' | 'editorDrafts'
+  | 'activeGroupIdByWorktree'
+  | 'activeFileIdByWorktree'
+  | 'activeBrowserTabIdByWorktree'
+  | 'groups'
+  | 'panes'
+  | 'editorDrafts'
 >
 
 export type SessionTabsFacts = Pick<
@@ -74,12 +80,15 @@ export function projectSessionTabs(
   facts: SessionTabsFacts,
   generatedTitlesEnabled: boolean
 ): ProjectedSessionTabs {
-  const activeGroupId = view.activeGroupIdByWorktree?.[key] ?? null
+  // A group or pane id that no longer exists falls back as the window's does; a group that never
+  // showed a tab (a background create) still shows none.
+  const selection = resolveWorkspaceSelection(view, key, workspace)
+  const activeGroupId = selection.activeGroupId
   const groupViews = view.groups[key] ?? {}
   const scope: Scope = {
     key,
     workspace,
-    view,
+    view: { ...view, panes: { ...view.panes, ...selection.panes } },
     facts,
     generatedTitlesEnabled,
     activeTabId: activeGroupId ? (groupViews[activeGroupId]?.activeTabId ?? null) : null

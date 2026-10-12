@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { DESKTOP_VIEW_ID } from '../../../shared/workspace-layout/workspace-layout-views'
 import { OrcaRuntimeService, makePaneKey } from '../orca-runtime-test-mocks.spec'
 import type {
   RuntimeClientEvent,
@@ -12,11 +13,34 @@ import {
   TEST_WORKTREE_ID,
   createRuntime,
   createRuntimeWithSshLease,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
   store
 } from '../orca-runtime-test-fixtures.spec'
 
+const terminalTab = (id: string, ptyId: string, title: string) => ({
+  id,
+  ptyId,
+  worktreeId: TEST_WORKTREE_ID,
+  title,
+  customTitle: null,
+  color: null,
+  sortOrder: 0,
+  createdAt: 1
+})
+
 describe('OrcaRuntimeService', () => {
   it('lists live terminals and issues stable handles for synced leaves', async () => {
+    store.setWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        activeTabId: 'tab-1',
+        activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-1' },
+        tabsByWorktree: { [TEST_WORKTREE_ID]: [terminalTab('tab-1', 'pty-1', 'Claude')] },
+        terminalLayoutsByTabId: {
+          'tab-1': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: 'pty-1' })
+        }
+      })
+    )
     const runtime = new OrcaRuntimeService(store)
     const events: RuntimeClientEvent[] = []
     runtime.onClientEvent((event) => events.push(event))
@@ -28,7 +52,7 @@ describe('OrcaRuntimeService', () => {
           tabId: 'tab-1',
           worktreeId: 'repo-1::/tmp/worktree-a',
           title: 'Claude',
-          activeLeafId: 'pane:1',
+          activeLeafId: HEADLESS_LEAF_ID,
           layout: null
         }
       ],
@@ -36,29 +60,9 @@ describe('OrcaRuntimeService', () => {
         {
           tabId: 'tab-1',
           worktreeId: 'repo-1::/tmp/worktree-a',
-          leafId: 'pane:1',
+          leafId: HEADLESS_LEAF_ID,
           paneRuntimeId: 1,
           ptyId: 'pty-1'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: 'repo-1::/tmp/worktree-a',
-          publicationEpoch: 'epoch-terminal-handle',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Claude',
-              isActive: true
-            }
-          ]
         }
       ]
     })
@@ -107,6 +111,16 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('routes a launch-draft resolution to the handle-owning local and remote renderers', async () => {
+    store.setWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        activeTabId: 'tab-1',
+        activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-1' },
+        tabsByWorktree: { [TEST_WORKTREE_ID]: [terminalTab('tab-1', 'pty-1', 'Claude')] },
+        terminalLayoutsByTabId: {
+          'tab-1': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: 'pty-1' })
+        }
+      })
+    )
     const runtime = new OrcaRuntimeService(store)
     const nativeChatLaunchDraftResolved = vi.fn()
     const events: RuntimeClientEvent[] = []
@@ -119,7 +133,7 @@ describe('OrcaRuntimeService', () => {
           tabId: 'tab-1',
           worktreeId: 'repo-1::/tmp/worktree-a',
           title: 'Claude',
-          activeLeafId: 'pane:1',
+          activeLeafId: HEADLESS_LEAF_ID,
           layout: null
         }
       ],
@@ -127,35 +141,19 @@ describe('OrcaRuntimeService', () => {
         {
           tabId: 'tab-1',
           worktreeId: 'repo-1::/tmp/worktree-a',
-          leafId: 'pane:1',
+          leafId: HEADLESS_LEAF_ID,
           paneRuntimeId: 1,
           ptyId: 'pty-1'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: 'repo-1::/tmp/worktree-a',
-          publicationEpoch: 'launch-draft-epoch',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-1::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-1::pane:1',
-              parentTabId: 'tab-1',
-              leafId: 'pane:1',
-              title: 'Claude',
-              launchDraft: 'seed',
-              launchDraftCreatedAt: 7,
-              isActive: true
-            }
-          ]
         }
       ]
     }
     runtime.syncWindowGraph(1, graph)
+    // The desktop view reports its composer drafts as content facts.
+    const reportDraft = (createdAt: number) =>
+      runtime.layoutCommands.views.setContentFacts(DESKTOP_VIEW_ID, {
+        launchDrafts: { 'tab-1': { text: 'seed', createdAt } }
+      })
+    reportDraft(7)
     const listed = await runtime.listMobileSessionTabs('branch:feature/foo')
     const mobileTab = listed.tabs.find((tab) => tab.type === 'terminal')
     if (!mobileTab?.terminal) {
@@ -191,14 +189,7 @@ describe('OrcaRuntimeService', () => {
     expect(retired).not.toHaveProperty('launchDraftCreatedAt')
 
     runtime.markRendererReloading(1)
-    const replay = runtime.syncWindowGraph(1, {
-      ...graph,
-      mobileSessionTabs: graph.mobileSessionTabs?.map((snapshot) => ({
-        ...snapshot,
-        publicationEpoch: 'launch-draft-reload',
-        snapshotVersion: 2
-      }))
-    })
+    const replay = runtime.syncWindowGraph(1, graph)
     expect(replay.nativeChatLaunchDraftResolutions).toEqual([
       { tabId: 'tab-1', text: 'seed', createdAt: 7 }
     ])
@@ -208,21 +199,8 @@ describe('OrcaRuntimeService', () => {
       )
     ).not.toHaveProperty('launchDraft')
 
-    const reconciled = runtime.syncWindowGraph(1, {
-      ...graph,
-      mobileSessionTabs: graph.mobileSessionTabs?.map((snapshot) => ({
-        ...snapshot,
-        publicationEpoch: 'launch-draft-reload',
-        snapshotVersion: 3,
-        tabs: snapshot.tabs.map((tab) => {
-          if (tab.type !== 'terminal') {
-            return tab
-          }
-          return { ...tab, launchDraftCreatedAt: 8 }
-        })
-      }))
-    })
-    expect(reconciled.nativeChatLaunchDraftResolutions).toBeUndefined()
+    // A newer draft in the same tab is not fenced by the old resolution.
+    reportDraft(8)
     expect(
       (await runtime.listMobileSessionTabs('branch:feature/foo')).tabs.find(
         (tab) => tab.type === 'terminal'

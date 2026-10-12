@@ -10,7 +10,12 @@ import {
 } from './workspace-layout-load-records'
 import { loadContentTab, loadTerminalTab } from './workspace-layout-load-tabs'
 import type { WorkspaceLoadArgs } from './workspace-layout-load-types'
-import type { LayoutTab, LayoutTerminalTab, WorkspaceLayout } from './workspace-layout-model'
+import type {
+  LayoutContentTab,
+  LayoutTab,
+  LayoutTerminalTab,
+  WorkspaceLayout
+} from './workspace-layout-model'
 import { pruneGroupLayout } from '../workspace-session-terminal-tab-close'
 
 function takeRows({ session, key, terminalHomes }: WorkspaceLoadArgs) {
@@ -64,7 +69,9 @@ function loadPanes(
   tab: Omit<LayoutTerminalTab, 'panes'>,
   args: WorkspaceLoadArgs
 ): LayoutTerminalTab {
-  const layout = session.terminalLayoutsByTabId?.[tab.entityId] ?? legacyLayout(session, row, args)
+  const saved = session.terminalLayoutsByTabId?.[tab.entityId]
+  // A layout saved before its pane mounted has no root yet: the tab still shows its one pane.
+  const layout = saved?.root ? saved : legacyLayout(session, row, args)
   // Each pane's data is loaded once every tab is placed (loadLeaves).
   args.layouts.set(tab.entityId, layout)
   return { ...tab, panes: { root: layout.root, ...pickStoredFields(layout, ['chatLeafId']) } }
@@ -131,6 +138,27 @@ function loadTabs(args: WorkspaceLoadArgs): { tabs: LayoutTab[]; candidates: Ord
       addTerminal(row, undefined)
     }
   }
+  if (!session.unifiedTabs?.[key]) {
+    // A session saved before tab bars lists open files only; each gets the tab today's window gives it.
+    for (const file of session.openFilesByWorktree?.[key] ?? []) {
+      if (tabIds.has(file.filePath)) {
+        continue
+      }
+      const tab: LayoutContentTab = {
+        id: file.filePath,
+        entityId: file.filePath,
+        kind: 'editor',
+        createdAt: 0,
+        customTitle: null,
+        color: null,
+        ...(file.isPreview ? { isPreview: true } : {})
+      }
+      tabs.push(tab)
+      tabIds.add(tab.id)
+      childRecord(args.facts.tabLabels, key)[tab.id] = file.relativePath
+      candidates.push({ id: tab.id, tabBarSortOrder: tabs.length, createdAt: 0 })
+    }
+  }
   return { tabs, candidates }
 }
 
@@ -151,6 +179,17 @@ export function loadWorkspace(args: WorkspaceLoadArgs): WorkspaceLayout {
     workspaceKey: key,
     mintId: args.context.mintId
   })
+  const legacyGroup = storedGroups.length === 0 ? groups[0] : undefined
+  if (legacyGroup) {
+    // A session saved before tab groups names its shown terminal per workspace, as the window reads it.
+    const terminalNamed = (id: string | null | undefined) =>
+      tabs.find((tab) => tab.kind === 'terminal' && tab.entityId === id)
+    const shown =
+      terminalNamed(session.activeTabIdByWorktree?.[key]) ?? terminalNamed(session.activeTabId)
+    if (shown) {
+      childRecord(view.groups, key)[legacyGroup.id] ??= { activeTabId: shown.id }
+    }
+  }
   const workspace: WorkspaceLayout = { worktreeId, tabs, groups }
   const groupLayout = pruneGroupLayout(
     session.tabGroupLayouts?.[key],

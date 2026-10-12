@@ -72,7 +72,7 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
       }
     }
     // Why: renderer adoption can precede graph sync; this path still requires reveal success before commit.
-    const projected = [...this.mobileSessionTabsByWorktree.entries()].some(
+    const projected = this.sessionTabsSnapshots().some(
       ([candidateWorktreeId, snapshot]) =>
         runtimeWorktreeIdsEqual(candidateWorktreeId, worktreeId) &&
         snapshot.tabs.some(

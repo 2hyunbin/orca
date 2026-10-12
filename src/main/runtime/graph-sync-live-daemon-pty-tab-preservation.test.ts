@@ -1,9 +1,9 @@
 import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
 /**
- * shouldPreserveHeadlessMobileSessionTab excludes the daemon ptyId form
- * <worktreeId>@@<uuid> from its runtime-owned checks, so a host-created terminal
- * survives renderer omission only through the binding createTerminal persists;
- * a renderer de-persist (a user close) releases it again.
+ * A host-created terminal with a daemon ptyId (<worktreeId>@@<uuid>) stays in the
+ * phone list across renderer graph syncs that omit it, because the list projects
+ * the binding createTerminal persists; a de-persist (a user close) or a real exit
+ * removes it.
  *
  * These assert only on a PTY the runtime records as connected or exited —
  * never on "unverifiable".
@@ -35,7 +35,6 @@ const PTY_ID_BY_WORKTREE: Record<string, string> = { [WT_CLI]: CLI_PTY, [WT_OTHE
 
 type RuntimeInternals = {
   ptysById: Map<string, { connected: boolean; runtimeSessionOwned: boolean }>
-  mobileSessionTabsByWorktree: Map<string, unknown>
 }
 
 function makeRepo() {
@@ -66,6 +65,9 @@ function createHarness() {
     flushOrThrow: () => {}
   })
   const runtime = new OrcaRuntimeService(store as never)
+  // The phone list as a client reads it; the read also reloads the holder from the Store.
+  const phoneList = (worktreeId: string): RuntimeMobileSessionTabsResult =>
+    runtime['getMobileSessionTabsForWorktree'](worktreeId)
   runtime.setNotifier({
     closeTerminal: vi.fn(),
     closeTerminalTab: vi.fn(),
@@ -209,17 +211,10 @@ function createHarness() {
     createCliTerminal,
     syncRendererGraph,
     snapshotTabIds: (worktreeId: string): string[] =>
-      (
-        (runtime as unknown as RuntimeInternals).mobileSessionTabsByWorktree.get(worktreeId) as
-          | { tabs: { parentTabId?: string }[] }
-          | undefined
-      )?.tabs.flatMap((tab) => (tab.parentTabId ? [tab.parentTabId] : [])) ?? [],
-    hasSnapshot: (worktreeId: string): boolean =>
-      (runtime as unknown as RuntimeInternals).mobileSessionTabsByWorktree.has(worktreeId),
-    markPtyExited: (ptyId: string): void => {
-      const record = (runtime as unknown as RuntimeInternals).ptysById.get(ptyId)!
-      record.connected = false
-    },
+      phoneList(worktreeId).tabs.flatMap((tab) =>
+        tab.type === 'terminal' ? [tab.parentTabId] : []
+      ),
+    hasSnapshot: (worktreeId: string): boolean => phoneList(worktreeId).tabs.length > 0,
     /** The user closed the tab: the renderer de-persists it from the session. */
     retirePersistedTabs: (worktreeId: string): void => {
       session = {
@@ -280,7 +275,7 @@ describe('graph sync must not prune a tab whose daemon PTY is live', () => {
     const h = createHarness()
     h.syncRendererGraph([WT_CLI])
     await h.createCliTerminal(WT_CLI)
-    h.markPtyExited(CLI_PTY)
+    h.runtime.onPtyExit(CLI_PTY, 0)
 
     h.syncRendererGraph([WT_OTHER])
     vi.advanceTimersByTime(300)

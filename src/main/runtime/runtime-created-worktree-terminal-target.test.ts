@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -65,7 +66,13 @@ function makeFixture(repos: Repo[] = [owner()], hostId: ExecutionHostId = 'local
   )
   const metadata: Record<string, WorktreeMeta> = { [worktree.id]: meta }
   const lineageById: Record<string, WorktreeLineage> = {}
+  // The layout holder places created terminals in the saved session; a split needs its source tab there.
+  let session = getDefaultWorkspaceSession()
   const store: RuntimeStore = {
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: (next) => {
+      session = next
+    },
     getRepos: () => repos,
     getRepo: (id) => repos.find((repo) => repo.id === id),
     addRepo: vi.fn<RuntimeStore['addRepo']>(),

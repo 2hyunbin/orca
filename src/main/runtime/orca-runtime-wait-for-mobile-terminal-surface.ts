@@ -6,7 +6,7 @@ import type {
   RuntimeMobileSessionTerminalClientTab
 } from '../../shared/runtime-types'
 import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from './orca-runtime-core'
-import { makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
+import { makePaneKey } from '../../shared/stable-pane-id'
 import { resolveTerminalSessionWorktreeId } from './runtime-worktree-path-identity'
 import { worktreeIdsEqual } from '../../shared/worktree/id'
 import type {
@@ -67,7 +67,7 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
     parentTabId: string,
     options: { requireReady?: boolean } = {}
   ): RuntimeMobileSessionCreateTerminalResult | null {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.readSessionTabsSnapshot(worktreeId)
     if (!snapshot) {
       return null
     }
@@ -93,7 +93,7 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
     worktreeId: string,
     ptyId: string
   ): RuntimeMobileSessionCreateTerminalResult | null {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.readSessionTabsSnapshot(worktreeId)
     if (!snapshot) {
       return null
     }
@@ -172,7 +172,7 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
     return { pty: live.pty, surface }
   }
 
-  // Why: publish an in-flight mobile create main-side from the live PTY so it can't stall on graph sync and destroy the session (#7587).
+  // Why: an in-flight mobile create's live PTY is owned by this session as soon as it registers (#7587).
   protected ensurePtyBackedMobileSurfaceForRendererTab(
     worktreeId: string,
     tabId: string
@@ -181,37 +181,12 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
     if (!pending) {
       return null
     }
-    const existing = this.findMobileTerminalSurface(worktreeId, tabId)
     const pty = this.findLiveRegisteredPtyForRendererTab(worktreeId, tabId)
     if (pty) {
       pty.runtimeSessionOwned = true
       if (pending.paired) {
         this.setPairedRendererSessionOwnership(pty.ptyId, true)
       }
-    }
-    if (
-      existing &&
-      this.isReadyMobileTerminalSurface(existing) &&
-      (pending.viewMode === undefined || existing.tab.viewMode === pending.viewMode)
-    ) {
-      // Why: the renderer's ready publication already landed with the intended mode; only a pending shell needs the main-side rescue.
-      return existing
-    }
-    const leafId = pty ? parsePaneKey(pty.paneKey ?? '')?.leafId : undefined
-    if (!pty || !leafId) {
-      return existing
-    }
-    this.publishPtyBackedMobileSessionTerminal(worktreeId, pty, {
-      tabId,
-      leafId,
-      title: null,
-      activate: pending.activate,
-      selectIfNoActiveTab: pending.selectIfNoActiveTab,
-      ...(pending.viewMode ? { viewMode: pending.viewMode } : {})
-    })
-    // Why: check closures normally drain only inside syncWindowGraph; a main-side publish must drain them too or the pending wait misses the insertion.
-    for (const cb of [...this.graphSyncCallbacks]) {
-      cb()
     }
     return this.findMobileTerminalSurface(worktreeId, tabId)
   }

@@ -188,7 +188,6 @@ function createHarness(
     issueHandle: (leaf: unknown) => string
     issuePtyHandle: (pty: unknown) => string
     leaves: Map<string, unknown>
-    mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
     ptysById: Map<string, unknown>
   }
   const handle = options.graphOnlySource
@@ -204,7 +203,7 @@ function createHarness(
     revealTerminalSession,
     rendererSplitTerminal,
     getSession: () => session,
-    getSnapshot: () => internals.mobileSessionTabsByWorktree.get(WORKTREE_ID),
+    getSnapshot: () => runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`),
     requestedSessionHostIds,
     replaceSourceIncarnation: (incarnationId: string) =>
       runtime.registerPty(SOURCE_PTY_ID, WORKTREE_ID, connectionId, {
@@ -320,12 +319,10 @@ describe('remote runtime terminal split authority', () => {
         [SOURCE_LEAF_ID]: SOURCE_PTY_ID
       }
     })
-    const siblingSurfaces = harness
-      .getSnapshot()!
-      .tabs.filter(
-        (tab): tab is Extract<typeof tab, { type: 'terminal' }> =>
-          tab.type === 'terminal' && tab.parentTabId === TAB_ID
-      )
+    const siblingSurfaces = (await harness.getSnapshot()).tabs.filter(
+      (tab): tab is Extract<typeof tab, { type: 'terminal' }> =>
+        tab.type === 'terminal' && tab.parentTabId === TAB_ID
+    )
     expect(siblingSurfaces).toHaveLength(2)
     expect(siblingSurfaces.every((tab) => tab.parentLayout?.root?.type === 'split')).toBe(true)
   })

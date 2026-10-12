@@ -356,11 +356,16 @@ describe('projectSessionTabs', () => {
     })
   })
 
-  it('names nothing active when the view selects nothing, and keeps one group without a tree', () => {
+  it('falls back to the first group but names no tab when the view selects nothing, and keeps one group without a tree', () => {
     const ctx = testContext()
     const { model } = build(ctx, [{ type: 'createTerminalTab', workspace: WS }])
-    const projected = projectSessionTabs(WS, model.workspaces[WS]!, views(), noFacts, false)
-    expect(projected).toMatchObject({ activeGroupId: null, activeTabId: null, activeTabType: null })
+    const workspace = model.workspaces[WS]!
+    const projected = projectSessionTabs(WS, workspace, views(), noFacts, false)
+    expect(projected).toMatchObject({
+      activeGroupId: workspace.groups[0]!.id,
+      activeTabId: null,
+      activeTabType: null
+    })
     expect(projected.tabGroups).toHaveLength(1)
     expect(projected).not.toHaveProperty('tabGroupLayout')
     expect(projected.tabs[0]).toMatchObject({ title: 'Terminal 1', isActive: false })

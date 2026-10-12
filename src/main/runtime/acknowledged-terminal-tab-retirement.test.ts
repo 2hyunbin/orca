@@ -31,7 +31,7 @@ it.each([false, true])(
     await f.entered.promise
     expect(f.hasTab()).toBe(true)
     if (graphBeforeAck) {
-      f.publish(false, 2)
+      f.publish(false)
     }
     f.acknowledgement.resolve()
     await expect(pending).resolves.toEqual({ closed: true })
@@ -93,7 +93,7 @@ it('protects a new incarnation admitted after the old snapshot disappeared', asy
   const f = fixture(true)
   const pending = f.close()
   await f.entered.promise
-  f.publish(false, 2)
+  f.publish(false)
   f.runtime.onPtySpawned('pty-a', '66666666-6666-4666-8666-666666666666')
   f.acknowledgement.resolve()
   await expect(pending).resolves.toMatchObject({ refused: true, refusalReason: 'stale-terminal' })
@@ -170,7 +170,7 @@ it('preserves dormant SSH kill IDs when the acknowledged tab becomes headless', 
     leafId: ACK_LEAF,
     incarnationId: ACK_INCARNATION
   })
-  f.publish(true, 2)
+  f.publish(true)
   const kill = vi.fn(() => true)
   f.runtime.setPtyController({ write: () => true, kill, getForegroundProcess: async () => null })
   f.closeTerminalTab.mockImplementationOnce(async () => {
@@ -188,7 +188,7 @@ it('preserves dormant SSH kill IDs when the acknowledged tab becomes headless', 
 
 it('protects a persisted sibling omitted by a partial mobile snapshot', async () => {
   const f = fixture(true)
-  f.publish(true, 2, [ACK_LEAF])
+  f.publish(true)
   const pending = f.close()
   await f.entered.promise
   f.runtime.onPtySpawned('pty-b', '66666666-6666-4666-8666-666666666666')

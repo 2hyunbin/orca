@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { parsePairingCode } from '../../shared/pairing'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { PersistedMobileClientTabSelections } from '../../shared/persisted-state-types'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { OrcaRuntimeRpcServer } from './runtime-rpc'
 import {
@@ -19,7 +21,6 @@ import {
   makeStore,
   REPO_ID,
   resultType,
-  seedSessionTabs,
   send,
   SESSION_WORKTREE_ID,
   snapshotVersion,
@@ -41,6 +42,56 @@ vi.mock('../git/worktree', () => {
     listWorktreesStrict: vi.fn().mockResolvedValue(worktrees)
   }
 })
+
+const SESSION_TAB_IDS = ['host-tab', 'client-a-tab', 'client-a2-tab', 'client-b-tab']
+const leafOf = (tabId: string): string =>
+  `${SESSION_TAB_IDS.indexOf(tabId) + 1}0000000-0000-4000-8000-000000000000`
+/** The phone row id of a seeded tab. */
+const rowOf = (tabId: string): string => `${tabId}::${leafOf(tabId)}`
+
+/** The window's saved session: four live terminals in one worktree, the host showing host-tab. */
+function makeSessionStore() {
+  let session: WorkspaceSessionState = {
+    ...getDefaultWorkspaceSession(),
+    activeTabIdByWorktree: { [SESSION_WORKTREE_ID]: 'host-tab' },
+    tabsByWorktree: {
+      [SESSION_WORKTREE_ID]: SESSION_TAB_IDS.map((id, index) => ({
+        id,
+        ptyId: `pty-${index + 1}`,
+        worktreeId: SESSION_WORKTREE_ID,
+        title: id,
+        customTitle: null,
+        color: null,
+        sortOrder: index,
+        createdAt: 1
+      }))
+    },
+    terminalLayoutsByTabId: Object.fromEntries(
+      SESSION_TAB_IDS.map((id, index) => [
+        id,
+        {
+          root: { type: 'leaf', leafId: leafOf(id) },
+          activeLeafId: leafOf(id),
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafOf(id)]: `pty-${index + 1}` }
+        }
+      ])
+    )
+  }
+  return {
+    ...makeStore(),
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      session = next
+    }
+  }
+}
+
+function registerSessionPtys(runtime: OrcaRuntimeService): void {
+  for (let index = 0; index < SESSION_TAB_IDS.length; index += 1) {
+    runtime.registerPty(`pty-${index + 1}`, SESSION_WORKTREE_ID)
+  }
+}
 
 describe('paired runtime navigation isolation', () => {
   const servers: OrcaRuntimeRpcServer[] = []
@@ -66,7 +117,10 @@ describe('paired runtime navigation isolation', () => {
     const focusTerminal = vi.fn((nextTabId: string) => {
       hostSelections.tabId = nextTabId
     })
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new OrcaRuntimeService(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime never calls getGitHubCache, the one RuntimeStore member this stub omits.
+      (options.headless ? makeStore() : makeSessionStore()) as never
+    )
     if (!options.headless) {
       runtime.setNotifier({
         worktreesChanged: vi.fn(),
@@ -84,7 +138,7 @@ describe('paired runtime navigation isolation', () => {
       })
       runtime.attachWindow(1)
       runtime.markGraphReady(1)
-      seedSessionTabs(runtime)
+      registerSessionPtys(runtime)
     }
 
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-navigation-isolation-'))
@@ -574,8 +628,8 @@ describe('paired runtime navigation isolation', () => {
         notifyClients: false
       }
     })
-    expect(activeTabId(await harness.readerA.next('select-a'))).toBe('client-a-tab')
-    expect(activeTabId(await harness.readerB.next('select-b'))).toBe('client-b-tab')
+    expect(activeTabId(await harness.readerA.next('select-a'))).toBe(rowOf('client-a-tab'))
+    expect(activeTabId(await harness.readerB.next('select-b'))).toBe(rowOf('client-b-tab'))
 
     for (const [session, id] of [
       [harness.clientA, 'tabs-a'],
@@ -587,8 +641,8 @@ describe('paired runtime navigation isolation', () => {
         params: { worktree: `id:${SESSION_WORKTREE_ID}` }
       })
     }
-    expect(activeTabId(await harness.readerA.next('tabs-a'))).toBe('client-a-tab')
-    expect(activeTabId(await harness.readerB.next('tabs-b'))).toBe('client-b-tab')
+    expect(activeTabId(await harness.readerA.next('tabs-a'))).toBe(rowOf('client-a-tab'))
+    expect(activeTabId(await harness.readerB.next('tabs-b'))).toBe(rowOf('client-b-tab'))
 
     send(harness.clientA, {
       id: 'select-a2',
@@ -601,7 +655,7 @@ describe('paired runtime navigation isolation', () => {
       }
     })
     const selectA2 = await harness.readerA.next('select-a2')
-    expect(activeTabId(selectA2)).toBe('client-a2-tab')
+    expect(activeTabId(selectA2)).toBe(rowOf('client-a2-tab'))
 
     harness.runtime.notifyMobileSessionTabsChanged(SESSION_WORKTREE_ID)
     const [updateA, updateB] = await Promise.all([
@@ -613,13 +667,13 @@ describe('paired runtime navigation isolation', () => {
       ),
       harness.readerB.next('tabs-b', (response) => resultType(response) === 'updated')
     ])
-    expect(activeTabId(updateA)).toBe('client-a2-tab')
-    expect(activeTabId(updateB)).toBe('client-b-tab')
+    expect(activeTabId(updateA)).toBe(rowOf('client-a2-tab'))
+    expect(activeTabId(updateB)).toBe(rowOf('client-b-tab'))
     expect(harness.hostSelections.tabId).toBe('host-tab')
     expect(harness.focusTerminal).not.toHaveBeenCalled()
     expect(
       (await harness.runtime.listMobileSessionTabs(`id:${SESSION_WORKTREE_ID}`)).activeTabId
-    ).toBe('host-tab')
+    ).toBe(rowOf('host-tab'))
 
     harness.readerA.dispose()
     harness.clientA.ws.close()
@@ -632,7 +686,9 @@ describe('paired runtime navigation isolation', () => {
       method: 'session.tabs.list',
       params: { worktree: `id:${SESSION_WORKTREE_ID}` }
     })
-    expect(activeTabId(await reconnectedReaderA.next('tabs-a-reconnected'))).toBe('client-a2-tab')
+    expect(activeTabId(await reconnectedReaderA.next('tabs-a-reconnected'))).toBe(
+      rowOf('client-a2-tab')
+    )
   })
 
   it('routes explicit host and paired-client follow intent without changing the default', async () => {
@@ -695,12 +751,12 @@ describe('paired runtime navigation isolation', () => {
         navigation: 'host'
       }
     })
-    expect(activeTabId(await harness.readerA.next('tabs-host-follow'))).toBe('client-a-tab')
+    expect(activeTabId(await harness.readerA.next('tabs-host-follow'))).toBe(rowOf('client-a-tab'))
     expect(
       activeTabId(
         await harness.readerA.next('tabs-a', (response) => resultType(response) === 'updated')
       )
-    ).toBe('client-a-tab')
+    ).toBe(rowOf('client-a-tab'))
     expect(harness.hostSelections.tabId).toBe('client-a-tab')
 
     send(harness.clientB, {
@@ -717,7 +773,10 @@ describe('paired runtime navigation isolation', () => {
       harness.readerA.next('tabs-a', (response) => resultType(response) === 'updated'),
       harness.readerB.next('tabs-b', (response) => resultType(response) === 'updated')
     ])
-    expect([activeTabId(tabsA), activeTabId(tabsB)]).toEqual(['client-b-tab', 'client-b-tab'])
+    expect([activeTabId(tabsA), activeTabId(tabsB)]).toEqual([
+      rowOf('client-b-tab'),
+      rowOf('client-b-tab')
+    ])
     expect(
       [tabsA, tabsB].map(
         (response) =>
@@ -769,7 +828,7 @@ describe('paired runtime navigation isolation', () => {
           notifyClients: false
         }
       })
-      expect(activeTabId(await reader.next(requestId))).toBe(tabId)
+      expect(activeTabId(await reader.next(requestId))).toBe(rowOf(tabId))
     }
 
     expect(serverOne.hostSelections.tabId).toBe('host-tab')
@@ -779,7 +838,7 @@ describe('paired runtime navigation isolation', () => {
   it('restores a device tab selection after a runtime restart', async () => {
     const persisted: { state: PersistedMobileClientTabSelections } = { state: {} }
     const makeStoreWithSelections = () => ({
-      ...makeStore(),
+      ...makeSessionStore(),
       getMobileClientTabSelections: () => persisted.state,
       setMobileClientTabSelections: (next: PersistedMobileClientTabSelections) => {
         persisted.state = next
@@ -789,29 +848,31 @@ describe('paired runtime navigation isolation', () => {
     const first = new OrcaRuntimeService(makeStoreWithSelections() as never)
     first.attachWindow(1)
     first.markGraphReady(1)
-    seedSessionTabs(first)
+    registerSessionPtys(first)
     await first.activateMobileSessionTab(`id:${SESSION_WORKTREE_ID}`, 'client-a-tab', undefined, {
       notifyClients: false,
       clientNavigationId: 'device-a',
       navigation: 'caller'
     })
-    expect(persisted.state['device-a']?.[SESSION_WORKTREE_ID]?.activeTabId).toBe('client-a-tab')
+    expect(persisted.state['device-a']?.[SESSION_WORKTREE_ID]?.activeTabId).toBe(
+      rowOf('client-a-tab')
+    )
 
     const restarted = new OrcaRuntimeService(makeStoreWithSelections() as never)
     restarted.attachWindow(1)
     restarted.markGraphReady(1)
-    seedSessionTabs(restarted)
+    registerSessionPtys(restarted)
     const remembered = await restarted.listMobileSessionTabs(
       `id:${SESSION_WORKTREE_ID}`,
       'device-a'
     )
-    expect(remembered.activeTabId).toBe('client-a-tab')
-    expect(remembered.tabs.find((tab) => tab.isActive)?.id).toBe('client-a-tab')
+    expect(remembered.activeTabId).toBe(rowOf('client-a-tab'))
+    expect(remembered.tabs.find((tab) => tab.isActive)?.id).toBe(rowOf('client-a-tab'))
     // Why: an unknown device must still start from deterministic topology, not inherit another device's restored state.
     const freshDevice = await restarted.listMobileSessionTabs(
       `id:${SESSION_WORKTREE_ID}`,
       'device-b'
     )
-    expect(freshDevice.activeTabId).toBe('host-tab')
+    expect(freshDevice.activeTabId).toBe(rowOf('host-tab'))
   })
 })

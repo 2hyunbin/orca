@@ -8,8 +8,21 @@ import { isTestOnlySourcePath } from './test-only-source-path.mjs'
 // `index` and only from the listed importers, so deleting the folder plus those import lines
 // removes the path.
 export const COMPAT_FOLDERS = [
-  // The RPC handler wiring joins in PR 6 step 6c.
-  { folder: 'src/shared/workspace-layout/old-client', importers: [] },
+  {
+    folder: 'src/shared/workspace-layout/old-client',
+    importers: [
+      'src/main/runtime/old-session-tabs-stream/session-tabs-snapshots.ts',
+      'src/main/runtime/orca-runtime-build-headless-mobile-session-browser-tabs.ts',
+      'src/main/runtime/orca-runtime-close-headless-mobile-terminal-tab.ts',
+      'src/main/runtime/orca-runtime-create-runtime-owned-mobile-session-terminal.ts',
+      'src/main/runtime/orca-runtime-held-layout.ts'
+    ]
+  },
+  // Old phones' `session.tabs` stream fields; the one module that stamps those payloads reads them.
+  {
+    folder: 'src/main/runtime/old-session-tabs-stream',
+    importers: ['src/main/runtime/orca-runtime-held-layout.ts']
+  },
   {
     folder: 'src/main/remote-layout-snapshot',
     importers: [

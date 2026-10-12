@@ -1,6 +1,6 @@
 import { applyClosedTerminalLeafNotice } from '@/components/terminal-pane/closed-terminal-leaf-notice'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { runSleepWorktree } from '@/components/sidebar/sleep-worktree-flow'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { persistWorkspaceSessionByHost } from '@/lib/workspace-session-host-persistence'

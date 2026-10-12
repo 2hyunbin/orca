@@ -71,6 +71,8 @@ export type TerminalCreateOptions = {
   viewMode?: 'terminal' | 'chat'
   /** The tab group a background create joins; defaults to the first group. */
   targetGroupId?: string
+  /** The tab-bar tab a background create follows in its group. */
+  afterTabId?: string
   startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
   telemetry?: WorktreeStartupLaunch['telemetry']
   /** The surface that asked for this `startupAgent` launch; the runtime attributes every one it
@@ -103,7 +105,6 @@ export type TerminalCreateOptions = {
     launchConfig?: SleepingAgentLaunchConfig
     launchAgent?: TuiAgent
   }) => void
-  deferMobileSessionPublish?: boolean
   /**
    * Main-internal: the start a layout command's apply began for this pane (its J attempt). Its
    * `shellOverride` is the tab's saved pick, applied as the window's spawn applies it today

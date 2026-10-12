@@ -14,10 +14,6 @@ import {
 } from './client-session-tab-selection'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
-import {
-  buildHeadlessMobileSessionTabGroups,
-  cloneTerminalLayoutSnapshot
-} from './mobile-session-layout-projection'
 
 export class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh {
   protected applyMobileSessionTabNavigation(
@@ -123,79 +119,6 @@ export class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeW
     snapshot: RuntimeMobileSessionTabsSnapshot,
     tab: RuntimeMobileSessionTerminalTab
   ): boolean {
-    return (
-      this.isHeadlessMobileSessionPublication(snapshot.publicationEpoch) ||
-      this.hasServeOrSshOwnedBinding(tab)
-    )
-  }
-
-  protected shouldPersistHeadlessMobileSessionActivation(
-    snapshot: RuntimeMobileSessionTabsSnapshot,
-    tab: RuntimeMobileSessionTerminalTab
-  ): boolean {
-    if (snapshot.publicationEpoch.includes(':headless-merge:')) {
-      return false
-    }
-    if (this.authoritativeWindowId !== null && this.graphStatus === 'ready') {
-      return false
-    }
-    return this.shouldMaterializeHeadlessMobileSessionTab(snapshot, tab)
-  }
-
-  protected activateHeadlessMobileSessionTerminalTab(
-    worktreeId: string,
-    snapshot: RuntimeMobileSessionTabsSnapshot,
-    activeTab: RuntimeMobileSessionTerminalTab
-  ): void {
-    const tabs = snapshot.tabs.map((candidate) => ({
-      ...candidate,
-      isActive: candidate.id === activeTab.id
-    }))
-    const nextSnapshot: RuntimeMobileSessionTabsSnapshot = {
-      ...snapshot,
-      publicationEpoch: `headless:${Date.now().toString(36)}`,
-      snapshotVersion: snapshot.snapshotVersion + 1,
-      activeTabId: activeTab.id,
-      activeTabType: 'terminal',
-      tabGroups: buildHeadlessMobileSessionTabGroups(
-        worktreeId,
-        tabs,
-        activeTab,
-        snapshot.tabGroups
-      ),
-      tabs
-    }
-    this.persistHeadlessTerminalActiveLeaf(worktreeId, activeTab)
-    this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
-    this.emitMobileSessionTabsSnapshot(nextSnapshot)
-  }
-
-  protected persistHeadlessTerminalActiveLeaf(
-    worktreeId: string,
-    tab: RuntimeMobileSessionTerminalTab
-  ): void {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    if (!session || !this.store?.setWorkspaceSession) {
-      return
-    }
-    const existingLayout = session.terminalLayoutsByTabId?.[tab.parentTabId]
-    const nextLayouts = existingLayout
-      ? {
-          ...session.terminalLayoutsByTabId,
-          [tab.parentTabId]: {
-            ...cloneTerminalLayoutSnapshot(existingLayout),
-            activeLeafId: tab.leafId
-          }
-        }
-      : session.terminalLayoutsByTabId
-    this.setWorkspaceSessionForWorktree(worktreeId, {
-      ...session,
-      activeTabId: tab.parentTabId,
-      activeTabIdByWorktree: {
-        ...session.activeTabIdByWorktree,
-        [worktreeId]: tab.parentTabId
-      },
-      terminalLayoutsByTabId: nextLayouts
-    })
+    return !this.getAvailableAuthoritativeWindow() || this.hasServeOrSshOwnedBinding(tab)
   }
 }

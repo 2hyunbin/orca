@@ -1,121 +1,123 @@
 import { describe, expect, it } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime'
-import type {
-  RuntimeMobileSessionSnapshotTab,
-  RuntimeMobileSessionTabsSnapshot,
-  RuntimeMobileSessionTerminalTab
-} from '../../shared/runtime-types'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 const WT = 'repo-1::/home/orca/worktree'
-const GROUP = `headless-terminals:${WT}`
+const leafOf = (n: number): string => `${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`
 
-const terminalTab = (n: number, isActive = false): RuntimeMobileSessionTerminalTab => ({
-  type: 'terminal',
-  id: `tab-${n}::leaf-${n}`,
-  title: `terminal ${n}`,
-  parentTabId: `tab-${n}`,
-  leafId: `leaf-${n}`,
+const terminalRow = (n: number) => ({
+  id: `tab-${n}`,
   ptyId: `pty-${n}`,
-  isActive
+  worktreeId: WT,
+  title: `terminal ${n}`,
+  customTitle: null,
+  color: null,
+  sortOrder: n,
+  createdAt: 1
 })
 
-const snapshotOf = (
-  tabs: RuntimeMobileSessionSnapshotTab[],
-  tabOrder: string[],
-  activeTabId: string | null
-): RuntimeMobileSessionTabsSnapshot => ({
-  worktree: WT,
-  publicationEpoch: 'headless:seed',
-  snapshotVersion: 1,
-  activeGroupId: GROUP,
-  activeTabId,
-  activeTabType: 'terminal',
-  tabGroups: [{ id: GROUP, activeTabId: activeTabId?.split('::')[0] ?? null, tabOrder }],
-  tabs
+const unifiedRow = (n: number, groupId: string) => ({
+  id: `tab-${n}`,
+  entityId: `tab-${n}`,
+  groupId,
+  worktreeId: WT,
+  contentType: 'terminal' as const,
+  label: `terminal ${n}`,
+  customLabel: null,
+  color: null,
+  sortOrder: n,
+  createdAt: 1
 })
+
+/** Saved tabs 1-4 grouped as `groups` (group id -> tab numbers in display order). */
+function runtimeWithGroups(groups: Record<string, number[]>): OrcaRuntimeService {
+  const numbers = Object.values(groups).flat()
+  const groupIds = Object.keys(groups)
+  let session: WorkspaceSessionState = {
+    ...getDefaultWorkspaceSession(),
+    tabsByWorktree: { [WT]: numbers.map(terminalRow) },
+    terminalLayoutsByTabId: Object.fromEntries(
+      numbers.map((n) => [
+        `tab-${n}`,
+        {
+          root: { type: 'leaf', leafId: leafOf(n) },
+          activeLeafId: leafOf(n),
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leafOf(n)]: `pty-${n}` }
+        }
+      ])
+    ),
+    unifiedTabs: {
+      [WT]: Object.entries(groups).flatMap(([groupId, tabs]) =>
+        tabs.map((n) => unifiedRow(n, groupId))
+      )
+    },
+    tabGroups: {
+      [WT]: Object.entries(groups).map(([id, tabs]) => ({
+        id,
+        worktreeId: WT,
+        activeTabId: `tab-${tabs[0]}`,
+        tabOrder: tabs.map((n) => `tab-${n}`)
+      }))
+    },
+    tabGroupLayouts: {
+      [WT]:
+        groupIds.length > 1
+          ? {
+              type: 'split',
+              direction: 'horizontal',
+              first: { type: 'leaf', groupId: groupIds[0]! },
+              second: { type: 'leaf', groupId: groupIds[1]! }
+            }
+          : { type: 'leaf', groupId: groupIds[0]! }
+    },
+    activeGroupIdByWorktree: { [WT]: groupIds[0]! }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only the workspace session and repo list in this suite.
+  const runtime = new OrcaRuntimeService({
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      session = next
+    },
+    getRepos: () => [{ id: 'repo-1' }],
+    getAllWorktreeMeta: () => ({}),
+    getSettings: () => ({ workspaceDir: '/tmp/workspaces' })
+  } as never)
+  // Live terminals: activating one only selects it, never respawns it.
+  for (const n of numbers) {
+    runtime.registerPty(`pty-${n}`, WT)
+  }
+  return runtime
+}
+
+async function groupOrders(runtime: OrcaRuntimeService): Promise<Record<string, string[]>> {
+  const result = await runtime.listMobileSessionTabs(`id:${WT}`)
+  return Object.fromEntries((result.tabGroups ?? []).map((group) => [group.id, group.tabOrder]))
+}
 
 describe('headless tab order stability', () => {
-  it('retains order when activating a re-appended surface', () => {
-    const runtime = new OrcaRuntimeService(null) as unknown as {
-      mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-      activateHeadlessMobileSessionTerminalTab: (
-        worktreeId: string,
-        snapshot: RuntimeMobileSessionTabsSnapshot,
-        activeTab: RuntimeMobileSessionTerminalTab
-      ) => void
-      emitMobileSessionTabsSnapshot: (snapshot: RuntimeMobileSessionTabsSnapshot) => void
-      persistHeadlessTerminalActiveLeaf: (...args: unknown[]) => void
-    }
-    runtime.emitMobileSessionTabsSnapshot = () => {}
-    runtime.persistHeadlessTerminalActiveLeaf = () => {}
+  it('retains order when activating a later tab', async () => {
+    const runtime = runtimeWithGroups({ main: [1, 2, 3, 4] })
+    const before = await groupOrders(runtime)
+    expect(before.main).toEqual(['tab-1', 'tab-2', 'tab-3', 'tab-4'])
 
-    const tabs = [terminalTab(1), terminalTab(3), terminalTab(4), terminalTab(2, true)]
-    const snapshot = snapshotOf(tabs, ['tab-1', 'tab-2', 'tab-3', 'tab-4'], 'tab-2::leaf-2')
-    runtime.mobileSessionTabsByWorktree.set(WT, snapshot)
+    await runtime.activateMobileSessionTab(`id:${WT}`, 'tab-2', leafOf(2))
 
-    runtime.activateHeadlessMobileSessionTerminalTab(WT, snapshot, tabs[3]!)
-
-    expect(runtime.mobileSessionTabsByWorktree.get(WT)?.tabGroups?.[0]?.tabOrder).toEqual([
-      'tab-1',
-      'tab-2',
-      'tab-3',
-      'tab-4'
-    ])
-  })
-
-  it('retains stored order when a materialized surface is re-appended', () => {
-    const runtime = new OrcaRuntimeService(null) as unknown as {
-      mergeMobileSessionTabGroups: (
-        worktreeId: string,
-        groups: { id: string; activeTabId: string | null; tabOrder: string[] }[],
-        terminalTabs: RuntimeMobileSessionTerminalTab[],
-        activeTab: RuntimeMobileSessionTerminalTab | null
-      ) => { id: string; tabOrder: string[] }[]
-    }
-    const reappended = [terminalTab(1), terminalTab(3), terminalTab(4), terminalTab(2, true)]
-    const merged = runtime.mergeMobileSessionTabGroups(
-      WT,
-      [{ id: GROUP, activeTabId: 'tab-1', tabOrder: ['tab-1', 'tab-2', 'tab-3', 'tab-4'] }],
-      reappended,
-      reappended[3]!
+    expect(await groupOrders(runtime)).toEqual(before)
+    expect((await runtime.listMobileSessionTabs(`id:${WT}`)).activeTabId).toBe(
+      `tab-2::${leafOf(2)}`
     )
-    expect(merged[0]!.tabOrder).toEqual(['tab-1', 'tab-2', 'tab-3', 'tab-4'])
   })
 
-  it('appends only genuinely new tabs after retained order', () => {
-    const runtime = new OrcaRuntimeService(null) as unknown as {
-      mergeMobileSessionTabGroups: (
-        worktreeId: string,
-        groups: { id: string; activeTabId: string | null; tabOrder: string[] }[],
-        terminalTabs: RuntimeMobileSessionTerminalTab[],
-        activeTab: RuntimeMobileSessionTerminalTab | null
-      ) => { id: string; tabOrder: string[] }[]
-    }
-    const tabs = [terminalTab(3), terminalTab(1), terminalTab(5, true)]
-    const merged = runtime.mergeMobileSessionTabGroups(
-      WT,
-      [{ id: GROUP, activeTabId: 'tab-1', tabOrder: ['tab-1', 'tab-2', 'tab-3'] }],
-      tabs,
-      tabs[2]!
-    )
-    expect(merged[0]!.tabOrder).toEqual(['tab-1', 'tab-3', 'tab-5'])
-  })
+  it('retains order independently in split groups', async () => {
+    const runtime = runtimeWithGroups({ left: [1, 2], right: [3, 4] })
 
-  it('retains order independently in split groups', () => {
-    const runtime = new OrcaRuntimeService(null) as unknown as {
-      buildHeadlessMobileSessionTabGroups: (
-        worktreeId: string,
-        tabs: RuntimeMobileSessionSnapshotTab[],
-        activeTab: RuntimeMobileSessionSnapshotTab | null,
-        existingGroups?: RuntimeMobileSessionTabsSnapshot['tabGroups']
-      ) => RuntimeMobileSessionTabsSnapshot['tabGroups']
-    }
-    const tabs = [terminalTab(2), terminalTab(1), terminalTab(4), terminalTab(3)]
-    const groups = runtime.buildHeadlessMobileSessionTabGroups(WT, tabs, tabs[0]!, [
-      { id: 'left', activeTabId: 'tab-1', tabOrder: ['tab-1', 'tab-2'] },
-      { id: 'right', activeTabId: 'tab-3', tabOrder: ['tab-3', 'tab-4'] }
-    ])
-    expect(groups?.find((group) => group.id === 'left')?.tabOrder).toEqual(['tab-1', 'tab-2'])
-    expect(groups?.find((group) => group.id === 'right')?.tabOrder).toEqual(['tab-3', 'tab-4'])
+    await runtime.activateMobileSessionTab(`id:${WT}`, 'tab-4', leafOf(4))
+
+    expect(await groupOrders(runtime)).toEqual({
+      left: ['tab-1', 'tab-2'],
+      right: ['tab-3', 'tab-4']
+    })
   })
 })

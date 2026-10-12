@@ -71,13 +71,10 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
       // Why: emptying a rotated runtime partition re-routes the session owner, so the
       // records cleared below live in the partition that owned the tabs at the start.
       const sessionHostId = this.getWorkspaceSessionHostIdForWorktree(worktree.id)
-      const snapshot = await this.listMobileSessionTabs(`id:${worktree.id}`)
       const targetPtyIds = this.collectWorktreePtyIds(worktree.id, hostFence, true)
-      const parentTabIds = [
-        ...new Set(
-          snapshot.tabs.flatMap((tab) => (tab.type === 'terminal' ? [tab.parentTabId] : []))
-        )
-      ]
+      const parentTabIds = (this.heldWorkspaceLayout(worktree.id)?.tabs ?? []).flatMap((tab) =>
+        tab.kind === 'terminal' ? [tab.entityId] : []
+      )
       let closed = 0
       for (const parentTabId of parentTabIds) {
         const result = await this.closeMobileSessionTab(`id:${worktree.id}`, parentTabId, {
@@ -116,6 +113,9 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
     hostId: ExecutionHostId,
     closedTabIds: readonly string[]
   ): Promise<void> {
+    if (!this.getAvailableAuthoritativeWindow()) {
+      return this.assertHeldTerminalsClosed(worktreeId)
+    }
     if (
       !this.store?.getWorkspaceSession ||
       !this.store.setWorkspaceSession ||

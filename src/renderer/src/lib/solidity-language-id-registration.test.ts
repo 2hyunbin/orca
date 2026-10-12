@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
-import { detectLanguage } from './language-detect'
+import { detectLanguage } from '../../../shared/language-detect'
 
 // Why: Monaco registers Solidity as id 'sol' with 'solidity' only an alias, and
 // mapping an alias silently renders plaintext. Pin against the installed package

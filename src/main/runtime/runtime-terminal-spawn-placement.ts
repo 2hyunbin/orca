@@ -7,14 +7,20 @@ export function runtimeNewTabPlacement(viewMode?: 'terminal' | 'chat'): Terminal
 }
 
 /** A runtime-started tab opens in the group asked for, else the first group (as the live view). */
-export function newTabIn(opts: { viewMode?: 'terminal' | 'chat'; targetGroupId?: string }): {
+export function newTabIn(opts: {
+  viewMode?: 'terminal' | 'chat'
+  targetGroupId?: string
+  afterTabId?: string
+}): {
   placement: TerminalPanePlacement
   groupId?: string
+  afterTabId?: string
 } {
-  const { targetGroupId } = opts
+  const { targetGroupId, afterTabId } = opts
   return {
     placement: runtimeNewTabPlacement(opts.viewMode),
-    ...(targetGroupId ? { groupId: targetGroupId } : {})
+    ...(targetGroupId ? { groupId: targetGroupId } : {}),
+    ...(afterTabId ? { afterTabId } : {})
   }
 }
 

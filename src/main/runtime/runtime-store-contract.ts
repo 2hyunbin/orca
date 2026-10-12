@@ -93,6 +93,8 @@ export type RuntimeStore = {
     branchPrefix: string
     branchPrefixCustom: string
     defaultTuiAgent?: GlobalSettings['defaultTuiAgent']
+    // Read by the old clients' session.tabs titles.
+    tabAutoGenerateTitle?: GlobalSettings['tabAutoGenerateTitle']
     disabledTuiAgents?: GlobalSettings['disabledTuiAgents']
     agentCmdOverrides?: GlobalSettings['agentCmdOverrides']
     agentDefaultArgs?: GlobalSettings['agentDefaultArgs']

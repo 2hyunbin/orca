@@ -136,7 +136,7 @@ vi.mock('@/lib/rename-file', () => ({
   renameFileOnDisk: vi.fn()
 }))
 
-vi.mock('@/lib/language-detect', () => ({
+vi.mock('../../../../shared/language-detect', () => ({
   detectLanguage: () => 'typescript'
 }))
 

@@ -10,7 +10,6 @@ import { ProfileStateSqliteAuthority } from '../persistence/profile-state/profil
 import { DelayedAuthority } from '../persistence/loading-store/profile-state-delayed-authority-fixture'
 import { Store } from '../persistence/loading-store/store'
 import { OrcaRuntimeService } from './orca-runtime'
-import { buildHeadlessMobileSessionTerminalTabs } from './mobile-session-terminal-projection'
 import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
 import { advanceTerminalTopologyRevision } from '../persistence/terminal-topology/terminal-topology-membership'
 
@@ -108,18 +107,8 @@ export function createAcknowledgedTabRetirementFixture(bound = false) {
       incarnationId: SECOND_INCARNATION
     })
   }
-  function publish(present: boolean, version: number, includedLeaves?: readonly string[]): void {
-    const session = store.getWorkspaceSession()
-    const projected = present
-      ? buildHeadlessMobileSessionTerminalTabs(
-          ACK_WORKTREE,
-          session.tabsByWorktree[ACK_WORKTREE],
-          session
-        )
-      : []
-    const tabs = includedLeaves
-      ? projected.filter((tab) => includedLeaves.includes(tab.leafId))
-      : projected
+  /** The window's graph sync: the tab is mounted or gone. Its phone list follows the saved session. */
+  function publish(present: boolean): void {
     const graph: RuntimeSyncWindowGraph = {
       tabs: present
         ? [
@@ -132,22 +121,11 @@ export function createAcknowledgedTabRetirementFixture(bound = false) {
             }
           ]
         : [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: ACK_WORKTREE,
-          publicationEpoch: 'renderer:ack',
-          activeGroupId: null,
-          snapshotVersion: version,
-          activeTabId: tabs[0]?.id ?? null,
-          activeTabType: tabs.length ? 'terminal' : null,
-          tabs
-        }
-      ]
+      leaves: []
     }
     runtime.syncWindowGraph(1, graph)
   }
-  publish(true, 1)
+  publish(true)
   store.setWorkspaceSession(
     advanceTerminalTopologyRevision(store.getWorkspaceSession(), ACK_WORKTREE)
   )

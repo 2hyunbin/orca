@@ -1,66 +1,10 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithWaitForMobileTerminalSurface } from './orca-runtime-wait-for-mobile-terminal-surface'
-import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../shared/runtime-types'
 
 export class OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals extends OrcaRuntimeWithWaitForMobileTerminalSurface {
-  protected restoreLivePairedRendererSessionOwnedMobileTerminals(
-    worktreeId: string | null,
-    options: { missingSnapshotOnly?: boolean; notify?: boolean } = {}
-  ): void {
-    for (const ptyId of this.pairedRendererSessionOwnedPtyIds) {
-      const pty = this.ptysById.get(ptyId)
-      if (
-        !pty?.connected ||
-        !pty.tabId ||
-        (worktreeId !== null && !runtimeWorktreeIdsEqual(pty.worktreeId, worktreeId))
-      ) {
-        continue
-      }
-      const targetWorktreeId = worktreeId ?? pty.worktreeId
-      const pane = parsePaneKey(pty.paneKey ?? '')
-      if (!pane || pane.tabId !== pty.tabId) {
-        continue
-      }
-      const existing = this.mobileSessionTabsByWorktree.get(targetWorktreeId)
-      if (existing && options.missingSnapshotOnly) {
-        continue
-      }
-      if (
-        existing?.tabs.some(
-          (tab) =>
-            tab.type === 'terminal' &&
-            (tab.ptyId === pty.ptyId ||
-              (tab.parentTabId === pty.tabId && tab.leafId === pane.leafId))
-        )
-      ) {
-        continue
-      }
-      if (!existing) {
-        this.storeMobileSessionSnapshot(targetWorktreeId, {
-          worktree: targetWorktreeId,
-          publicationEpoch: `renderer-rescue:${Date.now().toString(36)}`,
-          snapshotVersion: 0,
-          activeGroupId: null,
-          activeTabId: null,
-          activeTabType: null,
-          tabGroups: [],
-          tabs: []
-        })
-      }
-      this.publishPtyBackedMobileSessionTerminal(targetWorktreeId, pty, {
-        tabId: pty.tabId,
-        leafId: pane.leafId,
-        title: null,
-        activate: false,
-        selectIfNoActiveTab: false,
-        notify: options.notify
-      })
-    }
-  }
-
   protected setPairedRendererSessionOwnership(ptyId: string, owned: boolean): void {
     if (owned) {
       this.pairedRendererSessionOwnedPtyIds.add(ptyId)

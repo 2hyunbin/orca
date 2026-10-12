@@ -91,6 +91,9 @@ export class RuntimeWorkspaceLayouts {
     return this.writer.isWriting()
   }
 
+  /** Settles once the last structural change reached disk (or its failure was reported). */
+  readonly whenDurable = (): Promise<void> => this.writer.whenDurable()
+
   loadedHostIds(): ExecutionHostId[] {
     return [...this.partitions.keys()]
   }

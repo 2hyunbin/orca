@@ -6,17 +6,45 @@ import {
   listWorktrees
 } from '../orca-runtime-test-mocks.spec'
 import {
+  HEADLESS_LEAF_ID,
+  HEADLESS_SECOND_LEAF_ID,
   TEST_FOLDER_WORKSPACE_PATH,
   TEST_REPO_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   createRuntime,
+  makeHeadlessTerminalLayout,
+  makeWorkspaceSessionWithHeadlessTerminal,
   makeWorktreeMeta,
   store
 } from '../orca-runtime-test-fixtures.spec'
 
 describe('OrcaRuntimeService', () => {
   it('emits one mobile session terminal tab per live PTY even if two tabs resolve to it', () => {
+    const seed = (ptyIdsByLeafId: Record<string, string>) =>
+      store.setWorkspaceSession(
+        makeWorkspaceSessionWithHeadlessTerminal({
+          activeTabId: 'term_dup',
+          activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'term_dup' },
+          tabsByWorktree: {
+            [TEST_WORKTREE_ID]: [
+              {
+                id: 'term_dup',
+                ptyId: 'pty-shared',
+                worktreeId: TEST_WORKTREE_ID,
+                title: 'Agent',
+                customTitle: null,
+                color: null,
+                sortOrder: 0,
+                createdAt: 1
+              }
+            ]
+          },
+          terminalLayoutsByTabId: { term_dup: makeHeadlessTerminalLayout(ptyIdsByLeafId) }
+        })
+      )
+    // Two leaves (stale + live) both bound to the SAME live PTY.
+    seed({ [HEADLESS_LEAF_ID]: 'pty-shared', [HEADLESS_SECOND_LEAF_ID]: 'pty-shared' })
     const runtime = createRuntime()
     const internals = runtime as unknown as {
       recordPtyWorktree: (
@@ -24,61 +52,54 @@ describe('OrcaRuntimeService', () => {
         worktreeId: string,
         state?: Record<string, unknown>
       ) => void
-      mobileSessionTabsByWorktree: Map<string, unknown>
       getMobileSessionTabsForWorktree: (worktreeId: string) => {
         tabs: { type: string; terminal?: string | null }[]
       }
     }
-    // Two unclaimed live PTYs on the worktree; the worktree-only fallback binds either to a leafless tab that references it.
+    // Two unclaimed live PTYs on the worktree; the worktree-only fallback binds either to a leaf that references it.
     internals.recordPtyWorktree('pty-shared', TEST_WORKTREE_ID, { connected: true })
     internals.recordPtyWorktree('pty-other', TEST_WORKTREE_ID, { connected: true })
 
-    const terminalTab = (leafId: string, ptyId: string) => ({
-      type: 'terminal' as const,
-      id: `term_dup::${leafId}`,
-      parentTabId: 'term_dup',
-      leafId,
-      ptyId,
-      title: 'Agent',
-      isActive: leafId === 'leaf-new'
-    })
-
-    // Two records (stale headless leaf + live leaf) both resolve to the SAME live PTY — the renderer-graph origin the leaf fix can't reach.
-    internals.mobileSessionTabsByWorktree.set(TEST_WORKTREE_ID, {
-      worktree: TEST_WORKTREE_ID,
-      publicationEpoch: 'renderer:test:1',
-      snapshotVersion: 1,
-      activeGroupId: null,
-      activeTabId: 'term_dup::leaf-new',
-      activeTabType: 'terminal',
-      tabs: [terminalTab('leaf-new', 'pty-shared'), terminalTab('leaf-old', 'pty-shared')]
-    })
-    const deduped = internals.getMobileSessionTabsForWorktree(TEST_WORKTREE_ID)
-    const dedupedTerminals = deduped.tabs.filter((tab) => tab.type === 'terminal')
-    expect(dedupedTerminals).toHaveLength(1)
-    expect(dedupedTerminals[0].terminal).toBeTruthy()
+    // The holder keeps one leaf per PTY binding, so only one row carries the live handle.
+    const live = () =>
+      internals
+        .getMobileSessionTabsForWorktree(TEST_WORKTREE_ID)
+        .tabs.filter((tab) => tab.type === 'terminal' && tab.terminal)
+    expect(live()).toHaveLength(1)
 
     // Split siblings own DISTINCT PTYs, so they must never be collapsed.
-    internals.mobileSessionTabsByWorktree.set(TEST_WORKTREE_ID, {
-      worktree: TEST_WORKTREE_ID,
-      publicationEpoch: 'renderer:test:2',
-      snapshotVersion: 2,
-      activeGroupId: null,
-      activeTabId: 'term_dup::leaf-new',
-      activeTabType: 'terminal',
-      tabs: [terminalTab('leaf-new', 'pty-shared'), terminalTab('leaf-old', 'pty-other')]
-    })
-    const split = internals.getMobileSessionTabsForWorktree(TEST_WORKTREE_ID)
-    expect(split.tabs.filter((tab) => tab.type === 'terminal')).toHaveLength(2)
+    seed({ [HEADLESS_LEAF_ID]: 'pty-shared', [HEADLESS_SECOND_LEAF_ID]: 'pty-other' })
+    expect(new Set(live().map((tab) => tab.terminal)).size).toBe(2)
   })
 
-  it('resolves projected split authority from the parent layout PTY binding', () => {
-    const runtime = createRuntime()
+  it('authorizes splitting a headless pane from its saved layout PTY binding', () => {
     const tabId = 'projected-parent-tab'
-    const leafId = 'projected-leaf'
     const ptyId = 'projected-pty'
+    store.setWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        activeTabId: tabId,
+        activeTabIdByWorktree: { [TEST_WORKTREE_ID]: tabId },
+        tabsByWorktree: {
+          [TEST_WORKTREE_ID]: [
+            {
+              id: tabId,
+              ptyId,
+              worktreeId: TEST_WORKTREE_ID,
+              title: 'Terminal',
+              customTitle: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 1
+            }
+          ]
+        },
+        terminalLayoutsByTabId: {
+          [tabId]: makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: ptyId })
+        }
+      })
+    )
+    const runtime = createRuntime()
     const internals = runtime as unknown as {
-      mobileSessionTabsByWorktree: Map<string, unknown>
       resolveTerminalSplitSourceAuthority: (
         worktreeId: string,
         tabId: string,
@@ -86,21 +107,15 @@ describe('OrcaRuntimeService', () => {
         ptyId: string
       ) => { persisted: boolean; rendererMounted: boolean } | null
     }
-    internals.mobileSessionTabsByWorktree.set(TEST_WORKTREE_ID, {
-      tabs: [
-        {
-          type: 'terminal',
-          parentTabId: tabId,
-          leafId,
-          ptyId: null,
-          parentLayout: { ptyIdsByLeafId: { [leafId]: ptyId } }
-        }
-      ]
-    })
 
     expect(
-      internals.resolveTerminalSplitSourceAuthority(TEST_WORKTREE_ID, tabId, leafId, ptyId)
-    ).toMatchObject({ persisted: false, rendererMounted: false })
+      internals.resolveTerminalSplitSourceAuthority(
+        TEST_WORKTREE_ID,
+        tabId,
+        HEADLESS_LEAF_ID,
+        ptyId
+      )
+    ).toMatchObject({ persisted: true, rendererMounted: false })
   })
 
   it('keeps targeted terminal lists from adopting controller PTYs for other worktrees', async () => {

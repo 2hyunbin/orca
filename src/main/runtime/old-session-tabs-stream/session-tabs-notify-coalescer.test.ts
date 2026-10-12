@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createMobileSessionTabsNotifyCoalescer } from './mobile-session-tabs-notify-coalescer'
+import { createMobileSessionTabsNotifyCoalescer } from './session-tabs-notify-coalescer'
 
 describe('createMobileSessionTabsNotifyCoalescer', () => {
   beforeEach(() => {

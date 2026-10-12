@@ -12,7 +12,7 @@ export class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends OrcaRunt
       return null
     }
     const persistedBindingByPtyId = indexFloatingSnapshotPtyBindings(
-      this.mobileSessionTabsByWorktree.get(FLOATING_TERMINAL_WORKTREE_ID),
+      this.readSessionTabsSnapshot(FLOATING_TERMINAL_WORKTREE_ID),
       (tab) => this.getMobileTerminalPaneKey(tab)
     )
     const knownPtyIds = new Set<string>(persistedBindingByPtyId.keys())

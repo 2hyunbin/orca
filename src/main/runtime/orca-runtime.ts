@@ -1,5 +1,5 @@
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
-import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
+import { OrcaRuntimeWithHeldLayout } from './orca-runtime-held-layout'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
   AgentLaunchTabPublished,
@@ -45,7 +45,7 @@ import {
 } from './runtime-held-pane-exits'
 import type { Worktree } from '../../shared/worktree/types'
 
-class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
+class OrcaRuntimeService extends OrcaRuntimeWithHeldLayout {
   /** The one copy of every host partition's tab layout (PR 6). */
   protected readonly layoutHolder = new RuntimeWorkspaceLayouts({
     store: () => holderStoreOf(this.store),
@@ -68,14 +68,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
         ...(pty?.lastOscTitle ? { liveTitle: pty.lastOscTitle } : {})
       }
     },
-    stopTerminals: (ptyIds) => {
-      // The close is already committed; each stop is best-effort, as in the worktree sweep.
-      for (const ptyId of ptyIds) {
-        this.stopExplicitlyClosedTabPtys([ptyId], '').catch((error: unknown) => {
-          console.warn(`[runtime] failed to stop terminal ${ptyId}`, error)
-        })
-      }
-    }
+    stopTerminals: (ptyIds) => this.stopClosedTerminals(ptyIds)
   })
 
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
@@ -131,7 +124,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     })
   }
 
-  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithMigrationCatalog>) {
+  constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithHeldLayout>) {
     super(...args)
     // Why: the runtime listing re-runs a scan the worktree-change generation overtook and re-lists
     // through this runtime's scan cache, so a worktree change must reach both. The desktop IPC

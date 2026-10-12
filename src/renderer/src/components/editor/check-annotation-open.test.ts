@@ -13,7 +13,7 @@ vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.state } }))
 vi.mock('@/lib/worktree-activation', () => ({
   activateAndRevealWorktree: mocks.activateAndRevealWorktree
 }))
-vi.mock('@/lib/language-detect', () => ({ detectLanguage: () => 'typescript' }))
+vi.mock('../../../../shared/language-detect', () => ({ detectLanguage: () => 'typescript' }))
 
 import { openAnnotationLocation } from './check-annotation-open'
 

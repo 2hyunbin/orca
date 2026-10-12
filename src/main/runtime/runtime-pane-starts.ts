@@ -61,9 +61,8 @@ function startOptions(
     tabId: pane.tabId,
     leafId: pane.leafId,
     paneStart: start,
-    // No window reveal and no phone row: the pane is already in the layout every view reads.
+    // No window reveal: the pane is already in the layout every view reads.
     presentation: 'background',
-    deferMobileSessionPublish: true,
     ...(cwd ? { cwd } : {}),
     ...(terminal.shellOverride ? { shellOverride: terminal.shellOverride } : {}),
     ...(start.restoreSessionId ? { sessionId: start.restoreSessionId } : {}),

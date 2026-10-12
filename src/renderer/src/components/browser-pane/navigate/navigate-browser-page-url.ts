@@ -1,4 +1,4 @@
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../../shared/language-detect'
 import { getConnectionId } from '@/lib/connection-context'
 import { isPathInsideWorktree, toWorktreeRelativePath } from '@/lib/terminal-links'
 import { useAppStore } from '@/store'

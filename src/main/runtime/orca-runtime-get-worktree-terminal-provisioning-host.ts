@@ -28,13 +28,12 @@ export class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends OrcaRunt
         this.createTerminal(selector, options, createdWorktree),
       splitTerminal: (handle, options) => this.splitTerminal(handle, options, createdWorktree),
       setTabTitle: async (handle, title) => {
-        const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)
+        const { tabId } = this.getProvisionedTerminalTab(handle)
         // Why not renameTerminal: it writes the pane's title, stamped to outrank every later
         // agent title, which would hide the agent's own titles and status for the pane's life.
         this.notifier?.renameTerminal(tabId, title, { recordInteraction: false })
         if (!this.getAvailableAuthoritativeWindow()) {
           this.persistHeadlessTerminalTitle(tabId, title)
-          this.applyHeadlessSessionTabPropsToSnapshot(worktreeId, tabId, { title })
         }
       },
       setTabColor: async (handle, color) => {

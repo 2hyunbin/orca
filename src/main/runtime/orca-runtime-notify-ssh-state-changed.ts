@@ -95,7 +95,7 @@ export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStat
     const worktreeIds = new Set<string>()
     for (const worktreeId of [
       ...this.getKnownWorkspaceSessionWorktreeIds(),
-      ...this.mobileSessionTabsByWorktree.keys()
+      ...this.sessionTabsWorktreeIds()
     ]) {
       const parsed = splitWorktreeId(worktreeId)
       if (parsed && repoIds.has(parsed.repoId)) {
@@ -106,19 +106,13 @@ export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStat
       return
     }
 
-    // Why: relay readiness follows PTY reattach; rebuild the HUB-owned panes before paired clients consume the connected event.
-    for (const worktreeId of worktreeIds) {
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, {
-        allowAttachedWindow: true,
-        onlyRuntimeOwnedTerminals: true
-      })
-    }
+    // Why: relay readiness follows PTY reattach; refresh the HUB-owned panes before paired clients consume the connected event.
     await this.refreshMobileSessionPtyRecords()
     if (this.sshRelayRecoveryGenerationByTargetId.get(targetId) !== generation) {
       return
     }
     for (const worktreeId of worktreeIds) {
-      this.notifyMobileSessionTabsChangedNow(worktreeId, ++this.mobileSessionTabsChangeSequence)
+      this.notifyMobileSessionTabsChanged(worktreeId)
     }
   }
 

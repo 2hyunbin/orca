@@ -58,8 +58,11 @@ export function resolveMultiplexSubscribePty(
     return null
   }
 
-  // Why: a never-mounted tab has no graph leaf to await; mounting the exact tab attaches its PTY without activating the worktree.
-  runtime.requestRendererTerminalTabMount(request.terminal)
+  const startsPane = runtime.startsPanesForSubscribers()
+  if (!startsPane) {
+    // Why: a never-mounted tab has no graph leaf to await; mounting the exact tab attaches its PTY without activating the worktree.
+    runtime.requestRendererTerminalTabMount(request.terminal)
+  }
   const waitController = new AbortController()
   const pendingControllers = pendingPtyWaitControllers.get(request.streamId) ?? new Set()
   pendingControllers.add(waitController)
@@ -76,7 +79,9 @@ export function resolveMultiplexSubscribePty(
   })
   return (async () => {
     try {
-      const ptyId = await runtime.waitForLeafPtyId(request.terminal, 10_000, waitController.signal)
+      const ptyId = startsPane
+        ? await runtime.startPaneForHandle(request.terminal, waitController.signal)
+        : await runtime.waitForLeafPtyId(request.terminal, 10_000, waitController.signal)
       leaf = { ptyId }
     } catch {
       if (state.closed || signal?.aborted || waitController.signal.aborted) {

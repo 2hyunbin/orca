@@ -23,6 +23,8 @@ function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeSe
     // Why: subscribe streams register as remote view subscribers for Phase-5
     // query-authority suppression (terminal-query-authority.md).
     registerRemoteTerminalViewSubscriber: () => () => {},
+    // Why: window-attached path; the window mounts the tab and these tests double its PTY wait.
+    startsPanesForSubscribers: () => false,
     requestRendererTerminalTabMount: () => false,
     ...overrides
   } as OrcaRuntimeService

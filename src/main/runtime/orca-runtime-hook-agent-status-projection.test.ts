@@ -7,6 +7,8 @@ import { OrcaRuntimeService } from './orca-runtime'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../shared/agent-status-types'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
+import { getDefaultSettings, getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -58,6 +60,25 @@ function hookRow(overrides: Partial<AgentStatusIpcPayload> = {}): AgentStatusIpc
   }
 }
 
+/** A Store holding one workspace session, so the created terminal is a tab in the phone list. */
+function sessionStore(): ConstructorParameters<typeof OrcaRuntimeService>[0] {
+  let session = getDefaultWorkspaceSession()
+  const store = {
+    getSettings: () => getDefaultSettings('/tmp'),
+    getRepo: () => undefined,
+    getRepos: () => [],
+    getAllWorktreeMeta: () => ({}),
+    getWorktreeMeta: () => undefined,
+    getWorkspaceSessionHostIds: () => ['local'],
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      session = next
+    }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The layout holder reads only the session members this store defines.
+  return store as never
+}
+
 async function createRuntimeWithHookRows(
   rows: AgentStatusIpcPayload[],
   /** Pass a store to exercise the OSC producer; otherwise the rows stand in for it. */
@@ -66,7 +87,7 @@ async function createRuntimeWithHookRows(
   const readRows = statusWiring
     ? (): AgentStatusIpcPayload[] => [...rows, ...statusWiring.deps.getAgentStatusSnapshot()]
     : (): AgentStatusIpcPayload[] => rows
-  const runtime = new OrcaRuntimeService(null, undefined, {
+  const runtime = new OrcaRuntimeService(sessionStore(), undefined, {
     ...(statusWiring
       ? {
           onTerminalAgentStatus: statusWiring.deps.onTerminalAgentStatus,

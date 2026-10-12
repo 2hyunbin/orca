@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  OrcaRuntimeService,
-  appendBrowserTabOrder,
-  collectBrowserGroupAssignment
-} from '../orca-runtime-test-mocks.spec'
+import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import type { Tab } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
+  HEADLESS_SECOND_LEAF_ID,
   TEST_REPO_ID,
   TEST_WORKTREE_ID,
   makeHeadlessTerminalLayout,
@@ -17,47 +14,18 @@ import {
 
 describe('OrcaRuntimeService', () => {
   it('keeps split sibling headless mobile terminal leaves when a desktop renderer omits them', async () => {
-    const runtime = new OrcaRuntimeService(store)
-    runtime.syncWindowGraph(0, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'headless:split-siblings',
-          snapshotVersion: 1,
-          activeGroupId: 'headless-group',
-          activeTabId: 'host-tab::pane:2',
-          activeTabType: 'terminal',
-          tabGroups: [
-            {
-              id: 'headless-group',
-              activeTabId: 'host-tab',
-              tabOrder: ['host-tab']
-            }
-          ],
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'host-tab::pane:1',
-              parentTabId: 'host-tab',
-              leafId: 'pane:1',
-              title: 'left',
-              isActive: false
-            },
-            {
-              type: 'terminal',
-              id: 'host-tab::pane:2',
-              parentTabId: 'host-tab',
-              leafId: 'pane:2',
-              title: 'right',
-              isActive: true
-            }
-          ]
+    store.setWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        terminalLayoutsByTabId: {
+          'host-tab': makeHeadlessTerminalLayout({
+            [HEADLESS_LEAF_ID]: 'left-pty',
+            [HEADLESS_SECOND_LEAF_ID]: 'right-pty'
+          })
         }
-      ]
-    })
-
+      })
+    )
+    const runtime = new OrcaRuntimeService(store)
+    // The renderer's published phone list is ignored; the Store session is the source.
     runtime.syncWindowGraph(0, {
       tabs: [],
       leaves: [],
@@ -79,18 +47,17 @@ describe('OrcaRuntimeService', () => {
     expect(listed.tabs).toEqual([
       expect.objectContaining({
         type: 'terminal',
-        id: 'host-tab::pane:1',
+        id: `host-tab::${HEADLESS_LEAF_ID}`,
         parentTabId: 'host-tab',
-        leafId: 'pane:1'
+        leafId: HEADLESS_LEAF_ID
       }),
       expect.objectContaining({
         type: 'terminal',
-        id: 'host-tab::pane:2',
+        id: `host-tab::${HEADLESS_SECOND_LEAF_ID}`,
         parentTabId: 'host-tab',
-        leafId: 'pane:2'
+        leafId: HEADLESS_SECOND_LEAF_ID
       })
     ])
-    expect(listed.activeTabId).toBe('host-tab::pane:2')
   })
 
   it('keeps a headless tab-group split alive when a new tab is created', async () => {
@@ -204,7 +171,6 @@ describe('OrcaRuntimeService', () => {
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(session)
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
     const rehydrated = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     expect(rehydrated.tabGroups).toHaveLength(2)
     expect(rehydrated.tabGroupLayout).toMatchObject({ type: 'split', direction: 'horizontal' })
@@ -242,10 +208,9 @@ describe('OrcaRuntimeService', () => {
     )!
     expect(persistedTab.customTitle).toBe('My Title')
 
-    // A cold rehydrate keeps the renamed title.
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
-    const rehydrated = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    // A cold restart reads the persisted session back.
+    const restarted = new OrcaRuntimeService(runtimeStore)
+    const rehydrated = await restarted.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const renamed = rehydrated.tabs.find(
       (tab) => tab.type === 'terminal' && tab.parentTabId === 'host-tab'
     )
@@ -253,7 +218,15 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('persists a headless pane layout (ratio/expand) so it survives a cold rehydrate', async () => {
-    const session = makeWorkspaceSessionWithHeadlessTerminal()
+    // A sent tree may only reshape existing panes (adding one is refused), so seed the split.
+    const session = makeWorkspaceSessionWithHeadlessTerminal({
+      terminalLayoutsByTabId: {
+        'host-tab': makeHeadlessTerminalLayout({
+          [HEADLESS_LEAF_ID]: 'persisted-pty',
+          [HEADLESS_SECOND_LEAF_ID]: 'second-pty'
+        })
+      }
+    })
     const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(session)
     const runtime = new OrcaRuntimeService(runtimeStore as never)
 
@@ -263,7 +236,7 @@ describe('OrcaRuntimeService', () => {
         type: 'split',
         direction: 'vertical',
         first: { type: 'leaf', leafId: HEADLESS_LEAF_ID },
-        second: { type: 'leaf', leafId: 'leaf-2' },
+        second: { type: 'leaf', leafId: HEADLESS_SECOND_LEAF_ID },
         ratio: 0.7
       },
       expandedLeafId: null,
@@ -276,9 +249,9 @@ describe('OrcaRuntimeService', () => {
     // Host-owned pty bindings must be preserved through the structural update.
     expect(persisted.ptyIdsByLeafId).toMatchObject({ [HEADLESS_LEAF_ID]: 'persisted-pty' })
 
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
-    const rehydrated = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    // A cold restart reads the persisted session back.
+    const restarted = new OrcaRuntimeService(runtimeStore)
+    const rehydrated = await restarted.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const surface = rehydrated.tabs.find(
       (tab) => tab.type === 'terminal' && tab.parentTabId === 'host-tab'
     )
@@ -305,9 +278,9 @@ describe('OrcaRuntimeService', () => {
     expect(persisted.color).toBe('#ff8800')
     expect(persisted.isPinned).toBe(true)
 
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
-    const rehydrated = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    // A cold restart reads the persisted session back.
+    const restarted = new OrcaRuntimeService(runtimeStore)
+    const rehydrated = await restarted.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const surface = rehydrated.tabs.find(
       (tab) => tab.type === 'terminal' && tab.parentTabId === 'host-tab'
     )
@@ -332,6 +305,25 @@ describe('OrcaRuntimeService', () => {
     }
     const session = makeWorkspaceSessionWithHeadlessTerminal({
       unifiedTabs: { [TEST_WORKTREE_ID]: [browserTab] },
+      // The window saves each browser tab's record; its page id is what the bridge routes to.
+      browserTabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'browser-page-1',
+            worktreeId: TEST_WORKTREE_ID,
+            activePageId: 'browser-page-1',
+            pageIds: ['browser-page-1'],
+            url: 'https://example.com/',
+            title: 'Live Browser',
+            loading: false,
+            faviconUrl: null,
+            canGoBack: false,
+            canGoForward: false,
+            loadError: null,
+            createdAt: 2
+          }
+        ]
+      },
       tabGroups: {
         [TEST_WORKTREE_ID]: [
           {
@@ -344,21 +336,26 @@ describe('OrcaRuntimeService', () => {
       }
     })
     const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(session)
-    const runtime = new OrcaRuntimeService(runtimeStore as never)
-    runtime.setOffscreenBrowserBackend({ createTab: vi.fn(), closeTab: vi.fn() })
-    runtime.setAgentBrowserBridge({
-      tabList: vi.fn(() => ({
-        tabs: [
-          {
-            browserPageId: 'browser-page-1',
-            index: 0,
-            url: 'https://example.com/',
-            title: 'Live Browser',
-            active: true
-          }
-        ]
-      }))
-    } as never)
+    const startRuntime = (): OrcaRuntimeService => {
+      const started = new OrcaRuntimeService(runtimeStore)
+      started.setOffscreenBrowserBackend({ createTab: vi.fn(), closeTab: vi.fn() })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the listing reads only tabList from the agent browser bridge.
+      started.setAgentBrowserBridge({
+        tabList: vi.fn(() => ({
+          tabs: [
+            {
+              browserPageId: 'browser-page-1',
+              index: 0,
+              url: 'https://example.com/',
+              title: 'Live Browser',
+              active: true
+            }
+          ]
+        }))
+      } as never)
+      return started
+    }
+    const runtime = startRuntime()
 
     await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     await runtime.setMobileSessionTabProps(`id:${TEST_WORKTREE_ID}`, {
@@ -373,9 +370,8 @@ describe('OrcaRuntimeService', () => {
     expect(persisted?.color).toBe('#3b82f6')
     expect(persisted?.isPinned).toBe(true)
 
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
-    const rehydrated = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    // A cold restart reads the persisted session back.
+    const rehydrated = await startRuntime().listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const surface = rehydrated.tabs.find(
       (tab) => tab.type === 'browser' && tab.id === 'browser-page-1'
     )
@@ -394,9 +390,7 @@ describe('OrcaRuntimeService', () => {
     expect(cleared?.color).toBeNull()
     expect(cleared?.isPinned).toBe(false)
 
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
-    const rehydratedCleared = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    const rehydratedCleared = await startRuntime().listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const clearedSurface = rehydratedCleared.tabs.find(
       (tab) => tab.type === 'browser' && tab.id === 'browser-page-1'
     )
@@ -425,9 +419,9 @@ describe('OrcaRuntimeService', () => {
     )
     expect(liveSurface?.type === 'terminal' && liveSurface.viewMode).toBe('chat')
 
-    runtime['mobileSessionTabsByWorktree'].delete(TEST_WORKTREE_ID)
-    runtime['hydrateHeadlessMobileSessionTabsFromWorkspaceSession'](TEST_WORKTREE_ID)
-    const rehydrated = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    // A cold restart reads the persisted session back.
+    const restarted = new OrcaRuntimeService(runtimeStore)
+    const rehydrated = await restarted.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const surface = rehydrated.tabs.find(
       (tab) => tab.type === 'terminal' && tab.parentTabId === 'host-tab'
     )
@@ -529,73 +523,6 @@ describe('OrcaRuntimeService', () => {
     const right = after.tabGroups!.find((g) => g.id === rightGroupId)!
     expect(left.tabOrder).toHaveLength(2) // original + the targeted create
     expect(right.tabOrder).toHaveLength(1) // unchanged
-  })
-
-  it('appendBrowserTabOrder keeps a browser in its group across rebuilds (durability)', () => {
-    const groups = [
-      { id: 'left', activeTabId: 'web-terminal-a', tabOrder: ['web-terminal-a'] },
-      { id: 'right', activeTabId: 'web-terminal-b', tabOrder: ['web-terminal-b'] }
-    ]
-
-    // First create: a new browser targeted at the RIGHT group lands there.
-    const afterCreate = appendBrowserTabOrder(groups, ['browser-1'], {
-      tabId: 'browser-1',
-      groupId: 'right'
-    })
-    expect(afterCreate.find((g) => g.id === 'right')!.tabOrder).toContain('browser-1')
-    expect(afterCreate.find((g) => g.id === 'left')!.tabOrder).not.toContain('browser-1')
-
-    // Rebuild: the terminal distributor drops the browser id, so appendBrowserTabOrder must restore it to its prior group, not group[0].
-    const rebuiltGroups = [
-      { id: 'left', activeTabId: 'web-terminal-a', tabOrder: ['web-terminal-a'] },
-      { id: 'right', activeTabId: 'web-terminal-b', tabOrder: ['web-terminal-b'] }
-    ]
-    const priorAssignment = collectBrowserGroupAssignment(afterCreate, ['browser-1'])
-    const afterRebuild = appendBrowserTabOrder(
-      rebuiltGroups,
-      ['browser-1'],
-      undefined,
-      priorAssignment
-    )
-    expect(afterRebuild.find((g) => g.id === 'right')!.tabOrder).toContain('browser-1')
-    expect(afterRebuild.find((g) => g.id === 'left')!.tabOrder).not.toContain('browser-1')
-  })
-
-  it('keeps preserved headless mobile session publication epochs idempotent', async () => {
-    const runtime = new OrcaRuntimeService(store)
-    runtime.syncWindowGraph(0, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'headless:stable-epoch',
-          snapshotVersion: 1,
-          activeGroupId: null,
-          activeTabId: 'host-tab::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'host-tab::pane:1',
-              parentTabId: 'host-tab',
-              leafId: 'pane:1',
-              title: 'Terminal',
-              isActive: true
-            }
-          ]
-        }
-      ]
-    })
-
-    runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: [] })
-    const firstMerge = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-
-    runtime.syncWindowGraph(0, { tabs: [], leaves: [], mobileSessionTabs: [] })
-    const secondMerge = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-
-    expect(secondMerge.publicationEpoch).toBe(firstMerge.publicationEpoch)
-    expect(secondMerge.publicationEpoch).toBe('headless:stable-epoch')
   })
 
   it('keeps the graph ready when a mobile snapshot references a removed folder workspace', () => {

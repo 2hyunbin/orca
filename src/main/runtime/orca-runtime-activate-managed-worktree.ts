@@ -100,9 +100,6 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
     if (!targetsHost) {
       // Why: mobile/web selection needs fresh session surfaces without forcing
       // every attached desktop renderer to navigate to the phone's workspace.
-      this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id, {
-        allowAttachedWindow: true
-      })
       await this.refreshMobileSessionPtyRecords()
       this.notifyMobileSessionTabsChanged(worktree.id)
       // Why: a phone open must also wake the worktree's slept agents (experimental

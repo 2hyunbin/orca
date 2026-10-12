@@ -66,8 +66,8 @@ describe('OrcaRuntimeService', () => {
         'other-tab': makeHeadlessTerminalLayout({ other: 'pty-other' })
       },
       sleepingAgentSessionsByPaneKey: {
-        'host-tab:headless': {
-          paneKey: 'host-tab:headless',
+        [`host-tab:${HEADLESS_LEAF_ID}`]: {
+          paneKey: `host-tab:${HEADLESS_LEAF_ID}`,
           tabId: 'host-tab',
           worktreeId: TEST_WORKTREE_ID,
           agent: 'codex',
@@ -90,7 +90,7 @@ describe('OrcaRuntimeService', () => {
         }
       },
       terminalPtyIncarnationsByPaneKey: {
-        'host-tab:headless': 'incarnation-1',
+        [`host-tab:${HEADLESS_LEAF_ID}`]: 'incarnation-1',
         'pinned-tab:pinned': 'incarnation-2',
         'other-tab:other': 'incarnation-other'
       }

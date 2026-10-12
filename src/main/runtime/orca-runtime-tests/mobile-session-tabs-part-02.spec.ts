@@ -546,6 +546,53 @@ describe('OrcaRuntimeService', () => {
 
   it('closes browser mobile session tabs when addressed by browser workspace id', async () => {
     const closeSessionTab = vi.fn()
+    store.setWorkspaceSession({
+      ...getDefaultWorkspaceSession(),
+      unifiedTabs: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'browser-unified-1',
+            entityId: 'browser-workspace-1',
+            groupId: 'group-1',
+            worktreeId: TEST_WORKTREE_ID,
+            contentType: 'browser',
+            label: 'Browser',
+            customLabel: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      },
+      browserTabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'browser-workspace-1',
+            worktreeId: TEST_WORKTREE_ID,
+            activePageId: 'browser-page-1',
+            pageIds: ['browser-page-1'],
+            url: 'https://example.com/',
+            title: 'Browser',
+            loading: false,
+            faviconUrl: null,
+            canGoBack: false,
+            canGoForward: false,
+            loadError: null,
+            createdAt: 1
+          }
+        ]
+      },
+      tabGroups: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'group-1',
+            worktreeId: TEST_WORKTREE_ID,
+            activeTabId: 'browser-unified-1',
+            tabOrder: ['browser-unified-1']
+          }
+        ]
+      }
+    })
     const runtime = new OrcaRuntimeService(store)
     const forgetTabs = vi.spyOn(runtime['clientSessionTabSelections'], 'forgetTabs')
     runtime.setNotifier({
@@ -563,34 +610,12 @@ describe('OrcaRuntimeService', () => {
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
+    // A live window owns the browser tab, so it is asked to close it.
+    electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'browser-unified-1',
-          activeTabType: 'browser',
-          tabs: [
-            {
-              type: 'browser',
-              id: 'browser-unified-1',
-              title: 'Browser',
-              browserWorkspaceId: 'browser-workspace-1',
-              browserPageId: 'browser-page-1',
-              url: 'https://example.com/',
-              loading: false,
-              canGoBack: false,
-              canGoForward: false,
-              isActive: true
-            }
-          ]
-        }
-      ]
+      leaves: []
     })
 
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'browser-workspace-1')

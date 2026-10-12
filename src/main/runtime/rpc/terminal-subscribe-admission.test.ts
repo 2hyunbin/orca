@@ -96,6 +96,8 @@ function stubRuntime(overrides: Record<string, unknown> = {}) {
   const runtime = {
     getRuntimeId: () => 'test-runtime',
     registerRemoteTerminalViewSubscriber: () => () => {},
+    // Why: these cases cover the window-attached path, which mounts the tab and waits for its pty.
+    startsPanesForSubscribers: vi.fn(() => false),
     requestRendererTerminalTabMount: vi.fn(() => false),
     resolveLeafForHandle: vi.fn(() => ({ ptyId: ptyReady ? PTY_ID : null })),
     waitForLeafPtyId: ptyWaits.waitForLeafPtyId,
@@ -154,6 +156,8 @@ function createRealRuntime() {
     nextCursor: null
   })
   vi.spyOn(runtime, 'requestRendererTerminalTabMount').mockReturnValue(false)
+  // Why: keep the window-attached pty wait; a windowless runtime would start the pane itself.
+  vi.spyOn(runtime, 'startsPanesForSubscribers').mockReturnValue(false)
   const spawn = (): void => {
     ptyReady = true
     ptyWaits.spawn()
@@ -185,6 +189,28 @@ describe('terminal.subscribe registers at admission', () => {
       expect(registry.peekCleanup(SUBSCRIPTION_ID)).toBeUndefined()
       expect(runtime.handleMobileSubscribe).not.toHaveBeenCalled()
       expect(resultTypes(messages)).toEqual(['end'])
+    } finally {
+      registry.cleanupSubscriptionsForConnection('conn-a')
+      await subscribe
+    }
+  })
+
+  it('starts the pane itself when no window owns it, without a mount request', async () => {
+    const { runtime, registry } = stubRuntime({
+      startsPanesForSubscribers: vi.fn(() => true),
+      startPaneForHandle: vi.fn().mockResolvedValue(PTY_ID)
+    })
+    const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
+    const subscribe = dispatcher.dispatchStreaming(
+      subscribeRequest(binaryParams),
+      vi.fn(),
+      phoneConnection('conn-a')
+    )
+    try {
+      await vi.waitFor(() => expect(runtime.handleMobileSubscribe).toHaveBeenCalled())
+      expect(runtime.startPaneForHandle).toHaveBeenCalledWith('terminal-1', expect.any(AbortSignal))
+      expect(runtime.requestRendererTerminalTabMount).not.toHaveBeenCalled()
+      expect(runtime.waitForLeafPtyId).not.toHaveBeenCalled()
     } finally {
       registry.cleanupSubscriptionsForConnection('conn-a')
       await subscribe

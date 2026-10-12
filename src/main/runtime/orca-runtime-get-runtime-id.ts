@@ -192,10 +192,6 @@ export class OrcaRuntimeWithGetRuntimeId extends OrcaRuntimeWithHasExactPersiste
     return this.workspaceSessions.get(worktreeId)
   }
 
-  protected getOwnWorkspaceSessionForWorktree(worktreeId: string): WorkspaceSessionState | null {
-    return this.workspaceSessions.getOwnPartition(worktreeId)
-  }
-
   protected setWorkspaceSessionForWorktree(
     worktreeId: string,
     session: WorkspaceSessionState
@@ -205,11 +201,5 @@ export class OrcaRuntimeWithGetRuntimeId extends OrcaRuntimeWithHasExactPersiste
 
   protected getKnownWorkspaceSessionWorktreeIds(): Set<string> {
     return this.workspaceSessions.getKnownWorktreeIds()
-  }
-
-  protected getWorkspaceSessionHydrationTargets(
-    includeAllPersistedWorktrees: boolean
-  ): Map<string, WorkspaceSessionState> {
-    return this.workspaceSessions.getHydrationTargets(includeAllPersistedWorktrees)
   }
 }

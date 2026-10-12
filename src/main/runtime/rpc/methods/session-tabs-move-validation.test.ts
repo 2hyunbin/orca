@@ -1,262 +1,229 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../../orca-runtime'
-import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-types'
+import { getDefaultWorkspaceSession } from '../../../../shared/constants'
+import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
-function setMobileSessionSnapshot(
-  runtime: OrcaRuntimeService,
-  snapshot: RuntimeMobileSessionTabsSnapshot
-): void {
-  ;(
-    runtime as unknown as {
-      mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-    }
-  ).mobileSessionTabsByWorktree.set(snapshot.worktree, snapshot)
-}
+const WT = 'repo-1::/home/orca/worktree'
+const LEAF = '11111111-1111-4111-8111-111111111111'
 
-function getMobileSessionSnapshot(
-  runtime: OrcaRuntimeService,
-  worktree: string
-): RuntimeMobileSessionTabsSnapshot | undefined {
-  return (
-    runtime as unknown as {
-      mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-    }
-  ).mobileSessionTabsByWorktree.get(worktree)
-}
+type SeededTab =
+  | { kind: 'terminal'; id: string }
+  | { kind: 'browser'; id: string; pageId: string }
+  | { kind: 'editor'; id: string }
 
-function terminalTab() {
+const tabRow = (tab: SeededTab, groupId: string, sortOrder: number) => ({
+  id: tab.id,
+  entityId: tab.id,
+  groupId,
+  worktreeId: WT,
+  contentType: tab.kind,
+  label: tab.id,
+  customLabel: null,
+  color: null,
+  sortOrder,
+  createdAt: 1
+})
+
+/** The Store's session for one worktree whose groups hold `groups` (group id -> tabs in order). */
+function sessionWith(
+  groups: Record<string, SeededTab[]>,
+  activeGroupId: string
+): WorkspaceSessionState {
+  const all = Object.values(groups).flat()
+  const terminals = all.filter((tab) => tab.kind === 'terminal')
+  const browsers = all.flatMap((tab) => (tab.kind === 'browser' ? [tab] : []))
+  const editors = all.filter((tab) => tab.kind === 'editor')
   return {
-    type: 'terminal' as const,
-    id: 'terminal-tab::leaf-1',
-    parentTabId: 'terminal-tab',
-    leafId: 'leaf-1',
-    title: 'Terminal',
-    isActive: true
+    ...getDefaultWorkspaceSession(),
+    tabsByWorktree: {
+      [WT]: terminals.map((tab, index) => ({
+        id: tab.id,
+        ptyId: null,
+        worktreeId: WT,
+        title: tab.id,
+        customTitle: null,
+        color: null,
+        sortOrder: index,
+        createdAt: 1
+      }))
+    },
+    terminalLayoutsByTabId: Object.fromEntries(
+      terminals.map((tab) => [
+        tab.id,
+        { root: { type: 'leaf', leafId: LEAF }, activeLeafId: LEAF, expandedLeafId: null }
+      ])
+    ),
+    openFilesByWorktree: {
+      [WT]: editors.map((tab) => ({
+        filePath: tab.id,
+        relativePath: tab.id,
+        worktreeId: WT,
+        language: 'markdown'
+      }))
+    },
+    browserTabsByWorktree: {
+      [WT]: browsers.map((tab) => ({
+        id: tab.id,
+        worktreeId: WT,
+        activePageId: tab.pageId,
+        pageIds: [tab.pageId],
+        url: `https://example.test/${tab.id}`,
+        title: tab.id,
+        loading: false,
+        faviconUrl: null,
+        canGoBack: false,
+        canGoForward: false,
+        loadError: null,
+        createdAt: 1
+      }))
+    },
+    browserPagesByWorkspace: Object.fromEntries(
+      browsers.map((tab) => [
+        tab.id,
+        [
+          {
+            id: tab.pageId,
+            workspaceId: tab.id,
+            worktreeId: WT,
+            url: `https://example.test/${tab.id}`,
+            title: tab.id,
+            loading: false,
+            faviconUrl: null,
+            canGoBack: false,
+            canGoForward: false,
+            loadError: null,
+            createdAt: 1
+          }
+        ]
+      ])
+    ),
+    unifiedTabs: {
+      [WT]: Object.entries(groups).flatMap(([groupId, tabs]) =>
+        tabs.map((tab, index) => tabRow(tab, groupId, index))
+      )
+    },
+    tabGroups: {
+      [WT]: Object.entries(groups).map(([id, tabs]) => ({
+        id,
+        worktreeId: WT,
+        activeTabId: tabs[0]!.id,
+        tabOrder: tabs.map((tab) => tab.id)
+      }))
+    },
+    activeGroupIdByWorktree: { [WT]: activeGroupId }
   }
 }
 
-function browserTab({
-  id,
-  workspaceId,
-  pageId,
-  url
-}: {
-  id: string
-  workspaceId: string
-  pageId: string
-  url: string
-}) {
-  return {
-    type: 'browser' as const,
-    id,
-    title: 'Browser',
-    browserWorkspaceId: workspaceId,
-    browserPageId: pageId,
-    url,
-    loading: false,
-    canGoBack: false,
-    canGoForward: false,
-    isActive: false
-  }
+function runtimeWith(session: WorkspaceSessionState): OrcaRuntimeService {
+  let saved = session
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only the workspace session and repo list in this suite.
+  return new OrcaRuntimeService({
+    getWorkspaceSession: () => saved,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      saved = next
+    },
+    getRepos: () => [{ id: 'repo-1' }],
+    getSettings: () => ({ workspaceDir: '/tmp/workspaces' })
+  } as never)
+}
+
+/** A window applies moves until it hands the layout to the runtime; it is what these tests observe. */
+function windowAttached(runtime: OrcaRuntimeService) {
+  const moveSessionTab = vi.fn()
+  runtime.setNotifier({ moveSessionTab } as never)
+  return moveSessionTab
+}
+
+const liveBrowserPages = (runtime: OrcaRuntimeService, pageIds: string[]): void => {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: move validation reads only tabList from the agent browser bridge.
+  runtime.setAgentBrowserBridge({
+    tabList: vi.fn(() => ({
+      tabs: pageIds.map((browserPageId) => ({ browserPageId, title: 'Live', url: 'https://x' }))
+    }))
+  } as never)
 }
 
 describe('session tab move validation', () => {
-  it('preserves a structured tab across renderer-authored snapshot sync', () => {
-    const runtime = new OrcaRuntimeService()
-    const structured = {
-      type: 'agent-session' as const,
-      id: 'agent-session:session-a',
-      title: 'Codex Chat',
-      sessionId: 'session-a',
-      agent: 'codex' as const,
-      isActive: false
-    }
-    setMobileSessionSnapshot(runtime, {
-      worktree: 'wt-1',
-      publicationEpoch: 'structured-epoch',
-      snapshotVersion: 2,
-      activeGroupId: 'group-1',
-      activeTabId: 'terminal-tab::leaf-1',
-      activeTabType: 'terminal',
-      tabGroups: [
-        {
-          id: 'group-1',
-          activeTabId: 'terminal-tab',
-          tabOrder: ['terminal-tab', structured.id]
-        }
-      ],
-      tabs: [terminalTab(), structured]
-    })
-    const incoming: RuntimeMobileSessionTabsSnapshot = {
-      worktree: 'wt-1',
-      publicationEpoch: 'renderer-epoch',
-      snapshotVersion: 1,
-      activeGroupId: 'group-1',
-      activeTabId: 'terminal-tab::leaf-1',
-      activeTabType: 'terminal',
-      tabGroups: [{ id: 'group-1', activeTabId: 'terminal-tab', tabOrder: ['terminal-tab'] }],
-      tabs: [terminalTab()]
-    }
-
-    ;(
-      runtime as unknown as {
-        syncMobileSessionTabs(snapshots: RuntimeMobileSessionTabsSnapshot[]): Set<string>
-      }
-    ).syncMobileSessionTabs([incoming])
-
-    const snapshot = getMobileSessionSnapshot(runtime, 'wt-1')
-    expect(snapshot?.tabs).toContainEqual(structured)
-    expect(snapshot?.tabGroups?.[0]?.tabOrder).toEqual(['terminal-tab', 'agent-session:session-a'])
-  })
-
   it('publishes a structured tab into the active group instead of the first group', async () => {
-    const runtime = new OrcaRuntimeService()
-    setMobileSessionSnapshot(runtime, {
-      worktree: 'wt-1',
-      publicationEpoch: 'epoch-1',
-      snapshotVersion: 1,
-      activeGroupId: 'group-2',
-      activeTabId: 'file-tab',
-      activeTabType: 'file',
-      tabGroups: [
-        { id: 'group-1', activeTabId: 'terminal-tab', tabOrder: ['terminal-tab'] },
-        { id: 'group-2', activeTabId: 'file-tab', tabOrder: ['file-tab'] }
-      ],
-      tabs: [
-        terminalTab(),
+    const runtime = runtimeWith(
+      sessionWith(
         {
-          type: 'file',
-          id: 'file-tab',
-          title: 'README.md',
-          filePath: 'README.md',
-          relativePath: 'README.md',
-          language: 'markdown',
-          isDirty: false,
-          isActive: true
-        }
-      ]
-    })
+          'group-1': [{ kind: 'terminal', id: 'terminal-tab' }],
+          'group-2': [{ kind: 'editor', id: 'README.md' }]
+        },
+        'group-2'
+      )
+    )
 
     await runtime.publishStructuredAgentSessionTab({
-      workspaceId: 'wt-1',
+      workspaceId: WT,
       sessionId: 'session-a',
       agent: 'codex',
       activate: true
     })
 
-    const snapshot = getMobileSessionSnapshot(runtime, 'wt-1')
-    expect(snapshot?.activeGroupId).toBe('group-2')
-    expect(snapshot?.tabGroups?.[0]?.tabOrder).toEqual(['terminal-tab'])
-    expect(snapshot?.tabGroups?.[1]).toMatchObject({
+    const snapshot = await runtime.listMobileSessionTabs(`id:${WT}`)
+    expect(snapshot.activeGroupId).toBe('group-2')
+    expect(snapshot.tabGroups?.[0]?.tabOrder).toEqual(['terminal-tab'])
+    expect(snapshot.tabGroups?.[1]).toMatchObject({
       activeTabId: 'agent-session:session-a',
-      tabOrder: ['file-tab', 'agent-session:session-a']
+      tabOrder: ['README.md', 'agent-session:session-a']
     })
   })
 
   it('preserves a capability-hidden structured tab during an old-client reorder', async () => {
-    const runtime = new OrcaRuntimeService()
-    const moveSessionTab = vi.fn()
-    runtime.setNotifier({ moveSessionTab } as never)
-    setMobileSessionSnapshot(runtime, {
-      worktree: 'wt-1',
-      publicationEpoch: 'epoch-1',
-      snapshotVersion: 1,
-      activeGroupId: 'group-1',
-      activeTabId: 'terminal-tab::leaf-1',
-      activeTabType: 'terminal',
-      tabGroups: [
+    const runtime = runtimeWith(
+      sessionWith(
         {
-          id: 'group-1',
-          activeTabId: 'terminal-tab',
-          tabOrder: ['terminal-tab', 'agent-session:session-a', 'file-tab']
-        }
-      ],
-      tabs: [
-        terminalTab(),
-        {
-          type: 'agent-session',
-          id: 'agent-session:session-a',
-          title: 'Codex Chat',
-          sessionId: 'session-a',
-          agent: 'codex',
-          isActive: false
+          'group-1': [
+            { kind: 'terminal', id: 'terminal-tab' },
+            { kind: 'editor', id: 'README.md' }
+          ]
         },
-        {
-          type: 'file',
-          id: 'file-tab',
-          title: 'README.md',
-          filePath: 'README.md',
-          relativePath: 'README.md',
-          language: 'markdown',
-          isDirty: false,
-          isActive: false
-        }
-      ]
+        'group-1'
+      )
+    )
+    await runtime.publishStructuredAgentSessionTab({
+      workspaceId: WT,
+      sessionId: 'session-a',
+      agent: 'codex',
+      activate: false
+    })
+    const moveSessionTab = windowAttached(runtime)
+
+    await runtime.moveMobileSessionTab(`id:${WT}`, {
+      kind: 'reorder',
+      tabId: 'README.md',
+      targetGroupId: 'group-1',
+      tabOrder: ['README.md', 'terminal-tab']
     })
 
-    await runtime.moveMobileSessionTab('id:wt-1', {
+    expect(moveSessionTab).toHaveBeenCalledWith(WT, {
       kind: 'reorder',
-      tabId: 'file-tab',
+      tabId: 'README.md',
       targetGroupId: 'group-1',
-      tabOrder: ['file-tab', 'terminal-tab']
-    })
-
-    expect(moveSessionTab).toHaveBeenCalledWith('wt-1', {
-      kind: 'reorder',
-      tabId: 'file-tab',
-      targetGroupId: 'group-1',
-      tabOrder: ['file-tab', 'agent-session:session-a', 'terminal-tab']
+      tabOrder: ['README.md', 'terminal-tab', 'agent-session:session-a']
     })
   })
 
   it('validates reorder moves against sanitized visible tab groups', async () => {
-    const runtime = new OrcaRuntimeService()
-    const moveSessionTab = vi.fn()
-    runtime.setNotifier({ moveSessionTab } as never)
-    runtime.setAgentBrowserBridge({
-      tabList: vi.fn(() => ({
-        tabs: [
-          {
-            browserPageId: 'page-live',
-            title: 'Live Browser',
-            url: 'https://example.test/live'
-          }
-        ]
-      }))
-    } as never)
-    setMobileSessionSnapshot(runtime, {
-      worktree: 'wt-1',
-      publicationEpoch: 'epoch-1',
-      snapshotVersion: 1,
-      activeGroupId: 'group-1',
-      activeTabId: 'terminal-tab::leaf-1',
-      activeTabType: 'terminal',
-      tabGroups: [
+    const runtime = runtimeWith(
+      sessionWith(
         {
-          id: 'group-1',
-          activeTabId: 'terminal-tab',
-          tabOrder: ['terminal-tab', 'browser-stale', 'browser-live']
-        }
-      ],
-      tabs: [
-        terminalTab(),
-        browserTab({
-          id: 'browser-stale-tab',
-          workspaceId: 'browser-stale',
-          pageId: 'page-stale',
-          url: 'https://example.test/stale'
-        }),
-        browserTab({
-          id: 'browser-live-tab',
-          workspaceId: 'browser-live',
-          pageId: 'page-live',
-          url: 'https://example.test/live'
-        })
-      ]
-    })
+          'group-1': [
+            { kind: 'terminal', id: 'terminal-tab' },
+            { kind: 'browser', id: 'browser-stale', pageId: 'page-stale' },
+            { kind: 'browser', id: 'browser-live', pageId: 'page-live' }
+          ]
+        },
+        'group-1'
+      )
+    )
+    const moveSessionTab = windowAttached(runtime)
+    liveBrowserPages(runtime, ['page-live'])
 
     await expect(
-      runtime.moveMobileSessionTab('id:wt-1', {
+      runtime.moveMobileSessionTab(`id:${WT}`, {
         kind: 'reorder',
         tabId: 'browser-live',
         targetGroupId: 'group-1',
@@ -264,45 +231,29 @@ describe('session tab move validation', () => {
       })
     ).resolves.toEqual({ moved: true })
 
-    expect(moveSessionTab).toHaveBeenCalledWith('wt-1', {
+    expect(moveSessionTab).toHaveBeenCalledWith(WT, {
       kind: 'reorder',
-      tabId: 'browser-live-tab',
+      tabId: 'browser-live',
       targetGroupId: 'group-1',
-      tabOrder: ['browser-live-tab', 'terminal-tab']
+      tabOrder: ['browser-live', 'terminal-tab']
     })
   })
 
   it('rejects moves into groups hidden from the sanitized session model', async () => {
-    const runtime = new OrcaRuntimeService()
-    const moveSessionTab = vi.fn()
-    runtime.setNotifier({ moveSessionTab } as never)
-    runtime.setAgentBrowserBridge({
-      tabList: vi.fn(() => ({ tabs: [] }))
-    } as never)
-    setMobileSessionSnapshot(runtime, {
-      worktree: 'wt-1',
-      publicationEpoch: 'epoch-1',
-      snapshotVersion: 1,
-      activeGroupId: 'group-visible',
-      activeTabId: 'terminal-tab::leaf-1',
-      activeTabType: 'terminal',
-      tabGroups: [
-        { id: 'group-visible', activeTabId: 'terminal-tab', tabOrder: ['terminal-tab'] },
-        { id: 'group-hidden', activeTabId: 'browser-stale', tabOrder: ['browser-stale'] }
-      ],
-      tabs: [
-        terminalTab(),
-        browserTab({
-          id: 'browser-stale-tab',
-          workspaceId: 'browser-stale',
-          pageId: 'page-stale',
-          url: 'https://example.test/stale'
-        })
-      ]
-    })
+    const runtime = runtimeWith(
+      sessionWith(
+        {
+          'group-visible': [{ kind: 'terminal', id: 'terminal-tab' }],
+          'group-hidden': [{ kind: 'browser', id: 'browser-stale', pageId: 'page-stale' }]
+        },
+        'group-visible'
+      )
+    )
+    const moveSessionTab = windowAttached(runtime)
+    liveBrowserPages(runtime, [])
 
     await expect(
-      runtime.moveMobileSessionTab('id:wt-1', {
+      runtime.moveMobileSessionTab(`id:${WT}`, {
         kind: 'split',
         tabId: 'terminal-tab',
         targetGroupId: 'group-hidden',
@@ -313,38 +264,20 @@ describe('session tab move validation', () => {
   })
 
   it('rejects reorder moves when the moved tab is absent from the target order', async () => {
-    const runtime = new OrcaRuntimeService()
-    const moveSessionTab = vi.fn()
-    runtime.setNotifier({ moveSessionTab } as never)
-    runtime.setAgentBrowserBridge({
-      tabList: vi.fn(() => ({
-        tabs: [{ browserPageId: 'page-live', title: 'Live Browser', url: 'https://example.test' }]
-      }))
-    } as never)
-    setMobileSessionSnapshot(runtime, {
-      worktree: 'wt-1',
-      publicationEpoch: 'epoch-1',
-      snapshotVersion: 1,
-      activeGroupId: 'group-1',
-      activeTabId: 'terminal-tab::leaf-1',
-      activeTabType: 'terminal',
-      tabGroups: [
-        { id: 'group-1', activeTabId: 'terminal-tab', tabOrder: ['terminal-tab'] },
-        { id: 'group-2', activeTabId: 'browser-live', tabOrder: ['browser-live'] }
-      ],
-      tabs: [
-        terminalTab(),
-        browserTab({
-          id: 'browser-live-tab',
-          workspaceId: 'browser-live',
-          pageId: 'page-live',
-          url: 'https://example.test'
-        })
-      ]
-    })
+    const runtime = runtimeWith(
+      sessionWith(
+        {
+          'group-1': [{ kind: 'terminal', id: 'terminal-tab' }],
+          'group-2': [{ kind: 'browser', id: 'browser-live', pageId: 'page-live' }]
+        },
+        'group-1'
+      )
+    )
+    const moveSessionTab = windowAttached(runtime)
+    liveBrowserPages(runtime, ['page-live'])
 
     await expect(
-      runtime.moveMobileSessionTab('id:wt-1', {
+      runtime.moveMobileSessionTab(`id:${WT}`, {
         kind: 'reorder',
         tabId: 'browser-live',
         targetGroupId: 'group-1',

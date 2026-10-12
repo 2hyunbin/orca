@@ -24,6 +24,8 @@ import { setStructuredAgentSessionHost } from '../../../native-chat/agent-sessio
 import type { AgentSessionRecordStore } from '../../agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../agent-session-record-store-test-harness'
 import { OrcaRuntimeService } from '../../orca-runtime'
+import { getDefaultWorkspaceSession } from '../../../../shared/constants'
+import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcDispatchStreamingOptions } from '../dispatcher-stream-options'
 import { SESSION_TAB_METHODS } from './session-tabs'
@@ -186,7 +188,18 @@ beforeEach(async () => {
   acquireFails = false
   closeSession = vi.fn(async () => true)
   directory = await mkdtemp(join(tmpdir(), 'orca-chat-tab-table-'))
-  runtime = new OrcaRuntimeService()
+  // The phone list projects the layout holder, which needs a Store and the workspace in its catalog.
+  let session = getDefaultWorkspaceSession()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these catalog and session members here.
+  runtime = new OrcaRuntimeService({
+    getRepo: () => undefined,
+    getRepos: () => [],
+    getAllWorktreeMetaForHost: () => ({ [HOST_TEST_LOCATION.workspaceId]: {} }),
+    getWorkspaceSession: () => session,
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      session = next
+    }
+  } as never)
   vi.spyOn(runtime, 'getClientSettings').mockReturnValue(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the structured-chat policy reads only this one setting on these paths.
     { experimentalNativeChat: true } as ReturnType<OrcaRuntimeService['getClientSettings']>

@@ -110,8 +110,7 @@ function syncSplit(runtime: OrcaRuntimeService, snapshot = makeSplitSnapshot()):
         paneRuntimeId: 2,
         ptyId: 'pty-right'
       }
-    ],
-    mobileSessionTabs: [snapshot]
+    ]
   })
 }
 
@@ -213,10 +212,25 @@ describe('OrcaRuntimeService terminal surface retirement', () => {
   })
 
   it('retires the exact split leaf and rejects a stale renderer resurrection', async () => {
-    const runtime = new OrcaRuntimeService()
+    const shownSplit = (): WorkspaceSessionState => ({
+      ...makePersistedSplitSession(),
+      activeTabIdByWorktree: { [WORKTREE_ID]: 'tab' }
+    })
+    let session = shownSplit()
+    // The Store fences a stale window save against the host's retirements, as the real one does.
+    const runtime = new OrcaRuntimeService(
+      runtimeStore(
+        withDurableRuntimeStore({
+          getWorkspaceSession: () => session,
+          setWorkspaceSession: (incoming: WorkspaceSessionState) => {
+            session = sanitizeWorkspaceSessionTerminalRetirements(incoming, session)
+          },
+          flushOrThrow: vi.fn()
+        })
+      )
+    )
     runtime.attachWindow(1)
-    const staleSnapshot = makeSplitSnapshot()
-    syncSplit(runtime, staleSnapshot)
+    syncSplit(runtime)
     const leftBeforeExit = (await runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)).tabs.find(
       (tab) => tab.type === 'terminal' && tab.id === 'tab::left'
     )
@@ -224,6 +238,7 @@ describe('OrcaRuntimeService terminal surface retirement', () => {
       leftBeforeExit?.type === 'terminal' && leftBeforeExit.status === 'ready'
         ? leftBeforeExit.terminal
         : null
+    expect(leftHandle).toMatch(/^term_/)
 
     await runtime.onPtyExit('pty-left', 0)
 
@@ -253,132 +268,12 @@ describe('OrcaRuntimeService terminal surface retirement', () => {
       ]
     })
 
-    syncSplit(runtime, { ...staleSnapshot, snapshotVersion: 2 })
+    // A window that has not seen the exit yet saves the split again.
+    runtime['store']!.setWorkspaceSession!(shownSplit())
+    syncSplit(runtime)
 
     const afterStaleFrame = await runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
     expect(afterStaleFrame.tabs.map((tab) => tab.id)).toEqual(['tab::right'])
-  })
-
-  it('rejects one stale shared-PTY surface without removing its live sibling', () => {
-    const session = makePersistedSplitSession()
-    session.tabsByWorktree[WORKTREE_ID]![0]!.ptyId = 'pty-shared'
-    session.terminalLayoutsByTabId.tab = {
-      root: { type: 'leaf', leafId: 'right' },
-      activeLeafId: 'right',
-      expandedLeafId: null,
-      ptyIdsByLeafId: { right: 'pty-shared' }
-    }
-    session.terminalPtyIncarnationsByPaneKey = { 'tab:right': 'incarnation-current' }
-    session.terminalTopologyRevisionByRepoId = { [REPO_ID]: 1 }
-    const runtime = new OrcaRuntimeService(runtimeStore({ getWorkspaceSession: () => session }))
-    runtime.attachWindow(1)
-    runtime.registerPty('pty-shared', WORKTREE_ID, null, {
-      tabId: 'tab',
-      leafId: 'right',
-      incarnationId: 'incarnation-current'
-    })
-    const snapshot = makeSplitSnapshot()
-    const incoming = {
-      ...snapshot,
-      tabs: snapshot.tabs.map((tab) =>
-        tab.type === 'terminal'
-          ? {
-              ...tab,
-              ptyId: 'pty-shared',
-              parentLayout: tab.parentLayout
-                ? {
-                    ...tab.parentLayout,
-                    ptyIdsByLeafId: { left: 'pty-shared', right: 'pty-shared' }
-                  }
-                : undefined
-            }
-          : tab
-      )
-    }
-    type IncomingTerminalTab = Extract<(typeof incoming.tabs)[number], { type: 'terminal' }>
-    const rightTab = incoming.tabs.find(
-      (tab): tab is IncomingTerminalTab => tab.type === 'terminal' && tab.leafId === 'right'
-    )!
-    const hostSnapshot: RuntimeMobileSessionTabsSnapshot = {
-      ...incoming,
-      activeTabId: rightTab.id,
-      tabs: [
-        {
-          ...rightTab,
-          parentLayout: {
-            root: { type: 'leaf', leafId: 'right' },
-            activeLeafId: 'right',
-            expandedLeafId: null,
-            ptyIdsByLeafId: { right: 'pty-shared' }
-          }
-        }
-      ]
-    }
-
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'tab',
-          worktreeId: WORKTREE_ID,
-          title: 'Terminal',
-          activeLeafId: 'right',
-          layout: { type: 'leaf', leafId: 'right' }
-        }
-      ],
-      leaves: [
-        {
-          tabId: 'tab',
-          worktreeId: WORKTREE_ID,
-          leafId: 'right',
-          paneRuntimeId: 2,
-          ptyId: 'pty-shared'
-        }
-      ],
-      mobileSessionTabs: [hostSnapshot]
-    })
-    ;(
-      runtime as unknown as {
-        mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-      }
-    ).mobileSessionTabsByWorktree.set(WORKTREE_ID, hostSnapshot)
-
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'tab',
-          worktreeId: WORKTREE_ID,
-          title: 'Terminal',
-          activeLeafId: 'right',
-          layout: incoming.tabs[0]?.type === 'terminal' ? incoming.tabs[0].parentLayout!.root : null
-        }
-      ],
-      leaves: [
-        {
-          tabId: 'tab',
-          worktreeId: WORKTREE_ID,
-          leafId: 'left',
-          paneRuntimeId: 1,
-          ptyId: 'pty-shared'
-        },
-        {
-          tabId: 'tab',
-          worktreeId: WORKTREE_ID,
-          leafId: 'right',
-          paneRuntimeId: 2,
-          ptyId: 'pty-shared'
-        }
-      ],
-      mobileSessionTabs: [incoming]
-    })
-
-    const internalSnapshot = (
-      runtime as unknown as {
-        mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-      }
-    ).mobileSessionTabsByWorktree.get(WORKTREE_ID)
-    expect(internalSnapshot?.tabs).toEqual([
-      expect.objectContaining({ id: 'tab::right', ptyId: 'pty-shared' })
-    ])
   })
 
   it('honors a legacy persisted tombstone before its first migration write', async () => {
@@ -402,7 +297,9 @@ describe('OrcaRuntimeService terminal surface retirement', () => {
         }
       }
     })
-    const runtime = new OrcaRuntimeService(runtimeStore({ getWorkspaceSession: () => session }))
+    const runtime = new OrcaRuntimeService(
+      runtimeStore({ getWorkspaceSession: () => session, setWorkspaceSession: vi.fn() })
+    )
     runtime.attachWindow(1)
     runtime.registerPty('pty-right', WORKTREE_ID, null, {
       tabId: 'tab',
@@ -464,7 +361,7 @@ describe('OrcaRuntimeService terminal surface retirement', () => {
 
   it('retires a permanently exited surface despite a stale sleeping record', async () => {
     const session = {
-      ...getDefaultWorkspaceSession(),
+      ...makePersistedSplitSession(),
       sleepingAgentSessionsByPaneKey: { 'tab:left': {} as never }
     }
     const runtime = new OrcaRuntimeService(

@@ -95,11 +95,17 @@ export class RuntimeWorkspaceLayoutWriter {
   private readonly saved = new Map<ExecutionHostId, WorkspaceSessionState>()
   private writing = false
   private failureLogged = false
+  private durableWrite: Promise<void> = Promise.resolve()
 
   constructor(private readonly store: () => HolderStore | null) {}
 
   isWriting(): boolean {
     return this.writing
+  }
+
+  /** Settles once the last durable write reached disk or was reported as failed. */
+  whenDurable(): Promise<void> {
+    return this.durableWrite
   }
 
   savedSession(hostId: ExecutionHostId): WorkspaceSessionState | undefined {
@@ -131,10 +137,13 @@ export class RuntimeWorkspaceLayoutWriter {
     } finally {
       this.writing = false
     }
-    if (durable) {
-      store
-        .runDurableMutation?.(() => ({ value: undefined, persist: 'if-dirty' }))
-        .catch((error: unknown) => this.logFailure(error))
+    if (durable && store.runDurableMutation) {
+      this.durableWrite = store
+        .runDurableMutation(() => ({ value: undefined, persist: 'if-dirty' }))
+        .then(
+          () => undefined,
+          (error: unknown) => this.logFailure(error)
+        )
     }
   }
 

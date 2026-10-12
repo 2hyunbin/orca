@@ -92,18 +92,21 @@ describe('publishCreatedBrowserSessionTab', () => {
   it('pins the bookkeeping each placement owns', () => {
     expect(BROWSER_TAB_CREATE_PUBLICATION_RULES).toEqual({
       client: {
+        addsLayoutTab: true,
         activatesBridgeTab: false,
         marksSessionTabFocus: true,
         notifiesSessionTabsChanged: true,
         hostRowSource: 'session-notify'
       },
       offscreen: {
+        addsLayoutTab: true,
         activatesBridgeTab: true,
         marksSessionTabFocus: true,
         notifiesSessionTabsChanged: false,
         hostRowSource: 'none'
       },
       renderer: {
+        addsLayoutTab: false,
         activatesBridgeTab: true,
         marksSessionTabFocus: false,
         notifiesSessionTabsChanged: false,
@@ -211,6 +214,31 @@ describe('publishCreatedBrowserSessionTab', () => {
         expect(notifyHeadlessBrowserSessionTabsChanged).toHaveBeenCalledWith('wt-1')
       } else {
         expect(notifyHeadlessBrowserSessionTabsChanged).not.toHaveBeenCalled()
+      }
+    }
+  )
+
+  it.each(BROWSER_TAB_CREATE_PLACEMENT_KINDS)(
+    'adds a %s create to the runtime layout only when no window owns its tab',
+    (placementKind) => {
+      const addHeadlessBrowserLayoutTab = vi.fn()
+      const { host } = createPublicationHost()
+
+      publishCreatedBrowserSessionTab(
+        { ...host, addHeadlessBrowserLayoutTab },
+        {
+          placementKind,
+          browserPageId: 'page-1',
+          worktreeId: 'wt-1',
+          focus: resolveBrowserTabCreateFocus({ activate: true }),
+          targetGroupId: 'group-right'
+        }
+      )
+
+      if (BROWSER_TAB_CREATE_PUBLICATION_RULES[placementKind].addsLayoutTab) {
+        expect(addHeadlessBrowserLayoutTab).toHaveBeenCalledWith('wt-1', 'page-1', 'group-right')
+      } else {
+        expect(addHeadlessBrowserLayoutTab).not.toHaveBeenCalled()
       }
     }
   )

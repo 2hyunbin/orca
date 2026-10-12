@@ -160,7 +160,11 @@ describe('OrcaRuntimeService', () => {
     }
     runtimeStore.getRepos = () => [remoteRepo]
     runtimeStore.getRepo = (id: string) => (id === remoteRepo.id ? remoteRepo : undefined)
-    const runtime = new OrcaRuntimeService(runtimeStore as never)
+    // The Store lists every host partition it holds; the holder loads them at construction.
+    const runtime = new OrcaRuntimeService({
+      ...runtimeStore,
+      getWorkspaceSessionHostIds: () => ['local', 'ssh:ssh-target']
+    })
     const listProcesses = vi.fn(async () => [
       {
         id: remotePtyId,

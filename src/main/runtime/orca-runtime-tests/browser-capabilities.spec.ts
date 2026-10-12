@@ -6,7 +6,6 @@ import {
   electronMocks,
   getBrowserHostLeaseRegistry,
   getRuntimeBrowserPageRegistry,
-  headlessBrowserTabsUnchanged,
   setRuntimeBrowserCommandsFactory,
   setRuntimeBrowserUnavailableCause,
   setRuntimeTerminalUnavailableCause
@@ -17,6 +16,7 @@ import {
   TEST_WINDOW_ID,
   TEST_WORKTREE_ID,
   createRuntime,
+  makeWorkspaceSessionWithHeadlessTerminal,
   store
 } from '../orca-runtime-test-fixtures.spec'
 import {
@@ -219,16 +219,6 @@ describe('OrcaRuntimeService', () => {
 
   it('publishes a runtime-owned client page through the session-tab listener', () => {
     const runtime = createRuntime()
-    runtime['mobileSessionTabsByWorktree'].set(TEST_WORKTREE_ID, {
-      worktree: TEST_WORKTREE_ID,
-      publicationEpoch: 'renderer:1',
-      snapshotVersion: 1,
-      activeGroupId: 'group-1',
-      activeTabId: null,
-      activeTabType: null,
-      tabGroups: [{ id: 'group-1', activeTabId: null, tabOrder: [] }],
-      tabs: []
-    })
     const snapshots: RuntimeMobileSessionTabsResult[] = []
     const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => snapshots.push(snapshot))
     getRuntimeBrowserPageRegistry(runtime).publishClientPage({
@@ -246,6 +236,9 @@ describe('OrcaRuntimeService', () => {
       loading: true,
       active: true
     })
+    // What a client page's create adds (publishCreatedBrowserSessionTab) to a cataloged worktree.
+    runtime.addCatalogWorkspaces([TEST_WORKTREE_ID])
+    runtime.addHeadlessBrowserLayoutTab(TEST_WORKTREE_ID, 'page-client')
 
     runtime.notifyMobileSessionTabsChanged(TEST_WORKTREE_ID)
 
@@ -274,21 +267,7 @@ describe('OrcaRuntimeService', () => {
       pageHostGeneration: 9
     }
     runtime.attachWindow(1)
-    const rendererSnapshot = (snapshotVersion: number) => ({
-      worktree: TEST_WORKTREE_ID,
-      publicationEpoch: 'renderer:client-page-preservation',
-      snapshotVersion,
-      activeGroupId: 'group-1',
-      activeTabId: null,
-      activeTabType: null,
-      tabGroups: [{ id: 'group-1', activeTabId: null, tabOrder: [] }],
-      tabs: []
-    })
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [rendererSnapshot(1)]
-    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
     pages.publishClientPage({
       browserPageId: 'page-client',
       workspaceId: TEST_WORKTREE_ID,
@@ -299,97 +278,20 @@ describe('OrcaRuntimeService', () => {
       loading: false,
       active: true
     })
+    // What a client page's create adds (publishCreatedBrowserSessionTab) to a cataloged worktree.
+    runtime.addCatalogWorkspaces([TEST_WORKTREE_ID])
+    runtime.addHeadlessBrowserLayoutTab(TEST_WORKTREE_ID, 'page-client')
     runtime.notifyMobileSessionTabsChanged(TEST_WORKTREE_ID)
 
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [rendererSnapshot(2)]
-    })
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [rendererSnapshot(3)]
-    })
-
+    // A window graph update that knows nothing of the client page keeps it.
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
     expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([
       expect.objectContaining({ browserPageId: 'page-client', placement })
     ])
 
     expect(pages.retirePage('page-client', placement)).toBe(true)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [rendererSnapshot(3)]
-    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
     expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([])
-
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: [],
-      mobileSessionTabs: [rendererSnapshot(4)]
-    })
-    expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([])
-  })
-
-  it('detects headless browser-tab changes by field, treating absent and null loadError alike', () => {
-    const base = {
-      type: 'browser' as const,
-      id: 'page-1',
-      title: 'Local',
-      browserWorkspaceId: 'page-1',
-      browserPageId: 'page-1',
-      url: 'https://localhost:3443/',
-      loading: false,
-      canGoBack: false,
-      canGoForward: false,
-      isActive: true
-    }
-    const err = {
-      code: -202,
-      description: 'ERR_CERT_AUTHORITY_INVALID',
-      validatedUrl: 'https://localhost:3443/'
-    }
-    const certificateFailure = {
-      challengeId: 'challenge-1',
-      browserPageId: 'page-1',
-      errorCode: -202,
-      error: 'ERR_CERT_AUTHORITY_INVALID',
-      origin: 'https://localhost:3443',
-      displayHost: 'localhost:3443',
-      canProceed: true,
-      observedAt: 123
-    }
-    const unchanged = (a: unknown[], b: unknown[]): boolean =>
-      headlessBrowserTabsUnchanged(a as never, b as never)
-
-    // Absent vs explicit null loadError are equivalent (the JSON.stringify trap).
-    expect(unchanged([{ ...base }], [{ ...base, loadError: null }])).toBe(true)
-    expect(unchanged([{ ...base, loadError: err }], [{ ...base, loadError: { ...err } }])).toBe(
-      true
-    )
-    // A load-error-only change (identical ids/order) must not be missed.
-    expect(unchanged([{ ...base }], [{ ...base, loadError: err }])).toBe(false)
-    expect(
-      unchanged([{ ...base, loadError: err }], [{ ...base, loadError: { ...err, code: -200 } }])
-    ).toBe(false)
-    expect(
-      unchanged(
-        [{ ...base, certificateFailure }],
-        [{ ...base, certificateFailure: { ...certificateFailure } }]
-      )
-    ).toBe(true)
-    expect(unchanged([{ ...base }], [{ ...base, certificateFailure }])).toBe(false)
-    expect(
-      unchanged(
-        [{ ...base, certificateFailure }],
-        [{ ...base, certificateFailure: { ...certificateFailure, challengeId: 'challenge-2' } }]
-      )
-    ).toBe(false)
-    // Scalar and length changes are detected.
-    expect(unchanged([{ ...base }], [{ ...base, title: 'Changed' }])).toBe(false)
-    expect(unchanged([{ ...base }], [{ ...base, isActive: false }])).toBe(false)
-    expect(unchanged([{ ...base }], [{ ...base }, { ...base, id: 'page-2' }])).toBe(false)
   })
 
   it('does not advertise headless browser capability when a renderer window exists', () => {
@@ -663,7 +565,8 @@ describe('OrcaRuntimeService', () => {
     )
   })
 
-  it('preserves bare-id runtime state when removing a different qualified owner', () => {
+  it('preserves bare-id runtime state when removing a different qualified owner', async () => {
+    store.setWorkspaceSession(makeWorkspaceSessionWithHeadlessTerminal())
     const removeWorktreeMeta = vi.fn()
     const runtimeStore = {
       ...store,
@@ -671,28 +574,16 @@ describe('OrcaRuntimeService', () => {
       removeWorktreeMeta
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
-    const internals = runtime as unknown as {
-      mobileSessionTabsByWorktree: Map<string, unknown>
-      removeWorktreeMetadataAndHistory: (
-        runtimeStore: typeof store,
-        worktreeId: string,
-        hostId: string
-      ) => void
-    }
-    const localSession = { tabs: [{ id: 'local-tab' }] }
-    internals.mobileSessionTabsByWorktree.set(TEST_WORKTREE_ID, localSession)
+    const emitted = recordSessionTabEmissions(runtime)
 
-    internals.removeWorktreeMetadataAndHistory(
-      runtimeStore as typeof store,
-      TEST_WORKTREE_ID,
-      'runtime:env-b'
-    )
+    runtime['removeWorktreeMetadataAndHistory'](runtimeStore, TEST_WORKTREE_ID, 'runtime:env-b')
 
     expect(removeWorktreeMeta).toHaveBeenCalledWith(TEST_WORKTREE_ID, 'runtime:env-b')
-    expect(internals.mobileSessionTabsByWorktree.get(TEST_WORKTREE_ID)).toBe(localSession)
+    await expectLocalTabSurvives(runtime, emitted)
   })
 
-  it('preserves bare-id runtime state when removed-host metadata masks another owner', () => {
+  it('preserves bare-id runtime state when removed-host metadata masks another owner', async () => {
+    store.setWorkspaceSession(makeWorkspaceSessionWithHeadlessTerminal())
     const localRepo = store.getRepo(TEST_REPO_ID)!
     const remoteRepo = { ...localRepo, connectionId: 'ssh-1' }
     const removeWorktreeMeta = vi.fn()
@@ -703,26 +594,30 @@ describe('OrcaRuntimeService', () => {
       removeWorktreeMeta
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
-    const internals = runtime as unknown as {
-      mobileSessionTabsByWorktree: Map<string, unknown>
-      removeWorktreeMetadataAndHistory: (
-        runtimeStore: typeof store,
-        worktreeId: string,
-        hostId: string
-      ) => void
-    }
-    const survivingSession = { tabs: [{ id: 'same-id-local-tab' }] }
-    internals.mobileSessionTabsByWorktree.set(TEST_WORKTREE_ID, survivingSession)
+    const emitted = recordSessionTabEmissions(runtime)
     deleteWorktreeHistoryDirMock.mockClear()
 
-    internals.removeWorktreeMetadataAndHistory(
-      runtimeStore as typeof store,
-      TEST_WORKTREE_ID,
-      'ssh:ssh-1'
-    )
+    runtime['removeWorktreeMetadataAndHistory'](runtimeStore, TEST_WORKTREE_ID, 'ssh:ssh-1')
 
     expect(removeWorktreeMeta).toHaveBeenCalledWith(TEST_WORKTREE_ID, 'ssh:ssh-1')
-    expect(internals.mobileSessionTabsByWorktree.get(TEST_WORKTREE_ID)).toBe(survivingSession)
+    await expectLocalTabSurvives(runtime, emitted)
     expect(deleteWorktreeHistoryDirMock).not.toHaveBeenCalled()
   })
 })
+
+function recordSessionTabEmissions(runtime: OrcaRuntimeService): RuntimeMobileSessionTabsResult[] {
+  const emitted: RuntimeMobileSessionTabsResult[] = []
+  runtime.onMobileSessionTabsChanged((snapshot) => emitted.push(snapshot))
+  return emitted
+}
+
+// The surviving same-id owner's phone list is neither announced removed nor emptied.
+async function expectLocalTabSurvives(
+  runtime: OrcaRuntimeService,
+  emitted: RuntimeMobileSessionTabsResult[]
+): Promise<void> {
+  expect(emitted.some((snapshot) => 'removed' in snapshot && snapshot.removed)).toBe(false)
+  expect((await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs).toEqual([
+    expect.objectContaining({ type: 'terminal', parentTabId: 'host-tab' })
+  ])
+}

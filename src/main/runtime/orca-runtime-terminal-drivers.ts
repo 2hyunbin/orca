@@ -48,6 +48,8 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
       getAvailableAuthoritativeWindow: () => this.getAvailableAuthoritativeWindow(),
       getOffscreenBrowserBackend: () => this.offscreenBrowserBackend,
       markHeadlessBrowserSessionTabActive: this.markHeadlessBrowserSessionTabActive.bind(this),
+      addHeadlessBrowserLayoutTab: (worktreeId, browserPageId, groupId) =>
+        this.addHeadlessBrowserLayoutTab(worktreeId, browserPageId, groupId),
       notifyHeadlessBrowserSessionTabsChanged: (worktreeId) =>
         this.notifyMobileSessionTabsChanged(worktreeId),
       retireRuntimeOwnedBrowserSessionTab: (worktreeId, browserPageId) =>

@@ -20,24 +20,3 @@ export function titleStructuredConversationTabs(
   })
   return changed ? { ...snapshot, tabs } : snapshot
 }
-
-/** A changed title must cross the renderer's snapshot-version fence. */
-export function retitleStructuredConversationTab(
-  snapshot: RuntimeMobileSessionTabsSnapshot,
-  sessionId: string,
-  name: string | null | undefined
-): RuntimeMobileSessionTabsSnapshot | null {
-  let changed = false
-  const tabs = snapshot.tabs.map((tab) => {
-    if (tab.type !== 'agent-session' || tab.sessionId !== sessionId) {
-      return tab
-    }
-    const title = name ?? defaultAgentChatLabel(tab.agent)
-    if (tab.title === title) {
-      return tab
-    }
-    changed = true
-    return { ...tab, title }
-  })
-  return changed ? { ...snapshot, tabs, snapshotVersion: snapshot.snapshotVersion + 1 } : null
-}

@@ -390,7 +390,24 @@ function createStaleRuntimeWorktreeStore(
   return { runtimeStore, removeWorktreeMeta }
 }
 
+// Every production runtime has a Store, so the layout holder has a partition to load; each case
+// starts from the default session.
+const baseWorkspaceSessions = new Map<string, WorkspaceSessionState>()
+function resetBaseWorkspaceSessions(): void {
+  baseWorkspaceSessions.clear()
+}
+
 const store = {
+  getWorkspaceSession: (hostId?: string): WorkspaceSessionState => {
+    const key = hostId ?? 'local'
+    if (!baseWorkspaceSessions.has(key)) {
+      baseWorkspaceSessions.set(key, getDefaultWorkspaceSession())
+    }
+    return baseWorkspaceSessions.get(key)!
+  },
+  setWorkspaceSession: (session: WorkspaceSessionState, hostId?: string): void => {
+    baseWorkspaceSessions.set(hostId ?? 'local', session)
+  },
   getRepo: (id: string) => store.getRepos().find((repo) => repo.id === id),
   getRepos: () => [
     {
@@ -585,7 +602,12 @@ function makeRuntimeStoreWithWorkspaceSession(
       ...store,
       getWorkspaceSession: (hostId?: string) =>
         hostId === undefined || hostId === ownerHostId ? session : getDefaultWorkspaceSession(),
-      setWorkspaceSession: vi.fn(setSession),
+      // Another partition's save (the holder saves each one it holds) leaves this one alone.
+      setWorkspaceSession: vi.fn<Store['setWorkspaceSession']>((next, hostId) => {
+        if (hostId == null || hostId === ownerHostId) {
+          setSession(next)
+        }
+      }),
       // Headless close is a durable transaction; keep the in-memory fixture's
       // persistence contract equivalent to the production store.
       flushOrThrow: vi.fn(),
@@ -682,7 +704,7 @@ export { antigravityPromptBeforeModelReadyScreen, antigravityReadyScreen, bindSi
 export { createExplicitAgentStatusHarness, createFolderWorkspaceRuntimeStore, createRuntime }
 export { createRuntimeWithSshLease, createStaleRuntimeWorktreeStore, cursorBusyScreen }
 export { cursorReadyScreen, deferred, expectStablePaneKeyEnv, isOriginMainBaseRefProbe }
-export { isLocalBranchCatalogQuery }
+export { isLocalBranchCatalogQuery, resetBaseWorkspaceSessions }
 export { makeDeferred, makeFolderProjectGroup, makeFolderWorkspace, makeHeadlessTerminalLayout }
 export { makeRpcRequest, makeRuntimeStoreWithWorkspaceSession, makeStatusFrame }
 export { makeWorkspaceSessionWithHeadlessTerminal, makeWorktreeInfo, makeWorktreeMeta }

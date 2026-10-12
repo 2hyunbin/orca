@@ -39,6 +39,10 @@ export class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitForLeafPtyI
       if (!pty.pty.connected) {
         throw new Error('terminal_exited')
       }
+      if (navigateHost && !this.getAvailableAuthoritativeWindow()) {
+        // No window to reveal it: the desktop view, which paired clients follow, shows it.
+        this.focusHeldTerminalInDesktopView(pty.pty)
+      }
       if (!navigateHost || !this.notifier?.revealTerminalSession) {
         return {
           handle,
@@ -177,5 +181,19 @@ export class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitForLeafPtyI
       }
     }
     return [...ptyIds]
+  }
+
+  protected focusHeldTerminalInDesktopView(pty: {
+    worktreeId: string
+    tabId: string | null
+    paneKey: string | null
+  }): void {
+    const leafId = parsePaneKey(pty.paneKey ?? '')?.leafId
+    const tab = this.heldWorkspaceLayout(pty.worktreeId)?.tabs.find(
+      (candidate) => candidate.kind === 'terminal' && candidate.entityId === pty.tabId
+    )
+    if (tab) {
+      this.focusInDesktopView(pty.worktreeId, { tabId: tab.id, ...(leafId ? { leafId } : {}) })
+    }
   }
 }

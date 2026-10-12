@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { RuntimeTerminalOrphanAdoptionRequest } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { collectPersistedTerminalLeafIds } from './mobile-session-layout-projection'
+import { collectPersistedTerminalLeafIds } from './persisted-terminal-leaf-ids'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import { mergeTerminalOrphanGroupLayout } from './terminal-orphan-topology'
 import { canonicalizeTerminalSessionWorktreeId } from './workspace-session-worktree-id'

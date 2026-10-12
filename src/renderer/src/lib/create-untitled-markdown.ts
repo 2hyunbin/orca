@@ -5,7 +5,7 @@ import {
   runtimePathExists,
   writeRuntimeFile
 } from '../runtime/runtime-file-client'
-import { detectLanguage } from './language-detect'
+import { detectLanguage } from '../../../shared/language-detect'
 import {
   applyMarkdownTemplatePlaceholders,
   getMarkdownTemplateTitleForFileName,

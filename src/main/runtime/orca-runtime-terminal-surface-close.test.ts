@@ -7,6 +7,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { Store } from '../persistence/loading-store/store'
 import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
 import { OrcaRuntimeService } from './orca-runtime'
+import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
 import {
   LEAF_ID,
   PTY_ID,
@@ -64,11 +65,25 @@ function withPinnedTab(session: WorkspaceSessionState): WorkspaceSessionState {
 
 const directories: string[] = []
 afterEach(async () => {
+  setRuntimeDesktopSurface(null)
   await closeTestStores()
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+/** A desktop window is what main tells to drop a closed pane; a headless host closes it in the holder. */
+function showDesktopWindow(): void {
+  setRuntimeDesktopSurface({
+    showNotification: () => false,
+    findWindowById: () => {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane close path only checks window and WebContents destruction.
+      return { isDestroyed: () => false, webContents: { isDestroyed: () => false } } as never
+    },
+    onIpc: () => {},
+    removeIpcListener: () => {}
+  })
+}
 
 /** A real store whose repo already has host-authoritative membership, as any repo with an exit does. */
 function createPersistedRuntime(session: WorkspaceSessionState) {
@@ -181,6 +196,7 @@ describe('renderer close intents', () => {
 
 describe('CLI close of one pane in a split tab', () => {
   it('commits the pane removal without waiting for its process exit', async () => {
+    showDesktopWindow()
     const harness = createHarness()
     harness.syncSplitFixtureGraph()
     // A verified stop that never reports an exit: membership must not ride on one.
@@ -206,6 +222,7 @@ describe('CLI close of one pane in a split tab', () => {
   })
 
   it('commits the pane removal when the handle names a live PTY', async () => {
+    showDesktopWindow()
     const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
     harness.syncSplitFixtureGraph()
     // Graph without the leaf: the handle resolves through the PTY, as for a runtime-owned pane.
@@ -234,6 +251,7 @@ describe('CLI close of one pane in a split tab', () => {
   ] as const)(
     'closes only that pane, never the live sibling, when its stop %s',
     async (_case, stopResult) => {
+      showDesktopWindow()
       const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
       harness.syncSplitFixtureGraph()
       harness.syncFixtureTabWithoutLeaf()
@@ -317,6 +335,7 @@ describe('CLI close of one pane in a split tab', () => {
 
 describe('mobile close of one pane in a split tab', () => {
   it('commits the pane removal alongside its kill', async () => {
+    showDesktopWindow()
     const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
     harness.syncSplitFixtureGraph()
 

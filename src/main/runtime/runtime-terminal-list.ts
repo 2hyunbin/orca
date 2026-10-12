@@ -37,7 +37,8 @@ type RuntimeTerminalListDependencies = {
     pty: RuntimePtyWorktreeRecord,
     worktrees: Map<string, ResolvedWorktree>
   ): RuntimeTerminalSummary
-  getSnapshots(): ReadonlyMap<string, RuntimeMobileSessionTabsSnapshot>
+  /** The phone list of one worktree, or of every worktree; each is built on read. */
+  getSnapshots(worktreeId?: string): Iterable<RuntimeMobileSessionTabsSnapshot>
   getTabTitle(tabId: string): string | null
   getTopologyRevision(worktreeId: string): number
   buildHostScope(
@@ -149,18 +150,13 @@ export class RuntimeTerminalList {
       ? terminals.filter((terminal) => requestedHandles.has(terminal.handle))
       : terminals
     const listed = matching.slice(0, limit)
-    const snapshots = this.deps.getSnapshots()
     const visualLayouts =
       opts.includeVisualLayouts === false
         ? []
         : buildRuntimeTerminalVisualLayouts({
             terminals: listed,
             worktreesById,
-            snapshots: targetId
-              ? [snapshots.get(targetId)].filter(
-                  (snapshot): snapshot is RuntimeMobileSessionTabsSnapshot => snapshot !== undefined
-                )
-              : snapshots.values(),
+            snapshots: this.deps.getSnapshots(targetId ?? undefined),
             getTabTitle: (tabId) => this.deps.getTabTitle(tabId)
           })
     return {

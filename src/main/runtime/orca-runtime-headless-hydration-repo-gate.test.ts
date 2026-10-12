@@ -30,8 +30,10 @@ function makeSession(worktreeId: string): WorkspaceSessionState {
 // pin the two ways that gate must not overreach.
 describe('headless mobile session hydration repo gate', () => {
   it('hydrates when the store cannot report repos at all', async () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this store deliberately omits getRepos; hydration reads only the session members.
     const runtime = new OrcaRuntimeService({
-      getWorkspaceSession: () => makeSession(WORKTREE_ID)
+      getWorkspaceSession: () => makeSession(WORKTREE_ID),
+      setWorkspaceSession: () => {}
     } as never)
 
     // No getRepos on the store: an unavailable inventory must not read as
@@ -41,8 +43,10 @@ describe('headless mobile session hydration repo gate', () => {
   })
 
   it('still skips a key whose repo is absent from a known inventory', async () => {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: hydration reads only the session members and repo list this stub defines.
     const runtime = new OrcaRuntimeService({
       getWorkspaceSession: () => makeSession('ghost-repo::/worktree'),
+      setWorkspaceSession: () => {},
       getRepos: () => [{ id: REPO_ID, path: '/repo', name: 'repo' }]
     } as never)
 
@@ -52,8 +56,10 @@ describe('headless mobile session hydration repo gate', () => {
 
   it('does not read the repo inventory for an unparseable worktree id', async () => {
     const getRepos = vi.fn(() => [{ id: REPO_ID, path: '/repo', name: 'repo' }])
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: hydration reads only the session members and repo lookups this stub defines.
     const runtime = new OrcaRuntimeService({
       getWorkspaceSession: () => makeSession(FLOATING_TERMINAL_WORKTREE_ID),
+      setWorkspaceSession: () => {},
       // A separator-less id is validated against getRepo (singular) first.
       getRepo: () => null,
       getRepos

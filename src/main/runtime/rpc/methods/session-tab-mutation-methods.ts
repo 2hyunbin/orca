@@ -57,25 +57,27 @@ export const SESSION_TAB_MUTATION_METHODS = [
         translated = translateProjectedSessionTabMove(raw, projected, params)
       }
       const base = { tabId: translated.tabId, targetGroupId: translated.targetGroupId }
+      // Q3: a paired client's move selects the moved tab in that client's view only.
+      const caller = pairedDeviceId ? { clientNavigationId: pairedDeviceId } : {}
       if (translated.kind === 'reorder') {
-        return runtime.moveMobileSessionTab(params.worktree, {
-          ...base,
-          kind: 'reorder',
-          tabOrder: translated.tabOrder
-        })
+        return runtime.moveMobileSessionTab(
+          params.worktree,
+          { ...base, kind: 'reorder', tabOrder: translated.tabOrder },
+          caller
+        )
       }
       if (translated.kind === 'split') {
-        return runtime.moveMobileSessionTab(params.worktree, {
-          ...base,
-          kind: 'split',
-          splitDirection: translated.splitDirection
-        })
+        return runtime.moveMobileSessionTab(
+          params.worktree,
+          { ...base, kind: 'split', splitDirection: translated.splitDirection },
+          caller
+        )
       }
-      return runtime.moveMobileSessionTab(params.worktree, {
-        ...base,
-        kind: 'move-to-group',
-        index: translated.index
-      })
+      return runtime.moveMobileSessionTab(
+        params.worktree,
+        { ...base, kind: 'move-to-group', index: translated.index },
+        caller
+      )
     }
   }),
   defineMethod({

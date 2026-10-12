@@ -33,6 +33,14 @@ function pairedRuntime() {
   return { runtime, spawn, caller }
 }
 
+/** The host shows `pane`: a background create records no shown tab of its own. */
+async function showOnHost(
+  runtime: InstanceType<typeof OrcaRuntimeService>,
+  pane: { tabId: string; leafId: string }
+): Promise<void> {
+  await runtime.activateMobileSessionTab(`id:${WT}`, pane.tabId, pane.leafId)
+}
+
 async function createPane(runtime: InstanceType<typeof OrcaRuntimeService>) {
   const created = await runtime.createTerminal(`id:${WT}`)
   const pane = parsePaneKey(created.paneKey ?? '')
@@ -46,6 +54,7 @@ it('selects a launched terminal for the caller only, without spawning again', as
   const { runtime, spawn, caller } = pairedRuntime()
   const first = await createPane(runtime)
   const launched = await createPane(runtime)
+  await showOnHost(runtime, first)
   expect((await runtime.listMobileSessionTabs(`id:${WT}`)).activeTabId).toBe(first.id)
 
   expect(runtime.selectCreatedMobileSessionTabForClient(WT, launched, 'device-caller')).toBe(true)
@@ -64,6 +73,7 @@ it('selects a launched terminal for the caller only, without spawning again', as
 it('selects a launched chat by its session for the caller only', async () => {
   const { runtime, caller } = pairedRuntime()
   const first = await createPane(runtime)
+  await showOnHost(runtime, first)
   await runtime.publishStructuredAgentSessionTab({
     workspaceId: WT,
     sessionId: 'sess-1',

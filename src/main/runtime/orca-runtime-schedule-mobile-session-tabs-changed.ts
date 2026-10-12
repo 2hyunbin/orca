@@ -1,27 +1,104 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab } from './orca-runtime-stored-mobile-snapshot-has-stale-preserved-tab'
+import { OrcaRuntimeWithWriteOrchestrationPointerPty } from './orca-runtime-write-orchestration-pointer-pty'
 import type {
   BrowserTabInfo,
   RuntimeMobileSessionClientTab,
   RuntimeMobileSessionMarkdownTab,
   RuntimeMobileSessionTabGroup,
-  RuntimeMobileSessionTabsResult
+  RuntimeMobileSessionTabsRemovedResult,
+  RuntimeMobileSessionTabsResult,
+  RuntimeMobileSessionTabsSnapshot
 } from '../../shared/runtime-types'
-import { UNPUBLISHED_WORKTREE_PUBLICATION_EPOCH } from '../../shared/runtime-types'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
+import { splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
+import type { ClientHostedBrowserRowsEvent } from '../../shared/client-hosted-browser-rows'
 
-export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab {
+export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntimeWithWriteOrchestrationPointerPty {
+  /** The phone list is a projection of the holder's model, built on read and never stored. */
+  protected readSessionTabsSnapshot(
+    worktreeId: string
+  ): RuntimeMobileSessionTabsSnapshot | undefined {
+    const snapshot = this.sessionTabsStream.snapshot(worktreeId)
+    if (!snapshot || this.isSavedUnderRemovedRepo(worktreeId)) {
+      return undefined
+    }
+    // Pages the runtime hosts or brokers carry their live placement and state.
+    const pages = new Map(
+      this.buildHeadlessMobileSessionBrowserTabs(worktreeId).map((page) => [
+        page.browserPageId,
+        page
+      ])
+    )
+    const tabs = snapshot.tabs.map((tab) => {
+      const page = tab.type === 'browser' && tab.browserPageId ? pages.get(tab.browserPageId) : null
+      if (!page) {
+        return tab
+      }
+      const { id: _id, isActive: _active, color: _color, isPinned: _pinned, ...live } = page
+      return { ...tab, ...live }
+    })
+    // A launch draft the runtime already resolved is not shown again.
+    return this.nativeChatDraftResolutions.applyFence({ ...snapshot, tabs })
+  }
+
+  /** Every worktree the holder publishes, empty or not. */
+  protected sessionTabsWorktreeIds(): string[] {
+    return this.sessionTabsStream.worktreeIds().filter((id) => !this.isSavedUnderRemovedRepo(id))
+  }
+
+  /**
+   * Session keys outlive a repo removed elsewhere (#9343); listing one shows a phantom workspace.
+   * Keys without a repo (floating terminals) never read the inventory, and a store that cannot
+   * report repos removes none.
+   */
+  private isSavedUnderRemovedRepo(worktreeId: string): boolean {
+    const repoId = splitWorktreeIdForFilesystem(worktreeId)?.repoId
+    const repos = repoId ? this.store?.getRepos?.() : undefined
+    return Array.isArray(repos) && !repos.some((repo) => repo.id === repoId)
+  }
+
+  protected sessionTabsSnapshots(): [string, RuntimeMobileSessionTabsSnapshot][] {
+    const snapshots: [string, RuntimeMobileSessionTabsSnapshot][] = []
+    for (const worktreeId of this.sessionTabsWorktreeIds()) {
+      const snapshot = this.readSessionTabsSnapshot(worktreeId)
+      if (snapshot) {
+        snapshots.push([worktreeId, snapshot])
+      }
+    }
+    return snapshots
+  }
+
   protected scheduleMobileSessionTabsChanged(worktreeId: string): void {
+    this.sessionTabsStream.bump(worktreeId)
     this.pendingMobileSessionTabsChangeSequenceByWorktree.set(
       worktreeId,
       ++this.mobileSessionTabsChangeSequence
     )
-    this.mobileSessionTabsNotifyCoalescer.schedule(worktreeId)
+    this.sessionTabsStream.coalescer.schedule(worktreeId)
   }
 
   protected cancelScheduledMobileSessionTabsChanged(worktreeId: string): void {
-    this.mobileSessionTabsNotifyCoalescer.cancel(worktreeId)
+    this.sessionTabsStream.coalescer.cancel(worktreeId)
     this.pendingMobileSessionTabsChangeSequenceByWorktree.delete(worktreeId)
+  }
+
+  /** The holder published or removed a worktree. Publishes include every pane title and status
+   *  change, so they share today's coalescer; mutations that must reach phones at once notify. */
+  protected sessionTabsLayoutChanged(worktreeId: string, removed: boolean): void {
+    // A wait for a surface re-checks on every layout publish, not only on window graph syncs.
+    for (const check of this.graphSyncCallbacks.slice()) {
+      check()
+    }
+    if (removed) {
+      this.cancelScheduledMobileSessionTabsChanged(worktreeId)
+      this.notifyMobileSessionTabsRemoved(worktreeId)
+      return
+    }
+    this.pendingMobileSessionTabsChangeSequenceByWorktree.set(
+      worktreeId,
+      ++this.mobileSessionTabsChangeSequence
+    )
+    this.sessionTabsStream.coalescer.schedule(worktreeId)
   }
 
   protected flushScheduledMobileSessionTabsChanged(worktreeId: string): void {
@@ -37,7 +114,7 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
     if (this.mobileSessionTabListeners.size === 0) {
       return
     }
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.readSessionTabsSnapshot(worktreeId)
     if (!snapshot) {
       return
     }
@@ -55,8 +132,9 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
     if (this.mobileSessionTabListeners.size === 0) {
       return
     }
-    for (const snapshot of this.mobileSessionTabsByWorktree.values()) {
-      const result = this.toMobileSessionTabsResult(snapshot)
+    for (const worktreeId of this.sessionTabsWorktreeIds()) {
+      this.sessionTabsStream.bump(worktreeId)
+      const result = this.toMobileSessionTabsResult(this.readSessionTabsSnapshot(worktreeId)!)
       const changeSequence = ++this.mobileSessionTabsChangeSequence
       for (const subscription of this.mobileSessionTabListeners) {
         subscription.listener(
@@ -71,67 +149,26 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
     worktreeId: string,
     clientNavigationId?: string
   ): RuntimeMobileSessionTabsResult {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
-    if (!snapshot) {
-      const publishedEpoch = this.getAuthoritativeSessionTabsInventoryEpoch()
-      if (publishedEpoch === null) {
-        this.notifyEmptyWorktreeOnPublication(worktreeId)
-      }
-      return this.projectMobileSessionTabsForClient(
-        this.emptyMobileSessionTabsResult(worktreeId, publishedEpoch),
-        clientNavigationId
-      )
-    }
+    const snapshot = this.readSessionTabsSnapshot(worktreeId)
     return this.projectMobileSessionTabsForClient(
-      this.toMobileSessionTabsResult(snapshot),
+      snapshot
+        ? this.toMobileSessionTabsResult(snapshot)
+        : this.emptyMobileSessionTabsResult(worktreeId),
       clientNavigationId
     )
   }
 
-  // Why: only an unpublished graph is "ask me later"; once it publishes, a worktree with no entry
-  // really has no tabs, and saying so lets a client open its first terminal.
-  protected emptyMobileSessionTabsResult(
-    worktreeId: string,
-    publishedEpoch: number | null
-  ): RuntimeMobileSessionTabsResult {
+  /** A worktree the holder does not publish has no tabs here. */
+  protected emptyMobileSessionTabsResult(worktreeId: string): RuntimeMobileSessionTabsResult {
     return {
       worktree: worktreeId,
-      publicationEpoch:
-        publishedEpoch === null
-          ? UNPUBLISHED_WORKTREE_PUBLICATION_EPOCH
-          : `empty:${publishedEpoch}`,
+      publicationEpoch: this.sessionTabsStream.publicationEpoch,
       snapshotVersion: 0,
       activeGroupId: null,
       activeTabId: null,
       activeTabType: null,
       tabs: []
     }
-  }
-
-  // Why: a publication only notifies worktrees it has entries for, so a client told "ask me later"
-  // about an empty worktree would otherwise never hear the answer.
-  protected notifyEmptyWorktreeOnPublication(worktreeId: string): void {
-    if (this.worktreesAwaitingSessionTabsPublication.has(worktreeId)) {
-      return
-    }
-    this.worktreesAwaitingSessionTabsPublication.add(worktreeId)
-    const onPublished = (): void => {
-      this.sessionTabsInventoryWaiters.delete(onPublished)
-      this.worktreesAwaitingSessionTabsPublication.delete(worktreeId)
-      const publishedEpoch = this.getAuthoritativeSessionTabsInventoryEpoch()
-      if (publishedEpoch === null || this.mobileSessionTabsByWorktree.has(worktreeId)) {
-        return
-      }
-      const result = this.emptyMobileSessionTabsResult(worktreeId, publishedEpoch)
-      const changeSequence = ++this.mobileSessionTabsChangeSequence
-      for (const subscription of this.mobileSessionTabListeners) {
-        subscription.listener(
-          this.projectMobileSessionTabsForClient(result, subscription.clientNavigationId),
-          changeSequence
-        )
-      }
-    }
-    this.sessionTabsInventoryWaiters.add(onPublished)
   }
 
   protected emitMobileSessionTabsSnapshotToClient(
@@ -157,7 +194,7 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
     const worktreeId =
       this.getValidatedExplicitWorktreeIdSelector(worktreeSelector) ??
       (await this.resolveWorktreeSelector(worktreeSelector)).id
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.readSessionTabsSnapshot(worktreeId)
     const tab = snapshot?.tabs.find(
       (candidate): candidate is RuntimeMobileSessionMarkdownTab =>
         candidate.type === 'markdown' && candidate.id === tabId
@@ -230,5 +267,56 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
       })
       .filter((group): group is RuntimeMobileSessionTabGroup => group !== null)
     return sanitized.length > 0 ? sanitized : undefined
+  }
+
+  /** Serves a hydrating host renderer; the publisher counts this as a delivery, not a read. */
+  listClientHostedBrowserRows(): ClientHostedBrowserRowsEvent[] {
+    return this.clientHostedBrowserRows.deliverHydrationSnapshot()
+  }
+
+  protected notifyMobileSessionTabsRemoved(worktreeId: string): void {
+    const removed: RuntimeMobileSessionTabsRemovedResult = {
+      worktree: worktreeId,
+      publicationEpoch: `removed:${Date.now().toString(36)}`,
+      snapshotVersion: 0,
+      removed: true,
+      activeGroupId: null,
+      activeTabId: null,
+      activeTabType: null,
+      tabs: []
+    }
+    const changeSequence = ++this.mobileSessionTabsChangeSequence
+    for (const subscription of this.mobileSessionTabListeners) {
+      subscription.listener(
+        this.clientSessionTabSelections.project(removed, subscription.clientNavigationId),
+        changeSequence
+      )
+    }
+    this.clientSessionTabSelections.forgetWorktree(worktreeId)
+  }
+
+  /** Something a worktree's snapshot shows changed outside the layout: emit it now. */
+  notifyMobileSessionTabsChanged(worktreeId?: string): void {
+    if (!worktreeId) {
+      this.clientHostedBrowserRows.publishAll()
+      for (const id of new Set([
+        ...this.persistedClientHostedBrowserWorktreeIds,
+        ...getRuntimeBrowserPageRegistry(this)
+          .listPages()
+          .map((page) => page.workspaceId)
+      ])) {
+        this.persistClientHostedBrowserPagesForWorktree(id)
+      }
+      this.notifyMobileSessionTabSnapshots()
+      return
+    }
+    // Why: every client-page mutation — create, navigate, metadata, host quit, recovery — reaches
+    // this announcement, so the host's own rows derive from it rather than from a second seam.
+    this.clientHostedBrowserRows.publish(worktreeId)
+    this.persistClientHostedBrowserPagesForWorktree(worktreeId)
+    this.sessionTabsStream.bump(worktreeId)
+    // Why: structural changes must propagate promptly; cancel any pending coalesced notify since this immediate emit supersedes it.
+    this.cancelScheduledMobileSessionTabsChanged(worktreeId)
+    this.notifyMobileSessionTabsChangedNow(worktreeId, ++this.mobileSessionTabsChangeSequence)
   }
 }

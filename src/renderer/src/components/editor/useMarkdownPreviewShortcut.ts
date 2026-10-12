@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from 'react'
-import { detectLanguage } from '@/lib/language-detect'
+import { detectLanguage } from '../../../../shared/language-detect'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'

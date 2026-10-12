@@ -383,23 +383,25 @@ describe('OrcaRuntimeService', () => {
       getForegroundProcess: async () => null
     })
     const { handle } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`)
+    // The window mounts the pane at the surface the runtime created and persisted.
+    const [{ tabId, leafId }] = (await runtime.listTerminals()).terminals
 
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [
         {
-          tabId: 'tab-bg',
+          tabId,
           worktreeId: TEST_WORKTREE_ID,
           title: 'Codex ready',
-          activeLeafId: 'pane-bg',
+          activeLeafId: leafId,
           layout: null
         }
       ],
       leaves: [
         {
-          tabId: 'tab-bg',
+          tabId,
           worktreeId: TEST_WORKTREE_ID,
-          leafId: 'pane-bg',
+          leafId,
           paneRuntimeId: 1,
           ptyId: 'pty-bg',
           paneTitle: null

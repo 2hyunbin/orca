@@ -134,7 +134,7 @@ export class OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory ext
       return indexes
     }
     const floatingPtyBindings = indexFloatingSnapshotPtyBindings(
-      this.mobileSessionTabsByWorktree.get(FLOATING_TERMINAL_WORKTREE_ID),
+      this.readSessionTabsSnapshot(FLOATING_TERMINAL_WORKTREE_ID),
       (tab) => this.getMobileTerminalPaneKey(tab)
     )
     const allLivePtyIds = new Set(sessions.map((session) => session.id))

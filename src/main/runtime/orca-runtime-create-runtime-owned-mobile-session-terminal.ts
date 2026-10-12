@@ -3,21 +3,12 @@ import { OrcaRuntimeWithResolveMobileSessionTerminalCommand } from './orca-runti
 import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
-import type {
-  RuntimeMobileSessionCreateTerminalResult,
-  RuntimeMobileSessionTabsSnapshot,
-  RuntimeMobileSessionTerminalTab
-} from '../../shared/runtime-types'
+import type { RuntimeMobileSessionCreateTerminalResult } from '../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
 import { copySleepingAgentLaunchConfig } from './runtime-agent-launch-resolution'
 import { deriveRemoteRuntimeTerminalCreateHandle } from './remote-runtime-terminal-create-identity'
 import { parsePaneKey } from '../../shared/stable-pane-id'
-import { placeCreatedSessionTab } from '../../shared/session-tab-placement'
-import {
-  buildHeadlessMobileSessionTabGroups,
-  buildMaterializedHeadlessParentLayout,
-  getHeadlessMobileSessionGroupId
-} from './mobile-session-layout-projection'
+import { translateCreateTerminalTab } from '../../shared/workspace-layout/old-client'
 
 const OWNED_MOBILE_DISPATCH_RECIPE_TTL_MS = 15 * 60_000
 
@@ -56,7 +47,6 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
       launchAgent?: TuiAgent
       viewMode?: 'terminal' | 'chat'
       targetGroupId?: string
-      supportsSplitGroupPlacement?: boolean
       launchConfig?: SleepingAgentLaunchConfig
       signal?: AbortSignal
       refuseSleptWorktree?: boolean
@@ -76,6 +66,19 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
           opts.createMutation.id
         )
       : undefined
+    // `session.tabs.createTerminal`'s placement, as the holder's create places it.
+    const translated = translateCreateTerminalTab(
+      worktreeId,
+      this.heldWorkspaceLayout(worktreeId),
+      {
+        ...(afterTabId ? { afterTabId } : {}),
+        ...(opts.targetGroupId ? { targetGroupId: opts.targetGroupId } : {})
+      }
+    )
+    const placement =
+      translated.ok && translated.commands[0]?.type === 'createTerminalTab'
+        ? translated.commands[0]
+        : null
     const create = (preAllocatedHandle?: string) =>
       this.createTerminal(`id:${worktreeId}`, {
         focus: false,
@@ -111,7 +114,8 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
         ...(opts.launchConfig ? { launchConfig: opts.launchConfig } : {}),
         ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
         ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),
-        ...(opts.targetGroupId ? { targetGroupId: opts.targetGroupId } : {}),
+        ...(placement?.groupId ? { targetGroupId: placement.groupId } : {}),
+        ...(placement?.afterTabId ? { afterTabId: placement.afterTabId } : {}),
         startupCommandDelivery: opts.startupCommandDelivery,
         ...(opts.identity
           ? {
@@ -124,8 +128,6 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
             : {}),
         ...(isNewSession ? { isNewSession: true } : {}),
         persistHostSessionBinding: true,
-        // Why: this method publishes the authoritative snapshot below; skip the intermediate publish to avoid a wrong-group flash.
-        deferMobileSessionPublish: true,
         signal: opts.signal,
         ...(opts.refuseSleptWorktree ? { refuseSleptWorktree: true } : {})
       })
@@ -181,81 +183,29 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
       })
     }
     const parentTabId = livePty.pty.tabId ?? `pty:${livePty.pty.ptyId}`
-    const leafId = parsePaneKey(livePty.pty.paneKey ?? '')?.leafId ?? randomUUID()
-    const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
-    const existingSurface =
-      existing?.tabs.find(
-        (candidate): candidate is RuntimeMobileSessionTerminalTab =>
-          candidate.type === 'terminal' &&
-          candidate.parentTabId === parentTabId &&
-          candidate.leafId === leafId
-      ) ?? null
-    const parentLayout = buildMaterializedHeadlessParentLayout(
-      leafId,
-      livePty.pty.ptyId,
-      existingSurface?.parentLayout
-    )
-    const tab: RuntimeMobileSessionTerminalTab = {
-      type: 'terminal',
-      id: `${parentTabId}::${leafId}`,
-      parentTabId,
-      leafId,
-      ptyId: livePty.pty.ptyId,
-      incarnationId: livePty.pty.incarnationId,
-      title: terminal.title ?? livePty.pty.title ?? 'Terminal',
-      ...(cwd ? { startupCwd: cwd } : {}),
-      ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
-      ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),
-      parentLayout,
-      isActive: activate
-    }
-    const tabs = placeCreatedSessionTab(
-      (existing?.tabs ?? []).map((candidate) => ({
-        ...candidate,
-        ...(candidate.type === 'terminal' && candidate.parentTabId === parentTabId
-          ? { parentLayout }
-          : {}),
-        isActive: activate ? false : candidate.isActive
-      })),
-      tab,
-      afterTabId,
-      { afterParentGroup: opts.supportsSplitGroupPlacement !== false }
-    )
-    const next: RuntimeMobileSessionTabsSnapshot = {
-      worktree: worktreeId,
-      // Why: a fresh epoch retires the current publisher, so clients drop its later tab updates.
-      publicationEpoch: existing?.publicationEpoch ?? `headless:${Date.now().toString(36)}`,
-      snapshotVersion: (existing?.snapshotVersion ?? 0) + 1,
-      // Why: activating the new tab also focuses its group, so a "+" targeting a specific split group makes that group active too.
-      activeGroupId:
-        activate && opts.targetGroupId
-          ? opts.targetGroupId
-          : (existing?.activeGroupId ?? getHeadlessMobileSessionGroupId(worktreeId)),
-      activeTabId: activate ? tab.id : (existing?.activeTabId ?? null),
-      activeTabType: activate ? 'terminal' : (existing?.activeTabType ?? null),
-      tabGroups: buildHeadlessMobileSessionTabGroups(
-        worktreeId,
-        tabs,
-        activate ? tab : null,
-        existing?.tabGroups,
-        opts.targetGroupId ? { tabId: parentTabId, groupId: opts.targetGroupId } : undefined
-      ),
-      // Why: keep group split geometry on new-tab creation, else opening a terminal while split loses the arrangement.
-      ...(existing?.tabGroupLayout ? { tabGroupLayout: existing.tabGroupLayout } : {}),
-      tabs
-    }
-    // Why: emit the stored snapshot, not the pre-store one — storing grafts on retirement
-    // proofs, and subscribers dedupe on version so they would never see them otherwise.
-    const stored = this.storeMobileSessionSnapshot(worktreeId, next)
-    const result = this.toMobileSessionTabsResult(stored)
-    const changeSequence = ++this.mobileSessionTabsChangeSequence
-    for (const subscription of this.mobileSessionTabListeners) {
-      subscription.listener(
-        this.projectMobileSessionTabsForClient(result, subscription.clientNavigationId),
-        changeSequence
+    const leafId = parsePaneKey(livePty.pty.paneKey ?? '')?.leafId
+    const heldTab = () =>
+      this.heldWorkspaceLayout(worktreeId)?.tabs.find(
+        (tab) => tab.kind === 'terminal' && tab.entityId === parentTabId
       )
+    if (!heldTab() && leafId) {
+      // A retry found the terminal its first, ambiguous attempt started after that pane was taken back.
+      this.admitRecoveredTerminal(worktreeId, livePty.pty, {
+        ...(placement?.groupId ? { groupId: placement.groupId } : {}),
+        ...(placement?.afterTabId ? { afterTabId: placement.afterTabId } : {})
+      })
     }
-    const created = result.tabs.find((candidate) => candidate.id === tab.id)
+    const held = heldTab()
+    if (activate && held) {
+      this.focusInDesktopView(worktreeId, { tabId: held.id, ...(leafId ? { leafId } : {}) })
+    }
+    const result = this.getMobileSessionTabsForWorktree(worktreeId)
+    const created = result.tabs.find(
+      (candidate) =>
+        candidate.type === 'terminal' &&
+        candidate.parentTabId === parentTabId &&
+        candidate.leafId === leafId
+    )
     if (!created || created.type !== 'terminal') {
       throw new Error('terminal_handle_stale')
     }

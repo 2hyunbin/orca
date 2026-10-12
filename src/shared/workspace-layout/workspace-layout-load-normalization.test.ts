@@ -79,8 +79,9 @@ describe('Loader precedence for stored data that disagrees with itself, and its 
       'terminalEntry.*'
     ])
     const saved = saveWorkspaceLayout(loaded)
+    // The new group shows the terminal the session remembered, as the window's hydrate does.
     expect(saved.tabGroups?.[GIT_KEY]).toEqual([
-      { id: 'minted-1', worktreeId: GIT_KEY, activeTabId: null, tabOrder: ['tab-a', 'tab-b'] }
+      { id: 'minted-1', worktreeId: GIT_KEY, activeTabId: 'tab-a', tabOrder: ['tab-a', 'tab-b'] }
     ])
     expect(saved.unifiedTabs?.[GIT_KEY]?.map((tab) => [tab.id, tab.label, tab.sortOrder])).toEqual([
       ['tab-a', 'Terminal 1', 0],

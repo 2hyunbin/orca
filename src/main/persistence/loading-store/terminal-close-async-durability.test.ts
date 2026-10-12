@@ -1,7 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { fixture } from './profile-state-delayed-authority-fixture'
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
-import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-types'
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../../telemetry/cohort-classifier', () => ({
@@ -23,34 +22,15 @@ const siblingLeafId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 
 class CloseRuntime extends OrcaRuntimeService {
   async closeHeadlessTab(): Promise<void> {
-    const snapshot = this.mobileSessionTabsByWorktree.get(binding.worktreeId)
-    const tab = snapshot?.tabs[0]
+    const snapshot = this.readSessionTabsSnapshot(binding.worktreeId)
+    // The fixture's own tab shares the worktree.
+    const tab = snapshot?.tabs.find(
+      (row) => row.type === 'terminal' && row.parentTabId === binding.tabId
+    )
     if (!snapshot || tab?.type !== 'terminal') {
       throw new Error('missing test tab')
     }
     await this.closeHeadlessMobileTerminalTab(binding.worktreeId, snapshot, tab)
-  }
-  publish(): void {
-    const snapshot: RuntimeMobileSessionTabsSnapshot = {
-      worktree: binding.worktreeId,
-      publicationEpoch: 'close-test',
-      snapshotVersion: 1,
-      activeGroupId: null,
-      activeTabId: `${binding.tabId}::${binding.leafId}`,
-      activeTabType: 'terminal',
-      tabs: [
-        {
-          type: 'terminal',
-          id: `${binding.tabId}::${binding.leafId}`,
-          parentTabId: binding.tabId,
-          leafId: binding.leafId,
-          ptyId: binding.ptyId,
-          title: 'Terminal',
-          isActive: true
-        }
-      ]
-    }
-    this.storeMobileSessionSnapshot(binding.worktreeId, snapshot)
   }
 }
 
@@ -117,7 +97,6 @@ it.each([
 it('keeps a phone close and still kills when its durable write fails', async () => {
   const { authority, store, runtime, kill, persistedLeafIds, liveLeafIds } = await closeFixture()
   runtime.registerPty(binding.ptyId, binding.worktreeId, null, binding)
-  runtime.publish()
   const failure = vi.spyOn(console, 'error').mockImplementation(() => {})
   const gate = authority.pause()
   const closing = runtime.closeHeadlessTab()
@@ -128,9 +107,12 @@ it('keeps a phone close and still kills when its durable write fails', async () 
   expect(kill).toHaveBeenCalledExactlyOnceWith(binding.ptyId)
   expect(liveLeafIds()).toEqual([])
   expect(persistedLeafIds()).toEqual([binding.leafId])
-  expect(failure).toHaveBeenCalledWith(
-    '[runtime] failed to persist terminal close:',
-    expect.objectContaining({ message: 'close disk refused' })
+  // The holder's durable save is not awaited by the close, so its failure logs afterwards.
+  await vi.waitFor(() =>
+    expect(failure).toHaveBeenCalledWith(
+      '[workspace-layout] could not save the layout:',
+      expect.objectContaining({ message: 'close disk refused' })
+    )
   )
 
   // Nothing rolled the removal back, so the next write makes it durable.

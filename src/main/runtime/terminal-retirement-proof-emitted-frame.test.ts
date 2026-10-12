@@ -1,33 +1,15 @@
 import { expect, it, vi } from 'vitest'
-import type {
-  RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTabsSnapshot
-} from '../../shared/runtime-types'
+import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 
 const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
 await import('./orca-runtime-test-lifecycle.spec')
-const { store, TEST_WORKTREE_ID } = await import('./orca-runtime-test-fixtures.spec')
+const { HEADLESS_LEAF_ID, TEST_WORKTREE_ID, makeWorkspaceSessionWithHeadlessTerminal, store } =
+  await import('./orca-runtime-test-fixtures.spec')
 
-const retired = {
-  parentTabId: 'tab',
-  leafId: 'leaf',
-  ptyId: 'pty',
-  terminal: 'term_old',
-  incarnationId: 'inc'
-}
-
-type RuntimeInternals = {
-  mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-  storeMobileSessionSnapshot: (
-    worktreeId: string,
-    snapshot: RuntimeMobileSessionTabsSnapshot
-  ) => RuntimeMobileSessionTabsSnapshot
-}
-
-function seedRuntimeWithStoredProof(): {
-  runtime: InstanceType<typeof OrcaRuntimeService>
-  internals: RuntimeInternals
-} {
+// Why: subscribers dedupe on (epoch, version), so a frame emitted at a version without the proofs
+// would strand them until an unrelated later bump.
+it('emits the stored retirement proofs on the frame a runtime-owned create publishes', async () => {
+  store.setWorkspaceSession(makeWorkspaceSessionWithHeadlessTerminal())
   const runtime = new OrcaRuntimeService(store)
   runtime.setPtyController({
     spawn: vi.fn().mockResolvedValue({ id: 'pty-runtime-fallback' }),
@@ -35,35 +17,17 @@ function seedRuntimeWithStoredProof(): {
     kill: () => true,
     getForegroundProcess: async () => null
   })
-  runtime.syncWindowGraph(0, {
-    tabs: [],
-    leaves: [],
-    mobileSessionTabs: [
-      {
-        worktree: TEST_WORKTREE_ID,
-        publicationEpoch: 'headless:active-generation',
-        snapshotVersion: 7,
-        activeGroupId: null,
-        activeTabId: null,
-        activeTabType: null,
-        tabs: []
-      }
-    ]
+  runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+  runtime.registerPty('persisted-pty', TEST_WORKTREE_ID, null, {
+    tabId: 'host-tab',
+    leafId: HEADLESS_LEAF_ID
   })
-  const internals = runtime as unknown as RuntimeInternals
-  const stored = internals.mobileSessionTabsByWorktree.get(TEST_WORKTREE_ID)!
-  internals.storeMobileSessionSnapshot(TEST_WORKTREE_ID, {
-    ...stored,
-    snapshotVersion: stored.snapshotVersion + 1,
-    retiredTerminalSurfaces: [retired]
-  })
-  return { runtime, internals }
-}
-
-// Why: subscribers dedupe on (epoch, version), so a frame emitted at the stored version but
-// built from the pre-store object would strand the proofs until an unrelated later bump.
-it('emits the stored retirement proofs on the frame a runtime-owned create publishes', async () => {
-  const { runtime, internals } = seedRuntimeWithStoredProof()
+  // A client held a handle for the terminal, so its close leaves a proof.
+  const [terminal] = (await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)).terminals
+  await runtime.closeTerminal(terminal!.handle)
+  const proofs = (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`))
+    .retiredTerminalSurfaces
+  expect(proofs).toHaveLength(1)
   const events: RuntimeMobileSessionTabsResult[] = []
   const unsubscribe = runtime.onMobileSessionTabsChanged(
     (frame) => events.push(frame),
@@ -78,11 +42,11 @@ it('emits the stored retirement proofs on the frame a runtime-owned create publi
       clientNavigationId: 'paired-client'
     })
 
-    const storedAfter = internals.mobileSessionTabsByWorktree.get(TEST_WORKTREE_ID)!
+    await vi.waitFor(() => expect(events.at(-1)?.tabs).toHaveLength(1))
+    const read = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     const emitted = events.at(-1)!
-    expect(storedAfter.retiredTerminalSurfaces).toEqual([retired])
-    expect(emitted.snapshotVersion).toBe(storedAfter.snapshotVersion)
-    expect(emitted.retiredTerminalSurfaces).toEqual([retired])
+    expect(emitted.snapshotVersion).toBe(read.snapshotVersion)
+    expect(emitted.retiredTerminalSurfaces).toEqual(proofs)
   } finally {
     unsubscribe()
   }

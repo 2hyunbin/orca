@@ -4,9 +4,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
-import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
-import { OrcaRuntimeWithPersistHeadlessSessionTabProps } from '../../runtime/orca-runtime-persist-headless-session-tab-props'
+import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import type { Store } from '../loading-store/store'
 import { closeLeafOrTab } from './terminal-topology-commit'
 import {
@@ -31,22 +30,11 @@ const WT = FIXTURE_GIT_WORKTREE_ID
 const NEW_LEAF = '55555555-5555-4555-8555-555555555555'
 const directories: string[] = []
 
-type PaneLayoutHandler = Pick<
-  OrcaRuntimeWithPersistHeadlessSessionTabProps,
-  'updateMobileSessionPaneLayout'
->
-
 /** Main's real `updateMobileSessionPaneLayout`, on a headless host whose session is `store`'s. */
-function paneLayoutHandler(store: Store): PaneLayoutHandler {
-  return Object.assign(Object.create(OrcaRuntimeWithPersistHeadlessSessionTabProps.prototype), {
-    store,
-    mobileSessionTabsByWorktree: new Map(),
-    getValidatedExplicitWorktreeIdSelector: () => WT,
-    getAvailableAuthoritativeWindow: () => null,
-    getWorkspaceSessionForWorktree: () => store.getWorkspaceSession(),
-    setWorkspaceSessionForWorktree: (_worktreeId: string, session: WorkspaceSessionState) =>
-      store.setWorkspaceSession(session)
-  })
+function paneLayoutHandler(
+  store: Store
+): Pick<OrcaRuntimeService, 'updateMobileSessionPaneLayout'> {
+  return new OrcaRuntimeService(store)
 }
 
 function split(first: string, second: string): TerminalPaneLayoutNode {
@@ -199,10 +187,8 @@ describe('an old client pane tree that predates a split or close', () => {
     }
   })
 
-  // Known on main: with no topology revision for the repo, the membership rebase is skipped and
-  // `persistHeadlessTerminalPaneLayout` takes the tree whole, dropping a live pane and its binding
-  // (the tab row still names its PTY). Drop `fails` once fixed.
-  it.fails('keeps a pane the tree omits when the repo never had a host topology change', async () => {
+  // Fixed by the holder: an old tree that drops a pane is refused, not taken whole.
+  it('keeps a pane the tree omits when the repo never had a host topology change', async () => {
     const store = await openWithPanes([TEST_LEAF_1, TEST_LEAF_2])
     await paneLayoutHandler(store).updateMobileSessionPaneLayout(`id:${WT}`, {
       tabId: 'tab-a',

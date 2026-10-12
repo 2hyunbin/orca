@@ -75,13 +75,6 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
     const previousLeaves = this.leaves
     this.tabs = new Map(graph.tabs.map((tab) => [tab.tabId, tab]))
     const lifecycleLeaves = this.reconcileMobileSessionRetirementFences(graph.leaves)
-    const mobileSessionResyncWorktrees = new Set<string>()
-    const changedMobileWorktrees = this.syncMobileSessionTabs(
-      graph.mobileSessionTabs,
-      graph.unchangedMobileSessionWorktrees,
-      mobileSessionResyncWorktrees,
-      rendererGeneration
-    )
     const nextLeaves = new Map<string, RuntimeLeafRecord>()
     const graphSyncedAt = this.nextTitleObservationSequence()
     // Bumped before the leaf loop so surfaces this statement records are stamped with it, and a
@@ -240,39 +233,14 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
     this.leaves = nextLeaves
     this.rebuildLeafPtyIndex()
     this.reconcilePtyIncarnationHandles()
-    // Why: the emitted client payload is a function of the stored snapshot AND
-    // the tab/leaf graph (handles/titles/connected resolve from leaf state), so
-    // a graph-only change — e.g. a restored leaf binding its ptyId while the
-    // snapshot pair is unchanged — must also fan out, or a paired client stays
-    // on pending-handle forever. Schedule the union on the same 50ms trailing
-    // edge as the OSC-title path; the coalescer emit reads the latest state at
-    // fire time so no final version is ever lost.
+    // Why: the client payload resolves handles and titles from the tab/leaf graph, so a graph-only
+    // change (a restored leaf binding its ptyId) must fan out, or a paired client stays on
+    // pending-handle. The coalescer reads the latest state when it fires.
     for (const worktreeId of this.collectMobileVisibleGraphChangedWorktrees(
       previousTabs,
       previousLeaves
     )) {
-      if (changedMobileWorktrees.has(worktreeId)) {
-        continue
-      }
-      const stored = this.mobileSessionTabsByWorktree.get(worktreeId)
-      if (!stored) {
-        continue
-      }
-      // Why: web clients drop same-epoch frames whose version isn't strictly
-      // newer, so a graph-only change must mint a fresh stored version (like
-      // the PTY touch path does) or the re-emitted payload — e.g. the
-      // pending-handle → ready flip — is discarded and the client stays stale.
-      // The accepted-renderer tracking is untouched: this is a main-local bump.
-      this.storeMobileSessionSnapshot(worktreeId, {
-        ...stored,
-        snapshotVersion: stored.snapshotVersion + 1
-      })
-      changedMobileWorktrees.add(worktreeId)
-    }
-    for (const worktreeId of changedMobileWorktrees) {
-      if (this.mobileSessionTabsByWorktree.has(worktreeId)) {
-        this.scheduleMobileSessionTabsChanged(worktreeId)
-      }
+      this.scheduleMobileSessionTabsChanged(worktreeId)
     }
     const isAuthoritativeGraphPublisher = windowId === this.authoritativeWindowId
     this.markGraphReady(windowId)
@@ -280,11 +248,7 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
       isAuthoritativeGraphPublisher &&
       (windowId === HEADLESS_RUNTIME_WINDOW_ID || graph.mobileSessionTabs !== undefined)
     ) {
-      if (mobileSessionResyncWorktrees.size === 0) {
-        this.markSessionTabsInventoryPublished()
-      } else {
-        this.sessionTabsInventoryPublicationEpoch = null
-      }
+      this.markSessionTabsInventoryPublished()
     }
     if (rendererGeneration !== undefined) {
       this.rendererGeneration = rendererGeneration
@@ -322,10 +286,7 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
     return {
       ...this.getStatus(),
       ...(agentOrchestrationByPaneKey ? { agentOrchestrationByPaneKey } : {}),
-      ...(nativeChatLaunchDraftResolutions.length > 0 ? { nativeChatLaunchDraftResolutions } : {}),
-      ...(mobileSessionResyncWorktrees.size > 0
-        ? { mobileSessionResyncWorktrees: [...mobileSessionResyncWorktrees] }
-        : {})
+      ...(nativeChatLaunchDraftResolutions.length > 0 ? { nativeChatLaunchDraftResolutions } : {})
     }
   }
 }
