@@ -1,6 +1,10 @@
 import type { NativeChatEditFile } from '../../../../shared/native-chat-edit-model'
-import type { NativeChatBlock, NativeChatMessage } from '../../../../shared/native-chat-types'
-import { buildDiffSummaries, buildEditCards } from './native-chat-edit-cards'
+import type {
+  NativeChatMessage,
+  NativeChatToolCallBlock,
+  NativeChatToolResultBlock
+} from '../../../../shared/native-chat-types'
+import { buildDiffSummaries, normalizedToolEditFiles } from './native-chat-edit-cards'
 
 export type NativeChatDiffTarget = {
   messageId: string
@@ -13,8 +17,8 @@ export type NativeChatDiffTarget = {
 export type NativeChatDiffReveal = NativeChatDiffTarget & { requestId: number }
 
 export type NativeChatTurnDiffEdit = {
-  blocks: NativeChatBlock[]
-  call: NativeChatBlock
+  call: NativeChatToolCallBlock
+  result: NativeChatToolResultBlock
   fileIndex: number
   target: NativeChatDiffTarget
   order: number
@@ -40,7 +44,7 @@ export type NativeChatTurnDiff = {
 export function nativeChatTurnDiffEditFile(
   edit: NativeChatTurnDiffEdit
 ): NativeChatEditFile | undefined {
-  return buildEditCards(edit.blocks).editCards.get(edit.call)?.files[edit.fileIndex]
+  return normalizedToolEditFiles(edit.call, edit.result)?.[edit.fileIndex]
 }
 
 /** Recorded edit totals, grouped by the transcript's already-resolved turn boundaries. */
@@ -99,7 +103,7 @@ export function nativeChatTurnDiffs(
         entry.removed += file.removed
         entry.truncated ||= file.truncated
         entry.target = target
-        entry.edits.push({ blocks: message.blocks, call, fileIndex, target, order: editOrder++ })
+        entry.edits.push({ call, result: edit.result, fileIndex, target, order: editOrder++ })
         files.set(file.path, entry)
       }
     }

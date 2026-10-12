@@ -40,6 +40,38 @@ describe('turn diff rollups', () => {
     ])
   })
 
+  it('resolves only the selected file edits in a folded message and reuses their patches', () => {
+    const bodyReads = [0, 0, 0]
+    const messages = foldToolMessages(
+      ['selected.ts', 'closed.ts', 'selected.ts'].map((path, index) => ({
+        ...diff(`edit-${index}`, path),
+        blocks: [
+          { type: 'tool-call' as const, name: 'Diff', input: { path } },
+          {
+            type: 'tool-result' as const,
+            get output() {
+              bodyReads[index] = (bodyReads[index] ?? 0) + 1
+              return `@@ -1 +1 @@\n-old-${index}\n+new-${index}`
+            }
+          }
+        ]
+      }))
+    )
+    expect(messages).toHaveLength(1)
+    const turn = nativeChatTurnDiffs(messages, ['turn']).get('turn')!
+    bodyReads.fill(0)
+    const selected = turn.files.find((file) => file.path === 'selected.ts')!
+    const patches = selected.edits.map(nativeChatTurnDiffEditFile)
+    expect(bodyReads).toEqual([1, 0, 1])
+    expect(patches.map((patch) => patch?.lines.at(-1)?.text)).toEqual(['new-0', 'new-2'])
+    expect(selected.edits.map(nativeChatTurnDiffEditFile)[0]).toBe(patches[0])
+    expect(selected.edits.map(nativeChatTurnDiffEditFile)[1]).toBe(patches[1])
+    expect(bodyReads).toEqual([1, 0, 1])
+    const originalCards = buildEditCards(messages[0]!.blocks).editCards
+    expect(originalCards.get(selected.edits[0]!.call)?.files[0]).toBe(patches[0])
+    expect(originalCards.get(selected.edits[1]!.call)?.files[0]).toBe(patches[1])
+  })
+
   it('folds edits through chained renames into the destination and counts a deletion once', () => {
     const messages = [
       diff('edit', 'old.ts'),
@@ -109,6 +141,7 @@ describe('turn diff rollups', () => {
     expect(turn.files.map((file) => file.path)).toEqual(['a.ts', 'b.ts'])
     expect(turn).toMatchObject({ added: 2, removed: 2, truncated: true })
     expect(turn.files[1]?.target.fileIndex).toBe(1)
+    expect(turn.files[1]?.edits.map(nativeChatTurnDiffEditFile)).toMatchObject([{ path: 'b.ts' }])
   })
 
   it('does not count generic output, failed edits, running edits, or unparseable patches', () => {
