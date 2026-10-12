@@ -8,6 +8,10 @@ import {
 import type { RpcClient } from '../transport/rpc-client'
 import { useRelayHosts } from './relay-hosts-feed'
 
+function isRuntimeHostId(id: string): id is `runtime:${string}` {
+  return id.startsWith('runtime:')
+}
+
 /**
  * The desktop's servers from the shared feed while `active`, and a scoped client for each one this
  * phone can reach now. The clients change only when the set of ready servers does, so a health or
@@ -18,21 +22,27 @@ export function useReachableServerClients(
   hostCapabilities: readonly string[],
   active = true
 ): {
-  relays: boolean
   servers: readonly MobileRelayHost[] | null
   serverClients: ReadonlyMap<ExecutionHostId, RpcClient>
 } {
   const relays = client !== null && relaysToServers(client, hostCapabilities)
   const servers = useRelayHosts(active && relays ? client : null)
-  const readyHostIds = (servers ?? [])
+  const readyKey = (servers ?? [])
     .filter((host) => host.relay === 'ready')
     .map((host) => host.hostId)
     .sort()
     .join('\n')
   const serverClients = useMemo(
-    () => reachableServerClients(client, hostCapabilities, servers ?? []),
-    // Keyed on the ready set, not the feed's rows: see above.
-    [client, hostCapabilities, readyHostIds]
+    () =>
+      reachableServerClients(
+        client,
+        hostCapabilities,
+        readyKey
+          .split('\n')
+          .filter(isRuntimeHostId)
+          .map((hostId) => ({ hostId, relay: 'ready' }))
+      ),
+    [client, hostCapabilities, readyKey]
   )
-  return { relays, servers, serverClients }
+  return { servers, serverClients }
 }

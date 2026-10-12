@@ -7,6 +7,8 @@ import {
   normalizeVisibleTaskProviders,
   useHostClient,
   useHostRepoList,
+  useMemo,
+  reconcileRepoSelection,
   useLastConnectedAt,
   useRelayRecoveryStatus,
   useLocalSearchParams,
@@ -70,22 +72,14 @@ export function useMobileTasksRouteAndItemState() {
       : null
   )
   // Why one client: every call naming a server's repo then runs on that server.
-  const {
-    client,
-    repos,
-    serverRepoList,
-    serverReposSettled,
-    settledServerHosts,
-    repoListEnsureLoaded,
-    repoListReload,
-    repoHostLabels
-  } = useTaskHostRepos({
-    hostId,
-    desktopClient,
-    connState,
-    hostCapabilities,
-    desktopRepoList: repoList
-  })
+  const { client, repos, serverRepoList, repoListEnsureLoaded, repoListReload, repoHostLabels } =
+    useTaskHostRepos({
+      hostId,
+      desktopClient,
+      connState,
+      hostCapabilities,
+      desktopRepoList: repoList
+    })
   const [provider, setProvider] = useState<TaskProvider>('github')
   const [visibleProviders, setVisibleProviders] = useState<TaskProvider[]>(() =>
     normalizeVisibleTaskProviders(undefined)
@@ -110,8 +104,6 @@ export function useMobileTasksRouteAndItemState() {
     null
   )
   const [selectedLinearTeamIds, setSelectedLinearTeamIds] = useState<Set<string>>(new Set())
-  const defaultRepoSelectionRef = useRef<string[] | null>(null)
-  const repoSelectionHydratedRef = useRef(false)
   const defaultLinearTeamSelectionRef = useRef<string[] | null>(null)
   const [showLinearWorkspacePicker, setShowLinearWorkspacePicker] = useState(false)
   const [showLinearTeamPicker, setShowLinearTeamPicker] = useState(false)
@@ -127,6 +119,15 @@ export function useMobileTasksRouteAndItemState() {
   const [linearConnectError, setLinearConnectError] = useState('')
   const [taskSort, setTaskSort] = useState<TaskSort>('updated')
   const [selectedRepoIds, setSelectedRepoIds] = useState<Set<string>>(new Set())
+  // The user's saved choice narrowed to what is listed now (empty = all); the choice itself is
+  // never pruned, so a server that answers late or drops out briefly keeps its repos selected.
+  const effectiveRepoKey = [...reconcileRepoSelection(repos, [...selectedRepoIds])]
+    .sort()
+    .join('\n')
+  const effectiveRepoIds = useMemo(
+    (): ReadonlySet<string> => new Set(effectiveRepoKey ? effectiveRepoKey.split('\n') : []),
+    [effectiveRepoKey]
+  )
   const [items, setItems] = useState<TaskItem[]>([])
   const [githubPages, setGithubPages] = useState<
     Array<Extract<TaskItem, { provider: 'github' }>[]>
@@ -200,8 +201,6 @@ export function useMobileTasksRouteAndItemState() {
     repoList,
     repos,
     serverRepoList,
-    serverReposSettled,
-    settledServerHosts,
     repoHostLabels,
     repoListEnsureLoaded,
     repoListReload,
@@ -241,8 +240,6 @@ export function useMobileTasksRouteAndItemState() {
     setSelectedLinearWorkspaceId,
     selectedLinearTeamIds,
     setSelectedLinearTeamIds,
-    defaultRepoSelectionRef,
-    repoSelectionHydratedRef,
     defaultLinearTeamSelectionRef,
     showLinearWorkspacePicker,
     setShowLinearWorkspacePicker,
@@ -267,6 +264,7 @@ export function useMobileTasksRouteAndItemState() {
     taskSort,
     setTaskSort,
     selectedRepoIds,
+    effectiveRepoIds,
     setSelectedRepoIds,
     items,
     setItems,

@@ -41,7 +41,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     resetGitHubItemsState,
     selectedLinearTeamIds,
     selectedLinearWorkspaceId,
-    selectedRepoIds,
+    effectiveRepoIds,
     serverRepoList,
     setError,
     setGithubCurrentPage,
@@ -97,9 +97,9 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
         if (provider === 'github' || provider === 'gitlab') {
           const supportedRepos = currentRepos.filter(isHostedTaskRepo)
           const queriedRepos =
-            selectedRepoIds.size === 0
+            effectiveRepoIds.size === 0
               ? supportedRepos
-              : supportedRepos.filter((repo) => selectedRepoIds.has(repo.id))
+              : supportedRepos.filter((repo) => effectiveRepoIds.has(repo.id))
           if (queriedRepos.length === 0) {
             if (!isCurrent()) {
               return
@@ -122,7 +122,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
             setGithubPages([page.items])
             setGithubCurrentPage(0)
             setItems(page.items)
-            if (selectedRepoIds.size > 0) {
+            if (effectiveRepoIds.size > 0) {
               void countGitHubItems(requestClient, queriedRepos).then((count) => {
                 if (isCurrent()) {
                   setGithubTotalCount(count)
@@ -268,22 +268,24 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       provider,
       selectedLinearTeamIds,
       selectedLinearWorkspaceId,
-      selectedRepoIds,
+      effectiveRepoIds,
       taskStateHydrated,
       tasksSupported
     ]
   )
-  // A server's repos joining reload quietly, so the items already listed stay on screen.
-  const listedServerReposRef = useRef(serverRepoList)
+  // A server's repos joining or leaving reload quietly, so the items already listed stay on screen.
+  // When that also changes the effective filter, the load is a new one and its own effect reloads.
+  const listedRef = useRef({ serverRepoList, loadTasks })
   useEffect(() => {
-    if (listedServerReposRef.current === serverRepoList) {
+    const listed = listedRef.current
+    listedRef.current = { serverRepoList, loadTasks }
+    if (listed.serverRepoList === serverRepoList || listed.loadTasks !== loadTasks) {
       return
     }
-    listedServerReposRef.current = serverRepoList
     if (connState === 'connected' && taskStateHydrated) {
       void loadTasks({ silent: true })
     }
-  }, [serverRepoList])
+  }, [loadTasks, serverRepoList])
   return Object.assign(model, { loadTasks })
 }
 

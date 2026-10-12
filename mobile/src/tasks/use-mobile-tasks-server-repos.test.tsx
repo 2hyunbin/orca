@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { createElement, useEffect, useState } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
@@ -26,13 +26,13 @@ vi.mock('./mobile-tasks-dependencies', async () => {
     useState: react.useState,
     useHostRepoList,
     normalizeVisibleTaskProviders,
-    isHostedTaskRepo: (await import('./hosted-repo-selection')).isHostedTaskRepo,
+    ...(await import('./hosted-repo-selection')),
     CROSS_REPO_DISPLAY_LIMIT: workItems.CROSS_REPO_DISPLAY_LIMIT,
     PER_REPO_FETCH_LIMIT: workItems.PER_REPO_FETCH_LIMIT,
     isGitHubWorkItemsSshRemoteRequiredError: workItems.isGitHubWorkItemsSshRemoteRequiredError,
     extractGitHubIssueSourceError: sourceErrors.extractGitHubIssueSourceError,
     extractGitHubIssueSourceFallback: sourceErrors.extractGitHubIssueSourceFallback,
-    useHostClient: () => ({ client: desktopRef.current, state: 'connected' }),
+    useHostClient: () => ({ client: desktopRef.current, state: desktopRef.current?.getState() }),
     useLocalSearchParams: () => ({ hostId: 'mac' }),
     useRouter: () => ({}),
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -56,7 +56,6 @@ const { useMobileTasksRouteAndItemState } = await import('./use-mobile-tasks-rou
 const { useMobileTasksProviderLoadActions } =
   await import('./use-mobile-tasks-provider-load-actions')
 const { useMobileTasksTaskListLoading } = await import('./use-mobile-tasks-task-list-loading')
-const { useTaskRepoSelectionReconcile } = await import('./use-task-repo-selection-reconcile')
 
 type Sent = { method: string; executionHost?: string }
 const sentBy = new WeakMap<FakeSession, Sent[]>()
@@ -146,10 +145,12 @@ async function mount(
   const seen: { model?: Model } = {}
   function Harness(): null {
     const route = useMobileTasksRouteAndItemState()
-    if (route.defaultRepoSelectionRef.current === null) {
-      route.defaultRepoSelectionRef.current = savedSelection
+    // Stage 6 seeds the saved choice where settings land.
+    const [seeded, setSeeded] = useState(false)
+    if (!seeded) {
+      setSeeded(true)
+      route.setSelectedRepoIds(new Set(savedSelection))
     }
-    useTaskRepoSelectionReconcile(route)
     // Stage 6 binds this to the live client; a load only commits for the client it started on.
     route.clientRef.current = route.client
     // The list's loaders, fed the screen's own model as the screen feeds them. Stages 2-6 are
@@ -166,6 +167,13 @@ async function mount(
       )
     )
     renders.push({ loading: seen.model.loading, count: seen.model.items.length })
+    // Stage 11's load effect: a new load (as when the effective filter changes) runs.
+    const { loadTasks, connState } = seen.model
+    useEffect(() => {
+      if (connState === 'connected') {
+        void loadTasks()
+      }
+    }, [connState, loadTasks])
     return null
   }
   const gates: HostStatusGates = {
@@ -290,22 +298,6 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     expect(model().repos).toEqual(MAC_REPOS)
   })
 
-  it("keeps a saved selection of a server's repo while that server answers late", async () => {
-    const late = deferred<unknown>()
-    const model = await mount(
-      desktop(() => late.promise),
-      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
-      ['vm-repo']
-    )
-    await loadRepos(model)
-    await settle()
-    // Not yet applied: the server hasn't answered, so `vm-repo` is pending rather than gone.
-    expect([...model().selectedRepoIds]).toEqual([])
-    late.resolve({ repos: VM_REPOS })
-    await settle()
-    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
-  })
-
   it("adds a late server's items without blanking the desktop's or showing the full spinner", async () => {
     const late = deferred<unknown>()
     const model = await mount(
@@ -328,51 +320,6 @@ describe('Tasks screen repos on the desktop and its servers', () => {
         .sort()
     ).toEqual(['from the desktop', 'from the server', 'from the server'])
     expect(renders.slice(joinedFrom).filter((seen) => seen.loading || seen.count === 0)).toEqual([])
-  })
-
-  it('applies a desktop-only saved filter at once while a server is slow', async () => {
-    const model = await mount(
-      desktop(() => new Promise(() => {})),
-      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
-      ['mac-repo']
-    )
-    await loadRepos(model)
-    await settle()
-    expect([...model().selectedRepoIds]).toEqual(['mac-repo'])
-  })
-
-  it("applies a desktop-only saved filter while the desktop's server list never answers", async () => {
-    const model = await mount(
-      desktop(undefined, () => new Promise(() => {})),
-      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
-      ['mac-repo']
-    )
-    await loadRepos(model)
-    await settle()
-    expect([...model().selectedRepoIds]).toEqual(['mac-repo'])
-  })
-
-  it("keeps a server's repos in the filter while that server drops out for one poll", async () => {
-    let hosts = HOSTS
-    const client = desktop(undefined, async () => ({ hosts }))
-    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY], ['vm-repo'])
-    await loadRepos(model)
-    await settle()
-    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
-    hosts = HOSTS.map((host) => ({ ...host, relay: 'unavailable' }))
-    await act(async () => {
-      await relayHostsFeed(client).read()
-    })
-    await settle()
-    expect(model().repos).toEqual(MAC_REPOS)
-    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
-    hosts = HOSTS
-    await act(async () => {
-      await relayHostsFeed(client).read()
-    })
-    await settle()
-    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
-    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
   })
 
   it("re-lists nothing on a server's health or label change, and reloads nothing on an equal answer", async () => {
@@ -403,6 +350,78 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     expect(ranOn(client, 'repo.list').slice(listed)).toEqual(['desktop', 'runtime:vm'])
     expect(ranOn(client, 'github.listWorkItems')).toHaveLength(loaded)
   })
+
+  it("lists all while a saved server repo's server is pending, then filters to it", async () => {
+    const late = deferred<unknown>()
+    const model = await mount(
+      desktop(() => late.promise),
+      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
+      ['vm-repo']
+    )
+    await loadAll(model)
+    expect([...model().effectiveRepoIds]).toEqual([])
+    expect(titles(model)).toEqual(['from the desktop'])
+    late.resolve({ repos: VM_REPOS })
+    await settle()
+    expect([...model().effectiveRepoIds]).toEqual(['vm-repo'])
+    expect(titles(model)).toEqual(['from the server'])
+  })
+
+  it("keeps a server repo's filter through a one-poll drop-out and a reconnect", async () => {
+    let hosts = HOSTS
+    const client = desktop(undefined, async () => ({ hosts }))
+    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY], ['vm-repo'])
+    await loadAll(model)
+    expect([...model().effectiveRepoIds]).toEqual(['vm-repo'])
+    hosts = HOSTS.map((host) => ({ ...host, relay: 'unavailable' }))
+    await act(async () => {
+      await relayHostsFeed(client).read()
+    })
+    await settle()
+    expect(model().repos).toEqual(MAC_REPOS)
+    hosts = HOSTS
+    await act(async () => {
+      await relayHostsFeed(client).read()
+    })
+    await settle()
+    expect([...model().effectiveRepoIds]).toEqual(['vm-repo'])
+    await act(async () => {
+      client.publishState('disconnected')
+    })
+    await act(async () => {
+      client.publishState('connected')
+    })
+    await settle()
+    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
+    expect([...model().effectiveRepoIds]).toEqual(['vm-repo'])
+    expect(titles(model)).toEqual(['from the server'])
+  })
+
+  it('applies a desktop-only filter at once while a server is slow', async () => {
+    const model = await mount(
+      desktop(() => new Promise(() => {})),
+      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
+      ['mac-repo']
+    )
+    await loadAll(model)
+    expect([...model().effectiveRepoIds]).toEqual(['mac-repo'])
+    expect(titles(model)).toEqual(['from the desktop'])
+  })
+
+  it('lists all once the server behind the only selected repo is removed', async () => {
+    let hosts = HOSTS
+    const client = desktop(undefined, async () => ({ hosts }))
+    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY], ['vm-repo'])
+    await loadAll(model)
+    expect(titles(model)).toEqual(['from the server'])
+    hosts = []
+    await act(async () => {
+      await relayHostsFeed(client).read()
+    })
+    await settle()
+    expect([...model().effectiveRepoIds]).toEqual([])
+    expect(titles(model)).toEqual(['from the desktop'])
+  })
 })
 
 function deferred<Value>() {
@@ -411,4 +430,20 @@ function deferred<Value>() {
     resolve = settle
   })
   return { promise, resolve }
+}
+
+/** Loads the list once the desktop's repos and any answering server's have landed. */
+async function loadAll(model: () => Model): Promise<void> {
+  await loadRepos(model)
+  await settle()
+  await act(async () => {
+    await model().loadTasks()
+  })
+  await settle()
+}
+
+function titles(model: () => Model): string[] {
+  return model()
+    .items.map((item) => item.title)
+    .sort()
 }

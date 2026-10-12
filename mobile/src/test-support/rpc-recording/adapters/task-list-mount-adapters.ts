@@ -144,7 +144,7 @@ export function taskListMountAdapters(
           resetGitHubItemsState: () => {},
           selectedLinearTeamIds: new Set<string>(),
           selectedLinearWorkspaceId: 'linear-workspace',
-          selectedRepoIds: new Set<string>(),
+          effectiveRepoIds: new Set<string>(),
           serverRepoList: [],
           taskStateHydrated: true,
           tasksSupported: true,

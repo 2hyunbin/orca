@@ -93,7 +93,7 @@ export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) 
   const {
     hostedRepos,
     persistRepoSelection,
-    selectedRepoIds,
+    effectiveRepoIds,
     repoHostLabels,
     setSelectedRepoIds,
     setShowRepoPicker,
@@ -121,11 +121,11 @@ export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) 
             <Text style={styles.repoPickerTitle}>All repositories</Text>
             <Text style={styles.repoPickerSubtitle}>{repositoryCount(hostedRepos.length)}</Text>
           </View>
-          {selectedRepoIds.size === 0 ? <Check size={15} color={colors.textPrimary} /> : null}
+          {effectiveRepoIds.size === 0 ? <Check size={15} color={colors.textPrimary} /> : null}
         </Pressable>
 
         {hostedRepos.map((repo) => {
-          const selected = selectedRepoIds.has(repo.id)
+          const selected = effectiveRepoIds.has(repo.id)
           return (
             <View key={repo.id}>
               <View style={styles.actionSeparator} />

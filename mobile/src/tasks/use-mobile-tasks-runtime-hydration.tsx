@@ -1,6 +1,5 @@
 import { settingsRead } from '../transport/settings-read-operations'
 import type { ClientSettingsActionsModel } from './use-mobile-tasks-client-settings-actions'
-import { useTaskRepoSelectionReconcile } from './use-task-repo-selection-reconcile'
 import {
   taskLinearStatusRead,
   taskPreflightRead,
@@ -32,9 +31,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     client,
     connState,
     defaultLinearTeamSelectionRef,
-    defaultRepoSelectionRef,
     provider,
-    repoSelectionHydratedRef,
     requestedTaskSource,
     resetGitHubItemsState,
     resetWorkspaceCreateState,
@@ -92,6 +89,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setShowLinearWorkspacePicker,
     setShowProviderPicker,
     setShowRepoPicker,
+    setSelectedRepoIds,
     setShowSortPicker,
     setTaskStateHydrated,
     setTasksSupportState,
@@ -103,8 +101,6 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
   useEffect(() => {
     if (!client || connState !== 'connected') {
       taskResumeRef.current = {}
-      defaultRepoSelectionRef.current = null
-      repoSelectionHydratedRef.current = false
       setRuntimeTaskSettings({})
       setTrustedOrcaHooks({})
       setOrcaYamlTrustPrompt(null)
@@ -320,7 +316,8 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
           : getTaskPresetQuery(preset)
       const nextLinearFilter = normalizeLinearFilter(resume.linearPreset)
       const nextLinearQuery = resume.linearQuery ?? ''
-      defaultRepoSelectionRef.current = settings.defaultRepoSelection ?? null
+      // The user's saved choice, kept as is: readers derive what of it is listed now.
+      setSelectedRepoIds(new Set(settings.defaultRepoSelection ?? []))
       defaultLinearTeamSelectionRef.current = settings.defaultLinearTeamSelection ?? null
       const nextQuery =
         nextProvider === 'github' ? githubQuery : nextProvider === 'linear' ? nextLinearQuery : ''
@@ -362,7 +359,6 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setProvider(resolveVisibleTaskProvider(provider, visibleProviders))
   }, [provider, visibleProviders])
 
-  useTaskRepoSelectionReconcile(model)
   return model
 }
 
