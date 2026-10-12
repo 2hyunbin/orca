@@ -3,6 +3,7 @@
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */
 import { ipcMain, type BrowserWindow } from 'electron'
+import { z } from 'zod'
 import { LEGACY_RELAY_BRIDGE_CHANNELS as CHANNELS } from '../../../shared/legacy-relay-bridge-contract'
 import type { Store } from '../../persistence'
 import { track } from '../../telemetry/client'
@@ -19,19 +20,11 @@ import {
   writeLegacyRelayPane
 } from './legacy-relay-bridge-registry'
 
-function stringField(value: unknown, field: string): string | null {
-  const read: unknown =
-    typeof value === 'object' && value !== null ? Reflect.get(value, field) : undefined
-  return typeof read === 'string' && read.length > 0 && read.length <= 4096 ? read : null
-}
-
-function sizeField(value: unknown, field: string): number | null {
-  const read: unknown =
-    typeof value === 'object' && value !== null ? Reflect.get(value, field) : undefined
-  return typeof read === 'number' && Number.isInteger(read) && read > 0 && read <= 10_000
-    ? read
-    : null
-}
+const PtyIdSchema = z.string().min(1).max(4096)
+const SizeSchema = z.number().int().positive().max(10_000)
+const PaneArgsSchema = z.object({ ptyId: PtyIdSchema })
+const WriteArgsSchema = z.object({ ptyId: PtyIdSchema, data: z.string() })
+const ResizeArgsSchema = z.object({ ptyId: PtyIdSchema, cols: SizeSchema, rows: SizeSchema })
 
 export function registerLegacyRelayBridgeIpc(args: {
   store: Pick<Store, 'getSshRemotePtyLeases' | 'markSshRemotePtyLease'>
@@ -71,29 +64,25 @@ export function registerLegacyRelayBridgeIpc(args: {
   }
   ipcMain.handle(CHANNELS.listPanes, () => legacyRelayBridgedPanes())
   ipcMain.handle(CHANNELS.attach, async (_event, payload: unknown) => {
-    const ptyId = stringField(payload, 'ptyId')
-    return ptyId ? attachLegacyRelayPane(ptyId) : { status: 'not-bridged' }
+    const args = PaneArgsSchema.safeParse(payload)
+    return args.success ? attachLegacyRelayPane(args.data.ptyId) : { status: 'not-bridged' }
   })
   ipcMain.on(CHANNELS.write, (_event, payload: unknown) => {
-    const ptyId = stringField(payload, 'ptyId')
-    const data: unknown =
-      typeof payload === 'object' && payload !== null ? Reflect.get(payload, 'data') : undefined
-    if (ptyId && typeof data === 'string') {
-      writeLegacyRelayPane(ptyId, data)
+    const args = WriteArgsSchema.safeParse(payload)
+    if (args.success) {
+      writeLegacyRelayPane(args.data.ptyId, args.data.data)
     }
   })
   ipcMain.on(CHANNELS.resize, (_event, payload: unknown) => {
-    const ptyId = stringField(payload, 'ptyId')
-    const cols = sizeField(payload, 'cols')
-    const rows = sizeField(payload, 'rows')
-    if (ptyId && cols && rows) {
-      resizeLegacyRelayPane(ptyId, cols, rows)
+    const args = ResizeArgsSchema.safeParse(payload)
+    if (args.success) {
+      resizeLegacyRelayPane(args.data.ptyId, args.data.cols, args.data.rows)
     }
   })
   ipcMain.on(CHANNELS.detach, (_event, payload: unknown) => {
-    const ptyId = stringField(payload, 'ptyId')
-    if (ptyId) {
-      detachLegacyRelayPane(ptyId)
+    const args = PaneArgsSchema.safeParse(payload)
+    if (args.success) {
+      detachLegacyRelayPane(args.data.ptyId)
     }
   })
 }

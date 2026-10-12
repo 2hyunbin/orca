@@ -73,6 +73,18 @@ export async function installReleasedRelay(
   checkout: ReleaseCheckout,
   root: string
 ): Promise<ReleasedRelayInstall> {
+  const { bundleDir, version } = await buildReleasedRelayBundle(checkout)
+  const dir = join(root, `relay-${version}`)
+  await mkdir(dir, { recursive: true })
+  await symlink(join(bundleDir, 'relay.js'), join(dir, 'relay.js'))
+  await writeFile(join(dir, '.version'), version)
+  return { dir, version }
+}
+
+/** The release's `relay.js` (and its `.version`), bundled once per checkout. */
+export async function buildReleasedRelayBundle(
+  checkout: ReleaseCheckout
+): Promise<{ bundleDir: string; version: string }> {
   // Why bundled inside the checkout: `node-pty` stays external and resolves from the repo install,
   // and node resolves modules from the bundle's real path, not the install's symlink.
   const bundleDir = join(checkout.root, '.relay-bundle')
@@ -95,11 +107,7 @@ export async function installReleasedRelay(
     })
   }
   await writeFile(join(bundleDir, '.version'), version)
-  const dir = join(root, `relay-${version}`)
-  await mkdir(dir, { recursive: true })
-  await symlink(join(bundleDir, 'relay.js'), join(dir, 'relay.js'))
-  await writeFile(join(dir, '.version'), version)
-  return { dir, version }
+  return { bundleDir, version }
 }
 
 /** Starts the detached daemon with the "keep terminals forever" grace a 1.4.224 client used. */
@@ -219,13 +227,10 @@ export function openShellRelayTransport(command: string): Promise<MultiplexerTra
 
 /** A shipped 1.4.224 desktop: the owner role with output flow control, as that build asked for it. */
 export async function connectAsReleasedApp(
-  install: ReleasedRelayInstall,
-  sockPath: string,
+  openTransport: () => Promise<MultiplexerTransport>,
   clientInstanceId: string
 ): Promise<SshChannelMultiplexer> {
-  const app = new SshChannelMultiplexer(
-    await openShellRelayTransport(releasedRelayConnectCommand(install, sockPath))
-  )
+  const app = new SshChannelMultiplexer(await openTransport())
   // As that build did: a holder that disconnected within its grace is waited out, never forced.
   for (let attempt = 0; ; attempt++) {
     try {
@@ -238,7 +243,7 @@ export async function connectAsReleasedApp(
       return app
     } catch (error) {
       const code: unknown =
-        typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : undefined
+        typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
       if (code !== OWNER_HELD_DISCONNECTED || attempt >= 40) {
         app.dispose()
         throw error
@@ -253,13 +258,14 @@ export async function connectAsReleasedApp(
  * reads (and its size on `size`), and the app's owner claim lapses. Returns the relay PTY id.
  */
 export async function leaveShellInReleasedRelay(
-  install: ReleasedRelayInstall,
-  sockPath: string
+  openTransport: () => Promise<MultiplexerTransport>,
+  clientInstanceId: string,
+  marker?: string
 ): Promise<string> {
-  const oldApp = await connectAsReleasedApp(install, sockPath, `${install.version}-app`)
+  const oldApp = await connectAsReleasedApp(openTransport, clientInstanceId)
   const spawned: unknown = await oldApp.request('pty.spawn', { cols: 80, rows: 24 })
   const id: unknown =
-    typeof spawned === 'object' && spawned !== null ? Reflect.get(spawned, 'id') : undefined
+    typeof spawned === 'object' && spawned !== null && 'id' in spawned ? spawned.id : undefined
   if (typeof id !== 'string') {
     throw new Error('released relay pty.spawn returned no id')
   }
@@ -269,6 +275,9 @@ export async function leaveShellInReleasedRelay(
       'stty -echo; while read -r l; do [ "$l" = quit ] && exit 0; ' +
       '[ "$l" = size ] && stty size; echo "GOT:$l"; done\n'
   })
+  if (marker) {
+    oldApp.notify('pty.data', { id, data: `${marker}\n` })
+  }
   await new Promise((resolve) => setTimeout(resolve, 500))
   oldApp.dispose()
   return id

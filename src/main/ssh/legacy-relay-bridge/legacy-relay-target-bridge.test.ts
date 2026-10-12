@@ -231,7 +231,7 @@ describe('one target’s legacy relay bridge', () => {
 
   it('never serves a lease a stop is pending for, or one a newer pane won', async () => {
     leases = [
-      lease({ pendingKill: { requestedAt: 1 } }),
+      lease({ pendingKill: { requestedAt: 1, attempts: 1 } }),
       lease({ ptyId: 'pty-2', supersededBy: 'pty-3' }),
       lease({ ptyId: 'pty-4', tabId: undefined })
     ]

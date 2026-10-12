@@ -73,7 +73,10 @@ describe.skipIf(process.platform === 'win32')(
       install = await installReleasedRelay(checkout, root)
       sockPath = join(install.dir, 'relay-target.sock')
       daemon = await startReleasedRelayDaemon(install, sockPath, { SHELL: '/bin/sh' })
-      relayPtyId = await leaveShellInReleasedRelay(install, sockPath)
+      relayPtyId = await leaveShellInReleasedRelay(
+        () => openShellRelayTransport(releasedRelayConnectCommand(install, sockPath)),
+        `${install.version}-app`
+      )
     }, SUITE_TIMEOUT_MS)
 
     afterAll(async () => {
@@ -137,7 +140,10 @@ describe.skipIf(process.platform === 'win32')(
     it(
       'never displaces a 1.4.224 desktop attached to its own relay, which keeps working',
       async () => {
-        const oldApp = await connectAsReleasedApp(install, sockPath, OLD_APP_ID)
+        const oldApp = await connectAsReleasedApp(
+          () => openShellRelayTransport(releasedRelayConnectCommand(install, sockPath)),
+          OLD_APP_ID
+        )
         try {
           await expect(open()).rejects.toBeInstanceOf(LegacyRelayOwnerHeldError)
           await oldApp.request('pty.attach', { id: relayPtyId })

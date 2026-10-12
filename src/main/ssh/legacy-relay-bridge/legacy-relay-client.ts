@@ -7,6 +7,7 @@
  * client reaches it. Nothing is ever deployed or started here: a relay that is not already
  * listening simply cannot be reached.
  */
+import { z } from 'zod'
 import type { MultiplexerTransport } from '../ssh-channel-multiplexer'
 import { SshChannelMultiplexer } from '../ssh-channel-multiplexer'
 
@@ -57,48 +58,50 @@ function errorCode(error: unknown): unknown {
   return typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
 }
 
-/** Any build's grant is accepted: the bridge talks to whichever relay is already there. */
+// Any build's grant is accepted: the bridge talks to whichever relay is already there.
+const OwnerGrantSchema = z.object({
+  protocolVersion: z.literal(PROTOCOL_VERSION),
+  role: z.literal('session-owner'),
+  ownerGeneration: z.number().int().positive(),
+  ownerLease: z.string().min(1).max(512)
+})
+
+const PtyRowSchema = z.object({
+  id: z.string().min(1),
+  cwd: z.string().optional().catch(undefined),
+  title: z.string().optional().catch(undefined),
+  worktreeId: z.string().optional().catch(undefined)
+})
+
+const AttachResultSchema = z.object({ replay: z.string().optional().catch(undefined) }).nullable()
+
 function parseOwnerGrant(value: unknown): LegacyRelayOwnerClaim {
-  const grant = typeof value === 'object' && value !== null ? value : {}
-  const field = (name: string): unknown => (name in grant ? Reflect.get(grant, name) : undefined)
-  const ownerGeneration = field('ownerGeneration')
-  const ownerLease = field('ownerLease')
-  if (
-    field('protocolVersion') !== PROTOCOL_VERSION ||
-    field('role') !== 'session-owner' ||
-    typeof ownerGeneration !== 'number' ||
-    !Number.isSafeInteger(ownerGeneration) ||
-    ownerGeneration <= 0 ||
-    typeof ownerLease !== 'string' ||
-    ownerLease.length === 0 ||
-    ownerLease.length > 512
-  ) {
+  const grant = OwnerGrantSchema.safeParse(value)
+  if (!grant.success) {
     throw new Error('Older relay did not grant the terminal owner role')
   }
-  return { ownerGeneration, ownerLease }
+  return { ownerGeneration: grant.data.ownerGeneration, ownerLease: grant.data.ownerLease }
 }
 
 function parsePtyList(value: unknown): LegacyRelayPty[] {
   if (!Array.isArray(value)) {
     throw new Error('Older relay answered pty.listProcesses with something other than a list')
   }
-  const rows: LegacyRelayPty[] = []
-  for (const row of value) {
-    const id: unknown = typeof row === 'object' && row !== null ? Reflect.get(row, 'id') : null
-    if (typeof id !== 'string' || id.length === 0) {
-      continue
+  return value.flatMap((row: unknown) => {
+    const parsed = PtyRowSchema.safeParse(row)
+    if (!parsed.success) {
+      return []
     }
-    const cwd: unknown = Reflect.get(row, 'cwd')
-    const title: unknown = Reflect.get(row, 'title')
-    const worktreeId: unknown = Reflect.get(row, 'worktreeId')
-    rows.push({
-      relayPtyId: id,
-      ...(typeof cwd === 'string' ? { cwd } : {}),
-      ...(typeof title === 'string' ? { title } : {}),
-      ...(typeof worktreeId === 'string' ? { worktreeId } : {})
-    })
-  }
-  return rows
+    const { id, cwd, title, worktreeId } = parsed.data
+    return [
+      {
+        relayPtyId: id,
+        ...(cwd === undefined ? {} : { cwd }),
+        ...(title === undefined ? {} : { title }),
+        ...(worktreeId === undefined ? {} : { worktreeId })
+      }
+    ]
+  })
 }
 
 export class LegacyRelayClient {
@@ -147,9 +150,8 @@ export class LegacyRelayClient {
       { id: relayPtyId, suppressReplayNotification: true, requireReplay: true },
       { timeoutMs: REQUEST_TIMEOUT_MS }
     )
-    const replay: unknown =
-      typeof result === 'object' && result !== null ? Reflect.get(result, 'replay') : undefined
-    return { replay: typeof replay === 'string' ? replay : '' }
+    const parsed = AttachResultSchema.safeParse(result)
+    return { replay: (parsed.success ? parsed.data?.replay : undefined) ?? '' }
   }
 
   write(relayPtyId: string, data: string): void {
