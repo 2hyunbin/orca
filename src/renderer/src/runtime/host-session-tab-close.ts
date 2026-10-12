@@ -1,4 +1,3 @@
-import type { reprojectHostSessionTabSource } from './host-session-tab-source-projection'
 import {
   SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS,
   type SessionTabCloseOutcome
@@ -8,6 +7,7 @@ import { sessionTabCloseAnswerOutcome } from '../../../shared/session-tab-close-
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
 import {
   settleWebSessionCloseIntent,
+  takeFailedWebSessionCloseIntent,
   type WebSessionCloseIntentTicket
 } from './web-session-close-intent'
 
@@ -100,32 +100,47 @@ export async function settleHostSessionTabClose(args: {
     )
   }
   const tickets = [...args.tickets()]
-  if (outcome === 'failed') {
-    // The user close and its host reread must not wait for recovery-module loading.
-    void args.reread(true)
-  }
-  let reproject: typeof reprojectHostSessionTabSource | undefined
-  if (outcome === 'failed') {
-    try {
-      const { reprojectHostSessionTabSource } = await import('./host-session-tab-source-projection')
-      reproject = reprojectHostSessionTabSource
-    } catch (error) {
-      console.warn('[session-tabs] could not load closed tab recovery', error)
-    }
-  }
   for (const ticket of tickets) {
-    // Check the original entry after loading: a re-close during the yield owns recovery now.
-    const settled = settleWebSessionCloseIntent(ticket, outcome, Date.now())
-    if (settled && outcome === 'failed') {
-      try {
-        reproject?.(ticket)
-      } catch (error) {
-        console.warn('[session-tabs] could not restore closed tab from its host source', error)
-      }
-    }
+    settleWebSessionCloseIntent(ticket, outcome, Date.now())
+  }
+  if (outcome === 'failed') {
+    void recoverFailedHostSessionTabs(tickets)
+    void Promise.resolve()
+      .then(() => args.reread(true))
+      .catch((error: unknown) =>
+        console.warn('[session-tabs] tab re-read after a close failed', error)
+      )
   }
   if (outcome === 'closed' && args.readAfterClose) {
     await args.reread(false)
   }
   return result
+}
+
+async function recoverFailedHostSessionTabs(
+  tickets: readonly WebSessionCloseIntentTicket[]
+): Promise<void> {
+  if (tickets.length === 0) {
+    return
+  }
+  try {
+    const { reprojectHostSessionTabSource } = await import('./host-session-tab-source-projection')
+    const current = tickets.map((ticket) => takeFailedWebSessionCloseIntent(ticket, Date.now()))
+    if (!current.every(Boolean)) {
+      return
+    }
+    // Aliases describe one close; replay once with its captured occurrence, not an alias without it.
+    const ticket = tickets.find((candidate) => candidate.placement) ?? tickets[0]
+    try {
+      reprojectHostSessionTabSource(ticket)
+    } catch (error) {
+      console.warn('[session-tabs] could not restore closed tab from its host source', error)
+    }
+  } catch (error) {
+    console.warn('[session-tabs] could not load closed tab recovery', error)
+  } finally {
+    for (const ticket of tickets) {
+      takeFailedWebSessionCloseIntent(ticket, Date.now())
+    }
+  }
 }

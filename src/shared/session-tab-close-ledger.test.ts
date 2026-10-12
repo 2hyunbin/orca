@@ -52,6 +52,43 @@ describe('SessionTabCloseLedger', () => {
     expect(apply(ledger, [{ id: 'a' }, { id: 'b' }])).toEqual(['a', 'b'])
   })
 
+  it('settles failure without hiding the tab and consumes recovery only once', () => {
+    const ledger = new SessionTabCloseLedger()
+    const ticket = ledger.begin(P, 'b', NOW)!
+    expect(ledger.settle(ticket, 'failed', NOW)).toBe(true)
+    expect(ledger.isPending(P, 'b', NOW)).toBe(false)
+    expect(ledger.hasPending(P, NOW)).toBe(false)
+    expect(apply(ledger, [{ id: 'b' }])).toEqual(['b'])
+    expect(ledger.takeFailed(ticket, NOW)).toBe(true)
+    expect(ledger.takeFailed(ticket, NOW)).toBe(false)
+  })
+
+  it('supersedes deferred recovery even when the newer close also fails', () => {
+    const ledger = new SessionTabCloseLedger()
+    const first = ledger.begin(P, 'b', NOW)!
+    ledger.settle(first, 'failed', NOW)
+    const second = ledger.begin(P, 'b', NOW + 1)!
+    expect(ledger.takeFailed(first, NOW + 1)).toBe(false)
+    expect(apply(ledger, [{ id: 'b' }], NOW + 1)).toEqual([])
+    ledger.settle(second, 'failed', NOW + 2)
+    expect(apply(ledger, [{ id: 'b' }], NOW + 2)).toEqual(['b'])
+    expect(ledger.takeFailed(first, NOW + 2)).toBe(false)
+    expect(ledger.takeFailed(second, NOW + 2)).toBe(true)
+  })
+
+  it('expires or clears deferred recovery without leaving suppression behind', () => {
+    const ledger = new SessionTabCloseLedger()
+    const expired = ledger.begin(P, 'b', NOW)!
+    ledger.settle(expired, 'failed', NOW)
+    const late = NOW + SESSION_TAB_CLOSE_SETTLED_TTL_MS + 1
+    expect(ledger.takeFailed(expired, late)).toBe(false)
+    const cleared = ledger.begin(P, 'b', NOW)!
+    ledger.settle(cleared, 'failed', NOW)
+    ledger.clearPartition(P)
+    expect(ledger.takeFailed(cleared, NOW)).toBe(false)
+    expect(apply(ledger, [{ id: 'b' }])).toEqual(['b'])
+  })
+
   it('keeps an absent tab hidden with no time limit until a list omits it', () => {
     const ledger = new SessionTabCloseLedger()
     const ticket = ledger.begin(P, 'b', NOW)!

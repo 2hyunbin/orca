@@ -244,7 +244,7 @@ describe('host close occurrence and restoration identity', () => {
         await vi.advanceTimersByTimeAsync(15_000)
       }
       await expect(close).resolves.toBe('failed')
-      expect(groups()[0].order).toEqual(['host-a', 'host-b', 'host-c'])
+      await vi.waitFor(() => expect(groups()[0].order).toEqual(['host-a', 'host-b', 'host-c']))
       expect(useAppStore.getState().tabBarOrderByWorktree[WT]).toEqual([
         'host-a',
         'host-b',
@@ -287,16 +287,20 @@ describe('host close occurrence and restoration identity', () => {
     ])
     refusals[0]?.(new Error('offline'))
     await closes[0]
-    expect(groups()).toEqual([
-      { id: 'g1', order: ['a', 'b1'] },
-      { id: 'g2', order: ['c'] }
-    ])
+    await vi.waitFor(() =>
+      expect(groups()).toEqual([
+        { id: 'g1', order: ['a', 'b1'] },
+        { id: 'g2', order: ['c'] }
+      ])
+    )
     refusals[1]?.(new Error('offline'))
     await closes[1]
-    expect(groups()).toEqual([
-      { id: 'g1', order: ['a', 'b1'] },
-      { id: 'g2', order: ['b2', 'c'] }
-    ])
+    await vi.waitFor(() =>
+      expect(groups()).toEqual([
+        { id: 'g1', order: ['a', 'b1'] },
+        { id: 'g2', order: ['b2', 'c'] }
+      ])
+    )
     expect(
       useAppStore.getState().unifiedTabsByWorktree[WT].find((tab) => tab.id === 'b2')?.groupId
     ).toBe('g2')

@@ -7,7 +7,8 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../shared/tab-types'
 import {
   beginWebSessionCloseIntent,
-  resetWebSessionCloseIntentForTests
+  resetWebSessionCloseIntentForTests,
+  registerWebSessionClosePlacementStateReader
 } from './web-session-close-intent'
 
 afterEach(() => {
@@ -91,5 +92,40 @@ it('registers the actual completed store and reads current occurrence placement 
   } finally {
     clearHostSessionTabIdMappings('completed', wt)
     useAppStore.setState(initial, true)
+  }
+})
+
+it('reports a throwing placement reader without gating the close action', async () => {
+  const { useAppStore } = await import('../store')
+  const { settleHostSessionTabClose } = await import('./host-session-tab-close')
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  registerWebSessionClosePlacementStateReader(() => {
+    throw new Error('placement read failed')
+  })
+  try {
+    const ticket = beginWebSessionCloseIntent(
+      { environmentId: 'completed', pairingRevision: 1 },
+      'wt',
+      'b',
+      Date.now()
+    )
+    if (!ticket) {
+      throw new Error('missing close ticket')
+    }
+    expect(ticket.placement).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(
+      '[session-tabs] could not capture closed tab position',
+      expect.objectContaining({ message: 'placement read failed' })
+    )
+    await expect(
+      settleHostSessionTabClose({
+        tickets: () => [ticket],
+        close: Promise.resolve(undefined),
+        reread: async () => {},
+        readAfterClose: false
+      })
+    ).resolves.toBe('applied')
+  } finally {
+    registerWebSessionClosePlacementStateReader(() => useAppStore.getState())
   }
 })

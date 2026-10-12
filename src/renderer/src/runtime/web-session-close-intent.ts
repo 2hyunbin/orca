@@ -88,6 +88,13 @@ export function settleWebSessionCloseIntent(
   return ledger.settle(ticket, outcome, now)
 }
 
+export function takeFailedWebSessionCloseIntent(
+  ticket: WebSessionCloseIntentTicket,
+  now: number
+): boolean {
+  return ledger.takeFailed(ticket, now)
+}
+
 /** Ends closes the host has confirmed and drops tabs whose close is still pending. */
 export function filterWebSessionCloseIntents<T extends { id: string }>(
   owner: WebSessionIntentOwner,
