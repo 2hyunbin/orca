@@ -85,6 +85,35 @@ describe('activating a pane the legacy relay bridge serves', () => {
     expect(peekWebSessionFocusIntent(owner, WORKTREE_ID)).toBeNull()
   })
 
+  it('reads a click on the whole mirrored tab as the pane it shows', async () => {
+    const call = vi.fn().mockResolvedValue({ id: 'activate', ok: true, result: {} })
+    stubWindow(call)
+    const tabId = toWebTerminalSurfaceTabId('relay-tab')
+    const showing = (activeLeafId: string | undefined): void => {
+      mocks.getState.mockReturnValue({
+        settings: { activeRuntimeEnvironmentId: ENVIRONMENT_ID },
+        terminalLayoutsByTabId: activeLeafId ? { [tabId]: { activeLeafId } } : {}
+      })
+    }
+
+    showing('relay-leaf')
+    await activateWebRuntimeSessionTab({ worktreeId: WORKTREE_ID, tabId })
+    // Without a pane on screen the server would pick one itself, which may be the bridged one.
+    showing(undefined)
+    await activateWebRuntimeSessionTab({ worktreeId: WORKTREE_ID, tabId })
+    expect(call).not.toHaveBeenCalled()
+
+    // A sibling pane on screen is aimed at by leaf, so the server never picks the bridged one.
+    showing('orcad-leaf')
+    await activateWebRuntimeSessionTab({ worktreeId: WORKTREE_ID, tabId })
+    expect(call).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'session.tabs.activate',
+        params: expect.objectContaining({ tabId: 'relay-tab', leafId: 'orcad-leaf' })
+      })
+    )
+  })
+
   it('still activates its sibling panes and every other tab on the server', async () => {
     const call = vi.fn().mockResolvedValue({ id: 'activate', ok: true, result: {} })
     stubWindow(call)

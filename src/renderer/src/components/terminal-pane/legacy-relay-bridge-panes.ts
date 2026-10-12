@@ -41,33 +41,50 @@ export function legacyRelayBridgedPane(ptyId: string): LegacyRelayBridgedPane | 
   return panes.find((pane) => pane.ptyId === ptyId)
 }
 
+/** The bridged panes in a runtime tab, and the leaf a `web-terminal-<tab::leaf>` id names. */
+function bridgedPanesInTab(
+  tabId: string,
+  leafId: string | null | undefined
+): { inTab: LegacyRelayBridgedPane[]; leaf: string | null } {
+  ensureSubscribed()
+  if (!window.api?.legacyRelayBridge) {
+    return { inTab: [], leaf: null }
+  }
+  // A tab mirrored from the managed server is `web-terminal-<tab>` or `web-terminal-<tab::leaf>`;
+  // the lease names the relay-era tab and leaf it carried over.
+  const [hostTabId, hostLeafId] = toHostSessionTabId(tabId).split(HOST_TERMINAL_SURFACE_SEPARATOR)
+  return {
+    inTab: panes.filter((pane) => pane.tabId === hostTabId),
+    leaf: hostLeafId ?? leafId ?? null
+  }
+}
+
 /** The bridged pane a runtime pane's tab and leaf name, if main serves one. */
 function bridgedPaneFor(
   tabId: string,
   leafId: string | null | undefined
 ): LegacyRelayBridgedPane | undefined {
-  ensureSubscribed()
-  if (!window.api?.legacyRelayBridge) {
-    return undefined
-  }
-  // A tab mirrored from the managed server is `web-terminal-<tab::leaf>`; the lease names the
-  // relay-era tab and leaf it carried over.
-  const [hostTabId, hostLeafId] = toHostSessionTabId(tabId).split(HOST_TERMINAL_SURFACE_SEPARATOR)
-  const leaf = hostLeafId ?? leafId ?? ''
-  const inTab = panes.filter((pane) => pane.tabId === hostTabId)
+  const { inTab, leaf } = bridgedPanesInTab(tabId, leafId)
   // A lease without a leaf names its tab's pane only when it is that tab's sole bridged terminal.
   return (
-    inTab.find((pane) => pane.leafId === leaf || pane.leafId === leafId) ??
+    inTab.find((pane) => pane.leafId === (leaf ?? '') || pane.leafId === leafId) ??
     (inTab.length === 1 && !inTab[0].leafId ? inTab[0] : undefined)
   )
 }
 
 /**
- * Whether the bridge serves this tab's pane. Activating such a pane on the managed server would
- * start a second shell there that no tab ever shows.
+ * Whether activating this tab on the managed server could reach a pane the bridge serves, which
+ * would start a second shell there that no tab shows. Without a leaf, any bridged pane in the tab
+ * counts: the server then picks a pane itself.
  */
 export function isLegacyRelayBridgedTab(tabId: string, leafId?: string | null): boolean {
-  return bridgedPaneFor(tabId, leafId) !== undefined
+  const { inTab, leaf } = bridgedPanesInTab(tabId, leafId)
+  return leaf === null ? inTab.length > 0 : bridgedPaneFor(tabId, leafId) !== undefined
+}
+
+/** Whether any pane in this tab is one the bridge serves. */
+export function hasLegacyRelayBridgedPane(tabId: string): boolean {
+  return bridgedPanesInTab(tabId, null).inTab.length > 0
 }
 
 /**

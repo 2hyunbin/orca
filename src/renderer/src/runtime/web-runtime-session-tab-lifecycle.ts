@@ -24,7 +24,10 @@ import {
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
-import { isLegacyRelayBridgedTab } from '../components/terminal-pane/legacy-relay-bridge-panes'
+import {
+  hasLegacyRelayBridgedPane,
+  isLegacyRelayBridgedTab
+} from '../components/terminal-pane/legacy-relay-bridge-panes'
 
 export async function activateWebRuntimeSessionTab(args: {
   worktreeId: string
@@ -35,9 +38,15 @@ export async function activateWebRuntimeSessionTab(args: {
   /** The local tab visible at the gesture; later navigation away cancels the deferred focus. */
   expectedCurrentLocalTabId?: string | null
 }): Promise<boolean> {
-  // COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay runs this pane's terminal, and
-  // activating it on the managed server would start a second shell there that no tab shows.
-  if (isLegacyRelayBridgedTab(args.tabId, args.leafId)) {
+  // COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay runs a pane in this tab, and
+  // activating that pane on the managed server would start a second shell there that no tab shows.
+  // A click names no leaf, so the pane on screen does; the server would otherwise pick the first.
+  const leafId =
+    args.leafId ??
+    (hasLegacyRelayBridgedPane(args.tabId)
+      ? useAppStore.getState().terminalLayoutsByTabId?.[args.tabId]?.activeLeafId
+      : null)
+  if (isLegacyRelayBridgedTab(args.tabId, leafId)) {
     // This gesture still supersedes an earlier tab's pending focus, as recording its own would.
     const environmentId = resolveTabEnvironmentId(args.environmentId)
     if (environmentId) {
@@ -45,7 +54,10 @@ export async function activateWebRuntimeSessionTab(args: {
     }
     return true
   }
-  return (await callWebRuntimeSessionTabMethod('session.tabs.activate', args)) === 'applied'
+  return (
+    (await callWebRuntimeSessionTabMethod('session.tabs.activate', { ...args, leafId })) ===
+    'applied'
+  )
 }
 
 /**
