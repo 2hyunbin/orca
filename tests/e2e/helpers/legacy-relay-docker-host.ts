@@ -10,13 +10,10 @@ import path from 'node:path'
 import { quotePosixShell } from '../../../src/shared/wsl-login-shell-command'
 import { relaySocketNameForInstanceId } from '../../../src/main/ssh/ssh-relay-instance-id'
 import { SshChannelMultiplexer } from '../../../src/main/ssh/ssh-channel-multiplexer'
-import { materializeReleaseCheckout } from '../cross-version-wire/release-checkout'
 import {
-  buildReleasedRelayBundle,
   leaveShellInReleasedRelay,
-  openShellRelayTransport,
-  PREVIOUS_RELAY_REF
-} from '../cross-version-wire/released-relay-daemon'
+  openShellRelayTransport
+} from '../cross-version-wire/released-relay-transport'
 import { execDockerSshHostTargetCommand, type DockerSshHostTarget } from './docker-ssh-host-target'
 
 const NODE_PTY_SLOT = 'linux-x64-glibc'
@@ -33,9 +30,27 @@ export async function installReleasedRelayOnDockerHost(
   target: DockerSshHostTarget,
   orcadTemplateDir: string
 ): Promise<DockerReleasedRelay> {
-  const { bundleDir, version } = await buildReleasedRelayBundle(
-    await materializeReleaseCheckout(PREVIOUS_RELAY_REF)
+  const built: unknown = JSON.parse(
+    execFileSync(
+      path.join(process.cwd(), 'node_modules', '.bin', 'tsx'),
+      [path.join(process.cwd(), 'tests', 'e2e', 'helpers', 'build-released-relay-bundle.mts')],
+      { encoding: 'utf8', timeout: 300_000, stdio: ['ignore', 'pipe', 'inherit'] }
+    )
+      .trim()
+      .split('\n')
+      .at(-1) ?? 'null'
   )
+  if (
+    typeof built !== 'object' ||
+    built === null ||
+    !('bundleDir' in built) ||
+    !('version' in built) ||
+    typeof built.bundleDir !== 'string' ||
+    typeof built.version !== 'string'
+  ) {
+    throw new Error('Building the released relay printed no bundle')
+  }
+  const { bundleDir, version } = built
   const dir = `/root/.orca-remote/relay-${version}`
   const staging = mkdtempSync(path.join(os.tmpdir(), 'orca-legacy-relay-'))
   try {

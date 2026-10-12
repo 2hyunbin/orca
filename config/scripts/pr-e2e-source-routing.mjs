@@ -124,7 +124,7 @@ export const PR_E2E_SOURCE_ROUTES = [
     specs: ['tests/e2e/ssh-orcad-legacy-relay-bridge.spec.ts'],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
-      /^tests\/e2e\/(?:helpers\/legacy-relay-docker-host|cross-version-wire\/released-relay-daemon)\.ts$/.test(
+      /^tests\/e2e\/(?:helpers\/(?:legacy-relay-docker-host|build-released-relay-bundle)|cross-version-wire\/released-relay-(?:daemon|transport))\.m?ts$/.test(
         file
       ) ||
       (isProductSource(file) &&
