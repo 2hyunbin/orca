@@ -223,7 +223,7 @@ describe('a server workspace', () => {
     expect(session.sendRequest).toHaveBeenCalledWith(
       'files.readDir',
       { worktree: 'id:wt' },
-      { executionHost: 'runtime:vm' }
+      { envelope: { executionHost: 'runtime:vm' } }
     )
   })
 
@@ -233,7 +233,7 @@ describe('a server workspace', () => {
     await render(screen, desktopGates([...RELAYS, VAULT]))
     await vi.waitFor(() => expect(below.capabilities).toEqual([]))
     expect(session.sendRequest).toHaveBeenCalledWith('status.get', undefined, {
-      executionHost: 'runtime:vm'
+      envelope: { executionHost: 'runtime:vm' }
     })
   })
 
