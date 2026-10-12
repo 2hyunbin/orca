@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MessageChannel, Worker, type MessagePort } from 'node:worker_threads'
+import { runProcess } from '@orca/process-host'
 import { build } from 'esbuild'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -49,11 +50,25 @@ function waitForSpawn(child: WorkerThreadChildProcess): Promise<number> {
   )
 }
 
-async function waitUntilGone(pid: number): Promise<void> {
+// Why the zombie check: libuv reaps a child only through its own loop's handle, so
+// once the worker's loop is gone an exited POSIX child stays a zombie until Orca exits.
+async function isRunning(pid: number): Promise<boolean> {
+  try {
+    process.kill(pid, 0)
+  } catch {
+    return false
+  }
+  if (process.platform === 'win32') {
+    return true
+  }
+  const { stdout } = await runProcess({ program: 'ps', args: ['-o', 'stat=', '-p', String(pid)] })
+  const state = stdout.trim()
+  return state !== '' && !state.startsWith('Z')
+}
+
+async function waitUntilExited(pid: number): Promise<void> {
   for (let attempt = 0; attempt < 200; attempt++) {
-    try {
-      process.kill(pid, 0)
-    } catch {
+    if (!(await isRunning(pid))) {
       return
     }
     await new Promise((resolve) => setTimeout(resolve, 25))
@@ -269,7 +284,7 @@ describe('WorkerThreadChildProcessHost on a real worker thread', () => {
       await expect(abandoned).resolves.toMatchObject({
         message: expect.stringMatching(/^Child process worker (exited|failed)/)
       })
-      await waitUntilGone(pid)
+      await waitUntilExited(pid)
       expect(existsSync(marker)).toBe(true)
       expect(closed).toBe(false)
       expect(() => child.stdin.end()).not.toThrow()
