@@ -155,7 +155,7 @@ describe('connect-decision telemetry', () => {
       })
     })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toEqual({
-      route: 'relay',
+      route: 'unserved',
       reason: 'deferred',
       detail: reason
     })

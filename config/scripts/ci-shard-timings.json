@@ -5462,7 +5462,7 @@
       "src/main/ssh/ssh-reconnect-error-classification.test.ts": 123,
       "src/main/ssh/ssh-reconnect-ladder.test.ts": 96,
       "src/main/ssh/ssh-relay-answered-failure-producers.test.ts": 301,
-      "src/main/ssh/ssh-relay-deploy-helpers.test.ts": 571,
+      "src/main/ssh/ssh-relay-sentinel.test.ts": 571,
       "src/main/ssh/ssh-relay-endpoint-incumbent-shell.integration.test.ts": 2228,
       "src/main/ssh/ssh-relay-endpoint-incumbent.test.ts": 115,
       "src/main/ssh/ssh-relay-endpoint-pty-count.test.ts": 695,

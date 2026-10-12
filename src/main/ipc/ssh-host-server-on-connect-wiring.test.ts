@@ -80,7 +80,11 @@ describe('connect-time server decision against the real profile', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     await expect(
       resolveHostServerOnConnect(target(), hostServerOnConnectDeps(userDataPath))
-    ).resolves.toEqual({ route: 'relay', reason: 'orcad_unavailable', detail: 'unsupported_host' })
+    ).resolves.toEqual({
+      route: 'unserved',
+      reason: 'orcad_unavailable',
+      detail: 'unsupported_host'
+    })
     warn.mockRestore()
     expect(target().orcadFence).toBeUndefined()
     expect(target().managedServerUnavailable).toEqual({
