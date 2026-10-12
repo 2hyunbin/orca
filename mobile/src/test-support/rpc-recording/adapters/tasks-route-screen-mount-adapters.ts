@@ -1,3 +1,4 @@
+import type * as HostProtocolGatesContext from '../../../components/host-protocol-gates-context'
 import { createElement } from 'react'
 import { screenMount } from '../mounted-screen-tree'
 import { performHookAction } from '../hook-mount'
@@ -28,9 +29,9 @@ export function tasksRouteScreenMountAdapters(
       ).useMobileTasksRouteAndItemState
       const hostClientContext = loadHostClientContext(modules)
       // The screen sits under the host route's protocol gate; this one advertises no capabilities.
-      const gatesContext = modules.load<
-        typeof import('../../../components/host-protocol-gates-context')
-      >('mobile/src/components/host-protocol-gates-context.ts').HostStatusGatesContext
+      const gatesContext = modules.load<typeof HostProtocolGatesContext>(
+        'mobile/src/components/host-protocol-gates-context.ts'
+      ).HostStatusGatesContext
       const gates: HostStatusGates = {
         hostCapabilities: [],
         floatingWorkspaceEnabled: false,

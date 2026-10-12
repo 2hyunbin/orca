@@ -1,3 +1,4 @@
+import type * as WorkspaceSshGate from '../../../tasks/workspace-ssh-gate'
 import type { MountAdapter } from '../recording-scenario'
 import { hookMount, performHookAction } from '../hook-mount'
 import { observableModel, projectObservable } from '../observable-model'
@@ -17,9 +18,7 @@ export function taskWorkspaceHookMountAdapters(
   // an SSH connection detects remote agents, one without it detects local agents.
   const sshTargetKey = (connectionId: string | undefined): string =>
     modules
-      .load<typeof import('../../../tasks/workspace-ssh-gate')>(
-        'mobile/src/tasks/workspace-ssh-gate.ts'
-      )
+      .load<typeof WorkspaceSshGate>('mobile/src/tasks/workspace-ssh-gate.ts')
       .workspaceSshTargetKey(undefined, connectionId ?? null)
 
   function sshStateAdapter(connectionId: string | undefined): MountAdapter {

@@ -289,7 +289,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     ) {
       void loadTasks({ silent: true })
     }
-  }, [serverRepoList, loadTasks])
+  }, [serverRepoList, loadTasks, effectiveRepoIds.size, provider, connState, taskStateHydrated])
   return Object.assign(model, { loadTasks })
 }
 

@@ -9,6 +9,7 @@ import type { RpcResponse } from '../transport/types'
 import { relayHostsFeed } from '../worktree/relay-hosts-feed'
 import { MOBILE_TASKS_CAPABILITY } from './mobile-tasks-capability'
 import { getTaskRepoDetail } from './mobile-tasks-repository-presentation'
+import type { ConnectionPresentationModel } from './use-mobile-tasks-connection-presentation'
 
 const desktopRef: { current: FakeSession | null } = { current: null }
 /** The desktop's saved repo choice, as its settings answer it. */
@@ -22,9 +23,9 @@ vi.mock('react-native', () => ({
 }))
 vi.mock('../platform/clipboard', () => ({ useClipboardWriter: () => async () => {} }))
 // The whole screen mounts; its surface only hands the finished model to the test.
-const surface: { model?: Model } = {}
+const surface: { model?: ConnectionPresentationModel } = {}
 vi.mock('./MobileTasksLegacySurface', () => ({
-  MobileTasksLegacySurface: ({ model }: { model: Model }) => {
+  MobileTasksLegacySurface: ({ model }: { model: ConnectionPresentationModel }) => {
     surface.model = model
     renders.push({
       loading: model.loading,
@@ -176,9 +177,6 @@ function desktop(
   })
 }
 
-type Model = ReturnType<
-  typeof import('./use-mobile-tasks-connection-presentation').useMobileTasksConnectionPresentation
->
 /** What each render showed: the full-list spinner, and how many items. */
 const renders: { loading: boolean; refreshing: boolean; count: number }[] = []
 const mounted: ReactTestRenderer[] = []
@@ -193,7 +191,7 @@ async function mount(
   hostCapabilities: string[],
   savedSelection: string[] = [],
   savedSettings: Record<string, unknown> = {}
-): Promise<() => Model> {
+): Promise<() => ConnectionPresentationModel> {
   desktopRef.current = client
   savedSelectionRef.current = savedSelection
   savedSettingsRef.current = savedSettings
@@ -220,7 +218,7 @@ async function mount(
   return () => surface.model!
 }
 
-async function loadRepos(model: () => Model): Promise<unknown> {
+async function loadRepos(model: () => ConnectionPresentationModel): Promise<unknown> {
   const loaded: { repos?: unknown } = {}
   await act(async () => {
     loaded.repos = await model().repoListEnsureLoaded()
@@ -545,7 +543,7 @@ function deferred<Value>() {
   return { promise, resolve }
 }
 
-function titles(model: () => Model): string[] {
+function titles(model: () => ConnectionPresentationModel): string[] {
   return model()
     .items.map((item) => item.title)
     .sort()
