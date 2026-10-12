@@ -10,6 +10,12 @@ import {
   sessionBrowserTabCreate,
   sessionMarkdownNoteCreate
 } from './mobile-session-launch-operations'
+import {
+  createMobileFilePreviewHref,
+  displayNameFromPreviewPath
+} from '../files/mobile-file-preview-route'
+import { useWorkspaceRouteHandoff } from '../navigation/workspace-route-handoff'
+import { isRendererUnavailableReply } from '../transport/renderer-unavailable-reply'
 import { interpretOrThrowRefusalMessage } from '../transport/rpc-refusal-message'
 import type { MobileBrowserNavigationMethod } from './MobileBrowserTabActionSheet'
 import { isFileExistsErrorMessage } from './mobile-session-route-helpers'
@@ -26,8 +32,11 @@ const BROWSER_NAVIGATION_COMMANDS = {
 export function useMobileSessionContentCreateActions(
   scope: MobileSessionTerminalCreateActionsModel
 ) {
+  const router = useWorkspaceRouteHandoff()
   const {
+    hostId,
     worktreeId,
+    worktreeName,
     client,
     creatingBrowser,
     setCreatingBrowser,
@@ -73,6 +82,20 @@ export function useMobileSessionContentCreateActions(
           { worktree, relativePath },
           { timeoutMs: 15_000 }
         )
+        // Why: a headless server has no editor tabs; the preview route reads the new note through files.read.
+        if (isRendererUnavailableReply(openResponse)) {
+          router.push(
+            createMobileFilePreviewHref({
+              hostId,
+              worktreeId,
+              source: 'worktree',
+              relativePath,
+              name: displayNameFromPreviewPath(relativePath),
+              ...(worktreeName ? { worktreeName } : {})
+            })
+          )
+          return
+        }
         interpretOrThrowRefusalMessage(() => sourceFileOpenRun.interpret(openResponse), '')
         scheduleDelayedAction(() => void fetchSessionTabs(), 300)
         return

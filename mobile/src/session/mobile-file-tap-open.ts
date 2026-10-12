@@ -7,6 +7,7 @@ import { createMobileFilePreviewHref } from '../files/mobile-file-preview-route'
 import { classifyMobileArtifact } from './mobile-artifact-kind'
 import { fileTapOpenRun, fileTapPathResolve } from './mobile-session-launch-operations'
 import { shouldActivateOpenedMobileSessionTab } from './opened-mobile-session-tab'
+import { isRendererUnavailableReply } from '../transport/renderer-unavailable-reply'
 import type { RpcOperationSender } from '../transport/rpc-operation-sender'
 
 export type FileTapSessionTab = {
@@ -146,11 +147,7 @@ async function openMobileFileTapAsync<T extends FileTapSessionTab>(
     return
   }
   options.triggerOpenFeedback()
-  if (
-    resolvedWorktreeId !== options.worktreeId ||
-    options.line !== null ||
-    options.column !== null
-  ) {
+  const pushWorktreePreview = (): void =>
     options.pushPreviewRoute(
       createMobileFilePreviewHref({
         hostId: options.hostId,
@@ -163,6 +160,12 @@ async function openMobileFileTapAsync<T extends FileTapSessionTab>(
         ...(resolvedWorktreeName ? { worktreeName: resolvedWorktreeName } : {})
       })
     )
+  if (
+    resolvedWorktreeId !== options.worktreeId ||
+    options.line !== null ||
+    options.column !== null
+  ) {
+    pushWorktreePreview()
     return
   }
   if (
@@ -178,6 +181,11 @@ async function openMobileFileTapAsync<T extends FileTapSessionTab>(
     { worktree: resolvedWorktree, relativePath: openedPath },
     { timeoutMs: 15_000 }
   )
+  // Why: a headless server has no editor tabs; the preview route reads the file through files.read.
+  if (isRendererUnavailableReply(openResponse)) {
+    pushWorktreePreview()
+    return
+  }
   const opened = fileTapOpenRun.interpret(openResponse)
   if (!opened.accepted) {
     reportOpenFailure(options)
