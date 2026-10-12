@@ -1,3 +1,4 @@
+import type { PaneStart } from './runtime-pane-start-attempts'
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
 import type { ParsedAgentStatusPayload } from '../../shared/agent-status-types'
 import type {
@@ -103,6 +104,10 @@ export type TerminalCreateOptions = {
     launchAgent?: TuiAgent
   }) => void
   deferMobileSessionPublish?: boolean
+  /** Main-internal: the start a layout command's apply began for this pane (its J attempt). */
+  paneStart?: PaneStart
+  /** The issuing view measured its pane; 120x40 otherwise, as today. */
+  initialSize?: { cols: number; rows: number }
 }
 
 /** Identity a fenced spawn can be re-found by in the execution host's own inventory. */

@@ -6,6 +6,7 @@
 
 import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
+import type { EditorTabView } from '../editor-tab-view-types'
 import type { ExecutionHostId } from '../execution-host'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
 import type { TerminalPaneLayoutNode } from '../terminal-tab-types'
@@ -88,6 +89,8 @@ export type PublishedWorkspaceLayout = {
   /** In the one tab order. */
   tabs: PublishedTab[]
   editorFiles: PublishedEditorFile[]
+  /** Tab id → what an editor tab shows beyond its file (diff, conflict, preview…); never saved. */
+  editorViews?: Record<string, EditorTabView>
   browserTabs: PublishedBrowserTab[]
 }
 
@@ -152,6 +155,9 @@ export function publishWorkspaceLayout(
       language: file.language,
       ...pickStoredFields(file, ['readOnly', 'liveTail'])
     })),
+    ...(workspace.editorViews && Object.keys(workspace.editorViews).length > 0
+      ? { editorViews: workspace.editorViews }
+      : {}),
     browserTabs: (workspace.browserTabs ?? []).map((tab) => ({
       id: tab.id,
       ...pickStoredFields(tab, ['sessionProfileId', 'pageIds'])

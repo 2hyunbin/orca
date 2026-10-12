@@ -27,6 +27,7 @@ import {
   browserUnavailableMessage
 } from '../../shared/runtime-types'
 import { MOBILE_WEB_BUNDLE_CAPABILITY } from '../../shared/mobile-web-bundle/mobile-web-bundle-capability'
+import { WORKSPACE_LAYOUT_RUNTIME_CAPABILITY } from '../../shared/workspace-layout/workspace-layout-capability'
 import { loadBundledMobileWebBundle } from './bundled-mobile-web-bundle'
 import { runtimeTerminalDegradation } from './native-terminal-availability'
 import { isWindowsProcessStartTimeAvailable } from '../windows/windows-process-table'
@@ -108,6 +109,8 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
         (capability !== TERMINAL_PROMPT_DELIVERY_RUNTIME_CAPABILITY ||
           supportsDurableTerminalPromptDelivery())
     )
+    // Every host serves it; only the local window sends `layout.*` and `view.*` in phase 1.
+    capabilities.push(WORKSPACE_LAYOUT_RUNTIME_CAPABILITY)
     if (hasOffscreen || hasHeadlessCommands) {
       capabilities.push(BROWSER_HEADLESS_RUNTIME_CAPABILITY)
     }

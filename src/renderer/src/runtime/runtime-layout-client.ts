@@ -90,6 +90,10 @@ export function subscribeRuntimeLayout(
       lose(streamGeneration)
       return
     }
+    // Only a subscription that names its view gets these; this client names none yet.
+    if (frame.type === 'navigate') {
+      return
+    }
     if (frame.type === 'snapshot') {
       setStatus({ state: 'live' })
     } else if (state !== 'live') {

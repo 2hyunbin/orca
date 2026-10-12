@@ -148,6 +148,11 @@ export type LayoutCommandResult = {
   renamedTabIds?: Record<string, string>
 }
 
+/** A `layout.*` reply: the model's refusals plus those the runtime adds from host facts. */
+export type LayoutCommandReply =
+  | ({ ok: true } & LayoutCommandResult)
+  | { ok: false; code: LayoutRefusalCode | 'shell_override_refused'; message?: string }
+
 export type LayoutContext = {
   mintId: () => string
   /** Pane ids must be UUIDs (pane keys and PTY env carry them). */
@@ -155,6 +160,8 @@ export type LayoutContext = {
   now: () => number
   /** True while a start of this pane is in flight; such a pane is not started again. */
   isStarting?: (leafId: string) => boolean
+  /** Whether a bound terminal may still run; a pane bound to one that does not is started again. */
+  isRunning?: (ptyId: string) => boolean
 }
 
 export type LayoutApplyResult<Model> =

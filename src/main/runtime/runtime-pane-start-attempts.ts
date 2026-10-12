@@ -10,8 +10,11 @@ import {
   type PaneOutcomes
 } from '../../shared/workspace-layout/workspace-layout-pane-outcomes'
 
-/** A start an apply asked for, with the attempt token its spawn completion must carry. */
-export type PaneStart = { paneKey: string; attempt: string }
+/**
+ * A start an apply asked for, with the attempt token its spawn completion must carry.
+ * `restoreSessionId`: the saved terminal a restorable pane reattaches to (cold restore).
+ */
+export type PaneStart = { paneKey: string; attempt: string; restoreSessionId?: string }
 
 export class RuntimePaneStartAttempts {
   /** Leaf id → the token of its start in flight. Leaf ids are UUIDs, unique across partitions. */

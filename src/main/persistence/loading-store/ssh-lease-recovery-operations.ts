@@ -1,4 +1,6 @@
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
+import type { TerminalLeafMoveRequest } from '../../../shared/terminal-leaf-move'
+import { rekeyMovedLeafProfileRecords } from '../terminal-topology/terminal-leaf-move'
 import {
   getSshRemotePtyLeases as getSshRemotePtyLeasesOperation,
   markSshRemotePtyLease as markSshRemotePtyLeaseOperation,
@@ -60,6 +62,24 @@ export class SshLeaseRecoveryOperations {
 
   removeSshRemotePtyLeases(targetId: string): void {
     removeSshRemotePtyLeasesOperation(getSshPtyLeaseOperations(this), targetId)
+  }
+
+  /** A pane the runtime's layout moved into a new tab: its pane-keyed marks and lease follow it. */
+  rekeyMovedTerminalLeafRecords(move: TerminalLeafMoveRequest): void {
+    const { runtime, scheduling } = this[sshLeaseRecoveryOperationsContext]
+    const { ui, sshRemotePtyLeases } = rekeyMovedLeafProfileRecords(runtime.state, move)
+    const dirty: string[] = []
+    if (ui) {
+      runtime.state.ui = ui
+      dirty.push('ui')
+    }
+    if (sshRemotePtyLeases) {
+      runtime.state.sshRemotePtyLeases = sshRemotePtyLeases
+      dirty.push('sshRemotePtyLeases')
+    }
+    if (dirty.length > 0) {
+      scheduleSave(scheduling, dirty)
+    }
   }
 }
 

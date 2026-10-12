@@ -24,6 +24,21 @@ export type LayoutViewRecord = DesktopLayoutView
 
 export type LayoutViewStore = Readonly<Partial<Record<LayoutViewId, LayoutViewRecord>>>
 
+function isMap(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+// Checks the top-level shape only: the record is its view's own, carried as it was sent.
+export function isLayoutViewRecord(value: unknown): value is LayoutViewRecord {
+  return (
+    isMap(value) &&
+    isMap(value.groups) &&
+    isMap(value.lastFocusedAt) &&
+    isMap(value.panes) &&
+    isMap(value.editorDrafts)
+  )
+}
+
 export function emptyLayoutViewRecord(): LayoutViewRecord {
   return {
     activeRepoId: null,

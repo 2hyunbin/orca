@@ -85,6 +85,19 @@ describe('startPane and restartPane', () => {
     expect(restart.ok && restart.outcomes).toEqual({ [leafId]: null })
   })
 
+  it('starts a pane whose bound terminal no longer runs, keeping the binding to restore it', () => {
+    const { model, tabId, leafId, context } = setup(1)
+    const bound = bind(model, tabId, leafId)
+    const paneKey = `${tabId}:${leafId}`
+    const start = applyLayoutCommand(
+      bound,
+      { type: 'startPane', workspace: WS, paneKey },
+      { ...context, isRunning: (ptyId) => ptyId !== 'pty-1' }
+    )
+    expect(start.ok && start.effects).toEqual({ stopPtyIds: [], startPaneKeys: [paneKey] })
+    expect(start.ok && start.model).toEqual(bound)
+  })
+
   it('clears the last outcome when a start is issued, not when it is a no-op', () => {
     const { model, tabId, leafId, context } = setup(1)
     const paneKey = `${tabId}:${leafId}`

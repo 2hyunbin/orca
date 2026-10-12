@@ -15,7 +15,15 @@ export type HolderStore = Required<
   Pick<RuntimeStore, 'runDurableMutation'>
 
 /** The Store's session methods the holder uses; null for a runtime built without them. */
-export function holderStoreOf(store: RuntimeStore | null): HolderStore | null {
+export function holderStoreOf(
+  store: Pick<
+    RuntimeStore,
+    | 'getWorkspaceSession'
+    | 'getWorkspaceSessionHostIds'
+    | 'setWorkspaceSession'
+    | 'runDurableMutation'
+  > | null
+): HolderStore | null {
   if (!store?.getWorkspaceSession || !store.setWorkspaceSession) {
     return null
   }
@@ -28,6 +36,22 @@ export function holderStoreOf(store: RuntimeStore | null): HolderStore | null {
     ...(store.runDurableMutation
       ? { runDurableMutation: (mutate) => store.runDurableMutation!(mutate) }
       : {})
+  }
+}
+
+/**
+ * A partition the holder does not hold (`runtime:<env>`): the runtime writes only its view fields
+ * there (O1); its layout fields are the frozen mirror's.
+ */
+export function writeUnheldViewFields(
+  store: HolderStore,
+  hostId: ExecutionHostId,
+  fields: Partial<WorkspaceSessionState>
+): void {
+  try {
+    store.setWorkspaceSession({ ...store.getWorkspaceSession(hostId), ...fields }, hostId)
+  } catch (error) {
+    console.error('[workspace-layout] could not save a server workspace selection:', error)
   }
 }
 

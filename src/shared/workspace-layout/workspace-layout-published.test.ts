@@ -74,6 +74,14 @@ describe('publishWorkspaceLayout: the explicit published projection', () => {
     )
     expect(tabs.find((tab) => tab.kind === 'terminal')?.executionHostId).toBe('local')
   })
+
+  it('publishes each editor tab view, and no map when there is none', () => {
+    const { layout, workspace } = published()
+    expect(workspace).not.toHaveProperty('editorViews')
+    const git = layout.workspaces[GIT_KEY]!
+    git.editorViews = { 'editor:src/app.ts': { mode: 'diff', diffSource: 'staged' } }
+    expect(publishWorkspaceLayout(git, 'local', bound).editorViews).toEqual(git.editorViews)
+  })
 })
 
 describe('checkLayoutRoundTrip', () => {

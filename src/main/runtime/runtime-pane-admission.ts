@@ -13,6 +13,8 @@ type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
   leafId: string
   /** The group a new tab joins; a split stays in its parent's. */
   groupId?: string
+  /** The start a layout command's apply began for a pane already in the layout. */
+  paneStart?: PaneStart
 }
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
@@ -66,6 +68,9 @@ function admit(
   holder: RuntimeWorkspaceLayouts,
   args: AdmittedSpawnArgs
 ): { start: PaneStart; admitted: boolean } {
+  if (args.paneStart) {
+    return { start: args.paneStart, admitted: false }
+  }
   const hostId = hostIdOf(args)
   const paneKey = paneKeyOf(args.tabId, args.leafId)
   const workspace = holder.model(hostId)?.workspaces[args.worktreeId]
@@ -93,7 +98,7 @@ export async function spawnInAdmittedPane(
   controller: Required<Pick<RuntimePtyController, 'spawn' | 'kill'>>,
   args: AdmittedSpawnArgs
 ): ReturnType<Spawn> {
-  const { groupId: _groupId, ...spawnArgs } = args
+  const { groupId: _groupId, paneStart: _paneStart, ...spawnArgs } = args
   if (!holder.model(hostIdOf(args))) {
     // No partition holds this host's layout (a runtime without a profile): nothing to admit.
     return controller.spawn(spawnArgs)

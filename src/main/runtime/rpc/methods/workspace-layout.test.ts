@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import { OrcaRuntimeService } from '../../orca-runtime'
 import type { WorkspaceLayoutEvent } from '../../../../shared/workspace-layout/workspace-layout-stream-frames'
 import { eraseRpcMethods, isStreamingMethod, type RpcContext } from '../core'
 import { ALL_RPC_METHODS } from './index'
-import { RUNTIME_CAPABILITIES } from '../../../../shared/protocol-version'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from '../../runtime-rpc/runtime-rpc-mobile-method-allowlist'
+import { emptyLayoutViewRecord } from '../../../../shared/workspace-layout/workspace-layout-views'
 
 const methods = eraseRpcMethods(ALL_RPC_METHODS)
 const subscribe = methods.find((method) => method.name === 'layout.subscribe')
@@ -40,10 +40,48 @@ function harness() {
 }
 
 describe('layout.subscribe', () => {
-  it('is served but neither advertised nor open to phones (inert)', () => {
+  it('is advertised as workspace-layout.v1, and closed to phones until the OTA page uses it', () => {
     expect(subscribe && isStreamingMethod(subscribe)).toBe(true)
-    expect(RUNTIME_CAPABILITIES.some((capability) => capability.startsWith('layout'))).toBe(false)
-    expect(MOBILE_RPC_METHOD_ALLOWLIST.has('layout.subscribe')).toBe(false)
+    expect(new OrcaRuntimeService().getStatus().capabilities).toContain('workspace-layout.v1')
+    for (const method of methods) {
+      if (method.name.startsWith('layout.') || method.name.startsWith('view.')) {
+        expect(MOBILE_RPC_METHOD_ALLOWLIST.has(method.name)).toBe(false)
+      }
+    }
+  })
+
+  it("carries the named view's record on the snapshot and only that view's navigate frames", async () => {
+    const { runtime, cleanups } = harness()
+    const navigateListeners = new Map<string, (request: unknown) => void>()
+    const record = emptyLayoutViewRecord()
+    Object.assign(runtime, {
+      layoutCommands: {
+        views: {
+          record: vi.fn(() => record),
+          onNavigate: (viewId: string, listener: (request: unknown) => void) => {
+            navigateListeners.set(viewId, listener)
+            return () => navigateListeners.delete(viewId)
+          }
+        }
+      }
+    })
+    const emitted: unknown[] = []
+    if (!subscribe || !isStreamingMethod(subscribe)) {
+      throw new Error('layout.subscribe is not a streaming method')
+    }
+    const done = subscribe.handler(
+      { viewId: 'desktop' },
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only runtime and connectionId from its context.
+      { runtime, connectionId: 'conn-1' } as RpcContext,
+      (event) => emitted.push(event)
+    )
+    expect(emitted[0]).toMatchObject({ type: 'snapshot', view: record })
+    const request = { kind: 'focusTab', workspace: 'a', tabId: 't' }
+    navigateListeners.get('desktop')?.(request)
+    expect(emitted[1]).toEqual({ type: 'navigate', request })
+    runtime.cleanupSubscription([...cleanups.keys()][0]!)
+    await done
+    expect(navigateListeners.size).toBe(0)
   })
 
   it('sends the snapshot, then the named workspaces’ changes, and ends on unsubscribe', async () => {

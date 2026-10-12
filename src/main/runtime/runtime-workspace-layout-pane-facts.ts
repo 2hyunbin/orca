@@ -1,6 +1,7 @@
 // What the holder joins to its model at publish and at an exit: each pane's derived status and
 // live title, and which panes a model holds.
 
+import { randomUUID } from 'node:crypto'
 import { parseExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { leafIdsOf } from '../../shared/workspace-layout/workspace-layout-command-steps'
@@ -15,7 +16,8 @@ import type {
 } from '../../shared/workspace-layout/workspace-layout-published'
 import { findTerminalTab } from '../../shared/workspace-layout/workspace-layout-removal'
 import type { PaneOutcomeChanges } from '../../shared/workspace-layout/workspace-layout-pane-outcomes'
-import type { RuntimePaneStartAttempts } from './runtime-pane-start-attempts'
+import type { RuntimePaneStartAttempts, PaneStart } from './runtime-pane-start-attempts'
+import type { LayoutContext } from '../../shared/workspace-layout/workspace-layout-command-types'
 import type { HolderStore } from './runtime-workspace-layout-writer'
 
 /** What the PTY registry knows of a bound pane's terminal. */
@@ -76,6 +78,56 @@ export function holderPaneFacts(
     })
     return { status, ...(terminal?.liveTitle ? { liveTitle: terminal.liveTitle } : {}) }
   }
+}
+
+/** An apply's commands see these facts of the holder: J, and whether a bound terminal may run. */
+export function holderCommandContext(
+  starts: RuntimePaneStartAttempts,
+  terminalFacts: TerminalFacts
+): LayoutContext {
+  return {
+    mintId: randomUUID,
+    mintLeafId: randomUUID,
+    now: Date.now,
+    isStarting: (leafId) => starts.isStarting(leafId),
+    // Loss of contact is not an exit: an unverifiable terminal is not started again.
+    isRunning: (ptyId) => {
+      const fact = terminalFacts(ptyId).fact
+      return fact === 'live' || fact === 'unverifiable'
+    }
+  }
+}
+
+/**
+ * Begins an attempt for each pane to start. A pane still bound with no last outcome is
+ * restorable: its start reattaches to that terminal (cold restore). An exited or failed pane
+ * starts fresh, as Restart does today.
+ */
+export function beginStarts(
+  model: WorkspaceLayoutModel | null,
+  paneKeys: readonly string[],
+  starts: RuntimePaneStartAttempts
+): PaneStart[] {
+  return paneKeys.flatMap((paneKey) => {
+    const leafId = parsePaneKey(paneKey)?.leafId
+    if (!leafId) {
+      return []
+    }
+    const bound = model ? boundPtyIdOf(model, leafId) : undefined
+    const restoreSessionId = starts.outcome(leafId) === null ? bound : undefined
+    const attempt = starts.begin(leafId)
+    return [{ paneKey, attempt, ...(restoreSessionId ? { restoreSessionId } : {}) }]
+  })
+}
+
+function boundPtyIdOf(model: WorkspaceLayoutModel, leafId: string): string | undefined {
+  for (const workspace of Object.values(model.workspaces)) {
+    const leaf = workspace.leaves?.[leafId]
+    if (leaf) {
+      return leaf.ptyId
+    }
+  }
+  return undefined
 }
 
 /** Workspaces an apply changed: a new model object, or an outcome alone (a kept exit). */

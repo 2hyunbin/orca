@@ -28,8 +28,8 @@ function workspacePanes(workspace: WorkspaceLayout): { paneKey: string; leafId: 
 }
 
 /**
- * Idempotent: starts or restores a pane that has no live terminal. A bound pane, or one whose
- * start is in flight, is left alone; only restartPane replaces a terminal.
+ * Idempotent: starts or restores a pane that has no running terminal. A pane whose terminal may
+ * still run, or whose start is in flight, is left alone; only restartPane replaces a terminal.
  */
 export function startPane(
   model: WorkspaceLayoutModel,
@@ -45,7 +45,8 @@ export function startPane(
   if (leaf?.sleeping) {
     return refuse('pane_sleeping')
   }
-  if (leaf?.ptyId || context.isStarting?.(pane.leafId)) {
+  const running = leaf?.ptyId ? (context.isRunning?.(leaf.ptyId) ?? true) : false
+  if (running || context.isStarting?.(pane.leafId)) {
     return applied(model)
   }
   return applied(model, {}, { startPaneKeys: [command.paneKey] }, { [pane.leafId]: null })

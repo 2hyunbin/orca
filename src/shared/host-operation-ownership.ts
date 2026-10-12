@@ -64,6 +64,7 @@ export const HOST_OPERATION_OWNERSHIP = {
   terminal: 'host',
   ui: 'host',
   updater: 'host',
+  view: 'host',
   workspacePorts: 'host',
   worktree: 'host'
 } as const satisfies Record<string, HostOperationOwnership>

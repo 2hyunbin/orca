@@ -2,7 +2,6 @@
 // transitions synchronously through the pure layout module, saves from its own memory and
 // publishes only the workspaces an apply changed. `runtime:<env>` partitions never enter it.
 
-import { randomUUID } from 'node:crypto'
 import { parseExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
@@ -36,6 +35,8 @@ import {
   changedWorkspaceKeys,
   emptyPublishedWorkspace,
   holderPaneFacts,
+  beginStarts,
+  holderCommandContext,
   tabHasOtherBoundPane,
   terminalLeafIds,
   type RuntimeWorkspaceLayoutsDeps
@@ -99,13 +100,23 @@ export class RuntimeWorkspaceLayouts {
     if (!hostId || !loaded) {
       return { ok: false, code: 'workspace_not_found' }
     }
-    const result = applyLayoutCommand(loaded.layout, command, {
-      mintId: randomUUID,
-      mintLeafId: randomUUID,
-      now: Date.now,
-      isStarting: (leafId) => this.starts.isStarting(leafId)
-    })
+    const context = holderCommandContext(this.starts, this.deps.terminal)
+    const result = applyLayoutCommand(loaded.layout, command, context)
     return result.ok ? this.commit(hostId, result, DURABLE_COMMANDS.has(command.type)) : result
+  }
+
+  /** What a held partition keeps beside its layout: the desktop view's part and content facts. */
+  beside(hostId: ExecutionHostId): Omit<LoadedWorkspaceLayout, 'layout'> | undefined {
+    return this.partition(hostId) ?? undefined
+  }
+
+  /** View records or content facts changed: saved on the debounce, never published. */
+  updateBeside(hostId: ExecutionHostId, beside: Partial<Omit<LoadedWorkspaceLayout, 'layout'>>) {
+    const loaded = this.partition(hostId)
+    if (loaded) {
+      this.partitions.set(hostId, { ...loaded, ...beside })
+      this.save(hostId, false)
+    }
   }
 
   /**
@@ -143,8 +154,7 @@ export class RuntimeWorkspaceLayouts {
 
   /** A fresh attempt for a pane already in the layout, as when a start attaches to it. */
   beginStart(paneKey: string): PaneStart | null {
-    const leafId = parsePaneKey(paneKey)?.leafId
-    return leafId ? { paneKey, attempt: this.starts.begin(leafId) } : null
+    return beginStarts(null, [paneKey], this.starts)[0] ?? null
   }
 
   /**
@@ -310,10 +320,11 @@ export class RuntimeWorkspaceLayouts {
   ): HolderApplied {
     const before = this.partitions.get(hostId)!
     this.partitions.set(hostId, { ...before, layout: result.model })
+    // Before the apply's outcomes land: they tell a restorable pane from an exited or failed one.
+    const starts = beginStarts(result.model, result.effects.startPaneKeys, this.starts)
     this.starts.applyOutcomes(result.outcomes)
     const remaining = terminalLeafIds(result.model)
     this.starts.forget([...terminalLeafIds(before.layout)].filter((id) => !remaining.has(id)))
-    const starts = result.effects.startPaneKeys.flatMap((paneKey) => this.beginStart(paneKey) ?? [])
     if (result.effects.stopPtyIds.length > 0) {
       this.deps.stopTerminals(result.effects.stopPtyIds)
     }

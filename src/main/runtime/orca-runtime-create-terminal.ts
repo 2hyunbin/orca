@@ -60,9 +60,9 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
         if (launchOpts.signal?.aborted) {
           throw new Error('client_disconnected')
         }
+        const size = launchOpts.initialSize ?? { cols: 120, rows: 40 }
         const adoptedBeforeLaunch = await this.ptyController.adoptStablePane?.({
-          cols: 120,
-          rows: 40,
+          ...size,
           cwd,
           connectionId: workspace.connectionId,
           worktreeId: workspace.id,
@@ -124,8 +124,8 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
           const { launchAgent } = launchOpts
           launchOpts.onPtySpawnDispatched?.({ launchConfig: effectiveLaunchConfig, launchAgent })
           result = await dependencies.spawnInAdmittedPane(this.layoutHolder, this.ptyController, {
-            cols: 120,
-            rows: 40,
+            ...size,
+            ...(launchOpts.paneStart ? { paneStart: launchOpts.paneStart } : {}),
             cwd,
             command: sequencedStartupCommand
               ? launchOpts.command

@@ -1,6 +1,5 @@
-// The read-only layout stream (design 2.4) and the server snapshot read (design 6.3). Not
-// advertised as a capability and not on the mobile allowlist: no client calls them until the
-// switch, so they are inert.
+// The layout stream (design 2.4) and the server snapshot read (design 6.3). Advertised as
+// `workspace-layout.v1` and not on the mobile allowlist: in phase 1 only the local window reads it.
 
 import {
   LayoutSubscribeParams,
@@ -24,6 +23,7 @@ export const WORKSPACE_LAYOUT_METHODS = [
       // Typed so the frames stay the contract the client reads.
       const emit = (frame: WorkspaceLayoutStreamFrame): void => emitFrame(frame)
       const keys = params?.workspaces
+      const viewId = params?.viewId
       const wanted = (key: string) => !Array.isArray(keys) || keys.includes(key)
       await new Promise<void>((resolve) => {
         const subscriptionId = `layout-${connectionId ?? 'inproc'}-${++layoutSubscriptionSeq}`
@@ -34,10 +34,16 @@ export const WORKSPACE_LAYOUT_METHODS = [
             emit(event)
           }
         })
+        const stopNavigation = viewId
+          ? runtime.layoutCommands.views.onNavigate(viewId, (request) =>
+              emit({ type: 'navigate', request })
+            )
+          : null
         runtime.registerSubscriptionCleanup(
           cleanupKey,
           () => {
             unsubscribe()
+            stopNavigation?.()
             signal?.removeEventListener('abort', release)
             emit({ type: 'end' })
             resolve()
@@ -48,7 +54,8 @@ export const WORKSPACE_LAYOUT_METHODS = [
         emit({
           type: 'snapshot',
           subscriptionId,
-          workspaces: snapshot.filter((entry) => wanted(entry.key))
+          workspaces: snapshot.filter((entry) => wanted(entry.key)),
+          ...(viewId ? { view: runtime.layoutCommands.views.record(viewId) } : {})
         })
         if (signal?.aborted) {
           release()

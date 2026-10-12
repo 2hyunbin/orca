@@ -6,6 +6,7 @@ import { localDesktopSession } from './workspace-layout-profile.test-fixture'
 import { publishWorkspaceLayout } from './workspace-layout-published'
 import { GIT_KEY } from './workspace-layout-session.test-fixture'
 import { readWorkspaceLayoutStreamFrame } from './workspace-layout-stream-frames'
+import { emptyLayoutViewRecord } from './workspace-layout-views'
 
 function publishedLayout() {
   const { layout } = loadWorkspaceLayout(
@@ -25,6 +26,10 @@ describe('readWorkspaceLayoutStreamFrame', () => {
       { type: 'workspace', key: GIT_KEY, layout },
       { type: 'snapshot', workspaces: [{ key: GIT_KEY, layout }] },
       { type: 'removed', key: GIT_KEY },
+      { type: 'snapshot', workspaces: [], view: emptyLayoutViewRecord() },
+      { type: 'navigate', request: { kind: 'focusTab', workspace: GIT_KEY, tabId: 't1' } },
+      { type: 'navigate', request: { kind: 'focusPane', workspace: GIT_KEY, paneKey: 't1:l1' } },
+      { type: 'navigate', request: { kind: 'revealWorkspace', workspace: GIT_KEY } },
       { type: 'end' }
     ]
     for (const frame of frames) {
@@ -43,6 +48,9 @@ describe('readWorkspaceLayoutStreamFrame', () => {
     const layout = publishedLayout()
     for (const unreadable of [
       { type: 'navigate', request: {} },
+      { type: 'navigate', request: { kind: 'focusTab', workspace: GIT_KEY } },
+      { type: 'navigate', request: { kind: 'openFile', workspace: GIT_KEY } },
+      { type: 'future-frame' },
       null,
       { type: 'workspace', key: '', layout },
       { type: 'workspace', key: 'a', layout: {} },
