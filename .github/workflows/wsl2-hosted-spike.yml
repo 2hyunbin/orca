@@ -54,6 +54,8 @@ jobs:
           wsl.exe --status; "wsl --status exit=$LASTEXITCODE"
           wsl.exe --list --verbose; "wsl --list exit=$LASTEXITCODE"
           New-Item -ItemType File -Force (Join-Path $env:RUNNER_TEMP 'timings.csv') | Out-Null
+          # wsl --list exits -1 with no distros installed; this step only reports.
+          exit 0
 
       - name: Cache the pinned rootfs and guest Node
         uses: actions/cache@v4
