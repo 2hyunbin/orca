@@ -142,6 +142,25 @@ export async function runTypecheckProjects({
   parallelism = availableParallelism()
 } = {}) {
   const batches = typecheckBatches(projects, { compiler, bunConcurrency, memoryBytes, parallelism })
+  if (compiler === 'bun') {
+    // Equal Bun reservations let a freed slot start the next project without waiting for peers.
+    const pending = batches.flat()
+    const failures = []
+    let next = 0
+    await Promise.all(
+      Array.from({ length: Math.max(0, ...batches.map((batch) => batch.length)) }, async () => {
+        while (next < pending.length) {
+          const index = next++
+          try {
+            await checkProject(pending[index].config, { compiler, bunThreads, root })
+          } catch (reason) {
+            failures.push({ index, reason })
+          }
+        }
+      })
+    )
+    return failures.sort((left, right) => left.index - right.index).map(({ reason }) => reason)
+  }
   // Every batch runs even after one fails, so a single broken project still reports the rest.
   const failures = []
   for (const batch of batches) {
