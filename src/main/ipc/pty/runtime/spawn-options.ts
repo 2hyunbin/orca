@@ -1,5 +1,4 @@
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import { applyAdminPowerShellSetting } from '../windows-admin-terminal-setting'
 import { getLegacyOpenCodeEnvKeysToDelete } from '../../../opencode/legacy-shared-config-dir'
 import type { IPtyProvider, PtySpawnResult } from '../../../providers/pty-provider-contract'
 import { LocalPtyProvider } from '../../../providers/local-pty-provider'
@@ -206,7 +205,7 @@ export async function buildRuntimePtySpawnOptions(
     ctx.spawnOptions.terminalWindowsPowerShellImplementation = ctx.deps.getSettings
       ? (ctx.deps.getSettings()?.terminalWindowsPowerShellImplementation ?? 'auto')
       : undefined
-    applyAdminPowerShellSetting(ctx.spawnOptions, ctx.deps.getSettings?.(), ctx.expectedWslDistro)
+    // No elevation here: runtime clients may be remote, and the consent prompt appears only on this desktop.
   }
   if (
     !ctx.preAdoptedStablePane &&

@@ -11,6 +11,14 @@ import type { DaemonProcessHandle } from './daemon-spawner'
 import { PROTOCOL_VERSION } from './types'
 import { DaemonClient } from './client'
 
+export class WindowsAdminApprovalCanceledError extends Error {
+  constructor() {
+    super(
+      'Administrator terminal canceled. Approve the Windows prompt to open an administrator PowerShell.'
+    )
+  }
+}
+
 export function windowsAdminLauncherPath(): string {
   const environment = getAppEnvironment()
   const bundled = process.resourcesPath
@@ -52,9 +60,7 @@ export async function launchWindowsAdminDaemon(
     maxOutputBytes: 8192
   })
   if (result.code === 1223) {
-    throw new Error(
-      'Administrator terminal canceled. Approve the Windows prompt to open an administrator PowerShell.'
-    )
+    throw new WindowsAdminApprovalCanceledError()
   }
   if (result.code !== 0 || result.timedOut) {
     throw new Error(
@@ -70,7 +76,10 @@ export async function holdWindowsAdminDaemonLease(
   options: DaemonChildSpawnOptions
 ): Promise<DaemonProcessHandle> {
   const deadline = Date.now() + 10_000
-  const client = new DaemonClient({ socketPath: options.socketPath, tokenPath: options.tokenPath })
+  const client = new DaemonClient({
+    socketPath: options.socketPath,
+    tokenPath: options.tokenPath
+  })
   let failure = new Error('Administrator terminal host ownership could not be verified.')
   do {
     // Pipe creation precedes PID/token publication; authenticate only the requested incarnation.

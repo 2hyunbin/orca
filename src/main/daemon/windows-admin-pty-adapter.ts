@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppEnvironment } from '../../shared/app-environment'
 import type {
@@ -17,6 +17,10 @@ import {
   getDaemonTokenPath
 } from './daemon-spawner'
 import { releaseDaemonAdoptionLease } from './daemon-endpoint-adoption'
+import { readDaemonPidRecord } from './daemon-endpoint-incarnation'
+import { isDaemonEndpointGoneError } from './daemon-errors'
+import { inspectProcessSignal } from './daemon-process-inspection'
+import { WindowsAdminApprovalCanceledError } from './windows-admin-daemon-launch'
 import type { SessionInfo } from './types'
 import type { DaemonIdleRetirementResult } from './daemon-pty-runtime-state'
 
@@ -43,7 +47,9 @@ export class WindowsAdminPtyAdapter extends DaemonPtyAdapter {
     // Background inventories and input recovery must never raise Windows consent prompts.
     this.spawner = new DaemonSpawner({
       runtimeDir,
-      launcher: createOutOfProcessLauncher(runtimeDir, { windowsAdministrator: true })
+      launcher: createOutOfProcessLauncher(runtimeDir, {
+        windowsAdministrator: true
+      })
     })
   }
 
@@ -70,11 +76,38 @@ export class WindowsAdminPtyAdapter extends DaemonPtyAdapter {
   }
 
   override listProcesses(options?: { deadlineMs?: number }): Promise<PtyProcessInfo[]> {
-    return this.hasNeverLaunched() ? Promise.resolve([]) : super.listProcesses(options)
+    return this.hasNeverLaunched()
+      ? Promise.resolve([])
+      : this.emptyWhenHostGone(super.listProcesses(options))
   }
 
   override listSessions(): Promise<SessionInfo[]> {
-    return this.hasNeverLaunched() ? Promise.resolve([]) : super.listSessions()
+    return this.hasNeverLaunched()
+      ? Promise.resolve([])
+      : this.emptyWhenHostGone(super.listSessions())
+  }
+
+  // A crash, logoff or reboot leaves the PID/token files; an absent pipe plus a missing PID proves
+  // the host is gone. A live elevated host reports EPERM, so this still fails closed.
+  private async emptyWhenHostGone<T>(inventory: Promise<T[]>): Promise<T[]> {
+    try {
+      return await inventory
+    } catch (error) {
+      const record = readDaemonPidRecord(this.pidPath)
+      if (
+        this.launchInFlight ||
+        !isDaemonEndpointGoneError(error) ||
+        (record && inspectProcessSignal(record.pid) !== 'missing')
+      ) {
+        throw error
+      }
+      for (const path of [this.pidPath, this.tokenPath]) {
+        if (path) {
+          rmSync(path, { force: true })
+        }
+      }
+      return []
+    }
   }
 
   override requestIdleRetirement(): Promise<DaemonIdleRetirementResult> {
@@ -97,7 +130,15 @@ export class WindowsAdminPtyAdapter extends DaemonPtyAdapter {
       return
     }
     this.spawner.resetHandle()
-    await this.spawner.ensureRunning()
+    try {
+      await this.spawner.ensureRunning()
+    } catch (error) {
+      // Declining the prompt is a user choice, not a crash; keep it out of the crash-loop window.
+      if (error instanceof WindowsAdminApprovalCanceledError) {
+        this.spawner.resetRespawnWindow()
+      }
+      throw error
+    }
     try {
       await this.establishLifecycleLease()
     } finally {
