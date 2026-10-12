@@ -50,6 +50,7 @@ on:
 env:
   ORCA_BACKGROUND_LAUNCH: '1'
   ORCA_E2E_HEADLESS: '1'
+  ORCA_E2E_FORCE_HEADFUL: '1'
 
 jobs:
   build:
