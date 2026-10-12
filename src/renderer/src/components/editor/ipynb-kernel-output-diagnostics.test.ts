@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyKernelOutput, toStoredOutputs, type LiveOutputs } from './ipynb-kernel-outputs'
+import { parseIpynb, parseIpynbOutput } from './ipynb-parse'
 
 const LIMIT = 16 * 1024 * 1024
 const TEXT_LIMIT = 2 * 1024 * 1024
@@ -91,6 +92,65 @@ describe('notebook finite first diagnostics', () => {
     expect(String(live.outputs[0]?.evalue).length).toBe(64 * 1024)
     expect(noticeCount(live)).toBe(1)
     expect(JSON.stringify(live.outputs).length).toBeLessThan(TEXT_LIMIT + 1024)
+  })
+
+  it('keeps the actionable error summary visible in bounded live and saved tracebacks', () => {
+    const ename = 'ValueError'
+    const evalue = 'Set API_TOKEN before running this cell.'
+    const summary = `${ename}: ${evalue}`
+    const header = 'Traceback (most recent call last):'
+    const headLimit = TEXT_LIMIT - ename.length - evalue.length - summary.length - 1
+    const live = applyKernelOutput(EMPTY, 'error', {
+      ename,
+      evalue,
+      traceback: [
+        header,
+        `${'x'.repeat(headLimit - header.length - 2)}😀${'y'.repeat(LIMIT)}`,
+        summary
+      ]
+    })
+    const parsed = parseIpynbOutput(live.outputs[0])
+    if (parsed?.kind !== 'error') {
+      throw new Error('Expected live error')
+    }
+    const visibleText = parsed.traceback || `${parsed.name}: ${parsed.message}`
+    expect(visibleText.startsWith(`${header}\n`)).toBe(true)
+    expect(visibleText.endsWith(`x\n${summary}`)).toBe(true)
+    expect(visibleText.includes('\uD83D')).toBe(false)
+    expect(visibleText.includes(evalue)).toBe(true)
+    expect(parsed.name.length + parsed.message.length + visibleText.length).toBeLessThanOrEqual(
+      TEXT_LIMIT
+    )
+    expect(JSON.stringify(live.outputs).length).toBeLessThan(TEXT_LIMIT + 1024)
+    expect(noticeCount(live)).toBe(1)
+    const saved = parseIpynb(
+      JSON.stringify({
+        cells: [{ cell_type: 'code', source: '', outputs: toStoredOutputs(live.outputs) }]
+      })
+    )
+    const savedError = saved.cells[0]?.outputs[0]
+    if (savedError?.kind !== 'error') {
+      throw new Error('Expected saved error')
+    }
+    const savedText = savedError.traceback || `${savedError.name}: ${savedError.message}`
+    expect(savedText === visibleText).toBe(true)
+    expect(savedText.endsWith(summary)).toBe(true)
+  })
+
+  it('leaves fitting error tracebacks and empty-traceback presentation unchanged', () => {
+    const error = {
+      ename: 'ValueError',
+      evalue: 'bad input',
+      traceback: ['frame', 'ValueError: bad input']
+    }
+    const live = applyKernelOutput(EMPTY, 'error', error)
+    expect(live.outputs).toEqual([{ output_type: 'error', ...error }])
+    const empty = applyKernelOutput(EMPTY, 'error', { ...error, traceback: [] })
+    const parsed = parseIpynbOutput(empty.outputs[0])
+    if (parsed?.kind !== 'error') {
+      throw new Error('Expected error')
+    }
+    expect(parsed.traceback || `${parsed.name}: ${parsed.message}`).toBe('ValueError: bad input')
   })
 
   it('budgets repeated errors before truncation instead of giving each one an exception', () => {

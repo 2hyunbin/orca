@@ -130,11 +130,18 @@ function diagnosticFallback(output: NotebookOutput): NotebookOutput {
   if (output.output_type === 'error') {
     const ename = diagnosticText(output.ename, 1024)
     const evalue = diagnosticText(output.evalue, 64 * 1024)
+    const summary = `${ename}: ${evalue}`
+    // Why: the renderer displays traceback alone, so its final error summary must survive the cut.
     const traceback = diagnosticText(
       output.traceback,
-      MAX_STREAM_CHARS - ename.length - evalue.length
+      MAX_STREAM_CHARS - ename.length - evalue.length - summary.length - 1
     )
-    return { output_type: 'error', ename, evalue, traceback: traceback ? [traceback] : [] }
+    return {
+      output_type: 'error',
+      ename,
+      evalue,
+      traceback: traceback ? [traceback, summary] : [summary]
+    }
   }
   const data = isRecord(output.data) ? output.data : {}
   const value =
