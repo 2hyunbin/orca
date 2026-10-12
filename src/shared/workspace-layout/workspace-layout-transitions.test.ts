@@ -109,6 +109,20 @@ describe('layout transitions', () => {
     })
   })
 
+  it('retires a window-owned exited pane whatever the exit, without stopping its terminal', () => {
+    const { model, tabId, leafId } = setup()
+    const surface = { worktreeId: WS, terminalTabId: tabId, leafId, ptyId: 'pty-1' }
+    const stale = applyLayoutTransition(model, {
+      type: 'surfaceRetired',
+      surface: { ...surface, incarnationId: 'inc-old' }
+    })
+    expect(stale.ok && stale.model).toBe(model)
+    const retired = applyLayoutTransition(model, { type: 'surfaceRetired', surface })
+    expect(retired.ok && leavesOf(retired.model, tabId)).toEqual({})
+    expect(retired.ok && retired.effects.stopPtyIds).toEqual([])
+    expect(retired.ok && retired.outcomes).toEqual({ [leafId]: null })
+  })
+
   it('unbinds panes whose SSH lease ended without closing them', () => {
     const { model, tabId } = setup()
     const result = applyLayoutTransition(model, { type: 'sshLeaseTerminated', ptyIds: ['pty-1'] })

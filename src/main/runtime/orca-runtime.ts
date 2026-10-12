@@ -37,7 +37,8 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import { getRepoMainWorktreeId } from '../../shared/worktree/id'
 import {
-  retireExitedDuringRegistration,
+  hostIdOfPane,
+  retireExitedPane,
   unbindAbsentPane,
   type HeldPane
 } from './runtime-held-pane-exits'
@@ -241,7 +242,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
 
   /** A process that exited while its binding was written retires its pane, as on main. */
   retireExitedDuringRegistration(pane: HeldPane): Promise<void> {
-    retireExitedDuringRegistration(this.layoutHolder, pane)
+    retireExitedPane(this.layoutHolder, hostIdOfPane(pane), pane)
     return this.persistStagedTerminalSurfaceRetirements()
   }
 

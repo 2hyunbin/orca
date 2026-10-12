@@ -28,11 +28,13 @@ import {
   type SessionSnapshotOperations
 } from './session-snapshot-operations'
 import { scheduleSave } from './write-scheduling'
+import type { WorkspaceSessionWriteOptions } from './session-host-partitions'
 
 export function setLocalWorkspaceSession(
   owner: SessionSnapshotOperations,
   session: PersistedState['workspaceSession'],
-  deferSnapshotFiles = false
+  deferSnapshotFiles = false,
+  options: WorkspaceSessionWriteOptions = {}
 ): void {
   const context = getSessionSnapshotOperationsContext(owner)
   const prior = context.runtime.state.workspaceSession
@@ -94,7 +96,13 @@ export function setLocalWorkspaceSession(
   if (remappedLeases.changed) {
     context.runtime.state.sshRemotePtyLeases = remappedLeases.leases
   }
-  session = preserveMissingWorkspaceSessionTerminalBindings(session, prior, context.bindingRecovery)
+  if (!options.fromLayoutHolder) {
+    session = preserveMissingWorkspaceSessionTerminalBindings(
+      session,
+      prior,
+      context.bindingRecovery
+    )
+  }
   session = pruneLocalTerminalScrollbackBuffers(session, context.runtime.state.repos)
   if (!deferSnapshotFiles) {
     const migratedScrollback = migrateWorkspaceSessionTerminalScrollbackSnapshots(

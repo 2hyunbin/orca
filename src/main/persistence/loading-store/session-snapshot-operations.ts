@@ -16,7 +16,8 @@ import type { WriteSchedulingOperations } from './write-scheduling'
 import {
   resolveHostId,
   setHostWorkspaceSession,
-  withRequiredWorkspaceSessionMaps
+  withRequiredWorkspaceSessionMaps,
+  type WorkspaceSessionWriteOptions
 } from './session-host-partitions'
 import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
 import { scheduleSave } from './write-scheduling'
@@ -53,7 +54,15 @@ export class SessionSnapshotOperations {
     this[sessionSnapshotOperationsContext] = { runtime, sessions, bindingRecovery, scheduling }
   }
 
-  setWorkspaceSession(session: PersistedState['workspaceSession'], hostId?: string | null): void {
+  /**
+   * `fromLayoutHolder`: the runtime's layout holder saving its own copy. It skips the renderer
+   * binding replay, which would re-bind a pane the holder unbound (the replay goes in 6g).
+   */
+  setWorkspaceSession(
+    session: PersistedState['workspaceSession'],
+    hostId?: string | null,
+    options: WorkspaceSessionWriteOptions = {}
+  ): void {
     const resolved = resolveHostId(hostId)
     const { runtime } = this[sessionSnapshotOperationsContext]
     if (runtime.durableMutationPhase === 'rollback') {
@@ -64,10 +73,15 @@ export class SessionSnapshotOperations {
     }
     if (resolved === LOCAL_EXECUTION_HOST_ID) {
       this.assertSnapshotAdmission(true)
-      setLocalWorkspaceSession(this, session)
+      setLocalWorkspaceSession(this, session, false, options)
       return
     }
-    setHostWorkspaceSession(this[sessionSnapshotOperationsContext].sessions, resolved, session)
+    setHostWorkspaceSession(
+      this[sessionSnapshotOperationsContext].sessions,
+      resolved,
+      session,
+      options
+    )
   }
 
   stageWorkspaceSessionBeforeUnload(

@@ -23,7 +23,8 @@ export function holderStoreOf(store: RuntimeStore | null): HolderStore | null {
     getWorkspaceSession: (hostId) => store.getWorkspaceSession!(hostId),
     // A Store that lists no partitions holds only the local one.
     getWorkspaceSessionHostIds: () => store.getWorkspaceSessionHostIds?.() ?? ['local'],
-    setWorkspaceSession: (session, hostId) => store.setWorkspaceSession!(session, hostId),
+    setWorkspaceSession: (session, hostId, options) =>
+      store.setWorkspaceSession!(session, hostId, options),
     ...(store.runDurableMutation
       ? { runDurableMutation: (mutate) => store.runDurableMutation!(mutate) }
       : {})
@@ -71,7 +72,7 @@ export class RuntimeWorkspaceLayoutWriter {
     }
     this.writing = true
     try {
-      store.setWorkspaceSession(saveWorkspaceLayout(loaded), hostId)
+      store.setWorkspaceSession(saveWorkspaceLayout(loaded), hostId, { fromLayoutHolder: true })
       this.saved.set(hostId, store.getWorkspaceSession(hostId))
       this.failureLogged = false
     } catch (error) {

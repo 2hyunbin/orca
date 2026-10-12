@@ -9,6 +9,7 @@ import { updateLegacyPersistence } from './workspace-layout-legacy-persistence'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
 import {
   locateExitedSurface,
+  retireExitedSurface,
   retireTerminalPane,
   withWorkspace,
   type ExitedSurface
@@ -86,4 +87,21 @@ export function applyProcessExit(
       )
     }
   }
+}
+
+/** Today's Store retirement whatever the verdict: for a pane the window still decides on (until 6f). */
+export function applySurfaceRetirement(
+  model: WorkspaceLayoutModel,
+  surface: ExitedSurface
+): Applied {
+  const retired = retireExitedSurface(model, surface)
+  if (!retired || retired === model) {
+    return applied(model)
+  }
+  return applied(
+    updateLegacyPersistence(model, retired, [surface.worktreeId]),
+    {},
+    {},
+    { [surface.leafId]: null }
+  )
 }

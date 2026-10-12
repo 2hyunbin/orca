@@ -189,10 +189,13 @@ export function partitionHasOtherRepoWorktreeTabs(
   )
 }
 
+export type WorkspaceSessionWriteOptions = { fromLayoutHolder?: boolean }
+
 export function setHostWorkspaceSession(
   owner: SessionHostPartitionOperations,
   hostId: ExecutionHostId,
-  session: WorkspaceSessionState
+  session: WorkspaceSessionState,
+  options: WorkspaceSessionWriteOptions = {}
 ): void {
   const persisted =
     owner[sessionHostPartitionOperationsContext].runtime.state.workspaceSessionsByHostId?.[hostId]
@@ -204,15 +207,17 @@ export function setHostWorkspaceSession(
   session = dropClosedTerminalTabs(preserveRuntimeAuthoredWorkspaceSessionFields(session, prior))
   // Why: each partition owns its topology fence; renderer writes omit it and must rebase locally.
   session = sanitizeWorkspaceSessionTerminalRetirements(session, prior)
-  session = preserveMissingWorkspaceSessionTerminalBindings(
-    session,
-    prior,
-    owner[sessionHostPartitionOperationsContext].bindingRecovery,
-    {
-      targetIdForWorktree: sshTargetIdForWorkspaceSessionHost(hostId),
-      executionHostId: hostId
-    }
-  )
+  if (!options.fromLayoutHolder) {
+    session = preserveMissingWorkspaceSessionTerminalBindings(
+      session,
+      prior,
+      owner[sessionHostPartitionOperationsContext].bindingRecovery,
+      {
+        targetIdForWorktree: sshTargetIdForWorkspaceSessionHost(hostId),
+        executionHostId: hostId
+      }
+    )
+  }
   // Why here too: the load-side drop only survives until the next full snapshot write. A renderer
   // or runtime payload that still carries local's globals would re-inject them into this partition.
   const pruned = withoutRedundantGlobalFields(

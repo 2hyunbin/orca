@@ -8,6 +8,7 @@ import type { ProcessExitFacts } from '../../shared/workspace-layout/workspace-l
 import { retireTerminalSurfacesFromSnapshot } from './mobile-session-terminal-retirement'
 import { attachRetirementProofsToSnapshot } from './mobile-session-terminal-retirement-proof'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import { retireExitedPane } from './runtime-held-pane-exits'
 
 export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntimeWithTouchMobileSessionTabsForWorktree {
   /**
@@ -42,10 +43,18 @@ export class OrcaRuntimeWithPersistTerminalSurfaceRetirements extends OrcaRuntim
         ptyId: surface.ptyId,
         ...(surface.incarnationId ? { incarnationId: surface.incarnationId } : {})
       }
+      heldChange = true
+      // The window still decides its own panes' exits until it renders from the holder (6f).
+      if (this.leaves.has(this.getLeafKey(surface.parentTabId, surface.leafId))) {
+        const pane = { ...exited, tabId: surface.parentTabId }
+        if (retireExitedPane(this.layoutHolder, hostId, pane)) {
+          accepted.push(surface)
+        }
+        continue
+      }
       if (this.layoutHolder.processExited(hostId, exited, exit, false) === 'gone') {
         accepted.push(surface)
       }
-      heldChange = true
     }
     return { accepted, unpersisted, changed: heldChange || accepted.length > 0 }
   }

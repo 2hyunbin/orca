@@ -15,7 +15,11 @@ import {
 import { updateLegacyPersistence } from './workspace-layout-legacy-persistence'
 import type { WorkspaceLayout, WorkspaceLayoutModel } from './workspace-layout-model'
 import { renameEditorFiles, type EditorFileRename } from './workspace-layout-editor-rekey'
-import { applyProcessExit, type ProcessExitFacts } from './workspace-layout-process-exit'
+import {
+  applyProcessExit,
+  applySurfaceRetirement,
+  type ProcessExitFacts
+} from './workspace-layout-process-exit'
 import { withWorkspace, type ExitedSurface } from './workspace-layout-removal'
 import { removeWorkspaces, renameWorkspace } from './workspace-layout-owner-transitions'
 
@@ -28,6 +32,7 @@ export type LayoutTransition =
       incarnationId?: string
     }
   | { type: 'processExited'; surface: ExitedSurface; exit: ProcessExitFacts }
+  | { type: 'surfaceRetired'; surface: ExitedSurface }
   | { type: 'sshLeaseTerminated'; ptyIds: string[] }
   | { type: 'ownerRemoved'; workspaces: string[] }
   | { type: 'identityRenamed'; from: string; to: string }
@@ -89,7 +94,7 @@ function sshLeaseTerminated(model: WorkspaceLayoutModel, ptyIds: readonly string
 
 function applyTransition(
   model: WorkspaceLayoutModel,
-  transition: Exclude<LayoutTransition, { type: 'processExited' }>
+  transition: Exclude<LayoutTransition, { type: 'processExited' | 'surfaceRetired' }>
 ): Applied {
   switch (transition.type) {
     case 'processStarted':
@@ -120,6 +125,9 @@ export function applyLayoutTransition(
 ): Applied {
   if (transition.type === 'processExited') {
     return applyProcessExit(model, transition.surface, transition.exit)
+  }
+  if (transition.type === 'surfaceRetired') {
+    return applySurfaceRetirement(model, transition.surface)
   }
   const result = applyTransition(model, transition)
   return result.ok ? { ...result, model: updateLegacyPersistence(model, result.model) } : result
