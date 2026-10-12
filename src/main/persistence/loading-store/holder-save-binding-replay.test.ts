@@ -73,6 +73,7 @@ describe('a holder save that binds a pane without a topology change', () => {
     const holder = new RuntimeWorkspaceLayouts({
       store: () => store,
       homeHostId: () => 'local',
+      isKnownLocalWorkspace: () => false,
       isFrozenPartition: () => false,
       terminal: () => ({ fact: null }),
       stopTerminals: () => {}
