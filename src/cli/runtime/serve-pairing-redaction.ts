@@ -1,0 +1,61 @@
+import type { ChildProcess, SpawnOptions } from 'node:child_process'
+import { createInterface } from 'node:readline'
+
+export const PAIRING_HIDDEN_LINE =
+  'Pairing URL: hidden because this supervised server is not writing to a terminal. Pair from the desktop app, or run `orca serve` in a terminal.'
+
+/**
+ * Drops the human readiness block's pairing secrets: the web-client URL (it embeds the offer),
+ * the mobile QR, and the pairing URL itself. Stateful because the QR spans many lines.
+ */
+export function createPairingRedactor(): (line: string) => string | null {
+  let inQr = false
+  return (line) => {
+    if (line.startsWith('Mobile pairing QR:')) {
+      inQr = true
+      return null
+    }
+    if (line.startsWith('Pairing URL: ')) {
+      inQr = false
+      return PAIRING_HIDDEN_LINE
+    }
+    if (inQr || line.startsWith('Web client URL: ')) {
+      return null
+    }
+    return line
+  }
+}
+
+/**
+ * Only for `--supervise` writing to a log: a service journal must never hold a live bearer
+ * offer. A plain `orca serve` keeps inheriting stdout, which scripts parse for `Pairing URL:`.
+ */
+export function shouldRedactSupervisedStdout(
+  supervise: boolean,
+  stdoutIsTty: boolean = process.stdout.isTTY === true
+): boolean {
+  return supervise && !stdoutIsTty
+}
+
+/** Pipes the child's stdout through the redactor; stdio slots other than stdout are kept. */
+export function redactingSpawn<TOptions extends SpawnOptions>(
+  spawn: (program: string, args: string[], options: TOptions) => ChildProcess
+): (program: string, args: string[], options: TOptions) => ChildProcess {
+  return (program, args, options) => {
+    const stdio = Array.isArray(options.stdio)
+      ? options.stdio.map((slot, index) => (index === 1 ? 'pipe' : slot))
+      : ['inherit', 'pipe', 'inherit']
+    const child = spawn(program, args, { ...options, stdio })
+    if (child.stdout) {
+      const redact = createPairingRedactor()
+      const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
+      lines.on('line', (line) => {
+        const kept = redact(line)
+        if (kept !== null) {
+          process.stdout.write(`${kept}\n`)
+        }
+      })
+    }
+    return child
+  }
+}

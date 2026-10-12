@@ -1,5 +1,4 @@
 import { SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE } from '../../shared/single-instance-exit-code'
-import { SERVE_SUPERVISED_ENV } from '../../shared/serve-bundle-coordination'
 import {
   brakeForBuild,
   clearServeSupervisorBrake,
@@ -143,8 +142,6 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
         now
       })
     : null
-  // Why env: both Electron and orcad children inherit it, and it hides the pairing link from logs.
-  process.env[SERVE_SUPERVISED_ENV] = '1'
   let stopped = false
   let wake: (() => void) | null = null
   const removeStopListener = (options.onStopSignal ?? defaultOnStopSignal)(() => {

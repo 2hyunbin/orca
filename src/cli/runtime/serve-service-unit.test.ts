@@ -20,7 +20,7 @@ describe('renderServeService', () => {
     expect(spec.content).toContain('<string>6768</string>')
     expect(spec.content).toMatch(/<key>ExitTimeOut<\/key>\s*<integer>90<\/integer>/)
     expect(spec.content).toMatch(/<key>SuccessfulExit<\/key>\s*<false\/>/)
-    expect(spec.content).not.toContain('ORCA_USER_DATA_PATH')
+    expect(spec.content).toContain('<key>ORCA_USER_DATA_PATH</key>')
   })
 
   it('gives another profile its own label and pins its userData', () => {

@@ -56,10 +56,8 @@ export function renderServeService(input: ServeServiceInput): ServeServiceSpec {
     throw new Error(`No service manager support on ${input.platform}`)
   }
   const suffix = profileSuffix(input)
-  const env: Record<string, string> = {
-    PATH: input.path,
-    ...(suffix ? { ORCA_USER_DATA_PATH: input.userDataPath } : {})
-  }
+  // Why always pin: the manager's environment may resolve a different default profile.
+  const env: Record<string, string> = { PATH: input.path, ORCA_USER_DATA_PATH: input.userDataPath }
   const argv = [input.command, ...serveServiceArgs(input)]
   if (manager === 'launchd') {
     const name = suffix ? `${SERVE_LAUNCHD_LABEL_PREFIX}.${suffix}` : SERVE_LAUNCHD_LABEL_PREFIX

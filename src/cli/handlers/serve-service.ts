@@ -1,9 +1,10 @@
 import { accessSync, constants, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { delimiter, dirname, isAbsolute, join } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, relative } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import type { CommandHandler } from '../dispatch'
 import { RuntimeClientError } from '../runtime/types'
+import { getOptionalServePort } from '../runtime/serve-port-flag'
 import { formatServeServiceInstall, formatServeServiceStatus } from './serve-service-format'
 import { resolveLaunchUserDataPath } from '../runtime/launch-user-data-path'
 import { getPlatformUserDataPath } from '../runtime/metadata'
@@ -55,6 +56,16 @@ function requireManager(platform: NodeJS.Platform): void {
   }
 }
 
+function isVersionScopedDir(dir: string, userData: string): boolean {
+  const inside = relative(userData, dir)
+  return (
+    inside === '' ||
+    (!inside.startsWith('..') && !isAbsolute(inside)) ||
+    dir.includes('orcad-artifacts') ||
+    dir.includes('/.mount_')
+  )
+}
+
 /** The stable launcher on PATH: a version-specific executable would vanish with the next update. */
 export function resolveServiceCommand(
   explicit: string | null,
@@ -77,8 +88,14 @@ export function resolveServiceCommand(
     }
     return explicit
   }
-  const names = deps.platform === 'linux' ? ['orca-ide', 'orca'] : ['orca']
+  // Why only orca-ide on Linux: a bare `orca` there is often GNOME's screen reader.
+  const names = deps.platform === 'linux' ? ['orca-ide'] : ['orca']
+  const userData = resolveLaunchUserDataPath(deps.env)
   for (const dir of (deps.env.PATH ?? '').split(delimiter).filter(isAbsolute)) {
+    // Why skip: launchers under the profile or a mounted AppImage point at one version's files.
+    if (isVersionScopedDir(dir, userData)) {
+      continue
+    }
     for (const name of names) {
       if (isExecutable(join(dir, name))) {
         return join(dir, name)
@@ -204,8 +221,17 @@ export async function readServeServiceStatus(
     if (result.code === null) {
       return { ...base, verdict: 'unverifiable', pid: null, detail: 'launchctl did not answer' }
     }
-    if (result.code !== 0) {
+    // Why only 113: other failures (no GUI session over SSH, a refused request) prove nothing.
+    if (result.code === 113) {
       return { ...base, verdict: 'exited', pid: null, detail: 'not loaded' }
+    }
+    if (result.code !== 0) {
+      return {
+        ...base,
+        verdict: 'unverifiable',
+        pid: null,
+        detail: result.out.trim() || 'launchctl failed'
+      }
     }
     const pid = Number(/^\s*pid = (\d+)/m.exec(result.out)?.[1] ?? 0) || null
     const state = /^\s*state = (\S+)/m.exec(result.out)?.[1] ?? 'unknown'
@@ -266,7 +292,8 @@ export const SERVE_SERVICE_HANDLERS: Record<string, CommandHandler> = {
   'serve service install': async ({ flags, json }) => {
     const result = await installServeService({
       command: optionalString(flags.get('command')),
-      port: optionalString(flags.get('port')),
+      // Why validate here: a bad value fails before the supervisor's brake and launchd would loop.
+      port: getOptionalServePort(flags),
       pairingAddress: optionalString(flags.get('pairing-address')),
       dryRun: flags.get('dry-run') === true
     })

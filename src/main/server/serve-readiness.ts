@@ -36,9 +36,7 @@ export type ServeReadiness = {
 }
 
 export type ServeReadinessOutput =
-  | { mode: 'json' }
-  /** `hidePairingUrl`: a supervised service's log must never hold a live bearer offer. */
-  | { mode: 'human'; hidePairingUrl?: boolean }
+  | { mode: 'human' | 'json' }
   | { mode: 'recipe-json'; projectRoot: string }
 
 type ReadinessWrite = (output: string) => Promise<void>
@@ -92,10 +90,10 @@ export function renderServeReadiness(
       ...(readiness.health ? { health: readiness.health } : {})
     })
   }
-  return renderHumanReadiness(readiness, output.hidePairingUrl === true)
+  return renderHumanReadiness(readiness)
 }
 
-function renderHumanReadiness(readiness: ServeReadiness, hidePairingUrl: boolean): string {
+function renderHumanReadiness(readiness: ServeReadiness): string {
   const lines = [
     'Orca server ready',
     `Bound endpoint: ${readiness.boundEndpoint ?? 'websocket unavailable'}`,
@@ -113,11 +111,7 @@ function renderHumanReadiness(readiness: ServeReadiness, hidePairingUrl: boolean
         `; terminals survive an orcad restart: ${daemon.ownsFreshSessions ? 'yes' : 'NO'}`
     )
   }
-  if (readiness.pairing.available && hidePairingUrl) {
-    lines.push(
-      'Pairing URL: hidden because this supervised server is not writing to a terminal. Pair from the desktop app or with `orca serve` in a terminal.'
-    )
-  } else if (readiness.pairing.available) {
+  if (readiness.pairing.available) {
     if (readiness.pairing.webClientUrl) {
       lines.push(`Web client URL: ${readiness.pairing.webClientUrl}`)
     }

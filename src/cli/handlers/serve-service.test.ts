@@ -24,6 +24,8 @@ describe('orca serve service', () => {
     await mkdir(bin)
     await writeFile(join(bin, 'orca'), '#!/bin/sh\n')
     await chmod(join(bin, 'orca'), 0o755)
+    await writeFile(join(bin, 'orca-ide'), '#!/bin/sh\n')
+    await chmod(join(bin, 'orca-ide'), 0o755)
     calls = []
     answers = new Map()
   })
@@ -92,6 +94,8 @@ describe('orca serve service', () => {
     await expect(readServeServiceStatus(d)).resolves.toMatchObject({ verdict: 'exited' })
     answers.set(print, { code: null, out: '' })
     await expect(readServeServiceStatus(d)).resolves.toMatchObject({ verdict: 'unverifiable' })
+    answers.set(print, { code: 5, out: 'Bootstrap failed: no GUI session' })
+    await expect(readServeServiceStatus(d)).resolves.toMatchObject({ verdict: 'unverifiable' })
 
     const linux = deps('linux')
     answers.set(
@@ -108,6 +112,30 @@ describe('orca serve service', () => {
     await expect(uninstallServeService(d)).resolves.toMatchObject({ removed: true })
     expect(existsSync(String(result.unitPath))).toBe(false)
     expect(calls[0]).toMatch(/^systemctl --user disable --now orca-serve-/)
+  })
+
+  it('never picks a version-scoped launcher from the profile or a mounted AppImage', async () => {
+    const scoped = join(home, 'profile', 'cli', 'bin')
+    await mkdir(scoped, { recursive: true })
+    await writeFile(join(scoped, 'orca'), '#!/bin/sh\n')
+    await chmod(join(scoped, 'orca'), 0o755)
+    expect(
+      resolveServiceCommand(null, {
+        platform: 'darwin',
+        env: { PATH: `${scoped}:${bin}`, ORCA_USER_DATA_PATH: join(home, 'profile') }
+      })
+    ).toBe(join(bin, 'orca'))
+    // Linux takes only orca-ide, never a bare `orca` (often the screen reader).
+    const onlyOrca = join(home, 'only-orca')
+    await mkdir(onlyOrca)
+    await writeFile(join(onlyOrca, 'orca'), '#!/bin/sh\n')
+    await chmod(join(onlyOrca, 'orca'), 0o755)
+    expect(() =>
+      resolveServiceCommand(null, {
+        platform: 'linux',
+        env: { PATH: onlyOrca, ORCA_USER_DATA_PATH: join(home, 'profile') }
+      })
+    ).toThrow(/PATH/)
   })
 
   it('refuses Windows and a relative --command', async () => {
