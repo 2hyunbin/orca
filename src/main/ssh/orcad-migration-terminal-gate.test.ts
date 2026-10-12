@@ -163,3 +163,40 @@ describe('acting on a terminal proof', () => {
     ).toBe(proof)
   })
 })
+
+// COMPAT(legacy-relay-bridge): the leases a bridged conversion recorded never read as new terminals.
+describe('a bridged conversion under its fence', () => {
+  const bridged = {
+    verdict: 'bridged' as const,
+    relayVerdict: 'live' as const,
+    bridgedPtyIds: ['att', 'det'],
+    hostTerminals: 1
+  }
+
+  it('accounts for the leases it handed the bridge', () => {
+    const leases = store([
+      { ptyId: 'att', state: 'attached' },
+      { ptyId: 'det', state: 'detached' },
+      { ptyId: 'ter', state: 'terminated' }
+    ])
+    expect(confirmOrcadMigrationTerminalsUnderFence(leases, 'ssh-1', bridged)).toBe(bridged)
+  })
+
+  it('still refuses a lease that appeared after the proof', () => {
+    const leases = store([
+      { ptyId: 'att', state: 'attached' },
+      { ptyId: 'new', state: 'attached' }
+    ])
+    expect(confirmOrcadMigrationTerminalsUnderFence(leases, 'ssh-1', bridged)).toMatchObject({
+      verdict: 'live',
+      ptyIds: ['new']
+    })
+  })
+
+  it('retires nothing it bridged', () => {
+    const leases = store([{ ptyId: 'att', state: 'attached' }])
+    const markSshRemotePtyLease = vi.fn()
+    retireProvenExitedLeases({ ...leases, markSshRemotePtyLease }, 'ssh-1', bridged)
+    expect(markSshRemotePtyLease).not.toHaveBeenCalled()
+  })
+})
