@@ -26,7 +26,7 @@ import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { RpcResponse } from '../transport/types'
 import { readVisibleHostIds } from '../worktree/visible-host-rows'
 import type { Worktree } from '../worktree/workspace-list-types'
-import { useHostDisplayWorktrees, useHostLabelSources } from './use-host-display-worktrees'
+import { useHostDisplayWorktrees } from './use-host-display-worktrees'
 import { useHostScreenState } from './use-host-screen-state'
 import { useHostWorktreeActions } from './use-host-worktree-actions'
 import { useHostWorktreeCatalog } from './use-host-worktree-catalog'
@@ -149,7 +149,7 @@ async function mountScreen(first: FakeSession, hostCapabilities: string[]): Prom
     })
     held.state = state
     held.fetch = catalog.fetchWorktrees
-    held.rows = useHostDisplayWorktrees('connected', state, useHostLabelSources('host-1', state))
+    held.rows = useHostDisplayWorktrees('connected', state, 'host-1')
     return null
   }
   await act(async () => {

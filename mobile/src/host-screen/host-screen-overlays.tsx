@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { openExternalLink } from '../platform/external-link'
 import { Pressable, Text, View } from 'react-native'
 import { Check, Moon } from 'lucide-react-native'
@@ -19,7 +18,6 @@ import {
 } from '../worktree/workspace-list-picker-options'
 import { isWorktreePinned } from '../worktree/workspace-list-sections'
 import { hostScreenStyles as styles } from './host-screen-styles'
-import { useNewWorkspaceServers } from './use-host-display-worktrees'
 import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostScreenOverlays({ controller }: { controller: HostScreenController }) {
@@ -31,7 +29,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
     existingWorktreePaths,
     hostCapabilities,
     hostId,
-    hostLabels,
     settings,
     showNewWorktree,
     state
@@ -43,13 +40,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
     connState,
     desktopCapabilities: hostCapabilities,
     executionHost: actionTarget?.hostId
-  })
-  const [newWorktreeVisible, setNewWorktreeVisible] = useState(false)
-  const newWorkspaceServers = useNewWorkspaceServers({
-    client,
-    hostCapabilities,
-    hostLabelById: hostLabels.hostLabelById,
-    open: newWorktreeVisible
   })
 
   return (
@@ -189,14 +179,19 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
                       navigate: actions.navigateFromHostList,
                       onDone: () => state.setActionTarget(null)
                     }),
-                    {
-                      label: 'Sleep',
-                      icon: Moon,
-                      onPress: () => {
-                        actions.putWorktreeToSleep(actionTarget)
-                        state.setActionTarget(null)
-                      }
-                    },
+                    // Server sleep is not offered yet; the desktop would sleep its own id.
+                    ...(actionServer.server
+                      ? []
+                      : [
+                          {
+                            label: 'Sleep',
+                            icon: Moon,
+                            onPress: () => {
+                              actions.putWorktreeToSleep(actionTarget)
+                              state.setActionTarget(null)
+                            }
+                          }
+                        ]),
                     {
                       label: isWorktreePinned(actionTarget, state.pinnedIds) ? 'Unpin' : 'Pin',
                       onPress: () => {
@@ -231,9 +226,9 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         ref={state.newWorktreeModalRef}
         routeVisible={showNewWorktree}
         client={client}
-        serverClients={newWorkspaceServers.serverClients}
+        hostCapabilities={hostCapabilities}
         hostId={hostId}
-        hostLabelById={newWorkspaceServers.hostLabelById}
+        hostLabelById={state.hostLabelById}
         existingWorktreePaths={existingWorktreePaths}
         existingWorktrees={state.worktrees}
         // The seam, not react-native's `Linking`: this screen is in the tasks page closure, and
@@ -241,7 +236,6 @@ export function HostScreenOverlays({ controller }: { controller: HostScreenContr
         openExternalUrl={openExternalLink}
         onVisibleChange={(visible) => {
           state.newWorktreeModalVisibleRef.current = visible
-          setNewWorktreeVisible(visible)
         }}
         onCreated={(worktreeId, worktreeName, warning, executionHost) => {
           void catalog.fetchWorktrees({ allowDuringModal: true })

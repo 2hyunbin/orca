@@ -1,5 +1,9 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 
+import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import { reachableServerClients } from '../transport/execution-host-scoped-rpc-client'
+import { useRelayHosts } from '../worktree/relay-hosts-feed'
+import { withServerHosts } from '../worktree/server-workspaces'
 import { NewWorktreeModal } from './NewWorktreeModal'
 import type { NewWorktreeModalProps } from './new-worktree-modal-types'
 
@@ -7,7 +11,14 @@ export type NewWorktreeModalControllerHandle = {
   open: () => void
 }
 
-type Props = Omit<NewWorktreeModalProps, 'visible' | 'onClose'> & {
+type Props = Omit<
+  NewWorktreeModalProps,
+  'visible' | 'onClose' | 'serverClients' | 'hostLabelById'
+> & {
+  /** The desktop's capabilities, which say whether its servers are reachable through it. */
+  hostCapabilities: readonly string[]
+  /** The desktop's own host names; the sheet adds its servers' from the feed. */
+  hostLabelById: ReadonlyMap<ExecutionHostId, string>
   routeVisible: boolean
   onVisibleChange?: (visible: boolean) => void
   onRouteVisibleChange: (visible: boolean) => void
@@ -18,7 +29,7 @@ export const NewWorktreeModalController = forwardRef<NewWorktreeModalControllerH
     {
       routeVisible,
       client,
-      serverClients,
+      hostCapabilities,
       hostId,
       hostLabelById,
       existingWorktreePaths,
@@ -32,6 +43,16 @@ export const NewWorktreeModalController = forwardRef<NewWorktreeModalControllerH
   ) {
     const [manualVisible, setManualVisible] = useState(false)
     const visible = routeVisible || manualVisible
+    // Why the feed, not the list's server rows: the list stops refreshing behind the sheet.
+    const servers = useRelayHosts(visible ? client : null)
+    const serverClients = useMemo(
+      () => reachableServerClients(client, hostCapabilities, servers ?? []),
+      [client, hostCapabilities, servers]
+    )
+    const serverLabelById = useMemo(
+      () => withServerHosts(hostLabelById, servers ?? [], (host) => host.label),
+      [hostLabelById, servers]
+    )
 
     useImperativeHandle(
       ref,
@@ -58,7 +79,7 @@ export const NewWorktreeModalController = forwardRef<NewWorktreeModalControllerH
         client={client}
         serverClients={serverClients}
         hostId={hostId}
-        hostLabelById={hostLabelById}
+        hostLabelById={serverLabelById}
         existingWorktreePaths={existingWorktreePaths}
         existingWorktrees={existingWorktrees}
         openExternalUrl={openExternalUrl}
