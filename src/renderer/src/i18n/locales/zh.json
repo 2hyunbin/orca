@@ -6834,7 +6834,8 @@
           "40e7be7850": "已保存",
           "7c7e34a66d": "未保存的更改",
           "a4fa380b67": "{assistantMessage}",
-          "2ee2779c05": "{firstPrompt}"
+          "2ee2779c05": "{firstPrompt}",
+          "commandTemplateDescription": "使用 <basePrompt>{basePrompt}</basePrompt> 包括 Orca 的 <promptLink>内置分支名称提示</promptLink>。您还可以参考 <firstPrompt>{firstPrompt}</firstPrompt> 和 <assistantMessage>{assistantMessage}</assistantMessage>。 Orca 仅生成最后一段，例如 <example>fix-login-flow</example>;您的分支前缀设置仍然适用。"
         },
         "AutoRenameBranchPromptEditor": {
           "63121132c0": "放弃",
@@ -7411,7 +7412,8 @@
           "compareAgainstUpstreamTitle": "默认对比基准",
           "compareAgainstUpstreamDescription": "选择源代码管理在比较已提交变更时默认使用的基准。分支上游会自动跟随当前分支；如果没有上游，则回退到仓库默认分支。你仍然可以在对应 worktree 的 Git 面板中按 worktree 更改对比基准。Pull Request 和变基目标不会改变。",
           "compareBaseRepositoryDefault": "仓库默认",
-          "compareBaseBranchUpstream": "分支上游"
+          "compareBaseBranchUpstream": "分支上游",
+          "refreshLocalBaseDescription": "当您创建工作区时，Orca 会刷新远程库并安全地快进您匹配的本地分支，例如 <mainBranch>main</mainBranch> 或者 <masterBranch>master</masterBranch>。这使得命令像 <diffCommand>git diff main...HEAD</diffCommand> 避免与过时的历史记录进行比较。如果该分支有未提交的更改或仅在本地的提交，Orca 会跳过更新。"
         },
         "HiddenExperimentalGroup": {
           "7c4e18d2f6": "在本机启用粗体故障捕获手势：{{samplingShortcut}} 开始采样突发；{{captureShortcut}} 将窗格证据捕获到磁盘。",

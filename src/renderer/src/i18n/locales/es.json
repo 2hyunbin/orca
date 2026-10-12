@@ -6849,7 +6849,8 @@
           "40e7be7850": "Guardado",
           "7c7e34a66d": "Cambios sin guardar",
           "a4fa380b67": "{assistantMessage}",
-          "2ee2779c05": "{firstPrompt}"
+          "2ee2779c05": "{firstPrompt}",
+          "commandTemplateDescription": "Usa <basePrompt>{basePrompt}</basePrompt> para incluir el <promptLink>prompt integrado para nombres de rama</promptLink>. También puedes referenciar <firstPrompt>{firstPrompt}</firstPrompt> y <assistantMessage>{assistantMessage}</assistantMessage>. Orca genera solo el segmento final, como <example>fix-login-flow</example>; se seguirá aplicando tu prefijo de rama."
         },
         "AutoRenameBranchPromptEditor": {
           "63121132c0": "Descartar",
@@ -7426,7 +7427,8 @@
           "compareAgainstUpstreamTitle": "Base de comparación predeterminada",
           "compareAgainstUpstreamDescription": "Elige qué base usa Control de código fuente de forma predeterminada para las comparaciones de cambios confirmados. El upstream de la rama sigue automáticamente la rama actual y recurre a la rama predeterminada del repositorio cuando no hay upstream. Aun así, puedes cambiar la base de comparación por worktree desde el panel Git de ese worktree. Los objetivos de Pull Request y rebase no cambian.",
           "compareBaseRepositoryDefault": "Predeterminada del repositorio",
-          "compareBaseBranchUpstream": "Upstream de la rama"
+          "compareBaseBranchUpstream": "Upstream de la rama",
+          "refreshLocalBaseDescription": "Cuando creas un espacio de trabajo, Orca actualiza la base remota y adelanta de forma segura tu rama local correspondiente, como <mainBranch>main</mainBranch> o <masterBranch>master</masterBranch>. Esto mantiene comandos como <diffCommand>git diff main...HEAD</diffCommand> comparen con historial obsoleto. Orca omite la actualización si esa rama tiene cambios sin commit o commits solo locales."
         },
         "HiddenExperimentalGroup": {
           "7c4e18d2f6": "Activa los gestos de captura del fallo de negrita en esta máquina: {{samplingShortcut}} inicia una ráfaga de muestreo; {{captureShortcut}} captura evidencia del panel en disco.",

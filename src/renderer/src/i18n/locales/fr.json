@@ -6955,7 +6955,8 @@
           "40e7be7850": "Enregistré",
           "7c7e34a66d": "Modifications non enregistrées",
           "a4fa380b67": "{assistantMessage}",
-          "2ee2779c05": "{firstPrompt}"
+          "2ee2779c05": "{firstPrompt}",
+          "commandTemplateDescription": "Utiliser <basePrompt>{basePrompt}</basePrompt> pour inclure <promptLink>l'invite intégrée de nom de branche d'Orca</promptLink>. Vous pouvez aussi référencer <firstPrompt>{firstPrompt}</firstPrompt> et <assistantMessage>{assistantMessage}</assistantMessage>. Orca ne génère que le dernier segment, comme <example>fix-login-flow</example>; votre paramètre de préfixe de branche s'applique toujours."
         },
         "AutoRenameBranchPromptEditor": {
           "63121132c0": "Abandonner",
@@ -7569,7 +7570,8 @@
           "compareAgainstUpstreamTitle": "Base de comparaison par défaut",
           "compareAgainstUpstreamDescription": "Choisissez la base que le contrôle de code source utilise par défaut pour comparer les changements commités. L'amont de la branche suit automatiquement la branche courante et revient à la branche par défaut du dépôt en l'absence d'amont. Vous pouvez toujours changer la base de comparaison d'un worktree depuis son panneau Git. Les cibles de pull request et de rebase ne changent pas.",
           "compareBaseRepositoryDefault": "Valeur par défaut du dépôt",
-          "compareBaseBranchUpstream": "Amont de la branche"
+          "compareBaseBranchUpstream": "Amont de la branche",
+          "refreshLocalBaseDescription": "Quand vous créez un espace de travail, Orca actualise la base distante et fait avancer en toute sécurité votre branche locale correspondante (fast-forward), telle que <mainBranch>main</mainBranch> ou <masterBranch>master</masterBranch>. Cela permet de garder des commandes comme <diffCommand>git diff main...HEAD</diffCommand> de comparer avec un historique périmé. Orca ignore la mise à jour si cette branche contient des modifications non commitées ou des commits uniquement locaux."
         },
         "InputPane": {
           "db15068196": "Activé par défaut sur Linux et macOS. Linux utilise le presse-papiers de sélection du système ; les autres plateformes utilisent un tampon privé.",

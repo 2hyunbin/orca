@@ -1140,7 +1140,17 @@
           "workspaceCardLayoutGuidance": "Managed from the workspace sidebar."
         },
         "AutoRenameBranchFromWorkSetting": {
-          "ef787db0e3": "Auto-Rename Branch"
+          "2ee2779c05": "{firstPrompt}",
+          "56580dcf60": ". You can also reference",
+          "570817d126": "and",
+          "5d569f5199": ". Orca generates only the final segment, like",
+          "69bf4830c2": "to include Orca's",
+          "800edb1e54": "fix-login-flow",
+          "9241b59bf5": "Use",
+          "9c9b54e4ea": "built-in branch-name prompt",
+          "a4fa380b67": "{assistantMessage}",
+          "ef787db0e3": "Auto-Rename Branch",
+          "f19a56498d": "; your branch prefix setting still applies."
         },
         "AutoRenameBranchPromptEditor": {
           "0691753cf2": "Unsaved changes",
@@ -1256,7 +1266,14 @@
           "show": "Show"
         },
         "GitPane": {
-          "f35007e6e8": "git-username"
+          "36e3de3619": "from comparing against stale history. Orca skips the update if that branch has uncommitted changes or local-only commits.",
+          "3ae3de8898": "master",
+          "5bf885be48": "or",
+          "976afc6b3e": "When you create a workspace, Orca refreshes the remote base and safely fast-forwards your matching local branch, such as",
+          "d072a12995": "git diff main...HEAD",
+          "db3a127eb1": ". This keeps commands like",
+          "f35007e6e8": "git-username",
+          "ffba483bae": "main"
         },
         "GrokAccountsSection": {
           "c3d4e5f6a7": "Signed in. Orca only reads that file on disk — run grok login again if usage fails.",
