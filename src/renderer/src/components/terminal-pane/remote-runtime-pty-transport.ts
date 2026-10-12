@@ -47,7 +47,7 @@ import type {
 } from './pty-transport-types'
 import { createPtyOutputProcessor } from './pty-output-processor'
 import { isSshSessionGoneError } from './pty-connection/pty-connect-limits'
-import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-client'
+import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-result'
 import {
   getRemoteRuntimePtyEnvironmentId,
   getRemoteRuntimeTerminalHandle,

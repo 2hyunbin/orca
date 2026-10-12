@@ -5,7 +5,7 @@ import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../shared/pro
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import type { Tab } from '../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import type { WorktreeRuntimeOwnerState } from '../lib/worktree-runtime-owner'
+import type { WorktreeRuntimeOwnerState } from '../lib/worktree-runtime-owner-state'
 import { buildPersistedUnifiedTabSessionData } from '../lib/workspace-session-unified-tabs'
 import { buildHydratedTabState } from '../store/slices/tabs-hydration'
 import { applyLocalStructuredSessionTabSnapshots } from './local-structured-session-tabs-sync/snapshot-apply'

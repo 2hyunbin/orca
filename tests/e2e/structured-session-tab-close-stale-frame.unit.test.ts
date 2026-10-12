@@ -9,7 +9,7 @@
 
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type * as RuntimeRpcClient from '../../src/renderer/src/runtime/runtime-rpc-client'
-import type { RuntimeClientTarget } from '../../src/renderer/src/runtime/runtime-client-target'
+import type { RuntimeClientTarget } from '../../src/shared/runtime-client-target'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
 import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
 import { setStructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'

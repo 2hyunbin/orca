@@ -5,11 +5,8 @@ import { activateAndRevealWorktree } from './worktree-activation'
 import { activateStructuredAgentSessionById } from './structured-agent-session-tab-activation'
 import { useAppStore } from '@/store'
 import { getRuntimeEnvironmentIdForWorktree } from './worktree-runtime-owner'
-import {
-  callRuntimeRpc,
-  runtimeEnvironmentSupportsCapability,
-  type RuntimeClientTarget
-} from '@/runtime/runtime-rpc-client'
+import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
 import { refreshLocalStructuredSessionWorktreeTabs } from '@/runtime/local-structured-session-tabs-sync/inventory-refresh'
