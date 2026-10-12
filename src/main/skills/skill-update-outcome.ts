@@ -12,17 +12,22 @@ import {
  * a broken skill. The install is pinned to this build, so every placement it writes has
  * to come back current.
  *
- * Known limit: a placement that degrades OUT of the convergent set (a provider alias
- * left a broken link) is dropped from the judgment rather than failing it.
+ * A broken link fails the name too: eligibility skips names that had one before the run,
+ * so one after it is the run's own damage.
  */
 export function skillUpdateFailedNames(
   names: readonly string[],
   installations: readonly SkillFreshnessInstallation[]
 ): string[] {
   return names.filter((name) => {
-    const convergent = installations.filter(
-      (entry) => entry.name === name && SUPPORTED_GLOBAL_SKILL_TOPOLOGIES.has(entry.topology)
+    const placements = installations.filter((entry) => entry.name === name)
+    const convergent = placements.filter((entry) =>
+      SUPPORTED_GLOBAL_SKILL_TOPOLOGIES.has(entry.topology)
     )
-    return convergent.length === 0 || convergent.some((entry) => entry.status !== 'current')
+    return (
+      convergent.length === 0 ||
+      convergent.some((entry) => entry.status !== 'current') ||
+      placements.some((entry) => entry.topology === 'broken-link')
+    )
   })
 }

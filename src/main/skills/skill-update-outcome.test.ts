@@ -59,6 +59,15 @@ describe('skillUpdateFailedNames', () => {
     ).toEqual([])
   })
 
+  it('fails the name when the run leaves a broken link behind', () => {
+    expect(
+      skillUpdateFailedNames(
+        ['orca-cli'],
+        [placement('orca-cli', 'current'), placement('orca-cli', 'inaccessible', 'broken-link')]
+      )
+    ).toEqual(['orca-cli'])
+  })
+
   it('fails the name when any convergent alias was left behind', () => {
     expect(
       skillUpdateFailedNames(
