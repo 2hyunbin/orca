@@ -23,6 +23,7 @@ import {
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
+import { isLegacyRelayBridgedTab } from '../components/terminal-pane/legacy-relay-bridge-panes'
 
 export async function activateWebRuntimeSessionTab(args: {
   worktreeId: string
@@ -33,6 +34,11 @@ export async function activateWebRuntimeSessionTab(args: {
   /** The local tab visible at the gesture; later navigation away cancels the deferred focus. */
   expectedCurrentLocalTabId?: string | null
 }): Promise<boolean> {
+  // COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay runs this pane's terminal, and
+  // activating it on the managed server would start a second shell there that no tab shows.
+  if (isLegacyRelayBridgedTab(args.tabId, args.leafId)) {
+    return true
+  }
   return (await callWebRuntimeSessionTabMethod('session.tabs.activate', args)) === 'applied'
 }
 

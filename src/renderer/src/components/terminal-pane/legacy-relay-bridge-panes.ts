@@ -41,6 +41,35 @@ export function legacyRelayBridgedPane(ptyId: string): LegacyRelayBridgedPane | 
   return panes.find((pane) => pane.ptyId === ptyId)
 }
 
+/** The bridged pane a runtime pane's tab and leaf name, if main serves one. */
+function bridgedPaneFor(
+  tabId: string,
+  leafId: string | null | undefined
+): LegacyRelayBridgedPane | undefined {
+  ensureSubscribed()
+  if (!window.api?.legacyRelayBridge) {
+    return undefined
+  }
+  // A tab mirrored from the managed server is `web-terminal-<tab::leaf>`; the lease names the
+  // relay-era tab and leaf it carried over.
+  const [hostTabId, hostLeafId] = toHostSessionTabId(tabId).split(HOST_TERMINAL_SURFACE_SEPARATOR)
+  const leaf = hostLeafId ?? leafId ?? ''
+  const inTab = panes.filter((pane) => pane.tabId === hostTabId)
+  // A lease without a leaf names its tab's pane only when it is that tab's sole bridged terminal.
+  return (
+    inTab.find((pane) => pane.leafId === leaf || pane.leafId === leafId) ??
+    (inTab.length === 1 && !inTab[0].leafId ? inTab[0] : undefined)
+  )
+}
+
+/**
+ * Whether the bridge serves this tab's pane. Activating such a pane on the managed server would
+ * start a second shell there that no tab ever shows.
+ */
+export function isLegacyRelayBridgedTab(tabId: string, leafId?: string | null): boolean {
+  return bridgedPaneFor(tabId, leafId) !== undefined
+}
+
 /**
  * The relay-era PTY a runtime pane should reattach through the bridge: one main reports serving
  * for this tab and leaf, or the `ssh:` id the pane itself still names from an earlier bridging.
@@ -50,23 +79,12 @@ export function legacyRelayBridgePtyIdForPane(args: {
   leafId: string | null | undefined
   boundPtyId: string | null | undefined
 }): string | null {
-  ensureSubscribed()
   if (!window.api?.legacyRelayBridge) {
     return null
   }
-  // A tab mirrored from the managed server is `web-terminal-<tab::leaf>`; the lease names the
-  // relay-era tab and leaf it carried over.
-  const [hostTabId, hostLeafId] = toHostSessionTabId(args.tabId).split(
-    HOST_TERMINAL_SURFACE_SEPARATOR
-  )
-  const leaf = hostLeafId ?? args.leafId ?? ''
-  const inTab = panes.filter((pane) => pane.tabId === hostTabId)
-  // A lease without a leaf names its tab's pane only when it is that tab's sole bridged terminal.
-  const served =
-    inTab.find((pane) => pane.leafId === leaf || pane.leafId === args.leafId) ??
-    (inTab.length === 1 && !inTab[0].leafId ? inTab[0] : undefined)
   const candidate =
-    served?.ptyId ?? (args.boundPtyId && parseAppSshPtyId(args.boundPtyId) ? args.boundPtyId : null)
+    bridgedPaneFor(args.tabId, args.leafId)?.ptyId ??
+    (args.boundPtyId && parseAppSshPtyId(args.boundPtyId) ? args.boundPtyId : null)
   if (!candidate) {
     return null
   }
