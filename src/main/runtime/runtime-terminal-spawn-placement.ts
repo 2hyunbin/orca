@@ -1,19 +1,25 @@
 import type { TerminalPanePlacement } from '../../shared/terminal-pane-placement'
 import type { TerminalPaneSplitDirection } from '../../shared/terminal-tab-types'
 
-/** A main-side create always opens its own tab. */
-export function runtimeNewTabPlacement(viewMode?: 'terminal' | 'chat'): TerminalPanePlacement {
-  return viewMode ? { kind: 'new-tab', row: { viewMode } } : { kind: 'new-tab' }
-}
-
-/** A runtime-started tab opens in the group asked for, else the first group (as the live view). */
-export function newTabIn(opts: { viewMode?: 'terminal' | 'chat'; targetGroupId?: string }): {
+/**
+ * A runtime-started tab opens in the group asked for, else the first group (as the live view). Its
+ * title is the user's name for it, as when the window opens a titled terminal.
+ */
+export function newTabIn(opts: {
+  viewMode?: 'terminal' | 'chat'
+  targetGroupId?: string
+  title?: string
+}): {
   placement: TerminalPanePlacement
   groupId?: string
 } {
-  const { targetGroupId } = opts
+  const { viewMode, targetGroupId, title } = opts
+  const row = {
+    ...(viewMode ? { viewMode } : {}),
+    ...(title ? { customTitle: title } : {})
+  }
   return {
-    placement: runtimeNewTabPlacement(opts.viewMode),
+    placement: Object.keys(row).length > 0 ? { kind: 'new-tab', row } : { kind: 'new-tab' },
     ...(targetGroupId ? { groupId: targetGroupId } : {})
   }
 }

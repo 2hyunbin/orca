@@ -60,21 +60,6 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
     detail: /^group id differs: runtime \S+, client headless-terminals:\S+ \(tabs /,
     cause: 'two group ids'
   },
-  // A renamed terminal's title lists as null in terminal.list after a serve restart (session tabs
-  // keep it): orcad everywhere, Electron serve on Linux.
-  {
-    scenario: 'headless-orcad-rename-terminal',
-    check: 'expected',
-    step: 'rename after restart',
-    cause: 'title after restart'
-  },
-  {
-    scenario: 'headless-electron-rename-terminal',
-    check: 'expected',
-    step: 'rename after restart',
-    platform: 'linux',
-    cause: 'title after restart'
-  },
   // After a headless move into an existing group, paired clients still see that group's previous
   // tab selected, not the moved one. A split into a new group selects the moved tab.
   ...(['orcad', 'electron'] as const).map((kind) => ({
