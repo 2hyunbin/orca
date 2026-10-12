@@ -152,6 +152,8 @@ describe.skipIf(process.platform !== 'win32')('direct agent hook commands in Win
     async (agent, install) => {
       const command = install(home)
       expect(command).toMatch(/^[A-Za-z]:\/[^\\\s]+\.cmd$/)
+      // Proves the `os` mock reached the agents' `node:os` imports (Vitest normalizes builtins).
+      expect(command.startsWith(`${home.replaceAll('\\', '/')}/.orca/agent-hooks/`)).toBe(true)
 
       const hosts: [string, string[]][] = [
         ['cmd.exe', ['/d', '/c', command]],
