@@ -635,6 +635,9 @@ importers:
       '@orca/windows-registry':
         specifier: workspace:*
         version: link:native/windows-registry
+      '@orca/windows-security':
+        specifier: workspace:*
+        version: link:native/windows-security
       '@vscode/windows-process-tree':
         specifier: 0.8.0
         version: 0.8.0(patch_hash=9da74aa3d17243aa53dcdc95c9f06e97437e7fbccf098aeb017579e2d24cbac2)
@@ -655,6 +658,12 @@ importers:
         version: 1.12.37
 
   native/windows-registry:
+    dependencies:
+      node-addon-api:
+        specifier: ^8.5.0
+        version: 8.9.2
+
+  native/windows-security:
     dependencies:
       node-addon-api:
         specifier: ^8.5.0

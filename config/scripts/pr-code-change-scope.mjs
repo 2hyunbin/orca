@@ -296,7 +296,11 @@ const NATIVE_CACHE_FILES = new Set([
   'native/windows-registry/src/addon.cc',
   'native/windows-registry/binding.gyp',
   'native/windows-registry/package.json',
-  'native/windows-registry/index.js'
+  'native/windows-registry/index.js',
+  'native/windows-security/src/addon.cc',
+  'native/windows-security/binding.gyp',
+  'native/windows-security/package.json',
+  'native/windows-security/index.js'
 ])
 
 const NATIVE_CACHE_PREFIXES = [
@@ -376,6 +380,7 @@ const WINDOWS_PACKAGE_TESTS = [
   'config/scripts/build-windows-cli-launcher.test.mjs',
   'config/scripts/script-module-dependencies.test.mjs',
   'src/main/windows-registry-addon.test.ts',
+  'src/shared/windows-security-addon.win32.test.ts',
   'src/main/providers/windows-conpty-wide-char-duplication.node-pty.test.ts',
   'src/main/providers/pty-repaint-wide-char-buffer.node-pty.test.ts',
   'src/shared/__tests__/process-host/windows-command-line.win32.test.ts',

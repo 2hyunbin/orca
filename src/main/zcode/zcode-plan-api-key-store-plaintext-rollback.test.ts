@@ -22,8 +22,14 @@ vi.mock('node:fs', async (original) => ({
   writeFileSync: mocks.write,
   renameSync: mocks.rename
 }))
+// Stands in for the born-restricted create: it stages through the mocked writeFileSync (the
+// fallback the real one uses) and reports whatever restriction outcome the test injects.
 vi.mock('../../shared/secure-path-windows-acl', () => ({
   restrictWindowsPathSync: mocks.restrict,
+  writeRestrictedWindowsFile: (path: string, contents: string) => {
+    mocks.write(path, contents, { encoding: 'utf-8', mode: 0o600 })
+    return mocks.restrict(path, false)
+  },
   bestEffortRestrictWindowsPath: (
     _path: string,
     _directory: boolean,
@@ -81,6 +87,8 @@ describe('plaintext rollback through the secure-file writer', () => {
     expect(realFs.readdirSync(join(mocks.home, '.orca'))).toEqual([])
   })
 
+  // Windows has no post-rename restriction any more; the published path is next restricted by
+  // the read path, and that failing must not cost the restored key either.
   it.each(['restriction-false', 'restriction-throws'])(
     'keeps the previous envelope if rollback publishes before %s',
     (failure) => {
@@ -114,11 +122,10 @@ describe('plaintext rollback through the secure-file writer', () => {
         realFs.writeFileSync(keyPath, envelope('previous-key'))
       }
       if (phase === 'before-rollback') {
-        mocks.restrict.mockImplementation((path) => {
-          if (path === keyPath && mocks.write.mock.calls.length === 1) {
-            realFs.writeFileSync(keyPath, envelope('other-writer-key'))
-          }
-          return false
+        // Another writer lands between the rejected publication and the rollback.
+        mocks.rename.mockImplementationOnce((from, to) => {
+          realFs.renameSync(from, to)
+          realFs.writeFileSync(keyPath, envelope('other-writer-key'))
         })
       } else {
         mocks.write.mockImplementationOnce(realFs.writeFileSync).mockImplementationOnce(() => {
@@ -316,12 +323,8 @@ describe('conditional rollback publication through the real writer', () => {
       })
     ).toBe(true)
 
-    expect(operations).toEqual([
-      'staged restriction',
-      'ownership check',
-      'rename',
-      'published restriction'
-    ])
+    // The rename carries the staged file's DACL, so nothing restricts the published path again.
+    expect(operations).toEqual(['staged restriction', 'ownership check', 'rename'])
   })
 
   it('cleans guarded staging bytes if rename throws without deleting the original target', () => {

@@ -38,6 +38,7 @@ on:
       - 'config/scripts/space-sharing-copy.mjs'
       - 'config/patches/**'
       - 'native/windows-registry/**'
+      - 'native/windows-security/**'
   pull_request:
     paths:
       - '.github/workflows/ci-cache-warmup.yml'

@@ -38,7 +38,8 @@ const PACKAGED_RUNTIME_PACKAGE_ROOTS = [
 const DARWIN_PACKAGED_RUNTIME_PACKAGE_ROOTS = ['serve-sim']
 const WINDOWS_PACKAGED_RUNTIME_PACKAGE_ROOTS = [
   '@vscode/windows-process-tree',
-  '@orca/windows-registry'
+  '@orca/windows-registry',
+  '@orca/windows-security'
 ]
 
 const NODE_PTY_PREBUILD_PREFIX_BY_PLATFORM = {
@@ -612,7 +613,7 @@ function assertPackagedNativeVariantsInstalled(electronPlatformName, electronArc
   }
 
   // Why one package: @vscode/windows-process-tree is the only os: win32 npm addon;
-  // @orca/windows-registry is a workspace link present on every host, so its presence proves nothing.
+  // the @orca/windows-* addons are workspace links present on every host, so their presence proves nothing.
   const missingWindowsAddons = []
   if (electronPlatformName === 'win32' && !isInstalled('@vscode/windows-process-tree')) {
     missingWindowsAddons.push('@vscode/windows-process-tree')

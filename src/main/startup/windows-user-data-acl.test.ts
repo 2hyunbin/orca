@@ -1,5 +1,4 @@
-import { EventEmitter } from 'node:events'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -10,21 +9,18 @@ import {
   type WindowsAclGrantResult
 } from './windows-user-data-acl'
 
-type SpawnCall = { target: string; args: string[] }
-
-function createFakeSpawn(exitCode: number): {
-  calls: SpawnCall[]
-  spawnFn: (command: string, args?: readonly string[], options?: unknown) => EventEmitter
+function createFakeGrant(failing = new Set<string>()): {
+  calls: string[]
+  grantFn: (directory: string) => Promise<void>
 } {
-  const calls: SpawnCall[] = []
+  const calls: string[] = []
   return {
     calls,
-    spawnFn: (_command: string, args: readonly string[] = []) => {
-      calls.push({ target: args[0] ?? '', args: [...args] })
-      const child = new EventEmitter() as EventEmitter & { kill: () => void }
-      child.kill = () => undefined
-      setImmediate(() => child.emit('exit', exitCode))
-      return child
+    grantFn: (directory) => {
+      calls.push(directory)
+      return failing.has(directory)
+        ? Promise.reject(new Error('SetNamedSecurityInfoW failed with Win32 error 5'))
+        : Promise.resolve()
     }
   }
 }
@@ -38,6 +34,15 @@ function awaitResult(
   })
 }
 
+function writeMarker(userDataPath: string, identity: string): void {
+  writeFileSync(
+    join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE),
+    JSON.stringify({ schemeVersion: WINDOWS_ACL_GRANT_SCHEME_VERSION, identity, grantedAt: 1 })
+  )
+}
+
+const IDENTITY = '*S-1-5-21-1-2-3-1001'
+
 describe('ensureWindowsUserDataAclGrant', () => {
   let userDataPath: string
 
@@ -49,87 +54,94 @@ describe('ensureWindowsUserDataAclGrant', () => {
     rmSync(userDataPath, { recursive: true, force: true })
   })
 
-  it('grants children + root then writes the marker', async () => {
-    const fake = createFakeSpawn(0)
-    const result = await awaitResult(userDataPath, {
-      identity: 'testuser',
-      spawnFn: fake.spawnFn as never
-    })
+  it('grants each child directory, then the root, then writes the marker', async () => {
+    mkdirSync(join(userDataPath, 'agent-hooks'))
+    mkdirSync(join(userDataPath, 'codex-runtime-home'))
+    // Files carry no inheritable rule to fix, so they are not touched.
+    writeFileSync(join(userDataPath, 'orca-runtime.json'), '{}')
+    const fake = createFakeGrant()
+
+    const result = await awaitResult(userDataPath, { identity: IDENTITY, grantFn: fake.grantFn })
+
     expect(result).toEqual({ mode: 'granted' })
-    expect(fake.calls).toHaveLength(2)
-    expect(fake.calls[0].target).toBe(join(userDataPath, '*'))
-    expect(fake.calls[1].target).toBe(userDataPath)
-    expect(fake.calls[0].args).toContain('testuser:(OI)(CI)(F)')
+    expect(fake.calls.slice(0, -1).sort()).toEqual(
+      [join(userDataPath, 'agent-hooks'), join(userDataPath, 'codex-runtime-home')].sort()
+    )
+    expect(fake.calls.at(-1)).toBe(userDataPath)
     const marker = JSON.parse(
       readFileSync(join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE), 'utf-8')
     )
     expect(marker.schemeVersion).toBe(WINDOWS_ACL_GRANT_SCHEME_VERSION)
-    expect(marker.identity).toBe('testuser')
+    expect(marker.identity).toBe(IDENTITY)
   })
 
-  it('skips all spawns when the marker matches the identity', async () => {
-    writeFileSync(
-      join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE),
-      JSON.stringify({
-        schemeVersion: WINDOWS_ACL_GRANT_SCHEME_VERSION,
-        identity: 'testuser',
-        grantedAt: 1
-      })
-    )
-    const fake = createFakeSpawn(0)
+  it('skips every grant when the marker matches the identity', async () => {
+    writeMarker(userDataPath, IDENTITY)
+    const fake = createFakeGrant()
+
+    const result = await awaitResult(userDataPath, { identity: IDENTITY, grantFn: fake.grantFn })
+
+    expect(result).toEqual({ mode: 'marker-hit' })
+    expect(fake.calls).toHaveLength(0)
+  })
+
+  // An upgrade must not re-walk the whole userData tree just because the identity's spelling changed.
+  it('accepts a marker written under the pre-native USERNAME identity', async () => {
+    writeMarker(userDataPath, 'alice')
+    const fake = createFakeGrant()
+
     const result = await awaitResult(userDataPath, {
-      identity: 'testuser',
-      spawnFn: fake.spawnFn as never
+      identity: IDENTITY,
+      legacyIdentity: 'alice',
+      grantFn: fake.grantFn
     })
+
     expect(result).toEqual({ mode: 'marker-hit' })
     expect(fake.calls).toHaveLength(0)
   })
 
   it('re-grants when the marker belongs to a different identity', async () => {
-    writeFileSync(
-      join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE),
-      JSON.stringify({
-        schemeVersion: WINDOWS_ACL_GRANT_SCHEME_VERSION,
-        identity: 'someone-else',
-        grantedAt: 1
-      })
-    )
-    const fake = createFakeSpawn(0)
+    writeMarker(userDataPath, '*S-1-5-21-9-9-9-1001')
+    const fake = createFakeGrant()
+
     const result = await awaitResult(userDataPath, {
-      identity: 'testuser',
-      spawnFn: fake.spawnFn as never
+      identity: IDENTITY,
+      legacyIdentity: 'alice',
+      grantFn: fake.grantFn
     })
+
     expect(result).toEqual({ mode: 'granted' })
-    expect(fake.calls).toHaveLength(2)
+    expect(fake.calls).toEqual([userDataPath])
   })
 
-  it('does not write the marker when icacls fails, so the next launch retries', async () => {
-    const fake = createFakeSpawn(5)
-    const result = await awaitResult(userDataPath, {
-      identity: 'testuser',
-      spawnFn: fake.spawnFn as never
-    })
-    expect(result).toEqual({ mode: 'failed', reason: 'exit 5; exit 5' })
+  it('keeps going past a failed child, then withholds the marker so the next launch retries', async () => {
+    const locked = join(userDataPath, 'locked')
+    mkdirSync(locked)
+    mkdirSync(join(userDataPath, 'fine'))
+    const fake = createFakeGrant(new Set([locked]))
+
+    const result = await awaitResult(userDataPath, { identity: IDENTITY, grantFn: fake.grantFn })
+
+    expect(result).toMatchObject({ mode: 'failed', reason: expect.stringContaining('locked') })
+    expect(fake.calls).toContain(userDataPath)
     expect(() => readFileSync(join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE))).toThrow()
   })
 
   it('no-ops without a resolvable identity', async () => {
-    const fake = createFakeSpawn(0)
-    const result = await awaitResult(userDataPath, {
-      identity: null,
-      spawnFn: fake.spawnFn as never
-    })
+    const fake = createFakeGrant()
+
+    const result = await awaitResult(userDataPath, { identity: null, grantFn: fake.grantFn })
+
     expect(result).toEqual({ mode: 'no-identity' })
     expect(fake.calls).toHaveLength(0)
   })
 
   it('ignores a corrupt marker and re-grants', async () => {
     writeFileSync(join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE), '{not json')
-    const fake = createFakeSpawn(0)
-    const result = await awaitResult(userDataPath, {
-      identity: 'testuser',
-      spawnFn: fake.spawnFn as never
-    })
+    const fake = createFakeGrant()
+
+    const result = await awaitResult(userDataPath, { identity: IDENTITY, grantFn: fake.grantFn })
+
     expect(result).toEqual({ mode: 'granted' })
   })
 })

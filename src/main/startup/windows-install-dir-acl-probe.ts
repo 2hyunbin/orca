@@ -1,14 +1,11 @@
-import { spawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import {
   sanitizeCrashReportString,
   type CrashReportBreadcrumbData
 } from '../../shared/crash-reporting'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
-import { getIcaclsExePath } from '../win32-utils'
+import { loadWindowsSecurityAddon } from '../../shared/windows-security-addon'
 
 /**
  * Read-only DACL probe for the win32 install directory.
@@ -36,11 +33,9 @@ export const WINDOWS_INSTALL_DIR_ACL_BREADCRUMB = 'windows_install_dir_acl'
 // one shipped module answers it, and existsSync costs nothing.
 const MODULE_SHORTLIST = ['ffmpeg.dll', 'libGLESv2.dll', 'libEGL.dll', 'icudtl.dat']
 
-const PROBE_BUDGET_MS = 5_000
-
-// Why SDDL (`icacls /save`) rather than icacls's display: the display localizes
-// the well-known package names — and on zh/ja/ko even keeps "NT AUTHORITY" English
-// while doing so — so a repaired tree read as poisoned. SDDL prints SIDs on every locale.
+// Why SDDL rather than a display listing: displays localize the well-known package
+// names — and on zh/ja/ko even keep "NT AUTHORITY" English while doing so — so a
+// repaired tree read as poisoned. SDDL prints SIDs on every locale.
 const PACKAGE_SID = /^S-1-15-2-[0-9-]+$/i
 /** ALL RESTRICTED APPLICATION PACKAGES: the grant the reproduced remedy added. */
 const RESTRICTED_PACKAGES_SID = 'S-1-15-2-2'
@@ -54,7 +49,7 @@ export type WindowsInstallDirAclProbeOptions = {
   isServeMode?: boolean
   installDir?: string
   /** Test seams. */
-  spawnFn?: typeof spawn
+  readDaclSddl?: (path: string) => string
   fileExists?: (path: string) => boolean
   recordBreadcrumb?: typeof recordDurableCrashBreadcrumb
   onDone?: (data: CrashReportBreadcrumbData) => void
@@ -66,45 +61,21 @@ type AclFacts = {
   hasRestrictedPackageGrant: boolean
 }
 
-function readSavedDacl(spawnFn: typeof spawn, target: string, deadlineMs: number): Promise<string> {
-  const saveFile = join(tmpdir(), `orca-install-acl-${randomUUID()}.txt`)
-  return new Promise<string>((resolve) => {
-    // /save only reads the target (it writes the temp file). Never /T — a recursive
-    // walk on a real profile measured 62s and timed out (see windows-user-data-acl.ts).
-    const child = spawnFn(getIcaclsExePath(), [target, '/save', saveFile], {
-      stdio: ['ignore', 'ignore', 'ignore'],
-      windowsHide: true
-    })
-    let settled = false
-    const settle = (read: boolean): void => {
-      if (settled) {
-        return
-      }
-      settled = true
-      clearTimeout(timer)
-      let out = ''
-      try {
-        // An empty read parses as a clean DACL, so a failed /save must stay ''.
-        out = read ? readFileSync(saveFile, 'utf16le') : ''
-      } catch {
-        out = ''
-      }
-      try {
-        // A killed icacls may still hold the file; a leftover temp file is harmless.
-        rmSync(saveFile, { force: true })
-      } catch {
-        // Nothing to do.
-      }
-      resolve(out)
-    }
-    const timer = setTimeout(() => {
-      child.kill()
-      settle(false)
-    }, deadlineMs)
-    timer.unref?.()
-    child.on('error', () => settle(false))
-    child.on('close', (code) => settle(code === 0))
-  })
+/** The target's DACL as SDDL, or '' when it cannot be read (an empty read stays unreadable). */
+function readDacl(readDaclSddl: (path: string) => string, target: string): string {
+  try {
+    return readDaclSddl(target)
+  } catch {
+    return ''
+  }
+}
+
+function nativeDaclReader(): (path: string) => string {
+  const addon = loadWindowsSecurityAddon()
+  if (!addon) {
+    throw new Error('windows-security addon unavailable')
+  }
+  return (path) => addon.getDaclSddl(path)
 }
 
 function collectAclFacts(savedDacl: string): AclFacts | null {
@@ -145,20 +116,14 @@ function resolveTargets(installDir: string, fileExists: (path: string) => boolea
   return moduleFile ? [installDir, moduleFile] : [installDir]
 }
 
-async function runProbe(options: WindowsInstallDirAclProbeOptions): Promise<void> {
+function runProbe(options: WindowsInstallDirAclProbeOptions): void {
   const record = options.recordBreadcrumb ?? recordDurableCrashBreadcrumb
   let data: CrashReportBreadcrumbData
   try {
     const installDir = options.installDir ?? dirname(process.execPath)
     const targets = resolveTargets(installDir, options.fileExists ?? existsSync)
-    const spawnFn = options.spawnFn ?? spawn
-    const startedAt = Date.now()
-    const outputs: string[] = []
-    for (const target of targets) {
-      const remaining = PROBE_BUDGET_MS - (Date.now() - startedAt)
-      // Why one shared budget: two targets must never cost two full timeouts.
-      outputs.push(remaining > 0 ? await readSavedDacl(spawnFn, target, remaining) : '')
-    }
+    const readDaclSddl = options.readDaclSddl ?? nativeDaclReader()
+    const outputs = targets.map((target) => readDacl(readDaclSddl, target))
     const facts = outputs.map(collectAclFacts).filter((fact) => fact !== null)
     const orphans = [...new Set(facts.flatMap((f) => f.orphanPackageSids))]
     const hasWellKnownPackageGrant = facts.some((f) => f.hasWellKnownPackageGrant)
@@ -201,7 +166,7 @@ export function resetWindowsInstallDirAclProbeForTest(): void {
 }
 
 /**
- * Fire-and-forget; returns before any spawn. win32 only — no spawn and no fs I/O
+ * Fire-and-forget; returns before any read. win32 only — no ACL read and no fs I/O
  * anywhere else. Called from openMainWindow, which runs after initObservability,
  * so the durable record also emits a span into the diagnostics bundle.
  *
@@ -220,7 +185,11 @@ export function probeWindowsInstallDirAcl(options: WindowsInstallDirAclProbeOpti
   // propagates into window creation. A diagnostic must never be able to do that.
   try {
     setImmediate(() => {
-      void runProbe(options).catch(() => undefined)
+      try {
+        runProbe(options)
+      } catch {
+        // A diagnostic, and a throwing recorder or onDone has nowhere left to report.
+      }
     })
   } catch {
     // Nothing left to report to that would not throw again.

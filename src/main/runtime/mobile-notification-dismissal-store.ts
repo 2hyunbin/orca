@@ -28,7 +28,7 @@ export class MobileNotificationDismissalStore {
   private unreadable = false
   constructor(userDataPath: string) {
     this.path = join(userDataPath, 'mobile-notification-dismissals.json')
-    // Why: a write killed between writeFile and rename (e.g. a hung icacls, #20497) orphans its temp forever.
+    // Why: a write killed between writeFile and rename (e.g. a hung ACL child process, #20497) orphans its temp forever.
     void removeStaleDurableWriteTempFiles(this.path, { minimumAgeMs: STALE_WRITE_TEMP_AGE_MS })
     try {
       hardenExistingSecureFile(this.path)

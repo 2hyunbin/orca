@@ -8,7 +8,6 @@ import {
   openSync,
   renameSync,
   rmSync,
-  statSync,
   writeFileSync
 } from 'node:fs'
 import { dirname } from 'node:path'
@@ -25,35 +24,30 @@ import {
 import {
   bestEffortRestrictWindowsPath,
   resetSecureFileWindowsUserSidForTests,
-  restrictWindowsPathSync
+  restrictWindowsPathSync,
+  writeRestrictedWindowsFile
 } from './secure-path-windows-acl'
-
-type HardenedPathCacheEntry = {
-  isDirectory: boolean
-  dev: number
-  ino: number
-  size: number
-  mode: number
-  ctimeMs: number
-  mtimeMs: number
-  birthtimeMs: number
-}
+import {
+  getHardenedPathCacheEntry,
+  hardenedPathCacheEntriesMatch,
+  type HardenedPathCacheEntry
+} from './secure-path-metadata-snapshot'
 
 const UNSUPPORTED_DIRECTORY_FSYNC_CODES = new Set(['EINVAL', 'ENOTSUP', 'EOPNOTSUPP'])
 
-// Why: hardening spawns icacls synchronously (once when the DACL already verifies, four times when it must be rewritten), so cache idempotent re-hardens per process.
+// Why: read paths poll (~2/s, #4901); a metadata-keyed cache keeps an unchanged file from being re-verified and re-logged.
 let hardenedPathsThisProcess = new SecurePathHardeningCache<HardenedPathCacheEntry>(
   DEFAULT_HARDENING_CACHE_BOUNDS
 )
 
-// Why: child writes constantly bump a dir's mtime, so cache dirs by path (not metadata) to avoid an icacls spawn every read (#4901).
+// Why: child writes constantly bump a dir's mtime, so cache dirs by path (not metadata); a Windows rewrite walks the whole tree.
 // Limitation: a dir deleted+recreated in-process won't re-harden; fine since we never delete our secure dirs at runtime.
 let hardenedDirectoryPathsThisProcess = new SecurePathHardeningCache<true>(
   DEFAULT_HARDENING_CACHE_BOUNDS
 )
 
 function hardenSecureDirectoryOnce(dirPath: string): void {
-  // Why: dir hardening stays async — re-applying it stormed the main thread (#4901); files inside are hardened synchronously anyway.
+  // Why async: a Windows directory rewrite propagates to every descendant, ~2 s on a 29k-entry userData.
   if (hardenedDirectoryPathsThisProcess.get(dirPath)) {
     return
   }
@@ -80,6 +74,9 @@ function hardenSecurePathOnce(targetPath: string, isDirectory: boolean): boolean
   if (currentEntry && cachedEntry && hardenedPathCacheEntriesMatch(currentEntry, cachedEntry)) {
     return true
   }
+  if (process.platform === 'win32') {
+    return hardenExistingWindowsFile(targetPath)
+  }
   // Why: async re-harden is safe here — read path hardens each file at most once/process; new files harden synchronously on the write path.
   const outcome = applySecurePathRestriction(
     targetPath,
@@ -97,6 +94,21 @@ function hardenSecurePathOnce(targetPath: string, isDirectory: boolean): boolean
     return true
   }
   return false
+}
+
+/** A file has no descendants, so verifying and fixing it in-process costs microseconds. */
+function hardenExistingWindowsFile(targetPath: string): boolean {
+  // Why the floor: this is the read path, polled at ~2/s; a host that can never restrict
+  // (FAT32, some shares) would otherwise log on every poll.
+  if (!mayAttemptHardening(targetPath)) {
+    return false
+  }
+  const restricted = restrictWindowsPathSync(targetPath, false)
+  recordHardeningOutcome(targetPath, restricted)
+  if (restricted) {
+    rememberHardenedPath(targetPath, false)
+  }
+  return restricted
 }
 
 /** Returns false when the file was written but its permissions could not be restricted. */
@@ -135,36 +147,48 @@ export function writeSecureFile(
   hardenSecurePathOnce(dir, true)
 
   const tmpFile = `${targetPath}.${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`
+  const isWindows = process.platform === 'win32'
   try {
-    writeFileSync(tmpFile, contents, {
-      encoding: 'utf-8',
-      mode: 0o600
-    })
+    // Why born restricted on Windows: writeFileSync's mode is a no-op there, and a file created
+    // plainly would hold the credential under the directory's inherited DACL until a later fix.
+    const stagedRestricted = isWindows
+      ? writeRestrictedWindowsFile(tmpFile, contents)
+      : writeStagedPosixFile(tmpFile, contents)
     if (options.durable) {
       fsyncFileSync(tmpFile)
     }
-    // Why: writeFileSync mode is a no-op on Windows, so restrict the credential's ACL synchronously before the rename publishes it under inherited ACLs.
-    const stagedOutcome = applySecurePathRestriction(tmpFile, false, process.platform, true)
     // Recheck after hardening; the check and rename are separate, non-atomic operations.
     if (options.shouldPublish && !options.shouldPublish()) {
       rmSync(tmpFile, { force: true })
       return false
     }
     renameSync(tmpFile, targetPath)
-    // Why: these hold auth credentials, so the published path must stay current-user only; cache only on confirmed success so failures retry.
-    // The staged file's protected DACL survives the rename, so this pass usually just verifies it.
-    const publishedOutcome = applySecurePathRestriction(targetPath, false, process.platform, true)
-    if (publishedOutcome === 'applied') {
+    // A rename keeps the file's own DACL, so Windows needs no second pass; POSIX re-chmods the
+    // published path in case the rename replaced a differently-moded inode.
+    const publishedRestricted = isWindows
+      ? stagedRestricted
+      : applySecurePathRestriction(targetPath, false, process.platform, true) === 'applied'
+    // Cache only on confirmed success so failures retry.
+    if (publishedRestricted) {
       rememberHardenedPath(targetPath, false)
+      if (isWindows) {
+        // How a recovered host clears the read path's backoff (and reports `recovered`).
+        recordHardeningOutcome(targetPath, true)
+      }
     }
     if (options.durable) {
       bestEffortFsyncDirectorySync(dir)
     }
-    return stagedOutcome === 'applied' && publishedOutcome === 'applied'
+    return stagedRestricted && publishedRestricted
   } catch (error) {
     rmSync(tmpFile, { force: true })
     throw error
   }
+}
+
+function writeStagedPosixFile(tmpFile: string, contents: string): boolean {
+  writeFileSync(tmpFile, contents, { encoding: 'utf-8', mode: 0o600 })
+  return applySecurePathRestriction(tmpFile, false, process.platform, true) === 'applied'
 }
 
 function fsyncPathSync(path: string, flags: 'r' | 'r+'): void {
@@ -269,9 +293,7 @@ function applySecurePathRestriction(
 ): HardeningOutcome {
   if (platform === 'win32') {
     if (sync) {
-      // Why no retry floor here: the write path is user-driven, not polled, and a failed apply
-      // must still be retried on the next write of the same credential.
-      // Why: apply the ACL synchronously so the credential file isn't briefly readable under inherited ACLs (writeFileSync mode is a no-op on Windows).
+      // Why no retry floor here: callers are user-driven or startup-only, not polled.
       const restricted = restrictWindowsPathSync(targetPath, isDirectory)
       if (restricted) {
         // Success only: this is how a recovered host clears the read path's backoff (and reports
@@ -286,7 +308,7 @@ function applySecurePathRestriction(
       onAsyncSettled?.(false)
       return 'failed'
     }
-    // Why: dir/read-path re-harden runs async to avoid blocking the main thread (#4901).
+    // Why async: a directory rewrite walks every descendant, and read paths poll (#4901).
     bestEffortRestrictWindowsPath(targetPath, isDirectory, (restricted) => {
       recordHardeningOutcome(targetPath, restricted)
       onAsyncSettled?.(restricted)
@@ -305,51 +327,6 @@ function rememberHardenedPath(targetPath: string, isDirectory: boolean): void {
   } else {
     hardenedPathsThisProcess.delete(targetPath)
   }
-}
-
-/**
- * Snapshots a path's identity, mode, and timestamps so later drift is detectable.
- * Mode is tracked directly so a chmod is caught even where coarse ctime granularity hides it.
- */
-function getHardenedPathCacheEntry(
-  targetPath: string,
-  isDirectory: boolean
-): HardenedPathCacheEntry | null {
-  try {
-    const stats = statSync(targetPath)
-    if (stats.isDirectory() !== isDirectory) {
-      return null
-    }
-    return {
-      isDirectory,
-      dev: stats.dev,
-      ino: stats.ino,
-      size: stats.size,
-      mode: stats.mode & 0o777,
-      ctimeMs: stats.ctimeMs,
-      mtimeMs: stats.mtimeMs,
-      birthtimeMs: stats.birthtimeMs
-    }
-  } catch {
-    return null
-  }
-}
-
-/** True when two snapshots describe the same unchanged path (identity, mode, timestamps). */
-function hardenedPathCacheEntriesMatch(
-  a: HardenedPathCacheEntry,
-  b: HardenedPathCacheEntry
-): boolean {
-  return (
-    a.isDirectory === b.isDirectory &&
-    a.dev === b.dev &&
-    a.ino === b.ino &&
-    a.size === b.size &&
-    a.mode === b.mode &&
-    a.ctimeMs === b.ctimeMs &&
-    a.mtimeMs === b.mtimeMs &&
-    a.birthtimeMs === b.birthtimeMs
-  )
 }
 
 export function __resetSecureFileWindowsUserSidForTests(): void {

@@ -6,9 +6,18 @@ export type SecurePathHardeningReport = {
   targetPath: string
   /**
    * `throttled` and `recovered` mark entering and leaving the rate-limited degraded state;
-   * `settle` is the async lane's own callback failing, which is a caller bug rather than a host one.
+   * `settle` is the async lane's own callback failing, which is a caller bug rather than a host one;
+   * `addon` is the native ACL module failing to load, reported once per process.
    */
-  stage: 'sid-lookup' | 'reset' | 'grant' | 'verify' | 'settle' | 'throttled' | 'recovered'
+  stage:
+    | 'addon'
+    | 'sid-lookup'
+    | 'create'
+    | 'apply'
+    | 'verify'
+    | 'settle'
+    | 'throttled'
+    | 'recovered'
   detail: string
 }
 

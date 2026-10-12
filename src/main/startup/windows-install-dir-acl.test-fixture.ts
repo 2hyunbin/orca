@@ -1,12 +1,12 @@
-import { EventEmitter } from 'node:events'
-import { writeFileSync } from 'node:fs'
-import { basename } from 'node:path'
-import type { spawn } from 'node:child_process'
+import type {
+  InstallDirPackageGrant,
+  InstallDirPackageGrantOutcome,
+  InstallDirPackageGrantPass
+} from './windows-install-dir-package-acl-grant'
 
 /**
- * Shared icacls doubles for the install-dir DACL probe, repair, and recovery tests.
- * ACEs are SDDL, the shape `icacls <target> /save <file>` writes (captured on
- * win32 10.0.26200: the leaf name, CRLF, then `D:AI(...)(...)`, UTF-16LE).
+ * Shared ACL doubles for the install-dir DACL probe, repair, and recovery tests.
+ * ACEs are SDDL, the shape the native `getDaclSddl` returns (`D:AI(...)(...)`).
  */
 
 export const ORPHAN_PACKAGE_ACE = '(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)'
@@ -21,51 +21,45 @@ export const BASELINE_ACES = [
   '(A;OICIID;FA;;;S-1-5-21-432636774-4279371817-3971399515-1001)'
 ]
 
-/** The file `icacls <target> /save` writes for a target carrying these ACEs. */
-export function icaclsSavedAcl(target: string, aces: string[]): Buffer {
-  const leaf = basename(target.replaceAll('\\', '/'))
-  return Buffer.from(`${leaf}\r\nD:AI${[...aces, ...BASELINE_ACES].join('')}\r\n`, 'utf16le')
+/** The SDDL a target carrying these ACEs (plus the inherited baseline) reads back as. */
+export function savedDacl(aces: string[]): string {
+  return `D:AI${[...aces, ...BASELINE_ACES].join('')}`
 }
 
 /**
- * `saved` returns the target's extra ACEs, or the raw saved file; `null` makes the
- * spawn fail, as an unreadable target does. `display` is what a bare
- * `icacls <target>` prints.
+ * `saved` returns the target's extra ACEs, or a raw SDDL string; `null` makes the
+ * read throw, as an unreadable target does.
  */
-export function fakeIcaclsSpawn(
-  saved: (target: string) => string[] | Buffer | null,
-  display: (target: string) => string = () => '',
-  exitCode: number | null = 0
-): {
-  spawnFn: typeof spawn
-  calls: { file: string; args: string[] }[]
+export function fakeDaclReader(saved: (target: string) => string[] | string | null): {
+  readDaclSddl: (path: string) => string
+  calls: string[]
 } {
-  const calls: { file: string; args: string[] }[] = []
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test double; the probe only touches kill/stdout/on of the child.
-  const spawnFn = ((file: string, args: string[]) => {
-    calls.push({ file, args })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: both fields are assigned on the next two lines.
-    const child = new EventEmitter() as EventEmitter & {
-      stdout: EventEmitter
-      kill: () => void
+  const calls: string[] = []
+  const readDaclSddl = (path: string): string => {
+    calls.push(path)
+    const aces = saved(path)
+    if (aces === null) {
+      throw new Error('GetNamedSecurityInfoW failed with Win32 error 5')
     }
-    child.stdout = new EventEmitter()
-    child.kill = () => undefined
-    const [target, verb, saveFile] = args
-    const aces = saved(target)
-    setImmediate(() => {
-      if (aces === null) {
-        child.emit('error', new Error('ENOENT'))
-        return
-      }
-      if (verb === '/save') {
-        writeFileSync(saveFile, Buffer.isBuffer(aces) ? aces : icaclsSavedAcl(target, aces))
-      } else {
-        child.stdout.emit('data', Buffer.from(display(target), 'utf-8'))
-      }
-      child.emit('close', exitCode)
-    })
-    return child
-  }) as unknown as typeof spawn
-  return { spawnFn, calls }
+    return typeof aces === 'string' ? aces : savedDacl(aces)
+  }
+  return { readDaclSddl, calls }
+}
+
+/** Records each grant pass; `reply` decides its outcome (default: success). */
+export function fakePackageGrant(
+  reply: (
+    pass: InstallDirPackageGrantPass
+  ) => Partial<InstallDirPackageGrantOutcome> | Promise<InstallDirPackageGrantOutcome> = () => ({})
+): {
+  grantFn: InstallDirPackageGrant
+  passes: { installDir: string; pass: InstallDirPackageGrantPass }[]
+} {
+  const passes: { installDir: string; pass: InstallDirPackageGrantPass }[] = []
+  const grantFn: InstallDirPackageGrant = async (installDir, pass) => {
+    passes.push({ installDir, pass })
+    const outcome = await reply(pass)
+    return { ok: true, failedFileCount: 0, ...outcome }
+  }
+  return { grantFn, passes }
 }

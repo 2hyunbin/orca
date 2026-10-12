@@ -273,7 +273,7 @@ function writeScriptWithAclRetry(scriptPath: string, content: string): void {
         writeFileSync(scriptPath, content, 'utf-8')
         return
       } catch {
-        // icacls failure is not actionable; re-throw the original EPERM
+        // a failed grant is not actionable; re-throw the original EPERM
       }
     }
     throw error
