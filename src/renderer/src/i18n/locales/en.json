@@ -3243,7 +3243,8 @@
           }
         },
         "dialog": {
-          "f26c4baeda": "Close"
+          "f26c4baeda": "Close",
+          "minimize": "Minimize"
         },
         "repo": {
           "multi": {

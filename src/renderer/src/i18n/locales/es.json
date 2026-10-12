@@ -3012,7 +3012,8 @@
           }
         },
         "dialog": {
-          "f26c4baeda": "Cerrar"
+          "f26c4baeda": "Cerrar",
+          "minimize": "Minimizar"
         },
         "repo": {
           "multi": {

@@ -3117,7 +3117,8 @@
           }
         },
         "dialog": {
-          "f26c4baeda": "Fermer"
+          "f26c4baeda": "Fermer",
+          "minimize": "Réduire"
         },
         "repo": {
           "multi": {

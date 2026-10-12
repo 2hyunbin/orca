@@ -3012,7 +3012,8 @@
           }
         },
         "dialog": {
-          "f26c4baeda": "닫기"
+          "f26c4baeda": "닫기",
+          "minimize": "최소화"
         },
         "repo": {
           "multi": {

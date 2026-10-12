@@ -3012,7 +3012,8 @@
           }
         },
         "dialog": {
-          "f26c4baeda": "閉じる"
+          "f26c4baeda": "閉じる",
+          "minimize": "最小化"
         },
         "repo": {
           "multi": {

@@ -3012,7 +3012,8 @@
           }
         },
         "dialog": {
-          "f26c4baeda": "关闭"
+          "f26c4baeda": "关闭",
+          "minimize": "最小化"
         },
         "repo": {
           "multi": {
