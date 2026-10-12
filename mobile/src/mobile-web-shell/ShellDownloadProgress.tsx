@@ -1,9 +1,8 @@
-import { Animated, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { colors } from '../theme/mobile-theme'
 import { useHostDisplay, type HostDisplaySource } from '../transport/use-host-display'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 import { ShellWaitingFrame } from './ShellWaitingFrame'
-import { useEasedDownloadProgress } from './use-eased-download-progress'
 
 const DOWNLOADING_LABEL = 'Downloading the latest app'
 
@@ -21,7 +20,6 @@ export function ShellDownloadProgress({
   host: HostDisplaySource | null
 }) {
   const fraction = state.totalBytes > 0 ? Math.min(1, state.receivedBytes / state.totalBytes) : 0
-  const shown = useEasedDownloadProgress(fraction)
   const hostTitle = useHostDisplay(host).title
   const source = host === null ? '' : `from ${hostTitle} · `
   return (
@@ -35,7 +33,7 @@ export function ShellDownloadProgress({
           accessibilityValue={{ min: 0, max: 100, now: Math.round(fraction * 100) }}
           testID="mobile-web-shell-progress-bar"
         >
-          <Animated.View style={[styles.fill, { transform: [{ scaleX: shown }] }]} />
+          <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
         </View>
       }
       caption={`${source}${megabytes(state.receivedBytes)} of ${megabytes(state.totalBytes)} MB`}
@@ -52,9 +50,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgRaised
   },
   fill: {
-    width: '100%',
     height: '100%',
-    transformOrigin: 'left',
     backgroundColor: colors.textSecondary
   }
 })

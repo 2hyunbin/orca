@@ -8,12 +8,8 @@ import { SCREEN_SNAPSHOT, type ScreenDependencies } from './mobile-web-shell-scr
 export function screenModuleMocks(dependencies: ScreenDependencies) {
   return {
     'react-native': () => ({
-      AccessibilityInfo: {
-        isReduceMotionEnabled: () => Promise.resolve(false),
-        addEventListener: () => ({ remove: () => {} })
-      },
       ActivityIndicator: 'ActivityIndicator',
-      Easing: { in: (fn: unknown) => fn, quad: 'quad', linear: 'linear' },
+      Easing: { in: (fn: unknown) => fn, quad: 'quad' },
       // Enough of it for the cover to mount, fade and unmount. What the fade looks like is not this
       // test's business; that the cover is up until the page paints is, and that is the `visible` prop.
       Animated: {
