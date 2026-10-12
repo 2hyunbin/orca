@@ -16,7 +16,7 @@ import { providerSpawnedProcessIdentity } from '../provider-process/provider-spa
 import { ProviderAcquisitionStarts } from '../provider-process/provider-acquisition-starts'
 import { compactPiRpcSession } from './rpc-compaction'
 import { buildPiRpcLaunch } from './rpc-launch'
-import { piRpcProviderLink, type PiRpcResolvedLaunch } from './rpc-launch-resolution'
+import type { PiRpcResolvedLaunch } from './rpc-launch-resolution'
 import { PiRpcSession, type PiRpcSessionDeps, type PiRpcConnection } from './rpc-session'
 import { PiRpcPromptError, preparePiRpcPrompt } from './rpc-prompt'
 import { applyPiRpcSessionOption } from './rpc-options'
@@ -93,15 +93,15 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
         await spawned.onSpawned(session.connection.pid)
       }
       const process = await spawned.read(session.connection.pid)
-      const file = await waitForPromiseWithSignal(session.start(), attempt.signal)
       if (session.connection.closed || attempt.signal.aborted) {
         throw new Error('Pi exited while starting')
       }
+      const child = session
+      void child.start(launch, () => this.starts.retainFailed(id, child.connection))
       return {
         process,
         acquisitionGeneration: session.generation,
-        link: piRpcProviderLink(launch, file, input.fence, randomUUID(), Date.now()),
-        ...(session.startListing ? { catalogListing: session.startListing } : {})
+        providerChildPhase: 'starting'
       }
     } catch (error) {
       if (!session) {
@@ -227,10 +227,10 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
   }
   readOptions: NonNullable<StructuredAgentSessionAdapter['readOptions']> = async (input) =>
     this.session(input.sessionId, input.fence).readOptions()
-  readCommands = (id: string) => this.sessions.get(id)?.commands
   readOptionRestoreFailures(id: string): readonly string[] {
-    return this.sessions.get(id)?.skipped ?? []
+    return this.sessions.get(id)?.startup.skipped ?? []
   }
+  readCommands = (id: string) => this.sessions.get(id)?.startup.commands
   holdsDispatch(id: string): boolean {
     return this.sessions.get(id)?.turns.holdsDispatch ?? false
   }
@@ -241,9 +241,13 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
     return session &&
       !session.connection.closed &&
       session.connection.rootVerdict !== 'exited' &&
-      session.options?.models.length === 0
+      session.startup.options?.models.length === 0
       ? { reason: 'notSignedIn' }
       : undefined
+  }
+  holdsLiveProviderProcess(id: string, generation: string): boolean {
+    const session = this.sessions.get(id)
+    return session?.generation === generation && !session.connection.closed
   }
 
   async closeSession(id: string, requested = true): Promise<boolean> {

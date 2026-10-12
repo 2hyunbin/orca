@@ -4,10 +4,13 @@ import type { ClaudeStructuredSessionAdapterDeps } from '../claude/claude-struct
 import type { CodexStructuredSessionAdapterDeps } from '../codex/codex-structured-session-adapter'
 import type { StructuredAgentSessionStartupLimits } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
 import type { PiRpcSessionDeps } from '../pi/rpc-session'
+import type { PiRpcSessionAdapterDeps } from '../pi/rpc-session-adapter'
 
 /** Provider transports are overridden only to drive the runtime against scripted children. */
 export type StructuredAgentSessionTransportOverrides = {
   openPiConnection?: PiRpcSessionDeps['openConnection']
+  /** Scripted Pi children resolve their launch here, so no test reaches a real Pi binary. */
+  resolvePiLaunch?: PiRpcSessionAdapterDeps['resolveLaunch']
   openCodexConnection?: CodexStructuredSessionAdapterDeps['openConnection']
   openAcpConnection?: AcpStructuredSessionAdapterDeps['connect']
   /** Answers an ACP launch's command lookup and version probe for a scripted child; every launch
