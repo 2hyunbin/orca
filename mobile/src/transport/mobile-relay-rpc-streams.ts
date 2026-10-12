@@ -34,7 +34,8 @@ type StreamRecord = {
 
 type StreamUnsubscribe = { method: string; params: Record<string, unknown> }
 
-/** The host cleanup slot an unsubscribe names; the envelope routes it, so it is part of the slot. */
+/** The host cleanup slot an unsubscribe names. Every envelope field counts as routing, so the whole
+ *  envelope is part of the slot, read in sorted key order so equal envelopes name one slot. */
 function unsubscribeSlot(
   { method, params }: StreamUnsubscribe,
   envelope: RpcEnvelopeFields | undefined
@@ -47,7 +48,8 @@ function unsubscribeSlot(
       ? params.client
       : null
   const clientId = client && 'id' in client ? client.id : null
-  return JSON.stringify([method, params.subscriptionId, clientId, envelope ?? null])
+  const routing = envelope ? Object.entries(envelope).sort(([a], [b]) => (a < b ? -1 : 1)) : null
+  return JSON.stringify([method, params.subscriptionId, clientId, routing])
 }
 
 /** Unsubscribe derived from the subscribe params alone (no server-assigned id). */
