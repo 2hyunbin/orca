@@ -91,11 +91,11 @@ function throwMissingWorkingDirectory(cwd: string): never {
  * Validate that a working directory exists and is a directory.
  * Rejects with a descriptive Error if not.
  */
-export async function validateWorkingDirectory(cwd: string): Promise<void> {
+export async function validateWorkingDirectory(cwd: string, signal?: AbortSignal): Promise<void> {
   // Why: the distro probe spawns wsl.exe (~70 ms warm, 300+ ms for a stopped
   // distro), so it must never run synchronously on the main process.
   if (isWslUncPath(cwd)) {
-    return validateWorkingDirectoryAsync(cwd)
+    return validateWorkingDirectoryAsync(cwd, { signal })
   }
 
   if (!existsSync(cwd)) {

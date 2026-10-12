@@ -396,6 +396,31 @@ describe('LocalPtyProvider', () => {
       expect(spawnMock.mock.calls).toHaveLength(spawnCallsBefore)
     })
 
+    it('rejects a canceled spawn while its WSL cwd probe is still pending', async () => {
+      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+      const probeStarted = Promise.withResolvers<void>()
+      wslUncDirectoryExistsAsyncMock.mockImplementation(() => {
+        probeStarted.resolve()
+        return new Promise(() => {})
+      })
+      const spawnCallsBefore = spawnMock.mock.calls.length
+
+      const spawn = provider.spawn({
+        cols: 80,
+        rows: 24,
+        cwd: '\\\\wsl.localhost\\Stalled\\home\\jin\\repo',
+        sessionId: 'stalled-wsl-cwd-session'
+      })
+      const canceledSpawn = expect(spawn).rejects.toThrow(
+        'PTY spawn canceled: stalled-wsl-cwd-session'
+      )
+      await probeStarted.promise
+      await provider.shutdown('stalled-wsl-cwd-session', { immediate: true })
+
+      await canceledSpawn
+      expect(spawnMock.mock.calls).toHaveLength(spawnCallsBefore)
+    })
+
     it('resolves and persists the default distro for Windows cwd WSL terminals', async () => {
       Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
       const buildSpawnEnv = vi.fn(

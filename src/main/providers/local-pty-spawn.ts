@@ -9,7 +9,7 @@ import { finalizeLocalPtySpawnEnvironment } from './local-pty-finalize-environme
 import { normalizeLocalCallerSessionId } from './local-pty-launch-helpers'
 import { createLocalPtyLaunchPlan, DeferredLocalPtyLaunchPlan } from './local-pty-launch-plan'
 import type { LocalPtyProviderOptions } from './local-pty-provider-types'
-import { validateWorkingDirectory } from './local-pty-utils'
+import { validateWorkingDirectory, WorkingDirectoryValidationAbortedError } from './local-pty-utils'
 import { allocatePtyId, ptyShutdownOperations } from './local-pty-provider-state'
 import { activateLocalPtySession } from './local-pty-session-activation'
 import {
@@ -70,7 +70,15 @@ export async function spawnLocalPty(
     }
     throwIfCanceled()
     if (args.prevalidatedCwd !== plan.validationCwd) {
-      await validateWorkingDirectory(plan.validationCwd)
+      try {
+        await validateWorkingDirectory(plan.validationCwd, cancellation)
+      } catch (error) {
+        // Why: an abandoned probe keeps running for other waiters; report the spawn's own cancel.
+        if (error instanceof WorkingDirectoryValidationAbortedError) {
+          throwIfCanceled()
+        }
+        throw error
+      }
       throwIfCanceled()
     }
     const envResult = buildLocalPtySpawnEnvironment({
