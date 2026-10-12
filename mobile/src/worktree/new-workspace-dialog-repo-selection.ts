@@ -7,12 +7,6 @@ type MobileNewWorkspaceDialogRepo = {
   executionHostId?: 'local' | `ssh:${string}` | `runtime:${string}` | null
 }
 
-export function getMobileNewWorkspaceDialogEligibleRepos<T extends { path: string }>(
-  repos: readonly T[]
-): T[] {
-  return repos.filter((repo) => Boolean(repo.path))
-}
-
 function getMobileRepoExecutionHostId(
   repo: MobileNewWorkspaceDialogRepo
 ): Exclude<ExecutionHostScope, 'all'> {

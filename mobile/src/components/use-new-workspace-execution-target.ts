@@ -47,6 +47,9 @@ export function useNewWorkspaceExecutionTarget(args: {
   const target = JSON.stringify([server ?? null, connectionId])
   const [sshState, setSshEntry] = useState<SshStateEntry | null>(null)
   const setSshState = (record: WorkspaceSshRecord) => setSshEntry({ target, record })
+  // A connect reply lands only while its target is still the one shown, so it never overwrites another's.
+  const settleSshState = (record: WorkspaceSshRecord) =>
+    setSshEntry((current) => (current?.target === target ? { target, record } : current))
   const [connectingTarget, setConnectingTarget] = useState<string | null>(null)
   const [detectedAgentIdsState, setDetectedAgentIdsState] = useState<DetectedAgentIdsState | null>(
     null
@@ -134,9 +137,9 @@ export function useNewWorkspaceExecutionTarget(args: {
         { timeoutMs: 120_000 }
       )
       const state = sshRepoConnectRun.interpret(reply)
-      setSshState(state ?? fallbackSshState(connectionId, 'connected', null))
+      settleSshState(state ?? fallbackSshState(connectionId, 'connected', null))
     } catch (error) {
-      setSshState(
+      settleSshState(
         fallbackSshState(
           connectionId,
           'error',
