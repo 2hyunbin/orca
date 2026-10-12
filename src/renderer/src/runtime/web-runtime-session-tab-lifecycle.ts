@@ -24,10 +24,6 @@ import {
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
-import {
-  hasLegacyRelayBridgedPane,
-  isLegacyRelayBridgedTab
-} from '../components/terminal-pane/legacy-relay-bridge-panes'
 
 export async function activateWebRuntimeSessionTab(args: {
   worktreeId: string
@@ -41,6 +37,9 @@ export async function activateWebRuntimeSessionTab(args: {
   // COMPAT(legacy-relay-bridge, revisit 2027-01-15): an older relay runs a pane in this tab, and
   // activating that pane on the managed server would start a second shell there that no tab shows.
   // A click names no leaf, so the pane on screen does; the server would otherwise pick the first.
+  // Loaded lazily: the module subscribes to main's pane list on import, and terminal panes load it.
+  const { hasLegacyRelayBridgedPane, isLegacyRelayBridgedTab } =
+    await import('../components/terminal-pane/legacy-relay-bridge-panes')
   const leafId =
     args.leafId ??
     (hasLegacyRelayBridgedPane(args.tabId)
