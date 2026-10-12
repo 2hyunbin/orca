@@ -253,6 +253,31 @@ describe('shared agent-hook-listener', () => {
       expect(stop?.payload.subagents ?? []).toEqual([])
     })
 
+    it('revives an idle known child from its untyped tool event', () => {
+      claudeEvent({ hook_event_name: 'UserPromptSubmit', prompt: 'spawn probe' })
+      const agentId = 'aprobe1-6d3cb5b52120b7bf'
+      const teammateTask = { id: 'tlkjjs0jv', type: 'teammate', status: 'running' }
+      claudeEvent({ hook_event_name: 'SubagentStart', agent_id: agentId, agent_type: 'probe1' })
+      const parked = claudeEvent({
+        hook_event_name: 'SubagentStop',
+        agent_id: agentId,
+        background_tasks: [teammateTask]
+      })
+      expect(parked?.payload.subagents).toEqual([
+        expect.objectContaining({ id: agentId, state: 'idle' })
+      ])
+
+      const revived = claudeEvent({
+        hook_event_name: 'PostToolUse',
+        agent_id: agentId,
+        tool_name: 'Read',
+        tool_input: { file_path: '/tmp/x' }
+      })
+      expect(revived?.payload.subagents).toEqual([
+        expect.objectContaining({ id: agentId, state: 'working' })
+      ])
+    })
+
     it('parks a teammate as a persistent idle row across its stop/idle/lead-Stop cycle', () => {
       // Why: the interactive agent-teams shape observed live on 2.1.217 —
       // lifecycle events use `a<name>-<hex>` agent ids while background_tasks
