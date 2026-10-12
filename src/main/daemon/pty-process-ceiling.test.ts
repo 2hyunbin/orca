@@ -10,7 +10,11 @@ import {
   setPtyProcessCeilingForTest,
   wrapPtySpawnForCeiling
 } from './pty-process-ceiling-runtime'
-import { describePtyProcessCeiling, parsePtyProcessCeilingState } from './pty-process-ceiling-state'
+import {
+  confirmPtyProcessCeiling,
+  describePtyProcessCeiling,
+  parsePtyProcessCeilingState
+} from './pty-process-ceiling-state'
 import { parseDaemonPidFile } from './daemon-pid-file-parse'
 
 const on = { [PTY_PROCESS_CEILING_ENV]: '2048' }
@@ -78,7 +82,8 @@ describe('resolvePtyProcessCeiling', () => {
       state: 'on',
       limit: 2048,
       mechanism: 'systemd-slice',
-      unit: 'orca_ptys_1f_2e.slice'
+      unit: 'orca_ptys_1f_2e.slice',
+      controlGroup: '/user.slice/user-1000.slice/user@1000.service/orca_ptys_1f_2e.slice'
     })
     expect(resolved.linux?.pidsMaxPath).toBe(
       '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/orca_ptys_1f_2e.slice/pids.max'
@@ -183,6 +188,22 @@ describe('wrapPtySpawnForCeiling', () => {
 })
 
 describe('ceiling report', () => {
+  it('reports a slice the user manager dropped as lost, not on', () => {
+    const on = {
+      state: 'on' as const,
+      limit: 2048,
+      mechanism: 'systemd-slice' as const,
+      unit: 'orca_ptys_a.slice',
+      controlGroup: '/u/orca_ptys_a.slice'
+    }
+    expect(confirmPtyProcessCeiling(on, () => true)).toBe(on)
+    expect(confirmPtyProcessCeiling(on, () => false)).toEqual({
+      state: 'off',
+      reason: 'slice_lost'
+    })
+    expect(confirmPtyProcessCeiling(null)).toBeNull()
+  })
+
   it('round-trips through the daemon pid record and reads old records as not reported', () => {
     const record = parseDaemonPidFile(
       JSON.stringify({ pid: 7, processCeiling: { state: 'off', reason: 'no_user_manager' } })

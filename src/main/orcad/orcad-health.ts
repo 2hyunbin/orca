@@ -9,7 +9,10 @@
  * travels back over the daemon's socket.
  */
 import { hashOrcadLauncher } from '../../shared/orcad-build-identity'
-import type { PtyProcessCeilingState } from '../daemon/pty-process-ceiling-state'
+import {
+  confirmPtyProcessCeiling,
+  type PtyProcessCeilingState
+} from '../daemon/pty-process-ceiling-state'
 import process from 'node:process'
 import { checkDaemonHealthWithCoverage, type DaemonHealth } from '../daemon/daemon-health'
 import { ptySpawnHealthPlatformCoverage } from '../daemon/daemon-health-identity'
@@ -167,7 +170,7 @@ export async function collectTerminalDaemonHealth(): Promise<TerminalDaemonHealt
     entryPath: record?.entryPath ?? null,
     protocolVersion: facts.protocolVersion,
     cgroupUnit: record?.cgroupUnit ?? null,
-    processCeiling: record?.processCeiling ?? null,
+    processCeiling: confirmPtyProcessCeiling(record?.processCeiling ?? null),
     selfTest
   }
 }

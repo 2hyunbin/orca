@@ -170,7 +170,13 @@ export function resolvePtyProcessCeiling(input: ResolveInput): {
       return off('controller_unavailable')
     }
     return {
-      state: { state: 'on', limit: parsed.limit, mechanism: 'systemd-slice', unit: slice },
+      state: {
+        state: 'on',
+        limit: parsed.limit,
+        mechanism: 'systemd-slice',
+        unit: slice,
+        controlGroup
+      },
       linux: {
         slice,
         pidsMaxPath,

@@ -18,7 +18,8 @@ while IFS= read -r cgroup; do
   esac
 done < /proc/self/cgroup
 [ "$owned" = 1 ] || exit 0
-exec systemctl --user --no-block stop "$2" \${3:+"$3"}
+# Slice first: stopping the scope kills this script before a second StopUnit is sent.
+exec systemctl --user --no-block stop \${3:+"$3"} "$2"
 `
 
 type ScopeDeathWatchOptions = {
