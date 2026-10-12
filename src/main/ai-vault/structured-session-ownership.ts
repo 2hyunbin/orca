@@ -2,6 +2,7 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { agentSessionLeaseAdmitsWriter } from '../../shared/agent-session-lease-adjudication'
 import { defaultAgentChatLabel } from '../../shared/agent-session-chat-label'
 import type { AiVaultListResult } from '../../shared/ai-vault-types'
+import { historyRowShowsChatName } from '../../shared/structured-chat-row-name'
 import type { AiVaultSearchResponse } from '../../shared/ai-vault-search-types'
 import type { AiVaultPrepareSessionResumeArgs } from '../../shared/ai-vault-resume-preparation'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -44,7 +45,7 @@ export function projectStructuredAiVaultSessions(
     if (!opensChat(ownership.provider)) {
       return []
     }
-    return [{ ...session, ...ownedTitle(ownership) }]
+    return [{ ...session, ...ownedRow(session.agent, ownership) }]
   })
   return sessions.length === result.sessions.length &&
     sessions.every((row, index) => row === result.sessions[index])
@@ -73,7 +74,7 @@ export function projectStructuredAiVaultSearchResponse(
         return []
       }
       const { resumeCommand: _resumeCommand, ...owned } = hit
-      return [{ ...owned, ...ownedTitle(ownership) }]
+      return [{ ...owned, ...ownedRow(hit.agent, ownership) }]
     })
   }
 }
@@ -82,7 +83,10 @@ export function projectStructuredAiVaultSearchResponse(
  *  naming them must never cost the user the search. */
 export async function searchWithStructuredOwners(
   search: Promise<AiVaultSearchResponse>,
-  options: { ensureHost?: (() => Promise<unknown>) | undefined; opensChat: StructuredChatOpener }
+  options: {
+    ensureHost?: (() => Promise<unknown>) | undefined
+    opensChat: StructuredChatOpener
+  }
 ): Promise<AiVaultSearchResponse> {
   const { ensureHost } = options
   const hostReady = ensureHost
@@ -100,11 +104,17 @@ export async function searchWithStructuredOwners(
     : response
 }
 
-function ownedTitle(ownership: StructuredProviderSessionOwnership) {
-  return {
-    title: ownership.conversationName ?? defaultAgentChatLabel(ownership.provider),
-    structuredSession: { sessionId: ownership.sessionId, workspaceId: ownership.workspaceId }
+function ownedRow(rowAgent: string, ownership: StructuredProviderSessionOwnership) {
+  const structuredSession = {
+    sessionId: ownership.sessionId,
+    workspaceId: ownership.workspaceId
   }
+  return historyRowShowsChatName(rowAgent)
+    ? {
+        title: ownership.conversationName ?? defaultAgentChatLabel(ownership.provider),
+        structuredSession
+      }
+    : { structuredSession }
 }
 
 /** One index per projection: a list holds hundreds of rows, each once searched every record. */
@@ -250,7 +260,11 @@ function parseResumeInvocations(command: string): ResumeInvocation[] {
     const history = registration.sessionHistory
     const invocation = history.parseResumeArgs(words.slice(program + 1))
     if (invocation) {
-      invocations.push({ ...invocation, provider: registration.definition.agent, history })
+      invocations.push({
+        ...invocation,
+        provider: registration.definition.agent,
+        history
+      })
     }
   }
   return invocations

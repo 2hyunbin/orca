@@ -1,13 +1,17 @@
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
-import { structuredChatDisplayName } from '../../../../shared/structured-chat-row-name'
+import {
+  historyRowShowsChatName,
+  structuredChatDisplayName
+} from '../../../../shared/structured-chat-row-name'
 import { useAppStore } from '@/store'
 import { structuredChatTabBySessionId } from '@/lib/structured-chat-tab-index'
 import { useStructuredConversationName } from '@/runtime/structured-conversation-name'
 
-/** A native row reads the same name as the chat's tab; the host's row title is the fallback for a
- *  chat its host has not published this run, such as one closed before a restart. */
+/** A Claude or Codex chat's row reads the same name as the chat's tab; the host's row title is the
+ *  fallback for a chat its host has not published this run, such as one closed before a restart.
+ *  Other agents' rows keep their CLI's own title. */
 export function useAiVaultSessionDisplayTitle(session: AiVaultSession): string {
-  const owner = session.structuredSession
+  const owner = historyRowShowsChatName(session.agent) ? session.structuredSession : undefined
   const customLabel = useAppStore((state) => {
     const tab = owner
       ? structuredChatTabBySessionId(
@@ -16,8 +20,8 @@ export function useAiVaultSessionDisplayTitle(session: AiVaultSession): string {
           owner.sessionId
         )
       : undefined
-    // Not by agent: an OpenCode chat's conversation lists as an `opencode2` row on OpenCode 2.x.
-    return tab && (tab.executionHostId ?? 'local') === session.executionHostId
+    return tab?.agentSessionAgent === session.agent &&
+      (tab.executionHostId ?? 'local') === session.executionHostId
       ? tab.customLabel
       : undefined
   })

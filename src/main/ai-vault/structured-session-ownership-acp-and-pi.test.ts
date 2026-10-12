@@ -41,7 +41,15 @@ const refused = (command: string) =>
 
 function ownedRow(agent: AiVaultAgent, sessionId: string, filePath: string) {
   const result = listResult()
-  result.sessions = [{ ...result.sessions[0]!, agent, sessionId, filePath, title: 'First prompt' }]
+  result.sessions = [
+    {
+      ...result.sessions[0]!,
+      agent,
+      sessionId,
+      filePath,
+      title: 'First prompt'
+    }
+  ]
   return projectStructuredAiVaultSessions(result, OPENS_EVERY_STRUCTURED_CHAT).sessions[0]
 }
 
@@ -53,44 +61,42 @@ describe('Session History rows owned by OpenCode, Grok, OMP and Pi chats', () =>
       handle: acp('opencode', OPENCODE_ID),
       rowAgent: 'opencode' as const,
       sessionId: OPENCODE_ID,
-      filePath: `/Users/me/.local/share/opencode/opencode.db#${OPENCODE_ID}`,
-      label: 'OpenCode Chat'
+      filePath: `/Users/me/.local/share/opencode/opencode.db#${OPENCODE_ID}`
     },
     {
       handle: acp('opencode', OPENCODE_ID),
       rowAgent: 'opencode2' as const,
       sessionId: OPENCODE_ID,
-      filePath: `/Users/me/.local/share/opencode/opencode.db#${OPENCODE_ID}`,
-      label: 'OpenCode Chat'
+      filePath: `/Users/me/.local/share/opencode/opencode.db#${OPENCODE_ID}`
     },
     {
       handle: acp('grok', GROK_ID),
       rowAgent: 'grok' as const,
       sessionId: GROK_ID,
-      filePath: `/Users/me/.grok/sessions/%2FUsers%2Fme%2Frepo/${GROK_ID}/summary.json`,
-      label: 'Grok Chat'
+      filePath: `/Users/me/.grok/sessions/%2FUsers%2Fme%2Frepo/${GROK_ID}/summary.json`
     },
     {
       handle: acp('omp', OMP_ID),
       rowAgent: 'omp' as const,
       sessionId: OMP_ID,
-      filePath: OMP_FILE,
-      label: 'OMP Chat'
+      filePath: OMP_FILE
     },
     {
       handle: PI_HANDLE,
       rowAgent: 'pi' as const,
       sessionId: PI_ID,
-      filePath: PI_FILE,
-      label: 'Pi Chat'
+      filePath: PI_FILE
     }
   ])(
-    'owns the $rowAgent row of a $handle.agent chat and refuses preparing its resume',
-    ({ handle, rowAgent, sessionId, filePath, label }) => {
-      installOwnership({ handle })
+    'owns the $rowAgent row of a $handle.agent chat under its CLI title and refuses preparing its resume',
+    ({ handle, rowAgent, sessionId, filePath }) => {
+      installOwnership({ handle, conversationName: 'Quokka harbor chat' })
       expect(ownedRow(rowAgent, sessionId, filePath)).toMatchObject({
-        title: label,
-        structuredSession: { sessionId: 'session-alpha', workspaceId: 'workspace-1' }
+        title: 'First prompt',
+        structuredSession: {
+          sessionId: 'session-alpha',
+          workspaceId: 'workspace-1'
+        }
       })
       expect(
         ownedRow(rowAgent, OTHER_UUID, filePath.replace(sessionId, OTHER_UUID))
@@ -265,7 +271,10 @@ describe('the agent named again inside its own command', () => {
       handle: acp('opencode', OPENCODE_ID),
       command: `opencode -s ${OPENCODE_ID} ~/src/opencode --fork`
     },
-    { handle: acp('grok', GROK_ID), command: `grok -r ${GROK_ID} --cwd ~/src/grok --fork-session` },
+    {
+      handle: acp('grok', GROK_ID),
+      command: `grok -r ${GROK_ID} --cwd ~/src/grok --fork-session`
+    },
     { handle: PI_HANDLE, command: `pi --session pi` }
   ])('is an argument: $command', async ({ handle, command }) => {
     installOwnership({ handle })
