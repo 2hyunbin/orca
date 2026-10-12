@@ -2,15 +2,20 @@ import { Socket } from 'node:net'
 import { spawn, type IPty } from 'node-pty'
 import { describe, expect, it } from 'vitest'
 
-// The reader node-pty's conout worker writes into; not part of the public API.
-function windowsOutputReader(terminal: IPty): Socket {
-  const agent: unknown = Reflect.get(terminal, '_agent')
-  const reader: unknown =
-    typeof agent === 'object' && agent !== null ? Reflect.get(agent, 'outSocket') : undefined
-  if (!(reader instanceof Socket)) {
+/** node-pty's private Windows agent; `outSocket` is the reader its conout worker writes into. */
+type WindowsPtyAgent = { outSocket: Socket }
+
+function parseWindowsPtyAgent(terminal: IPty): WindowsPtyAgent {
+  const agent: unknown = '_agent' in terminal ? terminal._agent : undefined
+  if (
+    typeof agent !== 'object' ||
+    agent === null ||
+    !('outSocket' in agent) ||
+    !(agent.outSocket instanceof Socket)
+  ) {
     throw new Error('node-pty Windows agent exposes no output socket')
   }
-  return reader
+  return { outSocket: agent.outSocket }
 }
 
 const DEVICE_ATTRIBUTES_QUERY = '\x1b[c'
@@ -56,7 +61,7 @@ describe.skipIf(process.platform !== 'win32')('node-pty Windows conout bridge', 
       // the reader deterministically fails one of them with EPIPE.
       terminal.pause()
       await new Promise((resolve) => setTimeout(resolve, 500))
-      windowsOutputReader(terminal).destroy()
+      parseWindowsPtyAgent(terminal).outSocket.destroy()
       await new Promise((resolve) => setTimeout(resolve, 2_000))
 
       expect(uncaught).toEqual([])
