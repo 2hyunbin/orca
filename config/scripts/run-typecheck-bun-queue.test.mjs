@@ -2,8 +2,7 @@ import { EventEmitter } from 'node:events'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { runTypecheckProjects, TYPECHECK_PROJECTS } from './run-typecheck-projects-in-parallel.mjs'
 
-const spawn = vi.hoisted(() => vi.fn())
-vi.mock('@orca/process-host', () => ({ spawnProcess: spawn }))
+const spawn = vi.fn()
 let children
 let active
 let peak
@@ -28,6 +27,7 @@ function start(memoryBytes = 16 * 1024 ** 3) {
     compiler: 'bun',
     bunConcurrency: 2,
     bunThreads: 2,
+    spawnCompiler: spawn,
     memoryBytes,
     parallelism: 4
   })
