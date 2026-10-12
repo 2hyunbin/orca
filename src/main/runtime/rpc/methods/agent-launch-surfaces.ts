@@ -37,10 +37,7 @@ import {
   type TerminalSpawnDispatch
 } from '../../../agent-launch/agent-launch-not-started'
 import { AgentLaunchTabClosedError } from '../../../../shared/agent-launch-tab-closed'
-import {
-  agentLaunchMovesHostWindow,
-  type EarlyAgentLaunchTab
-} from './agent-launch-tab-publication'
+import { agentLaunchMovesHostWindow, type AgentLaunchView } from './agent-launch-tab-publication'
 
 /** Replay-safe launches keep the nested attach in the same stable caller namespace as the launch. */
 export function agentLaunchSurfaceFactory(
@@ -52,9 +49,10 @@ export function agentLaunchSurfaceFactory(
   terminalSpawn: TerminalSpawnDispatch = trackTerminalSpawnDispatch(),
   // The tab shown before the launch ran; asked at spawn, since the window's answer and the user's
   // close can both land after admission.
-  earlyTab: Pick<EarlyAgentLaunchTab, 'windowShowsTab' | 'closedByUser'> | null = null
+  view: AgentLaunchView = { early: null, presentation: undefined }
 ): AgentLaunchSurfaceFactory {
   const movesHostWindow = agentLaunchMovesHostWindow(context)
+  const { early: earlyTab, presentation } = view
   return {
     createStructuredSession: async ({
       worktreeId,
@@ -88,8 +86,9 @@ export function agentLaunchSurfaceFactory(
         agent,
         ...(seeded ? { options: seeded } : {}),
         ...(tabId ? { tabId } : {}),
-        // The user asked for this chat, so it takes the surface — unlike a dispatched worker.
-        activate: !callerPresentsSurface
+        activate:
+          !callerPresentsSurface &&
+          (presentation === undefined || (presentation === 'focused' && movesHostWindow))
       })
       if (!created.ok) {
         // The caller named this session, so a taken id is its answer, not an opaque refusal; and not
@@ -158,6 +157,9 @@ export function agentLaunchSurfaceFactory(
         ...(paneKey ? { ...paneIdentity(paneKey), requireFreshPane: true } : {}),
         ...(launchSource ? { launchSource } : {}),
         ...(viewMode ? { viewMode } : {}),
+        ...(presentation
+          ? { presentation: movesHostWindow ? presentation : ('background' as const) }
+          : {}),
         ...(earlyTab?.windowShowsTab() || !movesHostWindow ? { surfaceOwner: false as const } : {}),
         onPtySpawnDispatched: terminalSpawn.onPtySpawnDispatched
       })

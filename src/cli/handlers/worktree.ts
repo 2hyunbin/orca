@@ -63,7 +63,7 @@ function getPresentStringFlag(
 function getOptionalStartupAgent(flags: Map<string, string | boolean>): TuiAgent | undefined {
   const agent = getPresentStringFlag(flags, 'agent')
   if (agent === undefined) {
-    const needsAgent = ['prompt', 'model', 'effort'].find((name) => flags.has(name))
+    const needsAgent = ['prompt', 'model', 'effort', 'retry-launch'].find((name) => flags.has(name))
     if (needsAgent) {
       throw new RuntimeClientError('invalid_argument', `--${needsAgent} requires --agent`)
     }
@@ -161,7 +161,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     })
     printResult(result, json, formatWorktreeShow)
   },
-  'worktree create': async ({ flags, client, cwd, json }) => {
+  'worktree create': async ({ flags, client, cwd, json, rawArgs }) => {
     const linkedItems = getCreateReferences(flags)
     assertWorktreeParentFlagsCompatible(flags)
     assertWorkspaceTargetFlagsCompatible(flags)
@@ -234,7 +234,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       cliProvenanceRequest: callerTerminalHandle ? { callerTerminalHandle } : {}
     }
     if (agentLaunch) {
-      await createWorktreeWithAgent({ client, flags, create, launch: agentLaunch, json })
+      await createWorktreeWithAgent({ client, flags, create, launch: agentLaunch, json, rawArgs })
       return
     }
     const result = await withSetupDecisionRecovery(

@@ -1,8 +1,9 @@
+import { AGENT_LAUNCH_RUNTIME_CAPABILITIES } from '../shared/agent-launch-runtime-capability'
 import { okFixture } from './test-fixtures'
 
 /** A host that runs `agent.launch`, as `status.get` reports it. */
 export function agentLaunchHostFixture() {
-  return okFixture('req_status', { capabilities: ['agent.launch.v2'] })
+  return okFixture('req_status', { capabilities: [...AGENT_LAUNCH_RUNTIME_CAPABILITIES] })
 }
 
 /** What `agent.launch` answers when the user's Chat UI setting opened a chat. */

@@ -121,7 +121,7 @@ describe('orca cli worktree awareness', () => {
       '/tmp/repo/src'
     )
 
-    expect(callMock).toHaveBeenNthCalledWith(3, 'agent.launch', {
+    expect(callMock).toHaveBeenNthCalledWith(3, 'agent.launchReplay', {
       target: {
         kind: 'create-worktree',
         create: {
@@ -145,7 +145,8 @@ describe('orca cli worktree awareness', () => {
       presentation: 'background',
       agent: 'codex',
       prompt: { text: 'hi', delivery: 'submit' },
-      launchSource: 'cli'
+      launchSource: 'cli',
+      operationId: expect.any(String)
     })
     expect(callMock).toHaveBeenNthCalledWith(4, 'worktree.show', {
       worktree: 'id:repo-1::/tmp/repo/agent-task'

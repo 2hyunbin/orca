@@ -10,7 +10,7 @@ import {
   callAgentLaunch,
   formatAgentLaunch,
   hasLaunchModelFlags,
-  hostRunsAgentLaunch,
+  getAgentLaunchCapabilities,
   type CliAgentLaunch
 } from '../agent-launch-request'
 import { formatWorktreeShow, printResult } from '../format'
@@ -18,6 +18,7 @@ import { RuntimeClientError, type RuntimeClient } from '../runtime-client'
 import { printLineageSummary } from './worktree-lineage-summary'
 import { printHookWarning } from './worktree-removal-warnings'
 import { withSetupDecisionRecovery } from './worktree-setup-decision-recovery'
+import { withCliAgentLaunchRecovery } from '../agent-launch-recovery'
 
 type WorktreeAgentLaunchResult = Pick<
   RuntimeWorktreeCreateResult,
@@ -34,22 +35,37 @@ export async function createWorktreeWithAgent(args: {
   create: Record<string, unknown>
   launch: CliAgentLaunch
   json: boolean
+  rawArgs?: readonly string[]
 }): Promise<void> {
-  const { client, flags, create, launch, json } = args
-  if (!(await hostRunsAgentLaunch(client))) {
+  const { client, flags, create, launch, json, rawArgs } = args
+  const capabilities = await getAgentLaunchCapabilities(client)
+  if (!capabilities) {
+    if (launch.operationId) {
+      throw new RuntimeClientError(
+        'agent_session_operation_unknown',
+        'This host cannot replay the earlier launch. Return to the original execution host; do not retry without --retry-launch.'
+      )
+    }
     if (hasLaunchModelFlags(flags)) {
       throw new RuntimeClientError(
         'incompatible_runtime',
         'This Orca host cannot start an agent on a chosen model or effort. Update Orca on the execution host, or omit --model and --effort.'
       )
     }
+    const params = {
+      ...create,
+      startupAgent: launch.agent,
+      startupPrompt: launch.prompt?.text ?? '',
+      launchSource: 'cli'
+    }
     const created = await withSetupDecisionRecovery(
-      client.call<RuntimeWorktreeCreateResult>('worktree.create', {
-        ...create,
-        startupAgent: launch.agent,
-        startupPrompt: launch.prompt?.text ?? '',
-        launchSource: 'cli'
-      })
+      withCliAgentLaunchRecovery(
+        client.call<RuntimeWorktreeCreateResult>('worktree.create', params),
+        {
+          rawArgs,
+          params
+        }
+      )
     )
     printHookWarning(created.result, json)
     printLineageSummary(created.result, json)
@@ -57,11 +73,16 @@ export async function createWorktreeWithAgent(args: {
     return
   }
   const launched = await withSetupDecisionRecovery(
-    callAgentLaunch(client, launch, {
-      target: { kind: 'create-worktree', create },
-      // As before, the agent stays in the background unless activation is explicit.
-      ...(create.activate === true ? {} : { presentation: 'background' as const })
-    })
+    callAgentLaunch(
+      client,
+      launch,
+      {
+        target: { kind: 'create-worktree', create },
+        presentation: create.activate === true ? 'focused' : 'background'
+      },
+      capabilities,
+      rawArgs
+    )
   )
   const worktree = await showLaunchedWorktree(client, launched.result.worktreeId)
   const result: WorktreeAgentLaunchResult = {
