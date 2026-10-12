@@ -1,64 +1,65 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { resolveStructuredCodexAccountKind } from './structured-agent-account-home'
-import { collectRuntimeWorktreeAgentSources } from './runtime-worktree-agent-sources'
-import { OrcaRuntimeWithStartTuiIdleVisibleReadProbe } from './terminal/wait/terminal-wait-visible-probe'
-import { DEFAULT_WORKTREE_PS_LIMIT } from './orca-runtime-postlude'
-import type { RuntimeWorktreePsResult } from '../../shared/runtime-types'
-import { buildRuntimeWorktreePsSummaries } from './runtime-worktree-ps-summaries'
+import { resolveStructuredCodexAccountKind } from '../structured-agent-account-home'
+import { collectRuntimeWorktreeAgentSources } from '../runtime-worktree-agent-sources'
+import { OrcaRuntimeWithWorktreePsDependencies } from './workspace-process-listing-dependencies'
+import { DEFAULT_WORKTREE_PS_LIMIT } from '../orca-runtime-postlude'
+import type { RuntimeWorktreePsResult } from '../../../shared/runtime-types'
+import { buildRuntimeWorktreePsSummaries } from '../runtime-worktree-ps-summaries'
 import {
   buildRuntimeWorktreeSummaryPathIndex,
   createRuntimeWorktreePsSummaryLookup
-} from './runtime-worktree-summary-paths'
+} from '../runtime-worktree-summary-paths'
 import {
   applyRuntimeWorktreePsSessionActivity,
   applyRuntimeWorktreePsTerminalActivity
-} from './runtime-worktree-ps-activity'
-import { applyRuntimeWorktreePsUnverifiableTerminals } from './runtime-worktree-ps-unverifiable-terminals'
-import { attachRuntimeWorktreeAgentRows } from './runtime-worktree-agent-rows'
-import { compareWorktreePs } from './runtime-worktree-status-projection'
-import type { Repo } from '../../shared/repo-types'
-import { enrichMissingRepoGitRemoteIdentities } from '../repo-git-remote-identity-enrichment'
-import { ensureStructuredAgentSessionHost as installStructuredAgentSessionHost } from './structured-agent-session-runtime'
+} from '../runtime-worktree-ps-activity'
+import { applyRuntimeWorktreePsUnverifiableTerminals } from '../runtime-worktree-ps-unverifiable-terminals'
+import { attachRuntimeWorktreeAgentRows } from '../runtime-worktree-agent-rows'
+import { compareWorktreePs } from '../runtime-worktree-status-projection'
+import type { Repo } from '../../../shared/repo-types'
+import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
+import { enrichMissingRepoGitRemoteIdentities } from '../../repo-git-remote-identity-enrichment'
+import { ensureStructuredAgentSessionHost as installStructuredAgentSessionHost } from '../structured-agent-session-runtime'
 import {
   createStructuredAttentionMobileDelivery,
   readStructuredAttentionWorkspaceLabels
-} from './structured-agent-session-mobile-attention'
+} from '../structured-agent-session-mobile-attention'
 import {
   createStructuredAgentSessionLogger,
   neverThrowingStructuredAgentSessionLogger
-} from '../native-chat/agent-session-wire/structured-agent-session-logger'
-import { openAgentSessionRecordStoreOnce } from './agent-session-record-store-slot'
-import type { AgentSessionRecordStore } from './agent-session-record-store'
-import { maybeAutoRenameWorkspaceOnFirstStructuredTurn } from '../agent-hooks/first-work-structured-session-rename'
-import { firstWorkRenameDeps } from '../agent-hooks/first-work-rename-runtime'
-import { createStructuredChatNamingHandler } from '../native-chat/structured-chat-naming'
-import { structuredChatNamingDeps } from './structured-chat-naming-runtime'
-import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
-import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
-import { buildWorktreeListingPage } from './worktree-listing-host-scope'
+} from '../../native-chat/agent-session-wire/structured-agent-session-logger'
+import { openAgentSessionRecordStoreOnce } from '../agent-session-record-store-slot'
+import type { AgentSessionRecordStore } from '../agent-session-record-store'
+import { maybeAutoRenameWorkspaceOnFirstStructuredTurn } from '../../agent-hooks/first-work-structured-session-rename'
+import { firstWorkRenameDeps } from '../../agent-hooks/first-work-rename-runtime'
+import { createStructuredChatNamingHandler } from '../../native-chat/structured-chat-naming'
+import { structuredChatNamingDeps } from '../structured-chat-naming-runtime'
+import { getProfileUserDataPath } from '../../orca-profiles/profile-storage-paths'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
+import { buildWorktreeListingPage } from '../worktree-listing-host-scope'
 import {
   structuredWorkerOpenTaskTitle,
   structuredWorkerOwesWork
-} from './structured-worker-custody'
+} from '../structured-worker-custody'
 import {
   resolvedTuiAgentArgsBypassPermissions,
   resolveTuiAgentLaunchEnv
-} from '../../shared/tui-agent-launch-defaults'
-import { isTuiAgent } from '../../shared/tui-agent-config'
-import { nativeChatShellEnvironmentPolicy } from '../../shared/native-chat-shell-environment'
-import { claudeStructuredAuthPolicyForSettings } from '../claude-accounts/claude-structured-auth-policy'
-import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-command-resolution'
-import { structuredAgentConfiguredArgs } from '../native-chat/structured-agent-configured-args'
+} from '../../../shared/tui-agent-launch-defaults'
+import { isTuiAgent } from '../../../shared/tui-agent-config'
+import { nativeChatShellEnvironmentPolicy } from '../../../shared/native-chat-shell-environment'
+import { claudeStructuredAuthPolicyForSettings } from '../../claude-accounts/claude-structured-auth-policy'
+import { resolveStructuredAgentCommand } from '../../native-chat/structured-agent-command-resolution'
+import { structuredAgentConfiguredArgs } from '../../native-chat/structured-agent-configured-args'
+import { claudeCliFlagSupport } from '../../claude/claude-cli-flag-support'
 import {
   runtimeHiddenHostIds,
   runtimeHiddenRepoIds,
   runtimeVisibleRepos,
   withoutHiddenHosts
-} from './runtime-visible-catalog'
-import { claudeCliFlagSupport } from '../claude/claude-cli-flag-support'
-import { isStructuredAttentionWorkspaceHidden } from './structured-attention-hidden-workspace'
+} from '../runtime-visible-catalog'
+import { isStructuredAttentionWorkspaceHidden } from '../structured-attention-hidden-workspace'
 
-export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVisibleReadProbe {
+export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktreePsDependencies {
   async getWorktreePs(
     limit = DEFAULT_WORKTREE_PS_LIMIT,
     sourceDefaultsSupported = true
@@ -154,7 +155,10 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
 
   /** The agent's configured env, with the account a desktop that owns this host's accounts chose
    *  laid over it, as its own launches here carry. */
-  protected structuredAgentLaunchEnv(agent: StructuredAgentId, settings) {
+  protected structuredAgentLaunchEnv(
+    agent: StructuredAgentId,
+    settings: Pick<GlobalSettings, 'agentDefaultEnv'>
+  ) {
     return {
       ...resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
       ...this.accounts.hostLaunchEnvFor(agent)
