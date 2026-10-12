@@ -11,6 +11,7 @@ const asyncStorage = vi.hoisted(() => ({
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: asyncStorage }))
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
+  AppState: { currentState: 'active' },
   FlatList: 'FlatList',
   Image: 'Image',
   Keyboard: { dismiss: vi.fn() },
@@ -45,8 +46,12 @@ vi.mock('./TaskProviderLogo', () => ({ TaskProviderLogo: 'TaskProviderLogo' }))
 
 import { setCachedRepos } from '../cache/repo-cache'
 import { recordHostDescriptor } from '../transport/host-descriptor-store'
+import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import { getLocalExecutionHostLabel } from '../../../src/shared/execution-host'
+import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
+import { MOBILE_RELAY_HOSTS_LIST_METHOD } from '../../../src/shared/mobile-relay-hosts-contract'
 import { NewWorktreeModal } from './NewWorktreeModal'
+import { NewWorktreeModalController } from './NewWorktreeModalController'
 
 const LOCAL_HOST_LABEL = getLocalExecutionHostLabel('darwin')
 
@@ -546,6 +551,58 @@ describe('NewWorktreeModal project targets', () => {
     expect(server).toHaveBeenCalledWith('ssh.getState', { targetId: 'devbox' })
     expect(gate()).toMatchObject({ status: null, requiresConnection: true })
     expect(server).not.toHaveBeenCalledWith('worktree.create', expect.anything(), expect.anything())
+  })
+
+  it("offers the desktop's servers, by name, in a sheet opened before the list has them", async () => {
+    const serverRepo = { ...repos[0]!, id: 'server-repo', path: '/srv/orca' }
+    // One desktop: its own repos, its server list, and a server's repos relayed through it.
+    const desktop = new FakeSession('connected')
+    desktop.sendRequest.mockImplementation(async (method: string, ...rest: unknown[]) => {
+      const options = rest[1]
+      const relayed =
+        typeof options === 'object' && options !== null && 'executionHost' in options
+          ? options.executionHost
+          : undefined
+      const result =
+        method === MOBILE_RELAY_HOSTS_LIST_METHOD
+          ? {
+              hosts: [
+                { hostId: 'runtime:vm', label: 'scratch-vm', health: 'available', relay: 'ready' }
+              ]
+            }
+          : method === 'repo.list'
+            ? { repos: relayed === 'runtime:vm' ? [serverRepo] : repos }
+            : {}
+      return { id: 'reply', ok: true, result, _meta: { runtimeId: 'runtime-1' } }
+    })
+    const listCalls = () =>
+      desktop.sendRequest.mock.calls.filter(([method]) => method === MOBILE_RELAY_HOSTS_LIST_METHOD)
+    // The host list's own names: no server rows have loaded behind a sheet opened from Home.
+    const sheet = (routeVisible: boolean) =>
+      createElement(NewWorktreeModalController, {
+        routeVisible,
+        client: desktop,
+        hostCapabilities: [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
+        hostId: 'host-1',
+        hostLabelById: new Map(),
+        openExternalUrl: () => {},
+        onCreated: () => {},
+        onRouteVisibleChange: () => {}
+      })
+
+    await act(async () => {
+      renderer = create(sheet(false))
+    })
+    await flushUpdates()
+    // Closed, it asks nothing of the desktop.
+    expect(listCalls()).toHaveLength(0)
+
+    await act(async () => renderer.update(sheet(true)))
+    await flushUpdates()
+    expect(pickerItems(renderer, 'Run on').map((item) => [item.label, item.detail])).toEqual([
+      [expect.any(String), '/src/orca'],
+      ['scratch-vm', '/srv/orca']
+    ])
   })
 
   it("lists the desktop's repos at once while a server has not answered", async () => {
