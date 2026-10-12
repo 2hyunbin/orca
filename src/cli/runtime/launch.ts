@@ -36,6 +36,7 @@ import {
 } from './serve-electron-preflight'
 import { MacServeStartupAbortError } from './serve-signal-exit-diagnostic'
 import { superviseServeService } from './serve-supervised-service'
+import { isSupervisedSpawnHeld } from './serve-supervised-stop'
 import { openServeBundlePark } from './serve-bundle-park'
 
 const USER_NAMESPACE_PROBE_TIMEOUT_MS = 2_000
@@ -239,6 +240,9 @@ function spawnElectronServe(
       handoffPath: handoffPath!,
       handoff: interruptedHandoff
     })
+  }
+  if (isSupervisedSpawnHeld()) {
+    return Promise.resolve(0)
   }
   const child = spawnProcess(executable, childArgs, spawnOptions)
   const spawnedAt = Date.now()

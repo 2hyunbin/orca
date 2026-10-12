@@ -171,12 +171,24 @@ export async function parkServeSupervisorsForInstall(
   return { kind: 'refused', reason: 'unresponsive', pids: missing }
 }
 
+/** Margin so a supervisor polling at the park deadline cannot resume while commit is written. */
+const COMMIT_DEADLINE_MARGIN_MS = 5_000
+
 /** Right before the native install: from here supervisors wait for the bundle to change. */
-export async function commitServeSupervisorPark(now: () => number = Date.now): Promise<void> {
+export async function commitServeSupervisorPark(
+  listBlockers: () => Promise<number[]>,
+  now: () => number = Date.now
+): Promise<void> {
   if (!activePark) {
     return
   }
-  if (now() >= activePark.record.parkDeadlineAt) {
+  // Why re-list: a server another supervisor started after the acks would block ShipIt.
+  const blockers = await listBlockers().catch(() => null)
+  if (blockers === null || blockers.length > 0) {
+    await releaseServeSupervisorPark()
+    throw new Error('An Orca server started again before the install began.')
+  }
+  if (now() + COMMIT_DEADLINE_MARGIN_MS >= activePark.record.parkDeadlineAt) {
     // Why throw: supervisors may already have restarted servers that would block ShipIt.
     await releaseServeSupervisorPark()
     throw new Error('Paused Orca serve services resumed before the install began.')

@@ -98,7 +98,7 @@ describe('parkServeSupervisorsForInstall', () => {
     )
     expect(result).toEqual({ kind: 'parked' })
     expect((await readRecord())?.phase).toBe('park')
-    await commitServeSupervisorPark()
+    await commitServeSupervisorPark(async () => [])
     const committed = await readRecord()
     expect(committed?.phase).toBe('commit')
 
@@ -160,7 +160,29 @@ describe('parkServeSupervisorsForInstall', () => {
         }
       })
     )
-    await expect(commitServeSupervisorPark(() => Date.now() + 10 * 60_000)).rejects.toThrow()
+    await expect(
+      commitServeSupervisorPark(
+        async () => [],
+        () => Date.now() + 10 * 60_000
+      )
+    ).rejects.toThrow()
+    expect((await readRecord())?.phase).toBe('unpark')
+  })
+
+  it('fails the commit when a server is running again', async () => {
+    await register(CHILD)
+    await parkServeSupervisorsForInstall(
+      executable,
+      [CHILD],
+      deps({
+        sleep: async () => {
+          const record = await readRecord()
+          await mkdir(acksDir(dir), { recursive: true })
+          await writeFile(join(acksDir(dir), ackFileName(record!.attemptId, process.pid)), '{}')
+        }
+      })
+    )
+    await expect(commitServeSupervisorPark(async () => [CHILD + 1])).rejects.toThrow()
     expect((await readRecord())?.phase).toBe('unpark')
   })
 

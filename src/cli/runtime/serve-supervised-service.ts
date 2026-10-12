@@ -186,7 +186,7 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
     }
     return false
   }
-  resetSupervisedServeStop(awaitClearToSpawn)
+  resetSupervisedServeStop(awaitClearToSpawn, () => options.park?.holds() ?? false)
 
   try {
     let standbyAttempt = 0

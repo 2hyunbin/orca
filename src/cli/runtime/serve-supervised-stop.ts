@@ -2,6 +2,7 @@
 let supervisedStopRequested = false
 let supervisedStop = new AbortController()
 let supervisedSpawnGate: (() => Promise<boolean>) | null = null
+let supervisedSpawnHeld: (() => boolean) | null = null
 
 /** A stop that reached `--supervise` before its child existed must still reach that child. */
 export function requestSupervisedServeStop(): void {
@@ -10,10 +11,19 @@ export function requestSupervisedServeStop(): void {
 }
 
 /** Starts a supervised run: `gate` resolves true when a replacement may spawn, false on stop. */
-export function resetSupervisedServeStop(gate: (() => Promise<boolean>) | null = null): void {
+export function resetSupervisedServeStop(
+  gate: (() => Promise<boolean>) | null = null,
+  held: (() => boolean) | null = null
+): void {
   supervisedStopRequested = false
   supervisedStop = new AbortController()
   supervisedSpawnGate = gate
+  supervisedSpawnHeld = held
+}
+
+/** Checked synchronously right before a first spawn: a desktop install may have begun since. */
+export function isSupervisedSpawnHeld(): boolean {
+  return supervisedStopRequested || (supervisedSpawnHeld?.() ?? false)
 }
 
 /** Why: update replacements spawn inside this loop, so the install hold must gate them too. */

@@ -48,6 +48,7 @@ export function createSupervisedParkWatch(
     },
     during: async (run) => {
       let parking: string | null = null
+      let holding = false
       let stoppedPid: number | null = null
       const tick = (): void => {
         const child = deps.currentChild()
@@ -56,8 +57,10 @@ export function createSupervisedParkWatch(
           const pending = park.pendingPark()
           parking = pending && !acked.has(pending.attemptId) ? pending.attemptId : null
         }
+        // Why holds() too: a server another profile's supervisor started mid-install is not listed.
+        holding = holding || park.holds()
         // Why per pid: a park can land between preflight and spawn, before any child exists.
-        if (parking !== null && child && child.pid !== stoppedPid) {
+        if ((parking !== null || holding) && child && child.pid !== stoppedPid) {
           stoppedPid = child.pid
           child.stop()
         }
@@ -75,7 +78,8 @@ export function createSupervisedParkWatch(
         ack(parking)
         return { parked: true, settled }
       }
-      return { parked: false, settled }
+      // A first spawn refused by the hold, or a server stopped for it, is not a failure either.
+      return { parked: holding || park.holds(), settled }
     },
     close: () => park.unregister()
   }

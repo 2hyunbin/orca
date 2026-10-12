@@ -13,6 +13,7 @@ import {
 } from '../../shared/serve-bundle-coordination'
 import { openServeBundlePark } from './serve-bundle-park'
 import { superviseServeService } from './serve-supervised-service'
+import { createSupervisedParkWatch } from './serve-supervised-park-watch'
 
 const LABEL = 'com.stablyai.orca.serve.default'
 
@@ -130,6 +131,28 @@ describe('openServeBundlePark', () => {
     await expect(result).resolves.toBe(0)
     expect(runs).toBe(2)
     await expect(readdir(join(root, 'profile'))).rejects.toThrow()
+  })
+
+  it('stops a server it is not listed for while a park holds, without counting it', async () => {
+    const park = open()!
+    const watch = createSupervisedParkWatch(park, {
+      currentChild: () => ({ pid: 5, stop }),
+      setRepeating: (callback) => {
+        tick = callback
+        return () => undefined
+      },
+      now: Date.now
+    })
+    const stop = vi.fn()
+    let tick: (() => void) | null = null
+    const attempt = await watch.during(async () => {
+      await writeRecord({ supervisorPids: [process.pid + 1] })
+      tick?.()
+      return 0
+    })
+    expect(stop).toHaveBeenCalledOnce()
+    expect(attempt.parked).toBe(true)
+    await expect(readdir(acksDir(dir))).rejects.toThrow()
   })
 
   it('holds while committed until the bundle changes, then releases', async () => {

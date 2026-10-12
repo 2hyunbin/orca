@@ -153,7 +153,7 @@ export abstract class UpdaterInstallExecution extends UpdaterPackageRecovery {
           return
         }
 
-        await commitServeSupervisorPark()
+        await commitServeSupervisorPark(() => getMacUpdateRunningInstances())
         recordUpdaterLifecycle('quit_and_install_invoking_native', {
           version: pendingVersion || null
         })
