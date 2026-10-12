@@ -49,7 +49,7 @@ jobs:
           [Environment]::OSVersion.VersionString
           Get-CimInstance Win32_Processor | Select-Object Name,VirtualizationFirmwareEnabled,SecondLevelAddressTranslationExtensions | Format-List
           Get-CimInstance Win32_ComputerSystem | Select-Object Model,HypervisorPresent | Format-List
-          Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform,Microsoft-Windows-Subsystem-Linux | Select-Object FeatureName,State | Format-Table
+          foreach ($f in 'VirtualMachinePlatform', 'Microsoft-Windows-Subsystem-Linux') { Get-WindowsOptionalFeature -Online -FeatureName $f | Select-Object FeatureName,State | Format-Table }
           wsl.exe --version; "wsl --version exit=$LASTEXITCODE"
           wsl.exe --status; "wsl --status exit=$LASTEXITCODE"
           wsl.exe --list --verbose; "wsl --list exit=$LASTEXITCODE"
