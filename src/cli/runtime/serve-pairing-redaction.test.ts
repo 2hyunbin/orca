@@ -34,6 +34,20 @@ describe('supervised pairing redaction', () => {
     expect(kept.join('\n')).not.toContain('secret')
   })
 
+  it('blanks the pairing offer in the JSON readiness line', () => {
+    const line = JSON.stringify({
+      type: 'orca_server_ready',
+      endpoint: 'ws://x',
+      pairing: { available: true, url: 'orca://pair?code=secret' }
+    })
+    const kept = createPairingRedactor()(line)
+    expect(kept).not.toContain('secret')
+    expect(JSON.parse(kept ?? '{}')).toMatchObject({
+      endpoint: 'ws://x',
+      pairing: { available: false }
+    })
+  })
+
   it('redacts only supervised output that is not a terminal', () => {
     expect(shouldRedactSupervisedStdout(true, false)).toBe(true)
     expect(shouldRedactSupervisedStdout(true, true)).toBe(false)

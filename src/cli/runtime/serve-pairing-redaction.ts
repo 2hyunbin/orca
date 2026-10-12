@@ -11,6 +11,9 @@ export const PAIRING_HIDDEN_LINE =
 export function createPairingRedactor(): (line: string) => string | null {
   let inQr = false
   return (line) => {
+    if (line.startsWith('{') && line.includes('"orca_server_ready"')) {
+      return redactReadyJson(line)
+    }
     if (line.startsWith('Mobile pairing QR:')) {
       inQr = true
       return null
@@ -26,6 +29,21 @@ export function createPairingRedactor(): (line: string) => string | null {
   }
 }
 
+function redactReadyJson(line: string): string {
+  try {
+    const ready: unknown = JSON.parse(line)
+    if (typeof ready === 'object' && ready !== null && 'pairing' in ready) {
+      return JSON.stringify({
+        ...ready,
+        pairing: { available: false, reason: 'hidden', guidance: PAIRING_HIDDEN_LINE }
+      })
+    }
+  } catch {
+    // Not the readiness payload after all; pass it through.
+  }
+  return line
+}
+
 /**
  * Only for `--supervise` writing to a log: a service journal must never hold a live bearer
  * offer. A plain `orca serve` keeps inheriting stdout, which scripts parse for `Pairing URL:`.
@@ -37,6 +55,8 @@ export function shouldRedactSupervisedStdout(
   return supervise && !stdoutIsTty
 }
 
+let stdoutErrorsIgnored = false
+
 export type ServeSpawnChild = Parameters<typeof superviseForegroundServe>[0]['spawnChild']
 
 /** Pipes the child's stdout through the redactor; stdio slots other than stdout are kept. */
@@ -47,6 +67,12 @@ export function redactingSpawn(spawn: ServeSpawnChild): ServeSpawnChild {
       : ['inherit', 'pipe', 'inherit']
     const child = spawn(program, args, { ...options, stdio })
     if (child.stdout) {
+      // Why: a closed log pipe must not crash the supervisor; the server keeps running.
+      child.stdout.on('error', () => undefined)
+      if (!stdoutErrorsIgnored) {
+        stdoutErrorsIgnored = true
+        process.stdout.on('error', () => undefined)
+      }
       const redact = createPairingRedactor()
       const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
       lines.on('line', (line) => {
