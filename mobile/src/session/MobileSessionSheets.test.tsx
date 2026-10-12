@@ -75,7 +75,6 @@ describe('the New Tab sheet', () => {
 
   it('leaves out Markdown Note for a server workspace, whose host opens no editor tabs', async () => {
     const labels = await newTabLabels('runtime:vm')
-    expect(labels).not.toContain('Markdown Note')
     expect(labels).toEqual(['Terminal', 'Browser'])
   })
 })

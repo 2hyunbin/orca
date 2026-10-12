@@ -17,7 +17,7 @@ import { reviewSheetKey, type ReviewSheet } from '../session/mobile-diff-review-
 import type { useMobileDiffReviewController } from '../session/use-mobile-diff-review-controller'
 import { mobileDiffReviewStyles as styles } from './mobile-diff-review-screen-styles'
 import { hostOs } from '../platform/host-os'
-import { useWorkspaceHostOpensEditorTabs } from '../navigation/workspace-execution-host'
+import { useWorkspaceOnPairedHost } from '../navigation/workspace-execution-host'
 
 type Props = {
   controller: ReturnType<typeof useMobileDiffReviewController>
@@ -133,7 +133,7 @@ function useSendActions(
 }
 
 function useOverflowActions(controller: ReturnType<typeof useMobileDiffReviewController>) {
-  const sessionTabsAvailable = useWorkspaceHostOpensEditorTabs()
+  const sessionTabsAvailable = useWorkspaceOnPairedHost()
   return useMemo<ActionSheetAction[]>(
     () => [
       {

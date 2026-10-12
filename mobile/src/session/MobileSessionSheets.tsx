@@ -9,7 +9,7 @@ import { TextInputModal } from '../components/TextInputModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { CustomKeyModal } from '../components/CustomKeyModal'
 import { MobileDictationSetupSheet } from '../components/MobileDictationSetupSheet'
-import { useWorkspaceHostOpensEditorTabs } from '../navigation/workspace-execution-host'
+import { useWorkspaceOnPairedHost } from '../navigation/workspace-execution-host'
 import { MobileBrowserTabActionSheet } from './MobileBrowserTabActionSheet'
 import { getMobileTerminalActionSheetActions } from './mobile-terminal-action-sheet-actions'
 import {
@@ -92,7 +92,7 @@ export function MobileSessionSheets({ controller }: { controller: MobileSessionC
     showChecksAction
   } = controller
   const clipboard = useClipboardWriter()
-  const hostOpensEditorTabs = useWorkspaceHostOpensEditorTabs()
+  const onPairedHost = useWorkspaceOnPairedHost()
   return (
     <>
       <MobileSessionHeaderMoreActionsSheet
@@ -146,7 +146,7 @@ export function MobileSessionSheets({ controller }: { controller: MobileSessionC
                     setShowCreateBrowserModal(true)
                   }
                 },
-                ...(hostOpensEditorTabs
+                ...(onPairedHost
                   ? [
                       {
                         label: 'Markdown Note',
