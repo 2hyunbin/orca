@@ -158,6 +158,39 @@ describe('terminal paste target state', () => {
     ).toBe(true)
   })
 
+  it.each([makeElement('body'), makeElement('html'), null])(
+    'keeps paste current when provisional dispatch focus settles on the terminal',
+    (activeElementAtDispatch) => {
+      const terminalInput = makeElement('textarea', ['xterm-helper-textarea'])
+
+      expect(
+        isTerminalPanePasteFocusCurrent({
+          requireSameFocusedElement: true,
+          activeElementAtDispatch,
+          paneContainer: makePaneContainer(terminalInput),
+          activeElement: terminalInput
+        })
+      ).toBe(true)
+    }
+  )
+
+  it.each([makeElement('body'), makeElement('html'), null])(
+    'rejects provisional dispatch focus that settles on another control',
+    (activeElementAtDispatch) => {
+      const terminalInput = makeElement('textarea', ['xterm-helper-textarea'])
+      const searchInput = makeElement('input')
+
+      expect(
+        isTerminalPanePasteFocusCurrent({
+          requireSameFocusedElement: true,
+          activeElementAtDispatch,
+          paneContainer: makePaneContainerFor([terminalInput, searchInput]),
+          activeElement: searchInput
+        })
+      ).toBe(false)
+    }
+  )
+
   it('keeps keyboard-owned paste current when xterm replaces its helper textarea', () => {
     const originalTerminalInput = makeElement('textarea', ['xterm-helper-textarea'])
     const replacementTerminalInput = makeElement('textarea', ['xterm-helper-textarea'])
