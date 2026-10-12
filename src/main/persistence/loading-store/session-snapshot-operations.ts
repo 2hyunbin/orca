@@ -20,6 +20,7 @@ import {
 } from './session-host-partitions'
 import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
 import { scheduleSave } from './write-scheduling'
+import { recordRebaseRule } from './layout-save-audit'
 
 type SessionSnapshotOperationsRuntime = Pick<
   StoreRuntimeState,
@@ -99,7 +100,9 @@ export class SessionSnapshotOperations {
     }
     // Why: a unified-tabs patch skips full normalization, so it would bypass the close fence.
     if (Object.hasOwn(patch, 'unifiedTabs')) {
+      const beforeFence = next
       next = dropClosedTerminalTabs(next)
+      recordRebaseRule('tombstone-fence', beforeFence, next)
     }
     this.publishSession(next, resolved)
   }

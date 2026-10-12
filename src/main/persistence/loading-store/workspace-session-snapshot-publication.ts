@@ -28,6 +28,17 @@ import {
   type SessionSnapshotOperations
 } from './session-snapshot-operations'
 import { scheduleSave } from './write-scheduling'
+import { recordRebaseRule } from './layout-save-audit'
+
+function audit(
+  rule: string,
+  session: WorkspaceSessionState,
+  apply: (s: WorkspaceSessionState) => WorkspaceSessionState
+): WorkspaceSessionState {
+  const next = apply(session)
+  recordRebaseRule(rule, session, next)
+  return next
+}
 
 export function setLocalWorkspaceSession(
   owner: SessionSnapshotOperations,
@@ -38,8 +49,13 @@ export function setLocalWorkspaceSession(
   const prior = context.runtime.state.workspaceSession
   // Why here and not at the callers: the before-unload stage path writes the renderer's payload
   // straight through, so a per-caller guard leaves the quit write erasing runtime-authored rows.
-  session = dropClosedTerminalTabs(preserveRuntimeAuthoredWorkspaceSessionFields(session, prior))
-  session = sanitizeWorkspaceSessionTerminalRetirements(session, prior)
+  session = audit('runtime-authored', session, (s) =>
+    preserveRuntimeAuthoredWorkspaceSessionFields(s, prior)
+  )
+  session = audit('tombstone-fence', session, dropClosedTerminalTabs)
+  session = audit('retirement-rebase', session, (s) =>
+    sanitizeWorkspaceSessionTerminalRetirements(s, prior)
+  )
   session = pruneWorkspaceSessionBrowserHistory(
     pruneLocalTerminalScrollbackBuffers(session, context.runtime.state.repos)
   )
@@ -94,7 +110,9 @@ export function setLocalWorkspaceSession(
   if (remappedLeases.changed) {
     context.runtime.state.sshRemotePtyLeases = remappedLeases.leases
   }
-  session = preserveMissingWorkspaceSessionTerminalBindings(session, prior, context.bindingRecovery)
+  session = audit('binding-replay-217', session, (s) =>
+    preserveMissingWorkspaceSessionTerminalBindings(s, prior, context.bindingRecovery)
+  )
   session = pruneLocalTerminalScrollbackBuffers(session, context.runtime.state.repos)
   if (!deferSnapshotFiles) {
     const migratedScrollback = migrateWorkspaceSessionTerminalScrollbackSnapshots(

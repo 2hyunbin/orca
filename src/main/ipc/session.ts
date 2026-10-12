@@ -3,6 +3,11 @@ import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { parseTerminalSurfaceCloseTarget } from '../../shared/terminal-surface-close-target'
 import { isFrozenOrcadSourceSessionPartition } from '../ssh/orcad-retained-source'
+import {
+  beginWindowLayoutSave,
+  endWindowLayoutSave,
+  recordLayoutPartitionWrites
+} from '../persistence/loading-store/layout-save-audit'
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
 import type {
   WorkspaceSessionPatch,
@@ -13,6 +18,19 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
   // Why: renderer saves would change a fenced host's frozen source partition.
   const isFenced = (hostId?: string | null): boolean =>
     isFrozenOrcadSourceSessionPartition(store, hostId)
+  const audited = (hostId: string | null | undefined, kind: string, write: () => void): void => {
+    beginWindowLayoutSave(hostId ?? 'local', kind)
+    try {
+      write()
+    } finally {
+      endWindowLayoutSave()
+    }
+  }
+  store.onWorkspaceSessionWritten?.(() =>
+    recordLayoutPartitionWrites(
+      new Map(store.getWorkspaceSessionHostIds().map((id) => [id, store.getWorkspaceSession(id)]))
+    )
+  )
 
   // Why: hostId is an optional second arg so an older renderer that invokes
   // these channels without it keeps reading/writing the 'local' partition
@@ -30,13 +48,13 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
 
   ipcMain.handle('session:set', (_event, args: WorkspaceSessionState, hostId?: string | null) => {
     if (!isFenced(hostId)) {
-      store.setWorkspaceSession(args, hostId)
+      audited(hostId, 'set', () => store.setWorkspaceSession(args, hostId))
     }
   })
 
   ipcMain.handle('session:patch', (_event, args: WorkspaceSessionPatch, hostId?: string | null) => {
     if (!isFenced(hostId)) {
-      store.patchWorkspaceSession(args, hostId)
+      audited(hostId, 'patch', () => store.patchWorkspaceSession(args, hostId))
     }
   })
 
@@ -73,7 +91,7 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
     void (async () => {
       try {
         if (!isFenced(hostId)) {
-          store.setWorkspaceSession(args, hostId)
+          audited(hostId, 'set-sync', () => store.setWorkspaceSession(args, hostId))
         }
         await store.flushPendingOrThrowAsync({ drainToStableGeneration: false })
       } catch (error) {

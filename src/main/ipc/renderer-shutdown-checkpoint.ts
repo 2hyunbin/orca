@@ -1,3 +1,7 @@
+import {
+  beginWindowLayoutSave,
+  endWindowLayoutSave
+} from '../persistence/loading-store/layout-save-audit'
 import { ipcMain } from 'electron'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
@@ -51,7 +55,12 @@ export function registerRendererShutdownCheckpointHandler(store: Store): void {
     try {
       for (const { state, hostId } of args.sessions) {
         if (!isFrozenOrcadSourceSessionPartition(store, hostId)) {
-          store.stageWorkspaceSessionBeforeUnload(state, hostId)
+          beginWindowLayoutSave(hostId ?? 'local', 'stage-unload')
+          try {
+            store.stageWorkspaceSessionBeforeUnload(state, hostId)
+          } finally {
+            endWindowLayoutSave()
+          }
         }
       }
       store.updateUI(args.ui)

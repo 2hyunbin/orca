@@ -24,6 +24,7 @@ import {
 import type { StoreRuntimeState } from './store-runtime-state'
 import type { WriteSchedulingOperations } from './write-scheduling'
 import { scheduleSave } from './write-scheduling'
+import { recordRebaseRule } from './layout-save-audit'
 import {
   preserveMissingWorkspaceSessionTerminalBindings,
   sshTargetIdForWorkspaceSessionHost
@@ -189,6 +190,16 @@ export function partitionHasOtherRepoWorktreeTabs(
   )
 }
 
+function auditRule(
+  rule: string,
+  session: WorkspaceSessionState,
+  apply: (s: WorkspaceSessionState) => WorkspaceSessionState
+): WorkspaceSessionState {
+  const next = apply(session)
+  recordRebaseRule(rule, session, next)
+  return next
+}
+
 export function setHostWorkspaceSession(
   owner: SessionHostPartitionOperations,
   hostId: ExecutionHostId,
@@ -201,9 +212,15 @@ export function setHostWorkspaceSession(
   session = withRequiredWorkspaceSessionMaps(session)
   // Why here and not at the callers: the before-unload stage path writes the renderer's payload
   // straight through, so a per-caller guard leaves the quit write erasing runtime-authored rows.
-  session = dropClosedTerminalTabs(preserveRuntimeAuthoredWorkspaceSessionFields(session, prior))
+  session = auditRule('runtime-authored', session, (s) =>
+    preserveRuntimeAuthoredWorkspaceSessionFields(s, prior)
+  )
+  session = auditRule('tombstone-fence', session, dropClosedTerminalTabs)
   // Why: each partition owns its topology fence; renderer writes omit it and must rebase locally.
-  session = sanitizeWorkspaceSessionTerminalRetirements(session, prior)
+  session = auditRule('retirement-rebase', session, (s) =>
+    sanitizeWorkspaceSessionTerminalRetirements(s, prior)
+  )
+  const beforeReplay = session
   session = preserveMissingWorkspaceSessionTerminalBindings(
     session,
     prior,
@@ -213,6 +230,7 @@ export function setHostWorkspaceSession(
       executionHostId: hostId
     }
   )
+  recordRebaseRule('binding-replay-217', beforeReplay, session)
   // Why here too: the load-side drop only survives until the next full snapshot write. A renderer
   // or runtime payload that still carries local's globals would re-inject them into this partition.
   const pruned = withoutRedundantGlobalFields(
