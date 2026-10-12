@@ -397,6 +397,99 @@ describe('NewWorktreeModal project targets', () => {
     expect(onCreated).toHaveBeenCalledWith('srv-wt', expect.any(String), undefined, 'runtime:env-1')
   })
 
+  it("connects and creates on a server's own SSH repo through that server", async () => {
+    const serverSshRepo = {
+      ...repos[0]!,
+      id: 'server-ssh',
+      path: '/home/dev/orca',
+      connectionId: 'devbox'
+    }
+    const sshState = (status: string) =>
+      Promise.resolve({
+        ok: true,
+        result: { state: { targetId: 'devbox', status, error: null, reconnectAttempt: 0 } }
+      })
+    const reply = (method: string, listed: unknown[], hostPlatform: string) => {
+      if (method === 'repo.list') {
+        return Promise.resolve({ ok: true, result: { repos: listed } })
+      }
+      if (method === 'status.get') {
+        return Promise.resolve({ ok: true, result: { hostPlatform } })
+      }
+      if (method === 'ssh.getState') {
+        return sshState('disconnected')
+      }
+      if (method === 'ssh.connect') {
+        return sshState('connected')
+      }
+      if (method === 'worktree.create') {
+        return Promise.resolve({
+          ok: true,
+          result: { worktree: { id: 'ssh-wt', displayName: 'ssh-wt', path: '/home/dev/ssh-wt' } }
+        })
+      }
+      if (method === 'settings.get') {
+        return Promise.resolve({ ok: true, result: { settings: {} } })
+      }
+      return Promise.resolve({ ok: true, result: {} })
+    }
+    const desktop = vi.fn((method: string) => reply(method, repos, 'darwin'))
+    const server = vi.fn((method: string) => reply(method, [serverSshRepo], 'linux'))
+    const onCreated = vi.fn()
+    recordHostDescriptor('host-1', { machineName: null, platform: 'darwin' })
+
+    await act(async () => {
+      renderer = create(
+        createElement(NewWorktreeModal, {
+          visible: true,
+          client: requestsOnly(desktop),
+          serverClients: new Map([['runtime:env-1', requestsOnly(server)]]),
+          hostId: 'host-1',
+          hostLabelById: new Map([['runtime:env-1', 'scratch-server']]),
+          onCreated,
+          onClose: () => {}
+        })
+      )
+    })
+    await flushUpdates()
+
+    expect(pickerItems(renderer, 'Run on').map((item) => [item.label, item.detail])).toEqual([
+      [LOCAL_HOST_LABEL, '/src/orca'],
+      ['scratch-server', '/home/dev/orca']
+    ])
+    const picker = runTargetPicker(renderer)
+    await act(async () => picker.props.onSelect(picker.props.items[1]))
+    await flushUpdates()
+    expect(server).toHaveBeenCalledWith('ssh.getState', { targetId: 'devbox' })
+
+    const connectable = renderer.root.find((node) => typeof node.props.onConnect === 'function')
+    await act(async () => connectable.props.onConnect())
+    await flushUpdates()
+    expect(server).toHaveBeenCalledWith(
+      'ssh.connect',
+      { targetId: 'devbox' },
+      expect.objectContaining({ timeoutMs: 120_000 })
+    )
+    expect(server).toHaveBeenCalledWith('preflight.detectRemoteAgents', { connectionId: 'devbox' })
+
+    act(() => sourceInputs(renderer)[0]!.props.onChangeText('ssh-wt'))
+    const form = renderer.root.find((node) => typeof node.props.onCreate === 'function')
+    await act(async () => form.props.onCreate())
+    await flushUpdates()
+
+    expect(server).toHaveBeenCalledWith(
+      'worktree.create',
+      expect.objectContaining({ repo: 'id:server-ssh' }),
+      expect.anything()
+    )
+    expect(onCreated).toHaveBeenCalledWith('ssh-wt', expect.any(String), undefined, 'runtime:env-1')
+    // The server holds this SSH target, so the desktop is never asked about it.
+    const desktopMethods = desktop.mock.calls.map(([method]) => method)
+    expect(desktopMethods.filter((method) => method.startsWith('ssh.'))).toEqual([])
+    expect(desktopMethods).not.toContain('preflight.detectRemoteAgents')
+    expect(desktopMethods).not.toContain('worktree.create')
+  })
+
   it("lists the desktop's repos at once while a server has not answered", async () => {
     const desktop = vi.fn((method: string) =>
       method === 'repo.list'

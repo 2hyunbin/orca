@@ -23,17 +23,14 @@ async function listHostRepos(client: RpcClient): Promise<MobileWorkspaceRepo[] |
 
 /**
  * A server's repos tagged with that server, as the desktop's composer offers them. Its SSH repos
- * are left out: their connection is the server's, which the phone's SSH gate cannot read.
+ * keep their connection id, which the drawer connects through that server's client.
  */
 async function listServerRepos(
   executionHostId: ExecutionHostId,
   client: RpcClient
 ): Promise<MobileWorkspaceRepo[] | null> {
   const listed = await listHostRepos(client).catch(() => null)
-  return (
-    listed?.filter((repo) => !repo.connectionId).map((repo) => ({ ...repo, executionHostId })) ??
-    null
-  )
+  return listed?.map((repo) => ({ ...repo, executionHostId })) ?? null
 }
 
 /**
