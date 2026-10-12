@@ -179,6 +179,15 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
     await expect(page.getByText('orcad upgrade folder', { exact: true })).toBeVisible({
       timeout: 120_000
     })
+    // Opening the worktree loads its tabs from the managed server.
+    await page.evaluate(
+      ({ worktreeId, environmentId }) => {
+        const state = window.__store!.getState()
+        state.setActiveView('terminal')
+        state.setActiveWorktree(worktreeId, `runtime:${environmentId}`)
+      },
+      { worktreeId: seeded.worktreeId, environmentId: environment.id }
+    )
     // The client mirrors the server's tab as `web-terminal-<tab::leaf>`, under its worktree key.
     let storeTabId = ''
     let storeWorktreeKey = ''
