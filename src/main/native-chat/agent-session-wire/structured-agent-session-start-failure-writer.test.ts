@@ -120,7 +120,6 @@ beforeEach(async () => {
     adapter: {
       acquire: vi.fn(async ({ fence, spawnToken }) => {
         const child = {
-          providerChildPhase: 'starting' as const,
           process: {
             hostId: 'local',
             pid: 4242,

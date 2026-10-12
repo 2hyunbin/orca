@@ -706,7 +706,6 @@ describe('cross-version structured agent sessions', () => {
             starts += 1
             await startGate
             return {
-              providerChildPhase: 'starting' as const,
               process: {
                 hostId: 'local',
                 pid: 4242,

@@ -70,7 +70,6 @@ let idleMs: number
 let clock: number
 
 const spawnChild: StructuredAgentSessionAdapter['acquire'] = async ({ fence, spawnToken }) => ({
-  providerChildPhase: 'starting' as const,
   process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
   acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
   link: {

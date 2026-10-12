@@ -51,7 +51,6 @@ const providerStarted = vi.fn()
 
 function acquisition(input: StructuredAgentSessionAcquireInput): AgentSessionAcquisition {
   return {
-    providerChildPhase: 'starting' as const,
     process: {
       hostId: 'local',
       pid: 4242,

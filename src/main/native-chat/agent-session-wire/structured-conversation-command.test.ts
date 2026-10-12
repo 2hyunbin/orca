@@ -119,7 +119,6 @@ beforeEach(async () => {
         optionRevision: -1
       })
       return {
-        providerChildPhase: 'starting' as const,
         acquisitionGeneration,
         process: {
           hostId: 'local',

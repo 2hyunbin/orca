@@ -160,14 +160,10 @@ export class StructuredAgentSessionStartupAttempts {
   published(
     sessionId: string,
     attemptId: string,
-    child: StructuredAgentSessionProviderChildIdentity & { phase: 'starting' | 'ready' }
+    child: StructuredAgentSessionProviderChildIdentity
   ): void {
     const tracked = this.open.get(sessionId)
     if (tracked?.attempt.attemptId !== attemptId) {
-      return
-    }
-    if (child.phase === 'ready') {
-      this.settle(sessionId, tracked, 'ready')
       return
     }
     tracked.child = { generation: child.generation, fence: child.fence }

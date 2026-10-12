@@ -133,7 +133,6 @@ export async function initializeAcpStructuredSession(input: AcpHandshakeInput): 
       now,
       settle: onSettled
     }),
-    restoreSkipped,
     closeRequested: false,
     journalClosed: null,
     ended: false,

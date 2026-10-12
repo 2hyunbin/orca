@@ -97,7 +97,6 @@ beforeEach(async () => {
   publishFault.publishCount = 0
   resetHostTestOperationIds()
   acquire = vi.fn(async ({ fence }) => ({
-    providerChildPhase: 'starting' as const,
     process: {
       hostId: 'local',
       pid: 4242,
@@ -187,7 +186,6 @@ describe('settled attach retry', () => {
         throw new Error('reply lost')
       }
       return {
-        providerChildPhase: 'starting' as const,
         process: {
           hostId: 'local',
           pid: 4242,
@@ -233,7 +231,6 @@ describe('settled attach retry', () => {
         throw new Error('reply lost')
       }
       return {
-        providerChildPhase: 'starting' as const,
         process: {
           hostId: 'local',
           pid: 4242,

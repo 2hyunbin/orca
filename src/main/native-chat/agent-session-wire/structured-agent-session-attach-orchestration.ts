@@ -35,7 +35,6 @@ import {
   structuredAgentSessionConversationFence
 } from './structured-agent-session-provider-child'
 import type { DeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
-import { noteStructuredAgentSessionProviderStarted } from './structured-agent-session-provider-started'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { isStructuredAgentSessionStartupExpired } from './structured-agent-session-startup-attempt'
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
@@ -202,8 +201,6 @@ async function runAttachUnderAbort(
       now: () => context.now(),
       recordPhase,
       acquireSignal,
-      onStartCatalogListing: (listing) =>
-        context.deps.modelCatalog?.recordLiveListing(sessionId, listing),
       onStartupAttempt: (startup) => {
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
@@ -220,7 +217,7 @@ async function runAttachUnderAbort(
       // The cleanup released the acquisition, which for a re-attach is the live child itself.
       onAcquisitionReleased: (cause, verdict) =>
         endStructuredAgentSessionReleasedChild(context, sessionId, cause, verdict),
-      onAttached: async (attached, acquisitionGeneration, owner, providerChildPhase) => {
+      onAttached: async (attached, acquisitionGeneration, owner) => {
         const fence = structuredAgentSessionConversationFence(context.deps.store, sessionId)
         const current = context.sessions.get(sessionId)?.child ?? null
         const startedFor = owner === 'acquired' ? options.startedFor : current?.startedFor
@@ -251,8 +248,8 @@ async function runAttachUnderAbort(
             child: {
               generation: acquisitionGeneration ?? current?.generation ?? null,
               fence,
-              // An acquire reports its phase; a re-attach keeps what its child already proved.
-              phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
+              // Every acquired child starts unproven; a re-attach keeps what its child already proved.
+              phase: owner === 'acquired' ? 'starting' : (current?.phase ?? 'ready'),
               ...(startedFor === undefined ? {} : { startedFor }),
               ...launchedOptionsOf(owner, attempt.startup, current)
             }
@@ -285,9 +282,6 @@ async function runAttachUnderAbort(
       indexProviderChild(conversation, candidate.child)
       if (attempt.startup) {
         startupAttempts.published(sessionId, attempt.startup.attemptId, candidate.child)
-        if (candidate.child.phase === 'ready') {
-          noteStructuredAgentSessionProviderStarted(context.deps, sessionId)
-        }
       }
       context.publishStatus?.(sessionId)
     }

@@ -38,7 +38,7 @@ export function structuredAgentSessionHeldStarts(
       const acquired = await acquire(input)
       const acquisitionGeneration = acquired.acquisitionGeneration ?? `held-start-${++generations}`
       heldGenerations.add(acquisitionGeneration)
-      return { ...acquired, acquisitionGeneration, providerChildPhase: 'starting' as const }
+      return { ...acquired, acquisitionGeneration }
     },
     wrap: (adapter) => {
       const acquire: Acquire = async (input) => {
@@ -52,7 +52,7 @@ export function structuredAgentSessionHeldStarts(
             acquisitionGeneration
           })
         }
-        return { ...acquired, acquisitionGeneration, providerChildPhase: 'starting' as const }
+        return { ...acquired, acquisitionGeneration }
       }
       return { ...adapter, acquire }
     },

@@ -78,7 +78,6 @@ export function createQueuedRigProvider(
         ? `${THREAD}-context-${record!.providerContextBoundary!.operationId}`
         : (context?.head?.handle.nativeId ?? THREAD)
       return {
-        providerChildPhase: 'starting' as const,
         process: {
           hostId: 'local',
           pid: 4242,

@@ -8,7 +8,6 @@ import {
   USER_MESSAGE,
   claudeStartupSettled
 } from './claude-structured-session-test-support'
-import { CLAUDE_DEFAULT_REQUEST_TIMEOUT_MS } from './claude-agent-sdk-control-requests'
 
 /** Far past any deadline a start used to have. */
 const NEVER_MS = 10 * 60_000
@@ -134,39 +133,16 @@ describe('Claude structured session publishes before the CLI answers initialize'
     await adapter.closeAll()
   })
 
-  it('lets an option write wait for startup instead of refusing it', async () => {
+  // The host records a pick made while the child starts as intent and applies it after `started`.
+  it('refuses an option write before the CLI answers initialize', async () => {
     const claude = fakeClaude({ initDelayMs: SLOW_INIT_MS })
     const { adapter } = startingAdapter(claude)
     await adapter.acquire(ACQUIRE)
     const pick = { sessionId: 'session-1', key: 'model', value: 'opus', fence: 7 }
     await expect(adapter.setOption(pick)).rejects.toThrow('still starting')
 
-    let writable = false
-    const waited = adapter.awaitOptionWritable('session-1').then(() => {
-      writable = true
-    })
-    await vi.advanceTimersByTimeAsync(SLOW_INIT_MS - 1)
-    expect(writable).toBe(false)
-    await vi.advanceTimersByTimeAsync(1)
-    await waited
-
+    await vi.advanceTimersByTimeAsync(SLOW_INIT_MS)
     await expect(adapter.setOption(pick)).resolves.toMatchObject({ model: 'opus' })
-    await adapter.closeAll()
-  })
-
-  it('stops waiting on a start that never lands, so the write is refused as before', async () => {
-    const claude = fakeClaude({ initDelayMs: 10 * CLAUDE_DEFAULT_REQUEST_TIMEOUT_MS })
-    const { adapter } = startingAdapter(claude)
-    await adapter.acquire(ACQUIRE)
-    let writable = false
-    void adapter.awaitOptionWritable('session-1').then(() => {
-      writable = true
-    })
-    await vi.advanceTimersByTimeAsync(CLAUDE_DEFAULT_REQUEST_TIMEOUT_MS)
-    expect(writable).toBe(true)
-    await expect(
-      adapter.setOption({ sessionId: 'session-1', key: 'model', value: 'opus', fence: 7 })
-    ).rejects.toThrow('still starting')
     await adapter.closeAll()
   })
 

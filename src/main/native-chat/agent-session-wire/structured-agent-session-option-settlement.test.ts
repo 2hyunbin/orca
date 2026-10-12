@@ -73,7 +73,6 @@ function adapter(): StructuredAgentSessionAdapter {
         .runtimeState.optionRevisions.current(identity.sessionId)
     })
     return {
-      providerChildPhase: 'starting' as const,
       acquisitionGeneration,
       process: {
         hostId: 'local',

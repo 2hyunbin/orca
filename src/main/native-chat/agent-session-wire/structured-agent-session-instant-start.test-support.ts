@@ -29,7 +29,7 @@ export function startsWhenPublished<A extends StructuredAgentSessionAdapter>(
       restoreSkippedOptions: [],
       optionRevision: NO_OPTIONS_REPORTED
     })
-    return { ...acquired, acquisitionGeneration, providerChildPhase: 'starting' as const }
+    return { ...acquired, acquisitionGeneration }
   }
   return { ...adapter, acquire }
 }

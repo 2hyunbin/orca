@@ -77,7 +77,6 @@ beforeEach(async () => {
         acquires.push(input)
         sink = input.events!
         return {
-          providerChildPhase: 'starting' as const,
           process: {
             hostId: 'local',
             pid: 4000 + acquires.length,

@@ -281,7 +281,7 @@ export async function acquireAcpStructuredSession(input: {
       }
     })
   return {
-    acquisition: { process, acquisitionGeneration: generation, providerChildPhase: 'starting' },
+    acquisition: { process, acquisitionGeneration: generation },
     session: starting,
     initialize
   }

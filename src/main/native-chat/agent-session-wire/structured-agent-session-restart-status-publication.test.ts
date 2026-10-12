@@ -40,7 +40,6 @@ let root = ''
 function adapter(): StructuredAgentSessionAdapter {
   return {
     acquire: async ({ fence, spawnToken }) => ({
-      providerChildPhase: 'starting' as const,
       process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
       link: {
         linkId: `link-${fence}`,

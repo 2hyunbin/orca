@@ -56,7 +56,6 @@ function adapter(): StructuredAgentSessionAdapter {
         acquires += 1
         sink = input.events!
         return {
-          providerChildPhase: 'starting' as const,
           process: {
             hostId: 'local',
             pid: 4000 + acquires,

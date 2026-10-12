@@ -224,7 +224,6 @@ beforeEach(async () => {
   acquire = vi.fn(async ({ fence, spawnToken, events }) => {
     sink = events ?? null
     return {
-      providerChildPhase: 'starting' as const,
       process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
       acquisitionGeneration: `generation-${++generation}`,
       link: {

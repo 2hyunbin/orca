@@ -47,7 +47,6 @@ function openHost(): void {
     adapter: startsWhenPublished(
       {
         acquire: async ({ fence, spawnToken }) => ({
-          providerChildPhase: 'starting' as const,
           process: {
             hostId: 'local',
             pid: 4242,

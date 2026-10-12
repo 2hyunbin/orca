@@ -29,7 +29,6 @@ const START_REQUEST = { timeoutMs: STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS }
 export class PiRpcSessionStartup {
   started = false
   answered = false
-  skipped: readonly string[] = []
   commands?: AgentSessionSlashCommand[]
   /** What the start listed; a signed-out Pi lists no model. */
   options?: AgentSessionOptionsResult
@@ -107,7 +106,6 @@ export class PiRpcSessionStartup {
         unpickedSessionConfiguredChoice({ resolvesConfig: this.resolvesConfig, picked, ...options })
       ).catalogListing
     }
-    this.skipped = skipped
     this.started = true
     this.deps.onLifecycle({
       type: 'started',

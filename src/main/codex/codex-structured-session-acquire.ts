@@ -213,7 +213,7 @@ export async function acquireCodexStructuredSession(input: {
       forceCloseUnexpected: input.forceCloseUnexpected,
       ...(unbindReadingControl ? { unbindReadingControl } : {})
     })
-    return { process, acquisitionGeneration, providerChildPhase: 'starting' }
+    return { process, acquisitionGeneration }
   } catch (error) {
     if (sessions.get(sessionId)?.connection !== acquisition.connection) {
       return closeFailedCodexAcquisition({

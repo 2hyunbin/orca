@@ -17,8 +17,7 @@ import { CodexStructuredSessionTeardown } from './codex-structured-session-teard
 import {
   applyCodexStructuredSessionOption,
   prepareLiveCodexSessionOptions,
-  readLiveCodexSessionOptions,
-  readCodexAcquisitionOptions
+  readLiveCodexSessionOptions
 } from './codex-structured-session-options'
 import {
   CodexAcquisitionRegistry,
@@ -311,12 +310,6 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
 
   prepareReadOptions = (input: { sessionId: string; fence: number }) =>
     prepareLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
-
-  readAcquisitionOptions = (input: {
-    sessionId: string
-    fence: number
-    priorOptions?: Readonly<Record<string, string>>
-  }) => readCodexAcquisitionOptions(this.session(input.sessionId), input.priorOptions)
 
   closeSession = (sessionId: string): Promise<boolean> => this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)

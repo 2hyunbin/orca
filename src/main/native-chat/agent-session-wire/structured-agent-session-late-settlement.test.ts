@@ -105,7 +105,6 @@ beforeEach(async () => {
     adapter: startsWhenPublished(
       {
         acquire: vi.fn(async ({ fence }) => ({
-          providerChildPhase: 'starting' as const,
           process: {
             hostId: 'local',
             pid: 4242,

@@ -1,6 +1,6 @@
 // The host's half of a provider child proving its start.
 //
-// A starting acquisition hands the host an unproven child, so the record keeps only the
+// Every acquire hands the host a child that has answered nothing yet, so the record keeps only the
 // saved options the reservation carried, and the delivery loop hands it nothing. This is where the
 // host learns the start landed: the provider handle the child answered with is recorded (a resume
 // needs it), picks made meanwhile are applied, a rewind left in doubt is settled, the child turns

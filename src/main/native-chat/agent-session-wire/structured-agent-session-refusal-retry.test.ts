@@ -68,7 +68,6 @@ async function createHarness(options: { attached?: boolean } = {}) {
   const adapter: StructuredAgentSessionAdapter = startsWhenPublished(
     {
       acquire: async ({ fence }) => ({
-        providerChildPhase: 'starting' as const,
         process: {
           hostId: 'local',
           pid: 4242,
