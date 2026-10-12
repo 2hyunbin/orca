@@ -6,6 +6,7 @@ import { HostStatusGatesContext } from '../components/host-protocol-gates-contex
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { HostStatusGates } from '../transport/host-status-gates'
 import type { RpcResponse } from '../transport/types'
+import { relayHostsFeed } from '../worktree/relay-hosts-feed'
 import { getTaskRepoDetail } from './mobile-tasks-repository-presentation'
 
 const desktopRef: { current: FakeSession | null } = { current: null }
@@ -106,11 +107,12 @@ function issue(title: string) {
 
 /** A desktop relaying to `runtime:vm`, whose repo list `vmRepoList` answers. */
 function desktop(
-  vmRepoList: () => Promise<unknown> = async () => ({ repos: VM_REPOS })
+  vmRepoList: () => Promise<unknown> = async () => ({ repos: VM_REPOS }),
+  hostsList: () => Promise<unknown> = async () => ({ hosts: HOSTS })
 ): FakeSession {
   return recording(new FakeSession('connected'), async (method, executionHost) => {
     if (method === 'mobileRelay.hosts.list') {
-      return reply({ hosts: HOSTS })
+      return reply(await hostsList())
     }
     if (method === 'github.listWorkItems') {
       return reply({ items: [issue(executionHost ? 'from the server' : 'from the desktop')] })
@@ -326,6 +328,80 @@ describe('Tasks screen repos on the desktop and its servers', () => {
         .sort()
     ).toEqual(['from the desktop', 'from the server', 'from the server'])
     expect(renders.slice(joinedFrom).filter((seen) => seen.loading || seen.count === 0)).toEqual([])
+  })
+
+  it('applies a desktop-only saved filter at once while a server is slow', async () => {
+    const model = await mount(
+      desktop(() => new Promise(() => {})),
+      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
+      ['mac-repo']
+    )
+    await loadRepos(model)
+    await settle()
+    expect([...model().selectedRepoIds]).toEqual(['mac-repo'])
+  })
+
+  it("applies a desktop-only saved filter while the desktop's server list never answers", async () => {
+    const model = await mount(
+      desktop(undefined, () => new Promise(() => {})),
+      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
+      ['mac-repo']
+    )
+    await loadRepos(model)
+    await settle()
+    expect([...model().selectedRepoIds]).toEqual(['mac-repo'])
+  })
+
+  it("keeps a server's repos in the filter while that server drops out for one poll", async () => {
+    let hosts = HOSTS
+    const client = desktop(undefined, async () => ({ hosts }))
+    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY], ['vm-repo'])
+    await loadRepos(model)
+    await settle()
+    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
+    hosts = HOSTS.map((host) => ({ ...host, relay: 'unavailable' }))
+    await act(async () => {
+      await relayHostsFeed(client).read()
+    })
+    await settle()
+    expect(model().repos).toEqual(MAC_REPOS)
+    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
+    hosts = HOSTS
+    await act(async () => {
+      await relayHostsFeed(client).read()
+    })
+    await settle()
+    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
+    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
+  })
+
+  it("re-lists nothing on a server's health or label change, and reloads nothing on an equal answer", async () => {
+    let hosts = HOSTS
+    const client = desktop(undefined, async () => ({ hosts }))
+    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
+    await act(async () => {
+      await model().loadTasks()
+    })
+    await settle()
+    const listed = ranOn(client, 'repo.list').length
+    const loaded = ranOn(client, 'github.listWorkItems').length
+    hosts = HOSTS.map((host) => ({
+      ...host,
+      label: `${host.label} (renamed)`,
+      health: 'connecting'
+    }))
+    await act(async () => {
+      await relayHostsFeed(client).read()
+    })
+    await settle()
+    expect(ranOn(client, 'repo.list')).toHaveLength(listed)
+    // An explicit re-read: the server answers the same list, so the items aren't reloaded.
+    await act(async () => {
+      await model().repoListReload()
+    })
+    await settle()
+    expect(ranOn(client, 'repo.list').slice(listed)).toEqual(['desktop', 'runtime:vm'])
+    expect(ranOn(client, 'github.listWorkItems')).toHaveLength(loaded)
   })
 })
 

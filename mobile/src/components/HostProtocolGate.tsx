@@ -4,7 +4,6 @@ import { useHostClient } from '../transport/client-context'
 import { useHostStatusGates } from '../transport/host-status-gates'
 import { colors } from '../theme/mobile-theme'
 import { HostStatusGatesContext } from './host-protocol-gates-context'
-export { useHostProtocolGates } from './host-protocol-gates-context'
 import { ProtocolBlockScreen } from './ProtocolBlockScreen'
 
 type Props = {

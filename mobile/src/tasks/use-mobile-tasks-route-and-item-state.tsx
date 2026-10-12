@@ -75,6 +75,7 @@ export function useMobileTasksRouteAndItemState() {
     repos,
     serverRepoList,
     serverReposSettled,
+    settledServerHosts,
     repoListEnsureLoaded,
     repoListReload,
     repoHostLabels
@@ -200,6 +201,7 @@ export function useMobileTasksRouteAndItemState() {
     repos,
     serverRepoList,
     serverReposSettled,
+    settledServerHosts,
     repoHostLabels,
     repoListEnsureLoaded,
     repoListReload,

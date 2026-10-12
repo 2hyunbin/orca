@@ -1,21 +1,41 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { HostContextLabelSources } from '../../../src/shared/worktree/host-context-labels'
-import {
-  reachableServerClients,
-  relaysToServers
-} from '../transport/execution-host-scoped-rpc-client'
 import { useHostDescriptor } from '../transport/host-descriptor-store'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
-import { useRelayHosts } from '../worktree/relay-hosts-feed'
+import { relayHostsFeed } from '../worktree/relay-hosts-feed'
 import { withServerHosts } from '../worktree/server-workspaces'
+import { useReachableServerClients } from '../worktree/use-reachable-server-clients'
 import { useServerRepos } from '../worktree/use-server-repos'
 import type { RepoSummary } from './mobile-tasks-provider-detail-types'
 import { routeTaskRepoCalls } from './task-repo-host-routing'
 import type { HostRepoListResource } from './use-host-repo-list'
 
 const NO_LABELS: ReadonlyMap<ExecutionHostId, string> = new Map()
+
+/** Whether the desktop's server list has answered or failed once on this client. */
+function useRelayHostsAnswered(client: RpcClient | null): boolean {
+  const [answeredFor, setAnsweredFor] = useState<RpcClient | null>(null)
+  useEffect(() => {
+    if (!client) {
+      return
+    }
+    let stale = false
+    // `read` settles with null on a failure or timeout, which counts as an answer.
+    void relayHostsFeed(client)
+      .read()
+      .then(() => {
+        if (!stale) {
+          setAnsweredFor(client)
+        }
+      })
+    return () => {
+      stale = true
+    }
+  }, [client])
+  return client !== null && answeredFor === client
+}
 
 /**
  * The Tasks screen's repos across the desktop and its servers, as the desktop's task page lists
@@ -29,21 +49,20 @@ export function useTaskHostRepos(args: {
   desktopRepoList: HostRepoListResource<RepoSummary>
 }) {
   const { hostId, desktopClient, connState, hostCapabilities, desktopRepoList } = args
-  const relays = desktopClient !== null && relaysToServers(desktopClient, hostCapabilities)
-  const servers = useRelayHosts(relays ? desktopClient : null)
-  const serverClients = useMemo(
-    () => reachableServerClients(desktopClient, hostCapabilities, servers ?? []),
-    [desktopClient, hostCapabilities, servers]
+  const { relays, servers, serverClients } = useReachableServerClients(
+    desktopClient,
+    hostCapabilities
   )
+  const hostsAnswered = useRelayHostsAnswered(relays ? desktopClient : null)
   const [serverListGeneration, setServerListGeneration] = useState(0)
-  const { reposByHost, settled } = useServerRepos<RepoSummary>(
+  const { reposByHost, settledHosts, settled } = useServerRepos<RepoSummary>(
     serverClients,
     connState === 'connected',
     serverListGeneration
   )
   const serverRepoList = useMemo(() => [...reposByHost.values()].flat(), [reposByHost])
   // Why: a saved selection naming a server's repo must wait for that server, not read as gone.
-  const serverReposSettled = !relays || (servers !== null && settled)
+  const serverReposSettled = !relays || (hostsAnswered && settled)
   const desktopPlatform = useHostDescriptor(hostId)?.platform ?? null
   // Names hosts only once a server's repos mix in, as the desktop's mixed lists do.
   const repoHostLabels = useMemo<HostContextLabelSources | null>(
@@ -92,6 +111,7 @@ export function useTaskHostRepos(args: {
     repos,
     serverRepoList,
     serverReposSettled,
+    settledServerHosts: settledHosts,
     repoListEnsureLoaded,
     repoListReload,
     repoHostLabels
