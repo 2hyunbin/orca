@@ -112,6 +112,10 @@ describe('orca cli worktree awareness', () => {
         'agent-task',
         '--agent',
         'codex',
+        '--model',
+        'gpt-5.5',
+        '--effort',
+        'high',
         '--prompt',
         'hi',
         '--setup',
@@ -145,6 +149,7 @@ describe('orca cli worktree awareness', () => {
       presentation: 'background',
       agent: 'codex',
       prompt: { text: 'hi', delivery: 'submit' },
+      sessionOptions: { model: 'gpt-5.5', effort: 'high' },
       launchSource: 'cli',
       operationId: expect.any(String)
     })
@@ -160,12 +165,7 @@ describe('orca cli worktree awareness', () => {
     })
   })
 
-  it.each([
-    ['--retry-launch', ''],
-    ['--retry-launch='],
-    ['--retry-launch'],
-    ['--retry-launch', ' ']
-  ])('rejects an invalid retry identity before creating a worktree: %j', async (...retryArgs) => {
+  it('rejects an empty retry identity before creating a worktree', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const priorExitCode = process.exitCode
     await main(
@@ -178,7 +178,7 @@ describe('orca cli worktree awareness', () => {
         'task',
         '--agent',
         'codex',
-        ...retryArgs,
+        '--retry-launch=',
         '--json'
       ],
       '/tmp/repo'

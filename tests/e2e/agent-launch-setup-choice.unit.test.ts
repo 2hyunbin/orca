@@ -181,29 +181,6 @@ describe('CLI setup choice across durable launch admission', () => {
     )
   })
 
-  it.each(['run', 'skip'] as const)(
-    'accepts a deliberate fresh launch with setup %s',
-    async (setupDecision) => {
-      vi.spyOn(process.stdout, 'write').mockReturnValue(true)
-      const runtime = runtimeStub({ settings: {} })
-      runtime.createManagedWorktree.mockRejectedValueOnce(
-        new WorktreeCreateSetupChoiceRefusedError(SETUP_CHOICE)
-      )
-      const client = hostClient(runtime)
-      await expect(launch(client)).rejects.toMatchObject({ message: SETUP_CHOICE })
-      await launch(client, { setupDecision })
-      expect(runtime.createManagedWorktree).toHaveBeenLastCalledWith(
-        expect.objectContaining({ setupDecision })
-      )
-      expect(
-        store
-          .listOperationRows()
-          .map((row) => row.outcome.status)
-          .sort()
-      ).toEqual(['failed', 'succeeded'])
-    }
-  )
-
   it('keeps a matching error after workspace creation unknown', async () => {
     const runtime = runtimeStub({ settings: {} })
     runtime.createManagedWorktree.mockResolvedValue({

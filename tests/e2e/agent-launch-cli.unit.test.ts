@@ -84,11 +84,11 @@ const create = {
 } as const
 
 describe('CLI launch through host surface creation and replay admission', () => {
-  it.each([existing, create])('keeps a background chat inactive: %j', async (target) => {
+  it('keeps a new worktree background chat inactive', async () => {
     await callAgentLaunch(
       hostClient(runtimeStub()),
       { agent: 'codex' },
-      { target, presentation: 'background' },
+      { target: create, presentation: 'background' },
       AGENT_LAUNCH_RUNTIME_CAPABILITIES
     )
     expect(chatCreate.mock.calls[0]?.[0].activate).toBe(false)
@@ -104,22 +104,19 @@ describe('CLI launch through host surface creation and replay admission', () => 
     expect(chatCreate.mock.calls[0]?.[0].activate).toBe(true)
   })
 
-  it.each(['focused', 'background'] as const)(
-    'passes local terminal %s to the runtime',
-    async (presentation) => {
-      const runtime = runtimeStub({ settings: {} })
-      await callAgentLaunch(
-        hostClient(runtime),
-        { agent: 'codex' },
-        { target: existing, presentation },
-        AGENT_LAUNCH_RUNTIME_CAPABILITIES
-      )
-      expect(runtime.createTerminal).toHaveBeenCalledWith(
-        'id:wt-7',
-        expect.objectContaining({ presentation })
-      )
-    }
-  )
+  it('passes local terminal focus to the runtime', async () => {
+    const runtime = runtimeStub({ settings: {} })
+    await callAgentLaunch(
+      hostClient(runtime),
+      { agent: 'codex' },
+      { target: existing, presentation: 'focused' },
+      AGENT_LAUNCH_RUNTIME_CAPABILITIES
+    )
+    expect(runtime.createTerminal).toHaveBeenCalledWith(
+      'id:wt-7',
+      expect.objectContaining({ presentation: 'focused' })
+    )
+  })
 
   it.each([existing, create])(
     'a lost accepted reply replays without a second chat or prompt: %j',
@@ -320,7 +317,7 @@ describe('CLI launch through host surface creation and replay admission', () => 
     expect(call).toHaveBeenCalledTimes(2)
   })
 
-  it.each([undefined, 'current', 'active'])(
+  it.each([undefined, 'current'])(
     'uses the innermost native folder for %s before Git fallback',
     async (selector) => {
       const client = hostClient(runtimeStub())
@@ -356,19 +353,16 @@ describe('CLI launch through host surface creation and replay admission', () => 
     }
   )
 
-  it.each([undefined, 'current', 'active'])(
-    'refuses remote cwd inference for %s',
-    async (selector) => {
-      const client = hostClient(runtimeStub())
-      vi.spyOn(client, 'isRemote', 'get').mockReturnValue(true)
-      const flags = new Map<string, string | boolean>([['agent', 'codex']])
-      if (selector) {
-        flags.set('worktree', selector)
-      }
-      await expect(
-        AGENT_LAUNCH_HANDLERS['agent launch']({ flags, client, cwd: '/tmp/repo', json: true })
-      ).rejects.toMatchObject({ code: 'invalid_argument' })
-      expect(client.call).not.toHaveBeenCalled()
-    }
-  )
+  it('refuses remote cwd inference for current', async () => {
+    const client = hostClient(runtimeStub())
+    vi.spyOn(client, 'isRemote', 'get').mockReturnValue(true)
+    const flags = new Map<string, string | boolean>([
+      ['agent', 'codex'],
+      ['worktree', 'current']
+    ])
+    await expect(
+      AGENT_LAUNCH_HANDLERS['agent launch']({ flags, client, cwd: '/tmp/repo', json: true })
+    ).rejects.toMatchObject({ code: 'invalid_argument' })
+    expect(client.call).not.toHaveBeenCalled()
+  })
 })

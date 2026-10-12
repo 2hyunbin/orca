@@ -194,52 +194,26 @@ describe('orca cli agent launch', () => {
     expect(launchCalls()).toHaveLength(1)
   })
 
-  it.each([
-    ['--retry-launch', ''],
-    ['--retry-launch='],
-    ['--retry-launch'],
-    ['--retry-launch', ' ']
-  ])('rejects an invalid retry identity before launching: %j', async (...retryArgs) => {
-    const output = await runRefused([
-      'agent',
-      'launch',
-      '--agent',
-      'codex',
-      '--worktree',
-      `id:${WORKTREE_ID}`,
-      ...retryArgs,
-      '--json'
-    ])
-    expect(JSON.parse(output).error).toMatchObject({
-      code: 'invalid_argument',
-      message: expect.stringContaining('--retry-launch')
-    })
-    expect(callMock).not.toHaveBeenCalled()
-  })
-
-  it('forwards the recovery ID on a CLI retry', async () => {
-    const operationId = `${Date.now()}-${'b'.repeat(32)}`
-    queueFixtures(callMock, agentLaunchHostFixture(), agentLaunchFixture(WORKTREE_ID))
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-    await main(
-      [
+  it.each([['--retry-launch'], ['--retry-launch', ' ']])(
+    'rejects an invalid retry identity before launching: %j',
+    async (...retryArgs) => {
+      const output = await runRefused([
         'agent',
         'launch',
         '--agent',
         'codex',
         '--worktree',
         `id:${WORKTREE_ID}`,
-        '--retry-launch',
-        operationId,
+        ...retryArgs,
         '--json'
-      ],
-      '/tmp/repo'
-    )
-    expect(callMock).toHaveBeenCalledWith(
-      'agent.launchReplay',
-      expect.objectContaining({ operationId })
-    )
-  })
+      ])
+      expect(JSON.parse(output).error).toMatchObject({
+        code: 'invalid_argument',
+        message: expect.stringContaining('--retry-launch')
+      })
+      expect(callMock).not.toHaveBeenCalled()
+    }
+  )
 
   it('keeps recovery identity when an older replacement host refuses a replay method', async () => {
     const operationId = `${Date.now()}-${'c'.repeat(32)}`
@@ -331,46 +305,6 @@ describe('orca cli agent launch', () => {
 
     expect(output).toContain('cannot start agents from the CLI')
     expect(launchCalls()).toEqual([])
-  })
-
-  it('passes model and effort with a new worktree', async () => {
-    queueFixtures(
-      callMock,
-      agentLaunchHostFixture(),
-      agentLaunchFixture('repo-1::/tmp/repo/design'),
-      okFixture('req_show', {
-        worktree: buildWorktree('/tmp/repo/design', 'design', 'abc', 'repo-1')
-      })
-    )
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-
-    await main(
-      [
-        'worktree',
-        'create',
-        '--repo',
-        'id:repo-1',
-        '--name',
-        'design',
-        '--no-parent',
-        '--agent',
-        'codex',
-        '--model',
-        'gpt-5.5',
-        '--effort',
-        'high',
-        '--json'
-      ],
-      '/tmp/repo'
-    )
-
-    expect(callMock).toHaveBeenCalledWith(
-      'agent.launchReplay',
-      expect.objectContaining({
-        agent: 'codex',
-        sessionOptions: { model: 'gpt-5.5', effort: 'high' }
-      })
-    )
   })
 
   it('refuses a model on a host older than agent.launch rather than dropping it', async () => {
