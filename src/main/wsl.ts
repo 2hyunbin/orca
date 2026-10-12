@@ -24,7 +24,6 @@ export { toLinuxPath, toWindowsWslPath } from '../shared/wsl-paths'
 export {
   getCachedWslAvailability,
   hasCachedWslAvailability,
-  isWslAvailable,
   isWslAvailableAsync
 } from './wsl-availability'
 export type WslPathInfo = {
