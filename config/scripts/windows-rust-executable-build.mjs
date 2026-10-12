@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { findDynamicVcRuntimeImports, readPeImportedDllNames } from './windows-pe-imports.mjs'
@@ -154,6 +154,48 @@ export function compileWindowsRustExecutable({
   if (expectedMachine !== undefined && machine !== expectedMachine) {
     throw new Error(`${label} for ${arch ?? process.arch} has ${describePeMachine(machine)}`)
   }
-  copyFileSync(builtPath, outputPath)
+  publishBuiltExecutable(builtPath, outputPath)
   writeFileSync(`${outputPath}.sha256`, fingerprint)
+}
+
+function hasBytes(path, expected) {
+  try {
+    return readFileSync(path).equals(expected)
+  } catch {
+    // Missing, or held by another reader: publish and let the rename retry.
+    return false
+  }
+}
+
+const PUBLISH_ATTEMPTS = 10
+const PUBLISH_RETRY_MS = 300
+
+/**
+ * Concurrent builds (parallel test files, CI steps) finish together, and CopyFile opens its
+ * destination unshared, so copying straight onto the output fails with EBUSY for whichever
+ * build or reader is second. Each build stages its own temp file and renames it over the output.
+ */
+export function publishBuiltExecutable(builtPath, outputPath) {
+  const built = readFileSync(builtPath)
+  if (hasBytes(outputPath, built)) {
+    return
+  }
+  const tmpPath = `${outputPath}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    writeFileSync(tmpPath, built, { flag: 'wx' })
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        renameSync(tmpPath, outputPath)
+        return
+      } catch (error) {
+        // Why retry: antivirus briefly holds a freshly written image without delete sharing.
+        if (attempt === PUBLISH_ATTEMPTS || !['EBUSY', 'EPERM', 'EACCES'].includes(error?.code)) {
+          throw error
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, PUBLISH_RETRY_MS)
+      }
+    }
+  } finally {
+    rmSync(tmpPath, { force: true })
+  }
 }
