@@ -224,6 +224,8 @@ describe('terminal resumes of a conversation a Pi chat owns', () => {
     `pi --session '${PI_FILE}'`,
     `pi --session=${PI_FILE}`,
     `pi --session ${PI_ID.slice(0, 8)}`,
+    `pi --session-id ${PI_ID}`,
+    `pi --session-id=${PI_ID}`,
     `pi -c`,
     `pi --continue`,
     // `--resume` opens a picker; the next token is a prompt, not a target.
@@ -236,6 +238,7 @@ describe('terminal resumes of a conversation a Pi chat owns', () => {
 
   it.each([
     `pi --session ${OTHER_UUID}`,
+    `pi --session-id ${OTHER_UUID}`,
     `pi --session /Users/me/.pi/agent/sessions/--Users-me-repo--/2026-10-09T10-00-00-000Z_${OTHER_UUID}.jsonl`,
     `pi --fork '${PI_FILE}'`,
     `pi "hello"`,
