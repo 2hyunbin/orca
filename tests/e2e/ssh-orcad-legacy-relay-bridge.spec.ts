@@ -179,6 +179,26 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
     await expect(page.getByText('orcad upgrade folder', { exact: true })).toBeVisible({
       timeout: 120_000
     })
+    // The client mirrors the server's tab as `web-terminal-<tab::leaf>`.
+    let storeTabId = ''
+    await expect
+      .poll(
+        async () =>
+          (storeTabId = await page.evaluate(
+            ({ worktreeId, tabId }) =>
+              (window.__store!.getState().tabsByWorktree[worktreeId] ?? [])
+                .map((tab) => tab.id)
+                .find((id) => {
+                  const host = id.startsWith('web-terminal-')
+                    ? decodeURIComponent(id.slice('web-terminal-'.length))
+                    : id
+                  return host === tabId || host.startsWith(`${tabId}::`)
+                }) ?? '',
+            { worktreeId: seeded.worktreeId, tabId: terminalTabId }
+          )),
+        { timeout: 120_000, message: 'the client never mirrored the relay-era terminal tab' }
+      )
+      .not.toBe('')
     // The old tab, now under the managed server, shows the old shell's screen and takes input.
     await page.evaluate(
       ({ worktreeId, environmentId, tabId }) => {
@@ -191,23 +211,18 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
         state.setActiveTab(tabId)
         state.setActiveTabType('terminal', worktreeId)
       },
-      { worktreeId: seeded.worktreeId, environmentId: environment.id, tabId: terminalTabId }
+      { worktreeId: seeded.worktreeId, environmentId: environment.id, tabId: storeTabId }
     )
     await page.screenshot({ path: testInfo.outputPath('bridged-tab-activated.png') })
     await expect
-      .poll(() => page.evaluate((id) => window.__paneManagers?.has(id) ?? false, terminalTabId), {
+      .poll(() => page.evaluate((id) => window.__paneManagers?.has(id) ?? false, storeTabId), {
         timeout: 120_000,
         message: 'the relay-era terminal tab never mounted under the managed server'
       })
       .toBe(true)
-    await expectTerminalAccessibilityText(
-      page,
-      terminalTabId,
-      'GOT:before-upgrade',
-      BRIDGE_TIMEOUT_MS
-    )
+    await expectTerminalAccessibilityText(page, storeTabId, 'GOT:before-upgrade', BRIDGE_TIMEOUT_MS)
     await typeIntoActiveTerminal(page, 'after-upgrade')
-    await expectTerminalAccessibilityText(page, terminalTabId, 'GOT:after-upgrade')
+    await expectTerminalAccessibilityText(page, storeTabId, 'GOT:after-upgrade')
     await page.screenshot({ path: testInfo.outputPath('bridged-terminal.png') })
 
     // A new terminal opens on orcad.
@@ -231,7 +246,7 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
       state.setActiveView('terminal')
       state.setActiveTab(tabId)
       state.setActiveTabType('terminal', state.activeWorktreeId)
-    }, terminalTabId)
+    }, storeTabId)
     await expect
       .poll(
         async () => {
@@ -241,7 +256,7 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
               const manager = window.__paneManagers?.get(id)
               const pane = manager?.getActivePane?.() ?? manager?.getPanes?.()[0]
               return pane?.serializeAddon?.serialize?.() ?? ''
-            }, terminalTabId)) ?? ''
+            }, storeTabId)) ?? ''
           ).includes('GOT:after-drop')
         },
         { timeout: BRIDGE_TIMEOUT_MS, intervals: [5_000] }

@@ -4,6 +4,10 @@
  */
 import type { LegacyRelayBridgedPane } from '../../../../shared/legacy-relay-bridge-contract'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import {
+  HOST_TERMINAL_SURFACE_SEPARATOR,
+  toHostSessionTabId
+} from '../../../../shared/terminal-surface-id'
 
 let panes: LegacyRelayBridgedPane[] = []
 const listeners = new Set<() => void>()
@@ -43,8 +47,15 @@ export function legacyRelayBridgePtyIdForPane(args: {
   if (!window.api?.legacyRelayBridge) {
     return null
   }
+  // A tab mirrored from the managed server is `web-terminal-<tab::leaf>`; the lease names the
+  // relay-era tab and leaf it carried over.
+  const [hostTabId, hostLeafId] = toHostSessionTabId(args.tabId).split(
+    HOST_TERMINAL_SURFACE_SEPARATOR
+  )
   const served = panes.find(
-    (pane) => pane.tabId === args.tabId && (!pane.leafId || pane.leafId === args.leafId)
+    (pane) =>
+      pane.tabId === hostTabId &&
+      (!pane.leafId || pane.leafId === (hostLeafId ?? args.leafId) || pane.leafId === args.leafId)
   )
   if (served) {
     return served.ptyId

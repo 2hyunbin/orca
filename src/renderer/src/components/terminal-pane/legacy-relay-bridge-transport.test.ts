@@ -88,6 +88,20 @@ afterEach(async () => {
 })
 
 describe('a runtime pane bridged to an older relay’s terminal', () => {
+  it('finds a pane mirrored from the managed server by its host tab and leaf', () => {
+    publishPanes([
+      { ptyId: PTY, targetId: 'ssh-box', tabId: 'tab-1', leafId: 'leaf-1', state: 'live' }
+    ])
+    const mirrored = `web-terminal-${encodeURIComponent('tab-1::leaf-1')}`
+    expect(legacyRelayBridgePtyIdForPane({ tabId: mirrored, leafId: 'x', boundPtyId: null })).toBe(
+      PTY
+    )
+    const other = `web-terminal-${encodeURIComponent('tab-1::leaf-2')}`
+    expect(
+      legacyRelayBridgePtyIdForPane({ tabId: other, leafId: 'x', boundPtyId: null })
+    ).toBeNull()
+  })
+
   it('finds the pane main serves for its tab and leaf, or the ssh id it still names', () => {
     publishPanes([
       { ptyId: PTY, targetId: 'ssh-box', tabId: 'tab-1', leafId: 'leaf-1', state: 'live' }
