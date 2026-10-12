@@ -13,7 +13,7 @@ import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-t
 import { expect, test } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
 import { createRestartSession } from './helpers/orca-restart'
-import { managedServer } from './helpers/orcad-convert-flow'
+import { managedServer, serverCall } from './helpers/orcad-convert-flow'
 import { seedRelayEraProfile } from './helpers/orcad-upgrade-profile'
 import { readPersistedProfileState } from './helpers/persisted-profile-state'
 import { toSshExecutionHostId } from '../../src/shared/execution-host'
@@ -154,16 +154,36 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
     if (!environment) {
       throw new Error('Converted host is missing from the environment catalog')
     }
+    // The old tab moved with the session to the managed server, which lists it for every client.
+    await expect
+      .poll(
+        () =>
+          serverCall(page, environment.id, 'session.tabs.list', {
+            worktree: `id:${seeded.worktreeId}`
+          }),
+        { timeout: 60_000 }
+      )
+      .toContain(terminalTabId)
     // The old tab, now under the managed server, shows the old shell's screen and takes input.
     await page.evaluate(
       ({ worktreeId, environmentId, tabId }) => {
+        const hostId = `runtime:${environmentId}` as const
         const state = window.__store!.getState()
-        state.setActiveWorktree(worktreeId, `runtime:${environmentId}`)
+        state.setGroupBy('none')
+        window.__store!.setState({ visibleWorkspaceHostIds: ['local', hostId] })
+        state.setActiveView('terminal')
+        state.setActiveWorktree(worktreeId, hostId)
         state.setActiveTab(tabId)
         state.setActiveTabType('terminal', worktreeId)
       },
       { worktreeId: seeded.worktreeId, environmentId: environment.id, tabId: terminalTabId }
     )
+    await expect
+      .poll(() => page.evaluate((id) => window.__paneManagers?.has(id) ?? false, terminalTabId), {
+        timeout: 120_000,
+        message: 'the relay-era terminal tab never mounted under the managed server'
+      })
+      .toBe(true)
     await expectTerminalAccessibilityText(
       page,
       terminalTabId,
@@ -192,6 +212,7 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
       .toEqual([expect.objectContaining({ ptyId: bridgedPtyId, state: 'live' })])
     await page.evaluate((tabId) => {
       const state = window.__store!.getState()
+      state.setActiveView('terminal')
       state.setActiveTab(tabId)
       state.setActiveTabType('terminal', state.activeWorktreeId)
     }, terminalTabId)
