@@ -69,6 +69,7 @@ export class BridgeHostRequests {
    *  are the whole boundary, and a test that reads only `client.requests` sees only this half. */
   private forward(message: RequestMessage): Promise<RpcResponse> {
     const { client } = this.deps
+    // An envelope is wire fields for a desktop RPC; a native verb never reaches the wire.
     if (isBridgeNativeMethod(message.method)) {
       return this.deps.serveNative(message.id, message.method, message.params)
     }
