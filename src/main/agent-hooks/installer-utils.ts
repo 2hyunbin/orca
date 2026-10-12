@@ -126,7 +126,6 @@ export {
   buildWindowsHookPowerShellCommand,
   isSafeUnicodeWindowsBatchHookPath,
   WINDOWS_CMD_SAFE_PATH,
-  wrapWindowsCmdHookCommand,
   wrapWindowsHookCommand
 } from './windows-hook-command'
 
