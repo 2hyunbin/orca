@@ -396,6 +396,9 @@ export const PR_E2E_SOURCE_ROUTES = [
       (/^src\/main\/runtime\/(?:session-tabs\/mobile-session-(?:hydration|preservation|reconciliation)|terminal\/output\/terminal-(?:derived-agent-facts|osc-metadata))\.ts$/.test(
         file
       ) ||
+        /^src\/main\/runtime\/terminal\/launch\/(?:terminal-create|terminal-created-surface|terminal-desktop-create|terminal-split|terminal-caller-spawn-scope)\.ts$/.test(
+          file
+        ) ||
         /^(?:src\/shared\/workspace-layout\/|src\/main\/persistence\/(?:terminal-topology\/|restoring-sessions\/|loading-store\/pty-binding-)|src\/(?:main|renderer\/src)\/runtime\/(?:[^/]+\/)*[^/]*(?:pane-admission|workspace-layout|session-tab|headless-[^/]*tab|layout-client|create-terminal|split-pty-backed-terminal|terminal-split-layout|spawn-placement)[^/]*\.ts$|tests\/e2e\/(?:helpers\/)?(?:workspace-layout-oracle|headless-layout-oracle|terminal-layout-journeys))/.test(
           file
         ))

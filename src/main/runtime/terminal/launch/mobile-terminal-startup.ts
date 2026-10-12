@@ -1,14 +1,23 @@
-import { OrcaRuntimeWithRunCreateMobileSessionTerminal } from './orca-runtime-run-create-mobile-session-terminal'
-import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
-import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
-import type { TuiAgent } from '../../shared/tui-agent'
-import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
-import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
-import { buildAgentStartupPlan } from '../../shared/tui-agent-startup'
-import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
+import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
+import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
+import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
+import { buildAgentStartupPlan } from '../../../../shared/tui-agent-startup'
+import { resolveAgentStartupPlanInputs } from '../../../../shared/agent-startup-plan-inputs'
+import type { RuntimeStore } from '../../runtime-store-contract'
 
-export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRuntimeWithRunCreateMobileSessionTerminal {
-  protected async resolveMobileSessionTerminalCommand(
+export type RuntimeMobileTerminalStartupHost = {
+  getStore(): Pick<RuntimeStore, 'getSettings'> | null
+  getAgentLaunchPlatformForWorkspace(): (scope: TerminalWorkspaceLaunchScope) => NodeJS.Platform
+}
+
+export class RuntimeMobileTerminalStartup {
+  constructor(private readonly host: RuntimeMobileTerminalStartupHost) {}
+  private get store() {
+    return this.host.getStore()
+  }
+  async resolveMobileSessionTerminalCommand(
     workspace: TerminalWorkspaceLaunchScope,
     opts: {
       command?: string
@@ -50,7 +59,7 @@ export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRunt
         agent: opts.agent,
         settings,
         // Why: mobile may be iOS while the shell host is Windows/macOS/Linux or SSH Linux; quote for the host shell.
-        platform: this.getAgentLaunchPlatformForWorkspace(workspace),
+        platform: this.host.getAgentLaunchPlatformForWorkspace()(workspace),
         // Why: SSH runs the CLI through the relay shim (plain `orca`), so the Linux-only `orca-ide` rename must not apply.
         isRemote: Boolean(workspace.connectionId)
       }),

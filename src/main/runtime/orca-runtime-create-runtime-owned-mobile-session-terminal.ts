@@ -1,16 +1,15 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithResolveMobileSessionTerminalCommand } from './orca-runtime-resolve-mobile-session-terminal-command'
+import { OrcaRuntimeWithTerminalCreateDeduplication } from './orca-runtime-terminal-create-deduplication'
 import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
 import type {
   RuntimeMobileSessionCreateTerminalResult,
   RuntimeMobileSessionTabsSnapshot,
-  RuntimeMobileSessionTerminalTab
+  RuntimeMobileSessionTerminalTab,
+  RuntimeTerminalCreate
 } from '../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
-import { copySleepingAgentLaunchConfig } from './runtime-agent-launch-resolution'
-import { deriveRemoteRuntimeTerminalCreateHandle } from './remote-runtime-terminal-create-identity'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { placeCreatedSessionTab } from '../../shared/session-tab-placement'
 import {
@@ -18,30 +17,156 @@ import {
   buildMaterializedHeadlessParentLayout,
   getHeadlessMobileSessionGroupId
 } from './mobile-session-layout-projection'
+import { RuntimeMobileTerminalStartup } from './terminal/launch/mobile-terminal-startup'
+import { RuntimeMobileTerminalCreate } from './terminal/launch/mobile-terminal-create'
+import { RuntimeMobileTerminalRendererCreate } from './terminal/launch/mobile-terminal-renderer-create'
+import { RuntimeMobileTerminalOwnedCreate } from './terminal/launch/mobile-terminal-owned-create'
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
+import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
+import type { RuntimeOwnedMobileTerminalOptions } from './terminal/launch/mobile-terminal-owned-create'
 
-const OWNED_MOBILE_DISPATCH_RECIPE_TTL_MS = 15 * 60_000
-
-export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
-  private readonly ownedMobileDispatchRecipes = new Map<
-    string,
-    {
+export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
+  protected readonly mobileTerminalStartup = new RuntimeMobileTerminalStartup({
+    getStore: () => this.store,
+    getAgentLaunchPlatformForWorkspace: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getAgentLaunchPlatformForWorkspace)
+  })
+  protected resolveMobileSessionTerminalCommand(
+    workspace: TerminalWorkspaceLaunchScope,
+    opts: {
+      command?: string
+      env?: Record<string, string>
+      envToDelete?: string[]
+      startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
+      agent?: TuiAgent
+      agentPrompt?: string
       launchConfig?: SleepingAgentLaunchConfig
       launchAgent?: TuiAgent
-      connectionId: string | null
-      recordedAt: number
     }
-  >()
-
-  private pruneOwnedMobileDispatchRecipes(): void {
-    const now = Date.now()
-    for (const [handle, recipe] of this.ownedMobileDispatchRecipes) {
-      if (now - recipe.recordedAt >= OWNED_MOBILE_DISPATCH_RECIPE_TTL_MS) {
-        this.ownedMobileDispatchRecipes.delete(handle)
-      }
-    }
+  ): Promise<{
+    command?: string
+    env?: Record<string, string>
+    envToDelete?: string[]
+    startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
+    launchConfig?: SleepingAgentLaunchConfig
+    launchAgent?: TuiAgent
+  }> {
+    return this.mobileTerminalStartup.resolveMobileSessionTerminalCommand(workspace, opts)
   }
-
-  protected async createRuntimeOwnedMobileSessionTerminal(
+  protected readonly mobileTerminalCreate = new RuntimeMobileTerminalCreate({
+    getMobileTerminalCreateByMutationId: () => this.mobileTerminalCreateByMutationId,
+    runCreateMobileSessionTerminal: () =>
+      this.sessionPorts.bindRuntimeMethod(this.runCreateMobileSessionTerminal),
+    getValidatedExplicitWorktreeIdSelector: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getValidatedExplicitWorktreeIdSelector),
+    resolveWorktreeSelector: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveWorktreeSelector),
+    applyMobileSessionTabNavigation: () =>
+      this.sessionPorts.bindRuntimeMethod(this.applyMobileSessionTabNavigation),
+    getMobileSessionTabsForWorktree: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getMobileSessionTabsForWorktree)
+  })
+  createMobileSessionTerminal(
+    worktreeSelector: string,
+    opts: {
+      afterTabId?: string
+      targetGroupId?: string
+      command?: string
+      cwd?: string
+      env?: Record<string, string>
+      envToDelete?: string[]
+      startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
+      agent?: TuiAgent
+      agentPrompt?: string
+      launchConfig?: SleepingAgentLaunchConfig
+      launchAgent?: TuiAgent
+      viewMode?: 'terminal' | 'chat'
+      activate?: boolean
+      select?: boolean
+      clientNavigationId?: string
+      navigation?: RuntimeNavigationTarget
+      clientMutationId?: string
+      // Older mobile clients optimistically append; preserve that placement until they advertise
+      // split-group ordering support.
+      supportsSplitGroupPlacement?: boolean
+      signal?: AbortSignal
+    } = {}
+  ): Promise<RuntimeMobileSessionCreateTerminalResult> {
+    return this.mobileTerminalCreate.createMobileSessionTerminal(worktreeSelector, opts)
+  }
+  protected readonly mobileTerminalRendererCreate = new RuntimeMobileTerminalRendererCreate({
+    captureReadyGraphEpoch: () => this.sessionPorts.bindRuntimeMethod(this.captureReadyGraphEpoch),
+    resolveTerminalWorkspaceLaunchScope: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveTerminalWorkspaceLaunchScope),
+    resolveWorkspaceTerminalStartupCwd: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveWorkspaceTerminalStartupCwd),
+    hydrateHeadlessMobileSessionTabsFromWorkspaceSession: () =>
+      this.sessionPorts.bindRuntimeMethod(
+        this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession
+      ),
+    getMobileSessionTabsByWorktree: () => this.mobileSessionTabsByWorktree,
+    resolveMobileSessionTerminalCommand: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveMobileSessionTerminalCommand),
+    assertStableReadyGraph: () => this.sessionPorts.bindRuntimeMethod(this.assertStableReadyGraph),
+    createRuntimeOwnedMobileSessionTerminal: () =>
+      this.sessionPorts.bindRuntimeMethod(this.createRuntimeOwnedMobileSessionTerminal),
+    getAvailableAuthoritativeWindow: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getAvailableAuthoritativeWindow),
+    getNotifier: () => this.notifier,
+    getPendingMobileTerminalCreatesByKey: () => this.pendingMobileTerminalCreatesByKey,
+    ensurePtyBackedMobileSurfaceForRendererTab: () =>
+      this.sessionPorts.bindRuntimeMethod(this.ensurePtyBackedMobileSurfaceForRendererTab),
+    waitForMobileTerminalSurface: () =>
+      this.sessionPorts.bindRuntimeMethod(this.waitForMobileTerminalSurface),
+    isReadyMobileTerminalSurface: () =>
+      this.sessionPorts.bindRuntimeMethod(this.isReadyMobileTerminalSurface),
+    deliverPendingStartupCommandToBareRendererPty: () =>
+      this.sessionPorts.bindRuntimeMethod(this.deliverPendingStartupCommandToBareRendererPty),
+    findMobileTerminalSurface: () =>
+      this.sessionPorts.bindRuntimeMethod(this.findMobileTerminalSurface),
+    findLiveRegisteredPtyForRendererTab: () =>
+      this.sessionPorts.bindRuntimeMethod(this.findLiveRegisteredPtyForRendererTab),
+    hasLiveShellForRendererTab: () =>
+      this.sessionPorts.bindRuntimeMethod(this.hasLiveShellForRendererTab)
+  })
+  protected runCreateMobileSessionTerminal(
+    worktreeSelector: string,
+    opts: {
+      afterTabId?: string
+      targetGroupId?: string
+      command?: string
+      cwd?: string
+      env?: Record<string, string>
+      envToDelete?: string[]
+      startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
+      agent?: TuiAgent
+      agentPrompt?: string
+      launchConfig?: SleepingAgentLaunchConfig
+      launchAgent?: TuiAgent
+      viewMode?: 'terminal' | 'chat'
+      activate?: boolean
+      clientNavigationId?: string
+      clientMutationId?: string
+      supportsSplitGroupPlacement?: boolean
+      signal?: AbortSignal
+    } = {}
+  ): Promise<RuntimeMobileSessionCreateTerminalResult> {
+    return this.mobileTerminalRendererCreate.runCreateMobileSessionTerminal(worktreeSelector, opts)
+  }
+  protected readonly mobileTerminalOwnedCreate = new RuntimeMobileTerminalOwnedCreate({
+    resolveTerminalWorkspaceLaunchScope: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveTerminalWorkspaceLaunchScope),
+    resolveWorkspaceTerminalStartupCwd: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveWorkspaceTerminalStartupCwd),
+    createTerminal: () => this.sessionPorts.bindRuntimeMethod(this.createTerminal),
+    dedupeTerminalCreate: () => this.sessionPorts.bindRuntimeMethod(this.dedupeTerminalCreate),
+    getLivePtyForHandle: () => this.sessionPorts.bindRuntimeMethod(this.getLivePtyForHandle),
+    registerPty: () => this.sessionPorts.bindRuntimeMethod(this.registerPty),
+    publishRuntimeOwnedMobileSessionTerminal: () =>
+      this.sessionPorts.bindRuntimeMethod(this.publishRuntimeOwnedMobileSessionTerminal)
+  })
+  protected createRuntimeOwnedMobileSessionTerminal(
     worktreeId: string,
     activate: boolean,
     afterTabId?: string,
@@ -62,124 +187,23 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
       refuseSleptWorktree?: boolean
     } = {}
   ): Promise<RuntimeMobileSessionCreateTerminalResult> {
-    this.pruneOwnedMobileDispatchRecipes()
-    const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
-    const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
-    // Why: an SSH sessionId means reattach; only synthesize local serve ids so SSH fresh terminals still call pty.spawn.
-    const stableSessionId =
-      opts.identity?.sessionId ?? (workspace.connectionId ? undefined : `serve-${randomUUID()}`)
-    const isNewSession = stableSessionId !== undefined && opts.identity?.sessionId === undefined
-    const mutationHandle = opts.createMutation
-      ? deriveRemoteRuntimeTerminalCreateHandle(
-          opts.createMutation.clientIdentity,
-          worktreeId,
-          opts.createMutation.id
-        )
-      : undefined
-    const create = (preAllocatedHandle?: string) =>
-      this.createTerminal(`id:${worktreeId}`, {
-        focus: false,
-        ...(mutationHandle
-          ? {
-              onPtySpawnDispatched: (launch) => {
-                if (!launch) {
-                  return
-                }
-                if (
-                  !this.ownedMobileDispatchRecipes.has(mutationHandle) &&
-                  this.ownedMobileDispatchRecipes.size >= 4096
-                ) {
-                  throw new Error('runtime_unavailable')
-                }
-                // Retain original dispatch evidence across an ambiguous response; retry payloads cannot replace it.
-                this.ownedMobileDispatchRecipes.set(mutationHandle, {
-                  connectionId: workspace.connectionId ?? null,
-                  recordedAt: Date.now(),
-                  ...(launch.launchConfig
-                    ? { launchConfig: copySleepingAgentLaunchConfig(launch.launchConfig) }
-                    : {}),
-                  ...(launch.launchAgent ? { launchAgent: launch.launchAgent } : {})
-                })
-              }
-            }
-          : {}),
-        ...(preAllocatedHandle ? { preAllocatedHandle } : {}),
-        command: opts.command,
-        cwd,
-        env: opts.env,
-        envToDelete: opts.envToDelete,
-        ...(opts.launchConfig ? { launchConfig: opts.launchConfig } : {}),
-        ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
-        ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),
-        ...(opts.targetGroupId ? { targetGroupId: opts.targetGroupId } : {}),
-        startupCommandDelivery: opts.startupCommandDelivery,
-        ...(opts.identity
-          ? {
-              tabId: opts.identity.tabId,
-              leafId: opts.identity.leafId,
-              ...(stableSessionId ? { sessionId: stableSessionId } : {})
-            }
-          : stableSessionId
-            ? { sessionId: stableSessionId }
-            : {}),
-        ...(isNewSession ? { isNewSession: true } : {}),
-        persistHostSessionBinding: true,
-        // Why: this method publishes the authoritative snapshot below; skip the intermediate publish to avoid a wrong-group flash.
-        deferMobileSessionPublish: true,
-        signal: opts.signal,
-        ...(opts.refuseSleptWorktree ? { refuseSleptWorktree: true } : {})
-      })
-    const terminal = opts.createMutation
-      ? await this.dedupeTerminalCreate(
-          opts.createMutation.clientIdentity,
-          `id:${worktreeId}`,
-          opts.createMutation.id,
-          true,
-          (_selector, handle) => create(handle)
-        )
-      : await create()
-    const livePty = this.getLivePtyForHandle(terminal.handle)
-    if (!livePty) {
-      throw new Error('terminal_handle_stale')
-    }
-    if (opts.createMutation) {
-      if (
-        livePty.pty.launchAgent &&
-        opts.launchAgent &&
-        livePty.pty.launchAgent !== opts.launchAgent
-      ) {
-        throw new Error('terminal_create_identity_conflict')
-      }
-      const dispatchedRecipe =
-        mutationHandle === terminal.handle && this.ownedMobileDispatchRecipes.get(terminal.handle)
-      const recipe =
-        dispatchedRecipe &&
-        dispatchedRecipe.connectionId === (workspace.connectionId ?? null) &&
-        (!livePty.pty.launchAgent || livePty.pty.launchAgent === dispatchedRecipe.launchAgent)
-          ? dispatchedRecipe
-          : null
-      if (opts.launchConfig && !livePty.pty.launchConfig && !recipe?.launchConfig) {
-        // Missing original dispatch evidence cannot authorize a retry's captured recipe.
-        throw new Error('runtime_unavailable')
-      }
-      if (recipe) {
-        livePty.pty.launchAgent ??= recipe.launchAgent ?? null
-        if (!livePty.pty.launchConfig && recipe.launchConfig) {
-          livePty.pty.launchConfig = copySleepingAgentLaunchConfig(recipe.launchConfig)
-        }
-      }
-      livePty.pty.runtimeSessionOwned = true
-      if (mutationHandle) {
-        this.ownedMobileDispatchRecipes.delete(mutationHandle)
-      }
-    }
-    if (opts.createMutation && opts.identity && terminal.ptyId) {
-      this.registerPty(terminal.ptyId, worktreeId, workspace.connectionId ?? null, {
-        tabId: opts.identity.tabId,
-        leafId: opts.identity.leafId,
-        terminalHandle: terminal.handle
-      })
-    }
+    return this.mobileTerminalOwnedCreate.createRuntimeOwnedMobileSessionTerminal(
+      worktreeId,
+      activate,
+      afterTabId,
+      opts
+    )
+  }
+
+  protected publishRuntimeOwnedMobileSessionTerminal(
+    worktreeId: string,
+    activate: boolean,
+    afterTabId: string | undefined,
+    opts: RuntimeOwnedMobileTerminalOptions,
+    cwd: string | undefined,
+    terminal: RuntimeTerminalCreate,
+    livePty: { pty: RuntimePtyWorktreeRecord }
+  ): RuntimeMobileSessionCreateTerminalResult {
     const parentTabId = livePty.pty.tabId ?? `pty:${livePty.pty.ptyId}`
     const leafId = parsePaneKey(livePty.pty.paneKey ?? '')?.leafId ?? randomUUID()
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)

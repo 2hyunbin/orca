@@ -1,6 +1,6 @@
-import { OrcaRuntimeWithPreparePtyExecutionContext } from './orca-runtime-prepare-pty-execution-context'
+import { OrcaRuntimeWithRegisterPty } from './orca-runtime-register-pty'
 
-export class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithPreparePtyExecutionContext {
+export class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithRegisterPty {
   /** Arrival-order mode scan: the settled tracker plus any in-flight snapshot capture's. */
   protected scanProviderModeTrackers(ptyId: string, data: string): void {
     return this.terminalOutput.scanProviderModeTrackers(ptyId, data)

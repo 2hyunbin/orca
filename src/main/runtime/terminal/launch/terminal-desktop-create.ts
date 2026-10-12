@@ -1,24 +1,52 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import * as dependencies from './orca-runtime-create-terminal-dependencies'
-import type { OrcaRuntimeWithCreateTerminal } from './orca-runtime-create-terminal'
-import type { RuntimeTerminalPresentation } from '../../shared/runtime-types'
-import type { Worktree } from '../../shared/worktree/types'
+import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
+import type { BrowserWindow, IpcMainEvent } from 'electron'
+import type { TerminalCreateOptions, TerminalHandleRecord } from '../../runtime-terminal-contracts'
+import type {
+  RuntimeTerminalCreate,
+  RuntimeTerminalPresentation
+} from '../../../../shared/runtime-types'
+import { randomUUID } from 'node:crypto'
+import { getRuntimeDesktopSurface } from '../../runtime-desktop-surface'
+import { ownerSurfacing } from '../../orca-runtime-core'
+import type { Worktree } from '../../../../shared/worktree/types'
+
+export type DesktopTerminalLaunchHost = {
+  resolveTerminalWorkspaceLaunchScope(): (
+    selector: string,
+    createdWorktree?: Worktree
+  ) => Promise<TerminalWorkspaceLaunchScope>
+  resolveAgentTerminalCreateOptions(): (
+    workspace: TerminalWorkspaceLaunchScope,
+    opts: TerminalCreateOptions
+  ) => Promise<TerminalCreateOptions>
+  resolveWorkspaceTerminalStartupCwd(): (
+    workspace: Pick<TerminalWorkspaceLaunchScope, 'path'>,
+    requestedCwd?: string | null
+  ) => string | undefined
+  getPtyExecutionHostMetadata(): (
+    ptyId: string | null
+  ) => Pick<RuntimeTerminalCreate, 'executionHostId' | 'hostPlatform' | 'incarnationId'>
+  assertGraphReady(): () => void
+  getAuthoritativeWindow(): BrowserWindow
+  waitForTerminalHandle(): (tabId: string) => Promise<string>
+  getHandles(): ReadonlyMap<string, TerminalHandleRecord>
+}
 
 export async function createDesktopTerminal(
-  runtime: OrcaRuntimeWithCreateTerminal,
+  runtime: DesktopTerminalLaunchHost,
   worktreeSelector: string | undefined,
-  opts: dependencies.TerminalCreateOptions,
+  opts: TerminalCreateOptions,
   presentation: RuntimeTerminalPresentation | undefined,
   rendererWindow: Electron.BrowserWindow | null,
   createdWorktree?: Worktree
-): Promise<dependencies.RuntimeTerminalCreate> {
-  runtime.assertGraphReady()
+): Promise<RuntimeTerminalCreate> {
+  runtime.assertGraphReady()()
   const win = rendererWindow ?? runtime.getAuthoritativeWindow()
   const workspace = worktreeSelector
-    ? await runtime.resolveTerminalWorkspaceLaunchScope(worktreeSelector, createdWorktree)
+    ? await runtime.resolveTerminalWorkspaceLaunchScope()(worktreeSelector, createdWorktree)
     : null
   const launchOpts = workspace
-    ? await runtime.resolveAgentTerminalCreateOptions(workspace, opts)
+    ? await runtime.resolveAgentTerminalCreateOptions()(workspace, opts)
     : opts
   // `resolveAgentTerminalCreateOptions` refuses an unapplicable shell, and it only runs with a
   // workspace; a worktree-less create has no execution host to apply one to either.
@@ -29,16 +57,16 @@ export async function createDesktopTerminal(
   }
   const worktreeId = workspace?.id
   const cwd = workspace
-    ? runtime.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd)
+    ? runtime.resolveWorkspaceTerminalStartupCwd()(workspace, launchOpts.cwd)
     : launchOpts.cwd
-  const requestId = dependencies.randomUUID()
+  const requestId = randomUUID()
   const reply = await new Promise<{ tabId: string; title: string }>((resolve, reject) => {
     const timer = setTimeout(() => {
-      dependencies.getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
+      getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
       reject(new Error('Terminal creation timed out'))
     }, 10000)
     const handler = (
-      event: dependencies.IpcMainEvent,
+      event: IpcMainEvent,
       response: {
         requestId: string
         tabId?: string
@@ -50,14 +78,14 @@ export async function createDesktopTerminal(
         return
       }
       clearTimeout(timer)
-      dependencies.getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
+      getRuntimeDesktopSurface().removeIpcListener('terminal:tabCreateReply', handler)
       if (response.error) {
         reject(new Error(response.error))
       } else {
         resolve({ tabId: response.tabId!, title: response.title ?? launchOpts.title ?? '' })
       }
     }
-    dependencies.getRuntimeDesktopSurface().onIpc('terminal:tabCreateReply', handler)
+    getRuntimeDesktopSurface().onIpc('terminal:tabCreateReply', handler)
     win.webContents.send('terminal:requestTabCreate', {
       requestId,
       worktreeId,
@@ -76,16 +104,16 @@ export async function createDesktopTerminal(
       title: launchOpts.title,
       activate: presentation === 'focused',
       ...(presentation ? { presentation } : {}),
-      ...dependencies.ownerSurfacing(opts.surfaceOwner !== false)
+      ...ownerSurfacing(opts.surfaceOwner !== false)
     })
   })
-  const handle = await runtime.waitForTerminalHandle(reply.tabId)
+  const handle = await runtime.waitForTerminalHandle()(reply.tabId)
   return {
     handle,
     tabId: reply.tabId,
     worktreeId: worktreeId ?? '',
     title: reply.title,
-    ...runtime.getPtyExecutionHostMetadata(runtime.handles.get(handle)?.ptyId ?? null),
+    ...runtime.getPtyExecutionHostMetadata()(runtime.getHandles().get(handle)?.ptyId ?? null),
     surface: 'visible'
   }
 }

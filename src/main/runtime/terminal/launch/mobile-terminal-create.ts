@@ -1,14 +1,45 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithCreateTerminal } from './orca-runtime-create-terminal'
-import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
-import type { TuiAgent } from '../../shared/tui-agent'
-import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
-import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
-import type { RuntimeMobileSessionCreateTerminalResult } from '../../shared/runtime-types'
-import { navigationTargetsHost } from '../../shared/runtime-navigation'
-import { MOBILE_TERMINAL_CREATE_RESULT_TTL_MS } from './orca-runtime-core'
+import type { RuntimeMobileTerminalRendererCreate } from './mobile-terminal-renderer-create'
+import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
+import {
+  type RuntimeNavigationTarget,
+  navigationTargetsHost
+} from '../../../../shared/runtime-navigation'
+import type {
+  RuntimeMobileSessionCreateTerminalResult,
+  RuntimeMobileSessionTabsResult
+} from '../../../../shared/runtime-types'
+import { MOBILE_TERMINAL_CREATE_RESULT_TTL_MS } from '../../orca-runtime-core'
+import type { RuntimeWorkspaceSelectors } from '../../workspaces/workspace-selectors'
 
-export class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRuntimeWithCreateTerminal {
+export type RuntimeMobileTerminalCreateHost = {
+  getMobileTerminalCreateByMutationId(): Map<
+    string,
+    Promise<RuntimeMobileSessionCreateTerminalResult>
+  >
+  runCreateMobileSessionTerminal(): RuntimeMobileTerminalRendererCreate['runCreateMobileSessionTerminal']
+  getValidatedExplicitWorktreeIdSelector(): (selector: string | undefined) => string | null
+  resolveWorktreeSelector(): (
+    ...args: Parameters<RuntimeWorkspaceSelectors['resolveWorktreeSelector']>
+  ) => ReturnType<RuntimeWorkspaceSelectors['resolveWorktreeSelector']>
+  applyMobileSessionTabNavigation(): (
+    snapshot: RuntimeMobileSessionTabsResult,
+    activeTabId: string,
+    navigation: RuntimeNavigationTarget,
+    clientNavigationId?: string
+  ) => RuntimeMobileSessionTabsResult
+  getMobileSessionTabsForWorktree(): (
+    worktreeId: string,
+    clientNavigationId?: string
+  ) => RuntimeMobileSessionTabsResult
+}
+
+export class RuntimeMobileTerminalCreate {
+  constructor(private readonly host: RuntimeMobileTerminalCreateHost) {}
+  private get mobileTerminalCreateByMutationId() {
+    return this.host.getMobileTerminalCreateByMutationId()
+  }
   async createMobileSessionTerminal(
     worktreeSelector: string,
     opts: {
@@ -44,7 +75,7 @@ export class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRuntimeWithC
     const mutationId = opts.clientMutationId
     let result: RuntimeMobileSessionCreateTerminalResult
     if (!mutationId) {
-      result = await this.runCreateMobileSessionTerminal(worktreeSelector, runOpts)
+      result = await this.host.runCreateMobileSessionTerminal()(worktreeSelector, runOpts)
     } else {
       // Why: idempotency is caller-owned; two paired devices may reuse the same mutation id without sharing a result.
       const mutationKey = `${opts.clientNavigationId ?? 'local'}\0${worktreeSelector}\0${mutationId}`
@@ -54,7 +85,7 @@ export class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRuntimeWithC
       // was lost in transit reuses the created terminal; failures are dropped
       // immediately so a retry can start a fresh create.
       const inflight = this.mobileTerminalCreateByMutationId.get(mutationKey)
-      const run = inflight ?? this.runCreateMobileSessionTerminal(worktreeSelector, runOpts)
+      const run = inflight ?? this.host.runCreateMobileSessionTerminal()(worktreeSelector, runOpts)
       if (!inflight) {
         this.mobileTerminalCreateByMutationId.set(mutationKey, run)
         const drop = (): void => {
@@ -70,10 +101,10 @@ export class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRuntimeWithC
     }
     if (select) {
       const worktreeId =
-        this.getValidatedExplicitWorktreeIdSelector(worktreeSelector) ??
-        (await this.resolveWorktreeSelector(worktreeSelector)).id
-      this.applyMobileSessionTabNavigation(
-        this.getMobileSessionTabsForWorktree(worktreeId),
+        this.host.getValidatedExplicitWorktreeIdSelector()(worktreeSelector) ??
+        (await this.host.resolveWorktreeSelector()(worktreeSelector)).id
+      this.host.applyMobileSessionTabNavigation()(
+        this.host.getMobileSessionTabsForWorktree()(worktreeId),
         result.tab.id,
         navigation,
         opts.clientNavigationId

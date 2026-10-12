@@ -1,22 +1,33 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { spawnInAdmittedPane } from './runtime-pane-admission'
 import { OrcaRuntimeWithCreateAgentSession } from './orca-runtime-create-agent-session'
-import type { RuntimeTerminalCreate } from '../../shared/runtime-types'
+import type { RuntimeTerminalCreate, RuntimeTerminalSplit } from '../../shared/runtime-types'
 import { WORKTREE_CREATE_RESULT_TTL_MS } from './orca-runtime-core'
-import { deriveRemoteRuntimeTerminalCreateHandle } from './remote-runtime-terminal-create-identity'
-import { withTimeoutResult } from './runtime-async-boundaries'
-import { PTY_CONTROLLER_LIST_TIMEOUT_MS } from './orca-runtime-postlude'
-import { inferWorktreeIdFromPtyId } from './runtime-worktree-path-identity'
-import { getRegisteredSshState } from '../ssh/ssh-target-registry'
-import {
-  getConnectionExecutionHostId,
-  LOCAL_EXECUTION_HOST_ID,
-  toSshExecutionHostId
-} from '../../shared/execution-host'
-import { resolveWorktreeLaunchHost } from './worktree-launch-host-repo'
 import type { TuiAgent } from '../../shared/tui-agent'
+import { RuntimeTerminalCreateIdentity } from './terminal/launch/terminal-create-identity'
+import { RuntimeAgentTerminalLaunch } from './terminal/launch/agent-terminal-launch'
+import { RuntimeTerminalCreateLaunch } from './terminal/launch/terminal-create'
+import { RuntimeTerminalSplitLaunch } from './terminal/launch/terminal-split'
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
+import type { Worktree } from '../../shared/worktree/types'
+import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 
 export class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithCreateAgentSession {
-  async dedupeTerminalCreate(
+  protected readonly terminalCreateIdentity = new RuntimeTerminalCreateIdentity({
+    getTerminalCreateIdempotency: () => this.terminalCreateIdempotency,
+    reconcileRemoteTerminalCreate: () =>
+      this.sessionPorts.bindRuntimeMethod(this.reconcileRemoteTerminalCreate),
+    resolveTerminalWorkspaceLaunchScope: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveTerminalWorkspaceLaunchScope),
+    getPtyController: () => this.ptyController,
+    adoptControllerTerminalHandle: () =>
+      this.sessionPorts.bindRuntimeMethod(this.adoptControllerTerminalHandle),
+    recordPtyWorktree: () => this.sessionPorts.bindRuntimeMethod(this.recordPtyWorktree),
+    issuePtyHandle: () => this.sessionPorts.bindRuntimeMethod(this.issuePtyHandle),
+    getPtysById: () => this.ptysById
+  })
+  dedupeTerminalCreate(
     clientIdentity: string,
     worktreeSelector: string | undefined,
     clientMutationId: string | undefined,
@@ -26,175 +37,177 @@ export class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithC
       preAllocatedHandle: string | undefined
     ) => Promise<RuntimeTerminalCreate>
   ): Promise<RuntimeTerminalCreate> {
-    if (!clientMutationId || !worktreeSelector) {
-      if (reconcileExisting) {
-        throw new Error('runtime_unavailable')
-      }
-      return await run(worktreeSelector, undefined)
-    }
-    const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector)
-    const canonicalWorktreeSelector = `id:${workspace.id}`
-    const preAllocatedHandle = deriveRemoteRuntimeTerminalCreateHandle(
+    return this.terminalCreateIdentity.dedupeTerminalCreate(
       clientIdentity,
-      workspace.id,
-      clientMutationId
-    )
-    return this.terminalCreateIdempotency.run(
-      clientIdentity,
-      workspace.id,
+      worktreeSelector,
       clientMutationId,
-      async () => {
-        if (reconcileExisting) {
-          const adopted = await this.reconcileRemoteTerminalCreate(
-            workspace.id,
-            preAllocatedHandle,
-            // Why: an unreachable SSH host vanishes from the aggregate listing, which would read
-            // as absence and respawn over live remote work. Local/folder workspaces have no
-            // connection and keep the aggregate listing.
-            workspace.connectionId ?? null
-          )
-          if (adopted) {
-            return adopted
-          }
-        }
-        return await run(canonicalWorktreeSelector, preAllocatedHandle)
-      }
+      reconcileExisting,
+      run
     )
   }
-
-  protected async reconcileRemoteTerminalCreate(
+  protected reconcileRemoteTerminalCreate(
     worktreeId: string,
     terminalHandle: string,
     // Why: an aggregate listing drops a non-answering SSH host silently, which would read as
     // absence. Scoping to the owning host makes an unreachable relay throw instead.
     connectionId?: string | null
   ): Promise<RuntimeTerminalCreate | null> {
-    if (!this.ptyController?.listProcesses) {
-      throw new Error('runtime_unavailable')
-    }
-    const listed = await withTimeoutResult(
-      this.ptyController.listProcesses(
-        connectionId === undefined ? undefined : getConnectionExecutionHostId(connectionId)
-      ),
-      PTY_CONTROLLER_LIST_TIMEOUT_MS
-    )
-    if (!listed.ok) {
-      // Why: unknown inventory cannot prove the first create failed, so spawning could duplicate a live shell.
-      throw new Error('runtime_unavailable')
-    }
-    const matches = listed.value.filter((session) => session.terminalHandle === terminalHandle)
-    if (matches.length > 1) {
-      throw new Error('terminal_create_identity_conflict')
-    }
-    if (matches.length === 0) {
-      const sameWorktreeHasUnknownIdentity = listed.value.some(
-        (session) =>
-          (session.worktreeId ?? inferWorktreeIdFromPtyId(session.id)) === worktreeId &&
-          !session.terminalHandle
-      )
-      if (sameWorktreeHasUnknownIdentity) {
-        // Why: older retained providers may list the first shell without its handle; absence is not authoritative in that shape.
-        throw new Error('runtime_unavailable')
-      }
-      return null
-    }
-    const session = matches[0]
-    const authoritativeWorktreeId = session.worktreeId ?? inferWorktreeIdFromPtyId(session.id)
-    if (authoritativeWorktreeId !== worktreeId) {
-      // Why: a reused address or forged provider record must never adopt a PTY from another workspace.
-      throw new Error('terminal_create_identity_conflict')
-    }
-    this.adoptControllerTerminalHandle(session.id, terminalHandle)
-    const pty = this.recordPtyWorktree(session.id, worktreeId, {
-      connected: true,
-      title: session.title,
-      ...(session.incarnationId ? { incarnationId: session.incarnationId } : {}),
-      ...(session.wslDistro !== undefined
-        ? { wslDistro: session.wslDistro, isWsl: session.wslDistro !== null }
-        : {})
-    })
-    const adoptedHandle = this.issuePtyHandle(pty)
-    if (adoptedHandle !== terminalHandle) {
-      throw new Error('terminal_create_identity_conflict')
-    }
-    return {
-      handle: adoptedHandle,
-      ptyId: session.id,
+    return this.terminalCreateIdentity.reconcileRemoteTerminalCreate(
       worktreeId,
-      title: session.title || null,
-      surface: 'background'
-    }
+      terminalHandle,
+      connectionId
+    )
   }
-
   protected getPtyExecutionHostMetadata(
     ptyId: string | null
   ): Pick<RuntimeTerminalCreate, 'executionHostId' | 'hostPlatform' | 'incarnationId'> {
-    if (!ptyId) {
-      return {}
-    }
-    const pty = this.ptysById.get(ptyId)
-    if (!pty) {
-      return {}
-    }
-    if (pty.connectionId) {
-      const remotePlatform = getRegisteredSshState(pty.connectionId)?.remotePlatform
-      return {
-        executionHostId: toSshExecutionHostId(pty.connectionId),
-        ...(pty.incarnationId ? { incarnationId: pty.incarnationId } : {}),
-        ...(remotePlatform ? { hostPlatform: remotePlatform } : {})
-      }
-    }
-    return {
-      executionHostId: LOCAL_EXECUTION_HOST_ID,
-      ...(pty.incarnationId ? { incarnationId: pty.incarnationId } : {}),
-      hostPlatform: pty.isWsl || pty.wslDistro ? 'linux' : process.platform
-    }
+    return this.terminalCreateIdentity.getPtyExecutionHostMetadata(ptyId)
   }
-
-  async launchAgentTerminal(
+  protected readonly agentTerminalLaunch = new RuntimeAgentTerminalLaunch({
+    resolveWorktreeSelector: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveWorktreeSelector),
+    getStore: () => this.store,
+    buildStartupForAgent: () => this.sessionPorts.bindRuntimeMethod(this.buildStartupForAgent),
+    createTerminal: () => this.sessionPorts.bindRuntimeMethod(this.createTerminal),
+    sendStartupFollowupWhenReady: () =>
+      this.sessionPorts.bindRuntimeMethod(this.sendStartupFollowupWhenReady)
+  })
+  launchAgentTerminal(
     worktreeSelector: string,
     opts: { agent: TuiAgent; prompt: string; title?: string; extraAgentArgs?: string }
   ): Promise<RuntimeTerminalCreate> {
-    const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    // Why: `getRepo(id)` is host-blind; the same repo id on two hosts must build the launch for the
-    // host that owns this worktree (#11163).
-    const resolution = resolveWorktreeLaunchHost(this.store?.getRepos() ?? [], worktree)
-    if (resolution.kind === 'ambiguous') {
-      throw new Error('worktree_execution_host_unresolved')
-    }
-    const repo = resolution.repo ?? this.store?.getRepo(worktree.repoId)
-    if (!repo) {
-      throw new Error('Repository for the selected workspace is no longer available.')
-    }
-    const startup = this.buildStartupForAgent(
-      repo,
-      opts.agent,
-      opts.prompt,
-      undefined,
-      opts.extraAgentArgs ? { extraAgentArgs: opts.extraAgentArgs } : undefined
-    )
-    const terminal = await this.createTerminal(`id:${worktree.id}`, {
-      command: startup.startup.command,
-      env: startup.startup.env,
-      ...(startup.startup.launchConfig ? { launchConfig: startup.startup.launchConfig } : {}),
-      launchAgent: startup.agent,
-      startupCommandDelivery: startup.startup.startupCommandDelivery,
-      telemetry: startup.startup.telemetry,
-      title: opts.title
-    })
-    // Why: agents that read the prompt after they start get it typed in, not on argv.
-    if (startup.followup) {
-      this.sendStartupFollowupWhenReady(terminal.handle, startup.followup)
-    }
-    return terminal
+    return this.agentTerminalLaunch.launchAgentTerminal(worktreeSelector, opts)
   }
-
-  // Why: dedupes a worktree.create whose response was lost when a mobile
-  // connection migration (relay/direct hand-off on shoddy cellular) rejected the
-  // in-flight request. A retry with the same clientMutationId returns the
-  // in-flight or just-finished create instead of a duplicate worktree; failures
-  // drop immediately so a genuine retry starts fresh, and successes linger
-  // briefly so a retry whose response was lost in the cutover still reconciles.
+  protected readonly terminalCreate = new RuntimeTerminalCreateLaunch({
+    assertGraphReady: () => this.sessionPorts.bindRuntimeMethod(this.assertGraphReady),
+    getAuthoritativeWindow: () => this.getAuthoritativeWindow(),
+    waitForTerminalHandle: () => this.sessionPorts.bindRuntimeMethod(this.waitForTerminalHandle),
+    getHandles: () => this.handles,
+    spawnInAdmittedPane: () => {
+      const spawn = spawnInAdmittedPane
+      const store = this.store
+      const controller = this.ptyController
+      return (args) => spawn(store, controller, args)
+    },
+    getAvailableAuthoritativeWindow: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getAvailableAuthoritativeWindow),
+    getPtyController: () => this.ptyController,
+    resolveTerminalWorkspaceLaunchScope: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveTerminalWorkspaceLaunchScope),
+    resolveAgentTerminalCreateOptions: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveAgentTerminalCreateOptions),
+    resolveWorkspaceTerminalStartupCwd: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveWorkspaceTerminalStartupCwd),
+    createPreAllocatedTerminalHandle: () =>
+      this.sessionPorts.bindRuntimeMethod(this.createPreAllocatedTerminalHandle),
+    getStore: () => this.store,
+    getClaudeAgentTeams: () => this.claudeAgentTeams,
+    buildTerminalWorkspaceEnv: () =>
+      this.sessionPorts.bindRuntimeMethod(this.buildTerminalWorkspaceEnv),
+    assertPtyDidNotExitBeforeRegistration: () =>
+      this.sessionPorts.bindRuntimeMethod(this.assertPtyDidNotExitBeforeRegistration),
+    releaseRejectedPtyRegistrationFence: () =>
+      this.sessionPorts.bindRuntimeMethod(this.releaseRejectedPtyRegistrationFence),
+    registerPreAllocatedHandleForPty: () =>
+      this.sessionPorts.bindRuntimeMethod(this.registerPreAllocatedHandleForPty),
+    preparePtyExecutionContext: () =>
+      this.sessionPorts.bindRuntimeMethod(this.preparePtyExecutionContext),
+    registerPty: () => this.sessionPorts.bindRuntimeMethod(this.registerPty),
+    getOrCreatePtyWorktreeRecord: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getOrCreatePtyWorktreeRecord),
+    nextTitleObservationSequence: () =>
+      this.sessionPorts.bindRuntimeMethod(this.nextTitleObservationSequence),
+    setPtyManagementTitleFromObservedTitle: () =>
+      this.sessionPorts.bindRuntimeMethod(this.setPtyManagementTitleFromObservedTitle),
+    getGraphSequence: () => this.graphSequence,
+    issuePtyHandle: () => this.sessionPorts.bindRuntimeMethod(this.issuePtyHandle),
+    publishPtyBackedMobileSessionTerminal: () =>
+      this.sessionPorts.bindRuntimeMethod(this.publishPtyBackedMobileSessionTerminal),
+    getNotifier: () => this.notifier,
+    getPtyExecutionHostMetadata: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getPtyExecutionHostMetadata)
+  })
+  createTerminal(
+    worktreeSelector?: string,
+    opts: TerminalCreateOptions = {},
+    // Internal creation evidence; RPC and preload callers never supply it.
+    created?: Worktree
+  ): Promise<RuntimeTerminalCreate> {
+    return this.terminalCreate.createTerminal(worktreeSelector, opts, created)
+  }
+  protected readonly terminalSplit = new RuntimeTerminalSplitLaunch({
+    splitPtyBackedTerminal: () => this.sessionPorts.bindRuntimeMethod(this.splitPtyBackedTerminal),
+    spawnInAdmittedPane: () => {
+      const spawn = spawnInAdmittedPane
+      const store = this.store
+      const controller = this.ptyController
+      return (args) => spawn(store, controller, args)
+    },
+    getLivePtyForHandle: () => this.sessionPorts.bindRuntimeMethod(this.getLivePtyForHandle),
+    assertGraphReady: () => this.sessionPorts.bindRuntimeMethod(this.assertGraphReady),
+    getLiveLeafForHandle: () => this.sessionPorts.bindRuntimeMethod(this.getLiveLeafForHandle),
+    getNotifier: () => this.notifier,
+    waitForLeafInTab: () => this.sessionPorts.bindRuntimeMethod(this.waitForLeafInTab),
+    getPtyController: () => this.ptyController,
+    resolveTerminalWorkspaceLaunchScope: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveTerminalWorkspaceLaunchScope),
+    resolveTerminalSplitSourceAuthority: () =>
+      this.sessionPorts.bindRuntimeMethod(this.resolveTerminalSplitSourceAuthority),
+    createPreAllocatedTerminalHandle: () =>
+      this.sessionPorts.bindRuntimeMethod(this.createPreAllocatedTerminalHandle),
+    buildTerminalWorkspaceEnv: () =>
+      this.sessionPorts.bindRuntimeMethod(this.buildTerminalWorkspaceEnv),
+    getStore: () => this.store,
+    registerPreAllocatedHandleForPty: () =>
+      this.sessionPorts.bindRuntimeMethod(this.registerPreAllocatedHandleForPty),
+    preparePtyExecutionContext: () =>
+      this.sessionPorts.bindRuntimeMethod(this.preparePtyExecutionContext),
+    registerPty: () => this.sessionPorts.bindRuntimeMethod(this.registerPty),
+    getOrCreatePtyWorktreeRecord: () =>
+      this.sessionPorts.bindRuntimeMethod(this.getOrCreatePtyWorktreeRecord),
+    getGraphSequence: () => this.graphSequence,
+    setPairedRendererSessionOwnership: () =>
+      this.sessionPorts.bindRuntimeMethod(this.setPairedRendererSessionOwnership),
+    getPairedRendererSessionOwnedPtyIds: () => this.pairedRendererSessionOwnedPtyIds,
+    publishPtyBackedMobileSessionTerminal: () =>
+      this.sessionPorts.bindRuntimeMethod(this.publishPtyBackedMobileSessionTerminal),
+    issuePtyHandle: () => this.sessionPorts.bindRuntimeMethod(this.issuePtyHandle)
+  })
+  splitTerminal(
+    handle: string,
+    opts: {
+      direction?: 'horizontal' | 'vertical'
+      command?: string
+      env?: Record<string, string>
+      envToDelete?: string[]
+      activate?: boolean
+      // Why: same split as createTerminal — adopt the pane without revealing its
+      // workspace, for splits the user never asked to see.
+      surfaceOwner?: false
+      telemetrySource?: TerminalPaneSplitSource
+    } = {},
+    // Internal creation evidence; RPC and preload callers never supply it.
+    createdWorktree?: Worktree
+  ): Promise<RuntimeTerminalSplit> {
+    return this.terminalSplit.splitTerminal(handle, opts, createdWorktree)
+  }
+  protected splitPtyBackedTerminal(
+    pty: RuntimePtyWorktreeRecord,
+    opts: {
+      direction?: 'horizontal' | 'vertical'
+      command?: string
+      env?: Record<string, string>
+      envToDelete?: string[]
+      activate?: boolean
+      // Why: same split as createTerminal — adopt the pane without revealing its
+      // workspace, for splits the user never asked to see.
+      surfaceOwner?: false
+      telemetrySource?: TerminalPaneSplitSource
+    } = {},
+    createdWorktree?: Worktree
+  ): Promise<RuntimeTerminalSplit> {
+    return this.terminalSplit.splitPtyBackedTerminal(pty, opts, createdWorktree)
+  }
   dedupeWorktreeCreate<T>(
     repoSelector: string,
     clientMutationId: string | undefined,

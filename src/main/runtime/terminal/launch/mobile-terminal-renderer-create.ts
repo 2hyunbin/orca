@@ -1,22 +1,25 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithCreateMobileSessionTerminal } from './orca-runtime-create-mobile-session-terminal'
-import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
-import type { TuiAgent } from '../../shared/tui-agent'
-import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
-import type { RuntimeMobileSessionCreateTerminalResult } from '../../shared/runtime-types'
+import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
+import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
-import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
+import { getRuntimeDesktopSurface } from '../../runtime-desktop-surface'
 import type { IpcMainEvent } from 'electron'
 import {
   MOBILE_TERMINAL_READY_FALLBACK_MS,
   MOBILE_TERMINAL_SURFACE_TIMEOUT_MS,
   isClientDisconnectedError
-} from './orca-runtime-core'
-import { rendererPublicationThrottle } from '../window/renderer-publication-throttle'
-import { deterministicAgentSessionUuid } from './runtime-agent-launch-resolution'
+} from '../../orca-runtime-core'
+import { rendererPublicationThrottle } from '../../../window/renderer-publication-throttle'
+import { deterministicAgentSessionUuid } from '../../runtime-agent-launch-resolution'
+import type { RuntimeMobileTerminalRendererCreateHost } from './mobile-terminal-renderer-create-host'
 
-export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWithCreateMobileSessionTerminal {
-  protected async runCreateMobileSessionTerminal(
+export class RuntimeMobileTerminalRendererCreate {
+  constructor(private readonly host: RuntimeMobileTerminalRendererCreateHost) {}
+  private get notifier() {
+    return this.host.getNotifier()
+  }
+  async runCreateMobileSessionTerminal(
     worktreeSelector: string,
     opts: {
       afterTabId?: string
@@ -39,11 +42,11 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
     } = {}
   ): Promise<RuntimeMobileSessionCreateTerminalResult> {
     const pairedCreate = Boolean(opts.clientNavigationId)
-    const graphEpoch = this.captureReadyGraphEpoch()
-    const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector)
+    const graphEpoch = this.host.captureReadyGraphEpoch()()
+    const workspace = await this.host.resolveTerminalWorkspaceLaunchScope()(worktreeSelector)
     const worktreeId = workspace.id
-    const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
-    this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
+    const cwd = this.host.resolveWorkspaceTerminalStartupCwd()(workspace, opts.cwd)
+    this.host.hydrateHeadlessMobileSessionTabsFromWorkspaceSession()(worktreeId)
     // Older mobile clients append their optimistic tab, so make the host append too until the
     // client advertises the grouped placement contract.
     const requestedAfterTabId = opts.afterTabId
@@ -53,7 +56,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         : requestedAfterTabId
     let afterDesktopTabId: string | undefined
     if (requestedAfterTabId) {
-      const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+      const snapshot = this.host.getMobileSessionTabsByWorktree().get(worktreeId)
       const anchor = snapshot?.tabs.find((tab) => tab.id === requestedAfterTabId)
       if (!anchor) {
         throw new Error('after_tab_not_found')
@@ -62,8 +65,8 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         afterDesktopTabId = anchor.type === 'terminal' ? anchor.parentTabId : anchor.id
       }
     }
-    const startupCommand = await this.resolveMobileSessionTerminalCommand(workspace, opts)
-    this.assertStableReadyGraph(graphEpoch)
+    const startupCommand = await this.host.resolveMobileSessionTerminalCommand()(workspace, opts)
+    this.host.assertStableReadyGraph()(graphEpoch)
     if (opts.signal?.aborted) {
       throw new Error('client_disconnected')
     }
@@ -71,7 +74,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
       const clientIdentity = opts.clientNavigationId ?? 'local'
       const seed = `${clientIdentity}\0${worktreeId}\0${opts.clientMutationId}`
       // A command-bearing retry must reconcile the owning PTY before delivering the resume again.
-      return await this.createRuntimeOwnedMobileSessionTerminal(
+      return await this.host.createRuntimeOwnedMobileSessionTerminal()(
         worktreeId,
         opts.activate !== false,
         afterTabId,
@@ -90,9 +93,9 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         }
       )
     }
-    const win = this.getAvailableAuthoritativeWindow()
+    const win = this.host.getAvailableAuthoritativeWindow()()
     if (!win) {
-      return await this.createRuntimeOwnedMobileSessionTerminal(
+      return await this.host.createRuntimeOwnedMobileSessionTerminal()(
         worktreeId,
         opts.activate !== false,
         afterTabId,
@@ -179,7 +182,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
       // Why: a rescue publishes into the active group (opts.targetGroupId is not
       // threaded); the renderer's reconciling publication then moves the tab to the
       // requested group, so any wrong-group placement is cosmetic and stall-window-only.
-      this.pendingMobileTerminalCreatesByKey.set(pendingCreateKey, {
+      this.host.getPendingMobileTerminalCreatesByKey().set(pendingCreateKey, {
         activate: opts.activate !== false,
         paired: pairedCreate,
         selectIfNoActiveTab: true,
@@ -190,34 +193,36 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         // Why: the PTY spawn and the tabCreate reply race on independent IPC
         // channels; if the spawn already registered, publish immediately so the
         // wait resolves without depending on a graph sync.
-        this.ensurePtyBackedMobileSurfaceForRendererTab(worktreeId, reply.tabId)
-        const surface = await this.waitForMobileTerminalSurface(worktreeId, reply.tabId, {
+        this.host.ensurePtyBackedMobileSurfaceForRendererTab()(worktreeId, reply.tabId)
+        const surface = await this.host.waitForMobileTerminalSurface()(worktreeId, reply.tabId, {
           timeoutMs: MOBILE_TERMINAL_SURFACE_TIMEOUT_MS,
           signal: opts.signal
         })
-        if (this.isReadyMobileTerminalSurface(surface)) {
-          this.deliverPendingStartupCommandToBareRendererPty(worktreeId, reply.tabId)
+        if (this.host.isReadyMobileTerminalSurface()(surface)) {
+          this.host.deliverPendingStartupCommandToBareRendererPty()(worktreeId, reply.tabId)
           return surface
         }
-        const readySurface = await this.waitForMobileTerminalSurface(worktreeId, reply.tabId, {
-          timeoutMs: MOBILE_TERMINAL_READY_FALLBACK_MS,
-          requireReady: true,
-          signal: opts.signal
-        }).catch(() => null)
+        const readySurface = await this.host
+          .waitForMobileTerminalSurface()(worktreeId, reply.tabId, {
+            timeoutMs: MOBILE_TERMINAL_READY_FALLBACK_MS,
+            requireReady: true,
+            signal: opts.signal
+          })
+          .catch(() => null)
         if (readySurface) {
-          this.deliverPendingStartupCommandToBareRendererPty(worktreeId, reply.tabId)
+          this.host.deliverPendingStartupCommandToBareRendererPty()(worktreeId, reply.tabId)
           return readySurface
         }
         if (opts.signal?.aborted) {
           // Why: nobody awaits this create anymore; don't materialize or roll back — the renderer's own publication settles the tab.
           throw new Error('client_disconnected')
         }
-        const pendingSurface = this.findMobileTerminalSurface(worktreeId, reply.tabId)
+        const pendingSurface = this.host.findMobileTerminalSurface()(worktreeId, reply.tabId)
         if (!pendingSurface) {
           throw new Error('Timed out waiting for terminal surface after creation')
         }
         // Why: a hidden renderer can publish the tab shell before the PTY spawns; reuse the same identity so later focus adopts instead of creating another tab.
-        return await this.createRuntimeOwnedMobileSessionTerminal(
+        return await this.host.createRuntimeOwnedMobileSessionTerminal()(
           worktreeId,
           opts.activate !== false,
           afterTabId,
@@ -238,17 +243,20 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         )
       } catch (error) {
         // Why: publication latency (hidden renderer) can trip the surface timeout; rescue only when a live PTY backs the tab, else a ghost tab skips rollback (#7587).
-        if (this.findLiveRegisteredPtyForRendererTab(worktreeId, reply.tabId)) {
-          const rescued = this.ensurePtyBackedMobileSurfaceForRendererTab(worktreeId, reply.tabId)
+        if (this.host.findLiveRegisteredPtyForRendererTab()(worktreeId, reply.tabId)) {
+          const rescued = this.host.ensurePtyBackedMobileSurfaceForRendererTab()(
+            worktreeId,
+            reply.tabId
+          )
           if (rescued) {
-            this.deliverPendingStartupCommandToBareRendererPty(worktreeId, reply.tabId)
+            this.host.deliverPendingStartupCommandToBareRendererPty()(worktreeId, reply.tabId)
             return rescued
           }
         }
         // Why: don't roll back on a client disconnect or a live shell already backing the tab — that would kill a visible terminal ("tab dies after ~10s", #7718).
         if (
           isClientDisconnectedError(error) ||
-          this.hasLiveShellForRendererTab(worktreeId, reply.tabId)
+          this.host.hasLiveShellForRendererTab()(worktreeId, reply.tabId)
         ) {
           throw error
         }
@@ -256,7 +264,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         this.notifier?.closeTerminal(reply.tabId)
         throw error
       } finally {
-        this.pendingMobileTerminalCreatesByKey.delete(pendingCreateKey)
+        this.host.getPendingMobileTerminalCreatesByKey().delete(pendingCreateKey)
       }
     } finally {
       releasePublicationThrottle()

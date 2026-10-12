@@ -1,18 +1,71 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithSplitTerminal } from './orca-runtime-split-terminal'
-import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
-import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
-import type { RuntimeTerminalSplit } from '../../shared/runtime-types'
-import { makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
-import { recordPtySurface, spawnSurfaceClaimSequence } from './pty-recorded-surface-topology'
+import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
+import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
-import { runtimeSplitPlacement } from './runtime-terminal-spawn-placement'
-import { REJECTED_SPLIT_PTY_STOP_TIMEOUT_MS, ownerSurfacing } from './orca-runtime-core'
-import type { Worktree } from '../../shared/worktree/types'
-import { spawnInAdmittedPane, withdrawRuntimePane } from './runtime-pane-admission'
+import type { Worktree } from '../../../../shared/worktree/types'
+import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
+import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
+import { recordPtySurface, spawnSurfaceClaimSequence } from '../../pty-recorded-surface-topology'
+import { runtimeSplitPlacement } from '../../runtime-terminal-spawn-placement'
+import { REJECTED_SPLIT_PTY_STOP_TIMEOUT_MS, ownerSurfacing } from '../../orca-runtime-core'
+import { type spawnInAdmittedPane, withdrawRuntimePane } from '../../runtime-pane-admission'
+import type { RuntimeTerminalSplitLaunchHost } from './terminal-split-host'
 
-export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitTerminal {
-  protected async splitPtyBackedTerminal(
+export class RuntimeTerminalSplitLaunch {
+  constructor(private readonly host: RuntimeTerminalSplitLaunchHost) {}
+  private get notifier() {
+    return this.host.getNotifier()
+  }
+  private get ptyController() {
+    return this.host.getPtyController()
+  }
+  private get store() {
+    return this.host.getStore()
+  }
+  async splitTerminal(
+    handle: string,
+    opts: {
+      direction?: 'horizontal' | 'vertical'
+      command?: string
+      env?: Record<string, string>
+      envToDelete?: string[]
+      activate?: boolean
+      // Why: same split as createTerminal — adopt the pane without revealing its
+      // workspace, for splits the user never asked to see.
+      surfaceOwner?: false
+      telemetrySource?: TerminalPaneSplitSource
+    } = {},
+    // Internal creation evidence; RPC and preload callers never supply it.
+    createdWorktree?: Worktree
+  ): Promise<RuntimeTerminalSplit> {
+    const livePty = this.host.getLivePtyForHandle()(handle)
+    if (livePty) {
+      return await this.host.splitPtyBackedTerminal()(livePty.pty, opts, createdWorktree)
+    }
+    this.host.assertGraphReady()()
+    const { leaf } = this.host.getLiveLeafForHandle()(handle)
+    const direction = opts.direction ?? 'horizontal'
+
+    const newLeafId = randomUUID()
+
+    this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
+      direction,
+      command: opts.command,
+      worktreeId: leaf.worktreeId,
+      sourceLeafId: leaf.leafId,
+      telemetrySource: opts.telemetrySource,
+      newLeafId
+    })
+
+    const newHandle = await this.host.waitForLeafInTab()(leaf.tabId, newLeafId)
+    return {
+      handle: newHandle,
+      tabId: leaf.tabId,
+      paneRuntimeId: leaf.paneRuntimeId,
+      leafId: newLeafId
+    }
+  }
+
+  async splitPtyBackedTerminal(
     pty: RuntimePtyWorktreeRecord,
     opts: {
       direction?: 'horizontal' | 'vertical'
@@ -39,11 +92,11 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
       throw new Error('terminal_handle_stale')
     }
     const direction = opts.direction ?? 'horizontal'
-    const workspace = await this.resolveTerminalWorkspaceLaunchScope(
+    const workspace = await this.host.resolveTerminalWorkspaceLaunchScope()(
       `id:${pty.worktreeId}`,
       createdWorktree
     )
-    const sourceAuthority = this.resolveTerminalSplitSourceAuthority(
+    const sourceAuthority = this.host.resolveTerminalSplitSourceAuthority()(
       workspace.id,
       parentTabId,
       parsedPaneKey.leafId,
@@ -55,15 +108,20 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
     const sourceIncarnationId =
       sourceAuthority.liveIncarnationId ?? sourceAuthority.persistedIncarnationId
     const leafId = randomUUID()
-    const preAllocatedHandle = this.createPreAllocatedTerminalHandle()
+    const preAllocatedHandle = this.host.createPreAllocatedTerminalHandle()()
     const paneKey = makePaneKey(parentTabId, leafId)
-    const splitArgs = {
+    const splitArgs: Parameters<typeof spawnInAdmittedPane>[2] = {
       cols: 120,
       rows: 40,
       cwd: workspace.path,
       command: opts.command,
       commandDelivery: 'provider',
-      env: await this.buildTerminalWorkspaceEnv(workspace, opts.env ?? {}, paneKey, parentTabId),
+      env: await this.host.buildTerminalWorkspaceEnv()(
+        workspace,
+        opts.env ?? {},
+        paneKey,
+        parentTabId
+      ),
       envToDelete: opts.envToDelete,
       connectionId: workspace.connectionId,
       worktreeId: workspace.id,
@@ -91,24 +149,24 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
           }
         : {})
     }
-    const result = await spawnInAdmittedPane(this.store, this.ptyController, splitArgs)
-    this.registerPreAllocatedHandleForPty(result.id, preAllocatedHandle)
+    const result = await this.host.spawnInAdmittedPane()(splitArgs)
+    this.host.registerPreAllocatedHandleForPty()(result.id, preAllocatedHandle)
     if (result.wslDistro) {
-      this.preparePtyExecutionContext(result.id, result.wslDistro)
+      this.host.preparePtyExecutionContext()(result.id, result.wslDistro)
     }
-    this.registerPty(result.id, workspace.id, workspace.connectionId)
-    const createdPty = this.getOrCreatePtyWorktreeRecord(result.id)
+    this.host.registerPty()(result.id, workspace.id, workspace.connectionId)
+    const createdPty = this.host.getOrCreatePtyWorktreeRecord()(result.id)
     if (createdPty) {
       recordPtySurface(
         createdPty,
         parentTabId,
         paneKey,
-        spawnSurfaceClaimSequence(this.graphSequence)
+        spawnSurfaceClaimSequence(this.host.getGraphSequence())
       )
       createdPty.runtimeSessionOwned = pty.runtimeSessionOwned
-      this.setPairedRendererSessionOwnership(
+      this.host.setPairedRendererSessionOwnership()(
         createdPty.ptyId,
-        this.pairedRendererSessionOwnedPtyIds.has(pty.ptyId)
+        this.host.getPairedRendererSessionOwnedPtyIds().has(pty.ptyId)
       )
     }
 
@@ -128,7 +186,7 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
 
     try {
       const revalidateSourceAuthority = (): void => {
-        const current = this.resolveTerminalSplitSourceAuthority(
+        const current = this.host.resolveTerminalSplitSourceAuthority()(
           workspace.id,
           parentTabId,
           parsedPaneKey.leafId,
@@ -152,7 +210,7 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
         revalidateSourceAuthority()
       }
       if (createdPty) {
-        this.publishPtyBackedMobileSessionTerminal(workspace.id, createdPty, {
+        this.host.publishPtyBackedMobileSessionTerminal()(workspace.id, createdPty, {
           tabId: parentTabId,
           leafId,
           title: null,
@@ -161,7 +219,7 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
         })
       }
     } catch (error) {
-      this.setPairedRendererSessionOwnership(result.id, false)
+      this.host.setPairedRendererSessionOwnership()(result.id, false)
       let stopped = false
       try {
         stopped =
@@ -187,7 +245,7 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
       throw error
     }
     const committedSourceAuthority = sourceAuthority.persisted
-      ? this.resolveTerminalSplitSourceAuthority(
+      ? this.host.resolveTerminalSplitSourceAuthority()(
           workspace.id,
           parentTabId,
           parsedPaneKey.leafId,
@@ -200,7 +258,7 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
     }
 
     return {
-      handle: this.issuePtyHandle(createdPty ?? pty),
+      handle: this.host.issuePtyHandle()(createdPty ?? pty),
       tabId: parentTabId,
       paneRuntimeId: -1,
       leafId

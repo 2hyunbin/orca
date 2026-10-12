@@ -1,5 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithSplitPtyBackedTerminal } from './orca-runtime-split-pty-backed-terminal'
+import { OrcaRuntimeWithStopExplicitlyClosedTabPtys } from './orca-runtime-stop-explicitly-closed-tab-ptys'
 import {
   resolveTerminalSessionWorktreeId,
   runtimeWorktreeIdsEqual
@@ -16,7 +16,7 @@ import {
 } from './claude-agent-teams-shim-env'
 import { applyClaudeEnvPatch } from '../claude-accounts/environment'
 
-export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRuntimeWithSplitPtyBackedTerminal {
+export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
   protected resolveTerminalSplitSourceAuthority(
     worktreeId: string,
     tabId: string,

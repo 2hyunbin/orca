@@ -1,9 +1,9 @@
+import { RemoteRuntimeTerminalCreateIdempotency } from './remote-runtime-terminal-create-idempotency'
 import { describe, expect, it, vi } from 'vitest'
 import type { PtyProcessInfo } from '../providers/types'
 import type { RuntimeTerminalCreate } from '../../shared/runtime-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { deriveRemoteRuntimeTerminalCreateHandle } from './remote-runtime-terminal-create-identity'
-import { RemoteRuntimeTerminalCreateIdempotency } from './remote-runtime-terminal-create-idempotency'
 
 type CreateRun = (
   canonicalWorktreeSelector: string | undefined,
@@ -15,9 +15,8 @@ function createRuntimeForDedupe(
   scope: { connectionId?: string | null } = {}
 ) {
   const handleByPtyId = new Map<string, string>()
-  const runtime = Object.create(OrcaRuntimeService.prototype) as OrcaRuntimeService
+  const runtime = new OrcaRuntimeService()
   Object.assign(runtime, {
-    terminalCreateIdempotency: new RemoteRuntimeTerminalCreateIdempotency(),
     ptyController: { listProcesses },
     resolveTerminalWorkspaceLaunchScope: vi.fn(async (selector: string) => ({
       id: selector.startsWith('id:') ? selector.slice(3) : selector,
