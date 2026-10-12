@@ -1,4 +1,6 @@
+import { translate } from '@/i18n/i18n'
 import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
+import { noticeOutput } from './ipynb-kernel-runs'
 import { isRecord } from './ipynb-parse'
 
 /** An nbformat v4 output; while live it may also carry the kernel's `transient.display_id`. */
@@ -14,6 +16,14 @@ type StreamText = { text: string; tailStart: number; trailingReturn: boolean }
 
 // Why: weak output keys keep cursors off saved notebook data and release them with discarded outputs.
 const streamTextByOutput = new WeakMap<NotebookOutput, StreamText>()
+
+// Why: like the old per-process runner's 2 MiB cut, a bigger text block stalls the cell's rendering.
+const MAX_STREAM_CHARS = 2 * 1024 * 1024
+// Why: images and HTML get more room than text, but a looping display() still has a ceiling.
+const MAX_OUTPUT_CHARS = 16 * 1024 * 1024
+const MAX_OUTPUTS = 500
+const truncationNotices = new WeakSet<NotebookOutput>()
+const richOutputSizes = new WeakMap<NotebookOutput, number>()
 
 /** Applies terminal-style `\r` rewrites (progress bars), keeping a trailing `\r` for the next chunk. */
 export function collapseCarriageReturns(text: string): string {
@@ -83,6 +93,72 @@ function toOutput(type: KernelOutputType, content: Record<string, unknown>): Not
     : { output_type: 'display_data', ...bundle, transient: content.transient }
 }
 
+function outputSize(output: NotebookOutput): number {
+  if (output.output_type === 'stream') {
+    return String(output.text).length
+  }
+  let size = richOutputSizes.get(output)
+  if (size === undefined) {
+    size = JSON.stringify(output.data ?? output.traceback ?? null).length
+    richOutputSizes.set(output, size)
+  }
+  return size
+}
+
+function truncationNotice(): NotebookOutput {
+  const notice = noticeOutput(
+    translate(
+      'auto.components.editor.IpynbViewer.outputTruncated',
+      'Output truncated: this cell produced more output than Orca keeps, so the rest is not shown.'
+    )
+  )
+  truncationNotices.add(notice)
+  return notice
+}
+
+/** Keeps the head of the cell's output within budget; the output that just grew is the one cut. */
+function fitBudget(outputs: NotebookOutput[]): NotebookOutput[] {
+  let streamChars = 0
+  let totalChars = 0
+  for (const output of outputs) {
+    const size = outputSize(output)
+    totalChars += size
+    streamChars += output.output_type === 'stream' ? size : 0
+  }
+  if (
+    outputs.length <= MAX_OUTPUTS &&
+    streamChars <= MAX_STREAM_CHARS &&
+    totalChars <= MAX_OUTPUT_CHARS
+  ) {
+    return outputs
+  }
+  const last = outputs.at(-1)
+  let keep = 0
+  if (last?.output_type === 'stream' && outputs.length <= MAX_OUTPUTS) {
+    const text = String(last.text)
+    keep = text.length - Math.max(streamChars - MAX_STREAM_CHARS, totalChars - MAX_OUTPUT_CHARS)
+    // Why: never split a surrogate pair at the cut.
+    keep -= /[\ud800-\udbff]/.test(text.charAt(keep - 1)) ? 1 : 0
+  }
+  return [
+    ...outputs.slice(0, -1),
+    ...(last && keep > 0 ? [{ ...last, text: String(last.text).slice(0, keep) }] : []),
+    truncationNotice()
+  ]
+}
+
+function appendOutput(
+  outputs: NotebookOutput[],
+  type: KernelOutputType,
+  content: Record<string, unknown>
+): NotebookOutput[] {
+  const last = outputs.at(-1)
+  if (type === 'stream' && last?.output_type === 'stream' && last.name === content.name) {
+    return [...outputs.slice(0, -1), streamOutput(content, last)]
+  }
+  return [...outputs, type === 'stream' ? streamOutput(content) : toOutput(type, content)]
+}
+
 export function applyKernelOutput<T extends LiveOutputs>(
   live: T,
   type: KernelOutputType,
@@ -105,16 +181,18 @@ export function applyKernelOutput<T extends LiveOutputs>(
     }
   }
   const outputs = live.clearOnNextOutput ? [] : live.outputs
-  const last = outputs.at(-1)
-  if (type === 'stream' && last?.output_type === 'stream' && last.name === content.name) {
-    return {
-      ...live,
-      outputs: [...outputs.slice(0, -1), streamOutput(content, last)],
-      clearOnNextOutput: false
-    }
+  // Why: the kernel sends at most one error and one result per run, so keeping them stays bounded.
+  if (type === 'error' || type === 'execute_result') {
+    return { ...live, outputs: appendOutput(outputs, type, content), clearOnNextOutput: false }
   }
-  const output = type === 'stream' ? streamOutput(content) : toOutput(type, content)
-  return { ...live, outputs: [...outputs, output], clearOnNextOutput: false }
+  if (outputs.some((output) => truncationNotices.has(output))) {
+    return live
+  }
+  return {
+    ...live,
+    outputs: fitBudget(appendOutput(outputs, type, content)),
+    clearOnNextOutput: false
+  }
 }
 
 /** Drops live-only fields so the outputs are valid nbformat. */
