@@ -3,7 +3,7 @@ import type { Store } from './persistence'
 
 const AUTH_PRESERVATION_TIMEOUT_MS = 2_000
 
-type CodexRuntimeAuthSync = Pick<CodexRuntimeHomeService, 'syncForCurrentSelection'> &
+export type CodexRuntimeAuthSync = Pick<CodexRuntimeHomeService, 'syncForCurrentSelection'> &
   Partial<Pick<CodexRuntimeHomeService, 'syncActiveWslSelectionsBeforeRestart'>>
 type ShutdownStore = Pick<Store, 'flushPendingOrThrowAsync'>
 
@@ -31,18 +31,6 @@ export async function preserveAgentAuthBeforeRestart({
       )
     : Promise.resolve()
   await Promise.all([wslCodexPreservation, storePreservation])
-}
-
-/** Before any update restart, desktop or headless serve: save agent auth, then a full store checkpoint. */
-export async function preserveStateBeforeUpdateRestart({
-  codexRuntimeHome,
-  store
-}: {
-  codexRuntimeHome: CodexRuntimeAuthSync | null | undefined
-  store: ShutdownStore
-}): Promise<void> {
-  await preserveAgentAuthBeforeRestart({ codexRuntimeHome, store })
-  await store.flushPendingOrThrowAsync({ fullCheckpoint: true })
 }
 
 function remainingLifecycleTime(startedAt: number): number {

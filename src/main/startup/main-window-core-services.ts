@@ -6,10 +6,8 @@ import { resolveUpdateInstallMode } from '../updater'
 import { mainProcessState as state } from './main-process-state'
 import { prepareCodexAiVaultSessionResume } from '../codex/codex-ai-vault-session-resume'
 import { resolveHostCodexSessionSourceHome } from '../codex/codex-session-source-home'
-import {
-  preserveAgentAuthBeforeRestart,
-  preserveStateBeforeUpdateRestart
-} from '../agent-auth-restart-preservation'
+import { preserveAgentAuthBeforeRestart } from '../agent-auth-restart-preservation'
+import { preserveStateBeforeUpdateRestart } from '../update-restart-preservation'
 import {
   emitPluginWorktreeLifecycle,
   handleCodexHomePtySpawned,
