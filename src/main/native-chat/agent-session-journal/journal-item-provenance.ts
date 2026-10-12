@@ -94,6 +94,14 @@ export function stampJournalEntryProvenance(
   return { ...body, blocks }
 }
 
+/** An entry's generation: its own stamp, else the row's provenance. */
+export function journalEntryOwnerFence(
+  entry: Entry,
+  itemFence: number | undefined
+): number | undefined {
+  return entry.ownerFence ?? itemFence
+}
+
 /** The provenance a row states: the writer's own claim when it has one — a provider's observation,
  *  or history carried into a new epoch — else host bookkeeping's, which keeps the item's, and for
  *  an item it creates is the fence it writes at. Every item row states it. */

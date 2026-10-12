@@ -91,6 +91,18 @@ export type JournalLifecycleBatchInput = {
   rejectsQueued?: AgentJournalDispatchRejection
 }
 
+/** A lifecycle batch whose rows are chosen at its own turn in the write queue, so a write queued
+ *  ahead of it (an answer, a Stop) is what it plans from. */
+export type JournalPlannedLifecycleBatchInput = Pick<
+  JournalLifecycleBatchInput,
+  'settlementId' | 'fence' | 'recovered'
+> & {
+  plan: () => {
+    mutations: readonly JournalLifecycleMutationInput[]
+    dispatches: readonly ResolveDispatchInput[]
+  }
+}
+
 export type JournalResolvedLifecycleBatchInput = Omit<
   JournalLifecycleBatchInput,
   'mutations' | 'rejectsQueued' | 'dispatches'

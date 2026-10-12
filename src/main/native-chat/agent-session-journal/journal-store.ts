@@ -46,6 +46,7 @@ import type {
   JournalItemAppendOptions,
   JournalItemLinkageVisitor,
   JournalLifecycleBatchInput,
+  JournalPlannedLifecycleBatchInput,
   JournalReadSince,
   JournalSubmissionConsume,
   JournalSubmissionInput,
@@ -328,6 +329,10 @@ export class AgentSessionJournal {
   appendLifecycleBatch(input: JournalLifecycleBatchInput): Promise<AgentJournalCursor> {
     return this.lifecycleBatchAppender.append(input)
   }
+
+  /** A lifecycle batch planned at its own turn in the queue (`JournalPlannedLifecycleBatchInput`). */
+  appendPlannedLifecycleBatch = (input: JournalPlannedLifecycleBatchInput) =>
+    this.lifecycleBatchAppender.appendPlanned(input)
 
   /** Several writes as one turn in the queue; see `JournalStepWriter`. */
   appendSteps: JournalStepWriter['append'] = (steps) => this.stepWriter.append(steps)

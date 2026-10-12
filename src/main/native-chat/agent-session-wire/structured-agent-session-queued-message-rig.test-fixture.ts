@@ -16,7 +16,10 @@ import type { AgentMessageSource } from '../../../shared/agent-session-message-s
 import { agentSessionMessagePayload } from '../../../shared/structured-agent-session-send-mutation'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
-import { StructuredAgentSessionHost } from './structured-agent-session-host'
+import {
+  StructuredAgentSessionHost,
+  type StructuredAgentSessionHostDeps
+} from './structured-agent-session-host'
 import { rotateStructuredAgentSessionHostInstanceForTests } from './structured-agent-session-queued-pause'
 import {
   HOST_TEST_NOW as NOW,
@@ -52,6 +55,8 @@ export async function createQueuedMessageTestRig(
     recoveryCapsule?: true
     /** Where the chat runs, when not the default worktree. */
     location?: AgentSessionExecutionLocation
+    /** How the host probes a recorded owner; absent answers indeterminate. */
+    probeOwner?: StructuredAgentSessionHostDeps['probeOwner']
   } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), 'orca-queued-messages-'))
@@ -69,6 +74,7 @@ export async function createQueuedMessageTestRig(
       claimKeyId: 'key-1',
       mintSpawnToken: () => 'spawn-1',
       now: () => NOW,
+      ...(options.probeOwner ? { probeOwner: options.probeOwner } : {}),
       ...(options.idleSweep ? { idleSweep: options.idleSweep } : {}),
       ...(options.recoveryCapsule ? { recoveryCapsule: new AgentSessionRecoveryCapsule(root) } : {})
     })
