@@ -8470,7 +8470,9 @@
           "4db9afce1c": "포트는 1에서 65535 사이여야 합니다.",
           "0e5aa04161": "호스트 또는 SSH 구성 별칭이 필요합니다.",
           "f1fc50dad2": "SSH 대상을 로드하지 못했습니다.",
-          "0cda732f43": "연결 테스트 실패"
+          "0cda732f43": "연결 테스트 실패",
+          "syncedServerSingular": "서버 {{count}}개를 동기화했습니다.",
+          "syncedServerPlural": "서버 {{count}}개를 동기화했습니다."
         },
         "SshPassphraseDialog": {
           "d5a234456f": "취소",
@@ -10987,7 +10989,11 @@
                 "977e360b71": "API 토큰으로 Jira Cloud 사이트를 연결하거나, 개인 액세스 토큰 또는 사용자 이름과 비밀번호로 자체 호스팅 Jira를 연결하세요. 자격 증명은 로컬에 저장되며 로컬 런타임 저장소가 지원하는 경우 암호화됩니다.",
                 "statusConnected": "연결됨",
                 "statusNotConnected": "연결되지 않음",
-                "linearTokenName": "Linear API 토큰"
+                "linearTokenName": "Linear API 토큰",
+                "connectedSiteSingular": "사이트 {{count}}개 연결됨",
+                "connectedSitePlural": "사이트 {{count}}개 연결됨",
+                "connectedWorkspaceSingular": "워크스페이스 {{count}}개 연결됨",
+                "connectedWorkspacePlural": "워크스페이스 {{count}}개 연결됨"
               }
             }
           }

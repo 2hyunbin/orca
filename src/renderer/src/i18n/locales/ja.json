@@ -8507,7 +8507,9 @@
           "4db9afce1c": "ポートは 1 ～ 65535 でなければなりません",
           "0e5aa04161": "ホストまたは SSH 構成エイリアスが必要です",
           "f1fc50dad2": "SSH ターゲットのロードに失敗しました",
-          "0cda732f43": "接続テストに失敗しました"
+          "0cda732f43": "接続テストに失敗しました",
+          "syncedServerSingular": "{{count}} サーバー を同期しました",
+          "syncedServerPlural": "{{count}} サーバーs を同期しました"
         },
         "SshPassphraseDialog": {
           "d5a234456f": "キャンセル",
@@ -10987,7 +10989,11 @@
                 "977e360b71": "APIトークンを使用して Jira Cloudサイトに接続するか、パーソナルアクセストークンまたはユーザー名とパスワードを使用してセルフホスト Jira に接続します。認証情報はローカルに保存され、ローカルランタイムストレージがサポートする場合は暗号化されます。",
                 "statusConnected": "接続済み",
                 "statusNotConnected": "接続されていません",
-                "linearTokenName": "リニア API トークン"
+                "linearTokenName": "リニア API トークン",
+                "connectedSiteSingular": "{{count}} サイト が接続されました",
+                "connectedSitePlural": "{{count}} サイトs が接続されました",
+                "connectedWorkspaceSingular": "{{count}} ワークスペース が接続されました",
+                "connectedWorkspacePlural": "{{count}} ワークスペースs が接続されました"
               }
             }
           }

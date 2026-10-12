@@ -5110,5 +5110,23 @@
   },
   "auto.components.settings.VoicePane.dictationModesDescription": {
     "ko": "전환 모드: {{shortcut}} 단축키를 한 번 누르면 받아쓰기를 시작하고, 다시 누르면 중지합니다. 길게 누르기 모드: {{shortcut}} 단축키를 누르는 동안 받아쓰기합니다."
+  },
+  "auto.components.settings.SshPane.syncedServerSingular": {
+    "ko": "서버 {{count}}개를 동기화했습니다."
+  },
+  "auto.components.settings.SshPane.syncedServerPlural": {
+    "ko": "서버 {{count}}개를 동기화했습니다."
+  },
+  "auto.components.settings.task.tracker.integration.cards.connectedSiteSingular": {
+    "ko": "사이트 {{count}}개 연결됨"
+  },
+  "auto.components.settings.task.tracker.integration.cards.connectedSitePlural": {
+    "ko": "사이트 {{count}}개 연결됨"
+  },
+  "auto.components.settings.task.tracker.integration.cards.connectedWorkspaceSingular": {
+    "ko": "워크스페이스 {{count}}개 연결됨"
+  },
+  "auto.components.settings.task.tracker.integration.cards.connectedWorkspacePlural": {
+    "ko": "워크스페이스 {{count}}개 연결됨"
   }
 }

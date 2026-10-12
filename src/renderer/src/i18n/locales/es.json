@@ -8485,7 +8485,9 @@
           "4db9afce1c": "El puerto debe estar entre 1 y 65535",
           "0e5aa04161": "Se requiere un host o alias de configuración SSH",
           "f1fc50dad2": "No se pudieron cargar destinos SSH",
-          "0cda732f43": "La prueba de conexión falló"
+          "0cda732f43": "La prueba de conexión falló",
+          "syncedServerSingular": "Sincronización completada: {{count}} host",
+          "syncedServerPlural": "Sincronización completada: {{count}} hosts"
         },
         "SshPassphraseDialog": {
           "d5a234456f": "Cancelar",
@@ -10987,7 +10989,11 @@
                 "977e360b71": "Connect a Jira Cloud site with an API token, or a self-hosted Jira with a personal access token or username and password. Credentials are stored locally and encrypted when local runtime storage supports it.",
                 "statusConnected": "Conectado",
                 "statusNotConnected": "No conectado",
-                "linearTokenName": "Su token de API Linear"
+                "linearTokenName": "Su token de API Linear",
+                "connectedSiteSingular": "Conexión completada para {{count}} sitio",
+                "connectedSitePlural": "Conexión completada para {{count}} sitios",
+                "connectedWorkspaceSingular": "Conexión completada para {{count}} workspace",
+                "connectedWorkspacePlural": "Conexión completada para {{count}} workspaces"
               }
             }
           }

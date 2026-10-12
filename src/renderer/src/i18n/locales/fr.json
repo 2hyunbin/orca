@@ -8629,7 +8629,9 @@
           "4db9afce1c": "Le port doit être compris entre 1 et 65535",
           "0e5aa04161": "Un hôte ou un alias de config SSH est requis",
           "f1fc50dad2": "Échec du chargement des cibles SSH",
-          "0cda732f43": "Échec du test de connexion"
+          "0cda732f43": "Échec du test de connexion",
+          "syncedServerSingular": "Synchronisation terminée : {{count}} serveur",
+          "syncedServerPlural": "Synchronisation terminée : {{count}} serveurs"
         },
         "SshPassphraseDialog": {
           "d5a234456f": "Annuler",
@@ -11079,7 +11081,11 @@
                 "977e360b71": "Connectez un site Jira Cloud avec un jeton d'API, ou un Jira auto-hébergé avec un jeton d'accès personnel ou un nom d'utilisateur et mot de passe. Les identifiants sont stockés localement et chiffrés lorsque le stockage du runtime local le prend en charge.",
                 "statusConnected": "Connecté",
                 "statusNotConnected": "Non connecté",
-                "linearTokenName": "Votre jeton API linéaire"
+                "linearTokenName": "Votre jeton API linéaire",
+                "connectedSiteSingular": "{{count}} site connecté",
+                "connectedSitePlural": "{{count}} sites connecté",
+                "connectedWorkspaceSingular": "Connecté : {{count}} espace de travail",
+                "connectedWorkspacePlural": "Connectés : {{count}} espace de travail"
               }
             }
           }

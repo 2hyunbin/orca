@@ -8470,7 +8470,9 @@
           "4db9afce1c": "端口必须介于 1 和 65535 之间",
           "0e5aa04161": "需要主机或 SSH 配置别名",
           "f1fc50dad2": "无法加载 SSH 目标",
-          "0cda732f43": "连接测试失败"
+          "0cda732f43": "连接测试失败",
+          "syncedServerSingular": "已同步 {{count}} 服务器",
+          "syncedServerPlural": "已同步 {{count}} 服务器s"
         },
         "SshPassphraseDialog": {
           "d5a234456f": "取消",
@@ -10987,7 +10989,11 @@
                 "977e360b71": "使用 API token 连接 Jira Cloud 站点，或使用个人访问令牌或用户名和密码连接自托管 Jira。凭据存储在本地，本地运行时存储支持时会进行加密。",
                 "statusConnected": "已连接",
                 "statusNotConnected": "未连接",
-                "linearTokenName": "您的 Linear API 令牌"
+                "linearTokenName": "您的 Linear API 令牌",
+                "connectedSiteSingular": "{{count}} 个站点 已连接",
+                "connectedSitePlural": "{{count}} 个站点s 已连接",
+                "connectedWorkspaceSingular": "{{count}} 个工作区 已连接",
+                "connectedWorkspacePlural": "{{count}} 个工作区s 已连接"
               }
             }
           }

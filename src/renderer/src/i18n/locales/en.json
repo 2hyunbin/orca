@@ -8799,7 +8799,9 @@
           "4db9afce1c": "Port must be between 1 and 65535",
           "0e5aa04161": "Host or SSH config alias is required",
           "f1fc50dad2": "Failed to load SSH targets",
-          "0cda732f43": "Connection test failed"
+          "0cda732f43": "Connection test failed",
+          "syncedServerSingular": "Synced {{count}} server",
+          "syncedServerPlural": "Synced {{count}} servers"
         },
         "SshPassphraseDialog": {
           "d5a234456f": "Cancel",
@@ -11252,7 +11254,11 @@
                 "977e360b71": "Connect a Jira Cloud site with an API token, or a self-hosted Jira with a personal access token or username and password. Credentials are stored locally and encrypted when local runtime storage supports it.",
                 "statusConnected": "Connected",
                 "statusNotConnected": "Not connected",
-                "linearTokenName": "Your Linear API token"
+                "linearTokenName": "Your Linear API token",
+                "connectedSiteSingular": "{{count}} site connected",
+                "connectedSitePlural": "{{count}} sites connected",
+                "connectedWorkspaceSingular": "{{count}} workspace connected",
+                "connectedWorkspacePlural": "{{count}} workspaces connected"
               }
             }
           }
