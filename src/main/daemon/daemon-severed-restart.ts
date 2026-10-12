@@ -17,21 +17,30 @@ import {
 import { getCurrentDaemonAdapter } from './daemon-provider-routing'
 import { restartDaemon } from './daemon-provider-restart'
 import { getDaemonProvider } from './daemon-provider-state'
+import { DegradedDaemonPtyProvider } from './degraded-daemon-pty-provider'
 import { getDaemonPidPath } from './daemon-spawner'
 
 type Dependencies = {
   inspect: () => ReturnType<typeof inspectDaemonHostImage>
-  restart: () => Promise<{ killedCount: number }>
+  restart: (expectedDaemonPid: number) => Promise<{ killedCount: number }>
   listSessions: () => Promise<{ isAlive: boolean }[]>
+  /** Local terminals opened while quarantined; a restart ends them as well. */
+  countFallbackSessions: () => number
 }
 
 const defaultDependencies: Dependencies = {
   inspect: () =>
     inspectDaemonHostImage(readDaemonPidRecord(getDaemonPidPath(getDaemonRuntimeDir()))),
-  restart: restartDaemon,
+  restart: (expectedDaemonPid) => restartDaemon({ expectedDaemonPid }),
   listSessions: async () => {
     const provider = getDaemonProvider()
     return provider ? getCurrentDaemonAdapter(provider).listSessions() : []
+  },
+  countFallbackSessions: () => {
+    const provider = getDaemonProvider()
+    return provider instanceof DegradedDaemonPtyProvider
+      ? provider.getSessionIdsRoutedTo('fallback').length
+      : 0
   }
 }
 
@@ -41,7 +50,10 @@ export function createSeveredDaemonController(
   return {
     countLiveSessions: async () => {
       try {
-        return (await dependencies.listSessions()).filter((session) => session.isAlive).length
+        const daemonSessions = (await dependencies.listSessions()).filter(
+          (session) => session.isAlive
+        ).length
+        return daemonSessions + dependencies.countFallbackSessions()
       } catch {
         return null
       }
@@ -70,7 +82,7 @@ async function restartVerifiedSeveredDaemon(
     clearSeveredDaemon()
     return { status: 'refused', reason: 'replaced' }
   }
-  const { killedCount } = await dependencies.restart()
+  const { killedCount } = await dependencies.restart(expected.pid)
   clearSeveredDaemon()
   return { status: 'restarted', killedCount }
 }

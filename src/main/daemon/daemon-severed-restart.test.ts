@@ -24,13 +24,18 @@ const SEVERED: DaemonHostImageInspection = {
 }
 const EXPECTED = { pid: 4288, linuxStartTicks: '777', bootId: 'boot-1' }
 
-function setUp(current: DaemonHostImageInspection, sessions = [{ isAlive: true }]) {
-  const restart = vi.fn(async () => ({ killedCount: sessions.length }))
+function setUp(
+  current: DaemonHostImageInspection,
+  sessions = [{ isAlive: true }],
+  fallbackSessions = 0
+) {
+  const restart = vi.fn(async (_expectedPid: number) => ({ killedCount: sessions.length }))
   installSeveredDaemonController(
     createSeveredDaemonController({
       inspect: () => current,
       restart,
-      listSessions: async () => sessions
+      listSessions: async () => sessions,
+      countFallbackSessions: () => fallbackSessions
     })
   )
   noteSeveredDaemon(SEVERED)
@@ -42,9 +47,9 @@ afterEach(() => {
 })
 
 describe('restarting a daemon whose AppImage files are gone', () => {
-  it('reports the incarnation and its live session count', async () => {
-    setUp(SEVERED, [{ isAlive: true }, { isAlive: false }, { isAlive: true }])
-    await expect(readSeveredDaemonStatus()).resolves.toEqual({ ...EXPECTED, liveSessionCount: 2 })
+  it('counts every running terminal a restart would end, local fallback included', async () => {
+    setUp(SEVERED, [{ isAlive: true }, { isAlive: false }, { isAlive: true }], 2)
+    await expect(readSeveredDaemonStatus()).resolves.toEqual({ ...EXPECTED, liveSessionCount: 4 })
   })
 
   it('restarts only the incarnation the caller saw, after re-reading it', async () => {
@@ -53,7 +58,8 @@ describe('restarting a daemon whose AppImage files are gone', () => {
       status: 'restarted',
       killedCount: 1
     })
-    expect(restart).toHaveBeenCalledOnce()
+    // The pid travels into the restart so its teardown re-checks the endpoint owner.
+    expect(restart).toHaveBeenCalledWith(4288)
     expect(getSeveredDaemon()).toBeNull()
   })
 

@@ -10,6 +10,7 @@ export type SeveredDaemonIncarnation = {
   bootId: string
 }
 
+/** `liveSessionCount`: every running terminal a restart would end, daemon and local fallback. */
 export type SeveredDaemonStatus = SeveredDaemonIncarnation & { liveSessionCount: number | null }
 
 export type SeveredDaemonRestartResult =
