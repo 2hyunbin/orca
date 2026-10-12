@@ -1,16 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  CODEX_PROBE_SHUTDOWN_DRAIN_MS,
-  killOrphanedCodexProbe,
-  terminateCodexProbeChild
-} from './codex-probe-termination'
-
-const { killTreeMock } = vi.hoisted(() => ({ killTreeMock: vi.fn() }))
-
-vi.mock('../codex/codex-app-server-process-tree-kill', () => ({
-  killCodexAppServerProcessTree: killTreeMock
-}))
+import { CODEX_PROBE_SHUTDOWN_DRAIN_MS, terminateCodexProbeChild } from './codex-probe-termination'
 
 function makeFakeChild() {
   const emitter = new EventEmitter()
@@ -155,41 +145,5 @@ describe('terminateCodexProbeChild', () => {
 
     expect(child.stdin.end).not.toHaveBeenCalled()
     expect(child.kill).not.toHaveBeenCalled()
-  })
-})
-
-describe('killOrphanedCodexProbe', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-    killTreeMock.mockReset()
-  })
-
-  it('keeps SIGTERM a graceful signal to the root pid', () => {
-    const kill = vi.spyOn(process, 'kill').mockReturnValue(true)
-
-    expect(killOrphanedCodexProbe(4321, 'SIGTERM')).toBe(true)
-
-    expect(kill).toHaveBeenCalledWith(4321, 'SIGTERM')
-    expect(killTreeMock).not.toHaveBeenCalled()
-  })
-
-  it('takes the whole app-server tree for a hard kill, falling back to the pid', () => {
-    const kill = vi.spyOn(process, 'kill').mockReturnValue(true)
-
-    expect(killOrphanedCodexProbe(4321)).toBe(true)
-
-    expect(killTreeMock).toHaveBeenCalledTimes(1)
-    const [target] = killTreeMock.mock.calls[0]
-    expect(target.pid).toBe(4321)
-    target.kill('SIGKILL')
-    expect(kill).toHaveBeenCalledWith(4321, 'SIGKILL')
-  })
-
-  it('treats an already-exited root as not killed', () => {
-    vi.spyOn(process, 'kill').mockImplementation(() => {
-      throw Object.assign(new Error('kill ESRCH'), { code: 'ESRCH' })
-    })
-
-    expect(killOrphanedCodexProbe(4321, 'SIGTERM')).toBe(false)
   })
 })

@@ -3,14 +3,12 @@ import { existsSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
 import { LazyWorkerThreadHost, type WorkerThreadFactory } from '../lazy-worker-thread-host'
 import { currentWorkerEntryLayout, resolveWorkerThreadEntryPath } from '../worker-thread-entry-path'
-import {
-  WORKER_THREAD_CHILD_SPAWN_FAILED_EXIT_CODE,
-  type WorkerThreadChildErrorPayload,
-  type WorkerThreadChildEvent,
-  type WorkerThreadChildRequest,
-  type WorkerThreadChildSpec
+import type {
+  WorkerThreadChildErrorPayload,
+  WorkerThreadChildEvent,
+  WorkerThreadChildRequest,
+  WorkerThreadChildSpec
 } from './worker-thread-child-process-protocol'
-import { killOrphanByPid } from './orphan-pid-kill'
 
 // Why (#27362): libuv creates processes inline on the calling loop, and on
 // Windows CreateProcessW can spend seconds in code integrity hashing a large,
@@ -22,6 +20,11 @@ import { killOrphanByPid } from './orphan-pid-kill'
 export const IDLE_TEARDOWN_MS = 2 * 60_000
 
 const WORKER_ENTRY_FILENAME = 'worker-thread-child-process-entry.js'
+// Node reports a negative errno as the exit code of a child that never started.
+const SPAWN_FAILED_EXIT_CODE = -1
+
+/** False when the child is no longer reachable through a live worker. */
+type SendRequest = (request: WorkerThreadChildRequest) => boolean
 
 function toError(payload: WorkerThreadChildErrorPayload): Error {
   const error: NodeJS.ErrnoException = new Error(payload.message)
@@ -31,13 +34,11 @@ function toError(payload: WorkerThreadChildErrorPayload): Error {
   return error
 }
 
-/** Terminates an orphaned child by pid once its worker, and so its handle, is gone. */
-export type WorkerThreadOrphanKill = (pid: number, signal?: NodeJS.Signals) => boolean
-
+// Never emits: the worker reports stdin failures as child 'error' events.
 class WorkerThreadChildStdin extends EventEmitter {
   constructor(
     private readonly id: number,
-    private readonly send: (request: WorkerThreadChildRequest) => void
+    private readonly send: SendRequest
   ) {
     super()
   }
@@ -52,10 +53,7 @@ class WorkerThreadChildStdin extends EventEmitter {
   }
 }
 
-/**
- * Main-thread stand-in for a piped ChildProcess whose real process lives on the
- * worker. Mirrors the subset callers use: stdio streams, pid, exit state, kill.
- */
+/** Main-thread stand-in for a piped ChildProcess whose real process lives on the worker. */
 export class WorkerThreadChildProcess extends EventEmitter {
   pid: number | undefined = undefined
   exitCode: number | null = null
@@ -63,12 +61,10 @@ export class WorkerThreadChildProcess extends EventEmitter {
   readonly stdin: WorkerThreadChildStdin
   readonly stdout = new EventEmitter()
   readonly stderr = new EventEmitter()
-  private orphaned = false
 
   constructor(
     readonly id: number,
-    private readonly send: (request: WorkerThreadChildRequest) => void,
-    private readonly killOrphan: WorkerThreadOrphanKill = killOrphanByPid
+    private readonly send: SendRequest
   ) {
     super()
     this.stdin = new WorkerThreadChildStdin(id, send)
@@ -78,15 +74,9 @@ export class WorkerThreadChildProcess extends EventEmitter {
     if (this.exitCode !== null || this.signalCode !== null) {
       return false
     }
-    if (this.orphaned) {
-      // No pid means the spawn never reported back; there is nothing addressable to kill.
-      return this.pid === undefined ? false : this.killOrphan(this.pid, signal)
-    }
-    this.send({ type: 'kill', id: this.id, signal })
-    return true
+    return this.send({ type: 'kill', id: this.id, signal })
   }
 
-  /** @internal Applies one event forwarded from the worker. */
   receive(event: WorkerThreadChildEvent): void {
     switch (event.type) {
       case 'spawn':
@@ -101,10 +91,12 @@ export class WorkerThreadChildProcess extends EventEmitter {
         )
         return
       case 'error':
-        this.emitErrorIfObserved(this, event.error)
+        this.emitErrorIfObserved(event.error)
         return
-      case 'stdin-error':
-        this.emitErrorIfObserved(this.stdin, event.error)
+      case 'spawn-error':
+        this.emitErrorIfObserved(event.error)
+        this.receive({ type: 'exit', id: this.id, code: SPAWN_FAILED_EXIT_CODE, signal: null })
+        this.receive({ type: 'close', id: this.id, code: SPAWN_FAILED_EXIT_CODE, signal: null })
         return
       case 'exit':
         this.exitCode = event.code
@@ -116,27 +108,13 @@ export class WorkerThreadChildProcess extends EventEmitter {
     }
   }
 
-  /**
-   * @internal The worker died. No 'close': the real process may outlive it, so
-   * kill() switches to the pid-addressed orphan kill.
-   */
-  orphan(payload: WorkerThreadChildErrorPayload): void {
-    this.orphaned = true
-    this.emitErrorIfObserved(this, payload)
-  }
-
   // Why: a late error after the caller detached would otherwise throw inside the
   // worker message handler and surface as an uncaught main-process exception.
-  private emitErrorIfObserved(target: EventEmitter, payload: WorkerThreadChildErrorPayload): void {
-    if (target.listenerCount('error') > 0) {
-      target.emit('error', toError(payload))
+  private emitErrorIfObserved(payload: WorkerThreadChildErrorPayload): void {
+    if (this.listenerCount('error') > 0) {
+      this.emit('error', toError(payload))
     }
   }
-}
-
-export type SpawnOnWorkerThreadOptions = {
-  /** Defaults to a bare pid kill; pass a tree kill when the child runs behind a launcher. */
-  killOrphan?: WorkerThreadOrphanKill
 }
 
 export class WorkerThreadChildProcessHost {
@@ -144,56 +122,53 @@ export class WorkerThreadChildProcessHost {
   private readonly children = new Map<number, WorkerThreadChildProcess>()
   private nextId = 1
 
-  constructor(factory: WorkerThreadFactory, log: (message: string) => void = console.warn) {
+  constructor(factory: WorkerThreadFactory) {
     this.host = new LazyWorkerThreadHost<WorkerThreadChildEvent>({
       factory,
       idleTeardownMs: IDLE_TEARDOWN_MS,
       onMessage: (event) => this.route(event),
-      onError: (error) => this.orphanAll(`Child process worker failed: ${error.message}`),
-      onExit: (code) => this.orphanAll(`Child process worker exited with code ${code}`),
+      onError: (error) => this.abandonAll(`Child process worker failed: ${error.message}`),
+      onExit: (code) => this.abandonAll(`Child process worker exited with code ${code}`),
       isIdle: () => this.children.size === 0,
       onUnavailable: (error) =>
-        log(
+        console.warn(
           `[worker-thread-child-process] worker unavailable. ${error instanceof Error ? error.message : String(error)}`
         )
     })
   }
 
-  spawn(
-    spec: WorkerThreadChildSpec,
-    options: SpawnOnWorkerThreadOptions = {}
-  ): WorkerThreadChildProcess {
+  spawn(spec: WorkerThreadChildSpec): WorkerThreadChildProcess {
     const id = this.nextId++
-    const child = new WorkerThreadChildProcess(
-      id,
-      (request) => this.post(request),
-      options.killOrphan
-    )
-    const worker = this.host.ensure()
-    if (!worker) {
-      this.failToStart(child, 'Child process worker is unavailable')
-      return child
+    const child = new WorkerThreadChildProcess(id, (request) => this.post(request))
+    if (this.host.ensure()) {
+      this.host.clearIdleTimer()
+      this.children.set(id, child)
+      if (this.post({ type: 'spawn', id, spec })) {
+        return child
+      }
+      this.forget(id)
     }
-    this.host.clearIdleTimer()
-    this.children.set(id, child)
-    try {
-      worker.postMessage({
-        type: 'spawn',
+    // Deferred like Node's own spawn errors, so the caller can attach listeners first.
+    process.nextTick(() =>
+      child.receive({
+        type: 'spawn-error',
         id,
-        spec
-      } satisfies WorkerThreadChildRequest)
-    } catch (error) {
-      this.children.delete(id)
-      this.failToStart(child, error instanceof Error ? error.message : String(error))
-    }
+        error: { message: 'Child process worker is unavailable' }
+      })
+    )
     return child
   }
 
-  private post(request: WorkerThreadChildRequest): void {
+  private post(request: WorkerThreadChildRequest): boolean {
+    const worker = this.host.current
+    if (!worker || !this.children.has(request.id)) {
+      return false
+    }
     try {
-      this.host.current?.postMessage(request)
+      worker.postMessage(request)
+      return true
     } catch {
-      // A dead worker reports through onExit/onError, which orphans this child.
+      return false
     }
   }
 
@@ -202,35 +177,28 @@ export class WorkerThreadChildProcessHost {
     if (!child) {
       return
     }
-    if (event.type === 'close') {
-      this.children.delete(event.id)
-      if (this.children.size === 0) {
-        this.host.scheduleIdleTeardown()
-      }
+    if (event.type === 'close' || event.type === 'spawn-error') {
+      this.forget(event.id)
     }
     child.receive(event)
   }
 
-  private failToStart(child: WorkerThreadChildProcess, message: string): void {
-    // Deferred like Node's own spawn errors, so the caller can attach listeners first.
-    process.nextTick(() => {
-      const exit = {
-        id: child.id,
-        code: WORKER_THREAD_CHILD_SPAWN_FAILED_EXIT_CODE,
-        signal: null
-      }
-      child.receive({ type: 'error', id: child.id, error: { message } })
-      child.receive({ type: 'exit', ...exit })
-      child.receive({ type: 'close', ...exit })
-    })
+  private forget(id: number): void {
+    this.children.delete(id)
+    if (this.children.size === 0) {
+      this.host.scheduleIdleTeardown()
+    }
   }
 
-  private orphanAll(message: string): void {
-    const orphans = [...this.children.values()]
+  // Why no 'close': the worker's death closes each child's stdin, which is its
+  // graceful stop, but nothing here can observe the exit, so callers' drain
+  // windows (and the Codex home lock they hold) still run their course.
+  private abandonAll(message: string): void {
+    const abandoned = [...this.children.values()]
     this.children.clear()
     this.host.destroy()
-    for (const child of orphans) {
-      child.orphan({ message })
+    for (const child of abandoned) {
+      child.receive({ type: 'error', id: child.id, error: { message } })
     }
   }
 }
@@ -249,17 +217,8 @@ function defaultWorkerFactory(): Worker {
 
 let sharedHost: WorkerThreadChildProcessHost | null = null
 
-/**
- * Spawn a piped child from the shared worker thread so process creation never
- * blocks the main event loop.
- * @param spec - Program, argv, cwd and env; stdio is always three pipes.
- * @param options - How to kill the child by pid if the worker dies under it.
- * @returns A ChildProcess-shaped proxy whose events arrive from the worker.
- */
-export function spawnProcessOnWorkerThread(
-  spec: WorkerThreadChildSpec,
-  options?: SpawnOnWorkerThreadOptions
-): WorkerThreadChildProcess {
+/** Spawns a piped child from the shared worker thread so process creation never blocks the main loop. */
+export function spawnProcessOnWorkerThread(spec: WorkerThreadChildSpec): WorkerThreadChildProcess {
   sharedHost ??= new WorkerThreadChildProcessHost(defaultWorkerFactory)
-  return sharedHost.spawn(spec, options)
+  return sharedHost.spawn(spec)
 }

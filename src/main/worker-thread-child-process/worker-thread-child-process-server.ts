@@ -1,14 +1,12 @@
 import type { PipedChildProcess } from '@orca/process-host/process-spec'
 import { spawnProcess } from '@orca/process-host'
-import {
-  WORKER_THREAD_CHILD_SPAWN_FAILED_EXIT_CODE,
-  type WorkerThreadChildErrorPayload,
-  type WorkerThreadChildEvent,
-  type WorkerThreadChildRequest
+import type {
+  WorkerThreadChildErrorPayload,
+  WorkerThreadChildEvent,
+  WorkerThreadChildRequest
 } from './worker-thread-child-process-protocol'
 
-// Worker-thread half: owns the real children so CreateProcessW blocks this
-// thread, not the Electron main loop. Must stay electron-free.
+// Worker-thread half; must stay electron-free (plain-Node entry guard).
 
 export type WorkerThreadChildPort = {
   on(event: 'message', listener: (request: WorkerThreadChildRequest) => void): unknown
@@ -32,17 +30,12 @@ export function serveWorkerThreadChildProcesses(port: WorkerThreadChildPort): vo
     try {
       child = spawnProcess({ ...spec, stdio: ['pipe', 'pipe', 'pipe'] })
     } catch (error) {
-      port.postMessage({ type: 'error', id, error: toErrorPayload(error) })
-      const exit = {
-        id,
-        code: WORKER_THREAD_CHILD_SPAWN_FAILED_EXIT_CODE,
-        signal: null
-      }
-      port.postMessage({ type: 'exit', ...exit })
-      port.postMessage({ type: 'close', ...exit })
+      port.postMessage({ type: 'spawn-error', id, error: toErrorPayload(error) })
       return
     }
     children.set(id, child)
+    const postError = (error: Error): void =>
+      port.postMessage({ type: 'error', id, error: toErrorPayload(error) })
     child.on('spawn', () => port.postMessage({ type: 'spawn', id, pid: child.pid }))
     // Copied so the clone carries only this chunk, not the whole backing allocation.
     child.stdout?.on('data', (chunk: Buffer) =>
@@ -54,16 +47,9 @@ export function serveWorkerThreadChildProcesses(port: WorkerThreadChildPort): vo
     // An unhandled stream error would take the whole worker, and every other child, down.
     child.stdout?.on('error', () => {})
     child.stderr?.on('error', () => {})
-    child.stdin?.on('error', (error) =>
-      port.postMessage({
-        type: 'stdin-error',
-        id,
-        error: toErrorPayload(error)
-      })
-    )
-    child.on('error', (error) =>
-      port.postMessage({ type: 'error', id, error: toErrorPayload(error) })
-    )
+    // The stand-in surfaces stdin failures as child errors; its caller treats both alike.
+    child.stdin?.on('error', postError)
+    child.on('error', postError)
     child.on('exit', (code, signal) => port.postMessage({ type: 'exit', id, code, signal }))
     child.on('close', (code, signal) => {
       children.delete(id)
@@ -89,7 +75,7 @@ export function serveWorkerThreadChildProcesses(port: WorkerThreadChildPort): vo
         child.kill(request.signal)
       }
     } catch {
-      // Races with exit; the exit/close events still reach the proxy.
+      // Races with exit; the exit/close events still reach the stand-in.
     }
   })
 }

@@ -1,6 +1,4 @@
-import { killCodexAppServerProcessTree } from '../codex/codex-app-server-process-tree-kill'
 import { terminateWindowsProcessTree, type WindowsTreeKiller } from '../windows-process-tree-kill'
-import { killOrphanByPid } from '../worker-thread-child-process/orphan-pid-kill'
 
 // Why: Codex OAuth uses rotating refresh tokens. Hard-killing a probe's
 // app-server mid-refresh can strand auth.json between rotations and permanently
@@ -112,17 +110,4 @@ export async function terminateCodexProbeChild(
     // Already-exited children can race the kill; the exit wait handles it.
   }
   await waitForExit(child, options?.hardKillWaitMs ?? HARD_KILL_EXIT_WAIT_MS)
-}
-
-/**
- * Pid-addressed kill for a probe whose spawning worker died with its handle.
- * SIGTERM stays a graceful root signal; anything harsher takes the tree, since
- * an npm install runs app-server beneath a node launcher.
- */
-export function killOrphanedCodexProbe(pid: number, signal?: NodeJS.Signals): boolean {
-  if (signal === 'SIGTERM') {
-    return killOrphanByPid(pid, signal)
-  }
-  killCodexAppServerProcessTree({ pid, kill: (treeSignal) => killOrphanByPid(pid, treeSignal) })
-  return true
 }
