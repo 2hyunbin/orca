@@ -107,6 +107,7 @@ async function hostCatalog(listingLands: Promise<void>) {
     accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: join(dir, 'claude-home') },
     options: { permissionMode: 'ask' }
   })
+  record.lease.claimStatus = 'reserved'
   const modelCatalog = createAgentModelCatalogService({
     store,
     getRecord: () => record,
