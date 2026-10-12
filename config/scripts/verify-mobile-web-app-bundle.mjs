@@ -87,13 +87,12 @@ export const MOBILE_WEB_APP_BUNDLE_ROUTE_SCRIPT_SPREAD = sweptScripts
  * How far above the measurement the envelope sits, and the only slack a refactor gets.
  *
  * Measured, not chosen, and per head rather than cumulative: at 8, 10, 12 and 14 routes the head
- * that wrote the old `4r + 16` read 32, 43, 61 and 69, the head that first swept these prefixes
- * read 34, 44, 57 and 65, and this one reads 33, 43, 56 and 64. So one head has moved the count by
- * as much as four at a fixed route count with no route added (61 to 57), and the step that dropped
- * the page's second Zod moved it by one everywhere. Four is that worst step, which is what a shared
- * importer set moving between heads costs. Summing the steps instead would grow this number every
- * head and loosen the fence for free. A refactor inside four keeps building; anything past it
- * re-measures the sweep.
+ * that wrote the old `4r + 16` read 32, 43, 61 and 69, and one refactor with no route added moved
+ * the 12-route prefix by four (61 to 57). Four is the worst step a refactor alone has cost. The
+ * previous sweep read 34, 40, 58 and 71 and this head reads 34, 42, 61 and 77: six at 14 routes,
+ * from main's own drift plus the server-workspace modules this head adds, so it re-measured the
+ * sweep rather than fitting inside the margin, which is what a step past four is meant to force.
+ * Summing the steps instead would grow this number every head and loosen the fence for free.
  */
 export const MOBILE_WEB_APP_BUNDLE_SCRIPT_MARGIN = 4
 
