@@ -1265,9 +1265,9 @@ jobs:
           }
           cargo --version
 
-      # Why before the tests: the claude-hook.exe suites then share one prebuilt binary rather
+      # Why before the tests: the orca-agent-hook.exe suites then share one prebuilt binary rather
       # than each starting its own build mid-run.
-      - name: Build the Windows Claude hook
+      - name: Build the Windows agent hook
         run: node config/scripts/build-windows-agent-hook.mjs
 
       - name: Test Windows-specific boundaries

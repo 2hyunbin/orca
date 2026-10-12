@@ -14,6 +14,7 @@ import {
   type HooksConfig
 } from '../agent-hooks/installer-utils'
 import { quotePowerShellLiteral } from '../../shared/powershell-native-argument'
+import { getWindowsNativeHookAgent } from '../agent-hooks/windows-native-hook-executable'
 import {
   wrapRuntimeHomeHookCommand,
   wrapRuntimeHomePosixHookCommand
@@ -117,7 +118,7 @@ export function getRemoteManagedEventCommand(eventName: string, scriptPath: stri
     : getRemoteManagedCommand(scriptPath)
 }
 
-/** `nativeHookPath` is Claude's installed claude-hook.exe, or null to keep the `.cmd` form. */
+/** `nativeHookPath` is the installed orca-agent-hook.exe, or null to keep the `.cmd` form. */
 export function getManagedLifecycleHook(
   scriptPath: string,
   settings = CLAUDE_HOOK_SETTINGS,
@@ -126,10 +127,16 @@ export function getManagedLifecycleHook(
   if (process.platform !== 'win32' || !settings.usesWindowsCompatLauncher) {
     return buildManagedCommandHook(getManagedCommand(scriptPath, { neutralJsonWhenMissing: true }))
   }
-  // Why a bare exe path: Git Bash, PowerShell and CreateProcess all start it without cmd.exe.
+  // Why a bare exe path plus a plain word: Git Bash, PowerShell and CreateProcess all start
+  // `<exe> claude` the same way, without cmd.exe.
   const nativeCommand = nativeHookPath ? wrapWindowsDirectCmdHookCommand(nativeHookPath) : null
   if (nativeCommand) {
-    return { type: 'command', command: nativeCommand, timeout: MANAGED_HOOK_TIMEOUT_SECONDS }
+    const agent = getWindowsNativeHookAgent(basename(scriptPath))
+    return {
+      type: 'command',
+      command: `${nativeCommand} ${agent}`,
+      timeout: MANAGED_HOOK_TIMEOUT_SECONDS
+    }
   }
   if (settings.windowsHookShell === 'powershell') {
     return {

@@ -1,4 +1,4 @@
-// The real claude-hook.exe must keep the .cmd hook's contract under every Windows hook runner (#20913).
+// The real orca-agent-hook.exe must keep the .cmd hook's contract under every Windows hook runner (#20913).
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { spawn } from 'node:child_process'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
@@ -115,12 +115,12 @@ let command = ''
 const listeners: Server[] = []
 const tempIsCmdSafe = WINDOWS_CMD_SAFE_PATH.test(join(tmpdir(), 'orca-native-hook-x', 'x.exe'))
 
-describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe hosts', () => {
+describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('native agent hook hosts', () => {
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), 'orca-native-hook-'))
     // A dev box's AutoRun target under the redirected profile; the .cmd parity leg starts cmd.exe.
     writeFileSync(join(dir, '.cmd_aliases.cmd'), '@echo off\r\n')
-    exePath = join(dir, 'claude-hook.exe')
+    exePath = join(dir, 'orca-agent-hook.exe')
     copyFileSync(buildWindowsNativeHookExecutable(), exePath)
     writeFileSync(join(dir, 'claude-hook.cmd'), getWindowsClaudeHookEntry())
     writeFileSync(join(dir, 'claude-hook-impl.cmd'), getManagedScript())
@@ -146,8 +146,8 @@ describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe
     return listener
   }
 
-  it('registers a bare exe path with nothing a shell would rewrite', () => {
-    expect(command).toBe(exePath.replaceAll('\\', '/'))
+  it('registers a bare exe path and agent with nothing a shell would rewrite', () => {
+    expect(command).toBe(`${exePath.replaceAll('\\', '/')} claude`)
   })
 
   it('answers {} and posts what the .cmd hook posts under Git Bash, PowerShell 5.1 and CreateProcess', async () => {
@@ -166,7 +166,7 @@ describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe
         getWindowsPowerShellExecutablePath(),
         ['-NoProfile', '-NonInteractive', '-Command', command]
       ],
-      ['CreateProcess', exePath, []]
+      ['CreateProcess', exePath, ['claude']]
     ]
     for (const [name, program, args] of hosts) {
       const before = listener.posts.length
@@ -188,9 +188,19 @@ describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe
       paneEnv(listener, { ORCA_PANE_KEY: '' }),
       paneEnv(listener, { CLAUDE_JOB_DIR: join(dir, 'job') })
     ]) {
-      const result = await run(exePath, [], env, 'abandon')
+      const result = await run(exePath, ['claude'], env, 'abandon')
       expect(result.code).toBe(0)
       expect(result.stdout.trim()).toBe('{}')
+    }
+    expect(listener.posts).toHaveLength(0)
+  })
+
+  it('answers {} without reading stdin for a missing or unknown agent', async () => {
+    const listener = await listen()
+    for (const args of [[], ['codex'], ['Claude']]) {
+      const result = await run(exePath, args, paneEnv(listener), 'abandon')
+      expect(result.code, args.join(' ')).toBe(0)
+      expect(result.stdout.trim(), args.join(' ')).toBe('{}')
     }
     expect(listener.posts).toHaveLength(0)
   })
@@ -198,7 +208,7 @@ describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe
   it('drains, but does not report, Claude hooks that Grok or Devin imported', async () => {
     const listener = await listen()
     for (const extra of [{ GROK_HOOK_EVENT: 'PreToolUse' }, { DEVIN_PROJECT_DIR: dir }]) {
-      const result = await run(exePath, [], paneEnv(listener, extra))
+      const result = await run(exePath, ['claude'], paneEnv(listener, extra))
       expect(result.code).toBe(0)
       expect(result.stdout.trim()).toBe('{}')
     }
@@ -224,7 +234,7 @@ describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe
       ORCA_AGENT_HOOK_TOKEN: 'stale-token',
       ORCA_AGENT_HOOK_ENDPOINT: endpoint
     })
-    expect((await run(exePath, [], stale)).code).toBe(0)
+    expect((await run(exePath, ['claude'], stale)).code).toBe(0)
     expect(listener.posts).toHaveLength(1)
     expect(listener.posts[0].token).toBe('fresh-token')
     expect(JSON.parse(listener.posts[0].form)).toEqual(
@@ -237,21 +247,21 @@ describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe
 
   it('returns only after the listener answers, so the next event cannot overtake it', async () => {
     const listener = await listen(400)
-    const result = await run(exePath, [], paneEnv(listener))
+    const result = await run(exePath, ['claude'], paneEnv(listener))
     expect(result.code).toBe(0)
     expect(result.ms).toBeGreaterThanOrEqual(400)
   })
 
   it('gives up on a listener that never answers at the 1.5 s cap, still exit 0', async () => {
     const listener = await listen('never')
-    const result = await run(exePath, [], paneEnv(listener))
+    const result = await run(exePath, ['claude'], paneEnv(listener))
     expect(result.code).toBe(0)
     expect(result.stdout.trim()).toBe('{}')
     expect(listener.posts).toHaveLength(1)
     expect(result.ms).toBeGreaterThanOrEqual(1400)
     expect(result.ms).toBeLessThan(5000)
 
-    const refused = await run(exePath, [], paneEnv(listener, { ORCA_AGENT_HOOK_PORT: '1' }))
+    const refused = await run(exePath, ['claude'], paneEnv(listener, { ORCA_AGENT_HOOK_PORT: '1' }))
     expect(refused.code).toBe(0)
     expect(refused.stdout.trim()).toBe('{}')
   })

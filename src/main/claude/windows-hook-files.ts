@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { AgentHookInstallStatus } from '../../shared/agent-hook-types'
@@ -14,18 +14,25 @@ import {
 } from '../agent-hooks/hook-stdin-contract'
 import {
   resolveBundledWindowsNativeHookExecutable,
-  WINDOWS_CLAUDE_HOOK_EXECUTABLE_NAME
+  WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME
 } from '../agent-hooks/windows-native-hook-executable'
 import { WINDOWS_CLAUDE_BACKGROUND_JOB_GUARD } from './hook-script'
 
 const PAYLOAD_FILE_NAME = 'claude-hook-impl.cmd'
+// The pre-rename Claude-only copy of the native hook.
+const LEGACY_EXECUTABLE_FILE_NAME = 'claude-hook.exe'
 
 export function getWindowsClaudeHookPayloadPath(entryPath: string): string {
   return join(dirname(entryPath), PAYLOAD_FILE_NAME)
 }
 
 export function getWindowsClaudeHookExecutablePath(entryPath: string): string {
-  return join(dirname(entryPath), WINDOWS_CLAUDE_HOOK_EXECUTABLE_NAME)
+  return join(dirname(entryPath), WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME)
+}
+
+// Where a copy still running from the previous build is moved so the new one can take its name.
+function getLockedExecutableAside(executablePath: string): string {
+  return `${executablePath}.old`
 }
 
 /**
@@ -34,16 +41,24 @@ export function getWindowsClaudeHookExecutablePath(entryPath: string): string {
  * Authenticode signature.
  */
 export function installWindowsClaudeHookExecutable(entryPath: string): string | null {
+  const destination = getWindowsClaudeHookExecutablePath(entryPath)
+  const aside = getLockedExecutableAside(destination)
+  for (const leftover of [aside, join(dirname(entryPath), LEGACY_EXECUTABLE_FILE_NAME)]) {
+    try {
+      rmSync(leftover, { force: true })
+    } catch {
+      // Still running; a later install removes it.
+    }
+  }
   const source = resolveBundledWindowsNativeHookExecutable()
   if (!source) {
     return null
   }
-  const destination = getWindowsClaudeHookExecutablePath(entryPath)
   try {
-    writeManagedScript(destination, readFileSync(source))
+    writeManagedScript(destination, readFileSync(source), { lockedTargetAside: aside })
     return destination
   } catch {
-    // No bundled binary (dev checkout), or a copy still running from a previous build.
+    // No bundled binary (dev checkout), or both the copy and its aside are still running.
     return null
   }
 }
@@ -92,12 +107,15 @@ export async function refreshWindowsClaudeHookFiles(
   entryPath: string,
   payload: string
 ): Promise<void> {
-  // A surviving exe copy is Orca-owned too; one still running keeps its build until a later refresh.
+  // A surviving exe copy is Orca-owned too; a running one is moved aside, as in install().
   const bundledHook = resolveBundledWindowsNativeHookExecutable()
   if (bundledHook) {
+    const executable = getWindowsClaudeHookExecutablePath(entryPath)
     await readFile(bundledHook)
       .then((bytes) =>
-        refreshManagedScriptIfPresent(getWindowsClaudeHookExecutablePath(entryPath), bytes)
+        refreshManagedScriptIfPresent(executable, bytes, {
+          lockedTargetAside: getLockedExecutableAside(executable)
+        })
       )
       .catch(() => {})
   }

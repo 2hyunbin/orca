@@ -161,13 +161,13 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
       stdout: '{}'
     },
     {
-      name: 'Claude (claude-hook.exe)',
+      name: 'Claude (orca-agent-hook.exe)',
       install: () => {
         bundledHook.path = buildWindowsNativeHookExecutable()
         return new ClaudeHookService().install()
       },
       configPath: getConfigPath,
-      script: 'claude-hook.exe',
+      script: 'orca-agent-hook.exe',
       stdout: '{}'
     },
     {
@@ -193,7 +193,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
       if (!registeredCommand) {
         throw new Error('Missing managed PreToolUse command')
       }
-      expect(registeredCommand.endsWith(provider.script)).toBe(true)
+      expect(registeredCommand).toContain(provider.script)
       // ...with one exception: a cmd-safe profile must reach the script with no interpreter in
       // front of it, or #18875's per-event PowerShell start-up has quietly come back.
       if (WINDOWS_CMD_SAFE_PATH.test(join(home, '.orca', 'agent-hooks', provider.script))) {

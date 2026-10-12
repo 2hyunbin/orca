@@ -1,11 +1,11 @@
-//! Orca's native Windows Claude hook: answers `{}`, then posts the hook payload to
-//! Orca's loopback listener and waits for the reply, so status events arrive in
-//! the order Claude emitted them.
+//! Orca's native Windows agent hook, registered as `orca-agent-hook.exe <agent>`: answers
+//! `{}`, then posts the hook payload to Orca's loopback listener and waits for the reply,
+//! so status events arrive in the order the agent emitted them.
 //!
 //! Why native: the `.cmd` form costs a cmd.exe start (plus the user's AutoRun) and
 //! a curl.exe start on every event, and only an executable runs the same way under
-//! Git Bash, PowerShell, and a direct CreateProcess (#20913). The contract mirrors
-//! the managed Windows script in src/main/claude/hook-script.ts.
+//! Git Bash, PowerShell, and a direct CreateProcess (#20913). The `claude` contract
+//! mirrors the managed Windows script in src/main/claude/hook-script.ts.
 
 use std::env;
 use std::fs::File;
@@ -18,17 +18,42 @@ const CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 const TOTAL_TIMEOUT: Duration = Duration::from_millis(1500);
 const ENDPOINT_FILE_BYTE_LIMIT: u64 = 64 * 1024;
 
+/// What one agent's hooks report under, and which of its env vars veto reporting.
+struct Agent {
+    source: &'static str,
+    /// Set means the event is not this pane's to report: exit without owning stdin.
+    exit_vars: &'static [&'static str],
+    /// Set means another agent imported these hooks: drain stdin and stay silent.
+    drain_vars: &'static [&'static str],
+}
+
+fn agent(name: &str) -> Option<Agent> {
+    match name {
+        "claude" => Some(Agent {
+            source: "claude",
+            // A backgrounded session inherited the dispatching pane's env (#9236).
+            exit_vars: &["CLAUDE_JOB_DIR"],
+            // Grok and Devin import .claude hooks; only their own hooks report those events.
+            drain_vars: &["GROK_HOOK_EVENT", "DEVIN_PROJECT_DIR"],
+        }),
+        _ => None,
+    }
+}
+
 fn main() {
     let mut stdout = io::stdout();
     // Why first: Claude-compatible permission hooks fail closed on empty stdout (#14818).
     let _ = stdout.write_all(b"{}\r\n");
     let _ = stdout.flush();
-    run();
+    // Why no stdin for an unknown agent: a newer Orca may register one this copy predates.
+    if let Some(agent) = env::args_os().nth(1).and_then(|arg| agent(arg.to_str()?)) {
+        run(&agent);
+    }
     // Why always 0: a hook failure must never block or fail the agent's tool call.
     std::process::exit(0);
 }
 
-fn run() {
+fn run(agent: &Agent) {
     // Why: refresh the listener coordinates for terminals that survived an Orca restart.
     let endpoint = read_endpoint_file();
     let coordinate = |key: &str| endpoint_value(&endpoint, key).unwrap_or_else(|| var(key));
@@ -39,13 +64,12 @@ fn run() {
     if port.is_empty() || token.is_empty() || var("ORCA_PANE_KEY").is_empty() {
         return;
     }
-    // A backgrounded session inherited the dispatching pane's env (#9236).
-    if !var("CLAUDE_JOB_DIR").is_empty() {
+    let is_set = |name: &&str| !var(name).is_empty();
+    if agent.exit_vars.iter().any(is_set) {
         return;
     }
     let mut stdin = io::stdin().lock();
-    // Grok and Devin import .claude hooks; only their own hooks report those events.
-    if !var("GROK_HOOK_EVENT").is_empty() || !var("DEVIN_PROJECT_DIR").is_empty() {
+    if agent.drain_vars.iter().any(is_set) {
         let _ = io::copy(&mut stdin, &mut io::sink());
         return;
     }
@@ -59,7 +83,7 @@ fn run() {
         ("env", coordinate("ORCA_AGENT_HOOK_ENV")),
         ("version", coordinate("ORCA_AGENT_HOOK_VERSION")),
     ];
-    post(&port, &token, &form, &payload);
+    post(agent.source, &port, &token, &form, &payload);
 }
 
 fn var(name: &str) -> String {
@@ -93,7 +117,7 @@ fn endpoint_value(text: &str, key: &str) -> Option<String> {
     })
 }
 
-fn post(port: &str, token: &str, form: &[(&str, String)], payload: &[u8]) {
+fn post(source: &str, port: &str, token: &str, form: &[(&str, String)], payload: &[u8]) {
     let Ok(port) = port.parse::<u16>() else {
         return;
     };
@@ -108,7 +132,7 @@ fn post(port: &str, token: &str, form: &[(&str, String)], payload: &[u8]) {
     }
     append_form_field(&mut body, "payload", payload);
     let mut request = format!(
-        "POST /hook/claude HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\
+        "POST /hook/{source} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\
          Content-Type: application/x-www-form-urlencoded\r\n\
          X-Orca-Agent-Hook-Token: {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()

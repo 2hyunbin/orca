@@ -16,7 +16,7 @@ function resourcesWith(image) {
   roots.push(resourcesDir)
   if (image) {
     mkdirSync(join(resourcesDir, 'bin'))
-    writeFileSync(join(resourcesDir, 'bin', 'claude-hook.exe'), image)
+    writeFileSync(join(resourcesDir, 'bin', 'orca-agent-hook.exe'), image)
   }
   return resourcesDir
 }

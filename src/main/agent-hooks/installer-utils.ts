@@ -15,6 +15,11 @@ import type { AgentHookSource } from '../../shared/agent-hook-relay'
 import { grantDirAcl, isPermissionError } from '../win32-utils'
 import { resolveHooksJsonWritePath } from './hook-config-write-path'
 import { writeRollingFileBackup } from '../rolling-file-backup'
+import { renameOverLockedTarget } from './locked-executable-rename'
+import {
+  getWindowsNativeHookAgent,
+  WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME
+} from './windows-native-hook-executable'
 
 export type HookCommandConfig = {
   type: 'command'
@@ -77,6 +82,8 @@ export function createManagedCommandMatcher(
     `agent-hooks/${scriptStem}.ps1`,
     `agent-hooks/${scriptStem}.sh`
   ]
+  // The shared native hook names its agent in the first argument: `orca-agent-hook.exe claude`.
+  const nativeHook = `agent-hooks/${WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME} ${getWindowsNativeHookAgent(scriptFileName)} `
   return (command) => {
     if (!command) {
       return false
@@ -84,7 +91,10 @@ export function createManagedCommandMatcher(
     const decodedCommand = decodePowerShellEncodedCommand(command)
     const searchText = decodedCommand ? `${command}\n${decodedCommand}` : command
     const normalizedCommand = searchText.replaceAll('\\', '/')
-    return needles.some((needle) => normalizedCommand.includes(needle))
+    return (
+      needles.some((needle) => normalizedCommand.includes(needle)) ||
+      normalizedCommand.split('\n').some((line) => `${line} `.includes(nativeHook))
+    )
   }
 }
 
@@ -227,7 +237,11 @@ export function hookDefinitionHasManagedCommand(
 }
 
 // Why: temp+rename so concurrent writers can't leave a torn script for an in-flight /bin/sh to source.
-export function writeManagedScript(scriptPath: string, content: string | Buffer): void {
+export function writeManagedScript(
+  scriptPath: string,
+  content: string | Buffer,
+  options: { lockedTargetAside?: string } = {}
+): void {
   const dir = dirname(scriptPath)
   mkdirSync(dir, { recursive: true })
 
@@ -251,7 +265,7 @@ export function writeManagedScript(scriptPath: string, content: string | Buffer)
     if (process.platform !== 'win32') {
       chmodSync(tmpPath, 0o755)
     }
-    renameSync(tmpPath, scriptPath)
+    renameOverLockedTarget(tmpPath, scriptPath, options.lockedTargetAside)
   } finally {
     if (existsSync(tmpPath)) {
       try {

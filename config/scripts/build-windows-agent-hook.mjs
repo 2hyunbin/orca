@@ -16,11 +16,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   compileWindowsRustExecutable({
     repoRoot,
     crateRoot,
-    binName: 'claude-hook',
-    label: 'Windows Claude hook',
+    binName: 'orca-agent-hook',
+    label: 'Windows agent hook',
     fingerprintInputs: [iconPath, join(repoRoot, 'config/scripts/build-windows-agent-hook.mjs')],
     arch: readArg('--arch'),
-    outputPath: readArg('--output') ?? join(crateRoot, '.build', 'claude-hook.exe'),
+    outputPath: readArg('--output') ?? join(crateRoot, '.build', 'orca-agent-hook.exe'),
     buildEnv: (version) => ({
       ORCA_HOOK_BUILD_VERSION: version,
       ORCA_HOOK_BUILD_ICON: iconPath

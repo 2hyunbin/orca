@@ -512,7 +512,7 @@ describe('Windows managed hook stdin structure', () => {
   // Why: command-shape tests missed conhost discarding the JSON consumers observe (#14818).
   it.skipIf(process.platform !== 'win32').each([
     { form: 'claude-hook.cmd', bundled: false },
-    { form: 'claude-hook.exe', bundled: true }
+    { form: 'orca-agent-hook.exe claude', bundled: true }
   ])(
     'emits parseable JSON on stdout from the registered Claude hook command ($form), through cmd.exe and Git Bash',
     async ({ form, bundled }) => {

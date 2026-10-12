@@ -4,10 +4,10 @@ version = "0.0.0"
 edition = "2021"
 publish = false
 
-# Why `claude-hook`: it ships as resources\bin\claude-hook.exe and installs under the same
-# name in ~/.orca/agent-hooks, so the name that runs matches the PE's OriginalFilename.
+# Why `orca-agent-hook`: it ships as resources\bin\orca-agent-hook.exe and installs under the
+# same name in ~/.orca/agent-hooks, so the name that runs matches the PE's OriginalFilename.
 [[bin]]
-name = "claude-hook"
+name = "orca-agent-hook"
 path = "src/main.rs"
 
 [build-dependencies]
