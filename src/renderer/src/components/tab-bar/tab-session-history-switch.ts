@@ -15,8 +15,10 @@ import {
   parseExecutionHostId,
   type ExecutionHostScope
 } from '../../../../shared/execution-host'
-import type { AgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
-import { hostStructuredAgentClaims } from '@/runtime/use-host-structured-agent'
+import {
+  isAgentSessionHandleProvider,
+  type AgentSessionHandleProvider
+} from '../../../../shared/agent-session-provider-handle'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { resolveAiVaultSessionSurfaceSwitchTargets } from '../right-sidebar/ai-vault-session-surface-switch'
 import { resolveAiVaultHistoryRowResume } from '../right-sidebar/ai-vault-session-resume-in-chat-workspace'
@@ -28,7 +30,6 @@ import {
 } from '../right-sidebar/ai-vault-session-list-request'
 import { resolveAiVaultPanelSessionListRequest } from '../right-sidebar/ai-vault-panel-session-list-request'
 import { claimAiVaultForcedRescan } from '../right-sidebar/ai-vault-session-refresh'
-import { agentCliForksConversations } from '../right-sidebar/ai-vault-session-cli-fork'
 
 /** What a tab's history row is found by: a native chat tab by the chat it shows, a terminal tab by
  *  the provider conversation its agent reported. */
@@ -81,16 +82,11 @@ export function resolveTabSessionHistorySubject(
       : null
   }
   if (args.structuredSessionId !== undefined) {
-    // A chat tab's one move is a CLI fork of its owned row: no lookup for an agent without either.
-    const agent = args.tab.launchAgent
-    if (!agent || !agentCliForksConversations(agent)) {
-      return null
-    }
-    const target = workspace(args.tab.worktreeId, 'chat')
-    return target &&
-      hostStructuredAgentClaims(state, target.request.executionHostScope, agent, 'sessionHistory')
-      ? { ...target, kind: 'chat', sessionId: args.structuredSessionId }
+    // Only these providers have history rows either move can act on.
+    const target = isAgentSessionHandleProvider(args.tab.launchAgent)
+      ? workspace(args.tab.worktreeId, 'chat')
       : null
+    return target ? { ...target, kind: 'chat', sessionId: args.structuredSessionId } : null
   }
   // The same pane-to-conversation mapping tab titles use: live agent, then sleeping, then retained.
   const titleRequest = collectAiVaultTitleRequests(state).find(

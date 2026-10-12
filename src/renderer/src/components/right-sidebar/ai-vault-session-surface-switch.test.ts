@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { resolveAiVaultSessionSurfaceSwitchTargets } from './ai-vault-session-surface-switch'
 
 const TURNS = {
-  sessionId: 'provider-1',
   messageCount: 2,
   previewMessages: [{ role: 'user' as const, text: 'Fix the build', timestamp: null }]
 }
@@ -30,7 +29,6 @@ describe('resolveAiVaultSessionSurfaceSwitchTargets', () => {
   it('withholds the CLI fork for an empty or blocked chat row', () => {
     const empty = {
       agent: 'claude' as const,
-      sessionId: 'provider-1',
       structuredSession: OWNED,
       messageCount: 0
     }

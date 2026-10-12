@@ -1,30 +1,20 @@
 import { translate } from '@/i18n/i18n'
 import { compactIpcErrorMessage } from '@/lib/ipc-error'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
-import { getAgentForkArgv, isResumableTuiAgent } from '../../../../shared/agent-session-resume'
 
 /**
  * Where "Resume in New CLI" opens its copy of a conversation native chat owns, or null when the row
- * does not offer it. A row no chat owns already resumes in the CLI through plain Resume, and only an
- * agent whose CLI can fork offers the copy.
+ * does not offer it. A row no chat owns already resumes in the CLI through plain Resume, and only
+ * Claude and Codex can fork.
  */
 export function aiVaultSessionCliForkWorktreeId(
-  session: Pick<AiVaultSession, 'agent' | 'sessionId' | 'structuredSession'>,
+  session: Pick<AiVaultSession, 'agent' | 'structuredSession'>,
   resume: { worktreeId: string | null | undefined; disabled: boolean }
 ): string | null {
   if (!session.structuredSession || resume.disabled || !resume.worktreeId) {
     return null
   }
-  return agentCliForksConversations(session.agent, session.sessionId) ? resume.worktreeId : null
-}
-
-/** Whether the agent's CLI can open a copy of a conversation: whether it has a fork command for
- *  `sessionId`, which a caller with no conversation yet may leave as any id. */
-export function agentCliForksConversations(agent: string, sessionId = 'any'): boolean {
-  return (
-    isResumableTuiAgent(agent) &&
-    getAgentForkArgv(agent, { key: 'session_id', id: sessionId }) !== null
-  )
+  return session.agent === 'claude' || session.agent === 'codex' ? resume.worktreeId : null
 }
 
 /** The toast for a failed "Resume in New CLI". Only a host whose guard predates the fork refuses
