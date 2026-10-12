@@ -145,6 +145,7 @@ export function taskListMountAdapters(
           selectedLinearTeamIds: new Set<string>(),
           selectedLinearWorkspaceId: 'linear-workspace',
           selectedRepoIds: new Set<string>(),
+          serverRepoList: [],
           taskStateHydrated: true,
           tasksSupported: true,
           items: [],

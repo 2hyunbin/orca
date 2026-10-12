@@ -19,11 +19,13 @@ vi.mock('./mobile-tasks-dependencies', async () => {
   const { normalizeVisibleTaskProviders } = await import('./mobile-task-providers')
   return {
     useCallback: react.useCallback,
+    useEffect: react.useEffect,
     useMemo: react.useMemo,
     useRef: react.useRef,
     useState: react.useState,
     useHostRepoList,
     normalizeVisibleTaskProviders,
+    isHostedTaskRepo: (await import('./hosted-repo-selection')).isHostedTaskRepo,
     CROSS_REPO_DISPLAY_LIMIT: workItems.CROSS_REPO_DISPLAY_LIMIT,
     PER_REPO_FETCH_LIMIT: workItems.PER_REPO_FETCH_LIMIT,
     isGitHubWorkItemsSshRemoteRequiredError: workItems.isGitHubWorkItemsSshRemoteRequiredError,
@@ -43,12 +45,17 @@ vi.mock('./mobile-tasks-legacy-foundation', async () => ({
   reconcileTeamSelection: () => new Set(),
   DEFAULT_LINEAR_DISPLAY_PROPERTIES: [],
   GITHUB_REPO_CONCURRENCY: 3,
+  GITLAB_PER_PAGE: 50,
+  LINEAR_LIMIT: 50,
+  buildPartialRepositoryNotice: () => 'Some repositories failed to load.',
   groupDetailComments: () => []
 }))
 
 const { useMobileTasksRouteAndItemState } = await import('./use-mobile-tasks-route-and-item-state')
 const { useMobileTasksProviderLoadActions } =
   await import('./use-mobile-tasks-provider-load-actions')
+const { useMobileTasksTaskListLoading } = await import('./use-mobile-tasks-task-list-loading')
+const { useTaskRepoSelectionReconcile } = await import('./use-task-repo-selection-reconcile')
 
 type Sent = { method: string; executionHost?: string }
 const sentBy = new WeakMap<FakeSession, Sent[]>()
@@ -118,8 +125,9 @@ function desktop(
   })
 }
 
-type Model = ReturnType<typeof useMobileTasksRouteAndItemState> &
-  ReturnType<typeof useMobileTasksProviderLoadActions>
+type Model = ReturnType<typeof useMobileTasksTaskListLoading>
+/** What each render showed: the full-list spinner, and how many items. */
+const renders: { loading: boolean; count: number }[] = []
 const mounted: ReactTestRenderer[] = []
 afterEach(() => {
   for (const renderer of mounted.splice(0)) {
@@ -127,17 +135,35 @@ afterEach(() => {
   }
 })
 
-async function mount(client: FakeSession, hostCapabilities: string[]): Promise<() => Model> {
+async function mount(
+  client: FakeSession,
+  hostCapabilities: string[],
+  savedSelection: string[] = []
+): Promise<() => Model> {
   desktopRef.current = client
   const seen: { model?: Model } = {}
   function Harness(): null {
-    // The GitHub list's loader, fed the screen's own model as the screen feeds it.
-    seen.model = useMobileTasksProviderLoadActions(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the loader reads only stage-1 members (client, repos, query, kind).
-      useMobileTasksRouteAndItemState() as unknown as Parameters<
-        typeof useMobileTasksProviderLoadActions
-      >[0]
+    const route = useMobileTasksRouteAndItemState()
+    if (route.defaultRepoSelectionRef.current === null) {
+      route.defaultRepoSelectionRef.current = savedSelection
+    }
+    useTaskRepoSelectionReconcile(route)
+    // Stage 6 binds this to the live client; a load only commits for the client it started on.
+    route.clientRef.current = route.client
+    // The list's loaders, fed the screen's own model as the screen feeds them. Stages 2-6 are
+    // stood in for by the three members they would add: hydrated, supported, and the page reset.
+    seen.model = useMobileTasksTaskListLoading(
+      useMobileTasksProviderLoadActions(
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the loaders read only stage-1 members and the three stood-in ones.
+        {
+          ...route,
+          taskStateHydrated: true,
+          tasksSupported: true,
+          resetGitHubItemsState: () => {}
+        } as unknown as Parameters<typeof useMobileTasksProviderLoadActions>[0]
+      )
     )
+    renders.push({ loading: seen.model.loading, count: seen.model.items.length })
     return null
   }
   const gates: HostStatusGates = {
@@ -218,13 +244,15 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
     await loadRepos(model)
     await settle()
+    // Only this page's calls: the screen's own quiet reload already ran when the server joined.
+    const earlier = ranOn(client, 'github.listWorkItems').length
     const page: { titles?: string[] } = {}
     await act(async () => {
       const loaded = await model().fetchGitHubItemsPage(model().client!, model().repos)
       page.titles = loaded.items.map((item) => item.title).sort()
     })
     expect(page.titles).toEqual(['from the desktop', 'from the server', 'from the server'])
-    expect(ranOn(client, 'github.listWorkItems').sort()).toEqual([
+    expect(ranOn(client, 'github.listWorkItems').slice(earlier).sort()).toEqual([
       'desktop',
       'runtime:vm',
       'runtime:vm'
@@ -235,8 +263,8 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     const model = await mount(desktop(), [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
     await loadRepos(model)
     await settle()
-    const details = model().repos.map((repo) => getTaskRepoDetail(repo, model().serverLabelById))
-    expect(details).toEqual(['/mac/app', 'VM · /srv/api', 'VM · /r'])
+    const details = model().repos.map((repo) => getTaskRepoDetail(repo, model().repoHostLabels))
+    expect(details).toEqual(['This computer · /mac/app', 'VM · /srv/api', 'VM · /r'])
   })
 
   it('keeps the desktop list alone on a desktop that does not relay', async () => {
@@ -259,4 +287,52 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     expect(await loadRepos(model)).toEqual(MAC_REPOS)
     expect(model().repos).toEqual(MAC_REPOS)
   })
+
+  it("keeps a saved selection of a server's repo while that server answers late", async () => {
+    const late = deferred<unknown>()
+    const model = await mount(
+      desktop(() => late.promise),
+      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
+      ['vm-repo']
+    )
+    await loadRepos(model)
+    await settle()
+    // Not yet applied: the server hasn't answered, so `vm-repo` is pending rather than gone.
+    expect([...model().selectedRepoIds]).toEqual([])
+    late.resolve({ repos: VM_REPOS })
+    await settle()
+    expect([...model().selectedRepoIds]).toEqual(['vm-repo'])
+  })
+
+  it("adds a late server's items without blanking the desktop's or showing the full spinner", async () => {
+    const late = deferred<unknown>()
+    const model = await mount(
+      desktop(() => late.promise),
+      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY]
+    )
+    await act(async () => {
+      await model().loadTasks()
+    })
+    expect({ error: model().error, titles: model().items.map((item) => item.title) }).toEqual({
+      error: '',
+      titles: ['from the desktop']
+    })
+    const joinedFrom = renders.length
+    late.resolve({ repos: VM_REPOS })
+    await settle()
+    expect(
+      model()
+        .items.map((item) => item.title)
+        .sort()
+    ).toEqual(['from the desktop', 'from the server', 'from the server'])
+    expect(renders.slice(joinedFrom).filter((seen) => seen.loading || seen.count === 0)).toEqual([])
+  })
 })
+
+function deferred<Value>() {
+  let resolve: (value: Value) => void = () => {}
+  const promise = new Promise<Value>((settle) => {
+    resolve = settle
+  })
+  return { promise, resolve }
+}

@@ -70,9 +70,21 @@ export function useMobileTasksRouteAndItemState() {
       : null
   )
   // Why one client: every call naming a server's repo then runs on that server.
-  const { client, repos, repoListEnsureLoaded, repoListReload, serverLabelById } = useTaskHostRepos(
-    { desktopClient, connState, hostCapabilities, desktopRepoList: repoList }
-  )
+  const {
+    client,
+    repos,
+    serverRepoList,
+    serverReposSettled,
+    repoListEnsureLoaded,
+    repoListReload,
+    repoHostLabels
+  } = useTaskHostRepos({
+    hostId,
+    desktopClient,
+    connState,
+    hostCapabilities,
+    desktopRepoList: repoList
+  })
   const [provider, setProvider] = useState<TaskProvider>('github')
   const [visibleProviders, setVisibleProviders] = useState<TaskProvider[]>(() =>
     normalizeVisibleTaskProviders(undefined)
@@ -186,7 +198,9 @@ export function useMobileTasksRouteAndItemState() {
     taskResumeRef,
     repoList,
     repos,
-    serverLabelById,
+    serverRepoList,
+    serverReposSettled,
+    repoHostLabels,
     repoListEnsureLoaded,
     repoListReload,
     provider,

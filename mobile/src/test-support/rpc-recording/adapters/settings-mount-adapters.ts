@@ -160,6 +160,8 @@ export function settingsMountAdapters(
         provider: 'github',
         repoList: { state: { status: 'loading' } },
         repos: [],
+        // No servers, so their repo lists are settled from the start.
+        serverReposSettled: true,
         requestedTaskSource: undefined,
         resetGitHubItemsState: () => context.effect('reset-items', null),
         resetWorkspaceCreateState: () => context.effect('reset-workspace', null),

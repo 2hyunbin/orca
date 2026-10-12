@@ -1,5 +1,6 @@
 import { settingsRead } from '../transport/settings-read-operations'
 import type { ClientSettingsActionsModel } from './use-mobile-tasks-client-settings-actions'
+import { useTaskRepoSelectionReconcile } from './use-task-repo-selection-reconcile'
 import {
   taskLinearStatusRead,
   taskPreflightRead,
@@ -10,9 +11,7 @@ import {
   MOBILE_TASKS_CAPABILITY,
   type PersistedTrustedOrcaHooks,
   filterAvailableTaskProviders,
-  isHostedTaskRepo,
   normalizeVisibleTaskProviders,
-  reconcileRepoSelection,
   resolveVisibleTaskProvider,
   useEffect
 } from './mobile-tasks-dependencies'
@@ -35,9 +34,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     defaultLinearTeamSelectionRef,
     defaultRepoSelectionRef,
     provider,
-    repoList,
     repoSelectionHydratedRef,
-    repos,
     requestedTaskSource,
     resetGitHubItemsState,
     resetWorkspaceCreateState,
@@ -73,7 +70,6 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setRuntimeTaskSettings,
     setSelectedLinearTeamIds,
     setSelectedLinearWorkspaceId,
-    setSelectedRepoIds,
     setShowCreateTargetPicker,
     setShowCreateTask,
     setShowGitHubIssueSourcePicker,
@@ -366,26 +362,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setProvider(resolveVisibleTaskProvider(provider, visibleProviders))
   }, [provider, visibleProviders])
 
-  // Selection follows the list rather than the fetch, so it reconciles the same
-  // way no matter which caller triggered the load.
-  useEffect(() => {
-    if (repoList.state.status !== 'loaded') {
-      return
-    }
-    if (!repoSelectionHydratedRef.current) {
-      repoSelectionHydratedRef.current = true
-      setSelectedRepoIds(reconcileRepoSelection(repos, defaultRepoSelectionRef.current))
-      return
-    }
-    setSelectedRepoIds((current) => {
-      if (current.size === 0) {
-        return current
-      }
-      const availableIds = new Set(repos.filter(isHostedTaskRepo).map((repo) => repo.id))
-      const next = new Set([...current].filter((id) => availableIds.has(id)))
-      return next.size === current.size ? current : next
-    })
-  }, [repoList.state.status, repos])
+  useTaskRepoSelectionReconcile(model)
   return model
 }
 

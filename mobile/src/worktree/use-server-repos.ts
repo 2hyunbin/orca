@@ -7,16 +7,18 @@ type ServerRepo<Repo> = Repo & { executionHostId: ExecutionHostId }
 
 /**
  * Each reachable server's repos by host, filled in as each server answers, so a slow server never
- * holds back the desktop's own list or another server's. A new `generation` re-reads them.
+ * holds back the desktop's own list or another server's. `settled` once every server has answered
+ * or failed. A new `generation` re-reads them.
  */
 export function useServerRepos<Repo extends ListedRepo>(
   serverClients: ReadonlyMap<ExecutionHostId, RpcClient>,
   active: boolean,
   generation = 0
-): ReadonlyMap<ExecutionHostId, ServerRepo<Repo>[]> {
-  const [serverRepos, setServerRepos] = useState<ReadonlyMap<ExecutionHostId, ServerRepo<Repo>[]>>(
+): { reposByHost: ReadonlyMap<ExecutionHostId, ServerRepo<Repo>[]>; settled: boolean } {
+  const [reposByHost, setServerRepos] = useState<ReadonlyMap<ExecutionHostId, ServerRepo<Repo>[]>>(
     () => new Map()
   )
+  const [answered, setAnswered] = useState<ReadonlySet<ExecutionHostId>>(() => new Set())
 
   useEffect(() => {
     // A server the phone can no longer reach takes its repos with it.
@@ -30,7 +32,13 @@ export function useServerRepos<Repo extends ListedRepo>(
     let stale = false
     for (const [executionHostId, serverClient] of serverClients) {
       void listServerRepos<Repo>(executionHostId, serverClient).then((listed) => {
-        if (!stale && listed) {
+        if (stale) {
+          return
+        }
+        setAnswered((previous) =>
+          previous.has(executionHostId) ? previous : new Set(previous).add(executionHostId)
+        )
+        if (listed) {
           setServerRepos((previous) => new Map(previous).set(executionHostId, listed))
         }
       })
@@ -40,5 +48,5 @@ export function useServerRepos<Repo extends ListedRepo>(
     }
   }, [active, generation, serverClients])
 
-  return serverRepos
+  return { reposByHost, settled: [...serverClients.keys()].every((host) => answered.has(host)) }
 }

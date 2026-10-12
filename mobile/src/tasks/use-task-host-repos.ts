@@ -1,9 +1,11 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import type { HostContextLabelSources } from '../../../src/shared/worktree/host-context-labels'
 import {
   reachableServerClients,
   relaysToServers
 } from '../transport/execution-host-scoped-rpc-client'
+import { useHostDescriptor } from '../transport/host-descriptor-store'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
 import { useRelayHosts } from '../worktree/relay-hosts-feed'
@@ -20,29 +22,40 @@ const NO_LABELS: ReadonlyMap<ExecutionHostId, string> = new Map()
  * them: the desktop's list settles on its own, and each server's joins as it answers.
  */
 export function useTaskHostRepos(args: {
+  hostId: string | undefined
   desktopClient: RpcClient | null
   connState: ConnectionState
   hostCapabilities: readonly string[]
   desktopRepoList: HostRepoListResource<RepoSummary>
 }) {
-  const { desktopClient, connState, hostCapabilities, desktopRepoList } = args
+  const { hostId, desktopClient, connState, hostCapabilities, desktopRepoList } = args
   const relays = desktopClient !== null && relaysToServers(desktopClient, hostCapabilities)
   const servers = useRelayHosts(relays ? desktopClient : null)
   const serverClients = useMemo(
     () => reachableServerClients(desktopClient, hostCapabilities, servers ?? []),
     [desktopClient, hostCapabilities, servers]
   )
-  const serverLabelById = useMemo(
-    () => withServerHosts(NO_LABELS, servers ?? [], (host) => host.label),
-    [servers]
-  )
   const [serverListGeneration, setServerListGeneration] = useState(0)
-  const serverRepos = useServerRepos<RepoSummary>(
+  const { reposByHost, settled } = useServerRepos<RepoSummary>(
     serverClients,
     connState === 'connected',
     serverListGeneration
   )
-  const serverRepoList = useMemo(() => [...serverRepos.values()].flat(), [serverRepos])
+  const serverRepoList = useMemo(() => [...reposByHost.values()].flat(), [reposByHost])
+  // Why: a saved selection naming a server's repo must wait for that server, not read as gone.
+  const serverReposSettled = !relays || (servers !== null && settled)
+  const desktopPlatform = useHostDescriptor(hostId)?.platform ?? null
+  // Names hosts only once a server's repos mix in, as the desktop's mixed lists do.
+  const repoHostLabels = useMemo<HostContextLabelSources | null>(
+    () =>
+      serverRepoList.length === 0
+        ? null
+        : {
+            hostLabelById: withServerHosts(NO_LABELS, servers ?? [], (host) => host.label),
+            hostPlatform: desktopPlatform
+          },
+    [desktopPlatform, serverRepoList, servers]
+  )
   const desktopRepos = desktopRepoList.state.repos
   const repos = useMemo(
     () => (serverRepoList.length === 0 ? desktopRepos : [...desktopRepos, ...serverRepoList]),
@@ -65,15 +78,22 @@ export function useTaskHostRepos(args: {
     [currentDesktopRepos, desktopClient]
   )
 
-  // A new identity once a server's repos join, so a load keyed on it re-runs with them.
   const repoListEnsureLoaded = useCallback(
-    async (): Promise<RepoSummary[]> => [...(await ensureLoaded()), ...serverRepoList],
-    [ensureLoaded, serverRepoList]
+    async (): Promise<RepoSummary[]> => [...(await ensureLoaded()), ...serverReposRef.current],
+    [ensureLoaded]
   )
   const repoListReload = useCallback(async (): Promise<RepoSummary[]> => {
     setServerListGeneration((generation) => generation + 1)
-    return [...(await reload()), ...serverRepoList]
-  }, [reload, serverRepoList])
+    return [...(await reload()), ...serverReposRef.current]
+  }, [reload])
 
-  return { client, repos, repoListEnsureLoaded, repoListReload, serverLabelById }
+  return {
+    client,
+    repos,
+    serverRepoList,
+    serverReposSettled,
+    repoListEnsureLoaded,
+    repoListReload,
+    repoHostLabels
+  }
 }

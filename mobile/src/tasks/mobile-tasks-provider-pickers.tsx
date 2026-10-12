@@ -94,7 +94,7 @@ export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) 
     hostedRepos,
     persistRepoSelection,
     selectedRepoIds,
-    serverLabelById,
+    repoHostLabels,
     setSelectedRepoIds,
     setShowRepoPicker,
     showRepoPicker,
@@ -141,7 +141,7 @@ export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) 
                     {repo.displayName}
                   </Text>
                   <Text style={styles.repoPickerSubtitle} numberOfLines={1}>
-                    {getTaskRepoDetail(repo, serverLabelById)}
+                    {getTaskRepoDetail(repo, repoHostLabels)}
                   </Text>
                 </View>
                 {selected ? <Check size={15} color={colors.textPrimary} /> : null}

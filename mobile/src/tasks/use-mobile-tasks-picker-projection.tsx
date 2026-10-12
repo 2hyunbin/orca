@@ -35,7 +35,7 @@ export function useMobileTasksPickerProjection(model: DetailCommentRenderersMode
     reposById,
     selectedHostedRepos,
     selectedRepoIds,
-    serverLabelById,
+    repoHostLabels,
     taskSort,
     visibleProviders,
     workspaceRepos
@@ -46,7 +46,7 @@ export function useMobileTasksPickerProjection(model: DetailCommentRenderersMode
         ? hostedRepos.map((repo) => ({
             value: repo.id,
             label: repo.displayName,
-            subtitle: getTaskRepoDetail(repo, serverLabelById),
+            subtitle: getTaskRepoDetail(repo, repoHostLabels),
             renderIcon: () => (
               <View
                 style={[
@@ -61,7 +61,7 @@ export function useMobileTasksPickerProjection(model: DetailCommentRenderersMode
             label: team.name,
             subtitle: team.workspaceName
           })),
-    [hostedRepos, linearTeams, provider, serverLabelById]
+    [hostedRepos, linearTeams, provider, repoHostLabels]
   )
   const selectedCreateTarget =
     provider === 'github' || provider === 'gitlab'
@@ -122,7 +122,7 @@ export function useMobileTasksPickerProjection(model: DetailCommentRenderersMode
       workspaceRepos.map((repo) => ({
         value: repo.id,
         label: repo.displayName,
-        subtitle: getTaskRepoDetail(repo, serverLabelById),
+        subtitle: getTaskRepoDetail(repo, repoHostLabels),
         renderIcon: () => (
           <View
             style={[
@@ -132,7 +132,7 @@ export function useMobileTasksPickerProjection(model: DetailCommentRenderersMode
           />
         )
       })),
-    [serverLabelById, workspaceRepos]
+    [repoHostLabels, workspaceRepos]
   )
   const sortedItems = useMemo(
     () => sortMobileTaskItems(items, taskSort, reposById),

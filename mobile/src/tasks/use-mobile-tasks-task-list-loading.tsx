@@ -1,5 +1,5 @@
 import type { ProviderLoadActionsModel } from './use-mobile-tasks-provider-load-actions'
-import { isHostedTaskRepo, useCallback } from './mobile-tasks-dependencies'
+import { isHostedTaskRepo, useCallback, useEffect, useRef } from './mobile-tasks-dependencies'
 import {
   GITHUB_REPO_CONCURRENCY,
   GITLAB_PER_PAGE,
@@ -42,6 +42,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     selectedLinearTeamIds,
     selectedLinearWorkspaceId,
     selectedRepoIds,
+    serverRepoList,
     setError,
     setGithubCurrentPage,
     setGithubPages,
@@ -272,6 +273,17 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       tasksSupported
     ]
   )
+  // A server's repos joining reload quietly, so the items already listed stay on screen.
+  const listedServerReposRef = useRef(serverRepoList)
+  useEffect(() => {
+    if (listedServerReposRef.current === serverRepoList) {
+      return
+    }
+    listedServerReposRef.current = serverRepoList
+    if (connState === 'connected' && taskStateHydrated) {
+      void loadTasks({ silent: true })
+    }
+  }, [serverRepoList])
   return Object.assign(model, { loadTasks })
 }
 
