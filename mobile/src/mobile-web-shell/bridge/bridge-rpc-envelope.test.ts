@@ -108,6 +108,29 @@ describe('bridge rpc envelope: page side', () => {
     expect(refusal).toMatchObject({ code: 'bridge_rpc_envelope_invalid' })
     expect(page.sent).toHaveLength(posted)
   })
+
+  it.each([
+    ['null', null],
+    ['an array', []],
+    ['a Date', new Date(0)]
+  ])(
+    'refuses %s as an envelope with a rejection, never a throw or a silent drop',
+    async (_, value) => {
+      const page = grantedPage()
+      const posted = page.sent.length
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a caller that widened the type, which the check exists for.
+      const envelope = value as unknown as Record<string, null>
+      let answer: Promise<unknown> | undefined
+      expect(() => {
+        answer = page.client.sendRequest('worktree.ps', {}, { envelope })
+      }).not.toThrow()
+      expect(await answer?.catch(readError)).toBeInstanceOf(BridgeRpcEnvelopeInvalidError)
+      expect(() =>
+        page.client.subscribe('terminal.subscribe', {}, () => undefined, { envelope })
+      ).toThrow(BridgeRpcEnvelopeInvalidError)
+      expect(page.sent).toHaveLength(posted)
+    }
+  )
 })
 
 describe('bridge rpc envelope: shell side', () => {

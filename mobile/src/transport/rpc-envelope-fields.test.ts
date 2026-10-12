@@ -59,6 +59,10 @@ function relayStreams() {
   return { streams, frames }
 }
 
+function answered(id: string): RpcResponse {
+  return { id, ok: true, result: null, _meta: { runtimeId: 'runtime-1' } }
+}
+
 function streaming(id: string, result: unknown): RpcResponse {
   return { id, ok: true, streaming: true, result, _meta: { runtimeId: 'runtime-1' } }
 }
@@ -95,11 +99,14 @@ describe('withRpcEnvelopeFields', () => {
 describe('direct transport envelope', () => {
   it('sends a request with no envelope byte for byte as before', async () => {
     const socket = directWire()
-    void tracker(socket).sendRequest('status.get', { a: 1 }, { timeoutMs: 1000 })
+    const requests = tracker(socket)
+    const answer = requests.sendRequest('status.get', { a: 1 }, { timeoutMs: 1000 })
     await Promise.resolve()
     expect(socket.sent).toEqual([
       '{"id":"rpc-1","deviceToken":"device-token","method":"status.get","params":{"a":1}}'
     ])
+    requests.resolve(answered('rpc-1'))
+    await answer
   })
 
   it('writes a frame without params, like the liveness probe, as before', () => {
@@ -111,7 +118,8 @@ describe('direct transport envelope', () => {
   it('merges a request envelope under every transport field', async () => {
     const socket = directWire()
     const forged = Object.fromEntries(RPC_TRANSPORT_FIELDS.map((field) => [field, 'forged']))
-    void tracker(socket).sendRequest(
+    const requests = tracker(socket)
+    const answer = requests.sendRequest(
       'status.get',
       { a: 1 },
       { envelope: { ...forged, ...ENVELOPE } }
@@ -126,6 +134,8 @@ describe('direct transport envelope', () => {
         ...ENVELOPE
       }
     ])
+    requests.resolve(answered('rpc-1'))
+    await answer
   })
 
   it('sends a subscribe with no envelope byte for byte as before', () => {

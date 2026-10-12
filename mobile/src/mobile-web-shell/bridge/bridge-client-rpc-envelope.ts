@@ -22,15 +22,19 @@ export function readBridgeRpcEnvelope(
   fields: RpcEnvelopeFields | undefined,
   hasGrant: HasGrant
 ): RpcEnvelopeFields | undefined {
-  if (fields === undefined || Object.keys(fields).length === 0) {
+  if (fields === undefined) {
+    return undefined
+  }
+  // Checked before the empty shortcut, so `[]`, a `Date` or `null` is refused, not read as empty.
+  const parsed = RpcEnvelopeFieldsSchema.safeParse(fields)
+  if (!parsed.success) {
+    throw new BridgeRpcEnvelopeInvalidError()
+  }
+  if (Object.keys(parsed.data).length === 0) {
     return undefined
   }
   if (!hasGrant(BRIDGE_RPC_ENVELOPE_GRANT)) {
     throw new BridgeRpcEnvelopeUngrantedError()
-  }
-  const parsed = RpcEnvelopeFieldsSchema.safeParse(fields)
-  if (!parsed.success) {
-    throw new BridgeRpcEnvelopeInvalidError()
   }
   return parsed.data
 }
