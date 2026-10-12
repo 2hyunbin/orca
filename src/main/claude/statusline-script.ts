@@ -7,9 +7,18 @@ import {
   CLAUDE_STATUSLINE_MIN_POST_INTERVAL_SECONDS,
   CLAUDE_STATUSLINE_PATHNAME
 } from '../../shared/claude-statusline-rate-limits'
+import { getManagedCommand, getWindowsManagedLifecycleHook } from './hook-settings'
 
 const STATUSLINE_CLEANUP_LABEL = 'orca_statusline_cleanup'
 const STATUSLINE_PROBE_LABEL = 'orca_statusline_probe'
+
+// Why: Claude runs this under Windows PowerShell when Git Bash is absent, which cannot parse the
+// POSIX runtime-home form; the lifecycle hooks' shell-neutral .cmd invocation runs under either.
+export function getManagedStatusLineCommand(scriptPath: string): string {
+  return process.platform === 'win32'
+    ? getWindowsManagedLifecycleHook(scriptPath).command
+    : getManagedCommand(scriptPath)
+}
 
 // Why: Claude Code pipes `rate_limits` to the statusLine command on every turn; forwarding
 // it gives Orca live usage without spending the OAuth usage endpoint's tight budget.
