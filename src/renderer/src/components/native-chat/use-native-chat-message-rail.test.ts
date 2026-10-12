@@ -2,7 +2,7 @@
 
 import { act, renderHook } from '@testing-library/react'
 import * as rowContent from '../../../../shared/native-chat-row-content'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import type { NativeChatResolvedPrompt } from './native-chat-resolution-receipt'
 import type { NativeChatTurnDiff } from './native-chat-turn-diffs'
@@ -53,6 +53,10 @@ const CONVERSATION = [
 ]
 
 describe('message rail hook', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('reuses previews and rail state during long-history streamed renders', () => {
     const conversation = Array.from({ length: 2000 }, (_, index) =>
       message(`history-${index}`, index % 2 === 0 ? 'user' : 'assistant')
@@ -152,42 +156,65 @@ describe('message rail hook', () => {
 
   // A jump that cannot bring its row to the top lands clamped at the bottom, where
   // the position report would light the last tick instead of the clicked one.
-  it('keeps a clicked tick lit until the reader navigates', () => {
+  it('keeps a clicked tick lit while the view rests where its jump landed', () => {
     vi.useFakeTimers()
     const element = document.createElement('div')
+    let scrollTop = 200
     Object.defineProperties(element, {
-      scrollTop: { value: 200 },
+      scrollTop: { get: () => scrollTop },
       clientHeight: { value: 300 },
       scrollHeight: { value: 500 }
     })
     const scrollRef = { current: element }
-    const slots = slotsOf(CONVERSATION)
-    const virtualItems = slots.map((_slot, index) => ({
-      key: index,
-      index,
-      start: index * 100,
-      end: index * 100 + 100,
-      size: 100,
-      lane: 0
-    }))
-    const { result, unmount } = renderHook(() =>
-      useNativeChatMessageRail({ scrollRef, slots, turnRows: NO_ROWS, virtualItems })
+    const settle = (): void =>
+      act(() => {
+        element.dispatchEvent(new Event('scroll'))
+        vi.runAllTimers()
+      })
+    const virtualItemsOf = (slots: ReturnType<typeof slotsOf>) =>
+      slots.map((_slot, index) => ({
+        key: index,
+        index,
+        start: index * 100,
+        end: index * 100 + 100,
+        size: 100,
+        lane: 0
+      }))
+    const { result, rerender, unmount } = renderHook(
+      ({ slots }) =>
+        useNativeChatMessageRail({
+          scrollRef,
+          slots,
+          turnRows: NO_ROWS,
+          virtualItems: virtualItemsOf(slots)
+        }),
+      { initialProps: { slots: slotsOf(CONVERSATION) } }
     )
     expect(result.current.activeId).toBe('u3')
     act(() => result.current.onActivate('u2'))
-    act(() => {
-      element.dispatchEvent(new Event('scroll'))
-      vi.runAllTimers()
-    })
+    settle()
+    settle()
     expect(result.current.activeId).toBe('u2')
-    act(() => {
-      result.current.onNavigate()
-      element.dispatchEvent(new Event('scroll'))
-      vi.runAllTimers()
-    })
-    expect(result.current.activeId).toBe('u3')
+    // A jump that did not move the view fired no scroll, yet a later move still releases it.
+    act(() => result.current.onActivate('u3'))
+    act(() => vi.runAllTimers())
+    scrollTop = 0
+    settle()
+    expect(result.current.activeId).toBe('u1')
+    scrollTop = 200
+    settle()
+    act(() => result.current.onActivate('u2'))
+    settle()
+    // A long session trims its oldest rows as new ones arrive.
+    rerender({ slots: slotsOf(CONVERSATION.slice(1)) })
+    expect(result.current.items.map((item) => item.id)).toEqual(['u2', 'u3'])
+    settle()
+    expect(result.current.activeId).toBe('u2')
+    // Any move releases it, whatever made it: the reply above `u2` is in no turn.
+    scrollTop = 0
+    settle()
+    expect(result.current.activeId).toBeNull()
     unmount()
-    vi.useRealTimers()
   })
 
   it('ticks every user message and shows from the first one', () => {
