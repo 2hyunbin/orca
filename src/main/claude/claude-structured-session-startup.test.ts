@@ -426,7 +426,7 @@ describe('Claude structured session publishes before the CLI answers initialize'
     expect(events.some((event) => event.type === 'started')).toBe(false)
   })
 
-  // The CLI answers no control request before initialize; Claude's Stop ends the child instead.
+  // The CLI answers no control request before initialize; the Stop ends the child instead.
   it('sends no interrupt to a CLI still starting, though it was handed a message', async () => {
     const claude = fakeClaude({ initDelayMs: SLOW_INIT_MS })
     const { adapter } = startingAdapter(claude)
@@ -438,7 +438,6 @@ describe('Claude structured session publishes before the CLI answers initialize'
     })
 
     expect(claude.connections[0].calls.map(({ subtype }) => subtype)).not.toContain('interrupt')
-    expect(adapter.stopEndsSession()).toBe(true)
     await adapter.closeAll()
   })
 })

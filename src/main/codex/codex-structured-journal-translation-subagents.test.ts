@@ -181,4 +181,42 @@ describe('codex journal translation — subagents', () => {
 
     expect(rosterAgents(rows)).toMatchObject([{ id: 'child-1', state: 'unverifiable' }])
   })
+
+  it.each([
+    [{ root: 'exited', workload: 'exited' }, 'stopped'],
+    [{ root: 'exited', workload: 'unverifiable' }, 'unverifiable'],
+    [{ root: 'live', workload: 'exited' }, 'unverifiable']
+  ] as const)('settles a requested Stop with process evidence %j as %s', (processExit, state) => {
+    const { translator, rows } = harness()
+    translator.handle(notification('turn/started', { turn: { id: TURN_ID } }))
+    deliverActivity(translator, subagentItem('started', 'child-1', '/root/read'))
+    translator.handle({
+      type: 'ended',
+      sessionId: SESSION_ID,
+      reason: 'stopped',
+      cause: 'requested-close',
+      stopCause: 'user-stop',
+      processExit,
+      fence: 1,
+      acquisitionGeneration: 'gen-1'
+    })
+    expect(rosterAgents(rows)).toMatchObject([{ id: 'child-1', state }])
+  })
+
+  it('leaves a proven user-close child unavailable rather than calling it interrupted', () => {
+    const { translator, rows } = harness()
+    translator.handle(notification('turn/started', { turn: { id: TURN_ID } }))
+    deliverActivity(translator, subagentItem('started', 'child-1', '/root/read'))
+    translator.handle({
+      type: 'ended',
+      sessionId: SESSION_ID,
+      reason: 'chat closed',
+      cause: 'requested-close',
+      stopCause: 'user-close',
+      processExit: { root: 'exited', workload: 'exited' },
+      fence: 1,
+      acquisitionGeneration: 'gen-1'
+    })
+    expect(rosterAgents(rows)).toMatchObject([{ id: 'child-1', state: 'unverifiable' }])
+  })
 })

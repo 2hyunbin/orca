@@ -2,14 +2,15 @@
 // the events it writes back as the provider would.
 
 import { vi, type Mock } from 'vitest'
-import type { StructuredAgentSessionHost } from './structured-agent-session-host'
-import { startsWhenPublished } from './structured-agent-session-instant-start.test-support'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { activeProviderContext } from '../../../shared/agent-session-provider-context'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { isStructuredAgentSessionMainAgentWorking } from '../../../shared/structured-agent-session-main-agent-working'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import type { StructuredAgentSessionHost } from './structured-agent-session-host'
+import { startsWhenPublished } from './structured-agent-session-instant-start.test-support'
 import {
   HOST_TEST_NOW as NOW,
   HOST_TEST_THREAD as THREAD
@@ -21,13 +22,15 @@ export type QueuedRigProviderOptions = {
   /** A child started for a chat whose chain already names a thread resumes it, so a chat whose
    *  child closed or died can start another. */
   restartable?: true
-  /** Every child stays starting. */
+  /** Every child stays starting: it never answers its start, so it is handed nothing. */
   starting?: true
-  /** The provider's Stop ends its child, as Claude's does. */
-  stopEndsSession?: true
-  /** Its child never answers its start, so it runs nothing it is handed. */
-  startUnanswered?: true
+  /** A Stop's end of the child waits, as every shipping adapter's does, for the work it stopped
+   *  to end (no running turn, no unanswered send), or for the grace to run out. */
+  windsDown?: true
 }
+
+/** How long a winding-down child is given after the interrupt before the Stop ends it. */
+export const QUEUED_RIG_STOP_GRACE_MS = 2_000
 
 export function createQueuedRigProvider(
   store: Pick<AgentSessionRecordStore, 'getRecord'>,
@@ -83,7 +86,6 @@ export function createQueuedRigProvider(
           spawnToken
         },
         acquisitionGeneration: 'generation-1',
-        ...(options.starting ? { providerChildPhase: 'starting' as const } : {}),
         link: {
           linkId: `link-${fence}`,
           handle: codexProviderHandle(thread),
@@ -98,14 +100,33 @@ export function createQueuedRigProvider(
     releaseAcquisition: vi.fn(async () => true),
     compact,
     cancelTurn,
-    ...(options.stopEndsSession ? { stopEndsSession: () => true } : {}),
-    ...(options.startUnanswered ? { startAnswered: () => false } : {}),
     answerPrompt: vi.fn(async () => undefined),
     setOption: vi.fn(async () => undefined),
     ...(options.rewind
       ? { rewind: options.rewind, rewindSupport: () => ({ supported: true as const }) }
       : {}),
-    ...(options.recoverRewind ? { recoverRewind: options.recoverRewind } : {})
+    ...(options.recoverRewind ? { recoverRewind: options.recoverRewind } : {}),
+    ...(options.windsDown
+      ? {
+          awaitStoppedRequestEnd: async (sessionId: string, stoppedAt: number) => {
+            while (Date.now() < stoppedAt + QUEUED_RIG_STOP_GRACE_MS && working(sessionId)) {
+              await new Promise((resolve) => setTimeout(resolve, 5))
+            }
+          }
+        }
+      : {})
+  }
+
+  function working(sessionId: string): boolean {
+    const journal = host().collaboratorsForTests().sessions.get(sessionId)?.journal
+    return (
+      journal !== undefined &&
+      isStructuredAgentSessionMainAgentWorking(
+        journal.activeTurnId(),
+        journal.submissions(),
+        store.getRecord(sessionId)?.lease.runtimeFence
+      )
+    )
   }
 
   const adapter = options.starting ? scripted : startsWhenPublished(scripted, host)

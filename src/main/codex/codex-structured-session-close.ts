@@ -1,3 +1,4 @@
+import { settleCodexRequestEndWaiters } from './codex-request-end-wait'
 import { codexStartupFailureFact } from './codex-structured-starting-child'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import type { CodexAppServerConnection } from './codex-app-server-connection-types'
@@ -8,7 +9,10 @@ import {
   type CodexSession,
   type CodexStructuredSessionEvent
 } from './codex-structured-session-state'
-import type { StructuredAgentSessionEndedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type {
+  StructuredAgentSessionEndedEvent,
+  StructuredAgentSessionStopCause
+} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 
 export function handleCodexSessionExit(input: {
@@ -46,6 +50,17 @@ export function handleCodexSessionExit(input: {
         ? agentSessionFailureFact('hostFault')
         : agentSessionFailureFact('providerExited', { detail: providerDiagnosticOf(input.error) }),
     cause: session.orcaClose?.requested ? 'requested-close' : 'unexpected-exit',
+    ...(session.orcaClose?.requested && session.orcaClose.stopCause
+      ? { stopCause: session.orcaClose.stopCause }
+      : {}),
+    ...(input.closedByOrca && input.connection?.closeResult
+      ? {
+          processExit: {
+            root: input.connection.closeResult.root,
+            workload: input.connection.closeResult.tree ?? 'unverifiable'
+          }
+        }
+      : {}),
     fence: session.fence,
     acquisitionGeneration: session.acquisitionGeneration,
     observedAt: session.exitObservedAt,
@@ -71,6 +86,7 @@ export function handleCodexSessionExit(input: {
     session.startingChild.ended = true
   }
   session.ended = true
+  settleCodexRequestEndWaiters(session)
   // Nothing can echo for this child any more; the journal's pending-submission
   // recovery is what settles the sends these were armed for.
   session.dispatchEchoes.clear()
@@ -91,6 +107,7 @@ export async function closeCodexPublishedSession(
   options?: {
     logger?: StructuredAgentSessionLogger
     requestedClose?: boolean
+    stopCause?: StructuredAgentSessionStopCause
     expectedFence?: number
     expectedAcquisitionGeneration?: string
     unexpectedReason?: Error
@@ -111,7 +128,8 @@ export async function closeCodexPublishedSession(
   // observed-exit cause so host lease settlement runs as an unexpected death.
   session.orcaClose ??= {
     requested: options?.requestedClose ?? true,
-    reason: options?.unexpectedReason ?? new Error('codex session closed')
+    reason: options?.unexpectedReason ?? new Error('codex session closed'),
+    ...(options?.stopCause ? { stopCause: options.stopCause } : {})
   }
   // Keep the session indexed until the child exit is observed. A timeout or
   // failed kill must leave the live connection available for a safe retry.
@@ -141,7 +159,8 @@ export async function closeCodexSession(
   acquisitions: CodexAcquisitionRegistry,
   onEvent?: (event: CodexStructuredSessionEvent) => void,
   logger?: StructuredAgentSessionLogger,
-  requestedClose = true
+  requestedClose = true,
+  stopCause?: StructuredAgentSessionStopCause
 ): Promise<boolean> {
   const attempt = acquisitions.get(sessionId)
   if (!(await cancelCodexAcquisitionAttempt(attempt, requestedClose))) {
@@ -152,6 +171,7 @@ export async function closeCodexSession(
   }
   return closeCodexPublishedSession(sessions, sessionId, onEvent, {
     requestedClose,
+    ...(stopCause ? { stopCause } : {}),
     ...(logger ? { logger } : {})
   })
 }

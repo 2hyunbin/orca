@@ -40,6 +40,7 @@ import {
 } from './codex-structured-turn-end-settlement'
 import { createCodexStructuredNotificationRetry } from './codex-structured-notification-retry'
 import { acquireCodexStructuredSession } from './codex-structured-session-acquire'
+import { codexStoppedRequestEndWait, settleCodexRequestEndWaiters } from './codex-request-end-wait'
 import { changeCodexThreadGoal } from './codex-structured-thread-goal'
 import { startCodexTerminalStopProbe } from './codex-background-terminals'
 import { codexBackgroundTaskStops, stopCodexBackgroundTasks } from './codex-background-task-stops'
@@ -147,6 +148,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       session.backgroundTasks.publishChildWork()
       startCodexTerminalStopProbe(this.sessions, event.sessionId, session, this.deps)
     }
+    settleCodexRequestEndWaiters(session)
     this.deps.onEvent?.(event)
     return admission
   }
@@ -233,6 +235,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       return await dispatchCodexTurn(session, input, this.deps.requestTimeoutMs)
     } finally {
       session.dispatchPending = false
+      settleCodexRequestEndWaiters(session)
     }
   }
 
@@ -242,6 +245,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       sessions: this.sessions,
       requestTimeoutMs: this.deps.requestTimeoutMs
     })
+
+  awaitStoppedRequestEnd = codexStoppedRequestEndWait(this.sessions)
 
   rewindSupport: NonNullable<StructuredAgentSessionAdapter['rewindSupport']> = (sessionId) =>
     this.sessions.get(sessionId)?.historyMode === 'legacy'
@@ -316,6 +321,10 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   closeSession = (sessionId: string): Promise<boolean> => this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)
   disposeSession = (sessionId: string): Promise<boolean> => this.teardown.close(sessionId)
+  stopSessionWithCause: NonNullable<StructuredAgentSessionAdapter['stopSessionWithCause']> = (
+    sessionId,
+    cause
+  ) => this.teardown.close(sessionId, { cause })
   closeAll = (): Promise<void> => this.teardown.closeAll()
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.teardown.close(input.sessionId)

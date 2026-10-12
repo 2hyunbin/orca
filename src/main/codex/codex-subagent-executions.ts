@@ -168,10 +168,10 @@ export class CodexSubagentExecutions {
     )
   }
 
-  settleSession(): void {
+  settleSession(state: 'stopped' | 'unverifiable' = 'unverifiable'): void {
     for (const child of this.children.values()) {
       if (child.execution?.state === 'working') {
-        child.execution = { ...child.execution, state: 'unverifiable' }
+        child.execution = { ...child.execution, state }
         this.changed(child)
       }
     }

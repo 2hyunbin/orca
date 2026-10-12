@@ -242,6 +242,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/runtime/runtime-client-agent-launch-settings-durability.test.ts',
   'src/main/runtime/structured-agent-session-codex-scripted-child.test.ts',
   'src/main/runtime/structured-agent-session-codex-start-deadline.test.ts',
+  'src/main/runtime/structured-agent-registration-lifecycle-matrix.test.ts',
   'src/main/runtime/structured-agent-session-pi-startup.test.ts',
   'src/main/runtime/structured-agent-session-pi-signed-out-start.test.ts',
   'src/main/runtime/structured-agent-session-provider-operations-while-starting.test.ts',

@@ -1,6 +1,7 @@
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 import { spawnProcess } from '@orca/process-host'
 import { spawnManagedProviderProcess } from '../provider-process/managed-provider-process'
+import { createClaudeChildTreeReaper } from '../claude/claude-agent-sdk-exit-proof'
 import type { ProviderProcessLaunch } from '../provider-process/provider-process-launch'
 import { buildCodexAppServerExitError } from './codex-app-server-exit-error'
 import { withMissingProviderExecutable } from '../provider-process/provider-executable-missing'
@@ -49,6 +50,9 @@ async function connectCodexAppServer(
     ...(handlers.onOutput ? { onOutput: handlers.onOutput } : {})
   })
   const { child, terminateTree: terminateProcessTree } = managed
+  const tree = createClaudeChildTreeReaper(child, {
+    exited: () => managed.rootVerdict === 'exited'
+  })
 
   let nextRequestId = 1
   let closing = false
@@ -84,7 +88,7 @@ async function connectCodexAppServer(
     // Transport/protocol failures make the connection unusable immediately so
     // callers do not hang, but recovery must not treat that as a child exit
     // until the execution host has observed `exit`/`close`.
-    if (managed.rootVerdict === 'exited' && !exitReported) {
+    if (managed.rootVerdict === 'exited' && !closing && !exitReported) {
       exitReported = true
       handlers.onExit?.(terminalError, { expected: closing })
     }
@@ -197,7 +201,11 @@ async function connectCodexAppServer(
 
   function close(): Promise<boolean> {
     closing ||= managed.rootVerdict !== 'exited'
-    return managed.close().then((result) => {
+    return managed.close(tree).then((result) => {
+      if (result.root === 'exited' && !exitReported) {
+        exitReported = true
+        handlers.onExit?.(terminalError ?? buildExitError(), { expected: closing })
+      }
       dispatcher.failPending(new Error('codex app-server connection closed'))
       return result.root === 'exited'
     })
@@ -212,9 +220,10 @@ async function connectCodexAppServer(
     },
     get processTreeUnproven() {
       const tree = managed.lastCloseResult?.tree
-      return (
-        managed.lastCloseResult?.root === 'exited' && (tree === 'unverifiable' || tree === 'live')
-      )
+      return managed.lastCloseResult?.root === 'exited' && tree !== 'exited'
+    },
+    get closeResult() {
+      return managed.lastCloseResult
     },
     request,
     notify,

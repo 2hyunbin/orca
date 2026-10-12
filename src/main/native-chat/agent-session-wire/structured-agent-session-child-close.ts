@@ -25,8 +25,8 @@ export async function joinStructuredAgentSessionChildClose(
   sessionId: string,
   child: StructuredAgentSessionProviderChild
 ): Promise<StructuredAgentSessionChildCloseVerdict> {
-  // Read before the close: once the child is gone the provider can no longer say.
-  const unanswered = context.deps.adapter.startAnswered?.(sessionId) === false
+  // The host hands a starting child nothing, so its close ran nothing it was handed.
+  const unanswered = child.phase === 'starting'
   if (!(await closeProviderRoot(context, sessionId))) {
     return 'unverifiable'
   }
@@ -76,12 +76,21 @@ function closeProviderRoot(
 ): Promise<boolean> {
   const { adapter, logger } = context.deps
   // An adapter with no close has nothing to stop; anything else must PROVE the exit.
-  const stop = adapter.disposeSession ?? adapter.closeSession
-  if (!stop) {
+  if (!adapter.stopSessionWithCause && !adapter.disposeSession && !adapter.closeSession) {
     return Promise.resolve(true)
   }
   return stopAgentSessionProviderRoot(
-    () => stop.call(adapter, sessionId),
+    async () => {
+      if (adapter.stopSessionWithCause) {
+        return adapter.stopSessionWithCause(
+          sessionId,
+          context.sessions.get(sessionId)?.child?.close?.cause
+        )
+      }
+      return (
+        (await (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)) === true
+      )
+    },
     // The exit is proven; a child process left behind, or a write after it, is reported only.
     (error) =>
       logger.warn("the agent's process exited, but its close did not finish cleanly", {

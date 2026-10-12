@@ -18,7 +18,29 @@ import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-pr
 import { isCodexAppServerUnsupportedError } from './codex-app-server-session'
 import { isCodexAppServerHandshakeExitUnprovenError } from './codex-app-server-handshake-exit-proof'
 
-// close() waits out the supervisor's own stop before forcing the tree.
+vi.mock('../claude/claude-agent-sdk-exit-proof', () => ({ createClaudeChildTreeReaper }))
+
+function createClaudeChildTreeReaper(
+  child: { kill: (signal: NodeJS.Signals) => boolean },
+  deps: { exited: () => boolean }
+) {
+  let verdict: 'exited' | 'unverifiable' = 'unverifiable'
+  return {
+    capture: async () => {},
+    refresh: async () => {},
+    reap: async () => {
+      if (!deps.exited()) {
+        child.kill('SIGKILL')
+      }
+      verdict = 'exited'
+      return verdict
+    },
+    get treeVerdict() {
+      return verdict
+    }
+  }
+}
+
 const GRACEFUL_EXIT_MS = process.platform === 'win32' ? 1_500 : PROVIDER_SUPERVISOR_MAX_STOP_MS
 
 const originalCodexHome = process.env.CODEX_HOME
@@ -523,7 +545,7 @@ describe('openCodexAppServerConnection', () => {
     await vi.advanceTimersByTimeAsync(GRACEFUL_EXIT_MS + 2_600)
 
     await expect(Promise.all([first, second])).resolves.toEqual([true, true])
-    expect(child.kill.mock.calls.map(([signal]) => signal)).toEqual(['SIGSTOP', 'SIGKILL'])
+    expect(child.kill.mock.calls.map(([signal]) => signal)).toEqual(['SIGKILL'])
   })
 
   it('allows a later close to observe exit after an unproven attempt', async () => {

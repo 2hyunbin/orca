@@ -1,11 +1,14 @@
+import { readNativeSessionOptions } from './structured-agent-session-option-restoration'
 import type { StructuredAgentSessionAtRestCommands } from './structured-agent-session-at-rest-commands'
 import type { AgentSessionJournalIdentity } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionAccountHome,
   AgentSessionExecutionLocation
 } from '../../../shared/agent-session-record'
-import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
-import { readNativeSessionOptions } from './structured-agent-session-option-restoration'
+import type {
+  StructuredAgentSessionAdapter,
+  StructuredAgentSessionStopCause
+} from './structured-agent-session-adapter'
 import type {
   StructuredAgentRegistration,
   StructuredAgentRegistry
@@ -131,9 +134,6 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
   startUnavailable: NonNullable<StructuredAgentSessionAdapter['startUnavailable']> = (sessionId) =>
     this.liveOwnerOrNull(sessionId)?.startUnavailable?.(sessionId)
 
-  stopEndsSession = (sessionId: string): boolean =>
-    this.liveOwnerOrNull(sessionId)?.stopEndsSession?.(sessionId) ?? false
-
   awaitStoppedRequestEnd = async (sessionId: string, stoppedAt: number) =>
     this.liveOwnerOrNull(sessionId)?.awaitStoppedRequestEnd?.(sessionId, stoppedAt)
 
@@ -201,19 +201,31 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     Promise.resolve(null)
 
   closeSession = (sessionId: string): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.closeSession)
+    this.stopSession(sessionId, (adapter) => adapter.closeSession?.(sessionId))
 
   forceCloseSession = (sessionId: string): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.forceCloseSession ?? adapter.closeSession)
+    this.stopSession(sessionId, (adapter) =>
+      (adapter.forceCloseSession ?? adapter.closeSession)?.call(adapter, sessionId)
+    )
 
   disposeSession = (sessionId: string): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.disposeSession ?? adapter.closeSession)
+    this.stopSession(sessionId, (adapter) =>
+      (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
+    )
+
+  stopSessionWithCause = (
+    sessionId: string,
+    cause?: StructuredAgentSessionStopCause
+  ): Promise<boolean> =>
+    this.stopSession(sessionId, (adapter) =>
+      adapter.stopSessionWithCause
+        ? adapter.stopSessionWithCause(sessionId, cause)
+        : (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
+    )
 
   private async stopSession(
     sessionId: string,
-    selectStop: (
-      adapter: StructuredAgentSessionAdapter
-    ) => NonNullable<StructuredAgentSessionAdapter['closeSession']> | undefined
+    stop: (adapter: StructuredAgentSessionAdapter) => Promise<boolean> | undefined
   ): Promise<boolean> {
     const route = this.routes.get(sessionId)
     if (!route) {
@@ -226,8 +238,7 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
       return true
     }
     const { adapter } = route.registration
-    const stop = selectStop(adapter)
-    const stopped = await stop?.call(adapter, sessionId)
+    const stopped = await stop(adapter)
     if (stopped === true) {
       route.state = 'stopped'
       return true
