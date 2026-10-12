@@ -56,7 +56,7 @@ describe('options at rest', () => {
     const result = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: true
     })
-    expect(result.current).toEqual({ model: 'gpt-folder', effort: 'high' })
+    expect(result.current).toEqual({ model: 'gpt-folder', effort: 'high', permissionMode: 'ask' })
     expect(read).toHaveBeenCalledWith({
       agent: 'codex',
       sessionId: SESSION,
@@ -101,12 +101,12 @@ describe('options at rest', () => {
     const current = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: true
     })
-    expect(current.current).toEqual({})
+    expect(current.current).toEqual({ permissionMode: 'ask' })
     expect(read).toHaveBeenCalledTimes(1)
     const older = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: false
     })
-    expect(older.current).toEqual({ model: 'gpt-account' })
+    expect(older.current).toEqual({ model: 'gpt-account', permissionMode: 'ask' })
     expect(read).toHaveBeenLastCalledWith({ agent: 'codex', sessionId: SESSION, savedOnly: true })
   })
 
