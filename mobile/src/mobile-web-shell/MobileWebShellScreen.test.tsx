@@ -92,7 +92,7 @@ describe('the hybrid shell screen', () => {
       reason: 'document-load-failed',
       retriedOnce: true
     })
-    expect(textOf(tree)).toContain('The downloaded workspace could not be opened.')
+    expect(textOf(tree)).toContain('The downloaded app could not be opened.')
     const retry = tree.root.findAll((node) => node.props.testID === 'mobile-web-shell-retry')
     expect(retry).toHaveLength(1)
     await act(async () => {
@@ -123,20 +123,38 @@ describe('the hybrid shell screen', () => {
 
   it('names what is missing when the host is unreachable and nothing is cached', async () => {
     expect(textOf(await renderScreen({ kind: 'offline' }))).toContain(
-      'Connect to this host to download the workspace'
+      'Connect to this host to download the latest app'
     )
   })
 
-  it('counts assets and bytes while downloading', async () => {
+  it('shows the download as a progress bar with megabytes from the paired host', async () => {
     const tree = await renderScreen({
       kind: 'fetching',
-      completedAssets: 2,
-      totalAssets: 4,
-      receivedBytes: 2048,
-      totalBytes: 4096
+      completedAssets: 0,
+      totalAssets: 128,
+      receivedBytes: 2_020_592,
+      totalBytes: 8_082_368
     })
-    expect(textOf(tree)).toContain('2/4 files')
-    expect(textOf(tree)).toContain('2048/4096 bytes')
+    expect(textOf(tree)).toContain('Downloading the latest app')
+    expect(textOf(tree)).toContain('from Host One · 2.0 of 8.1 MB')
+    const bar = tree.root.findAll((node) => node.props.testID === 'mobile-web-shell-progress-bar')
+    expect(bar).toHaveLength(1)
+    expect(bar[0].props.accessibilityRole).toBe('progressbar')
+    expect(bar[0].props.accessibilityValue).toEqual({ min: 0, max: 100, now: 25 })
+    expect(byName(tree, 'ActivityIndicator')).toEqual([])
+  })
+
+  it('reads an empty download as no progress rather than dividing by zero', async () => {
+    const tree = await renderScreen({
+      kind: 'fetching',
+      completedAssets: 0,
+      totalAssets: 0,
+      receivedBytes: 0,
+      totalBytes: 0
+    })
+    const bar = tree.root.findAll((node) => node.props.testID === 'mobile-web-shell-progress-bar')
+    expect(bar[0].props.accessibilityValue).toEqual({ min: 0, max: 100, now: 0 })
+    expect(textOf(tree)).toContain('0.0 of 0.0 MB')
   })
 
   it('hands the shell view the generation path and the session id', async () => {
@@ -360,7 +378,7 @@ describe('the hybrid shell screen', () => {
       textOf(
         await renderScreen({ kind: 'failed', reason: 'document-load-failed', retriedOnce: true })
       )
-    ).toContain('The downloaded workspace could not be opened.')
+    ).toContain('The downloaded app could not be opened.')
   })
 
   it('reports a URL nothing on this phone could open, which is the dead tap that survives', async () => {
@@ -584,7 +602,7 @@ describe('a refused update is said beside the page, not in front of it', () => {
     const tree = await renderScreen(readyState('session-one'))
     expect(byName(tree, 'ShellViewProbe')).toHaveLength(1)
     const text = textOf(tree)
-    expect(text).toContain("Couldn't update the workspace from this host")
+    expect(text).toContain("Couldn't download the latest app from this host")
     expect(text).toContain('Showing the last version that worked')
     expect(text).not.toContain('Try again')
   })
