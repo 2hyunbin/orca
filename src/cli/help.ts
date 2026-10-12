@@ -1,5 +1,11 @@
 import type { CommandSpec } from './args'
-import { findCommandSpec, isCommandGroup, matches, supportsBrowserPageFlag } from './args'
+import {
+  findCommandSpec,
+  isCommandGroup,
+  matches,
+  specPaths,
+  supportsBrowserPageFlag
+} from './args'
 import { unknownCommandData } from './command-suggestion'
 import { formatCommandScopedFlagHelp } from './command-scoped-flag-help'
 import { FLAG_HELP_TEXT } from './flag-help-text'
@@ -66,14 +72,18 @@ export function formatGroupHelp(specs: CommandSpec[], groupPath: string[]): stri
   const group = groupPath.join(' ')
   const lines = [`orca ${group}`, '', `Usage: orca ${group} <command> [options]`, '', 'Commands:']
   for (const spec of specs) {
-    if (
-      spec.hidden === true ||
-      spec.path.length <= groupPath.length ||
-      !matches(spec.path.slice(0, groupPath.length), groupPath)
-    ) {
+    if (spec.hidden === true) {
       continue
     }
-    lines.push(`  ${spec.path.slice(groupPath.length).join(' ').padEnd(18)} ${spec.summary}`)
+    const path = specPaths(spec).find(
+      (candidate) =>
+        candidate.length > groupPath.length &&
+        matches(candidate.slice(0, groupPath.length), groupPath)
+    )
+    if (!path) {
+      continue
+    }
+    lines.push(`  ${path.slice(groupPath.length).join(' ').padEnd(18)} ${spec.summary}`)
   }
   lines.push('', `Run \`orca ${group} <command> --help\` for command-specific usage.`)
   return lines.join('\n')
