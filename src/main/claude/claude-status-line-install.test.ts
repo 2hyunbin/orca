@@ -2,6 +2,18 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as NodePath from 'node:path'
+
+// Why: production only reaches its win32 branch on Windows, where node:path is path.win32; keep
+// that pairing when a POSIX host stubs the platform.
+vi.mock('node:path', async (importOriginal) => {
+  const actual = await importOriginal<typeof NodePath>()
+  return {
+    ...actual,
+    basename: (...args: Parameters<typeof actual.basename>) =>
+      (process.platform === 'win32' ? actual.win32 : actual).basename(...args)
+  }
+})
 
 vi.mock('electron', () => ({
   app: {
