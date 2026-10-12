@@ -118,6 +118,7 @@
     "reclaim:electron-dists": "node config/scripts/reclaim-electron-dists.mjs",
     "reclaim:dev-bundles": "node config/scripts/reclaim-dev-electron-bundles.mjs",
     "reclaim:worktree-space": "node config/scripts/reclaim-worktree-space.mjs",
+    "reclaim:release-test-caches": "tsx config/scripts/reclaim-release-test-caches.mjs",
     "rebuild:node": "pnpm rebuild node-pty",
     "build:unpack": "pnpm run build && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --dir",
     "build:win": "pnpm run build:desktop && pnpm run ensure:electron-runtime && electron-builder --config config/electron-builder.config.cjs --win",

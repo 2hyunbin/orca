@@ -38,9 +38,40 @@ Sharing is enabled for ordinary local cross-version tests. Set
 `cacheRoot` options remain isolated unless a caller explicitly supplies `sharedCacheRoot`.
 
 This only changes test tooling. It adds no development-server task or background worktree
-scan. Existing caches are not migrated or deleted. Tests running on a remote host use that
+scan. Sharing does not migrate or delete existing local caches. Tests running on a remote host use that
 host's repository and filesystem; no client filesystem or remote protocol is involved.
 Folder contexts without a Git repository cannot provide a historical release checkout.
+
+## Cleaning up older historical caches
+
+Preview cleanup across this repository's registered local worktrees and shared source cache:
+
+```sh
+pnpm run reclaim:release-test-caches
+```
+
+The default selects stamped release checkouts older than 30 days, including previous extraction
+formats. To apply the preview, first stop cross-version tests in all this repository's worktrees:
+
+```sh
+pnpm run reclaim:release-test-caches --apply --tests-stopped
+```
+
+Use `--min-age-days 7` for a shorter retention window, or `--min-age-days 0` to select all
+recognised completed release checkouts. `--repo DIRECTORY` selects another local repository.
+Each run rescans and rechecks eligibility; it does not apply a saved preview.
+
+This is manual because older harnesses do not hold a lease while importing source. Locks prevent
+deletion during publication or shared-source copying, but do not prove that a completed checkout
+is unused. Local checkout age uses directory modification time, which ordinary reuse does not
+refresh; shared seed timestamps reflect recent copying. `--tests-stopped` acknowledges that the
+caller has stopped consumers; it does not detect them.
+
+The script checks matching commit/format stamps, skips symlinked cache paths and future formats,
+and leaves mutable `working-tree` copies, source, dependencies, and worktree registrations alone.
+It reports logical bytes rather than promised disk savings: another clone may retain the same
+blocks. Deleted historical source rebuilds on the next test run. Run the command on the execution
+host for SSH repositories. P1's automatic dev-bundle sweep does not invoke this command.
 
 ## Measurement and validation
 

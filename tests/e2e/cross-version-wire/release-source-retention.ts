@@ -20,7 +20,16 @@ export async function withReleaseSourceLease<T>(
   apply: (formatRoot: string, verifyLease: () => void) => Promise<T>,
   lockOptions = LEASE_OPTIONS
 ): Promise<T> {
-  const formatRoot = join(cacheRoot, `format-${CHECKOUT_FORMAT}`)
+  return withReleaseSourceFormatLease(cacheRoot, CHECKOUT_FORMAT, apply, lockOptions)
+}
+
+export async function withReleaseSourceFormatLease<T>(
+  cacheRoot: string,
+  format: number,
+  apply: (formatRoot: string, verifyLease: () => void) => Promise<T>,
+  lockOptions = LEASE_OPTIONS
+): Promise<T> {
+  const formatRoot = join(cacheRoot, `format-${format}`)
   await mkdir(formatRoot, { recursive: true })
   let compromised: Error | undefined
   const release = await lock(join(formatRoot, 'maintenance'), {
