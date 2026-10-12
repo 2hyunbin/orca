@@ -1440,3 +1440,33 @@ index 13f6c6d..eda63c8 100644
 +
      this._forwardEvents();
    }
+diff --git a/lib/worker/conoutSocketWorker.js b/lib/worker/conoutSocketWorker.js
+index 0451e2c..bd42610 100644
+--- a/lib/worker/conoutSocketWorker.js
++++ b/lib/worker/conoutSocketWorker.js
+@@ -11,6 +11,10 @@ var conoutSocket = new net_1.Socket();
+ conoutSocket.setEncoding('utf8');
+ conoutSocket.connect(conoutPipeName, function () {
+     var server = net_1.createServer(function (workerSocket) {
++        // Orca: the host's reader can close while ConPTY still writes. Unhandled, that write EPIPE
++        // is rethrown on the host's main thread and kills every terminal in the process; `pipe`
++        // already unpipes on error, so the late output is simply dropped.
++        workerSocket.on('error', function () { });
+         conoutSocket.pipe(workerSocket);
+     });
+     server.listen(conout_1.getWorkerPipeName(conoutPipeName));
+diff --git a/src/worker/conoutSocketWorker.ts b/src/worker/conoutSocketWorker.ts
+index 79a4148..3ffcd98 100644
+--- a/src/worker/conoutSocketWorker.ts
++++ b/src/worker/conoutSocketWorker.ts
+@@ -12,6 +12,10 @@ const conoutSocket = new Socket();
+ conoutSocket.setEncoding('utf8');
+ conoutSocket.connect(conoutPipeName, () => {
+   const server = createServer(workerSocket => {
++    // Orca: the host's reader can close while ConPTY still writes. Unhandled, that write EPIPE
++    // is rethrown on the host's main thread and kills every terminal in the process; `pipe`
++    // already unpipes on error, so the late output is simply dropped.
++    workerSocket.on('error', () => {});
+     conoutSocket.pipe(workerSocket);
+   });
+   server.listen(getWorkerPipeName(conoutPipeName));
