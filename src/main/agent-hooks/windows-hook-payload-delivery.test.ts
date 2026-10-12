@@ -39,6 +39,7 @@ import { DevinHookService } from '../devin/hook-service'
 import { DshHookService } from '../dsh/hook-service'
 import { GeminiHookService } from '../gemini/hook-service'
 import { GrokHookService } from '../grok/hook-service'
+import { KimiHookService } from '../kimi/hook-service'
 import { KiroHookService } from '../kiro/hook-service'
 import { MuseHookService } from '../muse/hook-service'
 import { getMuseManagedHooksPath } from '../muse/hook-settings'
@@ -149,6 +150,21 @@ const POWERSHELL_PLAIN: Runner = {
   name: 'Windows PowerShell',
   program: () => POWERSHELL,
   args: (command) => ['-NoProfile', '-Command', command]
+}
+// CPython's shell=True: `{ComSpec} /c "{command}"`, without `/d`.
+const CMD_PYTHON_SHELL: Runner = {
+  name: 'cmd.exe (Python shell=True)',
+  program: () => CMD,
+  args: (command) => ['/c', `"${command}"`],
+  verbatim: true
+}
+
+// Orca's TOML basic strings use only escapes that a JSON string decodes identically.
+function readTomlEventCommands(path: string, event: string): string[] {
+  const block = new RegExp(`^event = "${event}"\\r?\\ncommand = ("(?:[^"\\\\]|\\\\.)*")$`, 'gm')
+  return [...readFileSync(path, 'utf8').matchAll(block)].map((match) =>
+    String(JSON.parse(match[1]))
+  )
 }
 
 type Entry = { command?: string; hooks?: { command?: string }[] }
@@ -264,6 +280,16 @@ const PROVIDERS: Provider[] = [
     runners: [POWERSHELL_PLAIN, CMD_NODE_SHELL]
   },
   {
+    // Kimi's own tests cover replacing the old `.sh` registration in its TOML.
+    name: 'Kimi',
+    script: 'kimi-hook.cmd',
+    stdout: '',
+    install: () => new KimiHookService().install(),
+    commands: (home) =>
+      readTomlEventCommands(join(home, '.kimi-code', 'config.toml'), 'UserPromptSubmit'),
+    runners: [CMD_PYTHON_SHELL]
+  },
+  {
     // Grok spawns a one-token command directly, wraps a spaced one in PowerShell, or uses Git Bash.
     name: 'Grok',
     script: 'grok-hook.cmd',
@@ -370,7 +396,13 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
         vi.stubEnv(name, home)
       }
       vi.stubEnv('APPDATA', join(home, 'AppData', 'Roaming'))
-      for (const name of ['XDG_CONFIG_HOME', 'KIRO_HOME', 'DSH_HOME', 'GROK_HOME']) {
+      for (const name of [
+        'XDG_CONFIG_HOME',
+        'KIRO_HOME',
+        'DSH_HOME',
+        'KIMI_CODE_HOME',
+        'GROK_HOME'
+      ]) {
         vi.stubEnv(name, undefined)
       }
       seedCmdAutoRunTarget(home)
