@@ -120,7 +120,10 @@ test.describe('layout compat: released desktop and CLI on the current server', (
           environmentId: client.environmentId,
           leafId: firstLeaf!,
           host: host.client,
-          worktree
+          worktree,
+          // The packaged client draws with the DOM renderer (packaged-old-orca.ts), so rows are text.
+          readDrawn: () =>
+            client.page.locator(`${PANE}[data-leaf-id="${firstLeaf}"] .xterm-rows`).textContent()
         })
         await expect(client.page.locator(PANE)).toHaveCount(1)
         await record('after server restart')

@@ -82,9 +82,12 @@ export async function launchPackagedPairedClient(args: {
   const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-packaged-client-'))
   let app: ElectronApplication | undefined
   try {
+    const profile = getE2ECompletedOnboardingProfile()
+    // A released build exposes no terminal handle; the DOM renderer leaves drawn rows as text.
+    const settings = { ...profile.settings, terminalGpuAcceleration: 'off' }
     writeFileSync(
       path.join(userDataDir, 'orca-data.json'),
-      `${JSON.stringify(getE2ECompletedOnboardingProfile(), null, 2)}\n`
+      `${JSON.stringify({ ...profile, settings }, null, 2)}\n`
     )
     const { ELECTRON_RUN_AS_NODE: _unused, ...cleanEnv } = process.env
     void _unused

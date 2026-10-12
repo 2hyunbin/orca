@@ -26,6 +26,7 @@ import {
   sessionTabsShape
 } from './helpers/layout-compat-baseline'
 import { setPaneTitleFromTerminalMenu } from './helpers/terminal-pane-title-actions'
+import { readTerminalAccessibilityText } from './helpers/terminal-accessibility-tree'
 import type { TerminalLayoutSnapshot } from '../../src/shared/terminal-tab-types'
 
 const PANE = '.pane[data-leaf-id]:visible'
@@ -155,7 +156,13 @@ test.describe('layout compat: current desktop on a released server', () => {
           environmentId: desktop.environmentId,
           leafId: firstLeaf,
           host: host.client,
-          worktree: `path:${testRepoPath}`
+          worktree: `path:${testRepoPath}`,
+          // The focused pane is the one typed into; its tab's manager reads that pane.
+          readDrawn: async () =>
+            readTerminalAccessibilityText(
+              page,
+              (await page.evaluate(() => window.__store?.getState().activeTabId)) ?? ''
+            )
         })
         await record('after the server restarts and the desktop reconnects')
 

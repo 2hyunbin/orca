@@ -108,9 +108,13 @@ test('serve-restart-keeps-@@-terminals: desktop, CLI and serve terminals survive
       // last. So the list must hold the same tabs in any order, the published layout one of those
       // two orders; both are recorded in creation order. Any other change still fails.
       expect(settled.server.groups).toHaveLength(1)
+      const canonicalSelection = before.server.groups[0]!.active
       expect(settled.server.groups[0]!.tabs.toSorted()).toEqual(RESTART_ORDERS[0])
-      // The list's selected tab follows that order: it is whichever tab comes first.
-      expect(settled.server.activeTab).toBe(settled.server.groups[0]!.tabs[0])
+      // The list's selected tab follows that order: it is whichever tab comes first. The group's
+      // selection is the desktop's tab or, like the list's, the first listed.
+      const firstListed = settled.server.groups[0]!.tabs[0]
+      expect(settled.server.activeTab).toBe(firstListed)
+      expect([canonicalSelection, firstListed]).toContain(settled.server.groups[0]!.active)
       const published = settled.published?.groups
       expect(published).toHaveLength(1)
       expect(
@@ -126,7 +130,7 @@ test('serve-restart-keeps-@@-terminals: desktop, CLI and serve terminals survive
         server: {
           ...settled.server,
           activeTab: '<first listed>',
-          groups: [{ ...settled.server.groups[0]!, tabs: canonical }],
+          groups: [{ active: '<desktop tab or first listed>', tabs: canonical }],
           rows: settled.server.rows
             .map((row, index) => ({ ...row, title: positionalTitle(row.title, index) }))
             .toSorted(byCanonical)

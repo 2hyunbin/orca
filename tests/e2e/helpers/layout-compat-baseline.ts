@@ -276,8 +276,9 @@ export async function readUntil<T>(
 
 /**
  * After a server restart: waits until the client's own status call is answered, which only the
- * new server process can do, then types an `echo` into one of its panes and reads the output back
- * on the host, so input and output both cross the reconnected link.
+ * new server process can do, then types an `echo` into one of its panes, reads the output on the
+ * host and waits for the desktop to draw it in that pane, so input and output both cross the
+ * reconnected link.
  */
 export async function expectReconnectedPaneEcho(args: {
   page: Page
@@ -285,6 +286,8 @@ export async function expectReconnectedPaneEcho(args: {
   leafId: string
   host: RuntimeClient
   worktree: string
+  /** The text the desktop draws in that pane; null until it is there. */
+  readDrawn: () => Promise<string | null>
 }): Promise<void> {
   await expect
     .poll(
@@ -322,4 +325,5 @@ export async function expectReconnectedPaneEcho(args: {
       { timeout: 30_000 }
     )
     .toContain('P3_RECONNECT_42')
+  await expect.poll(args.readDrawn, { timeout: 30_000 }).toContain('P3_RECONNECT_42')
 }
