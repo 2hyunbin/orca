@@ -59,11 +59,23 @@ describe('rememberCombinedDiffViewState', () => {
     expect([...combinedDiffViewStateCache.keys()]).toEqual(['c', 'd', 'a', 'e'])
   })
 
-  it('does not keep a single view larger than the whole budget', () => {
+  it('refuses a view larger than the whole budget without evicting the others', () => {
     rememberCombinedDiffViewState('small', view(1000))
+    rememberCombinedDiffViewState('huge', view(1000))
     rememberCombinedDiffViewState('huge', view(COMBINED_DIFF_VIEW_CACHE_MAX_CHARS + 2))
 
-    expect([...combinedDiffViewStateCache.keys()]).toEqual([])
+    expect([...combinedDiffViewStateCache.keys()]).toEqual(['small'])
+  })
+
+  it('never evicts a view holding unsaved edits for the budget', () => {
+    const drafted = view(COMBINED_DIFF_VIEW_CACHE_MAX_CHARS + 2)
+    drafted.sections = [{ ...drafted.sections[0], dirty: true }]
+    rememberCombinedDiffViewState('drafted', drafted)
+    for (const key of ['a', 'b', 'c', 'd', 'e']) {
+      rememberCombinedDiffViewState(key, view(COMBINED_DIFF_VIEW_CACHE_MAX_CHARS / 4))
+    }
+
+    expect([...combinedDiffViewStateCache.keys()]).toEqual(['drafted', 'b', 'c', 'd', 'e'])
   })
 
   it('keeps the count cap for small views', () => {

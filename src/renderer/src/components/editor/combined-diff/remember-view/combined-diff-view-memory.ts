@@ -31,16 +31,22 @@ export const combinedDiffViewPreferences: {
   fileTreeCollapsed: boolean | null
 } = { collapsed: null, sideBySide: null, fileTreeCollapsed: null }
 
-// Why: scroll writes re-store the same sections array, so its size is computed once per array.
+// Why: scroll writes re-store the same sections array, so its weight is computed once per array.
 const retainedCharsBySections = new WeakMap<DiffSection[], number>()
 
-function countRetainedChars(sections: DiffSection[]): number {
+// File text the budget may drop. A view with unsaved edits weighs nothing: after unmount this cache
+// is the only owner of those drafts, so the budget never evicts it (the count cap still applies).
+function countEvictableChars(sections: DiffSection[]): number {
   const known = retainedCharsBySections.get(sections)
   if (known !== undefined) {
     return known
   }
   let chars = 0
   for (const section of sections) {
+    if (section.dirty) {
+      chars = 0
+      break
+    }
     chars += section.originalContent.length + section.modifiedContent.length
     const result = section.diffResult
     if (result && result.originalContent !== section.originalContent) {
@@ -58,17 +64,26 @@ export function rememberCombinedDiffViewState(
   viewStateKey: string,
   state: CachedCombinedDiffViewState
 ): void {
+  // Why: refused before admission so a view that can never fit does not flush the views that do;
+  // its older snapshot goes too, or a return would restore stale sections.
+  if (countEvictableChars(state.sections) > COMBINED_DIFF_VIEW_CACHE_MAX_CHARS) {
+    combinedDiffViewStateCache.delete(viewStateKey)
+    return
+  }
   setWithLRU(combinedDiffViewStateCache, viewStateKey, state)
   let total = 0
   for (const cached of combinedDiffViewStateCache.values()) {
-    total += countRetainedChars(cached.sections)
+    total += countEvictableChars(cached.sections)
   }
-  // Oldest first; a view larger than the whole budget is not kept either.
   for (const [key, cached] of combinedDiffViewStateCache) {
     if (total <= COMBINED_DIFF_VIEW_CACHE_MAX_CHARS) {
       break
     }
-    total -= countRetainedChars(cached.sections)
+    const chars = countEvictableChars(cached.sections)
+    if (key === viewStateKey || chars === 0) {
+      continue
+    }
+    total -= chars
     combinedDiffViewStateCache.delete(key)
   }
 }
