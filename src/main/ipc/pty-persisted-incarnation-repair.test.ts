@@ -52,6 +52,24 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
   import('./pty-ipc-mock-registry').then((m) => m.codexBackfillRecoveryModuleMock())
 )
 
+/** What the real runtime's holder saves on attach absence: the pane stays, unbound. */
+function withPaneUnbound<
+  T extends { terminalLayoutsByTabId: Record<string, { ptyIdsByLeafId: Record<string, string> }> }
+>(session: T, pane: { tabId: string; leafId: string }): T {
+  const layout = session.terminalLayoutsByTabId[pane.tabId]
+  if (!layout) {
+    return session
+  }
+  const { [pane.leafId]: _unbound, ...ptyIdsByLeafId } = layout.ptyIdsByLeafId
+  return {
+    ...session,
+    terminalLayoutsByTabId: {
+      ...session.terminalLayoutsByTabId,
+      [pane.tabId]: { ...layout, ptyIdsByLeafId }
+    }
+  }
+}
+
 describe('registerPtyHandlers', () => {
   const { handlers, mainWindow } = setupPtyIpcSuite()
 
@@ -312,7 +330,11 @@ describe('registerPtyHandlers', () => {
         seedHeadlessTerminal: vi.fn(),
         onPtySpawned: vi.fn(),
         onPtyExit: vi.fn(),
-        onPtyData: vi.fn()
+        onPtyData: vi.fn(),
+        unbindAbsentTerminal: vi.fn((pane: { tabId: string; leafId: string }) => {
+          session = withPaneUnbound(session, pane)
+          return 'gone'
+        })
       }
 
       registerPtyHandlers(
@@ -351,7 +373,7 @@ describe('registerPtyHandlers', () => {
           sessionId: 'pty-dead-persisted-owner',
           command: undefined
         })
-        expect(store.setWorkspaceSession).toHaveBeenCalledOnce()
+        expect(runtime.unbindAbsentTerminal).toHaveBeenCalledOnce()
         expect(runtime.onPtyExit).toHaveBeenCalledWith(
           'pty-dead-persisted-owner',
           -1,
@@ -375,8 +397,7 @@ describe('registerPtyHandlers', () => {
       expect(providerSpawn.mock.calls[1]?.[0]).toMatchObject({
         command: 'codex resume exact-dead-provider-session'
       })
-      expect(store.setWorkspaceSession).toHaveBeenCalledOnce()
-      expect(store.flushOrThrow).toHaveBeenCalledOnce()
+      expect(runtime.unbindAbsentTerminal).toHaveBeenCalledOnce()
       expect(runtime.onPtyExit).toHaveBeenCalledWith(
         'pty-dead-persisted-owner',
         -1,
