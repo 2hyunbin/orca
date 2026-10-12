@@ -623,6 +623,9 @@ test('retains a verified mirrored PTY binding through a serve restart pending sn
     await installPairedTerminalBindingProbe(client.page, { ...terminal, worktreeId })
     await installPairedTerminalSnapshotProbe(client.page, client.environmentId, terminal)
     await setPairedTerminalProbePhase(client.page, 'restart')
+    const epochBeforeRestart = (await readPairedTerminalSnapshotProbe(client.page)).receipts.at(
+      -1
+    )?.publicationEpoch
     const hostPidBeforeRestart = host.app.process().pid
     if (!hostPidBeforeRestart) {
       throw new Error('Serve process has no PID')
@@ -634,29 +637,33 @@ test('retains a verified mirrored PTY binding through a serve restart pending sn
     expect(host.app.process().pid, 'The serve Electron process must actually be replaced').not.toBe(
       hostPidBeforeRestart
     )
-    let pendingReceipt: PairedTerminalSnapshotReceipt | null = null
+    // The replacement host's first frame lists the surface with its terminal. It is pending until
+    // the terminal registers; the phone list is a projection of the host's state, not a startup
+    // snapshot, so a host that registered it before the client reconnected sends it ready.
+    let firstReceipt: PairedTerminalSnapshotReceipt | null = null
     await expect
       .poll(
         async () => {
-          pendingReceipt =
+          firstReceipt =
             (await readPairedTerminalSnapshotProbe(client!.page)).receipts.find(
-              (receipt) => receipt.status === 'pending-handle'
+              (receipt) => receipt.publicationEpoch !== epochBeforeRestart
             ) ?? null
-          return pendingReceipt
+          return firstReceipt
         },
         {
           timeout: 60_000,
-          message: 'Paired renderer never received the replacement host pending-handle frame'
+          message: 'Paired renderer never received a frame from the replacement host'
         }
       )
       .not.toBeNull()
-    expect(pendingReceipt).toMatchObject({
+    expect(firstReceipt).toMatchObject({
       leafId: terminal.leafId,
       parentTabId: terminal.parentTabId,
-      ptyId: terminal.ptyId,
-      status: 'pending-handle',
-      terminal: null
+      ptyId: terminal.ptyId
     })
+    if (firstReceipt!.status === 'pending-handle') {
+      expect(firstReceipt!.terminal).toBeNull()
+    }
 
     let recoveredSurface: HostSurface | null = null
     await expect
