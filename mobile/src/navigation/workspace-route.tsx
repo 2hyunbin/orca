@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useLocalSearchParams } from 'expo-router'
 import { normalizeExecutionHostId } from '../../../src/shared/execution-host'
 import { firstParam } from './route-param-reader'
@@ -10,7 +10,7 @@ import {
 import { PageRouteUnavailableScreen } from '../mobile-web-shell/PageRouteUnavailableScreen'
 import { useHostClient } from '../transport/client-context'
 import { WorkspaceServerContext } from '../transport/use-workspace-client'
-import { useWorkspaceServer, useWorkspaceServerConnState } from '../transport/workspace-server'
+import { useWorkspaceServer } from '../transport/workspace-server'
 
 const NO_CAPABILITIES: readonly string[] = []
 const UNREACHABLE_SERVER_MESSAGE =
@@ -37,13 +37,6 @@ export function WorkspaceRoute({ children }: { children: ReactNode }) {
     desktopCapabilities: desktopGates?.hostCapabilities ?? NO_CAPABILITIES,
     executionHost
   })
-  const serverConnState = useWorkspaceServerConnState({ client, connState: state, routeHost })
-  const serverClient = server ? server.client : undefined
-  const serverContext = useMemo(
-    () =>
-      serverClient === undefined ? undefined : { client: serverClient, state: serverConnState },
-    [serverClient, serverConnState]
-  )
   // Why: once the desktop has answered, a server it can't reach for this phone is a dead end, not a spinner.
   if (state === 'connected' && desktopGates && !desktopGates.statusPending && routeHost === null) {
     return <PageRouteUnavailableScreen hostId={hostId} message={UNREACHABLE_SERVER_MESSAGE} />
@@ -53,8 +46,8 @@ export function WorkspaceRoute({ children }: { children: ReactNode }) {
       {children}
     </WorkspaceExecutionHostContext.Provider>
   )
-  return server && serverContext ? (
-    <WorkspaceServerContext.Provider value={serverContext}>
+  return server ? (
+    <WorkspaceServerContext.Provider value={server}>
       <HostStatusGatesContext.Provider value={server.gates}>
         {screens}
       </HostStatusGatesContext.Provider>
