@@ -1,16 +1,12 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from './orca-runtime-prune-mobile-session-tab-group-layout'
+import { RuntimeTerminalPromptAgentPresence } from './terminal/status/terminal-agent-presence'
+import type { RuntimeTerminalAgentPresenceOptions } from './runtime-terminal-agent-presence'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import type { RuntimeMailboxControl } from './orchestration/mail/runtime-mailbox-control'
 
-import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
-import {
-  resolveStructuredWorkerAuthority,
-  resolveStructuredWorkerIdentityForSession
-} from './structured-worker-authority'
 import type { RuntimeTerminalIdentity } from './terminal-identity-probe'
 
-export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneMobileSessionTabGroupLayout {
+export class OrcaRuntimeWithGetPtyRecordForPaneKey extends RuntimeTerminalPromptAgentPresence {
   protected getPtyRecordForPaneKey(paneKey: string): RuntimePtyWorktreeRecord | null {
     return this.terminalIdentity.getPtyRecordForPaneKey(paneKey)
   }
@@ -38,46 +34,9 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
   // Why: title is the tightest agent-presence signal, but a Claude management title is negative evidence for task activity.
   async isTerminalRunningAgent(
     handle: string,
-    options?: { retryForegroundWrappers?: boolean }
+    options?: RuntimeTerminalAgentPresenceOptions
   ): Promise<boolean> {
     return this.terminalAgentPresence.isRunning(handle, options)
-  }
-
-  async isTerminalRunningSettledPromptAgent(handle: string): Promise<boolean> {
-    try {
-      const livePty = this.getLivePtyForHandle(handle)
-      const leaf = livePty ? null : this.getLiveLeafForHandle(handle).leaf
-      const ptyId = livePty?.pty.ptyId ?? leaf?.ptyId ?? null
-      const trackedPty = livePty?.pty ?? (ptyId ? this.ptysById.get(ptyId) : null)
-      if (!ptyId || !trackedPty || !this.ptyController) {
-        return false
-      }
-      let foregroundProcess = await this.ptyController.getForegroundProcess(ptyId)
-      let agent = recognizeAgentProcess(foregroundProcess)?.agent
-      // Why: the cached foreground name can be an executable basename nothing recognizes
-      // (macOS p_comm reports the native Claude installer as `2.1.258`), and treating that
-      // as "no agent" silently downgrades the prompt to unframed chunks, which Claude's
-      // composer truncates. A fresh process-table scan reads the real command line.
-      if (agent === undefined && this.ptyController.confirmForegroundProcess) {
-        foregroundProcess = await this.ptyController.confirmForegroundProcess(ptyId)
-        agent = recognizeAgentProcess(foregroundProcess)?.agent
-      }
-      if (agent !== 'claude' && agent !== 'codex') {
-        return false
-      }
-      if (
-        !(await this.isTerminalRunningAgent(handle, {
-          retryForegroundWrappers: false,
-          foregroundProcess
-        }))
-      ) {
-        return false
-      }
-      trackedPty.foregroundAgent = agent
-      return true
-    } catch {
-      return false
-    }
   }
 
   /**
@@ -88,20 +47,6 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
    */
   resolveTerminalIdentity(handle: string): RuntimeTerminalIdentity {
     return this.terminalIdentity.resolveTerminalIdentity(handle)
-  }
-
-  /**
-   * A structured worker's own pane key, for callers that can only name the session.
-   *
-   * Resolved HERE rather than published: the pane key is a random identity credential — anyone
-   * holding it can read and consume that worker's mailbox, and session ids are embedded in tab ids
-   * — so it must never travel to a renderer to be echoed back.
-   */
-  getStructuredWorkerPaneKeyForSession(sessionId: string): string | null {
-    const identity = resolveStructuredWorkerIdentityForSession(sessionId, this._orchestrationDb)
-    return identity && resolveStructuredWorkerAuthority(identity.handle, this._orchestrationDb)
-      ? identity.paneKey
-      : null
   }
 
   deliverPendingMessagesForHandle(

@@ -1,4 +1,3 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector } from './orca-runtime-create-terminal-side-effect-command-code-detector'
 import type { AgentStatus } from '../../shared/agent-detection'
 import { getDisplayPromptLifecycle } from './runtime-worktree-status-projection'
@@ -7,7 +6,7 @@ import { extractLastOscTitle } from '../../shared/osc-title-extraction'
 import { detectAgentStatusFromTitle } from '../../shared/agent-detection'
 import type { RuntimeTerminalDataMeta } from './runtime-terminal-stream-consumers'
 
-export class OrcaRuntimeWithRecordAgentPromptLifecycleState extends OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector {
+export abstract class OrcaRuntimeWithRecordAgentPromptLifecycleState extends OrcaRuntimeWithCreateTerminalSideEffectCommandCodeDetector {
   protected recordAgentPromptLifecycleState(ptyId: string, status: AgentStatus | null): void {
     if (status === 'permission') {
       this.recordAgentPromptPermissionObservation(ptyId)

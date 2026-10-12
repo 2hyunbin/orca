@@ -1,4 +1,4 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from './orca-runtime-stop-exact-terminals-for-worktree'
 import { TerminalWaitPermission } from './terminal/wait/terminal-wait-permission'
 import { OrcaRuntimeWithAgentPromptRequestCorrelation } from './orca-runtime-agent-prompt-request-correlation'
 import type { AgentStatusEntry } from '../../shared/agent-status-types'
@@ -12,7 +12,13 @@ import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 import type { TerminalAgent } from '../../shared/terminal-agent'
 import type { AgentPromptActivity } from './agent-prompt-submission-verification'
 
-export class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission extends OrcaRuntimeWithAgentPromptRequestCorrelation {
+export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission extends OrcaRuntimeWithAgentPromptRequestCorrelation {
+  protected abstract getExistingTerminalHandlesForPtyId(
+    ...args: Parameters<
+      OrcaRuntimeWithStopExactTerminalsForWorktree['getExistingTerminalHandlesForPtyId']
+    >
+  ): ReturnType<OrcaRuntimeWithStopExactTerminalsForWorktree['getExistingTerminalHandlesForPtyId']>
+
   private readonly waitPermission = new TerminalWaitPermission(
     {
       getPty: (id) => this.ptysById.get(id),

@@ -32,10 +32,8 @@ src/main/runtime/orca-runtime-preserved-branch-cleanup.ts
 src/main/runtime/orca-runtime-prune-mobile-session-tab-group-layout.ts
 src/main/runtime/orca-runtime-publish-pty-backed-mobile-session-terminal.ts
 src/main/runtime/orca-runtime-reconcile-headless-mobile-session-browser-tabs.ts
-src/main/runtime/orca-runtime-record-agent-prompt-lifecycle-state.ts
 src/main/runtime/orca-runtime-refresh-floating-workspace-pty-liveness.ts
 src/main/runtime/orca-runtime-refuse-unattributed-mobile-session-tab-close.ts
-src/main/runtime/orca-runtime-resolve-authoritative-terminal-wait-permission.ts
 src/main/runtime/orca-runtime-resolve-browser-network-execution-host-for-worktree.ts
 src/main/runtime/orca-runtime-resolve-exit-waiters.ts
 src/main/runtime/orca-runtime-resolve-terminal-pane.ts
@@ -43,7 +41,6 @@ src/main/runtime/orca-runtime-resolve-worktree-removal-target.ts
 src/main/runtime/orca-runtime-restore-live-paired-renderer-session-owned-mobile-terminals.ts
 src/main/runtime/orca-runtime-restore-structured-agent-session-tabs-once.ts
 src/main/runtime/orca-runtime-runtime-id.ts
-src/main/runtime/orca-runtime-serialize-agent-prompt-submission.ts
 src/main/runtime/orca-runtime-serialize-headless-terminal-buffer.ts
 src/main/runtime/orca-runtime-state-fields.ts
 src/main/runtime/orca-runtime-stop-requested-pty-ids.ts
