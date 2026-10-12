@@ -10,7 +10,6 @@
 
 import { z } from 'zod'
 import type { AgentSessionCapabilities } from './agent-session-capabilities'
-import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
 import { isStructuredAgentId } from './agent-session-provider-handle-encoding'
 import { openEnum } from './zod-salvage'
 
@@ -46,26 +45,9 @@ const registeredAgentSchema = z.object({
     // `orca` claims only that Orca answers the agent's requests, never that it confines the agent.
     approvalEnforcement: openEnum(['provider', 'orca'] as const, 'orca')
       .optional()
-      .default('orca'),
-    transcriptAdoption: z.boolean().optional(),
-    sessionHistory: z.boolean().optional()
+      .default('orca')
   })
 })
-
-/** A host older than these flags still adopts and owns history for the agents every build ships. */
-function withOlderHostFlags(
-  row: z.infer<typeof registeredAgentSchema>
-): AgentSessionRegisteredAgent {
-  const shipped = isAgentSessionHandleProvider(row.agent)
-  return {
-    agent: row.agent,
-    capabilities: {
-      ...row.capabilities,
-      transcriptAdoption: row.capabilities.transcriptAdoption ?? shipped,
-      sessionHistory: row.capabilities.sessionHistory ?? shipped
-    }
-  }
-}
 
 /** The host's agents as this build reads them, or null when the reply is not an agent list. */
 export function decodeAgentSessionAgentsResult(
@@ -84,7 +66,7 @@ export function decodeAgentSessionAgentsResult(
     const parsed = registeredAgentSchema.safeParse(row)
     if (parsed.success && !seen.has(parsed.data.agent)) {
       seen.add(parsed.data.agent)
-      decoded.push(withOlderHostFlags(parsed.data))
+      decoded.push(parsed.data)
     }
   }
   return decoded

@@ -24,13 +24,9 @@ export const STRUCTURED_AGENT_SESSION_AGENTS_METHODS = [
       return {
         agents: STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.filter(({ definition }) =>
           clientReadsStructuredSessionAgent(ctx, definition.agent)
-        ).map(({ definition, transcriptImport, sessionHistory }) => ({
+        ).map(({ definition }) => ({
           agent: definition.agent,
-          capabilities: {
-            ...definition.capabilities,
-            transcriptAdoption: transcriptImport !== null,
-            sessionHistory: sessionHistory !== null
-          }
+          capabilities: { ...definition.capabilities }
         }))
       }
     }

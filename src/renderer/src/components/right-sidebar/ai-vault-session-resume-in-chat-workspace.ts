@@ -7,7 +7,7 @@ import { resolveStructuredAgentSessionOwner } from '@/runtime/structured-agent-s
 import { useAppStore } from '@/store'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import { normalizeExecutionHostId } from '../../../../shared/execution-host'
-import { hostStructuredAgentClaims } from '@/runtime/use-host-structured-agent'
+import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
 import { STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { resolveAiVaultTargetWorkspacePath } from './ai-vault-session-launch-target'
 import {
@@ -39,14 +39,12 @@ export function resolveAiVaultSessionResumeInChatForWorkspace(args: {
   const targetOwner = targetWorkspaceId
     ? resolveStructuredAgentSessionOwner(state, targetWorkspaceId)
     : null
-  const transcriptAdoption = aiVaultSessionHostAdoptsTranscripts(state, args.session)
   return resolveAiVaultSessionResumeInChatEligibility({
     session: args.session,
     targetWorkspaceId,
     targetWorkspacePath,
-    transcriptAdoption,
     structuredRouteAvailable:
-      transcriptAdoption &&
+      isAgentSessionHandleProvider(args.session.agent) &&
       targetWorkspaceId !== null &&
       targetOwner !== null &&
       targetOwner === normalizeExecutionHostId(args.session.executionHostId) &&
@@ -84,17 +82,4 @@ export function resolveAiVaultHistoryRowResume(
       settings
     })
   }
-}
-
-/** Whether the host that recorded the row would adopt its conversation into a chat. */
-export function aiVaultSessionHostAdoptsTranscripts(
-  store: Parameters<typeof hostStructuredAgentClaims>[0],
-  session: Pick<AiVaultSession, 'agent' | 'executionHostId'>
-): boolean {
-  return hostStructuredAgentClaims(
-    store,
-    normalizeExecutionHostId(session.executionHostId) ?? session.executionHostId,
-    session.agent,
-    'transcriptAdoption'
-  )
 }

@@ -61,9 +61,7 @@ describe('a host-registered agent on the structured chat surface', () => {
       contextUsage: false,
       imagePrompts,
       steering: 'queue',
-      approvalEnforcement: 'orca',
-      transcriptAdoption: false,
-      sessionHistory: false
+      approvalEnforcement: 'orca'
     })
     const record = (imagePrompts: boolean) => ({
       agent: 'grok',

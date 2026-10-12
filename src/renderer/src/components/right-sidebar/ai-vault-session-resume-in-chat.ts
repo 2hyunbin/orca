@@ -8,6 +8,7 @@ import { isAntigravityReferenceSession } from '../../../../shared/antigravity-se
 import { isWslStoredAiVaultSessionFile } from '@/lib/ai-vault-resume-target'
 import { normalizeRuntimePathForComparison } from '../../../../shared/cross-platform-path'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
 import {
   isAiVaultSessionResumableContent,
   type AiVaultSession
@@ -68,11 +69,9 @@ export function resolveAiVaultSessionResumeInChatEligibility(args: {
    *  not apply. Reused rather than re-derived: it already encodes host capability, platform refusals
    *  and the WSL/repair refusal, and a second copy of those conditions would drift from it. */
   structuredRouteAvailable: boolean
-  /** Whether the row's host adopts this agent's CLI conversations into a chat. */
-  transcriptAdoption: boolean
 }): AiVaultResumeInChatEligibility {
   const { session } = args
-  if (isAntigravityReferenceSession(session) || !args.transcriptAdoption) {
+  if (isAntigravityReferenceSession(session) || !isAgentSessionHandleProvider(session.agent)) {
     return { available: false, reason: 'agent' }
   }
   // An already-adopted row reopens its own chat instead; offering a second resume of it would ask
