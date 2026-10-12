@@ -5104,5 +5104,11 @@
   },
   "components.workspace.cleanup.browse.agent.working": {
     "ko": "작업 중"
+  },
+  "auto.components.settings.VoicePane.dictationShortcutDescription": {
+    "ko": "{{shortcut}} 단축키를 눌러 포커스된 패널에 텍스트를 받아쓰세요."
+  },
+  "auto.components.settings.VoicePane.dictationModesDescription": {
+    "ko": "전환 모드: {{shortcut}} 단축키를 한 번 누르면 받아쓰기를 시작하고, 다시 누르면 중지합니다. 길게 누르기 모드: {{shortcut}} 단축키를 누르는 동안 받아쓰기합니다."
   }
 }

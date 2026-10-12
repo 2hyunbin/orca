@@ -8885,7 +8885,9 @@
           "1eac933202": "macOS 개인 정보 보호 및 보안을 열었습니다. 액세스 권한을 부여한 후 받아쓰기를 다시 활성화하세요.",
           "cd9fe37556": "마이크 권한이 부여되었습니다.",
           "6fa734ed95": "{{value0}} 삭제",
-          "openAiKeyName": "OpenAI 트랜스크립션 키"
+          "openAiKeyName": "OpenAI 트랜스크립션 키",
+          "dictationShortcutDescription": "{{shortcut}} 단축키를 눌러 포커스된 패널에 텍스트를 받아쓰세요.",
+          "dictationModesDescription": "전환 모드: {{shortcut}} 단축키를 한 번 누르면 받아쓰기를 시작하고, 다시 누르면 중지합니다. 길게 누르기 모드: {{shortcut}} 단축키를 누르는 동안 받아쓰기합니다."
         },
         "WorktreeSymlinksSection": {
           "1c1e35b219": "{{value0}} 제거",

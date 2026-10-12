@@ -1576,8 +1576,13 @@
           "target_label": "Theme Mode"
         },
         "VoicePane": {
+          "295d84b849": "once to start, again to stop. Hold: dictate while",
+          "366e1b4f36": "to dictate text into any focused pane.",
+          "4465596675": "Press",
+          "7cf715f891": "is held.",
           "901985625d": "toggle",
-          "b6536a1d12": "extracting"
+          "b6536a1d12": "extracting",
+          "ff9a680010": "Toggle: press"
         },
         "WarpThemeImportModal": {
           "found_theme_one": "Found 1 theme",
