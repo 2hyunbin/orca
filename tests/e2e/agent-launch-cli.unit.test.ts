@@ -6,6 +6,7 @@ import { AGENT_LAUNCH_RUNTIME_CAPABILITIES } from '../../src/shared/agent-launch
 import { openTestAgentSessionRecordStore } from '../../src/main/runtime/agent-session-record-store-test-harness'
 import { RuntimeClient, RuntimeClientError } from '../../src/cli/runtime-client'
 import { callAgentLaunch, readCliAgentLaunch } from '../../src/cli/agent-launch-request'
+import { parseArgs } from '../../src/cli/args'
 import { AGENT_LAUNCH_HANDLERS } from '../../src/cli/handlers/agent-launch'
 import { createWorktreeWithAgent } from '../../src/cli/handlers/worktree-create-agent-launch'
 import {
@@ -178,17 +179,18 @@ describe('CLI launch through host surface creation and replay admission', () => 
   )
 
   it.each([existing, create])(
-    'a lost terminal reply cannot paste the brief twice: %j',
+    'rejects empty recovery IDs after a lost terminal reply and preserves valid replay: %j',
     async (target) => {
       const runtime = runtimeStub({ settings: {} })
-      const launch = {
-        agent: 'codex',
-        prompt: { text: 'Fix the repo\nThen test', delivery: 'submit' }
-      } as const
+      const argv = ['--agent', 'codex', '--prompt', 'Fix the repo\nThen test']
+      const launch = readCliAgentLaunch(parseArgs(argv).flags, 'codex', {
+        createsWorktree: target.kind === 'create-worktree'
+      })
+      const initialClient = hostClient(runtime, true)
       let operationId: string | undefined
       try {
         await callAgentLaunch(
-          hostClient(runtime, true),
+          initialClient,
           launch,
           { target, presentation: 'background' },
           AGENT_LAUNCH_RUNTIME_CAPABILITIES
@@ -206,11 +208,36 @@ describe('CLI launch through host surface creation and replay admission', () => 
         }
         operationId = error.data.operationId
       }
+      const retryClient = hostClient(runtime)
+      for (const retryArgs of [['--retry-launch', ''], ['--retry-launch=']]) {
+        await expect(async () => {
+          const retry = readCliAgentLaunch(parseArgs([...argv, ...retryArgs]).flags, 'codex', {
+            createsWorktree: target.kind === 'create-worktree'
+          })
+          await callAgentLaunch(
+            retryClient,
+            retry,
+            { target, presentation: 'background' },
+            AGENT_LAUNCH_RUNTIME_CAPABILITIES
+          )
+        }).rejects.toMatchObject({ code: 'invalid_argument' })
+      }
+      expect(retryClient.call).not.toHaveBeenCalled()
       await callAgentLaunch(
-        hostClient(runtime),
-        { ...launch, operationId },
+        retryClient,
+        readCliAgentLaunch(
+          parseArgs([...argv, '--retry-launch', operationId ?? '']).flags,
+          'codex',
+          {
+            createsWorktree: target.kind === 'create-worktree'
+          }
+        ),
         { target, presentation: 'background' },
         AGENT_LAUNCH_RUNTIME_CAPABILITIES
+      )
+      expect(retryClient.call).toHaveBeenCalledExactlyOnceWith(
+        'agent.launchReplay',
+        vi.mocked(initialClient.call).mock.calls[0]?.[1]
       )
       expect(terminalPrompt).toHaveBeenCalledTimes(1)
       expect(runtime.createTerminal).toHaveBeenCalledTimes(target.kind === 'existing' ? 1 : 0)

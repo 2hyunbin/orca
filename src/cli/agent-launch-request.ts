@@ -18,7 +18,11 @@ import { parseAgentSessionOperationTimestamp } from '../shared/agent-session-hos
 import type { RuntimeStatus } from '../shared/runtime-types'
 import type { TuiAgent } from '../shared/tui-agent'
 import { isTuiAgent } from '../shared/tui-agent-config'
-import { getOptionalStringFlag, rejectValuelessFlag } from './flags'
+import {
+  getOptionalStringFlag,
+  getRequiredStringFlagAllowingEmpty,
+  rejectValuelessFlag
+} from './flags'
 import { RuntimeClientError, type RuntimeClient, type RuntimeRpcSuccess } from './runtime-client'
 import { withCliAgentLaunchRecovery } from './agent-launch-recovery'
 
@@ -63,8 +67,10 @@ export function readCliAgentLaunch(
   }
   const prompt = flags.get('prompt')
   rejectValuelessFlag(prompt, 'prompt')
-  const operationId = getOptionalStringFlag(flags, 'retry-launch')
-  if (operationId && parseAgentSessionOperationTimestamp(operationId) === null) {
+  const operationId = flags.has('retry-launch')
+    ? getRequiredStringFlagAllowingEmpty(flags, 'retry-launch')
+    : undefined
+  if (operationId !== undefined && parseAgentSessionOperationTimestamp(operationId) === null) {
     throw new RuntimeClientError('invalid_argument', 'Malformed --retry-launch operation ID')
   }
   return {

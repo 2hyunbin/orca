@@ -194,6 +194,29 @@ describe('orca cli agent launch', () => {
     expect(launchCalls()).toHaveLength(1)
   })
 
+  it.each([
+    ['--retry-launch', ''],
+    ['--retry-launch='],
+    ['--retry-launch'],
+    ['--retry-launch', ' ']
+  ])('rejects an invalid retry identity before launching: %j', async (...retryArgs) => {
+    const output = await runRefused([
+      'agent',
+      'launch',
+      '--agent',
+      'codex',
+      '--worktree',
+      `id:${WORKTREE_ID}`,
+      ...retryArgs,
+      '--json'
+    ])
+    expect(JSON.parse(output).error).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('--retry-launch')
+    })
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
   it('forwards the recovery ID on a CLI retry', async () => {
     const operationId = `${Date.now()}-${'b'.repeat(32)}`
     queueFixtures(callMock, agentLaunchHostFixture(), agentLaunchFixture(WORKTREE_ID))

@@ -160,6 +160,38 @@ describe('orca cli worktree awareness', () => {
     })
   })
 
+  it.each([
+    ['--retry-launch', ''],
+    ['--retry-launch='],
+    ['--retry-launch'],
+    ['--retry-launch', ' ']
+  ])('rejects an invalid retry identity before creating a worktree: %j', async (...retryArgs) => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const priorExitCode = process.exitCode
+    await main(
+      [
+        'worktree',
+        'create',
+        '--repo',
+        'id:repo-1',
+        '--name',
+        'task',
+        '--agent',
+        'codex',
+        ...retryArgs,
+        '--json'
+      ],
+      '/tmp/repo'
+    )
+    expect(process.exitCode).toBe(1)
+    process.exitCode = priorExitCode
+    expect(JSON.parse(String(logSpy.mock.calls[0]?.[0])).error).toMatchObject({
+      code: 'invalid_argument',
+      message: expect.stringContaining('--retry-launch')
+    })
+    expect(callMock).not.toHaveBeenCalled()
+  })
+
   it('falls back to the startup terminal on a host older than agent.launch', async () => {
     queueFixtures(
       callMock,
