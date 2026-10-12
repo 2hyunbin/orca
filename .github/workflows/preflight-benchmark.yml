@@ -17,14 +17,6 @@ jobs:
         fetch-depth: 50
         persist-credentials: false
         ref: a1c94a9080826bb6a665e520be0b86e225002a2f
-    - name: Restore baseline check implementations
-      run: 'git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:package.json > package.json
-
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
-
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
-
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - uses: ./.github/actions/install-node-dependencies
       if: '''false'' != ''true'''
       with:
@@ -44,6 +36,14 @@ jobs:
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       with:
         bun-version: 1.4.3
+    - name: Select check implementations
+      run: 'git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:package.json > package.json
+
+        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+
+        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+
+        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -297,6 +297,14 @@ jobs:
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       with:
         bun-version: 1.4.3
+    - name: Select check implementations
+      run: 'git show a1c94a9080826bb6a665e520be0b86e225002a2f:package.json > package.json
+
+        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+
+        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+
+        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -550,6 +558,14 @@ jobs:
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       with:
         bun-version: 1.4.3
+    - name: Select check implementations
+      run: 'git show a1c94a9080826bb6a665e520be0b86e225002a2f:package.json > package.json
+
+        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+
+        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+
+        git show a1c94a9080826bb6a665e520be0b86e225002a2f:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -784,14 +800,6 @@ jobs:
         fetch-depth: 50
         persist-credentials: false
         ref: a1c94a9080826bb6a665e520be0b86e225002a2f
-    - name: Restore baseline check implementations
-      run: 'git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:package.json > package.json
-
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
-
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
-
-        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - uses: ./.github/actions/install-node-dependencies
       if: '''false'' != ''true'''
       with:
@@ -811,6 +819,14 @@ jobs:
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       with:
         bun-version: 1.4.3
+    - name: Select check implementations
+      run: 'git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:package.json > package.json
+
+        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/runtime-serve-terminal-smoke.mjs > config/scripts/runtime-serve-terminal-smoke.mjs
+
+        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
+
+        git show 1104402f5e85063c3f99dc5b5cb140bb2b299ebb:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
