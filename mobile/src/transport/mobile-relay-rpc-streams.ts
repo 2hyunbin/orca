@@ -34,8 +34,11 @@ type StreamRecord = {
 
 type StreamUnsubscribe = { method: string; params: Record<string, unknown> }
 
-/** The host cleanup slot an unsubscribe names; the rest of its params never identify a sibling. */
-function unsubscribeSlot({ method, params }: StreamUnsubscribe): string | null {
+/** The host cleanup slot an unsubscribe names; the envelope routes it, so it is part of the slot. */
+function unsubscribeSlot(
+  { method, params }: StreamUnsubscribe,
+  envelope: RpcEnvelopeFields | undefined
+): string | null {
   if (!('subscriptionId' in params)) {
     return null
   }
@@ -44,7 +47,7 @@ function unsubscribeSlot({ method, params }: StreamUnsubscribe): string | null {
       ? params.client
       : null
   const clientId = client && 'id' in client ? client.id : null
-  return JSON.stringify([method, params.subscriptionId, clientId])
+  return JSON.stringify([method, params.subscriptionId, clientId, envelope ?? null])
 }
 
 /** Unsubscribe derived from the subscribe params alone (no server-assigned id). */
@@ -252,7 +255,7 @@ export class MobileRelayRpcStreams {
     envelope: RpcEnvelopeFields | undefined,
     terminalRequestId?: string
   ): void {
-    if (this.hasNewerSlotOwner(unsubscribe, sendOrder)) {
+    if (this.hasNewerSlotOwner(unsubscribe, sendOrder, envelope)) {
       return
     }
     // Why: added after the sibling check; an old host strips it and would evict the live sibling.
@@ -267,8 +270,12 @@ export class MobileRelayRpcStreams {
     })
   }
 
-  private hasNewerSlotOwner(unsubscribe: StreamUnsubscribe, sendOrder: number): boolean {
-    const slot = unsubscribeSlot(unsubscribe)
+  private hasNewerSlotOwner(
+    unsubscribe: StreamUnsubscribe,
+    sendOrder: number,
+    envelope: RpcEnvelopeFields | undefined
+  ): boolean {
+    const slot = unsubscribeSlot(unsubscribe, envelope)
     if (slot === null) {
       return false
     }
@@ -277,7 +284,7 @@ export class MobileRelayRpcStreams {
         continue
       }
       const siblingUnsubscribe = buildParamsUnsubscribe(sibling.method, sibling.params, siblingId)
-      if (siblingUnsubscribe && unsubscribeSlot(siblingUnsubscribe) === slot) {
+      if (siblingUnsubscribe && unsubscribeSlot(siblingUnsubscribe, sibling.envelope) === slot) {
         return true
       }
     }
