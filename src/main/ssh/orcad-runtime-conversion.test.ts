@@ -155,12 +155,14 @@ describe('converting an SSH host into a managed server', () => {
       createdAt: 1,
       updatedAt: 1
     }
-    vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([lease])
+    // A clean 1.4.224 quit saves its leases detached; a crash leaves them expired.
+    const detached = { ...lease, ptyId: 'q', state: 'detached' as const }
+    vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([lease, detached])
     const markLease = vi.spyOn(store, 'markSshRemotePtyLease')
     const uncounted = async () => ({ verdict: 'unverifiable' as const, count: 0 })
     await expect(convert(uncounted)).resolves.toMatchObject({ outcome: 'converted' })
     const [journal] = listOrcadMigrationSourceCutovers(userDataPath)
-    expect(journal).toMatchObject({ provenPtyIds: [], bridgedPtyIds: ['p'] })
+    expect(journal).toMatchObject({ provenPtyIds: [], bridgedPtyIds: ['p', 'q'] })
     expect(markLease).not.toHaveBeenCalled()
   })
 

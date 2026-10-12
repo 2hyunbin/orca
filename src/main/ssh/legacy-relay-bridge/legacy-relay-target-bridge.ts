@@ -16,7 +16,7 @@ import type {
 import type { LegacyRelayClient, LegacyRelayOwnerClaim } from './legacy-relay-client'
 import type { LegacyRelayEndpoint, LegacyRelayEndpointListing } from './legacy-relay-endpoints'
 import { LegacyRelayRetry, LegacyRelayWaiters } from './legacy-relay-bridge-timers'
-import { isBridgeableLease } from './legacy-relay-bridge-leases'
+import { bridgeableLeasesByRelayId } from './legacy-relay-bridge-leases'
 
 /** How long an attach waits for an unreachable relay before answering `unverifiable`. */
 const ATTACH_WAIT_MS = 20_000
@@ -104,7 +104,10 @@ export class LegacyRelayTargetBridge {
       pane = this.panes.get(ptyId)
     }
     if (!pane) {
-      return this.isLeased(ptyId) ? { status: 'unverifiable' } : { status: 'exited' }
+      const leased = [...bridgeableLeasesByRelayId(this.deps.leases()).keys()].some(
+        (relayPtyId) => toAppSshPtyId(this.deps.targetId, relayPtyId) === ptyId
+      )
+      return leased ? { status: 'unverifiable' } : { status: 'exited' }
     }
     const client = pane.endpoint ? this.endpoints.get(pane.endpoint)?.client : null
     if (pane.state !== 'live' || !client) {
@@ -169,16 +172,23 @@ export class LegacyRelayTargetBridge {
       return
     }
     this.looked = true
-    const leases = new Map<string, SshRemotePtyLease>()
-    for (const lease of this.deps.leases()) {
-      if (isBridgeableLease(lease)) {
-        leases.set(lease.ptyId, lease)
-      }
-    }
+    const leases = bridgeableLeasesByRelayId(this.deps.leases())
     if (leases.size === 0) {
       this.closeIdleClients(new Set())
       this.replacePanes(new Map())
       return
+    }
+    // Every leased pane is published before the slow look, so a tab that mounts meanwhile waits on
+    // its relay terminal rather than starting a second shell. Only proof of exit removes it.
+    const seeded = new Map(this.panes)
+    for (const [relayPtyId, lease] of leases) {
+      const ptyId = toAppSshPtyId(this.deps.targetId, relayPtyId)
+      if (!seeded.has(ptyId)) {
+        seeded.set(ptyId, { lease, relayPtyId, endpoint: null, state: 'unverifiable' })
+      }
+    }
+    if (seeded.size !== this.panes.size) {
+      this.replacePanes(seeded)
     }
     const listing = await this.deps.listEndpoints(this.abort.signal)
     if (this.disposed) {
@@ -207,13 +217,11 @@ export class LegacyRelayTargetBridge {
         next.set(ptyId, { lease, relayPtyId, endpoint, state: 'live' })
       } else if (complete) {
         // Every relay this target could have left answered, and none holds it.
-        const previous = this.panes.get(ptyId)
+        const wasLive = this.panes.get(ptyId)?.endpoint
         this.deps.retireLease(relayPtyId)
-        if (previous) {
-          this.emitExit(ptyId, -1)
-        }
-      } else if (this.panes.has(ptyId)) {
-        // Seen live and now unreachable: loss of contact is never exit, so the pane waits.
+        this.emitExit(ptyId, -1, Boolean(wasLive))
+      } else {
+        // Unreachable: loss of contact is never exit, so the pane waits.
         next.set(ptyId, { lease, relayPtyId, endpoint: null, state: 'unverifiable' })
       }
     }
@@ -303,25 +311,19 @@ export class LegacyRelayTargetBridge {
     this.waiters.wake()
   }
 
-  private emitExit(ptyId: string, code: number): void {
+  /** Only a terminal this session saw running counts as a bridged exit in telemetry. */
+  private emitExit(ptyId: string, code: number, counted = true): void {
     this.attached.delete(ptyId)
     this.deps.onExit(ptyId, code)
-    this.deps.onTerminalExited()
+    if (counted) {
+      this.deps.onTerminalExited()
+    }
   }
 
   private liveRoute(ptyId: string): { client: LegacyRelayClient; relayPtyId: string } | null {
     const pane = this.panes.get(ptyId)
     const client = pane?.endpoint ? this.endpoints.get(pane.endpoint)?.client : null
     return pane?.state === 'live' && client ? { client, relayPtyId: pane.relayPtyId } : null
-  }
-
-  private isLeased(ptyId: string): boolean {
-    return this.deps
-      .leases()
-      .some(
-        (lease) =>
-          isBridgeableLease(lease) && toAppSshPtyId(this.deps.targetId, lease.ptyId) === ptyId
-      )
   }
 
   private replacePanes(next: Map<string, Pane>): void {

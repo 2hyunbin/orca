@@ -191,9 +191,25 @@ describe('one target’s legacy relay bridge', () => {
     listing = { kind: 'unverifiable' }
     const subject = bridge()
     await subject.refresh()
-    expect(subject.snapshot()).toEqual([])
-    await expect(subject.attach(PTY)).resolves.toEqual({ status: 'unverifiable' })
+    // Published before any relay answers, so the tab waits instead of starting a second shell.
+    expect(subject.snapshot()).toEqual([
+      { ptyId: PTY, targetId: TARGET, tabId: 'tab-1', leafId: 'leaf-1', state: 'unverifiable' }
+    ])
+    const attached = subject.attach(PTY)
+    await vi.advanceTimersByTimeAsync(20_000)
+    await expect(attached).resolves.toEqual({ status: 'unverifiable' })
     expect(leases[0].state).toBe('detached')
+  })
+
+  it('serves a pane whose relay could not be asked at first once it answers', async () => {
+    relay.openError = new Error('owner claim timed out')
+    const subject = bridge()
+    await subject.refresh()
+    expect(subject.snapshot()[0].state).toBe('unverifiable')
+    relay.openError = null
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(subject.snapshot()[0].state).toBe('live')
+    await expect(subject.attach(PTY)).resolves.toMatchObject({ status: 'attached' })
   })
 
   it('retires a lease only when every relay for the target answered without it', async () => {

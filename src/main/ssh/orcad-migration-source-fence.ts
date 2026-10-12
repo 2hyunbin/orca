@@ -107,7 +107,12 @@ export async function fenceOrcadMigrationSource(args: {
   if (proof.verdict !== 'exited' && proof.verdict !== 'bridged') {
     return refuse(proof.verdict, 'orcad_migration_terminals', proof.reason)
   }
-  const preflight = preflightOrcadMigrationExport(args.store, target.id)
+  const preflight = preflightOrcadMigrationExport(
+    args.store,
+    target.id,
+    undefined,
+    proof.verdict === 'bridged' ? proof.bridgedPtyIds : []
+  )
   if (!preflight.claimable) {
     return {
       ...refuse(

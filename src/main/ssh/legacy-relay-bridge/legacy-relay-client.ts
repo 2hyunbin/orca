@@ -24,6 +24,10 @@ const METHOD_NOT_FOUND = -32601
 // Longer than the relay's 30s owner grace, which a different client clamps to 250ms on asking.
 const OWNER_RETRY_BUDGET_MS = 35_000
 
+export const REMOTE_CLI_UNAVAILABLE =
+  'This terminal was started by an older version of Orca, so orca commands are unavailable ' +
+  'in it. Run them in a new terminal on this host.'
+
 export type LegacyRelayOwnerClaim = { ownerGeneration: number; ownerLease: string }
 
 export type LegacyRelayClientOptions = {
@@ -115,6 +119,13 @@ export class LegacyRelayClient {
     readonly ownerClaim: LegacyRelayOwnerClaim | null
   ) {
     mux.onNotification((method, params) => this.route(method, params))
+    // The old relay forwards `orca` commands run inside its terminals to its attached client.
+    // This build has no relay-era remote CLI, so it says why instead of "Method not found".
+    for (const method of ['orca.cli', 'orca.cli.postOutput']) {
+      mux.onRequest(method, () => {
+        throw new Error(REMOTE_CLI_UNAVAILABLE)
+      })
+    }
     mux.onDispose(() => this.closeListeners.forEach((listener) => listener()))
   }
 

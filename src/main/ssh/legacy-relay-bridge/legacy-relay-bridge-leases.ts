@@ -18,3 +18,9 @@ export function isBridgeableLease(lease: SshRemotePtyLease): boolean {
     !lease.relayIdRecycled
   )
 }
+
+export function bridgeableLeasesByRelayId(
+  leases: readonly SshRemotePtyLease[]
+): Map<string, SshRemotePtyLease> {
+  return new Map(leases.filter(isBridgeableLease).map((lease) => [lease.ptyId, lease]))
+}

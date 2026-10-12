@@ -8,7 +8,9 @@ const fake = vi.hoisted(() => {
   const requests: Request[] = []
   const notifications: Request[] = []
   const instances: FakeMux[] = []
+  const requestHandlers = new Map<string, () => unknown>()
   return {
+    requestHandlers,
     requests,
     notifications,
     instances,
@@ -40,6 +42,10 @@ vi.mock('../ssh-channel-multiplexer', () => ({
       this.notificationHandlers.push(handler)
       return () => {}
     }
+    onRequest(method: string, handler: () => unknown) {
+      fake.requestHandlers.set(method, handler)
+      return () => {}
+    }
     onDispose(handler: () => void) {
       this.disposeHandlers.push(handler)
       return () => {}
@@ -54,7 +60,11 @@ vi.mock('../ssh-channel-multiplexer', () => ({
   }
 }))
 
-import { LegacyRelayClient, LegacyRelayOwnerHeldError } from './legacy-relay-client'
+import {
+  LegacyRelayClient,
+  LegacyRelayOwnerHeldError,
+  REMOTE_CLI_UNAVAILABLE
+} from './legacy-relay-client'
 
 const GRANT = {
   protocolVersion: 1,
@@ -185,6 +195,14 @@ describe('the legacy relay client', () => {
     fake.instances[0].emit('pty.exit', { id: 'pty-1', code: 0 })
     expect(data).toEqual(['pty-1:out'])
     expect(exits).toEqual([0])
+  })
+
+  it('answers an orca command from an old terminal with why it is unavailable', async () => {
+    await open()
+    expect(() => fake.requestHandlers.get('orca.cli')?.()).toThrow(REMOTE_CLI_UNAVAILABLE)
+    expect(() => fake.requestHandlers.get('orca.cli.postOutput')?.()).toThrow(
+      REMOTE_CLI_UNAVAILABLE
+    )
   })
 
   it('hangs up only itself on close', async () => {
