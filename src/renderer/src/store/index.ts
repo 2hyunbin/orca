@@ -1,4 +1,5 @@
 import { create, type StateCreator } from 'zustand'
+import { registerWebSessionClosePlacementStateReader } from '../runtime/web-session-close-intent'
 import type { AppState } from './types'
 import { createRepoSlice } from './slices/repos'
 import { createSparsePresetsSlice } from './slices/sparse-presets'
@@ -131,6 +132,7 @@ export const useAppStore = create<AppState>()(
   )
 )
 
+registerWebSessionClosePlacementStateReader(() => useAppStore.getState())
 registerHttpLinkStoreAccessor(() => useAppStore.getState())
 registerWorkspaceHttpLinkBrowserOpener(async (request) => {
   const { openWorkspaceBrowserTab } = await import('@/lib/workspace-browser-tab-open')

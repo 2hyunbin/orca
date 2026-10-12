@@ -4,7 +4,6 @@ import {
 } from '../../../shared/session-tab-close-ledger'
 import type { RuntimeClientTarget } from './runtime-rpc-client'
 import { sessionTabCloseAnswerOutcome } from '../../../shared/session-tab-close-answer'
-import { reprojectHostSessionTabSource } from './host-session-tab-source-projection'
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
 import {
   settleWebSessionCloseIntent,
@@ -104,6 +103,8 @@ export async function settleHostSessionTabClose(args: {
     const settled = settleWebSessionCloseIntent(ticket, outcome, now)
     if (settled && outcome === 'failed') {
       try {
+        const { reprojectHostSessionTabSource } =
+          await import('./host-session-tab-source-projection')
         reprojectHostSessionTabSource(ticket)
       } catch (error) {
         console.warn('[session-tabs] could not restore closed tab from its host source', error)
