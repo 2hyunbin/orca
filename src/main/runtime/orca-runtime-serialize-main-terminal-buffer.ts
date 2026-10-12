@@ -2,7 +2,7 @@ import { OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged } from './orca-r
 import type { TerminalOscLinkRange } from '../../shared/terminal-osc-link-ranges'
 import type { HeadlessSeedMetadata } from './runtime-terminal-state-records'
 
-export class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged {
+export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged {
   serializeMainTerminalBuffer(
     ptyId: string,
     opts: { scrollbackRows?: number } = {}

@@ -1,6 +1,6 @@
 import { OrcaRuntimeWithSerializeMainTerminalBuffer } from './orca-runtime-serialize-main-terminal-buffer'
 
-export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntimeWithSerializeMainTerminalBuffer {
+export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntimeWithSerializeMainTerminalBuffer {
   // Why: hydrate the runtime headless emulator from the desktop renderer's
   // xterm buffer on the first onPtyData byte after a PTY is taken over by a
   // pane. Eager-state pattern matches seedHeadlessTerminal: headlessTerminals

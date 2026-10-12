@@ -1,8 +1,29 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness } from './orca-runtime-refresh-floating-workspace-pty-liveness'
+import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from './orca-runtime-prune-mobile-session-tab-group-layout'
+import type { OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory } from './orca-runtime-refresh-pty-worktree-records-with-controller-inventory'
 import { OrcaRuntimeWithRecordPtyWorktree } from './orca-runtime-record-pty-worktree'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 
-export class OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController extends OrcaRuntimeWithRecordPtyWorktree {
+export abstract class OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController extends OrcaRuntimeWithRecordPtyWorktree {
+  protected abstract refreshFloatingWorkspacePtyLiveness(
+    ...args: Parameters<
+      OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['refreshFloatingWorkspacePtyLiveness']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['refreshFloatingWorkspacePtyLiveness']
+  >
+
+  protected abstract getMobileTerminalPaneKey(
+    ...args: Parameters<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['getMobileTerminalPaneKey']>
+  ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['getMobileTerminalPaneKey']>
+  protected abstract refreshPtyWorktreeRecordsWithControllerInventory(
+    ...args: Parameters<
+      OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory['refreshPtyWorktreeRecordsWithControllerInventory']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory['refreshPtyWorktreeRecordsWithControllerInventory']
+  >
+
   /** Synchronizes PTY tracking records with running daemon sessions, querying their foreground agent states. */
   protected async refreshPtyWorktreeRecordsFromController(
     resolvedWorktrees: ResolvedWorktree[],

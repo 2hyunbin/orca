@@ -1,10 +1,24 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithRecordPtyWorktree } from './orca-runtime-record-pty-worktree'
+import type { OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness } from './orca-runtime-refresh-floating-workspace-pty-liveness'
+import type { OrcaRuntimeWithBindPtyIncarnationHandle } from './orca-runtime-bind-pty-incarnation-handle'
 import { OrcaRuntimeWithResolveKnownWorkspaceFileTarget } from './orca-runtime-resolve-known-workspace-file-target'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import { getPtyExecutionHost } from '../../shared/terminal-execution-host'
 import { getConnectionExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
 
-export class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRuntimeWithResolveKnownWorkspaceFileTarget {
+export abstract class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRuntimeWithResolveKnownWorkspaceFileTarget {
+  protected abstract getOrCreatePtyWorktreeRecord(
+    ...args: Parameters<OrcaRuntimeWithRecordPtyWorktree['getOrCreatePtyWorktreeRecord']>
+  ): ReturnType<OrcaRuntimeWithRecordPtyWorktree['getOrCreatePtyWorktreeRecord']>
+
+  protected abstract getLeavesForPty(
+    ...args: Parameters<OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['getLeavesForPty']>
+  ): ReturnType<OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['getLeavesForPty']>
+
+  protected abstract adoptPreAllocatedHandle(
+    ...args: Parameters<OrcaRuntimeWithBindPtyIncarnationHandle['adoptPreAllocatedHandle']>
+  ): ReturnType<OrcaRuntimeWithBindPtyIncarnationHandle['adoptPreAllocatedHandle']>
+
   protected invalidateAllHandlesForPty(ptyId: string, preserveHandle?: string): Set<string> {
     return this.terminalIdentity.invalidateAllHandlesForPty(ptyId, preserveHandle)
   }

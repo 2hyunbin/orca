@@ -4,7 +4,7 @@ import { createSetupCompletionScanner } from './orchestration/setup-completion-s
 import type { TuiAgent } from '../../shared/tui-agent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 
-export class OrcaRuntimeWithStartTuiIdleVisibleReadProbe extends OrcaRuntimeWithCreateAgentPromptRenderGate {
+export abstract class OrcaRuntimeWithStartTuiIdleVisibleReadProbe extends OrcaRuntimeWithCreateAgentPromptRenderGate {
   /** The agent Orca believes owns this pane, for tui-idle evidence ranking. Launch
    *  authority first; the live foreground agent covers panes Orca did not launch. */
   protected getPaneAgentForTuiIdle(ptyId: string | null | undefined): TuiAgent | null {

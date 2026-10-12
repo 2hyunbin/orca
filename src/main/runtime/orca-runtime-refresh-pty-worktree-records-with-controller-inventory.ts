@@ -1,7 +1,7 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController } from './orca-runtime-refresh-pty-worktree-records-from-controller'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import type * as PtyControllerContract from './runtime-pty-controller-contract'
+import type { ExecutionHostId } from '../../shared/execution-host'
+import { OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController } from './orca-runtime-refresh-pty-worktree-records-from-controller'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
 import {
   getConnectionExecutionHostId,
@@ -12,7 +12,6 @@ import {
   PTY_CONTROLLER_LIST_PROVIDER_MARGIN_MS,
   PTY_CONTROLLER_LIST_TIMEOUT_MS
 } from './orca-runtime-postlude'
-import type { ExecutionHostId } from '../../shared/execution-host'
 import { pruneOldestMapEntry } from './prune-oldest-map-entry'
 import { withTimeoutResult } from './runtime-async-boundaries'
 import { getPtyExecutionHost } from '../../shared/terminal-execution-host'
@@ -33,7 +32,7 @@ import { NO_OBSERVING_PROVIDER_REASON } from '../../shared/pty-liveness-verdict'
 import { buildControllerTerminalIdentities } from './orca-runtime-build-controller-terminal-identities'
 import { retireOrchestrationAuthorityAbsentFromInventory } from './runtime-restored-orchestration-authority-sweep'
 
-export class OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory extends OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController {
+export abstract class OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInventory extends OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController {
   protected async refreshPtyWorktreeRecordsWithControllerInventory(
     resolvedWorktrees: ResolvedWorktree[],
     targetWorktreeId: string | null = null,

@@ -1,4 +1,10 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithSerializeAgentPromptSubmission } from './orca-runtime-serialize-agent-prompt-submission'
+import type { OrcaRuntimeWithMarkPtyLivenessUnverifiable } from './orca-runtime-mark-pty-liveness-unverifiable'
+import type { OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness } from './orca-runtime-refresh-floating-workspace-pty-liveness'
+import type { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
+import type { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals } from './orca-runtime-restore-live-paired-renderer-session-owned-mobile-terminals'
+import type { OrcaRuntimeWithResolveExitWaiters } from './orca-runtime-resolve-exit-waiters'
+import type { OrcaRuntimeWithSubscribeToTerminalResize } from './orca-runtime-subscribe-to-terminal-resize'
 import { OrcaRuntimeWithOnClientDisconnected } from './orca-runtime-on-client-disconnected'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { TerminalExitCause } from '../../shared/terminal-exit-cause'
@@ -11,7 +17,58 @@ import type { RetiredTerminalSurface } from './mobile-session-terminal-retiremen
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { advertisedUrlWatcher } from '../ports/advertised-url-watcher'
 
-export class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnected {
+export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnected {
+  protected abstract recheckHookAgentPresenceForPty(
+    ...args: Parameters<
+      OrcaRuntimeWithSerializeAgentPromptSubmission['recheckHookAgentPresenceForPty']
+    >
+  ): ReturnType<OrcaRuntimeWithSerializeAgentPromptSubmission['recheckHookAgentPresenceForPty']>
+
+  protected abstract leafExistsForPty(
+    ...args: Parameters<OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['leafExistsForPty']>
+  ): ReturnType<OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['leafExistsForPty']>
+  protected abstract rememberPtyLivenessVerdict(
+    ...args: Parameters<OrcaRuntimeWithMarkPtyLivenessUnverifiable['rememberPtyLivenessVerdict']>
+  ): ReturnType<OrcaRuntimeWithMarkPtyLivenessUnverifiable['rememberPtyLivenessVerdict']>
+
+  protected abstract getLeafKey(
+    ...args: Parameters<OrcaRuntimeWithResolveWaiter['getLeafKey']>
+  ): ReturnType<OrcaRuntimeWithResolveWaiter['getLeafKey']>
+
+  protected abstract setPairedRendererSessionOwnership(
+    ...args: Parameters<
+      OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['setPairedRendererSessionOwnership']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals['setPairedRendererSessionOwnership']
+  >
+
+  protected abstract resolvePtyExitWaiters(
+    ...args: Parameters<OrcaRuntimeWithResolveExitWaiters['resolvePtyExitWaiters']>
+  ): ReturnType<OrcaRuntimeWithResolveExitWaiters['resolvePtyExitWaiters']>
+
+  protected abstract pruneDisconnectedPtyTranscript(
+    ...args: Parameters<
+      OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['pruneDisconnectedPtyTranscript']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['pruneDisconnectedPtyTranscript']
+  >
+
+  protected abstract resolveExitWaiters(
+    ...args: Parameters<OrcaRuntimeWithResolveExitWaiters['resolveExitWaiters']>
+  ): ReturnType<OrcaRuntimeWithResolveExitWaiters['resolveExitWaiters']>
+
+  protected abstract failActiveDispatchOnExit(
+    ...args: Parameters<OrcaRuntimeWithSubscribeToTerminalResize['failActiveDispatchOnExit']>
+  ): ReturnType<OrcaRuntimeWithSubscribeToTerminalResize['failActiveDispatchOnExit']>
+
+  protected abstract pruneDisconnectedPtyRecords(
+    ...args: Parameters<
+      OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['pruneDisconnectedPtyRecords']
+    >
+  ): ReturnType<OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['pruneDisconnectedPtyRecords']>
+
   onPtyExit(
     ptyId: string,
     exitCode: number,

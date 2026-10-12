@@ -1,4 +1,7 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithMarkPtyLivenessUnverifiable } from './orca-runtime-mark-pty-liveness-unverifiable'
+import type { OrcaRuntimeWithRecordPtyWorktree } from './orca-runtime-record-pty-worktree'
+import type { OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller } from './orca-runtime-verify-orchestration-compatibility-caller'
+import type { OrcaRuntimeWithWaitForMobileTerminalSurface } from './orca-runtime-wait-for-mobile-terminal-surface'
 import { OrcaRuntimeWithInvalidateAllHandlesForPty } from './orca-runtime-invalidate-all-handles-for-pty'
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -7,7 +10,31 @@ import { isTerminalLeafId, makePaneKey } from '../../shared/stable-pane-id'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import { spawnSurfaceClaimSequence } from './pty-recorded-surface-topology'
 
-export class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
+export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
+  abstract getPtyLivenessVerdict(
+    ...args: Parameters<OrcaRuntimeWithMarkPtyLivenessUnverifiable['getPtyLivenessVerdict']>
+  ): ReturnType<OrcaRuntimeWithMarkPtyLivenessUnverifiable['getPtyLivenessVerdict']>
+
+  protected abstract recordPtyWorktree(
+    ...args: Parameters<OrcaRuntimeWithRecordPtyWorktree['recordPtyWorktree']>
+  ): ReturnType<OrcaRuntimeWithRecordPtyWorktree['recordPtyWorktree']>
+
+  protected abstract getOrchestrationCompatibilityHostScope(
+    ...args: Parameters<
+      OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller['getOrchestrationCompatibilityHostScope']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller['getOrchestrationCompatibilityHostScope']
+  >
+
+  protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
+    ...args: Parameters<
+      OrcaRuntimeWithWaitForMobileTerminalSurface['ensurePtyBackedMobileSurfaceForRendererTab']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithWaitForMobileTerminalSurface['ensurePtyBackedMobileSurfaceForRendererTab']
+  >
+
   registerPty(
     ptyId: string,
     worktreeId: string,

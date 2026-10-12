@@ -3,7 +3,7 @@ import { OrcaRuntimeWithWriteTerminalAgentPrompt } from './orca-runtime-write-te
 
 import type { RuntimeTerminalWait, RuntimeTerminalWaitCondition } from '../../shared/runtime-types'
 
-export class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRuntimeWithWriteTerminalAgentPrompt {
+export abstract class OrcaRuntimeWithCreateAgentPromptRenderGate extends OrcaRuntimeWithWriteTerminalAgentPrompt {
   private readonly promptRender = new TerminalAgentPromptRender({
     getPty: (ptyId) => this.ptysById.get(ptyId),
     subscribeToTerminalData: () => this.subscribeToTerminalData.bind(this)

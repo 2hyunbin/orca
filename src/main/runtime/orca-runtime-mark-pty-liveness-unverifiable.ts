@@ -1,4 +1,3 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import type { TerminalLayoutCommands } from './terminal/layout/terminal-layout-commands'
 import { OrcaRuntimeWithOnPtyExit } from './orca-runtime-on-pty-exit'
 import type { PtyLivenessVerdict } from '../../shared/pty-liveness-verdict'
@@ -8,7 +7,7 @@ import { getPtyTerminalState, getTerminalState } from './terminal-wait-results'
 // Orphaned verdicts are bounded; active PTYs retain theirs until new evidence resolves them.
 const MAX_TRACKED_PTY_LIVENESS_VERDICTS = 256
 
-export class OrcaRuntimeWithMarkPtyLivenessUnverifiable extends OrcaRuntimeWithOnPtyExit {
+export abstract class OrcaRuntimeWithMarkPtyLivenessUnverifiable extends OrcaRuntimeWithOnPtyExit {
   /**
    * Records that we lost contact with a PTY's owning host. Callers must never
    * read this as an exit: a detached relay PTY is designed to outlive the

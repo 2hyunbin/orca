@@ -8,7 +8,7 @@ import type {
 
 import type { RuledScreen } from './screen-input-veto'
 
-export class OrcaRuntimeWithVisibleSnapshotPreview extends OrcaRuntimeWithCaptureProviderTerminalBuffer {
+export abstract class OrcaRuntimeWithVisibleSnapshotPreview extends OrcaRuntimeWithCaptureProviderTerminalBuffer {
   protected visibleSnapshotPreview(ptyId: string, preview: string): Promise<string> {
     return this.terminalOutput.visibleSnapshotPreview(ptyId, preview)
   }

@@ -2,7 +2,7 @@ import { OrcaRuntimeWithCreatePtyHeadlessTerminalState } from './orca-runtime-cr
 import type { TerminalOscLinkRange } from '../../shared/terminal-osc-link-ranges'
 import type { PtyProviderBufferSnapshot } from '../providers/types'
 
-export class OrcaRuntimeWithSerializeTerminalBufferFromAvailableState extends OrcaRuntimeWithCreatePtyHeadlessTerminalState {
+export abstract class OrcaRuntimeWithSerializeTerminalBufferFromAvailableState extends OrcaRuntimeWithCreatePtyHeadlessTerminalState {
   protected serializeTerminalBufferFromAvailableState(
     ptyId: string,
     opts: { scrollbackRows?: number } = {}

@@ -6,7 +6,7 @@ import type { RuntimeProviderSnapshotReadOptions } from './runtime-terminal-cont
 
 import type { RuntimeTerminalProjection } from './orca-runtime-core'
 
-export class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWithSerializeTerminalBufferFromAvailableState {
+export abstract class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWithSerializeTerminalBufferFromAvailableState {
   protected captureProviderTerminalBuffer(
     ptyId: string,
     opts: { scrollbackRows?: number },
