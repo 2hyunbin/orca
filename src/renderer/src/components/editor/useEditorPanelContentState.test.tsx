@@ -17,16 +17,18 @@ const mocks = vi.hoisted(() => ({
   getState: vi.fn()
 }))
 
-vi.mock('@/runtime/runtime-file-client', () => ({
+vi.mock('@/runtime/runtime-file-routing', () => ({
   getRuntimeFileReadScope: vi.fn(
     (
       target: { kind: 'local' } | { kind: 'environment'; environmentId: string },
       connectionId?: string
     ) => connectionId ?? (target.kind === 'environment' ? target.environmentId : null)
-  ),
-  readRuntimeFileContent: mocks.readRuntimeFileContent,
-  subscribeRuntimeFileChanges: vi.fn()
+  )
 }))
+vi.mock('@/runtime/runtime-file-read-client', () => ({
+  readRuntimeFileContent: mocks.readRuntimeFileContent
+}))
+vi.mock('@/runtime/runtime-file-watch-client', () => ({ subscribeRuntimeFileChanges: vi.fn() }))
 
 vi.mock('@/runtime/runtime-git-client', () => ({
   getRuntimeGitBranchDiff: mocks.getRuntimeGitBranchDiff,

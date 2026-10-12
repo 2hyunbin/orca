@@ -13,11 +13,11 @@ const mocks = vi.hoisted(() => ({
   readRuntimeFileContent: vi.fn()
 }))
 
-vi.mock('@/runtime/runtime-file-client', () => ({
-  getRuntimeFileReadScope: vi.fn(() => null),
-  readRuntimeFileContent: mocks.readRuntimeFileContent,
-  subscribeRuntimeFileChanges: vi.fn()
+vi.mock('@/runtime/runtime-file-routing', () => ({ getRuntimeFileReadScope: vi.fn(() => null) }))
+vi.mock('@/runtime/runtime-file-read-client', () => ({
+  readRuntimeFileContent: mocks.readRuntimeFileContent
 }))
+vi.mock('@/runtime/runtime-file-watch-client', () => ({ subscribeRuntimeFileChanges: vi.fn() }))
 
 vi.mock('@/runtime/runtime-git-client', () => ({
   getRuntimeGitBranchDiff: vi.fn(),
