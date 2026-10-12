@@ -37,7 +37,7 @@ export type StructuredAgentSessionHistory = {
   /** The resume the arguments after the binary ask for; null when they resume nothing. */
   parseResumeArgs: (args: readonly string[]) => StructuredAgentResumeInvocation | null
   /** Whether a resume target names the conversation listed under `rowSessionId`; absent, only
-   *  that exact id does. */
+   *  that id does, in any case. */
   resumeTargetMatches?: (target: string, rowSessionId: string) => boolean
 }
 

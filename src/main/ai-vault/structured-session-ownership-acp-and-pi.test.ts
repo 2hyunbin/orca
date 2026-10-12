@@ -131,6 +131,8 @@ describe('terminal resumes of a conversation an OpenCode chat owns', () => {
     `opencode -c`,
     `opencode --continue`,
     `opencode --session`,
+    // Ids compare in any case.
+    `opencode --session ${OPENCODE_ID.toLowerCase()}`,
     // After `--` the flag is prompt text, so the session is resumed, not forked.
     `opencode -s ${OPENCODE_ID} -- --fork`
   ])('refuses %s', async (command) => {
@@ -140,8 +142,6 @@ describe('terminal resumes of a conversation an OpenCode chat owns', () => {
 
   it.each([
     `opencode --session ses_otherSession123`,
-    // Ids are case-sensitive.
-    `opencode --session ${OPENCODE_ID.toLowerCase()}`,
     `opencode --session ${OPENCODE_ID} --fork`,
     `opencode -c --fork`,
     `opencode`,

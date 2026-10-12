@@ -218,10 +218,12 @@ function resumesOwnedSession(
   if (invocation.target === null) {
     return true
   }
-  const matches = invocation.history.resumeTargetMatches
-  return matches
-    ? matches(invocation.target, ownership.providerSessionId)
-    : invocation.target === ownership.providerSessionId
+  const matches = invocation.history.resumeTargetMatches ?? sameIdInAnyCase
+  return matches(invocation.target, ownership.providerSessionId)
+}
+
+function sameIdInAnyCase(target: string, rowSessionId: string): boolean {
+  return target.toLowerCase() === rowSessionId.toLowerCase()
 }
 
 type ResumeInvocation = StructuredAgentResumeInvocation & {

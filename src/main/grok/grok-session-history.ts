@@ -20,6 +20,5 @@ export const GROK_SESSION_HISTORY: StructuredAgentSessionHistory = {
     })
     // Grok reads a non-UUID value as a session title, which may name any of the folder's sessions.
     return invocation?.target && !UUID.test(invocation.target) ? { target: null } : invocation
-  },
-  resumeTargetMatches: (target, rowSessionId) => target.toLowerCase() === rowSessionId.toLowerCase()
+  }
 }

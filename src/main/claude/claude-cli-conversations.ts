@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
 import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
 import {
-  resumeInvocationAfterMarker,
+  resumeInvocationFromOptions,
   type StructuredAgentResumeInvocation,
   type StructuredAgentCliConversations,
   type StructuredAgentSessionHistory,
@@ -34,32 +34,22 @@ export const CLAUDE_CLI_CONVERSATIONS: StructuredAgentCliConversations = {
 }
 
 function parseClaudeResumeArgs(args: readonly string[]): StructuredAgentResumeInvocation | null {
-  if (isClaudeForkInvocation(args)) {
-    return null
-  }
-  // `--continue`/`-c` resume the most recent session and never take an id, so a
-  // following token is a prompt, not a target — they are always target-less.
-  const targetlessFlags = ['--continue', '-c']
-  if (args.some((token) => targetlessFlags.includes(token.toLowerCase()))) {
-    return { target: null }
-  }
-  const inline = args.find(
-    (token) => token.toLowerCase().startsWith('--resume=') || token.toLowerCase().startsWith('-r=')
-  )
-  if (inline !== undefined) {
-    const target = inline.slice(inline.indexOf('=') + 1)
-    return { target: target.length > 0 ? target : null }
-  }
-  return resumeInvocationAfterMarker(args, ['--resume', '-r'])
+  // Flags match in any case (`claude -C`); a lowered id still matches, as ids compare in any case.
+  const folded = args.map((token) => token.toLowerCase())
+  // `--continue`/`-c` never take an id, so a following token is a prompt, not a target.
+  return isClaudeForkInvocation(folded)
+    ? null
+    : resumeInvocationFromOptions(folded, {
+        targetless: ['--continue', '-c'],
+        markers: ['--resume', '-r']
+      })
 }
 
 /** A fork reads the conversation and writes a new one, so it is no second writer. Not when
  *  `--session-id` names the id it writes under, and nothing after `--` is an option. */
 function isClaudeForkInvocation(args: readonly string[]): boolean {
   const terminatorIndex = args.indexOf('--')
-  const options = (terminatorIndex === -1 ? args : args.slice(0, terminatorIndex)).map((token) =>
-    token.toLowerCase()
-  )
+  const options = terminatorIndex === -1 ? args : args.slice(0, terminatorIndex)
   return (
     options.includes('--fork-session') &&
     !options.some((token) => token === '--session-id' || token.startsWith('--session-id='))
