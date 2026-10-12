@@ -180,6 +180,9 @@ export function useStructuredAgentSessionOptionState(args: {
           if (!selectionFromStatus) {
             return applyStructuredAgentSessionOptions(current, optionCatalog, result)
           }
+          if (result.modelsKnown === false) {
+            return current
+          }
           const catalog = structuredAgentSessionOptionCatalog(optionCatalog, result)
           return { ...current, catalog, catalogSource: 'live' }
         })

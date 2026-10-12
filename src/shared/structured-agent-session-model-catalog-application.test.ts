@@ -152,4 +152,33 @@ describe('structured option state from the host model catalog', () => {
     const model = snapshot.find((descriptor) => descriptor.id === 'model')!
     expect(model.kind.type === 'select' ? model.kind.currentValue : null).toBe('gpt-live')
   })
+
+  it('keeps a known catalog and default when an options read has no loaded catalog', () => {
+    const hosted = applyStructuredAgentSessionModelCatalog(
+      createStructuredAgentSessionOptionState('codex', SEED),
+      SEED,
+      HOST_CATALOG,
+      LAUNCH
+    )
+    const unknown = applyStructuredAgentSessionOptions(hosted, SEED, {
+      models: [],
+      modelsKnown: false,
+      current: {}
+    })
+    expect(unknown.catalog).toBe(hosted.catalog)
+    expect(unknown.catalogSource).toBe('host')
+    expect(structuredAgentSessionOptionSnapshot(unknown)).toEqual(
+      structuredAgentSessionOptionSnapshot(hosted)
+    )
+    const picked = applyStructuredAgentSessionOptions(unknown, SEED, {
+      models: [],
+      modelsKnown: false,
+      current: { model: 'gpt-hosted', effort: 'medium' }
+    })
+    expect(picked.catalog).toBe(hosted.catalog)
+    const effort = structuredAgentSessionOptionSnapshot(picked).find(
+      (option) => option.id === 'effort'
+    )
+    expect(effort?.kind).toMatchObject({ currentValue: 'medium' })
+  })
 })

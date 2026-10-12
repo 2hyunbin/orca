@@ -137,8 +137,11 @@ export function applyStructuredAgentSessionOptions(
   )
   return {
     ...state,
-    catalog: structuredAgentSessionOptionCatalog(seed, result),
-    catalogSource: 'live'
+    catalog:
+      result.modelsKnown === false
+        ? state.catalog
+        : structuredAgentSessionOptionCatalog(seed, result),
+    catalogSource: result.modelsKnown === false ? state.catalogSource : 'live'
   }
 }
 
