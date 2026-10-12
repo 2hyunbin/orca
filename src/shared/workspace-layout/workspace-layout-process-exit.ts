@@ -89,7 +89,7 @@ export function applyProcessExit(
   }
 }
 
-/** Today's Store retirement whatever the verdict: for a pane the window still decides on (until 6f). */
+/** Stack-internal, removed in 6f: today's Store retirement whatever the verdict, for a pane the window still decides on. */
 export function applySurfaceRetirement(
   model: WorkspaceLayoutModel,
   surface: ExitedSurface

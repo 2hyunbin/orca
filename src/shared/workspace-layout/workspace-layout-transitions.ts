@@ -32,6 +32,7 @@ export type LayoutTransition =
       incarnationId?: string
     }
   | { type: 'processExited'; surface: ExitedSurface; exit: ProcessExitFacts }
+  /** Stack-internal (temporary-code ledger): today's retirement of a window-mounted pane; removed in 6f. */
   | { type: 'surfaceRetired'; surface: ExitedSurface }
   | { type: 'sshLeaseTerminated'; ptyIds: string[] }
   | { type: 'ownerRemoved'; workspaces: string[] }
