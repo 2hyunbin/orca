@@ -65,7 +65,6 @@ export function useMobileStructuredAgentOptions(args: {
   )
   const optionStateRef = useRef(optionState)
   const activeOptionRecordRef = useRef(optionState.record)
-  const pendingOptionRef = useRef<string | null>(null)
   const optionMutationGeneration = useRef(0)
   const updateOptionState = useCallback(
     (update: (current: StructuredAgentSessionOptionState) => StructuredAgentSessionOptionState) => {
@@ -101,7 +100,6 @@ export function useMobileStructuredAgentOptions(args: {
         ? { ...seeded, catalog: previous.catalog, catalogSource: previous.catalogSource }
         : seeded
     optionMutationGeneration.current += 1
-    pendingOptionRef.current = null
     optionStateRef.current = next
     activeOptionRecordRef.current = next.record
     setOptionState(next)
@@ -164,7 +162,6 @@ export function useMobileStructuredAgentOptions(args: {
       const currentState = optionStateRef.current
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
-        pendingOptionRef.current !== null ||
         !client ||
         !sessionId ||
         !optionCatalog ||
@@ -175,8 +172,7 @@ export function useMobileStructuredAgentOptions(args: {
       }
       const targetRecord = currentState.record
       const mutationGeneration = ++optionMutationGeneration.current
-      pendingOptionRef.current = id
-      updateOptionState((current) => ({ ...current, pendingId: id }))
+      updateOptionState((current) => ({ ...current, pendingPick: { id, value: encoded } }))
       try {
         const result = await mutate<AgentSessionOptionResult>(
           'agentSession.setOption',
@@ -240,10 +236,9 @@ export function useMobileStructuredAgentOptions(args: {
           activeOptionRecordRef.current === targetRecord &&
           optionMutationGeneration.current === mutationGeneration
         ) {
-          pendingOptionRef.current = null
           updateOptionState((current) =>
-            current.record === targetRecord && current.pendingId === id
-              ? { ...current, pendingId: null }
+            current.record === targetRecord && current.pendingPick?.id === id
+              ? { ...current, pendingPick: null }
               : current
           )
         }
@@ -290,7 +285,7 @@ export function useMobileStructuredAgentOptions(args: {
       (agent !== null && isAgentSessionHandleProvider(agent)),
     optionSnapshot,
     optionSurface,
-    pendingOptionId: optionState.pendingId,
+    pendingOptionId: optionState.pendingPick?.id ?? null,
     setStructuredOption,
     invokeStructuredOption
   }

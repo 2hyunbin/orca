@@ -451,7 +451,6 @@ describe('useMobileStructuredAgentOptions pending guard', () => {
     expect(await firstWrite).toBe(true)
     expect(harness.current().pendingOptionId).toBeNull()
 
-    // The guard is a ref, so a write that never clears it wedges every later pick.
     let later: boolean | null = null
     await act(async () => {
       later = await harness.current().setStructuredOption('fastMode', true)
