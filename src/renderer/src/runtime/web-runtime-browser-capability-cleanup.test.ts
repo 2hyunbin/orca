@@ -21,12 +21,18 @@ vi.mock('../store', () => ({
   }
 }))
 
-vi.mock('./web-session-tabs-sync', () => ({
+vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: vi.fn(),
-  applyWebSessionTabsSnapshot: vi.fn(),
-  decideWebSessionTabsSnapshot: vi.fn(() => ({ apply: true, settlesHostMirror: true })),
-  getWebSessionTabsTrackingGeneration: vi.fn(() => 0),
-  applyWebSessionTabsStorePatch: vi.fn(() => () => {}),
+  getWebSessionTabsTrackingGeneration: vi.fn(() => 0)
+}))
+vi.mock('./web-session-tabs-sync/snapshot-api', () => ({ applyWebSessionTabsSnapshot: vi.fn() }))
+vi.mock('./web-session-tabs-sync/tracking-decisions', () => ({
+  decideWebSessionTabsSnapshot: vi.fn(() => ({ apply: true, settlesHostMirror: true }))
+}))
+vi.mock('./web-session-tabs-sync/store-patch', () => ({
+  applyWebSessionTabsStorePatch: vi.fn(() => () => {})
+}))
+vi.mock('./web-session-tabs-sync/tracking-mappings', () => ({
   resolveHostSessionTabIdForWebSessionTab: vi.fn()
 }))
 
