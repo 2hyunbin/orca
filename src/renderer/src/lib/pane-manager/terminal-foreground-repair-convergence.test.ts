@@ -189,6 +189,7 @@ type ControllableTarget = {
   requests: SpanRequest[]
   active: { type: string; cursorY: number; baseY: number; viewportY: number }
   setRows: (rows: number) => void
+  setCols: (cols: number) => void
   /** `undefined` is xterm's own whole-viewport refresh request. */
   requestRefreshRows: (event?: SpanRequest) => void
   setDirty: (span: SpanRequest) => void
@@ -203,11 +204,15 @@ function createControllableTarget(dirtySpan: SpanRequest, cursorY = 2): Controll
   const requests: SpanRequest[] = []
   const active = { type: 'normal', cursorY, baseY: 0, viewportY: 0 }
   let rows = 24
+  let cols = 80
   let dirty = dirtySpan
   let listener: RefreshRowListener | undefined
   const target: ControllableTerminal = {
     get rows() {
       return rows
+    },
+    get cols() {
+      return cols
     },
     buffer: { active },
     refresh: (start: number, end: number) => requests.push({ start, end }),
@@ -234,6 +239,9 @@ function createControllableTarget(dirtySpan: SpanRequest, cursorY = 2): Controll
     active,
     setRows: (next: number) => {
       rows = next
+    },
+    setCols: (next: number) => {
+      cols = next
     },
     requestRefreshRows: (event?: SpanRequest) => listener?.(event),
     setDirty: (span: SpanRequest) => {
@@ -675,6 +683,41 @@ describe('delayed settle repair span', () => {
     frame.flush()
 
     expect(double.requests[1]).toEqual({ start: 0, end: 29 })
+  })
+
+  it('repaints the whole viewport when only the columns changed before the repeat', () => {
+    const double = createControllableTarget({ start: 10, end: 10 }, 10)
+    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
+      forceViewportRefresh: true,
+      followupViewportRefresh: true,
+      shouldRefreshViewportSynchronously: () => false
+    })
+    expect(double.requests[0]).toEqual({ start: 10, end: 10 })
+
+    double.setCols(100)
+    frame.flush()
+
+    expect(double.requests[1]).toEqual({ start: 0, end: 23 })
+  })
+
+  it('repaints the whole viewport when the pane is scrolled into scrollback', async () => {
+    // `cursorY` counts from the live screen, not the scrolled viewport, so the
+    // caret rows in the immediate span do not address the visible caret.
+    const harness = createHarness(80, 24)
+    await seed(harness, Array.from({ length: 40 }, (_, i) => `row ${i}`).join('\r\n'))
+    await seed(harness, '\x1b[11;1H')
+    harness.terminal.scrollLines(-3)
+    expect(harness.terminal.buffer.active.viewportY).toBeLessThan(
+      harness.terminal.buffer.active.baseY
+    )
+    harness.requests.length = 0
+
+    await writeAndSettleWithFollowup(harness, '\r\x1b[2Kstatus ...', frame)
+
+    expect(harness.requests).toHaveLength(2)
+    expect(harness.requests[1]).toEqual({ start: 0, end: 23 })
+    discardForegroundRenderSettle(harness.target)
+    harness.terminal.dispose()
   })
 
   it('repaints the whole viewport when the buffer switched before the repeat', () => {

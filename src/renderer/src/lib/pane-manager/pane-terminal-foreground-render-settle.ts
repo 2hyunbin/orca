@@ -17,6 +17,7 @@ export type ForegroundTerminalOutputTarget = {
     }
   }
   rows?: number
+  cols?: number
   _core?: {
     refresh?(start: number, end: number, sync?: boolean): void
   }
@@ -57,6 +58,7 @@ type ViewportSnapshot = {
   baseY: number | null
   viewportY: number | null
   rows: number | null
+  cols: number | null
 }
 
 function refreshVisibleRows(
@@ -104,7 +106,8 @@ function captureViewportSnapshot(terminal: ForegroundTerminalOutputTarget): View
     cursorY: typeof active?.cursorY === 'number' ? active.cursorY : null,
     baseY: typeof active?.baseY === 'number' ? active.baseY : null,
     viewportY: typeof active?.viewportY === 'number' ? active.viewportY : null,
-    rows: typeof terminal.rows === 'number' ? terminal.rows : null
+    rows: typeof terminal.rows === 'number' ? terminal.rows : null,
+    cols: typeof terminal.cols === 'number' ? terminal.cols : null
   }
 }
 
@@ -195,8 +198,9 @@ function carryRowsIntoPendingRepair(
  * Why the repeat is not simply re-issued as the immediate span: the delay crosses
  * a frame, so other output can arrive first. The rows parsed since the write and
  * the caret now are unioned in, and any geometry the span cannot be proven to
- * still address — a scroll, a resize, a buffer flip, an unobservable parse, or a
- * terminal xterm itself asked to repaint whole — falls back to the whole grid.
+ * still address — a scroll, a resize, a buffer flip, a viewport scrolled into
+ * scrollback, an unobservable parse, or a terminal xterm itself asked to repaint
+ * whole — falls back to the whole grid.
  */
 function pendingRepairRowSpan(
   terminal: ForegroundTerminalOutputTarget,
@@ -210,10 +214,15 @@ function pendingRepairRowSpan(
     scheduled.type !== current.type ||
     scheduled.rows === null ||
     scheduled.rows !== current.rows ||
+    // Why cols: a column-only resize reflows wrapped lines without moving rows or origin.
+    scheduled.cols !== current.cols ||
     scheduled.baseY === null ||
     scheduled.baseY !== current.baseY ||
     scheduled.viewportY === null ||
-    scheduled.viewportY !== current.viewportY
+    scheduled.viewportY !== current.viewportY ||
+    // Why: scrolled into scrollback, `cursorY` is not a viewport row, so the caret
+    // rows in the span may miss the visible caret.
+    current.viewportY !== current.baseY
   ) {
     return null
   }
