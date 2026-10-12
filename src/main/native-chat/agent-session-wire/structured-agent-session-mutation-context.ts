@@ -62,23 +62,33 @@ export function mutateStructuredAgentSession<TValue>(
   caller: StructuredAgentSessionCaller,
   envelope: AgentSessionMutationEnvelope,
   plan: MutationPlan<TValue>,
-  prepareSession?: AgentSessionMutationRequest<TValue>['prepareSession'],
-  alreadySerialized = false
+  prepareSession?: AgentSessionMutationRequest<TValue>['prepareSession']
 ): Promise<AgentSessionMutationResult<TValue>> {
-  const run = () =>
-    admitAndRunAgentSessionMutation({
-      store: context.deps.store,
-      adapter: context.deps.adapter,
-      agents: context.deps.agents,
-      logger: context.deps.logger,
-      callerKey: caller.callerKey,
-      envelope,
-      plan,
-      journal: () => context.sessions.get(envelope.sessionId)?.journal,
-      prepareSession,
-      publish: (journal) => context.publish(envelope.sessionId, journal),
-      wakeDelivery: (sessionId) => context.wakeDelivery(sessionId),
-      now: () => context.now()
-    })
-  return alreadySerialized ? run() : context.serialize(envelope.sessionId, run)
+  return context.serialize(envelope.sessionId, () =>
+    runStructuredAgentSessionMutation(context, caller, envelope, plan, prepareSession)
+  )
+}
+
+/** Admission for a caller already inside the session's queue. */
+export function runStructuredAgentSessionMutation<TValue>(
+  context: StructuredAgentSessionMutationContext,
+  caller: StructuredAgentSessionCaller,
+  envelope: AgentSessionMutationEnvelope,
+  plan: MutationPlan<TValue>,
+  prepareSession?: AgentSessionMutationRequest<TValue>['prepareSession']
+): Promise<AgentSessionMutationResult<TValue>> {
+  return admitAndRunAgentSessionMutation({
+    store: context.deps.store,
+    adapter: context.deps.adapter,
+    agents: context.deps.agents,
+    logger: context.deps.logger,
+    callerKey: caller.callerKey,
+    envelope,
+    plan,
+    journal: () => context.sessions.get(envelope.sessionId)?.journal,
+    prepareSession,
+    publish: (journal) => context.publish(envelope.sessionId, journal),
+    wakeDelivery: (sessionId) => context.wakeDelivery(sessionId),
+    now: () => context.now()
+  })
 }

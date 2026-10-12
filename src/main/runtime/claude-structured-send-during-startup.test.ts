@@ -65,6 +65,9 @@ async function expectHeldBeforeStart(
   expect(entry).toMatchObject({ dispatchState: 'pending' })
   expect(entry?.handedOverAt).toBeUndefined()
   expect(claude.child(SESSION).calls).not.toContain('send')
+  await host.flushStreamedEvents(SESSION)
+  expect((await submission(host, clientMessageId))?.handedOverAt).toBeUndefined()
+  expect(claude.child(SESSION).calls).not.toContain('send')
 }
 
 async function statusRows(host: StructuredAgentSessionHost): Promise<string[]> {

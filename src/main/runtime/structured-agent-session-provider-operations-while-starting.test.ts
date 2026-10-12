@@ -402,7 +402,10 @@ it('does not run a ready goal when its final queued admission passes the caller 
 
   expect(await goal).toMatchObject({
     ok: false,
-    refusal: { message: expect.stringContaining('did not run') }
+    refusal: {
+      code: 'agent_session_operation_expired',
+      message: expect.stringContaining('wait expired')
+    }
   })
   clock.mockRestore()
   expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(false)

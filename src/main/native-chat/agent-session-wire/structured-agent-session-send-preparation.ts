@@ -13,13 +13,15 @@ import { TUI_AGENT_DISPLAY_NAMES } from '../../../shared/tui-agent-display-names
 import { isTuiAgent } from '../../../shared/tui-agent-config'
 import type { AgentSessionFailureWordsContext } from '../../../shared/agent-session-failure-words'
 import { journalOpenRefusal } from '../agent-session-journal/journal-open-failure'
-import { refuseUnclassified } from '../../../shared/agent-session-wire-refusals'
 import {
   structuredAgentSessionAwaitedCommand,
   type StructuredAgentSessionAwaitedCommandJournal
 } from './structured-agent-session-command-turn'
 import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
-import type { ReadyOperationSelection } from './structured-agent-session-ready-operation'
+import {
+  operationDidNotRun,
+  type ReadyOperationSelection
+} from './structured-agent-session-ready-operation'
 import {
   AGENT_SESSION_NOT_ATTACHED,
   type AgentSessionMutationSessionPreparation
@@ -165,13 +167,7 @@ export function sendPreparation(
         : { ok: false, refusal: agentSessionOperationOutcomeUnknown(envelope.clientOperationId) }
     }
     if (selection?.deadline !== undefined && Date.now() >= selection.deadline) {
-      return {
-        ok: false,
-        refusal: refuseUnclassified(
-          'agent_session_owner_restart_failed',
-          'The operation did not run because the agent did not finish starting.'
-        )
-      }
+      return operationDidNotRun(true)
     }
     const { sessionId } = envelope
     if (!opened.ok || !rewindInDoubt(context.deps.store.getRecord(sessionId))) {

@@ -22,6 +22,7 @@ import type { AgentSessionPromptRequest } from './structured-agent-session-turns
 import { refuseThreadGoalUnsupported, threadGoalPlan } from './structured-agent-session-thread-goal'
 import {
   mutateStructuredAgentSession,
+  runStructuredAgentSessionMutation,
   type StructuredAgentSessionMutationContext
 } from './structured-agent-session-mutation-context'
 import {
@@ -41,7 +42,7 @@ import { runQueueableStructuredAgentSessionSend } from './structured-agent-sessi
 import { cancelStructuredAgentSessionPrompt } from './structured-agent-session-prompt-cancel'
 import { mutateWithChatStop } from './structured-agent-session-chat-stop'
 import {
-  prepareReadyStructuredAgentSessionOperation,
+  runWithReadyStructuredAgentSessionOperation,
   openWithReadyStructuredAgentSessionChild,
   runAfterRewindStart
 } from './structured-agent-session-ready-operation'
@@ -77,32 +78,25 @@ export function sendStructuredAgentSessionTurn(
   arrival?: Parameters<typeof sendPreparation>[2]
 ): Promise<AgentSessionMutationResult<AgentSessionSendResult>> {
   const plan = sendPlan(params)
-  return runAfterRewindStart(
-    context,
-    caller.callerKey,
-    params.envelope,
-    plan.method,
-    plan.fields,
-    (selection, alreadySerialized) =>
-      mutateStructuredAgentSession(
-        context,
-        caller,
-        params.envelope,
-        {
-          ...plan,
-          run: (ctx) =>
-            runQueueableStructuredAgentSessionSend(
-              context,
-              ctx,
-              params,
-              async () =>
-                structuredAgentSessionSendBlock(context.deps.store.getRecord(ctx.sessionId)) ??
-                (await plan.run(ctx))
-            )
-        },
-        sendPreparation(context, params.envelope, arrival, selection),
-        alreadySerialized
-      )
+  return runAfterRewindStart(context, caller.callerKey, params.envelope, plan, (selection) =>
+    runStructuredAgentSessionMutation(
+      context,
+      caller,
+      params.envelope,
+      {
+        ...plan,
+        run: (ctx) =>
+          runQueueableStructuredAgentSessionSend(
+            context,
+            ctx,
+            params,
+            async () =>
+              structuredAgentSessionSendBlock(context.deps.store.getRecord(ctx.sessionId)) ??
+              (await plan.run(ctx))
+          )
+      },
+      sendPreparation(context, params.envelope, arrival, selection)
+    )
   )
 }
 
@@ -233,24 +227,24 @@ export async function changeStructuredAgentSessionThreadGoal(
   params: { envelope: AgentSessionMutationEnvelope; change: AgentSessionThreadGoalChange }
 ): Promise<AgentSessionMutationResult<AgentSessionThreadGoalResult>> {
   const plan = threadGoalPlan(params)
-  const selected = await prepareReadyStructuredAgentSessionOperation(
+  return runWithReadyStructuredAgentSessionOperation(
     context,
     caller.callerKey,
     params.envelope,
-    plan.method,
-    plan.fields,
-    (record) =>
-      refuseThreadGoalUnsupported(context.deps.adapter, context.deps.agents, record?.provider)
-  )
-  return selected.ok
-    ? mutateStructuredAgentSession(
+    plan,
+    (selection) =>
+      runStructuredAgentSessionMutation(
         context,
         caller,
         params.envelope,
         plan,
-        openWithReadyStructuredAgentSessionChild(context, params.envelope, selected)
-      )
-    : selected
+        openWithReadyStructuredAgentSessionChild(context, params.envelope, selection)
+      ),
+    {
+      beforeAgent: (record) =>
+        refuseThreadGoalUnsupported(context.deps.adapter, context.deps.agents, record?.provider)
+    }
+  )
 }
 
 /** The host's thin mutation surface. Each call re-reads the context, so a session

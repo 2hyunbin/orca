@@ -186,6 +186,8 @@ describe('a Claude chat whose CLI is still starting', () => {
     clock += IDLE_MS - 1
     await waitOutSeveralSweeps()
 
+    expect(claude.connections[0].sent).toEqual([])
+    expect(await dispatchState(sent)).toBe('pending')
     expect(host.hasSession(SESSION)).toBe(true)
     expect(claude.connections[0].closeCount).toBe(0)
 
@@ -209,6 +211,8 @@ describe('a Claude chat whose CLI is still starting', () => {
     expect(await dispatchState(held)).toBe('pending')
     clock += IDLE_MS - 1
     await waitOutSeveralSweeps()
+    expect(connection.sent).toEqual([])
+    expect(await dispatchState(held)).toBe('pending')
     expect(host.hasSession(SESSION)).toBe(true)
 
     // Startup lands just before the window closes and the message is handed over; the agent stays

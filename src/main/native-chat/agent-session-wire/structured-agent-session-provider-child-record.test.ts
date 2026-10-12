@@ -596,6 +596,9 @@ describe('another child indexed after a Stop ended the starting one', () => {
     const secondId = await accept('second')
     expect((await submission(secondId))?.handedOverAt).toBeUndefined()
     expect(dispatch).not.toHaveBeenCalled()
+    await host.flushStreamedEvents(SESSION)
+    expect((await submission(secondId))?.handedOverAt).toBeUndefined()
+    expect(dispatch).not.toHaveBeenCalled()
 
     await prove()
 

@@ -11,6 +11,7 @@ import {
   REST_TEST_CALLER as CALLER,
   REST_TEST_SESSION as SESSION,
   restTestSend,
+  sweepTicks,
   type RestTestRig
 } from './structured-agent-session-rest-test-rig'
 import {
@@ -39,6 +40,31 @@ describe('a send after the agent said it is not signed in', () => {
   })
 
   const fence = () => rig.store.getRecord(SESSION)?.lease.runtimeFence ?? 1
+
+  it('hands a message to the signed-out child started for it exactly once', async () => {
+    await foundRestTestChat(rig)
+    await rig.host.close(SESSION, 'evict')
+    rig.adapter.closeSession.mockClear()
+    rig.adapter.startUnavailable.mockReturnValue({ reason: 'notSignedIn' })
+    const acquire = rig.adapter.acquire.getMockImplementation()!
+    rig.adapter.acquire
+      .mockImplementationOnce(acquire)
+      .mockRejectedValueOnce(new Error('unexpected extra restart'))
+    const params = restTestSend('try the newly started agent', fence())
+
+    expect(await rig.host.send(CALLER, params)).toMatchObject({ ok: true })
+    await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
+    await rig.host.flushStreamedEvents(SESSION)
+    await sweepTicks()
+
+    expect(
+      rig.adapter.dispatch.mock.calls.filter(
+        ([input]) => input.clientMessageId === params.envelope.clientOperationId
+      )
+    ).toHaveLength(1)
+    expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
+    expect(rig.adapter.closeSession).not.toHaveBeenCalled()
+  })
 
   it('goes to a new agent, and the new agent is kept for the sends after it', async () => {
     await foundRestTestChat(rig)

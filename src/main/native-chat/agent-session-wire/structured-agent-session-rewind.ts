@@ -16,7 +16,7 @@ import type { AgentSessionMutationResult } from '../../../shared/agent-session-w
 import { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES } from './agent-session-history-page-bounds'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 import {
-  prepareReadyStructuredAgentSessionOperation,
+  runWithReadyStructuredAgentSessionOperation,
   openWithReadyStructuredAgentSessionChild,
   type ReadyOperationSelection
 } from './structured-agent-session-ready-operation'
@@ -28,6 +28,7 @@ import { rewindRefusal, rewindRefusalBehindClear } from './structured-rewind-ref
 import { renameRewindTurnOpener } from './structured-rewind-journal-body'
 import { persistRewindRecord, recoverStructuredRewind } from './structured-rewind-recovery'
 import { mergeRetainedHostLifecycleRows } from './structured-rewind-retained-host-rows'
+import { rewindInDoubt } from './structured-agent-session-send-preparation'
 
 export async function rewindStructuredAgentSession(
   context: StructuredAgentSessionMutationContext,
@@ -35,17 +36,10 @@ export async function rewindStructuredAgentSession(
   caller: StructuredAgentSessionCaller,
   params: AgentSessionRewindParams
 ): Promise<AgentSessionMutationResult<AgentSessionRewindResult>> {
-  // Only a proven child has the protocol session a rewind reads and changes.
-  const selected = await prepareReadyStructuredAgentSessionOperation(
-    context,
-    caller.callerKey,
-    params.envelope,
-    'agentSession.rewind',
-    { itemId: params.itemId, expectedEpoch: params.expectedEpoch },
-    () => rewindRefusalBehindClear(context.sessions.get(params.envelope.sessionId)?.journal, params)
-  )
   const { sessionId, clientOperationId } = params.envelope
   const store = context.deps.store
+  const fields = { itemId: params.itemId, expectedEpoch: params.expectedEpoch }
+  const operation = { method: 'agentSession.rewind', fields }
   const run = async (selection: ReadyOperationSelection) => {
     let completionReceipt: JournalOperationReceipt | undefined
     const result = await admitAndRunAgentSessionMutation<AgentSessionRewindResult>({
@@ -61,8 +55,7 @@ export async function rewindStructuredAgentSession(
       publish: (journal) => context.publish(sessionId, journal),
       now: context.now,
       plan: {
-        method: 'agentSession.rewind',
-        fields: { itemId: params.itemId, expectedEpoch: params.expectedEpoch },
+        ...operation,
         recoverUnknownFromDurableState: true,
         settledOutcome: (rewind: AgentSessionRewindResult) => ({
           status: 'succeeded' as const,
@@ -97,10 +90,7 @@ export async function rewindStructuredAgentSession(
           if (!support?.supported) {
             return rewindRefusal(support?.reason ?? 'unsupported')
           }
-          if (
-            record.rewind?.phase === 'prepared' ||
-            record.rewind?.phase === 'provider-succeeded'
-          ) {
+          if (rewindInDoubt(record)) {
             return rewindRefusal('outcome-unknown')
           }
           if (conversationCommandBlocked(ctx, record, context.readChildWork(sessionId))) {
@@ -300,5 +290,14 @@ export async function rewindStructuredAgentSession(
         }
       : result
   }
-  return selected.ok ? context.serialize(sessionId, () => run(selected)) : selected
+  return runWithReadyStructuredAgentSessionOperation(
+    context,
+    caller.callerKey,
+    params.envelope,
+    operation,
+    run,
+    {
+      beforeAgent: () => rewindRefusalBehindClear(context.sessions.get(sessionId)?.journal, params)
+    }
+  )
 }

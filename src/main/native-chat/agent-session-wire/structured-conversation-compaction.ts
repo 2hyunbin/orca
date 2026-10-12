@@ -13,7 +13,7 @@ import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-qu
 import type { AgentSessionMutationResult } from '../../../shared/agent-session-wire'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
-  mutateStructuredAgentSession,
+  runStructuredAgentSessionMutation,
   type StructuredAgentSessionMutationContext
 } from './structured-agent-session-mutation-context'
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
@@ -150,14 +150,8 @@ function acceptStructuredConversationCommand(
     ...(params.delivery ? { delivery: params.delivery } : {}),
     priorRecord
   })
-  return runAfterRewindStart(
-    context,
-    caller.callerKey,
-    params.envelope,
-    plan.method,
-    plan.fields,
-    (selection, alreadySerialized) =>
-      acceptUnderSerialize(context, caller, params, plan, arrival, selection, alreadySerialized)
+  return runAfterRewindStart(context, caller.callerKey, params.envelope, plan, (selection) =>
+    acceptUnderSerialize(context, caller, params, plan, arrival, selection)
   )
 }
 
@@ -167,10 +161,9 @@ function acceptUnderSerialize(
   params: ConversationCommandParams,
   plan: ReturnType<typeof conversationCommandPlan>,
   arrival: { clearInFlight?: boolean },
-  selection: ReadyOperationSelection,
-  alreadySerialized: boolean
+  selection: ReadyOperationSelection
 ): Promise<AgentSessionMutationResult<ConversationCommandAcceptance>> {
-  return mutateStructuredAgentSession(
+  return runStructuredAgentSessionMutation(
     context,
     caller,
     params.envelope,
@@ -217,7 +210,6 @@ function acceptUnderSerialize(
         return plan.run(ctx)
       }
     },
-    sendPreparation(context, params.envelope, arrival, selection),
-    alreadySerialized
+    sendPreparation(context, params.envelope, arrival, selection)
   )
 }
