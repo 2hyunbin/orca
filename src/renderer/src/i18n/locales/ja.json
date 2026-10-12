@@ -4077,7 +4077,12 @@
             "checkTooltip": "再起動後に Orca が再開できなかった、または再開を確認できなかったチャット。詳細はクリックしてください。",
             "resumingTooltip": "中断されたチャットを復元し、続行を依頼しています…",
             "resumingProgressLabel": "チャットを再開中 {{value0}}/{{value1}}",
-            "resumingProgressAria": "チャットを再開中。{{value1}} 件中 {{value0}} 件完了。クリックすると詳細を表示します。"
+            "resumingProgressAria": "チャットを再開中。{{value1}} 件中 {{value0}} 件完了。クリックすると詳細を表示します。",
+            "resumedLabelOne": "再開したチャット 1 件",
+            "resumedLabel": "再開したチャット {{value0}} 件",
+            "resumedAriaOne": "チャットを 1 件再開しました。クリックすると表示します。",
+            "resumedAria": "チャットを {{value0}} 件再開しました。クリックすると表示します。",
+            "resumedTooltip": "再起動後に Orca が再開したチャットです。クリックすると表示します。"
           },
           "provider": {
             "extra": {
@@ -18137,8 +18142,11 @@
       },
       "transcriptLabel": "会話",
       "toggle": {
-        "showTerminal": "ターミナルを表示",
-        "showChat": "チャットビューを表示"
+        "showTerminal": "ターミナルを表示"
+      },
+      "resumeInNewChat": {
+        "notSavedYet": "{{agent}} はまだこの会話を保存していません。応答してから再度お試しください。",
+        "cannotResume": "この {{agent}} の会話はネイティブチャットで再開できません。"
       },
       "state": {
         "loading": {
@@ -18216,7 +18224,8 @@
         "one": "1 つの変更されたファイル",
         "many": "{{count}} がファイルを変更しました",
         "partial": "部分的な差分",
-        "recorded": "このターンに記録された編集の合計。"
+        "showDiff": "差分を表示",
+        "hideDiff": "差分を非表示"
       },
       "receipt": {
         "unavailable": "選択した回答は利用できません",
