@@ -2,7 +2,8 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
 import { startGitSpan } from '../../observability/instrumentation'
 import { createAbortError } from './abort-error'
-import { pendingWslWindowsCheckoutGitConfig, resolveGitCommand } from './git-command-resolution'
+import { resolveGitCommand } from './git-command-resolution'
+import { pendingWslDriveCheckoutGitRouting } from '../wsl-drive-checkout-git-routing'
 import { untranslatedGitOutputEnv } from './git-process-env'
 import { prepareWindowsHostGitEnvironment } from './windows-host-git-environment'
 import type { GitAdmissionTier } from './git-exec-options'
@@ -27,7 +28,7 @@ export async function gitSpawnAfterWindowsEnvironmentReady(
   if (options.signal?.aborted) {
     throw createAbortError()
   }
-  const lineEndingsReady = pendingWslWindowsCheckoutGitConfig(options)
+  const lineEndingsReady = pendingWslDriveCheckoutGitRouting(args, options)
   if (lineEndingsReady) {
     await lineEndingsReady
   }

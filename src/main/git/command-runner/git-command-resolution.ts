@@ -10,51 +10,15 @@ import {
   peekWslGitReadEnvironment,
   WSL_GIT_READ_ENVIRONMENT_WAIT_MS
 } from '../wsl-git-read-environment'
-import {
-  isWslLinkedWorktreeGitRoutingCandidate,
-  prepareWslLinkedWorktreeGitRouting,
-  usesHostGitForWslLinkedWorktree
-} from '../wsl-linked-worktree-git-routing'
-import {
-  pendingWslWindowsCheckoutProbe,
-  withWslWindowsCheckoutGitConfig
-} from '../wsl-windows-checkout-git-config'
+import { usesHostGitForWslLinkedWorktree } from '../wsl-linked-worktree-git-routing'
+import { withWslWindowsCheckoutGitConfig } from '../wsl-windows-checkout-git-config'
 import { resolveCommand, type ResolvedCommand } from './wsl-command-resolution'
 import type { GitExecOptions } from './git-exec-options'
 
+// Why: Linux Git misreads a Windows Git checkout unless it runs with Windows Git's settings.
 // Classification reads the caller's args; only the spawned argv carries the injected config.
 function wslGitArgs(args: string[], options: GitExecOptions): string[] {
   return withWslWindowsCheckoutGitConfig(args, options.cwd, options.wslDistro)
-}
-
-/**
- * The line-ending probe a WSL git command on a Windows drive must wait for, or null.
- *
- * Why: Linux Git reading a Windows Git checkout reports every CRLF file as modified and
- * rehashes the whole tree; the probe decides whether to run it with Windows Git's settings.
- */
-export function pendingWslWindowsCheckoutGitConfig(
-  options: Pick<GitExecOptions, 'cwd' | 'wslDistro' | 'signal'>
-): Promise<void> | null {
-  if (usesHostGitForWslLinkedWorktree(options.cwd, options.wslDistro)) {
-    return null
-  }
-  return pendingWslWindowsCheckoutProbe(options.cwd, options.wslDistro, options.signal)
-}
-
-/** Settles the per-checkout routing a WSL git command on a Windows drive reads at spawn, or null. */
-export function pendingWslDriveCheckoutGitRouting(
-  options: Pick<GitExecOptions, 'cwd' | 'wslDistro' | 'signal'>
-): Promise<void> | null {
-  if (!isWslLinkedWorktreeGitRoutingCandidate(options.cwd, options.wslDistro)) {
-    return null
-  }
-  return (async () => {
-    await prepareWslLinkedWorktreeGitRouting(options.cwd, options.wslDistro, {
-      signal: options.signal
-    })
-    await pendingWslWindowsCheckoutGitConfig(options)
-  })()
 }
 
 /** The WSL distro a Git command with this cwd runs in, or null when it runs on the host. */

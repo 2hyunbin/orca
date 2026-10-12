@@ -1,84 +1,131 @@
 import { win32 } from 'node:path'
-import { runWslProcess, type WslResult, type WslSpec } from '../wsl/wsl-runner'
-import { translateArgForWsl } from './command-runner/wsl-path-translation'
+import { isWslDirectGitReadCommand } from './wsl-direct-git-read-commands'
 
 /**
  * Per-command config that makes Linux Git read a Windows Git checkout the way Windows Git does.
  *
- * - core.autocrlf=true: compare CRLF working files against LF blobs as equal, and stage LF —
+ * - core.autocrlf=true: CRLF working files compare equal to LF blobs, and staging writes LF;
  *   without it every rehashed file reads as modified and `add` commits CRLF.
- * - core.checkStat=minimal / core.trustctime=false: an index Windows Git wrote carries no inode
- *   or ctime Linux Git agrees with, so every entry otherwise rehashes across drvfs.
+ * - core.checkStat=minimal: an index Windows Git wrote carries no inode/uid/ctime Linux Git
+ *   agrees with, so every entry otherwise rehashes across drvfs (~70 s on 11k files). It also
+ *   skips the ctime check, so `core.trustctime` is moot here.
  *
- * All three predate the Git 2.25 baseline, so no capability probe is needed.
+ * Both predate the Git 2.25 baseline, so no capability probe is needed.
  */
 export const WINDOWS_CHECKOUT_GIT_CONFIG_ARGS: readonly string[] = [
   '-c',
   'core.autocrlf=true',
   '-c',
-  'core.checkStat=minimal',
-  '-c',
-  'core.trustctime=false'
+  'core.checkStat=minimal'
 ]
 
-// Top-level tracked files only: enough to see the checkout's line endings without walking the tree.
-const PROBE_GIT_ARGS = ['ls-files', '--eol', '--', ':(top,glob)*']
-const PROBE_TIMEOUT_MS = 15_000
-const PROBE_MAX_OUTPUT_BYTES = 256 * 1024
-// Why a TTL at all: a re-clone at the same path can change the answer; one cheap probe per window.
-export const WSL_WINDOWS_CHECKOUT_RESULT_TTL_MS = 10 * 60_000
-const RETRY_BASE_MS = 30_000
+/** Deliberate cap: ~200 eligible files decide the checkout without reading the whole tree over drvfs. */
+export const LINE_ENDING_SAMPLE_LIMIT = 200
+// Fewer eligible files than this is no evidence either way.
+export const LINE_ENDING_MIN_EVIDENCE = 5
+// Why a TTL: a re-clone at the same path can change the answer.
+export const WSL_WINDOWS_CHECKOUT_TTL_MS = 10 * 60_000
 const CACHE_LIMIT = 256
 
-type CachedResult = { matchesWindowsCheckout: boolean; expiresAt: number }
-type Failure = { count: number; retryAfter: number }
+export type HostAutocrlfAnswer = 'true' | 'other' | 'not-repo'
+export type LineEndingSampleAnswer = 'windows' | 'not-windows' | 'inconclusive'
 
-const results = new Map<string, CachedResult>()
-const pending = new Map<string, Promise<void>>()
-const failures = new Map<string, Failure>()
-
-export type WslWindowsCheckoutProbeRunner = (spec: WslSpec) => Promise<WslResult>
-
-export type WslWindowsCheckoutOptions = {
-  platform?: NodeJS.Platform
-  now?: () => number
-  run?: WslWindowsCheckoutProbeRunner
+type Timed<T> = { value: T; at: number }
+type CheckoutState = {
+  host?: Timed<HostAutocrlfAnswer>
+  sample?: Timed<LineEndingSampleAnswer> & { identity: string | null }
 }
 
-function isCandidate(
+const states = new Map<string, CheckoutState>()
+
+export function isWslWindowsCheckoutCandidate(
   cwd: string | undefined,
   wslDistro: string | undefined,
-  platform: NodeJS.Platform
+  platform: NodeJS.Platform = process.platform
 ): cwd is string {
   return platform === 'win32' && Boolean(wslDistro) && Boolean(cwd && /^[A-Za-z]:[/\\]/.test(cwd))
 }
 
-function cacheKey(cwd: string, wslDistro: string): string {
+export function wslWindowsCheckoutKey(cwd: string, wslDistro: string): string {
   return `${wslDistro.toLowerCase()}\0${win32.resolve(cwd).toLowerCase()}`
 }
 
-function setBounded<T>(map: Map<string, T>, key: string, value: T): void {
-  map.delete(key)
-  if (map.size >= CACHE_LIMIT) {
-    const oldest = map.keys().next().value
+export function getWslWindowsCheckoutState(key: string): Readonly<CheckoutState> | undefined {
+  return states.get(key)
+}
+
+function updateState(key: string, patch: CheckoutState): void {
+  const next = { ...states.get(key), ...patch }
+  states.delete(key)
+  if (states.size >= CACHE_LIMIT) {
+    const oldest = states.keys().next().value
     if (oldest !== undefined) {
-      map.delete(oldest)
+      states.delete(oldest)
     }
   }
-  map.set(key, value)
+  states.set(key, next)
+}
+
+export function recordHostAutocrlf(key: string, value: HostAutocrlfAnswer, now: number): void {
+  updateState(key, { host: { value, at: now } })
+}
+
+export function recordLineEndingSample(
+  key: string,
+  value: LineEndingSampleAnswer,
+  identity: string | null,
+  now: number
+): void {
+  updateState(key, { sample: { value, at: now, identity } })
+}
+
+export function forgetLineEndingSample(key: string): void {
+  const state = states.get(key)
+  if (state?.sample) {
+    states.set(key, { ...state, sample: undefined })
+  }
+}
+
+export function isFresh(entry: { at: number } | undefined, now: number): boolean {
+  return entry !== undefined && now - entry.at < WSL_WINDOWS_CHECKOUT_TTL_MS
 }
 
 /**
- * True when most top-level text files are LF in the index but CRLF on disk with no
- * `.gitattributes` eol rule — the shape Windows Git's autocrlf leaves behind.
+ * Effective `core.autocrlf` from `git config --show-origin --get-regexp`, the way Windows Git
+ * resolves it (last value wins). Only `true` makes Windows Git write CRLF.
  *
- * Why a majority: one CRLF file saved by a Windows editor into an LF checkout must not flip
- * Orca's checkouts in that repo to CRLF.
+ * Why core.eol is ignored: with autocrlf=true Windows Git checks out CRLF regardless of core.eol
+ * (measured: local core.eol=lf still leaves Windows Git and the flagged WSL Git both clean).
  */
-export function looksLikeWindowsAutocrlfCheckout(lsFilesEolOutput: string): boolean {
+export function parseHostAutocrlf(showOriginOutput: string): 'true' | 'other' {
+  let value: string | null = null
+  for (const line of showOriginOutput.split(/\r?\n/)) {
+    const match = /\tcore\.autocrlf(?:\s+(.*))?$/i.exec(line)
+    if (match) {
+      value = (match[1] ?? 'true').trim().toLowerCase()
+    }
+  }
+  return value !== null && ['true', 'yes', 'on', '1'].includes(value) ? 'true' : 'other'
+}
+
+/**
+ * Classifies a bounded `ls-files --eol` sample of LF blobs with no eol attribute.
+ *
+ * Whole-tree rather than top-level: root files are the ones formatters re-save as LF, the ones
+ * attributes pin, and absent in some repos. Majority of CRLF working files means Windows Git
+ * (autocrlf=true) wrote this checkout; one CRLF README in a Linux checkout does not.
+ */
+export function classifyLineEndingSample(
+  output: string,
+  outputTruncated: boolean
+): LineEndingSampleAnswer {
+  const lines = output.split('\n').filter((line) => line.length > 0)
+  if (outputTruncated || lines.length > LINE_ENDING_SAMPLE_LIMIT) {
+    return 'inconclusive'
+  }
   let crlf = 0
   let lf = 0
-  for (const line of lsFilesEolOutput.split('\n')) {
+  for (const line of lines) {
     const match = /^i\/(\S*)\s+w\/(\S*)\s+attr\/([^\t]*)\t/.exec(line)
     if (!match || match[1] !== 'lf' || match[3].trim() !== '') {
       continue
@@ -89,138 +136,50 @@ export function looksLikeWindowsAutocrlfCheckout(lsFilesEolOutput: string): bool
       lf += 1
     }
   }
-  return crlf > 0 && crlf > lf
-}
-
-async function probe(
-  key: string,
-  cwd: string,
-  wslDistro: string,
-  run: WslWindowsCheckoutProbeRunner,
-  now: () => number
-): Promise<void> {
-  let result: WslResult | null = null
-  try {
-    result = await run({
-      distro: wslDistro,
-      program: 'git',
-      args: ['-C', translateArgForWsl(cwd), ...PROBE_GIT_ARGS],
-      loginPath: 'preferred',
-      timeoutMs: PROBE_TIMEOUT_MS,
-      maxOutputBytes: PROBE_MAX_OUTPUT_BYTES
-    })
-  } catch {
-    result = null
+  if (crlf + lf < LINE_ENDING_MIN_EVIDENCE) {
+    return 'inconclusive'
   }
-  // 128 is Git's "not a repository": a settled answer (e.g. a folder workspace), not a failure.
-  if (result && !result.timedOut && (result.code === 0 || result.code === 128)) {
-    const matchesWindowsCheckout =
-      result.code === 0 && looksLikeWindowsAutocrlfCheckout(result.stdout)
-    if (matchesWindowsCheckout && !results.get(key)?.matchesWindowsCheckout) {
-      console.info(
-        `[git] ${cwd}: Windows line-ending checkout detected; WSL git runs with core.autocrlf=true`
-      )
-    }
-    failures.delete(key)
-    setBounded(results, key, {
-      matchesWindowsCheckout,
-      expiresAt: now() + WSL_WINDOWS_CHECKOUT_RESULT_TTL_MS
-    })
-    return
-  }
-  const count = (failures.get(key)?.count ?? 0) + 1
-  const delay = Math.min(RETRY_BASE_MS * 2 ** (count - 1), WSL_WINDOWS_CHECKOUT_RESULT_TTL_MS)
-  setBounded(failures, key, { count, retryAfter: now() + delay })
-}
-
-function startProbe(
-  key: string,
-  cwd: string,
-  wslDistro: string,
-  options: WslWindowsCheckoutOptions
-): Promise<void> {
-  const running = pending.get(key)
-  if (running) {
-    return running
-  }
-  const started = probe(
-    key,
-    cwd,
-    wslDistro,
-    options.run ?? runWslProcess,
-    options.now ?? Date.now
-  ).finally(() => pending.delete(key))
-  pending.set(key, started)
-  return started
-}
-
-function waitUnlessAborted(work: Promise<void>, signal: AbortSignal | undefined): Promise<void> {
-  if (!signal) {
-    return work
-  }
-  // Why: an aborted command stops waiting, but the shared probe keeps running for the next caller.
-  return new Promise<void>((resolve) => {
-    const done = (): void => {
-      signal.removeEventListener('abort', done)
-      resolve()
-    }
-    if (signal.aborted) {
-      resolve()
-      return
-    }
-    signal.addEventListener('abort', done, { once: true })
-    void work.then(done)
-  })
+  return crlf * 2 > crlf + lf ? 'windows' : 'not-windows'
 }
 
 /**
- * The probe a WSL git command on a Windows drive must wait for, or null when there is nothing to
- * wait for. Never rejects.
+ * Whether this command runs with Windows Git's settings.
  *
- * Only the first command for a checkout waits; an expired answer keeps serving while a refresh
- * runs in the background, so polling never sits behind the probe.
+ * Reads need only the host's autocrlf=true: the flags never make a read less correct, even on an
+ * LF checkout, so an unfinished sample must not leave status flashing every file as modified.
+ * Writes change bytes on disk or in the index, so they need a fresh sample proving CRLF.
  */
-export function pendingWslWindowsCheckoutProbe(
-  cwd: string | undefined,
-  wslDistro: string | undefined,
-  signal?: AbortSignal,
-  options: WslWindowsCheckoutOptions = {}
-): Promise<void> | null {
-  const platform = options.platform ?? process.platform
-  if (!isCandidate(cwd, wslDistro, platform) || !wslDistro) {
-    return null
+export function usesWindowsCheckoutGitConfig(
+  args: readonly string[],
+  state: Readonly<CheckoutState> | undefined,
+  now: number
+): boolean {
+  if (state?.host?.value !== 'true') {
+    return false
   }
-  const now = (options.now ?? Date.now)()
-  const key = cacheKey(cwd, wslDistro)
-  const cached = results.get(key)
-  if (cached && cached.expiresAt > now) {
-    return null
+  if (isWslDirectGitReadCommand(args)) {
+    return state.sample?.value !== 'not-windows'
   }
-  const failure = failures.get(key)
-  if (failure && failure.retryAfter > now) {
-    return null
-  }
-  const work = startProbe(key, cwd, wslDistro, options)
-  return cached ? null : waitUnlessAborted(work, signal)
+  return state.sample?.value === 'windows' && isFresh(state.sample, now)
 }
 
-/** `args` with the Windows-checkout config prepended when this WSL checkout was written by Windows Git. */
+/** `args` with Windows Git's settings prepended when this WSL command needs them. */
 export function withWslWindowsCheckoutGitConfig(
   args: string[],
   cwd: string | undefined,
   wslDistro: string | undefined,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  now: number = Date.now()
 ): string[] {
-  if (!isCandidate(cwd, wslDistro, platform) || !wslDistro) {
+  if (!isWslWindowsCheckoutCandidate(cwd, wslDistro, platform) || !wslDistro) {
     return args
   }
-  return results.get(cacheKey(cwd, wslDistro))?.matchesWindowsCheckout
+  const state = states.get(wslWindowsCheckoutKey(cwd, wslDistro))
+  return usesWindowsCheckoutGitConfig(args, state, now)
     ? [...WINDOWS_CHECKOUT_GIT_CONFIG_ARGS, ...args]
     : args
 }
 
 export function resetWslWindowsCheckoutGitConfigForTests(): void {
-  results.clear()
-  pending.clear()
-  failures.clear()
+  states.clear()
 }

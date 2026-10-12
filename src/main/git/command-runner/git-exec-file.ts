@@ -5,13 +5,13 @@ import {
   resolveGitFetchHeadCommand,
   runWithGitFetchHeadLock
 } from '../../../shared/git-fetch-head-lock'
+import { pendingWslDriveCheckoutGitRouting } from '../wsl-drive-checkout-git-routing'
 import { resolveCommand, type ResolvedCommand } from './wsl-command-resolution'
 import { annotateWslHostFailure } from './wsl-host-failure'
 import type { GitAdmissionTier, GitExecOptions } from './git-exec-options'
 import { execFileCapture, execFileCaptureToTermination } from './exec-file-capture'
 import {
   pendingWslDirectGitReadEnvironment,
-  pendingWslDriveCheckoutGitRouting,
   directWslGitExitCode,
   isQuietGitControlFlowExit,
   disableDirectWslGitAfterSuccessfulFallback,
@@ -38,7 +38,7 @@ async function gitExecFileAsyncUnlocked(
   return withGitSpan(
     { args, ...(options.cwd !== undefined ? { cwd: options.cwd } : {}) },
     async (span) => {
-      const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(options)
+      const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(args, options)
       if (checkoutRoutingReady) {
         await checkoutRoutingReady
       }
@@ -201,7 +201,7 @@ export async function gitExecFileAsyncBuffer(
   }
 ): Promise<{ stdout: Buffer }> {
   return withGitSpan({ args, cwd: options.cwd }, async (span) => {
-    const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(options)
+    const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(args, options)
     if (checkoutRoutingReady) {
       await checkoutRoutingReady
     }

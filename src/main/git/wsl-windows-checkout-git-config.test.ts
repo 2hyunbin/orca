@@ -1,190 +1,138 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { WslResult } from '../wsl/wsl-runner'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
-  looksLikeWindowsAutocrlfCheckout,
-  pendingWslWindowsCheckoutProbe,
+  classifyLineEndingSample,
+  LINE_ENDING_SAMPLE_LIMIT,
+  parseHostAutocrlf,
+  recordHostAutocrlf,
+  recordLineEndingSample,
   resetWslWindowsCheckoutGitConfigForTests,
+  usesWindowsCheckoutGitConfig,
   WINDOWS_CHECKOUT_GIT_CONFIG_ARGS,
   withWslWindowsCheckoutGitConfig,
-  WSL_WINDOWS_CHECKOUT_RESULT_TTL_MS
+  wslWindowsCheckoutKey,
+  WSL_WINDOWS_CHECKOUT_TTL_MS
 } from './wsl-windows-checkout-git-config'
+import {
+  ATTRIBUTE_PINNED_ROOT_SAMPLE,
+  HOST_CONFIG_LOCAL_AUTOCRLF_FALSE,
+  HOST_CONFIG_LOCAL_EOL_LF,
+  HOST_CONFIG_SYSTEM_AUTOCRLF,
+  LOCAL_AUTOCRLF_FALSE_CLONE_SAMPLE,
+  NO_TOP_LEVEL_FILES_SAMPLE,
+  PLAIN_WINDOWS_CLONE_SAMPLE,
+  PRETTIER_ROOT_LF_SAMPLE,
+  WSL_CLONE_WITH_CRLF_README_SAMPLE
+} from './wsl-windows-checkout-line-endings.test-fixture'
 
 afterEach(() => resetWslWindowsCheckoutGitConfigForTests())
 
 const CWD = String.raw`C:\Users\dev\repo`
-const DISTRO = 'Ubuntu'
-// Captured from WSL Git 2.53 against a Windows Git (autocrlf=true) clone on C:.
-const WINDOWS_CHECKOUT_EOL = [
-  'i/lf    w/crlf  attr/                 \t.gitattributes',
-  'i/lf    w/crlf  attr/                 \t.gitignore',
-  'i/lf    w/crlf  attr/                 \tAGENTS.md',
-  'i/-text w/-text attr/                 \tlogo.png',
-  ''
-].join('\n')
-const LINUX_CHECKOUT_EOL = [
-  'i/lf    w/lf    attr/                 \t.gitignore',
-  'i/lf    w/lf    attr/                 \tREADME.md',
-  ''
-].join('\n')
+const KEY = wslWindowsCheckoutKey(CWD, 'Ubuntu')
+const NOW = 1_000_000
 
-function wslResult(overrides: Partial<WslResult>): WslResult {
-  return {
-    environmentResolved: true,
-    code: 0,
-    stdout: '',
-    stderr: '',
-    timedOut: false,
-    ...overrides
-  }
-}
-
-function probeOptions(stdout: string, code = 0) {
-  const run = vi.fn(async () => wslResult({ stdout, code }))
-  return { run, options: { platform: 'win32' as const, run } }
-}
-
-describe('looksLikeWindowsAutocrlfCheckout', () => {
-  it('detects LF blobs checked out as CRLF', () => {
-    expect(looksLikeWindowsAutocrlfCheckout(WINDOWS_CHECKOUT_EOL)).toBe(true)
+describe('classifyLineEndingSample on captured checkouts', () => {
+  it.each([
+    ['a plain Windows clone', PLAIN_WINDOWS_CLONE_SAMPLE],
+    ['a Windows clone whose root files a formatter re-saved as LF', PRETTIER_ROOT_LF_SAMPLE],
+    ['a repo with no top-level text files', NO_TOP_LEVEL_FILES_SAMPLE],
+    ['root files pinned LF by attributes over CRLF sources', ATTRIBUTE_PINNED_ROOT_SAMPLE]
+  ])('detects %s', (_name, sample) => {
+    expect(classifyLineEndingSample(sample, false)).toBe('windows')
   })
 
-  it('ignores an LF checkout', () => {
-    expect(looksLikeWindowsAutocrlfCheckout(LINUX_CHECKOUT_EOL)).toBe(false)
+  it.each([
+    ['a WSL clone after a Windows editor saved README as CRLF', WSL_CLONE_WITH_CRLF_README_SAMPLE],
+    ['a Windows clone made with autocrlf=false', LOCAL_AUTOCRLF_FALSE_CLONE_SAMPLE]
+  ])('does not flag %s', (_name, sample) => {
+    expect(classifyLineEndingSample(sample, false)).toBe('not-windows')
   })
 
-  it('needs a majority, so one CRLF file saved into an LF checkout does not count', () => {
-    const output = `${LINUX_CHECKOUT_EOL}i/lf    w/crlf  attr/                 \tnotes.txt\n`
-    expect(looksLikeWindowsAutocrlfCheckout(output)).toBe(false)
+  it('treats clipped or over-cap output as inconclusive', () => {
+    expect(classifyLineEndingSample(PLAIN_WINDOWS_CLONE_SAMPLE, true)).toBe('inconclusive')
+    const overCap = Array.from(
+      { length: LINE_ENDING_SAMPLE_LIMIT + 1 },
+      (_, index) => `i/lf    w/crlf  attr/                 \tsrc/f${index}.ts`
+    ).join('\n')
+    expect(classifyLineEndingSample(overCap, false)).toBe('inconclusive')
   })
 
-  it('ignores files whose line endings .gitattributes already pins', () => {
-    const output = [
-      'i/lf    w/crlf  attr/text eol=crlf    \tbuild.cmd',
-      'i/lf    w/crlf  attr/text=auto        \tREADME.md',
-      ''
-    ].join('\n')
-    expect(looksLikeWindowsAutocrlfCheckout(output)).toBe(false)
-  })
-
-  it('treats empty output as no evidence', () => {
-    expect(looksLikeWindowsAutocrlfCheckout('')).toBe(false)
+  it('needs a minimum amount of evidence', () => {
+    const fewFiles = PLAIN_WINDOWS_CLONE_SAMPLE.split('\n').slice(0, 4).join('\n')
+    expect(classifyLineEndingSample(fewFiles, false)).toBe('inconclusive')
+    expect(classifyLineEndingSample('', false)).toBe('inconclusive')
   })
 })
 
-describe('Windows checkout config for WSL git', () => {
-  it('probes once with argv-safe ls-files and then prepends the config', async () => {
-    const { run, options } = probeOptions(WINDOWS_CHECKOUT_EOL)
+describe('parseHostAutocrlf', () => {
+  it('reads the effective value with the last scope winning', () => {
+    expect(parseHostAutocrlf(HOST_CONFIG_SYSTEM_AUTOCRLF)).toBe('true')
+    expect(parseHostAutocrlf(HOST_CONFIG_LOCAL_AUTOCRLF_FALSE)).toBe('other')
+    expect(parseHostAutocrlf('')).toBe('other')
+  })
 
-    await pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)
+  it('ignores core.eol, which Windows Git overrides when autocrlf=true', () => {
+    expect(parseHostAutocrlf(HOST_CONFIG_LOCAL_EOL_LF)).toBe('true')
+  })
 
-    expect(run).toHaveBeenCalledWith(
-      expect.objectContaining({
-        distro: DISTRO,
-        program: 'git',
-        args: ['-C', '/mnt/c/Users/dev/repo', 'ls-files', '--eol', '--', ':(top,glob)*'],
-        loginPath: 'preferred'
-      })
-    )
-    expect(withWslWindowsCheckoutGitConfig(['status'], CWD, DISTRO, 'win32')).toEqual([
+  it('accepts every Git boolean spelling and the bare key', () => {
+    expect(parseHostAutocrlf('file:.git/config\tcore.autocrlf yes\n')).toBe('true')
+    expect(parseHostAutocrlf('file:.git/config\tcore.autocrlf\n')).toBe('true')
+    expect(parseHostAutocrlf('file:.git/config\tcore.autocrlf input\n')).toBe('other')
+  })
+})
+
+describe('which commands run with Windows Git settings', () => {
+  const read = ['-c', 'core.quotePath=false', 'status', '--porcelain=v2']
+  const write = ['checkout', '--', 'README.md']
+
+  it('flags nothing unless the host Git would write CRLF', () => {
+    recordHostAutocrlf(KEY, 'other', NOW)
+    recordLineEndingSample(KEY, 'windows', 'id', NOW)
+    expect(usesWindowsCheckoutGitConfig(read, undefined, NOW)).toBe(false)
+    expect(withWslWindowsCheckoutGitConfig(read, CWD, 'Ubuntu', 'win32', NOW)).toEqual(read)
+  })
+
+  it('flags reads as soon as the host answers, before the sample', () => {
+    recordHostAutocrlf(KEY, 'true', NOW)
+    expect(withWslWindowsCheckoutGitConfig(read, CWD, 'Ubuntu', 'win32', NOW)).toEqual([
       ...WINDOWS_CHECKOUT_GIT_CONFIG_ARGS,
-      'status'
+      ...read
     ])
-    expect(pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)).toBeNull()
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', NOW)).toEqual(write)
   })
 
-  it('keys the cache case-insensitively by checkout and distro', async () => {
-    const { run, options } = probeOptions(WINDOWS_CHECKOUT_EOL)
-    await pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)
-
-    expect(
-      withWslWindowsCheckoutGitConfig(['status'], 'c:/users/DEV/repo', 'ubuntu', 'win32')
-    ).toEqual([...WINDOWS_CHECKOUT_GIT_CONFIG_ARGS, 'status'])
-    expect(withWslWindowsCheckoutGitConfig(['status'], CWD, 'Debian', 'win32')).toEqual(['status'])
-    expect(run).toHaveBeenCalledTimes(1)
+  it('stops flagging reads once the sample proves an LF checkout', () => {
+    recordHostAutocrlf(KEY, 'true', NOW)
+    recordLineEndingSample(KEY, 'not-windows', 'id', NOW)
+    expect(withWslWindowsCheckoutGitConfig(read, CWD, 'Ubuntu', 'win32', NOW)).toEqual(read)
   })
 
-  it('leaves args alone for an LF checkout or a folder that is not a repository', async () => {
-    const lf = probeOptions(LINUX_CHECKOUT_EOL)
-    await pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, lf.options)
-    expect(withWslWindowsCheckoutGitConfig(['status'], CWD, DISTRO, 'win32')).toEqual(['status'])
-
-    const folder = probeOptions('', 128)
-    await pendingWslWindowsCheckoutProbe(String.raw`D:\notes`, DISTRO, undefined, folder.options)
-    expect(
-      pendingWslWindowsCheckoutProbe(String.raw`D:\notes`, DISTRO, undefined, folder.options)
-    ).toBeNull()
-    expect(folder.run).toHaveBeenCalledTimes(1)
-  })
-
-  it('never probes off Windows, without a distro, or for a path inside the distro', () => {
-    const { run, options } = probeOptions(WINDOWS_CHECKOUT_EOL)
-
-    expect(
-      pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, { ...options, platform: 'linux' })
-    ).toBeNull()
-    expect(pendingWslWindowsCheckoutProbe(CWD, undefined, undefined, options)).toBeNull()
-    expect(
-      pendingWslWindowsCheckoutProbe(
-        String.raw`\\wsl.localhost\Ubuntu\home\dev\repo`,
-        DISTRO,
-        undefined,
-        options
-      )
-    ).toBeNull()
-    expect(run).not.toHaveBeenCalled()
-  })
-
-  it('shares one in-flight probe between concurrent commands', async () => {
-    let finish: (result: WslResult) => void = () => {}
-    const run = vi.fn(() => new Promise<WslResult>((resolve) => (finish = resolve)))
-    const options = { platform: 'win32' as const, run }
-
-    const first = pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)
-    const second = pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)
-    finish(wslResult({ stdout: WINDOWS_CHECKOUT_EOL }))
-    await Promise.all([first, second])
-
-    expect(run).toHaveBeenCalledTimes(1)
-  })
-
-  it('stops waiting when the command aborts, without failing it', async () => {
-    const run = vi.fn(() => new Promise<WslResult>(() => {}))
-    const controller = new AbortController()
-    const waiting = pendingWslWindowsCheckoutProbe(CWD, DISTRO, controller.signal, {
-      platform: 'win32',
-      run
-    })
-    controller.abort()
-
-    await expect(waiting).resolves.toBeUndefined()
-  })
-
-  it('backs off after a timed-out probe instead of retrying on every poll', async () => {
-    let now = 1_000
-    const run = vi.fn(async () => wslResult({ code: null, timedOut: true }))
-    const options = { platform: 'win32' as const, run, now: () => now }
-
-    await pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)
-    expect(pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)).toBeNull()
-    expect(withWslWindowsCheckoutGitConfig(['status'], CWD, DISTRO, 'win32')).toEqual(['status'])
-
-    now += 30_000
-    await pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)
-    expect(run).toHaveBeenCalledTimes(2)
-  })
-
-  it('keeps serving an expired answer while a background refresh runs', async () => {
-    let now = 1_000
-    const run = vi.fn(async () => wslResult({ stdout: WINDOWS_CHECKOUT_EOL }))
-    const options = { platform: 'win32' as const, run, now: () => now }
-    await pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)
-
-    now += WSL_WINDOWS_CHECKOUT_RESULT_TTL_MS + 1
-    expect(pendingWslWindowsCheckoutProbe(CWD, DISTRO, undefined, options)).toBeNull()
-    expect(withWslWindowsCheckoutGitConfig(['status'], CWD, DISTRO, 'win32')[1]).toBe(
+  it('flags writes only on a fresh Windows answer', () => {
+    recordHostAutocrlf(KEY, 'true', NOW)
+    recordLineEndingSample(KEY, 'windows', 'id', NOW)
+    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', NOW)[1]).toBe(
       'core.autocrlf=true'
     )
-    expect(run).toHaveBeenCalledTimes(2)
+    const stale = NOW + WSL_WINDOWS_CHECKOUT_TTL_MS
+    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', stale)).toEqual(write)
+    expect(withWslWindowsCheckoutGitConfig(read, CWD, 'Ubuntu', 'win32', stale)[1]).toBe(
+      'core.autocrlf=true'
+    )
+  })
+
+  it('does not flag writes on an inconclusive sample', () => {
+    recordHostAutocrlf(KEY, 'true', NOW)
+    recordLineEndingSample(KEY, 'inconclusive', 'id', NOW)
+    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', NOW)).toEqual(write)
+  })
+
+  it('keys case-insensitively and per distro, and ignores non-candidates', () => {
+    recordHostAutocrlf(KEY, 'true', NOW)
+    expect(
+      withWslWindowsCheckoutGitConfig(read, 'c:/users/DEV/repo', 'ubuntu', 'win32', NOW)[1]
+    ).toBe('core.autocrlf=true')
+    expect(withWslWindowsCheckoutGitConfig(read, CWD, 'Debian', 'win32', NOW)).toEqual(read)
+    expect(withWslWindowsCheckoutGitConfig(read, CWD, 'Ubuntu', 'linux', NOW)).toEqual(read)
+    expect(withWslWindowsCheckoutGitConfig(read, CWD, undefined, 'win32', NOW)).toEqual(read)
   })
 })

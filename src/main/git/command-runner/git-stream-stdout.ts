@@ -4,6 +4,7 @@ import { withGitSpan } from '../../observability/instrumentation'
 import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
 import { createAbortError } from './abort-error'
 import { killSpawnedCommandTree } from './spawned-command-tree-kill'
+import { pendingWslDriveCheckoutGitRouting } from '../wsl-drive-checkout-git-routing'
 import type { ResolvedCommand } from './wsl-command-resolution'
 import {
   DEFAULT_GIT_MAX_BUFFER,
@@ -12,7 +13,6 @@ import {
 } from './git-exec-options'
 import {
   pendingWslDirectGitReadEnvironment,
-  pendingWslDriveCheckoutGitRouting,
   directWslGitExitCode,
   disableDirectWslGitAfterSuccessfulFallback,
   invalidateMissingDirectWslGit,
@@ -62,7 +62,7 @@ export async function gitStreamStdout(
   const maxBuffer = options.maxBuffer ?? DEFAULT_GIT_MAX_BUFFER
   const timeoutMs = gitCommandTimeoutMs(args, options.timeoutMs, options.timeoutMsForTest)
   return withGitSpan({ args, cwd: options.cwd }, async (span) => {
-    const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(options)
+    const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(args, options)
     if (checkoutRoutingReady) {
       await checkoutRoutingReady
     }
