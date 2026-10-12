@@ -104,3 +104,31 @@ export function codexOffersServiceTier(
     codexListsServiceTier(model, tier)
   )
 }
+
+/** What the picker shows for the chosen tier: standard where Codex leaves it out, and `flex` added
+ *  to the model's choices while chosen, since Codex runs it without listing it. */
+export function presentCodexServiceTier(
+  chosen: string | undefined,
+  models: AgentSessionModelOption[],
+  modelId: string | undefined
+): { serviceTier?: string; models: AgentSessionModelOption[] } {
+  const model = models.find((entry) => entry.id === modelId)
+  const tiers = model?.serviceTiers
+  if (chosen === undefined || !tiers || codexListsServiceTier(model, chosen)) {
+    return { ...(chosen ? { serviceTier: chosen } : {}), models }
+  }
+  if (!codexOffersServiceTier(chosen, model)) {
+    return { serviceTier: CODEX_DEFAULT_SERVICE_TIER, models }
+  }
+  if (chosen !== CODEX_FLEX_SERVICE_TIER) {
+    return { serviceTier: chosen, models }
+  }
+  return {
+    serviceTier: chosen,
+    models: models.map((entry) =>
+      entry === model
+        ? { ...entry, serviceTiers: [...tiers, { value: chosen, label: 'Flex' }] }
+        : entry
+    )
+  }
+}

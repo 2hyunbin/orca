@@ -19,6 +19,12 @@ export type StructuredAgentDefinition = AgentSessionStoredAgent & {
     fallbackModels: () => AgentSessionModelOption[] | null
     /** An unpicked effort reads as the model's default effort, as a running child reports it. */
     effortDefaultsToModel: boolean
+    /** A saved speed tier as a running child would show it, with the choices that show it. */
+    presentServiceTier?: (
+      tier: string,
+      models: AgentSessionModelOption[],
+      modelId: string | undefined
+    ) => { serviceTier?: string; models: AgentSessionModelOption[] }
   }
 }
 

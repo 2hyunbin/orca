@@ -11,6 +11,7 @@ import type { StructuredAgentSessionMutationContext } from './structured-agent-s
 import { readStructuredAgentSessionOptions } from './structured-agent-session-options-read'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { CODEX_STRUCTURED_AGENT } from '../../codex/codex-structured-agent-definition'
 
 const SESSION = 'session-1'
 
@@ -71,6 +72,51 @@ describe('options at rest', () => {
       })
     }
   )
+})
+
+describe('Codex speed at rest', () => {
+  async function readAtRest(options: Record<string, string>) {
+    const record = { ...restingRecord(), options }
+    const resting = {
+      child: null,
+      params: { provider: 'codex' },
+      journal: { context: { floor: () => null } }
+    }
+    const luna = {
+      id: 'gpt-6-luna',
+      label: 'GPT-6 Luna',
+      isDefault: true,
+      efforts: [],
+      serviceTiers: [{ value: 'priority', label: 'Fast' }]
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resting read touches only these members.
+    const context = {
+      deps: {
+        adapter: {},
+        agents: {
+          definition: () => CODEX_STRUCTURED_AGENT,
+          capabilities: NO_STRUCTURED_AGENTS.capabilities.bind(NO_STRUCTURED_AGENTS)
+        },
+        store: { getRecord: () => record },
+        modelCatalog: { read: async () => ({ origin: 'probe', fetchedAt: 1, models: [luna] }) }
+      },
+      serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => resting,
+      conversation: async () => resting
+    } as unknown as StructuredAgentSessionMutationContext
+    return readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+  }
+
+  it('shows a saved speed the model does not offer as Standard, as a running chat would', async () => {
+    const result = await readAtRest({ model: 'gpt-6-luna', serviceTier: 'ultrafast' })
+    expect(result.current).toMatchObject({ model: 'gpt-6-luna', serviceTier: 'default' })
+  })
+
+  it('shows a saved Flex as a Flex choice, since Codex runs it on every model', async () => {
+    const result = await readAtRest({ model: 'gpt-6-luna', serviceTier: 'flex' })
+    expect(result.current).toMatchObject({ serviceTier: 'flex' })
+    expect(result.models[0]?.serviceTiers).toContainEqual({ value: 'flex', label: 'Flex' })
+  })
 })
 
 describe('live Codex option reads', () => {

@@ -110,8 +110,14 @@ async function readStructuredAgentSessionOptionsAtRest(
     (rules?.effortDefaultsToModel || (saved.model === undefined && folderDefault)
       ? models.find((entry) => entry.id === model)?.defaultEffort
       : undefined)
+  const rows = listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : []
+  const tier = saved.serviceTier
+  const shown =
+    tier && rules?.presentServiceTier
+      ? rules.presentServiceTier(tier, rows, model)
+      : { serviceTier: tier, models: rows }
   return {
-    models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
+    models: shown.models,
     ...(catalog.origin !== 'unknown' && catalog.fastModeSupport
       ? { fastModeSupport: catalog.fastModeSupport }
       : {}),
@@ -119,7 +125,7 @@ async function readStructuredAgentSessionOptionsAtRest(
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
       ...(typeof fastMode === 'boolean' ? { fastMode } : {}),
-      ...(saved.serviceTier ? { serviceTier: saved.serviceTier } : {})
+      ...(shown.serviceTier ? { serviceTier: shown.serviceTier } : {})
     }
   }
 }

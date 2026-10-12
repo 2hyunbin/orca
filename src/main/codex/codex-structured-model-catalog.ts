@@ -10,7 +10,7 @@ import {
   codexFastModeOfServiceTier,
   codexFastModeSupport,
   codexFastServiceTier,
-  codexOffersServiceTier,
+  presentCodexServiceTier,
   readCodexServiceTiers
 } from './codex-structured-service-tier'
 import {
@@ -157,30 +157,13 @@ export function composeCodexSessionOptionCatalog(
     ? (input.reportedServiceTier ?? CODEX_DEFAULT_SERVICE_TIER)
     : undefined
   // The pick, else the configured tier, as this model runs it; neither is ever rewritten.
-  const chosen = input.current.serviceTier ?? reportedTier
-  const serviceTier =
-    chosen === undefined || !modelEntry?.serviceTiers || codexOffersServiceTier(chosen, modelEntry)
-      ? chosen
-      : CODEX_DEFAULT_SERVICE_TIER
+  const shown = presentCodexServiceTier(input.current.serviceTier ?? reportedTier, models, model)
+  const serviceTier = shown.serviceTier
   // Older clients only read Fast; any other tier leaves their toggle unset.
   const fastMode = codexFastModeOfServiceTier(serviceTier, modelEntry)
   const support = codexFastModeSupport(models)
-  // Codex runs flex on every model without listing it: while this chat runs it, it is a choice here.
-  const runsUnlisted =
-    serviceTier !== undefined &&
-    serviceTier !== CODEX_DEFAULT_SERVICE_TIER &&
-    modelEntry?.serviceTiers?.some((choice) => choice.value === serviceTier) === false
   return {
-    models: runsUnlisted
-      ? models.map((entry) =>
-          entry === modelEntry
-            ? {
-                ...entry,
-                serviceTiers: [...(entry.serviceTiers ?? []), { value: serviceTier, label: 'Flex' }]
-              }
-            : entry
-        )
-      : models,
+    models: shown.models,
     ...(support ? { fastModeSupport: support } : {}),
     current: {
       model,
