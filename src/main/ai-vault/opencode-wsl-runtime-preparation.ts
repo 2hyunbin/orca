@@ -8,7 +8,7 @@ import { RELAY_OPENCODE_SQLITE_READER_FILENAME } from '../../shared/relay-artifa
 import { parseWslUncPath, toWindowsWslUncPath } from '../../shared/wsl-paths'
 import { NODE_SQLITE_READER_API_SOURCE } from '../sqlite/node-sqlite-reader-api'
 import { relayBundleCandidates } from '../ssh/relay-bundle-paths'
-import { materializeNodeRuntimeArchive } from '../ssh/pinned-runtime-materializer'
+import { materializeNodeRuntimeArchive } from '../node-runtime/pinned-runtime-materializer'
 import { parseOrcadLinuxLibc } from '../ssh/orcad-deployment-target'
 import {
   installNodeRuntimeFromHostArchiveCommand,

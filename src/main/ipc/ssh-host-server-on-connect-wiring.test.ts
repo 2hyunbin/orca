@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SshTarget } from '../../shared/ssh-types'
 import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
 import { Store } from '../persistence/loading-store/store'
-import { OrcadHostUnsupportedError } from '../ssh/orcad-host-unavailable'
+import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
 import { allowsDirectSshRelay, SshConnectionStore } from '../ssh/ssh-connection-store'
 import { resolveHostServerOnConnect } from '../ssh/ssh-host-server-on-connect'
 
@@ -30,7 +30,7 @@ vi.mock('../ssh/orcad-runtime-conversion', () => ({
   convertSshTargetToManagedOrcad: mocks.convert
 }))
 vi.mock('../ssh/orcad-managed-tunnel', () => ({ ensureOrcadManagedTunnel: mocks.tunnel }))
-vi.mock('../ssh/orcad-artifact-materializer', () => ({ hasOrcadTemplate: () => true }))
+vi.mock('../orcad/orcad-artifact-materializer', () => ({ hasOrcadTemplate: () => true }))
 vi.mock('./ssh-renderer-broadcast', () => ({ broadcastSshState: mocks.broadcast }))
 vi.mock('./ssh-ipc-context', () => ({ getCurrentMainWindow: () => null }))
 vi.mock('./ssh-session-teardown', () => ({ disconnectRegisteredSshTarget: vi.fn() }))

@@ -28,7 +28,7 @@ import { managedResultAfterUpdate, unservedManagedResult } from './managed-serve
 import {
   classifyOrcadHostUnavailable,
   ORCAD_TUNNEL_UNAVAILABLE_REASON
-} from './orcad-host-unavailable'
+} from '../orcad/orcad-host-unavailable'
 import {
   decidedEvent,
   reportHostServerConversion,
