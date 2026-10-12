@@ -12,5 +12,5 @@ export const WorkspaceServerContext = createContext<
 export function useWorkspaceClient(hostId: string | undefined): ReturnType<typeof useHostClient> {
   const host = useHostClient(hostId)
   const server = useContext(WorkspaceServerContext)
-  return server === undefined ? host : { ...host, ...server }
+  return server === undefined ? host : { ...host, client: server.client, state: server.state }
 }
