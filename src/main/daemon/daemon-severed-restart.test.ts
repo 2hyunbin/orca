@@ -11,7 +11,10 @@ import {
   restartSeveredDaemon
 } from './daemon-host-image-state'
 import type { DaemonHostImageInspection } from './daemon-host-image'
-import { createSeveredDaemonController } from './daemon-severed-restart'
+import {
+  createSeveredDaemonController,
+  hasSeveredDaemonBeenReplaced
+} from './daemon-severed-restart'
 
 const SEVERED: DaemonHostImageInspection = {
   verdict: 'severed',
@@ -90,5 +93,29 @@ describe('restarting a daemon whose AppImage files are gone', () => {
       status: 'refused',
       reason: 'not-severed'
     })
+  })
+})
+
+describe('hasSeveredDaemonBeenReplaced', () => {
+  it('keeps the quarantine while the severed incarnation still owns the endpoint', () => {
+    setUp(SEVERED)
+    expect(hasSeveredDaemonBeenReplaced('/pid', () => SEVERED)).toBe(false)
+    expect(hasSeveredDaemonBeenReplaced('/pid', () => ({ ...SEVERED, verdict: 'unknown' }))).toBe(
+      false
+    )
+    expect(getSeveredDaemon()).toEqual(EXPECTED)
+  })
+
+  it('lifts it once a verified, intact daemon replaced the severed one', () => {
+    setUp(SEVERED)
+    expect(
+      hasSeveredDaemonBeenReplaced('/pid', () => ({
+        verdict: 'intact',
+        pid: 9000,
+        linuxStartTicks: '5',
+        bootId: 'boot-1'
+      }))
+    ).toBe(true)
+    expect(getSeveredDaemon()).toBeNull()
   })
 })

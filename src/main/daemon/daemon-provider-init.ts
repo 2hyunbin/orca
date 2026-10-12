@@ -36,7 +36,10 @@ import { DaemonPtyRouter } from './daemon-pty-router'
 import { isDaemonRestartInFlight } from './daemon-restart-state'
 import { DaemonSpawner, getDaemonPidPath } from './daemon-spawner'
 import { clearSeveredDaemon, installSeveredDaemonController } from './daemon-host-image-state'
-import { createSeveredDaemonController } from './daemon-severed-restart'
+import {
+  createSeveredDaemonController,
+  hasSeveredDaemonBeenReplaced
+} from './daemon-severed-restart'
 
 // Why: daemon init runs concurrent with window load, so an in-process t timestamp (not harness stderr timing) measures cold-start.
 function logDaemonMilestone(event: string, details: Record<string, unknown> = {}): void {
@@ -135,14 +138,12 @@ export async function initDaemonPtyProvider(
             current: newAdapter,
             legacy: legacyAdapters,
             fallback: getLocalPtyProvider(),
-            // Why no probe when severed: the daemon passes health checks for hours, and only a
-            // new incarnation (restart or the next replacement) may take fresh terminals again.
-            ...(quarantine === 'host-image-severed'
-              ? {}
-              : {
-                  probeCurrentDaemonSpawn: async () =>
-                    (await checkDaemonHealth(info.socketPath, info.tokenPath)) === 'healthy'
-                })
+            // Why the incarnation gate: a severed daemon passes health checks for hours, so only a
+            // new daemon at the endpoint (after a crash respawn or restart) may take fresh terminals.
+            probeCurrentDaemonSpawn: async () =>
+              (quarantine !== 'host-image-severed' ||
+                hasSeveredDaemonBeenReplaced(getDaemonPidPath(runtimeDir))) &&
+              (await checkDaemonHealth(info.socketPath, info.tokenPath)) === 'healthy'
           })
         : legacyAdapters.length > 0 || isHoldingForNewerProtocolDaemon()
           ? new DaemonPtyRouter({

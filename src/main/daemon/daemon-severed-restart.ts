@@ -8,6 +8,7 @@ import { readDaemonPidRecord } from './daemon-endpoint-incarnation'
 import { inspectDaemonHostImage } from './daemon-host-image'
 import {
   clearSeveredDaemon,
+  getSeveredDaemon,
   isSameIncarnation,
   type SeveredDaemonController,
   type SeveredDaemonIncarnation,
@@ -72,4 +73,32 @@ async function restartVerifiedSeveredDaemon(
   const { killedCount } = await dependencies.restart()
   clearSeveredDaemon()
   return { status: 'restarted', killedCount }
+}
+
+/** True once the endpoint's pid record names a verified incarnation other than the severed one. */
+export function hasSeveredDaemonBeenReplaced(
+  pidPath: string,
+  inspect: (pidPath: string) => ReturnType<typeof inspectDaemonHostImage> = (path) =>
+    inspectDaemonHostImage(readDaemonPidRecord(path))
+): boolean {
+  const severed = getSeveredDaemon()
+  if (!severed) {
+    return true
+  }
+  const current = inspect(pidPath)
+  if (
+    current.verdict === 'unknown' ||
+    current.verdict === 'severed' ||
+    current.pid === null ||
+    !current.linuxStartTicks ||
+    !current.bootId ||
+    isSameIncarnation(
+      { pid: current.pid, linuxStartTicks: current.linuxStartTicks, bootId: current.bootId },
+      severed
+    )
+  ) {
+    return false
+  }
+  clearSeveredDaemon()
+  return true
 }

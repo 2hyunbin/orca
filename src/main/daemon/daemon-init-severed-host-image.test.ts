@@ -18,8 +18,9 @@ const {
 )
 
 const hostImage = vi.hoisted(() => {
-  const state: { verdict: 'intact' | 'severed' | 'unknown' | 'not-ephemeral' } = {
-    verdict: 'not-ephemeral'
+  const state: { verdict: 'intact' | 'severed' | 'unknown' | 'not-ephemeral'; pid: number } = {
+    verdict: 'not-ephemeral',
+    pid: 4288
   }
   return state
 })
@@ -45,7 +46,7 @@ vi.mock('../ipc/pty/provider/listener-lifecycle', () => moduleFactories.ptyListe
 vi.mock('./daemon-host-image', () => ({
   inspectDaemonHostImage: () => ({
     verdict: hostImage.verdict,
-    pid: 4288,
+    pid: hostImage.pid,
     linuxStartTicks: '777',
     bootId: 'boot-1'
   })
@@ -114,6 +115,7 @@ describe('daemon-init: a daemon whose AppImage files are gone', () => {
 
   afterEach(async () => {
     hostImage.verdict = 'not-ephemeral'
+    hostImage.pid = 4288
     warn.mockRestore()
     vi.clearAllMocks()
     ;(await import('./daemon-host-image-state')).clearSeveredDaemon()
@@ -181,6 +183,12 @@ describe('daemon-init: a daemon whose AppImage files are gone', () => {
 
   it('never re-admits fresh terminals to a quarantined daemon on a healthy check', async () => {
     const mod = await importFresh()
+    ;(await import('./daemon-host-image-state')).noteSeveredDaemon({
+      verdict: 'severed',
+      pid: 4288,
+      linuxStartTicks: '777',
+      bootId: 'boot-1'
+    })
     ensureRunningOverrides.push(async () => ({
       socketPath: '/fake/severed-socket',
       tokenPath: '/fake/severed-token',
@@ -202,5 +210,36 @@ describe('daemon-init: a daemon whose AppImage files are gone', () => {
     const result = await degraded.spawn({ cols: 80, rows: 24 })
     expect(result.id).toBe('local-fallback-pty')
     expect(localFallbackProvider.spawn).toHaveBeenCalled()
+  })
+
+  it('lets fresh terminals back once a new daemon incarnation owns the endpoint', async () => {
+    const mod = await importFresh()
+    const state = await import('./daemon-host-image-state')
+    state.noteSeveredDaemon({
+      verdict: 'severed',
+      pid: 4288,
+      linuxStartTicks: '777',
+      bootId: 'boot-1'
+    })
+    ensureRunningOverrides.push(async () => ({
+      socketPath: '/fake/severed-socket',
+      tokenPath: '/fake/severed-token',
+      mode: 'degraded-new-pty-fallback',
+      quarantine: 'host-image-severed'
+    }))
+    await mod.initDaemonPtyProvider()
+    checkDaemonHealthMock.mockResolvedValue('healthy')
+    const { DegradedDaemonPtyProvider } = await import('./degraded-daemon-pty-provider')
+    const provider = mod.getDaemonProvider()
+    if (!(provider instanceof DegradedDaemonPtyProvider)) {
+      throw new Error('expected degraded routing')
+    }
+
+    // The severed daemon crashed and its adapter respawned a new one at the endpoint.
+    hostImage.verdict = 'intact'
+    hostImage.pid = 9000
+
+    await expect(provider.recoverFreshSpawnRouting()).resolves.toBe(true)
+    expect(state.getSeveredDaemon()).toBeNull()
   })
 })
