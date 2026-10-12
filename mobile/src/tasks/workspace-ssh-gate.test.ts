@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { deriveWorkspaceSshGate, workspaceSshStatusLabel } from './workspace-ssh-gate'
+import {
+  deriveWorkspaceSshGate,
+  workspaceSshStatusLabel,
+  workspaceSshTargetKey
+} from './workspace-ssh-gate'
 
 describe('workspace SSH gate', () => {
+  it('keys a target by the host holding it, so same-named targets on two hosts differ', () => {
+    expect(workspaceSshTargetKey(undefined, 'devbox')).not.toBe(
+      workspaceSshTargetKey('runtime:env-1', 'devbox')
+    )
+    expect(workspaceSshTargetKey('runtime:env-1', 'devbox')).not.toBe(
+      workspaceSshTargetKey('runtime:env-2', 'devbox')
+    )
+    expect(workspaceSshTargetKey('runtime:env-1', 'devbox')).toBe(
+      workspaceSshTargetKey('runtime:env-1', 'devbox')
+    )
+  })
+
   it('does not gate local repositories', () => {
     expect(
       deriveWorkspaceSshGate({

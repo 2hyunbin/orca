@@ -9,6 +9,7 @@ import {
 } from '../tasks/mobile-workspace-source-operations'
 import {
   deriveWorkspaceSshGate,
+  workspaceSshTargetKey,
   type WorkspaceSshGate,
   type WorkspaceSshRecord
 } from '../tasks/workspace-ssh-gate'
@@ -43,8 +44,7 @@ export function useNewWorkspaceExecutionTarget(args: {
   connect: () => Promise<void>
 } {
   const { client, connectionId, server, visible } = args
-  // Why the host too: the desktop and a server can each hold a target with the same id.
-  const target = JSON.stringify([server ?? null, connectionId])
+  const target = workspaceSshTargetKey(server, connectionId)
   const [sshState, setSshEntry] = useState<SshStateEntry | null>(null)
   const setSshState = (record: WorkspaceSshRecord) => setSshEntry({ target, record })
   // A connect reply lands only while its target is still the one shown, so it never overwrites another's.
