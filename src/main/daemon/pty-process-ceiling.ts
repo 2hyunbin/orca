@@ -8,10 +8,10 @@
  * scope: `pids.max` counts threads too, and the daemon must keep serving sockets, attach and
  * cancel while a build inside a terminal hits the ceiling.
  */
+import { accessSync, constants, readFileSync } from 'node:fs'
+import { delimiter, isAbsolute, join } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
 import { isDurableDaemonScopeSupported, userManagerEnv } from './daemon-cgroup-scope'
-import { setPtyActiveProcessLimit } from '../windows/windows-pty-job'
 import type { PtyProcessCeilingState } from './pty-process-ceiling-state'
 
 export type { PtyProcessCeilingState } from './pty-process-ceiling-state'
@@ -19,15 +19,25 @@ export type { PtyProcessCeilingState } from './pty-process-ceiling-state'
 export const PTY_PROCESS_CEILING_ENV = 'ORCA_TERMINAL_PROCESS_CEILING'
 /** Below this a shell, its prompt hooks and one build step already collide. */
 const MIN_CEILING = 64
+const CGROUP_ROOT = '/sys/fs/cgroup'
 
 type Runner = (
   program: string,
   args: string[],
   env: NodeJS.ProcessEnv
-) => Pick<ProcessResult, 'code' | 'timedOut'>
+) => { code: number | null; timedOut: boolean; stdout: string }
 
 const defaultRunner: Runner = (program, args, env) =>
-  runProcessSync({ program, args, env, stdio: 'ignore', timeoutMs: 5_000 })
+  runProcessSync({ program, args, env, timeoutMs: 5_000 })
+
+/** What the Linux wrap needs at spawn time; never reported, only used. */
+export type LinuxCeilingRuntime = {
+  slice: string
+  pidsMaxPath: string
+  systemdRun: string
+  envBinary: string | null
+  launchId: string
+}
 
 export function parsePtyProcessCeiling(
   raw: string | undefined
@@ -41,44 +51,88 @@ export function parsePtyProcessCeiling(
     : { kind: 'invalid' }
 }
 
+const sanitizeId = (id: string): string => id.replace(/[^A-Za-z0-9]/g, '_')
+
 /** No dashes: systemd reads `a-b.slice` as a child of `a.slice`, and this one must be top-level. */
 export function ptyCeilingSliceName(launchId: string): string {
-  return `orca_ptys_${launchId.replace(/[^A-Za-z0-9]/g, '_')}.slice`
+  return `orca_ptys_${sanitizeId(launchId)}.slice`
 }
 
-/**
- * Decides once, at daemon start, whether this host gets a ceiling. Every failure is a named
- * "off", never a guess: a host without a user manager or linger keeps today's behaviour.
- */
-export function resolvePtyProcessCeiling(input: {
+export function findExecutableOnPath(name: string, path: string | undefined): string | null {
+  for (const dir of (path ?? '').split(delimiter).filter(isAbsolute)) {
+    try {
+      accessSync(join(dir, name), constants.X_OK)
+      return join(dir, name)
+    } catch {
+      // Not here.
+    }
+  }
+  return null
+}
+
+type ResolveInput = {
   env: NodeJS.ProcessEnv
   platform: NodeJS.Platform
   launchId: string
   scopeSupported?: () => boolean
   run?: Runner
+  findExecutable?: (name: string) => string | null
+  readPidsMax?: (path: string) => string | null
   setWindowsLimit?: (limit: number) => boolean
-}): PtyProcessCeilingState {
+}
+
+function readFileOrNull(path: string): string | null {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Decides once, at daemon start, whether this host gets a ceiling. Every failure is a named
+ * "off", never a guess: "on" requires the kernel's own pids.max to show the limit.
+ */
+export function resolvePtyProcessCeiling(input: ResolveInput): {
+  state: PtyProcessCeilingState
+  linux: LinuxCeilingRuntime | null
+} {
+  const off = (reason: Extract<PtyProcessCeilingState, { state: 'off' }>['reason']) => ({
+    state: { state: 'off' as const, reason },
+    linux: null
+  })
   const parsed = parsePtyProcessCeiling(input.env[PTY_PROCESS_CEILING_ENV])
   if (parsed.kind === 'off') {
-    return { state: 'off', reason: 'disabled' }
+    return off('disabled')
   }
   if (parsed.kind === 'invalid') {
-    return { state: 'off', reason: 'invalid_limit' }
+    return off('invalid_limit')
   }
   if (input.platform === 'win32') {
     return input.setWindowsLimit?.(parsed.limit)
-      ? { state: 'on', limit: parsed.limit, mechanism: 'windows-job', unit: null }
-      : { state: 'off', reason: 'native_unavailable' }
+      ? {
+          state: { state: 'on', limit: parsed.limit, mechanism: 'windows-job', unit: null },
+          linux: null
+        }
+      : off('native_unavailable')
   }
   if (input.platform !== 'linux') {
-    return { state: 'off', reason: 'unsupported_platform' }
+    return off('unsupported_platform')
   }
   if (!(input.scopeSupported ?? isDurableDaemonScopeSupported)()) {
-    return { state: 'off', reason: 'no_user_manager' }
+    return off('no_user_manager')
   }
+  const find =
+    input.findExecutable ?? ((name: string) => findExecutableOnPath(name, input.env.PATH))
+  const systemdRun = find('systemd-run')
+  if (!systemdRun) {
+    return off('systemd_run_missing')
+  }
+  const run = input.run ?? defaultRunner
+  const managerEnv = userManagerEnv(input.env)
   const slice = ptyCeilingSliceName(input.launchId)
   try {
-    const result = (input.run ?? defaultRunner)(
+    const created = run(
       'busctl',
       [
         '--user',
@@ -96,72 +150,36 @@ export function resolvePtyProcessCeiling(input: {
         String(parsed.limit),
         '0'
       ],
-      userManagerEnv(input.env)
+      managerEnv
     )
-    return result.code === 0 && !result.timedOut
-      ? { state: 'on', limit: parsed.limit, mechanism: 'systemd-slice', unit: slice }
-      : { state: 'off', reason: 'slice_unavailable' }
-  } catch {
-    return { state: 'off', reason: 'slice_unavailable' }
-  }
-}
-
-let current: PtyProcessCeilingState = { state: 'off', reason: 'disabled' }
-let scopeCounter = 0
-
-export function setPtyProcessCeiling(state: PtyProcessCeilingState): void {
-  current = state
-}
-
-export function currentPtyProcessCeiling(): PtyProcessCeilingState {
-  return current
-}
-
-/**
- * Linux only: the PTY execs through `systemd-run --scope`, which keeps its pid and exit status,
- * into a scope under the ceiling slice. Anything else spawns exactly as before.
- */
-export function wrapPtySpawnForCeiling(
-  file: string,
-  args: string[],
-  env: Record<string, string>,
-  state: PtyProcessCeilingState = current
-): { file: string; args: string[]; env: Record<string, string> } {
-  if (state.state !== 'on' || state.mechanism !== 'systemd-slice' || !state.unit) {
-    return { file, args, env }
-  }
-  scopeCounter += 1
-  const scopeEnv: Record<string, string> = {}
-  for (const [key, value] of Object.entries(userManagerEnv(env))) {
-    if (typeof value === 'string') {
-      scopeEnv[key] = value
+    if (created.code !== 0 || created.timedOut) {
+      return off('slice_unavailable')
     }
+    // Why verify: cgroup v1/hybrid hosts and managers without pids delegation accept TasksMax
+    // and enforce nothing.
+    const shown = run(
+      'systemctl',
+      ['--user', 'show', slice, '--property=ControlGroup', '--value'],
+      managerEnv
+    )
+    const controlGroup = shown.code === 0 ? shown.stdout.trim() : ''
+    const pidsMaxPath = controlGroup ? join(CGROUP_ROOT, controlGroup, 'pids.max') : ''
+    const pidsMax = pidsMaxPath ? (input.readPidsMax ?? readFileOrNull)(pidsMaxPath) : null
+    if (pidsMax?.trim() !== String(parsed.limit)) {
+      run('systemctl', ['--user', '--no-block', 'stop', slice], managerEnv)
+      return off('controller_unavailable')
+    }
+    return {
+      state: { state: 'on', limit: parsed.limit, mechanism: 'systemd-slice', unit: slice },
+      linux: {
+        slice,
+        pidsMaxPath,
+        systemdRun,
+        envBinary: find('env'),
+        launchId: sanitizeId(input.launchId)
+      }
+    }
+  } catch {
+    return off('slice_unavailable')
   }
-  return {
-    file: 'systemd-run',
-    args: [
-      '--user',
-      '--scope',
-      '--quiet',
-      '--collect',
-      `--slice=${state.unit}`,
-      `--unit=orca_pty_${process.pid}_${scopeCounter}.scope`,
-      '--',
-      file,
-      ...args
-    ],
-    env: scopeEnv
-  }
-}
-
-/** Daemon start: decide, remember for every spawn, and return what the pid record reports. */
-export function initializePtyProcessCeiling(launchId: string): PtyProcessCeilingState {
-  const state = resolvePtyProcessCeiling({
-    env: process.env,
-    platform: process.platform,
-    launchId: launchId || `${process.pid}`,
-    setWindowsLimit: setPtyActiveProcessLimit
-  })
-  setPtyProcessCeiling(state)
-  return state
 }

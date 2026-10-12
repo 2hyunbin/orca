@@ -5,7 +5,7 @@ import {
 } from '../../providers/macos-tcc-login-shell'
 import type { WindowsShellSpawnAttempt } from '../../providers/windows-shell-fallback-chain'
 import { assignHostProcessToKillOnCloseJob } from '../../windows/windows-pty-job'
-import { wrapPtySpawnForCeiling } from '../pty-process-ceiling'
+import { wrapPtySpawnForCeiling } from '../pty-process-ceiling-runtime'
 
 async function loadNodePty(): Promise<typeof pty> {
   return import('node-pty')

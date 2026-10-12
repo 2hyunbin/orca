@@ -5,6 +5,9 @@ export type PtyProcessCeilingOffReason =
   | 'unsupported_platform'
   | 'no_user_manager'
   | 'slice_unavailable'
+  | 'systemd_run_missing'
+  | 'controller_unavailable'
+  | 'slice_lost'
   | 'native_unavailable'
 
 export type PtyProcessCeilingState =
@@ -17,6 +20,9 @@ const OFF_REASONS: readonly PtyProcessCeilingOffReason[] = [
   'unsupported_platform',
   'no_user_manager',
   'slice_unavailable',
+  'systemd_run_missing',
+  'controller_unavailable',
+  'slice_lost',
   'native_unavailable'
 ]
 
@@ -47,6 +53,6 @@ export function describePtyProcessCeiling(state: PtyProcessCeilingState | null):
     return 'not reported'
   }
   return state.state === 'on'
-    ? `on (${state.limit} processes, ${state.mechanism === 'systemd-slice' ? `systemd ${state.unit ?? 'slice'}` : 'per-terminal job'})`
+    ? `on (${state.limit} processes, ${state.mechanism === 'systemd-slice' ? `all terminals, systemd ${state.unit ?? 'slice'}` : 'requested per terminal job'})`
     : `off (${state.reason.replace(/_/g, ' ')})`
 }
