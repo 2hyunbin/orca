@@ -81,11 +81,12 @@ vi.mock('./mobile-tasks-dependencies', async () => {
     useRelayRecoveryStatus: () => null
   }
   const renderNothing = () => null
+  const exports = new Map<string | symbol, unknown>(Object.entries(pure))
   return new Proxy(pure, {
     has: (target, key) => key !== 'then' && (key in target || typeof key === 'string'),
-    get: (target, key) =>
-      key in target || typeof key !== 'string' || key === 'then'
-        ? Reflect.get(target, key)
+    get: (_target, key) =>
+      exports.has(key) || typeof key !== 'string' || key === 'then'
+        ? exports.get(key)
         : renderNothing
   })
 })
