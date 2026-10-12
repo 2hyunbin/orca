@@ -26,6 +26,9 @@ type HeldInput = {
   beforeBind: boolean
 }
 
+/** One connect's claim on pre-bind typing; identity decides which connect may settle it. */
+export type RestoredInputExpectation = { readonly endpoint: HeldEndpoint }
+
 export type RemoteRuntimeRecoveryInputHold = {
   isHolding: () => boolean
   isHoldingBeforeBind: () => boolean
@@ -37,9 +40,9 @@ export type RemoteRuntimeRecoveryInputHold = {
     options?: AcceptedInputOptions
   ) => Promise<boolean>
   /** Binds pre-bind typing to the terminal a connect restores; null (a fresh create) drops it. */
-  expect: (endpoint: HeldEndpoint) => object
+  expect: (endpoint: HeldEndpoint) => RestoredInputExpectation
   /** Ends the latest connect's expectation: without a bound terminal its typing is dropped. */
-  settleExpectation: (expectation: object, bound: boolean) => void
+  settleExpectation: (expectation: RestoredInputExpectation, bound: boolean) => void
   /** Delivers held input to the endpoint it was typed into, or drops it if the pane rebound elsewhere. */
   release: (bound: RemoteRuntimeInputEndpoint, writer: HeldInputWriter) => void
   discard: () => void
@@ -69,7 +72,7 @@ export function createRemoteRuntimeRecoveryInputHold(
   })
   let held: HeldInput | null = options.holdBeforeFirstConnect ? newHold(null, true) : null
   // Why: only the latest connect may settle pre-bind typing; a superseded one must not drop it.
-  let latestExpectation: object | null = null
+  let latestExpectation: RestoredInputExpectation | null = null
 
   const discard = (): void => {
     const current = held
@@ -102,7 +105,7 @@ export function createRemoteRuntimeRecoveryInputHold(
     enqueueAccepted: (endpoint, data, inputKind, acceptedOptions) =>
       bufferFor(endpoint).enqueueAccepted(data, inputKind, undefined, acceptedOptions),
     expect(endpoint) {
-      const expectation = {}
+      const expectation: RestoredInputExpectation = { endpoint }
       latestExpectation = endpoint ? expectation : null
       if (!endpoint) {
         if (held?.beforeBind) {
