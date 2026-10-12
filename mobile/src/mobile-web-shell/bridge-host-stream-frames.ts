@@ -78,7 +78,7 @@ export function createBridgeHostStreamFrames(deps: {
           message.method,
           substituteBridgePageClientIdentity(message.params, readClientIdentity()),
           lane === 'serve',
-          message.executionHost
+          message.envelope
         )
       } catch (error) {
         sendError(id, error)
