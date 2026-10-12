@@ -18499,8 +18499,11 @@
       },
       "transcriptLabel": "Conversation",
       "toggle": {
-        "showTerminal": "Show terminal",
-        "showChat": "Show chat view"
+        "showTerminal": "Show terminal"
+      },
+      "resumeInNewChat": {
+        "notSavedYet": "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
+        "cannotResume": "This {{agent}} conversation can't be resumed in a native chat."
       },
       "state": {
         "loading": {
