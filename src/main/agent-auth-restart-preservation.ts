@@ -33,6 +33,18 @@ export async function preserveAgentAuthBeforeRestart({
   await Promise.all([wslCodexPreservation, storePreservation])
 }
 
+/** Before any update restart, desktop or headless serve: save agent auth, then a full store checkpoint. */
+export async function preserveStateBeforeUpdateRestart({
+  codexRuntimeHome,
+  store
+}: {
+  codexRuntimeHome: CodexRuntimeAuthSync | null | undefined
+  store: ShutdownStore
+}): Promise<void> {
+  await preserveAgentAuthBeforeRestart({ codexRuntimeHome, store })
+  await store.flushPendingOrThrowAsync({ fullCheckpoint: true })
+}
+
 function remainingLifecycleTime(startedAt: number): number {
   return Math.max(0, AUTH_PRESERVATION_TIMEOUT_MS - (Date.now() - startedAt))
 }
