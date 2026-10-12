@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  getMobileNewWorkspaceDialogEligibleRepos,
   refreshMobileNewWorkspaceDialogSelectedRepo,
   resolveMobileNewWorkspaceDialogRepoId
 } from './new-workspace-dialog-repo-selection'
@@ -69,15 +68,6 @@ describe('mobile new workspace dialog repo selection', () => {
     expect(
       resolveMobileNewWorkspaceDialogRepoId({ eligibleRepos, focusedHostScope: 'local' })
     ).toBe('local-repo')
-  })
-
-  it('excludes repos without paths from dialog defaults', () => {
-    expect(
-      getMobileNewWorkspaceDialogEligibleRepos([
-        makeRepo('missing-path', { path: '' }),
-        makeRepo('repo')
-      ])
-    ).toEqual([expect.objectContaining({ id: 'repo' })])
   })
 
   it('refreshes the selected repo from the fresh repo list', () => {

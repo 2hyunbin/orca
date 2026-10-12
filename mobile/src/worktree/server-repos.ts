@@ -14,16 +14,13 @@ export async function listHostRepos<Repo extends ListedRepo>(
 }
 
 /**
- * A server's repos tagged with that server, as the desktop offers them. Its SSH repos are left
- * out: their connection is the server's, which the phone's SSH gate cannot read.
+ * A server's repos tagged with that server, as the desktop's composer offers them. Its SSH repos
+ * keep their connection id, which callers connect through that server's client.
  */
 export async function listServerRepos<Repo extends ListedRepo>(
   executionHostId: ExecutionHostId,
   client: RpcClient
 ): Promise<(Repo & { executionHostId: ExecutionHostId })[] | null> {
   const listed = await listHostRepos<Repo>(client).catch(() => null)
-  return (
-    listed?.filter((repo) => !repo.connectionId).map((repo) => ({ ...repo, executionHostId })) ??
-    null
-  )
+  return listed?.map((repo) => ({ ...repo, executionHostId })) ?? null
 }

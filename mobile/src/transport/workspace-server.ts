@@ -1,6 +1,6 @@
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import type { MobileRelayHost } from '../../../src/shared/mobile-relay-hosts-contract'
 import { useRelayHosts } from '../worktree/relay-hosts-feed'
-import { serverHostHealth } from '../worktree/server-workspaces'
 import {
   scopeRpcClientToExecutionHost,
   workspaceRouteExecutionHost
@@ -21,42 +21,32 @@ export function useWorkspaceServer(args: {
   executionHost: ExecutionHostId | undefined
 }): {
   routeHost: ExecutionHostId | undefined | null
-  server: { client: RpcClient | null; gates: HostStatusGates } | null
+  server: { client: RpcClient | null; state: ConnectionState; gates: HostStatusGates } | null
 } {
   const { client, connState, desktopCapabilities, executionHost } = args
   const routeHost = workspaceRouteExecutionHost(client, desktopCapabilities, executionHost)
   const serverClient = client && routeHost ? scopeRpcClientToExecutionHost(client, routeHost) : null
   // No hostId: the desktop's recorded version and descriptor must not take the server's.
   const gates = useHostStatusGates({ hostId: undefined, client: serverClient, connState })
-  return { routeHost, server: routeHost === undefined ? null : { client: serverClient, gates } }
+  // The same feed the host list reads, so the desktop is not polled twice.
+  const hosts = useRelayHosts(routeHost ? client : null)
+  const state =
+    connState === 'connected' && routeHost && hosts
+      ? serverConnState(hosts.find((entry) => entry.hostId === routeHost))
+      : connState
+  return {
+    routeHost,
+    server: routeHost === undefined ? null : { client: serverClient, state, gates }
+  }
 }
 
 /**
- * The connection state a server workspace's screens see: the desktop's, unless the desktop reports
- * that server down. Desktop-owned workspaces (`routeHost` absent) keep the desktop's state untouched.
+ * Whether the desktop can relay calls to the server now. A stopped server reads `connecting`, which
+ * matches the desktop's own reconnecting banner; one it no longer lists is unreachable.
  */
-export function useWorkspaceServerConnState(args: {
-  client: RpcClient | null
-  connState: ConnectionState
-  routeHost: ExecutionHostId | undefined | null
-}): ConnectionState {
-  const { client, connState, routeHost } = args
-  // The same feed the host list reads, so a row's badge and its screens agree.
-  const hosts = useRelayHosts(routeHost ? client : null)
-  if (connState !== 'connected' || !routeHost || !hosts) {
-    return connState
+function serverConnState(host: MobileRelayHost | undefined): ConnectionState {
+  if (host?.relay === 'ready') {
+    return 'connected'
   }
-  const host = hosts.find((entry) => entry.hostId === routeHost)
-  // A server the desktop no longer lists cannot be reached through it.
-  switch (host ? serverHostHealth(host) : 'disconnected') {
-    case 'local':
-    case 'available':
-      return 'connected'
-    case 'connecting':
-      return 'connecting'
-    case 'blocked':
-    case 'disconnected':
-    case 'error':
-      return 'disconnected'
-  }
+  return host?.health === 'connecting' ? 'connecting' : 'disconnected'
 }

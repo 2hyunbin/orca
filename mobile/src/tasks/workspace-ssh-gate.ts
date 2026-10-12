@@ -1,3 +1,4 @@
+import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { SshConnectionState, SshConnectionStatus } from '../../../src/shared/ssh-types'
 
 /**
@@ -12,6 +13,17 @@ import type { SshConnectionState, SshConnectionStatus } from '../../../src/share
 export type WorkspaceSshRecord = Omit<SshConnectionState, 'error' | 'reconnectAttempt'> & {
   error?: string | null
   reconnectAttempt?: number
+}
+
+/**
+ * Names an SSH target by the host holding it as well as its id: the desktop and a server can each
+ * hold a target with the same id. `server` is undefined for the desktop's own targets.
+ */
+export function workspaceSshTargetKey(
+  server: ExecutionHostId | undefined,
+  connectionId: string | null
+): string {
+  return JSON.stringify([server ?? null, connectionId])
 }
 
 export type WorkspaceSshGate = {

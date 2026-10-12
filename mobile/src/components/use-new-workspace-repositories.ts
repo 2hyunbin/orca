@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import { getNewWorkspaceDialogEligibleRepos } from '../../../src/shared/new-workspace-dialog-repo'
 import type { RpcClient } from '../transport/rpc-client'
 import { getCachedRepos, setCachedRepos } from '../cache/repo-cache'
 import { listHostRepos } from '../worktree/server-repos'
 import { useServerRepos } from '../worktree/use-server-repos'
 import { useLastVisitedWorktreeRepoId } from '../worktree/use-last-visited-worktree-repo'
 import {
-  getMobileNewWorkspaceDialogEligibleRepos,
   refreshMobileNewWorkspaceDialogSelectedRepo,
   resolveMobileNewWorkspaceDialogRepoId
 } from '../worktree/new-workspace-dialog-repo-selection'
@@ -39,11 +39,10 @@ export function useNewWorkspaceRepositories(args: {
   const [pickedRepo, setSelectedRepo] = useState<MobileWorkspaceRepo | null>(null)
   const [loading, setLoading] = useState(initialRepos == null)
   const lastVisitedRepo = useLastVisitedWorktreeRepoId(hostId, visible)
+  // The desktop's rule: a per-workspace-environment SSH repo is plumbing, never a pick.
   const repos = useMemo(
     () =>
-      serverRepos.size === 0
-        ? desktopRepos
-        : [...desktopRepos, ...[...serverRepos.values()].flat()],
+      getNewWorkspaceDialogEligibleRepos([...desktopRepos, ...[...serverRepos.values()].flat()]),
     [desktopRepos, serverRepos]
   )
   // Why derived: the pick follows its repo's latest listing, and goes once its host stops listing it.
@@ -56,9 +55,8 @@ export function useNewWorkspaceRepositories(args: {
     if (!visible || !lastVisitedRepo.loaded || selectedRepo || repos.length === 0) {
       return
     }
-    const eligibleRepos = getMobileNewWorkspaceDialogEligibleRepos(repos)
     const preferredRepoId = resolveMobileNewWorkspaceDialogRepoId({
-      eligibleRepos,
+      eligibleRepos: repos,
       activeRepoId: lastVisitedRepo.repoId
     })
     const preferredRepo = repos.find((repo) => repo.id === preferredRepoId) ?? null
