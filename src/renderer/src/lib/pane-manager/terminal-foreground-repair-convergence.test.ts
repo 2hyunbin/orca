@@ -116,14 +116,11 @@ async function seed(harness: Harness, data: string): Promise<void> {
   })
 }
 
-type AnimationFrameQueue = { flush: () => void; dispose: () => void }
-
 /**
- * Why a queue and not a real frame: the delayed settle repair is scheduled with
- * `requestAnimationFrame`, which Node does not implement. Holding the callback
- * lets a test choose what happens between the write and the repeated repair.
+ * Holds queued frames so a test picks what lands before the repeat. Why a stub:
+ * Node has no `requestAnimationFrame`, so vitest's fake timers skip faking it.
  */
-function installAnimationFrameQueue(): AnimationFrameQueue {
+function stubAnimationFrames(): () => void {
   const queued = new Map<number, FrameRequestCallback>()
   let nextId = 0
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -131,34 +128,23 @@ function installAnimationFrameQueue(): AnimationFrameQueue {
     queued.set(nextId, callback)
     return nextId
   })
-  // Why paired with the stub: the module cancels through `cancelAnimationFrame`,
-  // so a queue that cannot drop a callback would run a discarded repair.
-  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-    queued.delete(id)
-  })
-  return {
-    flush: () => {
-      const callbacks = [...queued.values()]
-      queued.clear()
-      for (const callback of callbacks) {
-        callback(0)
-      }
-    },
-    dispose: () => vi.unstubAllGlobals()
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => queued.delete(id))
+  return () => {
+    const callbacks = [...queued.values()]
+    queued.clear()
+    for (const callback of callbacks) {
+      callback(0)
+    }
   }
 }
 
-/**
- * Like `writeAndSettle`, but the write also asks for the delayed settle repair and
- * the queued frame runs before returning, so the repeated request is `requests[1]`.
- */
-async function writeAndSettleWithFollowup(
-  harness: Harness,
-  data: string,
-  frame: AnimationFrameQueue
+/** Ask for the delayed repeat too; it stays queued until the test advances a frame. */
+async function writeWithFollowup(
+  target: ForegroundTerminalOutputTarget,
+  data: string
 ): Promise<void> {
   await new Promise<void>((resolve) => {
-    const accepted = writeForegroundTerminalChunk(harness.target, data, {
+    const accepted = writeForegroundTerminalChunk(target, data, {
       forceViewportRefresh: true,
       followupViewportRefresh: true,
       // Why: headless has no `_core.refresh`, so drive the public `refresh` path.
@@ -167,10 +153,17 @@ async function writeAndSettleWithFollowup(
     })
     expect(accepted).toBe(true)
   })
-  frame.flush()
 }
 
-type RefreshRowListener = (event: SpanRequest | undefined) => void
+/** Like `writeAndSettle`, but the repeat runs before returning, so it is `requests[1]`. */
+async function writeAndSettleWithFollowup(
+  harness: Harness,
+  data: string,
+  runFrame: () => void
+): Promise<void> {
+  await writeWithFollowup(harness.target, data)
+  runFrame()
+}
 
 /**
  * The dirty-row source the production tracker reads through `_core._inputHandler`,
@@ -179,7 +172,7 @@ type RefreshRowListener = (event: SpanRequest | undefined) => void
 type ControllableTerminal = ForegroundTerminalOutputTarget & {
   _core: {
     _inputHandler: {
-      onRequestRefreshRows: (listener: RefreshRowListener) => { dispose: () => void }
+      onRequestRefreshRows: (listener: (event: SpanRequest) => void) => { dispose: () => void }
     }
   }
 }
@@ -188,31 +181,27 @@ type ControllableTarget = {
   target: ForegroundTerminalOutputTarget
   requests: SpanRequest[]
   active: { type: string; cursorY: number; baseY: number; viewportY: number }
-  setRows: (rows: number) => void
-  setCols: (cols: number) => void
-  /** `undefined` is xterm's own whole-viewport refresh request. */
-  requestRefreshRows: (event?: SpanRequest) => void
+  size: { rows: number; cols: number }
   setDirty: (span: SpanRequest) => void
 }
 
 /**
  * A terminal double whose parse span and geometry a test controls directly.
- * Why a double: a real parse cannot scroll, resize or re-request the whole
- * viewport between the repair and its queued repeat.
+ * Why a double: a real parse cannot scroll or resize between the repair and its
+ * queued repeat.
  */
 function createControllableTarget(dirtySpan: SpanRequest, cursorY = 2): ControllableTarget {
   const requests: SpanRequest[] = []
-  const active = { type: 'normal', cursorY, baseY: 0, viewportY: 0 }
-  let rows = 24
-  let cols = 80
+  const active = { type: 'normal', cursorY, baseY: 5, viewportY: 5 }
+  const size = { rows: 24, cols: 80 }
   let dirty = dirtySpan
-  let listener: RefreshRowListener | undefined
+  let listener: ((event: SpanRequest) => void) | undefined
   const target: ControllableTerminal = {
     get rows() {
-      return rows
+      return size.rows
     },
     get cols() {
-      return cols
+      return size.cols
     },
     buffer: { active },
     refresh: (start: number, end: number) => requests.push({ start, end }),
@@ -222,7 +211,7 @@ function createControllableTarget(dirtySpan: SpanRequest, cursorY = 2): Controll
     },
     _core: {
       _inputHandler: {
-        onRequestRefreshRows: (next: RefreshRowListener) => {
+        onRequestRefreshRows: (next) => {
           listener = next
           return {
             dispose: () => {
@@ -237,13 +226,7 @@ function createControllableTarget(dirtySpan: SpanRequest, cursorY = 2): Controll
     target,
     requests,
     active,
-    setRows: (next: number) => {
-      rows = next
-    },
-    setCols: (next: number) => {
-      cols = next
-    },
-    requestRefreshRows: (event?: SpanRequest) => listener?.(event),
+    size,
     setDirty: (span: SpanRequest) => {
       dirty = span
     }
@@ -498,14 +481,14 @@ describe('foreground repaint convergence', () => {
 })
 
 describe('delayed settle repair span', () => {
-  let frame: AnimationFrameQueue
+  let runFrame: () => void
 
   beforeEach(() => {
-    frame = installAnimationFrameQueue()
+    runFrame = stubAnimationFrames()
   })
 
   afterEach(() => {
-    frame.dispose()
+    vi.unstubAllGlobals()
   })
 
   for (const testCase of CASES) {
@@ -518,7 +501,7 @@ describe('delayed settle repair span', () => {
       const cursorBefore = harness.terminal.buffer.active.cursorY
       harness.requests.length = 0
 
-      await writeAndSettleWithFollowup(harness, testCase.write, frame)
+      await writeAndSettleWithFollowup(harness, testCase.write, runFrame)
 
       const after = snapshotViewport(harness.terminal)
       const cursorAfter = harness.terminal.buffer.active.cursorY
@@ -527,7 +510,7 @@ describe('delayed settle repair span', () => {
       const immediate = harness.requests[0]!
       const delayed = harness.requests[1]!
 
-      // A repeat may add rows dirtied in between, never drop one.
+      // A repeat may add the caret row, never drop one.
       expect(delayed.start).toBeLessThanOrEqual(immediate.start)
       expect(delayed.end).toBeGreaterThanOrEqual(immediate.end)
 
@@ -566,7 +549,7 @@ describe('delayed settle repair span', () => {
     await seed(harness, '\x1b[56;1H')
     harness.requests.length = 0
 
-    await writeAndSettleWithFollowup(harness, '\r\x1b[2Kstatus ...', frame)
+    await writeAndSettleWithFollowup(harness, '\r\x1b[2Kstatus ...', runFrame)
 
     expect(harness.requests.length).toBe(2)
     expect(harness.requests[0]).toEqual({ start: 55, end: 55 })
@@ -575,134 +558,108 @@ describe('delayed settle repair span', () => {
     harness.terminal.dispose()
   })
 
-  it('covers rows written before the repeat runs', () => {
+  it('adds the caret a later write moved, not the rows xterm repaints itself', async () => {
     const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
+    await writeWithFollowup(double.target, 'in-place rewrite')
     expect(double.requests[0]).toEqual({ start: 10, end: 10 })
 
-    double.setDirty({ start: 3, end: 4 })
+    double.setDirty({ start: 20, end: 20 })
     double.active.cursorY = 3
-    writeForegroundTerminalChunk(double.target, 'later chunk', {
-      shouldRefreshViewportSynchronously: () => false
-    })
-    frame.flush()
+    writeForegroundTerminalChunk(double.target, 'later chunk')
+    runFrame()
 
     expect(double.requests[1]).toEqual({ start: 3, end: 10 })
   })
 
-  it('keeps rows an earlier write dirtied when a later write resets the parse spans', () => {
-    const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    // A forced repair is queued and has not run yet.
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
-    expect(double.requests[0]).toEqual({ start: 10, end: 10 })
-
-    // An ordinary write dirties a row that no repair has covered yet.
-    double.setDirty({ start: 3, end: 3 })
-    writeForegroundTerminalChunk(double.target, 'ordinary chunk', {
-      shouldRefreshViewportSynchronously: () => false
-    })
-
-    // A later forced write resets the shared parse-span tracker and queues no
-    // follow-up of its own, so the first repair is still the pending one.
-    double.setDirty({ start: 20, end: 20 })
-    double.active.cursorY = 20
-    writeForegroundTerminalChunk(double.target, 'second rewrite', {
-      forceViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
-    expect(double.requests[1]).toEqual({ start: 20, end: 20 })
-
-    frame.flush()
-
-    // Row 3 was dirtied before the reset, so only the pending repair can cover it.
-    expect(double.requests.length).toBe(3)
-    expect(double.requests[2]).toEqual({ start: 3, end: 20 })
-  })
-
-  it('keeps the superseded repair rows when a later write queues its own repeat', () => {
+  it('keeps the superseded repair rows when a later write queues its own repeat', async () => {
     // The caret sits outside the parse span, so only the queued repair's own span
-    // remembers row 5; the parse tracker never saw it.
+    // remembers row 5.
     const double = createControllableTarget({ start: 10, end: 10 }, 5)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
+    await writeWithFollowup(double.target, 'in-place rewrite')
     expect(double.requests[0]).toEqual({ start: 5, end: 10 })
 
-    // A second forced write queues a repeat of its own, superseding the first.
     double.setDirty({ start: 20, end: 20 })
     double.active.cursorY = 20
-    writeForegroundTerminalChunk(double.target, 'second rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
+    await writeWithFollowup(double.target, 'second rewrite')
     expect(double.requests[1]).toEqual({ start: 20, end: 20 })
 
-    frame.flush()
+    runFrame()
 
-    // Superseding the queued repair must not discard the rows it already owed.
+    expect(double.requests).toHaveLength(3)
     expect(double.requests[2]).toEqual({ start: 5, end: 20 })
   })
 
-  it('repaints the whole viewport when the terminal scrolled before the repeat', () => {
-    const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
-    expect(double.requests[0]).toEqual({ start: 10, end: 10 })
+  it.each([
+    ['entering the alternate screen', '\x1b[?1049h\x1b[2J\x1b[Halt screen'],
+    ['ending a synchronized-output frame', '\x1b[?2026h\x1b[3;1Hframe\x1b[K\x1b[?2026l']
+  ])('keeps a whole-grid repeat that a narrow write supersedes: %s', async (_name, first) => {
+    const harness = createHarness(80, 24)
+    await seed(harness, SCROLLBACK_SEED)
+    harness.requests.length = 0
 
-    double.active.baseY = 4
-    double.active.viewportY = 4
-    frame.flush()
+    // The first write's span is unknown, so its repeat is whole-grid; a status
+    // rewrite then lands in the same frame and queues a narrow repeat of its own.
+    await writeWithFollowup(harness.target, first)
+    await writeWithFollowup(harness.target, '\r\x1b[2Kstatus ...')
+    expect(harness.requests[0]).toEqual({ start: 0, end: 23 })
+    expect(harness.requests[1]).not.toEqual({ start: 0, end: 23 })
+    runFrame()
 
-    expect(double.requests[1]).toEqual({ start: 0, end: 23 })
+    expect(harness.requests).toHaveLength(3)
+    expect(harness.requests[2]).toEqual({ start: 0, end: 23 })
+    discardForegroundRenderSettle(harness.target)
+    harness.terminal.dispose()
   })
 
-  it('repaints the whole viewport when the pane was resized before the repeat', () => {
+  // Why resize is here although xterm repaints whole on resize itself
+  // (`terminal-foreground-repair-xterm-contract.test.ts`): the repeat must not
+  // trust a span recorded against the old rows either way.
+  it.each<[string, (double: ControllableTarget) => void]>([
+    [
+      'the terminal scrolled',
+      (double) => {
+        double.active.baseY = 9
+        double.active.viewportY = 9
+      }
+    ],
+    [
+      'the pane was scrolled into scrollback',
+      (double) => {
+        double.active.viewportY = 2
+      }
+    ],
+    [
+      'the rows were resized',
+      (double) => {
+        double.size.rows = 30
+      }
+    ],
+    [
+      'only the columns were resized',
+      (double) => {
+        double.size.cols = 100
+      }
+    ],
+    [
+      'the buffer switched',
+      (double) => {
+        double.active.type = 'alternate'
+      }
+    ]
+  ])('repaints the whole viewport when %s before the repeat', async (_name, change) => {
     const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
+    await writeWithFollowup(double.target, 'in-place rewrite')
     expect(double.requests[0]).toEqual({ start: 10, end: 10 })
 
-    double.setRows(30)
-    frame.flush()
+    change(double)
+    runFrame()
 
-    expect(double.requests[1]).toEqual({ start: 0, end: 29 })
+    expect(double.requests[1]).toEqual({ start: 0, end: double.size.rows - 1 })
   })
 
-  it('repaints the whole viewport when only the columns changed before the repeat', () => {
-    const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
-    expect(double.requests[0]).toEqual({ start: 10, end: 10 })
-
-    double.setCols(100)
-    frame.flush()
-
-    expect(double.requests[1]).toEqual({ start: 0, end: 23 })
-  })
-
-  it('repaints the whole viewport when the pane is scrolled into scrollback', async () => {
+  it('repaints the whole viewport while the pane is scrolled into scrollback', async () => {
     // `cursorY` counts from the live screen, not the scrolled viewport, so the
-    // caret rows in the immediate span do not address the visible caret.
+    // caret rows would not address the visible caret.
     const harness = createHarness(80, 24)
     await seed(harness, Array.from({ length: 40 }, (_, i) => `row ${i}`).join('\r\n'))
     await seed(harness, '\x1b[11;1H')
@@ -712,72 +669,23 @@ describe('delayed settle repair span', () => {
     )
     harness.requests.length = 0
 
-    await writeAndSettleWithFollowup(harness, '\r\x1b[2Kstatus ...', frame)
+    await writeAndSettleWithFollowup(harness, '\r\x1b[2Kstatus ...', runFrame)
 
-    expect(harness.requests).toHaveLength(2)
-    expect(harness.requests[1]).toEqual({ start: 0, end: 23 })
+    expect(harness.requests).toEqual([
+      { start: 0, end: 23 },
+      { start: 0, end: 23 }
+    ])
     discardForegroundRenderSettle(harness.target)
     harness.terminal.dispose()
   })
 
-  it('repaints the whole viewport when the buffer switched before the repeat', () => {
+  it('drops the repeat when the pane is discarded first', async () => {
     const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
-    expect(double.requests[0]).toEqual({ start: 10, end: 10 })
-
-    double.active.type = 'alternate'
-    frame.flush()
-
-    expect(double.requests[1]).toEqual({ start: 0, end: 23 })
-  })
-
-  it('repaints the whole viewport when the renderer was swapped before the repeat', () => {
-    const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    let synchronous = false
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => synchronous
-    })
-    expect(double.requests[0]).toEqual({ start: 10, end: 10 })
-
-    // The resolver reads the attached renderer, so swapping one flips this value.
-    synchronous = true
-    frame.flush()
-
-    expect(double.requests[1]).toEqual({ start: 0, end: 23 })
-  })
-
-  it('repaints the whole viewport when xterm asks for a whole-viewport refresh', () => {
-    const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
-    expect(double.requests[0]).toEqual({ start: 10, end: 10 })
-
-    double.requestRefreshRows()
-    frame.flush()
-
-    expect(double.requests[1]).toEqual({ start: 0, end: 23 })
-  })
-
-  it('drops the repeat when the pane is discarded first', () => {
-    const double = createControllableTarget({ start: 10, end: 10 }, 10)
-    writeForegroundTerminalChunk(double.target, 'in-place rewrite', {
-      forceViewportRefresh: true,
-      followupViewportRefresh: true,
-      shouldRefreshViewportSynchronously: () => false
-    })
+    await writeWithFollowup(double.target, 'in-place rewrite')
     expect(double.requests[0]).toEqual({ start: 10, end: 10 })
 
     discardForegroundRenderSettle(double.target)
-    frame.flush()
+    runFrame()
 
     expect(double.requests).toHaveLength(1)
   })

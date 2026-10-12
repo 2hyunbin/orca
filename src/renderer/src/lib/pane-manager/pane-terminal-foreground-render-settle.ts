@@ -34,22 +34,17 @@ type ForegroundTerminalWriteOptions = {
   onWriteFailure?: () => void
 }
 
-type PendingViewportSettleRefresh =
-  | { kind: 'raf'; id: number }
-  | { kind: 'timeout'; id: ReturnType<typeof setTimeout> }
-
-type PendingViewportSettleRepair = {
-  /** The span the immediate repair used, or `null` when it stayed whole-grid. */
+type PendingViewportSettleRefresh = {
+  /** The rows the repeat repaints, or `null` for the whole viewport. */
   span: ParsedDirtyRowSpan | null
-  /** Geometry that span addressed, re-checked when the queued frame runs. */
+  /** Geometry `span` addresses; the repeat goes whole-grid if it moved. */
   viewport: ViewportSnapshot
-  /** The repair path the write used; a change means the renderer was swapped. */
-  synchronous: boolean
+  cancel: () => void
 }
 
 const pendingViewportSettleRefreshByTerminal = new WeakMap<
   ForegroundTerminalOutputTarget,
-  { pending: PendingViewportSettleRefresh; repair: PendingViewportSettleRepair }
+  PendingViewportSettleRefresh
 >()
 
 type ViewportSnapshot = {
@@ -111,15 +106,24 @@ function captureViewportSnapshot(terminal: ForegroundTerminalOutputTarget): View
   }
 }
 
-function viewportChangedDuringWrite(
-  beforeWrite: ViewportSnapshot,
-  afterWrite: ViewportSnapshot
-): boolean {
+/** A scroll or resize between the snapshots: the same row number now shows another line. */
+function viewportMoved(earlier: ViewportSnapshot, later: ViewportSnapshot): boolean {
   return (
-    afterWrite.baseY !== null &&
-    afterWrite.viewportY !== null &&
-    (afterWrite.baseY !== beforeWrite.baseY || afterWrite.viewportY !== beforeWrite.viewportY)
+    (later.baseY !== null &&
+      later.viewportY !== null &&
+      (later.baseY !== earlier.baseY || later.viewportY !== earlier.viewportY)) ||
+    later.rows !== earlier.rows ||
+    // Why cols: a column-only resize reflows wrapped lines without moving rows or origin.
+    later.cols !== earlier.cols
   )
+}
+
+function sameRowGeometry(earlier: ViewportSnapshot, later: ViewportSnapshot): boolean {
+  return earlier.type === later.type && !viewportMoved(earlier, later)
+}
+
+function unionRowSpans(left: ParsedDirtyRowSpan, right: ParsedDirtyRowSpan): ParsedDirtyRowSpan {
+  return { start: Math.min(left.start, right.start), end: Math.max(left.end, right.end) }
 }
 
 /**
@@ -129,15 +133,16 @@ function viewportChangedDuringWrite(
  * Why the cursor rows: xterm's WebGL model drops its cursor whenever an update
  * pass excludes the cursor row, so a repair that skips it would blank the caret.
  * Returns `null` — repaint everything — whenever the span is unknown, the
- * viewport scrolled (dirty rows were recorded against the pre-scroll origin), or
- * the write flipped between the normal and alternate buffer.
+ * viewport scrolled or resized (dirty rows were recorded against the old rows),
+ * the write flipped between the normal and alternate buffer, or the pane is
+ * scrolled into scrollback (`cursorY` counts from the live screen, not the view).
  */
 function repairRowSpan(
   terminal: ForegroundTerminalOutputTarget,
   beforeWrite: ViewportSnapshot,
   afterWrite: ViewportSnapshot
 ): ParsedDirtyRowSpan | null {
-  if (beforeWrite.type !== afterWrite.type || viewportChangedDuringWrite(beforeWrite, afterWrite)) {
+  if (!sameRowGeometry(beforeWrite, afterWrite) || afterWrite.viewportY !== afterWrite.baseY) {
     return null
   }
   const parsed = readParsedDirtyRowSpan(terminal)
@@ -155,162 +160,101 @@ function repairRowSpan(
   return { start, end }
 }
 
-/** Widest span the inputs cover; `null` on either side means "nothing known". */
-function unionRowSpans(
-  left: ParsedDirtyRowSpan | null,
-  right: ParsedDirtyRowSpan | null
-): ParsedDirtyRowSpan | null {
-  if (!left) {
-    return right
-  }
-  if (!right) {
-    return left
-  }
-  return { start: Math.min(left.start, right.start), end: Math.max(left.end, right.end) }
-}
-
-/** The span a queued repair would repeat, before it is validated against geometry. */
-function queuedRepairRowSpan(terminal: ForegroundTerminalOutputTarget): ParsedDirtyRowSpan | null {
-  return pendingViewportSettleRefreshByTerminal.get(terminal)?.repair.span ?? null
-}
-
 /**
- * Widen a repair that is already queued so the reset about to happen cannot drop
- * rows it still owes. A pending whole-grid repair (`span: null`) already covers
- * them, and one renderer swap invalidates them wholesale.
+ * The queued repeat re-covers the immediate repair's rows plus the caret now.
+ * Rows that later writes parse need no repeat: xterm requests those itself.
  */
-function carryRowsIntoPendingRepair(
+function repeatRowSpan(
   terminal: ForegroundTerminalOutputTarget,
-  carried: ParsedDirtyRowSpan | null
-): void {
-  const queued = pendingViewportSettleRefreshByTerminal.get(terminal)
-  if (!carried || !queued?.repair.span) {
-    return
-  }
-  // Why mutate in place: the queued frame already closed over this repair record,
-  // so replacing the map entry would leave that frame on the old span.
-  queued.repair.span = unionRowSpans(queued.repair.span, carried)
-}
-
-/**
- * The rows the queued repeat must repaint, or `null` for the whole viewport.
- *
- * Why the repeat is not simply re-issued as the immediate span: the delay crosses
- * a frame, so other output can arrive first. The rows parsed since the write and
- * the caret now are unioned in, and any geometry the span cannot be proven to
- * still address — a scroll, a resize, a buffer flip, a viewport scrolled into
- * scrollback, an unobservable parse, or a terminal xterm itself asked to repaint
- * whole — falls back to the whole grid.
- */
-function pendingRepairRowSpan(
-  terminal: ForegroundTerminalOutputTarget,
-  repair: PendingViewportSettleRepair
+  span: ParsedDirtyRowSpan | null,
+  viewport: ViewportSnapshot
 ): ParsedDirtyRowSpan | null {
-  const scheduled = repair.viewport
   const current = captureViewportSnapshot(terminal)
-  if (
-    repair.span === null ||
-    scheduled.type === null ||
-    scheduled.type !== current.type ||
-    scheduled.rows === null ||
-    scheduled.rows !== current.rows ||
-    // Why cols: a column-only resize reflows wrapped lines without moving rows or origin.
-    scheduled.cols !== current.cols ||
-    scheduled.baseY === null ||
-    scheduled.baseY !== current.baseY ||
-    scheduled.viewportY === null ||
-    scheduled.viewportY !== current.viewportY ||
-    // Why: scrolled into scrollback, `cursorY` is not a viewport row, so the caret
-    // rows in the span may miss the visible caret.
-    current.viewportY !== current.baseY
-  ) {
+  if (!span || current.cursorY === null || !sameRowGeometry(viewport, current)) {
     return null
   }
-  const parsedSince = readParsedDirtyRowSpan(terminal)
-  if (!parsedSince || current.cursorY === null) {
+  return unionRowSpans(span, { start: current.cursorY, end: current.cursorY })
+}
+
+/** A superseded repeat's rows are still owed, and a whole-grid one stays whole. */
+function supersedingRepeatSpan(
+  superseded: PendingViewportSettleRefresh | undefined,
+  span: ParsedDirtyRowSpan | null,
+  viewport: ViewportSnapshot
+): ParsedDirtyRowSpan | null {
+  if (!superseded) {
+    return span
+  }
+  if (!span || !superseded.span || !sameRowGeometry(superseded.viewport, viewport)) {
     return null
   }
-  return {
-    start: Math.min(repair.span.start, parsedSince.start, current.cursorY),
-    end: Math.max(repair.span.end, parsedSince.end, current.cursorY)
+  return unionRowSpans(span, superseded.span)
+}
+
+function requestRepeatFrame(run: () => void): () => void {
+  if (typeof requestAnimationFrame === 'function') {
+    const id = requestAnimationFrame(run)
+    return () => {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(id)
+      }
+    }
   }
+  const id = setTimeout(run, 16)
+  return () => clearTimeout(id)
 }
 
 function cancelScheduledViewportSettleRefresh(terminal: ForegroundTerminalOutputTarget): void {
-  const queued = pendingViewportSettleRefreshByTerminal.get(terminal)
-  if (!queued) {
-    return
-  }
+  pendingViewportSettleRefreshByTerminal.get(terminal)?.cancel()
   pendingViewportSettleRefreshByTerminal.delete(terminal)
-  if (queued.pending.kind === 'raf') {
-    if (typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(queued.pending.id)
-    }
-    return
-  }
-  clearTimeout(queued.pending.id)
 }
 
 function scheduleViewportSettleRefresh(
   terminal: ForegroundTerminalOutputTarget,
-  repair: PendingViewportSettleRepair,
+  repairedSpan: ParsedDirtyRowSpan | null,
+  viewport: ViewportSnapshot,
   shouldRefreshSynchronously?: () => boolean,
   shouldReleaseRenderPause?: () => boolean
 ): void {
+  const span = supersedingRepeatSpan(
+    pendingViewportSettleRefreshByTerminal.get(terminal),
+    repairedSpan,
+    viewport
+  )
   cancelScheduledViewportSettleRefresh(terminal)
-  const runRepair = (): void => {
+  const cancel = requestRepeatFrame(() => {
     pendingViewportSettleRefreshByTerminal.delete(terminal)
-    const synchronous = shouldRefreshSynchronously?.() ?? true
-    // Why the path check: the resolver reads the attached renderer, so a flipped
-    // path means a renderer was swapped mid-frame and only the whole viewport can
-    // be proven converged for the replacement.
     refreshVisibleRows(
       terminal,
-      synchronous,
+      shouldRefreshSynchronously?.() ?? true,
       shouldReleaseRenderPause,
-      synchronous === repair.synchronous ? pendingRepairRowSpan(terminal, repair) : null
+      repeatRowSpan(terminal, span, viewport)
     )
-  }
-  if (typeof requestAnimationFrame === 'function') {
-    const id = requestAnimationFrame(runRepair)
-    pendingViewportSettleRefreshByTerminal.set(terminal, {
-      pending: { kind: 'raf', id },
-      repair
-    })
-    return
-  }
-
-  const id = setTimeout(runRepair, 16)
-  pendingViewportSettleRefreshByTerminal.set(terminal, { pending: { kind: 'timeout', id }, repair })
+  })
+  pendingViewportSettleRefreshByTerminal.set(terminal, { span, viewport, cancel })
 }
 
 function settleForegroundRender(
   terminal: ForegroundTerminalOutputTarget,
   beforeWriteViewport: ViewportSnapshot,
-  options: ForegroundTerminalWriteOptions,
-  carriedDirtySpan: ParsedDirtyRowSpan | null
+  options: ForegroundTerminalWriteOptions
 ): void {
   const afterWriteViewport = captureViewportSnapshot(terminal)
-  const synchronous = options.shouldRefreshViewportSynchronously?.() ?? true
   const span = repairRowSpan(terminal, beforeWriteViewport, afterWriteViewport)
-  refreshVisibleRows(terminal, synchronous, options.shouldReleaseRenderPause, span)
+  refreshVisibleRows(
+    terminal,
+    options.shouldRefreshViewportSynchronously?.() ?? true,
+    options.shouldReleaseRenderPause,
+    span
+  )
   // Why: when output advances the viewport, Chromium can paint the freshly
   // scrolled top row one frame later than xterm finishes parsing. Repaint once
   // more after the scroll settles so the user doesn't need to jiggle the window.
-  if (
-    options.followupViewportRefresh ||
-    viewportChangedDuringWrite(beforeWriteViewport, afterWriteViewport)
-  ) {
+  if (options.followupViewportRefresh || viewportMoved(beforeWriteViewport, afterWriteViewport)) {
     scheduleViewportSettleRefresh(
       terminal,
-      {
-        // Why the carry and the guard: the queued repeat must also cover rows a
-        // reset dropped, but only when this write's own span is proven — `null`
-        // requires the whole grid, which covers the carried rows anyway.
-        span: span ? unionRowSpans(span, carriedDirtySpan) : null,
-        viewport: afterWriteViewport,
-        synchronous
-      },
+      span,
+      afterWriteViewport,
       options.shouldRefreshViewportSynchronously,
       options.shouldReleaseRenderPause
     )
@@ -325,17 +269,7 @@ export function writeForegroundTerminalChunk(
   const beforeWriteViewport = options.forceViewportRefresh
     ? captureViewportSnapshot(terminal)
     : null
-  let carriedDirtySpan: ParsedDirtyRowSpan | null = null
   if (beforeWriteViewport) {
-    // Why before the reset: a queued repair may still be waiting on rows an
-    // earlier ordinary write dirtied, and this reset is about to forget them.
-    // Why the queued span is unioned in too: this write may supersede that repair,
-    // and its span can hold rows the parse tracker never saw (caret rows).
-    carriedDirtySpan = unionRowSpans(
-      readParsedDirtyRowSpan(terminal),
-      queuedRepairRowSpan(terminal)
-    )
-    carryRowsIntoPendingRepair(terminal, carriedDirtySpan)
     // Why here and not in the callback: the span must cover only this write's
     // parse, and xterm fires its dirty-row request between the two.
     resetParsedDirtyRows(terminal)
@@ -347,7 +281,7 @@ export function writeForegroundTerminalChunk(
   const runParsedSteps = (): void => {
     if (beforeWriteViewport) {
       runGuardedWriteCompletionStep('foreground-render-settle', () =>
-        settleForegroundRender(terminal, beforeWriteViewport, options, carriedDirtySpan)
+        settleForegroundRender(terminal, beforeWriteViewport, options)
       )
     }
     if (options.onParsed) {
