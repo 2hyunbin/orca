@@ -13,7 +13,7 @@ import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-t
 import { expect, test } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
 import { createRestartSession } from './helpers/orca-restart'
-import { managedServer, serverCall } from './helpers/orcad-convert-flow'
+import { managedServer, reconnect, serverCall } from './helpers/orcad-convert-flow'
 import { seedRelayEraProfile } from './helpers/orcad-upgrade-profile'
 import { readPersistedProfileState } from './helpers/persisted-profile-state'
 import { toSshExecutionHostId } from '../../src/shared/execution-host'
@@ -164,6 +164,21 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
         { timeout: 60_000 }
       )
       .toContain(terminalTabId)
+    // A reconnect hangs the bridge up and finds the old terminal again, as the next launch would.
+    await reconnect(page, targetId)
+    await expect
+      .poll(() => bridgedPanes(page), { timeout: BRIDGE_TIMEOUT_MS })
+      .toEqual([expect.objectContaining({ ptyId: bridgedPtyId, state: 'live' })])
+    await page.evaluate(
+      (hostId) => {
+        window.__store!.getState().setGroupBy('none')
+        window.__store!.setState({ visibleWorkspaceHostIds: ['local', hostId] })
+      },
+      `runtime:${environment.id}` as const
+    )
+    await expect(page.getByText('orcad upgrade folder', { exact: true })).toBeVisible({
+      timeout: 120_000
+    })
     // The old tab, now under the managed server, shows the old shell's screen and takes input.
     await page.evaluate(
       ({ worktreeId, environmentId, tabId }) => {
@@ -178,6 +193,7 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
       },
       { worktreeId: seeded.worktreeId, environmentId: environment.id, tabId: terminalTabId }
     )
+    await page.screenshot({ path: testInfo.outputPath('bridged-tab-activated.png') })
     await expect
       .poll(() => page.evaluate((id) => window.__paneManagers?.has(id) ?? false, terminalTabId), {
         timeout: 120_000,
