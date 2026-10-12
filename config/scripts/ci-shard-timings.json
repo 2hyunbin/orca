@@ -252,7 +252,7 @@
       "config/scripts/rebuild-native-deps.test.mjs": 1263,
       "config/scripts/reclaim-dev-electron-bundles.test.ts": 64,
       "config/scripts/regenerate-xterm-patches.test.mjs": 249,
-      "config/scripts/relay-windows-process-tree-prepared-addon.test.mjs": 168,
+      "config/scripts/windows-process-tree-prepared-addon.test.mjs": 168,
       "config/scripts/release-cut-token-permissions.test.mjs": 199,
       "config/scripts/release-javascript-artifact.test.mjs": 253,
       "config/scripts/release-javascript-parity.test.mjs": 98,
