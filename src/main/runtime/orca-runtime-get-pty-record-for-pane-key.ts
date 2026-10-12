@@ -1,22 +1,13 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from './orca-runtime-prune-mobile-session-tab-group-layout'
-import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import type { RuntimeMailboxControl } from './orchestration/mail/runtime-mailbox-control'
 
 import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
 import {
   resolveStructuredWorkerAuthority,
   resolveStructuredWorkerIdentityForSession
 } from './structured-worker-authority'
-import type { StructuredPointerTarget } from './orchestration/structured-mailbox-pointer-delivery'
-import {
-  chatDispatchMailTarget,
-  handleLessCoordinatorSessionId,
-  structuredSessionAddressTarget,
-  structuredSessionMailTarget,
-  structuredSessionIdleEdgeMailboxes
-} from './orchestration/structured-session-mail-target'
-import { exitedChatDispatchesForSession } from './orchestration/chat-assignee'
-import { OPERATOR_CLOSE_EXIT_CAUSE } from '../../shared/terminal-exit-cause'
 import type { RuntimeTerminalIdentity } from './terminal-identity-probe'
 
 export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneMobileSessionTabGroupLayout {
@@ -113,13 +104,17 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
       : null
   }
 
-  deliverPendingMessagesForHandle(handle: string, reservedTypes?: ReadonlySet<string>): void {
-    this.orchestrationMailboxNotifications.deliverForHandle(handle, reservedTypes)
+  deliverPendingMessagesForHandle(
+    ...args: Parameters<RuntimeMailboxControl['deliverPendingMessagesForHandle']>
+  ) {
+    return this.mailboxControl.deliverPendingMessagesForHandle(...args)
   }
 
   /** The structured idle edge: any journal movement is a chance to redrive parked mail. */
-  notifyStructuredSessionJournalActivity(sessionId: string): void {
-    this.orchestrationStructuredMailboxPointerDelivery.onJournalActivity(sessionId)
+  notifyStructuredSessionJournalActivity(
+    ...args: Parameters<RuntimeMailboxControl['notifyStructuredSessionJournalActivity']>
+  ) {
+    return this.mailboxControl.notifyStructuredSessionJournalActivity(...args)
   }
 
   /**
@@ -127,25 +122,10 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
    * on it and re-derive the mailboxes it owns, so mail it could not take earlier (mid-turn, closed)
    * is pointed again. Workers and chats alike: this is not per-dispatch.
    */
-  onStructuredSessionStatusForMail(summary: {
-    sessionId: string
-    status: 'working' | 'attention' | 'idle' | null
-  }): void {
-    if (summary.status === 'working' || summary.status === 'attention') {
-      return
-    }
-    // Logged, never thrown: the same status callback goes on to the first-turn workspace rename.
-    try {
-      this.notifyStructuredSessionJournalActivity(summary.sessionId)
-      const openDb = () => this.getExistingOrchestrationDb()
-      const deliver = (mailbox: string) => this.deliverPendingMessagesForHandle(mailbox)
-      structuredSessionIdleEdgeMailboxes(summary.sessionId, openDb).forEach(deliver)
-    } catch (error) {
-      console.warn('[orchestration] structured session mail redrive failed', {
-        sessionId: summary.sessionId,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
+  onStructuredSessionStatusForMail(
+    ...args: Parameters<RuntimeMailboxControl['onStructuredSessionStatusForMail']>
+  ) {
+    return this.mailboxControl.onStructuredSessionStatusForMail(...args)
   }
 
   /**
@@ -153,22 +133,17 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
    * settles as a terminal the operator closed does; a /clear moves the tab, so its successor keeps
    * the work.
    */
-  onStructuredSessionTabHidden(sessionId: string): void {
-    try {
-      const db = this.getExistingOrchestrationDb()
-      for (const dispatch of db ? exitedChatDispatchesForSession(sessionId, db) : []) {
-        this.failActiveDispatchOnExit(dispatch.assignee_handle, null, 0, OPERATOR_CLOSE_EXIT_CAUSE)
-      }
-    } catch (error) {
-      console.warn('[orchestration] settling a closed chat worker failed', {
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
+  onStructuredSessionTabHidden(
+    ...args: Parameters<RuntimeMailboxControl['onStructuredSessionTabHidden']>
+  ) {
+    return this.mailboxControl.onStructuredSessionTabHidden(...args)
   }
 
   /** Settlement drops anything parked for the session; nothing will ever redrive it again. */
-  forgetStructuredSessionMail(sessionId: string): void {
-    this.orchestrationStructuredMailboxPointerDelivery.forgetSession(sessionId)
+  forgetStructuredSessionMail(
+    ...args: Parameters<RuntimeMailboxControl['forgetStructuredSessionMail']>
+  ) {
+    return this.mailboxControl.forgetStructuredSessionMail(...args)
   }
 
   /**
@@ -180,29 +155,10 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
    * structured, and this lane used to decline anything that was not `dispatch:`, so each half
    * believed the other owned it and a structured coordinator was never nudged.
    */
-  protected resolveStructuredMailboxTarget(mailboxHandle: string): StructuredPointerTarget | null {
-    if (mailboxHandle.startsWith('run:')) {
-      return this.resolveStructuredCoordinatorMailboxTarget(mailboxHandle.slice('run:'.length))
-    }
-    const addressed = structuredSessionAddressTarget(mailboxHandle, this._orchestrationDb)
-    if (addressed !== undefined) {
-      return addressed
-    }
-    if (!mailboxHandle.startsWith('dispatch:')) {
-      return this.resolveStructuredWorkerDirectMailboxTarget(mailboxHandle)
-    }
-    const dispatchId = mailboxHandle.slice('dispatch:'.length)
-    const dispatch = this._orchestrationDb?.getDispatchContextById?.(dispatchId)
-    const assignee = dispatch?.assignee_handle
-    if (!assignee) {
-      return null
-    }
-    const chat = chatDispatchMailTarget(dispatch, this._orchestrationDb)
-    if (chat !== undefined) {
-      return chat
-    }
-    const sessionId = this.liveStructuredWorkerSessionId(assignee)
-    return sessionId ? { sessionId, dispatchId } : null
+  protected resolveStructuredMailboxTarget(
+    ...args: Parameters<RuntimeMailboxControl['resolveStructuredMailboxTarget']>
+  ) {
+    return this.mailboxControl.resolveStructuredMailboxTarget(...args)
   }
 
   /**
@@ -214,19 +170,9 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
    * dispatch, and needs none, since the ledger bucket is all a dispatch id ever supplied.
    */
   protected resolveStructuredCoordinatorMailboxTarget(
-    runId: string
-  ): StructuredPointerTarget | null {
-    const run = this._orchestrationDb?.getRun?.(runId)
-    const sessionId = run ? handleLessCoordinatorSessionId(run) : null
-    if (sessionId) {
-      return structuredSessionMailTarget(sessionId, this._orchestrationDb)
-    }
-    const coordinator = run?.coordinator_handle
-    if (!coordinator) {
-      return null
-    }
-    const workerSessionId = this.liveStructuredWorkerSessionId(coordinator)
-    return workerSessionId ? { sessionId: workerSessionId, dispatchId: null } : null
+    ...args: Parameters<RuntimeMailboxControl['resolveStructuredCoordinatorMailboxTarget']>
+  ) {
+    return this.mailboxControl.resolveStructuredCoordinatorMailboxTarget(...args)
   }
 
   /**
@@ -242,69 +188,28 @@ export class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeWithPruneM
    * says nothing about whether delivery is safe — the idle gate and the writer lease do that.
    */
   protected resolveStructuredWorkerDirectMailboxTarget(
-    handle: string
-  ): StructuredPointerTarget | null {
-    const db = this._orchestrationDb
-    // Answers null for anything that is not a live structured worker of THIS runtime, so `run:`
-    // and PTY handles fall through to the PTY lane exactly as before.
-    const authority = resolveStructuredWorkerAuthority(handle, db)
-    if (!authority) {
-      return null
-    }
-    const dispatchId =
-      db?.findActiveDispatchForAssignee?.(handle, authority.identity.paneKey)?.id ?? null
-    return { sessionId: authority.running.sessionId, dispatchId }
+    ...args: Parameters<RuntimeMailboxControl['resolveStructuredWorkerDirectMailboxTarget']>
+  ) {
+    return this.mailboxControl.resolveStructuredWorkerDirectMailboxTarget(...args)
   }
 
   /** The session running a structured worker of this runtime: its `/clear` successor, if any. */
-  private liveStructuredWorkerSessionId(handle: string): string | null {
-    return (
-      resolveStructuredWorkerAuthority(handle, this._orchestrationDb)?.running.sessionId ?? null
-    )
+
+  protected scheduleRestoredMessageRepoints(
+    ...args: Parameters<RuntimeMailboxControl['scheduleRestoredMessageRepoints']>
+  ) {
+    return this.mailboxControl.scheduleRestoredMessageRepoints(...args)
   }
 
-  protected scheduleRestoredMessageRepoints(): void {
-    let handles: Set<string>
-    try {
-      const db = this._orchestrationDb
-      // Pointer-phase rows are excluded from the undelivered scan, so they need their own.
-      handles = new Set([
-        ...(db?.getUndeliveredUnreadMailboxHandles?.() ?? []),
-        ...(db?.getPendingMailboxPointerHandles?.() ?? [])
-      ])
-    } catch (error) {
-      console.warn('[orchestration] failed to scan restored mailboxes', error)
-      return
-    }
-    for (const handle of handles) {
-      try {
-        if (handle.startsWith('run:') || handle.startsWith('dispatch:')) {
-          this.mailPointerRepointScheduler.schedule(handle)
-          continue
-        }
-        const routed = this.orchestrationMailboxOwner.routeDetachedDirectMessages(handle)
-        for (const mailbox of routed.mailboxes) {
-          this.mailPointerRepointScheduler.schedule(mailbox.mailboxHandle)
-        }
-        if (!routed.hasMore) {
-          this.mailPointerRepointScheduler.schedule(handle)
-        }
-      } catch (error) {
-        console.warn(`[orchestration] failed to restore mailbox ${handle}`, error)
-        this.mailPointerRepointScheduler.schedule(handle)
-      }
-    }
+  protected repointPendingMessagesForHandle(
+    ...args: Parameters<RuntimeMailboxControl['repointPendingMessagesForHandle']>
+  ) {
+    return this.mailboxControl.repointPendingMessagesForHandle(...args)
   }
 
-  protected repointPendingMessagesForHandle(handle: string): void {
-    try {
-      this.deliverPendingMessagesForHandle(handle)
-    } catch {
-      // The unref'd repair can outlive a test/runtime-owned database during shutdown.
-    }
-  }
-
-  protected deliverPendingMessagesForLeaf(leaf: RuntimeLeafRecord): void {
-    this.orchestrationMailboxNotifications.deliverForLeaf(leaf)
+  protected deliverPendingMessagesForLeaf(
+    ...args: Parameters<RuntimeMailboxControl['deliverPendingMessagesForLeaf']>
+  ) {
+    return this.mailboxControl.deliverPendingMessagesForLeaf(...args)
   }
 }

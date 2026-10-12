@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { RuntimeMailboxControl } from './orchestration/mail/runtime-mailbox-control'
 import { RuntimeTerminalOutputOwner } from './terminal/output/terminal-output-owner'
 import { OrchestrationStructuredMailboxPointerDelivery } from './orchestration/structured-mailbox-pointer-delivery'
 import { createStructuredMailboxPointerHost } from './orchestration/structured-mailbox-pointer-host'
@@ -38,6 +39,25 @@ import type { RuntimeSkillCommands } from './runtime-skill-command-surface'
 import { RuntimeTerminalStreamConsumers } from './runtime-terminal-stream-consumers'
 
 export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId {
+  protected readonly mailboxControl = new RuntimeMailboxControl(
+    {
+      getDb: () => this._orchestrationDb,
+      getExistingOrchestrationDb: () => this.getExistingOrchestrationDb.bind(this),
+      getNotifications: () => this.orchestrationMailboxNotifications,
+      getStructuredPointerDelivery: () => this.orchestrationStructuredMailboxPointerDelivery,
+      getMailboxOwner: () => this.orchestrationMailboxOwner,
+      failActiveDispatchOnExit: () => this.failActiveDispatchOnExit.bind(this),
+      notifyStructuredSessionJournalActivity: () =>
+        this.notifyStructuredSessionJournalActivity.bind(this),
+      deliverPendingMessagesForHandle: () => this.deliverPendingMessagesForHandle.bind(this),
+      resolveStructuredCoordinatorMailboxTarget: () =>
+        this.resolveStructuredCoordinatorMailboxTarget.bind(this),
+      resolveStructuredWorkerDirectMailboxTarget: () =>
+        this.resolveStructuredWorkerDirectMailboxTarget.bind(this)
+    },
+    this.mailPointerRepointScheduler
+  )
+
   protected readonly stopRequestedPtyIds = new Set<string>()
 
   protected readonly ptyExitListenersByPtyId = new Map<string, Set<() => void>>()

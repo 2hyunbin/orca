@@ -14,7 +14,6 @@ src/main/runtime/orca-runtime-close-structured-agent-session-tab.ts
 src/main/runtime/orca-runtime-controller-knows-pty-is-live.ts
 src/main/runtime/orca-runtime-create-agent-session.ts
 src/main/runtime/orca-runtime-create-runtime-owned-mobile-session-terminal.ts
-src/main/runtime/orca-runtime-deliver-pending-messages.ts
 src/main/runtime/orca-runtime-automation-operations.ts
 src/main/runtime/orca-runtime-file-commands.ts
 src/main/runtime/orca-runtime-fit-override-listeners.ts
@@ -80,4 +79,3 @@ src/main/runtime/orca-runtime-verify-orchestration-compatibility-caller.ts
 src/main/runtime/orca-runtime-wait-for-leaf-pty-id.ts
 src/main/runtime/orca-runtime-wait-for-mobile-terminal-surface.ts
 src/main/runtime/orca-runtime-write-orchestration-pointer-pty.ts
-src/main/runtime/orca-runtime-write-terminal-agent-prompt.ts

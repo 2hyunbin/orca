@@ -1,0 +1,133 @@
+import {
+  CLAUDE_AGENT_PROMPT_RENDER_MARKER,
+  CLAUDE_AGENT_PROMPT_RENDER_QUIET_MS,
+  CLAUDE_AGENT_PROMPT_RENDER_TIMEOUT_MS
+} from '../../orca-runtime-core'
+
+import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
+type TerminalAgentPromptRenderHost = {
+  getPty(id: string): Pick<RuntimePtyWorktreeRecord, 'launchAgent' | 'foregroundAgent'> | undefined
+  subscribeToTerminalData(): (id: string, listener: (data: string) => void) => () => void
+}
+export class TerminalAgentPromptRender {
+  constructor(private readonly host: TerminalAgentPromptRenderHost) {}
+  createAgentPromptRenderGate(
+    ptyId: string,
+    pasteIngestMs: number
+  ): {
+    arm: () => void
+    wait: () => Promise<void>
+    dispose: () => void
+  } | null {
+    const pty = this.host.getPty(ptyId)
+    if (!['claude', 'codex'].includes(pty?.launchAgent ?? pty?.foregroundAgent ?? '')) {
+      return null
+    }
+    let armed = false
+    let observedMarker = false
+    let settled = false
+    let ingested = pasteIngestMs <= 0
+    // Why absolute: the ingest clock starts once, here, but the cap is armed twice (at arm()
+    // and again on the marker). Re-adding the whole window would charge ingest twice.
+    const ingestDeadlineAt = Date.now() + pasteIngestMs
+    let markerCarry = ''
+    let quietTimer: NodeJS.Timeout | null = null
+    let hardTimer: NodeJS.Timeout | null = null
+    let ingestTimer: NodeJS.Timeout | null = null
+    let resolveRender!: () => void
+    const rendered = new Promise<void>((resolve) => {
+      resolveRender = resolve
+    })
+
+    const clearGateTimers = (): void => {
+      if (quietTimer) {
+        clearTimeout(quietTimer)
+        quietTimer = null
+      }
+      if (hardTimer) {
+        clearTimeout(hardTimer)
+        hardTimer = null
+      }
+      if (ingestTimer) {
+        clearTimeout(ingestTimer)
+        ingestTimer = null
+      }
+    }
+    const finish = (): void => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearGateTimers()
+      resolveRender()
+    }
+    const armQuietTimer = (): void => {
+      // Why: the quiet window measures the agent going still after a *complete* paste.
+      // Silence during ingest is not settlement, so it cannot start the clock.
+      if (!ingested) {
+        return
+      }
+      if (quietTimer) {
+        clearTimeout(quietTimer)
+      }
+      quietTimer = setTimeout(finish, CLAUDE_AGENT_PROMPT_RENDER_QUIET_MS)
+    }
+    const armHardTimer = (): void => {
+      if (hardTimer) {
+        clearTimeout(hardTimer)
+      }
+      hardTimer = setTimeout(
+        finish,
+        CLAUDE_AGENT_PROMPT_RENDER_TIMEOUT_MS + Math.max(0, ingestDeadlineAt - Date.now())
+      )
+    }
+    const armIngestTimer = (): void => {
+      if (ingested || ingestTimer) {
+        return
+      }
+      ingestTimer = setTimeout(
+        () => {
+          ingestTimer = null
+          ingested = true
+          if (observedMarker) {
+            armQuietTimer()
+          }
+        },
+        Math.max(0, ingestDeadlineAt - Date.now())
+      )
+    }
+    const unsubscribe = this.host.subscribeToTerminalData()(ptyId, (data) => {
+      if (!armed || settled) {
+        return
+      }
+      if (!observedMarker) {
+        const combined = markerCarry + data
+        markerCarry = combined.slice(-(CLAUDE_AGENT_PROMPT_RENDER_MARKER.length - 1))
+        if (!combined.includes(CLAUDE_AGENT_PROMPT_RENDER_MARKER)) {
+          return
+        }
+        observedMarker = true
+        armHardTimer()
+      }
+      armQuietTimer()
+    })
+    return {
+      arm: () => {
+        armed = true
+        markerCarry = ''
+        armIngestTimer()
+        armHardTimer()
+      },
+      wait: async () => {
+        if (settled) {
+          return
+        }
+        await rendered
+      },
+      dispose: () => {
+        unsubscribe()
+        clearGateTimers()
+      }
+    }
+  }
+}

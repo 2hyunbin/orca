@@ -1,8 +1,8 @@
-import { OrcaRuntimeWithDeliverPendingMessages } from './orca-runtime-deliver-pending-messages'
+import { OrcaRuntimeWithResolveExitWaiters } from './orca-runtime-resolve-exit-waiters'
 import type { BrowserWindow } from 'electron'
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
 
-export class OrcaRuntimeWithResolveWaiter extends OrcaRuntimeWithDeliverPendingMessages {
+export class OrcaRuntimeWithResolveWaiter extends OrcaRuntimeWithResolveExitWaiters {
   protected rejectWaitersForHandle(handle: string, code: string): void {
     this.terminalWaiters.rejectHandle(handle, code)
   }

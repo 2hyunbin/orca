@@ -22,8 +22,7 @@ vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry'
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 
-const { OrcaRuntimeWithGetPtyRecordForPaneKey } =
-  await import('../orca-runtime-get-pty-record-for-pane-key')
+const { OrcaRuntimeService } = await import('../orca-runtime')
 const { OrchestrationDb } = await import('./db')
 const { resolveOrcaSessionParty } = await import('./orchestration-party')
 const {
@@ -37,7 +36,7 @@ const CHAT = testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
 const CHAT_ADDRESS = formatOrcaSessionAddress(CHAT)
 
 /** The real methods through the real prototype chain; a re-declared copy would pin nothing. */
-class MailTargetProbe extends OrcaRuntimeWithGetPtyRecordForPaneKey {
+class MailTargetProbe extends OrcaRuntimeService {
   target(mailboxHandle: string): unknown {
     return this.resolveStructuredMailboxTarget(mailboxHandle)
   }
@@ -80,12 +79,10 @@ function installStore(record: AgentSessionRecord | null, visible = true): Store 
 let db: InstanceType<typeof OrchestrationDb>
 
 function probe(extra: Record<string, unknown> = {}): MailTargetProbe {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a prototype-only probe; every field the methods read is assigned below.
-  return Object.assign(Object.create(MailTargetProbe.prototype), {
+  return Object.assign(new MailTargetProbe(), {
     _orchestrationDb: db,
-    ptysById: new Map(),
     ...extra
-  }) as MailTargetProbe
+  })
 }
 
 function chatCoordinatedRun(): string {

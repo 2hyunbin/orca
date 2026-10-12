@@ -8,7 +8,7 @@ import {
 export type OrchestrationPointerWriteArgs = {
   ptyId: string
   data: string
-  controller: RuntimePtyController | null | undefined
+  controller: Pick<RuntimePtyController, 'writeWithSettlement'> | null | undefined
 }
 
 /**

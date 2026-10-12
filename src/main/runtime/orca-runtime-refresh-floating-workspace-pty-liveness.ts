@@ -108,10 +108,7 @@ export class OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness extends OrcaRunt
 
   // Keep the notification hook on the runtime as well as on the installed
   // command surface: exit escalation can wake an in-flight --wait directly.
-  notifyMessageArrived(handle: string, messageType?: string): void {
-    if (!handle.startsWith('dispatch:')) {
-      this.mailPointerRepointScheduler.schedule(handle)
-    }
-    this.orchestrationMailboxNotifications.notifyMessageArrived(handle, messageType)
+  notifyMessageArrived(...args: Parameters<RuntimeMailboxControl['notifyMessageArrived']>) {
+    return this.mailboxControl.notifyMessageArrived(...args)
   }
 }

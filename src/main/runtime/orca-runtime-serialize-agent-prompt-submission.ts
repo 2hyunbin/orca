@@ -16,26 +16,12 @@ import { readAgentPromptWaitText } from './agent-prompt-submission-verification'
 import type { AgentStatus } from '../../shared/agent-detection'
 
 export class OrcaRuntimeWithSerializeAgentPromptSubmission extends OrcaRuntimeWithControllerKnowsPtyIsLive {
-  protected async serializeAgentPromptSubmission<T>(
+  protected serializeAgentPromptSubmission<T>(
     ptyId: string,
     generation: number,
     submit: () => Promise<T>
   ): Promise<T> {
-    const queueKey = `${ptyId}\u0000${generation}`
-    const previous = this.agentPromptSubmissionTailByPtyId.get(queueKey) ?? Promise.resolve()
-    const submission = previous.catch(() => undefined).then(submit)
-    const tail = submission.then(
-      () => undefined,
-      () => undefined
-    )
-    this.agentPromptSubmissionTailByPtyId.set(queueKey, tail)
-    try {
-      return await submission
-    } finally {
-      if (this.agentPromptSubmissionTailByPtyId.get(queueKey) === tail) {
-        this.agentPromptSubmissionTailByPtyId.delete(queueKey)
-      }
-    }
+    return this.promptSubmissions.serializeAgentPromptSubmission(ptyId, generation, submit)
   }
 
   getTerminalAgentStatus(handle: string): Promise<RuntimeTerminalAgentStatus> {

@@ -7,8 +7,7 @@ vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry'
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 
-const { OrcaRuntimeWithGetPtyRecordForPaneKey } =
-  await import('../orca-runtime-get-pty-record-for-pane-key')
+const { OrcaRuntimeService } = await import('../orca-runtime')
 const {
   mintStructuredWorkerHandle,
   mintStructuredWorkerPaneKey,
@@ -19,7 +18,7 @@ const {
 const SESSION_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 
 /** The real method through the real prototype chain; a re-declared copy would pin nothing. */
-class MailboxTargetProbe extends OrcaRuntimeWithGetPtyRecordForPaneKey {
+class MailboxTargetProbe extends OrcaRuntimeService {
   probeResolveTarget(mailboxHandle: string): unknown {
     return this.resolveStructuredMailboxTarget(mailboxHandle)
   }
@@ -58,12 +57,12 @@ function registerWorker(): string {
 function probe(activeDispatch: { id: string } | undefined, run?: { coordinator_handle: string }) {
   const findActiveDispatchForAssignee = vi.fn(() => activeDispatch)
   const getRun = vi.fn(() => run)
-  const instance = Object.assign(Object.create(MailboxTargetProbe.prototype), {
+  const instance = Object.assign(new MailboxTargetProbe(), {
     _orchestrationDb: { findActiveDispatchForAssignee, getRun },
     getLiveLeafForHandle: () => {
       throw new Error('no leaf backs a native-born structured worker')
     }
-  }) as MailboxTargetProbe
+  })
   return { instance, findActiveDispatchForAssignee, getRun }
 }
 
