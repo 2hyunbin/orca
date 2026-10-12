@@ -106,10 +106,10 @@ jobs:
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
-          pnpm run check:code-quality:changed -- "${{ github.event.pull_request.base.sha }}"
+          pnpm run check:code-quality:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - name: Enforce React Doctor on changed lines
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run check:react-doctor:changed -- "${{ github.event.pull_request.base.sha }}"
+        run: pnpm run check:react-doctor:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - wait: changed-code-quality
       - name: Typecheck
         if: "!cancelled()"
@@ -374,10 +374,10 @@ jobs:
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
-          pnpm run check:code-quality:changed -- "${{ github.event.pull_request.base.sha }}"
+          pnpm run check:code-quality:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - name: Enforce React Doctor on changed lines
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run check:react-doctor:changed -- "${{ github.event.pull_request.base.sha }}"
+        run: pnpm run check:react-doctor:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - wait: changed-code-quality
       - name: Typecheck
         if: "!cancelled()"
@@ -642,10 +642,10 @@ jobs:
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
-          pnpm run check:code-quality:changed -- "${{ github.event.pull_request.base.sha }}"
+          pnpm run check:code-quality:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - name: Enforce React Doctor on changed lines
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run check:react-doctor:changed -- "${{ github.event.pull_request.base.sha }}"
+        run: pnpm run check:react-doctor:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - wait: changed-code-quality
       - name: Typecheck
         if: "!cancelled()"
@@ -910,10 +910,10 @@ jobs:
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
-          pnpm run check:code-quality:changed -- "${{ github.event.pull_request.base.sha }}"
+          pnpm run check:code-quality:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - name: Enforce React Doctor on changed lines
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run check:react-doctor:changed -- "${{ github.event.pull_request.base.sha }}"
+        run: pnpm run check:react-doctor:changed -- "be4cea1584f1bd070a967b7a6214d5b6b0bfa862"
       - wait: changed-code-quality
       - name: Typecheck
         if: "!cancelled()"
