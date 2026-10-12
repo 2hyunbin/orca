@@ -31,13 +31,18 @@ const META = { runtimeId: 'runtime-1' }
 async function tapChangedFile(args: {
   executionHost?: string
   openDiffReply: RpcResponse
+  unmountDuringOpen?: boolean
 }): Promise<{ methods: string[]; actionErrors: (string | null)[]; openedDiffs: string[] }> {
   route.opened.length = 0
   const methods: string[] = []
   const actionErrors: (string | null)[] = []
   const openedDiffs: string[] = []
+  const mountedRef = { current: true }
   const sendRequest = async (method: string): Promise<RpcResponse> => {
     methods.push(method)
+    if (args.unmountDuringOpen) {
+      mountedRef.current = false
+    }
     return args.openDiffReply
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the opener reaches `sendRequest` and nothing else on the client.
@@ -54,7 +59,7 @@ async function tapChangedFile(args: {
       embedded: false,
       onOpenedFileDiff: (path) => openedDiffs.push(path),
       branchCompareState: { kind: 'idle' },
-      mountedRef: { current: true },
+      mountedRef,
       busyActionRef: { current: null },
       setActionError: (message) => actionErrors.push(message)
     }).openFile
@@ -76,7 +81,7 @@ async function tapChangedFile(args: {
 }
 
 describe('tapping a changed file from the session', () => {
-  it("opens a server workspace's diff on the review screen when the server has no editor tabs", async () => {
+  it("opens a server workspace's diff on the review screen when its host has no desktop window", async () => {
     const result = await tapChangedFile({
       executionHost: 'runtime:vm',
       openDiffReply: {
@@ -95,6 +100,21 @@ describe('tapping a changed file from the session', () => {
     ])
     expect(result.actionErrors).toEqual([null])
     expect(result.openedDiffs).toEqual([])
+  })
+
+  it('does not push the review screen once the source control screen has gone during the call', async () => {
+    const result = await tapChangedFile({
+      executionHost: 'runtime:vm',
+      unmountDuringOpen: true,
+      openDiffReply: {
+        id: 'call',
+        ok: false,
+        error: { code: 'runtime_error', message: 'renderer_unavailable' },
+        _meta: META
+      }
+    })
+    expect(result.methods).toEqual(['files.openDiff'])
+    expect(route.opened).toEqual([])
   })
 
   it("opens a local workspace's diff as a desktop tab", async () => {

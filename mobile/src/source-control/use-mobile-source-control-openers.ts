@@ -131,9 +131,11 @@ export function useMobileSourceControlOpeners(params: Params) {
           relativePath: entry.path,
           staged: entry.area === 'staged'
         })
-        // Why: a headless server has no editor tabs; its diff still reads through git.diff on the review screen.
+        // Why: a host with no desktop window opens no editor tabs; its diff still reads through git.diff on the review screen.
         if (isRendererUnavailableReply(diffReply)) {
-          openReviewScreen(entry.path, entry.area)
+          if (mountedRef.current) {
+            openReviewScreen(entry.path, entry.area)
+          }
           return
         }
         // Why the raw refusal: a host too old to open a diff tab is a capability gap this flow
