@@ -19,11 +19,11 @@ import {
   expectLayoutCompatBaseline,
   expectReconnectedPaneEcho,
   IdLabels,
-  paneTreeShape,
+  paneTreeBaseline,
   readSessionTabs,
   readSettled,
   readTerminals,
-  sessionTabsShape
+  sessionTabsBaseline
 } from './helpers/layout-compat-baseline'
 import { setPaneTitleFromTerminalMenu } from './helpers/terminal-pane-title-actions'
 import { readTerminalAccessibilityText } from './helpers/terminal-accessibility-tree'
@@ -56,7 +56,7 @@ async function readDesktop(page: Page, labels: IdLabels) {
   return {
     // A count: a tab's label follows its focused pane's shell title, which differs per machine.
     tabs: held.tabCount,
-    tree: paneTreeShape(held.root, labels),
+    tree: paneTreeBaseline(held.root, labels),
     paneTitles: Object.entries(held.titlesByLeafId)
       .map(([leafId, title]) => `${labels.label('leaf', leafId)}=${title}`)
       .sort(),
@@ -121,7 +121,7 @@ test.describe('layout compat: current desktop on a released server', () => {
         const steps: unknown[] = []
         const record = async (step: string): Promise<void> => {
           const observed = await readSettled(async () => ({
-            oldServer: sessionTabsShape(
+            oldServer: sessionTabsBaseline(
               await readSessionTabs(host.client, `path:${testRepoPath}`),
               labels
             ),

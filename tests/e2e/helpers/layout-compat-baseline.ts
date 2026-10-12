@@ -61,14 +61,19 @@ function round(ratio: number | undefined): number {
   return Math.round((ratio ?? 0.5) * 10) / 10
 }
 
-export type PaneTreeShape =
+export type PaneTreeBaseline =
   | string
-  | { split: 'vertical' | 'horizontal'; ratio: number; first: PaneTreeShape; second: PaneTreeShape }
+  | {
+      split: 'vertical' | 'horizontal'
+      ratio: number
+      first: PaneTreeBaseline
+      second: PaneTreeBaseline
+    }
 
-export function paneTreeShape(
+export function paneTreeBaseline(
   node: TerminalPaneLayoutNode | null | undefined,
   labels: IdLabels
-): PaneTreeShape | null {
+): PaneTreeBaseline | null {
   if (!node) {
     return null
   }
@@ -79,13 +84,13 @@ export function paneTreeShape(
     split: node.direction,
     // Divider drags land on whole pixels; a tenth keeps the shape stable across window sizes.
     ratio: round(node.ratio),
-    first: paneTreeShape(node.first, labels)!,
-    second: paneTreeShape(node.second, labels)!
+    first: paneTreeBaseline(node.first, labels)!,
+    second: paneTreeBaseline(node.second, labels)!
   }
 }
 
 /** `session.tabs.list` as every client version reads it: groups, rows, pane trees and titles. */
-export function sessionTabsShape(result: RuntimeMobileSessionTabsResult, labels: IdLabels) {
+export function sessionTabsBaseline(result: RuntimeMobileSessionTabsResult, labels: IdLabels) {
   const tabLabel = (id: string) => labels.label('tab', id)
   // A terminal row's id names its pane; the strip and groups name the tab.
   const rowTab = (id: string) => {
@@ -109,7 +114,7 @@ export function sessionTabsShape(result: RuntimeMobileSessionTabsResult, labels:
             ...(tab.isPinned ? { pinned: true } : {}),
             ...(tab.parentLayout
               ? {
-                  tree: paneTreeShape(tab.parentLayout.root, labels),
+                  tree: paneTreeBaseline(tab.parentLayout.root, labels),
                   paneTitles: Object.entries(tab.parentLayout.titlesByLeafId ?? {})
                     .map(([leafId, title]) => `${labels.label('leaf', leafId)}=${title}`)
                     .sort()
@@ -184,7 +189,7 @@ export async function readPublishedLayout(
 }
 
 /** The runtime's published layout for one workspace, the model the rework will hold. */
-export function publishedLayoutShape(layout: PublishedWorkspaceLayout | null, labels: IdLabels) {
+export function publishedLayoutBaseline(layout: PublishedWorkspaceLayout | null, labels: IdLabels) {
   if (!layout) {
     return null
   }
@@ -197,7 +202,7 @@ export function publishedLayoutShape(layout: PublishedWorkspaceLayout | null, la
       ...(tab.isPinned ? { pinned: true } : {}),
       ...(tab.terminal
         ? {
-            tree: paneTreeShape(tab.terminal.root, labels),
+            tree: paneTreeBaseline(tab.terminal.root, labels),
             panes: tab.terminal.panes.map((pane) => ({
               leaf: labels.label('leaf', pane.leafId),
               pty: labels.pty(pane.ptyId),

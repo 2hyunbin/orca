@@ -20,12 +20,12 @@ import {
   expectLayoutCompatBaseline,
   expectReconnectedPaneEcho,
   IdLabels,
-  publishedLayoutShape,
+  publishedLayoutBaseline,
   readPublishedLayout,
   readSessionTabs,
   readSettled,
   readTerminals,
-  sessionTabsShape
+  sessionTabsBaseline
 } from './helpers/layout-compat-baseline'
 import type { RuntimeTerminalCreate } from '../../src/shared/runtime-terminal-contracts'
 
@@ -74,9 +74,9 @@ test.describe('layout compat: released desktop and CLI on the current server', (
         const steps: unknown[] = []
         const record = async (step: string): Promise<void> => {
           const observed = await readSettled(async () => ({
-            server: sessionTabsShape(await readSessionTabs(host.client, worktree), labels),
+            server: sessionTabsBaseline(await readSessionTabs(host.client, worktree), labels),
             serverTerminals: await readTerminals(host.client, worktree, labels),
-            published: publishedLayoutShape(
+            published: publishedLayoutBaseline(
               await readPublishedLayout(host.offer.pairingUrl, worktreeId),
               labels
             ),
@@ -176,7 +176,7 @@ test.describe('layout compat: released desktop and CLI on the current server', (
         ptyId: labels.pty(
           'ptyId' in terminal && typeof terminal.ptyId === 'string' ? terminal.ptyId : null
         ),
-        server: sessionTabsShape(listed, labels)
+        server: sessionTabsBaseline(listed, labels)
       })
     } finally {
       await host.dispose()

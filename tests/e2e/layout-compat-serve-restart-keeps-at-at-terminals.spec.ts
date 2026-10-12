@@ -10,12 +10,12 @@ import { launchPairedElectronClient } from './helpers/paired-electron-client'
 import {
   expectLayoutCompatBaseline,
   IdLabels,
-  publishedLayoutShape,
+  publishedLayoutBaseline,
   readPublishedLayout,
   readSessionTabs,
   readSettled,
   readTerminals,
-  sessionTabsShape
+  sessionTabsBaseline
 } from './helpers/layout-compat-baseline'
 import type { RuntimeTerminalCreate } from '../../src/shared/runtime-terminal-contracts'
 
@@ -80,9 +80,9 @@ test('serve-restart-keeps-@@-terminals: desktop, CLI and serve terminals survive
 
       const labels = new IdLabels()
       const read = async () => ({
-        server: sessionTabsShape(await readSessionTabs(host.client, worktree), labels),
+        server: sessionTabsBaseline(await readSessionTabs(host.client, worktree), labels),
         terminals: await readTerminals(host.client, worktree, labels),
-        published: publishedLayoutShape(
+        published: publishedLayoutBaseline(
           await readPublishedLayout(host.offer.pairingUrl, worktreeId),
           labels
         ),

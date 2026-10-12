@@ -15,7 +15,7 @@ import {
   readSessionTabs,
   readSettled,
   readUntil,
-  sessionTabsShape
+  sessionTabsBaseline
 } from './helpers/layout-compat-baseline'
 import type { RuntimeCapability } from '../../src/shared/protocol-version'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-session-contracts'
@@ -120,11 +120,11 @@ test('old-phone-on-new-server: create, activate, rename, focus, close, open a fi
     const steps: unknown[] = []
     const record = async (step: string, sent?: unknown): Promise<void> => {
       const observed = await readSettled(async () => ({
-        phone: sessionTabsShape(
+        phone: sessionTabsBaseline(
           await phone.call<RuntimeMobileSessionTabsResult>('session.tabs.list', { worktree }),
           labels
         ),
-        server: sessionTabsShape(await readSessionTabs(host.client, worktree), labels)
+        server: sessionTabsBaseline(await readSessionTabs(host.client, worktree), labels)
       }))
       steps.push({ step, ...(sent ? { reply: sent } : {}), ...observed })
     }
@@ -186,12 +186,12 @@ test('old-phone-on-new-server: create, activate, rename, focus, close, open a fi
     const opened = await reply(phone, 'files.open', { worktree, relativePath: 'README.md' })
     await record('phone opens a file', opened)
 
-    const selectedBefore = sessionTabsShape(await firstSnapshot(phone, worktree), labels)
+    const selectedBefore = sessionTabsBaseline(await firstSnapshot(phone, worktree), labels)
     const tabsOf = (terminals: { tabId: string }[]) =>
       JSON.stringify(terminals.map((terminal) => terminal.tabId).sort())
     const tabsBefore = tabsOf(await phoneTerminals(phone, worktree))
     await host.restartServeProcess()
-    const selectedAfter = sessionTabsShape(await firstSnapshot(phone, worktree), labels)
+    const selectedAfter = sessionTabsBaseline(await firstSnapshot(phone, worktree), labels)
     // Linux: the server lists every terminal again shortly after it answers. macOS (no baseline):
     // in this harness the list stayed empty for the 60 s measured, with the tabs still listed.
     const listedAfter = await readUntil(
