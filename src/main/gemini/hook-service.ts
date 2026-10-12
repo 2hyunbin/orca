@@ -11,12 +11,11 @@ import {
   readHooksJson,
   removeManagedCommands,
   wrapPosixHookCommand,
-  wrapWindowsHookCommand,
   writeHooksJson,
   writeManagedScript,
   type HookDefinition
 } from '../agent-hooks/installer-utils'
-import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
+import { wrapWindowsBatchHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 import { refreshManagedScriptIfPresent } from '../agent-hooks/managed-hook-script-refresh'
 import {
   readHooksJsonRemote,
@@ -48,7 +47,7 @@ function getManagedScriptPath(): string {
 
 function getManagedCommand(scriptPath: string): string {
   return process.platform === 'win32'
-    ? (wrapWindowsDirectCmdHookCommand(scriptPath) ?? wrapWindowsHookCommand(scriptPath))
+    ? wrapWindowsBatchHookCommand(scriptPath)
     : wrapPosixHookCommand(scriptPath)
 }
 

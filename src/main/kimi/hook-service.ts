@@ -20,10 +20,9 @@ import {
   createManagedCommandMatcher,
   getSharedManagedScriptPath,
   wrapPosixHookCommand,
-  wrapWindowsHookCommand,
   writeManagedScript
 } from '../agent-hooks/installer-utils'
-import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
+import { wrapWindowsBatchHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 import { refreshManagedScriptIfPresent } from '../agent-hooks/managed-hook-script-refresh'
 import {
   readTextFileRemote,
@@ -74,7 +73,7 @@ export function getManagedCommand(scriptPath: string): string {
   // Why the direct form's forward slashes are load-bearing: ownership matches the still-escaped
   // TOML literal, where a backslash path reads as `agent-hooks\\kimi-hook.cmd` and never matches.
   return process.platform === 'win32'
-    ? (wrapWindowsDirectCmdHookCommand(scriptPath) ?? wrapWindowsHookCommand(scriptPath))
+    ? wrapWindowsBatchHookCommand(scriptPath)
     : wrapPosixHookCommand(scriptPath)
 }
 
