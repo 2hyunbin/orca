@@ -86,6 +86,7 @@ export function NativeChatStructuredSession(
     composerScopeKey: structuredAgentSessionDraftScopeKey(props.sessionId),
     queueFollowUps,
     hostStopping: hostExecution.stopping,
+    hostOptionStamp: hostExecution.optionStamp,
     providerStarting: hostExecution.phase === 'starting',
     // A start's own verdict (a signed-out agent) exists only once that start is proven.
     providerRunning: hostExecution.phase === 'ready',
