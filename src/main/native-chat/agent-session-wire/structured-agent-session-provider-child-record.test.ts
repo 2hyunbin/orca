@@ -594,8 +594,8 @@ describe('another child indexed after a Stop ended the starting one', () => {
     const replacement = currentChild()
     expect(replacement.acquisitionGeneration).not.toBe(stopped.acquisitionGeneration)
     const secondId = await accept('second')
-    await settleLoop()
     expect((await submission(secondId))?.handedOverAt).toBeUndefined()
+    expect(dispatch).not.toHaveBeenCalled()
 
     await prove()
 

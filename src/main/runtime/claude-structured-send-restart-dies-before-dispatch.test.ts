@@ -141,9 +141,8 @@ describe('a send whose restarted Claude child dies before it proves its start', 
     // Accepted: the answer comes before the restart it needs.
     expect(answered.get(sent)).toBe('pending')
     await eventually(() => expect(claude.children(SESSION)).toHaveLength(2))
-    await eventually(() =>
-      expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(false)
-    )
+    expect(await submission(host, sent)).toMatchObject({ dispatchState: 'pending' })
+    expect((await submission(host, sent))?.handedOverAt).toBeUndefined()
     expect(claude.child(SESSION).calls).not.toContain('send')
     await failLatestStart(host, 2)
 

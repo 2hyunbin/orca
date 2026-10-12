@@ -57,12 +57,14 @@ function fence(host: StructuredAgentSessionHost): number {
   return host.deps.store.getRecord(SESSION)?.lease.runtimeFence ?? 0
 }
 
-/** Whether the CLI was written a message, once the delivery loop has settled what it does. */
-async function written(host: StructuredAgentSessionHost): Promise<boolean> {
-  await vi.waitFor(() =>
-    expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(false)
-  )
-  return claude.child(SESSION).calls.includes('send')
+async function expectHeldBeforeStart(
+  host: StructuredAgentSessionHost,
+  clientMessageId: string
+): Promise<void> {
+  const entry = await submission(host, clientMessageId)
+  expect(entry).toMatchObject({ dispatchState: 'pending' })
+  expect(entry?.handedOverAt).toBeUndefined()
+  expect(claude.child(SESSION).calls).not.toContain('send')
 }
 
 async function statusRows(host: StructuredAgentSessionHost): Promise<string[]> {
@@ -105,7 +107,7 @@ describe('a send into a Claude chat whose CLI keeps failing at startup', () => {
     await vi.waitFor(() =>
       expect(host.deps.store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
     )
-    expect(await written(host)).toBe(false)
+    await expectHeldBeforeStart(host, held)
     await failLatestStart(host, 2)
 
     // Rejected with the cause, not left in doubt; one row for this attempt names it.
@@ -142,7 +144,7 @@ describe('a send while the first Claude start is still answering initialize', ()
     await host.attach(CALLER, claude.attachParams(SESSION, null))
 
     const sent = await send(host, 'hello')
-    expect(await written(host)).toBe(false)
+    await expectHeldBeforeStart(host, sent)
     expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('starting')
 
     // The CLI answers: the start lands, and the held message is written to it, once.
@@ -165,8 +167,8 @@ describe('a send while the first Claude start is still answering initialize', ()
     const host = await claude.install()
     await host.attach(CALLER, claude.attachParams(SESSION, null))
 
-    await send(host, 'hello')
-    expect(await written(host)).toBe(false)
+    const sent = await send(host, 'hello')
+    await expectHeldBeforeStart(host, sent)
     claude.child(SESSION).answerInit()
 
     await vi.waitFor(() =>
@@ -184,7 +186,7 @@ describe('a send while the first Claude start is still answering initialize', ()
     const startedFence = fence(host)
 
     const held = await send(host, 'hello')
-    expect(await written(host)).toBe(false)
+    await expectHeldBeforeStart(host, held)
     await failLatestStart(host, 1)
 
     await vi.waitFor(async () =>
