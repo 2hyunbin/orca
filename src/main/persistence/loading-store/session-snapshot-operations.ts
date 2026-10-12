@@ -10,13 +10,13 @@ import { workspaceSessionPatchNeedsFullNormalization } from './terminal-session-
 
 import { setLocalWorkspaceSession } from './workspace-session-snapshot-publication'
 import type { StoreRuntimeState } from './store-runtime-state'
-import type { SessionHostPartitionOperations } from './session-host-partitions'
 import type { TerminalBindingRecoveryOperations } from './terminal-binding-recovery'
 import type { WriteSchedulingOperations } from './write-scheduling'
 import {
   resolveHostId,
   setHostWorkspaceSession,
   withRequiredWorkspaceSessionMaps,
+  type SessionHostPartitionOperations,
   type WorkspaceSessionWriteOptions
 } from './session-host-partitions'
 import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
