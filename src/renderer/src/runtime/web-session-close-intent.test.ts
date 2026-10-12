@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RuntimeEnvironmentRevision from './runtime-environment-revision'
 import {
   beginWebSessionCloseIntent,
@@ -7,7 +7,8 @@ import {
   filterWebSessionCloseIntents,
   isWebSessionCloseIntentPending,
   resetWebSessionCloseIntentForTests,
-  settleWebSessionCloseIntent
+  settleWebSessionCloseIntent,
+  registerWebSessionClosePlacementStateReader
 } from './web-session-close-intent'
 
 import {
@@ -25,6 +26,14 @@ vi.mock('./runtime-environment-revision', async (importOriginal) => ({
 const WT = 'repo::/wt'
 const OWNER = { environmentId: 'runtime-a', pairingRevision: 1 }
 const topLevel = (tab: { id: string; parentTabId?: string }): string => tab.parentTabId ?? tab.id
+
+beforeEach(() =>
+  registerWebSessionClosePlacementStateReader(() => ({
+    unifiedTabsByWorktree: {},
+    groupsByWorktree: {},
+    tabBarOrderByWorktree: {}
+  }))
+)
 
 afterEach(() => {
   resetWebSessionCloseIntentForTests()

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   SESSION_TAB_CLOSE_SETTLED_TTL_MS,
   SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS
@@ -8,7 +8,8 @@ import {
   beginWebSessionCloseIntent,
   filterWebSessionCloseIntents,
   isWebSessionCloseIntentPending,
-  resetWebSessionCloseIntentForTests
+  resetWebSessionCloseIntentForTests,
+  registerWebSessionClosePlacementStateReader
 } from './web-session-close-intent'
 
 const OWNER = { environmentId: 'env-1', pairingRevision: 1 }
@@ -36,6 +37,14 @@ function closeWith(
 }
 
 const pending = (): boolean => isWebSessionCloseIntentPending(OWNER, WT, TAB, Date.now())
+
+beforeEach(() =>
+  registerWebSessionClosePlacementStateReader(() => ({
+    unifiedTabsByWorktree: {},
+    groupsByWorktree: {},
+    tabBarOrderByWorktree: {}
+  }))
+)
 
 afterEach(() => {
   resetWebSessionCloseIntentForTests()

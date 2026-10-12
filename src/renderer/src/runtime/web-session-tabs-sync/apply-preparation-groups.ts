@@ -1,3 +1,5 @@
+import { insertTabAtHostSessionTabClosePosition } from '../host-session-tab-close-placement'
+import type { ClientOwnedAdoptedTab } from '../web-session-client-owned-tab-placement'
 import type { TabGroup } from '../../../../shared/tab-types'
 import type { prepareWebSessionTabsSnapshotUnified } from './apply-preparation-unified'
 import { toWebTerminalSurfaceTabId } from '../web-runtime-session'
@@ -38,6 +40,15 @@ export function prepareWebSessionTabsSnapshotGroups(
     reservedEmptyPreviewFallbackTabId
   } = base
   const currentGroups = state.groupsByWorktree[worktreeId] ?? []
+  const restoredTabId = options?.closeRestoration
+    ? hostToLocalTabId.get(options.closeRestoration.hostTabId)
+    : undefined
+  const closeRestoration =
+    options?.projectionOnly &&
+    restoredTabId &&
+    !state.unifiedTabsByWorktree[worktreeId]?.some((tab) => tab.id === restoredTabId)
+      ? options.closeRestoration
+      : undefined
   const clientGroupIdByLocalTabId = new Map(
     mirroredBrowserTabs.flatMap((entry) =>
       entry.clientGroupId ? [[entry.unifiedTab.id, entry.clientGroupId]] : []
@@ -78,7 +89,7 @@ export function prepareWebSessionTabsSnapshotGroups(
     // provisional tab was provisionally adopted elsewhere or the target group record lags its leaf.
     // The entry's own clientGroupId comes first, so a group the user moved the row into after the
     // create was recorded wins over the group the create asked for.
-    const placementMoves = mirroredBrowserTabs.flatMap((entry) => {
+    const placementMoves: ClientOwnedAdoptedTab[] = mirroredBrowserTabs.flatMap((entry) => {
       const recordedGroupId = peekWebSessionBrowserPlacementGroup({
         environmentId,
         worktreeId,
@@ -102,11 +113,15 @@ export function prepareWebSessionTabsSnapshotGroups(
         })
       }
     }
-    if (options?.closeRestoration) {
-      const restoredTabId = hostToLocalTabId.get(options.closeRestoration.hostTabId)
-      if (restoredTabId) {
-        placementMoves.push({ tabId: restoredTabId, groupId: options.closeRestoration.groupId })
-      }
+    if (closeRestoration && restoredTabId) {
+      placementMoves.push({
+        tabId: restoredTabId,
+        groupId: closeRestoration.groupId,
+        position: {
+          previousTabId: closeRestoration.previousTabId,
+          nextTabId: closeRestoration.nextTabId
+        }
+      })
     }
     const adoptedTabs = mirroredUnifiedTabs
       .filter((tab) => !knownGroupTabIds.has(tab.id))
@@ -228,7 +243,14 @@ export function prepareWebSessionTabsSnapshotGroups(
     for (const tabId of hostOrMirroredOrder) {
       push(tabId)
     }
-    return next
+    return closeRestoration && restoredTabId
+      ? insertTabAtHostSessionTabClosePosition(
+          next,
+          restoredTabId,
+          closeRestoration.previousBarId,
+          closeRestoration.nextBarId
+        )
+      : next
   })()
   return {
     ...base,

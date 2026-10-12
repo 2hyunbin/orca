@@ -1,3 +1,4 @@
+import { insertTabAtHostSessionTabClosePosition } from './host-session-tab-close-placement'
 import type { TabGroup, TabGroupLayoutNode } from '../../../shared/tab-types'
 import {
   pickNextActiveTab,
@@ -9,6 +10,7 @@ import {
 export type ClientOwnedAdoptedTab = {
   tabId: string
   groupId: string
+  position?: { previousTabId?: string; nextTabId?: string }
 }
 
 export type ClientOwnedPlacementInput = {
@@ -171,7 +173,14 @@ export function reconcileClientOwnedTabPlacement(
     }
     const target = ensureGroup(targetGroupId)
     if (!target.tabOrder.includes(move.tabId)) {
-      target.tabOrder.push(move.tabId)
+      target.tabOrder = move.position
+        ? insertTabAtHostSessionTabClosePosition(
+            target.tabOrder,
+            move.tabId,
+            move.position.previousTabId,
+            move.position.nextTabId
+          )
+        : [...target.tabOrder, move.tabId]
     }
   }
   for (const adopted of input.adoptedTabs) {

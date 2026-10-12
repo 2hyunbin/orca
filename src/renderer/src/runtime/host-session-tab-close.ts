@@ -1,10 +1,10 @@
+import type { reprojectHostSessionTabSource } from './host-session-tab-source-projection'
 import {
   SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS,
   type SessionTabCloseOutcome
 } from '../../../shared/session-tab-close-ledger'
 import type { RuntimeClientTarget } from './runtime-rpc-client'
 import { sessionTabCloseAnswerOutcome } from '../../../shared/session-tab-close-answer'
-import { reprojectHostSessionTabSource } from './host-session-tab-source-projection'
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
 import {
   settleWebSessionCloseIntent,
@@ -99,21 +99,32 @@ export async function settleHostSessionTabClose(args: {
       error instanceof Error ? error.message : String(error)
     )
   }
-  const now = Date.now()
-  for (const ticket of args.tickets()) {
-    const settled = settleWebSessionCloseIntent(ticket, outcome, now)
+  const tickets = [...args.tickets()]
+  if (outcome === 'failed') {
+    // The user close and its host reread must not wait for recovery-module loading.
+    void args.reread(true)
+  }
+  let reproject: typeof reprojectHostSessionTabSource | undefined
+  if (outcome === 'failed') {
+    try {
+      const { reprojectHostSessionTabSource } = await import('./host-session-tab-source-projection')
+      reproject = reprojectHostSessionTabSource
+    } catch (error) {
+      console.warn('[session-tabs] could not load closed tab recovery', error)
+    }
+  }
+  for (const ticket of tickets) {
+    // Check the original entry after loading: a re-close during the yield owns recovery now.
+    const settled = settleWebSessionCloseIntent(ticket, outcome, Date.now())
     if (settled && outcome === 'failed') {
       try {
-        reprojectHostSessionTabSource(ticket)
+        reproject?.(ticket)
       } catch (error) {
         console.warn('[session-tabs] could not restore closed tab from its host source', error)
       }
     }
   }
-  if (outcome === 'failed') {
-    // Not awaited: the caller's own failure handling must not wait on a read of an unreachable host.
-    void args.reread(true)
-  } else if (outcome === 'closed' && args.readAfterClose) {
+  if (outcome === 'closed' && args.readAfterClose) {
     await args.reread(false)
   }
   return result

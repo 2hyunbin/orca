@@ -1,3 +1,4 @@
+import { projectHostSessionTabSource } from '../../../shared/host-session-snapshot'
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
@@ -13,7 +14,8 @@ import { resetWebSessionTabsSnapshotFreshnessForTests } from './web-session-tabs
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 import {
   beginWebSessionCloseIntent,
-  resetWebSessionCloseIntentForTests
+  resetWebSessionCloseIntentForTests,
+  settleWebSessionCloseIntent
 } from './web-session-close-intent'
 import { closeWebRuntimeSessionTab } from './web-runtime-session-tab-lifecycle'
 
@@ -120,6 +122,62 @@ afterEach(() => {
 })
 
 describe('host close occurrence and restoration identity', () => {
+  it.each([false, true])(
+    'reconciles recovery order before the store commit, already present=%s',
+    (alreadyPresent) => {
+      apply(browserFrame(1))
+      const ticket = beginWebSessionCloseIntent({ environmentId: ENV }, WT, 'host-b', Date.now())!
+      const placement = ticket.placement
+      if (!placement) {
+        throw new Error('missing close placement')
+      }
+      if (!alreadyPresent) {
+        apply(browserFrame(2))
+        expect(groups()[0].order).toEqual(['host-a', 'host-c'])
+      }
+      settleWebSessionCloseIntent(ticket, 'failed', Date.now())
+      useAppStore.setState((state) => ({
+        groupsByWorktree: {
+          ...state.groupsByWorktree,
+          [WT]: state.groupsByWorktree[WT].map((group) => ({
+            ...group,
+            activeTabId: 'host-c',
+            ...(alreadyPresent ? { tabOrder: ['host-c', 'host-a', 'host-b'] } : {})
+          }))
+        },
+        ...(alreadyPresent
+          ? {
+              tabBarOrderByWorktree: {
+                ...state.tabBarOrderByWorktree,
+                [WT]: ['host-c', 'host-a', 'host-b']
+              }
+            }
+          : {})
+      }))
+      const state = useAppStore.getState()
+      const patch = applyWebSessionTabsSnapshot(
+        state,
+        projectHostSessionTabSource(browserFrame(2)),
+        ENV,
+        Date.now(),
+        {
+          projectionOnly: true,
+          closeRestoration: { ...placement, hostTabId: ticket.closedId }
+        }
+      )
+      const expected = alreadyPresent
+        ? ['host-c', 'host-a', 'host-b']
+        : ['host-a', 'host-b', 'host-c']
+      expect(patch.groupsByWorktree?.[WT][0].tabOrder).toEqual(expected)
+      expect(patch.tabBarOrderByWorktree?.[WT] ?? state.tabBarOrderByWorktree[WT]).toEqual(expected)
+      expect(patch.groupsByWorktree?.[WT][0].activeTabId).toBe('host-c')
+      expect(groups()[0].order).toEqual(alreadyPresent ? expected : ['host-a', 'host-c'])
+      applyWebSessionTabsStorePatch(() => patch, { frames: [] })()
+      expect(groups()[0].order).toEqual(expected)
+      expect(useAppStore.getState().tabBarOrderByWorktree[WT]).toEqual(expected)
+    }
+  )
+
   it.each(['rejection', 'timeout'] as const)(
     'restores an adopted browser between surviving neighbors after %s',
     async (outcome) => {

@@ -1,3 +1,5 @@
+import { sameSessionTabsPublicationLineage } from '../../../../shared/host-session-snapshot'
+export { sameSessionTabsPublicationLineage } from '../../../../shared/host-session-snapshot'
 import type { RuntimeRpcResponse } from '../../../../shared/runtime-rpc-envelope'
 import {
   latestReceivedSessionTabsFrameByEnvironment,
@@ -153,18 +155,6 @@ export function isRetiredSessionTabsPublicationEpoch(
     history?.retired.some((retired) =>
       sameSessionTabsPublicationLineage(retired, publicationEpoch)
     ) ?? false
-  )
-}
-
-/**
- * A headless merge keeps the renderer publication as its base epoch while
- * adding runtime-owned surfaces. Treat both forms as one ordering lineage.
- */
-export function sameSessionTabsPublicationLineage(left: string, right: string): boolean {
-  return (
-    left === right ||
-    ((left.includes(':headless-merge:') || right.includes(':headless-merge:')) &&
-      left.split(':headless-merge:')[0] === right.split(':headless-merge:')[0])
   )
 }
 

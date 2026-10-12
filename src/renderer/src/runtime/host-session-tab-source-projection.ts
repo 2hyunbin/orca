@@ -1,3 +1,4 @@
+import { projectHostSessionTabSource } from '../../../shared/host-session-snapshot'
 import { parseExecutionHostId, toSshExecutionHostId } from '../../../shared/execution-host'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { resolveExplicitWorktreeOperationRouteResult } from '../lib/worktree-operation-catalog-route'
@@ -33,10 +34,7 @@ import {
   isRetiredSessionTabsPublicationEpoch,
   sameSessionTabsPublicationLineage
 } from './web-session-tabs-sync/publisher-identity-fences'
-import {
-  applyHostSessionTabClosePlacement,
-  survivingHostSessionTabClosePlacement
-} from './host-session-tab-close-placement'
+import { survivingHostSessionTabClosePlacement } from './host-session-tab-close-placement'
 import type { WebSessionCloseIntentTicket } from './web-session-close-intent'
 import { resolveLocalTabIdForHostSessionTab } from './web-session-tabs-sync/tracking-mappings'
 
@@ -120,14 +118,7 @@ export function reprojectHostSessionTabSource(ticket: WebSessionCloseIntentTicke
         suppressCancelledStructuredSessionTabs(source, { kind: 'local' })
       )
     : source
-  const projection = {
-    ...snapshot,
-    activeTabId: null,
-    activeTabType: null,
-    activeGroupId: null,
-    navigationIntent: undefined,
-    tabs: snapshot.tabs.map((tab) => ({ ...tab, isActive: false }))
-  }
+  const projection = projectHostSessionTabSource(snapshot)
   applyWebSessionTabsStorePatch(
     (state) => {
       const catalog = resolveSourceWorkspaceOwner(state, worktreeId)
@@ -165,37 +156,17 @@ export function reprojectHostSessionTabSource(ticket: WebSessionCloseIntentTicke
         ? undefined
         : survivingHostSessionTabClosePlacement(state, worktreeId, ticket.placement)
       const closeRestoration = placement ? { ...placement, hostTabId: ticket.closedId } : undefined
-      const patch = applyWebSessionTabsSnapshot(
-        state,
-        projection,
-        owner.environmentId,
-        Date.now(),
-        {
-          projectionOnly: true,
-          closeRestoration,
-          ...(local
-            ? ({
-                contentScope: 'agent-session',
-                preserveLocalLayout: true,
-                terminalPtyMode: 'local'
-              } as const)
-            : {})
-        }
-      )
-      const restoredTabId = resolveLocalTabIdForHostSessionTab({
-        environmentId: owner.environmentId,
-        worktreeId,
-        hostTabId: ticket.closedId
+      return applyWebSessionTabsSnapshot(state, projection, owner.environmentId, Date.now(), {
+        projectionOnly: true,
+        closeRestoration,
+        ...(local
+          ? ({
+              contentScope: 'agent-session',
+              preserveLocalLayout: true,
+              terminalPtyMode: 'local'
+            } as const)
+          : {})
       })
-      return closeRestoration && restoredTabId
-        ? {
-            ...patch,
-            ...applyHostSessionTabClosePlacement({ ...state, ...patch }, worktreeId, {
-              ...closeRestoration,
-              localTabId: restoredTabId
-            })
-          }
-        : patch
     },
     { frames: [] }
   )()

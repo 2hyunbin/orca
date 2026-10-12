@@ -8,14 +8,22 @@ import {
 } from '../../../shared/session-tab-close-ledger'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
 import { webSessionIntentOwnerKey, type WebSessionIntentOwner } from './web-session-intent-owner'
-import { useAppStore } from '../store'
 import { localStructuredSessionGeneration } from './local-structured-session-tabs-sync/inventory-generation-fence'
 import {
   captureHostSessionTabClosePlacement,
-  type HostSessionTabClosePlacement
+  type HostSessionTabClosePlacement,
+  type HostSessionTabClosePlacementState
 } from './host-session-tab-close-placement'
 
 const ledger = new SessionTabCloseLedger()
+let readClosePlacementState: (() => HostSessionTabClosePlacementState) | undefined
+
+// Store slices import close records; bind the reader only after store creation finishes.
+export function registerWebSessionClosePlacementStateReader(
+  reader: () => HostSessionTabClosePlacementState
+): void {
+  readClosePlacementState = reader
+}
 // The pairing each partition was recorded under, so an ended pairing's closes can be found.
 const ownerByPartition = new Map<string, Required<WebSessionIntentOwner>>()
 
@@ -51,8 +59,11 @@ export function beginWebSessionCloseIntent(
   }
   let placement: HostSessionTabClosePlacement | undefined
   try {
+    if (!readClosePlacementState) {
+      throw new Error('closed tab placement state reader is not registered')
+    }
     placement = captureHostSessionTabClosePlacement(
-      useAppStore.getState(),
+      readClosePlacementState(),
       owner.environmentId,
       worktreeId,
       hostTabId
