@@ -77,18 +77,24 @@ async function buildSnapshot(
   }
   const temporary = join(root, `${TEMPORARY_PREFIX}${pid}-${id}`)
   await rm(temporary, { recursive: true, force: true })
-  // Why both: bare requires from out/ walk up into Resources/node_modules.
-  for (const name of [PACKAGED_APP_ROOT_NAME, 'node_modules']) {
-    if (await exists(join(resources, name))) {
-      // Why FICLONE: on APFS and reflink filesystems the copy shares blocks with the app.
-      await cp(join(resources, name), join(temporary, name), {
-        recursive: true,
-        verbatimSymlinks: true,
-        mode: constants.COPYFILE_FICLONE
-      })
+  try {
+    // Why both: bare requires from out/ walk up into Resources/node_modules.
+    for (const name of [PACKAGED_APP_ROOT_NAME, 'node_modules']) {
+      if (await exists(join(resources, name))) {
+        // Why FICLONE: on APFS and reflink filesystems the copy shares blocks with the app.
+        await cp(join(resources, name), join(temporary, name), {
+          recursive: true,
+          verbatimSymlinks: true,
+          mode: constants.COPYFILE_FICLONE
+        })
+      }
     }
+    await writeFile(join(temporary, COMPLETE_MARKER), '')
+  } catch (error) {
+    // Why: a partial copy on a full disk would otherwise keep that space for the service's life.
+    await rm(temporary, { recursive: true, force: true }).catch(() => undefined)
+    throw error
   }
-  await writeFile(join(temporary, COMPLETE_MARKER), '')
   try {
     await rename(temporary, snapshotDir)
   } catch (error) {
