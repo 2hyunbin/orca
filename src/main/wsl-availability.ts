@@ -185,7 +185,7 @@ export function getCachedWslAvailability(): boolean | null {
 // first — so a definitive failure held for 10-30min would report `wsl-unavailable` over a
 // WSL that just listed a distro for us. A non-empty list proves wsl.exe ran, so drop the
 // stale failure and let the next call re-probe. Non-empty lists are cached for the process
-// lifetime, so this cannot re-spawn the blocking probe more than once.
+// lifetime, so this cannot re-spawn the probe more than once.
 export function dropStaleWslAvailabilityFailure(): void {
   wslAvailabilityCacheGeneration += 1
   if (wslAvailableCache && !wslAvailableCache.available && !('unsupported' in wslAvailableCache)) {
