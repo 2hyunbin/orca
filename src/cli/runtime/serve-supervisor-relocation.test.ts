@@ -104,25 +104,28 @@ describe('relocateServeSupervisor', () => {
     await expect(relocateServeSupervisor(failing)).resolves.toBe('in-place')
   })
 
-  it('removes a partial copy when copying fails', async () => {
-    // A dangling symlink with verbatim copy succeeds, so fail on an unreadable directory instead.
-    const unreadable = join(appRoot, 'out', 'locked')
-    await mkdir(unreadable)
-    await writeFile(join(unreadable, 'x.js'), '')
-    await chmod(unreadable, 0o000)
-    try {
-      const d = deps()
-      await expect(relocateServeSupervisor(d)).resolves.toBe('in-place')
-      expect(d.execve).not.toHaveBeenCalled()
-      expect(
-        (await readdir(serveSupervisorSnapshotRoot(userData))).filter((name) =>
-          name.startsWith('.tmp-')
-        )
-      ).toEqual([])
-    } finally {
-      await chmod(unreadable, 0o755)
+  // Why skip: mode 000 blocks neither root nor Windows readers.
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'removes a partial copy when copying fails',
+    async () => {
+      const unreadable = join(appRoot, 'out', 'locked')
+      await mkdir(unreadable)
+      await writeFile(join(unreadable, 'x.js'), '')
+      await chmod(unreadable, 0o000)
+      try {
+        const d = deps()
+        await expect(relocateServeSupervisor(d)).resolves.toBe('in-place')
+        expect(d.execve).not.toHaveBeenCalled()
+        expect(
+          (await readdir(serveSupervisorSnapshotRoot(userData))).filter((name) =>
+            name.startsWith('.tmp-')
+          )
+        ).toEqual([])
+      } finally {
+        await chmod(unreadable, 0o755)
+      }
     }
-  })
+  )
 
   const releaseCopies = async (): Promise<string[]> =>
     (await readdir(serveSupervisorSnapshotRoot(userData))).filter((name) => !name.startsWith('.'))
