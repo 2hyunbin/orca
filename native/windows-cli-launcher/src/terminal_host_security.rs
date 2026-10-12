@@ -113,7 +113,8 @@ pub fn allow_medium_integrity_client(name: &OsStr, expected_pid: u32) -> std::io
 unsafe fn set_medium_label(pipe: Handle) -> std::io::Result<()> {
     let sid = current_user_sid()?;
     // Scope control to this Windows account, SYSTEM and administrators; never Everyone or anonymous.
-    let text: Vec<u16> = format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;{sid})S:(ML;;NW;;;ME)")
+    // The user gets read/write without FILE_CREATE_PIPE_INSTANCE, so it cannot plant an unelevated instance.
+    let text: Vec<u16> = format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x12019b;;;{sid})S:(ML;;NW;;;ME)")
         .encode_utf16()
         .chain(Some(0))
         .collect();
@@ -149,7 +150,12 @@ unsafe fn set_medium_label(pipe: Handle) -> std::io::Result<()> {
     result
 }
 
-unsafe fn current_user_sid() -> std::io::Result<String> {
+pub fn current_user_sid() -> std::io::Result<String> {
+    // SAFETY: reads this process's own token; every handle and allocation is released.
+    unsafe { token_user_sid() }
+}
+
+unsafe fn token_user_sid() -> std::io::Result<String> {
     let mut token = std::ptr::null_mut();
     if OpenProcessToken(GetCurrentProcess(), 8, &mut token) == 0 {
         return Err(std::io::Error::last_os_error());

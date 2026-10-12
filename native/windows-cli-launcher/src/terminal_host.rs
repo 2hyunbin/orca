@@ -5,11 +5,14 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::time::{Duration, Instant};
 
+use crate::terminal_host_paths::{is_inside, trusted_host};
 use crate::terminal_host_process::TerminalHostProcess;
-use crate::terminal_host_security::{allow_medium_integrity_client, is_elevated};
+use crate::terminal_host_security::{allow_medium_integrity_client, current_user_sid, is_elevated};
 
 const REQUEST: &str = "--orca-admin-terminal-host";
 const APPROVED: &str = "--orca-approved-terminal-host";
+const ACCOUNT_MISMATCH: &str =
+    "Approve administrator terminals with your own Windows account, not a different administrator account";
 
 #[repr(C)]
 struct ShellExecuteInfo {
@@ -81,10 +84,15 @@ pub fn run_if_requested(launcher: &Path) {
     if args.len() < 6 {
         crate::fail("Missing administrator terminal host launch arguments");
     }
+    let caller_sid = current_user_sid().unwrap_or_else(|error| {
+        crate::fail(&format!("Unable to read the Windows account: {error}"))
+    });
     if mode == REQUEST && !is_elevated() {
         let file = wide(launcher.as_os_str());
         let verb = wide(OsStr::new("runas"));
         let mut parameters = quote(OsStr::new(APPROVED));
+        parameters.push(32);
+        parameters.extend(quote(OsStr::new(&caller_sid)));
         for arg in &args[1..] {
             parameters.push(32);
             parameters.extend(quote(arg));
@@ -116,19 +124,34 @@ pub fn run_if_requested(launcher: &Path) {
     if !is_elevated() {
         crate::fail("Administrator terminal host requires Windows approval");
     }
-    let program = PathBuf::from(&args[1]);
-    let entry = PathBuf::from(&args[2]);
+    // A direct elevated REQUEST has no forwarded account; APPROVED carries the requester's.
+    let args = if mode == APPROVED {
+        &args[1..]
+    } else {
+        &args[..]
+    };
+    if mode == APPROVED && args[0].as_os_str() != OsStr::new(&caller_sid) {
+        crate::fail(ACCOUNT_MISMATCH);
+    }
+    if args.len() < 6 {
+        crate::fail("Missing administrator terminal host launch arguments");
+    }
+    let Some(host) = trusted_host(launcher, Path::new(&args[1]), Path::new(&args[2])) else {
+        crate::fail("Administrator terminal host must be this Orca installation");
+    };
     let user_data = PathBuf::from(&args[3]);
-    if !program.is_absolute()
-        || !program.is_file()
-        || !entry.is_absolute()
-        || !entry.is_file()
-        || !user_data.is_absolute()
-        || !user_data.is_dir()
-    {
+    if !user_data.is_absolute() || !user_data.is_dir() {
         crate::fail("Administrator terminal host paths must be existing absolute paths");
     }
     let daemon_args = &args[4..];
+    for pair in daemon_args.windows(2) {
+        let is_file_arg = ["--token", "--pid-record", "--log-file"]
+            .iter()
+            .any(|name| pair[0] == *name);
+        if is_file_arg && !is_inside(&user_data, Path::new(&pair[1])) {
+            crate::fail("Administrator terminal host files must stay in Orca's profile");
+        }
+    }
     let socket = daemon_args
         .windows(2)
         .find(|pair| pair[0] == "--socket")
@@ -149,7 +172,7 @@ pub fn run_if_requested(launcher: &Path) {
     }
     env::set_var("ELECTRON_RUN_AS_NODE", "1");
     env::set_var("ORCA_USER_DATA_PATH", &user_data);
-    let child = TerminalHostProcess::spawn(&program, &entry, daemon_args, &user_data)
+    let child = TerminalHostProcess::spawn(&host.program, &host.entry, daemon_args, &user_data)
         .unwrap_or_else(|error| {
             crate::fail(&format!("Unable to start administrator terminals: {error}"))
         });
@@ -167,7 +190,9 @@ pub fn run_if_requested(launcher: &Path) {
             }
         }
         if let Some(code) = child.exit_code() {
-            exit(code);
+            crate::fail(&format!(
+                "Administrator terminal host exited before it was ready (code {code})"
+            ));
         }
         std::thread::sleep(Duration::from_millis(50));
     }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { expect, it } from 'vitest'
@@ -14,7 +14,9 @@ it.skipIf(!enabled)(
     const launcher = join(process.cwd(), 'native', 'windows-cli-launcher', '.build', 'orca.exe')
     const check = await runProcess({ program: launcher, args: ['--orca-check-administrator'] })
     expect(JSON.parse(check.stdout)).toEqual({ elevated: true })
-    const directory = mkdtempSync(join(tmpdir(), 'orca admin 雪 '))
+    // The broker elevates only this checkout's runtime, so the host and scripts live inside it.
+    const electron = String(createRequire(import.meta.url)('electron'))
+    const directory = mkdtempSync(join(launcher, '..', 'orca admin 雪 '))
     const entry = join(directory, 'pipe-server.cjs')
     const pidPath = join(directory, 'server-pid.txt')
     const idleEntry = join(directory, 'idle-server.cjs')
@@ -31,21 +33,17 @@ server.listen(socket,()=>fs.writeFileSync('server-pid.txt',String(process.pid)))
 setTimeout(()=>process.exit(1),30000).unref();`
     )
     writeFileSync(idleEntry, 'setTimeout(()=>process.exit(1),30000)')
-    const launch = (script = entry) =>
+    const launch = (script = entry, program = electron) =>
       runProcess({
         program: launcher,
-        args: [
-          '--orca-admin-terminal-host',
-          process.execPath,
-          script,
-          directory,
-          '--socket',
-          socket
-        ],
+        args: ['--orca-admin-terminal-host', program, script, directory, '--socket', socket],
         timeoutMs: 10_000
       })
     let hostPid: number | undefined
     try {
+      const foreign = await launch(entry, process.execPath)
+      expect(foreign).toMatchObject({ code: 1, timedOut: false })
+      expect(foreign.stderr).toContain('must be this Orca installation')
       const first = await launch()
       expect(first).toMatchObject({ code: 0, timedOut: false })
       const pid = Number(readFileSync(pidPath, 'utf8'))
