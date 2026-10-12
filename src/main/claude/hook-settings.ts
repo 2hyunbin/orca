@@ -131,7 +131,7 @@ export function getManagedLifecycleHook(
   // `<exe> claude` the same way, without cmd.exe.
   const nativeCommand = nativeHookPath ? wrapWindowsDirectCmdHookCommand(nativeHookPath) : null
   if (nativeCommand) {
-    const agent = getWindowsNativeHookAgent(basename(scriptPath))
+    const agent = getWindowsNativeHookAgent(scriptPath)
     return {
       type: 'command',
       command: `${nativeCommand} ${agent}`,
