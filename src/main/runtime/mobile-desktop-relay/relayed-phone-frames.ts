@@ -27,10 +27,8 @@ export function rewriteRelayedPhoneRequest(
 
 // Why: the server lists client-placed browser tabs only to callers declaring this; for a
 // mobile-scoped caller it is projection-only, since hosting duty requires a runtime-scoped one.
-export function relayedPhoneCapabilities<Capability>(
-  capabilities: readonly Capability[]
-): readonly (Capability | typeof BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY)[] {
-  return capabilities.some((capability) => capability === BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY)
+export function relayedPhoneCapabilities(capabilities: readonly string[]): readonly string[] {
+  return capabilities.includes(BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY)
     ? capabilities
     : [...capabilities, BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY]
 }
@@ -42,7 +40,9 @@ export function declareRelayedPhoneCapabilities(frame: string): string {
   if (!isRecord(parsed) || !isRecord(params) || !Array.isArray(params.clientCapabilities)) {
     return frame
   }
-  const clientCapabilities: readonly unknown[] = params.clientCapabilities
+  const clientCapabilities = params.clientCapabilities.filter(
+    (capability): capability is string => typeof capability === 'string'
+  )
   return JSON.stringify({
     ...parsed,
     params: { ...params, clientCapabilities: relayedPhoneCapabilities(clientCapabilities) }

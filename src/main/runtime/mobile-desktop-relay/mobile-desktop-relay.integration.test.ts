@@ -20,7 +20,9 @@ import {
 } from '../../../shared/delegated-mobile-device-contract'
 import { decodeTerminalStreamFrame } from '../../../shared/terminal-stream-protocol'
 import { sendRemoteRuntimeRequest } from '../../../shared/remote-runtime-client'
+import { mintBrowserScreencastSubscriptionId } from '../browser-screencast-subscription-id'
 import { OrcaRuntimeService } from '../orca-runtime'
+import { setRuntimeBrowserCommandsFactory } from '../runtime-browser-commands-factory'
 import { readRuntimeMetadata } from '../runtime-metadata'
 import { OrcaRuntimeRpcServer } from '../runtime-rpc'
 import { sendRequest } from '../runtime-rpc-test-harness'
@@ -485,6 +487,60 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
     expect(isOk(await phone.next('server'))).toBe(true)
     expect(hostGoto).toHaveBeenCalledWith(expect.objectContaining({ page: 'server-page' }))
     expect(desktopGoto).toHaveBeenCalledTimes(1)
+  })
+
+  it('streams a desktop-hosted page and releases it through the subscription id, never on the server', async () => {
+    const { host, desktop, state } = await startTopology()
+    state.hostedPages.add('hosted-page')
+    const phone = await connectPhone(desktop.server, 'iPhone')
+    const subscriptionId = mintBrowserScreencastSubscriptionId('hosted-page', 'nonce')
+    let release = (): void => {}
+    const released = new Promise<void>((resolve) => (release = resolve))
+    const desktopScreencast = vi
+      .spyOn(desktop.runtime, 'browserScreencast')
+      .mockImplementation(async (_params, stream) => {
+        stream.emit?.({
+          type: 'ready',
+          subscriptionId,
+          browserPageId: 'hosted-page',
+          format: 'jpeg',
+          tab: {
+            browserPageId: 'hosted-page',
+            index: 0,
+            url: 'http://a.test/',
+            title: 'A',
+            active: true
+          }
+        })
+        await released
+      })
+    const desktopCleanup = vi
+      .spyOn(desktop.runtime, 'cleanupSubscription')
+      .mockImplementation(() => release())
+    const hostScreencast = vi.spyOn(host.runtime, 'browserScreencast')
+    const hostCleanup = vi.spyOn(host.runtime, 'cleanupSubscription')
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: unsubscribe only checks a provider exists; the spies replace every command it would reach.
+    setRuntimeBrowserCommandsFactory(() => ({}) as never)
+    cleanups.push(() => setRuntimeBrowserCommandsFactory(null))
+
+    phone.send('cast', 'browser.screencast', {
+      worktree: WORKTREE,
+      page: 'hosted-page',
+      format: 'jpeg'
+    })
+    expect(
+      await phone.next('cast', (frame) => JSON.stringify(frame).includes(subscriptionId))
+    ).toMatchObject({ ok: true, result: { type: 'ready', subscriptionId } })
+    expect(desktopScreencast).toHaveBeenCalledWith(
+      { page: 'hosted-page', format: 'jpeg' },
+      expect.anything()
+    )
+
+    phone.send('uncast', 'browser.screencast.unsubscribe', { subscriptionId })
+    expect(await phone.next('uncast')).toMatchObject({ ok: true, result: { unsubscribed: true } })
+    expect(desktopCleanup).toHaveBeenCalledWith(subscriptionId)
+    expect(hostScreencast).not.toHaveBeenCalled()
+    expect(hostCleanup).not.toHaveBeenCalledWith(subscriptionId)
   })
 
   it('answers a targeted status from the server, so a server workspace gates on its own features', async () => {

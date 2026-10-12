@@ -42,7 +42,8 @@ describe('localHostedBrowserPageRequest', () => {
   it.each([
     ['a server page', 'browser.goto', { page: 'server-page' }, 'env-1'],
     ['another server', 'browser.goto', { page: 'hosted-page' }, 'env-2'],
-    ['no page', 'browser.tabCreate', { url: 'http://a.test' }, 'env-1'],
+    ['no page', 'browser.reload', {}, 'env-1'],
+    ['a new page', 'browser.tabCreate', { page: 'hosted-page', url: 'http://a.test' }, 'env-1'],
     ['a non-browser method', 'github.listWorkItems', { page: 'hosted-page' }, 'env-1'],
     [
       'a server screencast',
@@ -56,7 +57,7 @@ describe('localHostedBrowserPageRequest', () => {
 
   // Why: a relayed browser method that names its page some other way would silently reach the
   // server, which cannot serve a client-placed page.
-  it('covers every relayed browser method', () => {
+  it('covers every relayed browser method that targets an existing page', () => {
     for (const method of RELAYED_BROWSER_METHODS) {
       const schema = PARAMS_SCHEMAS.get(method)
       const keys = schema instanceof z.ZodObject ? Object.keys(schema.shape) : []
@@ -68,7 +69,12 @@ describe('localHostedBrowserPageRequest', () => {
         method,
         keys: Object.keys(params)
       })
-      expect(localHostedBrowserPageRequest(request(method, params), 'env-1', hosts)).not.toBeNull()
+      const local = localHostedBrowserPageRequest(request(method, params), 'env-1', hosts)
+      // tabCreate's page names the page to create, so creation always stays on the server.
+      expect({ method, local: local !== null }).toEqual({
+        method,
+        local: method !== 'browser.tabCreate'
+      })
     }
   })
 })
