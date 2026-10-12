@@ -8,10 +8,6 @@ import {
 import type { RpcClient } from '../transport/rpc-client'
 import { useRelayHosts } from './relay-hosts-feed'
 
-function isRuntimeHostId(id: string): id is `runtime:${string}` {
-  return id.startsWith('runtime:')
-}
-
 /**
  * The desktop's servers from the shared feed while `active`, and a scoped client for each one this
  * phone can reach now. The clients change only when the set of ready servers does, so a health or
@@ -33,15 +29,8 @@ export function useReachableServerClients(
     .sort()
     .join('\n')
   const serverClients = useMemo(
-    () =>
-      reachableServerClients(
-        client,
-        hostCapabilities,
-        readyKey
-          .split('\n')
-          .filter(isRuntimeHostId)
-          .map((hostId) => ({ hostId, relay: 'ready' }))
-      ),
+    () => reachableServerClients(client, hostCapabilities, servers ?? []),
+    // Keyed on the ready set rather than the feed's rows: see above.
     [client, hostCapabilities, readyKey]
   )
   return { servers, serverClients }

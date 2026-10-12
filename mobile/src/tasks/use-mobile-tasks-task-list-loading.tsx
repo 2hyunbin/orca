@@ -273,19 +273,18 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       tasksSupported
     ]
   )
-  // A server's repos joining or leaving reload quietly, so the items already listed stay on screen.
-  // When that also changes the effective filter, the load is a new one and its own effect reloads.
-  const listedRef = useRef({ serverRepoList, loadTasks })
+  // A server's repos joining or leaving an unfiltered list reload it quietly, so the items already
+  // listed stay on screen. A filter they change makes a new load, which its own effect runs.
+  const listedServerReposRef = useRef(serverRepoList)
   useEffect(() => {
-    const listed = listedRef.current
-    listedRef.current = { serverRepoList, loadTasks }
-    if (listed.serverRepoList === serverRepoList || listed.loadTasks !== loadTasks) {
+    if (listedServerReposRef.current === serverRepoList) {
       return
     }
-    if (connState === 'connected' && taskStateHydrated) {
+    listedServerReposRef.current = serverRepoList
+    if (effectiveRepoIds.size === 0 && connState === 'connected' && taskStateHydrated) {
       void loadTasks({ silent: true })
     }
-  }, [loadTasks, serverRepoList])
+  }, [serverRepoList])
   return Object.assign(model, { loadTasks })
 }
 
