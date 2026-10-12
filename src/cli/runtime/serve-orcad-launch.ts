@@ -3,7 +3,7 @@
  * app-side by `src/main/orcad/orcad-local-serve-selection.ts`; the CLI only asks and runs.
  */
 import { dirname, join } from 'node:path'
-import { runProcess, spawnProcess } from '../../shared/child-process/run-process'
+import { runProcess, spawnProcess } from '@orca/process-host'
 import {
   ORCAD_LOCAL_SERVE_SELECTION_ENTRY,
   ORCAD_LOCAL_SERVE_SELECTION_FLAGS as FLAGS,
@@ -24,6 +24,8 @@ export type ServeOrcaAppArgs = {
   grantDesktopControl?: boolean
   recipeJson?: boolean
   projectRoot?: string | null
+  /** Starts Electron serve despite a remembered macOS startup abort in this environment. */
+  force?: boolean
 }
 
 /** A first run may download and verify the pinned Node; bound it well past that. */

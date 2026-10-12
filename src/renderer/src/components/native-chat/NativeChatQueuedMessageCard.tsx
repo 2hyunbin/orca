@@ -92,11 +92,6 @@ export function queuedMessageCardCaption(
         'components.native-chat.queuedMessages.behindReturnedHold',
         'Waiting — a message ahead needs attention'
       )
-    case 'awaiting-answer':
-      return translate(
-        'components.native-chat.queuedMessages.awaitingAnswerHold',
-        'Waiting for your answer'
-      )
     case 'sending':
       return translate('components.native-chat.messageSending', 'Sending…')
     case 'turn':
@@ -352,7 +347,12 @@ function QueuedMessageExpandToggle({
           aria-controls={controls}
           onClick={onToggle}
         >
-          <ChevronDown className={cn('size-3.5 transition-transform', expanded && 'rotate-180')} />
+          <ChevronDown
+            className={cn(
+              'size-3.5 transition-transform motion-reduce:transition-none',
+              expanded && 'rotate-180'
+            )}
+          />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={4}>

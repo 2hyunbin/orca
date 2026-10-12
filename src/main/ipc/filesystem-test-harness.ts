@@ -48,7 +48,6 @@ export const resolveCommitMessageSettingsMock: IpcMock = vi.fn()
 export const generateCommitMessageFromContextMock: IpcMock = vi.fn()
 export const generatePullRequestFieldsFromContextMock: IpcMock = vi.fn()
 export const discoverCommitMessageModelsLocalMock: IpcMock = vi.fn()
-export const discoverCommitMessageModelsRemoteMock: IpcMock = vi.fn()
 export const cancelGenerateCommitMessageLocalMock: IpcMock = vi.fn()
 export const cancelGeneratePullRequestFieldsLocalMock: IpcMock = vi.fn()
 export const getPullRequestDraftContextMock: IpcMock = vi.fn()
@@ -132,7 +131,8 @@ export const sshFilesystemDispatchMock = {
 
 export const sshGitDispatchMock = {
   getSshGitProvider: getSshGitProviderMock,
-  SSH_GIT_PROVIDER_UNAVAILABLE_MESSAGE: PROVIDER_UNAVAILABLE_MESSAGE
+  SSH_GIT_PROVIDER_UNAVAILABLE_MESSAGE: PROVIDER_UNAVAILABLE_MESSAGE,
+  sshGitProviderMissingError: () => new Error(PROVIDER_UNAVAILABLE_MESSAGE)
 }
 
 export const textGenerationModuleMock = {
@@ -140,7 +140,6 @@ export const textGenerationModuleMock = {
   generateCommitMessageFromContext: generateCommitMessageFromContextMock,
   generatePullRequestFieldsFromContext: generatePullRequestFieldsFromContextMock,
   discoverCommitMessageModelsLocal: discoverCommitMessageModelsLocalMock,
-  discoverCommitMessageModelsRemote: discoverCommitMessageModelsRemoteMock,
   cancelGenerateCommitMessageLocal: cancelGenerateCommitMessageLocalMock,
   cancelGeneratePullRequestFieldsLocal: cancelGeneratePullRequestFieldsLocalMock
 }

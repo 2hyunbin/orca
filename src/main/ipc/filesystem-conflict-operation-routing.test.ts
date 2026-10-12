@@ -5,6 +5,7 @@ import {
   REPO_PATH,
   WORKTREE_FEATURE_PATH,
   detectConflictOperationMock,
+  getSshGitProviderMock,
   resetFilesystemIpcMocks
 } from './filesystem-test-harness'
 
@@ -81,5 +82,25 @@ describe('git:conflictOperation local routing', () => {
     expect(detectConflictOperationMock).toHaveBeenCalledWith(WORKTREE_FEATURE_PATH, {
       wslDistro: 'Ubuntu'
     })
+  })
+})
+
+describe('git:conflictOperation ssh routing', () => {
+  beforeEach(() => {
+    resetFilesystemIpcMocks()
+    detectConflictOperationMock.mockReset()
+  })
+
+  it('reports an SSH host as not served instead of falling back to this machine', async () => {
+    getSshGitProviderMock.mockReturnValue({ detectConflictOperation: vi.fn() })
+    registerFilesystemHandlers(store as never)
+
+    await expect(
+      handlers.get('git:conflictOperation')!(null, {
+        worktreePath: '/remote/wt',
+        connectionId: 'ssh-1'
+      })
+    ).rejects.toThrow('Remote connection dropped')
+    expect(detectConflictOperationMock).not.toHaveBeenCalled()
   })
 })

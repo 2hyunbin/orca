@@ -144,7 +144,7 @@ function restingRecord(options: Record<string, string>): AgentSessionRecord {
   return {
     provider: 'claude',
     accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: ACCOUNT_HOME },
-    location: { wslDistro: null },
+    location: { executionHostId: 'local', wslDistro: null },
     // Why released: a chat at rest has no live claim, so its next start reads the current account.
     lease: { claimStatus: 'released' },
     options
@@ -188,7 +188,7 @@ function readAtRest(store: AgentModelCatalogStore, record: AgentSessionRecord) {
     openConversation: async () => resting,
     conversation: async () => resting
   } as unknown as StructuredAgentSessionMutationContext
-  return readStructuredAgentSessionOptions(context, SESSION)
+  return readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
 }
 
 function pickerEffort(result: Awaited<ReturnType<typeof readAtRest>>, agent = 'claude') {
@@ -268,7 +268,7 @@ describe('Claude effort default at rest', () => {
     const record = {
       provider: 'codex',
       accountHome: { variable: 'CODEX_HOME', path: '/accounts/codex' },
-      location: { wslDistro: null },
+      location: { executionHostId: 'local', wslDistro: null },
       options: { model: 'gpt-unlisted', effort: 'high' }
     } as unknown as AgentSessionRecord
     const listing = {
@@ -282,8 +282,7 @@ describe('Claude effort default at rest', () => {
             { value: 'high', label: 'High' }
           ]
         }
-      ],
-      fastModeTierByModel: new Map<string, string>()
+      ]
     }
     store.recordSuccess(
       agentModelCatalogFingerprintForRecord(record),
@@ -298,7 +297,7 @@ describe('Claude effort default at rest', () => {
     const resting = await readAtRest(store, record)
     const live = composeCodexSessionOptionCatalog(listing, {
       current: { model: 'gpt-unlisted', effort: 'high' }
-    }).result
+    })
 
     expect(resting.models).toEqual(live.models)
     expect(live.models.find((entry) => entry.id === 'gpt-unlisted')).toMatchObject({ efforts: [] })
@@ -348,7 +347,7 @@ describe('Claude effort default at rest', () => {
     const record = {
       provider: 'codex',
       accountHome: { variable: 'CODEX_HOME', path: '/accounts/codex' },
-      location: { wslDistro: null },
+      location: { executionHostId: 'local', wslDistro: null },
       options: { model: 'gpt-5.5', effort: 'high' }
     } as unknown as AgentSessionRecord
 
@@ -365,7 +364,7 @@ describe('Claude effort default at rest', () => {
     const record = {
       provider: 'codex',
       accountHome: { variable: 'CODEX_HOME', path: '/accounts/codex' },
-      location: { wslDistro: null },
+      location: { executionHostId: 'local', wslDistro: null },
       options: { model: 'gpt-5.5' }
     } as unknown as AgentSessionRecord
     store.recordSuccess(
@@ -384,7 +383,6 @@ describe('Claude effort default at rest', () => {
             ]
           }
         ],
-        fastModeTierByModel: new Map(),
         origin: 'live-session'
       },
       'discovery'

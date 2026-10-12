@@ -27,6 +27,7 @@ import { planCodexNoDaemonLaunch } from '../../../pty/codex-no-daemon-launch-com
 import { resolveStablePaneOwner } from '../pane/stable-owner'
 import { getStartupTerminalIngressIntent } from '../../terminal-startup-color-query-replies'
 import {
+  joinPaneSpawn,
   makePaneSpawnReservationKey,
   reservePaneSpawn,
   paneSpawnReservationsByOwnerKey
@@ -226,6 +227,9 @@ export async function buildRuntimePtySpawnOptions(
   if (!ctx.preAdoptedStablePane && args.agentSessionCreateOperationId) {
     ctx.spawnOptions.agentSessionCreateOperationId = args.agentSessionCreateOperationId
   }
+  if (!ctx.preAdoptedStablePane && args.spawnIntent) {
+    ctx.spawnOptions.spawnIntent = args.spawnIntent
+  }
   if (args.signal) {
     ctx.spawnOptions.signal = args.signal
   }
@@ -253,8 +257,8 @@ export async function buildRuntimePtySpawnOptions(
     const existingPaneSpawn = ctx.spawnIdentityPaneKey
       ? paneSpawnReservationsByOwnerKey.get(resolvedPaneSpawnReservationKey!)
       : undefined
-    if (existingPaneSpawn) {
-      const concurrentResult = await existingPaneSpawn.promise
+    const concurrentResult = existingPaneSpawn ? await joinPaneSpawn(existingPaneSpawn) : null
+    if (concurrentResult) {
       const concurrentOwner = resolveStablePaneOwner(
         ctx.deps.runtime,
         ctx.deps.store,

@@ -17,7 +17,7 @@ import {
   type RelayRegion
 } from '@orca-cloud/relay-contract'
 import { Hono, type Context } from 'hono'
-import { SignJWT, type createRemoteJWKSet } from 'jose'
+import { SignJWT } from 'jose'
 import { z } from 'zod'
 import {
   createAdminTokenVerifier,
@@ -29,6 +29,7 @@ import {
 } from './admin-token-verifier.js'
 import {
   RelayAssignmentRowBusyError,
+  RelayCellInReserveModeError,
   RelayHomeCellUnavailableError,
   type CellFenceAttemptEvidence,
   type RelayAssignment,
@@ -39,8 +40,11 @@ import { ASSIGNMENT_LEASE_AUDIENCE, assignmentLeaseKeyId } from './assignment-le
 import { AssignmentRejectionLogWindow } from './assignment-rejection-log-window.js'
 import { CELL_ADMISSION_STATES } from './cell-admission-selector.js'
 import { registerCellSeatFeedRoute } from './cell-seat-feed-route.js'
+import { ReservePaceError, type ReserveAssignment, type ReservePlan } from './reserve-assignment.js'
+import { registerCellReserveRoutes } from './cell-reserve-routes.js'
+import type { DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
 import type { CellSeatFeedPage } from './cell-seat-log.js'
-import type { CellFlags } from './cell-flags.js'
+import { type CellFlags, supportedCellFlags } from './cell-flags.js'
 import type { AppliedControlFlags } from './relay-control-flag-channel.js'
 import { RELAY_MAX_CELL_CAPACITY_REQUESTS, type RelayConfig } from './config.js'
 import type { RelayCredentialStore } from './credential-store.js'
@@ -75,6 +79,7 @@ import {
   probeRegionalRehomeTrust
 } from './regional-rehome-trust-probe.js'
 import { createRelayTokenVerifier, readBearer } from './relay-token-verifier.js'
+import type { RelayJWKSet } from './stale-if-error-jwks.js'
 import { stagingAsiaProofMembership } from './staging-asia-proof-admission.js'
 
 const RelayCellConnectionHardCapSchema = z.custom<RelayCellConnectionHardCap>(
@@ -126,6 +131,18 @@ export function createRelayApp(
     cellIncarnation?: string
     cellSeatFeed?: (sinceSeq: number | null) => CellSeatFeedPage
     cellFlags?: () => AppliedControlFlags<CellFlags>
+    // Step 5 on directors; absent keeps today's path for every request.
+    reservePlacement?: ReserveAssignment
+    cellReserve?: (request: ReserveRequest) => ReserveOutcome[]
+    cellDemote?: (request: DemoteRequest) => string
+    cellReserverPoll?: () => void
+    cellAdmitModeEffective?: () => 'db' | 'reserve'
+    cellAdmitModeRaw?: () => 'db' | 'reserve'
+    cellReserveCounts?: () => {
+      bookings: number
+      intake: { perSec: number; burst: number; tokens: number }
+    } | null
+    cellPlacementCeiling?: number
     isDraining?: () => boolean
     regionalRehomeSafetySnapshot?: () => RegionalRehomeSafetySnapshot
     runtimeCounts?: () => RelayRuntimeCounts
@@ -134,7 +151,7 @@ export function createRelayApp(
     // Both only on cells; the switch is the per-cell `readinessLocal` flag, off by default.
     readinessLocal?: () => boolean
     localReadiness?: () => RelayLocalReadinessVerdict
-    relayJwks?: ReturnType<typeof createRemoteJWKSet>
+    relayJwks?: RelayJWKSet
     recordAssignmentAdmission?: (outcome: AssignmentAdmissionOutcome) => void
     recordAssignmentRejectionReason?: (
       lane: AssignmentAdmissionLane,
@@ -284,7 +301,9 @@ export function createRelayApp(
     error: unknown,
     status: 404 | 409
   ): Response => {
-    if (!isRelayDatabaseTransientError(error)) {
+    // The reserve-mode set could not be read: retry, as for a database blip.
+    const unknownReserveSet = error instanceof RelayCellInReserveModeError && error.cellId === null
+    if (!isRelayDatabaseTransientError(error) && !unknownReserveSet) {
       return context.json({ error: operationError(error) }, status)
     }
     context.header('Retry-After', String(config.publicAssignmentRetryAfterSeconds))
@@ -333,7 +352,17 @@ export function createRelayApp(
     seatFeed: operations.cellSeatFeed,
     isDraining: operations.isDraining,
     runtimeCounts: operations.runtimeCounts,
-    cellFlags: operations.cellFlags
+    cellFlags: operations.cellFlags,
+    onReserverPoll: operations.cellReserverPoll,
+    admitModeEffective: operations.cellAdmitModeEffective,
+    admitModeRaw: operations.cellAdmitModeRaw,
+    reserveCounts: operations.cellReserveCounts,
+    placementCeiling: operations.cellPlacementCeiling
+  })
+  registerCellReserveRoutes(app, config, {
+    verifyRegionalRehomeToken,
+    reserve: operations.cellReserve,
+    demote: operations.cellDemote
   })
 
   // Not /healthz: Google Front End reserves that path before the container.
@@ -399,6 +428,56 @@ export function createRelayApp(
         ? requestedRegion
         : RELAY_DEFAULT_REGION
     operations.recordRegionRequest?.(requestedRegion)
+    const signAssignment = async (assignment: RelayAssignment) =>
+      await new SignJWT({
+        purpose: 'cell-assignment',
+        cellId: assignment.cellId,
+        cellUrl: assignment.cellUrl,
+        assignmentEpoch: assignment.assignmentEpoch,
+        relayHostId: claims.relayHostId
+      })
+        .setProtectedHeader({ alg: 'HS256', kid: assignmentLeaseKid })
+        .setIssuer(config.publicUrl)
+        .setAudience(ASSIGNMENT_LEASE_AUDIENCE)
+        .setSubject(claims.sub)
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(config.assignmentSigningKey)
+    // Step 5: switched-on cells answer from the map; anything else keeps today's path below.
+    let step5: { epochFloor?: number; placeFresh?: () => Promise<RelayAssignment | null> } = {}
+    if (operations.reservePlacement && !body.data.regionCorrection) {
+      let plan: ReservePlan
+      try {
+        plan = await operations.reservePlacement.plan(identity, {
+          reconnect: Boolean(body.data.reconnect),
+          region: targetRegion
+        })
+      } catch (error) {
+        if (!(error instanceof ReservePaceError)) throw error
+        plan = { kind: 'retry', retryAfterSeconds: error.retryAfterSeconds, reason: 'paced' }
+      }
+      if (plan.kind === 'answer') {
+        operations.recordAssignmentAdmission?.(plan.lane === 'sticky' ? 'sticky' : 'placement')
+        return context.json({
+          v: 1,
+          cellUrl: plan.assignment.cellUrl,
+          assignmentEpoch: plan.assignment.assignmentEpoch,
+          lease: await signAssignment(plan.assignment)
+        })
+      }
+      if (plan.kind === 'retry') {
+        operations.recordAssignmentUnavailable?.(
+          plan.reason === 'map-incomplete'
+            ? 'reserve-map-incomplete'
+            : plan.reason === 'database'
+              ? 'reserve-database'
+              : 'reserve-paced'
+        )
+        context.header('Retry-After', String(plan.retryAfterSeconds))
+        return context.json({ error: 'assignment_temporarily_unavailable' }, 503)
+      }
+      step5 = { epochFloor: plan.epochFloor, placeFresh: plan.placeFresh }
+    }
     let admission: { release(): void } | null = null
     let lane: AssignmentAdmissionLane = 'placement'
     if (body.data.reconnect) {
@@ -499,9 +578,14 @@ export function createRelayApp(
         if (!current) return context.json({ error: 'assignment_not_found' }, 409)
         assignment = current
       } else {
-        assignment = requestedRegion
-          ? await operations.assignments.assign(identity, requestedRegion, targetRegion)
-          : await operations.assignments.assign(identity)
+        // The host asked: it may leave a reserve cell the director proves dead.
+        assignment = await operations.assignments.assign(
+          identity,
+          requestedRegion,
+          requestedRegion ? targetRegion : undefined,
+          undefined,
+          { ...step5, hostRequested: true }
+        )
       }
       if (body.data.regionCorrection) {
         try {
@@ -517,6 +601,11 @@ export function createRelayApp(
         }
       }
     } catch (error) {
+      if (error instanceof ReservePaceError) {
+        operations.recordAssignmentUnavailable?.('reserve-paced')
+        context.header('Retry-After', String(error.retryAfterSeconds))
+        return context.json({ error: 'assignment_temporarily_unavailable' }, 503)
+      }
       if (error instanceof RelayAssignmentRowBusyError) {
         logAssignmentRejection({
           route: 'assign',
@@ -573,20 +662,7 @@ export function createRelayApp(
           ` host=${relayHostLogDigest(claims.relayHostId)} cell=${assignment.cellId}`
       )
     }
-    const lease = await new SignJWT({
-      purpose: 'cell-assignment',
-      cellId: assignment.cellId,
-      cellUrl: assignment.cellUrl,
-      assignmentEpoch: assignment.assignmentEpoch,
-      relayHostId: claims.relayHostId
-    })
-      .setProtectedHeader({ alg: 'HS256', kid: assignmentLeaseKid })
-      .setIssuer(config.publicUrl)
-      .setAudience(ASSIGNMENT_LEASE_AUDIENCE)
-      .setSubject(claims.sub)
-      .setIssuedAt()
-      .setExpirationTime('5m')
-      .sign(config.assignmentSigningKey)
+    const lease = await signAssignment(assignment)
     return context.json({
       v: 1,
       cellUrl: assignment.cellUrl,
@@ -783,7 +859,21 @@ export function createRelayApp(
       draining: operations.isDraining?.() ?? false,
       regionalRehomeProtocol: config.rehomeAudience && config.rehomeDirectorServiceAccount ? 3 : 0,
       // The flag workflow's read-back: applied switches, never the desired object.
-      ...(operations.cellFlags ? { flagsApplied: operations.cellFlags() } : {}),
+      ...(operations.cellFlags
+        ? {
+            flagsApplied: operations.cellFlags(),
+            supportedFlags: supportedCellFlags(),
+            // The flag tool paces a flip back's wait from it.
+            databasePoolMax: config.databasePoolMax
+          }
+        : {}),
+      ...(operations.cellAdmitModeEffective
+        ? { admitModeEffective: operations.cellAdmitModeEffective() }
+        : {}),
+      // Placement as built, not as configured: `on` only when this director books reserve cells.
+      ...(config.role === 'director'
+        ? { reservePlacement: operations.reservePlacement?.placementMode ?? 'off' }
+        : {}),
       connectionCapacity:
         config.connectionHardCap === undefined
           ? null
@@ -1129,6 +1219,44 @@ export function createRelayApp(
           : 'existing-only'
       )
       return context.json({ ok: true })
+    } catch (error) {
+      return rejectAdminOperation(context, error, 409)
+    }
+  })
+  // Step 5: the flag workflow's record of a cell's admitMode, which every sweep reads. Without
+  // `admitMode` it only reads; reserve is refused while a drain, migration or rehome is open.
+  app.post('/v1/admin/cell-admit-mode', async (context) => {
+    const bearer = readBearer(context.req.header('authorization'))
+    if (config.role !== 'director') return context.json({ error: 'director_only' }, 404)
+    if (!bearer || !(await verifyAdminToken(bearer))) {
+      return context.json({ error: 'invalid_token' }, 401)
+    }
+    if (requestTooLarge(context.req.header('content-length'))) {
+      return context.json({ error: 'request_too_large' }, 413)
+    }
+    const body = AdminCellAdmitModeSchema.safeParse(await context.req.json().catch(() => null))
+    if (!body.success) return context.json({ error: 'invalid_request' }, 400)
+    try {
+      if (body.data.admitMode) {
+        const before = await operations.assignments.cellAdmitMode(body.data.cellId)
+        await operations.assignments.setCellAdmitMode(body.data.cellId, body.data.admitMode)
+        // The sweeps' switch: every write is on the record, the break-glass flip included.
+        console.warn(
+          JSON.stringify({
+            event: 'orca_relay_cell_admit_mode_recorded',
+            cellId: body.data.cellId,
+            from: before.admitMode,
+            to: body.data.admitMode
+          })
+        )
+      }
+      return context.json({
+        v: 1,
+        cellId: body.data.cellId,
+        ...(await operations.assignments.cellAdmitMode(body.data.cellId)),
+        // The break-glass flip refuses a cell that is still heartbeating.
+        heartbeatFresh: await operations.assignments.cellHeartbeatFresh(body.data.cellId)
+      })
     } catch (error) {
       return rejectAdminOperation(context, error, 409)
     }
@@ -1954,6 +2082,10 @@ const AdminAdmissionSelectorAddMigrationCellsSchema = z
       new Set(cells.map(({ cellId }) => cellId)).size === cells.length &&
       new Set(cells.map(({ cellUrl }) => cellUrl)).size === cells.length
   )
+
+const AdminCellAdmitModeSchema = z
+  .object({ v: z.literal(1), cellId: CellIdSchema, admitMode: z.enum(['db', 'reserve']).optional() })
+  .strict()
 
 const AdminCellStateSchema = z.union([
   z.object({ v: z.literal(1), cellId: CellIdSchema, enabled: z.boolean() }).strict(),

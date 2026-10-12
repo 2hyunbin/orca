@@ -29,6 +29,10 @@ export type SessionTabsStreamEvent =
   | { type: 'snapshots'; snapshots: RuntimeMobileSessionTabsResult[]; authoritative?: boolean }
   | { type: 'end' }
 
+export function isSessionTabsStreamEnd(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && 'type' in result && result.type === 'end'
+}
+
 export type SessionTabsListAllResult = {
   snapshots: RuntimeMobileSessionTabsResult[]
   authoritative?: boolean
@@ -147,6 +151,8 @@ export const sessionTabsInventoryOmissionsByWorktree = new Map<
   SessionTabsInventoryOmissionObservation
 >()
 export const hostSessionTabIdByLocalKey = new Map<string, string>()
+// Why: desktop and host mint their own ids for a group a split creates; moves name the host's.
+export const hostSessionGroupIdByLocalKey = new Map<string, string>()
 export const hostSessionTabMappingKeysByEnvironmentAndWorktree = new Map<
   string,
   Map<string, Set<string>>
