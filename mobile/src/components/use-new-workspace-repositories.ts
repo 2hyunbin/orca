@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { RpcClient } from '../transport/rpc-client'
-import { nativeChatRepoListRead } from '../session/mobile-session-read-operations'
 import { getCachedRepos, setCachedRepos } from '../cache/repo-cache'
+import { listHostRepos, listServerRepos } from '../worktree/server-repos'
 import { useLastVisitedWorktreeRepoId } from '../worktree/use-last-visited-worktree-repo'
 import {
   getMobileNewWorkspaceDialogEligibleRepos,
@@ -13,28 +13,6 @@ import type { MobileWorkspaceRepo } from './new-worktree-modal-types'
 
 const NO_SERVER_CLIENTS: ReadonlyMap<ExecutionHostId, RpcClient> = new Map()
 const NO_SERVER_REPOS: ReadonlyMap<ExecutionHostId, MobileWorkspaceRepo[]> = new Map()
-
-/** One host's repos, or null when it refused or failed to answer. */
-async function listHostRepos(client: RpcClient): Promise<MobileWorkspaceRepo[] | null> {
-  const listed = nativeChatRepoListRead.interpret(await nativeChatRepoListRead.request(client))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
-  return listed.accepted ? (listed.value as MobileWorkspaceRepo[]) : null
-}
-
-/**
- * A server's repos tagged with that server, as the desktop's composer offers them. Its SSH repos
- * are left out: their connection is the server's, which the phone's SSH gate cannot read.
- */
-async function listServerRepos(
-  executionHostId: ExecutionHostId,
-  client: RpcClient
-): Promise<MobileWorkspaceRepo[] | null> {
-  const listed = await listHostRepos(client).catch(() => null)
-  return (
-    listed?.filter((repo) => !repo.connectionId).map((repo) => ({ ...repo, executionHostId })) ??
-    null
-  )
-}
 
 /**
  * The desktop's repos, then each reachable server's as it answers: a slow server never holds back
@@ -95,7 +73,7 @@ export function useNewWorkspaceRepositories(args: {
     }
     let stale = false
     setLoading(true)
-    void listHostRepos(client)
+    void listHostRepos<MobileWorkspaceRepo>(client)
       .then((listed) => {
         if (stale || !listed) {
           return
@@ -127,7 +105,7 @@ export function useNewWorkspaceRepositories(args: {
     }
     let stale = false
     for (const [executionHostId, serverClient] of serverClients) {
-      void listServerRepos(executionHostId, serverClient).then((listed) => {
+      void listServerRepos<MobileWorkspaceRepo>(executionHostId, serverClient).then((listed) => {
         if (!stale && listed) {
           setServerRepos((previous) => new Map(previous).set(executionHostId, listed))
         }

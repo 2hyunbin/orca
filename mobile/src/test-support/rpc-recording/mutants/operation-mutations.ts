@@ -101,8 +101,8 @@ export const OPERATION_MUTATIONS = {
   // Publishes the repo reply's payload instead of the member the reader took off it.
   'task-screen-repo-envelope': {
     file: 'use-mobile-tasks-route-and-item-state.tsx',
-    before: 'return newTabRepoListRead.interpret(reply) as RepoSummary[]',
-    after: 'return (reply as { result?: unknown }).result as RepoSummary[]'
+    before: '...(newTabRepoListRead.interpret(reply) as RepoSummary[])',
+    after: '...((reply as { result?: unknown }).result as RepoSummary[])'
   },
   // Drops the context reload the workspace switch chains off its send, so the sheet keeps showing
   // the previous workspace's teams after the host accepted the change.

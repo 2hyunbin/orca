@@ -31,9 +31,50 @@ export function workspaceRouteExecutionHost(
 }
 
 /**
+ * A view of the paired desktop's client that runs each call on the host `hostOf` names for its
+ * params, and on the desktop when it names none. The view owns no connection, so `close` leaves
+ * the shared client open.
+ */
+export function routeRpcClientCalls(
+  client: RpcClient,
+  hostOf: (params: unknown) => ExecutionHostId | undefined
+): RpcClient {
+  return {
+    sendRequest: (method, params, options) => {
+      const executionHost = hostOf(params)
+      return client.sendRequest(
+        method,
+        params,
+        executionHost ? { ...options, executionHost } : options
+      )
+    },
+    subscribe: (method, params, onData, options) => {
+      const executionHost = hostOf(params)
+      return client.subscribe(
+        method,
+        params,
+        onData,
+        executionHost ? { ...options, executionHost } : options
+      )
+    },
+    updateTerminalSubscriptionViewport: (terminal, viewport) =>
+      client.updateTerminalSubscriptionViewport(terminal, viewport),
+    getState: () => client.getState(),
+    getReconnectAttempt: () => client.getReconnectAttempt(),
+    getLastConnectedAt: () => client.getLastConnectedAt(),
+    getLastInboundAt: client.getLastInboundAt && (() => client.getLastInboundAt?.() ?? null),
+    getGeneration: client.getGeneration && (() => client.getGeneration?.() ?? 0),
+    carriesExecutionHost: () => client.carriesExecutionHost?.() ?? true,
+    onStateChange: (listener) => client.onStateChange(listener),
+    notifyForeground: (reason) => client.notifyForeground(reason),
+    close: () => {}
+  }
+}
+
+/**
  * The paired desktop's client with every call run on `executionHost`, mirroring the desktop's
  * `callRuntimeRpc(target, …)`. One view per (client, host), so screens comparing client identity
- * keep working; the view owns no connection, so `close` leaves the shared client open.
+ * keep working.
  */
 export function scopeRpcClientToExecutionHost(
   client: RpcClient,
@@ -48,23 +89,7 @@ export function scopeRpcClientToExecutionHost(
   if (existing) {
     return existing
   }
-  const view: RpcClient = {
-    sendRequest: (method, params, options) =>
-      client.sendRequest(method, params, { ...options, executionHost }),
-    subscribe: (method, params, onData, options) =>
-      client.subscribe(method, params, onData, { ...options, executionHost }),
-    updateTerminalSubscriptionViewport: (terminal, viewport) =>
-      client.updateTerminalSubscriptionViewport(terminal, viewport),
-    getState: () => client.getState(),
-    getReconnectAttempt: () => client.getReconnectAttempt(),
-    getLastConnectedAt: () => client.getLastConnectedAt(),
-    getLastInboundAt: client.getLastInboundAt && (() => client.getLastInboundAt?.() ?? null),
-    getGeneration: client.getGeneration && (() => client.getGeneration?.() ?? 0),
-    carriesExecutionHost: () => client.carriesExecutionHost?.() ?? true,
-    onStateChange: (listener) => client.onStateChange(listener),
-    notifyForeground: (reason) => client.notifyForeground(reason),
-    close: () => {}
-  }
+  const view = routeRpcClientCalls(client, () => executionHost)
   views.set(executionHost, view)
   return view
 }

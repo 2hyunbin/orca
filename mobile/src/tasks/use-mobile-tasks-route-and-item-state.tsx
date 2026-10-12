@@ -7,6 +7,7 @@ import {
   normalizeVisibleTaskProviders,
   useHostClient,
   useHostRepoList,
+  useMemo,
   useLastConnectedAt,
   useRelayRecoveryStatus,
   useLocalSearchParams,
@@ -17,6 +18,9 @@ import {
   useState
 } from './mobile-tasks-dependencies'
 import { newTabRepoListRead } from '../session/mobile-session-read-operations'
+import { useOptionalHostProtocolGates } from '../components/host-protocol-gates-context'
+import { listReachableServerRepos } from '../worktree/server-repos'
+import { routeTaskRepoCalls } from './task-repo-host-routing'
 import {
   type ActionableTaskItem,
   DEFAULT_LINEAR_DISPLAY_PROPERTIES,
@@ -45,11 +49,14 @@ import {
 } from './mobile-tasks-legacy-foundation'
 import { useMobileTasksItemState } from './use-mobile-tasks-item-state'
 
+const NO_CAPABILITIES: readonly string[] = []
+
 export function useMobileTasksRouteAndItemState() {
   const { hostId, taskSource } = useLocalSearchParams<{ hostId: string; taskSource?: string }>()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { client, state: connState } = useHostClient(hostId)
+  const { client: desktopClient, state: connState } = useHostClient(hostId)
+  const hostCapabilities = useOptionalHostProtocolGates()?.hostCapabilities ?? NO_CAPABILITIES
   const reconnectAttempts = useReconnectAttempt(hostId)
   const lastConnectedAt = useLastConnectedAt(hostId)
   const relayRecovery = useRelayRecoveryStatus(hostId)
@@ -57,14 +64,24 @@ export function useMobileTasksRouteAndItemState() {
   const loadGenerationRef = useRef(0)
   const taskResumeRef = useRef<TaskResumeState>({})
   const repoList = useHostRepoList<RepoSummary>(
-    client,
-    client && connState === 'connected'
+    desktopClient,
+    desktopClient && connState === 'connected'
       ? async () => {
-          const reply = await newTabRepoListRead.request(client)
+          // Why: the desktop's task page lists every host's repos, so the servers' join its own.
+          const [reply, serverRepos] = await Promise.all([
+            newTabRepoListRead.request(desktopClient),
+            listReachableServerRepos<RepoSummary>(desktopClient, hostCapabilities)
+          ])
           // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
-          return newTabRepoListRead.interpret(reply) as RepoSummary[]
+          return [...(newTabRepoListRead.interpret(reply) as RepoSummary[]), ...serverRepos]
         }
       : null
+  )
+  const { current: currentRepos } = repoList
+  // Why one client: every call naming a server's repo then runs on that server.
+  const client = useMemo(
+    () => desktopClient && routeTaskRepoCalls(desktopClient, currentRepos),
+    [currentRepos, desktopClient]
   )
   const repos = repoList.state.repos
   const { ensureLoaded: repoListEnsureLoaded, reload: repoListReload } = repoList
