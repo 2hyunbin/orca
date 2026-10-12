@@ -7,6 +7,9 @@ import {
 } from './execution-host-scoped-rpc-client'
 import { MobileRelayRpcStreams } from './mobile-relay-rpc-streams'
 import type { RpcClient } from './rpc-client'
+import { RpcClientRequestTracker } from './rpc-client-request-tracker'
+import { RpcClientStreamRegistry } from './rpc-client-stream-registry'
+import { buildDirectRpcWireRequest, type RpcRequestFrame } from './rpc-envelope-fields'
 import type { RpcResponse } from './types'
 
 const SERVER = 'runtime:env-1' as const
@@ -37,6 +40,42 @@ describe('executionHost on the envelope', () => {
       method: 'terminal.unsubscribe',
       envelope: { executionHost: SERVER }
     })
+  })
+})
+
+describe('a server workspace call on the direct wire', () => {
+  it('reaches the desktop as the same top-level executionHost frame as before the envelope', async () => {
+    const sent: string[] = []
+    let id = 0
+    const socket = {
+      nextId: () => `rpc-${++id}`,
+      getState: () => 'connected' as const,
+      sendFrame: (frame: RpcRequestFrame) => {
+        sent.push(JSON.stringify(buildDirectRpcWireRequest(frame, 'device-token')))
+        return true
+      }
+    }
+    const requests = new RpcClientRequestTracker({ ...socket, waitForConnected: async () => {} })
+    const streams = new RpcClientStreamRegistry(socket)
+    const direct: RpcClient = {
+      ...fakeClient(),
+      sendRequest: (method, params, options) => requests.sendRequest(method, params, options),
+      subscribe: (method, params, onData, options) =>
+        streams.subscribe(method, params, onData, options)
+    }
+    const server = scopeRpcClientToExecutionHost(direct, SERVER)
+    void server.sendRequest('worktree.ps', { limit: 1 })
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    server.subscribe('terminal.subscribe', { terminal: 't1' }, () => {})
+    // What #26501 wrote with its own `executionHost` option; the desktop parses JSON, so key order is not read.
+    expect(sent.map((json) => JSON.parse(json))).toStrictEqual([
+      JSON.parse(
+        '{"id":"rpc-1","deviceToken":"device-token","method":"worktree.ps","params":{"limit":1},"executionHost":"runtime:env-1"}'
+      ),
+      JSON.parse(
+        '{"id":"rpc-2","deviceToken":"device-token","method":"terminal.subscribe","params":{"terminal":"t1"},"executionHost":"runtime:env-1"}'
+      )
+    ])
   })
 })
 
