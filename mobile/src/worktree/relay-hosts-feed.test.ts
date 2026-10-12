@@ -78,6 +78,9 @@ describe('the desktop’s server list', () => {
     await vi.advanceTimersByTimeAsync(3000)
     expect(listCalls(session)).toBe(2)
     unsubscribe()
+    // The read in flight finishes without arming a poll nobody reads.
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('drops a reply that lands after a drop and reconnect', async () => {
