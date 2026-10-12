@@ -23,6 +23,9 @@ const TRANSPORT_FIELDS: Record<keyof RpcRequest, true> = {
 /** Every field the transport owns; none can be set through `RpcEnvelopeFields`. */
 export const RPC_TRANSPORT_FIELDS: readonly string[] = Object.keys(TRANSPORT_FIELDS)
 
+/** What a caller-facing transport hands its physical sender, which adds the credential. */
+export type RpcRequestFrame = Omit<RpcRequest, 'deviceToken'> & { envelope?: RpcEnvelopeFields }
+
 /**
  * The wire request with `fields` merged under it. Transport fields are dropped from `fields`
  * whether or not this request carries them, so an absent `params` cannot be filled in either.
@@ -39,4 +42,12 @@ export function withRpcEnvelopeFields(
     Object.entries(fields).filter(([key]) => !Object.hasOwn(TRANSPORT_FIELDS, key))
   )
   return { ...extra, ...request }
+}
+
+/** The direct transport's wire request, in the key order its sockets and goldens have always had. */
+export function buildDirectRpcWireRequest(
+  { id, method, params, envelope }: RpcRequestFrame,
+  deviceToken: string
+): RpcRequest {
+  return withRpcEnvelopeFields({ id, deviceToken, method, params }, envelope)
 }

@@ -4,10 +4,14 @@ import {
   type MobileRelayEndpoint
 } from '../../../src/shared/mobile-relay-credential-contract'
 import { MobileRelayE2eeLink } from './mobile-relay-e2ee-link'
-import { MobileRelayRpcStreams, type MobileRelayRpcFrame } from './mobile-relay-rpc-streams'
+import { MobileRelayRpcStreams } from './mobile-relay-rpc-streams'
 import { MobileE2EEAuthenticationError } from './mobile-e2ee-v2-physical-channel'
 import { markRpcDeliveryUnknown } from './rpc-delivery-ambiguity'
-import { withRpcEnvelopeFields, type RpcEnvelopeFields } from './rpc-envelope-fields'
+import {
+  withRpcEnvelopeFields,
+  type RpcEnvelopeFields,
+  type RpcRequestFrame
+} from './rpc-envelope-fields'
 import { openRpcRequestBudget, resolvePostConnectRequestTimeout } from './rpc-request-budget'
 import { isRpcResponse } from './rpc-response-shape'
 import { RelayDialStageTracker, type RelayDialStageSource } from './relay-dial-stage'
@@ -230,7 +234,7 @@ export function connectMobileRelayRpcSession(args: {
     })
   }
 
-  function sendFrame({ envelope, ...request }: MobileRelayRpcFrame): boolean {
+  function sendFrame({ envelope, ...request }: RpcRequestFrame): boolean {
     const wire = withRpcEnvelopeFields({ ...request, deviceToken: args.deviceToken }, envelope)
     return link.sendText(JSON.stringify(wire))
   }

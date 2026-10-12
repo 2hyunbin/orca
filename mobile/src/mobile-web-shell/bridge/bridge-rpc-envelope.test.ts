@@ -6,7 +6,10 @@ import {
   readBridgeClientMessage,
   readBridgeHostMessage
 } from './bridge-envelope'
-import { BridgeRpcEnvelopeRefusedError } from './bridge-client-errors'
+import {
+  BridgeRpcEnvelopeInvalidError,
+  BridgeRpcEnvelopeUngrantedError
+} from './bridge-client-errors'
 import { INIT, createPageClient, readError } from './bridge-page-client-test-harness'
 import { createFakeBridgePortPair } from './bridge-port-pair-test-harness'
 
@@ -53,6 +56,19 @@ describe('bridge rpc envelope: page side', () => {
     expect(emptySubscribe).toBe(subscribe)
   })
 
+  it('posts no options when the only option was the envelope, and keeps an empty bag', () => {
+    const page = grantedPage()
+    void page.client.sendRequest('worktree.ps', { a: 1 }, { envelope: {} })
+    void page.client.sendRequest('worktree.ps', { a: 1 }, { envelope: ENVELOPE })
+    void page.client.sendRequest('worktree.ps', { a: 1 }, {})
+    const [, emptyOnly, envelopeOnly, emptyBag] = page.frames()
+    expect(emptyOnly).not.toHaveProperty('options')
+    expect(emptyOnly).not.toHaveProperty('envelope')
+    expect(envelopeOnly).not.toHaveProperty('options')
+    expect(envelopeOnly).toMatchObject({ envelope: ENVELOPE })
+    expect(emptyBag).toMatchObject({ options: {} })
+  })
+
   it('carries a granted envelope beside params, out of options', () => {
     const page = grantedPage()
     void page.client.sendRequest('worktree.ps', undefined, { timeoutMs: 50, envelope: ENVELOPE })
@@ -72,11 +88,11 @@ describe('bridge rpc envelope: page side', () => {
     const refusal = await page.client
       .sendRequest('worktree.ps', {}, { envelope: ENVELOPE })
       .catch(readError)
-    expect(refusal).toBeInstanceOf(BridgeRpcEnvelopeRefusedError)
-    expect(refusal).toMatchObject({ code: 'bridge_rpc_envelope_not_granted' })
+    expect(refusal).toBeInstanceOf(BridgeRpcEnvelopeUngrantedError)
+    expect(refusal).toMatchObject({ code: 'bridge_rpc_envelope_ungranted' })
     expect(() =>
       page.client.subscribe('terminal.subscribe', {}, () => undefined, { envelope: ENVELOPE })
-    ).toThrow(BridgeRpcEnvelopeRefusedError)
+    ).toThrow(BridgeRpcEnvelopeUngrantedError)
     expect(page.sent).toHaveLength(posted)
   })
 
@@ -88,6 +104,7 @@ describe('bridge rpc envelope: page side', () => {
     const refusal = await page.client
       .sendRequest('worktree.ps', {}, { envelope: notJson })
       .catch(readError)
+    expect(refusal).toBeInstanceOf(BridgeRpcEnvelopeInvalidError)
     expect(refusal).toMatchObject({ code: 'bridge_rpc_envelope_invalid' })
     expect(page.sent).toHaveLength(posted)
   })

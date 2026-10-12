@@ -15,7 +15,7 @@ import {
 } from './rpc-subscription-result-shapes'
 import { RpcClientTerminalStreamRouter } from './rpc-client-terminal-stream-router'
 import * as sessionTabsStream from './rpc-client-session-tabs-stream'
-import { withRpcEnvelopeFields, type RpcEnvelopeFields } from './rpc-envelope-fields'
+import type { RpcEnvelopeFields, RpcRequestFrame } from './rpc-envelope-fields'
 import type { ConnectionState, RpcResponse, RpcSuccess } from './types'
 
 export type RpcStreamingListener = (result: unknown) => void
@@ -39,9 +39,8 @@ type StreamRequest = {
 
 type StreamRegistryOptions = {
   nextId: () => string
-  deviceToken: string
   getState: () => ConnectionState
-  sendEncrypted: (request: unknown) => boolean
+  sendFrame: (frame: RpcRequestFrame) => boolean
 }
 
 export class RpcClientStreamRegistry {
@@ -270,21 +269,12 @@ export class RpcClientStreamRegistry {
 
   // The stream's envelope rides its unsubscribes too: a routing field must reach the same host.
   private sendRpc(method: string, params: unknown, envelope?: RpcEnvelopeFields): boolean {
-    return this.options.sendEncrypted(
-      withRpcEnvelopeFields(
-        { id: this.options.nextId(), deviceToken: this.options.deviceToken, method, params },
-        envelope
-      )
-    )
+    return this.options.sendFrame({ id: this.options.nextId(), method, params, envelope })
   }
 
   private send(id: string, stream: StreamRequest): boolean {
-    return this.options.sendEncrypted(
-      withRpcEnvelopeFields(
-        { id, deviceToken: this.options.deviceToken, method: stream.method, params: stream.params },
-        stream.envelope
-      )
-    )
+    const { method, params, envelope } = stream
+    return this.options.sendFrame({ id, method, params, envelope })
   }
 
   private remove(id: string): void {

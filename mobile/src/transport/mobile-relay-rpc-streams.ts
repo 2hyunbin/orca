@@ -11,16 +11,8 @@ import {
 import { buildReadyStreamUnsubscribe, isReadyIdStream } from './rpc-client-server-subscription'
 import { isStreamingOpenerReply } from './rpc-acceptance-policies'
 import type { RpcClient } from './rpc-client'
-import type { RpcEnvelopeFields } from './rpc-envelope-fields'
+import type { RpcEnvelopeFields, RpcRequestFrame } from './rpc-envelope-fields'
 import type { RpcResponse, RpcSuccess } from './types'
-
-/** `envelope` rides a stream's subscribe and unsubscribes alike, so routing reaches one host. */
-export type MobileRelayRpcFrame = {
-  id: string
-  method: string
-  params?: unknown
-  envelope?: RpcEnvelopeFields
-}
 
 type StreamRecord = {
   method: string
@@ -70,7 +62,8 @@ function buildParamsUnsubscribe(
 
 type StreamManagerOptions = {
   nextId: () => string
-  sendFrame: (frame: MobileRelayRpcFrame) => boolean
+  // A stream's envelope rides its subscribe and unsubscribes alike, so routing reaches one host.
+  sendFrame: (frame: RpcRequestFrame) => boolean
   waitForConnected: () => Promise<void>
 }
 
