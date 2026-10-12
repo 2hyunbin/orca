@@ -22,12 +22,12 @@ vi.mock('@/runtime/runtime-file-read-client', () => ({
 }))
 vi.mock('@/runtime/runtime-file-watch-client', () => ({ subscribeRuntimeFileChanges: vi.fn() }))
 
-vi.mock('@/runtime/runtime-git-client', () => ({
+vi.mock('@/runtime/runtime-git-diff-client', () => ({
   getRuntimeGitBranchDiff: vi.fn(),
   getRuntimeGitCommitDiff: vi.fn(),
-  getRuntimeGitDiff: vi.fn(),
-  getRuntimeGitScope: vi.fn(() => null)
+  getRuntimeGitDiff: vi.fn()
 }))
+vi.mock('@/runtime/runtime-git-client-context', () => ({ getRuntimeGitScope: vi.fn(() => null) }))
 
 vi.mock('@/lib/connection-context', () => ({
   getConnectionId: vi.fn(),
