@@ -15,7 +15,7 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
 
 const { observeStructuredWorker, resolveStructuredWorkerAuthority, structuredSessionCloseSettled } =
   await import('./structured-worker-authority')
-const { structuredWorkerOwesWork, structuredWorkerOwned } =
+const { structuredWorkerOpenTaskTitle, structuredWorkerOwesWork, structuredWorkerOwned } =
   await import('./structured-worker-custody')
 const {
   mintStructuredWorkerHandle,
@@ -127,6 +127,16 @@ describe('an open dispatch keeps its worker running (P2-19 i)', () => {
     expect(structuredWorkerOwesWork(db, record({}))).toBe(true)
     db.settleWorkerStop(dispatch.id)
     expect(structuredWorkerOwesWork(db, record({}))).toBe(false)
+  })
+
+  it('names the worker after the task it still owes, and nothing once that settles', () => {
+    const dispatch = dispatchWorker()
+    expect(structuredWorkerOpenTaskTitle(db, record({}))).toBe('structured work')
+    db.markWorkerDispatchReady(dispatch.id)
+    db.beginWorkerStop(dispatch.id, 'epoch_home')
+    db.settleWorkerStop(dispatch.id)
+    expect(structuredWorkerOpenTaskTitle(db, record({}))).toBeNull()
+    expect(structuredWorkerOpenTaskTitle(null, record({}))).toBeNull()
   })
 
   // Custody is the list state coordinators see: `active` owes work, `reclaimable` does not.

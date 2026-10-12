@@ -124,9 +124,48 @@ export function structuredWorkerOwesWork(
   db: OrchestrationDb | null,
   record: AgentSessionRecord
 ): boolean {
+  const incarnation = db && ownedWorkerIncarnation(db, record)
+  return (
+    !!db &&
+    !!incarnation &&
+    db.db
+      .prepare(
+        `SELECT 1 FROM dispatch_contexts
+          WHERE process_incarnation = ? AND status IN ('pending', 'dispatched') LIMIT 1`
+      )
+      .get(incarnation) !== undefined
+  )
+}
+
+/** The title of the first task this worker still owes, which names its chat. */
+export function structuredWorkerOpenTaskTitle(
+  db: OrchestrationDb | null,
+  record: AgentSessionRecord
+): string | null {
+  const incarnation = db && ownedWorkerIncarnation(db, record)
+  if (!db || !incarnation) {
+    return null
+  }
+  const row: unknown = db.db
+    .prepare(
+      `SELECT task.task_title FROM dispatch_contexts dispatch
+        JOIN tasks task ON task.id = dispatch.task_id
+        WHERE dispatch.process_incarnation = ? AND dispatch.status IN ('pending', 'dispatched')
+        ORDER BY dispatch.rowid LIMIT 1`
+    )
+    .get(incarnation)
+  return typeof row === 'object' &&
+    row !== null &&
+    'task_title' in row &&
+    typeof row.task_title === 'string'
+    ? row.task_title
+    : null
+}
+
+function ownedWorkerIncarnation(db: OrchestrationDb, record: AgentSessionRecord): string | null {
   const hostScope = structuredWorkerHostScope(record.location)
-  if (!db || !hostScope) {
-    return false
+  if (!hostScope) {
+    return null
   }
   const incarnation = structuredWorkerProcessIncarnation(
     isOrcaSessionId(record.sessionId) ? canonicalOrcaSessionId(record.sessionId) : record.sessionId
@@ -137,13 +176,5 @@ export function structuredWorkerOwesWork(
         WHERE process_incarnation = ? AND host_scope IS ? AND ownership_state = 'owned' LIMIT 1`
     )
     .get(incarnation, JSON.stringify(hostScope))
-  return (
-    owned !== undefined &&
-    db.db
-      .prepare(
-        `SELECT 1 FROM dispatch_contexts
-          WHERE process_incarnation = ? AND status IN ('pending', 'dispatched') LIMIT 1`
-      )
-      .get(incarnation) !== undefined
-  )
+  return owned === undefined ? null : incarnation
 }
