@@ -168,6 +168,14 @@ export function createRestartSession(
         ORCA_E2E_RUNTIME_WS_PORT: String(runtimeWsPort)
       }
     })
+    // SPIKE (option B): surface the layout-save audit per scenario.
+    app.process().stdout?.on('data', (chunk: Buffer) => {
+      for (const line of chunk.toString().split('\n')) {
+        if (line.includes('[layout-audit]')) {
+          console.log(`[audit:${testInfo.title}] ${line}`)
+        }
+      }
+    })
     // Why: attach before firstWindow — the main-process daemon guard and the
     // plugin-system startup metrics can both emit before the renderer is ready.
     if (options?.onStderr) {
