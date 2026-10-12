@@ -103,6 +103,10 @@ test('serve-restart-keeps-@@-terminals: desktop, CLI and serve terminals survive
         })
         .toBe(before.terminals.length)
       const settled = await readSettled(read)
+      // Spike C evidence: the orders before and after the restart.
+      console.log(
+        `[spike-c-order] before ${JSON.stringify(before.server.groups)} ${JSON.stringify(before.published?.groups)} after ${JSON.stringify(settled.server.groups)} ${JSON.stringify(settled.published?.groups)}`
+      )
       // Bug on main: the order changes on restart. Repeated macOS runs saw session.tabs.list in
       // four of the six orders, and the published layout with the CLI's tab (tab2) second or
       // last. So the list must hold the same tabs in any order, the published layout one of those
