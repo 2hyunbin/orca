@@ -64,7 +64,12 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
       }
     },
     stopTerminals: (ptyIds) => {
-      void this.stopExplicitlyClosedTabPtys(ptyIds, '')
+      // The close is already committed; each stop is best-effort, as in the worktree sweep.
+      for (const ptyId of ptyIds) {
+        this.stopExplicitlyClosedTabPtys([ptyId], '').catch((error: unknown) => {
+          console.warn(`[runtime] failed to stop terminal ${ptyId}`, error)
+        })
+      }
     }
   })
 

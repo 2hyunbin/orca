@@ -88,4 +88,33 @@ describe('the runtime wired to its layout holder', () => {
     runtime.markPtyLivenessUnverifiable('pty-a', 'relay out of contact')
     expect(statusOf(events.at(-1), HEADLESS_LEAF_ID)).toBe('unverifiable')
   })
+
+  // A failed kill after a holder close must not escape: orcad has no unhandled-rejection handler.
+  it('logs a terminal stop that throws after a close and still stops the others', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const runtime = runtimeOn(partitionedStore({ local: twoPaneSession() }))
+    const kill = vi.fn((ptyId: string) => {
+      if (ptyId === 'pty-a') {
+        throw new Error('kill failed')
+      }
+      return true
+    })
+    runtime.setPtyController({ write: () => true, kill, getForegroundProcess: async () => null })
+
+    runtime['layoutHolder'].apply({
+      type: 'closeTabs',
+      workspace: TEST_WORKTREE_ID,
+      tabIds: ['host-tab']
+    })
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(
+        '[runtime] failed to stop terminal pty-a',
+        expect.any(Error)
+      )
+    )
+
+    expect(kill).toHaveBeenCalledWith('pty-a')
+    expect(kill).toHaveBeenCalledWith('pty-b')
+    warn.mockRestore()
+  })
 })
