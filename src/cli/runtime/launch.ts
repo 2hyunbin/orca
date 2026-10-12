@@ -41,6 +41,7 @@ import {
   relocateThisServeSupervisor,
   SERVE_SUPERVISOR_APP_ROOT_ENV
 } from './serve-supervisor-relocation'
+import { serverOnlyServeMessage } from './serve-app-launcher'
 import { isSupervisedSpawnHeld } from './serve-supervised-stop'
 import { openServeBundlePark } from './serve-bundle-park'
 import {
@@ -331,10 +332,7 @@ export function resolveForegroundOrcaExecutable(): string {
   if (process.env.ELECTRON_RUN_AS_NODE === '1') {
     return process.execPath
   }
-  throw new RuntimeClientError(
-    'runtime_serve_failed',
-    'Could not determine how to start Orca server. Set ORCA_APP_EXECUTABLE to the Orca executable.'
-  )
+  throw new RuntimeClientError('runtime_serve_failed', serverOnlyServeMessage(process.platform))
 }
 
 export function stripElectronRunAsNode(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
