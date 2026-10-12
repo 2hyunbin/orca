@@ -1,5 +1,6 @@
 import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
 import { isRecord } from './ipynb-parse'
+import { outputTextView, type OutputTextView } from './ipynb-output-text-view'
 
 /** An nbformat v4 output; while live it may also carry the kernel's `transient.display_id`. */
 export type NotebookOutput = Record<string, unknown>
@@ -10,7 +11,13 @@ export type LiveOutputs = {
   clearOnNextOutput: boolean
 }
 
-type StreamText = { text: string; tailStart: number; trailingReturn: boolean }
+type StreamText = {
+  text: string
+  tailStart: number
+  trailingReturn: boolean
+  /** What the cell draws, kept from chunks so drawing never reads the whole growing text. */
+  view: OutputTextView
+}
 
 // Why: weak output keys keep cursors off saved notebook data and release them with discarded outputs.
 const streamTextByOutput = new WeakMap<NotebookOutput, StreamText>()
@@ -22,10 +29,12 @@ export function collapseCarriageReturns(text: string): string {
 
 function splitStreamText(text: string, prefix = ''): StreamText {
   const tailStart = text.lastIndexOf('\n') + 1
+  const full = prefix + text
   return {
-    text: prefix + text,
+    text: full,
     tailStart: prefix.length + tailStart,
-    trailingReturn: text.endsWith('\r')
+    trailingReturn: text.endsWith('\r'),
+    view: outputTextView(full)
   }
 }
 
@@ -42,7 +51,8 @@ function appendStreamText(previous: StreamText, chunk: string): StreamText {
   return {
     text: previous.text + chunk,
     tailStart: tailStart === 0 ? previous.tailStart : previous.text.length + tailStart,
-    trailingReturn: false
+    trailingReturn: false,
+    view: outputTextView(previous.view.text + chunk, previous.view.truncated)
   }
 }
 
@@ -115,6 +125,11 @@ export function applyKernelOutput<T extends LiveOutputs>(
   }
   const output = type === 'stream' ? streamOutput(content) : toOutput(type, content)
   return { ...live, outputs: [...outputs, output], clearOnNextOutput: false }
+}
+
+/** The drawn end of a live stream output, without reading its whole text. */
+export function liveStreamView(output: NotebookOutput): OutputTextView | undefined {
+  return streamTextByOutput.get(output)?.view
 }
 
 /** Drops live-only fields so the outputs are valid nbformat. */

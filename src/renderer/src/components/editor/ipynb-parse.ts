@@ -1,7 +1,15 @@
+import {
+  OUTPUT_VIEW_CHAR_LIMIT,
+  OUTPUT_VIEW_LINE_LIMIT,
+  outputTextView,
+  type OutputTextView
+} from './ipynb-output-text-view'
+
 export type IpynbCellKind = 'code' | 'markdown' | 'raw'
 
 export type IpynbOutput =
-  | { kind: 'stream'; name: string; text: string }
+  /** Only the end that draws; `truncated` when earlier text is left out. */
+  | { kind: 'stream'; name: string; text: string; truncated: boolean }
   | { kind: 'error'; name: string; message: string; traceback: string }
   | { kind: 'display'; outputType: string; executionCount: number | null; items: IpynbOutputItem[] }
 
@@ -64,6 +72,25 @@ export function concatIpynbMultilineString(value: unknown): string {
   return String(value ?? '').replace(/\r\n/g, '\n')
 }
 
+/** The drawn end of a saved multiline string, without joining the lines it leaves out. */
+function multilineStringView(value: unknown): OutputTextView {
+  if (!Array.isArray(value)) {
+    const view = outputTextView(String(value ?? ''))
+    return { ...view, text: view.text.replace(/\r\n/g, '\n') }
+  }
+  let start = value.length
+  let newlines = 0
+  let chars = 0
+  // Why: one line past the limit lets outputTextView find where the drawn lines begin.
+  while (start > 0 && newlines <= OUTPUT_VIEW_LINE_LIMIT && chars <= OUTPUT_VIEW_CHAR_LIMIT) {
+    start -= 1
+    const item = String(value[start] ?? '')
+    newlines += item.split('\n').length - (item.endsWith('\n') ? 1 : 0)
+    chars += item.length
+  }
+  return outputTextView(concatIpynbMultilineString(value.slice(start)), start > 0)
+}
+
 export function translateKernelLanguageToMonaco(language: string | null | undefined): string {
   const normalized = (language ?? 'python').toLowerCase()
   if (normalized.length === 2 && normalized.endsWith('#')) {
@@ -113,7 +140,7 @@ export function parseIpynbOutput(rawOutput: unknown): IpynbOutput | null {
     return {
       kind: 'stream',
       name: typeof rawOutput.name === 'string' ? rawOutput.name : 'stdout',
-      text: concatIpynbMultilineString(rawOutput.text)
+      ...multilineStringView(rawOutput.text)
     }
   }
 

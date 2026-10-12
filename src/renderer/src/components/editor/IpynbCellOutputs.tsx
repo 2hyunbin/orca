@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { ITheme } from '@xterm/xterm'
 import { cn } from '@/lib/utils'
 import {
@@ -10,6 +11,8 @@ import { IpynbHtmlOutput } from './IpynbHtmlOutput'
 import { parseAnsiSegments, type AnsiColor } from './ipynb-ansi'
 import type { IpynbCell, IpynbOutput, IpynbOutputItem } from './ipynb-parse'
 import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
+import { translate } from '@/i18n/i18n'
+import { outputTextView } from './ipynb-output-text-view'
 
 const ANSI_PALETTE_KEYS = [
   'black',
@@ -93,7 +96,16 @@ function AnsiText({ text }: { text: string }): React.JSX.Element {
   )
 }
 
-function TextOutput({ text, error = false }: { text: string; error?: boolean }) {
+function TextOutput({
+  text,
+  truncated = false,
+  error = false
+}: {
+  text: string
+  truncated?: boolean
+  error?: boolean
+}) {
+  const view = useMemo(() => outputTextView(text, truncated), [text, truncated])
   return (
     <pre
       className={cn(
@@ -101,7 +113,15 @@ function TextOutput({ text, error = false }: { text: string; error?: boolean }) 
         error && 'bg-destructive/10'
       )}
     >
-      <AnsiText text={text} />
+      {view.truncated ? (
+        <span className="block pb-1 text-muted-foreground">
+          {translate(
+            'auto.components.editor.IpynbViewer.outputTruncated',
+            'Output is truncated. Showing the end; the full output is kept in the notebook.'
+          )}
+        </span>
+      ) : null}
+      <AnsiText text={view.text} />
     </pre>
   )
 }
@@ -128,7 +148,13 @@ function DisplayItem({ item }: { item: IpynbOutputItem }): React.JSX.Element | n
 
 function Output({ output }: { output: IpynbOutput }): React.JSX.Element | null {
   if (output.kind === 'stream') {
-    return <TextOutput text={output.text} error={output.name === 'stderr'} />
+    return (
+      <TextOutput
+        text={output.text}
+        truncated={output.truncated}
+        error={output.name === 'stderr'}
+      />
+    )
   }
   if (output.kind === 'error') {
     // Jupyter tracebacks already end with "ename: evalue".

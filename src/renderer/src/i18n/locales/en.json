@@ -15652,6 +15652,7 @@
           "noPython": "Python was not found on this computer. Install it from [python.org](https://www.python.org/downloads/), then run the cell again.",
           "kernelDied": "The kernel died.",
           "localOnly": "Notebook cells can only run for files on this computer.",
+          "outputTruncated": "Output is truncated. Showing the end; the full output is kept in the notebook.",
           "pythonOnly": "Only Python notebooks can run in Orca."
         },
         "MarkdownPreview": {

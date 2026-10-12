@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { formatToolDuration } from '../../../../shared/native-chat-tool-identity'
 import { IpynbCellOutputs } from './IpynbCellOutputs'
 import { IpynbRunPrompt } from './IpynbCellToolbar'
+import { liveStreamView, type NotebookOutput } from './ipynb-kernel-outputs'
 import { useCellRun } from './ipynb-kernel-store'
 import { parseIpynbOutput, type IpynbCell, type IpynbOutput } from './ipynb-parse'
 
@@ -30,6 +31,14 @@ export function IpynbCellRunPrompt({
   )
 }
 
+function parseLiveOutput(output: NotebookOutput): IpynbOutput | null {
+  const view = liveStreamView(output)
+  // Why: parsing reads the whole growing text; the stream's own view is already bounded.
+  return view
+    ? { kind: 'stream', name: String(output.name ?? 'stdout'), ...view }
+    : parseIpynbOutput(output)
+}
+
 /** A cell's outputs: live from its run until the document takes them in, then from the document. */
 export function IpynbCellRunOutputs({
   filePath,
@@ -44,7 +53,7 @@ export function IpynbCellRunOutputs({
             ...cell,
             executionCount: run.executionCount,
             outputs: run.outputs
-              .map(parseIpynbOutput)
+              .map(parseLiveOutput)
               .filter((output): output is IpynbOutput => output !== null)
           }
         : null,

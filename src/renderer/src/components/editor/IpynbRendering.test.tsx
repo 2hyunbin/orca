@@ -6,6 +6,7 @@ import { IpynbCellSource, IpynbMarkdownCell } from './IpynbCellEditor'
 import { IpynbRunPrompt } from './IpynbCellToolbar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { IpynbCell, IpynbOutput } from './ipynb-parse'
+import { OUTPUT_VIEW_LINE_LIMIT } from './ipynb-output-text-view'
 
 vi.mock('@/i18n/i18n', () => ({
   i18n: { language: 'en' },
@@ -176,5 +177,35 @@ describe('notebook outputs', () => {
     expect(source).toContain("default-src 'none'; img-src data:")
     expect(source).not.toContain('<script')
     expect(source).toContain('<b>safe</b>')
+  })
+
+  it('draws the end of long text output under a truncation note', () => {
+    const lines = Array.from(
+      { length: OUTPUT_VIEW_LINE_LIMIT + 10 },
+      (_, index) => `row ${index}\n`
+    )
+    render(
+      <IpynbCellOutputs
+        cell={cell('code', 'print', [
+          { kind: 'stream', name: 'stdout', text: lines.join(''), truncated: false }
+        ])}
+      />
+    )
+    expect(screen.getByText(/^Output is truncated\./)).toBeTruthy()
+    const text = document.querySelector('pre')?.textContent ?? ''
+    expect(text).not.toContain('row 9\n')
+    expect(text).toContain('row 10\n')
+    expect(text.endsWith(`row ${OUTPUT_VIEW_LINE_LIMIT + 9}\n`)).toBe(true)
+  })
+
+  it('draws short text output whole, without a note', () => {
+    render(
+      <IpynbCellOutputs
+        cell={cell('code', 'print', [
+          { kind: 'stream', name: 'stdout', text: 'done\n', truncated: false }
+        ])}
+      />
+    )
+    expect(screen.queryByText(/^Output is truncated\./)).toBeNull()
   })
 })

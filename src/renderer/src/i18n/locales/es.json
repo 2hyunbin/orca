@@ -15337,6 +15337,7 @@
           "noPython": "No se encontró Python en este equipo. Instálalo desde [python.org](https://www.python.org/downloads/) y vuelve a ejecutar la celda.",
           "kernelDied": "El kernel murió.",
           "localOnly": "Las celdas del notebook solo pueden ejecutarse para archivos de este equipo.",
+          "outputTruncated": "La salida está truncada. Se muestra el final; la salida completa se conserva en el notebook.",
           "pythonOnly": "Solo los notebooks de Python pueden ejecutarse en Orca.",
           "commandCopied": "Comando copiado",
           "createVenv": "Crear .venv",

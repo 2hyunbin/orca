@@ -15443,6 +15443,7 @@
           "noPython": "Python est introuvable sur cet ordinateur. Installez-le depuis [python.org](https://www.python.org/downloads/), puis réexécutez la cellule.",
           "kernelDied": "Le kernel est mort.",
           "localOnly": "Les cellules du notebook ne peuvent s'exécuter que pour des fichiers sur cet ordinateur.",
+          "outputTruncated": "La sortie est tronquée. Seule la fin est affichée ; la sortie complète est conservée dans le notebook.",
           "pythonOnly": "Seuls les notebooks Python peuvent s'exécuter dans Orca.",
           "commandCopied": "Commande copiée.",
           "createVenv": "Créer .venv",
