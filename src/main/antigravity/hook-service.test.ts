@@ -417,14 +417,12 @@ describe('AntigravityHookService', () => {
     )
   })
 
-  // win32-only: a cmd-safe managed path needs a real backslash-joined home.
-  it.skipIf(process.platform !== 'win32')(
-    'registers forward-slash wrapper paths and replaces legacy backslash entries',
-    () => {
+  it('replaces legacy backslash Windows entries and keeps user hooks', () => {
+    withPlatform('win32', () => {
       const configPath = join(homeDir, '.gemini', 'config', 'hooks.json')
-      const hooksDir = join(homeDir, '.orca', 'agent-hooks')
-      const legacyStop = join(hooksDir, 'antigravity-stop.cmd')
-      const legacyPreToolUse = join(hooksDir, 'antigravity-pre-tool-use.cmd')
+      // The pre-forward-slash bare paths: Git Bash strips their backslashes and exits 127.
+      const legacyStop = 'C:\\Users\\ada\\.orca\\agent-hooks\\antigravity-stop.cmd'
+      const legacyPreToolUse = 'C:\\Users\\ada\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd'
       const userHook = { type: 'command', command: 'C:\\tools\\user-hook.cmd' }
       mkdirSync(dirname(configPath), { recursive: true })
       writeFileSync(
@@ -444,14 +442,14 @@ describe('AntigravityHookService', () => {
       const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
         'orca-status': Record<string, { command?: string; hooks?: { command: string }[] }[]>
       }
-      // Why: Git Bash strips backslashes from a bare path; forward slashes survive every host.
-      expect(config['orca-status'].Stop).toEqual([
-        userHook,
-        expect.objectContaining({ command: legacyStop.replaceAll('\\', '/') })
-      ])
-      expect(config['orca-status'].PreToolUse.flatMap((d) => d.hooks ?? [])).toEqual([
-        expect.objectContaining({ command: legacyPreToolUse.replaceAll('\\', '/') })
-      ])
-    }
-  )
+      const [keptUserHook, stop] = config['orca-status'].Stop
+      expect(config['orca-status'].Stop).toHaveLength(2)
+      expect(keptUserHook).toEqual(userHook)
+      expect(stop.command).not.toBe(legacyStop)
+      expect(createManagedCommandMatcher('antigravity-stop.cmd')(stop.command)).toBe(true)
+      const preToolUse = config['orca-status'].PreToolUse.flatMap((d) => d.hooks ?? [])
+      expect(preToolUse).toHaveLength(1)
+      expect(preToolUse[0].command).not.toBe(legacyPreToolUse)
+    })
+  })
 })

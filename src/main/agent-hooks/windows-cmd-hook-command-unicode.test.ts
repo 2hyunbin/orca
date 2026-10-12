@@ -10,11 +10,13 @@ import {
   isPlainObject,
   readHooksJson,
   WINDOWS_CMD_SAFE_PATH,
-  wrapWindowsCmdHookCommand,
   wrapWindowsHookCommand,
   writeHooksJson
 } from './installer-utils'
-import { wrapWindowsDirectCmdHookCommand } from './windows-direct-cmd-hook-command'
+import {
+  wrapWindowsBatchHookCommand,
+  wrapWindowsDirectCmdHookCommand
+} from './windows-direct-cmd-hook-command'
 import { AntigravityHookService } from '../antigravity/hook-service'
 import { ANTIGRAVITY_EVENTS } from '../antigravity/hook-events'
 import { getWindowsPowerShellExecutablePath } from './windows-powershell-hook-launcher'
@@ -41,15 +43,14 @@ function decodeCommand(command: string): string {
 describe('Windows Unicode managed hook commands', () => {
   it('keeps the existing ASCII direct path', () => {
     const scriptPath = 'C:\\Users\\ascii\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd'
-    expect(wrapWindowsCmdHookCommand(scriptPath)).toBe(scriptPath)
-    expect(wrapWindowsDirectCmdHookCommand(scriptPath)).toBe(scriptPath.replaceAll('\\', '/'))
+    expect(wrapWindowsBatchHookCommand(scriptPath)).toBe(scriptPath.replaceAll('\\', '/'))
   })
 
   it.each(PROFILES.slice(1))(
     'preserves the guarded launcher for %s without policy setup',
     (profile) => {
       const scriptPath = `C:\\Users\\${profile}\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd`
-      const decoded = decodeCommand(wrapWindowsCmdHookCommand(scriptPath))
+      const decoded = decodeCommand(wrapWindowsBatchHookCommand(scriptPath))
       expect(decoded).toContain(`Test-Path -LiteralPath '${scriptPath}' -PathType Leaf`)
       expect(decoded).toContain('[Console]::In.ReadToEnd() | Out-Null; exit 0')
       expect(decoded).not.toContain('Set-ExecutionPolicy')
@@ -73,7 +74,7 @@ describe('Windows Unicode managed hook commands', () => {
     '用户\u2019name'
   ])('retains the encoded launcher for %s', (profile) => {
     const scriptPath = `C:\\Users\\${profile}\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd`
-    expect(wrapWindowsCmdHookCommand(scriptPath)).toBe(wrapWindowsHookCommand(scriptPath))
+    expect(wrapWindowsBatchHookCommand(scriptPath)).toBe(wrapWindowsHookCommand(scriptPath))
     expect(wrapWindowsDirectCmdHookCommand(scriptPath)).toBeNull()
   })
 })
@@ -155,7 +156,7 @@ describe.skipIf(
           const scriptPath = join(home, '.orca', 'agent-hooks', event.windowsWrapperFileName)
           const directCommand = wrapWindowsDirectCmdHookCommand(scriptPath)
           // Why: an ASCII profile registers the forward-slash path Git Bash can start too.
-          expect(command).toBe(directCommand ?? wrapWindowsCmdHookCommand(scriptPath))
+          expect(command).toBe(wrapWindowsBatchHookCommand(scriptPath))
           if (!WINDOWS_CMD_SAFE_PATH.test(scriptPath)) {
             expect(decodeCommand(command)).not.toContain('Set-ExecutionPolicy')
           }

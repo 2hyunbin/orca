@@ -185,6 +185,10 @@ describe('DevinHookService', () => {
       const command = getDevinManagedCommand(scriptPath)
       // Why: Git Bash strips backslashes from a bare path; forward slashes survive every host.
       expect(command).toBe('C:/Users/ada/.orca/agent-hooks/devin-hook.cmd')
+      // A UNC home is cmd-safe but has no drive letter, so it keeps the encoded launcher.
+      expect(
+        getDevinManagedCommand('\\\\server\\share\\ada\\.orca\\agent-hooks\\devin-hook.cmd')
+      ).toMatch(/ -EncodedCommand \S+$/)
 
       const next = applyDevinManagedHooks(
         {

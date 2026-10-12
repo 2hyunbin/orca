@@ -99,6 +99,7 @@ describe('Windows Grok managed hook launch shape', () => {
       expect(command).not.toContain(spaced)
     })
 
+    // Platform-stubbed so the legacy sweep runs on every CI leg; the installed-config legs are win32-only.
     it('replaces a legacy backslash entry and keeps user hooks', () => {
       const config: HooksConfig = {
         hooks: {
@@ -155,11 +156,10 @@ describe('Windows Grok managed hook launch shape', () => {
     )
 
     it.skipIf(process.platform !== 'win32')(
-      'replaces previously installed encoded-PowerShell and backslash entries on reinstall',
+      'replaces a previously installed encoded-PowerShell entry on reinstall',
       () => {
         const scriptPath = join(home, '.orca', 'agent-hooks', 'grok-hook.cmd')
         const staleCommand = wrapWindowsHookCommand(scriptPath)
-        const legacyBackslashCommand = scriptPath
         const configPath = join(home, '.grok', 'hooks', 'orca-status.json')
         mkdirSync(dirname(configPath), { recursive: true })
         writeFileSync(
@@ -167,9 +167,6 @@ describe('Windows Grok managed hook launch shape', () => {
           `${JSON.stringify({
             hooks: {
               Stop: [{ hooks: [{ type: 'command', command: staleCommand, timeout: 10 }] }],
-              PreToolUse: [
-                { hooks: [{ type: 'command', command: legacyBackslashCommand, timeout: 10 }] }
-              ],
               // Why: a retired event must be swept too, or the old launcher keeps firing there.
               SubagentStop: [{ hooks: [{ type: 'command', command: staleCommand, timeout: 10 }] }],
               Notification: [{ hooks: [{ type: 'command', command: '/usr/local/bin/user-hook' }] }]
@@ -187,7 +184,6 @@ describe('Windows Grok managed hook launch shape', () => {
           definitions.flatMap((definition) => definition.hooks.map((hook) => hook.command))
         )
         expect(all).not.toContain(staleCommand)
-        expect(all).not.toContain(legacyBackslashCommand)
         expect(all.filter((command) => /-EncodedCommand/i.test(command))).toEqual([])
         expect(config.hooks.SubagentStop).toBeUndefined()
         // Why: sweeping stale Orca entries must not touch hooks the user wrote.
