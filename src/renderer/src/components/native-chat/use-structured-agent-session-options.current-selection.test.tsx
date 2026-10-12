@@ -141,13 +141,6 @@ it('uses the existing options read when an older host omits the selection field'
   view.unmount()
 })
 
-it('treats an empty selection field as capable rather than an older host', async () => {
-  const view = renderSelection({ capable: true, selection: {} })
-  view.rerender({ fence: 1, turnId: null })
-  await waitFor(() => expect(pill(view.result.current.optionSnapshot).model).toBeNull())
-  view.unmount()
-})
-
 it('retires an accepted pick on reply even when another host change arrived first', async () => {
   let selection: Readonly<Record<string, string>> = { model: 'gpt-one' }
   mocks.summary.mockImplementation(() => ({ optionSelection: selection }))

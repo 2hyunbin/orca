@@ -125,13 +125,16 @@ export function useHostModelCatalogUpgrade(args: {
       if (catalog && newLaunch) {
         recordHostModelCatalogSnapshot(target, agent, worktree ?? '', catalog)
       }
+      // A new scoped default must refresh the view even when its live choices already won.
       updateOptionState((current) =>
         current.record !== activeOptionRecordRef.current
           ? current
           : catalog
-            ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
-                newLaunch
-              })
+            ? {
+                ...applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
+                  newLaunch
+                })
+              }
             : settleStructuredAgentSessionBuiltinCatalog(current)
       )
     }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import { structuralValuesEqual } from '../../../../shared/structural-value-equality'
 import { agentProviderSessionsEqual } from '../../../../shared/agent-session-resume'
 import type { AgentSessionStatusSummary } from '../../../../shared/agent-session-wire'
 import {
@@ -75,17 +76,6 @@ const EMPTY_HOST_EXECUTION: HostExecutionSelection = {
   optionSelection: undefined
 }
 
-function sameSelection(
-  a: HostExecutionSelection['optionSelection'],
-  b: HostExecutionSelection['optionSelection']
-): boolean {
-  if (a === undefined || b === undefined) {
-    return a === b
-  }
-  const keys = Object.keys(a)
-  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
-}
-
 /** Select only the host facts the chat renders. */
 export function useStructuredAgentSessionHostExecution(
   sessionId: string,
@@ -100,7 +90,7 @@ export function useStructuredAgentSessionHostExecution(
       const next = {
         phase: summary?.hostExecutionPhase ?? null,
         stopping: summary?.stopping === true,
-        optionSelection: sameSelection(previous.optionSelection, summary?.optionSelection)
+        optionSelection: structuralValuesEqual(previous.optionSelection, summary?.optionSelection)
           ? previous.optionSelection
           : summary?.optionSelection
       }

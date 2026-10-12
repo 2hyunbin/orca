@@ -80,10 +80,6 @@ export function useStructuredAgentSessionOptionState(args: {
     worktree
   } = args
   const selectionFromStatus = hostSelection !== undefined
-  const [pendingPick, setPendingPick] = useState<{
-    generation: number
-    values: Readonly<Record<string, string>>
-  } | null>(null)
   const [conversationSupport, setConversationSupport] = useState<{
     sessionId: string
     commands: readonly AgentSessionConversationCommand[]
@@ -121,16 +117,13 @@ export function useStructuredAgentSessionOptionState(args: {
     []
   )
   const optionIdentityRef = useRef(identity)
-  const activePendingPick =
-    optionIdentityRef.current === identity &&
-    pendingPick?.generation === optionMutationGeneration.current
-      ? pendingPick.values
-      : null
   useEffect(() => {
     const previous = optionStateRef.current
     const sameSession = optionIdentityRef.current === identity
     optionIdentityRef.current = identity
     if (sameSession && selectionFromStatus) {
+      optionMutationGeneration.current += 1
+      updateOptionState((current) => ({ ...current, pendingPick: null }))
       return
     }
     const launch = firstFrameLaunch.current
@@ -146,7 +139,7 @@ export function useStructuredAgentSessionOptionState(args: {
         ? {
             ...previous,
             record: cloneNativeChatSessionOptionRecord(previous.record),
-            pendingId: null
+            pendingPick: null
           }
         : seeded
     optionMutationGeneration.current += 1
@@ -187,28 +180,7 @@ export function useStructuredAgentSessionOptionState(args: {
           if (!selectionFromStatus) {
             return applyStructuredAgentSessionOptions(current, optionCatalog, result)
           }
-          // A live listing owns choices; only the scoped host catalog owns defaults.
-          const configured =
-            current.catalogSource !== 'seed' && current.catalog?.defaultModelIsCliDefault
-              ? current.catalog.models.find((model) => model.isDefault)
-              : undefined
-          const effort = configured?.options.find((option) => option.id === 'effort')?.kind
-          const catalog = structuredAgentSessionOptionCatalog(optionCatalog, {
-            ...result,
-            models: result.models.map((model) => ({
-              ...model,
-              isDefault: model.id === configured?.id,
-              ...(model.id === configured?.id &&
-              effort?.type === 'select' &&
-              effort.defaultIsCliDefault &&
-              model.efforts.some((choice) => choice.value === effort.defaultValue)
-                ? { defaultEffort: effort.defaultValue }
-                : {})
-            }))
-          })
-          if (!configured) {
-            delete catalog.defaultModelIsCliDefault
-          }
+          const catalog = structuredAgentSessionOptionCatalog(optionCatalog, result)
           return { ...current, catalog, catalogSource: 'live' }
         })
       }
@@ -242,33 +214,86 @@ export function useStructuredAgentSessionOptionState(args: {
     }
   }, [contextRefresh])
 
+  const configured = readHostModelCatalogSnapshot(target, agent, {
+    newLaunch,
+    worktree,
+    seedsModel
+  })
   return {
     conversationSupport,
     optionState,
     optionView: useMemo(() => {
+      // Live rows supply choices; the latest scoped host answer supplies the launch default.
+      const scoped =
+        configured && optionCatalog
+          ? applyStructuredAgentSessionModelCatalog(
+              createStructuredAgentSessionOptionState(agent),
+              optionCatalog,
+              configured,
+              { newLaunch }
+            ).catalog
+          : null
+      const defaultModel = scoped?.defaultModelIsCliDefault
+        ? scoped.models.find((model) => model.isDefault)
+        : undefined
+      const defaultEffort = defaultModel?.options.find((option) => option.id === 'effort')?.kind
+      const catalog =
+        optionState.catalog && selectionFromStatus
+          ? {
+              ...optionState.catalog,
+              defaultModelIsCliDefault: defaultModel ? (true as const) : undefined,
+              models: optionState.catalog.models.map((model) => ({
+                ...model,
+                isDefault: model.id === defaultModel?.id,
+                options: model.options.map((option) =>
+                  model.id === defaultModel?.id &&
+                  option.id === 'effort' &&
+                  option.kind.type === 'select' &&
+                  defaultEffort?.type === 'select' &&
+                  defaultEffort.defaultIsCliDefault &&
+                  option.kind.choices.some((choice) => choice.value === defaultEffort.defaultValue)
+                    ? {
+                        ...option,
+                        kind: {
+                          ...option.kind,
+                          defaultValue: defaultEffort.defaultValue,
+                          defaultIsCliDefault: true as const
+                        }
+                      }
+                    : option
+                )
+              }))
+            }
+          : optionState.catalog
       const selected = selectionFromStatus
         ? commitStructuredAgentSessionOptionValues(
-            { ...optionState, record: createNativeChatSessionOptionRecord(agent) },
+            { ...optionState, catalog, record: createNativeChatSessionOptionRecord(agent) },
             hostSelection
           )
         : optionState
+      const pending = optionIdentityRef.current === identity ? optionState.pendingPick : null
       return structuredAgentSessionOptionView(
-        activePendingPick
-          ? commitStructuredAgentSessionOptionValues(selected, activePendingPick)
-          : selected,
+        {
+          ...(selectionFromStatus && pending
+            ? commitStructuredAgentSessionOptionValues(selected, { [pending.id]: pending.value })
+            : selected),
+          pendingPick: pending
+        },
         selectionFromStatus ? undefined : launchSeedOptions,
         held
       )
     }, [
       agent,
-      activePendingPick,
+      configured,
+      identity,
+      newLaunch,
+      optionCatalog,
       held,
       hostSelection,
       launchSeedOptions,
       optionState,
       selectionFromStatus
     ]),
-    setPendingPick,
     optionStateRef,
     activeOptionRecordRef,
     optionMutationGeneration,

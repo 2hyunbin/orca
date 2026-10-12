@@ -73,7 +73,6 @@ export function useStructuredAgentSessionOptions(args: {
   const {
     optionState,
     optionView,
-    setPendingPick,
     optionStateRef,
     activeOptionRecordRef,
     optionMutationGeneration,
@@ -138,10 +137,7 @@ export function useStructuredAgentSessionOptions(args: {
       const isCurrent = (): boolean =>
         activeOptionRecordRef.current === targetRecord &&
         optionMutationGeneration.current === mutationGeneration
-      if (selectionFromStatus) {
-        setPendingPick({ generation: mutationGeneration, values: { [id]: encoded } })
-      }
-      updateOptionState((current) => ({ ...current, pendingId: id }))
+      updateOptionState((current) => ({ ...current, pendingPick: { id, value: encoded } }))
       let committed: Readonly<Record<string, string>> | null = null
       try {
         const result = await mutate<AgentSessionOptionResult>(
@@ -152,9 +148,6 @@ export function useStructuredAgentSessionOptions(args: {
         if (result && isCurrent()) {
           const acceptedValues = result.options ?? { [id]: encoded }
           committed = acceptedValues
-          if (selectionFromStatus) {
-            setPendingPick(null)
-          }
           updateOptionState((current) =>
             current.record === targetRecord && !selectionFromStatus
               ? commitStructuredAgentSessionOptionValues(current, acceptedValues)
@@ -182,12 +175,9 @@ export function useStructuredAgentSessionOptions(args: {
         return committed
       } finally {
         if (isCurrent()) {
-          if (!committed) {
-            setPendingPick(null)
-          }
           updateOptionState((current) =>
-            current.record === targetRecord && current.pendingId === id
-              ? { ...current, pendingId: null }
+            current.record === targetRecord && current.pendingPick?.id === id
+              ? { ...current, pendingPick: null }
               : current
           )
         }
@@ -200,7 +190,6 @@ export function useStructuredAgentSessionOptions(args: {
       optionMutationGeneration,
       optionStateRef,
       rememberOptionPicks,
-      setPendingPick,
       optionView,
       selectionFromStatus,
       sessionId,
@@ -241,7 +230,7 @@ export function useStructuredAgentSessionOptions(args: {
         void applied?.then(settleLaunchOptionPick)
         return applied === null ? null : { [id]: encoded }
       }
-      if (optionStateRef.current.pendingId !== null) {
+      if (optionStateRef.current.pendingPick !== null) {
         return null
       }
       return sendStructuredOption(id, encoded)

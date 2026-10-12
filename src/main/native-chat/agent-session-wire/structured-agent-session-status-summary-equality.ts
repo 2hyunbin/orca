@@ -1,6 +1,7 @@
 // Which status-summary changes reach every session list. The summary is broadcast to remote
 // subscribers too, so only a change a session list shows may re-send it.
 
+import { structuralValuesEqual } from '../../../shared/structural-value-equality'
 import { agentProviderSessionsEqual } from '../../../shared/agent-session-resume'
 import {
   agentSessionBackgroundTasksEqual,
@@ -31,7 +32,7 @@ export function structuredStatusSummariesEqual(
       (a.statusStartedAt !== undefined && !isIdleHeldOpenByChildWork(b))) &&
     a.latestPrompt === b.latestPrompt &&
     a.model === b.model &&
-    sameOptionSelection(a.optionSelection, b.optionSelection) &&
+    structuralValuesEqual(a.optionSelection, b.optionSelection) &&
     a.toolName === b.toolName &&
     a.toolInput === b.toolInput &&
     a.lastAssistantMessage === b.lastAssistantMessage &&
@@ -43,17 +44,6 @@ export function structuredStatusSummariesEqual(
     structuredStatusChildrenEqual(a.children, b.children) &&
     agentProviderSessionsEqual(undefined, a.providerSession, b.providerSession)
   )
-}
-
-function sameOptionSelection(
-  a: AgentSessionStatusSummary['optionSelection'],
-  b: AgentSessionStatusSummary['optionSelection']
-): boolean {
-  if (a === undefined || b === undefined) {
-    return a === b
-  }
-  const keys = Object.keys(a)
-  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
 }
 
 /** Held open by the host's child records, read the way every row reads them. */

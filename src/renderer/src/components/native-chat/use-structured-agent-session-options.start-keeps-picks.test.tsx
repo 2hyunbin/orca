@@ -124,9 +124,10 @@ for (const [agent, entry] of Object.entries(CASES)) {
         { initialProps: { fence: 1, starting: false } }
       )
       await waitFor(() =>
-        expect(pill(result.current.optionSnapshot).model).toBe(
-          selectionFromStatus ? null : entry.listed[0]
-        )
+        expect(pill(result.current.optionSnapshot)).toEqual({
+          model: entry.listed[0],
+          effort: 'medium'
+        })
       )
       await waitFor(() =>
         expect(
