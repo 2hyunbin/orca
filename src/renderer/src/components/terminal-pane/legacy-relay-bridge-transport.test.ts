@@ -9,7 +9,7 @@ const bridge = vi.hoisted(() => ({
   write: vi.fn(),
   resize: vi.fn(),
   detach: vi.fn(),
-  listPanes: vi.fn(async () => [] as LegacyRelayBridgedPane[]),
+  listPanes: vi.fn(async (): Promise<LegacyRelayBridgedPane[]> => []),
   panes: new Set<(panes: LegacyRelayBridgedPane[]) => void>(),
   data: new Set<(event: { ptyId: string; data: string }) => void>(),
   exit: new Set<(event: { ptyId: string; code: number }) => void>()

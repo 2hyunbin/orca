@@ -2,12 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type Request = { method: string; params: Record<string, unknown> | undefined }
 
-const fake = vi.hoisted(() => ({
-  requests: [] as { method: string; params: Record<string, unknown> | undefined }[],
-  notifications: [] as { method: string; params: Record<string, unknown> | undefined }[],
-  respond: (_method: string, _params: Record<string, unknown> | undefined): unknown => null,
-  instances: [] as { emit: (method: string, params: Record<string, unknown>) => void }[]
-}))
+type FakeMux = { emit: (method: string, params: Record<string, unknown>) => void }
+
+const fake = vi.hoisted(() => {
+  const requests: Request[] = []
+  const notifications: Request[] = []
+  const instances: FakeMux[] = []
+  return {
+    requests,
+    notifications,
+    instances,
+    respond: (_method: string, _params: Record<string, unknown> | undefined): unknown => null
+  }
+})
 
 vi.mock('../ssh-channel-multiplexer', () => ({
   SshChannelMultiplexer: class {
