@@ -541,8 +541,8 @@ module.exports = {
       // Why resources/bin: SignPath signs every unsigned PE under win-unpacked, and the hook
       // installer copies this signed file into ~/.orca/agent-hooks (#20913).
       {
-        from: 'native/windows-agent-hook/.build/orca-hook.exe',
-        to: 'bin/orca-hook.exe'
+        from: 'native/windows-agent-hook/.build/claude-hook.exe',
+        to: 'bin/claude-hook.exe'
       },
       {
         from: 'node_modules/agent-browser/bin/agent-browser-win32-x64.exe',

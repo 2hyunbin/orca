@@ -1,13 +1,8 @@
 import { spawnSync } from 'node:child_process'
-import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { createHash } from 'node:crypto'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { findDynamicVcRuntimeImports, readPeImportedDllNames } from './windows-pe-imports.mjs'
-
-const { PE_MACHINE, describePeMachine, readPeMachine } = createRequire(import.meta.url)(
-  './windows-pe-machine.cjs'
-)
 
 // Why explicit triples: both architectures cross-compile from one x64 runner.
 const RUST_TARGETS = {
@@ -36,21 +31,21 @@ export function shouldReuseCompiledWindowsRustExecutable(outputPath, fingerprint
  * The four-part numeric version Windows records in the PE. A prerelease suffix
  * survives only in ProductVersion, which is a free-form string.
  */
-export function windowsRustExecutableFileVersion(version, label) {
+export function windowsRustExecutableFileVersion(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.exec(version ?? '')
   if (!match || match.slice(1).some((part) => Number(part) > 65534)) {
-    throw new Error(`Invalid ${label} version: ${version}`)
+    throw new Error(`Invalid Windows executable version: ${version}`)
   }
   return `${match.slice(1).join('.')}.0`
 }
 
-export function windowsRustExecutableTarget(arch, label) {
+export function windowsRustExecutableTarget(arch) {
   if (arch === undefined) {
     return null
   }
   const target = RUST_TARGETS[arch]
   if (!target) {
-    throw new Error(`Unsupported ${label} architecture: ${arch}`)
+    throw new Error(`Unsupported Windows executable architecture: ${arch}`)
   }
   return target
 }
@@ -58,7 +53,7 @@ export function windowsRustExecutableTarget(arch, label) {
 /**
  * Compiles one std-only Windows binary crate with cargo, reusing a restored build
  * whose inputs are unchanged, and refuses an output that needs the VC++
- * Redistributable or targets the wrong machine.
+ * Redistributable.
  */
 export function compileWindowsRustExecutable({
   repoRoot,
@@ -78,13 +73,14 @@ export function compileWindowsRustExecutable({
   const manifestPath = join(crateRoot, 'Cargo.toml')
   const { version } = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
   // Throws on a version the PE cannot represent, before anything is compiled.
-  windowsRustExecutableFileVersion(version, label)
-  const rustTarget = windowsRustExecutableTarget(arch, label)
+  windowsRustExecutableFileVersion(version)
+  const rustTarget = windowsRustExecutableTarget(arch)
   const fingerprint = windowsRustExecutableFingerprint(
     [
       join(crateRoot, 'src', 'main.rs'),
       join(crateRoot, 'build.rs'),
       manifestPath,
+      join(crateRoot, 'Cargo.lock'),
       join(crateRoot, 'app.manifest'),
       join(crateRoot, '.cargo', 'config.toml'),
       join(repoRoot, 'config/scripts/windows-rust-executable-build.mjs'),
@@ -149,53 +145,6 @@ export function compileWindowsRustExecutable({
       `${binName}.exe imports ${vcRuntimeImports.join(', ')}; the C runtime must be linked statically (${join(crateRoot, '.cargo', 'config.toml')}).`
     )
   }
-  const expectedMachine = PE_MACHINE[arch ?? process.arch]
-  const machine = readPeMachine(builtPath)
-  if (expectedMachine !== undefined && machine !== expectedMachine) {
-    throw new Error(`${label} for ${arch ?? process.arch} has ${describePeMachine(machine)}`)
-  }
-  publishBuiltExecutable(builtPath, outputPath)
+  copyFileSync(builtPath, outputPath)
   writeFileSync(`${outputPath}.sha256`, fingerprint)
-}
-
-function hasBytes(path, expected) {
-  try {
-    return readFileSync(path).equals(expected)
-  } catch {
-    // Missing, or held by another reader: publish and let the rename retry.
-    return false
-  }
-}
-
-const PUBLISH_ATTEMPTS = 10
-const PUBLISH_RETRY_MS = 300
-
-/**
- * Concurrent builds (parallel test files, CI steps) finish together, and CopyFile opens its
- * destination unshared, so copying straight onto the output fails with EBUSY for whichever
- * build or reader is second. Each build stages its own temp file and renames it over the output.
- */
-export function publishBuiltExecutable(builtPath, outputPath) {
-  const built = readFileSync(builtPath)
-  if (hasBytes(outputPath, built)) {
-    return
-  }
-  const tmpPath = `${outputPath}.${process.pid}.${randomUUID()}.tmp`
-  try {
-    writeFileSync(tmpPath, built, { flag: 'wx' })
-    for (let attempt = 1; ; attempt += 1) {
-      try {
-        renameSync(tmpPath, outputPath)
-        return
-      } catch (error) {
-        // Why retry: antivirus briefly holds a freshly written image without delete sharing.
-        if (attempt === PUBLISH_ATTEMPTS || !['EBUSY', 'EPERM', 'EACCES'].includes(error?.code)) {
-          throw error
-        }
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, PUBLISH_RETRY_MS)
-      }
-    }
-  } finally {
-    rmSync(tmpPath, { force: true })
-  }
 }

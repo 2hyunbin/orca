@@ -16,8 +16,8 @@ import {
 } from '../agent-hooks/installer-utils-remote'
 import { refreshManagedScriptIfPresent } from '../agent-hooks/managed-hook-script-refresh'
 import { getManagedScript } from './hook-script'
-import { findManagedEventHooks } from './managed-event-hook-status'
 import {
+  getWindowsClaudeHookExecutablePath,
   getWindowsClaudeHookFileStatus,
   installWindowsClaudeHookExecutable,
   installWindowsClaudeHookFiles,
@@ -43,6 +43,7 @@ import {
   getStatusLineScriptFileName,
   getStatusLineScriptPath,
   getStatusLineSlotState,
+  findManagedEventHookForms,
   removeManagedHooks,
   removeManagedStatusLine,
   type ClaudeCompatibleHookSettings
@@ -122,13 +123,16 @@ export class ClaudeHookService {
       }
     }
 
-    // Why: report partial registration instead of a false installed state.
-    const { missing, presentCount, registeredNativeHookPath } = findManagedEventHooks(
-      config,
-      this.managedHookPlan(options).install.map((event) => event.eventName),
-      scriptPath,
-      this.options.settings
+    // Why: report partial registration instead of a false installed state. Either Windows form
+    // counts: install() registers the `.cmd` hook whenever the exe cannot be placed.
+    const exePath = this.usesWindowsEntry ? getWindowsClaudeHookExecutablePath(scriptPath) : null
+    const events = this.managedHookPlan(options).install.map((event) => event.eventName)
+    const { missing, matchedForms } = findManagedEventHookForms(config, events, (eventName) =>
+      [null, exePath].map((path) =>
+        getManagedEventHook(eventName, scriptPath, this.options.settings, path)
+      )
     )
+    const presentCount = matchedForms.length
     const managedHooksPresent = presentCount > 0
     let state: AgentHookInstallState
     let detail: string | null
@@ -144,7 +148,7 @@ export class ClaudeHookService {
     }
     const status = { agent: this.options.agent, state, configPath, managedHooksPresent, detail }
     return this.usesWindowsEntry
-      ? getWindowsClaudeHookFileStatus(status, scriptPath, registeredNativeHookPath)
+      ? getWindowsClaudeHookFileStatus(status, scriptPath, matchedForms.includes(1))
       : status
   }
 
@@ -152,7 +156,7 @@ export class ClaudeHookService {
     const scriptPath = getManagedScriptPath(this.options.settings)
     const payload = this.managedScript()
     await (this.usesWindowsEntry
-      ? refreshWindowsClaudeHookFiles(scriptPath, payload, this.options.settings)
+      ? refreshWindowsClaudeHookFiles(scriptPath, payload)
       : refreshManagedScriptIfPresent(scriptPath, payload))
     // Why: no agent gate — the statusline script only ever exists for claude, so presence is the gate.
     await refreshManagedScriptIfPresent(
@@ -180,13 +184,10 @@ export class ClaudeHookService {
     }
 
     const plan = this.managedHookPlan(options)
-    const nativeHookPath = this.usesWindowsEntry
-      ? installWindowsClaudeHookExecutable(this.options.settings)
-      : null
+    const exePath = this.usesWindowsEntry ? installWindowsClaudeHookExecutable(scriptPath) : null
     let nextConfig = applyManagedHooks(
       config,
-      (eventName) =>
-        getManagedEventHook(eventName, scriptPath, this.options.settings, nativeHookPath),
+      (eventName) => getManagedEventHook(eventName, scriptPath, this.options.settings, exePath),
       getManagedScriptFileName(this.options.settings),
       plan
     )

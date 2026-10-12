@@ -1,8 +1,8 @@
-// The real orca-hook.exe must keep the .cmd hook's contract under every Windows hook runner (#20913).
+// The real claude-hook.exe must keep the .cmd hook's contract under every Windows hook runner (#20913).
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { spawn } from 'node:child_process'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
@@ -10,7 +10,6 @@ import { getManagedScript } from '../claude/hook-script'
 import { CLAUDE_HOOK_SETTINGS, getManagedLifecycleHook } from '../claude/hook-settings'
 import { getWindowsClaudeHookEntry } from '../claude/windows-hook-files'
 import { WINDOWS_CMD_SAFE_PATH } from './installer-utils'
-import { installWindowsNativeHookExecutable } from './windows-native-hook-executable'
 import {
   buildWindowsNativeHookExecutable,
   WINDOWS_NATIVE_HOOK_BUILD_TIMEOUT_MS
@@ -116,15 +115,13 @@ let command = ''
 const listeners: Server[] = []
 const tempIsCmdSafe = WINDOWS_CMD_SAFE_PATH.test(join(tmpdir(), 'orca-native-hook-x', 'x.exe'))
 
-describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('orca-hook.exe hook hosts', () => {
+describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('claude-hook.exe hosts', () => {
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), 'orca-native-hook-'))
     // A dev box's AutoRun target under the redirected profile; the .cmd parity leg starts cmd.exe.
     writeFileSync(join(dir, '.cmd_aliases.cmd'), '@echo off\r\n')
     exePath = join(dir, 'claude-hook.exe')
-    expect(installWindowsNativeHookExecutable(buildWindowsNativeHookExecutable(), exePath)).toBe(
-      true
-    )
+    copyFileSync(buildWindowsNativeHookExecutable(), exePath)
     writeFileSync(join(dir, 'claude-hook.cmd'), getWindowsClaudeHookEntry())
     writeFileSync(join(dir, 'claude-hook-impl.cmd'), getManagedScript())
     command = getManagedLifecycleHook(
@@ -257,15 +254,5 @@ describe.skipIf(process.platform !== 'win32' || !tempIsCmdSafe)('orca-hook.exe h
     const refused = await run(exePath, [], paneEnv(listener, { ORCA_AGENT_HOOK_PORT: '1' }))
     expect(refused.code).toBe(0)
     expect(refused.stdout.trim()).toBe('{}')
-  })
-
-  it('stays inert under a file name that selects no agent profile', async () => {
-    const listener = await listen()
-    const unprofiled = join(dir, 'orca-hook.exe')
-    expect(installWindowsNativeHookExecutable(exePath, unprofiled)).toBe(true)
-    const result = await run(unprofiled, [], paneEnv(listener), 'abandon')
-    expect(result.code).toBe(0)
-    expect(result.stdout.trim()).toBe('{}')
-    expect(listener.posts).toHaveLength(0)
   })
 })

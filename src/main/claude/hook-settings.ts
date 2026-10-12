@@ -32,15 +32,12 @@ export type ClaudeCompatibleHookSettings = {
     | 'codebuddy-hook'
   usesWindowsCompatLauncher: boolean
   windowsHookShell?: 'powershell'
-  /** Register native-Windows hooks as the bundled orca-hook.exe when it installs (#20913). */
-  windowsNativeHookExecutable?: boolean
 }
 
 export const CLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
   configDirName: '.claude',
   scriptBaseName: 'claude-hook',
-  usesWindowsCompatLauncher: true,
-  windowsNativeHookExecutable: true
+  usesWindowsCompatLauncher: true
 }
 
 export const OPENCLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
@@ -120,7 +117,7 @@ export function getRemoteManagedEventCommand(eventName: string, scriptPath: stri
     : getRemoteManagedCommand(scriptPath)
 }
 
-/** `nativeHookPath` is the installed orca-hook.exe copy, or null to keep the `.cmd` form. */
+/** `nativeHookPath` is Claude's installed claude-hook.exe, or null to keep the `.cmd` form. */
 export function getManagedLifecycleHook(
   scriptPath: string,
   settings = CLAUDE_HOOK_SETTINGS,
@@ -130,10 +127,7 @@ export function getManagedLifecycleHook(
     return buildManagedCommandHook(getManagedCommand(scriptPath, { neutralJsonWhenMissing: true }))
   }
   // Why a bare exe path: Git Bash, PowerShell and CreateProcess all start it without cmd.exe.
-  const nativeCommand =
-    settings.windowsNativeHookExecutable && nativeHookPath
-      ? wrapWindowsDirectCmdHookCommand(nativeHookPath)
-      : null
+  const nativeCommand = nativeHookPath ? wrapWindowsDirectCmdHookCommand(nativeHookPath) : null
   if (nativeCommand) {
     return { type: 'command', command: nativeCommand, timeout: MANAGED_HOOK_TIMEOUT_SECONDS }
   }
@@ -182,6 +176,31 @@ export function hasSameManagedHookInvocation(
     actual.shell === expected.shell &&
     JSON.stringify(actual.args ?? []) === JSON.stringify(expected.args ?? [])
   )
+}
+
+/** Per planned event, the index of the first of `formsFor(event)` it carries; unmatched are missing. */
+export function findManagedEventHookForms(
+  config: HooksConfig,
+  eventNames: string[],
+  formsFor: (eventName: string) => HookCommandConfig[]
+): { missing: string[]; matchedForms: number[] } {
+  const missing: string[] = []
+  const matchedForms: number[] = []
+  for (const eventName of eventNames) {
+    const definitions = config.hooks?.[eventName]
+    const hooks = Array.isArray(definitions)
+      ? definitions.flatMap((definition) => definition.hooks ?? [])
+      : []
+    const form = formsFor(eventName).findIndex((expected) =>
+      hooks.some((hook) => hasSameManagedHookInvocation(hook, expected))
+    )
+    if (form === -1) {
+      missing.push(eventName)
+    } else {
+      matchedForms.push(form)
+    }
+  }
+  return { missing, matchedForms }
 }
 
 export function getRemoteManagedCommand(scriptPath: string): string {

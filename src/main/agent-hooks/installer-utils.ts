@@ -227,13 +227,13 @@ export function hookDefinitionHasManagedCommand(
 }
 
 // Why: temp+rename so concurrent writers can't leave a torn script for an in-flight /bin/sh to source.
-export function writeManagedScript(scriptPath: string, content: string): void {
+export function writeManagedScript(scriptPath: string, content: string | Buffer): void {
   const dir = dirname(scriptPath)
   mkdirSync(dir, { recursive: true })
 
   if (existsSync(scriptPath)) {
     try {
-      if (readFileSync(scriptPath, 'utf-8') === content) {
+      if (readFileSync(scriptPath).equals(Buffer.from(content))) {
         if (process.platform !== 'win32') {
           chmodSync(scriptPath, 0o755)
         }
@@ -264,7 +264,7 @@ export function writeManagedScript(scriptPath: string, content: string): void {
 }
 
 // Why: a restrictive directory DACL makes writes fail with EPERM on Windows; grant an ACL and retry once.
-function writeScriptWithAclRetry(scriptPath: string, content: string): void {
+function writeScriptWithAclRetry(scriptPath: string, content: string | Buffer): void {
   try {
     writeFileSync(scriptPath, content, 'utf-8')
   } catch (error) {

@@ -161,7 +161,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
       stdout: '{}'
     },
     {
-      name: 'Claude (orca-hook.exe)',
+      name: 'Claude (claude-hook.exe)',
       install: () => {
         bundledHook.path = buildWindowsNativeHookExecutable()
         return new ClaudeHookService().install()

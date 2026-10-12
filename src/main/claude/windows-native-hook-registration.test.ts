@@ -1,8 +1,11 @@
-// Claude alone opts into the native Windows hook (#20913); every other agent keeps its form.
+// Claude alone registers the native Windows hook (#20913); every other agent keeps its form.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnProcess } from '@orca/process-host'
+import { once } from 'node:events'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import type * as NativeHookExecutableModule from '../agent-hooks/windows-native-hook-executable'
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/userData' } }))
@@ -17,12 +20,16 @@ vi.mock('../agent-hooks/windows-native-hook-executable', async (importOriginal) 
 }))
 
 import { createManagedCommandMatcher } from '../agent-hooks/installer-utils'
+import {
+  buildWindowsNativeHookExecutable,
+  WINDOWS_NATIVE_HOOK_BUILD_TIMEOUT_MS
+} from '../agent-hooks/windows-native-hook-exe.test-fixture'
+import { openClaudeHookService } from '../openclaude/hook-service'
 import { ClaudeHookService } from './hook-service'
 import {
   CLAUDE_HOOK_SETTINGS,
   getManagedLifecycleHook,
-  getWindowsManagedLifecycleHook,
-  type ClaudeCompatibleHookSettings
+  getWindowsManagedLifecycleHook
 } from './hook-settings'
 
 const CURRENT_CLAUDE = { claudeVersion: '2.1.261 (Claude Code)' }
@@ -55,19 +62,6 @@ describe('getManagedLifecycleHook native executable gate', () => {
     expect(createManagedCommandMatcher('codebuddy-hook.cmd')(hook.command)).toBe(false)
   })
 
-  it('keeps every other Claude-compatible agent on its current form', () => {
-    const codeBuddyLike: ClaudeCompatibleHookSettings = {
-      configDirName: '.codebuddy',
-      scriptBaseName: 'codebuddy-hook',
-      usesWindowsCompatLauncher: true
-    }
-    const scriptPath = SCRIPT_PATH.replace('claude-hook', 'codebuddy-hook')
-    const hook = withWin32(() =>
-      getManagedLifecycleHook(scriptPath, codeBuddyLike, EXE_PATH.replace('claude', 'codebuddy'))
-    )
-    expect(hook).toEqual(getWindowsManagedLifecycleHook(scriptPath))
-  })
-
   it('falls back to the .cmd form without an installed exe or with a path shells cannot carry', () => {
     for (const exePath of [null, 'C:\\Users\\Bob Smith\\.orca\\agent-hooks\\claude-hook.exe']) {
       const hook = withWin32(() =>
@@ -85,7 +79,7 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
     vi.unstubAllEnvs()
     bundledHook.path = null
     if (home) {
-      rmSync(home, { recursive: true, force: true })
+      removeTreeSync(home)
       home = ''
     }
   })
@@ -94,7 +88,7 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
     home = mkdtempSync(join(tmpdir(), 'orca-claude-native-hook-'))
     vi.stubEnv('HOME', home)
     vi.stubEnv('USERPROFILE', home)
-    const bundle = join(home, 'orca-hook.exe')
+    const bundle = join(home, 'bundled-claude-hook.exe')
     writeFileSync(bundle, 'MZ stand-in for the signed bundle')
     return {
       hooksDir: join(home, '.orca', 'agent-hooks'),
@@ -169,4 +163,52 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
     await service.refreshManagedScripts()
     expect(readFileSync(join(hooksDir, 'claude-hook.exe'), 'utf8')).toBe('MZ next build')
   })
+
+  it('leaves every other Claude-compatible agent on its .cmd form', () => {
+    const { hooksDir, bundle } = useTempHome()
+    bundledHook.path = bundle
+
+    expect(openClaudeHookService.install().state).toBe('installed')
+    expect(readdirSync(hooksDir).filter((name) => name.endsWith('.exe'))).toEqual([])
+  })
+
+  it(
+    'keeps a copy whose hook is still running and registers the .cmd hook for that install',
+    { timeout: WINDOWS_NATIVE_HOOK_BUILD_TIMEOUT_MS },
+    async () => {
+      const { hooksDir, settingsPath } = useTempHome()
+      bundledHook.path = buildWindowsNativeHookExecutable()
+      const service = new ClaudeHookService()
+      expect(service.install(CURRENT_CLAUDE).state).toBe('installed')
+      const installed = join(hooksDir, 'claude-hook.exe')
+      const running = readFileSync(installed)
+
+      // In-pane env with stdin held open keeps the hook running and its image mapped.
+      const hook = spawnProcess({
+        program: installed,
+        env: {
+          SystemRoot: process.env.SystemRoot,
+          ORCA_AGENT_HOOK_PORT: '1',
+          ORCA_AGENT_HOOK_TOKEN: 'token',
+          ORCA_PANE_KEY: 'tab:leaf'
+        },
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+      try {
+        await once(hook.stdout, 'data')
+        bundledHook.path = join(home, 'next-build.exe')
+        writeFileSync(bundledHook.path, Buffer.concat([running, Buffer.from('next')]))
+
+        expect(service.install(CURRENT_CLAUDE).state).toBe('installed')
+        expect(managedCommands(settingsPath, 'Stop')).toEqual([
+          join(hooksDir, 'claude-hook.cmd').replaceAll('\\', '/')
+        ])
+        await service.refreshManagedScripts()
+        expect(readFileSync(installed).equals(running)).toBe(true)
+      } finally {
+        hook.stdin.end()
+        await once(hook, 'close')
+      }
+    }
+  )
 })

@@ -21,14 +21,14 @@ fn main() {
 
     let mut resource = winresource::WindowsResource::new();
     resource.set("ProductName", "Orca");
-    resource.set("FileDescription", "Orca Agent Hook");
+    resource.set("FileDescription", "Orca Claude Hook");
     resource.set("CompanyName", "Stably AI");
     resource.set(
         "LegalCopyright",
         "Copyright (C) Stably AI. All rights reserved.",
     );
-    resource.set("InternalName", "orca-hook.exe");
-    resource.set("OriginalFilename", "orca-hook.exe");
+    resource.set("InternalName", "claude-hook.exe");
+    resource.set("OriginalFilename", "claude-hook.exe");
     resource.set("FileVersion", &format!("{major}.{minor}.{patch}.0"));
     resource.set("ProductVersion", &version);
     resource.set_version_info(
