@@ -45,7 +45,7 @@ import type {
   PtyTransport,
   PtyTransportRecoveryState
 } from './pty-transport-types'
-import { createPtyOutputProcessor } from './pty-transport'
+import { createPtyOutputProcessor } from './pty-output-processor'
 import { isSshSessionGoneError } from './pty-connection/pty-connect-limits'
 import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-client'
 import {
@@ -54,12 +54,12 @@ import {
   runtimeTerminalErrorMessage,
   toRemoteRuntimePtyId
 } from '../../runtime/runtime-terminal-stream'
-import {
-  getRemoteRuntimeTerminalMultiplexer,
-  REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE,
-  type RemoteRuntimeMultiplexedTerminal,
-  type RemoteRuntimeSnapshotOutcome
-} from '../../runtime/remote-runtime-terminal-multiplexer'
+import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'
+import { REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE } from '../../runtime/remote-runtime-terminal-snapshot-state'
+import type {
+  RemoteRuntimeMultiplexedTerminal,
+  RemoteRuntimeSnapshotOutcome
+} from '../../runtime/remote-runtime-terminal-multiplexer-types'
 import {
   toRuntimeTerminalWorktreeSelector,
   toRuntimeWorktreeSelector
