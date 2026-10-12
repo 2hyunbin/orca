@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { RpcRequest } from '../rpc/core'
 import type { DelegatedMobileDeviceSyncParams } from '../../../shared/delegated-mobile-device-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import { RemoteRuntimeClientError } from '../../../shared/remote-runtime-client-error'
@@ -7,9 +8,15 @@ import {
   type RemoteRuntimePassthroughSocket
 } from '../../../shared/remote-runtime-passthrough-socket'
 import { syncDelegatedPhoneGrants, type DelegatedPhoneGrants } from './delegated-phone-grants'
+import { localHostedBrowserPageRequest } from './hosted-browser-page-route'
 import type { MobileDesktopRelayHost, MobileDesktopRelayHosts } from './mobile-desktop-relay-hosts'
 import { RELAYED_STREAM_CARRIERS } from './relayed-stream-carriers'
-import { RelayedPhoneReplies, rewriteRelayedPhoneRequest } from './relayed-phone-frames'
+import {
+  declareRelayedPhoneCapabilities,
+  RelayedPhoneReplies,
+  relayedPhoneCapabilities,
+  rewriteRelayedPhoneRequest
+} from './relayed-phone-frames'
 
 const RELAY_CONNECT_TIMEOUT_MS = 15_000
 
@@ -81,6 +88,15 @@ export class MobileDesktopRelay {
     this.grants.clear()
   }
 
+  /** The request to run on this desktop instead, when it renders the page the call targets. */
+  localRequestFor(request: RpcRequest, environmentId: string): RpcRequest | null {
+    return localHostedBrowserPageRequest(
+      request,
+      environmentId,
+      this.options.hosts.hostsBrowserPage
+    )
+  }
+
   forward(
     phone: RelayedPhone,
     environmentId: string,
@@ -128,7 +144,11 @@ export class MobileDesktopRelay {
         ({ socket, hostToken }) => {
           if (
             this.isCurrent(link) &&
-            !socket.send(rewriteRelayedPhoneRequest(frame, link.phone.deviceToken, hostToken, id))
+            !socket.send(
+              declareRelayedPhoneCapabilities(
+                rewriteRelayedPhoneRequest(frame, link.phone.deviceToken, hostToken, id)
+              )
+            )
           ) {
             this.endLink(link, unavailable('The server connection could not take the request.'))
           }
@@ -220,7 +240,7 @@ export class MobileDesktopRelay {
           pairedDeviceId: grant.deviceId,
           scope: 'mobile'
         },
-        phone.clientCapabilities(),
+        relayedPhoneCapabilities(phone.clientCapabilities()),
         {
           onText: (plaintext) => {
             const frame = link.replies.text(plaintext)

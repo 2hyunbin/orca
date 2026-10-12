@@ -147,6 +147,7 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
     const retirementListeners = new Set<(environmentId: string) => void>()
     const state = {
       capable: true,
+      hostedPages: new Set<string>(),
       retire: (environmentId: string) =>
         retirementListeners.forEach((listener) => listener(environmentId))
     }
@@ -175,6 +176,8 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
             }
           : response
       },
+      hostsBrowserPage: (environmentId, browserPageId) =>
+        environmentId === 'env-1' && state.hostedPages.has(browserPageId),
       onEnvironmentRetired: (listener) => {
         retirementListeners.add(listener)
         return () => retirementListeners.delete(listener)
@@ -385,7 +388,8 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
     await vi.waitFor(() =>
       expect(
         passthroughOpens.hostReplies.some((frame) =>
-          frame.includes('"clientCapabilities":["relay.test.v1"]')
+          // The server lists client-placed browser tabs only to callers declaring it.
+          frame.includes('"clientCapabilities":["relay.test.v1","browser.clientHost.v1"]')
         )
       ).toBe(true)
     )
@@ -448,6 +452,39 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
     phone.send('list', 'terminal.list', {})
     expect(isOk(await phone.next('list'))).toBe(true)
     expect(passthroughOpens.count).toBe(opensBefore + 1)
+  })
+
+  it('serves a browser call on the desktop when the desktop renders that server page itself', async () => {
+    const { host, desktop, state } = await startTopology()
+    state.hostedPages.add('hosted-page')
+    const phone = await connectPhone(desktop.server, 'iPhone')
+    const desktopGoto = vi.spyOn(desktop.runtime, 'browserGoto').mockResolvedValue({
+      url: 'http://example.test/',
+      title: 'Example'
+    })
+    const hostGoto = vi.spyOn(host.runtime, 'browserGoto').mockResolvedValue({
+      url: 'http://example.test/',
+      title: 'Example'
+    })
+
+    phone.send('hosted', 'browser.goto', {
+      worktree: WORKTREE,
+      page: 'hosted-page',
+      url: 'http://example.test/'
+    })
+    expect(isOk(await phone.next('hosted'))).toBe(true)
+    // The server's workspace selector means nothing here; the page id alone names the page.
+    expect(desktopGoto).toHaveBeenCalledWith({ page: 'hosted-page', url: 'http://example.test/' })
+    expect(hostGoto).not.toHaveBeenCalled()
+
+    phone.send('server', 'browser.goto', {
+      worktree: WORKTREE,
+      page: 'server-page',
+      url: 'http://example.test/'
+    })
+    expect(isOk(await phone.next('server'))).toBe(true)
+    expect(hostGoto).toHaveBeenCalledWith(expect.objectContaining({ page: 'server-page' }))
+    expect(desktopGoto).toHaveBeenCalledTimes(1)
   })
 
   it('answers a targeted status from the server, so a server workspace gates on its own features', async () => {

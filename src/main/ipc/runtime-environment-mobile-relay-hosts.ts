@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { pairedRuntimeBrowserClientHostsPage } from '../browser/paired-runtime-browser-client-host-runtime'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import {
   getPreferredPairingOffer,
@@ -85,6 +86,7 @@ export function createRuntimeEnvironmentMobileRelayHosts(): MobileDesktopRelayHo
           ? { expectedEnvironmentRuntimeId: options.expected.runtimeId }
           : undefined
       ),
+    hostsBrowserPage: pairedRuntimeBrowserClientHostsPage,
     onEnvironmentRetired: (listener) => {
       retirementListeners.add(listener)
       return () => retirementListeners.delete(listener)

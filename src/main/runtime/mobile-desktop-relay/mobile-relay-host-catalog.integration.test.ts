@@ -136,6 +136,7 @@ describe('mobile relay hosts: phone -> desktop lists the servers it shows', () =
       },
       call: (host, method, params) =>
         sendRemoteRuntimeRequest(servers.get(host.environmentId)!.pairing, method, params, 5_000),
+      hostsBrowserPage: () => false,
       onEnvironmentRetired: () => () => {}
     }
     desktop.setMobileDesktopRelayHosts(hosts)
