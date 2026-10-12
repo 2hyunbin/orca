@@ -114,7 +114,7 @@ async function drawn(): Promise<string[]> {
   const { items, submissions } = await host.journalSnapshot(SESSION)
   const journal = { items, submissions }
   const { conversation } = projectNativeChatTranscript(
-    projectStructuredAgentSessionMessages(items, [], submissions, { rejectedInPlace: true }),
+    projectStructuredAgentSessionMessages(items, [], submissions),
     undefined,
     journal
   )
@@ -349,9 +349,7 @@ describe('a send a Stop took back before Codex echoed it', () => {
     // Every client draws the send where it was sent, then the one row saying it never started.
     await host.flushStreamedEvents(SESSION)
     const { items, submissions: settled } = await host.journalSnapshot(SESSION)
-    const messages = projectStructuredAgentSessionMessages(items, [], settled, {
-      rejectedInPlace: true
-    })
+    const messages = projectStructuredAgentSessionMessages(items, [], settled)
     expect(messages.slice(-2).map((message) => [message.role, message.blocks])).toEqual([
       ['user', [{ type: 'text', text: 'look around' }]],
       ['system', [expect.objectContaining({ text: NATIVE_CHAT_STOPPED_BEFORE_START_TEXT })]]
