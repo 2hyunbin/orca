@@ -1,5 +1,3 @@
-import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { rpcExecutionHostEnvelope } from '../transport/rpc-execution-host-target'
 import { BRIDGE_MAX_MESSAGE_BYTES, utf8ByteLength } from './bridge/bridge-caps'
 import { BRIDGE_PROTOCOL_VERSION, type BridgeHostMessage } from './bridge/bridge-envelope'
 import {
@@ -18,6 +16,7 @@ import {
 import type { BridgeBinaryEvent } from './bridge/bridge-screencast-binary'
 import type { BrowserScreencastFrame } from '../transport/browser-screencast-protocol'
 import type { RpcClient } from '../transport/rpc-client'
+import type { RpcEnvelopeFields } from '../transport/rpc-envelope-fields'
 
 /** Derived, so an arm added to the envelope's closed list is a compile error here rather than a
  *  reason this module never sends. */
@@ -123,7 +122,7 @@ export class BridgeHostSubscriptions {
     method: string,
     params: unknown,
     wantsBinary = false,
-    executionHost?: ExecutionHostId
+    envelope?: RpcEnvelopeFields
   ): void {
     const record: OpenSubscription = {
       unsubscribe: () => undefined,
@@ -141,20 +140,18 @@ export class BridgeHostSubscriptions {
         : null
     }
     this.open.set(id, record)
+    const onBinaryFrame = wantsBinary
+      ? (frame: BrowserScreencastFrame) => this.deliverBinaryFrame(id, frame)
+      : undefined
     let unsubscribe: () => void
     try {
       unsubscribe = this.options.client.subscribe(
         method,
         params,
         (payload) => this.deliver(id, payload),
-        wantsBinary || executionHost
-          ? {
-              ...(wantsBinary
-                ? { onBinaryFrame: (frame) => this.deliverBinaryFrame(id, frame) }
-                : {}),
-              ...rpcExecutionHostEnvelope(executionHost)
-            }
-          : undefined
+        onBinaryFrame === undefined && envelope === undefined
+          ? undefined
+          : { onBinaryFrame, envelope }
       )
     } catch (error) {
       this.open.delete(id)

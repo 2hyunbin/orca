@@ -6,7 +6,7 @@ import {
   BRIDGE_MAX_ROUTE_PATHNAME_CHARS,
   BRIDGE_MAX_SUBSCRIPTIONS
 } from './bridge/bridge-caps'
-import { BRIDGE_EXECUTION_HOST_GRANT, BRIDGE_FAULT_GRANT } from './bridge/bridge-envelope'
+import { BRIDGE_FAULT_GRANT, BRIDGE_RPC_ENVELOPE_GRANT } from './bridge/bridge-envelope'
 import { routeViewOf } from './page-route-policy'
 
 describe('init and state', () => {
@@ -40,7 +40,7 @@ describe('init and state', () => {
         // What the shell will do for the page, and what makes its `navigate` frame acceptable.
         native: [
           BRIDGE_FAULT_GRANT,
-          BRIDGE_EXECUTION_HOST_GRANT,
+          BRIDGE_RPC_ENVELOPE_GRANT,
           'navigate',
           'storage',
           'externalLink',
@@ -147,7 +147,7 @@ describe('init and state', () => {
     }
     expect(init.grants.native).toEqual([
       BRIDGE_FAULT_GRANT,
-      BRIDGE_EXECUTION_HOST_GRANT,
+      BRIDGE_RPC_ENVELOPE_GRANT,
       ...view.routeGrants
     ])
     const pair = (init.pageRouteGrants ?? []).find((entry) => entry.pathname === '/h/[hostId]')
