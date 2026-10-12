@@ -1,4 +1,5 @@
 import { runProcess, runProcessSync } from '@orca/process-host'
+import { buildWslExecArgs } from '../shared/wsl-login-shell-command'
 import { parseWslUncPath, toWindowsWslPath } from '../shared/wsl-paths'
 import { filterUserWslDistros, parseWslDistros } from './wsl-distro-list-output'
 import { wslDistroListRetryDelayMs } from './wsl-distro-retry'
@@ -34,7 +35,7 @@ export type WslPathInfo = {
 const WSL_PROBE_TIMEOUT_MS = 5000
 
 function wslHomeProbeArgs(distro: string): string[] {
-  return ['-d', distro, '--exec', 'bash', '-c', 'echo $HOME']
+  return buildWslExecArgs(distro, ['bash', '-c', 'echo $HOME'])
 }
 
 /** Detect and parse a WSL UNC path on Windows. */

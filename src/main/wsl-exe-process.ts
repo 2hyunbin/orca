@@ -12,32 +12,21 @@ export function wslExeProcessSpec(
   return { program: 'wsl.exe', args, env, timeoutMs, cwd: resolveWslInteropSpawnCwd() }
 }
 
-export type WslExeExitError = Error & { code: number | string | null; status: number | null }
-
-/**
- * Null for a clean exit; otherwise the execFile-shaped error the WSL probes classify.
- *
- * Why both `code` and `status`: the probe caches read a numeric exit from either field as
- * a definitive answer, and `ETIMEDOUT` (like a signal kill) as a retryable one.
- */
-export function wslExeExitError(result: ProcessResult): WslExeExitError | null {
+/** Why a `wsl.exe` call failed, or null for a clean exit. */
+export function wslExeFailure(result: ProcessResult): string | null {
   if (result.code === 0) {
     return null
   }
-  if (result.timedOut) {
-    return Object.assign(new Error('wsl.exe timed out'), { code: 'ETIMEDOUT', status: null })
-  }
-  return Object.assign(new Error(`wsl.exe exited with code ${result.code ?? result.signal}`), {
-    code: result.code,
-    status: result.code
-  })
+  return result.timedOut
+    ? 'wsl.exe timed out'
+    : `wsl.exe exited with ${result.code ?? result.signal}`
 }
 
-/** Stdout of a clean exit; throws for any other outcome, as execFile did. */
+/** Stdout of a clean exit; throws for any other outcome. */
 export function wslExeStdout(result: ProcessResult): string {
-  const error = wslExeExitError(result)
-  if (error) {
-    throw error
+  const failure = wslExeFailure(result)
+  if (failure) {
+    throw new Error(failure)
   }
   return result.stdout
 }

@@ -1,7 +1,7 @@
 import { runProcess } from '@orca/process-host'
 import { buildWslExecArgs } from '../shared/wsl-login-shell-command'
 import { parseWslPath } from './wsl'
-import { wslExeExitError, wslExeProcessSpec } from './wsl-exe-process'
+import { wslExeFailure, wslExeProcessSpec } from './wsl-exe-process'
 import {
   containedDeleteCommand,
   rejectionFromWslDeleteStderr,
@@ -70,20 +70,17 @@ async function runWslDelete(distro: string, command: string[]): Promise<void> {
   // The explicit cwd matters here (#16463): this deletes worktrees, so an
   // inherited cwd is exactly the directory about to go.
   const result = await runProcess(wslExeProcessSpec(buildWslExecArgs(distro, command), 30000))
-  const error = wslExeExitError(result)
-  if (error) {
-    throw wslDeleteError(error, result.stderr)
+  const failure = wslExeFailure(result)
+  if (failure) {
+    throw wslDeleteError(failure, result.stderr)
   }
 }
 
-function wslDeleteError(error: Error, stderr: string): Error {
+function wslDeleteError(failure: string, stderr: string): Error {
   const detail = stderr.trim()
   const rejection = rejectionFromWslDeleteStderr(stderr)
   if (rejection) {
     return new WslDeleteValidationError(rejection, `Refusing WSL delete: ${detail}`)
   }
-  if (!detail) {
-    return error
-  }
-  return new Error(`Failed to delete WSL path: ${detail}`)
+  return new Error(`Failed to delete WSL path: ${detail || failure}`)
 }
