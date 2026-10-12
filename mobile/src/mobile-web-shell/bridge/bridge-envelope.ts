@@ -1,10 +1,7 @@
 import { z } from 'zod'
 import { salvagedOptional } from '../../../../src/shared/zod-salvage'
-import {
-  normalizeExecutionHostId,
-  type ExecutionHostId
-} from '../../../../src/shared/execution-host'
 import { NODE_PLATFORM_NAMES } from '../../transport/mobile-runtime-host-platform'
+import { RpcEnvelopeFieldsSchema } from '../../transport/rpc-envelope-fields'
 import { isRpcResponse } from '../../transport/rpc-response-shape'
 import type { RpcResponse } from '../../transport/types'
 import { BridgeErrorCaptureSchema } from './bridge-error-capture'
@@ -17,13 +14,13 @@ import { BRIDGE_BACK_FRAME } from './bridge-page-back'
 import { BRIDGE_ID_PATTERN, idSchema, methodSchema, versionSchema } from './bridge-frame-fields'
 
 export {
-  BRIDGE_EXECUTION_HOST_GRANT,
   BRIDGE_EXTERNAL_LINK_GRANT,
   BRIDGE_FAULT_GRANT,
   BRIDGE_FOREGROUND_NUDGE_REASONS,
   BRIDGE_ID_PATTERN,
   BRIDGE_NAVIGATE_BACK_NOTIFY,
-  BRIDGE_PROTOCOL_VERSION
+  BRIDGE_PROTOCOL_VERSION,
+  BRIDGE_RPC_ENVELOPE_GRANT
 } from './bridge-frame-fields'
 import {
   isPageStorageKey,
@@ -126,17 +123,11 @@ export const BridgeInitStorageSchema = z
   )
   .refine((entries) => Object.keys(entries).length <= PAGE_STORAGE_MAX_ENTRIES)
 
-/** Canonical only: the desktop routes on this exact string. */
-const executionHostSchema = z.custom<ExecutionHostId>(
-  (value) => typeof value === 'string' && normalizeExecutionHostId(value) === value
-)
-
-/** Pinned against `SendRequestOptions` in this module's test. */
+/** Pinned against `SendRequestOptions` in this module's test; its `envelope` is a frame field. */
 export const BridgeSendRequestOptionsSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
   budgetSpansConnect: z.boolean().optional(),
-  failWhenDisconnected: z.boolean().optional(),
-  executionHost: executionHostSchema.optional()
+  failWhenDisconnected: z.boolean().optional()
 })
 
 /**
@@ -190,7 +181,9 @@ const BridgeClientMessageSchema = z.discriminatedUnion('type', [
     // Absent stays absent: `sendRequest(method)` and `sendRequest(method, undefined)` are different
     // calls to the recorder, so the host replays the arity the page used.
     params: z.unknown().optional(),
-    options: BridgeSendRequestOptionsSchema.optional()
+    options: BridgeSendRequestOptionsSchema.optional(),
+    // Verbatim like a reply's `payload`, bounded by the frame caps `params` already has.
+    envelope: RpcEnvelopeFieldsSchema.optional()
   }),
   z.object({
     v: versionSchema,
@@ -199,7 +192,7 @@ const BridgeClientMessageSchema = z.discriminatedUnion('type', [
     method: methodSchema,
     params: z.unknown(),
     wantsBinary: z.boolean().optional(),
-    executionHost: executionHostSchema.optional()
+    envelope: RpcEnvelopeFieldsSchema.optional()
   }),
   z.object({
     v: versionSchema,

@@ -53,13 +53,6 @@ export const BRIDGE_FOREGROUND_NUDGE_REASONS = ['focus', 'app-resume', 'network-
 export const BRIDGE_FAULT_GRANT = 'fault'
 
 /**
- * The protocol grant that says this shell forwards a request's or subscribe's `executionHost`. An
- * older shell strips the field, so the call would run on the paired desktop instead; the page names
- * a server's workspace only once this is granted.
- */
-export const BRIDGE_EXECUTION_HOST_GRANT = 'executionHost'
-
-/**
  * The `navigate` grant's second verb, and the first notify whose name is not its grant's.
  *
  * The page is served at `/` with one history entry written by `replaceState`, so its own Back goes
@@ -78,3 +71,10 @@ export const BRIDGE_NAVIGATE_BACK_NOTIFY = 'navigate-back'
  * to say so.
  */
 export const BRIDGE_EXTERNAL_LINK_GRANT = 'externalLink'
+
+/**
+ * The shell copies a `request` or `subscribe` frame's `envelope` onto the wire request, under the
+ * transport's own fields. A protocol grant like `fault`: a page asks first because an older shell
+ * drops the key and would send the request without the fields the caller asked for.
+ */
+export const BRIDGE_RPC_ENVELOPE_GRANT = 'rpcEnvelope'

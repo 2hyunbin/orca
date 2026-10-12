@@ -15,24 +15,22 @@ import {
 } from './rpc-subscription-result-shapes'
 import { RpcClientTerminalStreamRouter } from './rpc-client-terminal-stream-router'
 import * as sessionTabsStream from './rpc-client-session-tabs-stream'
+import type { RpcEnvelopeFields, RpcRequestFrame } from './rpc-envelope-fields'
 import type { ConnectionState, RpcResponse, RpcSuccess } from './types'
-import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { rpcExecutionHostEnvelope } from './rpc-execution-host-target'
 
 export type RpcStreamingListener = (result: unknown) => void
 
 export type RpcStreamSubscribeOptions = {
   onBinaryFrame?: (frame: BrowserScreencastFrame) => void
-  /** The host the stream runs on; its unsubscribe and replay frames must name it too. */
-  executionHost?: ExecutionHostId
+  envelope?: RpcEnvelopeFields
 }
 
 type StreamRequest = {
   method: string
   params: unknown
+  envelope?: RpcEnvelopeFields
   listener?: RpcStreamingListener
   onBinaryFrame?: (frame: BrowserScreencastFrame) => void
-  executionHost?: ExecutionHostId
   subscriptionId?: string
   cancelled?: boolean
   sent?: boolean
@@ -41,9 +39,8 @@ type StreamRequest = {
 
 type StreamRegistryOptions = {
   nextId: () => string
-  deviceToken: string
   getState: () => ConnectionState
-  sendEncrypted: (request: unknown) => boolean
+  sendFrame: (frame: RpcRequestFrame) => boolean
 }
 
 export class RpcClientStreamRegistry {
@@ -64,9 +61,9 @@ export class RpcClientStreamRegistry {
     const stream: StreamRequest = {
       method,
       params,
+      envelope: subscribeOptions?.envelope,
       listener,
-      onBinaryFrame: subscribeOptions?.onBinaryFrame,
-      executionHost: subscribeOptions?.executionHost
+      onBinaryFrame: subscribeOptions?.onBinaryFrame
     }
     this.streams.set(id, stream)
     if (method === 'browser.screencast') {
@@ -195,7 +192,7 @@ export class RpcClientStreamRegistry {
           this.pendingBrowserRequestId !== response.id &&
           this.activeBrowserRequestId !== response.id
         ) {
-          this.sendBrowserUnsubscribe(stream, result.subscriptionId)
+          this.sendBrowserUnsubscribe(result.subscriptionId, stream.envelope)
           this.remove(response.id)
           return
         }
@@ -230,7 +227,7 @@ export class RpcClientStreamRegistry {
     }
     const unsubscribe = buildRequestStreamUnsubscribe(stream?.method, stream?.params, id)
     if (unsubscribe) {
-      this.sendRpc(unsubscribe.method, unsubscribe.params, stream?.executionHost)
+      this.sendRpc(unsubscribe.method, unsubscribe.params, stream?.envelope)
     }
     this.remove(id)
   }
@@ -262,25 +259,22 @@ export class RpcClientStreamRegistry {
     }
     const unsubscribe = buildReadyStreamUnsubscribe(stream.method, stream.subscriptionId)
     if (unsubscribe) {
-      this.sendRpc(unsubscribe.method, unsubscribe.params, stream.executionHost)
+      this.sendRpc(unsubscribe.method, unsubscribe.params, stream.envelope)
     }
   }
 
-  private sendBrowserUnsubscribe(stream: StreamRequest, subscriptionId: string): void {
-    this.sendRpc('browser.screencast.unsubscribe', { subscriptionId }, stream.executionHost)
+  private sendBrowserUnsubscribe(subscriptionId: string, envelope?: RpcEnvelopeFields): void {
+    this.sendRpc('browser.screencast.unsubscribe', { subscriptionId }, envelope)
   }
 
-  private sendRpc(method: string, params: unknown, target: ExecutionHostId | undefined): boolean {
-    return this.sendFrame(this.options.nextId(), method, params, target)
+  // The stream's envelope rides its unsubscribes too: a routing field must reach the same host.
+  private sendRpc(method: string, params: unknown, envelope?: RpcEnvelopeFields): boolean {
+    return this.options.sendFrame({ id: this.options.nextId(), method, params, envelope })
   }
 
   private send(id: string, stream: StreamRequest): boolean {
-    return this.sendFrame(id, stream.method, stream.params, stream.executionHost)
-  }
-
-  private sendFrame(id: string, method: string, params: unknown, target?: ExecutionHostId) {
-    const frame = { id, deviceToken: this.options.deviceToken, method, params }
-    return this.options.sendEncrypted({ ...frame, ...rpcExecutionHostEnvelope(target) })
+    const { method, params, envelope } = stream
+    return this.options.sendFrame({ id, method, params, envelope })
   }
 
   private remove(id: string): void {
