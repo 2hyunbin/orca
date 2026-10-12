@@ -26,6 +26,7 @@ import {
   LayoutRestartPaneParams,
   LayoutSetChatPaneParams,
   LayoutSetGroupRatiosParams,
+  LayoutSetBrowserTabProfileParams,
   LayoutSetPaneRatiosParams,
   LayoutSetTabPropsParams,
   LayoutSplitGroupParams,
@@ -142,6 +143,26 @@ export const WORKSPACE_LAYOUT_COMMAND_METHODS = [
     type: 'openBrowserTab',
     ...p
   })),
+  // The profile resolves on the browser side, which `browser tab set-profile` shares.
+  defineMethod({
+    name: 'layout.setBrowserTabProfile',
+    permission: 'workspace',
+    params: LayoutSetBrowserTabProfileParams,
+    handler: async (params, { runtime }) => {
+      const page = runtime
+        .heldWorkspaceLayout(params.workspace)
+        ?.browserTabs?.find((tab) => tab.id === params.tabId)?.pageIds?.[0]
+      if (!page) {
+        return { ok: false as const, code: 'tab_not_found' as const }
+      }
+      await runtime.browserTabSetProfile({
+        worktree: `id:${params.workspace}`,
+        page,
+        profileId: params.profileId
+      })
+      return { ok: true as const }
+    }
+  }),
   layoutCommand(
     'layout.openAgentSessionTab',
     LayoutOpenAgentSessionTabParams,

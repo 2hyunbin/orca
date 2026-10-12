@@ -138,8 +138,6 @@ export async function useIpcEventsForCloseRouting({
         onResumeSleepingAgents: () => () => {},
         onNewBrowserTab: () => () => {},
         onNewMarkdownTab: () => () => {},
-        onRequestTabSetProfile: () => () => {},
-        replyTabSetProfile: () => {},
         onNewTerminalTab: () => () => {},
         onCloseActiveTab: (listener: CloseActiveTabListener) => {
           if (closeActiveTabListenerRef) {

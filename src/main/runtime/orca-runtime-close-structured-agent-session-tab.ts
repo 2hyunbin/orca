@@ -5,6 +5,8 @@ import type {
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
 import type { BrowserSessionTabSelectionOptions } from './browser-tab-create-publication'
+import type { BrowserSessionProfile } from '../../shared/browser-workspace-types'
+import { BrowserError } from '../browser/browser-error'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 
@@ -120,6 +122,37 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
           ...(profileId ? { profileId } : {})
         }
       ])
+    }
+  }
+
+  /** `browser tab set-profile`: the held tab showing this page takes the profile. */
+  setHeldBrowserTabProfile(
+    worktreeId: string | undefined,
+    browserPageId: string,
+    profile: BrowserSessionProfile
+  ): void {
+    // An explicit page names no workspace: look in every one the runtime holds.
+    const candidates = worktreeId
+      ? [worktreeId]
+      : this.layoutHolder
+          .loadedHostIds()
+          .flatMap((hostId) => Object.keys(this.layoutHolder.model(hostId)?.workspaces ?? {}))
+    const owner = candidates.find((id) => this.heldBrowserTabForPage(id, browserPageId))
+    const tab = owner ? this.heldBrowserTabForPage(owner, browserPageId) : undefined
+    if (!owner || !tab) {
+      throw new BrowserError('browser_no_tab', `Browser tab ${browserPageId} not found`)
+    }
+    const reply = this.applyTranslatedLayoutCommands([
+      {
+        type: 'setBrowserTabProfile',
+        workspace: owner,
+        tabId: tab.entityId,
+        profileId: profile.id,
+        sessionPartition: profile.partition
+      }
+    ])
+    if (!reply.ok) {
+      throw new BrowserError('browser_no_tab', `Browser tab ${browserPageId} not found`)
     }
   }
 

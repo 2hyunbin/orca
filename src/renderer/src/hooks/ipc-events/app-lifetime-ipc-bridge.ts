@@ -8,7 +8,6 @@ import { resetAgentHookCompletionNotificationCoordinators } from '../agent-hook-
 import { useAppStore } from '../../store'
 import { registerAgentStatusIpcBridge } from './agent-status-ipc-bridge'
 import { registerBackgroundWorktreeRemovalBridge } from './background-worktree-removal-bridge'
-import { registerBrowserProfileSwitchIpcBridge } from './browser-profile-switch-ipc-bridge'
 import { registerBrowserStateIpcBridge } from './browser-state-ipc-bridge'
 import { registerContentCreationIpcBridge } from './content-creation-ipc-bridge'
 import { registerDirectSshStateIpcBridge } from './direct-ssh-state-ipc-bridge'
@@ -115,7 +114,6 @@ export function installAppLifetimeIpcEvents(
   registerUpdaterStatusIpcBridge(unsubs)
   registerBrowserStateIpcBridge(unsubs, isRuntimeEnvironmentActive)
   registerContentCreationIpcBridge(unsubs, isRuntimeEnvironmentActive)
-  registerBrowserProfileSwitchIpcBridge(unsubs)
   registerTabLifecycleIpcBridge(unsubs)
   registerRateLimitIpcBridge(unsubs)
   const stopDirectSshStateBridge = registerDirectSshStateIpcBridge(unsubs)

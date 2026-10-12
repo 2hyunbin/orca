@@ -115,7 +115,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
       ctx.result.id,
       args.worktreeId,
       null,
-      // Why: thread validated pane identity so main can back a pending mobile create even if graph-sync stalls (#7587).
+      // Why: binds the PTY to its pane before any graph names it; bound the untrusted tabId.
       typeof args.tabId === 'string' &&
         isValidTerminalTabId(args.tabId) &&
         args.tabId.length <= 512 &&

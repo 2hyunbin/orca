@@ -51,8 +51,6 @@ export function buildWindowApi(args: {
         onResumeSleepingAgents: () => () => {},
         onNewBrowserTab: () => () => {},
         onNewMarkdownTab: () => () => {},
-        onRequestTabSetProfile: () => () => {},
-        replyTabSetProfile: () => {},
         onNewTerminalTab: () => () => {},
         onCloseActiveTab: () => () => {},
         onCloseFloatingItem: () => () => {},

@@ -61,7 +61,7 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
       ctx.result.id,
       args.worktreeId,
       null,
-      // Why: pass validated pane identity so a throttled mobile create publishes its surface main-side instead of destroying the live PTY (#7587); bound the untrusted tabId.
+      // Why: binds the PTY to its pane before any graph names it; bound the untrusted tabId.
       typeof args.tabId === 'string' &&
         isValidTerminalTabId(args.tabId) &&
         args.tabId.length <= 512 &&

@@ -107,7 +107,7 @@ describe('registerPtyHandlers', () => {
           }
         }
       })
-      it('threads the validated pane identity into registerPty for a runtime-created daemon PTY (#7587)', async () => {
+      it('threads the validated pane identity into registerPty for a runtime-created daemon PTY', async () => {
         type RuntimeSpawnController = {
           spawn(args: {
             cols: number
@@ -139,7 +139,6 @@ describe('registerPtyHandlers', () => {
           leafId
         })
 
-        // Why: runtime-created spawns must thread {tabId, leafId} so the catch-path rescue can keep their live PTY (#7587).
         expect(runtime.registerPty).toHaveBeenCalledWith(
           expect.any(String),
           'wt-runtime',

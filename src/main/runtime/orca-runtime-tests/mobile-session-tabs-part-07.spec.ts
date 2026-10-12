@@ -393,7 +393,7 @@ describe('OrcaRuntimeService', () => {
       status: 'pending-handle'
     })
 
-    // Why notifyClients false: mirrors the phone tapping the tab, the path that materializes pending tabs headlessly (#7587).
+    // Why notifyClients false: mirrors the phone tapping the tab, the path that materializes pending tabs headlessly.
     const activated = await runtime.activateMobileSessionTab(
       `id:${TEST_WORKTREE_ID}`,
       `host-tab::${HEADLESS_LEAF_ID}`,

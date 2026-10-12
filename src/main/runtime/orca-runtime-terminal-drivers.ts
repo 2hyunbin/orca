@@ -51,6 +51,8 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
       markHeadlessBrowserSessionTabActive: this.markHeadlessBrowserSessionTabActive.bind(this),
       addHeadlessBrowserLayoutTab: (worktreeId, browserPageId, groupId, profileId) =>
         this.addHeadlessBrowserLayoutTab(worktreeId, browserPageId, groupId, profileId),
+      setHeldBrowserTabProfile: (worktreeId, browserPageId, profile) =>
+        this.setHeldBrowserTabProfile(worktreeId, browserPageId, profile),
       desktopViewWorkspaceId: () =>
         this.layoutCommands.views.record(DESKTOP_VIEW_ID).activeWorktreeId,
       notifyHeadlessBrowserSessionTabsChanged: (worktreeId) =>

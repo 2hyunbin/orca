@@ -122,7 +122,9 @@ describe('OrcaRuntimeService', () => {
     }
   })
 
-  it('waits for durability before it settles an exited worker', async () => {
+  // Q4: a failed write has no rollback or retry; the change stays in memory, is logged, and the next
+  // ordinary save writes it. The database still hears only once the write has ended.
+  it('settles an exited worker once its write ends, even when the write fails (Q4)', async () => {
     const workerPaneKey = `legacy-missing-retry:${HEADLESS_LEAF_ID}`
     const incarnationId = '34343434-3434-4434-8434-343434343434'
     const session: WorkspaceSessionState = {
@@ -150,7 +152,7 @@ describe('OrcaRuntimeService', () => {
         }
       }
     }
-    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(session)
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(session)
     const durableWrite = deferred<void>()
     const durableWriteStarted = deferred<void>()
     const flushPendingOrThrowAsync = vi.fn(() => {
@@ -192,18 +194,24 @@ describe('OrcaRuntimeService', () => {
         hasPty: () => false,
         listProcesses: async () => []
       })
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
       const recovery = runtime.reconcileLegacyWorkerTerminals()
       await durableWriteStarted.promise
       expect(db.getDispatchContextById(started.dispatch.id)?.status).toBe('dispatched')
       expect(db.getWorkerDispatch(started.dispatch.id)?.state).toBe('ready')
-      durableWrite.resolve()
+      durableWrite.reject(new Error('disk unavailable'))
 
       await expect(recovery).resolves.toMatchObject({
         exitedDispatchIds: [started.dispatch.id],
         deferredDispatchIds: []
       })
       expect(db.getWorkerDispatch(started.dispatch.id)?.state).toBe('abandoned')
-      expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeUndefined()
+      expect(error).toHaveBeenCalled()
+      // The change stays in memory for the next ordinary save to write.
+      expect(
+        runtime.heldWorkspaceLayout(TEST_WORKTREE_ID)?.leaves?.[HEADLESS_LEAF_ID]?.sleeping
+      ).toBeUndefined()
+      error.mockRestore()
     } finally {
       db.close()
     }

@@ -349,27 +349,16 @@ describe('RuntimeBrowserCommands browser screencast', () => {
     expect(addHeadlessBrowserLayoutTab).not.toHaveBeenCalled()
   })
 
-  it('sends the resolved partition when switching a renderer tab profile', async () => {
+  it("sets a tab's profile in the runtime's layout with the resolved partition", async () => {
     const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
-    const webContents = { send: vi.fn() }
-    const send = vi.fn((channel: string, data: { requestId: string }) => {
-      expect(channel).toBe('browser:requestTabSetProfile')
-      const handler = ipcMainOnMock.mock.calls.find(
-        ([eventName]) => eventName === 'browser:tabSetProfileReply'
-      )?.[1] as ((event: unknown, reply: { requestId: string; error?: string }) => void) | undefined
-      handler?.({ sender: webContents } as never, { requestId: data.requestId })
-    })
-    webContents.send = send
+    const setHeldBrowserTabProfile = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the set-profile path reads only the active page off the bridge.
     const bridge = {
       getRegisteredTabs: vi.fn(() => new Map([['page-1', 101]])),
       getActivePageId: vi.fn(() => 'page-1')
     } as unknown as AgentBrowserBridge
     const commands = new RuntimeBrowserCommands(
-      createHost({
-        getAgentBrowserBridge: () => bridge,
-        getAvailableAuthoritativeWindow: vi.fn(() => ({}) as never),
-        getAuthoritativeWindow: vi.fn(() => ({ webContents }) as never)
-      })
+      createHost({ getAgentBrowserBridge: () => bridge, setHeldBrowserTabProfile })
     )
 
     await expect(
@@ -379,16 +368,14 @@ describe('RuntimeBrowserCommands browser screencast', () => {
       profileId: 'profile-isolated',
       profileLabel: 'Isolated'
     })
-
-    expect(send).toHaveBeenCalledWith(
-      'browser:requestTabSetProfile',
+    expect(setHeldBrowserTabProfile).toHaveBeenCalledWith(
+      'wt-1',
+      'page-1',
       expect.objectContaining({
-        browserPageId: 'page-1',
-        profileId: 'profile-isolated',
-        sessionPartition: 'persist:orca-browser-session-profile-isolated'
+        id: 'profile-isolated',
+        partition: 'persist:orca-browser-session-profile-isolated'
       })
     )
-    expect(waitForTabRegistrationMock).toHaveBeenCalledWith('page-1')
   })
 
   it('wakes the requested page instead of the first worktree tab for page-scoped commands', async () => {

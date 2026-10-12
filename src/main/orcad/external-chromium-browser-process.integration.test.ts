@@ -53,7 +53,8 @@ describe('ExternalChromiumBrowserProcess integration', () => {
             throw new Error('No renderer')
           },
           getAvailableAuthoritativeWindow: () => null,
-          getOffscreenBrowserBackend: () => null
+          getOffscreenBrowserBackend: () => null,
+          setHeldBrowserTabProfile: () => {}
         })
         await expect(
           commands.browserTabCreate({ page: 'external-page', url: 'about:blank' })

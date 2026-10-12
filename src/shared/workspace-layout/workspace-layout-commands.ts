@@ -6,7 +6,8 @@ import type { LayoutCommand, LayoutContext } from './workspace-layout-command-ty
 import {
   openAgentSessionTab,
   openBrowserTab,
-  openEditorTab
+  openEditorTab,
+  setBrowserTabProfile
 } from './workspace-layout-content-commands'
 import { moveTab, setGroupRatios, splitGroup } from './workspace-layout-group-commands'
 import { updateLegacyPersistence } from './workspace-layout-legacy-persistence'
@@ -97,6 +98,8 @@ function applyCommand(
       return promotePreviewTab(model, command)
     case 'openBrowserTab':
       return openBrowserTab(model, command, context)
+    case 'setBrowserTabProfile':
+      return setBrowserTabProfile(model, command)
     case 'openAgentSessionTab':
       return openAgentSessionTab(model, command, context)
     case 'startPane':

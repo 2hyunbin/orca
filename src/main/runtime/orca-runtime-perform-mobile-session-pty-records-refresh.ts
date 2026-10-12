@@ -161,9 +161,8 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
         const targetGroupId = snapshot?.tabGroups?.find((group) =>
           group.tabOrder.includes(tab.parentTabId)
         )?.id
-        // Why: a pending agent tab may exist without its startup command ever
-        // having been delivered (the create's renderer stalled, #7587), so a
-        // bare materialize would put a plain shell under the agent icon.
+        // Why: a pending agent tab never ran its startup command, so a bare
+        // materialize would put a plain shell under the agent icon.
         // Re-resolve the launch like the create path; providers skip startup
         // commands when attaching to live sessions, so this cannot double-launch.
         let agentStartup: Awaited<

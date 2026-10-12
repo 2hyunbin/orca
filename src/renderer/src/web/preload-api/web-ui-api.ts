@@ -229,8 +229,6 @@ export function createWebUiApi(): NonNullable<Partial<PreloadApi>['ui']> {
     onNewBrowserTab: () => noopUnsubscribe,
     onNewMarkdownTab: () => noopUnsubscribe,
     onNewSimulatorTab: () => noopUnsubscribe,
-    onRequestTabSetProfile: () => noopUnsubscribe,
-    replyTabSetProfile: () => {},
     onNewTerminalTab: () => noopUnsubscribe,
     onFocusBrowserAddressBar: () => noopUnsubscribe,
     onFindInBrowserPage: () => noopUnsubscribe,

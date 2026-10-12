@@ -18,6 +18,7 @@ import type { RuntimeBrowserPageRegistry } from './runtime-browser-page-registry
 import type { BrowserWindow } from 'electron'
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { BrowserSessionTabSelectionOptions } from './browser-tab-create-publication'
+import type { BrowserSessionProfile } from '../../shared/browser-workspace-types'
 import type { RpcBinarySender } from './rpc/rpc-binary-sender'
 
 export type BrowserCommandTargetParams = {
@@ -193,6 +194,11 @@ export type RuntimeBrowserCommandHost = {
     browserPageId: string,
     groupId?: string,
     profileId?: string
+  ): void
+  setHeldBrowserTabProfile(
+    worktreeId: string | undefined,
+    browserPageId: string,
+    profile: BrowserSessionProfile
   ): void
   /** The workspace the desktop view shows, for a create that names none. */
   desktopViewWorkspaceId?(): string | null

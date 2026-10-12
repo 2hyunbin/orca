@@ -166,6 +166,11 @@ export const LayoutOpenBrowserTabParams = On.extend({
   groupId: Id.optional()
 })
 
+export const LayoutSetBrowserTabProfileParams = On.extend({
+  tabId: Id,
+  profileId: Id
+})
+
 export const LayoutOpenAgentSessionTabParams = On.extend({
   sessionId: Id,
   agent: z.string().min(1).max(128),

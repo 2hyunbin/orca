@@ -61,15 +61,6 @@ export type UiCommandEventApi = {
   onNewBrowserTab: (callback: () => void) => () => void
   onNewMarkdownTab: (callback: () => void) => () => void
   onNewSimulatorTab: (callback: () => void) => () => void
-  onRequestTabSetProfile: (
-    callback: (data: {
-      requestId: string
-      browserPageId: string
-      profileId: string
-      sessionPartition?: string
-    }) => void
-  ) => () => void
-  replyTabSetProfile: (reply: { requestId: string; error?: string }) => void
   onNewTerminalTab: (callback: () => void) => () => void
   onFocusBrowserAddressBar: (callback: (target: BrowserPageCommandTarget) => void) => () => void
   onFindInBrowserPage: (source: BrowserFindSource, callback: () => void) => () => void

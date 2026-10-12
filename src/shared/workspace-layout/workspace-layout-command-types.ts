@@ -96,6 +96,13 @@ export type LayoutCommand =
       pageId?: string
     })
   | (On & {
+      type: 'setBrowserTabProfile'
+      /** The browser tab's id, which its tab-bar entry shares. */
+      tabId: string
+      profileId: string | null
+      sessionPartition: string | null
+    })
+  | (On & {
       type: 'openAgentSessionTab'
       sessionId: string
       agent: AgentType

@@ -2685,6 +2685,7 @@
         "nativeDropTempCopyFailed_other": "Orca couldn't copy {{count}} dropped files."
       },
       "useIpcEvents": {
+        "0e3cf53060": "Browser tab {{value0}} not found",
         "2f6637fe6c": "Browser tab {{value0}} is pinned",
         "60428567b4": "Local terminal reveal is unavailable while a remote runtime is active",
         "7a64b31991": "Local terminal creation is unavailable while a remote runtime is active",
@@ -2771,6 +2772,9 @@
   "browser": {
     "clientHosted": {
       "popupBlocked": "Popup blocked: {{origin}}"
+    },
+    "request": {
+      "pairedServerWorkspace": "This workspace runs on a paired server. Use that server's browser tabs."
     },
     "sshEgress": {
       "localChip": "This device"

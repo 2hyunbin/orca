@@ -146,7 +146,7 @@ describe('registerPtyHandlers', () => {
       'term_agent_teams'
     )
   })
-  it('threads the validated pane identity into registerPty for a renderer PTY spawn (#7587)', async () => {
+  it('threads the validated pane identity into registerPty for a renderer PTY spawn', async () => {
     const leafId = '88888888-8888-4888-8888-888888888888'
     const runtime = {
       setPtyController: vi.fn(),
@@ -170,7 +170,6 @@ describe('registerPtyHandlers', () => {
       worktreeId: 'wt-1'
     })
 
-    // Why: #7587 — the runtime can only back a stalled mobile create if the spawn threads {tabId, leafId}.
     expect(runtime.registerPty).toHaveBeenCalledWith(
       expect.any(String),
       'wt-1',
@@ -286,7 +285,7 @@ describe('registerPtyHandlers', () => {
       )
     }
   })
-  it('omits the pane identity from registerPty when the leafId is not a terminal leaf (#7587)', async () => {
+  it('omits the pane identity from registerPty when the leafId is not a terminal leaf', async () => {
     const runtime = {
       setPtyController: vi.fn(),
       preAllocateHandleForPty: vi.fn(() => 'term_seam'),

@@ -9,6 +9,7 @@ import type {
   LegacyWorkerRecoveryResolution
 } from './runtime-legacy-worker-terminal-recovery-types'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
+import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
 
 export class RuntimeLegacyWorkerTerminalRecoveryPersistence {
   constructor(
@@ -43,6 +44,7 @@ export class RuntimeLegacyWorkerTerminalRecoveryPersistence {
         },
         resolution
       })
+      dropUnplacedSleepingRecord(holder, hostId, candidate)
       dispatchIds.add(candidate.dispatchId)
     }
     await holder.whenDurable()
@@ -80,4 +82,20 @@ export class RuntimeLegacyWorkerTerminalRecoveryPersistence {
       return null
     }
   }
+}
+
+/** A worker's sleeping record whose pane the layout does not hold is dropped too, as for a placed one. */
+function dropUnplacedSleepingRecord(
+  holder: RuntimeWorkspaceLayouts,
+  hostId: ExecutionHostId,
+  candidate: LegacyWorkerRecoveryCandidate
+): void {
+  const carried = holder.beside(hostId)?.carried
+  const record = carried?.unplacedSleepingRecords[candidate.paneKey]
+  if (!carried || !record || !runtimeWorktreeIdsEqual(record.worktreeId, candidate.worktreeId)) {
+    return
+  }
+  const { [candidate.paneKey]: _dropped, ...unplacedSleepingRecords } =
+    carried.unplacedSleepingRecords
+  holder.updateBeside(hostId, { carried: { ...carried, unplacedSleepingRecords } })
 }

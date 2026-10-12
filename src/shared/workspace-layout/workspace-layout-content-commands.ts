@@ -1,7 +1,7 @@
 // Opening editor, browser and agent-session tabs: the tab and its content record in one apply.
 
 import type { EditorTabView } from '../editor-tab-view-types'
-import { applied, updateTab, type Applied } from './workspace-layout-command-steps'
+import { applied, refuse, updateTab, type Applied } from './workspace-layout-command-steps'
 import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
 import type { LayoutContentTab, WorkspaceLayoutModel } from './workspace-layout-model'
@@ -98,6 +98,35 @@ export function openBrowserTab(
       browserTabs: [...(workspace.browserTabs ?? []), browserTab]
     }),
     { tabId: tab.id, pageId }
+  )
+}
+
+/** A browser tab's profile, which its pages' webviews open under; the same profile changes nothing. */
+export function setBrowserTabProfile(
+  model: WorkspaceLayoutModel,
+  command: CommandOf<'setBrowserTabProfile'>
+): Applied {
+  const workspace = model.workspaces[command.workspace]!
+  const tab = workspace.browserTabs?.find((candidate) => candidate.id === command.tabId)
+  if (!tab) {
+    return refuse('tab_not_found')
+  }
+  if (
+    (tab.sessionProfileId ?? null) === command.profileId &&
+    (tab.sessionPartition ?? null) === command.sessionPartition
+  ) {
+    return applied(model)
+  }
+  const next = {
+    ...tab,
+    sessionProfileId: command.profileId,
+    sessionPartition: command.sessionPartition
+  }
+  return applied(
+    withWorkspace(model, command.workspace, {
+      ...workspace,
+      browserTabs: workspace.browserTabs!.map((candidate) => (candidate === tab ? next : candidate))
+    })
   )
 }
 

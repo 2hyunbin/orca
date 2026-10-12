@@ -12,10 +12,6 @@ import type {
 } from '../../shared/runtime-types'
 import { BrowserError } from '../browser/browser-error'
 import { browserSessionRegistry } from '../browser/browser-session-registry'
-import { browserManager } from '../browser/browser-manager'
-import { randomUUID } from 'node:crypto'
-import { ipcMain } from 'electron'
-import { waitForTabRegistration } from '../ipc/browser-tab-registration-wait'
 import { detectInstalledBrowsers } from '../browser/browser-cookie-import'
 
 export class RuntimeBrowserCommandsWithBrowserTabSetProfile extends RuntimeBrowserCommandsWithBrowserTabCreate {
@@ -40,56 +36,8 @@ export class RuntimeBrowserCommandsWithBrowserTabSetProfile extends RuntimeBrows
         `Browser profile ${params.profileId} was not found`
       )
     }
-
-    // Why: short-circuit no-op switches so the renderer doesn't needlessly tear down and remount the webview.
-    const currentProfileId = browserManager.getSessionProfileIdForTab(browserPageId) ?? 'default'
-    if (currentProfileId === profile.id) {
-      return {
-        browserPageId,
-        profileId: profile.id,
-        profileLabel: profile.label
-      }
-    }
-
-    const win = this.host.getAuthoritativeWindow()
-    const requestId = randomUUID()
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        ipcMain.removeListener('browser:tabSetProfileReply', handler)
-        reject(new Error('Tab profile update timed out'))
-      }, 10_000)
-
-      const handler = (
-        _event: Electron.IpcMainEvent,
-        reply: { requestId: string; error?: string }
-      ): void => {
-        if (reply.requestId !== requestId) {
-          return
-        }
-        clearTimeout(timer)
-        ipcMain.removeListener('browser:tabSetProfileReply', handler)
-        if (reply.error) {
-          reject(new Error(reply.error))
-        } else {
-          resolve()
-        }
-      }
-      ipcMain.on('browser:tabSetProfileReply', handler)
-      win.webContents.send('browser:requestTabSetProfile', {
-        requestId,
-        browserPageId,
-        profileId: profile.id,
-        sessionPartition: profile.partition
-      })
-    })
-
-    // Why: profile change remounts the webview; wait for re-register so follow-up commands see the new profile and an attached guest.
-    try {
-      await waitForTabRegistration(browserPageId)
-    } catch {
-      // Best-effort: re-register won't fire while the worktree is hidden; downstream commands retry once the pane re-mounts.
-    }
-
+    // A saved layout field: the runtime's layout sets it, and the window remounts the tab's webviews.
+    this.host.setHeldBrowserTabProfile(target.worktreeId, browserPageId, profile)
     return {
       browserPageId,
       profileId: profile.id,

@@ -508,4 +508,33 @@ describe('layout command effects', () => {
       opened.model.workspaces[WS]!.tabs.find((tab) => tab.id === session!.tabId)
     ).toMatchObject({ kind: 'agent-session', entityId: 'sess-1', agentSessionAgent: 'codex' })
   })
+
+  it("sets a browser tab's profile, changes nothing for the same one, refuses an unknown tab", () => {
+    const { model, ctx } = setup()
+    const opened = build(ctx, [{ type: 'openBrowserTab', workspace: WS, profileId: 'p1' }], model)
+    const tabId = opened.results[0]!.tabId!
+    const set = (on: WorkspaceLayoutModel, id: string) =>
+      applyLayoutCommand(
+        on,
+        {
+          type: 'setBrowserTabProfile',
+          workspace: WS,
+          tabId: id,
+          profileId: 'p2',
+          sessionPartition: 'persist:p2'
+        },
+        ctx
+      )
+    const changed = set(opened.model, tabId)
+    if (!changed.ok) {
+      throw new Error(changed.code)
+    }
+    expect(changed.model.workspaces[WS]!.browserTabs![0]).toMatchObject({
+      sessionProfileId: 'p2',
+      sessionPartition: 'persist:p2'
+    })
+    const again = set(changed.model, tabId)
+    expect(again.ok && again.model).toEqual(changed.model)
+    expect(set(opened.model, 'missing')).toEqual({ ok: false, code: 'tab_not_found' })
+  })
 })

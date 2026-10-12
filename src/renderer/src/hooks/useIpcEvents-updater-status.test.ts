@@ -118,8 +118,6 @@ describe('useIpcEvents updater integration', () => {
           onResumeSleepingAgents: () => () => {},
           onNewBrowserTab: () => () => {},
           onNewMarkdownTab: () => () => {},
-          onRequestTabSetProfile: () => () => {},
-          replyTabSetProfile: () => {},
           onNewTerminalTab: () => () => {},
           onCloseActiveTab: () => () => {},
           onCloseFloatingItem: () => () => {},

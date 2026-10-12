@@ -1,7 +1,7 @@
 import './orca-runtime-test-lifecycle.spec'
 import type { RuntimeStore } from './runtime-store-contract'
 import { describe, expect, it, vi } from 'vitest'
-import { createMobileCreateTestNotifier } from './orca-runtime-test-scenario-builders.spec'
+import { createWindowTestNotifier } from './orca-runtime-test-scenario-builders.spec'
 import { OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
@@ -55,7 +55,7 @@ describe('terminal rename before renderer graph hydration', () => {
     const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(session)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Shared fixture implements RuntimeStore; its legacy Mock typing loses callable signatures.
     const runtime = new OrcaRuntimeService(runtimeStore as RuntimeStore)
-    const notifier = createMobileCreateTestNotifier(vi.fn())
+    const notifier = createWindowTestNotifier()
     runtime.setNotifier(notifier)
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: 'surviving-pty' })),

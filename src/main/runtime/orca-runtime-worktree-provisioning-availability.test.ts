@@ -11,7 +11,7 @@ import {
   shouldRunSetupForCreate
 } from './orca-runtime-test-mocks.spec'
 import { store } from './orca-runtime-test-fixtures.spec'
-import { createMobileCreateTestNotifier } from './orca-runtime-test-scenario-builders.spec'
+import { createWindowTestNotifier } from './orca-runtime-test-scenario-builders.spec'
 
 describe('host worktree creation while its renderer is unavailable', () => {
   it.each([
@@ -33,7 +33,7 @@ describe('host worktree creation while its renderer is unavailable', () => {
         getRepo: (id) => (id === repo.id ? repo : undefined)
       })
       onTestFinished(() => runtime.markGraphUnavailable(1))
-      const notifier = createMobileCreateTestNotifier(vi.fn())
+      const notifier = createWindowTestNotifier()
       runtime.setNotifier(notifier)
       runtime.setPtyController({
         spawn: vi.fn(),
