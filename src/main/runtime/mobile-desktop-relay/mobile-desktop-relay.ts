@@ -1,3 +1,4 @@
+import { pairedRuntimeConnectionFromOffer } from '../../../shared/paired-runtime-connection'
 import { randomUUID } from 'node:crypto'
 import type { DelegatedMobileDeviceSyncParams } from '../../../shared/delegated-mobile-device-contract'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
@@ -215,10 +216,9 @@ export class MobileDesktopRelay {
     try {
       const socket = await openRemoteRuntimePassthroughSocket(
         {
-          ...host.pairing,
-          deviceToken: grant.token,
-          pairedDeviceId: grant.deviceId,
-          scope: 'mobile'
+          ...pairedRuntimeConnectionFromOffer(host.pairing),
+          credential: { kind: 'token', deviceToken: grant.token },
+          pairedDeviceId: grant.deviceId
         },
         phone.clientCapabilities(),
         {
