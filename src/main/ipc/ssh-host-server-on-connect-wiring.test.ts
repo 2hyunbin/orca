@@ -23,8 +23,7 @@ vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getVersion: () => '1.5.0', getPath: () => '/tmp/unused' })
 }))
 vi.mock('../ssh/ssh-target-registry', () => ({
-  getSshTargetRegistryStore: () => mocks.registry.current,
-  hasRegisteredDirectSshAuthority: () => false
+  getSshTargetRegistryStore: () => mocks.registry.current
 }))
 vi.mock('../ssh/orcad-runtime-deployment', () => ({ createManagedOrcadEnvironment: mocks.deploy }))
 vi.mock('../ssh/orcad-runtime-conversion', () => ({
@@ -114,7 +113,10 @@ describe('connect-time server decision against the real profile', () => {
       kind: 'git',
       connectionId: TARGET.id
     })
-    store.upsertSshRemotePtyLease({ targetId: TARGET.id, ptyId: 'pty-1', state: 'expired' })
+    // Saved by a relay-era build; this build only reads it.
+    vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([
+      { targetId: TARGET.id, ptyId: 'pty-1', state: 'expired', createdAt: 1, updatedAt: 1 }
+    ])
     await expect(
       resolveHostServerOnConnect(target(), hostServerOnConnectDeps(userDataPath))
     ).resolves.toEqual({ route: 'relay', reason: 'relay_terminals_unverifiable', terminals: 0 })
