@@ -17,15 +17,6 @@ describe('agent feature skill commands', () => {
     ])
   })
 
-  it.each(['', 'v1.4.224-hourly.3', 'abc1234', `${'a'.repeat(40)}/skills`, 'A'.repeat(40)])(
-    'refuses to build a source URL from %j',
-    (badCommit) => {
-      expect(() =>
-        buildAgentFeatureSkillInstallArgs(['orca-cli'], { sourceCommit: badCommit })
-      ).toThrow('is not a commit official skills can be pinned to')
-    }
-  )
-
   it('builds a global install command by default', () => {
     expect(buildAgentFeatureSkillInstallCommand(['orca-cli'], { sourceCommit })).toBe(
       `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli --global`

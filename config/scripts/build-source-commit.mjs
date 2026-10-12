@@ -4,10 +4,10 @@ import { execFileSync } from 'node:child_process'
  * The full commit this build is made from. Official skill installs pin to it, so the
  * skills an Orca build installs are the ones it bundles on every release channel.
  */
-export function resolveBuildSourceCommit(cwd = process.cwd()) {
+export function resolveBuildSourceCommit() {
   let commit = ''
   try {
-    commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim()
+    commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
   } catch (error) {
     throw new Error(
       `Could not read the source commit with \`git rev-parse HEAD\`: ${

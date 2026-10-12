@@ -32,9 +32,6 @@ export function buildAgentFeatureSkillInstallArgs(
   if (skillNames.length === 0) {
     throw new Error('At least one skill name is required.')
   }
-  if (!/^[0-9a-f]{40}$/.test(options.sourceCommit)) {
-    throw new Error(`"${options.sourceCommit}" is not a commit official skills can be pinned to.`)
-  }
   const global = options.global ?? true
   // Why: -y with no --agent is the one combination that makes `skills add` install
   // into every agent it knows. Refuse it here so no caller can express it.
