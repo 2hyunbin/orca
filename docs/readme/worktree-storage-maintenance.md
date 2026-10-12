@@ -36,6 +36,8 @@ anything on SSH hosts. Run maintenance on the execution host when maintaining re
 
 Healthy Electron installs join the shared distribution cache during native dependency setup,
 without waiting for an Electron upgrade. The manual command migrates older installs immediately.
+Read-only Electron package directories are retained and reported as skipped. Cache publication
+or copying failures are also reported as skipped rather than silently omitted.
 
 Historical test cache cleanup runs only in this explicit manual command. Automatic invocations
 exclude it because tests may still be importing source.
