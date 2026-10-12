@@ -5,6 +5,11 @@ import {
   insertTabAtRecentlyClosedPosition
 } from '../store/slices/recently-closed-tab-position'
 
+export type HostSessionTabClosePlacementState = Pick<
+  WebSessionTabsSyncState,
+  'unifiedTabsByWorktree' | 'groupsByWorktree' | 'tabBarOrderByWorktree'
+>
+
 export type HostSessionTabClosePlacement = {
   localTabId: string
   groupId: string
@@ -15,7 +20,7 @@ export type HostSessionTabClosePlacement = {
 }
 
 export function captureHostSessionTabClosePlacement(
-  state: WebSessionTabsSyncState,
+  state: HostSessionTabClosePlacementState,
   environmentId: string,
   worktreeId: string,
   hostTabId: string
@@ -60,7 +65,7 @@ function anchoredIndex(
 }
 
 export function survivingHostSessionTabClosePlacement(
-  state: WebSessionTabsSyncState,
+  state: HostSessionTabClosePlacementState,
   worktreeId: string,
   placement: HostSessionTabClosePlacement | undefined
 ): HostSessionTabClosePlacement | undefined {
@@ -76,43 +81,13 @@ export function survivingHostSessionTabClosePlacement(
     : undefined
 }
 
-export function applyHostSessionTabClosePlacement(
-  state: WebSessionTabsSyncState,
-  worktreeId: string,
-  placement: HostSessionTabClosePlacement
-): Partial<WebSessionTabsSyncState> {
-  const groups = state.groupsByWorktree[worktreeId] ?? []
-  const group = groups.find((candidate) => candidate.id === placement.groupId)
-  if (!group?.tabOrder.includes(placement.localTabId)) {
-    return {}
-  }
-  const order = group.tabOrder.filter((id) => id !== placement.localTabId)
-  const index = anchoredIndex(order, placement.previousTabId, placement.nextTabId)
-  if (index === undefined) {
-    return {}
-  }
-  const tabOrder = insertTabAtRecentlyClosedPosition(order, placement.localTabId, {
-    tabBarIndex: index
-  })
-  const bar = state.tabBarOrderByWorktree[worktreeId] ?? []
-  const barOrder = bar.filter((id) => id !== placement.localTabId)
-  const barIndex = anchoredIndex(barOrder, placement.previousBarId, placement.nextBarId)
-  return {
-    groupsByWorktree: {
-      ...state.groupsByWorktree,
-      [worktreeId]: groups.map((candidate) =>
-        candidate === group ? { ...candidate, tabOrder } : candidate
-      )
-    },
-    ...(barIndex !== undefined
-      ? {
-          tabBarOrderByWorktree: {
-            ...state.tabBarOrderByWorktree,
-            [worktreeId]: insertTabAtRecentlyClosedPosition(barOrder, placement.localTabId, {
-              tabBarIndex: barIndex
-            })
-          }
-        }
-      : {})
-  }
+export function insertTabAtHostSessionTabClosePosition(
+  order: readonly string[],
+  tabId: string,
+  previousTabId?: string,
+  nextTabId?: string
+): string[] {
+  const withoutTab = order.filter((id) => id !== tabId)
+  const index = anchoredIndex(withoutTab, previousTabId, nextTabId)
+  return insertTabAtRecentlyClosedPosition(withoutTab, tabId, { tabBarIndex: index })
 }

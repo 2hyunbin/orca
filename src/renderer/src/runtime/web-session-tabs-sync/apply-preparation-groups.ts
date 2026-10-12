@@ -1,3 +1,10 @@
+import {
+  insertTabAtHostSessionTabClosePosition,
+  survivingHostSessionTabClosePlacement
+} from '../host-session-tab-close-placement'
+import { failedWebSessionCloseIntentTickets } from '../web-session-close-intent'
+import { hostSessionTabSourceMatchesWorkspaceOwner } from '../host-session-tab-source-owner'
+import type { ClientOwnedAdoptedTab } from '../web-session-client-owned-tab-placement'
 import type { TabGroup } from '../../../../shared/tab-types'
 import type { prepareWebSessionTabsSnapshotUnified } from './apply-preparation-unified'
 import { toWebTerminalSurfaceTabId } from '../web-runtime-session'
@@ -38,6 +45,25 @@ export function prepareWebSessionTabsSnapshotGroups(
     reservedEmptyPreviewFallbackTabId
   } = base
   const currentGroups = state.groupsByWorktree[worktreeId] ?? []
+  const failedRestorations = failedWebSessionCloseIntentTickets({ environmentId }, worktreeId, now)
+    .filter((ticket) => hostSessionTabSourceMatchesWorkspaceOwner(state, ticket.owner, worktreeId))
+    .flatMap((ticket) =>
+      ticket.placement ? [{ ...ticket.placement, hostTabId: ticket.closedId }] : []
+    )
+  const candidates =
+    options?.projectionOnly && options.closeRestoration
+      ? [options.closeRestoration, ...failedRestorations]
+      : failedRestorations
+  // The first apply restoring a missing occurrence owns placement, regardless of recovery module timing.
+  const closeRestorations = candidates.flatMap((candidate) => {
+    const tabId = hostToLocalTabId.get(candidate.hostTabId)
+    const placement = survivingHostSessionTabClosePlacement(state, worktreeId, candidate)
+    return tabId &&
+      placement &&
+      !state.unifiedTabsByWorktree[worktreeId]?.some((tab) => tab.id === tabId)
+      ? [{ tabId, placement }]
+      : []
+  })
   const clientGroupIdByLocalTabId = new Map(
     mirroredBrowserTabs.flatMap((entry) =>
       entry.clientGroupId ? [[entry.unifiedTab.id, entry.clientGroupId]] : []
@@ -78,7 +104,7 @@ export function prepareWebSessionTabsSnapshotGroups(
     // provisional tab was provisionally adopted elsewhere or the target group record lags its leaf.
     // The entry's own clientGroupId comes first, so a group the user moved the row into after the
     // create was recorded wins over the group the create asked for.
-    const placementMoves = mirroredBrowserTabs.flatMap((entry) => {
+    const placementMoves: ClientOwnedAdoptedTab[] = mirroredBrowserTabs.flatMap((entry) => {
       const recordedGroupId = peekWebSessionBrowserPlacementGroup({
         environmentId,
         worktreeId,
@@ -102,11 +128,15 @@ export function prepareWebSessionTabsSnapshotGroups(
         })
       }
     }
-    if (options?.closeRestoration) {
-      const restoredTabId = hostToLocalTabId.get(options.closeRestoration.hostTabId)
-      if (restoredTabId) {
-        placementMoves.push({ tabId: restoredTabId, groupId: options.closeRestoration.groupId })
-      }
+    for (const { tabId, placement } of closeRestorations) {
+      placementMoves.push({
+        tabId,
+        groupId: placement.groupId,
+        position: {
+          previousTabId: placement.previousTabId,
+          nextTabId: placement.nextTabId
+        }
+      })
     }
     const adoptedTabs = mirroredUnifiedTabs
       .filter((tab) => !knownGroupTabIds.has(tab.id))
@@ -228,7 +258,16 @@ export function prepareWebSessionTabsSnapshotGroups(
     for (const tabId of hostOrMirroredOrder) {
       push(tabId)
     }
-    return next
+    return closeRestorations.reduce(
+      (order, { tabId, placement }) =>
+        insertTabAtHostSessionTabClosePosition(
+          order,
+          tabId,
+          placement.previousBarId,
+          placement.nextBarId
+        ),
+      next
+    )
   })()
   return {
     ...base,

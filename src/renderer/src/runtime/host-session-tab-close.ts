@@ -6,7 +6,8 @@ import type { RuntimeClientTarget } from './runtime-rpc-client'
 import { sessionTabCloseAnswerOutcome } from '../../../shared/session-tab-close-answer'
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
 import {
-  settleWebSessionCloseIntent,
+  settleWebSessionCloseIntents,
+  isFailedWebSessionCloseIntents,
   type WebSessionCloseIntentTicket
 } from './web-session-close-intent'
 
@@ -98,24 +99,41 @@ export async function settleHostSessionTabClose(args: {
       error instanceof Error ? error.message : String(error)
     )
   }
-  const now = Date.now()
-  for (const ticket of args.tickets()) {
-    const settled = settleWebSessionCloseIntent(ticket, outcome, now)
-    if (settled && outcome === 'failed') {
-      try {
-        const { reprojectHostSessionTabSource } =
-          await import('./host-session-tab-source-projection')
-        reprojectHostSessionTabSource(ticket)
-      } catch (error) {
-        console.warn('[session-tabs] could not restore closed tab from its host source', error)
-      }
-    }
-  }
+  const tickets = [...args.tickets()]
+  settleWebSessionCloseIntents(tickets, outcome, Date.now())
   if (outcome === 'failed') {
-    // Not awaited: the caller's own failure handling must not wait on a read of an unreachable host.
-    void args.reread(true)
-  } else if (outcome === 'closed' && args.readAfterClose) {
+    void recoverFailedHostSessionTabs(tickets)
+    void Promise.resolve()
+      .then(() => args.reread(true))
+      .catch((error: unknown) =>
+        console.warn('[session-tabs] tab re-read after a close failed', error)
+      )
+  }
+  if (outcome === 'closed' && args.readAfterClose) {
     await args.reread(false)
   }
   return result
+}
+
+async function recoverFailedHostSessionTabs(
+  tickets: readonly WebSessionCloseIntentTicket[]
+): Promise<void> {
+  if (tickets.length === 0) {
+    return
+  }
+  try {
+    const { reprojectHostSessionTabSource } = await import('./host-session-tab-source-projection')
+    if (!isFailedWebSessionCloseIntents(tickets, Date.now())) {
+      return
+    }
+    // Aliases describe one close; replay once with its captured occurrence, not an alias without it.
+    const ticket = tickets.find((candidate) => candidate.placement) ?? tickets[0]
+    try {
+      reprojectHostSessionTabSource(ticket)
+    } catch (error) {
+      console.warn('[session-tabs] could not restore closed tab from its host source', error)
+    }
+  } catch (error) {
+    console.warn('[session-tabs] could not load closed tab recovery', error)
+  }
 }

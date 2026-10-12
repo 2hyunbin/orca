@@ -1,5 +1,5 @@
-import { create, type StateCreator } from 'zustand'
 import { registerWebSessionClosePlacementStateReader } from '../runtime/web-session-close-intent'
+import { create, type StateCreator } from 'zustand'
 import type { AppState } from './types'
 import { createRepoSlice } from './slices/repos'
 import { createSparsePresetsSlice } from './slices/sparse-presets'

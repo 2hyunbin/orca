@@ -7,7 +7,8 @@ import {
 import {
   isWebSessionCloseIntentPending,
   beginWebSessionCloseIntent,
-  resetWebSessionCloseIntentForTests
+  resetWebSessionCloseIntentForTests,
+  registerWebSessionClosePlacementStateReader
 } from './web-session-close-intent'
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import { toHostSessionTabId } from './web-terminal-surface-id'
@@ -83,6 +84,14 @@ afterEach(() => resetWebSessionCloseIntentForTests())
 
 describe('web runtime session tab actions', () => {
   beforeEach(() => {
+    registerWebSessionClosePlacementStateReader(() => {
+      const state = mocks.getState()
+      return {
+        unifiedTabsByWorktree: state.unifiedTabsByWorktree ?? {},
+        groupsByWorktree: state.groupsByWorktree ?? {},
+        tabBarOrderByWorktree: state.tabBarOrderByWorktree ?? {}
+      }
+    })
     vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
     mocks.getState.mockReturnValue({
       settings: {
