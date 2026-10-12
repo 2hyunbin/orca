@@ -21,7 +21,8 @@ const streamTextByOutput = new WeakMap<NotebookOutput, StreamText>()
 const MAX_STREAM_CHARS = 2 * 1024 * 1024
 // Why: images and HTML get more room than text, but a looping display() still has a ceiling.
 const MAX_OUTPUT_CHARS = 16 * 1024 * 1024
-const MAX_OUTPUTS = 500
+// Why: each output is its own rendered block; stdout/stderr switches alone add one per flush.
+const MAX_OUTPUTS = 2000
 const truncationNotices = new WeakSet<NotebookOutput>()
 const richOutputSizes = new WeakMap<NotebookOutput, number>()
 
@@ -109,15 +110,15 @@ function truncationNotice(): NotebookOutput {
   const notice = noticeOutput(
     translate(
       'auto.components.editor.IpynbViewer.outputTruncated',
-      'Output truncated: this cell produced more output than Orca keeps, so the rest is not shown.'
+      'Output truncated: this cell produced more output than Orca keeps. To keep all of it, write it to a file instead.'
     )
   )
   truncationNotices.add(notice)
   return notice
 }
 
-/** Keeps the head of the cell's output within budget; the output that just grew is the one cut. */
-function fitBudget(outputs: NotebookOutput[]): NotebookOutput[] {
+/** Keeps the head of the cell's output within budget, cutting only what this frame added. */
+function fitBudget(previous: NotebookOutput[], outputs: NotebookOutput[]): NotebookOutput[] {
   let streamChars = 0
   let totalChars = 0
   for (const output of outputs) {
@@ -139,6 +140,9 @@ function fitBudget(outputs: NotebookOutput[]): NotebookOutput[] {
     keep = text.length - Math.max(streamChars - MAX_STREAM_CHARS, totalChars - MAX_OUTPUT_CHARS)
     // Why: never split a surrogate pair at the cut.
     keep -= /[\ud800-\udbff]/.test(text.charAt(keep - 1)) ? 1 : 0
+    // Why: text already on screen stays, even when unbudgeted outputs pushed the cell over.
+    const shown = outputs.length === previous.length ? String(previous.at(-1)?.text).length : 0
+    keep = Math.max(keep, Math.min(shown, text.length))
   }
   return [
     ...outputs.slice(0, -1),
@@ -181,8 +185,11 @@ export function applyKernelOutput<T extends LiveOutputs>(
     }
   }
   const outputs = live.clearOnNextOutput ? [] : live.outputs
-  // Why: the kernel sends at most one error and one result per run, so keeping them stays bounded.
-  if (type === 'error' || type === 'execute_result') {
+  // Why: a run's first error (e.g. the interrupt) and first result always show, even past the budget.
+  if (
+    (type === 'error' || type === 'execute_result') &&
+    !outputs.some((output) => output.output_type === type)
+  ) {
     return { ...live, outputs: appendOutput(outputs, type, content), clearOnNextOutput: false }
   }
   if (outputs.some((output) => truncationNotices.has(output))) {
@@ -190,7 +197,7 @@ export function applyKernelOutput<T extends LiveOutputs>(
   }
   return {
     ...live,
-    outputs: fitBudget(appendOutput(outputs, type, content)),
+    outputs: fitBudget(outputs, appendOutput(outputs, type, content)),
     clearOnNextOutput: false
   }
 }

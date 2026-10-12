@@ -9,7 +9,7 @@ const NOTICE = {
   output_type: 'display_data',
   data: {
     'text/markdown':
-      'Output truncated: this cell produced more output than Orca keeps, so the rest is not shown.'
+      'Output truncated: this cell produced more output than Orca keeps. To keep all of it, write it to a file instead.'
   },
   metadata: {}
 }
@@ -115,19 +115,69 @@ describe('applyKernelOutput output budget', () => {
     expect(waited.outputs).toEqual([{ output_type: 'stream', name: 'stdout', text: 'fresh' }])
   })
 
-  it('caps a cell at 500 outputs', () => {
+  it('caps a cell at 2000 outputs', () => {
     const frames: [KernelOutputType, Record<string, unknown>][] = []
-    for (let index = 0; index < 600; index += 1) {
+    for (let index = 0; index < 2100; index += 1) {
       frames.push(['display_data', { data: { 'text/plain': String(index) }, metadata: {} }])
     }
     const live = apply(frames)
-    expect(live.outputs).toHaveLength(501)
-    expect(live.outputs[499]).toEqual({
+    expect(live.outputs).toHaveLength(2001)
+    expect(live.outputs[1999]).toEqual({
       output_type: 'display_data',
-      data: { 'text/plain': '499' },
+      data: { 'text/plain': '1999' },
       metadata: {}
     })
-    expect(live.outputs[500]).toEqual(NOTICE)
+    expect(live.outputs[2000]).toEqual(NOTICE)
+  })
+
+  it('does not truncate a long training log that interleaves stdout and stderr', () => {
+    const frames: [KernelOutputType, Record<string, unknown>][] = []
+    for (let epoch = 0; epoch < 900; epoch += 1) {
+      frames.push(['stream', { name: 'stderr', text: `\r${epoch}%` }])
+      frames.push(['stream', { name: 'stdout', text: `epoch ${epoch}\n` }])
+    }
+    const live = apply(frames)
+    expect(live.outputs).toHaveLength(1800)
+    expect(live.outputs.at(-1)).toEqual({
+      output_type: 'stream',
+      name: 'stdout',
+      text: 'epoch 899\n'
+    })
+  })
+
+  it('keeps text already shown when an unbudgeted display update pushed the cell over', () => {
+    const shown = 'z'.repeat(1000)
+    const grown = apply([
+      [
+        'display_data',
+        { data: { 'text/plain': 'small' }, metadata: {}, transient: { display_id: 'd' } }
+      ],
+      ['stream', { name: 'stdout', text: shown }],
+      [
+        'update_display_data',
+        {
+          data: { 'image/png': 'A'.repeat(MAX_OUTPUT_CHARS) },
+          metadata: {},
+          transient: { display_id: 'd' }
+        }
+      ],
+      ['stream', { name: 'stdout', text: 'more' }]
+    ])
+    expect(textOf(grown, 1)).toBe(shown)
+    expect(grown.outputs.at(-1)).toEqual(NOTICE)
+  })
+
+  it('always keeps the first result and error of a run but budgets repeats', () => {
+    const result = (count: number): [KernelOutputType, Record<string, unknown>] => [
+      'execute_result',
+      { execution_count: count, data: { 'text/plain': 'r'.repeat(MAX_OUTPUT_CHARS) }, metadata: {} }
+    ]
+    const live = apply([result(1), result(2), result(3)])
+    expect(live.outputs.map((output) => output.output_type)).toEqual([
+      'execute_result',
+      'display_data'
+    ])
+    expect(live.outputs[1]).toEqual(NOTICE)
   })
 
   it('drops rich outputs past 16 MiB but still updates displays already shown', () => {
