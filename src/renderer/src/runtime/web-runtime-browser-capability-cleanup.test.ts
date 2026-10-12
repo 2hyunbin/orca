@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createWebRuntimeSessionBrowserTab } from './web-runtime-session'
+import { createWebRuntimeSessionBrowserTab } from './web-runtime-browser-creation'
 import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
 
 const ENVIRONMENT_ID = 'runtime-1'

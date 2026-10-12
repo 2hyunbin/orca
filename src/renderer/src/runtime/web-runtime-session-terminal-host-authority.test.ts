@@ -3,7 +3,7 @@ import {
   createWebRuntimeAgentSessionTerminal,
   createWebRuntimeAgentSessionTerminalWithLaunchDraft,
   createWebRuntimeSessionTerminal
-} from './web-runtime-session'
+} from './web-runtime-terminal-creation'
 import { peekWebSessionFocusIntent } from './web-session-focus-intent'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
 import {

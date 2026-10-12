@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { moveWebRuntimeSessionTab } from './web-runtime-session'
+import { moveWebRuntimeSessionTab } from './web-runtime-session-tab-move'
 import { resetWebSessionFocusIntentForTests } from './web-session-focus-intent'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
 import { ENVIRONMENT_ID, WORKTREE_ID } from './web-runtime-session-test-harness'

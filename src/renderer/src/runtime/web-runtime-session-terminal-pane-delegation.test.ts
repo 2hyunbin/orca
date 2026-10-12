@@ -3,7 +3,7 @@ import {
   closeWebRuntimeTerminal,
   consumePendingWebRuntimeSplitMirrorTelemetry,
   splitWebRuntimeTerminal
-} from './web-runtime-session'
+} from './web-runtime-terminal-actions'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
 import {
   peekWebSessionFocusIntent,

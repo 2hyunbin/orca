@@ -9,7 +9,7 @@ import {
   BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY
 } from '../../../shared/protocol-version'
 import { peekWebSessionFocusIntent } from './web-session-focus-intent'
-import { createWebRuntimeSessionBrowserTab } from './web-runtime-session'
+import { createWebRuntimeSessionBrowserTab } from './web-runtime-browser-creation'
 import {
   ENVIRONMENT_ID,
   WORKTREE_ID,

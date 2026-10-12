@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  activateWebRuntimeSessionWorktree,
-  refreshWebRuntimeSessionTabsSnapshot
-} from './web-runtime-session'
+import { activateWebRuntimeSessionWorktree } from './web-runtime-worktree-activation'
+import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
 import { clearRuntimeCompatibilityCacheForTests } from './runtime-rpc-client'
 import {
   confirmWebAgentSessionHandoffAfterCreate,

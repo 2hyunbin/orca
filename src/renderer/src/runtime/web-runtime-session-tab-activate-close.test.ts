@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { activateWebRuntimeSessionTab, closeWebRuntimeSessionTab } from './web-runtime-session'
+import {
+  activateWebRuntimeSessionTab,
+  closeWebRuntimeSessionTab
+} from './web-runtime-session-tab-lifecycle'
 import {
   peekWebSessionFocusIntent,
   resetWebSessionFocusIntentForTests

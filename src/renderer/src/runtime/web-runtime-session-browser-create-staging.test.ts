@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createWebRuntimeSessionBrowserTab } from './web-runtime-session'
+import { createWebRuntimeSessionBrowserTab } from './web-runtime-browser-creation'
 import { discardStagedWebRuntimeBrowserTab } from './web-runtime-browser-tab-staging'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
 import type * as BrowserMaterializationModule from './web-runtime-browser-materialization'
