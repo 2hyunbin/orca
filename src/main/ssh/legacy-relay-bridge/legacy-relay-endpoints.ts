@@ -42,7 +42,12 @@ export type LegacyRelayEndpoint = {
 }
 
 export type LegacyRelayEndpointListing =
-  | { kind: 'listed'; endpoints: LegacyRelayEndpoint[] }
+  | {
+      kind: 'listed'
+      endpoints: LegacyRelayEndpoint[]
+      /** False when a relay may run that no endpoint here accounts for, so absence proves nothing. */
+      exhaustive: boolean
+    }
   | { kind: 'unverifiable' }
 
 export function legacyRelayEndpointListCommand(remoteHome: string, sockName: string): string {
@@ -128,7 +133,7 @@ async function listPosixEndpoints(
     return { kind: 'unverifiable' }
   }
   if (sockets.length === 0) {
-    return { kind: 'listed', endpoints: [] }
+    return { kind: 'listed', endpoints: [], exhaustive: true }
   }
   // Each relay is driven with the runtime it runs on; a socket whose daemon is gone with any Node.
   const runtimes = await readRelayDaemonRuntimes(conn, signal)
@@ -148,7 +153,7 @@ async function listPosixEndpoints(
       nodePath
     })
   }
-  return { kind: 'listed', endpoints }
+  return { kind: 'listed', endpoints, exhaustive: true }
 }
 
 /** Pipes have no inode to list, so this account's version directories name which pipe is ours. */
@@ -177,9 +182,15 @@ async function listWindowsEndpoints(
   }
   const credentialName = `${sockName}.credential`.toLowerCase()
   const endpoints: LegacyRelayEndpoint[] = []
+  // A pipe no version directory here names could still be ours, so its absence proves nothing.
+  let exhaustive = true
   for (const pipe of inventory.pipes) {
     const owner = inventory.owners.get(pipe.toLowerCase())
-    if (!owner || !owner.credentialFile.toLowerCase().endsWith(credentialName)) {
+    if (!owner) {
+      exhaustive = false
+      continue
+    }
+    if (!owner.credentialFile.toLowerCase().endsWith(credentialName)) {
       continue
     }
     endpoints.push({
@@ -196,5 +207,5 @@ async function listWindowsEndpoints(
       nodePath
     })
   }
-  return { kind: 'listed', endpoints }
+  return { kind: 'listed', endpoints, exhaustive }
 }

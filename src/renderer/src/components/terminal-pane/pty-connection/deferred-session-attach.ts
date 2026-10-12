@@ -9,7 +9,7 @@ export function runDeferredSessionAttach(session: ConnectPanePtySession): void {
     return
   }
   // COMPAT(legacy-relay-bridge, revisit 2027-01-15): reattach the relay-era terminal it still runs.
-  if (session.legacyRelayBridgePtyId) {
+  if (session.legacyRelayBridgePtyId && !session.pendingReplacedPtyId) {
     startDeferredSessionReattach(session, session.legacyRelayBridgePtyId)
     return
   }

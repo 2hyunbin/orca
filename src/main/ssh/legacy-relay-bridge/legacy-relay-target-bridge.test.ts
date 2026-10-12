@@ -136,7 +136,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   relay = { ptys: new Set(['pty-1']), attachError: null, clients: [], openError: null }
   leases = [lease()]
-  listing = { kind: 'listed', endpoints: [ENDPOINT] }
+  listing = { kind: 'listed', endpoints: [ENDPOINT], exhaustive: true }
   endpointExited = false
   events = { data: [], exits: [], exitedTelemetry: 0, panesChanged: 0 }
 })
@@ -207,6 +207,13 @@ describe('one target’s legacy relay bridge', () => {
   it('keeps a lease when a relay could not be asked', async () => {
     relay.ptys.clear()
     relay.openError = new Error('refused')
+    await bridge().refresh()
+    expect(leases[0].state).toBe('detached')
+  })
+
+  it('keeps a lease when a relay may run that no endpoint accounts for', async () => {
+    relay.ptys.clear()
+    listing = { kind: 'listed', endpoints: [ENDPOINT], exhaustive: false }
     await bridge().refresh()
     expect(leases[0].state).toBe('detached')
   })

@@ -182,7 +182,7 @@ export class LegacyRelayTargetBridge {
       return
     }
     const listedBy = new Map<string, string>()
-    let complete = listing.kind === 'listed'
+    let complete = listing.kind === 'listed' && listing.exhaustive
     for (const endpoint of listing.kind === 'listed' ? listing.endpoints : []) {
       const listed = await this.listEndpoint(endpoint)
       if (this.disposed) {

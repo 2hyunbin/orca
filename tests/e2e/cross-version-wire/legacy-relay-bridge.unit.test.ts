@@ -200,7 +200,7 @@ describe.skipIf(process.platform === 'win32')(
               }
             }
           },
-          listEndpoints: async () => ({ kind: 'listed', endpoints: [endpoint] }),
+          listEndpoints: async () => ({ kind: 'listed', endpoints: [endpoint], exhaustive: true }),
           openClient: async (_endpoint, resume) => {
             const client = await open(resume)
             opened.push(client)
