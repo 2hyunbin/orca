@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export async function stageClipboardPublisher(source: string, userData: string): Promise<string> {
@@ -10,6 +10,7 @@ export async function stageClipboardPublisher(source: string, userData: string):
   await mkdir(directory, { recursive: true, mode: 0o700 })
   try {
     if ((await readFile(executable)).equals(contents)) {
+      await chmod(executable, 0o700)
       return executable
     }
   } catch (error) {

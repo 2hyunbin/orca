@@ -14,6 +14,26 @@ on that desktop the helper loads host GTK 3 and publishes through Xwayland's
 clipboard bridge. GTK handles selection conversion and large incremental transfers.
 No `wl-copy`, `xclip`, or other clipboard command is required at runtime.
 
+## Upstream issue and removal
+
+This is a temporary workaround for [Electron #54645](https://github.com/electron/electron/issues/54645).
+Stock Electron 43.7.9 and 44.7.0 still reproduce the rejected write and stale read.
+Remove the publisher after an Electron version containing the upstream repair
+passes these checks with the helper disabled on native Wayland:
+
+- Before any keyboard/mouse input, copy A externally, write B through Orca's text
+  IPC, then copy C externally. Both the system clipboard and Orca must contain B
+  after the write and C after the external copy; native Ctrl+V must paste C.
+- Repeat with OSC 52 emitted by a restored terminal before new input, and with
+  duplicate/different copies after native keyboard input. Check Unicode, CRLF,
+  large text, and later external copies on Mutter, wlroots and KDE.
+
+When these pass, restore the existing Electron writers in `clipboard-ipc-handlers.ts`
+and remove the text publisher, executable staging, native directory, build script
+and packaging resource/hooks. Keep sender authorization and payload limits.
+Do not use Electron's write-then-read result alone to validate the repair: the
+affected runtime returns its own rejected text from the cache.
+
 Neither path requests window focus or displays a window. If neither data control
 nor the Xwayland/GTK path is available, the copy rejects without retrying through
 Electron or changing the existing clipboard. X11, macOS and Windows use their

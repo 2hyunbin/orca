@@ -26,6 +26,7 @@ type ClipboardTextPublisherDeps = {
   validate: (text: string) => Promise<string>
 }
 
+// Workaround for https://github.com/electron/electron/issues/54645; removal checks are in the native README.
 export function createClipboardTextPublisher(
   deps: ClipboardTextPublisherDeps
 ): (text: unknown, kind?: ClipboardTextWriteKind) => Promise<void> {

@@ -51,14 +51,10 @@ export function isTerminalPanePasteFocusCurrent({
   paneContainer,
   activeElement = typeof document === 'undefined' ? null : document.activeElement
 }: TerminalPanePasteFocusState): boolean {
-  if (!requireSameFocusedElement) {
+  if (!requireSameFocusedElement || activeElementAtDispatch === null) {
     return true
   }
-  // Window refocus can defer xterm's focus until after the clipboard read starts.
-  if (
-    !isInertDocumentFocus(activeElementAtDispatch) &&
-    !paneContainer.contains(activeElementAtDispatch)
-  ) {
+  if (!paneContainer.contains(activeElementAtDispatch)) {
     return false
   }
   if (activeElement === activeElementAtDispatch) {

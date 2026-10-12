@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -47,3 +47,15 @@ it('repairs a damaged cache entry without replacing a running executable in plac
   expect(await stageClipboardPublisher(source, directory)).toBe(executable)
   expect(await readFile(executable, 'utf8')).toBe('native publisher')
 })
+
+it.skipIf(process.platform === 'win32')(
+  'restores executable mode on a reused cache entry',
+  async () => {
+    const source = join(directory, 'bundled')
+    await writeFile(source, 'native publisher')
+    const executable = await stageClipboardPublisher(source, directory)
+    await chmod(executable, 0o600)
+    expect(await stageClipboardPublisher(source, directory)).toBe(executable)
+    expect((await stat(executable)).mode & 0o777).toBe(0o700)
+  }
+)

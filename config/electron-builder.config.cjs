@@ -384,14 +384,14 @@ module.exports = {
     mobileWebBundleDir = MOBILE_WEB_BUNDLE_DIR,
     ensureWaylandClipboard = ensureBundledWaylandClipboard
   ) => {
-    if (context.electronPlatformName === 'linux') {
-      ensureWaylandClipboard(context.arch)
-    }
     assertPackagedNativeVariantsInstalled(context.electronPlatformName, context.arch)
     assertBundledRipgrepInstalled()
     assertProcessHostOutputBuilt()
     assertOrcadTemplateBuilt()
     assertMobileWebBundleBuilt(mobileWebBundleDir)
+    if (context.electronPlatformName === 'linux') {
+      ensureWaylandClipboard(context.arch)
+    }
   },
   afterPack: async (context) => {
     const resourcesDir =
