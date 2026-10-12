@@ -1,7 +1,10 @@
 import { isUsableSkillsCliAgentKey } from './skills-cli-agent-keys'
-import { SKILLS_CLI_VERSION } from './skills-cli-version'
 
 export const ORCA_SKILLS_REPOSITORY_URL = 'https://github.com/stablyai/orca'
+
+// Why: one skills CLI for every install rail. 1.5.x cannot fetch a commit, and a bare
+// `npx skills` can reuse a stale cached copy or another binary (#18687).
+export const SKILLS_CLI_VERSION = '1.7.2'
 
 export const ORCA_CLI_SKILL_NAME = 'orca-cli'
 export const COMPUTER_USE_SKILL_NAME = 'computer-use'

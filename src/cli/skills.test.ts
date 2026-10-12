@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { delimiter, join } from 'node:path'
 import type * as CodexCliCommandModule from '../shared/node-cli-command-resolution'
 import { WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL } from '../shared/windows-batch-spawn'
-import { SKILLS_CLI_VERSION } from '../shared/skills-cli-version'
+import { SKILLS_CLI_VERSION } from '../shared/agent-feature-install-commands'
 
 const COMMIT = '0123456789abcdef0123456789abcdef01234567'
 const PINNED_ADD = [

@@ -6,7 +6,7 @@ import type { DiscoveredSkill } from '../../../../shared/skills'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '../ui/tooltip'
 import { LinearAgentSkillInstallCta } from './linear-agent-skill-install-cta'
-import { SKILLS_CLI_VERSION } from '../../../../shared/skills-cli-version'
+import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
 
 const mocks = vi.hoisted(() => ({
   skillState: {

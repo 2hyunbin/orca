@@ -10,7 +10,7 @@ import {
   _linearAgentSkillSetupPromptInternalsForTests
 } from './LinearAgentSkillSetupPrompt'
 import type { LinearAgentSkillPromptSettings } from './linear-agent-skill-runtime'
-import { SKILLS_CLI_VERSION } from '../../../../shared/skills-cli-version'
+import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
 
 const HOST_DISMISS_STORAGE_KEY = 'orca.linearTicketsSkill.setupDismissed.host'
 const FEDORA_DISMISS_STORAGE_KEY = 'orca.linearTicketsSkill.setupDismissed.wsl.Fedora'

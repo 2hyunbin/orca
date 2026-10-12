@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildAgentFeatureSkillInstallArgs,
-  buildAgentFeatureSkillInstallCommand
+  buildAgentFeatureSkillInstallCommand,
+  SKILLS_CLI_VERSION
 } from './agent-feature-install-commands'
-import { SKILLS_CLI_VERSION } from './skills-cli-version'
 
 const sourceCommit = '0123456789abcdef0123456789abcdef01234567'
 const source = `https://github.com/stablyai/orca/tree/${sourceCommit}`

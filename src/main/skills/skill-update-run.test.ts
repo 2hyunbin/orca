@@ -6,7 +6,7 @@ import {
   WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL
 } from '../../shared/windows-batch-spawn'
 import { CANCEL_RELEASE_TIMEOUT_MS, SkillUpdateRunner } from './skill-update-run'
-import { SKILLS_CLI_VERSION } from '../../shared/skills-cli-version'
+import { SKILLS_CLI_VERSION } from '../../shared/agent-feature-install-commands'
 
 class FakeChild extends EventEmitter {
   stdout = new EventEmitter()

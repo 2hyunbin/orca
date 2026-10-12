@@ -12,7 +12,6 @@ on:
       - 'config/scripts/verify-skill-update-roundtrip.mjs'
       - 'src/main/skills/skill-freshness-eligibility.ts'
       - 'src/shared/agent-feature-install-commands.ts'
-      - 'src/shared/skills-cli-version.ts'
       - 'src/shared/skill-freshness.ts'
       - '.github/workflows/skill-update-roundtrip.yml'
   # Why unfiltered: GitHub ignores `paths` on merge_group. We do not run a merge
@@ -35,7 +34,7 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
         shape: [symlink, copy]
         autocrlf: ['false', 'true']
-        # Why: `pinned` runs the version in src/shared/skills-cli-version.ts, the one Orca ships.
+        # Why: `pinned` runs the skills CLI version Orca ships (SKILLS_CLI_VERSION).
         skills-cli: [pinned]
         include:
           - os: ubuntu-latest
@@ -58,7 +57,7 @@ jobs:
           # A commit, the same kind of ref Orca pins official skills to.
           SKILL_UPDATE_REF: ${{ github.event.pull_request.head.sha || github.sha }}
         run: >-
-          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON config/scripts/verify-skill-update-roundtrip.mjs
+          node config/scripts/verify-skill-update-roundtrip.mjs
           ${{ matrix.skills-cli == 'latest' && '--cli=latest' || '' }}
           --autocrlf=${{ matrix.autocrlf }}
           --shape=${{ matrix.shape }}

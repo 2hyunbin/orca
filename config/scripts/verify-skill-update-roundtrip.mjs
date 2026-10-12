@@ -13,7 +13,6 @@ import {
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
-import { SKILLS_CLI_VERSION } from '../../src/shared/skills-cli-version.ts'
 import { collectPackageFiles, packageDigest } from './generate-skill-bundle-manifest.mjs'
 
 function option(name) {
@@ -21,8 +20,10 @@ function option(name) {
 }
 
 // Why: the exact rail Orca runs for both install and update, pinned to this PR's commit.
-// A test holds it equal to the shared builder's argv.
-export function roundTripAddArgs(source, ref, skillName, cliVersion = SKILLS_CLI_VERSION) {
+// A unit test holds it, and this pinned skills CLI, equal to the shared builder's argv.
+const PINNED_SKILLS_CLI_VERSION = '1.7.2'
+
+export function roundTripAddArgs(source, ref, skillName, cliVersion = PINNED_SKILLS_CLI_VERSION) {
   return [
     `skills@${cliVersion}`,
     'add',
@@ -40,7 +41,7 @@ export function roundTripAddArgs(source, ref, skillName, cliVersion = SKILLS_CLI
 
 async function main() {
   // Why: defaults to the version Orca pins; `--cli=latest` previews the next release.
-  const cliVersion = option('cli') ?? SKILLS_CLI_VERSION
+  const cliVersion = option('cli') ?? PINNED_SKILLS_CLI_VERSION
   const autocrlf = option('autocrlf')
   const placement = option('shape')
   // Why: PR refs are untrusted workflow input. Keep them out of the generated shell

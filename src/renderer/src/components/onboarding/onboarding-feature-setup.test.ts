@@ -26,7 +26,7 @@ import {
   type OnboardingFeatureSetupSelection
 } from './onboarding-feature-setup'
 import { getOnboardingFeatureSetupAgentRuntime } from './onboarding-feature-setup-runtime'
-import { SKILLS_CLI_VERSION } from '../../../../shared/skills-cli-version'
+import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
 
 const ALL_SKILL_INSTALL_COMMAND = buildAgentFeatureSkillInstallCommand([
   ORCA_CLI_SKILL_NAME,
