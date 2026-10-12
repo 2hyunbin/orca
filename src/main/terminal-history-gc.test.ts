@@ -456,6 +456,7 @@ describe('history GC main-thread occupancy', () => {
         last = now
       }, 4)
       await runHistoryGc(live)
+      maxAsyncGapMs = Math.max(maxAsyncGapMs, performance.now() - last - 4)
       clearInterval(asyncTimer)
 
       // Count real timer service at the owner's yields, independent of total walk duration.
