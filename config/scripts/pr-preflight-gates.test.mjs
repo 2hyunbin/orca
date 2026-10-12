@@ -224,6 +224,8 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Enforce ts-nocheck ratchet', staticPhase],
     ['Enforce runtime Electron-import ratchet', staticPhase],
     ['Enforce focus-read ratchet', staticPhase],
+    ['Enforce layout-writer ratchets', staticPhase],
+    ['Check compatibility-folder imports', staticPhase],
     ['Check Node runtime pin', staticPhase],
     ['Boot orcad and round-trip a terminal', staticPhase],
     ['Verify the generated RPC params catalog', staticPhase],
@@ -242,6 +244,7 @@ it('pins every foreground and background step to its selected phase', () => {
       .map((step) => [step.id, step.env.PREFLIGHT_PHASE_SELECTED])
   ).toEqual([
     ['process-host-imports', `\${{ ${staticPhase} }}`],
+    ['main-sync-spawn-ratchet', `\${{ ${staticPhase} }}`],
     ['root-lint', `\${{ ${staticPhase} }}`],
     ['native-code-quality', `\${{ ${staticPhase} }}`],
     ['changed-code-quality', `\${{ ${staticPhase} }}`],

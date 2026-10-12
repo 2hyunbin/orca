@@ -69,7 +69,7 @@ vi.mock('@/store', () => ({
 vi.mock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { info: vi.fn() } }))
 vi.mock('@/lib/codex-stale-pane-sweep', () => ({ notifyCodexPaneBoundForStaleSweep: vi.fn() }))
-vi.mock('@/runtime/web-runtime-session', () => ({
+vi.mock('@/runtime/web-runtime-session-snapshot', () => ({
   refreshWebRuntimeSessionTabsSnapshot: vi.fn(async () => {})
 }))
 
@@ -105,8 +105,6 @@ function startHost(): {
     getRemoteDesktopFitHold: vi.fn().mockReturnValue({ mode: 'desktop-fit', cols: 120, rows: 40 }),
     isRemoteDesktopViewerOwner: vi.fn().mockReturnValue(false),
     getPtyOutputSequence: vi.fn().mockReturnValue(0),
-    attachRemoteTerminalSourceRangeConsumer: vi.fn().mockReturnValue(false),
-    detachRemoteTerminalSourceRangeConsumer: vi.fn(),
     getRendererTerminalSerializerGeneration: vi.fn().mockReturnValue(0),
     sendTerminal,
     readTerminal: vi.fn().mockResolvedValue({ tail: [], truncated: false }),

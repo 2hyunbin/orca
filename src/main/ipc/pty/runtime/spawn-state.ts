@@ -1,5 +1,9 @@
 import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
-import type { IPtyProvider, PtySpawnOptions, PtySpawnResult } from '../../../providers/types'
+import type {
+  IPtyProvider,
+  PtySpawnOptions,
+  PtySpawnResult
+} from '../../../providers/pty-provider-contract'
 import type { CodexPaneHomeRoute } from '../../../codex/codex-pane-account-registry'
 import type { CodexAccountSelectionTarget } from '../../../codex-accounts/runtime-selection'
 import type { ClaudeRuntimeAuthPreparation } from '../../../claude-accounts/runtime-auth-service'
@@ -34,7 +38,6 @@ export type RuntimePtySpawnState = {
   callerRequestedSessionId: string | undefined
   requestedSessionId: string | undefined
   sessionId: string | undefined
-  effectiveSessionRelayId: string | undefined
   effectiveSessionAppId: string | undefined
   isNewDaemonSession: boolean
   expectedWslDistro: string | null
@@ -157,7 +160,6 @@ export function createRuntimePtySpawnState(
     callerRequestedSessionId: undefined,
     requestedSessionId: undefined,
     sessionId: undefined,
-    effectiveSessionRelayId: undefined,
     effectiveSessionAppId: undefined,
     isNewDaemonSession: false,
     expectedWslDistro: null,

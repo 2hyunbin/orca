@@ -2,7 +2,7 @@ import {
   SESSION_TAB_CLOSE_UNSETTLED_BOUND_MS,
   type SessionTabCloseOutcome
 } from '../../../shared/session-tab-close-ledger'
-import type { RuntimeClientTarget } from './runtime-rpc-client'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { sessionTabCloseAnswerOutcome } from '../../../shared/session-tab-close-answer'
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
 import {

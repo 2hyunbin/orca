@@ -44,7 +44,6 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
     activeSessionTabIdRef,
     selectedSessionTabIdRef,
     markdownDocsRef,
-    initializedHandlesRef,
     terminalDiagnosticsRef,
     activeHandleRef,
     activeSessionTabTypeRef,
@@ -216,7 +215,6 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
           const previous = activeHandleRef.current
           if (previous) {
             unsubscribeTerminal(previous)
-            initializedHandlesRef.current.delete(previous)
           }
           activeHandleRef.current = null
           setActiveHandle(null)
@@ -225,7 +223,6 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
         const previous = activeHandleRef.current
         if (previous && previous !== active.terminal) {
           unsubscribeTerminal(previous)
-          initializedHandlesRef.current.delete(previous)
         }
         activeHandleRef.current = active.terminal
         setActiveHandle(active.terminal)
@@ -235,7 +232,6 @@ export function useMobileSessionTabApplication(scope: MobileSessionTerminalListM
         const previous = activeHandleRef.current
         if (previous) {
           unsubscribeTerminal(previous)
-          initializedHandlesRef.current.delete(previous)
         }
         activeHandleRef.current = null
         setActiveHandle(null)

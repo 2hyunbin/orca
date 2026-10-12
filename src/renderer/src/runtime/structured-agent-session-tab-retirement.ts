@@ -28,11 +28,8 @@ import {
 import { WEB_SESSION_TAB_RPC_TIMEOUT_MS } from './web-session-tab-rpc-timeout'
 import { captureWebSessionIntentOwner } from './web-runtime-session-environment'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
-import {
-  callRuntimeRpc,
-  ensureRuntimeEnvironmentCompatible,
-  type RuntimeClientTarget
-} from './runtime-rpc-client'
+import { callRuntimeRpc, ensureRuntimeEnvironmentCompatible } from './runtime-rpc-client'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 
 type HostTabCloseSettlement = PromiseSettledResult<HostSessionTabCloseAnswer | undefined>
