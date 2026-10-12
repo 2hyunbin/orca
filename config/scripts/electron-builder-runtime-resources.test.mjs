@@ -442,6 +442,7 @@ describe('packaged runtime resources', () => {
         wrongArchElf[5] = 1
         wrongArchElf.writeUInt16LE(target.machine, 18)
         await writeFile(join(wrongArchPackage, 'watcher.node'), wrongArchElf)
+        await seedClipboardPublisher(resourcesDir, target.machine)
 
         const stubBinDir = join(root, 'bin')
         await mkdir(stubBinDir)
@@ -478,6 +479,7 @@ describe('packaged runtime resources', () => {
           { recursive: true }
         )
         await seedBundledRipgrep(resourcesDir)
+        await seedClipboardPublisher(resourcesDir, 0x3e)
         await mkdir(join(resourcesDir, 'node_modules', 'zod', 'src'), { recursive: true })
         // Why: afterPack now fails hard when the unpacked daemon entry is
         // missing, so the fixture must carry one like a real package layout.
@@ -531,6 +533,18 @@ describe('packaged runtime resources', () => {
 // verifyPackagedMainRuntimeDeps' `require("x")` scan cannot see these specifiers — packaging
 // stays green while the packaged app throws MODULE_NOT_FOUND the first time the path runs.
 // Why stubs: afterPack only checks each platform binary exists; non-ELF bytes skip the glibc scan.
+async function seedClipboardPublisher(resourcesDir, machine) {
+  const binDir = join(resourcesDir, 'bin')
+  await mkdir(binDir, { recursive: true })
+  const elf = Buffer.alloc(64)
+  elf.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1])
+  elf.writeUInt16LE(2, 16)
+  elf.writeUInt16LE(machine, 18)
+  elf.writeUInt32LE(1, 20)
+  elf.writeUInt16LE(64, 52)
+  await writeFile(join(binDir, 'orca-wayland-clipboard'), elf)
+}
+
 async function seedBundledRipgrep(resourcesDir) {
   const { BUNDLED_RIPGREP_PLATFORMS } = require('../bundled-ripgrep-resources.cjs')
   for (const platform of BUNDLED_RIPGREP_PLATFORMS) {
