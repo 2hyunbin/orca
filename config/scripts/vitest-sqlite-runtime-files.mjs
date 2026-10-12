@@ -217,6 +217,8 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'tests/e2e/agent-launch-cli.unit.test.ts',
   'src/main/runtime/rpc/methods/agent-launch-folder-workspace-create.test.ts',
   'src/main/runtime/rpc/methods/agent-launch-instant-tab.test.ts',
+  'src/main/runtime/orca-runtime.test.ts',
+  'tests/e2e/agent-launch-setup-choice.unit.test.ts',
   'src/main/runtime/rpc/methods/agent-launch-pane-reservation.test.ts',
   'src/main/runtime/rpc/methods/agent-launch-prestart-failure.test.ts',
   'src/main/runtime/rpc/methods/agent-launch-replay.test.ts',

@@ -131,6 +131,7 @@ export function agentLaunchSurfaceFactory(
     }) => {
       const launchPreferences = toAgentLaunchPreferences(options)
       let promptRodeLaunchCommand = false
+      const windowOwnsPresentation = earlyTab?.windowOwnsPresentation() === true
       if (earlyTab?.closedByUser()) {
         // The user closed its tab while it waited: nothing is spawned, and that is the answer.
         terminalSpawn.rethrow(new AgentLaunchTabClosedError())
@@ -157,10 +158,11 @@ export function agentLaunchSurfaceFactory(
         ...(paneKey ? { ...paneIdentity(paneKey), requireFreshPane: true } : {}),
         ...(launchSource ? { launchSource } : {}),
         ...(viewMode ? { viewMode } : {}),
-        ...(presentation
+        ...(presentation &&
+        (!movesHostWindow || !windowOwnsPresentation || presentation === 'background')
           ? { presentation: movesHostWindow ? presentation : ('background' as const) }
           : {}),
-        ...(earlyTab?.windowShowsTab() || !movesHostWindow ? { surfaceOwner: false as const } : {}),
+        ...(windowOwnsPresentation || !movesHostWindow ? { surfaceOwner: false as const } : {}),
         onPtySpawnDispatched: terminalSpawn.onPtySpawnDispatched
       })
       const terminal = await created.catch(terminalSpawn.rethrow)

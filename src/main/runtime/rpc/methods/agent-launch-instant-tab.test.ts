@@ -267,6 +267,7 @@ describe('the instant tab', () => {
     await replayLaunch(runtime, { presentation: 'focused' }, CLI)
 
     expect(terminalOptions(runtime)).toMatchObject({ surfaceOwner: false })
+    expect(terminalOptions(runtime)).not.toHaveProperty('presentation')
   })
 
   it('reveals the spawn as before when the window never said it showed the tab', async () => {

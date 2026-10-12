@@ -1,0 +1,178 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { RuntimeClient, RuntimeRpcFailureError } from '../../src/cli/runtime-client'
+import { createWorktreeWithAgent } from '../../src/cli/handlers/worktree-create-agent-launch'
+import { formatCliError } from '../../src/cli/cli-error'
+import { AGENT_LAUNCH_RUNTIME_CAPABILITIES } from '../../src/shared/agent-launch-runtime-capability'
+import { WorktreeCreateSetupChoiceRefusedError } from '../../src/main/runtime/worktree-create-setup-choice-refusal'
+import { openTestAgentSessionRecordStore } from '../../src/main/runtime/agent-session-record-store-test-harness'
+import { closeTestJournalHostDatabase } from '../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
+import { mapDispatcherError } from '../../src/main/runtime/rpc/dispatcher-error-response'
+import {
+  methodNamed,
+  rpcContext,
+  runtimeStub,
+  setAgentLaunchRecordStore
+} from '../../src/main/runtime/rpc/methods/agent-launch.test-fixture'
+import { AGENT_LAUNCH_METHODS } from '../../src/main/runtime/rpc/methods/agent-launch'
+
+const SETUP_CHOICE = 'Setup decision required for this repository'
+const create = { repo: 'id:repo-1', name: 'task', activate: false }
+let directory: string
+let store: Awaited<ReturnType<typeof openTestAgentSessionRecordStore>>
+
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'agent-launch-setup-choice-'))
+  store = await openTestAgentSessionRecordStore(directory)
+  setAgentLaunchRecordStore(store)
+})
+
+afterEach(async () => {
+  setAgentLaunchRecordStore(null)
+  closeTestJournalHostDatabase(directory)
+  vi.restoreAllMocks()
+  await rm(directory, { recursive: true, force: true })
+})
+
+function hostClient(runtime: ReturnType<typeof runtimeStub>) {
+  const client = new RuntimeClient(directory, 60_000, null, null)
+  vi.spyOn(client, 'call').mockImplementation(async (name, params) => {
+    const meta = { runtimeId: 'runtime-1' }
+    if (name === 'status.get') {
+      return {
+        id: 'status',
+        ok: true,
+        result: { capabilities: [...AGENT_LAUNCH_RUNTIME_CAPABILITIES] },
+        _meta: meta
+      }
+    }
+    if (name === 'worktree.show') {
+      return { id: 'show', ok: true, result: { worktree: { id: 'wt-new' } }, _meta: meta }
+    }
+    expect(name).toBe('agent.launchReplay')
+    const method = methodNamed(AGENT_LAUNCH_METHODS, 'agent.launchReplay')
+    try {
+      const result = await method.handler(method.params.parse(params), rpcContext(runtime, {}))
+      return { id: 'launch', ok: true, result, _meta: meta }
+    } catch (error) {
+      const response = mapDispatcherError(
+        { id: 'launch', authToken: 'token', method: name, params },
+        meta,
+        error
+      )
+      if (response.ok) {
+        throw new Error('Expected an error response')
+      }
+      throw new RuntimeRpcFailureError(response)
+    }
+  })
+  return client
+}
+
+function launch(
+  client: RuntimeClient,
+  options: { operationId?: string; setupDecision?: 'run' | 'skip' } = {}
+) {
+  return createWorktreeWithAgent({
+    client,
+    flags: new Map(),
+    create: {
+      ...create,
+      ...(options.setupDecision ? { setupDecision: options.setupDecision } : {})
+    },
+    launch: {
+      agent: 'codex',
+      ...(options.operationId ? { operationId: options.operationId } : {})
+    },
+    json: true
+  })
+}
+
+describe('CLI setup choice across durable launch admission', () => {
+  it('preserves the choice and its guidance on first refusal and after reopening the store', async () => {
+    const first = runtimeStub({ settings: {} })
+    first.createManagedWorktree.mockRejectedValue(
+      new WorktreeCreateSetupChoiceRefusedError(SETUP_CHOICE)
+    )
+    const firstError = await launch(hostClient(first)).catch((error: unknown) => error)
+    expect(formatCliError(firstError)).toContain('--setup run')
+    expect(formatCliError(firstError)).toContain('--setup skip')
+    expect(firstError).toMatchObject({ message: SETUP_CHOICE })
+    expect(first.createTerminal).not.toHaveBeenCalled()
+    const row = store.listOperationRows()[0]
+    expect(row?.outcome).toMatchObject({ status: 'failed', code: SETUP_CHOICE })
+    if (!row) {
+      throw new Error('Missing failed launch row')
+    }
+
+    setAgentLaunchRecordStore(null)
+    closeTestJournalHostDatabase(directory)
+    store = await openTestAgentSessionRecordStore(directory)
+    setAgentLaunchRecordStore(store)
+    const replay = runtimeStub({ settings: {} })
+    const replayError = await launch(hostClient(replay), { operationId: row.operationId }).catch(
+      (error: unknown) => error
+    )
+    expect(replayError).toMatchObject({ message: SETUP_CHOICE })
+    expect(formatCliError(replayError)).toContain('--setup run')
+    expect(replay.createManagedWorktree).not.toHaveBeenCalled()
+    await expect(
+      launch(hostClient(replay), { operationId: row.operationId, setupDecision: 'skip' })
+    ).rejects.toMatchObject({ code: 'agent_session_operation_conflict' })
+  })
+
+  it.each(['run', 'skip'] as const)(
+    'accepts a deliberate fresh launch with setup %s',
+    async (setupDecision) => {
+      vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+      const runtime = runtimeStub({ settings: {} })
+      runtime.createManagedWorktree.mockRejectedValueOnce(
+        new WorktreeCreateSetupChoiceRefusedError(SETUP_CHOICE)
+      )
+      const client = hostClient(runtime)
+      await expect(launch(client)).rejects.toMatchObject({ message: SETUP_CHOICE })
+      await launch(client, { setupDecision })
+      expect(runtime.createManagedWorktree).toHaveBeenLastCalledWith(
+        expect.objectContaining({ setupDecision })
+      )
+      expect(
+        store
+          .listOperationRows()
+          .map((row) => row.outcome.status)
+          .sort()
+      ).toEqual(['failed', 'succeeded'])
+    }
+  )
+
+  it('keeps a matching error after workspace creation unknown', async () => {
+    const runtime = runtimeStub({ settings: {} })
+    runtime.createManagedWorktree.mockResolvedValue({
+      worktree: { id: 'wt-new' },
+      startupTerminal: undefined
+    })
+    runtime.createTerminal.mockRejectedValue(new Error(SETUP_CHOICE))
+    const client = hostClient(runtime)
+    await expect(launch(client)).rejects.toMatchObject({ code: 'agent_session_operation_unknown' })
+    const row = store.listOperationRows()[0]
+    expect(row?.outcome.status).toBe('unknown')
+    if (!row) {
+      throw new Error('Missing uncertain launch row')
+    }
+    await expect(launch(client, { operationId: row.operationId })).rejects.toMatchObject({
+      code: 'agent_session_operation_unknown'
+    })
+    expect(runtime.createManagedWorktree).toHaveBeenCalledOnce()
+    expect(runtime.createTerminal).toHaveBeenCalledOnce()
+  })
+
+  it('does not infer an effect-free refusal from matching text alone', async () => {
+    const runtime = runtimeStub({ settings: {} })
+    runtime.createManagedWorktree.mockRejectedValue(new Error(SETUP_CHOICE))
+    await expect(launch(hostClient(runtime))).rejects.toMatchObject({
+      code: 'agent_session_operation_unknown'
+    })
+    expect(store.listOperationRows()[0]?.outcome.status).toBe('unknown')
+  })
+})
