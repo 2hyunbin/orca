@@ -1,6 +1,9 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeWithListManagedWorktrees } from './orca-runtime-list-managed-worktrees'
+import { OrcaRuntimeService } from './orca-runtime'
+import type { ExecutionHostId } from '../../shared/execution-host'
+import type { LaunchHostRepo } from './worktree-launch-host-repo'
 
 const scanWorkspacePortsMock = vi.hoisted(() => vi.fn())
 
@@ -10,17 +13,22 @@ vi.mock('../ports/local-workspace-port-scanner', () => ({
 
 const proto = OrcaRuntimeWithListManagedWorktrees.prototype
 
-function runtimeResolvingTo(executionHostId: string) {
+function runtimeResolvingTo(executionHostId: ExecutionHostId) {
   const host = {
     resolveRuntimeFileTarget: vi.fn(async () => ({ worktree: {}, executionHostId })),
     getWorkspacePortProbes: vi.fn(async () => []),
     getWorkspacePortHostDeps: proto['getWorkspacePortHostDeps']
   }
+  const runtimeHost = new OrcaRuntimeService()
+  Object.defineProperties(runtimeHost, {
+    resolveRuntimeFileTarget: { value: host.resolveRuntimeFileTarget },
+    getWorkspacePortProbes: { value: host.getWorkspacePortProbes }
+  })
   return {
     host,
-    scan: (selector: string) => proto.scanWorkspacePortsOnHost.call(host, selector),
+    scan: (selector: string) => proto.scanWorkspacePortsOnHost.call(runtimeHost, selector),
     kill: (args: Parameters<typeof proto.killWorkspacePortOnHost>[0]) =>
-      proto.killWorkspacePortOnHost.call(host, args)
+      proto.killWorkspacePortOnHost.call(runtimeHost, args)
   }
 }
 
@@ -57,7 +65,7 @@ describe('host-scoped workspace port scans on the server', () => {
   })
 
   it('authorizes Stop only with workspaces this host runs itself', async () => {
-    const repos = [
+    const repos: (LaunchHostRepo & { path: string })[] = [
       { id: 'local-repo', path: '/srv/app' },
       // An SSH repo may carry only its execution host, with no legacy connectionId.
       { id: 'ssh-repo', path: '/srv/private', executionHostId: 'ssh:box' },
@@ -80,7 +88,12 @@ describe('host-scoped workspace port scans on the server', () => {
       ]
     }
 
-    const probes = await proto['getWorkspacePortProbes'].call(host)
+    const runtime = new OrcaRuntimeService()
+    Object.defineProperties(runtime, {
+      requireStore: { value: host.requireStore },
+      listResolvedWorktrees: { value: host.listResolvedWorktrees }
+    })
+    const probes = await proto['getWorkspacePortProbes'].call(runtime)
 
     expect(probes.map((probe) => probe.path)).toEqual(['/srv/app'])
   })

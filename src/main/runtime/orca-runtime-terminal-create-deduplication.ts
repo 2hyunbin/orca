@@ -1,8 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { spawnInAdmittedPane } from './runtime-pane-admission'
-import { OrcaRuntimeWithCreateAgentSession } from './orca-runtime-create-agent-session'
+import { WorkspaceCreateIdempotency } from './workspaces/workspace-create-idempotency'
 import type { RuntimeTerminalCreate, RuntimeTerminalSplit } from '../../shared/runtime-types'
-import { WORKTREE_CREATE_RESULT_TTL_MS } from './orca-runtime-core'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { RuntimeTerminalCreateIdentity } from './terminal/launch/terminal-create-identity'
 import { RuntimeAgentTerminalLaunch } from './terminal/launch/agent-terminal-launch'
@@ -13,7 +12,7 @@ import type { TerminalPaneSplitSource } from '../../shared/feature-education-tel
 import type { Worktree } from '../../shared/worktree/types'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 
-export class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithCreateAgentSession {
+export class OrcaRuntimeWithTerminalCreateDeduplication extends WorkspaceCreateIdempotency {
   protected readonly terminalCreateIdentity = new RuntimeTerminalCreateIdentity({
     getTerminalCreateIdempotency: () => this.terminalCreateIdempotency,
     reconcileRemoteTerminalCreate: () =>
@@ -207,30 +206,5 @@ export class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRuntimeWithC
     createdWorktree?: Worktree
   ): Promise<RuntimeTerminalSplit> {
     return this.terminalSplit.splitPtyBackedTerminal(pty, opts, createdWorktree)
-  }
-  dedupeWorktreeCreate<T>(
-    repoSelector: string,
-    clientMutationId: string | undefined,
-    run: () => Promise<T>
-  ): Promise<T> {
-    if (!clientMutationId) {
-      return run()
-    }
-    const key = `${repoSelector}\0${clientMutationId}`
-    const inflight = this.worktreeCreateByMutationId.get(key)
-    if (inflight) {
-      return inflight as Promise<T>
-    }
-    const created = run()
-    this.worktreeCreateByMutationId.set(key, created)
-    const drop = (): void => {
-      if (this.worktreeCreateByMutationId.get(key) === created) {
-        this.worktreeCreateByMutationId.delete(key)
-      }
-    }
-    void created.then(() => {
-      setTimeout(drop, WORKTREE_CREATE_RESULT_TTL_MS).unref?.()
-    }, drop)
-    return created
   }
 }

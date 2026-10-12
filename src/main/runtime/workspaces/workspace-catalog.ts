@@ -1,3 +1,4 @@
+import { enrichMissingRepoGitRemoteIdentities } from '../../repo-git-remote-identity-enrichment'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
 import { isPathInsideOrEqual } from '../../../shared/cross-platform-path'
@@ -23,6 +24,8 @@ import { RuntimeWorkspaceRepoScans } from './workspace-repo-scans'
 import type { RuntimeWorkspaceRepoScanHost } from './workspace-repo-scan-refresh'
 
 export type RuntimeWorkspaceCatalogHost = RuntimeWorkspaceRepoScanHost & {
+  invalidateResolvedWorktreeCache(): void
+  notifyReposChanged(): void
   getValidatedExplicitWorktreeIdSelector(selector: string): string | null
   listRepoWorktreesForResolution(
     repo: Repo,
@@ -54,6 +57,22 @@ export class RuntimeWorkspaceCatalog {
   private get store() {
     return this.host.getStore()
   }
+  listRepos(): Repo[] {
+    return this.store?.getRepos() ?? []
+  }
+
+  enrichMissingRepoGitRemoteIdentities(): void {
+    if (!this.store) {
+      return
+    }
+    enrichMissingRepoGitRemoteIdentities(this.store, {
+      onChanged: () => {
+        this.host.invalidateResolvedWorktreeCache()
+        this.host.notifyReposChanged()
+      }
+    })
+  }
+
   private requireStore() {
     return this.host.requireStore()
   }

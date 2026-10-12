@@ -1,4 +1,3 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithStopExplicitlyClosedTabPtys } from './orca-runtime-stop-explicitly-closed-tab-ptys'
 import {
   resolveTerminalSessionWorktreeId,
@@ -15,8 +14,11 @@ import {
   resolveClaudeAgentTeamsShimBin
 } from './claude-agent-teams-shim-env'
 import { applyClaudeEnvPatch } from '../claude-accounts/environment'
+import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from './orca-runtime-prune-mobile-session-tab-group-layout'
 
-export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
+export abstract class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
+  abstract getTerminalHandleForPaneKey: OrcaRuntimeWithPruneMobileSessionTabGroupLayout['getTerminalHandleForPaneKey']
+
   protected resolveTerminalSplitSourceAuthority(
     worktreeId: string,
     tabId: string,

@@ -24,7 +24,17 @@ export function applyClaudeEnvPatch(
   baseEnv: Record<string, string>,
   patch: ClaudeEnvPatch,
   options?: { stripAuthEnv?: boolean; platform?: NodeJS.Platform }
-): Record<string, string> {
+): Record<string, string>
+export function applyClaudeEnvPatch(
+  baseEnv: NodeJS.ProcessEnv,
+  patch: ClaudeEnvPatch,
+  options?: { stripAuthEnv?: boolean; platform?: NodeJS.Platform }
+): NodeJS.ProcessEnv
+export function applyClaudeEnvPatch(
+  baseEnv: NodeJS.ProcessEnv,
+  patch: ClaudeEnvPatch,
+  options?: { stripAuthEnv?: boolean; platform?: NodeJS.Platform }
+): NodeJS.ProcessEnv {
   if (options?.stripAuthEnv) {
     for (const key of CLAUDE_AUTH_ENV_VARS) {
       delete baseEnv[key]

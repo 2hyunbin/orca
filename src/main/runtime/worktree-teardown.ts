@@ -36,7 +36,7 @@ import {
   resolveUnstoppedPtyVerdict
 } from './unstopped-pty-verification'
 
-type WorktreeTeardownRuntime = StructuredWorktreeSweepRuntime &
+export type WorktreeTeardownRuntime = StructuredWorktreeSweepRuntime &
   Pick<OrcaRuntimeWithStopTerminalsForWorktree, 'stopTerminalsForWorktree'> &
   Pick<OrcaRuntimeWithMarkPtyLivenessUnverifiable, 'getPtyLivenessVerdict'>
 

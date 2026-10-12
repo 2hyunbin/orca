@@ -118,7 +118,8 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
   }
 
   protected getAgentLaunchPlatformForWorkspace(
-    scope: TerminalWorkspaceLaunchScope
+    scope: Pick<TerminalWorkspaceLaunchScope, 'repo' | 'path'> &
+      Partial<Pick<TerminalWorkspaceLaunchScope, 'connectionId'>>
   ): NodeJS.Platform {
     if (scope.repo) {
       return this.getAgentLaunchPlatformForRepo(scope.repo)

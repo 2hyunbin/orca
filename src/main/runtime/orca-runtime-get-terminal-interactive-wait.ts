@@ -1,4 +1,11 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithSerializeAgentPromptSubmission } from './orca-runtime-serialize-agent-prompt-submission'
+import type { OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission } from './orca-runtime-resolve-authoritative-terminal-wait-permission'
+import type { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
+import type { OrcaRuntimeWithGetPtyRecordForPaneKey } from './orca-runtime-get-pty-record-for-pane-key'
+import type { RuntimeWorkspaceQuerySurface } from './workspaces/workspace-query-surface'
+import type { OrcaRuntimeWithBuildPtyTerminalSummary } from './orca-runtime-build-pty-terminal-summary'
+import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from './orca-runtime-resolve-browser-network-execution-host-for-worktree'
+import type { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce } from './orca-runtime-restore-structured-agent-session-tabs-once'
 import { TerminalInteractiveWait } from './terminal/wait/terminal-interactive-wait'
 import { resolveStructuredWorkerAuthority } from './structured-worker-authority'
 import { OrcaRuntimeWithAdoptTerminalOrphansFromInventory } from './orca-runtime-adopt-terminal-orphans-from-inventory'
@@ -17,7 +24,66 @@ import { resolveLocalProjectRuntimeForRepo } from '../project-runtime-git-option
 import { prepareOpenCodeModelStartupInputs } from '../opencode/opencode-model-startup-plan'
 import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
 
-export class OrcaRuntimeWithGetTerminalInteractiveWait extends OrcaRuntimeWithAdoptTerminalOrphansFromInventory {
+export abstract class OrcaRuntimeWithGetTerminalInteractiveWait extends OrcaRuntimeWithAdoptTerminalOrphansFromInventory {
+  protected abstract getTerminalAgentStatusPtyId(
+    ...args: Parameters<
+      OrcaRuntimeWithSerializeAgentPromptSubmission['getTerminalAgentStatusPtyId']
+    >
+  ): ReturnType<OrcaRuntimeWithSerializeAgentPromptSubmission['getTerminalAgentStatusPtyId']>
+  protected abstract getTerminalWaitPermissionInputs(
+    ...args: Parameters<
+      OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['getTerminalWaitPermissionInputs']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['getTerminalWaitPermissionInputs']
+  >
+  protected abstract getFreshExplicitAgentStatusForHandle(
+    ...args: Parameters<
+      OrcaRuntimeWithSerializeAgentPromptSubmission['getFreshExplicitAgentStatusForHandle']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithSerializeAgentPromptSubmission['getFreshExplicitAgentStatusForHandle']
+  >
+  protected abstract resolveAuthoritativeTerminalWaitPermission(
+    ...args: Parameters<
+      OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['resolveAuthoritativeTerminalWaitPermission']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['resolveAuthoritativeTerminalWaitPermission']
+  >
+  abstract getTerminalAgentStatus(
+    ...args: Parameters<OrcaRuntimeWithSerializeAgentPromptSubmission['getTerminalAgentStatus']>
+  ): ReturnType<OrcaRuntimeWithSerializeAgentPromptSubmission['getTerminalAgentStatus']>
+  protected abstract getLeafKey(
+    ...args: Parameters<OrcaRuntimeWithResolveWaiter['getLeafKey']>
+  ): ReturnType<OrcaRuntimeWithResolveWaiter['getLeafKey']>
+  protected abstract getPtyRecordForPaneKey(
+    ...args: Parameters<OrcaRuntimeWithGetPtyRecordForPaneKey['getPtyRecordForPaneKey']>
+  ): ReturnType<OrcaRuntimeWithGetPtyRecordForPaneKey['getPtyRecordForPaneKey']>
+  protected abstract getOrchestrationDbIfAvailable(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['getOrchestrationDbIfAvailable']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['getOrchestrationDbIfAvailable']>
+  protected abstract getLivePtyForHandle(
+    ...args: Parameters<OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']>
+  ): ReturnType<OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']>
+  protected abstract resolveRepoSelector(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['resolveRepoSelector']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['resolveRepoSelector']>
+  protected abstract resolveTerminalWorkspaceLaunchScope(
+    ...args: Parameters<
+      OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveTerminalWorkspaceLaunchScope']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveTerminalWorkspaceLaunchScope']
+  >
+  protected abstract getAgentLaunchPlatformForWorkspace(
+    ...args: Parameters<
+      OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce['getAgentLaunchPlatformForWorkspace']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce['getAgentLaunchPlatformForWorkspace']
+  >
+
   private readonly interactiveWait = new TerminalInteractiveWait({
     getTerminalAgentStatusPtyId: (handle) => this.getTerminalAgentStatusPtyId(handle),
     getTerminalWaitPermissionInputs: (handle, id) =>
@@ -158,7 +224,7 @@ export class OrcaRuntimeWithGetTerminalInteractiveWait extends OrcaRuntimeWithAd
     const repo = target.repo ? await this.resolveRepoSelector(target.repo) : null
     const workspace = repo
       ? { repo, path: repo.path, connectionId: repo.connectionId }
-      : await this.resolveTerminalWorkspaceLaunchScope(target.worktree)
+      : await this.resolveTerminalWorkspaceLaunchScope(target.worktree!)
     const platform = this.getAgentLaunchPlatformForWorkspace(workspace)
     const shell = resolveStartupShell(
       platform,

@@ -1,4 +1,6 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithListManagedWorktrees } from './orca-runtime-list-managed-worktrees'
+import type { RuntimeWorkspaceQuerySurface } from './workspaces/workspace-query-surface'
+import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from './orca-runtime-transition-graph-reload-to-terminal-state'
 import { OrcaRuntimeWithPersistHeadlessTerminalTitle } from './orca-runtime-persist-headless-terminal-title'
 import {
   getConnectionExecutionHostId,
@@ -12,7 +14,29 @@ import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 
-export class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeWithPersistHeadlessTerminalTitle {
+export abstract class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeWithPersistHeadlessTerminalTitle {
+  protected abstract buildRuntimeVisibilitySourceMatchersByRepoId(
+    ...args: Parameters<
+      OrcaRuntimeWithListManagedWorktrees['buildRuntimeVisibilitySourceMatchersByRepoId']
+    >
+  ): ReturnType<OrcaRuntimeWithListManagedWorktrees['buildRuntimeVisibilitySourceMatchersByRepoId']>
+
+  protected abstract isRuntimeWorktreeVisible(
+    ...args: Parameters<OrcaRuntimeWithListManagedWorktrees['isRuntimeWorktreeVisible']>
+  ): ReturnType<OrcaRuntimeWithListManagedWorktrees['isRuntimeWorktreeVisible']>
+
+  protected abstract listResolvedWorktrees(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['listResolvedWorktrees']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['listResolvedWorktrees']>
+
+  protected abstract resolveFolderWorkspaceConnectionId(
+    ...args: Parameters<
+      OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceConnectionId']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceConnectionId']
+  >
+
   protected async resolveKnownWorkspaceFileTarget(
     absolutePath: string,
     executionHostId: ExecutionHostId

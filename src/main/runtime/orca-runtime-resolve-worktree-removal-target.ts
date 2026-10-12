@@ -1,16 +1,9 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import type { RuntimeWorkspaceRemovalRecovery } from './workspaces/workspace-removal-recovery'
-import { OrcaRuntimeWithTerminalTitleRename } from './terminal/output/terminal-title-rename'
+import { WorkspaceRemovalMetadata } from './workspaces/workspace-removal-metadata'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { RuntimeWorktreeRemovalTarget } from './runtime-worktree-selection'
 import { resolveRuntimeWorktreeRemovalTarget } from './runtime-worktree-removal-target'
-import type { RuntimeStore } from './runtime-store-contract'
-import { splitWorktreeId } from '../../shared/worktree/id'
-import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
-import { hasWorktreeRemovalRepoOwnerOnOtherHost } from '../worktree-removal-repo-owner'
-import { advertisedUrlWatcher } from '../ports/advertised-url-watcher'
-import { deleteWorktreeHistoryDir } from '../terminal-history-deletion'
-import { closeClientHostedBrowserPagesForWorktree } from './worktree-browser-client-page-close'
 import type { ForceDeleteWorktreeBranchResult } from '../../shared/worktree/create-types'
 import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
@@ -20,7 +13,7 @@ import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtim
 import { resolveQoderTerminalCommandForWorkspace } from './qoder-terminal-command-resolution'
 import { buildRuntimeAgentTerminalStartupOptions } from './runtime-agent-terminal-startup'
 
-export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWithTerminalTitleRename {
+export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends WorkspaceRemovalMetadata {
   protected async resolveWorktreeRemovalTarget(
     worktreeSelector: string,
     requiredHostId?: ExecutionHostId
@@ -62,59 +55,6 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
     ...args: Parameters<RuntimeWorkspaceRemovalRecovery['purgeRemovedWorktree']>
   ): ReturnType<RuntimeWorkspaceRemovalRecovery['purgeRemovedWorktree']> {
     return this.workspaceRemovalRecovery.purgeRemovedWorktree(...args)
-  }
-
-  protected removeWorktreeMetadataAndHistory(
-    store: RuntimeStore,
-    worktreeId: string,
-    hostId?: ExecutionHostId
-  ): void {
-    // Why: worktree IDs are path-derived and can be recreated, so removal must
-    // purge history and process-local caches before the ID points at new state.
-    const persistedHostId = store.getWorktreeMeta(worktreeId)?.hostId
-    const repoId = splitWorktreeId(worktreeId)?.repoId
-    const preservesSameIdOwner = Boolean(
-      hostId &&
-      ((persistedHostId && persistedHostId !== hostId) ||
-        (repoId && hasWorktreeRemovalRepoOwnerOnOtherHost(store, repoId, hostId)))
-    )
-    const acceptedRendererSnapshot = this.acceptedRendererMobileSnapshotByWorktree.get(worktreeId)
-    const storedSnapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
-    if (hostId) {
-      store.removeWorktreeMeta(worktreeId, hostId)
-    } else {
-      store.removeWorktreeMeta(worktreeId)
-    }
-    // Why outside the same-id gate: retirement is per host and per pane, so a surviving owner keeps its own.
-    this.dropAgentStatusForRemovedWorktreeFn?.(worktreeId, hostId ?? persistedHostId)
-    if (!preservesSameIdOwner) {
-      // A paired PTY can outlive the delete acknowledgement; it must not be
-      // rescued into a newly-created occupant of the same path-derived ID.
-      for (const ptyId of this.pairedRendererSessionOwnedPtyIds) {
-        const ptyWorktreeId = this.ptysById.get(ptyId)?.worktreeId
-        if (ptyWorktreeId && runtimeWorktreeIdsEqual(ptyWorktreeId, worktreeId)) {
-          this.pairedRendererSessionOwnedPtyIds.delete(ptyId)
-        }
-      }
-      const removedPublicationEpoch =
-        acceptedRendererSnapshot?.publicationEpoch ??
-        storedSnapshot?.publicationEpoch ??
-        this.rendererGeneration ??
-        undefined
-      this.removedMobileSessionWorktreeIds.set(
-        worktreeId,
-        removedPublicationEpoch ? { removedPublicationEpoch } : {}
-      )
-      this.mobileSessionTabsByWorktree.delete(worktreeId)
-      this.mobileSessionTabsAgentStatusHeartbeat.removeWorktree(worktreeId)
-      this.acceptedRendererMobileSnapshotByWorktree.delete(worktreeId)
-      this.cancelScheduledMobileSessionTabsChanged(worktreeId)
-      this.notifyMobileSessionTabsRemoved(worktreeId)
-      advertisedUrlWatcher.forgetWorktree(worktreeId)
-      deleteWorktreeHistoryDir(worktreeId)
-      this.closeHeadlessBrowserPagesForWorktree(worktreeId)
-      closeClientHostedBrowserPagesForWorktree(this, worktreeId)
-    }
   }
 
   // Why: headless offscreen browser pages are main-process BrowserWindows that

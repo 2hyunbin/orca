@@ -1,4 +1,7 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession } from './orca-runtime-hydrate-headless-mobile-session-tabs-from-workspace-session'
+import type { RuntimeWorkspaceQuerySurface } from './workspaces/workspace-query-surface'
+import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged } from './orca-runtime-schedule-mobile-session-tabs-changed'
+import type { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './orca-runtime-build-headless-mobile-session-browser-tabs'
 import { OrcaRuntimeWithGetStatus } from './orca-runtime-get-status'
 import type { SshConnectionState } from '../../shared/ssh-types'
 import { getPublicSshState } from './public-ssh-state'
@@ -12,7 +15,43 @@ import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { EmulatorBridge } from '../emulator/emulator-bridge'
 
-export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStatus {
+export abstract class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStatus {
+  protected abstract hydrateHeadlessMobileSessionTabsFromWorkspaceSession(
+    ...args: Parameters<
+      OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession['hydrateHeadlessMobileSessionTabsFromWorkspaceSession']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession['hydrateHeadlessMobileSessionTabsFromWorkspaceSession']
+  >
+
+  protected abstract invalidateResolvedWorktreeCache(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['invalidateResolvedWorktreeCache']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['invalidateResolvedWorktreeCache']>
+
+  protected abstract invalidateSshWorktreeScanCacheInternal(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['invalidateSshWorktreeScanCacheInternal']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['invalidateSshWorktreeScanCacheInternal']>
+
+  protected abstract invalidateWorktreeScanCacheForRepo(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['invalidateWorktreeScanCacheForRepo']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['invalidateWorktreeScanCacheForRepo']>
+
+  protected abstract notifyMobileSessionTabsChangedNow(
+    ...args: Parameters<
+      OrcaRuntimeWithScheduleMobileSessionTabsChanged['notifyMobileSessionTabsChangedNow']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithScheduleMobileSessionTabsChanged['notifyMobileSessionTabsChangedNow']
+  >
+
+  protected abstract refreshMobileSessionPtyRecords(
+    ...args: Parameters<
+      OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs['refreshMobileSessionPtyRecords']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs['refreshMobileSessionPtyRecords']
+  >
+
   private static readonly MAX_SSH_RELAY_RECOVERY_GENERATIONS = 512
   private sshRelayRecoveryGenerationSequence = 0
   // Why: SSH state changes originate in main's ssh handlers, not in runtime

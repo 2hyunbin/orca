@@ -393,9 +393,10 @@ export const PR_E2E_SOURCE_ROUTES = [
     ],
     matches: (file) =>
       isLayoutOracleSource(file) &&
-      (/^src\/main\/runtime\/(?:session-tabs\/mobile-session-(?:hydration|preservation|reconciliation)|terminal\/output\/terminal-(?:derived-agent-facts|osc-metadata))\.ts$/.test(
-        file
-      ) ||
+      (file === 'src/main/runtime/orca-runtime-persist-headless-terminal-title.ts' ||
+        /^src\/main\/runtime\/(?:session-tabs\/mobile-session-(?:hydration|preservation|reconciliation)|terminal\/output\/terminal-(?:derived-agent-facts|osc-metadata))\.ts$/.test(
+          file
+        ) ||
         /^src\/main\/runtime\/terminal\/launch\/(?:terminal-create|terminal-created-surface|terminal-desktop-create|terminal-split|terminal-caller-spawn-scope)\.ts$/.test(
           file
         ) ||

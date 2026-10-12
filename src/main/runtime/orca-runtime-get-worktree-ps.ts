@@ -17,7 +17,6 @@ import { applyRuntimeWorktreePsUnverifiableTerminals } from './runtime-worktree-
 import { attachRuntimeWorktreeAgentRows } from './runtime-worktree-agent-rows'
 import { compareWorktreePs } from './runtime-worktree-status-projection'
 import type { Repo } from '../../shared/repo-types'
-import { enrichMissingRepoGitRemoteIdentities } from '../repo-git-remote-identity-enrichment'
 import { ensureStructuredAgentSessionHost as installStructuredAgentSessionHost } from './structured-agent-session-runtime'
 import {
   createStructuredAttentionMobileDelivery,
@@ -142,19 +141,11 @@ export class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithStartTuiIdleVis
   }
 
   listRepos(): Repo[] {
-    return this.store?.getRepos() ?? []
+    return this.workspaceQueries.listRepos()
   }
 
   enrichMissingRepoGitRemoteIdentities(): void {
-    if (!this.store) {
-      return
-    }
-    enrichMissingRepoGitRemoteIdentities(this.store, {
-      onChanged: () => {
-        this.invalidateResolvedWorktreeCache()
-        this.notifyReposChanged()
-      }
-    })
+    return this.workspaceQueries.enrichMissingRepoGitRemoteIdentities()
   }
 
   /** The durable record store alone, without the chat host: launch admission needs only its

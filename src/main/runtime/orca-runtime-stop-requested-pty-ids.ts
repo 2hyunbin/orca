@@ -104,6 +104,8 @@ export class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId
   protected emulatorBridge: EmulatorBridge | null = null
 
   protected readonly workspaceQueries = new RuntimeWorkspaceCatalog({
+    invalidateResolvedWorktreeCache: () => this.invalidateResolvedWorktreeCache(),
+    notifyReposChanged: () => this.notifyReposChanged(),
     getStore: () => this.store,
     requireStore: () => this.requireStore(),
     getValidatedExplicitWorktreeIdSelector: (selector) =>

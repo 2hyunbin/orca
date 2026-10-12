@@ -4,6 +4,7 @@ import './rpc/unused-default-rpc-methods.test-fixture'
 // write; a stop or a failed start never touches the chat.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mergeWorktree } from '../ipc/worktree-metadata-merge'
 import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
 import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
 import type { FakeConnection } from './structured-chat-coordinator-fake-codex-fixture'
@@ -27,10 +28,23 @@ import {
 const WORKER = formatOrcaSessionAddress(testOrcaSessionId(PEER_CHAT))
 
 beforeEach(() => {
-  vi.spyOn(runtime, 'showManagedTerminalWorkspace').mockImplementation(async (selector) => ({
-    id: selector.replace(/^id:/, ''),
-    repoId: 'repo'
-  }))
+  vi.spyOn(runtime, 'showManagedTerminalWorkspace').mockImplementation(async (selector) => {
+    const git = {
+      path: '/tmp/worker',
+      head: 'head',
+      branch: 'main',
+      isBare: false,
+      isMainWorktree: false
+    }
+    return {
+      ...mergeWorktree('repo', git, undefined),
+      id: selector.replace(/^id:/, ''),
+      parentWorktreeId: null,
+      childWorktreeIds: [],
+      lineage: null,
+      git
+    }
+  })
 })
 
 /** A person's turn in the worker chat, started and still running; resolves to its end. */
