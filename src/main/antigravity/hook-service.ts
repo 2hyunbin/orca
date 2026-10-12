@@ -16,6 +16,7 @@ import {
   writeHooksJsonRemote,
   writeManagedScriptRemote
 } from '../agent-hooks/installer-utils-remote'
+import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 import { WINDOWS_ANTIGRAVITY_JSON_POST_SCRIPT } from './windows-hook-json-post'
 import {
   restoreManagedScript,
@@ -69,7 +70,9 @@ function getPosixManagedCommand(scriptPath: string, event: AntigravityEvent): st
 
 function getManagedCommand(scriptPath: string, event: AntigravityEvent): string {
   if (process.platform === 'win32') {
-    return wrapWindowsCmdHookCommand(getWindowsWrapperScriptPath(event))
+    const wrapperPath = getWindowsWrapperScriptPath(event)
+    // Forward slashes keep the path intact if Antigravity's host shell is Git Bash.
+    return wrapWindowsDirectCmdHookCommand(wrapperPath) ?? wrapWindowsCmdHookCommand(wrapperPath)
   }
   return getPosixManagedCommand(scriptPath, event)
 }

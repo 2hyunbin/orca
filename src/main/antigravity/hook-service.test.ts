@@ -405,7 +405,7 @@ describe('AntigravityHookService', () => {
     )
     expect(preToolCommands).toHaveLength(1)
     expect(preToolCommands[0]).toContain(
-      join(homeDir, '.orca', 'agent-hooks', ANTIGRAVITY_PRE_TOOL_USE_COMMAND)
+      join(homeDir, '.orca', 'agent-hooks', ANTIGRAVITY_PRE_TOOL_USE_COMMAND).replaceAll('\\', '/')
     )
     expect(preToolCommands[0]).not.toContain('/tmp/old/agent-hooks/antigravity-hook.sh')
     const commands = config['orca-status'].PostToolUse.flatMap((definition) =>
@@ -413,7 +413,45 @@ describe('AntigravityHookService', () => {
     )
     expect(commands).toHaveLength(1)
     expect(commands[0]).toContain(
-      join(homeDir, '.orca', 'agent-hooks', ANTIGRAVITY_POST_TOOL_USE_COMMAND)
+      join(homeDir, '.orca', 'agent-hooks', ANTIGRAVITY_POST_TOOL_USE_COMMAND).replaceAll('\\', '/')
     )
   })
+
+  // win32-only: a cmd-safe managed path needs a real backslash-joined home.
+  it.skipIf(process.platform !== 'win32')(
+    'registers forward-slash wrapper paths and replaces legacy backslash entries',
+    () => {
+      const configPath = join(homeDir, '.gemini', 'config', 'hooks.json')
+      const hooksDir = join(homeDir, '.orca', 'agent-hooks')
+      const legacyStop = join(hooksDir, 'antigravity-stop.cmd')
+      const legacyPreToolUse = join(hooksDir, 'antigravity-pre-tool-use.cmd')
+      const userHook = { type: 'command', command: 'C:\\tools\\user-hook.cmd' }
+      mkdirSync(dirname(configPath), { recursive: true })
+      writeFileSync(
+        configPath,
+        `${JSON.stringify({
+          'orca-status': {
+            Stop: [{ type: 'command', command: legacyStop }, userHook],
+            PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: legacyPreToolUse }] }]
+          }
+        })}\n`
+      )
+
+      const service = new AntigravityHookService()
+      expect(service.getStatus().state).toBe('partial')
+      expect(service.install().state).toBe('installed')
+
+      const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+        'orca-status': Record<string, { command?: string; hooks?: { command: string }[] }[]>
+      }
+      // Why: Git Bash strips backslashes from a bare path; forward slashes survive every host.
+      expect(config['orca-status'].Stop).toEqual([
+        userHook,
+        expect.objectContaining({ command: legacyStop.replaceAll('\\', '/') })
+      ])
+      expect(config['orca-status'].PreToolUse.flatMap((d) => d.hooks ?? [])).toEqual([
+        expect.objectContaining({ command: legacyPreToolUse.replaceAll('\\', '/') })
+      ])
+    }
+  )
 })

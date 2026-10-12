@@ -10,6 +10,7 @@ import {
   type HookDefinition,
   type HooksConfig
 } from '../agent-hooks/installer-utils'
+import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 
 const DEVIN_SCRIPT_BASE = 'devin-hook'
 
@@ -53,9 +54,9 @@ export function getDevinRemoteConfigPath(remoteHome: string): string {
 export function getDevinManagedCommand(scriptPath: string): string {
   if (process.platform === 'win32') {
     // Why: Devin spawns this command as argv[0], so the safe path stays a bare
-    // directly-spawnable .cmd; the encoded fallback protects spaced paths and
-    // drains stdin for a stale missing-script entry.
-    return wrapWindowsCmdHookCommand(scriptPath)
+    // directly-spawnable .cmd; forward slashes survive a Git Bash host, and the
+    // encoded fallback protects spaced paths and drains stdin for a missing script.
+    return wrapWindowsDirectCmdHookCommand(scriptPath) ?? wrapWindowsCmdHookCommand(scriptPath)
   }
   return wrapPosixHookCommand(scriptPath)
 }

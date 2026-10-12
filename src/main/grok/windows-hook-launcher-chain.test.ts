@@ -22,7 +22,8 @@ vi.mock('os', async () => {
 })
 
 import { getManagedCommandForTests, GrokHookService } from './hook-service'
-import { wrapWindowsHookCommand } from '../agent-hooks/installer-utils'
+import { wrapWindowsHookCommand, type HooksConfig } from '../agent-hooks/installer-utils'
+import { buildInstalledGrokConfig } from './grok-hook-config'
 
 const GROK_EVENT_NAMES = [
   'SessionStart',
@@ -80,7 +81,8 @@ describe('Windows Grok managed hook launch shape', () => {
       const command = withWin32(() => getManagedCommandForTests(scriptPath))
 
       // Why (#8430): Grok spawns this as argv[0], so it must be exactly one spawnable token.
-      expect(command).toBe(scriptPath)
+      // Forward slashes because Git Bash strips the backslashes out of a bare path.
+      expect(command).toBe('C:/Users/dev/.orca/agent-hooks/grok-hook.cmd')
       // Why: whitespace is the sole trigger for Grok's `pwsh -Command` wrapper, which is the
       // interpreter this fix removes. Assert the trigger, not just the absence of the name.
       expect(command, 'a space would reintroduce the pwsh wrapper').not.toMatch(/\s/)
@@ -95,6 +97,28 @@ describe('Windows Grok managed hook launch shape', () => {
       expect(command).toMatch(/-EncodedCommand \S+$/)
       // Why: the raw path must never reach a cmd.exe command line unquoted.
       expect(command).not.toContain(spaced)
+    })
+
+    it('replaces a legacy backslash entry and keeps user hooks', () => {
+      const config: HooksConfig = {
+        hooks: {
+          Stop: [
+            { hooks: [{ type: 'command', command: scriptPath }] },
+            { hooks: [{ type: 'command', command: 'C:\\tools\\user-hook.cmd' }] }
+          ]
+        }
+      }
+      withWin32(() =>
+        buildInstalledGrokConfig(config, getManagedCommandForTests(scriptPath), 'grok-hook.cmd')
+      )
+
+      const stop = config.hooks?.Stop?.flatMap((definition) =>
+        (definition.hooks ?? []).map((hook) => hook.command)
+      )
+      expect(stop).toEqual([
+        'C:\\tools\\user-hook.cmd',
+        'C:/Users/dev/.orca/agent-hooks/grok-hook.cmd'
+      ])
     })
   })
 
@@ -124,17 +148,18 @@ describe('Windows Grok managed hook launch shape', () => {
 
         expect(commands).toHaveLength(GROK_EVENT_NAMES.length)
         for (const command of commands) {
-          expect(command).toBe(scriptPath)
+          expect(command).toBe(scriptPath.replaceAll('\\', '/'))
           expect(existsSync(command), 'registered command must name a real file').toBe(true)
         }
       }
     )
 
     it.skipIf(process.platform !== 'win32')(
-      'replaces a previously installed encoded-PowerShell entry on reinstall',
+      'replaces previously installed encoded-PowerShell and backslash entries on reinstall',
       () => {
         const scriptPath = join(home, '.orca', 'agent-hooks', 'grok-hook.cmd')
         const staleCommand = wrapWindowsHookCommand(scriptPath)
+        const legacyBackslashCommand = scriptPath
         const configPath = join(home, '.grok', 'hooks', 'orca-status.json')
         mkdirSync(dirname(configPath), { recursive: true })
         writeFileSync(
@@ -142,6 +167,9 @@ describe('Windows Grok managed hook launch shape', () => {
           `${JSON.stringify({
             hooks: {
               Stop: [{ hooks: [{ type: 'command', command: staleCommand, timeout: 10 }] }],
+              PreToolUse: [
+                { hooks: [{ type: 'command', command: legacyBackslashCommand, timeout: 10 }] }
+              ],
               // Why: a retired event must be swept too, or the old launcher keeps firing there.
               SubagentStop: [{ hooks: [{ type: 'command', command: staleCommand, timeout: 10 }] }],
               Notification: [{ hooks: [{ type: 'command', command: '/usr/local/bin/user-hook' }] }]
@@ -159,11 +187,12 @@ describe('Windows Grok managed hook launch shape', () => {
           definitions.flatMap((definition) => definition.hooks.map((hook) => hook.command))
         )
         expect(all).not.toContain(staleCommand)
+        expect(all).not.toContain(legacyBackslashCommand)
         expect(all.filter((command) => /-EncodedCommand/i.test(command))).toEqual([])
         expect(config.hooks.SubagentStop).toBeUndefined()
         // Why: sweeping stale Orca entries must not touch hooks the user wrote.
         expect(all).toContain('/usr/local/bin/user-hook')
-        expect(all.filter((command) => command === scriptPath)).toHaveLength(
+        expect(all.filter((command) => command === scriptPath.replaceAll('\\', '/'))).toHaveLength(
           GROK_EVENT_NAMES.length
         )
       }
