@@ -127,6 +127,7 @@ const RUNNING: ServerReport = { health: 'available', relay: 'ready' }
 const STOPPED: ServerReport = { health: 'connecting', relay: 'unavailable' }
 const NO_STATUS_YET: ServerReport = { health: 'available', relay: 'unavailable' }
 const FAILED: ServerReport = { health: 'error', relay: 'unavailable' }
+const TOO_OLD: ServerReport = { health: 'connecting', relay: 'update-needed' }
 
 /** The server as the desktop reports it in `mobileRelay.hosts.list`. */
 const serverReport: { current: ServerReport } = { current: RUNNING }
@@ -236,28 +237,31 @@ describe('a server workspace', () => {
     })
   })
 
-  it('follows whether the desktop can relay to its server, and recovers', async () => {
+  it.each([
+    ['connecting while the desktop reconnects to a stopped server', STOPPED, 'connecting'],
+    [
+      'connecting while a reached server has not answered its status yet',
+      NO_STATUS_YET,
+      'connecting'
+    ],
+    ['disconnected once the desktop gives up on the server', FAILED, 'disconnected'],
+    [
+      'disconnected while the server is too old to relay to, whatever its health',
+      TOO_OLD,
+      'disconnected'
+    ]
+  ] as const)('reads as %s, and recovers', async (_why, report, expected) => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     try {
       route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
       desktop()
       await render(screen, desktopGates(RELAYS))
       expect(below.state).toBe('connected')
-      serverReport.current = STOPPED
+      serverReport.current = report
       await act(async () => {
         vi.advanceTimersByTime(3000)
       })
-      expect(below.state).toBe('connecting')
-      serverReport.current = NO_STATUS_YET
-      await act(async () => {
-        vi.advanceTimersByTime(3000)
-      })
-      expect(below.state).toBe('disconnected')
-      serverReport.current = FAILED
-      await act(async () => {
-        vi.advanceTimersByTime(3000)
-      })
-      expect(below.state).toBe('disconnected')
+      expect(below.state).toBe(expected)
       serverReport.current = RUNNING
       await act(async () => {
         vi.advanceTimersByTime(3000)
