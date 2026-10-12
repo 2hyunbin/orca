@@ -1595,9 +1595,10 @@ export function createRemoteRuntimePtyTransport(
     }
   }
 
-  // Why null: typing before the pane bound a terminal joins the hold its connect expects.
+  // Why null: typing on a restored screen stays scoped to the terminal its connect expects, even
+  // after the host binds a replacement and before the connect settles (#10065).
   function holdEndpoint(): RemoteRuntimeInputEndpoint | null {
-    return handle ? heldInputEndpoint(handle) : null
+    return handle && !recoveryInputHold.isHoldingBeforeBind() ? heldInputEndpoint(handle) : null
   }
 
   // Why: releases a stale hold first, so the hold check reads the handle that release left bound.

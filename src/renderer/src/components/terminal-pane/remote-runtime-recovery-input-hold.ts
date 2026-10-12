@@ -141,6 +141,10 @@ export function createRemoteRuntimeRecoveryInputHold(
       }
       if (!current.endpoint || !isSameRemoteRuntimeInputEndpoint(current.endpoint, bound)) {
         discard()
+        if (current.beforeBind) {
+          // Why: the restored screen still shows the original terminal until its connect settles.
+          held = newHold(current.endpoint, true)
+        }
         return
       }
       void current.buffer

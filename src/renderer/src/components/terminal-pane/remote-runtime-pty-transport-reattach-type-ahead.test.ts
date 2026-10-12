@@ -15,6 +15,7 @@ let callbacks: MultiplexSubscriptionCallbacks = null
 let resolvedHandle = 'terminal-1'
 const {
   runtimeCall,
+  runtimeSubscribe,
   latestFrameForOpcode,
   latestSubscribePayload,
   emitSnapshot,
@@ -165,6 +166,35 @@ describe('remote reattach type-ahead', () => {
       await expect(accepted).resolves.toBe(false)
       await flushAsyncTicks()
       expect(inputFrameTexts()).toEqual([])
+      transport.destroy?.()
+    }
+  )
+
+  it.each([
+    ['terminal-1', 'tail-on-old-pixels\r'],
+    ['terminal-replacement', '']
+  ])(
+    'keeps typing between binding %s and its first snapshot scoped to the restored terminal',
+    async (boundHandle, delivered) => {
+      const subscribed = createDeferred<void>()
+      const subscribe = runtimeSubscribe.getMockImplementation()
+      runtimeSubscribe.mockImplementation(async (...args: unknown[]) => {
+        await subscribed.promise
+        return subscribe?.(...args)
+      })
+      const { transport, created, waitForCreate } = await createGatedTransport()
+      const connecting = transport.connect({ url: '', sessionId: ORIGINAL_ID, callbacks: {} })
+      await waitForCreate()
+      created.resolve(boundHandle)
+      await vi.waitFor(() => expect(runtimeSubscribe).toHaveBeenCalled())
+      expect(transport.sendInput('tail-on-old-pixels\r', 'driving')).toBe(true)
+      subscribed.resolve()
+      await connecting
+      await completeAttach()
+      // A key typed on the new snapshot proves everything held ahead of it has settled.
+      expect(transport.sendInput('on-new-snapshot', 'driving')).toBe(true)
+      await vi.waitFor(() => expect(inputFrameTexts().join('')).toMatch(/on-new-snapshot$/))
+      expect(inputFrameTexts().join('')).toBe(`${delivered}on-new-snapshot`)
       transport.destroy?.()
     }
   )
