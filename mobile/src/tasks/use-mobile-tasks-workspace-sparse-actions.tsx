@@ -2,6 +2,7 @@ import type { WorkspaceSourceEffectsModel } from './use-mobile-tasks-workspace-s
 import { type SparsePreset, useCallback, useEffect } from './mobile-tasks-dependencies'
 import { sortSparsePresetsByName } from './mobile-tasks-legacy-foundation'
 import { repoSparsePresetSaveRun, sshRepoStateRead } from './mobile-workspace-source-operations'
+import { taskRepoClient } from './task-repo-host-routing'
 
 export function useMobileTasksWorkspaceSparseActions(model: WorkspaceSourceEffectsModel) {
   const {
@@ -20,6 +21,7 @@ export function useMobileTasksWorkspaceSparseActions(model: WorkspaceSourceEffec
     workspaceCreateDraft,
     workspaceCreateTargetConnectionId,
     workspaceCreateTargetRepo,
+    workspaceCreateTargetSshKey,
     workspaceSparseCheckoutAvailable,
     workspaceSparseDraft,
     workspaceSparseDraftName,
@@ -117,36 +119,50 @@ export function useMobileTasksWorkspaceSparseActions(model: WorkspaceSourceEffec
   ])
 
   useEffect(() => {
-    if (!tasksSupported || !client || !workspaceCreateDraft || !workspaceCreateTargetConnectionId) {
+    if (
+      !tasksSupported ||
+      !client ||
+      !workspaceCreateDraft ||
+      !workspaceCreateTargetRepo ||
+      !workspaceCreateTargetConnectionId
+    ) {
       setWorkspaceSshState(null)
       setWorkspaceSshConnecting(false)
       return
     }
 
     let stale = false
+    const target = workspaceCreateTargetSshKey
+    // The target's own host answers, as a server holds its SSH targets.
     void sshRepoStateRead
-      .request(client, { targetId: workspaceCreateTargetConnectionId })
+      .request(taskRepoClient(client, workspaceCreateTargetRepo), {
+        targetId: workspaceCreateTargetConnectionId
+      })
       .then((reply) => {
         if (stale) {
           return
         }
         const state = sshRepoStateRead.interpret(reply) ?? null
-        setWorkspaceSshState(
-          state ?? {
+        setWorkspaceSshState({
+          target,
+          record: state ?? {
             targetId: workspaceCreateTargetConnectionId,
             status: 'disconnected',
             error: null,
             reconnectAttempt: 0
           }
-        )
+        })
       })
       .catch((err) => {
         if (!stale) {
           setWorkspaceSshState({
-            targetId: workspaceCreateTargetConnectionId,
-            status: 'error',
-            error: err instanceof Error ? err.message : 'Failed to read SSH connection state.',
-            reconnectAttempt: 0
+            target,
+            record: {
+              targetId: workspaceCreateTargetConnectionId,
+              status: 'error',
+              error: err instanceof Error ? err.message : 'Failed to read SSH connection state.',
+              reconnectAttempt: 0
+            }
           })
         }
       })
@@ -154,7 +170,7 @@ export function useMobileTasksWorkspaceSparseActions(model: WorkspaceSourceEffec
     return () => {
       stale = true
     }
-  }, [client, tasksSupported, workspaceCreateDraft, workspaceCreateTargetConnectionId])
+  }, [client, tasksSupported, workspaceCreateDraft, workspaceCreateTargetSshKey])
   return Object.assign(model, {
     startNewWorkspaceSparsePreset,
     startEditWorkspaceSparsePreset,

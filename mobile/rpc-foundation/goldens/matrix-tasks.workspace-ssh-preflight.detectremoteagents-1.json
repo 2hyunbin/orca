@@ -4,6 +4,56 @@
   "family": "tasks.workspace-ssh",
   "namedDeltas": [],
   "values": {
+    "083fb3c55082": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": [],
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
+        },
+        "source": "repo"
+      },
+      "ssh": {
+        "record": {
+          "error": {
+            "$rpc": "null"
+          },
+          "reconnectAttempt": 0,
+          "status": "connected",
+          "targetId": "ssh-1"
+        },
+        "target": "[null,\"ssh-1\"]"
+      }
+    },
+    "0a9bf4383712": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
+        },
+        "source": "repo"
+      },
+      "ssh": {
+        "record": {
+          "error": {
+            "$rpc": "null"
+          },
+          "reconnectAttempt": 0,
+          "status": "connected",
+          "targetId": "ssh-1"
+        },
+        "target": "[null,\"ssh-1\"]"
+      }
+    },
     "0ba2cee4b538": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -16,6 +66,23 @@
           "scriptContent": "pnpm install"
         },
         "source": "repo"
+      }
+    },
+    "0f216c7f5907": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": [],
+      "setup": "unresolved",
+      "ssh": {
+        "record": {
+          "error": {
+            "$rpc": "null"
+          },
+          "reconnectAttempt": 0,
+          "status": "connected",
+          "targetId": "ssh-1"
+        },
+        "target": "[null,\"ssh-1\"]"
       }
     },
     "11405363c62d": {
@@ -101,6 +168,21 @@
           "id": "frame-1",
           "ok": true
         }
+      }
+    },
+    "27794616c8de": {
+      "name": "workspaceSshState",
+      "ordinal": 11,
+      "value": {
+        "record": {
+          "error": {
+            "$rpc": "null"
+          },
+          "reconnectAttempt": 0,
+          "status": "connected",
+          "targetId": "ssh-1"
+        },
+        "target": "[null,\"ssh-1\"]"
       }
     },
     "2bdbcded5f9b": {
@@ -208,28 +290,6 @@
           "id": "frame-1",
           "ok": false
         }
-      }
-    },
-    "43ead075ce12": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
-      "ssh": {
-        "error": {
-          "$rpc": "null"
-        },
-        "reconnectAttempt": 0,
-        "status": "connected",
-        "targetId": "ssh-1"
       }
     },
     "50c5123e1f42": {
@@ -350,52 +410,6 @@
         }
       }
     },
-    "7a1b524f17d0": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": [],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
-      "ssh": {
-        "error": {
-          "$rpc": "null"
-        },
-        "reconnectAttempt": 0,
-        "status": "connected",
-        "targetId": "ssh-1"
-      }
-    },
-    "80ffce5fa2b3": {
-      "name": "workspaceSshState",
-      "ordinal": 11,
-      "value": {
-        "error": {
-          "$rpc": "null"
-        },
-        "reconnectAttempt": 0,
-        "status": "connected",
-        "targetId": "ssh-1"
-      }
-    },
-    "84149cfb1467": {
-      "name": "workspaceSshState",
-      "ordinal": 8,
-      "value": {
-        "error": {
-          "$rpc": "null"
-        },
-        "reconnectAttempt": 0,
-        "status": "connecting",
-        "targetId": "ssh-1"
-      }
-    },
     "9637248df9cb": {
       "name": "workspaceDetectedAgentIds",
       "ordinal": 3,
@@ -435,20 +449,6 @@
         }
       }
     },
-    "9f0676ba0d67": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": [],
-      "setup": "unresolved",
-      "ssh": {
-        "error": {
-          "$rpc": "null"
-        },
-        "reconnectAttempt": 0,
-        "status": "connected",
-        "targetId": "ssh-1"
-      }
-    },
     "9f089dfe58b4": {
       "name": "preflight.detectRemoteAgents#1",
       "ordinal": 4,
@@ -483,24 +483,25 @@
         }
       }
     },
-    "a1f755a38636": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": "unresolved",
-      "ssh": {
-        "error": {
-          "$rpc": "null"
-        },
-        "reconnectAttempt": 0,
-        "status": "connected",
-        "targetId": "ssh-1"
-      }
-    },
     "a9ec92743b9e": {
       "name": "workspaceAgentOverridden",
       "ordinal": 2,
       "value": false
+    },
+    "bdfd96f57e2c": {
+      "name": "workspaceSshState",
+      "ordinal": 8,
+      "value": {
+        "record": {
+          "error": {
+            "$rpc": "null"
+          },
+          "reconnectAttempt": 0,
+          "status": "connecting",
+          "targetId": "ssh-1"
+        },
+        "target": "[null,\"ssh-1\"]"
+      }
     },
     "bf0c0c00caf9": {
       "name": "repo.hooks#1",
@@ -600,6 +601,23 @@
         }
       }
     },
+    "e6d3fdebfaa8": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": "unresolved",
+      "ssh": {
+        "record": {
+          "error": {
+            "$rpc": "null"
+          },
+          "reconnectAttempt": 0,
+          "status": "connected",
+          "targetId": "ssh-1"
+        },
+        "target": "[null,\"ssh-1\"]"
+      }
+    },
     "eb79a9b3682a": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -674,15 +692,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "a1f755a38636",
+          "state": "e6d3fdebfaa8",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -697,15 +715,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "43ead075ce12",
+          "state": "0a9bf4383712",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -731,15 +749,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -754,15 +772,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -788,15 +806,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -811,15 +829,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -845,15 +863,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -868,15 +886,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -902,15 +920,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -925,15 +943,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -959,15 +977,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -982,15 +1000,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1016,15 +1034,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1039,15 +1057,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1073,15 +1091,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1096,15 +1114,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1130,15 +1148,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1153,15 +1171,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1187,15 +1205,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1210,15 +1228,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1244,15 +1262,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "9f0676ba0d67",
+          "state": "0f216c7f5907",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }
@@ -1267,15 +1285,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "7a1b524f17d0",
+          "state": "083fb3c55082",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "84149cfb1467",
-            "80ffce5fa2b3",
+            "bdfd96f57e2c",
+            "27794616c8de",
             "e44d3b580ab0"
           ]
         }

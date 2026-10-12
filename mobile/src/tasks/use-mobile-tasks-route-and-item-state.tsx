@@ -17,7 +17,7 @@ import {
   useState
 } from './mobile-tasks-dependencies'
 import { newTabRepoListRead } from '../session/mobile-session-read-operations'
-import { useOptionalHostProtocolGates } from '../components/host-protocol-gates-context'
+import { useHostProtocolGates } from '../components/host-protocol-gates-context'
 import { useTaskHostRepos } from './use-task-host-repos'
 import {
   type ActionableTaskItem,
@@ -47,14 +47,12 @@ import {
 } from './mobile-tasks-legacy-foundation'
 import { useMobileTasksItemState } from './use-mobile-tasks-item-state'
 
-const NO_CAPABILITIES: readonly string[] = []
-
 export function useMobileTasksRouteAndItemState() {
   const { hostId, taskSource } = useLocalSearchParams<{ hostId: string; taskSource?: string }>()
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { client: desktopClient, state: connState } = useHostClient(hostId)
-  const hostCapabilities = useOptionalHostProtocolGates()?.hostCapabilities ?? NO_CAPABILITIES
+  const { hostCapabilities } = useHostProtocolGates()
   const reconnectAttempts = useReconnectAttempt(hostId)
   const lastConnectedAt = useLastConnectedAt(hostId)
   const relayRecovery = useRelayRecoveryStatus(hostId)

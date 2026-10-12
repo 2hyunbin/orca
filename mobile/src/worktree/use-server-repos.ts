@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { RpcClient } from '../transport/rpc-client'
-import { listServerRepos } from './server-repos'
+import { listServerRepos, type ListedRepo } from './server-repos'
 
 type ServerRepo<Repo> = Repo & { executionHostId: ExecutionHostId }
 
@@ -9,7 +9,7 @@ type ServerRepo<Repo> = Repo & { executionHostId: ExecutionHostId }
  * Each reachable server's repos by host, filled in as each server answers, so a slow server never
  * holds back the desktop's own list or another server's. A new `generation` re-reads them.
  */
-export function useServerRepos<Repo extends { connectionId?: string | null }>(
+export function useServerRepos<Repo extends ListedRepo>(
   serverClients: ReadonlyMap<ExecutionHostId, RpcClient>,
   active: boolean,
   generation = 0

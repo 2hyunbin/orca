@@ -14,6 +14,8 @@ vi.mock('react-native', () => ({ AppState: { currentState: 'active' } }))
 vi.mock('./mobile-tasks-dependencies', async () => {
   const react = await import('react')
   const { useHostRepoList } = await import('./use-host-repo-list')
+  const workItems = await import('./mobile-work-items')
+  const sourceErrors = await import('./github-work-item-source-errors')
   const { normalizeVisibleTaskProviders } = await import('./mobile-task-providers')
   return {
     useCallback: react.useCallback,
@@ -22,6 +24,11 @@ vi.mock('./mobile-tasks-dependencies', async () => {
     useState: react.useState,
     useHostRepoList,
     normalizeVisibleTaskProviders,
+    CROSS_REPO_DISPLAY_LIMIT: workItems.CROSS_REPO_DISPLAY_LIMIT,
+    PER_REPO_FETCH_LIMIT: workItems.PER_REPO_FETCH_LIMIT,
+    isGitHubWorkItemsSshRemoteRequiredError: workItems.isGitHubWorkItemsSshRemoteRequiredError,
+    extractGitHubIssueSourceError: sourceErrors.extractGitHubIssueSourceError,
+    extractGitHubIssueSourceFallback: sourceErrors.extractGitHubIssueSourceFallback,
     useHostClient: () => ({ client: desktopRef.current, state: 'connected' }),
     useLocalSearchParams: () => ({ hostId: 'mac' }),
     useRouter: () => ({}),
@@ -33,11 +40,15 @@ vi.mock('./mobile-tasks-dependencies', async () => {
 })
 vi.mock('./mobile-tasks-legacy-foundation', async () => ({
   ...(await import('./mobile-tasks-item-mapping')),
+  reconcileTeamSelection: () => new Set(),
   DEFAULT_LINEAR_DISPLAY_PROPERTIES: [],
+  GITHUB_REPO_CONCURRENCY: 3,
   groupDetailComments: () => []
 }))
 
 const { useMobileTasksRouteAndItemState } = await import('./use-mobile-tasks-route-and-item-state')
+const { useMobileTasksProviderLoadActions } =
+  await import('./use-mobile-tasks-provider-load-actions')
 
 type Sent = { method: string; executionHost?: string }
 const sentBy = new WeakMap<FakeSession, Sent[]>()
@@ -72,6 +83,20 @@ const HOSTS = [
   { hostId: 'runtime:old', label: 'ThinkPad', health: 'available', relay: 'update-needed' }
 ]
 
+function issue(title: string) {
+  return {
+    id: title,
+    type: 'issue',
+    number: 1,
+    title,
+    state: 'open',
+    url: 'https://github.com/o/r/issues/1',
+    labels: [],
+    updatedAt: '2026-10-11T00:00:00Z',
+    author: null
+  }
+}
+
 /** A desktop relaying to `runtime:vm`, whose repo list `vmRepoList` answers. */
 function desktop(
   vmRepoList: () => Promise<unknown> = async () => ({ repos: VM_REPOS })
@@ -79,6 +104,9 @@ function desktop(
   return recording(new FakeSession('connected'), async (method, executionHost) => {
     if (method === 'mobileRelay.hosts.list') {
       return reply({ hosts: HOSTS })
+    }
+    if (method === 'github.listWorkItems') {
+      return reply({ items: [issue(executionHost ? 'from the server' : 'from the desktop')] })
     }
     if (method !== 'repo.list') {
       return reply({})
@@ -90,7 +118,8 @@ function desktop(
   })
 }
 
-type Model = ReturnType<typeof useMobileTasksRouteAndItemState>
+type Model = ReturnType<typeof useMobileTasksRouteAndItemState> &
+  ReturnType<typeof useMobileTasksProviderLoadActions>
 const mounted: ReactTestRenderer[] = []
 afterEach(() => {
   for (const renderer of mounted.splice(0)) {
@@ -102,7 +131,13 @@ async function mount(client: FakeSession, hostCapabilities: string[]): Promise<(
   desktopRef.current = client
   const seen: { model?: Model } = {}
   function Harness(): null {
-    seen.model = useMobileTasksRouteAndItemState()
+    // The GitHub list's loader, fed the screen's own model as the screen feeds it.
+    seen.model = useMobileTasksProviderLoadActions(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the loader reads only stage-1 members (client, repos, query, kind).
+      useMobileTasksRouteAndItemState() as unknown as Parameters<
+        typeof useMobileTasksProviderLoadActions
+      >[0]
+    )
     return null
   }
   const gates: HostStatusGates = {
@@ -147,6 +182,8 @@ const VM_REPO = {
   path: '/srv/api',
   executionHostId: 'runtime:vm'
 }
+// A server's SSH-backed repo keeps its connection, which that server holds.
+const VM_SSH_REPO = { ...VM_REPOS[1], executionHostId: 'runtime:vm' }
 
 /** Where each call on the screen's client ran: its `executionHost`, or `desktop`. */
 function ranOn(client: FakeSession, method: string): string[] {
@@ -161,8 +198,8 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
     await loadRepos(model)
     await settle()
-    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO])
-    expect(await loadRepos(model)).toEqual([...MAC_REPOS, VM_REPO])
+    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
+    expect(await loadRepos(model)).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
     // The server needing an update is never asked.
     expect(ranOn(client, 'repo.list').sort()).toEqual(['desktop', 'runtime:vm'])
   })
@@ -176,19 +213,22 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     expect(model().repos).toEqual(MAC_REPOS)
   })
 
-  it("runs a server repo's work-item calls on that server and the rest on the desktop", async () => {
+  it("loads a server repo's GitHub items from that server, as the screen's list does", async () => {
     const client = desktop()
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
-    await settle()
     await loadRepos(model)
-    const screenClient = model().client!
-    await screenClient.sendRequest('github.listWorkItems', { repo: 'id:vm-repo', limit: 1 })
-    await screenClient.sendRequest('gitlab.workItemDetails', { repo: 'id:vm-repo', iid: 1 })
-    await screenClient.sendRequest('github.listWorkItems', { repo: 'id:mac-repo', limit: 1 })
-    await screenClient.sendRequest('linear.status', undefined)
-    expect(ranOn(client, 'github.listWorkItems')).toEqual(['runtime:vm', 'desktop'])
-    expect(ranOn(client, 'gitlab.workItemDetails')).toEqual(['runtime:vm'])
-    expect(ranOn(client, 'linear.status')).toEqual(['desktop'])
+    await settle()
+    const page: { titles?: string[] } = {}
+    await act(async () => {
+      const loaded = await model().fetchGitHubItemsPage(model().client!, model().repos)
+      page.titles = loaded.items.map((item) => item.title).sort()
+    })
+    expect(page.titles).toEqual(['from the desktop', 'from the server', 'from the server'])
+    expect(ranOn(client, 'github.listWorkItems').sort()).toEqual([
+      'desktop',
+      'runtime:vm',
+      'runtime:vm'
+    ])
   })
 
   it("names a server repo's host before its path in the repo pickers", async () => {
@@ -196,7 +236,7 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     await loadRepos(model)
     await settle()
     const details = model().repos.map((repo) => getTaskRepoDetail(repo, model().serverLabelById))
-    expect(details).toEqual(['/mac/app', 'VM · /srv/api'])
+    expect(details).toEqual(['/mac/app', 'VM · /srv/api', 'VM · /r'])
   })
 
   it('keeps the desktop list alone on a desktop that does not relay', async () => {

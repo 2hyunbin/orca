@@ -15,6 +15,13 @@ export function taskWorkspaceHookMountAdapters(
 ): Record<string, MountAdapter> {
   // The drawer's SSH hook. `connectionId` picks the arm the detection effect takes: a repo on
   // an SSH connection detects remote agents, one without it detects local agents.
+  const sshTargetKey = (connectionId: string | undefined): string =>
+    modules
+      .load<typeof import('../../../tasks/workspace-ssh-gate')>(
+        'mobile/src/tasks/workspace-ssh-gate.ts'
+      )
+      .workspaceSshTargetKey(undefined, connectionId ?? null)
+
   function sshStateAdapter(connectionId: string | undefined): MountAdapter {
     return (context) => {
       const useSsh = modules.load<
@@ -32,6 +39,7 @@ export function taskWorkspaceHookMountAdapters(
         workspaceCreateSshStatus: connectionId ? 'connected' : 'idle',
         workspaceCreateTargetConnectionId: connectionId,
         workspaceCreateTargetRepo: repo,
+        workspaceCreateTargetSshKey: sshTargetKey(connectionId),
         workspaceDetectedAgentIds: null,
         workspaceSshState: null,
         workspaceSshConnecting: false
@@ -147,6 +155,7 @@ export function taskWorkspaceHookMountAdapters(
         workspaceCreateDraft: { key: 'linear:1' },
         workspaceCreateTargetConnectionId: 'ssh-1',
         workspaceCreateTargetRepo: { id: REPO, displayName: 'Repo' },
+        workspaceCreateTargetSshKey: sshTargetKey('ssh-1'),
         workspaceSparseCheckoutAvailable: true,
         workspaceSparseDraft: { mode: 'new', name: 'docs', directoriesText: 'docs' },
         workspaceSparseDraftName: 'docs',

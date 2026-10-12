@@ -1,4 +1,6 @@
 import type { ProjectMetadataLoadingModel } from './use-mobile-tasks-project-metadata-loading'
+import { taskRepoServer } from './task-repo-host-routing'
+import { workspaceSshTargetKey } from './workspace-ssh-gate'
 import {
   type BaseRefSearchResult,
   MOBILE_TUI_AGENT_AUTO_PICK_ORDER,
@@ -89,9 +91,14 @@ export function useMobileTasksWorkspaceCreateProjection(model: ProjectMetadataLo
     [getWorkspaceTargetRepo, workspaceCreateDraft]
   )
   const workspaceCreateTargetConnectionId = workspaceCreateTargetRepo?.connectionId ?? null
+  const workspaceCreateTargetSshKey = workspaceSshTargetKey(
+    taskRepoServer(workspaceCreateTargetRepo ?? undefined),
+    workspaceCreateTargetConnectionId
+  )
   const workspaceCreateSshGate = deriveWorkspaceSshGate({
     connectionId: workspaceCreateTargetConnectionId,
-    state: workspaceSshState,
+    state:
+      workspaceSshState?.target === workspaceCreateTargetSshKey ? workspaceSshState.record : null,
     connecting: workspaceSshConnecting
   })
   const workspaceCreateSshStatus = workspaceCreateSshGate.status
@@ -250,6 +257,7 @@ export function useMobileTasksWorkspaceCreateProjection(model: ProjectMetadataLo
     getWorkspaceTargetRepo,
     workspaceCreateTargetRepo,
     workspaceCreateTargetConnectionId,
+    workspaceCreateTargetSshKey,
     workspaceCreateSshGate,
     workspaceCreateSshStatus,
     workspaceCreateRequiresSshConnection,

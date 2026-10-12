@@ -26,6 +26,9 @@ export function workspaceSshTargetKey(
   return JSON.stringify([server ?? null, connectionId])
 }
 
+/** An SSH record with the `workspaceSshTargetKey` it was read for. */
+export type WorkspaceSshEntry = { target: string; record: WorkspaceSshRecord }
+
 export type WorkspaceSshGate = {
   status: SshConnectionStatus | null
   requiresConnection: boolean

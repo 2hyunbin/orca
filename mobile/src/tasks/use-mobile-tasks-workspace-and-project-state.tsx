@@ -1,5 +1,5 @@
 import type { RouteAndItemStateModel } from './use-mobile-tasks-route-and-item-state'
-import type { WorkspaceSshRecord } from './workspace-ssh-gate'
+import type { WorkspaceSshEntry } from './workspace-ssh-gate'
 import {
   type BaseRefSearchResult,
   type GitHubProjectPartialFailure,
@@ -66,7 +66,7 @@ export function useMobileTasksWorkspaceAndProjectState(model: RouteAndItemStateM
   const [workspaceDetectedAgentIds, setWorkspaceDetectedAgentIds] = useState<Set<string> | null>(
     null
   )
-  const [workspaceSshState, setWorkspaceSshState] = useState<WorkspaceSshRecord | null>(null)
+  const [workspaceSshState, setWorkspaceSshState] = useState<WorkspaceSshEntry | null>(null)
   const [workspaceSshConnecting, setWorkspaceSshConnecting] = useState(false)
   const [showWorkspaceAgentPicker, setShowWorkspaceAgentPicker] = useState(false)
   const [showWorkspaceCreateRepoPicker, setShowWorkspaceCreateRepoPicker] = useState(false)
