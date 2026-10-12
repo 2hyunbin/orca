@@ -1110,7 +1110,8 @@
             "step": "phone opens a file",
             "reply": {
               "ok": false,
-              "error": "runtime_error"
+              "error": "runtime_error",
+              "message": "renderer_unavailable"
             },
             "phone": {
               "activeTab": "tab1",
@@ -1435,7 +1436,7 @@
         },
         "after": {
           "server": {
-            "activeTab": "tab1",
+            "activeTab": "<first listed>",
             "groups": [
               {
                 "tabs": ["tab1", "tab2", "tab3"],
@@ -1448,7 +1449,7 @@
                 "tab": "tab1",
                 "leaf": "leaf1",
                 "pty": "ptyServe1",
-                "title": "Terminal 1",
+                "title": "Terminal <position>",
                 "tree": "leaf1",
                 "paneTitles": []
               },
@@ -1457,7 +1458,7 @@
                 "tab": "tab2",
                 "leaf": "leaf2",
                 "pty": "pty@@1",
-                "title": "Terminal 2",
+                "title": "Terminal <position>",
                 "tree": "leaf2",
                 "paneTitles": []
               },
@@ -1466,7 +1467,7 @@
                 "tab": "tab3",
                 "leaf": "leaf3",
                 "pty": "ptyServe2",
-                "title": "Terminal 3",
+                "title": "Terminal <position>",
                 "tree": "leaf3",
                 "paneTitles": []
               }
