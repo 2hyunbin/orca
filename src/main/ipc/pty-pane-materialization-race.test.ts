@@ -274,7 +274,7 @@ describe('registerPtyHandlers', () => {
         env?: Record<string, string>
         tabId?: string
         leafId?: string
-        persistHostSessionBinding?: boolean
+        runtimeAdmittedPane?: boolean
       }): Promise<{ id: string }>
     }
     let resolveSpawn!: (result: { id: string }) => void
@@ -382,7 +382,7 @@ describe('registerPtyHandlers', () => {
       tabId: 'tab-race',
       leafId,
       env: { ORCA_PANE_KEY: paneKey },
-      persistHostSessionBinding: true
+      runtimeAdmittedPane: true
     })
     await vi.waitFor(() => expect(providerSpawn).toHaveBeenCalledTimes(1))
     resolveSpawn({ id: 'pty-renderer' })
@@ -565,7 +565,7 @@ describe('registerPtyHandlers', () => {
         tabId,
         leafId,
         env: { ORCA_PANE_KEY: paneKey },
-        persistHostSessionBinding: true
+        runtimeAdmittedPane: true
       })
       ownerPublished = true
       runtime.createPreAllocatedTerminalHandle.mockClear()
@@ -668,7 +668,7 @@ describe('registerPtyHandlers', () => {
         tabId,
         leafId,
         env: { ORCA_PANE_KEY: paneKey },
-        persistHostSessionBinding: true,
+        runtimeAdmittedPane: true,
         adoptedStablePane: adoptedOwner,
         agentSessionEnsure: {
           claim: {
