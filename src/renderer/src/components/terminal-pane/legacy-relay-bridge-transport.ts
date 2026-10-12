@@ -99,10 +99,10 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
         }
         if (!pane) {
           lastState = null
-          // Still waiting on the relay: ask again, which answers exited once it is proven gone.
-          if (!attached) {
-            void reattach()
-          }
+          // A disconnect hangs the bridge up without an exit, and the next bridge serves only panes
+          // that attach to it. Ask again; it answers exited once the terminal is proven gone.
+          attached = false
+          void reattach()
           return
         }
         const previous = lastState
