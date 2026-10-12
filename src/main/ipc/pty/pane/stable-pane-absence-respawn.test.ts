@@ -136,6 +136,23 @@ describe('stable pane adoption after the owning host reports the PTY absent', ()
     expect(result.owner).toBeNull()
   })
 
+  it('refuses to respawn a workspace pane when no Store can clear its binding', async () => {
+    const spawn = vi.fn().mockRejectedValueOnce(new SessionNotFoundError(OWNER.ptyId))
+
+    await expect(
+      spawnForStablePane({
+        runtime: undefined,
+        provider: { spawn } as unknown as IPtyProvider,
+        spawnOptions: { cols: 80, rows: 24 },
+        owner: OWNER,
+        worktreeId: WORKTREE,
+        connectionId: 'conn-1',
+        resolveOwner: () => null
+      })
+    ).rejects.toThrow('terminal_pane_owner_changed')
+    expect(spawn).toHaveBeenCalledTimes(1)
+  })
+
   // The message alone cannot distinguish absence from a lost link; only the class may authorise
   // abandoning the binding.
   it.each([

@@ -32,8 +32,12 @@ export async function releaseAbsentPaneOwner(
   settleStop?.(true)
   clearProviderPtyState(owner.ptyId)
   ptyOwnership.delete(owner.ptyId)
-  if (!worktreeId || !store) {
+  if (!worktreeId) {
     return true
+  }
+  // Without the Store the binding cannot be cleared, so the pane is not free for a fresh spawn.
+  if (!store) {
+    return false
   }
   return retireReplacedPaneBinding(store, {
     ptyId: owner.ptyId,

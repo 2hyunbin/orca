@@ -64,7 +64,10 @@ export function withDurableRuntimeStore<
         if (!session || !bound) {
           return { value: true, persist: 'if-dirty' }
         }
-        if (bound !== binding.ptyId) {
+        if (
+          bound !== binding.ptyId ||
+          !session.tabsByWorktree?.[binding.worktreeId]?.some((tab) => tab.id === binding.tabId)
+        ) {
           return { value: false, persist: false }
         }
         sessions.setWorkspaceSession?.(
