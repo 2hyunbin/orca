@@ -244,9 +244,12 @@ function parseResumeInvocations(command: string): ResumeInvocation[] {
   for (const words of shellCommands(command)) {
     const program = commandProgramIndex(words)
     const registration = binaries.get(commandName(words[program] ?? ''))
-    const history = registration?.sessionHistory
-    const invocation = history?.parseResumeArgs(words.slice(program + 1))
-    if (registration && history && invocation) {
+    if (!registration) {
+      continue
+    }
+    const history = registration.sessionHistory
+    const invocation = history.parseResumeArgs(words.slice(program + 1))
+    if (invocation) {
       invocations.push({ ...invocation, provider: registration.definition.agent, history })
     }
   }
