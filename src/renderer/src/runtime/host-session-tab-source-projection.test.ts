@@ -186,7 +186,8 @@ describe('failed host close projection', () => {
       })
       await vi.advanceTimersByTimeAsync(15_000)
       await result
-      expect(strip()).toEqual(['a', 'b', 'c'])
+      // Recovery loads independently of close settlement.
+      await vi.waitFor(() => expect(strip()).toEqual(['a', 'b', 'c']))
       expect(useAppStore.getState().worktreesByRepo).toEqual({})
     }
   )

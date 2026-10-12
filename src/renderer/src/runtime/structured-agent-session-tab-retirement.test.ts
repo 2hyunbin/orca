@@ -83,6 +83,7 @@ vi.mock('./runtime-worktree-selector', () => ({
 import {
   beginStructuredAgentSessionTabClose,
   retireStructuredAgentSessionTab,
+  pendingStructuredAgentSessionTabRetirement,
   suppressCancelledStructuredSessionTabs
 } from './structured-agent-session-tab-retirement'
 import {
@@ -416,6 +417,49 @@ describe('structured agent session tab retirement', () => {
       'session.tabs.close',
       expect.objectContaining({ tabId: 'agent-session:session-1' }),
       expect.anything()
+    )
+  })
+
+  it('restores a paired chat on capability failure and retries both pinned legacy closes', async () => {
+    const paired = { kind: 'environment', environmentId: 'server-1' } as const
+    const error = new Error('capability_read_failed')
+    const onError = vi.fn()
+    mocks.closesById.mockRejectedValueOnce(error)
+    beginStructuredAgentSessionTabClose({
+      target: paired,
+      worktreeId: 'wt-1',
+      sessionId: 'session-1',
+      provisional: false,
+      onError
+    })
+    const pending = pendingStructuredAgentSessionTabRetirement(paired, 'wt-1', 'session-1')
+    expect(pending).toBeDefined()
+    expect(await pending).toEqual({ status: 'rejected', reason: error })
+    expect(onError).toHaveBeenCalledWith(error)
+    expect(mocks.ensureCompatible).not.toHaveBeenCalled()
+    expect(mocks.closeSession).not.toHaveBeenCalled()
+    expect(mocks.callRuntime).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(mocks.refreshPaired).toHaveBeenCalled())
+    expect(closing('server-1')).toBe(false)
+
+    expect(
+      await retireStructuredAgentSessionTab({
+        target: paired,
+        worktreeId: 'wt-1',
+        sessionId: 'session-1',
+        onError
+      })
+    ).toEqual({ status: 'fulfilled', value: undefined })
+    expect(mocks.closeSession).toHaveBeenCalledWith(
+      paired,
+      'session-1',
+      expect.objectContaining({ expectedEnvironmentRuntimeId: 'server-runtime' })
+    )
+    expect(mocks.callRuntime).toHaveBeenCalledWith(
+      paired,
+      'session.tabs.close',
+      expect.anything(),
+      expect.objectContaining({ expectedEnvironmentRuntimeId: 'server-runtime' })
     )
   })
 

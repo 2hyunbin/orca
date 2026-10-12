@@ -147,7 +147,7 @@ export function retireStructuredAgentSessionTab(args: {
     const capability = await readSessionTabsCloseAgentSessionCapability(
       args.target,
       requestOptions()
-    ).catch(() => ({ supported: false, runtimeId: undefined }))
+    )
     throwIfGaveUp()
     if (args.target.kind === 'environment') {
       await ensureRuntimeEnvironmentCompatible(args.target.environmentId, requestOptions())
