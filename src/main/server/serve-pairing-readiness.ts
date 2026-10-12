@@ -2,6 +2,7 @@ import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { resolveAdvertisedPairingEndpoint } from '../runtime/pairing-endpoint'
 import { assertServeProjectRoot, renderServePairingQr } from './serve-pairing-output'
 import type { ServeReadiness, ServeReadinessOutput } from './serve-readiness'
+import { SERVE_SUPERVISED_ENV } from '../../shared/serve-bundle-coordination'
 
 /** Endpoint and pairing-offer fields shared by the Electron serve host and orcad. */
 export async function buildServePairingReadiness(
@@ -47,12 +48,25 @@ export async function buildServePairingReadiness(
   }
 }
 
-export function servePublishMode(options: {
-  recipeJson?: boolean
-  projectRoot?: string | null
-  json?: boolean
-}): ServeReadinessOutput {
-  return options.recipeJson && options.projectRoot
-    ? { mode: 'recipe-json', projectRoot: assertServeProjectRoot(options.projectRoot) }
-    : { mode: options.json ? 'json' : 'human' }
+export function servePublishMode(
+  options: {
+    recipeJson?: boolean
+    projectRoot?: string | null
+    json?: boolean
+  },
+  output: { supervised: boolean; stdoutIsTty: boolean } = {
+    supervised: process.env[SERVE_SUPERVISED_ENV] === '1',
+    stdoutIsTty: process.stdout.isTTY === true
+  }
+): ServeReadinessOutput {
+  if (options.recipeJson && options.projectRoot) {
+    return { mode: 'recipe-json', projectRoot: assertServeProjectRoot(options.projectRoot) }
+  }
+  if (options.json) {
+    return { mode: 'json' }
+  }
+  // Why only supervised: scripts read `Pairing URL:` from piped stdout of a plain `orca serve`.
+  return output.supervised && !output.stdoutIsTty
+    ? { mode: 'human', hidePairingUrl: true }
+    : { mode: 'human' }
 }

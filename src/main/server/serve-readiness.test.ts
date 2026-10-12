@@ -5,6 +5,7 @@ import {
   type ServeReadiness
 } from './serve-readiness'
 import type { OrcadHealth } from '../orcad/orcad-health'
+import { servePublishMode } from './serve-pairing-readiness'
 
 const ready: ServeReadiness = {
   runtimeId: 'runtime-1',
@@ -184,5 +185,26 @@ describe('ServeReadinessPublisher', () => {
     await expect(publisher.publish(ready, { mode: 'human' })).rejects.toThrow(
       'publication already failed'
     )
+  })
+})
+
+describe('supervised service output', () => {
+  it('hides every pairing secret only for a supervised server not writing to a terminal', () => {
+    const hidden = renderServeReadiness(
+      ready,
+      servePublishMode({}, { supervised: true, stdoutIsTty: false })
+    )
+    expect(hidden).toContain('Pairing URL: hidden')
+    expect(hidden).not.toContain('secret')
+    // Scripts read `Pairing URL:` from the piped stdout of a plain `orca serve`.
+    for (const output of [
+      servePublishMode({}, { supervised: false, stdoutIsTty: false }),
+      servePublishMode({}, { supervised: true, stdoutIsTty: true })
+    ]) {
+      expect(renderServeReadiness(ready, output)).toContain('Pairing URL: orca://pair?code=secret')
+    }
+    expect(servePublishMode({ json: true }, { supervised: true, stdoutIsTty: false })).toEqual({
+      mode: 'json'
+    })
   })
 })
