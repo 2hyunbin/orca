@@ -1,6 +1,6 @@
 // The paired desktop's servers (`mobileRelay.hosts.list`), one feed per desktop client: the host
-// list and every open server workspace share one poll and one answer, so a row's badge and its
-// workspace screen never disagree and two readers never double the desktop's load.
+// list's poll and every open server workspace share one read, so two readers never double the
+// desktop's load. The host list reads without subscribing, so its badge may trail a workspace by a tick.
 
 import { useCallback, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
@@ -8,7 +8,7 @@ import type { MobileRelayHost } from '../../../src/shared/mobile-relay-hosts-con
 import type { RpcClient } from '../transport/rpc-client'
 import { relayHostsListRead } from './server-workspace-operations'
 
-// The host list's own poll cadence; a read by any reader pushes the next timed one back.
+// The host list's own poll cadence, counted from when the last read finished.
 const RELAY_HOSTS_POLL_MS = 3000
 
 export type RelayHostsFeed = {
@@ -84,14 +84,15 @@ function createFeed(client: RpcClient): RelayHostsFeed {
     if (inFlight) {
       return inFlight
     }
-    lastReadAt = Date.now()
     const readGeneration = generation
     inFlight = fetchHosts(readGeneration).finally(() => {
       if (readGeneration === generation) {
         inFlight = null
+        // Why: scheduling from the finish, so a read slower than the poll still gets a next one.
+        lastReadAt = Date.now()
+        schedule()
       }
     })
-    schedule()
     return inFlight
   }
 

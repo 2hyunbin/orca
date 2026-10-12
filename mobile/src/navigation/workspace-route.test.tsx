@@ -74,8 +74,10 @@ import {
   HostStatusGatesContext,
   useOptionalHostProtocolGates
 } from '../components/host-protocol-gates-context'
-import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
-import { MOBILE_RELAY_HOSTS_LIST_METHOD } from '../../../src/shared/mobile-relay-hosts-contract'
+import {
+  MOBILE_RELAY_HOSTS_LIST_METHOD,
+  type MobileRelayHost
+} from '../../../src/shared/mobile-relay-hosts-contract'
 import type { HostStatusGates } from '../transport/host-status-gates'
 import type { ConnectionState } from '../transport/types'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
@@ -119,8 +121,15 @@ function desktopGates(hostCapabilities: string[], statusPending = false): HostSt
   }
 }
 
-/** The server's health as the desktop reports it in `mobileRelay.hosts.list`. */
-const serverHealth: { current: ExecutionHostHealth } = { current: 'available' }
+type ServerReport = Pick<MobileRelayHost, 'health' | 'relay'>
+// The pairs the desktop's `mobileRelay.hosts.list` actually sends for a server.
+const RUNNING: ServerReport = { health: 'available', relay: 'ready' }
+const STOPPED: ServerReport = { health: 'connecting', relay: 'unavailable' }
+const NO_STATUS_YET: ServerReport = { health: 'available', relay: 'unavailable' }
+const FAILED: ServerReport = { health: 'error', relay: 'unavailable' }
+
+/** The server as the desktop reports it in `mobileRelay.hosts.list`. */
+const serverReport: { current: ServerReport } = { current: RUNNING }
 
 /** A desktop whose own status is settled as given; a status it is asked for is the server's. */
 function desktop(serverCapabilities: string[] = []): FakeSession {
@@ -133,9 +142,7 @@ function desktop(serverCapabilities: string[] = []): FakeSession {
         ? { capabilities: serverCapabilities }
         : method === MOBILE_RELAY_HOSTS_LIST_METHOD
           ? {
-              hosts: [
-                { hostId: 'runtime:vm', label: 'vm', health: serverHealth.current, relay: 'ready' }
-              ]
+              hosts: [{ hostId: 'runtime:vm', label: 'vm', ...serverReport.current }]
             }
           : {},
     _meta: { runtimeId: 'runtime-1' }
@@ -158,7 +165,7 @@ async function render(element: ReactElement, gates: HostStatusGates): Promise<Re
   below.client = null
   below.state = null
   below.capabilities = null
-  serverHealth.current = 'available'
+  serverReport.current = RUNNING
   let renderer: ReactTestRenderer | null = null
   await act(async () => {
     renderer = create(createElement(HostStatusGatesContext.Provider, { value: gates }, element))
@@ -229,24 +236,29 @@ describe('a server workspace', () => {
     })
   })
 
-  it('reads as disconnected while the desktop reports its server down, and recovers', async () => {
+  it('follows whether the desktop can relay to its server, and recovers', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     try {
       route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
       desktop()
       await render(screen, desktopGates(RELAYS))
       expect(below.state).toBe('connected')
-      serverHealth.current = 'connecting'
+      serverReport.current = STOPPED
       await act(async () => {
         vi.advanceTimersByTime(3000)
       })
       expect(below.state).toBe('connecting')
-      serverHealth.current = 'error'
+      serverReport.current = NO_STATUS_YET
       await act(async () => {
         vi.advanceTimersByTime(3000)
       })
       expect(below.state).toBe('disconnected')
-      serverHealth.current = 'available'
+      serverReport.current = FAILED
+      await act(async () => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(below.state).toBe('disconnected')
+      serverReport.current = RUNNING
       await act(async () => {
         vi.advanceTimersByTime(3000)
       })
@@ -259,7 +271,7 @@ describe('a server workspace', () => {
   it('opens disconnected, not loading, when its server is already down', async () => {
     route.params = { hostId: 'host-1', executionHost: 'runtime:vm' }
     desktop()
-    serverHealth.current = 'disconnected'
+    serverReport.current = FAILED
     await act(async () => {
       create(
         createElement(HostStatusGatesContext.Provider, { value: desktopGates(RELAYS) }, screen)

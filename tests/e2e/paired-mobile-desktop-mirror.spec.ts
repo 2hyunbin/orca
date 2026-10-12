@@ -275,13 +275,17 @@ test('phone paired with a desktop lists, opens and types into a workspace on its
 
     await host.restartServeProcess({
       betweenProcesses: async () => {
-        // The server is down: the desktop says so, and its workspace stays listed from its last rows.
+        // The server is down: the desktop reports it reconnecting and not relaying, which the phone
+        // shows as connecting; its workspace stays listed from its last rows.
         await expect
-          .poll(async () => (await listedHost(socket, serverHostId))?.relay, {
-            timeout: 60_000,
-            intervals: [1_000]
-          })
-          .toBe('unavailable')
+          .poll(
+            async () => {
+              const down = await listedHost(socket, serverHostId)
+              return down && { health: down.health, relay: down.relay }
+            },
+            { timeout: 60_000, intervals: [1_000] }
+          )
+          .toEqual({ health: 'connecting', relay: 'unavailable' })
         const lastRows = await hostWorktrees(socket, serverHostId)
         expect(lastRows?.worktrees.map((row) => row.path)).toContain(serverFolder)
         // A relayed call fails as unavailable, and never runs on the desktop instead.
@@ -300,13 +304,13 @@ test('phone paired with a desktop lists, opens and types into a workspace on its
         }
       }
     })
-    // Back up: the desktop reports it available again, and the same phone socket reaches it.
+    // Back up: the desktop relays to it again, and the same phone socket reaches it.
     await expect
-      .poll(async () => (await listedHost(socket, serverHostId))?.health, {
+      .poll(async () => (await listedHost(socket, serverHostId))?.relay, {
         timeout: 90_000,
         intervals: [2_000]
       })
-      .toBe('available')
+      .toBe('ready')
     const reopened = await call(
       socket,
       { id: 'ps-restarted', ...list, executionHost: serverHostId },

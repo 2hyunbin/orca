@@ -6,14 +6,18 @@ import { MOBILE_RELAY_HOSTS_LIST_METHOD } from '../../../src/shared/mobile-relay
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import { relayHostsFeed } from './relay-hosts-feed'
 
+function hostsReply(health: string) {
+  return {
+    id: 'reply',
+    ok: true as const,
+    result: { hosts: [{ hostId: 'runtime:vm', label: 'vm', health, relay: 'ready' }] },
+    _meta: { runtimeId: 'runtime-1' }
+  }
+}
+
 function desktop(health: () => string): FakeSession {
   const session = new FakeSession('connected')
-  session.sendRequest.mockImplementation(async () => ({
-    id: 'reply',
-    ok: true,
-    result: { hosts: [{ hostId: 'runtime:vm', label: 'vm', health: health(), relay: 'ready' }] },
-    _meta: { runtimeId: 'runtime-1' }
-  }))
+  session.sendRequest.mockImplementation(async () => hostsReply(health()))
   return session
 }
 
@@ -59,6 +63,40 @@ describe('the desktop’s server list', () => {
     const [first, second] = await Promise.all([feed.read(), feed.read()])
     expect(second).toBe(first)
     expect(listCalls(session)).toBe(1)
+  })
+
+  it('keeps polling after a read slower than the poll', async () => {
+    const session = desktop(() => 'available')
+    session.sendRequest.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5000))
+      return hostsReply('available')
+    })
+    const unsubscribe = relayHostsFeed(session).subscribe(() => {})
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(listCalls(session)).toBe(1)
+    // The next poll counts from the slow read's finish.
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(listCalls(session)).toBe(2)
+    unsubscribe()
+  })
+
+  it('drops a reply that lands after a drop and reconnect', async () => {
+    const session = desktop(() => 'error')
+    let releaseStale: () => void = () => {}
+    session.sendRequest.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        releaseStale = resolve
+      })
+      return hostsReply('available')
+    })
+    const feed = relayHostsFeed(session)
+    const stale = feed.read()
+    session.publishState('reconnecting')
+    session.publishState('connected')
+    expect(await feed.read()).toEqual([expect.objectContaining({ health: 'error' })])
+    releaseStale()
+    expect(await stale).toBeNull()
+    expect(feed.getSnapshot()?.[0]?.health).toBe('error')
   })
 
   it('forgets its answer on a drop, and reads again on reconnect', async () => {
