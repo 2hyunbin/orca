@@ -29,7 +29,6 @@ src/main/runtime/orca-runtime-create-managed-worktree.ts
 src/main/runtime/orca-runtime-create-mobile-session-terminal.ts
 src/main/runtime/orca-runtime-create-pty-headless-terminal-state.ts
 src/main/runtime/orca-runtime-create-runtime-owned-mobile-session-terminal.ts
-src/main/runtime/orca-runtime-create-terminal-desktop.ts
 src/main/runtime/orca-runtime-create-terminal-side-effect-command-code-detector.ts
 src/main/runtime/orca-runtime-create-terminal.ts
 src/main/runtime/orca-runtime-deliver-pending-messages.ts
