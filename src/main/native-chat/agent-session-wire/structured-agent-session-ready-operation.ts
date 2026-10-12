@@ -104,20 +104,34 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
     envelope.sessionId,
     async () => {
       const record = context.deps.store.getRecord(envelope.sessionId)
+      if (options.needsAgent && !options.needsAgent(record)) {
+        return { result: await run({ ok: true, child: null }) }
+      }
       if (plan.acceptsWithCommandReceipt) {
         if (parseAgentSessionOperationTimestamp(envelope.clientOperationId) === null) {
           return { result: await run({ ok: true, child: null }) }
         }
         // Receipt admission owns replay and unreadable-result answers, before any start.
-        let recorded = true
+        let recorded: boolean
         try {
           recorded =
             context.deps.store.readCommandReceipt(
               commandReceiptScope(callerKey, plan.operationIdScope),
               envelope.clientOperationId
             ).verdict !== 'absent'
-        } catch {
-          // Let admission report the read failure using the existing unknown answer.
+        } catch (error) {
+          context.deps.logger.warn('reading a command receipt failed', {
+            scope: 'command-receipt-read',
+            sessionId: envelope.sessionId,
+            operationId: envelope.clientOperationId,
+            error
+          })
+          return {
+            result: {
+              ok: false as const,
+              refusal: agentSessionOperationOutcomeUnknown(envelope.clientOperationId)
+            }
+          }
         }
         if (recorded) {
           return { result: await run({ ok: true, child: null }) }
@@ -139,9 +153,6 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
             })
           }
         }
-      }
-      if (options.needsAgent && !options.needsAgent(record)) {
-        return { result: await run({ ok: true, child: null }) }
       }
       const select = async () => {
         const opened = await openForWrite(context, envelope)()
