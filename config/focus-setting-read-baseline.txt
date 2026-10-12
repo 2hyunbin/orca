@@ -2,7 +2,7 @@
 # activeRuntimeEnvironmentId) plus calls of exported functions that read it, per file.
 # This is a RATCHET: counts may only go DOWN. Only creation flows with no source row may read
 # the default host, through defaultCreationHost. Everything else routes by the owner.
-# Prune after removing reads: pnpm check:owner-routing-ratchet --prune
+# Prune after removing reads: pnpm check:focus-read-ratchet --prune
 2 src/renderer/src/App.tsx
 5 src/renderer/src/app-shell/use-app-shell-services.ts
 9 src/renderer/src/components/JiraIssueWorkspace.tsx
@@ -194,17 +194,15 @@
 1 src/renderer/src/components/sidebar/worktree-list/rows/ProjectGroupDialogs.tsx
 1 src/renderer/src/components/sidebar/worktree-visibility-host-target.ts
 1 src/renderer/src/components/skills/SkillsPage.tsx
-7 src/renderer/src/components/status-bar/ClaudeSwitcherMenu.tsx
+2 src/renderer/src/components/status-bar/ClaudeSwitcherMenu.tsx
 1 src/renderer/src/components/status-bar/CodexSwitcherMenu.tsx
 1 src/renderer/src/components/status-bar/PortsStatusSegment.tsx
 1 src/renderer/src/components/status-bar/SshStatusSegment.tsx
 1 src/renderer/src/components/status-bar/StatusBarSurface.tsx
 1 src/renderer/src/components/status-bar/ports-status-popover-rows.tsx
 2 src/renderer/src/components/status-bar/provider-account-sync-key.ts
-1 src/renderer/src/components/status-bar/status-bar-claude-accounts.ts
-1 src/renderer/src/components/status-bar/status-bar-codex-accounts.ts
 1 src/renderer/src/components/status-bar/usage-provider-settings-target.ts
-7 src/renderer/src/components/status-bar/use-codex-switcher-controller.ts
+2 src/renderer/src/components/status-bar/use-codex-switcher-controller.ts
 1 src/renderer/src/components/status-bar/use-status-bar-controller.ts
 1 src/renderer/src/components/status-bar/use-workspace-space-git-refresh-action.ts
 1 src/renderer/src/components/status-bar/use-workspace-space-manager-panel.ts
@@ -228,12 +226,11 @@
 1 src/renderer/src/components/terminal-pane/pending-split-close-test-fixture.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/agent-idle-working-handlers.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/cold-restore-resume-startup.ts
-1 src/renderer/src/components/terminal-pane/pty-connection/direct-ssh-retry-status.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/interrupt-input-intent.ts
 1 src/renderer/src/components/terminal-pane/pty-connection/pane-agent-identity.ts
+1 src/renderer/src/components/terminal-pane/pty-connection/pane-host-capability-flags.ts
 1 src/renderer/src/components/terminal-pane/retire-unbound-runtime-terminal-pane.ts
 1 src/renderer/src/components/terminal-pane/terminal-ctrl-arrow-conpty.ts
-2 src/renderer/src/components/terminal-pane/terminal-drop-runtime-owner.ts
 1 src/renderer/src/components/terminal-pane/terminal-fit-restore.ts
 2 src/renderer/src/components/terminal-pane/terminal-input-host-platform.ts
 1 src/renderer/src/components/terminal-pane/terminal-keyboard-hook.ts
@@ -278,12 +275,9 @@
 2 src/renderer/src/components/use-worktree-jump-palette-store-state.ts
 1 src/renderer/src/components/use-worktree-jump-palette-task-url.ts
 1 src/renderer/src/components/worktree-jump-palette-create-worktree.ts
-1 src/renderer/src/hooks/composer-state/attachment-drop-state.ts
-1 src/renderer/src/hooks/composer-state/composer-attachment-drop-state.ts
 1 src/renderer/src/hooks/composer-state/composer-navigation-actions.ts
-2 src/renderer/src/hooks/composer-state/composer-source-state.ts
-1 src/renderer/src/hooks/composer-state/composer-target-state.ts
-1 src/renderer/src/hooks/composer-state/workspace-identity-state.ts
+1 src/renderer/src/hooks/composer-state/composer-source-state.ts
+1 src/renderer/src/hooks/composer-state/runtime-target-selection.ts
 1 src/renderer/src/hooks/editor-external-watch-target-rows.ts
 3 src/renderer/src/hooks/editor-external-watch-targets.ts
 1 src/renderer/src/hooks/ipc-events-close-routing-test-harness.ts
@@ -341,13 +335,12 @@
 1 src/renderer/src/lib/launch-structured-agent-session.ts
 1 src/renderer/src/lib/launch-worktree-background-terminals.ts
 1 src/renderer/src/lib/linear-issue-url-lookup.ts
-2 src/renderer/src/lib/local-preflight-context.ts
+1 src/renderer/src/lib/local-preflight-context.ts
 3 src/renderer/src/lib/open-agent-message-sender.ts
 2 src/renderer/src/lib/provider-runtime-context.ts
 2 src/renderer/src/lib/remap-open-editor-tabs-for-path-change.ts
 1 src/renderer/src/lib/remote-workspace-drop-test-fixtures.ts
-4 src/renderer/src/lib/repo-runtime-owner.ts
-2 src/renderer/src/lib/resolve-owner.ts
+2 src/renderer/src/lib/repo-runtime-owner.ts
 2 src/renderer/src/lib/resume-sleeping-agent-session.ts
 1 src/renderer/src/lib/runtime-session-mirror-owners.ts
 1 src/renderer/src/lib/runtime-session-mirror-targets.ts
@@ -377,7 +370,7 @@
 1 src/renderer/src/lib/worktree-jump-navigation.ts
 2 src/renderer/src/lib/worktree-operation-route.ts
 1 src/renderer/src/lib/worktree-row-open-in-owner.ts
-6 src/renderer/src/lib/worktree-runtime-owner.ts
+5 src/renderer/src/lib/worktree-runtime-owner.ts
 1 src/renderer/src/lib/worktree-sort-order-host-split.ts
 1 src/renderer/src/runtime/close-mirrored-editor-tab.ts
 1 src/renderer/src/runtime/local-structured-session-tabs-sync/snapshot-apply.ts

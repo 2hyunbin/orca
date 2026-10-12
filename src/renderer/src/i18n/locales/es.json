@@ -1042,12 +1042,6 @@
         "f6300deb8b": "Nueva pestaña del navegador",
         "7a64b31991": "La creación de terminales locales no está disponible mientras haya un host remoto activo",
         "60428567b4": "Mostrar terminales locales no está disponible mientras haya un host remoto activo",
-        "f8aaf2bde3": "Espacio de trabajo subido",
-        "2fe88c2e06": "La sincronización del espacio de trabajo remoto no está disponible",
-        "workspaceChangedOnAnotherDevice": "El espacio de trabajo cambió en otro dispositivo",
-        "2ec42e1c52": "Aún no hay espacio de trabajo remoto",
-        "88214a785b": "La sincronización del espacio de trabajo esperó a que la sesión local terminara de cargarse y agotó el tiempo de espera",
-        "4f78ba5885": "Espacio de trabajo sincronizado",
         "ef223fbb6b": "A device tried to connect but is not paired",
         "11992d0337": "If this was your phone or another Orca client, re-pair it from Settings → Mobile.",
         "6573cfe955": "Open Mobile Settings",
@@ -3159,6 +3153,7 @@
             "remoteTerminalClosed": "La terminal remota se cerró.",
             "ptyAllocationLimit": "Tu sistema no puede asignar más dispositivos pty. Cierra algunas terminales que no estés usando, en Orca o en otro programa, y vuelve a intentarlo.",
             "terminalProcessLimit": "Tu sistema no puede iniciar otro proceso de terminal. Cierra las terminales que no uses o sal de los procesos que no necesites y vuelve a intentarlo.",
+            "hostTerminalCap": "El host ya está ejecutando tantas terminales como permite Orca. Cierra una terminal que ya no necesites y vuelve a intentarlo.",
             "retry": "Reintentar",
             "retrying": "Reintentando…",
             "retryUnavailable": "Reintentar no pudo volver a conectarse todavía. Vuelve a intentarlo en breve.",
@@ -3167,7 +3162,6 @@
             "e16012e31e": "El demonio de terminal propietario de esta sesión salió, por lo que no se pudo recuperar la sesión y su desplazamiento hacia atrás. Abra una nueva terminal para continuar.",
             "sessionUnavailable": "Orca no pudo volver a conectarse a la sesión de terminal de este panel en el host. Abra una nueva terminal para continuar.",
             "sourceRestoring": "Reconectando este terminal: se está restableciendo su salida. La sesión aún está en marcha.",
-            "heldByPreviousRelay": "Este terminal sigue ejecutándose en el host con la versión anterior de Orca, a la que esta versión no puede conectarse. Sigue ejecutándose hasta que salga. Abre un terminal nuevo para seguir trabajando aquí.",
             "ownerHostMismatch": "La sesión guardada de este terminal pertenece a otra conexión de host, así que Orca no puede reconectarlo aquí. Abre un terminal nuevo para continuar."
           },
           "TerminalProcessExitOverlay": {
@@ -3704,8 +3698,6 @@
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
             "connecting": "Conectando…",
-            "workspaceConflict": "Conflicto del espacio de trabajo",
-            "workspaceSyncError": "Error de sincronización del espacio de trabajo",
             "runtime_unavailable_transport_up": "Orca no disponible",
             "runtime_workspace_window_closed": "Ventana del espacio de trabajo cerrada"
           },
@@ -4591,9 +4583,8 @@
         "SkillFreshnessRow": {
           "statusUpdateAvailable": "Actualización disponible",
           "statusCantUpdate": "No se puede actualizar",
-          "cantUpdateReason": "Esta skill está instalada en un lugar que Orca no puede actualizar de forma segura, así que el comando npx skills update la deja sin cambios.",
+          "cantUpdateReason": "Esta skill está instalada en un lugar que Orca no puede actualizar de forma segura, así que el comando de actualización la deja sin cambios.",
           "chipCurrent": "Actual",
-          "chipUnrecognized": "No reconocida",
           "chipInaccessible": "Inaccesible",
           "chipDuplicate": "Duplicada",
           "chipExternalLink": "Enlace externo",
@@ -4602,26 +4593,20 @@
           "chipInRepo": "En un repo",
           "chipPluginCache": "Caché de plugin",
           "tipCurrent": "La skill aquí ya está actualizada; la actualización no la cambiará.",
-          "tipUnrecognized": "El contenido de la skill aquí no coincide con ninguna versión oficial, así que Orca no puede actualizarla de forma segura. Elimina o reemplaza lo que hay aquí para permitir las actualizaciones.",
           "tipInaccessible": "Orca no pudo leer la skill aquí (un error de permisos o de archivo), así que no puede comprobarla ni actualizarla.",
-          "tipDuplicate": "La skill también está instalada aquí, aparte de la principal, así que el comando npx skills update no puede alcanzarla. Elimínala para permitir las actualizaciones.",
+          "tipDuplicate": "La skill también está instalada aquí, aparte de la principal, así que el comando de actualización no puede alcanzarla. Elimínala para permitir las actualizaciones.",
           "tipExternalLink": "Es un acceso directo que apunta fuera de las carpetas de skills de Orca; la actualización no lo seguirá.",
           "tipBrokenLink": "Es un acceso directo a algo que ya no existe; puedes eliminarlo sin problema.",
           "tipReadOnly": "La skill aquí está en una ubicación de solo lectura, así que no se puede actualizar hasta que cambies sus permisos.",
           "tipInRepo": "La skill aquí vive dentro de un proyecto, no en tus skills globales; Orca solo actualiza las globales.",
           "tipPluginCache": "La skill aquí la gestiona un plugin; actualiza el plugin en su lugar.",
-          "skippedReasonUnrecognized": "The copy here doesn’t match the official version — it may be modified, or a different skill with the same name. Orca left it out of the update so it won’t overwrite it. Remove it if you want Orca to update this skill.",
           "skippedReasonReadOnly": "This copy is in a read-only location, so Orca left it out of the update. Change its permissions to let Orca update it.",
           "skippedReasonInaccessible": "Orca couldn’t read this copy, so it left the skill out of the update.",
           "skippedReasonInRepo": "This is a project skill, not a global one — Orca only updates your global skills, so it left this out of the update.",
           "skippedReasonPluginCache": "A plugin manages this skill, so Orca left it out of the update — update the plugin instead.",
           "skippedReasonExternalLink": "This copy is a shortcut pointing outside Orca’s skill folders, so Orca left it out of the update.",
           "skippedReasonBrokenLink": "This copy is a shortcut to something that no longer exists, so Orca left it out — you can safely delete it.",
-          "skippedReasonDuplicate": "This is a separate copy, so the update won’t reach it — the command only refreshes the main copy. Remove this copy, then reinstall the skill so this location follows the main one.",
-          "skippedReasonNewer": "This copy is a later version than the one this build of Orca ships, so Orca left it alone rather than roll it back. Updating Orca will bring the two back in line.",
-          "skippedReasonStaleRecord": "The skills updater has no usable record of this copy, so it reports the skill as already up to date and changes nothing. Reinstall it to bring the record back in line: {{value0}}",
-          "chipNewer": "Newer",
-          "tipNewer": "This copy is a later version than the one this build of Orca ships."
+          "skippedReasonDuplicate": "Es una copia aparte, así que la actualización no la alcanza: el comando solo actualiza la copia principal. Elimina esta copia y vuelve a instalar la skill para que esta ubicación siga a la principal."
         },
         "SkillFreshnessUpdateDialog": {
           "title": "Actualizar skills",
@@ -4662,7 +4647,9 @@
           "scanOutsideRoot": "Orca omitió esta ruta del plugin porque apunta fuera de la caché de plugins.",
           "scanIoErrorWithCode": "Orca no pudo leer esta ruta del plugin ({{value0}}).",
           "scanIoError": "Orca no pudo leer esta ruta del plugin.",
-          "scanIssueLimit": "Orca encontró demasiadas carpetas de plugins omitidas para mostrarlas por separado."
+          "scanIssueLimit": "Orca encontró demasiadas carpetas de plugins omitidas para mostrarlas por separado.",
+          "unselectedForeignOne": "1 skill no instalada por Orca no está seleccionada.",
+          "unselectedForeignMany": "{{value0}} skills no instaladas por Orca no están seleccionadas."
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "Actualización disponible",
@@ -4677,8 +4664,12 @@
           "stillOutdated": "Still out of date after the update ran."
         },
         "SkillUpdateRow": {
-          "oneLocation": "1 location",
-          "manyLocations": "{{value0}} locations"
+          "oneLocation": "1 ubicación",
+          "manyLocations": "{{value0}} ubicaciones",
+          "notFromOrca": "No es de Orca",
+          "notFromOrcaSourceTip": "Instalada desde {{value0}}. Si la seleccionas, se reemplaza por la versión de Orca.",
+          "notFromOrcaNoRecordTip": "No hay registro de instalación de Orca para esta copia. Si la seleccionas, se reemplaza por la versión de Orca.",
+          "includeSkill": "Incluir {{value0}}"
         },
         "host": {
           "local": "Esta máquina",
@@ -5078,8 +5069,7 @@
         "AddProjectFromFolderDialog": {
           "7d1f51678c": "Agregar proyecto",
           "7726a16374": "Cancelar",
-          "046751dbfb": "Agrega esta carpeta como un proyecto de Orca separado.",
-          "e643b30398": "Proyecto agregado en host SSH"
+          "046751dbfb": "Agrega esta carpeta como un proyecto de Orca separado."
         },
         "AddRepoCreateStep": {
           "0ae45b8238": "my-project",
@@ -5097,8 +5087,7 @@
           "fe1e616c5b": "Git es necesario para crear un proyecto.",
           "c234df77f7": "Elige o introduce una carpeta padre del host antes de crear.",
           "3a13f6e88b": "ubicación no seleccionada",
-          "6ed14c0281": "carpeta del host no seleccionada",
-          "ssh_parent_manual": "Introduce una ruta padre SSH."
+          "6ed14c0281": "carpeta del host no seleccionada"
         },
         "AddRepoNestedImportStep": {
           "496f68cf8c": "Escaneando repositorios. Haz clic para detener.",
@@ -5123,13 +5112,9 @@
           "e52454b7f6": "Abrir como carpeta"
         },
         "AddRepoRemoteStep": {
-          "5b205b5281": "Detener escaneo",
           "6680289908": "/inicio/usuario/proyecto",
           "ef410aa881": "Ruta del host",
-          "0416bde073": "Agregar en Ajustes",
-          "df6fbcf880": "No hay destinos SSH configurados.",
           "44637f43bd": "Destino SSH",
-          "80557be85a": "Elige un destino SSH conectado e introduce la ruta a un repositorio Git.",
           "serverDescription": "Elige un host SSH al que se conecta {{server}} e introduce la ruta a un repositorio Git en él.",
           "serverEmpty": "{{server}} aún no tiene hosts SSH.",
           "serverAddHost": "Añadir host SSH",
@@ -5137,10 +5122,7 @@
           "007651bdf9": "Navega hasta un directorio y haz clic en Seleccionar para elegirlo.",
           "dd3ff65486": "Explorar el sistema de archivos remoto",
           "36d427bb66": "Agregar proyecto en host SSH",
-          "35831a7312": "Agregando...",
-          "lockedDescription": "Introduce la ruta a un repositorio Git en {{value0}}.",
-          "lockedDisconnected": "{{value0}} está desconectado.",
-          "93e0221434": "Conectar"
+          "35831a7312": "Agregando..."
         },
         "AddRepoServerStartStep": {
           "ae990c86a0": "Volver a opciones de agregado",
@@ -5890,12 +5872,8 @@
                   "serverSshTitle": "Proyecto en un host SSH de este servidor",
                   "serverSshDescription": "Abre una carpeta de proyecto de un host SSH al que se conecta este servidor",
                   "serverSshUpdate": "Actualiza este servidor para añadir proyectos en sus hosts SSH",
-                  "3d162cc76f": "Proyecto remoto",
                   "fb4fc5380e": "Proyecto local, repositorio de Git o carpeta con muchos repositorios",
                   "2281fdc8c7": "Explorar carpeta",
-                  "sshCreateUnavailable": "Aún no disponible para hosts SSH",
-                  "sshBrowseTitle": "Abrir proyecto en host SSH",
-                  "sshBrowseDescription": "Repositorio Git o carpeta existente en este host SSH",
                   "runtimeBrowseDescription": "Repositorio Git o carpeta existente en este host"
                 }
               }
@@ -11549,7 +11527,7 @@
           "failed": "Update failed",
           "serviceManagerHelp": "Update Orca through the service manager that starts this server.",
           "unpackedHelp": "Development builds must be updated from their source checkout.",
-          "legacyHelp": "Update this server manually once to enable remote updates."
+          "legacyHelp": "Las actualizaciones remotas no están disponibles para este servidor. Actualiza Orca en el servidor."
         },
         "BrowserLinkRoutingSetting": {
           "description": "Abre los enlaces http(s) del terminal, Markdown y el editor en el navegador integrado de Orca. {{shortcut}} siempre usa el navegador del sistema.",
@@ -12376,7 +12354,7 @@
           }
         },
         "sshHostServer": {
-          "sourceChanged": "Se modificó en una versión anterior de Orca: ejecuta el relé hasta que se mueva de nuevo a su servidor gestionado.",
+          "sourceChanged": "Una versión anterior de Orca cambió los proyectos de este host. Mueve esos cambios a su servidor gestionado o conserva la versión del servidor para volver a conectarte.",
           "deploying": "Configurando un servidor Orca gestionado…",
           "converting": "Moviendo los proyectos de este host a su servidor Orca gestionado…",
           "connecting": "Conectando al servidor Orca gestionado…",
@@ -13639,7 +13617,8 @@
             "resumeInChatTranscriptMissing": "El historial de esta conversación no se pudo cargar, por lo que no se puede reanudar en el chat.",
             "resumeInChatFailed": "No se pudo reanudar esta sesión en un chat nuevo.",
             "resumeInNewCliUnavailable": "Esta sesión no se puede abrir en la CLI.",
-            "resumeInNewCliHostTooOld": "Actualiza Orca en el host que ejecuta este chat para reanudarlo en una nueva CLI."
+            "resumeInNewCliHostTooOld": "Actualiza Orca en el host que ejecuta este chat para reanudarlo en una nueva CLI.",
+            "folderWorkspaceUnavailable": "El espacio de trabajo de carpeta ya no está disponible."
           },
           "AiVaultPanelControls": {
             "scanningSessions": "Buscando sesiones",
@@ -13741,7 +13720,9 @@
             "copied": "Copiado",
             "copy": "Copiar",
             "noFirstPromptAvailable": "No hay primer prompt disponible",
-            "loadingFirstPrompt": "Cargando primer prompt…"
+            "loadingFirstPrompt": "Cargando primer prompt…",
+            "folder": "Carpeta",
+            "resumeInFolder": "Reanudar en carpeta"
           },
           "AiVaultSessionRow": {
             "resumeAgentSession": "Reanudar sesión de {{value0}}",
@@ -13837,7 +13818,12 @@
             "noRecordedWorktree": "No se registró ningún worktree para esta sesión.",
             "archivedJumpUnavailable": "Esta sesión está en un worktree archivado.",
             "noActiveWorktreeMatch": "Ningún worktree activo coincide con esta sesión.",
-            "noActiveWorktreeTarget": "No hay ningún worktree activo disponible."
+            "noActiveWorktreeTarget": "No hay ningún worktree activo disponible.",
+            "activeFolder": "Carpeta",
+            "archivedFolder": "Carpeta archivada",
+            "archivedFolderJumpUnavailable": "Esta sesión está en una carpeta archivada.",
+            "currentFolder": "Carpeta actual",
+            "jumpToFolder": "Saltar a la carpeta"
           },
           "AiVaultSessionSubagents": {
             "subagentsCount": "Subagentes ({{value0}})",
@@ -17934,7 +17920,6 @@
         "imagePasteFailed": "Error al pegar imagen.",
         "worktreeNotReady": "Worktree no está listo — intenta de nuevo en un momento.",
         "pasteUnavailable": "No se puede pegar — este chat no acepta entradas en este momento.",
-        "uploadingAttachments": "Subiendo {{value0}} archivo(s) al remoto…",
         "model": "Modelo",
         "effort": "Esfuerzo",
         "fastMode": "Modo rápido",
@@ -18335,7 +18320,8 @@
         "orcaStopQuit": "Orca en {{machine}} se cerró mientras esta respuesta estaba en curso.",
         "orcaStopCrash": "Orca en {{machine}} se detuvo inesperadamente mientras esta respuesta estaba en curso.",
         "orcaStopRemote": "Orca en {{machine}} se detuvo mientras esta respuesta estaba en curso.",
-        "orcaStopCanContinue": "Puedes continuar en esta conversación."
+        "orcaStopCanContinue": "Puedes continuar en esta conversación.",
+        "orcaStopUnnamedServer": "el servidor remoto"
       },
       "providerFrame": {
         "byteLength": "{{value0}} bytes"
