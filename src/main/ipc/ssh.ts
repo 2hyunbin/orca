@@ -79,6 +79,7 @@ const SSH_IPC_CHANNELS = [
   'ssh:getState',
   'ssh:needsPassphrasePrompt',
   'ssh:testConnection',
+  'ssh:endOldRelayTerminals',
   'ssh:addPortForward',
   'ssh:updatePortForward',
   'ssh:removePortForward',
