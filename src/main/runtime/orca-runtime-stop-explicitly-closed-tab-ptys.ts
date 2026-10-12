@@ -1,15 +1,27 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import type { RuntimeExplicitTerminalCloseStops } from './session-tabs/explicit-terminal-close-stops'
+import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from './orca-runtime-prune-mobile-session-tab-group-layout'
+import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from './orca-runtime-transition-graph-reload-to-terminal-state'
 import { OrcaRuntimeWithFocusTerminal } from './orca-runtime-focus-terminal'
-
 import type { RuntimeTerminalClose } from '../../shared/runtime-types'
 import type { RuntimePtyTabCloseAuthority } from './runtime-terminal-state-records'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 
-/** How an explicit close's stop of its addressed PTY ended. */
-type ExplicitCloseStop = { stopped: boolean }
+import {
+  NO_STOP,
+  type ExplicitCloseStop,
+  type RuntimeExplicitTerminalCloseStops
+} from './session-tabs/explicit-terminal-close-stops'
 
-export class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithFocusTerminal {
+export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithFocusTerminal {
+  protected abstract getMobileTerminalLeafPtyIds(
+    ...args: Parameters<
+      OrcaRuntimeWithPruneMobileSessionTabGroupLayout['getMobileTerminalLeafPtyIds']
+    >
+  ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['getMobileTerminalLeafPtyIds']>
+
+  protected abstract assertGraphReady(
+    ...args: Parameters<OrcaRuntimeWithTransitionGraphReloadToTerminalState['assertGraphReady']>
+  ): ReturnType<OrcaRuntimeWithTransitionGraphReloadToTerminalState['assertGraphReady']>
+
   protected stopExplicitlyClosedTabPtys(
     ...args: Parameters<RuntimeExplicitTerminalCloseStops['stopExplicitlyClosedTabPtys']>
   ): ReturnType<RuntimeExplicitTerminalCloseStops['stopExplicitlyClosedTabPtys']> {

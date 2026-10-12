@@ -1,16 +1,11 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithResolveTerminalSplitSourceAuthority } from './orca-runtime-resolve-terminal-split-source-authority'
-import {
-  runtimeWorktreeIdentityKey,
-  runtimeWorktreeIdsEqual
-} from './runtime-worktree-path-identity'
+import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from './orca-runtime-transition-graph-reload-to-terminal-state'
+import type { RuntimeWorkspaceQuerySurface } from './workspaces/workspace-query-surface'
+import type { OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController } from './orca-runtime-refresh-pty-worktree-records-from-controller'
+import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from './orca-runtime-stop-exact-terminals-for-worktree'
+import { WorktreeTerminalAdmission } from './terminal/stop/worktree-terminal-admission'
+import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
 import { teardownRpcDeadline } from './worktree-teardown'
-import { WORKTREE_TERMINALS_SLEEPING_ERROR } from './worktree-terminals-sleeping-error'
-import type {
-  RuntimeWorktreeTerminalCloseResult,
-  RuntimeWorktreeTerminalSleepResult
-} from '../../shared/runtime-types'
-import type { WorktreeTerminalMutationKind } from './worktree-terminal-mutation-lock'
+import type { RuntimeWorktreeTerminalCloseResult } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { cloneWorkspaceSessionState } from '../persistence/restoring-sessions/session-owner-fields'
 import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../persistence/restoring-sessions/workspace-session-write-rollback'
@@ -23,7 +18,51 @@ import { worktreePtyBelongsToHost, type WorktreePtyHostFence } from './worktree-
 import { summarizeWorktreePtyStopVerdict } from './worktree-pty-stop-verdict'
 import { describeMobileSessionTabCloseRefusal } from './mobile-session-tab-close-refusal-message'
 
-export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithResolveTerminalSplitSourceAuthority {
+export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends WorktreeTerminalAdmission {
+  protected abstract getTerminalHandlesForPtyId(
+    ...args: Parameters<OrcaRuntimeWithStopExactTerminalsForWorktree['getTerminalHandlesForPtyId']>
+  ): ReturnType<OrcaRuntimeWithStopExactTerminalsForWorktree['getTerminalHandlesForPtyId']>
+
+  protected abstract getRecordedTerminalSleepHandles(
+    ...args: Parameters<
+      OrcaRuntimeWithStopExactTerminalsForWorktree['getRecordedTerminalSleepHandles']
+    >
+  ): ReturnType<OrcaRuntimeWithStopExactTerminalsForWorktree['getRecordedTerminalSleepHandles']>
+
+  protected abstract commitWorktreeTerminalSleepPtys(
+    ...args: Parameters<
+      OrcaRuntimeWithStopExactTerminalsForWorktree['commitWorktreeTerminalSleepPtys']
+    >
+  ): ReturnType<OrcaRuntimeWithStopExactTerminalsForWorktree['commitWorktreeTerminalSleepPtys']>
+
+  protected abstract captureReadyGraphEpoch(
+    ...args: Parameters<
+      OrcaRuntimeWithTransitionGraphReloadToTerminalState['captureReadyGraphEpoch']
+    >
+  ): ReturnType<OrcaRuntimeWithTransitionGraphReloadToTerminalState['captureReadyGraphEpoch']>
+
+  protected abstract assertStableReadyGraph(
+    ...args: Parameters<
+      OrcaRuntimeWithTransitionGraphReloadToTerminalState['assertStableReadyGraph']
+    >
+  ): ReturnType<OrcaRuntimeWithTransitionGraphReloadToTerminalState['assertStableReadyGraph']>
+
+  protected abstract getResolvedWorktreeMap(
+    ...args: Parameters<RuntimeWorkspaceQuerySurface['getResolvedWorktreeMap']>
+  ): ReturnType<RuntimeWorkspaceQuerySurface['getResolvedWorktreeMap']>
+
+  protected abstract refreshPtyWorktreeRecordsFromController(
+    ...args: Parameters<
+      OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController['refreshPtyWorktreeRecordsFromController']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController['refreshPtyWorktreeRecordsFromController']
+  >
+
+  protected abstract getLivePtyIdsForWorktree(
+    ...args: Parameters<OrcaRuntimeWithStopExactTerminalsForWorktree['getLivePtyIdsForWorktree']>
+  ): ReturnType<OrcaRuntimeWithStopExactTerminalsForWorktree['getLivePtyIdsForWorktree']>
+
   private collectWorktreePtyIds(
     worktreeId: string,
     hostFence: WorktreePtyHostFence,
@@ -51,7 +90,11 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
     return ptyIds
   }
 
-  private getWorktreeHostFence(worktree: { id: string; repoId?: string }): WorktreePtyHostFence {
+  private getWorktreeHostFence(worktree: {
+    id: string
+    repoId?: string
+    hostId?: ExecutionHostId
+  }): WorktreePtyHostFence {
     const repo = worktree.repoId ? this.store?.getRepo?.(worktree.repoId) : undefined
     const parsedHost = parseExecutionHostId(getWorktreeExecutionHostId(worktree, repo))
     return parsedHost?.kind === 'runtime'
@@ -123,8 +166,9 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
     ) {
       throw new Error('workspace_session_unavailable')
     }
+    // SAFETY: Erased assertions preserve guarded legacy reads and native errors if capabilities change.
     const refusal = await this.store.runDurableMutation<Error | undefined>(() => {
-      const session = cloneWorkspaceSessionState(this.store.getWorkspaceSession(hostId))
+      const session = cloneWorkspaceSessionState(this.store!.getWorkspaceSession!(hostId))
       const sleepingAgentSessionsByPaneKey = Object.fromEntries(
         Object.entries(session.sleepingAgentSessionsByPaneKey ?? {}).filter(
           ([, record]) => record.worktreeId !== worktreeId
@@ -155,15 +199,15 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
         sleepingAgentSessionsByPaneKey,
         terminalPtyIncarnationsByPaneKey
       }
-      this.store.setWorkspaceSession(next, hostId)
-      const staged = cloneWorkspaceSessionState(this.store.getWorkspaceSession(hostId))
+      this.store!.setWorkspaceSession!(next, hostId)
+      const staged = cloneWorkspaceSessionState(this.store!.getWorkspaceSession!(hostId))
       return {
         value: undefined,
         rollback: () => {
-          const current = this.store.getWorkspaceSession(hostId)
+          const current = this.store!.getWorkspaceSession!(hostId)
           const rolledBack = rollbackWorkspaceSessionAfterFailedAsyncWrite(session, staged, current)
           if (rolledBack !== current) {
-            this.store.setWorkspaceSession(rolledBack, hostId)
+            this.store!.setWorkspaceSession!(rolledBack, hostId)
           }
         }
       }
@@ -241,85 +285,5 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
       }
     }
     return { stopped }
-  }
-
-  async sleepTerminalsForWorktree(
-    worktreeSelector: string
-  ): Promise<RuntimeWorktreeTerminalSleepResult> {
-    const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    const existing = this.terminalSleepByWorktreeId.get(worktree.id)
-    if (existing) {
-      return await existing
-    }
-
-    const sleeping = this.sleepResolvedWorktreeTerminals(worktree)
-    this.terminalSleepByWorktreeId.set(worktree.id, sleeping)
-    try {
-      return await sleeping
-    } finally {
-      if (this.terminalSleepByWorktreeId.get(worktree.id) === sleeping) {
-        this.terminalSleepByWorktreeId.delete(worktree.id)
-      }
-    }
-  }
-
-  async acquireWorktreeTerminalSpawn(
-    worktreeId?: string,
-    opts: { refuseSleptWorktree?: boolean } = {}
-  ): Promise<() => void> {
-    if (!worktreeId) {
-      return () => {}
-    }
-    const release = await this.acquireWorktreeTerminalMutation(worktreeId, 'shared')
-    const key = runtimeWorktreeIdentityKey(worktreeId)
-    const sleepState = this.terminalSleepStateByWorktreeId.get(key)
-    // Why: re-checked under the lock, since a sleep can commit while an automatic spawn waits for it.
-    if (sleepState && opts.refuseSleptWorktree) {
-      release()
-      throw new Error(WORKTREE_TERMINALS_SLEEPING_ERROR)
-    }
-    if (sleepState?.phase === 'sleeping' || sleepState?.phase === 'partial') {
-      this.terminalSleepStateByWorktreeId.delete(key)
-      this.emitClientEvent({
-        type: 'worktreeTerminalSleepState',
-        worktreeId: sleepState.worktreeId,
-        generation: sleepState.generation,
-        phase: 'woken',
-        ptyIds: sleepState.ptyIds,
-        terminalHandles: sleepState.terminalHandles
-      })
-    }
-    return release
-  }
-
-  /** Whether the host itself has put (or is putting) this worktree's terminals to sleep. */
-  protected isWorktreeTerminalSleepHeld(worktreeId: string): boolean {
-    return this.terminalSleepStateByWorktreeId.has(runtimeWorktreeIdentityKey(worktreeId))
-  }
-
-  protected async runWorktreeTerminalMutation<T>(
-    worktreeId: string,
-    operation: () => Promise<T>
-  ): Promise<T> {
-    // Why exclusive: adoption reconciles this worktree's terminal records, so
-    // it must not interleave with a spawn registering a pty or with a sleep.
-    const release = await this.acquireWorktreeTerminalMutation(worktreeId, 'exclusive')
-    try {
-      return await operation()
-    } finally {
-      release()
-    }
-  }
-
-  protected async acquireWorktreeTerminalMutation(
-    worktreeId: string,
-    kind: WorktreeTerminalMutationKind,
-    deadline?: number
-  ): Promise<() => void> {
-    return await this.terminalMutationLock.acquire(
-      runtimeWorktreeIdentityKey(worktreeId),
-      kind,
-      deadline
-    )
   }
 }

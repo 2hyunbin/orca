@@ -1,6 +1,6 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { triggerTerminalSpawnPushTargetMaterialization } from './runtime-terminal-spawn-push-target-materialization'
-import { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from './orca-runtime-transition-graph-reload-to-terminal-state'
+import { TerminalWorkspaceIdValidation } from './terminal/launch/terminal-workspace-id-validation'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import { floatingWorkspaceToWorktree } from '../../shared/floating-workspace-worktree'
 import { resolveFloatingTerminalCwd } from '../ipc/floating-workspace-directory'
@@ -40,7 +40,7 @@ function withoutWorktreeLineage(worktree: Worktree): ResolvedWorktree {
   }
 }
 
-export class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree extends OrcaRuntimeWithTransitionGraphReloadToTerminalState {
+export class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree extends TerminalWorkspaceIdValidation {
   protected readonly terminalWorkspaceLaunch = new RuntimeTerminalWorkspaceLaunch({
     resolveTerminalWorkspaceLaunchTarget: () =>
       this.sessionPorts.bindRuntimeMethod(this.resolveTerminalWorkspaceLaunchTarget),
@@ -102,9 +102,6 @@ export class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree extend
       tabId,
       agentTeamsEnv
     )
-  }
-  protected getValidatedExplicitWorktreeIdSelector(selector: string | undefined): string | null {
-    return this.terminalWorkspaceLaunch.getValidatedExplicitWorktreeIdSelector(selector)
   }
   protected readonly terminalExecutionContext = new RuntimeTerminalExecutionContext({
     getPtysById: () => this.ptysById,

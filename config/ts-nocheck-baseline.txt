@@ -61,12 +61,8 @@ src/main/runtime/orca-runtime-runtime-id.ts
 src/main/runtime/orca-runtime-schedule-mobile-session-tabs-changed.ts
 src/main/runtime/orca-runtime-serialize-agent-prompt-submission.ts
 src/main/runtime/orca-runtime-serialize-headless-terminal-buffer.ts
-src/main/runtime/orca-runtime-sleep-resolved-worktree-terminals.ts
 src/main/runtime/orca-runtime-state-fields.ts
-src/main/runtime/orca-runtime-stop-exact-terminals-for-worktree.ts
-src/main/runtime/orca-runtime-stop-explicitly-closed-tab-ptys.ts
 src/main/runtime/orca-runtime-stop-requested-pty-ids.ts
-src/main/runtime/orca-runtime-stop-terminals-for-worktree.ts
 src/main/runtime/orca-runtime-stored-mobile-snapshot-has-stale-preserved-tab.ts
 src/main/runtime/orca-runtime-subscribe-to-terminal-resize.ts
 src/main/runtime/orca-runtime-terminal-create-deduplication.ts

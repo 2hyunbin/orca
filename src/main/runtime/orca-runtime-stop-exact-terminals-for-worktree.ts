@@ -1,9 +1,33 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness } from './orca-runtime-refresh-floating-workspace-pty-liveness'
+import type { OrcaRuntimeWithBuildPtyTerminalSummary } from './orca-runtime-build-pty-terminal-summary'
+import type { OrcaRuntimeWithRecordPtyWorktree } from './orca-runtime-record-pty-worktree'
+import type { OrcaRuntimeWithBindPtyIncarnationHandle } from './orca-runtime-bind-pty-incarnation-handle'
+import type { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
 import { OrcaRuntimeWithSleepResolvedWorktreeTerminals } from './orca-runtime-sleep-resolved-worktree-terminals'
 import { setsEqual } from './runtime-worktree-binding-index'
 import { runtimeWorktreeIdsEqual } from './runtime-worktree-path-identity'
 
-export class OrcaRuntimeWithStopExactTerminalsForWorktree extends OrcaRuntimeWithSleepResolvedWorktreeTerminals {
+export abstract class OrcaRuntimeWithStopExactTerminalsForWorktree extends OrcaRuntimeWithSleepResolvedWorktreeTerminals {
+  protected abstract getLeavesForPty(
+    ...args: Parameters<OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['getLeavesForPty']>
+  ): ReturnType<OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness['getLeavesForPty']>
+
+  protected abstract issueHandle(
+    ...args: Parameters<OrcaRuntimeWithBuildPtyTerminalSummary['issueHandle']>
+  ): ReturnType<OrcaRuntimeWithBuildPtyTerminalSummary['issueHandle']>
+
+  protected abstract getOrCreatePtyWorktreeRecord(
+    ...args: Parameters<OrcaRuntimeWithRecordPtyWorktree['getOrCreatePtyWorktreeRecord']>
+  ): ReturnType<OrcaRuntimeWithRecordPtyWorktree['getOrCreatePtyWorktreeRecord']>
+
+  protected abstract issuePtyHandle(
+    ...args: Parameters<OrcaRuntimeWithBindPtyIncarnationHandle['issuePtyHandle']>
+  ): ReturnType<OrcaRuntimeWithBindPtyIncarnationHandle['issuePtyHandle']>
+
+  protected abstract getLeafKey(
+    ...args: Parameters<OrcaRuntimeWithResolveWaiter['getLeafKey']>
+  ): ReturnType<OrcaRuntimeWithResolveWaiter['getLeafKey']>
+
   async stopExactTerminalsForWorktree(
     worktreeSelector: string,
     expectedPtyIds: readonly string[],

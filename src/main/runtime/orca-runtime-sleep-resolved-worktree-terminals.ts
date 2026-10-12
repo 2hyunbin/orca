@@ -1,4 +1,3 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithStopTerminalsForWorktree } from './orca-runtime-stop-terminals-for-worktree'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import type { RuntimeWorktreeTerminalSleepResult } from '../../shared/runtime-types'
@@ -9,7 +8,7 @@ import {
 } from './runtime-worktree-path-identity'
 import { teardownRpcDeadline } from './worktree-teardown'
 
-export class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends OrcaRuntimeWithStopTerminalsForWorktree {
+export abstract class OrcaRuntimeWithSleepResolvedWorktreeTerminals extends OrcaRuntimeWithStopTerminalsForWorktree {
   protected async sleepResolvedWorktreeTerminals(
     worktree: ResolvedWorktree
   ): Promise<RuntimeWorktreeTerminalSleepResult> {

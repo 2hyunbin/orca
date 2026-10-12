@@ -13,9 +13,6 @@ import {
 } from '../../orca-runtime-core'
 import { ensureJcodeRuntimeDir } from '../../../../shared/jcode-runtime-dir'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import { getExplicitWorktreeIdSelector } from '../../runtime-worktree-selection'
-import { WORKTREE_ID_SEPARATOR } from '../../../../shared/worktree/id'
-import { WorktreeIdRequiresFullPathError } from '../../runtime-worktree-lineage-resolution'
 import { resolveCreatedWorktreeTerminalTarget } from '../../runtime-created-worktree-terminal-target'
 import type { RuntimeStore } from '../../runtime-store-contract'
 import type { RuntimeWorkspaceSelectors } from '../../workspaces/workspace-selectors'
@@ -145,18 +142,5 @@ export class RuntimeTerminalWorkspaceLaunch {
       ORCA_PROJECT_GROUP_ID: scope.folderWorkspace.projectGroupId,
       ORCA_WORKSPACE_ROOT: scope.folderWorkspace.folderPath
     }
-  }
-
-  getValidatedExplicitWorktreeIdSelector(selector: string | undefined): string | null {
-    const worktreeId = getExplicitWorktreeIdSelector(selector)
-    if (
-      worktreeId &&
-      !worktreeId.includes(WORKTREE_ID_SEPARATOR) &&
-      this.store?.getRepo(worktreeId)
-    ) {
-      // Why: a registered repo id is a known-invalid worktree id; reject early before fast paths or Git/SSH scans hide the mistake.
-      throw new WorktreeIdRequiresFullPathError()
-    }
-    return worktreeId
   }
 }

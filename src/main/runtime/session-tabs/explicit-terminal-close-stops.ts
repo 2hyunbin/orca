@@ -5,7 +5,7 @@ import { errorMessage } from '../../../shared/error-message'
 import type { RuntimePtyController } from '../runtime-pty-controller-contract'
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
 export type ExplicitCloseStop = { stopped: boolean }
-const NO_STOP: ExplicitCloseStop = { stopped: false }
+export const NO_STOP: ExplicitCloseStop = { stopped: false }
 
 export type RuntimeExplicitTerminalCloseStopsHost = {
   markPtyStopRequested(ptyId: string): void
