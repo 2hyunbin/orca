@@ -5,7 +5,7 @@ export const WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME = 'orca-agent-hook.exe'
 
 /** The agent argument the exe takes for a managed script: `claude-hook.cmd` → `claude`. */
 export function getWindowsNativeHookAgent(scriptFileName: string): string {
-  return scriptFileName.replace(/-hook(?:\.(?:cmd|exe|ps1|sh))?$/, '')
+  return scriptFileName.replace(/-hook(?:\.(?:cmd|ps1|sh))?$/, '')
 }
 
 /**

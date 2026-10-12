@@ -5,7 +5,6 @@ import type { PipedChildProcess } from '@orca/process-host/process-spec'
 import { once } from 'node:events'
 import {
   existsSync,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -71,17 +70,16 @@ describe('getManagedLifecycleHook native executable gate', () => {
     })
   })
 
-  it('owns the new command and the pre-rename claude-hook.exe one; no other agent does', () => {
-    const isClaude = createManagedCommandMatcher('claude-hook.cmd')
-    const commands = [
-      `C:/Users/alice/.orca/agent-hooks/${EXE} claude`,
-      'C:/Users/alice/.orca/agent-hooks/claude-hook.exe'
-    ]
-    expect(commands.map(isClaude)).toEqual([true, true])
+  it('owns the `<exe> claude` command, and no other agent does', () => {
+    const command = `C:/Users/alice/.orca/agent-hooks/${EXE} claude`
+    expect(createManagedCommandMatcher('claude-hook.cmd')(command)).toBe(true)
     for (const other of ['openclaude-hook.cmd', 'codebuddy-hook.cmd']) {
-      expect(commands.map(createManagedCommandMatcher(other)), other).toEqual([false, false])
+      expect(createManagedCommandMatcher(other)(command), other).toBe(false)
     }
-    expect(isClaude(`C:/Users/alice/.orca/agent-hooks/${EXE} claudex`)).toBe(false)
+    expect(
+      createManagedCommandMatcher('claude-hook.cmd')(`${command}x`),
+      'a longer agent name'
+    ).toBe(false)
   })
 
   it('falls back to the .cmd form without an installed exe or with a path shells cannot carry', () => {
@@ -168,23 +166,6 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
     expect([after.ino, after.mtimeNs]).toEqual([before.ino, before.mtimeNs])
   })
 
-  it('migrates a pre-rename claude-hook.exe registration and removes its copy', () => {
-    const { hooksDir, settingsPath, bundle } = useTempHome()
-    mkdirSync(hooksDir, { recursive: true })
-    mkdirSync(join(home, '.claude'), { recursive: true })
-    writeFileSync(join(hooksDir, 'claude-hook.exe'), 'MZ previous build')
-    const legacy = join(hooksDir, 'claude-hook.exe').replaceAll('\\', '/')
-    writeFileSync(
-      settingsPath,
-      JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: legacy }] }] } })
-    )
-    bundledHook.path = bundle
-
-    expect(new ClaudeHookService().install(CURRENT_CLAUDE).state).toBe('installed')
-    expect(managedCommands(settingsPath, 'Stop')).toEqual([exeCommand(hooksDir)])
-    expect(existsSync(join(hooksDir, 'claude-hook.exe'))).toBe(false)
-  })
-
   it('registers the .cmd hook when no signed exe ships, and status accepts either form', () => {
     const { hooksDir, settingsPath, bundle } = useTempHome()
     const service = new ClaudeHookService()
@@ -198,8 +179,13 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
     expect(service.install(CURRENT_CLAUDE).state).toBe('installed')
     expect(managedCommands(settingsPath, 'Stop')).toEqual([exeCommand(hooksDir)])
 
-    // And back: an install that cannot place the exe returns to the .cmd hook.
+    // A build that cannot read its bundle (a dev checkout) keeps the copy already installed...
     bundledHook.path = join(home, 'missing.exe')
+    expect(service.install(CURRENT_CLAUDE).state).toBe('installed')
+    expect(managedCommands(settingsPath, 'Stop')).toEqual([exeCommand(hooksDir)])
+
+    // ...and returns to the .cmd hook only when no copy is left.
+    rmSync(join(hooksDir, EXE))
     expect(service.install(CURRENT_CLAUDE).state).toBe('installed')
     expect(managedCommands(settingsPath, 'Stop')).toEqual([cmdCommand])
   })

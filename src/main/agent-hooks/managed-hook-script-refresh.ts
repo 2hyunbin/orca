@@ -65,9 +65,14 @@ async function writeScriptWithAclRetry(
 export async function refreshManagedScriptIfPresent(
   scriptPath: string,
   content: string | Buffer,
-  options: { lockedTargetAside?: string } = {}
+  options: { moveLockedTargetAside?: boolean } = {}
 ): Promise<boolean> {
-  return writeManagedScriptAtomically(scriptPath, content, false, options.lockedTargetAside)
+  return writeManagedScriptAtomically(
+    scriptPath,
+    content,
+    false,
+    options.moveLockedTargetAside === true
+  )
 }
 
 // Callers must establish ownership from a surviving managed script or registration first.
@@ -80,7 +85,7 @@ async function writeManagedScriptAtomically(
   scriptPath: string,
   content: string | Buffer,
   allowMissing: boolean,
-  lockedTargetAside?: string
+  moveLockedTargetAside = false
 ): Promise<boolean> {
   const existing = await readExistingScript(scriptPath)
   if (!existing.exists && !allowMissing) {
@@ -102,7 +107,7 @@ async function writeManagedScriptAtomically(
     if (!allowMissing && !(await scriptStillExists(scriptPath))) {
       return false
     }
-    await renameOverLockedTargetAsync(tmpPath, scriptPath, lockedTargetAside)
+    await renameOverLockedTargetAsync(tmpPath, scriptPath, moveLockedTargetAside)
     return true
   } finally {
     await rm(tmpPath, { force: true }).catch(() => undefined)

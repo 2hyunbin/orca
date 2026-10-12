@@ -73,12 +73,11 @@ export {
 export function createManagedCommandMatcher(
   scriptFileName: string
 ): (command: string | undefined) => boolean {
-  const scriptStem = scriptFileName.replace(/\.(?:cmd|exe|ps1|sh)$/, '')
-  // Why: installs use .cmd/.exe/.ps1 (Windows) or .sh (SSH/POSIX); match all so a form switch still sweeps stale hooks.
+  const scriptStem = scriptFileName.replace(/\.(?:cmd|ps1|sh)$/, '')
+  // Why: installs use .cmd/.ps1 (Windows) or .sh (SSH/POSIX); match all so a platform switch still sweeps stale hooks.
   const needles = [
     `agent-hooks/${scriptFileName}`,
     `agent-hooks/${scriptStem}.cmd`,
-    `agent-hooks/${scriptStem}.exe`,
     `agent-hooks/${scriptStem}.ps1`,
     `agent-hooks/${scriptStem}.sh`
   ]
@@ -239,7 +238,7 @@ export function hookDefinitionHasManagedCommand(
 export function writeManagedScript(
   scriptPath: string,
   content: string | Buffer,
-  options: { lockedTargetAside?: string } = {}
+  options: { moveLockedTargetAside?: boolean } = {}
 ): void {
   const dir = dirname(scriptPath)
   mkdirSync(dir, { recursive: true })
@@ -264,7 +263,7 @@ export function writeManagedScript(
     if (process.platform !== 'win32') {
       chmodSync(tmpPath, 0o755)
     }
-    renameOverLockedTarget(tmpPath, scriptPath, options.lockedTargetAside)
+    renameOverLockedTarget(tmpPath, scriptPath, options.moveLockedTargetAside === true)
   } finally {
     if (existsSync(tmpPath)) {
       try {
