@@ -37,10 +37,14 @@ export function ShellDownloadProgress({
           <Animated.View style={[styles.fill, { transform: [{ scaleX: shown }] }]} />
         </View>
       </View>
-      <Text style={styles.label}>{DOWNLOADING_LABEL}</Text>
-      <Text style={styles.caption} testID="mobile-web-shell-progress">
-        {`${source}${megabytes(state.receivedBytes)} of ${megabytes(state.totalBytes)} MB`}
-      </Text>
+      {/* The caption hangs below the label out of flow, so the centred column is the waiting
+          frame's height and the bar and label sit where its spinner and label do. */}
+      <View style={styles.labelRow}>
+        <Text style={styles.label}>{DOWNLOADING_LABEL}</Text>
+        <Text style={styles.caption} testID="mobile-web-shell-progress">
+          {`${source}${megabytes(state.receivedBytes)} of ${megabytes(state.totalBytes)} MB`}
+        </Text>
+      </View>
     </>
   )
 }
@@ -64,6 +68,9 @@ const styles = StyleSheet.create({
     transformOrigin: 'left',
     backgroundColor: colors.textSecondary
   },
+  labelRow: {
+    alignSelf: 'stretch'
+  },
   label: {
     fontSize: typography.bodySize,
     color: colors.textSecondary,
@@ -71,6 +78,11 @@ const styles = StyleSheet.create({
     textAlign: 'center'
   },
   caption: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     fontSize: typography.metaSize,
     color: colors.textMuted,
     marginTop: spacing.sm,
