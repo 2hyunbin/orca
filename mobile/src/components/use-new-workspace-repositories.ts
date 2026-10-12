@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { RpcClient } from '../transport/rpc-client'
 import { getCachedRepos, setCachedRepos } from '../cache/repo-cache'
-import { listHostRepos, listServerRepos } from '../worktree/server-repos'
+import { listHostRepos } from '../worktree/server-repos'
+import { useServerRepos } from '../worktree/use-server-repos'
 import { useLastVisitedWorktreeRepoId } from '../worktree/use-last-visited-worktree-repo'
 import {
   getMobileNewWorkspaceDialogEligibleRepos,
@@ -12,7 +13,6 @@ import {
 import type { MobileWorkspaceRepo } from './new-worktree-modal-types'
 
 const NO_SERVER_CLIENTS: ReadonlyMap<ExecutionHostId, RpcClient> = new Map()
-const NO_SERVER_REPOS: ReadonlyMap<ExecutionHostId, MobileWorkspaceRepo[]> = new Map()
 
 /**
  * The desktop's repos, then each reachable server's as it answers: a slow server never holds back
@@ -35,7 +35,7 @@ export function useNewWorkspaceRepositories(args: {
     hostId ? (getCachedRepos(hostId) as MobileWorkspaceRepo[] | null) : null
   )
   const [desktopRepos, setDesktopRepos] = useState<MobileWorkspaceRepo[]>(initialRepos ?? [])
-  const [serverRepos, setServerRepos] = useState(NO_SERVER_REPOS)
+  const serverRepos = useServerRepos<MobileWorkspaceRepo>(serverClients, visible)
   const [pickedRepo, setSelectedRepo] = useState<MobileWorkspaceRepo | null>(null)
   const [loading, setLoading] = useState(initialRepos == null)
   const lastVisitedRepo = useLastVisitedWorktreeRepoId(hostId, visible)
@@ -93,28 +93,6 @@ export function useNewWorkspaceRepositories(args: {
       stale = true
     }
   }, [visible, client, hostId])
-
-  useEffect(() => {
-    // A server the phone can no longer reach takes its repos with it.
-    setServerRepos((previous) => {
-      const kept = [...previous].filter(([host]) => serverClients.has(host))
-      return kept.length === previous.size ? previous : new Map(kept)
-    })
-    if (!visible) {
-      return
-    }
-    let stale = false
-    for (const [executionHostId, serverClient] of serverClients) {
-      void listServerRepos<MobileWorkspaceRepo>(executionHostId, serverClient).then((listed) => {
-        if (!stale && listed) {
-          setServerRepos((previous) => new Map(previous).set(executionHostId, listed))
-        }
-      })
-    }
-    return () => {
-      stale = true
-    }
-  }, [visible, serverClients])
 
   return { repos, selectedRepo, setSelectedRepo, loading: loading && repos.length === 0 }
 }

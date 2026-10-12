@@ -7,7 +7,6 @@ import {
   normalizeVisibleTaskProviders,
   useHostClient,
   useHostRepoList,
-  useMemo,
   useLastConnectedAt,
   useRelayRecoveryStatus,
   useLocalSearchParams,
@@ -19,8 +18,7 @@ import {
 } from './mobile-tasks-dependencies'
 import { newTabRepoListRead } from '../session/mobile-session-read-operations'
 import { useOptionalHostProtocolGates } from '../components/host-protocol-gates-context'
-import { listReachableServerRepos } from '../worktree/server-repos'
-import { routeTaskRepoCalls } from './task-repo-host-routing'
+import { useTaskHostRepos } from './use-task-host-repos'
 import {
   type ActionableTaskItem,
   DEFAULT_LINEAR_DISPLAY_PROPERTIES,
@@ -67,24 +65,16 @@ export function useMobileTasksRouteAndItemState() {
     desktopClient,
     desktopClient && connState === 'connected'
       ? async () => {
-          // Why: the desktop's task page lists every host's repos, so the servers' join its own.
-          const [reply, serverRepos] = await Promise.all([
-            newTabRepoListRead.request(desktopClient),
-            listReachableServerRepos<RepoSummary>(desktopClient, hostCapabilities)
-          ])
+          const reply = await newTabRepoListRead.request(desktopClient)
           // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
-          return [...(newTabRepoListRead.interpret(reply) as RepoSummary[]), ...serverRepos]
+          return newTabRepoListRead.interpret(reply) as RepoSummary[]
         }
       : null
   )
-  const { current: currentRepos } = repoList
   // Why one client: every call naming a server's repo then runs on that server.
-  const client = useMemo(
-    () => desktopClient && routeTaskRepoCalls(desktopClient, currentRepos),
-    [currentRepos, desktopClient]
+  const { client, repos, repoListEnsureLoaded, repoListReload, serverLabelById } = useTaskHostRepos(
+    { desktopClient, connState, hostCapabilities, desktopRepoList: repoList }
   )
-  const repos = repoList.state.repos
-  const { ensureLoaded: repoListEnsureLoaded, reload: repoListReload } = repoList
   const [provider, setProvider] = useState<TaskProvider>('github')
   const [visibleProviders, setVisibleProviders] = useState<TaskProvider[]>(() =>
     normalizeVisibleTaskProviders(undefined)
@@ -198,6 +188,7 @@ export function useMobileTasksRouteAndItemState() {
     taskResumeRef,
     repoList,
     repos,
+    serverLabelById,
     repoListEnsureLoaded,
     repoListReload,
     provider,

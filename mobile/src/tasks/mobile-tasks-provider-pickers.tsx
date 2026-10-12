@@ -17,6 +17,7 @@ import {
   normalizeLinearFilter,
   repositoryCount,
   getRepoBadgeColor,
+  getTaskRepoDetail,
   issueSourceSlug,
   GITHUB_KIND_OPTIONS
 } from './mobile-tasks-legacy-foundation'
@@ -93,6 +94,7 @@ export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) 
     hostedRepos,
     persistRepoSelection,
     selectedRepoIds,
+    serverLabelById,
     setSelectedRepoIds,
     setShowRepoPicker,
     showRepoPicker,
@@ -139,7 +141,7 @@ export function renderMobileTasksRepoPicker(model: ConnectionPresentationModel) 
                     {repo.displayName}
                   </Text>
                   <Text style={styles.repoPickerSubtitle} numberOfLines={1}>
-                    {repo.path}
+                    {getTaskRepoDetail(repo, serverLabelById)}
                   </Text>
                 </View>
                 {selected ? <Check size={15} color={colors.textPrimary} /> : null}

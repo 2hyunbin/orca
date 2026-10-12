@@ -6,10 +6,11 @@ import { HostStatusGatesContext } from '../components/host-protocol-gates-contex
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { HostStatusGates } from '../transport/host-status-gates'
 import type { RpcResponse } from '../transport/types'
+import { getTaskRepoDetail } from './mobile-tasks-repository-presentation'
 
 const desktopRef: { current: FakeSession | null } = { current: null }
 
-vi.mock('react-native', () => ({}))
+vi.mock('react-native', () => ({ AppState: { currentState: 'active' } }))
 vi.mock('./mobile-tasks-dependencies', async () => {
   const react = await import('react')
   const { useHostRepoList } = await import('./use-host-repo-list')
@@ -71,7 +72,10 @@ const HOSTS = [
   { hostId: 'runtime:old', label: 'ThinkPad', health: 'available', relay: 'update-needed' }
 ]
 
-function desktop(vmRepoList: () => unknown = () => ({ repos: VM_REPOS })): FakeSession {
+/** A desktop relaying to `runtime:vm`, whose repo list `vmRepoList` answers. */
+function desktop(
+  vmRepoList: () => Promise<unknown> = async () => ({ repos: VM_REPOS })
+): FakeSession {
   return recording(new FakeSession('connected'), async (method, executionHost) => {
     if (method === 'mobileRelay.hosts.list') {
       return reply({ hosts: HOSTS })
@@ -82,11 +86,7 @@ function desktop(vmRepoList: () => unknown = () => ({ repos: VM_REPOS })): FakeS
     if (executionHost !== 'runtime:vm') {
       return reply({ repos: executionHost ? [] : MAC_REPOS })
     }
-    const result = vmRepoList()
-    if (result instanceof Error) {
-      throw result
-    }
-    return reply(result)
+    return reply(await vmRepoList())
   })
 }
 
@@ -132,6 +132,22 @@ async function loadRepos(model: () => Model): Promise<unknown> {
   return loaded.repos
 }
 
+/** Lets the hosts feed and every answered server list land. */
+async function settle(): Promise<void> {
+  for (let round = 0; round < 5; round += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+}
+
+const VM_REPO = {
+  id: 'vm-repo',
+  displayName: 'api',
+  path: '/srv/api',
+  executionHostId: 'runtime:vm'
+}
+
 /** Where each call on the screen's client ran: its `executionHost`, or `desktop`. */
 function ranOn(client: FakeSession, method: string): string[] {
   return (sentBy.get(client) ?? [])
@@ -143,18 +159,27 @@ describe('Tasks screen repos on the desktop and its servers', () => {
   it("lists a reachable server's repos beside the desktop's, as the desktop's task page does", async () => {
     const client = desktop()
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
-    const repos = await loadRepos(model)
-    expect(repos).toEqual([
-      ...MAC_REPOS,
-      { id: 'vm-repo', displayName: 'api', path: '/srv/api', executionHostId: 'runtime:vm' }
-    ])
+    await loadRepos(model)
+    await settle()
+    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO])
+    expect(await loadRepos(model)).toEqual([...MAC_REPOS, VM_REPO])
     // The server needing an update is never asked.
-    expect(ranOn(client, 'repo.list')).toEqual(['desktop', 'runtime:vm'])
+    expect(ranOn(client, 'repo.list').sort()).toEqual(['desktop', 'runtime:vm'])
+  })
+
+  it('loads the desktop list while a server never answers', async () => {
+    const client = desktop(() => new Promise(() => {}))
+    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
+    expect(await loadRepos(model)).toEqual(MAC_REPOS)
+    await settle()
+    expect(ranOn(client, 'repo.list').sort()).toEqual(['desktop', 'runtime:vm'])
+    expect(model().repos).toEqual(MAC_REPOS)
   })
 
   it("runs a server repo's work-item calls on that server and the rest on the desktop", async () => {
     const client = desktop()
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
+    await settle()
     await loadRepos(model)
     const screenClient = model().client!
     await screenClient.sendRequest('github.listWorkItems', { repo: 'id:vm-repo', limit: 1 })
@@ -166,17 +191,32 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     expect(ranOn(client, 'linear.status')).toEqual(['desktop'])
   })
 
+  it("names a server repo's host before its path in the repo pickers", async () => {
+    const model = await mount(desktop(), [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
+    await loadRepos(model)
+    await settle()
+    const details = model().repos.map((repo) => getTaskRepoDetail(repo, model().serverLabelById))
+    expect(details).toEqual(['/mac/app', 'VM · /srv/api'])
+  })
+
   it('keeps the desktop list alone on a desktop that does not relay', async () => {
     const client = desktop()
     const model = await mount(client, [])
+    await settle()
     expect(await loadRepos(model)).toEqual(MAC_REPOS)
     expect(ranOn(client, 'mobileRelay.hosts.list')).toEqual([])
     expect(ranOn(client, 'repo.list')).toEqual(['desktop'])
   })
 
   it("keeps the desktop's repos when a server fails to list its own", async () => {
-    const client = desktop(() => new Error('server went away'))
-    const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
+    const model = await mount(
+      desktop(async () => {
+        throw new Error('server went away')
+      }),
+      [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY]
+    )
+    await settle()
     expect(await loadRepos(model)).toEqual(MAC_REPOS)
+    expect(model().repos).toEqual(MAC_REPOS)
   })
 })

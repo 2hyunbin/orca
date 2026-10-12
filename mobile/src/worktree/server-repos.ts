@@ -1,11 +1,6 @@
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import { nativeChatRepoListRead } from '../session/mobile-session-read-operations'
-import {
-  reachableServerClients,
-  relaysToServers
-} from '../transport/execution-host-scoped-rpc-client'
 import type { RpcClient } from '../transport/rpc-client'
-import { relayHostsFeed } from './relay-hosts-feed'
 
 type ListedRepo = { connectionId?: string | null }
 
@@ -31,20 +26,4 @@ export async function listServerRepos<Repo extends ListedRepo>(
     listed?.filter((repo) => !repo.connectionId).map((repo) => ({ ...repo, executionHostId })) ??
     null
   )
-}
-
-/** Every reachable server's repos through the desktop; a server that does not answer lists none. */
-export async function listReachableServerRepos<Repo extends ListedRepo>(
-  client: RpcClient,
-  hostCapabilities: readonly string[]
-): Promise<(Repo & { executionHostId: ExecutionHostId })[]> {
-  if (!relaysToServers(client, hostCapabilities)) {
-    return []
-  }
-  const hosts = (await relayHostsFeed(client).read()) ?? []
-  const servers = reachableServerClients(client, hostCapabilities, hosts)
-  const listed = await Promise.all(
-    [...servers].map(([host, serverClient]) => listServerRepos<Repo>(host, serverClient))
-  )
-  return listed.flatMap((repos) => repos ?? [])
 }

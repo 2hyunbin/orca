@@ -1,8 +1,11 @@
+import type { ExecutionHostId } from '../../../src/shared/execution-host'
+import { getHostContextLabel } from '../../../src/shared/worktree/host-context-labels'
 import { colors } from './mobile-tasks-dependencies'
 import { taskTime } from './mobile-tasks-item-mapping'
 import type { TaskItem } from './mobile-tasks-project-workspace-types'
 import type { RepoSummary } from './mobile-tasks-provider-detail-types'
 import type { TaskSort } from './mobile-tasks-view-state-types'
+import { taskRepoServer } from './task-repo-host-routing'
 
 export function isFailedGitHubCheck(check: { conclusion?: string | null }): boolean {
   return ['failure', 'cancelled', 'timed_out'].includes(check.conclusion ?? '')
@@ -23,6 +26,17 @@ export function repoColor(name: string): string {
     hash = (hash * 31 + name.charCodeAt(i)) | 0
   }
   return palette[Math.abs(hash) % palette.length]!
+}
+
+/** A repo picker row's detail: the server it runs on, as the desktop's picker shows it, then its path. */
+export function getTaskRepoDetail(
+  repo: RepoSummary,
+  serverLabelById: ReadonlyMap<ExecutionHostId, string>
+): string {
+  const server = taskRepoServer(repo)
+  return server
+    ? `${getHostContextLabel(server, { hostLabelById: serverLabelById })} · ${repo.path}`
+    : repo.path
 }
 
 export function getRepoBadgeColor(repo: RepoSummary | undefined, fallbackName: string): string {
