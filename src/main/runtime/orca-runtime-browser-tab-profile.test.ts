@@ -80,8 +80,8 @@ function sessionWithBrowserTab(): WorkspaceSessionState {
 /** A runtime with no window over a saved session; `saved()` reads what reached disk. */
 function windowlessRuntime(session: WorkspaceSessionState) {
   let saved = session
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only the workspace session, repos and settings in this suite.
   const runtime = new OrcaRuntimeService(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only the workspace session, repos and settings in this suite.
     withDurableRuntimeStore({
       getWorkspaceSession: () => saved,
       setWorkspaceSession: (next: WorkspaceSessionState) => {
