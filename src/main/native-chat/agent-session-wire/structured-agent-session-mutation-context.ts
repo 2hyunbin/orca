@@ -15,6 +15,7 @@ import type { MutationPlan } from './structured-agent-session-mutation-plans'
 import type { StructuredAgentSessionStopEnding } from './structured-agent-session-host-lifetime'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import type { StructuredAgentSessionOptionRevisions } from './structured-agent-session-option-revisions'
+import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
 import type {
   StructuredAgentSessionCaller,
   StructuredAgentSessionHostDeps,
@@ -34,6 +35,7 @@ export type StructuredAgentSessionMutationContext = {
   openConversation: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
   /** Gives the session a provider child; inside the caller's serialize. */
   ensureAgent: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
+  startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'readiness'>
   /** Joins a close a stop began on the session's child, for an operation that starts no child;
    *  inside the caller's serialize. */
   joinChildClose: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
@@ -60,9 +62,10 @@ export function mutateStructuredAgentSession<TValue>(
   caller: StructuredAgentSessionCaller,
   envelope: AgentSessionMutationEnvelope,
   plan: MutationPlan<TValue>,
-  prepareSession?: AgentSessionMutationRequest<TValue>['prepareSession']
+  prepareSession?: AgentSessionMutationRequest<TValue>['prepareSession'],
+  alreadySerialized = false
 ): Promise<AgentSessionMutationResult<TValue>> {
-  return context.serialize(envelope.sessionId, () =>
+  const run = () =>
     admitAndRunAgentSessionMutation({
       store: context.deps.store,
       adapter: context.deps.adapter,
@@ -77,5 +80,5 @@ export function mutateStructuredAgentSession<TValue>(
       wakeDelivery: (sessionId) => context.wakeDelivery(sessionId),
       now: () => context.now()
     })
-  )
+  return alreadySerialized ? run() : context.serialize(envelope.sessionId, run)
 }

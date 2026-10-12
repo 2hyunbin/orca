@@ -10,7 +10,10 @@ import { admitAndRunAgentSessionMutation } from './structured-agent-session-muta
 import { agentSessionOperationKey } from '../../../shared/agent-session-operation-ledger'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 import { sendPreparation } from './structured-agent-session-send-preparation'
-import { runAfterProviderStart } from './structured-agent-session-provider-start-hold'
+import {
+  runAfterRewindStart,
+  type ReadyOperationSelection
+} from './structured-agent-session-ready-operation'
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import { conversationCommandBlocked } from './structured-conversation-command-admission'
 import type { AgentSessionFailureFact } from '../../../shared/agent-session-failure'
@@ -49,16 +52,23 @@ export function runStructuredConversationCommand(
   caller: StructuredAgentSessionCaller,
   params: ConversationCommandParams
 ): Promise<AgentSessionMutationResult<AgentSessionConversationCommandResult>> {
-  // A rewind in doubt is recovered by a proven start, which the clear waits out.
-  return runAfterProviderStart(context, params.envelope.sessionId, () =>
-    clearUnderSerialize(context, caller, params)
+  return runAfterRewindStart(
+    context,
+    caller.callerKey,
+    params.envelope,
+    'agentSession.conversationCommand',
+    { command: params.command },
+    (selection, alreadySerialized) =>
+      clearUnderSerialize(context, caller, params, selection, alreadySerialized)
   )
 }
 
 function clearUnderSerialize(
   context: StructuredAgentSessionMutationContext,
   caller: StructuredAgentSessionCaller,
-  params: ConversationCommandParams
+  params: ConversationCommandParams,
+  selection: ReadyOperationSelection,
+  alreadySerialized: boolean
 ): Promise<AgentSessionMutationResult<AgentSessionConversationCommandResult>> {
   const { envelope, command } = params
   const { sessionId, clientOperationId } = envelope
@@ -69,7 +79,7 @@ function clearUnderSerialize(
       ? record
       : null
   }
-  return context.serialize(sessionId, async () => {
+  const run = async () => {
     let clear: AgentSessionConversationClear | null = null
     const result = await admitAndRunAgentSessionMutation({
       store,
@@ -79,7 +89,7 @@ function clearUnderSerialize(
       callerKey: caller.callerKey,
       envelope,
       // Starts the agent only to settle a rewind in doubt, as a send does; a /clear itself starts nothing.
-      prepareSession: sendPreparation(context, envelope, { refusesInRun: true }),
+      prepareSession: sendPreparation(context, envelope, { refusesInRun: true }, selection),
       journal: () => context.sessions.get(sessionId)?.journal,
       publish: (journal) => context.publish(sessionId, journal),
       now: context.now,
@@ -158,5 +168,6 @@ function clearUnderSerialize(
       typeof result.value.runtimeFence === 'number'
       ? { ...result, fence: result.value.runtimeFence }
       : result
-  })
+  }
+  return alreadySerialized ? run() : context.serialize(sessionId, run)
 }

@@ -278,6 +278,26 @@ it('sets a goal asked of a starting Codex chat on the thread once it is open', a
   ])
 })
 
+it('refuses a changed goal payload immediately while the handshake is held', async () => {
+  const child = codexScriptedChild()
+  const host = await openChat(child)
+  const change = { kind: 'set' as const, objective: 'Do not run' }
+  const goal = host.changeThreadGoal(CALLER, {
+    envelope: {
+      ...envelope(host, 'agentSession.threadGoal', { change }),
+      payloadFingerprint: 'changed-payload'
+    },
+    change
+  })
+
+  expect(await settlesSoon(goal)).toBe(true)
+  expect(await goal).toMatchObject({
+    ok: false,
+    refusal: { code: 'agent_session_operation_conflict' }
+  })
+  expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(false)
+})
+
 it('keeps a goal waiting on a starting Codex chat through a re-attach, then sets it once the thread is open', async () => {
   const child = codexScriptedChild()
   const host = await openChat(child)
@@ -301,6 +321,129 @@ it('keeps a goal waiting on a starting Codex chat through a re-attach, then sets
   expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(true)
 })
 
+it('ends a waiting goal when its starting child is closed and never runs it afterward', async () => {
+  const child = codexScriptedChild()
+  const host = await openChat(child)
+  const change = { kind: 'set' as const, objective: 'Do not run later' }
+  const goal = host.changeThreadGoal(CALLER, {
+    envelope: envelope(host, 'agentSession.threadGoal', { change }),
+    change
+  })
+  expect(await settlesSoon(goal)).toBe(false)
+
+  await host.close(SESSION, 'user-close')
+  expect(await goal).toMatchObject({
+    ok: false,
+    refusal: { message: expect.stringContaining('did not run') }
+  })
+  child.releaseHandshake()
+  expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(false)
+})
+
+it('does not run a goal after its caller budget ends, even if the child starts later', async () => {
+  const child = codexScriptedChild()
+  const host = await openChat(child)
+  const attempts = host.collaboratorsForTests().runtimeState.startupAttempts
+  const readiness = attempts.readiness.bind(attempts)
+  attempts.readiness = (sessionId, identity) => {
+    const selected = readiness(sessionId, identity)
+    return selected && { wait: async () => 'timeout' as const }
+  }
+  const change = { kind: 'set' as const, objective: 'Never after timeout' }
+
+  const goal = await host.changeThreadGoal(CALLER, {
+    envelope: envelope(host, 'agentSession.threadGoal', { change }),
+    change
+  })
+  expect(goal).toMatchObject({
+    ok: false,
+    refusal: { message: expect.stringContaining('did not run') }
+  })
+  attempts.readiness = readiness
+  child.releaseHandshake()
+  await host.flushStreamedEvents(SESSION)
+  expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(false)
+})
+
+it('does not run a ready goal when its final queued admission passes the caller budget', async () => {
+  const child = codexScriptedChild()
+  const host = await openChat(child)
+  const attempts = host.collaboratorsForTests().runtimeState.startupAttempts
+  const readiness = attempts.readiness.bind(attempts)
+  const held = Promise.withResolvers<void>()
+  let finalQueueHeld = false
+  const realNow = Date.now.bind(Date)
+  attempts.readiness = (sessionId, identity) => {
+    const selected = readiness(sessionId, identity)
+    return (
+      selected && {
+        wait: async (budgetMs?: number) => {
+          const outcome = await selected.wait(budgetMs)
+          attempts.readiness = readiness
+          void host.collaboratorsForTests().serialize(SESSION, async () => {
+            finalQueueHeld = true
+            await held.promise
+          })
+          return outcome
+        }
+      }
+    )
+  }
+  const change = { kind: 'set' as const, objective: 'Too late for admission' }
+  const goal = host.changeThreadGoal(CALLER, {
+    envelope: envelope(host, 'agentSession.threadGoal', { change }),
+    change
+  })
+  child.releaseHandshake()
+  await eventually(() => expect(finalQueueHeld).toBe(true))
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 121_000)
+  expect(await settlesSoon(goal)).toBe(false)
+  held.resolve()
+
+  expect(await goal).toMatchObject({
+    ok: false,
+    refusal: { message: expect.stringContaining('did not run') }
+  })
+  clock.mockRestore()
+  expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(false)
+})
+
+it('rechecks its selected child when another child replaces it before the goal runs', async () => {
+  const child = codexScriptedChild()
+  const host = await openChat(child)
+  const attempts = host.collaboratorsForTests().runtimeState.startupAttempts
+  const readiness = attempts.readiness.bind(attempts)
+  attempts.readiness = (sessionId, identity) => {
+    const selected = readiness(sessionId, identity)
+    return (
+      selected && {
+        wait: async (budgetMs?: number) => {
+          const outcome = await selected.wait(budgetMs)
+          attempts.readiness = readiness
+          await host.close(SESSION, 'evict')
+          const replacement = send(host, 'replacement child')
+          await eventually(() => expect(child.spawns()).toBe(2))
+          child.releaseHandshake()
+          expect(await replacement).toMatchObject({ ok: true })
+          return outcome
+        }
+      }
+    )
+  }
+  const change = { kind: 'set' as const, objective: 'Old child only' }
+  const goal = host.changeThreadGoal(CALLER, {
+    envelope: envelope(host, 'agentSession.threadGoal', { change }),
+    change
+  })
+  child.releaseHandshake()
+
+  expect(await goal).toMatchObject({
+    ok: false,
+    refusal: { message: expect.stringContaining('did not run') }
+  })
+  expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(false)
+})
+
 it('answers a goal asked of an ACP agent, which has none, without waiting out its start', async () => {
   const spec = ACP_LAUNCH_SPECS[0]!
   const child = acpScriptedChild(spec.agent)()
@@ -320,4 +463,29 @@ it('answers a goal asked of an ACP agent, which has none, without waiting out it
 
   expect(await send(host, 'after the goal')).toMatchObject({ ok: true })
   await eventually(() => expect(child.prompts()).toEqual(['after the goal']))
+})
+
+it('admits an ordinary send in its first queued step before a later Stop', async () => {
+  const child = codexScriptedChild()
+  const host = await openChat(child)
+  const blocked = Promise.withResolvers<void>()
+  void host.collaboratorsForTests().serialize(SESSION, () => blocked.promise)
+  const order: string[] = []
+  const sent = send(host, 'before Stop').then((result) => {
+    order.push('send')
+    return result
+  })
+  const stopped = host
+    .cancel(CALLER, {
+      envelope: envelope(host, 'agentSession.cancel', {})
+    })
+    .then((result) => {
+      order.push('Stop')
+      return result
+    })
+  blocked.resolve()
+
+  expect(await sent).toMatchObject({ ok: true })
+  expect(await stopped).toMatchObject({ ok: true })
+  expect(order).toEqual(['send', 'Stop'])
 })

@@ -37,6 +37,7 @@ import { handOverSubmission } from './structured-agent-session-turns'
 import { structuredAgentSessionNextHandover } from './structured-agent-session-opening-send'
 import { structuredAgentSessionCommandRunning } from './structured-agent-session-command-turn'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
+import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 import { holdRestartedStructuredAgentSessionSends } from './structured-agent-session-host-lifetime'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 
@@ -53,6 +54,10 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
     sessionId: string,
     startedFor: string
   ) => Promise<StructuredAgentSessionResumeOutcome>
+  readiness: (
+    sessionId: string,
+    child: StructuredAgentSessionProviderChildIdentity
+  ) => StructuredAgentSessionStartReadiness | null
   /** The fence the conversation's own writes carry; see `structuredAgentSessionConversationFence`. */
   conversationFence: (sessionId: string) => number
   /** Settles queued messages as a completed close of the chat does; false when that failed. */
@@ -77,7 +82,11 @@ type RefusedStart = Extract<StructuredAgentSessionResumeOutcome, { ok: false }>
 type Prepared =
   | 'stop'
   | RefusedStart
-  | { ok: true; awaited: StructuredAgentSessionProviderChildIdentity | null }
+  | {
+      ok: true
+      awaited: StructuredAgentSessionProviderChildIdentity | null
+      readiness: StructuredAgentSessionStartReadiness | null
+    }
 
 /** A failed start before it is worded; `fail` words it once, through the one wording point. */
 type StartFailure = { startKey: string | null; cause: StructuredAgentSessionStartFailureCause }
@@ -137,6 +146,9 @@ export class StructuredAgentSessionDeliveryLoop {
             this.fail(sessionId, this.refusedStart(sessionId, prepared))
           )
           return
+        }
+        if (prepared.readiness) {
+          await prepared.readiness.wait()
         }
         const handed = await this.deps.serialize(sessionId, () =>
           this.handOver(sessionId, prepared.awaited)
@@ -209,7 +221,8 @@ export class StructuredAgentSessionDeliveryLoop {
     // The child this run waits on; handover checks it is still the one there.
     return {
       ok: true,
-      awaited: child ? { generation: child.generation, fence: child.fence } : null
+      awaited: child ? { generation: child.generation, fence: child.fence } : null,
+      readiness: child?.phase === 'starting' ? this.deps.readiness(sessionId, child) : null
     }
   }
 
@@ -247,9 +260,7 @@ export class StructuredAgentSessionDeliveryLoop {
     // Never steer into a turn a person's Stop is ending: the message runs after it, as its own
     // turn, and the turn's end is a commit that wakes the loop again. Read here, at the handover,
     // because a Stop can take the lane between the step that judged the send and this one.
-    // Nor hand anything to a child still proving its start: nothing is written until it is
-    // `ready`, whose settlement wakes the loop, so a start that fails leaves the message unsent.
-    if (this.deps.stopping(sessionId) || awaitedChild.phase === 'starting') {
+    if (this.deps.stopping(sessionId) || awaitedChild.phase !== 'ready') {
       return this.stop(sessionId)
     }
     // None while a turn is still opening: joining it would record the message ahead of it.

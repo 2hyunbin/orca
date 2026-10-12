@@ -205,11 +205,10 @@ describe('retireSignedOutStructuredAgentSessionChild', () => {
   const retire = async (
     input: Parameters<typeof conversation>[0],
     work: Partial<typeof idle> = {},
-    stopAgent = vi.fn(async () => undefined),
-    startedFor = 'next-send'
+    stopAgent = vi.fn(async () => undefined)
   ) => {
     const warn = vi.fn()
-    await retireSignedOutStructuredAgentSessionChild('session', conversation(input), startedFor, {
+    await retireSignedOutStructuredAgentSessionChild('session', conversation(input), {
       work: { ...idle, ...work },
       stopAgent,
       logger: { warn, error: vi.fn() }
@@ -219,23 +218,6 @@ describe('retireSignedOutStructuredAgentSessionChild', () => {
 
   it('stops a signed-out child that owes nothing', async () => {
     expect((await retire(signedOut)).stopAgent).toHaveBeenCalledWith('session')
-  })
-
-  it('keeps a child started for the send it is about to take', async () => {
-    const own = await retire(
-      { ...signedOut, child: childAt({ startedFor: 'next-send' }) },
-      {},
-      undefined,
-      'next-send'
-    )
-    expect(own.stopAgent).not.toHaveBeenCalled()
-    const earlier = await retire(
-      { ...signedOut, child: childAt({ startedFor: 'earlier-send' }) },
-      {},
-      undefined,
-      'next-send'
-    )
-    expect(earlier.stopAgent).toHaveBeenCalledWith('session')
   })
 
   it('keeps it while it owes work the idle sweep also protects', async () => {

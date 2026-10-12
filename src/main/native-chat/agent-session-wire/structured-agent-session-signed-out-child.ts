@@ -78,15 +78,12 @@ function owesWakeUp(
   )
 }
 
-/** For a caller inside the session's serialize, before it hands the next send (`startedFor`) to
- *  the child. A child started for that same send keeps it: the send has not reached any child yet,
- *  and the agent's own refusal settles it once, where a new child would refuse it again forever.
- *  Work the child still owes keeps it, as it keeps an idle one from the sweep. A stop that fails
+/** For a caller inside the session's serialize, before it hands the next send to
+ *  the child. Work the child still owes keeps it, as it keeps an idle one from the sweep. A stop that fails
  *  leaves the close begun, which the start joins. */
 export async function retireSignedOutStructuredAgentSessionChild(
   sessionId: string,
   session: SignedOutReading | undefined,
-  startedFor: string,
   deps: {
     work: StructuredAgentSessionChildWorkReads
     startUnavailable?: () => AgentSessionUnavailable | undefined
@@ -96,7 +93,6 @@ export async function retireSignedOutStructuredAgentSessionChild(
 ): Promise<void> {
   if (
     !session ||
-    session.child?.startedFor === startedFor ||
     !structuredAgentSessionChildReportedSignedOut(session, deps.startUnavailable?.()) ||
     structuredAgentSessionChildHasOpenWork(session.journal, deps.work) ||
     owesWakeUp(session.journal, deps.work.childWork())

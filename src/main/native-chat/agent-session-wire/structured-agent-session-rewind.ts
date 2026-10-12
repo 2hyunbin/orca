@@ -15,7 +15,11 @@ import type {
 import type { AgentSessionMutationResult } from '../../../shared/agent-session-wire'
 import { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES } from './agent-session-history-page-bounds'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
-import { openWithAgent } from './structured-agent-session-send-preparation'
+import {
+  prepareReadyStructuredAgentSessionOperation,
+  openWithReadyStructuredAgentSessionChild,
+  type ReadyOperationSelection
+} from './structured-agent-session-ready-operation'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import { admitAndRunAgentSessionMutation } from './structured-agent-session-mutation-admission'
@@ -24,29 +28,25 @@ import { rewindRefusal, rewindRefusalBehindClear } from './structured-rewind-ref
 import { renameRewindTurnOpener } from './structured-rewind-journal-body'
 import { persistRewindRecord, recoverStructuredRewind } from './structured-rewind-recovery'
 import { mergeRetainedHostLifecycleRows } from './structured-rewind-retained-host-rows'
-import { runAfterProviderStart } from './structured-agent-session-provider-start-hold'
 
-export function rewindStructuredAgentSession(
+export async function rewindStructuredAgentSession(
   context: StructuredAgentSessionMutationContext,
   attachContext: StructuredAgentSessionAttachContext,
   caller: StructuredAgentSessionCaller,
   params: AgentSessionRewindParams
 ): Promise<AgentSessionMutationResult<AgentSessionRewindResult>> {
   // Only a proven child has the protocol session a rewind reads and changes.
-  return runAfterProviderStart(context, params.envelope.sessionId, () =>
-    rewindUnderSerialize(context, attachContext, caller, params)
+  const selected = await prepareReadyStructuredAgentSessionOperation(
+    context,
+    caller.callerKey,
+    params.envelope,
+    'agentSession.rewind',
+    { itemId: params.itemId, expectedEpoch: params.expectedEpoch },
+    () => rewindRefusalBehindClear(context.sessions.get(params.envelope.sessionId)?.journal, params)
   )
-}
-
-function rewindUnderSerialize(
-  context: StructuredAgentSessionMutationContext,
-  attachContext: StructuredAgentSessionAttachContext,
-  caller: StructuredAgentSessionCaller,
-  params: AgentSessionRewindParams
-): Promise<AgentSessionMutationResult<AgentSessionRewindResult>> {
   const { sessionId, clientOperationId } = params.envelope
   const store = context.deps.store
-  return context.serialize(sessionId, async () => {
+  const run = async (selection: ReadyOperationSelection) => {
     let completionReceipt: JournalOperationReceipt | undefined
     const result = await admitAndRunAgentSessionMutation<AgentSessionRewindResult>({
       store,
@@ -56,9 +56,7 @@ function rewindUnderSerialize(
       callerKey: caller.callerKey,
       envelope: params.envelope,
       // Only the provider can do this, so an agent at rest is started first.
-      prepareSession: openWithAgent(context, params.envelope, () =>
-        rewindRefusalBehindClear(context.sessions.get(sessionId)?.journal, params)
-      ),
+      prepareSession: openWithReadyStructuredAgentSessionChild(context, params.envelope, selection),
       journal: () => context.sessions.get(sessionId)?.journal,
       publish: (journal) => context.publish(sessionId, journal),
       now: context.now,
@@ -301,5 +299,6 @@ function rewindUnderSerialize(
           cursor: context.sessions.get(sessionId)!.journal.cursor()
         }
       : result
-  })
+  }
+  return selected.ok ? context.serialize(sessionId, () => run(selected)) : selected
 }
