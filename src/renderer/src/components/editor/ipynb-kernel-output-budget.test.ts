@@ -145,7 +145,7 @@ describe('applyKernelOutput output budget', () => {
     })
   })
 
-  it('keeps text already shown when an unbudgeted display update pushed the cell over', () => {
+  it('keeps text already shown when a display update is rejected', () => {
     const shown = 'z'.repeat(1000)
     const grown = apply([
       [
@@ -164,29 +164,31 @@ describe('applyKernelOutput output budget', () => {
       ['stream', { name: 'stdout', text: 'more' }]
     ])
     expect(textOf(grown, 1)).toBe(shown)
+    expect(grown.outputs[0]?.data).toEqual({ 'text/plain': 'small' })
     expect(grown.outputs.at(-1)).toEqual(NOTICE)
   })
 
   it('always keeps the first result and error of a run but budgets repeats', () => {
     const result = (count: number): [KernelOutputType, Record<string, unknown>] => [
       'execute_result',
-      { execution_count: count, data: { 'text/plain': 'r'.repeat(MAX_OUTPUT_CHARS) }, metadata: {} }
+      { execution_count: count, data: { 'text/plain': 'r'.repeat(9 * 1024 * 1024) }, metadata: {} }
     ]
     const error = (name: string): [KernelOutputType, Record<string, unknown>] => [
       'error',
       { ename: name, evalue: '', traceback: [] }
     ]
-    const live = apply([result(1), result(2), error('First'), result(3), error('Second')])
+    const live = apply([result(1), result(2), result(3), error('First'), error('Second')])
     expect(live.outputs.map((output) => output.output_type)).toEqual([
+      'execute_result',
       'execute_result',
       'display_data',
       'error'
     ])
-    expect(live.outputs[1]).toEqual(NOTICE)
-    expect(live.outputs[2]?.ename).toBe('First')
+    expect(live.outputs[2]).toEqual(NOTICE)
+    expect(live.outputs[3]?.ename).toBe('First')
   })
 
-  it('never splits an emoji when a progress rewrite lands on the cut', () => {
+  it('keeps progress text intact when an oversized replacement is rejected', () => {
     const live = apply([
       [
         'display_data',
@@ -203,7 +205,7 @@ describe('applyKernelOutput output budget', () => {
       ],
       ['stream', { name: 'stderr', text: 'xyz\u{1F600} 50%' }]
     ])
-    expect(textOf(live, 1)).toBe('xyz')
+    expect(textOf(live, 1)).toBe('abc\r')
   })
 
   it('drops rich outputs past 16 MiB but still updates displays already shown', () => {

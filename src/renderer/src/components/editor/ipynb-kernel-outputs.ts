@@ -1,6 +1,10 @@
-import { translate } from '@/i18n/i18n'
 import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
-import { noticeOutput } from './ipynb-kernel-runs'
+import {
+  appendDiagnostic,
+  fitDisplayUpdateBudget,
+  fitOutputBudget,
+  hasTruncationNotice
+} from './ipynb-kernel-output-budget'
 import { isRecord } from './ipynb-parse'
 
 /** An nbformat v4 output; while live it may also carry the kernel's `transient.display_id`. */
@@ -16,15 +20,6 @@ type StreamText = { text: string; tailStart: number; trailingReturn: boolean }
 
 // Why: weak output keys keep cursors off saved notebook data and release them with discarded outputs.
 const streamTextByOutput = new WeakMap<NotebookOutput, StreamText>()
-
-// Why: like the old per-process runner's 2 MiB cut, a bigger text block stalls the cell's rendering.
-const MAX_STREAM_CHARS = 2 * 1024 * 1024
-// Why: images and HTML get more room than text, but a looping display() still has a ceiling.
-const MAX_OUTPUT_CHARS = 16 * 1024 * 1024
-// Why: each output is its own rendered block; stdout/stderr switches alone add one per flush.
-const MAX_OUTPUTS = 2000
-const truncationNotices = new WeakSet<NotebookOutput>()
-const richOutputSizes = new WeakMap<NotebookOutput, number>()
 
 /** Applies terminal-style `\r` rewrites (progress bars), keeping a trailing `\r` for the next chunk. */
 export function collapseCarriageReturns(text: string): string {
@@ -87,68 +82,15 @@ function toOutput(type: KernelOutputType, content: Record<string, unknown>): Not
   }
   const bundle = { data: content.data ?? {}, metadata: content.metadata ?? {} }
   if (type === 'execute_result') {
-    return { output_type: type, execution_count: content.execution_count ?? null, ...bundle }
+    return {
+      output_type: type,
+      execution_count: typeof content.execution_count === 'number' ? content.execution_count : null,
+      ...bundle
+    }
   }
   return displayId(content) === undefined
     ? { output_type: 'display_data', ...bundle }
     : { output_type: 'display_data', ...bundle, transient: content.transient }
-}
-
-function outputSize(output: NotebookOutput): number {
-  if (output.output_type === 'stream') {
-    return String(output.text).length
-  }
-  let size = richOutputSizes.get(output)
-  if (size === undefined) {
-    size = JSON.stringify(output.data ?? output.traceback ?? null).length
-    richOutputSizes.set(output, size)
-  }
-  return size
-}
-
-function truncationNotice(): NotebookOutput {
-  const notice = noticeOutput(
-    translate(
-      'auto.components.editor.IpynbViewer.outputTruncated',
-      'Output truncated: this cell produced more output than Orca keeps. To keep all of it, write it to a file instead.'
-    )
-  )
-  truncationNotices.add(notice)
-  return notice
-}
-
-/** Keeps the head of the cell's output within budget, cutting only what this frame added. */
-function fitBudget(previous: NotebookOutput[], outputs: NotebookOutput[]): NotebookOutput[] {
-  let streamChars = 0
-  let totalChars = 0
-  for (const output of outputs) {
-    const size = outputSize(output)
-    totalChars += size
-    streamChars += output.output_type === 'stream' ? size : 0
-  }
-  if (
-    outputs.length <= MAX_OUTPUTS &&
-    streamChars <= MAX_STREAM_CHARS &&
-    totalChars <= MAX_OUTPUT_CHARS
-  ) {
-    return outputs
-  }
-  const last = outputs.at(-1)
-  let keep = 0
-  if (last?.output_type === 'stream' && outputs.length <= MAX_OUTPUTS) {
-    const text = String(last.text)
-    keep = text.length - Math.max(streamChars - MAX_STREAM_CHARS, totalChars - MAX_OUTPUT_CHARS)
-    // Why: text already on screen stays, even when unbudgeted outputs pushed the cell over.
-    const shown = outputs.length === previous.length ? String(previous.at(-1)?.text).length : 0
-    keep = Math.max(keep, Math.min(shown, text.length))
-    // Why: never split a surrogate pair at the cut.
-    keep -= /[\ud800-\udbff]/.test(text.charAt(keep - 1)) ? 1 : 0
-  }
-  return [
-    ...outputs.slice(0, -1),
-    ...(last && keep > 0 ? [{ ...last, text: String(last.text).slice(0, keep) }] : []),
-    truncationNotice()
-  ]
 }
 
 function appendOutput(
@@ -175,29 +117,35 @@ export function applyKernelOutput<T extends LiveOutputs>(
   }
   if (type === 'update_display_data') {
     const id = displayId(content)
-    return {
-      ...live,
-      outputs: live.outputs.map((output) =>
-        id !== undefined && displayId(output) === id
-          ? { ...output, data: content.data ?? {}, metadata: content.metadata ?? {} }
-          : output
-      )
+    if (id === undefined || !live.outputs.some((output) => displayId(output) === id)) {
+      return live
     }
+    const updated = live.outputs.map((output) =>
+      displayId(output) === id
+        ? { ...output, data: content.data ?? {}, metadata: content.metadata ?? {} }
+        : output
+    )
+    const outputs = fitDisplayUpdateBudget(live.outputs, updated)
+    return outputs === live.outputs ? live : { ...live, outputs }
   }
   const outputs = live.clearOnNextOutput ? [] : live.outputs
-  // Why: a run's first error (e.g. the interrupt) and first result always show, even past the budget.
+  // Why: first diagnostics survive ordinary truncation, with a separate finite allowance.
   if (
     (type === 'error' || type === 'execute_result') &&
     !outputs.some((output) => output.output_type === type)
   ) {
-    return { ...live, outputs: appendOutput(outputs, type, content), clearOnNextOutput: false }
+    return {
+      ...live,
+      outputs: appendDiagnostic(outputs, toOutput(type, content)),
+      clearOnNextOutput: false
+    }
   }
-  if (outputs.some((output) => truncationNotices.has(output))) {
+  if (hasTruncationNotice(outputs)) {
     return live
   }
   return {
     ...live,
-    outputs: fitBudget(outputs, appendOutput(outputs, type, content)),
+    outputs: fitOutputBudget(outputs, appendOutput(outputs, type, content)),
     clearOnNextOutput: false
   }
 }
