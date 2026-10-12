@@ -3,7 +3,11 @@ import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { translate } from '@/i18n/i18n'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { PaneTopWarningBanner } from './PaneTopWarningBanner'
-import { reopenHeldTerminals, useNewerDaemonHold } from './newer-daemon-hold-state'
+import {
+  dismissHeldPaneBanner,
+  reopenHeldTerminals,
+  useNewerDaemonHold
+} from './newer-daemon-hold-state'
 
 /** Shown on a restored pane held back because a newer Orca build's daemon may still run it. */
 export function NewerDaemonHoldBanner({
@@ -13,7 +17,8 @@ export function NewerDaemonHoldBanner({
   tabId: string
   leafId: string
 }): React.JSX.Element | null {
-  const hold = useNewerDaemonHold(makePaneKey(tabId, leafId))
+  const paneKey = makePaneKey(tabId, leafId)
+  const hold = useNewerDaemonHold(paneKey)
   if (!hold) {
     return null
   }
@@ -50,9 +55,16 @@ export function NewerDaemonHoldBanner({
             ? translate('terminal.newerDaemonBanner.reopening', 'Reopening…')
             : failed
               ? translate('terminal.newerDaemonBanner.tryAgain', 'Try again')
-              : translate('terminal.newerDaemonBanner.reopen', 'Reopen terminal')}
+              : translate(
+                  'terminal.newerDaemonBanner.reopenTerminal',
+                  'Reopen {{count}} terminals',
+                  {
+                    count: hold.heldCount
+                  }
+                )}
         </Button>
       }
+      onDismiss={reopening ? undefined : () => dismissHeldPaneBanner(paneKey)}
     />
   )
 }

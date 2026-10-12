@@ -13,6 +13,8 @@ type HeldPane = {
   resumable: boolean
   // Why a phase per pane: a pane held after a failed attempt has not failed anything yet.
   phase: NewerDaemonHoldPhase
+  /** Banner hidden for this app session; the pane stays held. */
+  dismissed: boolean
   release: () => Promise<HeldPaneReopenOutcome>
 }
 
@@ -20,21 +22,28 @@ export const newerDaemonHoldStore = createStore<{ panes: Record<string, HeldPane
   panes: {}
 }))
 
-function setPhase(paneKeys: readonly string[], phase: NewerDaemonHoldPhase): void {
+function updatePanes(paneKeys: readonly string[], update: Partial<HeldPane>): void {
   newerDaemonHoldStore.setState(({ panes }) => ({
     panes: Object.fromEntries(
       Object.entries(panes).map(([key, pane]) => [
         key,
-        paneKeys.includes(key) ? { ...pane, phase } : pane
+        paneKeys.includes(key) ? { ...pane, ...update } : pane
       ])
     )
   }))
 }
 
+export function dismissHeldPaneBanner(paneKey: string): void {
+  updatePanes([paneKey], { dismissed: true })
+}
+
 /** Registers a held pane; the returned teardown forgets it if it unmounts while held. */
-export function holdPaneForNewerDaemon(paneKey: string, pane: Omit<HeldPane, 'phase'>): () => void {
+export function holdPaneForNewerDaemon(
+  paneKey: string,
+  pane: Omit<HeldPane, 'phase' | 'dismissed'>
+): () => void {
   newerDaemonHoldStore.setState(({ panes }) => ({
-    panes: { ...panes, [paneKey]: { ...pane, phase: 'held' } }
+    panes: { ...panes, [paneKey]: { ...pane, phase: 'held', dismissed: false } }
   }))
   return () =>
     newerDaemonHoldStore.setState(({ panes }) => {
@@ -46,11 +55,15 @@ export function holdPaneForNewerDaemon(paneKey: string, pane: Omit<HeldPane, 'ph
     })
 }
 
+/** This pane's banner state, null when not held or dismissed; heldCount is every pane one Reopen releases. */
 export function useNewerDaemonHold(
   paneKey: string
-): { resumable: boolean; phase: NewerDaemonHoldPhase } | null {
+): { resumable: boolean; phase: NewerDaemonHoldPhase; heldCount: number } | null {
   const pane = useStore(newerDaemonHoldStore, (state) => state.panes[paneKey])
-  return pane ? { resumable: pane.resumable, phase: pane.phase } : null
+  const heldCount = useStore(newerDaemonHoldStore, (state) => Object.keys(state.panes).length)
+  return pane && !pane.dismissed
+    ? { resumable: pane.resumable, phase: pane.phase, heldCount }
+    : null
 }
 
 export function announceReopenedTerminals(outcomes: readonly HeldPaneReopenOutcome[]): void {
@@ -82,13 +95,13 @@ export async function reopenHeldTerminals(): Promise<void> {
   if (Object.values(panes).some((pane) => pane.phase === 'reopening')) {
     return
   }
-  setPhase(attempt, 'reopening')
+  updatePanes(attempt, { phase: 'reopening' })
   const reopened = await window.api.pty.reopenNewerDaemonTerminals().then(
     (result) => result.reopened,
     () => false
   )
   if (!reopened) {
-    setPhase(attempt, 'failed')
+    updatePanes(attempt, { phase: 'failed' })
     return
   }
   const released = Object.values(newerDaemonHoldStore.getState().panes)

@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
 import { NewerDaemonHoldBanner } from './NewerDaemonHoldBanner'
-import { holdPaneForNewerDaemon, newerDaemonHoldStore } from './newer-daemon-hold-state'
+import {
+  holdPaneForNewerDaemon,
+  newerDaemonHoldStore,
+  reopenHeldTerminals
+} from './newer-daemon-hold-state'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn() } }))
 
@@ -28,11 +32,12 @@ class ResizeObserverStub {
   disconnect(): void {}
 }
 
-function hold(paneKey: string, resumable: boolean): void {
-  holdPaneForNewerDaemon(paneKey, {
-    resumable,
-    release: vi.fn(() => Promise.resolve({ reopened: true, agentResumed: resumable }))
-  })
+const OTHER_PANE_KEY = makePaneKey('tab-2', LEAF_ID)
+
+function hold(paneKey: string, resumable: boolean): ReturnType<typeof vi.fn> {
+  const release = vi.fn(() => Promise.resolve({ reopened: true, agentResumed: resumable }))
+  holdPaneForNewerDaemon(paneKey, { resumable, release })
+  return release
 }
 
 async function render(): Promise<void> {
@@ -81,7 +86,6 @@ describe('NewerDaemonHoldBanner', () => {
     await render()
     expect(paneElement.textContent).toContain(TITLE)
     expect(paneElement.textContent).toContain(BODY)
-    expect(paneElement.textContent).not.toContain('Dismiss')
     hold(PANE_KEY, false)
     await render()
     expect(paneElement.textContent).toContain(TITLE)
@@ -95,6 +99,7 @@ describe('NewerDaemonHoldBanner', () => {
     await render()
     await act(async () => button('Reopen terminal').click())
     expect(button('Reopening…').disabled).toBe(true)
+    expect(paneElement.textContent).not.toContain('Dismiss')
     await act(async () => finish({ reopened: true }))
     expect(paneElement.textContent).toBe('')
   })
@@ -111,5 +116,37 @@ describe('NewerDaemonHoldBanner', () => {
     await render()
     expect(paneElement.textContent).toContain(TITLE)
     expect(paneElement.textContent).not.toContain(FAILED_TITLE)
+  })
+
+  it('counts every held pane in the label, since one click reopens them all', async () => {
+    hold(PANE_KEY, false)
+    await render()
+    expect(button('Reopen terminal')).toBeTruthy()
+    hold(OTHER_PANE_KEY, false)
+    await render()
+    expect(button('Reopen 2 terminals')).toBeTruthy()
+  })
+
+  it('dismisses only this pane, which stays held and still reopens with the others', async () => {
+    const release = hold(PANE_KEY, false)
+    const otherRelease = hold(OTHER_PANE_KEY, false)
+    await render()
+    await act(async () => button('Dismiss').click())
+    expect(paneElement.textContent).toBe('')
+    expect(newerDaemonHoldStore.getState().panes[PANE_KEY]?.phase).toBe('held')
+    expect(newerDaemonHoldStore.getState().panes[OTHER_PANE_KEY]?.dismissed).toBe(false)
+    expect(release).not.toHaveBeenCalled()
+    await act(async () => reopenHeldTerminals())
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(otherRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers Dismiss after a failed stop', async () => {
+    reopenNewerDaemonTerminals.mockResolvedValue({ reopened: false })
+    hold(PANE_KEY, false)
+    await render()
+    expect(button('Dismiss')).toBeTruthy()
+    await act(async () => button('Reopen terminal').click())
+    expect(button('Dismiss')).toBeTruthy()
   })
 })
