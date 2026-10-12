@@ -14,7 +14,8 @@ import { attachDocPreviewWebview } from './doc-preview-webview-attach'
 import {
   buildDocPreviewGrantRequest,
   ensureDocPreviewGrant,
-  releaseDocPreviewGrant
+  releaseDocPreviewGrant,
+  type DocPreviewGrantHandle
 } from '@/lib/doc-preview-grants'
 import { selectWorktreeHostDisplayLabel } from '@/lib/execution-host-display-label'
 import { translate } from '@/i18n/i18n'
@@ -31,6 +32,7 @@ import {
   docPreviewFailureDetail
 } from './doc-preview-failure-messages'
 import { DocPreviewToolbar } from './doc-preview-toolbar'
+import { buildDocPreviewShareControl } from './doc-preview-artifact-share'
 import { useDocPreviewWebviewHistory } from './doc-preview-webview-history'
 import { useDocPreviewGuestTools } from './use-doc-preview-guest-tools'
 
@@ -74,7 +76,8 @@ export function HtmlDocPreview({
   const [assetFailures, setAssetFailures] = useState<DocPreviewFileFailure[]>([])
   const [downloadBlocked, setDownloadBlocked] = useState(false)
   const [remintCount, setRemintCount] = useState(0)
-  const [grantId, setGrantId] = useState<string | null>(null)
+  const [grant, setGrant] = useState<DocPreviewGrantHandle | null>(null)
+  const grantId = grant?.grantId ?? null
   const {
     requests: accessRequests,
     busy: accessRequestBusy,
@@ -126,15 +129,23 @@ export function HtmlDocPreview({
     [filePath, hostLabel, worktreeRoot]
   )
   const isUnavailable = state === 'unavailable' || failureReason !== null
-  const { grab, markup, annotationSend, grabAnnotations, browserOverlayViewport, elementTools } =
-    useDocPreviewGuestTools({
-      previewId,
-      worktreeId,
-      grantId,
-      webviewRef,
-      containerRef,
-      toolsReady: state === 'ready' && !isUnavailable
-    })
+  const {
+    grab,
+    markup,
+    annotationSend,
+    grabAnnotations,
+    browserOverlayViewport,
+    handleAnnotationViewportMessage,
+    resetBrowserOverlayViewport,
+    elementTools
+  } = useDocPreviewGuestTools({
+    previewId,
+    worktreeId,
+    grantId,
+    webviewRef,
+    containerRef,
+    toolsReady: state === 'ready' && !isUnavailable
+  })
   // Not `document`: shadowing the global inside a component is how a stray DOM call silently
   // starts reading a plain object.
   const previewDocument = useMemo(
@@ -147,6 +158,7 @@ export function HtmlDocPreview({
     let detach: (() => void) | undefined
     let loadFailed = false
     const onLoadStarted = (): void => {
+      resetBrowserOverlayViewport()
       loadFailed = false
       setFailureReason(null)
       setAssetFailures([])
@@ -173,7 +185,7 @@ export function HtmlDocPreview({
     setAssetFailures([])
     resetDirectoryAccess()
     setDownloadBlocked(false)
-    setGrantId(null)
+    setGrant(null)
     resetHistory()
     const request = buildDocPreviewGrantRequest(useAppStore.getState(), worktreeId, filePath)
     if (!request) {
@@ -228,6 +240,7 @@ export function HtmlDocPreview({
           onLoadStopped,
           onLoadFailed,
           onNavigated: syncHistory,
+          onViewportMessage: handleAnnotationViewportMessage,
           onTitleUpdated: (event) => {
             useAppStore.getState().updateBrowserPageState(previewId, { title: event.title })
             // A rename only — the mount already recorded this document's visit.
@@ -245,7 +258,7 @@ export function HtmlDocPreview({
         webviewRef.current = attached.webview
         // Why only now: main binds this grant to the guest on its first commit, so the tools have
         // nothing to name until the webview exists and is pointed at it.
-        setGrantId(handle.grantId)
+        setGrant(handle)
       })
       .catch(() => {
         if (!disposed) {
@@ -266,6 +279,8 @@ export function HtmlDocPreview({
     previewId,
     remintCount,
     resetDirectoryAccess,
+    handleAnnotationViewportMessage,
+    resetBrowserOverlayViewport,
     resetHistory,
     syncHistory,
     worktreeId
@@ -382,6 +397,7 @@ export function HtmlDocPreview({
         onToggleMarkup={() => (markup.isActive ? markup.cancel() : void markup.start())}
         // Nothing has painted yet on a loading or failed preview, so there is nothing to draw on.
         markupDisabled={isUnavailable || state !== 'ready' || grab.state !== 'idle'}
+        shareControl={buildDocPreviewShareControl(filePath, grant?.location ?? null)}
       />
       {notices.map((notice) => (
         <div

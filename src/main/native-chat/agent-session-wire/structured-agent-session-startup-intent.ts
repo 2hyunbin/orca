@@ -4,6 +4,7 @@
 // before effort, since an effort is only valid for the model it is set on. A pick the child refuses
 // is shown as what it runs; one cut short leaves the start unproven, so the child never runs it.
 
+import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import type { AgentSessionOptionsResult } from '../../../shared/agent-session-wire'
 import { nativeSessionOptionsFromReport } from './structured-agent-session-option-restoration'
 import type {
@@ -25,9 +26,14 @@ export function structuredAgentSessionStartupIntentWrites(
   launched: Readonly<Record<string, string>>,
   saved: Readonly<Record<string, string>> | undefined
 ): [key: string, value: string][] {
-  return Object.entries(saved ?? {})
-    .filter(([key, value]) => launched[key] !== value)
-    .sort(([a], [b]) => applyRank(a) - applyRank(b))
+  return (
+    Object.entries(saved ?? {})
+      // Permission changes replace the child at delivery; providers read them only at launch.
+      .filter(
+        ([key, value]) => key !== AGENT_CHAT_PERMISSION_MODE_OPTION_ID && launched[key] !== value
+      )
+      .sort(([a], [b]) => applyRank(a) - applyRank(b))
+  )
 }
 
 /** What applying the intent came to: `aborted` when a close, Stop, quit or the startup limit cut
