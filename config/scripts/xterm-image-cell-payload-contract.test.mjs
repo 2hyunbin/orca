@@ -133,6 +133,7 @@ describe('installed xterm image cell payload contract', () => {
       expect(cells(terminal)).toHaveLength(1)
       await write(terminal, '\x1b[1;2H\x1b[0mX\x1b[2;1Hordinary')
       expect(terminal.buffer.active.getLine(0).getCell(1).getChars()).toBe('X')
+      // Precondition: the stale map entry survives, so the next line proves the flag gates it.
       expect(line(terminal)._extendedAttrs[1].payload.imageId).toBe(placed.id)
       expect(line(terminal).getExtended(1).payload).toBeUndefined()
       expect(storage.getImageAtBufferCell(1, 0)).toBeUndefined()
@@ -186,6 +187,45 @@ describe('installed xterm image cell payload contract', () => {
       await write(terminal, '\x1b[?1049h')
       expect(cells(terminal)).toEqual([])
       expect(storage.getImageAtBufferCell(0, 0)).toBeUndefined()
+    } finally {
+      terminal.dispose()
+    }
+  })
+
+  it('replaces a foreign payload with a fresh tile without mutating it', async () => {
+    const { terminal, storage } = createTerminal()
+    try {
+      await write(terminal, '\x1b]8;;https://example.test\x1b\\AB')
+      const bufferLine = line(terminal)
+      const foreign = { kind: 'other-addon' }
+      const cell = terminal.buffer.active.getLine(0).getCell(0)
+      cell.extended = cell.extended.clone()
+      cell.extended.payload = foreign
+      cell.updateExtended()
+      bufferLine.setCell(0, cell)
+      const foreignAttrs = bufferLine.getExtended(0)
+      await write(terminal, '\x1b[1;1H')
+      const placed = place(storage)
+      expect(foreign).toEqual({ kind: 'other-addon' })
+      expect(foreignAttrs.payload).toBe(foreign)
+      expect(bufferLine.getExtended(0)).not.toBe(foreignAttrs)
+      expect(bufferLine.getExtended(0).urlId).toBe(foreignAttrs.urlId)
+      expect(bufferLine.getExtended(0).payload).toMatchObject({ imageId: placed.id, tileId: 0 })
+      expect(storage.getImageAtBufferCell(0, 0)).toBe(placed.image)
+    } finally {
+      terminal.dispose()
+    }
+  })
+
+  it('never reports a payload for plain cells, even after a caller writes the shared blank', async () => {
+    const { terminal } = createTerminal()
+    try {
+      await write(terminal, 'AB')
+      const bufferLine = line(terminal)
+      // Plain cells share one scratch ExtendedAttrs; a stray write must not reach the next read.
+      bufferLine.getExtended(0).payload = { kind: 'stray' }
+      expect(bufferLine.getExtended(1).payload).toBeUndefined()
+      expect(terminal.buffer.active.getLine(0).getCell(1).extended.payload).toBeUndefined()
     } finally {
       terminal.dispose()
     }
