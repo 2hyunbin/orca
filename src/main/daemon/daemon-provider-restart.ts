@@ -33,6 +33,7 @@ import {
   type RestartDaemonResult
 } from './daemon-restart-state'
 import { getDaemonPidPath, type DaemonSpawner } from './daemon-spawner'
+import { clearSeveredDaemon } from './daemon-host-image-state'
 import { PROTOCOL_VERSION } from './types'
 
 export type { RestartDaemonResult } from './daemon-restart-state'
@@ -163,6 +164,8 @@ async function runRestartDaemon(): Promise<RestartDaemonResult> {
 
   // Step 7: rebind renderer listeners against the new provider.
   rebindLocalProviderListeners()
+  // A new incarnation replaced any daemon whose AppImage files were gone.
+  clearSeveredDaemon()
 
   return { killedCount }
 }
