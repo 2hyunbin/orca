@@ -26,6 +26,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
   let callbacks: Callbacks | null = null
   let unsubscribe: (() => void)[] = []
   let reattaching = false
+  let reattachQueued = false
   let showingUnreachable = false
   let lastState: 'live' | 'unverifiable' | null = null
 
@@ -53,7 +54,12 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
   }
 
   const reattach = async (): Promise<void> => {
-    if (!api || reattaching || mode !== 'bridge') {
+    if (!api || mode !== 'bridge') {
+      return
+    }
+    if (reattaching) {
+      // The ask in flight may reach a bridge that was replaced since; ask again once it answers.
+      reattachQueued = true
       return
     }
     reattaching = true
@@ -72,6 +78,12 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       }
     } finally {
       reattaching = false
+      if (reattachQueued) {
+        reattachQueued = false
+        if (!attached) {
+          void reattach()
+        }
+      }
     }
   }
 
