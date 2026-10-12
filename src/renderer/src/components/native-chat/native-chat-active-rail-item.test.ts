@@ -27,7 +27,11 @@ const TURNS: NativeChatRailSlot[] = [
   { turnKey: 'u2' }
 ]
 
-const NO_TICKS: ReadonlySet<string> = new Set()
+/** The rail items `TURNS` loads: each turn's opening prompt. */
+const TICKS = [
+  { id: 'u1', slotIndex: 0 },
+  { id: 'u2', slotIndex: 4 }
+]
 
 const VIEWPORT = 300
 /** Ten 100px rows against a 300px viewport, scrolled off the bottom. */
@@ -44,7 +48,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
-        tickIds: NO_TICKS,
+        ticks: TICKS,
         virtualItems: rows(10),
         scrollTop: 250,
         ...MID_SCROLL
@@ -56,7 +60,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
-        tickIds: NO_TICKS,
+        ticks: TICKS,
         virtualItems: rows(10),
         scrollTop: 450,
         ...MID_SCROLL
@@ -68,7 +72,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
-        tickIds: NO_TICKS,
+        ticks: TICKS,
         virtualItems: rows(10),
         scrollTop: 400,
         ...MID_SCROLL
@@ -82,7 +86,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
-        tickIds: NO_TICKS,
+        ticks: TICKS,
         virtualItems: rows(10),
         scrollTop: 700,
         clientHeight: VIEWPORT,
@@ -98,7 +102,10 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: [{ turnKey: 'u1' }, { turnKey: 'u1' }, { turnKey: 'u2' }, { turnKey: 'u2' }],
-        tickIds: NO_TICKS,
+        ticks: [
+          { id: 'u1', slotIndex: 0 },
+          { id: 'u2', slotIndex: 2 }
+        ],
         virtualItems: rows(4),
         // 30px short of the end, with a `u1` row at the top edge.
         scrollTop: 100,
@@ -113,7 +120,10 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: [{ turnKey: undefined }, { turnKey: undefined }, ...TURNS],
-        tickIds: NO_TICKS,
+        ticks: [
+          { id: 'u1', slotIndex: 2 },
+          { id: 'u2', slotIndex: 6 }
+        ],
         virtualItems: rows(12),
         scrollTop: 50,
         clientHeight: VIEWPORT,
@@ -129,7 +139,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
-        tickIds: NO_TICKS,
+        ticks: TICKS,
         virtualItems: [{ index: 0, start: 0, end: 100 }],
         scrollTop: 600,
         clientHeight: VIEWPORT,
@@ -143,7 +153,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots: TURNS,
-        tickIds: NO_TICKS,
+        ticks: TICKS,
         virtualItems: [],
         scrollTop: 0,
         clientHeight: VIEWPORT,
@@ -154,15 +164,13 @@ describe('active rail item', () => {
   })
 
   // A rejected send the journal recorded keeps its place but opens no turn.
-  it('lights a prompt in no turn by its own id', () => {
-    const slots: NativeChatRailSlot[] = [
-      ...TURNS,
-      { turnKey: undefined, message: { id: 'rejected', role: 'user' } }
-    ]
+  it('lights a prompt in no turn by its own tick', () => {
+    const slots: NativeChatRailSlot[] = [...TURNS, { turnKey: undefined }]
+    const ticks = [...TICKS, { id: 'rejected', slotIndex: 10 }]
     expect(
       findActiveNativeChatRailItem({
         slots,
-        tickIds: NO_TICKS,
+        ticks,
         virtualItems: rows(11),
         scrollTop: 800,
         clientHeight: VIEWPORT,
@@ -173,7 +181,7 @@ describe('active rail item', () => {
     expect(
       findActiveNativeChatRailItem({
         slots,
-        tickIds: NO_TICKS,
+        ticks,
         virtualItems: rows(11),
         scrollTop: 1010,
         ...MID_SCROLL,
@@ -185,19 +193,22 @@ describe('active rail item', () => {
   // A message sent mid-turn takes the running turn's key but has its own tick.
   describe('a message sent into a running turn', () => {
     const slots: NativeChatRailSlot[] = [
-      { turnKey: 'u1', message: { id: 'u1', role: 'user' } },
       { turnKey: 'u1' },
-      { turnKey: 'u1', message: { id: 'steer', role: 'user' } },
+      { turnKey: 'u1' },
+      { turnKey: 'u1' },
       { turnKey: 'u1' },
       { turnKey: 'u1' }
     ]
-    const tickIds = new Set(['u1', 'steer'])
+    const ticks = [
+      { id: 'u1', slotIndex: 0 },
+      { id: 'steer', slotIndex: 2 }
+    ]
 
     it('lights it when pinned to the bottom', () => {
       expect(
         findActiveNativeChatRailItem({
           slots,
-          tickIds,
+          ticks,
           virtualItems: rows(5),
           scrollTop: 200,
           clientHeight: VIEWPORT,
@@ -208,9 +219,45 @@ describe('active rail item', () => {
     })
 
     it('lights the opener above it and itself from its row on', () => {
-      const scroll = { slots, tickIds, virtualItems: rows(5), ...MID_SCROLL }
+      const scroll = { slots, ticks, virtualItems: rows(5), ...MID_SCROLL }
       expect(findActiveNativeChatRailItem({ ...scroll, scrollTop: 150 })).toBe('u1')
       expect(findActiveNativeChatRailItem({ ...scroll, scrollTop: 250 })).toBe('steer')
     })
+
+    // A row outside every turn (thread-scoped) can land inside the running one.
+    it('stays lit past a row of no turn below it', () => {
+      expect(
+        findActiveNativeChatRailItem({
+          slots: [...slots.slice(0, 3), { turnKey: undefined }, { turnKey: 'u1' }],
+          ticks,
+          virtualItems: rows(5),
+          scrollTop: 450,
+          ...MID_SCROLL
+        })
+      ).toBe('steer')
+    })
+
+    // The opener is older than the loaded window, known only from the outline.
+    it('lights the outline prompt above the first loaded tick, and the tick below it', () => {
+      const window = { slots, ticks: [{ id: 'steer', slotIndex: 2 }], virtualItems: rows(5) }
+      expect(findActiveNativeChatRailItem({ ...window, scrollTop: 150, ...MID_SCROLL })).toBe('u1')
+      expect(findActiveNativeChatRailItem({ ...window, scrollTop: 250, ...MID_SCROLL })).toBe(
+        'steer'
+      )
+    })
+  })
+
+  // No prompt of the reader's opened it, so the nearest one above stands for it.
+  it('lights the prompt above a turn the agent opened on its own', () => {
+    expect(
+      findActiveNativeChatRailItem({
+        slots: [...TURNS, { turnKey: 'agent-turn' }, { turnKey: 'agent-turn' }],
+        ticks: TICKS,
+        virtualItems: rows(12),
+        scrollTop: 1050,
+        ...MID_SCROLL,
+        scrollHeight: 2000
+      })
+    ).toBe('u2')
   })
 })

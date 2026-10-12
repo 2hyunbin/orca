@@ -46,7 +46,7 @@ import type {
   NativeChatRailItem,
   NativeChatRailOutlineEntry
 } from './native-chat-message-rail-items'
-import { useNativeChatRailHistoryJump } from './use-native-chat-rail-history-jump'
+import { useNativeChatRailSelection } from './use-native-chat-rail-selection'
 import { useNativeChatRailJumpLanding } from './use-native-chat-rail-jump-landing'
 import { useNativeChatReaderScrollInput } from './native-chat-reader-scroll-input'
 import { useNativeChatMessageListHandle } from './use-native-chat-reveal-latest'
@@ -274,28 +274,14 @@ export function NativeChatMessageList({
       requestId: navigationSequence.current
     })
   }, [])
-  const railHistoryJump = useNativeChatRailHistoryJump({
-    items: rail.items,
+  const { beginNavigation, selectRailItem, pendingId } = useNativeChatRailSelection({
+    rail,
     sessionKey: `${session.agent}:${session.sessionId}`,
     isVisible,
     loadEarlier,
+    readerLeavesEnd,
     jumpToLoaded: requestRailJump
   })
-  const { start: startHistoryJump, abort: beginNavigation } = railHistoryJump
-  // Every navigation begins by aborting a history jump still paging, which would
-  // otherwise land later and pull the reader away from where they just went.
-  const selectRailItem = useCallback(
-    (item: NativeChatRailItem) => {
-      beginNavigation()
-      readerLeavesEnd()
-      if (item.slotIndex === null) {
-        startHistoryJump(item)
-        return
-      }
-      requestRailJump(item)
-    },
-    [beginNavigation, readerLeavesEnd, requestRailJump, startHistoryJump]
-  )
   const revealDiff = useCallback(
     (target: NativeChatDiffTarget) => {
       beginNavigation()
@@ -417,7 +403,7 @@ export function NativeChatMessageList({
             scrollRef={scrollRef}
             onSelect={selectRailItem}
             onReaderScroll={readerScrollInput.railWheel}
-            pendingId={railHistoryJump.pendingId}
+            pendingId={pendingId}
           />
           <NativeChatJumpToLatest visible={showJump} onJump={jumpToLatest} />
         </div>

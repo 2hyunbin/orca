@@ -34,6 +34,8 @@ export type NativeChatMessageRailState = {
   activeId: string | null
   /** Light a tick now, ahead of the scroll that is taking the reader to it. */
   onActivate: (id: string) => void
+  /** The reader scrolled or started another navigation: the lit tick follows the view again. */
+  onNavigate: () => void
   visible: boolean
   /** The item whose preview is open, if any. */
   previewId: string | null
@@ -85,19 +87,20 @@ export function useNativeChatMessageRail({
   virtualItemsRef.current = virtualItems
   const slotsRef = useRef(slots)
   slotsRef.current = slots
-  const tickIds = useMemo(() => new Set(loadedItems.map((item) => item.id)), [loadedItems])
-  const tickIdsRef = useRef(tickIds)
-  tickIdsRef.current = tickIds
+  // A clicked tick stays lit until the reader navigates: a jump clamped short of
+  // the top settles with another row at the fold, or the last one at the bottom.
+  const clickedRef = useRef(false)
 
   const readActiveId = useCallback(() => {
     const element = scrollRef.current
-    if (!element) {
+    if (!element || clickedRef.current) {
       return
     }
     setActiveId((previous) =>
       findActiveNativeChatRailItem({
         slots: slotsRef.current,
-        tickIds: tickIdsRef.current,
+        // The committed items: a read only ever follows a commit.
+        ticks: previousItemsRef.current,
         virtualItems: virtualItemsRef.current,
         scrollTop: element.scrollTop,
         clientHeight: element.clientHeight,
@@ -136,8 +139,9 @@ export function useNativeChatMessageRail({
   }, [readActiveId, scrollRef])
 
   // Re-read when the set of prompts actually changes, so a transcript that grew
-  // updates without waiting for the next scroll.
+  // updates without waiting for the next scroll. A clicked tick may be gone from it.
   useEffect(() => {
+    clickedRef.current = false
     readActiveId()
   }, [items, readActiveId])
 
@@ -157,14 +161,16 @@ export function useNativeChatMessageRail({
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
   const ticks = useMemo(
-    () =>
-      selectNativeChatRailTicks({
-        items,
-        keepIds: [activeId, focusId, previewId],
-        maxTicks
-      }),
+    () => selectNativeChatRailTicks({ items, keepIds: [activeId, focusId, previewId], maxTicks }),
     [items, activeId, focusId, previewId, maxTicks]
   )
+  const onActivate = useCallback((id: string) => {
+    clickedRef.current = true
+    setActiveId(id)
+  }, [])
+  const onNavigate = useCallback(() => {
+    clickedRef.current = false
+  }, [])
   const previewReply =
     previewId === null ? '' : nativeChatRailReplyPreview(turnRows, items, previewId)
 
@@ -173,7 +179,8 @@ export function useNativeChatMessageRail({
       ticks,
       items,
       activeId,
-      onActivate: setActiveId,
+      onActivate,
+      onNavigate,
       visible: wideEnough && items.length > 0,
       previewId,
       previewReply,
@@ -181,6 +188,6 @@ export function useNativeChatMessageRail({
       focusId,
       onFocusItem: setFocusId
     }),
-    [ticks, items, activeId, wideEnough, previewId, previewReply, focusId]
+    [ticks, items, activeId, onActivate, onNavigate, wideEnough, previewId, previewReply, focusId]
   )
 }

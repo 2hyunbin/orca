@@ -150,6 +150,46 @@ describe('message rail hook', () => {
     expect(scrollSubscriptions).toHaveLength(1)
   })
 
+  // A jump that cannot bring its row to the top lands clamped at the bottom, where
+  // the position report would light the last tick instead of the clicked one.
+  it('keeps a clicked tick lit until the reader navigates', () => {
+    vi.useFakeTimers()
+    const element = document.createElement('div')
+    Object.defineProperties(element, {
+      scrollTop: { value: 200 },
+      clientHeight: { value: 300 },
+      scrollHeight: { value: 500 }
+    })
+    const scrollRef = { current: element }
+    const slots = slotsOf(CONVERSATION)
+    const virtualItems = slots.map((_slot, index) => ({
+      key: index,
+      index,
+      start: index * 100,
+      end: index * 100 + 100,
+      size: 100,
+      lane: 0
+    }))
+    const { result, unmount } = renderHook(() =>
+      useNativeChatMessageRail({ scrollRef, slots, turnRows: NO_ROWS, virtualItems })
+    )
+    expect(result.current.activeId).toBe('u3')
+    act(() => result.current.onActivate('u2'))
+    act(() => {
+      element.dispatchEvent(new Event('scroll'))
+      vi.runAllTimers()
+    })
+    expect(result.current.activeId).toBe('u2')
+    act(() => {
+      result.current.onNavigate()
+      element.dispatchEvent(new Event('scroll'))
+      vi.runAllTimers()
+    })
+    expect(result.current.activeId).toBe('u3')
+    unmount()
+    vi.useRealTimers()
+  })
+
   it('ticks every user message and shows from the first one', () => {
     const element = document.createElement('div')
     const scrollRef = { current: element }
