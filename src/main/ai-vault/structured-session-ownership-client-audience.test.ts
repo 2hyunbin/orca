@@ -8,6 +8,10 @@ import {
 import { buildAgentResumeStartupPlan } from '../../shared/tui-agent-resume-startup'
 import { isResumableTuiAgent } from '../../shared/agent-session-resume'
 import type { AgentStartupShell } from '../../shared/tui-agent-startup-shell'
+import {
+  claudeProviderHandle,
+  codexProviderHandle
+} from '../../shared/agent-session-provider-handle-encoding'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
 import {
   CLAUDE_STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
@@ -130,6 +134,12 @@ describe('resume commands Orca builds for an owned row', () => {
     { platform: 'win32', shell: 'powershell' },
     { platform: 'win32', shell: 'cmd' }
   ]
+  // A user's command override is the launch command's program, verbatim.
+  const overrides = (binary: string): Record<AgentStartupShell, (string | undefined)[]> => ({
+    posix: [undefined, `FOO=1 /opt/bin/${binary}`, `env -i FOO=1 /opt/bin/${binary}`],
+    powershell: [undefined, `& 'C:\\Program Files\\${binary}\\${binary}.exe'`],
+    cmd: [undefined, `"C:\\Program Files\\${binary}\\${binary}.exe"`]
+  })
 
   function builtCommands(conversation: OwnedConversation): string[] {
     const agent = conversation.rowAgent
@@ -145,34 +155,50 @@ describe('resume commands Orca builds for an owned row', () => {
         shell,
         resumeFilePath: conversation.filePath
       })
-      const plan = buildAgentResumeStartupPlan({
-        agent,
-        providerSession: {
-          key: 'session_id',
-          id: conversation.sessionId,
-          transcriptPath: conversation.filePath
-        },
-        cmdOverrides: {},
-        platform,
-        shell,
-        ompResumeFilePath: conversation.filePath
+      const tabs = overrides(agent)[shell].map((override) => {
+        const plan = buildAgentResumeStartupPlan({
+          agent,
+          providerSession: {
+            key: 'session_id',
+            id: conversation.sessionId,
+            transcriptPath: conversation.filePath
+          },
+          cmdOverrides: override ? { [agent]: override } : {},
+          platform,
+          shell,
+          ompResumeFilePath: conversation.filePath
+        })
+        return plan
+          ? buildAiVaultResumeShellCommand({
+              resumeCommand: plan.launchCommand,
+              cwd: '/Users/me/repo',
+              platform,
+              shell
+            })
+          : null
       })
-      const tab = plan
-        ? buildAiVaultResumeShellCommand({
-            resumeCommand: plan.launchCommand,
-            cwd: '/Users/me/repo',
-            platform,
-            shell
-          })
-        : null
-      return tab ? [vault, tab] : [vault]
+      return [vault, ...tabs.filter((tab): tab is string => tab !== null)]
     })
   }
 
-  it.each(CONVERSATIONS)('refuses each one for the $rowAgent row', async (conversation) => {
+  it.each([
+    ...CONVERSATIONS,
+    {
+      rowAgent: 'claude' as const,
+      sessionId: UUID,
+      filePath: `/Users/me/.claude/projects/-Users-me-repo/${UUID}.jsonl`,
+      handle: claudeProviderHandle(UUID, null)
+    },
+    {
+      rowAgent: 'codex' as const,
+      sessionId: UUID,
+      filePath: `/Users/me/.codex/sessions/2026/10/09/rollout-2026-10-09T10-00-00-${UUID}.jsonl`,
+      handle: codexProviderHandle(UUID)
+    }
+  ])('refuses each one for the $rowAgent row', async (conversation) => {
     installOwnership({ handle: conversation.handle })
     const commands = builtCommands(conversation)
-    expect(commands.length).toBe(shells.length * 2)
+    expect(commands.length).toBe(10)
     for (const command of commands) {
       await expect(
         assertLegacyAiVaultResumeCommandAllowed(command, async () => undefined),

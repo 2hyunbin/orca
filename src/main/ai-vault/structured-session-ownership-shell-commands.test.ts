@@ -124,3 +124,48 @@ describe.each(AGENTS)('a $name resume read as a shell reads it', (agent) => {
     }
   })
 })
+
+// terminal.send checks agent prompts too, and its text may still reach a shell, so a name counts
+// only where a shell would run it.
+describe.each(AGENTS)('a $name resume in command position', (agent) => {
+  const resume = `${agent.name} ${agent.resumeArgs}`
+
+  it('is refused behind assignments, a path or a launcher', async () => {
+    agent.own()
+    for (const command of [
+      `FOO=1 BAR='a b' ${resume}`,
+      `/usr/local/bin/${resume}`,
+      `${agent.name[0]!.toUpperCase()}${agent.name.slice(1)} ${agent.resumeArgs}`,
+      `env -i FOO=1 ${resume}`,
+      `exec ${resume}`,
+      `command ${resume}`,
+      `sudo -E ${resume}`,
+      `npx ${resume}`,
+      `bunx ${resume}`,
+      `pnpm dlx ${resume}`,
+      `& 'C:\\Program Files\\${agent.name}\\${agent.name}.exe' ${agent.resumeArgs}`,
+      `cd /d "C:/x" && ${resume}`,
+      `echo hi\n${resume}`
+    ]) {
+      await refused(command)
+    }
+  })
+
+  it('is allowed as another program’s argument or prompt text', async () => {
+    agent.own()
+    for (const command of [
+      `Fix the ${agent.name} ${agent.resumeArgs} handling`,
+      `echo ${resume}`,
+      `git commit -m wip ${resume}`,
+      `rg -n ${resume}`
+    ]) {
+      await allowed(command)
+    }
+  })
+})
+
+it('allows a prompt that names a Pi flag while a Pi chat owns a conversation', async () => {
+  AGENTS.find(({ name }) => name === 'pi')!.own()
+  await allowed('Fix the Pi --resume flag')
+  await allowed('The pi -c path is broken.\nPlease fix pi --continue too')
+})

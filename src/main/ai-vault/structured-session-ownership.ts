@@ -20,7 +20,7 @@ import {
   STRUCTURED_AGENT_RUNTIME_REGISTRATIONS,
   type StructuredAgentRuntimeRegistration
 } from '../runtime/structured-agent-runtime-registrations'
-import { commandName, shellCommands } from './shell-command-words'
+import { commandName, commandProgramIndex, shellCommands } from './shell-command-words'
 
 /** Whether the client a projection answers opens a chat of this agent from its history row. A row
  *  owned by a chat it cannot open is hidden from it: resuming that row in a terminal is refused. */
@@ -236,23 +236,16 @@ function parseResumeInvocations(command: string): ResumeInvocation[] {
       binaries.set(name, registration)
     }
   }
-  // Each shell command is read alone: in it, each agent reads its arguments from its own first
-  // binary word, so another agent's name earlier (`claude --model pi -r x`) never hides it.
+  // Only a command's program can resume: a name elsewhere is an argument or prompt text
+  // ("Fix the Pi --resume flag", `claude --model pi -r x`).
   const invocations: ResumeInvocation[] = []
   for (const words of shellCommands(command)) {
-    const firstMentions = new Map<StructuredAgentRuntimeRegistration, number>()
-    for (const [index, word] of words.entries()) {
-      const registration = binaries.get(commandName(word))
-      if (registration && !firstMentions.has(registration)) {
-        firstMentions.set(registration, index)
-      }
-    }
-    for (const [registration, mention] of firstMentions) {
-      const history = registration.sessionHistory
-      const invocation = history.parseResumeArgs(words.slice(mention + 1))
-      if (invocation) {
-        invocations.push({ ...invocation, provider: registration.definition.agent, history })
-      }
+    const program = commandProgramIndex(words)
+    const registration = binaries.get(commandName(words[program] ?? ''))
+    const history = registration?.sessionHistory
+    const invocation = history?.parseResumeArgs(words.slice(program + 1))
+    if (registration && history && invocation) {
+      invocations.push({ ...invocation, provider: registration.definition.agent, history })
     }
   }
   return invocations

@@ -44,3 +44,26 @@ export function* shellCommands(text: string): Generator<string[]> {
 export function commandName(word: string): string {
   return word.slice(Math.max(word.lastIndexOf('/'), word.lastIndexOf('\\')) + 1).toLowerCase()
 }
+
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+const LAUNCHERS = new Set(['env', 'exec', 'command', 'sudo', 'npx', 'bunx'])
+
+/** The index of the program a command runs: its first word past `VAR=x` prefixes and launchers
+ *  (`env`, `exec`, `command`, `sudo`, `npx`, `bunx`, `pnpm dlx`) with their options; -1 if none. */
+export function commandProgramIndex(words: readonly string[]): number {
+  let launched = false
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index]!
+    if (ASSIGNMENT.test(word) || (launched && word.startsWith('-'))) {
+      continue
+    }
+    const name = commandName(word)
+    if (name === 'pnpm' && words[index + 1] === 'dlx') {
+      index += 1
+    } else if (!LAUNCHERS.has(name)) {
+      return index
+    }
+    launched = true
+  }
+  return -1
+}
