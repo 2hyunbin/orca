@@ -47,6 +47,10 @@ on:
     # One complete daily reference run; targeted PR coverage remains unchanged.
     - cron: '0 17 * * *'
 
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+  ORCA_E2E_HEADLESS: '1'
+
 jobs:
   build:
     name: build e2e app
