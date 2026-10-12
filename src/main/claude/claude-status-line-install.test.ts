@@ -10,6 +10,8 @@ vi.mock('electron', () => ({
 }))
 
 import { ClaudeHookService } from './hook-service'
+import { getManagedCommand } from './hook-settings'
+import { getManagedStatusLineCommand } from './statusline-script'
 
 const USER_STATUS_LINE = { type: 'command', command: '/usr/local/bin/my-statusline' }
 
@@ -72,4 +74,72 @@ describe('Claude statusLine by resolved version', () => {
     new ClaudeHookService().install()
     expect(readSettings().statusLine?.command).toContain('claude-statusline')
   })
+})
+
+describe('Claude statusLine on Windows', () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  const CURRENT_CLAUDE = { claudeVersion: '2.1.261' }
+  let tmpHome: string
+  let settingsPath: string
+  let scriptPath: string
+
+  beforeEach(() => {
+    tmpHome = mkdtempSync(join(tmpdir(), 'orca-claude-statusline-win-'))
+    settingsPath = join(tmpHome, '.claude', 'settings.json')
+    scriptPath = join(tmpHome, '.orca', 'agent-hooks', 'claude-statusline.cmd')
+    vi.stubEnv('HOME', tmpHome)
+    vi.stubEnv('USERPROFILE', tmpHome)
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platform)
+    vi.unstubAllEnvs()
+    rmSync(tmpHome, { recursive: true, force: true })
+  })
+
+  const readSettings = () => JSON.parse(readFileSync(settingsPath, 'utf-8'))
+  const seedStatusLine = (command: string) => {
+    mkdirSync(join(tmpHome, '.claude'), { recursive: true })
+    writeFileSync(settingsPath, JSON.stringify({ statusLine: { type: 'command', command } }))
+  }
+
+  it('registers a cmd-safe script bare, which Windows PowerShell can run', () => {
+    expect(
+      getManagedStatusLineCommand('C:\\Users\\alice\\.orca\\agent-hooks\\claude-statusline.cmd')
+    ).toBe('C:/Users/alice/.orca/agent-hooks/claude-statusline.cmd')
+  })
+
+  it('keeps the runtime-home form for an unsafe path rather than an encoded PowerShell launcher', () => {
+    const spaced = 'C:\\Users\\John Smith\\.orca\\agent-hooks\\claude-statusline.cmd'
+    // Why: the encoded launcher would start a hidden PowerShell on every statusline tick.
+    expect(getManagedStatusLineCommand(spaced)).toBe(getManagedCommand(spaced))
+  })
+
+  it.each([
+    ['the runtime-home form', () => getManagedCommand(scriptPath)],
+    ['a stale bare path', () => 'C:/Users/someone-else/.orca/agent-hooks/claude-statusline.cmd']
+  ])('replaces %s as Orca-owned', (_name, command) => {
+    seedStatusLine(command())
+    // Why: the marker from an earlier install must not read as the user's opt-out.
+    mkdirSync(join(tmpHome, '.orca', 'agent-hooks'), { recursive: true })
+    writeFileSync(join(tmpHome, '.orca', 'agent-hooks', 'claude-statusline.installed'), '')
+
+    new ClaudeHookService().install(CURRENT_CLAUDE)
+    expect(readSettings().statusLine).toEqual({
+      type: 'command',
+      command: getManagedStatusLineCommand(scriptPath)
+    })
+  })
+
+  it.each(['C:/tools/my-statusline.cmd', 'powershell -NoProfile -File C:\\tools\\statusline.ps1'])(
+    'never overwrites or removes a user statusLine: %s',
+    (command) => {
+      seedStatusLine(command)
+      new ClaudeHookService().install(CURRENT_CLAUDE)
+      expect(readSettings().statusLine).toEqual({ type: 'command', command })
+      new ClaudeHookService().remove()
+      expect(readSettings().statusLine).toEqual({ type: 'command', command })
+    }
+  )
 })

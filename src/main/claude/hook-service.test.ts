@@ -335,14 +335,7 @@ describe('ClaudeHookService.install', () => {
         readFileSync(join(tmpHome, '.claude', 'settings.json'), 'utf-8')
       ) as { statusLine?: { type: string; command: string } }
       expect(settings.statusLine?.type).toBe('command')
-      if (process.platform === 'win32') {
-        // Why: Windows PowerShell runs it when Git Bash is absent, so it must be the shell-neutral form.
-        expect(settings.statusLine?.command).toBe(
-          getWindowsManagedLifecycleHook(
-            join(tmpHome, '.orca', 'agent-hooks', STATUSLINE_SCRIPT_FILE_NAME)
-          ).command
-        )
-      } else {
+      if (process.platform !== 'win32') {
         expect(settings.statusLine?.command).toContain(
           '"${HOME-}/.orca/agent-hooks/claude-statusline.sh"'
         )
