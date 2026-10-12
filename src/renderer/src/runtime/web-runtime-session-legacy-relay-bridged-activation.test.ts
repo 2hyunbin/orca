@@ -4,6 +4,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { activateWebRuntimeSessionTab } from './web-runtime-session-tab-lifecycle'
+import {
+  peekWebSessionFocusIntent,
+  recordWebSessionFocusIntent,
+  resetWebSessionFocusIntentForTests
+} from './web-session-focus-intent'
 import { toWebTerminalSurfaceTabId } from './web-terminal-surface-id'
 import { ENVIRONMENT_ID, WORKTREE_ID } from './web-runtime-session-test-harness'
 
@@ -46,6 +51,7 @@ describe('activating a pane the legacy relay bridge serves', () => {
   })
 
   afterEach(() => {
+    resetWebSessionFocusIntentForTests()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
@@ -63,6 +69,20 @@ describe('activating a pane the legacy relay bridge serves', () => {
     ).resolves.toBe(true)
 
     expect(call).not.toHaveBeenCalled()
+  })
+
+  it("drops an earlier tab's pending focus so its late snapshot cannot pull focus back", async () => {
+    stubWindow(vi.fn())
+    const owner = { environmentId: ENVIRONMENT_ID }
+    recordWebSessionFocusIntent(owner, WORKTREE_ID, 'orcad-tab::leaf')
+
+    await activateWebRuntimeSessionTab({
+      worktreeId: WORKTREE_ID,
+      tabId: toWebTerminalSurfaceTabId('relay-tab::relay-leaf'),
+      environmentId: ENVIRONMENT_ID
+    })
+
+    expect(peekWebSessionFocusIntent(owner, WORKTREE_ID)).toBeNull()
   })
 
   it('still activates its sibling panes and every other tab on the server', async () => {
