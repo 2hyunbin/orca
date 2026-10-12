@@ -431,7 +431,11 @@ describe('unknown help command surfaces a suggestion', () => {
 describe('nested command group help', () => {
   it.each([
     ['browser', ['browser'], ['identity get', 'identity set']],
-    ['browser identity', ['browser', 'identity'], ['get', 'set']]
+    ['browser identity', ['browser', 'identity'], ['get', 'set']],
+    ['tab', ['tab'], ['create', 'current', 'show', 'profile delete']],
+    ['tab profile', ['tab', 'profile'], ['list', 'create', 'delete', 'clone']],
+    ['browser page', ['browser', 'page'], ['create', 'current', 'show']],
+    ['browser profile', ['browser', 'profile'], ['list', 'create', 'rm', 'clone']]
   ])(
     'prints successful help for %s without constructing a runtime client',
     async (_, path, commands) => {
