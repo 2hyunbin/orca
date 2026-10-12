@@ -10,6 +10,7 @@ import {
   type WorkerThreadChildRequest,
   type WorkerThreadChildSpec
 } from './worker-thread-child-process-protocol'
+import { killOrphanByPid } from './orphan-pid-kill'
 
 // Why (#27362): libuv creates processes inline on the calling loop, and on
 // Windows CreateProcessW can spend seconds in code integrity hashing a large,
@@ -29,6 +30,9 @@ function toError(payload: WorkerThreadChildErrorPayload): Error {
   }
   return error
 }
+
+/** Terminates an orphaned child by pid once its worker, and so its handle, is gone. */
+export type WorkerThreadOrphanKill = (pid: number, signal?: NodeJS.Signals) => boolean
 
 class WorkerThreadChildStdin extends EventEmitter {
   constructor(
@@ -59,10 +63,12 @@ export class WorkerThreadChildProcess extends EventEmitter {
   readonly stdin: WorkerThreadChildStdin
   readonly stdout = new EventEmitter()
   readonly stderr = new EventEmitter()
+  private orphaned = false
 
   constructor(
     readonly id: number,
-    private readonly send: (request: WorkerThreadChildRequest) => void
+    private readonly send: (request: WorkerThreadChildRequest) => void,
+    private readonly killOrphan: WorkerThreadOrphanKill = killOrphanByPid
   ) {
     super()
     this.stdin = new WorkerThreadChildStdin(id, send)
@@ -71,6 +77,10 @@ export class WorkerThreadChildProcess extends EventEmitter {
   kill(signal?: NodeJS.Signals): boolean {
     if (this.exitCode !== null || this.signalCode !== null) {
       return false
+    }
+    if (this.orphaned) {
+      // No pid means the spawn never reported back; there is nothing addressable to kill.
+      return this.pid === undefined ? false : this.killOrphan(this.pid, signal)
     }
     this.send({ type: 'kill', id: this.id, signal })
     return true
@@ -108,9 +118,10 @@ export class WorkerThreadChildProcess extends EventEmitter {
 
   /**
    * @internal The worker died. No 'close': the real process may outlive it, so
-   * callers must escalate by pid rather than treat the child as gone.
+   * kill() switches to the pid-addressed orphan kill.
    */
   orphan(payload: WorkerThreadChildErrorPayload): void {
+    this.orphaned = true
     this.emitErrorIfObserved(this, payload)
   }
 
@@ -121,6 +132,11 @@ export class WorkerThreadChildProcess extends EventEmitter {
       target.emit('error', toError(payload))
     }
   }
+}
+
+export type SpawnOnWorkerThreadOptions = {
+  /** Defaults to a bare pid kill; pass a tree kill when the child runs behind a launcher. */
+  killOrphan?: WorkerThreadOrphanKill
 }
 
 export class WorkerThreadChildProcessHost {
@@ -143,9 +159,16 @@ export class WorkerThreadChildProcessHost {
     })
   }
 
-  spawn(spec: WorkerThreadChildSpec): WorkerThreadChildProcess {
+  spawn(
+    spec: WorkerThreadChildSpec,
+    options: SpawnOnWorkerThreadOptions = {}
+  ): WorkerThreadChildProcess {
     const id = this.nextId++
-    const child = new WorkerThreadChildProcess(id, (request) => this.post(request))
+    const child = new WorkerThreadChildProcess(
+      id,
+      (request) => this.post(request),
+      options.killOrphan
+    )
     const worker = this.host.ensure()
     if (!worker) {
       this.failToStart(child, 'Child process worker is unavailable')
@@ -230,9 +253,13 @@ let sharedHost: WorkerThreadChildProcessHost | null = null
  * Spawn a piped child from the shared worker thread so process creation never
  * blocks the main event loop.
  * @param spec - Program, argv, cwd and env; stdio is always three pipes.
+ * @param options - How to kill the child by pid if the worker dies under it.
  * @returns A ChildProcess-shaped proxy whose events arrive from the worker.
  */
-export function spawnProcessOnWorkerThread(spec: WorkerThreadChildSpec): WorkerThreadChildProcess {
+export function spawnProcessOnWorkerThread(
+  spec: WorkerThreadChildSpec,
+  options?: SpawnOnWorkerThreadOptions
+): WorkerThreadChildProcess {
   sharedHost ??= new WorkerThreadChildProcessHost(defaultWorkerFactory)
-  return sharedHost.spawn(spec)
+  return sharedHost.spawn(spec, options)
 }

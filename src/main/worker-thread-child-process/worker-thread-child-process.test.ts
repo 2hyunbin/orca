@@ -210,6 +210,31 @@ describe('WorkerThreadChildProcessHost', () => {
     expect(workers).toHaveLength(2)
   })
 
+  it('kills an orphan by pid once its worker is gone', () => {
+    const workers: FakeWorker[] = []
+    const killOrphan = vi.fn(() => true)
+    const child = makeHost(workers).spawn(SPEC, { killOrphan })
+    workers[0].send({ type: 'spawn', id: child.id, pid: 77 })
+    workers[0].emit('exit', 1)
+
+    expect(child.kill('SIGKILL')).toBe(true)
+
+    expect(killOrphan).toHaveBeenCalledWith(77, 'SIGKILL')
+    // The dead worker must not be the one asked to kill.
+    expect(workers[0].posted.map((request) => request.type)).toEqual(['spawn'])
+  })
+
+  it('reports an orphan without a known pid as unkillable instead of throwing', () => {
+    const workers: FakeWorker[] = []
+    const killOrphan = vi.fn(() => true)
+    const child = makeHost(workers).spawn(SPEC, { killOrphan })
+    workers[0].emit('error', new Error('worker crashed'))
+
+    expect(() => child.kill()).not.toThrow()
+    expect(child.kill()).toBe(false)
+    expect(killOrphan).not.toHaveBeenCalled()
+  })
+
   it('tears the idle worker down only after the last child closes', async () => {
     vi.useFakeTimers()
     const workers: FakeWorker[] = []

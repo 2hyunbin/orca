@@ -23,7 +23,7 @@ import {
 } from './codex-backend-usage-client'
 import type { CodexRateLimitFetchOptions } from './codex-rate-limit-fetch-options'
 import { abortedCodexRateLimitResult } from './codex-rate-limit-fetch-result'
-import { terminateCodexProbeChild } from './codex-probe-termination'
+import { killOrphanedCodexProbe, terminateCodexProbeChild } from './codex-probe-termination'
 import {
   consumeCodexRateLimitResetCreditFromBackend,
   supplementCodexRateLimitResetCredits
@@ -94,17 +94,20 @@ async function fetchViaRpc(options?: CodexRateLimitFetchOptions): Promise<Provid
   // Why the bare CLI: spawnProcess resolves an npm `codex.cmd` shim past cmd.exe itself.
   // Why a worker thread (#27362): this runs on window focus, and creating a cold
   // standalone codex.exe can block the calling thread for seconds on Windows.
-  const child = spawnProcessOnWorkerThread({
-    program: wslCodex ? wslCodex.command : codexCommand,
-    args: wslCodex ? wslCodex.args : codexArgs,
-    cwd: resolveHiddenRateLimitPtyCwd(),
-    env: withCliRuntimeOnPath(codexCommand, {
-      ...(wslCodex ? processEnvWithoutCodexHome() : process.env),
-      // WSL probes keep the guest's own proxy env; a Windows proxy address may not resolve there.
-      ...(wslCodex ? {} : buildConfiguredProxyEnv(options?.networkProxySettings)),
-      ...(options?.codexHomePath && !wslCodex ? { CODEX_HOME: options.codexHomePath } : {})
-    })
-  })
+  const child = spawnProcessOnWorkerThread(
+    {
+      program: wslCodex ? wslCodex.command : codexCommand,
+      args: wslCodex ? wslCodex.args : codexArgs,
+      cwd: resolveHiddenRateLimitPtyCwd(),
+      env: withCliRuntimeOnPath(codexCommand, {
+        ...(wslCodex ? processEnvWithoutCodexHome() : process.env),
+        // WSL probes keep the guest's own proxy env; a Windows proxy address may not resolve there.
+        ...(wslCodex ? {} : buildConfiguredProxyEnv(options?.networkProxySettings)),
+        ...(options?.codexHomePath && !wslCodex ? { CODEX_HOME: options.codexHomePath } : {})
+      })
+    },
+    { killOrphan: killOrphanedCodexProbe }
+  )
   return readCodexRateLimitsViaRpc({
     child,
     codexCommand,
