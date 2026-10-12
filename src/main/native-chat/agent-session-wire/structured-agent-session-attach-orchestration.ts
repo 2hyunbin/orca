@@ -35,6 +35,7 @@ import {
   structuredAgentSessionConversationFence
 } from './structured-agent-session-provider-child'
 import type { DeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { isStructuredAgentSessionStartupExpired } from './structured-agent-session-startup-attempt'
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
@@ -206,6 +207,8 @@ async function runAttachUnderAbort(
         return startupAttempts.track(sessionId, startup)
       },
       optionRevision: () => context.runtimeState.optionRevisions.current(sessionId),
+      launchPermissionMode: async (record) =>
+        (await structuredAgentSessionLaunchPermission(context.deps, record)) ?? undefined,
       ...(options.onAcquisitionFailed ? { onAcquisitionFailed: options.onAcquisitionFailed } : {}),
       openConversation: async (record) => {
         const conversation = await context.openConversation(record.sessionId, { acquisition: true })
@@ -221,6 +224,9 @@ async function runAttachUnderAbort(
         const fence = structuredAgentSessionConversationFence(context.deps.store, sessionId)
         const current = context.sessions.get(sessionId)?.child ?? null
         const startedFor = owner === 'acquired' ? options.startedFor : current?.startedFor
+        // A re-attach to a live child keeps the mode that child was launched with.
+        const permissionMode =
+          owner === 'acquired' ? attempt.startup?.permissionMode : current?.permissionMode
         // A re-attach to a live child keeps the sink that child already writes through.
         const eventSink =
           owner === 'acquired'
@@ -251,7 +257,8 @@ async function runAttachUnderAbort(
               // Every acquired child starts unproven; a re-attach keeps what its child already proved.
               phase: owner === 'acquired' ? 'starting' : (current?.phase ?? 'ready'),
               ...(startedFor === undefined ? {} : { startedFor }),
-              ...launchedOptionsOf(owner, attempt.startup, current)
+              ...launchedOptionsOf(owner, attempt.startup, current),
+              ...(permissionMode === undefined ? {} : { permissionMode })
             }
           }
         }

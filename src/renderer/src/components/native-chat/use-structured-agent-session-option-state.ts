@@ -48,6 +48,8 @@ export function useStructuredAgentSessionOptionState(args: {
   seedsModel: boolean
   providerVisible: boolean
   providerStarting: boolean
+  /** The option values the host's status carries: a pick made on another device moves it. */
+  hostOptionStamp: string
   readsBeforeStart: boolean
   turnId: string | null
   unloadedTurnRevisions: number | undefined
@@ -55,6 +57,7 @@ export function useStructuredAgentSessionOptionState(args: {
   const {
     agent,
     fence,
+    hostOptionStamp,
     identity,
     newLaunch,
     optionCatalog,
@@ -118,7 +121,7 @@ export function useStructuredAgentSessionOptionState(args: {
     })
     // The chat's next runtime starts with the picks the host saved, which this view last showed,
     // and a starting agent is not read: keep them, and the account's list, until a read replaces them.
-    const next =
+    const kept =
       sameSession && previous.catalogSource !== 'seed' && previous.catalogSource !== null
         ? {
             ...previous,
@@ -126,6 +129,8 @@ export function useStructuredAgentSessionOptionState(args: {
             pendingId: null
           }
         : seeded
+    // The chat's own, which a restart for a new mode keeps: the picker never blanks between them.
+    const next = sameSession ? { ...kept, permissionMode: previous.permissionMode } : kept
     optionMutationGeneration.current += 1
     pendingOptionRef.current = null
     optionStateRef.current = next
@@ -175,6 +180,8 @@ export function useStructuredAgentSessionOptionState(args: {
   }, [
     fence,
     optionCatalog,
+    // Another device's pick moves it.
+    hostOptionStamp,
     providerStarting,
     providerVisible,
     readsBeforeStart,
@@ -194,8 +201,12 @@ export function useStructuredAgentSessionOptionState(args: {
     }
   }, [contextRefresh])
 
+  // An options answer made before the account's listing landed listed none of it.
+  const rereadOptions = useCallback(() => optionsReadRef.current?.run(), [])
+
   return {
     conversationSupport,
+    rereadOptions,
     optionState,
     optionStateRef,
     activeOptionRecordRef,

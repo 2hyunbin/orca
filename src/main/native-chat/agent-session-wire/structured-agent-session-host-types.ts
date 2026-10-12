@@ -26,6 +26,7 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionStartupLimits } from './structured-agent-session-startup-attempt-contract'
+import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
 
 export type StructuredAgentSessionCaller = { callerKey: string }
 
@@ -76,6 +77,8 @@ export type StructuredAgentSessionProviderChild = StructuredAgentSessionProvider
   /** The saved options its start launched with: a pick made while it started that differs is
    *  applied before it is accepted as ready. */
   readonly launchedOptions?: Readonly<Record<string, string>>
+  /** The permission mode it was launched with, in memory only; absent for an agent with none. */
+  readonly permissionMode?: AgentChatPermissionMode
   close?: StructuredAgentSessionChildClose
 }
 
