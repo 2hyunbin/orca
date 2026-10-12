@@ -25,19 +25,17 @@ describe('terminal multiplex RPC', () => {
     // responder (terminal-query-authority.md) — the count must return to 0.
     let viewSubscriberCount = 0
     let leafResolved = false
-    let resolveFirstWait: (ptyId: string) => void = () => {}
+    let resolveFirstWait: (ptyId: string | null) => void = () => {}
     // Why: the multiplex subscribe path resolves via resolveLiveLeafForHandle
-    // (#7718); null makes subscribe A block in waitForLeafPtyId until B resolves.
+    // (#7718); null makes subscribe A block in startPaneForHandle until B resolves.
     const resolveLeaf = (): { ptyId: string | null } =>
       leafResolved ? { ptyId: 'pty-1' } : { ptyId: null }
     const runtime = stubRuntime({
-      // Why: window-attached path; subscribe A blocks in the window's PTY wait.
-      startsPanesForSubscribers: vi.fn(() => false),
       resolveLeafForHandle: vi.fn(resolveLeaf),
       resolveLiveLeafForHandle: vi.fn(resolveLeaf),
-      waitForLeafPtyId: vi.fn(
+      startPaneForHandle: vi.fn(
         () =>
-          new Promise<string>((resolve) => {
+          new Promise<string | null>((resolve) => {
             resolveFirstWait = resolve
           })
       ),
@@ -101,10 +99,10 @@ describe('terminal multiplex RPC', () => {
       )
     }
 
-    // Subscribe A blocks in waitForLeafPtyId; subscribe B (same streamId)
+    // Subscribe A blocks in startPaneForHandle; subscribe B (same streamId)
     // then resolves the leaf directly and fully registers.
     sendSubscribe()
-    await vi.waitFor(() => expect(runtime.waitForLeafPtyId).toHaveBeenCalled())
+    await vi.waitFor(() => expect(runtime.startPaneForHandle).toHaveBeenCalled())
     leafResolved = true
     sendSubscribe()
     await vi.waitFor(() =>

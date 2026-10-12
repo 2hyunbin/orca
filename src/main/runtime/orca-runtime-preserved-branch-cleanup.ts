@@ -176,7 +176,7 @@ export class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeWithTermin
 
   protected readonly legacyWorkerRecoveryPersistence =
     new RuntimeLegacyWorkerTerminalRecoveryPersistence(
-      () => this.store,
+      () => this.layoutHolder,
       () => this.getOrchestrationDb(),
       (worktreeId) => this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
     )
@@ -206,15 +206,11 @@ export class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeWithTermin
     hasExactSurface: (candidate) => this.hasExactTerminalSurfaceIdentity(candidate),
     adopt: (candidate, workspace, inventory, activation) =>
       this.adoptLegacyWorkerTerminal(candidate, workspace, inventory, activation),
-    getRendererEpoch: () => this.rendererGraphEpoch,
-    reveal: (candidate) => this.revealLegacyWorkerTerminal(candidate),
     onPtyExit: (candidate) => this.onPtyExit(candidate.ptyId, 0, candidate.incarnationId),
     persist: (resolutions) => this.legacyWorkerRecoveryPersistence.persist(resolutions),
     rollback: (candidate) => this.rollbackLegacyWorkerTerminalSurface(candidate),
     reconcileMissing: (candidate) =>
       this.legacyWorkerRecoveryPersistence.reconcileMissing(candidate),
-    notifyResolution: (candidate, resolution) =>
-      this.notifier?.resolveLegacyWorkerTerminalRecovery?.(candidate.paneKey, resolution),
     canRecoverPersistentLocalPtys: () => this.canRecoverPersistentLocalPtysFn(),
     isTerminalProvenAbsent: (candidate) => this.isLeafPtyProvenAbsent(candidate.ptyId),
     hasRequestedReleases: () =>

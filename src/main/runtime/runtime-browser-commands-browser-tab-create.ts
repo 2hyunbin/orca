@@ -112,11 +112,8 @@ export class RuntimeBrowserCommandsWithBrowserTabCreate extends RuntimeBrowserCo
       return { browserPageId }
     }
     // Why: headless serve has no renderer <webview>, so back the page with a main-process offscreen WebContents instead.
-    if (!this.host.getAvailableAuthoritativeWindow()) {
-      const offscreen = this.host.getOffscreenBrowserBackend()
-      if (!offscreen) {
-        throw new BrowserError('browser_error', 'This host does not support browser panes.')
-      }
+    const offscreen = this.host.getOffscreenBrowserBackend()
+    if (offscreen) {
       // Why: the offscreen backend registers synchronously, so there is no webview-mount wait.
       const created = await offscreen.createTab({
         url,
@@ -128,48 +125,54 @@ export class RuntimeBrowserCommandsWithBrowserTabCreate extends RuntimeBrowserCo
         placementKind: 'offscreen',
         browserPageId: created.browserPageId,
         worktreeId,
+        profileId: params.profileId,
         focus,
         ...(caller?.pairedDeviceId ? { clientNavigationId: caller.pairedDeviceId } : {}),
         targetGroupId: params.targetGroupId
       })
       return { browserPageId: created.browserPageId }
     }
-    const { browserPageId } = await this.createBrowserTabInRenderer(
-      url,
-      worktreeId,
-      params.profileId,
-      params.profileId ? sessionPartition : undefined,
-      focus.focusesHost,
-      params.page
-    )
+    // Why: with no offscreen backend only a window can back the page, with the <webview> it mounts
+    // for the layout's tab.
+    if (!this.host.getAvailableAuthoritativeWindow()) {
+      throw new BrowserError('browser_error', 'This host does not support browser panes.')
+    }
+    // A create that names no workspace opens in the one the window shows, as it did when the
+    // window made the tab.
+    const workspaceId = worktreeId ?? this.host.desktopViewWorkspaceId?.() ?? undefined
+    if (!workspaceId) {
+      throw new BrowserError(
+        'invalid_argument',
+        'No workspace is open to create the browser tab in'
+      )
+    }
+    const browserPageId = params.page ?? randomUUID()
+    publishCreatedBrowserSessionTab(this.host, {
+      placementKind: 'renderer',
+      browserPageId,
+      worktreeId: workspaceId,
+      profileId: params.profileId,
+      focus,
+      ...(caller?.pairedDeviceId ? { clientNavigationId: caller.pairedDeviceId } : {}),
+      targetGroupId: params.targetGroupId
+    })
 
     // Why: the webview must mount and register before the tab is operable, so wait here (returning the ID anyway on timeout).
     if (params.waitForRegistration !== false) {
       try {
         await waitForTabRegistration(browserPageId)
       } catch {
-        // Tab exists in the renderer even if the webview hasn't mounted; subsequent commands surface a clear error if it never loads.
+        // The tab is in the layout even if the webview hasn't mounted; subsequent commands surface a clear error if it never loads.
       }
     }
 
-    const bridge = this.requireAgentBrowserBridge()
-    publishCreatedBrowserSessionTab(this.host, {
-      placementKind: 'renderer',
-      browserPageId,
-      worktreeId,
-      focus,
-      ...(caller?.pairedDeviceId ? { clientNavigationId: caller.pairedDeviceId } : {}),
-      targetGroupId: params.targetGroupId
-    })
-
     // Why: the webview loads about:blank first; route navigation through the bridge so its registered owner remains authoritative.
     if (url && url !== 'about:blank') {
+      const bridge = this.requireAgentBrowserBridge()
       const navigate = async (): Promise<void> => {
-        const result = await bridge.goto(url, worktreeId, browserPageId)
+        const result = await bridge.goto(url, workspaceId, browserPageId)
         this.notifyRendererNavigation(browserPageId, result.url, result.title)
-        if (!this.host.getAvailableAuthoritativeWindow() && worktreeId) {
-          this.host.notifyHeadlessBrowserSessionTabsChanged?.(worktreeId)
-        }
+        this.host.notifyHeadlessBrowserSessionTabsChanged?.(workspaceId)
       }
       if (params.waitForRegistration === true) {
         void navigate().catch(() => {})

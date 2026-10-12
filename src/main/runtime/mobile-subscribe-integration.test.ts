@@ -128,12 +128,6 @@ function createRuntime() {
   runtime.setNotifier({
     worktreesChanged: vi.fn(),
     reposChanged: vi.fn(),
-    activateWorktree: vi.fn(),
-    createTerminal: vi.fn(),
-    splitTerminal: vi.fn(),
-    renameTerminal: vi.fn(),
-    focusTerminal: vi.fn(),
-    closeTerminal: vi.fn(),
     sleepWorktree: vi.fn(),
     terminalFitOverrideChanged: (ptyId, mode, cols, rows) => {
       notifications.push({ ptyId, mode, cols, rows })

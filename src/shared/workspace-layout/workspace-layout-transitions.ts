@@ -1,7 +1,6 @@
 // Runtime-internal transitions (design 2.3): facts the runtime sees about processes, hosts and
 // owners, applied through the same module as commands. No client sends these. Transitions whose
-// producer arrives later (legacy worker recovery, client-hosted pages, agent launch verdicts,
-// sleep capture, partition moves) ship with that producer's PR.
+// producer arrives later (sleep capture, partition moves) ship with that producer's PR.
 
 import { isSameTerminal } from './terminal-owner-invariants'
 import { omitStoredFields } from './stored-record-fields'
@@ -22,6 +21,13 @@ import {
 } from './workspace-layout-process-exit'
 import { withWorkspace, type ExitedSurface } from './workspace-layout-removal'
 import { removeWorkspaces, renameWorkspace } from './workspace-layout-owner-transitions'
+import { saveClientHostedBrowserPages } from './workspace-layout-client-hosted-browser-pages'
+import type { PersistedClientHostedBrowserPage } from '../client-hosted-browser-page-record'
+import { setAgentLaunchPane, type AgentLaunchPaneOnTab } from './workspace-layout-agent-launch-pane'
+import {
+  recoverLegacyWorker,
+  type LegacyWorkerRecoveryResolution
+} from './workspace-layout-legacy-worker-recovery'
 
 export type LayoutTransition =
   | {
@@ -43,6 +49,23 @@ export type LayoutTransition =
    * is the key the workspace was stored under when that spelling differs from its id.
    */
   | { type: 'orphansAdopted'; from: string; workspace: string; adopted: WorkspaceLayout }
+  | {
+      type: 'clientHostedBrowserPagesSaved'
+      workspace: string
+      pages: readonly PersistedClientHostedBrowserPage[]
+    }
+  | {
+      type: 'legacyWorkerRecovered'
+      surface: ExitedSurface
+      resolution: LegacyWorkerRecoveryResolution
+    }
+  /** An agent launch laid out a tab's pane, or its verdict on that pane is final or settled. */
+  | {
+      type: 'agentLaunchPaneSet'
+      workspace: string
+      tabId: string
+      agentLaunchPane: AgentLaunchPaneOnTab | null
+    }
 
 function boundElsewhere(
   model: WorkspaceLayoutModel,
@@ -113,6 +136,17 @@ function applyTransition(
           : removeWorkspaces(model, [transition.from])
       return applied(withWorkspace(others, transition.workspace, transition.adopted))
     }
+    case 'legacyWorkerRecovered':
+      return recoverLegacyWorker(model, transition.surface, transition.resolution)
+    case 'agentLaunchPaneSet':
+      return setAgentLaunchPane(
+        model,
+        transition.workspace,
+        transition.tabId,
+        transition.agentLaunchPane
+      )
+    case 'clientHostedBrowserPagesSaved':
+      return saveClientHostedBrowserPages(model, transition.workspace, transition.pages)
     case 'identityRenamed': {
       const renamedModel = renameWorkspace(model, transition.from, transition.to)
       return renamedModel ? applied(renamedModel) : refuse('workspace_exists')

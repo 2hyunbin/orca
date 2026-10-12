@@ -22,16 +22,8 @@ vi.mock('@/components/browser-pane/host-guest/webview-registry', () => ({
 vi.mock('../../store', () => ({
   useAppStore: { getState: mocks.getState }
 }))
-vi.mock('./browser-automation-bootstrap-lease', () => ({
-  acquireBrowserAutomationBootstrapLease: vi.fn()
-}))
-vi.mock('../../store/pinned-tab-close-guard', () => ({
-  guardPinnedTabClose: vi.fn(),
-  isUnifiedTabPinned: vi.fn(),
-  resolvePinnedTabLabel: vi.fn()
-}))
 
-import { registerBrowserRequestIpcBridge } from './browser-request-ipc-bridge'
+import { registerBrowserProfileSwitchIpcBridge } from './browser-profile-switch-ipc-bridge'
 
 describe('browser profile request teardown', () => {
   beforeEach(() => {
@@ -60,22 +52,18 @@ describe('browser profile request teardown', () => {
       configurable: true,
       value: {
         ui: {
-          onRequestTabCreate: () => () => {},
-          replyTabCreate: vi.fn(),
           onRequestTabSetProfile: (listener: typeof mocks.profileListener) => {
             mocks.profileListener = listener
             return () => {}
           },
-          replyTabSetProfile: mocks.replyTabSetProfile,
-          onRequestTabClose: () => () => {},
-          replyTabClose: vi.fn()
+          replyTabSetProfile: mocks.replyTabSetProfile
         }
       }
     })
   })
 
   it('keeps document-preview guests while rebuilding URL siblings for a profile change', () => {
-    registerBrowserRequestIpcBridge([])
+    registerBrowserProfileSwitchIpcBridge([])
 
     mocks.profileListener?.({
       requestId: 'request-1',

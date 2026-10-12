@@ -12,9 +12,6 @@ import type { AgentStatusSetData } from './ipc-events-agent-status-store-test-fi
 export function buildWindowApi(args: {
   onSet: (cb: (data: AgentStatusSetData) => void) => () => void
   onClear?: (cb: (data: AgentStatusClearIpcPayload) => void) => () => void
-  onLegacyWorkerTerminalRecovery?: (
-    cb: (data: { paneKey: string; resolution: 'adopted' | 'exited' }) => void
-  ) => () => void
   getSnapshot?: () => Promise<AgentStatusSetData[]>
   getMigrationUnsupportedSnapshot?: () => Promise<MigrationUnsupportedPtyEntry[]>
   drop?: (paneKey: string) => void
@@ -48,31 +45,12 @@ export function buildWindowApi(args: {
         onJumpToTabIndex: () => () => {},
         onWorktreeHistoryNavigate: () => () => {},
         onActivateWorktree: () => () => {},
-        onCreateTerminal: () => () => {},
-        onRequestTerminalCreate: () => () => {},
-        onPublishAgentLaunchTab: () => () => {},
-        onAgentLaunchPaneVerdict: () => () => {},
-        onRequestTerminalTabMount: () => () => {},
-        replyTerminalCreate: () => {},
-        onSplitTerminal: () => () => {},
-        onRenameTerminal: () => () => {},
         onFocusTerminal: () => () => {},
         onFocusEditorTab: () => () => {},
-        onCloseSessionTab: () => () => {},
-        onSessionTabCloseRequest: () => () => {},
-        respondSessionTabClose: () => {},
-        onMoveSessionTab: () => () => {},
-        onOpenFileFromMobile: () => () => {},
-        onOpenDiffFromMobile: () => () => {},
-        onCloseTerminal: () => () => {},
         onSleepWorktree: () => () => {},
         onResumeSleepingAgents: () => () => {},
         onNewBrowserTab: () => () => {},
         onNewMarkdownTab: () => () => {},
-        onRequestTabCreate: () => () => {},
-        replyTabCreate: () => {},
-        onRequestTabClose: () => () => {},
-        replyTabClose: () => {},
         onRequestTabSetProfile: () => () => {},
         replyTabSetProfile: () => {},
         onNewTerminalTab: () => () => {},
@@ -135,8 +113,6 @@ export function buildWindowApi(args: {
       agentStatus: {
         onSet: args.onSet,
         onClear: args.onClear ?? vi.fn(() => () => {}),
-        onLegacyWorkerTerminalRecovery:
-          args.onLegacyWorkerTerminalRecovery ?? vi.fn(() => () => {}),
         getSnapshot: args.getSnapshot ?? vi.fn(() => Promise.resolve([])),
         ...(args.getMigrationUnsupportedSnapshot
           ? { getMigrationUnsupportedSnapshot: args.getMigrationUnsupportedSnapshot }

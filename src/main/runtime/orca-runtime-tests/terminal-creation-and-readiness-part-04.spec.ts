@@ -2,12 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
-import {
-  OrcaRuntimeService,
-  electronMocks,
-  ipcMain,
-  setPlatform
-} from '../orca-runtime-test-mocks.spec'
+import { OrcaRuntimeService, electronMocks, setPlatform } from '../orca-runtime-test-mocks.spec'
 import { TEST_WORKTREE_ID, TEST_WORKTREE_PATH, store } from '../orca-runtime-test-fixtures.spec'
 import { wireHeadlessServeRuntime } from '../orca-runtime-test-scenario-builders.spec'
 
@@ -23,7 +18,6 @@ describe('OrcaRuntimeService', () => {
       await rm(home, { recursive: true, force: true })
     })
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-bg' })
     const runtimeStore = {
       ...store,
       getSettings: () => ({
@@ -38,22 +32,6 @@ describe('OrcaRuntimeService', () => {
       kill: () => true,
       getForegroundProcess: async () => null
     })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
       command: 'claude --resume claude-session',
@@ -93,28 +71,24 @@ describe('OrcaRuntimeService', () => {
     expect(spawnCall?.env?.ORCA_AGENT_TEAMS_TEAM_ID).not.toBe('stale-team')
     expect(spawnCall?.env?.ORCA_AGENT_TEAMS_TOKEN).not.toBe('stale-token')
     expect(spawnCall?.env?.TMUX).not.toBe('/tmp/orca-claude-agent-teams/stale-team,0,1')
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      TEST_WORKTREE_ID,
+    const pty = runtime['ptysById'].get('pty-bg')
+    expect(pty?.launchAgent).toBe('claude')
+    expect(pty?.launchConfig).toEqual(
       expect.objectContaining({
-        launchConfig: expect.objectContaining({
-          agentCommand: 'claude --teammate-mode auto',
-          agentEnv: expect.objectContaining({
-            CLAUDE_PROFILE: 'captured',
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            TMUX_PANE: '%1'
-          })
-        }),
-        launchAgent: 'claude'
+        agentCommand: 'claude --teammate-mode auto',
+        agentEnv: expect.objectContaining({
+          CLAUDE_PROFILE: 'captured',
+          CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+          TMUX_PANE: '%1'
+        })
       })
     )
-    const revealedLaunchConfig = revealTerminalSession.mock.calls[0]?.[1]?.launchConfig
-    expect(revealedLaunchConfig?.agentEnv.ORCA_AGENT_TEAMS_TEAM_ID).not.toBe('stale-team')
-    expect(revealedLaunchConfig?.agentEnv.ORCA_AGENT_TEAMS_TOKEN).not.toBe('stale-token')
+    expect(pty?.launchConfig?.agentEnv.ORCA_AGENT_TEAMS_TEAM_ID).not.toBe('stale-team')
+    expect(pty?.launchConfig?.agentEnv.ORCA_AGENT_TEAMS_TOKEN).not.toBe('stale-token')
   })
 
   it('does not apply current Agent Teams mode to captured plain Claude resumes', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-bg' })
     const runtimeStore = {
       ...store,
       getSettings: () => ({
@@ -129,22 +103,6 @@ describe('OrcaRuntimeService', () => {
       kill: () => true,
       getForegroundProcess: async () => null
     })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
       command: 'claude --resume claude-session',
@@ -161,17 +119,13 @@ describe('OrcaRuntimeService', () => {
       | undefined
     expect(spawnCall?.command).toBe('claude --resume claude-session')
     expect(spawnCall?.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined()
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      TEST_WORKTREE_ID,
-      expect.objectContaining({
-        launchConfig: {
-          agentCommand: 'claude',
-          agentArgs: '',
-          agentEnv: { CLAUDE_PROFILE: 'captured' }
-        },
-        launchAgent: 'claude'
-      })
-    )
+    const pty = runtime['ptysById'].get('pty-bg')
+    expect(pty?.launchAgent).toBe('claude')
+    expect(pty?.launchConfig).toEqual({
+      agentCommand: 'claude',
+      agentArgs: '',
+      agentEnv: { CLAUDE_PROFILE: 'captured' }
+    })
   })
 
   it('adopts renderer pane identity for remote runtime terminal creates', async () => {
@@ -227,7 +181,7 @@ describe('OrcaRuntimeService', () => {
     expect(spawnedEnv.ORCA_PANE_KEY).toMatch(`${spawnedEnv.ORCA_TAB_ID}:`)
   })
 
-  it('creates background terminal sessions while the renderer graph is unavailable', async () => {
+  it('creates terminal sessions while the renderer graph is unavailable', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
@@ -239,7 +193,7 @@ describe('OrcaRuntimeService', () => {
 
     await expect(runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`)).resolves.toMatchObject({
       worktreeId: TEST_WORKTREE_ID,
-      surface: 'background'
+      surface: 'visible'
     })
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -278,53 +232,11 @@ describe('OrcaRuntimeService', () => {
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ runtimeAdmittedPane: true }))
   })
 
-  it('falls back to background terminal creation for renderer-backed requests without a renderer window', async () => {
-    const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
-    const runtime = new OrcaRuntimeService(store)
-    runtime.setPtyController({
-      spawn,
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null
-    })
-
-    await expect(
-      runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-        command: 'codex',
-        rendererBacked: true
-      })
-    ).resolves.toMatchObject({
-      worktreeId: TEST_WORKTREE_ID,
-      surface: 'background'
-    })
-    expect(spawn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: "codex '--dangerously-bypass-approvals-and-sandbox'",
-        cwd: TEST_WORKTREE_PATH,
-        worktreeId: TEST_WORKTREE_ID
-      })
-    )
-  })
-
   it('spawns focus-requested CLI terminal creates in background on headless serve', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-focus-headless' })
     const runtime = wireHeadlessServeRuntime()
-    const revealTerminalSession = vi.fn()
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      resumeSleepingAgents: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    } as never)
+    const navigations: unknown[] = []
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     runtime.setPtyController({
       spawn,
       write: () => true,
@@ -350,12 +262,8 @@ describe('OrcaRuntimeService', () => {
         runtimeAdmittedPane: true
       })
     )
-    // Why: degrading the create must not silently drop the focus request — the
-    // host still asks whatever surface exists to activate the new pane.
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      TEST_WORKTREE_ID,
-      expect.objectContaining({ activate: true, presentation: 'focused' })
-    )
+    // Why: degrading the create must not silently drop the focus request.
+    expect(navigations).toContainEqual(expect.objectContaining({ workspace: TEST_WORKTREE_ID }))
   })
 
   it('spawns presentation:focused terminal creates in background on headless serve', async () => {
@@ -376,7 +284,7 @@ describe('OrcaRuntimeService', () => {
       })
     ).resolves.toMatchObject({
       worktreeId: TEST_WORKTREE_ID,
-      surface: 'background',
+      surface: 'visible',
       handle: expect.stringMatching(/^term_/)
     })
     expect(spawn).toHaveBeenCalled()
@@ -437,140 +345,5 @@ describe('OrcaRuntimeService', () => {
     expect(published).toBeDefined()
     expect(published?.isActive).toBe(true)
     expect(tabs.activeTabId).toBe(published?.id)
-  })
-
-  it('keeps focus-requested terminal creates on the renderer when a window exists', async () => {
-    const spawn = vi.fn().mockResolvedValue({ id: 'pty-should-not-spawn' })
-    const webContents = { send: vi.fn() }
-    const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-      runtime.syncWindowGraph(1, {
-        tabs: [
-          {
-            tabId: 'tab-focused',
-            worktreeId: TEST_WORKTREE_ID,
-            title: 'Focused Terminal',
-            activeLeafId: 'pane:1',
-            layout: null
-          }
-        ],
-        leaves: [
-          {
-            tabId: 'tab-focused',
-            worktreeId: TEST_WORKTREE_ID,
-            leafId: 'pane:1',
-            paneRuntimeId: 1,
-            ptyId: 'pty-focused',
-            paneTitle: null
-          }
-        ]
-      })
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: webContents },
-        { requestId: payload.requestId, tabId: 'tab-focused', title: 'Focused Terminal' }
-      )
-    })
-    webContents.send = send
-    const runtime = new OrcaRuntimeService(store)
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents
-    })
-    runtime.setPtyController({
-      spawn,
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null
-    })
-
-    await expect(
-      runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
-        command: 'echo test',
-        focus: true
-      })
-    ).resolves.toMatchObject({
-      tabId: 'tab-focused',
-      worktreeId: TEST_WORKTREE_ID,
-      surface: 'visible'
-    })
-    expect(send).toHaveBeenCalledWith(
-      'terminal:requestTabCreate',
-      expect.objectContaining({ activate: true, presentation: 'focused' })
-    )
-    expect(spawn).not.toHaveBeenCalled()
-  })
-
-  it('accepts renderer-backed terminal create replies only from the target renderer', async () => {
-    const webContents = { send: vi.fn() }
-    const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: { send: vi.fn() } },
-        { requestId: payload.requestId, error: 'spoofed renderer reply' }
-      )
-      runtime.syncWindowGraph(1, {
-        tabs: [
-          {
-            tabId: 'tab-renderer',
-            worktreeId: TEST_WORKTREE_ID,
-            title: 'Renderer Terminal',
-            activeLeafId: 'pane:1',
-            layout: null
-          }
-        ],
-        leaves: [
-          {
-            tabId: 'tab-renderer',
-            worktreeId: TEST_WORKTREE_ID,
-            leafId: 'pane:1',
-            paneRuntimeId: 1,
-            ptyId: 'pty-renderer',
-            paneTitle: null
-          }
-        ]
-      })
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: webContents },
-        { requestId: payload.requestId, tabId: 'tab-renderer', title: 'Renderer Terminal' }
-      )
-    })
-    webContents.send = send
-    const runtime = new OrcaRuntimeService(store)
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents
-    })
-
-    await expect(
-      runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
-        command: 'codex',
-        rendererBacked: true,
-        title: 'Renderer Terminal'
-      })
-    ).resolves.toMatchObject({
-      handle: expect.stringMatching(/^term_/),
-      tabId: 'tab-renderer',
-      title: 'Renderer Terminal',
-      worktreeId: TEST_WORKTREE_ID,
-      surface: 'visible'
-    })
-    expect(send).toHaveBeenCalledWith(
-      'terminal:requestTabCreate',
-      expect.objectContaining({
-        requestId: expect.any(String),
-        worktreeId: TEST_WORKTREE_ID,
-        command: "codex '--dangerously-bypass-approvals-and-sandbox'",
-        title: 'Renderer Terminal'
-      })
-    )
-    expect(electronMocks.ipcMain.removeListener).toHaveBeenCalledWith(
-      'terminal:tabCreateReply',
-      expect.any(Function)
-    )
   })
 })

@@ -13,7 +13,6 @@ import {
 import {
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
-  UUID_RE,
   renderGateCapMs,
   store
 } from '../orca-runtime-test-fixtures.spec'
@@ -363,8 +362,7 @@ describe('OrcaRuntimeService', () => {
     expect(writes).toEqual([])
   })
 
-  it('reveals a background terminal session when focusing its handle', async () => {
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-adopted' })
+  it('navigates the desktop view to a terminal session when focusing its handle', async () => {
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
       spawn: vi.fn().mockResolvedValue({ id: 'pty-bg' }),
@@ -372,169 +370,39 @@ describe('OrcaRuntimeService', () => {
       kill: () => true,
       getForegroundProcess: async () => null
     })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    const { handle } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      title: 'worker'
+    const { handle, tabId } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+      title: 'worker',
+      presentation: 'background'
     })
+    const navigations: unknown[] = []
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
 
+    // Why: focus keeps createTerminal's pre-minted tabId, the one baked into the pane's env.
     await expect(runtime.focusTerminal(handle)).resolves.toMatchObject({
       handle,
-      tabId: 'tab-adopted',
-      worktreeId: TEST_WORKTREE_ID
+      tabId,
+      worktreeId: TEST_WORKTREE_ID,
+      navigated: true
     })
-    // Why: focus reveal must reuse createTerminal's pre-minted tabId so a retry adopts under the paneKey baked into env.
-    expect(revealTerminalSession).toHaveBeenLastCalledWith(TEST_WORKTREE_ID, {
-      ptyId: 'pty-bg',
-      title: 'worker',
-      tabId: expect.stringMatching(UUID_RE),
-      leafId: expect.stringMatching(UUID_RE)
-    })
-  })
-
-  it('replays captured launch config when focusing a background agent session', async () => {
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-adopted' })
-    const runtime = new OrcaRuntimeService(store)
-    runtime.setPtyController({
-      spawn: vi.fn().mockResolvedValue({ id: 'pty-bg' }),
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null
-    })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    const { handle } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      command: 'codex',
-      launchAgent: 'codex',
-      launchConfig: {
-        agentCommand: 'codex',
-        agentArgs: '--model gpt-5',
-        agentEnv: { CODEX_PROFILE: 'captured' }
-      },
-      title: 'worker'
-    })
-    const firstReveal = revealTerminalSession.mock.calls[0]?.[1] as
-      | { launchToken?: string; tabId?: string; leafId?: string }
-      | undefined
-    revealTerminalSession.mockClear()
-
-    await runtime.focusTerminal(handle)
-
-    expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
-      ptyId: 'pty-bg',
-      title: 'worker',
-      launchConfig: {
-        agentCommand: 'codex',
-        agentArgs: '--model gpt-5',
-        agentEnv: { CODEX_PROFILE: 'captured' }
-      },
-      launchToken: firstReveal?.launchToken,
-      launchAgent: 'codex',
-      tabId: firstReveal?.tabId,
-      leafId: firstReveal?.leafId
-    })
-  })
-
-  it('reveals background terminal sessions with the freshest PTY title', async () => {
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-adopted' })
-    const runtime = new OrcaRuntimeService(store)
-    runtime.setPtyController({
-      spawn: vi.fn().mockResolvedValue({ id: 'pty-bg' }),
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null
-    })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    const { handle } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      title: 'Claude working'
-    })
-    runtime.onPtyData('pty-bg', '\x1b]0;claude agents\x07', 100)
-
-    await runtime.focusTerminal(handle)
-
-    expect(revealTerminalSession).toHaveBeenLastCalledWith(
-      TEST_WORKTREE_ID,
-      expect.objectContaining({
-        ptyId: 'pty-bg',
-        title: 'claude agents'
-      })
-    )
+    expect(navigations).toEqual([expect.objectContaining({ workspace: TEST_WORKTREE_ID })])
   })
 
   it('rejects focusing an exited background terminal session', async () => {
-    const revealTerminalSession = vi.fn()
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
       spawn: vi.fn().mockResolvedValue({ id: 'pty-bg' }),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
-    })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
     })
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
     const { handle } = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`)
-    revealTerminalSession.mockClear()
     runtime.onPtyExit('pty-bg', 0)
 
     await expect(runtime.focusTerminal(handle)).rejects.toThrow('terminal_exited')
-    expect(revealTerminalSession).not.toHaveBeenCalled()
   })
 
   it('renames background terminal handles without requiring a visible tab', async () => {
@@ -572,13 +440,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -596,93 +457,5 @@ describe('OrcaRuntimeService', () => {
       handle,
       ptyId: 'pty-bg'
     })
-  })
-
-  it('coalesces concurrent focusTerminal navigations so only the latest full reveal runs', async () => {
-    // Instant reveals during createTerminal; switch to gated mock before focus storm.
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-create' })
-    const runtime = new OrcaRuntimeService(store)
-    runtime.setPtyController({
-      spawn: vi
-        .fn()
-        .mockResolvedValueOnce({ id: 'pty-a' })
-        .mockResolvedValueOnce({ id: 'pty-b' })
-        .mockResolvedValueOnce({ id: 'pty-c' }),
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null
-    })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    const a = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      title: 'a',
-      presentation: 'background'
-    })
-    const b = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      title: 'b',
-      presentation: 'background'
-    })
-    const c = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      title: 'c',
-      presentation: 'background'
-    })
-
-    let releaseFirstReveal!: (value: { tabId: string }) => void
-    let firstRevealStarted = false
-    const firstRevealGate = new Promise<{ tabId: string }>((resolve) => {
-      releaseFirstReveal = resolve
-    })
-    revealTerminalSession.mockReset()
-    revealTerminalSession.mockImplementation(() => {
-      if (!firstRevealStarted) {
-        firstRevealStarted = true
-        return firstRevealGate
-      }
-      return Promise.resolve({ tabId: 'tab-latest' })
-    })
-
-    const pA = runtime.focusTerminal(a.handle)
-    await vi.waitFor(() => {
-      expect(firstRevealStarted).toBe(true)
-    })
-    const pB = runtime.focusTerminal(b.handle)
-    const pC = runtime.focusTerminal(c.handle)
-
-    // B is superseded while A is in flight — identity only, never navigated.
-    await expect(pB).resolves.toMatchObject({
-      handle: b.handle,
-      navigated: false
-    })
-    releaseFirstReveal({ tabId: 'tab-a' })
-    // A may still complete reveal work, but if C superseded it, navigated is false.
-    const aResult = await pA
-    expect(aResult.handle).toBe(a.handle)
-    expect(aResult.navigated).toBe(false)
-    await expect(pC).resolves.toMatchObject({
-      handle: c.handle,
-      tabId: 'tab-latest',
-      navigated: true
-    })
-
-    // B must never have started a reveal; only A and/or C.
-    const revealedPtyIds = revealTerminalSession.mock.calls.map(
-      (call) => (call[1] as { ptyId?: string }).ptyId
-    )
-    expect(revealedPtyIds).not.toContain('pty-b')
-    expect(revealedPtyIds.at(-1)).toBe('pty-c')
   })
 })

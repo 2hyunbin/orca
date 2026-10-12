@@ -289,7 +289,11 @@ describe('the instant tab', () => {
       paneKey: PANE_KEY
     })
     await expect(paneVerdict(runtime)).resolves.toEqual({ kind: 'proceed' })
-    expect(runtime.reportAgentLaunchPaneVerdict).not.toHaveBeenCalled()
+    // The layout forgets a pane whose agent runs.
+    expect(runtime.reportAgentLaunchPaneVerdict).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ worktreeId: 'wt-7' }),
+      { kind: 'proceed' }
+    )
   })
 
   it('is not shown early for a chat-mode launch, whose tab is the session', async () => {
@@ -347,8 +351,11 @@ describe('the pane while its launch delivers the prompt', () => {
 
     deliver(true)
     await expect(launched).resolves.toMatchObject({ outcome: { kind: 'terminal' } })
-    // The pane's own spawn settles its tab; the launch reports nothing for a pane it ran in.
-    expect(runtime.reportAgentLaunchPaneVerdict).not.toHaveBeenCalled()
+    // Reported once, when the agent bound, not again on delivery.
+    expect(runtime.reportAgentLaunchPaneVerdict).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ worktreeId: 'wt-7' }),
+      { kind: 'proceed' }
+    )
   })
 
   it('still stops the launch as closed when its attached tab is closed before the prompt lands', async () => {

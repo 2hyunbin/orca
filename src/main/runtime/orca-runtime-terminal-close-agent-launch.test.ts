@@ -39,7 +39,7 @@ function showDesktopWindow(): void {
 }
 
 describe("a pane close main starts (a phone's, the CLI's)", () => {
-  // The window path closes the pane through the renderer; a headless host closes it in the holder.
+  // The holder closes the pane whether or not a window is attached.
   it.each([
     { host: 'with a desktop window', desktop: true },
     { host: 'with no desktop window', desktop: false }
@@ -60,9 +60,6 @@ describe("a pane close main starts (a phone's, the CLI's)", () => {
 
     await harness.runtime.closeTerminal(terminal.handle)
 
-    if (desktop) {
-      expect(harness.closeTerminalPane).toHaveBeenCalledWith(TAB_ID, LEAF_ID)
-    }
     expect(
       (await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)).tabs.map((tab) => tab.id)
     ).toEqual([`${TAB_ID}::${SIBLING_LEAF_ID}`])

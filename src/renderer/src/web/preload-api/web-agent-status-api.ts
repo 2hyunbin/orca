@@ -12,7 +12,6 @@ export function createWebAgentStatusApi(): Partial<PreloadApi> {
       hasVerifiableAgentProcess: () => Promise.resolve(false),
       onMigrationUnsupported: () => noopUnsubscribe,
       onMigrationUnsupportedClear: () => noopUnsubscribe,
-      onLegacyWorkerTerminalRecovery: () => noopUnsubscribe,
       getMigrationUnsupportedSnapshot: () => Promise.resolve([]),
       drop: () => {},
       dropPersisted: () => {},

@@ -3,15 +3,15 @@
  *
  * Admission, workspace resolution, the mode decision and the daemon spawn each have a cold cost (a
  * Windows window still booting its first PowerShell measured ~0.55 s and ~1 s), and the tab used to
- * wait for all of them. It now waits for none: the host asks the window for the tab first, under ids
- * the spawn will bake into the agent's PTY, and the pane attaches to that process when it exists.
+ * wait for all of them. It now waits for none: the runtime's layout shows the tab first, under ids
+ * the spawn will bake into the agent's PTY, and the pane binds to that process when it exists.
  *
  * Only a launch with an operation id gets one: the launch record is what tells the pane, then and
  * after a restart, which launch owns it and how it ended (`agent-launch-pane-attachment`).
  *
  * Best-effort by construction. Anything this cannot decide cheaply — a workspace it cannot resolve,
- * a chat-mode default, no window owning the layout, a pane already running something — skips the
- * early tab, and the launch's tab appears when it spawns, exactly as before.
+ * a chat-mode default, a layout the runtime does not hold, a pane already running something — skips
+ * the early tab, and the launch's tab appears when it spawns, exactly as before.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -97,7 +97,7 @@ export type EarlyAgentLaunchTab = {
   executing(): void
   /** The surface exists; an agent in this pane lets the pane's waiting spawn attach to it now. */
   surfacePublished(result: AgentLaunchResult): void
-  /** The window has said it shows the tab, so the spawn must bind it without a second reveal. */
+  /** The layout shows the tab, so the spawn must bind it without a second reveal. */
   windowShowsTab(): boolean
   /** The user closed the tab or pane: the launch must not start its agent, or must stop it. */
   closedByUser(): boolean
@@ -155,7 +155,6 @@ export async function publishAgentLaunchTabEarly(
     params.target.kind !== 'existing' ||
     params.reuseTerminal ||
     !readsEarlyLaunchTab(context) ||
-    !runtime.canPublishAgentLaunchTab() ||
     // A running pane is attached to, never launched into; this launch is refused and must not
     // touch the pane another launch's agent is running in.
     (params.paneKey !== undefined && runtime.hasLiveTerminalForPaneKey(params.paneKey))
@@ -189,7 +188,7 @@ export async function publishAgentLaunchTabEarly(
     return null
   }
   const ownedPane = { worktreeId: workspace.id, paneKey }
-  // Before the window hears of the tab, so a pane that mounts at once already waits.
+  // Before the tab is shown, so a pane that mounts at once already waits.
   const running = trackRunningAgentLaunchPane(ownedPane)
   let publishing: ReturnType<typeof runtime.publishAgentLaunchTab>
   try {
@@ -261,7 +260,7 @@ function trackEarlyAgentLaunchTab(args: {
     },
     (error: unknown) => {
       // The tab did not appear; the launch still runs and its tab appears when it spawns.
-      console.warn('[agent-launch] the window did not show the launch tab early', error)
+      console.warn('[agent-launch] the launch tab was not shown early', error)
       return null
     }
   )
@@ -282,8 +281,9 @@ function trackEarlyAgentLaunchTab(args: {
     closedByUser: args.closedByUser,
     finish: () => {
       if (ranHere === true) {
-        // The agent's spawn bound the pane; its own spawn settles the tab.
+        // The agent's spawn bound the pane: the launch is settled there.
         args.finishRunning(false)
+        args.report({ kind: 'proceed' })
         return
       }
       void published.then((answer) => {

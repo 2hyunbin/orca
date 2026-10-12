@@ -5,7 +5,6 @@ import type { UseTerminalPaneLifecycleDeps } from './terminal-pane-lifecycle-typ
 import { restoreExpandedLayoutFrom } from './expand-collapse'
 import { captureParkedTerminalPaneCandidates } from './terminal-parked-tab-watchers'
 import { shouldDetachPaneTransportOnUnmount } from './terminal-pane-lifecycle-primitives'
-import { cancelQueuedTerminalPaneSplitRequests } from './terminal-pane-split-request-routing'
 import {
   clearDeferredSplitPaneHandoff,
   discardDeferredSplitPaneHandoffsForTab,
@@ -37,17 +36,8 @@ export function cleanupTerminalPaneMount(args: {
   const { tabId, worktreeId, managerRef, paneTransportsRef, panePtyBindingsRef } = deps
   const currentStore = useAppStore.getState()
   const currentWorktreeTabs = currentStore.tabsByWorktree[worktreeId]
-  // Queued split cancellation stays worktree-scoped: a tab that merely moved
-  // buckets must still cancel this worktree's queue.
-  const tabRemainsInWorktree = Boolean(
-    currentWorktreeTabs?.some((candidate) => candidate.id === tabId)
-  )
-  if (!tabRemainsInWorktree) {
-    cancelQueuedTerminalPaneSplitRequests(tabId, worktreeId)
-  }
-  // Handoff retention is deliberately broader: a tab move removes the old
-  // worktree bucket before the replacement surface mounts, so use the shared
-  // global ownership check to let an ID-less deferred split survive a rehome.
+  // A tab move removes the old worktree bucket before the replacement surface mounts, so the
+  // global ownership check lets an ID-less deferred split survive a rehome.
   const tabStillExists = isTerminalTabPresent(currentStore, tabId)
   unregisterRuntimeTab()
   cancelResize()

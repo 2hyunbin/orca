@@ -50,8 +50,10 @@ export function isRestoredClientHostedBrowserPlacement(
 }
 
 export type ClientHostedBrowserPagePersistenceHost = {
-  getWorkspaceSession(worktreeId: string): WorkspaceSessionState | null
-  setWorkspaceSession(worktreeId: string, session: WorkspaceSessionState): void
+  /** The worktree's saved rows; null when no held layout has the worktree's partition. */
+  savedPages(worktreeId: string): readonly PersistedClientHostedBrowserPage[] | null
+  /** Saves the rows through the layout holder; false when it refused. */
+  savePages(worktreeId: string, pages: readonly PersistedClientHostedBrowserPage[]): boolean
   now?: () => number
 }
 
@@ -72,39 +74,15 @@ export function persistClientHostedBrowserPages(
     registry.listPages(worktreeId),
     host.now?.() ?? Date.now()
   )
-  let session: WorkspaceSessionState | null
-  try {
-    session = host.getWorkspaceSession(worktreeId)
-  } catch {
-    return false
-  }
-  if (!session) {
-    return false
-  }
-  const existing = session.clientHostedBrowserPagesByWorktree ?? {}
+  const existing = host.savedPages(worktreeId)
   if (
-    samePersistedClientHostedBrowserPages(existing[worktreeId], rows) &&
-    !needsAgeRefresh(existing[worktreeId], rows[0]?.savedAt ?? 0)
+    !existing ||
+    (samePersistedClientHostedBrowserPages(existing, rows) &&
+      !needsAgeRefresh(existing, rows[0]?.savedAt ?? 0))
   ) {
     return false
   }
-  const next = { ...existing }
-  if (rows.length === 0) {
-    delete next[worktreeId]
-  } else {
-    next[worktreeId] = rows
-  }
-  try {
-    host.setWorkspaceSession(worktreeId, {
-      ...session,
-      clientHostedBrowserPagesByWorktree: next
-    })
-  } catch {
-    // Why swallow: a worktree that no longer resolves has no partition to write to, and the row it
-    // would have carried is one rehydration already refuses to restore.
-    return false
-  }
-  return true
+  return host.savePages(worktreeId, rows)
 }
 
 export function buildPersistedClientHostedBrowserPages(

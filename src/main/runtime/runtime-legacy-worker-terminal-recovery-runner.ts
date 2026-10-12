@@ -130,9 +130,7 @@ export async function runLegacyWorkerTerminalRecovery(
         continue
       }
       await reconcileLegacyWorkerCandidate({
-        controller,
         ports,
-        options,
         candidate,
         workspace,
         resolvedWorktrees,
@@ -151,7 +149,6 @@ export async function runLegacyWorkerTerminalRecovery(
     }
     if (resolution === 'adopted') {
       controller.addRecoveredPty(candidate.ptyId)
-      ports.notifyResolution(candidate, 'adopted')
       adoptedDispatchIds.push(candidate.dispatchId)
       continue
     }
@@ -160,7 +157,6 @@ export async function runLegacyWorkerTerminalRecovery(
       deferredDispatchIds.add(candidate.dispatchId)
       continue
     }
-    ports.notifyResolution(candidate, 'exited')
     exitedDispatchIds.push(candidate.dispatchId)
   }
   const result = {

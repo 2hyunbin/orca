@@ -12,7 +12,6 @@ import type {
   LegacyWorkerRecoveryInventory,
   TerminalWorkspaceLaunchScope
 } from './runtime-legacy-worker-terminal-recovery-types'
-import { getLatestPtyTitle } from './runtime-worktree-status-projection'
 import type { AutomationService } from '../automations/service'
 import type { ArtifactCloudService } from '../artifacts/artifact-cloud-service'
 import type {
@@ -90,11 +89,6 @@ export class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends Orc
       pty.paneKey = null
     }
     this.notifyMobileSessionTabsChanged(candidate.worktreeId)
-    this.notifier?.resolveLegacyWorkerTerminalRecovery?.(
-      candidate.paneKey,
-      'rolled_back',
-      candidate.ptyId
-    )
   }
 
   protected getLegacyWorkerRecoveryActivation(worktreeId: string): {
@@ -138,36 +132,6 @@ export class OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity extends Orc
       },
       workspace,
       inventory
-    )
-  }
-
-  protected async revealLegacyWorkerTerminal(
-    candidate: LegacyWorkerRecoveryCandidate
-  ): Promise<boolean | null> {
-    const pty = this.ptysById.get(candidate.ptyId)
-    if (!pty || !this.notifier?.revealTerminalSession) {
-      return null
-    }
-    const reveal = await this.notifier.revealTerminalSession(candidate.worktreeId, {
-      ptyId: candidate.ptyId,
-      title: getLatestPtyTitle(this.getPtyDisplayRecord(pty)) ?? pty.controllerTitle,
-      activate: false,
-      presentation: 'background',
-      tabId: candidate.tabId,
-      leafId: candidate.leafId,
-      focus: false,
-      expectedProcessIdentity: {
-        terminalHandle: candidate.terminalHandle,
-        incarnationId: candidate.incarnationId
-      }
-    })
-    const identity = reveal?.identity
-    return Boolean(
-      identity &&
-      runtimeWorktreeIdsEqual(identity.worktreeId, candidate.worktreeId) &&
-      identity.tabId === candidate.tabId &&
-      identity.leafId === candidate.leafId &&
-      identity.ptyId === candidate.ptyId
     )
   }
 

@@ -22,7 +22,7 @@ import {
   makeRuntimeStoreWithWorkspaceSession,
   store
 } from '../orca-runtime-test-fixtures.spec'
-import { publishLegacyWorkerReveal } from '../orca-runtime-test-scenario-builders.spec'
+import { withLegacyWorkerTab } from '../orca-runtime-test-scenario-builders.spec'
 
 describe('OrcaRuntimeService', () => {
   it('recovers exported ORCA_TERMINAL_HANDLE from discovered live PTY sessions', async () => {
@@ -240,12 +240,12 @@ describe('OrcaRuntimeService', () => {
     ).rejects.toThrow('terminal_orphan_competing_owner')
   })
 
-  it('reveals one exact live legacy worker without stealing focus', async () => {
+  it('adopts one exact live legacy worker without stealing focus', async () => {
     const workerLeafId = HEADLESS_LEAF_ID
     const coordinatorLeafId = HEADLESS_SECOND_LEAF_ID
     const workerPaneKey = `legacy-worker:${workerLeafId}`
     const incarnationId = '22222222-2222-4222-8222-222222222222'
-    const session: WorkspaceSessionState = {
+    const coordinatorSession: WorkspaceSessionState = {
       ...getDefaultWorkspaceSession(),
       activeWorktreeId: TEST_WORKTREE_ID,
       activeTabId: 'coordinator',
@@ -276,10 +276,19 @@ describe('OrcaRuntimeService', () => {
             id: 'coordinator-group',
             worktreeId: TEST_WORKTREE_ID,
             activeTabId: 'coordinator',
-            tabOrder: ['coordinator']
+            tabOrder: ['coordinator', 'legacy-worker']
           }
         ]
-      },
+      }
+    }
+    const session: WorkspaceSessionState = {
+      ...withLegacyWorkerTab(coordinatorSession, {
+        worktreeId: TEST_WORKTREE_ID,
+        tabId: 'legacy-worker',
+        leafId: workerLeafId,
+        ptyId: 'pty-legacy',
+        title: 'Legacy worker'
+      }),
       sleepingAgentSessionsByPaneKey: {
         [workerPaneKey]: {
           paneKey: workerPaneKey,
@@ -362,29 +371,9 @@ describe('OrcaRuntimeService', () => {
         }
       ]
     })
-    const revealTerminalSession = vi.fn().mockImplementation(() =>
-      publishLegacyWorkerReveal(
-        runtime,
-        {
-          worktreeId: TEST_WORKTREE_ID,
-          tabId: 'legacy-worker',
-          leafId: workerLeafId,
-          ptyId: 'pty-legacy'
-        },
-        'Legacy worker'
-      )
-    )
-    const resolveLegacyWorkerTerminalRecovery = vi.fn()
-    runtime.setNotifier({
-      revealTerminalSession,
-      resolveLegacyWorkerTerminalRecovery
-    } as never)
-
     expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeDefined()
 
-    const recovered = await runtime.reconcileLegacyWorkerTerminals({
-      materializeRenderer: true
-    })
+    const recovered = await runtime.reconcileLegacyWorkerTerminals()
 
     expect(recovered).toMatchObject({
       adoptedDispatchIds: ['dispatch-legacy'],
@@ -397,20 +386,6 @@ describe('OrcaRuntimeService', () => {
       tabOrder: ['coordinator', 'legacy-worker']
     })
     expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeUndefined()
-    expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
-      ptyId: 'pty-legacy',
-      title: 'Legacy worker',
-      activate: false,
-      presentation: 'background',
-      tabId: 'legacy-worker',
-      leafId: workerLeafId,
-      focus: false,
-      expectedProcessIdentity: {
-        terminalHandle: 'term_legacy',
-        incarnationId
-      }
-    })
-    expect(resolveLegacyWorkerTerminalRecovery).toHaveBeenCalledWith(workerPaneKey, 'adopted')
     expect(write).not.toHaveBeenCalled()
     expect(kill).not.toHaveBeenCalled()
     const [terminal] = (await runtime.listTerminals()).terminals
@@ -510,10 +485,12 @@ describe('OrcaRuntimeService', () => {
       processIncarnation: `pty-legacy:${incarnationId}`
     })
 
-    await runtime.reconcileLegacyWorkerTerminals({ materializeRenderer: true })
-    expect(revealTerminalSession).toHaveBeenCalledTimes(1)
-    expect(getSession().terminalTopologyRevisionByRepoId?.[TEST_REPO_ID]).toBe(1)
-    expect(flushOrThrow).toHaveBeenCalled()
+    // The fake database still lists the row: adopting again changes nothing.
+    await runtime.reconcileLegacyWorkerTerminals()
+    expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
+      'coordinator',
+      'legacy-worker'
+    ])
 
     serializeProviderBuffer.mockClear()
     runtime.onPtyExit('pty-legacy', 0, incarnationId)

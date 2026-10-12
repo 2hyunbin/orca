@@ -45,7 +45,7 @@ export function registerMainProcessIpcHandlers(): void {
       localPtyProviderStartupReady: state.localPtyProviderStartupReady,
       reconcile: async () => {
         await state.runtime?.refreshRestoredOrchestrationAuthority()
-        return state.runtime?.reconcileLegacyWorkerTerminals({ materializeRenderer: true })
+        return state.runtime?.reconcileLegacyWorkerTerminals()
       },
       onDeferredRecoveryError: (error) => {
         console.warn('[orchestration] legacy worker provider-ready recovery failed', error)

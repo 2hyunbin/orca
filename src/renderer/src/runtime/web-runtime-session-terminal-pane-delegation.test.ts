@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  closeWebRuntimeTerminal,
-  consumePendingWebRuntimeSplitMirrorTelemetry,
-  splitWebRuntimeTerminal
-} from './web-runtime-session'
+import { closeWebRuntimeTerminal, splitWebRuntimeTerminal } from './web-runtime-session'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
 import {
   peekWebSessionFocusIntent,
@@ -150,7 +146,7 @@ describe('splitWebRuntimeTerminal', () => {
     vi.clearAllMocks()
   })
 
-  it('passes telemetry source to the host split while allowing the mirrored split event to be suppressed', async () => {
+  it('passes telemetry source to the host split', async () => {
     const runtimeCall = vi.fn().mockResolvedValue({
       id: 'split',
       ok: true,
@@ -171,12 +167,6 @@ describe('splitWebRuntimeTerminal', () => {
         'keyboard',
         SPLIT_SOURCE
       )
-    ).toBe(true)
-    expect(
-      consumePendingWebRuntimeSplitMirrorTelemetry('remote:web-env-1@@terminal-other', 'horizontal')
-    ).toBe(false)
-    expect(
-      consumePendingWebRuntimeSplitMirrorTelemetry('remote:web-env-1@@terminal-1', 'horizontal')
     ).toBe(true)
 
     await vi.waitFor(() => expect(runtimeCall).toHaveBeenCalledTimes(1))

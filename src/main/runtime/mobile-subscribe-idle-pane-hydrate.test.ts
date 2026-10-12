@@ -75,10 +75,9 @@ function setup(opts: { paneMounted: boolean; providerSnapshot?: boolean }) {
         : null
     }
   })
-  const requestMount = vi.spyOn(runtime, 'requestRendererTerminalTabMount').mockReturnValue(false)
   const record = internals(runtime).recordPtyWorktree(PTY_ID, WORKTREE_ID, { connected: true })
   const handle = internals(runtime).issuePtyHandle(record)
-  return { runtime, handle, sizes, serializeBuffer, requestMount }
+  return { runtime, handle, sizes, serializeBuffer }
 }
 
 function subscribePhone(runtime: OrcaRuntimeService, handle: string) {
@@ -203,14 +202,13 @@ describe('phone subscribe to an idle PTY whose hidden pane sits at desktop size'
     ])
   })
 
-  it('leaves a PTY with no pane serializer to the renderer mount path', async () => {
-    const { runtime, handle, requestMount } = setup({ paneMounted: false })
+  it('does not hydrate a host model for a PTY with no pane serializer', async () => {
+    const { runtime, handle } = setup({ paneMounted: false })
 
     const subscription = subscribePhone(runtime, handle)
     await vi.waitFor(() => expect(subscription.snapshot()).not.toBeNull(), { timeout: 5_000 })
     await subscription.close()
 
-    expect(requestMount).toHaveBeenCalledTimes(1)
     expect(runtime.hasHeadlessTerminalState(PTY_ID)).toBe(false)
   })
 })

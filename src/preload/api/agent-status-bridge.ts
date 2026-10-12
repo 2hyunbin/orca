@@ -45,24 +45,6 @@ export const agentStatusApi = {
     ipcRenderer.on('agentStatus:migrationUnsupportedClear', listener)
     return () => ipcRenderer.removeListener('agentStatus:migrationUnsupportedClear', listener)
   },
-  onLegacyWorkerTerminalRecovery: (
-    callback: (data: {
-      paneKey: string
-      resolution: 'adopted' | 'exited' | 'rolled_back'
-      ptyId?: string
-    }) => void
-  ): (() => void) => {
-    const listener = (
-      _event: Electron.IpcRendererEvent,
-      data: {
-        paneKey: string
-        resolution: 'adopted' | 'exited' | 'rolled_back'
-        ptyId?: string
-      }
-    ) => callback(data)
-    ipcRenderer.on('agentStatus:legacyWorkerTerminalRecovery', listener)
-    return () => ipcRenderer.removeListener('agentStatus:legacyWorkerTerminalRecovery', listener)
-  },
   getMigrationUnsupportedSnapshot: (): Promise<MigrationUnsupportedPtyEntry[]> =>
     ipcRenderer.invoke('agentStatus:getMigrationUnsupportedSnapshot'),
   /** Drop the cached hook status for a paneKey on both sides (memory + on-disk) so a relaunch can't resurrect a dismissed row. */

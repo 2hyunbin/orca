@@ -1,50 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService, electronMocks, ipcMain } from '../orca-runtime-test-mocks.spec'
+import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import {
-  HEADLESS_LEAF_ID,
   TEST_REPO_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   store,
-  makeHeadlessTerminalLayout,
   withPlatform
 } from '../orca-runtime-test-fixtures.spec'
-
-// What the window's session save puts in the Store once the renderer created a tab.
-function storeRendererTab(
-  runtime: OrcaRuntimeService,
-  tabId: string,
-  leafId: string,
-  ptyId: string,
-  viewMode?: 'chat'
-): void {
-  const session = store.getWorkspaceSession()
-  store.setWorkspaceSession({
-    ...session,
-    tabsByWorktree: {
-      ...session.tabsByWorktree,
-      [TEST_WORKTREE_ID]: [
-        {
-          id: tabId,
-          ptyId,
-          worktreeId: TEST_WORKTREE_ID,
-          title: 'Terminal',
-          customTitle: null,
-          color: null,
-          sortOrder: 0,
-          createdAt: 1,
-          ...(viewMode ? { viewMode } : {})
-        }
-      ]
-    },
-    terminalLayoutsByTabId: {
-      ...session.terminalLayoutsByTabId,
-      [tabId]: makeHeadlessTerminalLayout({ [leafId]: ptyId })
-    }
-  })
-  // Stands in for the Store's write notice, which the base fixture does not emit.
-  runtime['layoutHolder'].model('local')
-}
 
 describe('OrcaRuntimeService', () => {
   it('rejects startup prompts for agents that require post-ready stdin', async () => {
@@ -307,127 +269,16 @@ describe('OrcaRuntimeService', () => {
     expect(spawn).not.toHaveBeenCalled()
   })
 
-  it('forwards inactive mobile terminal creation to the renderer without focusing it', async () => {
-    const focusTerminal = vi.fn()
-    const runtime = new OrcaRuntimeService(store)
-    runtime.setNotifier({
-      focusTerminal,
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      closeSessionTab: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
-    const webContents = { send: vi.fn() }
-    const send = vi.fn((_channel: string, payload: { requestId: string; activate?: boolean }) => {
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: { send: vi.fn() } },
-        { requestId: payload.requestId, error: 'spoofed renderer reply' }
-      )
-      storeRendererTab(runtime, 'tab-renderer', HEADLESS_LEAF_ID, 'pty-renderer', 'chat')
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [
-          {
-            tabId: 'tab-renderer',
-            worktreeId: TEST_WORKTREE_ID,
-            leafId: HEADLESS_LEAF_ID,
-            paneRuntimeId: 1,
-            ptyId: 'pty-renderer',
-            paneTitle: null
-          }
-        ]
-      })
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: webContents },
-        {
-          requestId: payload.requestId,
-          tabId: 'tab-renderer',
-          title: 'Terminal'
-        }
-      )
-    })
-    webContents.send = send
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents
-    })
-
-    const result = await runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
-      activate: false,
-      viewMode: 'chat'
-    })
-
-    expect(send).toHaveBeenCalledWith(
-      'terminal:requestTabCreate',
-      expect.objectContaining({
-        worktreeId: TEST_WORKTREE_ID,
-        activate: false,
-        source: 'runtime-session',
-        viewMode: 'chat'
-      })
-    )
-    expect(focusTerminal).not.toHaveBeenCalled()
-    expect(result.tab).toMatchObject({ parentTabId: 'tab-renderer', isActive: false })
-  })
-
   it('dedupes concurrent mobile terminal creates that share a clientMutationId', async () => {
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-created' })
     const runtime = new OrcaRuntimeService(store)
-    runtime.setNotifier({
-      focusTerminal: vi.fn(),
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      closeSessionTab: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
     })
-    const webContents = { send: vi.fn() }
-    const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-      storeRendererTab(runtime, 'tab-renderer', HEADLESS_LEAF_ID, 'pty-renderer')
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [
-          {
-            tabId: 'tab-renderer',
-            worktreeId: TEST_WORKTREE_ID,
-            leafId: HEADLESS_LEAF_ID,
-            paneRuntimeId: 1,
-            ptyId: 'pty-renderer',
-            paneTitle: null
-          }
-        ]
-      })
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: webContents },
-        { requestId: payload.requestId, tabId: 'tab-renderer', title: 'Terminal' }
-      )
-    })
-    webContents.send = send
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents
-    })
+    runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
 
     const [first, second] = await Promise.all([
       runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
@@ -440,60 +291,20 @@ describe('OrcaRuntimeService', () => {
       })
     ])
 
-    const createRequests = send.mock.calls.filter(
-      ([channel]) => channel === 'terminal:requestTabCreate'
-    )
-    expect(createRequests).toHaveLength(1)
+    expect(spawn).toHaveBeenCalledTimes(1)
     expect(second).toBe(first)
-    expect(first.tab).toMatchObject({ parentTabId: 'tab-renderer' })
   })
 
   it('returns the settled success for a retried clientMutationId whose response was lost', async () => {
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-created' })
     const runtime = new OrcaRuntimeService(store)
-    runtime.setNotifier({
-      focusTerminal: vi.fn(),
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      closeSessionTab: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
     })
-    const webContents = { send: vi.fn() }
-    const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-      storeRendererTab(runtime, 'tab-renderer', HEADLESS_LEAF_ID, 'pty-renderer')
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [
-          {
-            tabId: 'tab-renderer',
-            worktreeId: TEST_WORKTREE_ID,
-            leafId: HEADLESS_LEAF_ID,
-            paneRuntimeId: 1,
-            ptyId: 'pty-renderer',
-            paneTitle: null
-          }
-        ]
-      })
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: webContents },
-        { requestId: payload.requestId, tabId: 'tab-renderer', title: 'Terminal' }
-      )
-    })
-    webContents.send = send
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents
-    })
+    runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
 
     const first = await runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
       activate: false,
@@ -505,10 +316,7 @@ describe('OrcaRuntimeService', () => {
       clientMutationId: 'mutation-lost-response'
     })
 
-    const createRequests = send.mock.calls.filter(
-      ([channel]) => channel === 'terminal:requestTabCreate'
-    )
-    expect(createRequests).toHaveLength(1)
+    expect(spawn).toHaveBeenCalledTimes(1)
     expect(retried).toBe(first)
   })
 })

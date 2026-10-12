@@ -94,10 +94,8 @@ describe('resolveTerminalWorktreeRoute', () => {
   })
 
   // #16733: the store a reporter actually has — a real local repo/worktree whose legacy rows were
-  // persisted before owner projection, plus one saved runtime environment. resolveTerminalWorktreeRoute
-  // is the sole gate in front of terminal-request-ipc-bridge.ts's "Terminal creation is unavailable
-  // because the worktree owner could not be resolved" reply, so a non-null route here is exactly
-  // "that toast cannot fire".
+  // persisted before owner projection, plus one saved runtime environment. Terminal creation needs a
+  // non-null route here.
   describe('unstamped local worktrees with a saved runtime (#16733)', () => {
     /** The single saved runtime is the hazard: it arms the legacy hydration gates while owning nothing here. */
     const unstampedState = (): AppState =>

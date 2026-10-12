@@ -13,10 +13,7 @@ import {
 
 export class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends OrcaRuntimeWithActivateManagedWorktree {
   protected shouldProvisionWorktreeInBackground(navigation?: RuntimeNavigationTarget): boolean {
-    return (
-      navigationTargetsHost(navigation ?? 'host') &&
-      (!this.notifier || this.graphStatus !== 'ready' || !this.getAvailableAuthoritativeWindow())
-    )
+    return navigationTargetsHost(navigation ?? 'host')
   }
 
   protected getWorktreeTerminalProvisioningHost(
@@ -29,12 +26,9 @@ export class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends OrcaRunt
       splitTerminal: (handle, options) => this.splitTerminal(handle, options, createdWorktree),
       setTabTitle: async (handle, title) => {
         const { tabId } = this.getProvisionedTerminalTab(handle)
-        // Why not renameTerminal: it writes the pane's title, stamped to outrank every later
-        // agent title, which would hide the agent's own titles and status for the pane's life.
-        this.notifier?.renameTerminal(tabId, title, { recordInteraction: false })
-        if (!this.getAvailableAuthoritativeWindow()) {
-          this.persistHeadlessTerminalTitle(tabId, title)
-        }
+        // Why not renameTerminal: it stamps the pane's live title to outrank every later agent
+        // title, which would hide the agent's own titles and status for the pane's life.
+        this.persistHeadlessTerminalTitle(tabId, title)
       },
       setTabColor: async (handle, color) => {
         const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)

@@ -7,7 +7,7 @@ import { makePaneKey, parsePaneKey } from '../../shared/stable-pane-id'
 import { recordPtySurface, spawnSurfaceClaimSequence } from './pty-recorded-surface-topology'
 import { randomUUID } from 'node:crypto'
 import { runtimeSplitPlacement } from './runtime-terminal-spawn-placement'
-import { REJECTED_SPLIT_PTY_STOP_TIMEOUT_MS, ownerSurfacing } from './orca-runtime-core'
+import { REJECTED_SPLIT_PTY_STOP_TIMEOUT_MS } from './orca-runtime-core'
 import type { Worktree } from '../../shared/worktree/types'
 import { spawnInAdmittedPane, withdrawRuntimePane } from './runtime-pane-admission'
 
@@ -112,20 +112,6 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
       )
     }
 
-    const revealSplit = async (): Promise<void> => {
-      await this.notifier?.revealTerminalSession?.(workspace.id, {
-        ptyId: result.id,
-        title: null,
-        activate: opts.activate !== false,
-        ...ownerSurfacing(opts.surfaceOwner !== false),
-        tabId: parentTabId,
-        leafId,
-        splitFromLeafId: parsedPaneKey.leafId,
-        splitDirection: direction,
-        splitTelemetrySource: opts.telemetrySource
-      })
-    }
-
     try {
       const revalidateSourceAuthority = (): void => {
         const current = this.resolveTerminalSplitSourceAuthority(
@@ -144,13 +130,6 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
         }
       }
       revalidateSourceAuthority()
-      if (!sourceAuthority.persisted) {
-        await revealSplit()
-        // Why: rejecting here unmounts the pane the reveal just added only because the retire
-        // below always emits its exit and the tab still holds the source sibling — the renderer's
-        // exit handler closes non-final panes. Never close it by tabId: that drops the whole tab.
-        revalidateSourceAuthority()
-      }
     } catch (error) {
       this.setPairedRendererSessionOwnership(result.id, false)
       let stopped = false
@@ -177,19 +156,12 @@ export class OrcaRuntimeWithSplitPtyBackedTerminal extends OrcaRuntimeWithSplitT
       withdrawRuntimePane(this.layoutHolder, splitArgs)
       throw error
     }
-    const committedSourceAuthority = sourceAuthority.persisted
-      ? this.resolveTerminalSplitSourceAuthority(
-          workspace.id,
-          parentTabId,
-          parsedPaneKey.leafId,
-          pty.ptyId
-        )
-      : null
-    if (sourceAuthority.persisted && committedSourceAuthority?.rendererMounted) {
-      // Why: renderer adoption is a projection after the durable main commit; rejection cannot undo it.
-      void revealSplit().catch(() => undefined)
+    if (opts.activate !== false && opts.surfaceOwner !== false) {
+      this.focusHeldTerminalInDesktopView(
+        { worktreeId: workspace.id, tabId: parentTabId, paneKey },
+        { navigate: true }
+      )
     }
-
     return {
       handle: this.issuePtyHandle(createdPty ?? pty),
       tabId: parentTabId,

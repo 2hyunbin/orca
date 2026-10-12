@@ -15,7 +15,6 @@ import {
   translateSetTabProps,
   translateUpdatePaneLayout
 } from '../../shared/workspace-layout/old-client'
-import { closedTabTerminals } from './closed-pane-terminal-stop'
 
 export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithCloseStructuredAgentSessionTab {
   /** Closes a terminal row's whole tab in the holder; its terminals stop as the close applies. */
@@ -45,19 +44,6 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
       options.authorizedPty.runtimeSessionOwned = false
       this.setPairedRendererSessionOwnership(options.authorizedPty.ptyId, false)
     }
-  }
-
-  /** A tab the window closed: what it left running (relay recovery) stops; its own kills are not repeated. */
-  protected stopTerminalsTheWindowLeft(
-    worktreeId: string,
-    tab: RuntimeMobileSessionTerminalTab
-  ): void {
-    const ptyIdsByLeafId = tab.parentLayout?.ptyIdsByLeafId ?? { [tab.leafId]: tab.ptyId }
-    this.stopClosedTerminals(
-      closedTabTerminals(worktreeId, tab.parentTabId, ptyIdsByLeafId).filter(
-        (terminal) => !this.isPtyStopRequested(terminal.ptyId)
-      )
-    )
   }
 
   /**
@@ -106,9 +92,6 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     if (!snapshot) {
       throw new Error('tab_not_found')
     }
-    if (this.notifier?.moveSessionTab) {
-      return this.moveWindowSessionTab(worktreeId, snapshot, move)
-    }
     const workspace = this.heldWorkspaceLayout(worktreeId)
     if (!workspace) {
       throw new Error('tab_not_found')
@@ -140,36 +123,7 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     return { moved: true }
   }
 
-  /** The window owns the layout until PR 6d: it applies the move. */
-  private moveWindowSessionTab(
-    worktreeId: string,
-    snapshot: RuntimeMobileSessionTabsSnapshot,
-    move: RuntimeMobileSessionTabMove
-  ): RuntimeMobileSessionTabMoveResult {
-    const hostTabId = this.resolveMobileSessionHostTabId(snapshot, move.tabId)
-    if (!hostTabId) {
-      throw new Error('tab_not_found')
-    }
-    const publicSnapshot = this.toMobileSessionTabsResult(snapshot)
-    const targetGroup = publicSnapshot.tabGroups?.find((group) => group.id === move.targetGroupId)
-    if (!targetGroup) {
-      throw new Error('target_group_not_found')
-    }
-    // Why: web clients address terminal surfaces as tab::leaf, while desktop
-    // tab grouping is owned by the outer terminal tab id.
-    if (move.kind === 'reorder') {
-      const tabOrder = this.normalizeMobileSessionTabOrder(snapshot, targetGroup, move.tabOrder)
-      if (!tabOrder.includes(hostTabId)) {
-        throw new Error('invalid_tab_order')
-      }
-      this.notifier.moveSessionTab(worktreeId, { ...move, tabId: hostTabId, tabOrder })
-      return { moved: true }
-    }
-    this.notifier.moveSessionTab(worktreeId, { ...move, tabId: hostTabId })
-    return { moved: true }
-  }
-
-  /** An old desktop's pane tree, as the commands that reach it (rule 11); a window keeps its own. */
+  /** An old desktop's pane tree, as the commands that reach it (rule 11). */
   async updateMobileSessionPaneLayout(
     worktreeSelector: string,
     args: {
@@ -183,10 +137,6 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
-    // Why: a renderer that owns the layout republishes its own geometry (until PR 6d).
-    if (this.getAvailableAuthoritativeWindow()) {
-      return { updated: true }
-    }
     const workspace = this.heldWorkspaceLayout(worktreeId)
     const tab = workspace ? resolveSessionTabRow(workspace, args.tabId)?.tab : undefined
     if (!workspace || tab?.kind !== 'terminal') {
@@ -202,7 +152,7 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     return { updated: !structureRefused }
   }
 
-  /** Tab color, pin and mode, as `setTabProps`; a window keeps its own. */
+  /** Tab color, pin and mode, as `setTabProps`. */
   async setMobileSessionTabProps(
     worktreeSelector: string,
     args: {
@@ -215,10 +165,6 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     const explicitWorktreeId = this.getValidatedExplicitWorktreeIdSelector(worktreeSelector)
     const worktreeId =
       explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
-    // Why: a renderer that owns the layout republishes its own tab props (until PR 6d).
-    if (this.getAvailableAuthoritativeWindow()) {
-      return { updated: true }
-    }
     const workspace = this.heldWorkspaceLayout(worktreeId)
     const translated = workspace ? translateSetTabProps(worktreeId, workspace, args) : null
     if (translated?.ok) {

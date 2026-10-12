@@ -1,9 +1,6 @@
 // A workspace close's last step: its sleeping-agent resume records and pane incarnations go too.
 
 import type { ExecutionHostId } from '../../shared/execution-host'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { cloneWorkspaceSessionState } from '../persistence/restoring-sessions/session-owner-fields'
-import { rollbackWorkspaceSessionAfterFailedAsyncWrite } from '../persistence/restoring-sessions/workspace-session-write-rollback'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
 
@@ -29,8 +26,8 @@ function withoutClosedRecords<R extends { worktreeId: string }>(
 }
 
 /**
- * With no window the holder's close took each closed pane's records; it still carries the ones
- * no loaded pane names, which main's close cleared with the rest.
+ * The holder's close took each closed pane's records; it still carries the ones no loaded pane
+ * names, which main's close cleared with the rest.
  */
 export async function clearHeldWorktreeResumeRecords(
   holder: RuntimeWorkspaceLayouts,
@@ -56,58 +53,4 @@ export async function clearHeldWorktreeResumeRecords(
     }
   })
   await store?.runDurableMutation?.(() => ({ value: undefined, persist: 'if-dirty' }))
-}
-
-/** A window's close (until PR 6d) leaves the records in the Store; they are cleared there. */
-export async function clearStoredWorktreeResumeRecords(
-  store: RuntimeStore | null | undefined,
-  args: { worktreeId: string; hostId: ExecutionHostId; closedTabIds: readonly string[] },
-  setSession: ((session: WorkspaceSessionState, hostId: ExecutionHostId) => void) | undefined
-): Promise<void> {
-  const { worktreeId, hostId, closedTabIds } = args
-  const getSession = store?.getWorkspaceSession?.bind(store)
-  if (!getSession || !setSession || !store?.runDurableMutation) {
-    throw new Error('workspace_session_unavailable')
-  }
-  const refusal = await store.runDurableMutation<Error | undefined>(() => {
-    const session = cloneWorkspaceSessionState(getSession(hostId))
-    const remainingTerminalRows = session.tabsByWorktree[worktreeId] ?? []
-    const remainingUnifiedTerminalTabs = (session.unifiedTabs?.[worktreeId] ?? []).filter(
-      (tab) => tab.contentType === 'terminal'
-    )
-    if (remainingTerminalRows.length > 0 || remainingUnifiedTerminalTabs.length > 0) {
-      return { value: new Error('terminal_close_incomplete'), persist: false }
-    }
-    const cleared = withoutClosedRecords(
-      {
-        sleeping: session.sleepingAgentSessionsByPaneKey ?? {},
-        incarnations: session.terminalPtyIncarnationsByPaneKey ?? {}
-      },
-      worktreeId,
-      closedTabIds
-    )
-    if (!cleared) {
-      return { value: undefined, persist: false }
-    }
-    const next: WorkspaceSessionState = {
-      ...session,
-      sleepingAgentSessionsByPaneKey: cleared.sleeping,
-      terminalPtyIncarnationsByPaneKey: cleared.incarnations
-    }
-    setSession(next, hostId)
-    const staged = cloneWorkspaceSessionState(getSession(hostId))
-    return {
-      value: undefined,
-      rollback: () => {
-        const current = getSession(hostId)
-        const rolledBack = rollbackWorkspaceSessionAfterFailedAsyncWrite(session, staged, current)
-        if (rolledBack !== current) {
-          setSession(rolledBack, hostId)
-        }
-      }
-    }
-  })
-  if (refusal) {
-    throw refusal
-  }
 }

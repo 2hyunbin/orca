@@ -5,8 +5,6 @@ import {
   FLOATING_TERMINAL_WORKTREE_ID,
   OrcaRuntimeService,
   SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV,
-  electronMocks,
-  ipcMain,
   join,
   mkdtemp,
   randomUUID,
@@ -191,68 +189,6 @@ describe('OrcaRuntimeService', () => {
     expect(spawnCall?.env?.ORCA_AGENT_LAUNCH_TOKEN).toBeUndefined()
   })
 
-  it('sends Settings agent defaults through renderer-backed bare agent terminal creates', async () => {
-    const runtimeStore = {
-      ...store,
-      getSettings: () => ({
-        ...store.getSettings(),
-        disabledTuiAgents: [],
-        agentCmdOverrides: {},
-        agentDefaultArgs: { codex: '--dangerously-bypass-approvals-and-sandbox' },
-        agentDefaultEnv: { codex: { CODEX_PROFILE: 'captured' } }
-      })
-    }
-    const runtime = new OrcaRuntimeService(runtimeStore)
-
-    const webContents = { send: vi.fn() }
-    webContents.send.mockImplementation((_channel: string, payload: { requestId: string }) => {
-      runtime.syncWindowGraph(1, {
-        tabs: [],
-        leaves: [
-          {
-            tabId: 'tab-renderer',
-            worktreeId: TEST_WORKTREE_ID,
-            leafId: 'pane:1',
-            paneRuntimeId: 1,
-            ptyId: 'pty-renderer',
-            paneTitle: null
-          }
-        ]
-      })
-      ipcMain.emit(
-        'terminal:tabCreateReply',
-        { sender: webContents },
-        { requestId: payload.requestId, tabId: 'tab-renderer', title: 'Codex' }
-      )
-    })
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents
-    })
-
-    await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
-      command: 'codex',
-      rendererBacked: true
-    })
-
-    expect(webContents.send).toHaveBeenCalledWith(
-      'terminal:requestTabCreate',
-      expect.objectContaining({
-        worktreeId: TEST_WORKTREE_ID,
-        command: "codex '--dangerously-bypass-approvals-and-sandbox'",
-        env: { CODEX_PROFILE: 'captured' },
-        launchAgent: 'codex',
-        launchConfig: {
-          agentCommand: "codex '--dangerously-bypass-approvals-and-sandbox'",
-          agentArgs: '--dangerously-bypass-approvals-and-sandbox',
-          agentEnv: { CODEX_PROFILE: 'captured' }
-        }
-      })
-    )
-  })
-
   it('injects runtime hook receiver env into terminal sessions', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-hooked' })
     const runtime = new OrcaRuntimeService(store, undefined, {
@@ -326,7 +262,7 @@ describe('OrcaRuntimeService', () => {
     ).resolves.toMatchObject({
       worktreeId: TEST_FOLDER_WORKSPACE_KEY,
       title: 'multi-repo worker',
-      surface: 'background'
+      surface: 'visible'
     })
 
     const spawnCall = spawn.mock.calls[0]?.[0] as
@@ -373,7 +309,7 @@ describe('OrcaRuntimeService', () => {
     ).resolves.toMatchObject({
       worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
       title: 'floating worker',
-      surface: 'background'
+      surface: 'visible'
     })
 
     const spawnCall = spawn.mock.calls[0]?.[0] as
@@ -485,9 +421,8 @@ describe('OrcaRuntimeService', () => {
     expect(normalAgent.env?.TMUX).toBeUndefined()
   })
 
-  it('reveals Claude Agent Teams launches with the rewritten launch config', async () => {
+  it('records Claude Agent Teams launches with the rewritten launch config', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-bg' })
     const runtimeStore = {
       ...store,
       getSettings: () => ({
@@ -502,22 +437,6 @@ describe('OrcaRuntimeService', () => {
       kill: () => true,
       getForegroundProcess: async () => null
     })
-    runtime.setNotifier({
-      worktreesChanged: vi.fn(),
-      reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
-      terminalFitOverrideChanged: vi.fn(),
-      terminalDriverChanged: vi.fn()
-    })
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
 
     await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
       command: "claude 'hello'",
@@ -532,25 +451,17 @@ describe('OrcaRuntimeService', () => {
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ launchAgent: 'claude' }))
 
     const spawnCall = spawn.mock.calls[0]?.[0] as { env?: Record<string, string> } | undefined
-    const spawnedEnv = spawnCall?.env ?? {}
-    const spawnedLeafId = spawnedEnv.ORCA_PANE_KEY.slice(`${spawnedEnv.ORCA_TAB_ID}:`.length)
-    expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
-      ptyId: 'pty-bg',
-      title: null,
-      launchConfig: {
-        agentCommand: 'claude --teammate-mode in-process',
-        agentArgs: '',
-        agentEnv: {
-          CLAUDE_PROFILE: 'captured',
-          CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1'
-        }
-      },
-      launchToken: spawnedEnv.ORCA_AGENT_LAUNCH_TOKEN,
-      launchAgent: 'claude',
-      activate: false,
-      tabId: spawnedEnv.ORCA_TAB_ID,
-      leafId: spawnedLeafId
+    const pty = runtime['ptysById'].get('pty-bg')
+    expect(pty?.launchConfig).toEqual({
+      agentCommand: 'claude --teammate-mode in-process',
+      agentArgs: '',
+      agentEnv: {
+        CLAUDE_PROFILE: 'captured',
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1'
+      }
     })
+    expect(pty?.launchToken).toBe(spawnCall?.env?.ORCA_AGENT_LAUNCH_TOKEN)
+    expect(pty?.launchAgent).toBe('claude')
   })
 
   it('preserves Claude Agent Teams for sequenced Claude launches', async () => {

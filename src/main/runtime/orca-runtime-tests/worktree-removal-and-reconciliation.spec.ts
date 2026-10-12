@@ -51,13 +51,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-duplicate-path' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -164,12 +157,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -213,16 +200,10 @@ describe('OrcaRuntimeService', () => {
 
   it('activates CLI-created worktrees only when explicitly requested', async () => {
     const runtime = new OrcaRuntimeService(store)
-    const activateWorktree = vi.fn()
+    const navigations: unknown[] = []
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree,
-      createTerminal: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -242,19 +223,17 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
-    await runtime.createManagedWorktree({
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
+    const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-activate',
       activate: true
     })
 
-    expect(activateWorktree).toHaveBeenCalledWith(
-      'repo-1',
-      expect.any(String),
-      undefined,
-      undefined,
-      undefined
-    )
+    expect(navigations).toContainEqual({
+      kind: 'revealWorkspace',
+      workspace: result.worktree.id
+    })
   })
 
   it('stamps createdAt alongside lastActivityAt so CLI-created worktrees get the Recent-sort grace window', async () => {
@@ -263,12 +242,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()

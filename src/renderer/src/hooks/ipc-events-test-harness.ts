@@ -13,30 +13,6 @@ export {
   type HarnessTab
 } from './ipc-events-harness-store-state'
 
-export type CreateTerminalRequest = {
-  requestId?: string
-  worktreeId: string
-  command?: string
-  title?: string
-  ptyId?: string
-  activate?: boolean
-  presentation?: 'background' | 'focused'
-  surfaceOwner?: boolean
-  tabId?: string
-  leafId?: string
-  splitFromLeafId?: string
-}
-
-export type RequestTerminalCreateRequest = {
-  requestId: string
-  worktreeId?: string
-  command?: string
-  title?: string
-  activate?: boolean
-  presentation?: 'background' | 'focused'
-  surfaceOwner?: boolean
-}
-
 /** A notification click sets userInitiated; a chat-completion courtesy reveal leaves it off. */
 export type FocusEditorTabRequest = {
   tabId: string
@@ -54,10 +30,7 @@ function createApiNamespaceStub(overrides: Record<string, unknown> = {}): Record
 export type IpcEventsHarness = {
   /** Call inside the test body: useIpcEvents runs its effects eagerly here. */
   useIpcEvents: () => void
-  createTerminal: (request: CreateTerminalRequest) => void
-  requestTerminalCreate: (request: RequestTerminalCreateRequest) => void
   focusEditorTab: (request: FocusEditorTabRequest) => void
-  replyTerminalCreate: ReturnType<typeof vi.fn>
   /** Fire a main-process digit chord (zero-based index). */
   jumpToWorktreeIndex: (index: number) => void
   jumpToTabIndex: (index: number) => void
@@ -88,10 +61,7 @@ export async function loadIpcEventsHarness(
   storeState: HarnessStoreState,
   options: IpcEventsHarnessOptions = {}
 ): Promise<IpcEventsHarness> {
-  const replyTerminalCreate = vi.fn()
   const activateAndRevealWorkspace = vi.fn()
-  let createTerminalListener: ((request: CreateTerminalRequest) => void) | null = null
-  let requestTerminalCreateListener: ((request: RequestTerminalCreateRequest) => void) | null = null
   let focusEditorTabListener: ((request: FocusEditorTabRequest) => void) | null = null
   let navigationUpdateListener:
     | ((event: { browserPageId: string; url: string; title: string }) => void)
@@ -156,18 +126,6 @@ export async function loadIpcEventsHarness(
           consumePendingOpenSettings: () => Promise.resolve(false),
           consumePendingSkillShare: () => Promise.resolve(null),
           set: vi.fn(),
-          replyTabCreate: vi.fn(),
-          replyTabClose: vi.fn(),
-          replyTabSetProfile: vi.fn(),
-          replyTerminalCreate,
-          onCreateTerminal: (listener: (request: CreateTerminalRequest) => void) => {
-            createTerminalListener = listener
-            return () => {}
-          },
-          onRequestTerminalCreate: (listener: (request: RequestTerminalCreateRequest) => void) => {
-            requestTerminalCreateListener = listener
-            return () => {}
-          },
           onFocusEditorTab: (
             listener: (request: { tabId: string; worktreeId: string }) => void
           ) => {
@@ -250,25 +208,12 @@ export async function loadIpcEventsHarness(
   const { useIpcEvents } = await import('./useIpcEvents')
   return {
     useIpcEvents,
-    createTerminal: (request) => {
-      if (typeof createTerminalListener !== 'function') {
-        throw new Error('Expected the create-terminal listener to be registered')
-      }
-      createTerminalListener(request)
-    },
-    requestTerminalCreate: (request) => {
-      if (typeof requestTerminalCreateListener !== 'function') {
-        throw new Error('Expected the request-terminal-create listener to be registered')
-      }
-      requestTerminalCreateListener(request)
-    },
     focusEditorTab: (request) => {
       if (typeof focusEditorTabListener !== 'function') {
         throw new Error('Expected the focus-editor-tab listener to be registered')
       }
       focusEditorTabListener(request)
     },
-    replyTerminalCreate,
     jumpToWorktreeIndex: (index) => fireIndexJump(indexJumpListeners, 'worktree', index),
     jumpToTabIndex: (index) => fireIndexJump(indexJumpListeners, 'tab', index),
     navigationUpdate: (event) => {

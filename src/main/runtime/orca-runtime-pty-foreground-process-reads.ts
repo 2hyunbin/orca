@@ -102,10 +102,20 @@ export class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithSta
     } else {
       this.persistedClientHostedBrowserWorktreeIds.delete(worktreeId)
     }
+    // A worktree whose partition no longer resolves, or that no held layout has, has nowhere to
+    // save, and rehydration would refuse the row it carried anyway.
+    const hostId = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
+    const model = hostId ? this.layoutHolder.model(hostId) : null
     persistClientHostedBrowserPages(
       {
-        getWorkspaceSession: (id) => this.getWorkspaceSessionForWorktree(id),
-        setWorkspaceSession: (id, session) => this.setWorkspaceSessionForWorktree(id, session)
+        savedPages: (id) =>
+          model ? (model.records.clientHostedBrowserPagesByWorkspace?.[id] ?? []) : null,
+        savePages: (id, pages) =>
+          this.layoutHolder.transition(hostId, {
+            type: 'clientHostedBrowserPagesSaved',
+            workspace: id,
+            pages
+          }).ok
       },
       registry,
       worktreeId

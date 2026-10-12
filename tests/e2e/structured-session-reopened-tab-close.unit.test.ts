@@ -2,9 +2,9 @@
 
 /**
  * After /clear the current chat keeps the tab id derived from its first session, so reopening that
- * first session from history lands in a suffixed tab. Closing or focusing the reopened tab from
- * main must reach that tab, not the current chat. Runs the real main close/focus path against the
- * real window store, mirror and IPC bridges; only the process boundary is stubbed.
+ * first session from history lands in a suffixed tab. Closing the reopened tab must reach that tab,
+ * not the current chat. Runs the real main close path against the real window store and mirror;
+ * only the process boundary is stubbed.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,8 +18,6 @@ import { useAppStore } from '../../src/renderer/src/store'
 import { applyStructuredSessionTabSnapshots } from '../../src/renderer/src/runtime/local-structured-session-tabs-sync/snapshot-apply'
 import { resetLocalStructuredSessionVersionForTests } from '../../src/renderer/src/runtime/local-structured-session-tabs-sync'
 import { resetWebSessionTabsSnapshotFreshnessForTests } from '../../src/renderer/src/runtime/web-session-tabs-sync'
-import { registerSessionTabIpcBridge } from '../../src/renderer/src/hooks/ipc-events/session-tab-ipc-bridge'
-import { registerTerminalUiRoutingIpcBridge } from '../../src/renderer/src/hooks/ipc-events/terminal-ui-routing-ipc-bridge'
 import { resetWebSessionCloseIntentForTests } from '../../src/renderer/src/runtime/web-session-close-intent'
 
 const WORKTREE = 'repo-1::/tmp/wt-reopen'
@@ -27,9 +25,6 @@ const CURRENT_SESSION = 'clear-x'
 const REOPENED_SESSION = 'session-s'
 const CURRENT_TAB = `structured-agent-session-${REOPENED_SESSION}`
 const REOPENED_TAB = `${CURRENT_TAB}:history-1`
-
-type CloseRequest = { requestId: string; tabId: string; worktreeId: string; expiresAt?: number }
-type Listener<T> = (payload: T) => void
 
 type ProcessBoundary = {
   runtime: Pick<OrcaRuntimeService, 'closeMobileSessionTab' | 'listMobileSessionTabs'> | null
@@ -72,37 +67,7 @@ vi.mock('../../src/renderer/src/runtime/structured-agent-session-close', () => (
 }))
 
 async function setup() {
-  const listeners: {
-    closeSessionTab?: Listener<{ tabId: string; worktreeId: string }>
-    closeRequest?: Listener<CloseRequest>
-    focusEditorTab?: Listener<{ tabId: string; worktreeId: string; userInitiated?: boolean }>
-  } = {}
-  const pendingResponses = new Map<string, (error?: string) => void>()
-  const register =
-    <T>(assign: (listener: Listener<T>) => void) =>
-    (listener: Listener<T>) => {
-      assign(listener)
-      return () => {}
-    }
-  const noop = () => () => {}
-  vi.stubGlobal('api', {
-    ui: {
-      onCloseSessionTab: register((l) => (listeners.closeSessionTab = l)),
-      onSessionTabCloseRequest: register((l) => (listeners.closeRequest = l)),
-      onFocusEditorTab: register((l) => (listeners.focusEditorTab = l)),
-      onMoveSessionTab: noop,
-      onSplitTerminal: noop,
-      onRenameTerminal: noop,
-      onFocusTerminal: noop,
-      respondSessionTabClose: ({ requestId, error }: { requestId: string; error?: string }) =>
-        pendingResponses.get(requestId)?.(error)
-    }
-  })
-  registerSessionTabIpcBridge([])
-  registerTerminalUiRoutingIpcBridge([])
-
   const hostSessionCloses: string[] = []
-  const closeResponses: (string | undefined)[] = []
   // The saved workspace session the runtime's tab layout loads from and writes to.
   let session: WorkspaceSessionState = getDefaultWorkspaceSession()
   const runtime = new OrcaRuntimeService(
@@ -117,24 +82,6 @@ async function setup() {
   // The worktree as a scan lists it: the runtime's layout holds it, still without tabs.
   runtime.addCatalogWorkspaces([WORKTREE])
   bridge.runtime = runtime
-  let nextRequest = 0
-  runtime.setNotifier(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the chat close and focus paths call only these two notifier members.
-    {
-      // Same contract as the window relay: a request the renderer answers with an optional error.
-      closeSessionTab: (tabId: string, worktreeId: string) =>
-        new Promise<void>((resolve, reject) => {
-          const requestId = `close-${++nextRequest}`
-          pendingResponses.set(requestId, (error) => {
-            closeResponses.push(error)
-            return error ? reject(new Error(error)) : resolve()
-          })
-          listeners.closeRequest!({ requestId, tabId, worktreeId })
-        }),
-      focusEditorTab: (tabId: string, worktreeId: string) =>
-        listeners.focusEditorTab!({ tabId, worktreeId })
-    } as never
-  )
   // No durable store, PTYs or workspace session on disk: the host tab list below is the whole state.
   Object.assign(runtime, {
     hasPersistedStructuredAgentSessionStore: () => true,
@@ -175,7 +122,7 @@ async function setup() {
     (useAppStore.getState().unifiedTabsByWorktree[WORKTREE] ?? [])
       .filter((tab) => tab.contentType === 'agent-session')
       .map((tab) => ({ id: tab.id, entityId: tab.entityId }))
-  return { runtime, agentTabs, hostSessionCloses, closeResponses }
+  return { agentTabs, hostSessionCloses }
 }
 
 const initialStoreState = useAppStore.getState()
@@ -208,7 +155,7 @@ describe('closing a chat reopened from history after /clear', () => {
   })
 
   it('closes only the reopened tab when the user closes it on the desktop', async () => {
-    const { agentTabs, hostSessionCloses, closeResponses } = await setup()
+    const { agentTabs, hostSessionCloses } = await setup()
 
     useAppStore.getState().closeUnifiedTab(REOPENED_TAB)
 
@@ -218,34 +165,5 @@ describe('closing a chat reopened from history after /clear', () => {
     expect(agentTabs()).toEqual([{ id: CURRENT_TAB, entityId: CURRENT_SESSION }])
     expect(bridge.rendererSessionCloses).toEqual([REOPENED_SESSION])
     expect(hostSessionCloses).toEqual([REOPENED_SESSION])
-    // The window already removed the tab, so main's relay is acknowledged, not reported missing.
-    expect(closeResponses).toEqual([undefined])
-  })
-
-  it('closes only the reopened tab when a phone closes it through the runtime', async () => {
-    const { runtime, agentTabs, hostSessionCloses } = await setup()
-
-    await runtime.closeMobileSessionTab(`id:${WORKTREE}`, `agent-session:${REOPENED_SESSION}`, {
-      reason: 'user'
-    })
-
-    await vi.waitFor(() =>
-      expect(agentTabs()).toEqual([{ id: CURRENT_TAB, entityId: CURRENT_SESSION }])
-    )
-    expect(bridge.rendererSessionCloses).not.toContain(CURRENT_SESSION)
-    expect(hostSessionCloses).not.toContain(CURRENT_SESSION)
-  })
-
-  it('focuses the reopened tab when a phone activates it through the runtime', async () => {
-    const { runtime } = await setup()
-    useAppStore.getState().activateTab(CURRENT_TAB, { worktreeId: WORKTREE })
-
-    await runtime.activateMobileSessionTab(`id:${WORKTREE}`, `agent-session:${REOPENED_SESSION}`)
-
-    const state = useAppStore.getState()
-    const group = state.groupsByWorktree[WORKTREE]?.find((candidate) =>
-      candidate.tabOrder.includes(REOPENED_TAB)
-    )
-    expect(group?.activeTabId).toBe(REOPENED_TAB)
   })
 })

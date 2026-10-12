@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { makePaneKey } from '../../shared/stable-pane-id'
 import {
-  CANARY_INCARNATION_ID,
-  CANARY_LEAF_ID,
-  CANARY_PTY_ID,
-  CANARY_TAB_ID,
   createHarness,
   createPtyBackedPublishedSurfaceHarness,
   createStaleTabCloseHarness,
@@ -22,7 +17,7 @@ import {
 } from './__fixtures__/orca-runtime-terminal-close-continuity-fixtures'
 
 describe('terminal close and handle incarnation continuity', () => {
-  it('delegates a stale spawn-time tab through its current PTY-backed renderer surface', async () => {
+  it('closes a stale spawn-time tab through its current PTY-backed surface', async () => {
     const harness = await createStaleTabCloseHarness()
     const { terminal } = harness
 
@@ -32,7 +27,7 @@ describe('terminal close and handle incarnation continuity', () => {
       closeMode: 'tab'
     })
 
-    expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_ID)
+    expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([])
   })
 
   it('kills and removes a stale spawn-time tab through its current headless surface', async () => {
@@ -140,7 +135,6 @@ describe('terminal close and handle incarnation continuity', () => {
     )
 
     expect(harness.kill).not.toHaveBeenCalled()
-    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
     expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
   })
 
@@ -158,111 +152,39 @@ describe('terminal close and handle incarnation continuity', () => {
     )
 
     expect(harness.kill).not.toHaveBeenCalled()
-    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
     expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
   })
 
-  it('does not acknowledge final-pane close before durable tab retirement', async () => {
+  it('retires the tab before it stops the final PTY', async () => {
     const harness = createHarness()
     const [{ handle }] = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals
-    let settled = false
-    const closing = harness.runtime.closeTerminal(handle).finally(() => {
-      settled = true
+    const tabsAtStop: unknown[] = []
+    harness.setStopAndWaitAction(() => {
+      tabsAtStop.push(harness.getSession().tabsByWorktree[WORKTREE_ID])
     })
 
-    await vi.waitFor(() =>
-      expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_ID, {
-        localPtyTeardownOwnedExternally: true
-      })
-    )
-    expect(settled).toBe(false)
-    expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
+    await expect(harness.runtime.closeTerminal(handle)).resolves.toMatchObject({
+      handle,
+      tabId: TAB_ID
+    })
 
-    harness.retirePersistedTab()
-    harness.acknowledged.resolve()
-    await expect(closing).resolves.toMatchObject({ handle, tabId: TAB_ID, ptyKilled: false })
-    expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
-    expect(harness.closeTerminal).not.toHaveBeenCalled()
+    expect(tabsAtStop).toEqual([[]])
     expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([])
   })
 
-  it('fences final-pane exit ordering until exact retirement commits', async () => {
-    const harness = createHarness({
-      includeCanary: true,
-      publishMobileSurface: true,
-      registerPtyBacked: true
-    })
-    harness.syncFixtureTabWithoutLeaf()
-    const closeMobileSessionTab = vi.spyOn(harness.runtime, 'closeMobileSessionTab')
-    const order: string[] = []
-    harness.setCloseTerminalTabAction(() => {
-      order.push('session-retirement')
-      harness.retirePersistedTab()
-      harness.syncCanaryGraph()
-      order.push('committed-graph-removal')
-    })
-    harness.setVerifiedStopResult(true)
-    harness.setStopAndWaitAction((stoppingPtyId) => {
-      order.push('pty-stop')
-      harness.removeVictimFromInventory()
-      harness.syncCanaryGraph()
-      order.push('idempotent-graph-removal')
-      harness.runtime.onPtyExit(stoppingPtyId, 0, INCARNATION_ID)
-      order.push('idempotent-session-retirement')
-    })
-    const terminals = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals
-    const victim = terminals.find((terminal) => terminal.ptyId === PTY_ID)!
-    const canary = terminals.find((terminal) => terminal.ptyId === CANARY_PTY_ID)!
-
-    await expect(harness.runtime.closeTerminal(victim.handle)).resolves.toMatchObject({
-      handle: victim.handle,
-      tabId: TAB_ID,
-      ptyKilled: true
-    })
-
-    expect(order).toEqual([
-      'session-retirement',
-      'committed-graph-removal',
-      'pty-stop',
-      'idempotent-graph-removal',
-      'idempotent-session-retirement'
-    ])
-    expect(harness.stopAndWait).toHaveBeenCalledTimes(1)
-    expect(harness.stopAndWait).toHaveBeenCalledWith(PTY_ID, {
-      deadlineMs: expect.any(Number)
-    })
-    expect(harness.kill).not.toHaveBeenCalled()
-    expect(closeMobileSessionTab).toHaveBeenCalledTimes(1)
-    expect(closeMobileSessionTab).toHaveBeenCalledWith(`id:${WORKTREE_ID}`, TAB_ID, {
-      localPtyTeardownOwnedExternally: true
-    })
-    expect(harness.closeTerminalTab).toHaveBeenCalledTimes(1)
-    expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([
-      expect.objectContaining({ id: CANARY_TAB_ID, ptyId: CANARY_PTY_ID })
-    ])
-    expect(harness.getSession().terminalLayoutsByTabId).toEqual({
-      [CANARY_TAB_ID]: expect.objectContaining({
-        ptyIdsByLeafId: { [CANARY_LEAF_ID]: CANARY_PTY_ID }
-      })
-    })
-    expect(harness.getSession().terminalPtyIncarnationsByPaneKey).toEqual({
-      [makePaneKey(CANARY_TAB_ID, CANARY_LEAF_ID)]: CANARY_INCARNATION_ID
-    })
-    const survivors = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals
-    expect(survivors).toHaveLength(1)
-    const [survivor] = survivors
-    expect(survivor).toMatchObject({ ptyId: CANARY_PTY_ID })
-    await expect(harness.runtime.readTerminal(survivor.handle)).resolves.toMatchObject({
-      handle: survivor.handle,
-      status: 'running'
-    })
-    expect(canary.ptyId).toBe(survivor.ptyId)
-  })
-
-  it('does not kill the final PTY when durable tab retirement is rejected', async () => {
+  it('does not kill the final PTY of a pinned tab', async () => {
     const harness = createHarness()
     const [{ handle }] = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals
-    harness.rejectTerminalTabClose(new Error('terminal_tab_pinned'))
+    harness.editSession((session) => ({
+      ...session,
+      tabsByWorktree: {
+        ...session.tabsByWorktree,
+        [WORKTREE_ID]: session.tabsByWorktree[WORKTREE_ID]!.map((tab) => ({
+          ...tab,
+          isPinned: true
+        }))
+      }
+    }))
 
     await expect(harness.runtime.closeTerminal(handle)).rejects.toThrow('terminal_tab_pinned')
 
@@ -270,21 +192,16 @@ describe('terminal close and handle incarnation continuity', () => {
     expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
   })
 
-  it('requests a stop for every live tab PTY after retirement when the renderer graph is stale', async () => {
+  it('requests a stop for every live tab PTY when the tab closes', async () => {
     const harness = createHarness()
     harness.syncSplitFixtureGraph()
     const terminal = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals.find(
       (candidate) => candidate.ptyId === PTY_ID
     )!
-    harness.syncFixtureGraph()
 
-    const closing = harness.runtime.closeTerminalTab(terminal.handle)
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
-    expect(harness.kill).not.toHaveBeenCalled()
-
-    harness.retirePersistedTab()
-    harness.acknowledged.resolve()
-    await expect(closing).resolves.toMatchObject({ ptyKilled: false })
+    await expect(harness.runtime.closeTerminalTab(terminal.handle)).resolves.toMatchObject({
+      ptyKilled: false
+    })
     expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
     expect(harness.kill).toHaveBeenCalledWith(SIBLING_PTY_ID)
   })
@@ -295,11 +212,6 @@ describe('terminal close and handle incarnation continuity', () => {
     harness.setVerifiedStopResult(true)
 
     const closing = harness.runtime.closeTerminal(handle)
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
-    expect(harness.stopAndWait).not.toHaveBeenCalled()
-
-    harness.retirePersistedTab()
-    harness.acknowledged.resolve()
     await expect(closing).resolves.toMatchObject({ ptyKilled: true })
     expect(harness.stopAndWait).toHaveBeenCalledWith(PTY_ID, {
       deadlineMs: expect.any(Number)
@@ -317,9 +229,6 @@ describe('terminal close and handle incarnation continuity', () => {
     harness.runtime.markPtyLivenessUnverifiable(PTY_ID, 'its SSH provider is no longer registered')
 
     const closing = harness.runtime.closeTerminal(handle)
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
-    harness.retirePersistedTab()
-    harness.acknowledged.resolve()
 
     await expect(closing).resolves.toMatchObject({
       ptyKilled: false,
@@ -336,9 +245,6 @@ describe('terminal close and handle incarnation continuity', () => {
     harness.runtime.markPtyLivenessLive(PTY_ID)
 
     const closing = harness.runtime.closeTerminal(handle)
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
-    harness.retirePersistedTab()
-    harness.acknowledged.resolve()
 
     await expect(closing).resolves.toMatchObject({
       ptyKilled: false,
@@ -354,9 +260,6 @@ describe('terminal close and handle incarnation continuity', () => {
     harness.setVerifiedStopResult(true)
 
     const closing = harness.runtime.closeTerminal(handle)
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
-    harness.retirePersistedTab()
-    harness.acknowledged.resolve()
 
     const close = await closing
     expect(close.ptyKilled).toBe(true)
@@ -370,9 +273,6 @@ describe('terminal close and handle incarnation continuity', () => {
     harness.setVerifiedStopResult(new Error('provider_unavailable'))
 
     const closing = harness.runtime.closeTerminal(handle)
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalled())
-    harness.retirePersistedTab()
-    harness.acknowledged.resolve()
 
     await expect(closing).resolves.toMatchObject({
       ptyKilled: false,
@@ -385,15 +285,23 @@ describe('terminal close and handle incarnation continuity', () => {
     expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
   })
 
-  it('does not tear down a published PTY when retirement fails before acknowledgement', async () => {
+  it('does not tear down a published PTY of a pinned tab', async () => {
     const harness = createPtyBackedPublishedSurfaceHarness()
-    harness.rejectTerminalTabClose(new Error('terminal_tab_pinned'))
+    harness.editSession((session) => ({
+      ...session,
+      tabsByWorktree: {
+        ...session.tabsByWorktree,
+        [WORKTREE_ID]: session.tabsByWorktree[WORKTREE_ID]!.map((tab) => ({
+          ...tab,
+          isPinned: true
+        }))
+      }
+    }))
     const [terminal] = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals
 
     await expect(harness.runtime.closeTerminal(terminal.handle)).rejects.toThrow(
       'terminal_tab_pinned'
     )
-    expect(harness.closeTerminal).not.toHaveBeenCalled()
     expect(harness.stopAndWait).not.toHaveBeenCalled()
     expect(harness.kill).not.toHaveBeenCalled()
   })

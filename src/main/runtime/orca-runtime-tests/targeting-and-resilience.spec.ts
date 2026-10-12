@@ -4,7 +4,6 @@ import {
   OrcaRuntimeService,
   assertWorktreeCleanForRemoval,
   electronMocks,
-  ipcMain,
   listWorktrees,
   removeWorktree
 } from '../orca-runtime-test-mocks.spec'
@@ -15,7 +14,6 @@ import {
   store,
   syncSinglePty
 } from '../orca-runtime-test-fixtures.spec'
-import { createMobileCreateTestNotifier } from '../orca-runtime-test-scenario-builders.spec'
 
 describe('OrcaRuntimeService', () => {
   describe('browser page targeting', () => {
@@ -489,116 +487,6 @@ describe('OrcaRuntimeService', () => {
       })
 
       await expect(runtime.resolveTerminalCwd(handle)).resolves.toBeNull()
-    })
-  })
-
-  describe('mobile terminal create resilience (#7718)', () => {
-    it('cancels the surface wait without rolling back when the client connection dies', async () => {
-      vi.useFakeTimers()
-      try {
-        const closeTerminal = vi.fn()
-        const runtime = new OrcaRuntimeService(store)
-        runtime.setNotifier(createMobileCreateTestNotifier(closeTerminal))
-        const abort = new AbortController()
-        const webContents = { send: vi.fn() }
-        const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-          ipcMain.emit(
-            'terminal:tabCreateReply',
-            { sender: webContents },
-            { requestId: payload.requestId, tabId: 'tab-abort', title: 'Terminal' }
-          )
-        })
-        webContents.send = send
-        runtime.attachWindow(1)
-        runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-        electronMocks.BrowserWindow.fromId.mockReturnValue({
-          isDestroyed: () => false,
-          webContents
-        })
-
-        const create = runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
-          activate: false,
-          signal: abort.signal
-        })
-        const settled = create.then(
-          () => ({ ok: true as const }),
-          (error: Error) => ({ ok: false as const, error })
-        )
-        await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
-
-        // Client socket dies mid-wait: create must settle right away (not the 10s timeout) and must NOT close the tab (real terminal exists).
-        abort.abort()
-        await vi.advanceTimersByTimeAsync(0)
-        const outcome = await settled
-
-        expect(outcome.ok).toBe(false)
-        if (outcome.ok === false) {
-          expect(outcome.error.message).toBe('client_disconnected')
-        }
-        expect(closeTerminal).not.toHaveBeenCalled()
-      } finally {
-        vi.useRealTimers()
-      }
-    })
-
-    it('keeps a mobile-created terminal alive when its live shell has no registered pane key', async () => {
-      vi.useFakeTimers()
-      try {
-        const closeTerminal = vi.fn()
-        const runtime = new OrcaRuntimeService(store)
-        runtime.setNotifier(createMobileCreateTestNotifier(closeTerminal))
-        const webContents = { send: vi.fn() }
-        const send = vi.fn((_channel: string, payload: { requestId: string }) => {
-          ipcMain.emit(
-            'terminal:tabCreateReply',
-            { sender: webContents },
-            { requestId: payload.requestId, tabId: 'tab-stall', title: 'Terminal' }
-          )
-        })
-        webContents.send = send
-        runtime.attachWindow(1)
-        runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-        electronMocks.BrowserWindow.fromId.mockReturnValue({
-          isDestroyed: () => false,
-          webContents
-        })
-
-        const create = runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
-          activate: false
-        })
-        const settled = create.then(
-          () => ({ ok: true as const }),
-          (error: Error) => ({ ok: false as const, error })
-        )
-        await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
-
-        // A live shell backs the tab but its leaf id isn't a terminal UUID, so no pane key registers (stalled renderer publication).
-        runtime.syncWindowGraph(1, {
-          tabs: [],
-          leaves: [
-            {
-              tabId: 'tab-stall',
-              worktreeId: TEST_WORKTREE_ID,
-              leafId: 'pane:1',
-              paneRuntimeId: 1,
-              ptyId: 'pty-stall',
-              paneTitle: null
-            }
-          ]
-        })
-
-        await vi.advanceTimersByTimeAsync(11_000)
-        const outcome = await settled
-
-        // The create fails, but the timeout must not kill the live terminal (the "tab dies after ~10s" symptom).
-        expect(outcome.ok).toBe(false)
-        if (outcome.ok === false) {
-          expect(outcome.error.message).toContain('Timed out')
-        }
-        expect(closeTerminal).not.toHaveBeenCalled()
-      } finally {
-        vi.useRealTimers()
-      }
     })
   })
 })

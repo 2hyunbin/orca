@@ -13,23 +13,12 @@ import {
   TERMINAL_MULTIPLEX_MAX_ACTIVE_STREAMS_PER_CONNECTION,
   TERMINAL_MULTIPLEX_MAX_PENDING_PTY_WAITS_PER_CONNECTION
 } from '../../../shared/terminal-multiplex-flow-control'
-import type { OrcaRuntimeService } from '../orca-runtime'
 import {
   makeRequest,
   sendDesktopMultiplexSubscribe,
-  startDesktopMultiplexSubscribe as startHarnessDesktopMultiplexSubscribe,
-  stubRuntime as stubHarnessRuntime
+  startDesktopMultiplexSubscribe,
+  stubRuntime
 } from './terminal-multiplex-test-harness'
-
-// Why: these PTY waits are the window-attached path; a windowless runtime starts the pane instead.
-const windowAttached = (overrides: Partial<OrcaRuntimeService>): Partial<OrcaRuntimeService> => ({
-  startsPanesForSubscribers: vi.fn(() => false),
-  ...overrides
-})
-const stubRuntime = (overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService =>
-  stubHarnessRuntime(windowAttached(overrides))
-const startDesktopMultiplexSubscribe = (overrides: Partial<OrcaRuntimeService> = {}) =>
-  startHarnessDesktopMultiplexSubscribe(windowAttached(overrides))
 
 describe('terminal multiplex RPC', () => {
   it('settles mobile multiplex PTY waits when the stream signal aborts before PTY spawn', async () => {
@@ -43,9 +32,9 @@ describe('terminal multiplex RPC', () => {
     const cleanups = new Map<string, () => void>()
     const runtime = stubRuntime({
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      waitForLeafPtyId: vi.fn(
-        (_handle: string, _timeoutMs?: number, signal?: AbortSignal) =>
-          new Promise<string>((_resolve, reject) => {
+      startPaneForHandle: vi.fn(
+        (_handle: string, signal?: AbortSignal) =>
+          new Promise<string | null>((_resolve, reject) => {
             signal?.addEventListener('abort', () => reject(new Error('request_aborted')), {
               once: true
             })
@@ -95,13 +84,9 @@ describe('terminal multiplex RPC', () => {
       )!
     )
 
-    await vi.waitFor(() => expect(runtime.waitForLeafPtyId).toHaveBeenCalled())
-    const pendingWaitSignal = vi.mocked(runtime.waitForLeafPtyId).mock.calls[0]?.[2]
-    expect(runtime.waitForLeafPtyId).toHaveBeenCalledWith(
-      'terminal-1',
-      10_000,
-      expect.any(AbortSignal)
-    )
+    await vi.waitFor(() => expect(runtime.startPaneForHandle).toHaveBeenCalled())
+    const pendingWaitSignal = vi.mocked(runtime.startPaneForHandle).mock.calls[0]?.[1]
+    expect(runtime.startPaneForHandle).toHaveBeenCalledWith('terminal-1', expect.any(AbortSignal))
 
     controller.abort()
     await vi.waitFor(() => expect(pendingWaitSignal?.aborted).toBe(true))
@@ -119,13 +104,12 @@ describe('terminal multiplex RPC', () => {
   })
 
   it("waits for a desktop multiplex subscriber's PTY before retiring the terminal", async () => {
-    let resolvePty: (ptyId: string) => void = () => {}
+    let resolvePty: (ptyId: string | null) => void = () => {}
     const runtime = stubRuntime({
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      requestRendererTerminalTabMount: vi.fn(),
-      waitForLeafPtyId: vi.fn(
+      startPaneForHandle: vi.fn(
         () =>
-          new Promise<string>((resolve) => {
+          new Promise<string | null>((resolve) => {
             resolvePty = resolve
           })
       )
@@ -135,8 +119,7 @@ describe('terminal multiplex RPC', () => {
       expect(harness.messages.some((msg) => JSON.parse(msg).result?.type === 'ready')).toBe(true)
     )
     sendDesktopMultiplexSubscribe(harness.handlers)
-    await vi.waitFor(() => expect(runtime.waitForLeafPtyId).toHaveBeenCalled())
-    expect(runtime.requestRendererTerminalTabMount).toHaveBeenCalledWith('terminal-1')
+    await vi.waitFor(() => expect(runtime.startPaneForHandle).toHaveBeenCalled())
     expect(
       harness.binaryFrames
         .map((frame) => decodeTerminalStreamFrame(frame))
@@ -160,14 +143,14 @@ describe('terminal multiplex RPC', () => {
   })
 
   it('cancels a pending desktop PTY wait when its multiplex slot unsubscribes', async () => {
-    let resolvePty: (ptyId: string) => void = () => {}
+    let resolvePty: (ptyId: string | null) => void = () => {}
     let waitSignal: AbortSignal | undefined
     const readTerminal = vi.fn().mockResolvedValue({ tail: [], truncated: false })
     const subscribeToTerminalData = vi.fn().mockReturnValue(vi.fn())
     const registerRemoteTerminalViewSubscriber = vi.fn().mockReturnValue(vi.fn())
-    const waitForLeafPtyId = vi.fn(
-      (_handle: string, _timeoutMs?: number, signal?: AbortSignal) =>
-        new Promise<string>((resolve, reject) => {
+    const startPaneForHandle = vi.fn(
+      (_handle: string, signal?: AbortSignal) =>
+        new Promise<string | null>((resolve, reject) => {
           resolvePty = resolve
           waitSignal = signal
           signal?.addEventListener('abort', () => reject(new Error('request_aborted')), {
@@ -177,7 +160,7 @@ describe('terminal multiplex RPC', () => {
     )
     const harness = startDesktopMultiplexSubscribe({
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      waitForLeafPtyId,
+      startPaneForHandle,
       readTerminal,
       subscribeToTerminalData,
       registerRemoteTerminalViewSubscriber
@@ -186,7 +169,7 @@ describe('terminal multiplex RPC', () => {
       expect(harness.messages.some((msg) => JSON.parse(msg).result?.type === 'ready')).toBe(true)
     )
     sendDesktopMultiplexSubscribe(harness.handlers)
-    await vi.waitFor(() => expect(waitForLeafPtyId).toHaveBeenCalled())
+    await vi.waitFor(() => expect(startPaneForHandle).toHaveBeenCalled())
 
     harness.handlers.get(7)?.(
       decodeTerminalStreamFrame(
@@ -216,9 +199,9 @@ describe('terminal multiplex RPC', () => {
 
   it('cancels an older pending PTY wait when the same multiplex slot resubscribes', async () => {
     const waitSignals: AbortSignal[] = []
-    const waitForLeafPtyId = vi.fn(
-      (_handle: string, _timeoutMs?: number, signal?: AbortSignal) =>
-        new Promise<string>((_resolve, reject) => {
+    const startPaneForHandle = vi.fn(
+      (_handle: string, signal?: AbortSignal) =>
+        new Promise<string | null>((_resolve, reject) => {
           if (signal) {
             waitSignals.push(signal)
           }
@@ -229,7 +212,7 @@ describe('terminal multiplex RPC', () => {
     )
     const harness = startDesktopMultiplexSubscribe({
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      waitForLeafPtyId
+      startPaneForHandle
     })
     await vi.waitFor(() =>
       expect(harness.messages.some((message) => JSON.parse(message).result?.type === 'ready')).toBe(
@@ -369,14 +352,14 @@ describe('terminal multiplex RPC', () => {
   it('reserves PTY wait capacity independently from active streams', async () => {
     const activeStreamCount = 44
     const waitSignals: AbortSignal[] = []
-    const resolveWaits: ((ptyId: string) => void)[] = []
+    const resolveWaits: ((ptyId: string | null) => void)[] = []
     const runtime = stubRuntime({
       resolveLiveLeafForHandle: vi.fn((terminal: string) =>
         terminal.startsWith('pending-') ? { ptyId: null } : { ptyId: `pty-${terminal}` }
       ),
-      waitForLeafPtyId: vi.fn(
-        (_handle: string, _timeoutMs?: number, signal?: AbortSignal) =>
-          new Promise<string>((resolve, reject) => {
+      startPaneForHandle: vi.fn(
+        (_handle: string, signal?: AbortSignal) =>
+          new Promise<string | null>((resolve, reject) => {
             if (signal) {
               waitSignals.push(signal)
             }
@@ -465,7 +448,7 @@ describe('terminal multiplex RPC', () => {
   it("still reports no_connected_pty when a desktop multiplex subscriber's PTY never appears", async () => {
     const runtime = stubRuntime({
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      waitForLeafPtyId: vi.fn().mockRejectedValue(new Error('timeout'))
+      startPaneForHandle: vi.fn().mockResolvedValue(null)
     })
     const harness = startDesktopMultiplexSubscribe(runtime)
     await vi.waitFor(() =>
@@ -487,8 +470,7 @@ describe('terminal multiplex RPC', () => {
 
   it('does not wait when a desktop multiplex subscriber already has a PTY', async () => {
     const runtime = stubRuntime({
-      requestRendererTerminalTabMount: vi.fn(),
-      waitForLeafPtyId: vi.fn()
+      startPaneForHandle: vi.fn()
     })
     const harness = startDesktopMultiplexSubscribe(runtime)
     await vi.waitFor(() =>
@@ -500,8 +482,7 @@ describe('terminal multiplex RPC', () => {
         true
       )
     )
-    expect(runtime.waitForLeafPtyId).not.toHaveBeenCalled()
-    expect(runtime.requestRendererTerminalTabMount).not.toHaveBeenCalled()
+    expect(runtime.startPaneForHandle).not.toHaveBeenCalled()
     harness.registry.cleanupSubscription('terminal-multiplex:conn-desktop-first-paint')
     await harness.dispatchPromise
   })
@@ -516,8 +497,7 @@ describe('terminal multiplex RPC', () => {
     let cleanup: () => void = () => {}
     const runtime = stubRuntime({
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      requestRendererTerminalTabMount: vi.fn(),
-      waitForLeafPtyId: vi.fn(),
+      startPaneForHandle: vi.fn(),
       registerSubscriptionCleanup: vi.fn((_id: string, callback: () => void) => {
         cleanup = callback
       })
@@ -555,8 +535,7 @@ describe('terminal multiplex RPC', () => {
         TerminalStreamOpcode.Error
       )
     )
-    expect(runtime.waitForLeafPtyId).not.toHaveBeenCalled()
-    expect(runtime.requestRendererTerminalTabMount).not.toHaveBeenCalled()
+    expect(runtime.startPaneForHandle).not.toHaveBeenCalled()
     const errorFrame = binaryFrames
       .map((frame) => decodeTerminalStreamFrame(frame))
       .find((frame) => frame?.opcode === TerminalStreamOpcode.Error)
@@ -565,12 +544,11 @@ describe('terminal multiplex RPC', () => {
     await dispatchPromise
   })
 
-  it('preserves clientless legacy subscriptions without a PTY wait or mount', async () => {
+  it('preserves clientless legacy subscriptions without a PTY wait', async () => {
     const messages: string[] = []
     const runtime = stubRuntime({
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      waitForLeafPtyId: vi.fn(),
-      requestRendererTerminalTabMount: vi.fn(),
+      startPaneForHandle: vi.fn(),
       readTerminal: vi.fn().mockResolvedValue({ tail: ['scrollback'], truncated: false })
     })
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
@@ -580,8 +558,7 @@ describe('terminal multiplex RPC', () => {
       { connectionId: 'conn-clientless-legacy' }
     )
     await dispatchPromise
-    expect(runtime.waitForLeafPtyId).not.toHaveBeenCalled()
-    expect(runtime.requestRendererTerminalTabMount).not.toHaveBeenCalled()
+    expect(runtime.startPaneForHandle).not.toHaveBeenCalled()
     expect(messages.map((msg) => JSON.parse(msg).result?.type)).toEqual(['subscribed', 'end'])
   })
 
@@ -589,8 +566,7 @@ describe('terminal multiplex RPC', () => {
     const messages: string[] = []
     const runtime = stubRuntime({
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-      waitForLeafPtyId: vi.fn().mockRejectedValue(new Error('timeout')),
-      requestRendererTerminalTabMount: vi.fn().mockReturnValue(true),
+      startPaneForHandle: vi.fn().mockResolvedValue(null),
       readTerminal: vi.fn().mockResolvedValue({ tail: ['scrollback'], truncated: false })
     })
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
@@ -603,14 +579,8 @@ describe('terminal multiplex RPC', () => {
       { connectionId: 'conn-desktop-legacy' }
     )
     await dispatchPromise
-    // Widened gate: a desktop client must mount + await its late PTY, not skip
-    // straight to the bare scrollback path the way it did under the mobile-only gate.
-    expect(runtime.requestRendererTerminalTabMount).toHaveBeenCalledWith('terminal-1')
-    expect(runtime.waitForLeafPtyId).toHaveBeenCalledWith(
-      'terminal-1',
-      10_000,
-      expect.any(AbortSignal)
-    )
+    // A desktop client must start its pane, not skip straight to the bare scrollback path.
+    expect(runtime.startPaneForHandle).toHaveBeenCalledWith('terminal-1', expect.any(AbortSignal))
     expect(messages.map((msg) => JSON.parse(msg).result?.type)).toEqual(['subscribed', 'end'])
   })
 })

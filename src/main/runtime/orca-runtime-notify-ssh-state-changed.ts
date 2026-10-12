@@ -8,6 +8,7 @@ import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
 import { navigationTargetsClients, navigationTargetsHost } from '../../shared/runtime-navigation'
 import { toRuntimeActivateWorktreeEvent } from '../../shared/runtime-client-events'
+import { DESKTOP_VIEW_ID } from '../../shared/workspace-layout/workspace-layout-views'
 import type { AgentBrowserBridge } from '../browser/agent-browser-bridge'
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { EmulatorBridge } from '../emulator/emulator-bridge'
@@ -43,12 +44,7 @@ export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStat
     const initialPublication = publish()
     void initialPublication
     void this.refreshRestoredOrchestrationAuthority(targetId)
-      .then(() =>
-        this.reconcileLegacyWorkerTerminals({
-          connectionId: targetId,
-          materializeRenderer: this.notifier !== null
-        })
-      )
+      .then(() => this.reconcileLegacyWorkerTerminals({ connectionId: targetId }))
       .then(async () => {
         await initialPublication
         await publish()
@@ -161,7 +157,7 @@ export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStat
   ): void {
     const navigation = navigationTarget ?? 'host'
     if (navigationTargetsHost(navigation)) {
-      this.notifyHostActivateWorktree(repoId, worktreeId, setup, startup, defaultTabs)
+      this.notifyHostActivateWorktree(worktreeId)
     }
     if (navigationTargetsClients(navigation)) {
       this.notifyClientsActivateWorktree(
@@ -175,14 +171,12 @@ export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStat
     }
   }
 
-  protected notifyHostActivateWorktree(
-    repoId: string,
-    worktreeId: string,
-    setup?: CreateWorktreeResult['setup'],
-    startup?: WorktreeStartupLaunch,
-    defaultTabs?: CreateWorktreeResult['defaultTabs']
-  ): void {
-    this.notifier?.activateWorktree(repoId, worktreeId, setup, startup, defaultTabs)
+  /** Host navigation: the desktop view's window is told to show the workspace. */
+  protected notifyHostActivateWorktree(worktreeId: string): void {
+    this.layoutCommands.views.navigate(DESKTOP_VIEW_ID, {
+      kind: 'revealWorkspace',
+      workspace: worktreeId
+    })
   }
 
   protected notifyClientsActivateWorktree(

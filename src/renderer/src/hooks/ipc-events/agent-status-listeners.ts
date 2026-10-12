@@ -1,12 +1,7 @@
-import { CLOSE_TERMINAL_PANE_EVENT } from '@/constants/terminal'
 import type {
   AgentStatusClearIpcPayload,
   AgentStatusIpcPayload
 } from '../../../../shared/agent-status-types'
-import {
-  resolveLegacyWorkerTerminalRecoveryAction,
-  rollbackLegacyWorkerTerminalSurfaceInStore
-} from '../legacy-worker-terminal-recovery-event'
 import { useAppStore } from '../../store'
 import { resolvePaneKey } from './agent-status-routing'
 import type { PendingAgentStatusEvent } from './agent-status-bridge-types'
@@ -115,18 +110,5 @@ export function registerAgentStatusListeners(args: {
   )
   if (unsubscribeMigrationUnsupportedClear) {
     unsubs.push(unsubscribeMigrationUnsupportedClear)
-  }
-  const unsubscribeLegacyWorkerTerminalRecovery =
-    window.api.agentStatus.onLegacyWorkerTerminalRecovery?.((event) => {
-      const action = resolveLegacyWorkerTerminalRecoveryAction(event)
-      if (action.kind === 'rollback-surface') {
-        window.dispatchEvent(new CustomEvent(CLOSE_TERMINAL_PANE_EVENT, { detail: action.detail }))
-        rollbackLegacyWorkerTerminalSurfaceInStore(useAppStore.getState(), action.detail)
-      } else if (action.kind === 'clear-sleeping') {
-        useAppStore.getState().clearSleepingAgentSession(action.paneKey)
-      }
-    })
-  if (unsubscribeLegacyWorkerTerminalRecovery) {
-    unsubs.push(unsubscribeLegacyWorkerTerminalRecovery)
   }
 }

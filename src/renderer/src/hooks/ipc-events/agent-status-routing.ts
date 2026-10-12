@@ -5,7 +5,7 @@ import type {
   AgentStatusIpcPayload,
   ParsedAgentStatusPayload
 } from '../../../../shared/agent-status-types'
-import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
+import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { useAppStore } from '../../store'
 
 export function isAgentStatusForRecentlyClosedTab(
@@ -33,14 +33,6 @@ export function hasRuntimeBackedWorktreeAttribution(data: AgentStatusIpcPayload)
     (typeof data.terminalHandle === 'string' && data.terminalHandle.length > 0) ||
     data.orchestration !== undefined
   )
-}
-
-export function tryMakePaneKey(tabId: string, leafId: string): string | null {
-  try {
-    return makePaneKey(tabId, leafId)
-  } catch {
-    return null
-  }
 }
 
 export function applyResolvedAgentTerminalTitleToTab(

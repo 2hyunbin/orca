@@ -164,7 +164,9 @@ describe('settled assignment worker recovery', () => {
   it('preserves retry failure when SQL cannot be read, then recovers after the database reopens', () => {
     const { dispatchId } = worker()
     const recovery = new RuntimeLegacyWorkerTerminalRecoveryPersistence(
-      () => null,
+      () => {
+        throw new Error('planning reads no layout')
+      },
       () => db,
       () => null
     )

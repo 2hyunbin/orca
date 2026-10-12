@@ -23,9 +23,6 @@ function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeSe
     // Why: subscribe streams register as remote view subscribers for Phase-5
     // query-authority suppression (terminal-query-authority.md).
     registerRemoteTerminalViewSubscriber: () => () => {},
-    // Why: window-attached path; the window mounts the tab and these tests double its PTY wait.
-    startsPanesForSubscribers: () => false,
-    requestRendererTerminalTabMount: () => false,
     ...overrides
   } as OrcaRuntimeService
 }
@@ -45,9 +42,9 @@ describe('terminal subscribe buffering', () => {
       const controller = new AbortController()
       const runtime = stubRuntime({
         resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
-        waitForLeafPtyId: vi.fn(
-          (_handle: string, _timeoutMs?: number, signal?: AbortSignal) =>
-            new Promise<string>((_resolve, reject) => {
+        startPaneForHandle: vi.fn(
+          (_handle: string, signal?: AbortSignal) =>
+            new Promise<string | null>((_resolve, reject) => {
               signal?.addEventListener('abort', () => reject(new Error('request_aborted')), {
                 once: true
               })
@@ -72,7 +69,7 @@ describe('terminal subscribe buffering', () => {
         }
       )
 
-      expect(runtime.waitForLeafPtyId).toHaveBeenCalled()
+      expect(runtime.startPaneForHandle).toHaveBeenCalled()
       controller.abort()
       const outcomePromise = Promise.race([
         dispatchPromise.then(() => 'settled'),

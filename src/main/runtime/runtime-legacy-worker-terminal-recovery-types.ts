@@ -13,7 +13,6 @@ export type LegacyWorkerTerminalRecoveryResult = {
 
 export type LegacyWorkerRecoveryOptions = {
   connectionId?: string
-  materializeRenderer?: boolean
   /** Internal timer pass; retry only assignments that remain unresolved. */
   retry?: true
   dispatchIds?: readonly string[]
@@ -62,16 +61,10 @@ export type LegacyWorkerRecoveryPorts = {
     inventory: LegacyWorkerRecoveryInventory,
     activation: { activeTabId?: string; activeGroupId?: string }
   ) => Promise<void>
-  getRendererEpoch: () => number
-  reveal: (candidate: LegacyWorkerRecoveryCandidate) => Promise<boolean | null>
   onPtyExit: (candidate: LegacyWorkerRecoveryCandidate) => void
   persist: (resolutions: readonly LegacyWorkerRecoveryResolution[]) => Promise<ReadonlySet<string>>
   rollback: (candidate: LegacyWorkerRecoveryCandidate) => void
   reconcileMissing: (candidate: LegacyWorkerRecoveryCandidate) => boolean
-  notifyResolution: (
-    candidate: LegacyWorkerRecoveryCandidate,
-    resolution: 'adopted' | 'exited'
-  ) => void
   canRecoverPersistentLocalPtys: () => boolean
   isTerminalProvenAbsent?: (candidate: LegacyWorkerRecoveryCandidate) => Promise<boolean>
   hasRequestedReleases: () => boolean

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   CLIENT_HOSTED_BROWSER_PAGE_MAX_AGE_MS,
   CLIENT_HOSTED_BROWSER_PAGE_REFRESH_MS,
-  persistedClientHostedBrowserPageSchema
+  persistedClientHostedBrowserPageSchema,
+  type PersistedClientHostedBrowserPage
 } from '../../shared/client-hosted-browser-page-record'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { parseWorkspaceSessionSalvaging } from '../../shared/workspace-session-salvage'
@@ -84,7 +85,7 @@ describe('client-hosted browser page persistence', () => {
 
     expect(persistClientHostedBrowserPages(store, pages, 'repo-1::wt-a')).toBe(true)
     expect(persistClientHostedBrowserPages(store, pages, 'repo-1::wt-a')).toBe(false)
-    expect(store.setWorkspaceSession).toHaveBeenCalledOnce()
+    expect(store.savePages).toHaveBeenCalledOnce()
   })
 
   it('refreshes a parked tab so the expiry measures held-ness, not last change', () => {
@@ -115,15 +116,14 @@ describe('client-hosted browser page persistence', () => {
     expect(store.session.clientHostedBrowserPagesByWorktree).toEqual({})
   })
 
-  it('survives a worktree that no longer resolves instead of throwing', () => {
+  it('saves nothing for a worktree no held layout has', () => {
     const store = sessionStore()
-    store.setWorkspaceSession.mockImplementation(() => {
-      throw new Error('folder_workspace_not_found')
-    })
+    store.savedPages.mockReturnValue(null)
 
-    expect(() =>
+    expect(
       persistClientHostedBrowserPages(store, registryWith(livePlacement), 'repo-1::wt-a')
-    ).not.toThrow()
+    ).toBe(false)
+    expect(store.savePages).not.toHaveBeenCalled()
   })
 
   it('never rehydrates a row whose worktree is gone', () => {
@@ -269,10 +269,20 @@ function sessionStore() {
       tabsByWorktree: {},
       terminalLayoutsByTabId: {}
     } as WorkspaceSessionState,
-    setWorkspaceSession: vi.fn((_worktreeId: string, next: WorkspaceSessionState) => {
-      state.session = next
+    savedPages: vi.fn(
+      (worktreeId: string): readonly PersistedClientHostedBrowserPage[] | null =>
+        state.session.clientHostedBrowserPagesByWorktree?.[worktreeId] ?? []
+    ),
+    savePages: vi.fn((worktreeId: string, pages: readonly PersistedClientHostedBrowserPage[]) => {
+      const next = { ...state.session.clientHostedBrowserPagesByWorktree }
+      if (pages.length === 0) {
+        delete next[worktreeId]
+      } else {
+        next[worktreeId] = [...pages]
+      }
+      state.session = { ...state.session, clientHostedBrowserPagesByWorktree: next }
+      return true
     }),
-    getWorkspaceSession: (_worktreeId: string) => state.session,
     now: () => NOW as number
   }
   return state

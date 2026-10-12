@@ -34,7 +34,6 @@ export function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRu
     // only stub the legacy resolveLeafForHandle still bind; tests that need a
     // null/stale leaf override this explicitly.
     resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
-    requestRendererTerminalTabMount: vi.fn().mockReturnValue(true),
     updateRemoteDesktopViewer: vi.fn().mockResolvedValue(true),
     unregisterRemoteDesktopViewer: vi.fn().mockResolvedValue(true),
     unregisterRemoteDesktopViewers: vi.fn().mockResolvedValue(true),

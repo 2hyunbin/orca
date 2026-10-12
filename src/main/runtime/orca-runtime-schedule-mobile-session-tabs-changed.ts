@@ -85,10 +85,6 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
   /** The holder published or removed a worktree. Publishes include every pane title and status
    *  change, so they share today's coalescer; mutations that must reach phones at once notify. */
   protected sessionTabsLayoutChanged(worktreeId: string, removed: boolean): void {
-    // A wait for a surface re-checks on every layout publish, not only on window graph syncs.
-    for (const check of this.graphSyncCallbacks.slice()) {
-      check()
-    }
     if (removed) {
       this.cancelScheduledMobileSessionTabsChanged(worktreeId)
       this.notifyMobileSessionTabsRemoved(worktreeId)

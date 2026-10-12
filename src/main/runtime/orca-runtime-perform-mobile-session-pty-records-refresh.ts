@@ -155,10 +155,7 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
           kind: 'pane',
           tabId: tab.parentTabId,
           leafId: tab.leafId
-        }) &&
-        (!targetsHost ||
-          !this.notifier?.focusTerminal ||
-          this.shouldMaterializeHeadlessMobileSessionTab(snapshot!, tab))
+        })
       if (shouldMaterializePendingTerminal) {
         const sessionId = tab.ptyId ?? tab.parentLayout?.ptyIdsByLeafId?.[tab.leafId] ?? undefined
         const targetGroupId = snapshot?.tabGroups?.find((group) =>
@@ -232,39 +229,34 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
                 candidate.isActive
             ) as RuntimeMobileSessionTerminalTab | undefined)
       const targetTab = activeSibling ?? tab
-      if (targetsHost && !this.notifier?.focusTerminal) {
-        if (!targetTab.isActive && !this.getAvailableAuthoritativeWindow()) {
-          this.focusHeldTerminalInDesktopView({
-            worktreeId,
-            tabId: targetTab.parentTabId,
-            paneKey: makePaneKey(targetTab.parentTabId, targetTab.leafId)
-          })
-        }
-      } else if (targetsHost) {
-        this.notifier?.focusTerminal?.(targetTab.parentTabId, worktreeId, targetTab.leafId)
-      }
-      return this.applyMobileSessionTabNavigation(
+      const navigated = this.applyMobileSessionTabNavigation(
         this.getMobileSessionTabsForWorktree(worktreeId),
         targetTab.id,
         navigation,
         opts.clientNavigationId
       )
-    } else if (tab.type === 'browser') {
-      // Why: browser mobile tabs are renderer-owned unified tabs; focusing the
-      // session tab keeps desktop tab order/group state authoritative.
+      // After the caller's own selection, so the desktop view's republish carries it.
       if (targetsHost) {
-        this.notifier?.focusEditorTab?.(tab.id, worktreeId)
+        this.focusHeldTerminalInDesktopView(
+          {
+            worktreeId,
+            tabId: targetTab.parentTabId,
+            paneKey: makePaneKey(targetTab.parentTabId, targetTab.leafId)
+          },
+          { navigate: true }
+        )
       }
-    } else {
-      if (targetsHost) {
-        this.notifier?.focusEditorTab?.(tab.id, worktreeId)
-      }
+      return navigated
     }
-    return this.applyMobileSessionTabNavigation(
+    const navigated = this.applyMobileSessionTabNavigation(
       this.getMobileSessionTabsForWorktree(worktreeId),
       tab.id,
       navigation,
       opts.clientNavigationId
     )
+    if (targetsHost) {
+      this.navigateDesktopView(worktreeId, { tabId: tab.id })
+    }
+    return navigated
   }
 }

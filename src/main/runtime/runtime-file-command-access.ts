@@ -24,7 +24,7 @@ import {
   requireRuntimeFileProvider,
   type RuntimeFileExplorerPath
 } from './runtime-file-command-target'
-import { parseExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import type { FileStat } from '../providers/types'
 
 export class RuntimeFileCommandAccess {
@@ -76,13 +76,7 @@ export class RuntimeFileCommandAccess {
     const filePath = joinWorktreeRelativePath(worktree.path, relativePath)
     // Why: CLI/agents treat opened:true as success; stat first so missing paths and directories fail the RPC instead of opening a ghost tab.
     await this.assertOpenTargetIsFile(filePath, target)
-    this.host.openFile(
-      worktree.id,
-      filePath,
-      relativePath,
-      runtimeOwnerForTarget(target),
-      navigation
-    )
+    this.host.openFile(worktree.id, filePath, relativePath, navigation)
     return { worktree: worktree.id, relativePath, kind, opened: true }
   }
 
@@ -121,14 +115,7 @@ export class RuntimeFileCommandAccess {
         ? 'markdown'
         : 'text'
     const filePath = joinWorktreeRelativePath(worktree.path, relativePath)
-    this.host.openDiff(
-      worktree.id,
-      filePath,
-      relativePath,
-      staged,
-      runtimeOwnerForTarget(target),
-      navigation
-    )
+    this.host.openDiff(worktree.id, filePath, relativePath, staged, navigation)
     return { worktree: worktree.id, relativePath, kind, opened: true }
   }
 
@@ -185,10 +172,4 @@ export class RuntimeFileCommandAccess {
       ...(fileStat.ctimeMs === undefined ? {} : { ctime: fileStat.ctimeMs })
     }
   }
-}
-
-// Why: name the resolved owner; undefined would let the renderer fall back to the focused server.
-function runtimeOwnerForTarget(target: { executionHostId: ExecutionHostId }): string | null {
-  const host = parseExecutionHostId(target.executionHostId)
-  return host?.kind === 'runtime' ? host.environmentId : null
 }

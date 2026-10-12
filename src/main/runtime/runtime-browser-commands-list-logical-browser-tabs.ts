@@ -6,8 +6,6 @@ import { browserSessionRegistry } from '../browser/browser-session-registry'
 import { BrowserError } from '../browser/browser-error'
 import type { BrowserCommandTargetParams } from './runtime-browser-commands-browser-command-target-params'
 import { browserManager } from '../browser/browser-manager'
-import { randomUUID } from 'node:crypto'
-import { ipcMain } from 'electron'
 
 export class RuntimeBrowserCommandsWithListLogicalBrowserTabs extends RuntimeBrowserCommandsWithBrowserTabClose {
   protected listLogicalBrowserTabs(
@@ -96,53 +94,5 @@ export class RuntimeBrowserCommandsWithListLogicalBrowserTabs extends RuntimeBro
       )
     }
     return this.enrichBrowserTabInfo(tab)
-  }
-
-  protected async createBrowserTabInRenderer(
-    url: string,
-    worktreeId: string | undefined,
-    profileId: string | undefined,
-    sessionPartition: string | undefined,
-    activate?: boolean,
-    requestedPageId?: string
-  ): Promise<{ browserPageId: string }> {
-    const win = this.host.getAuthoritativeWindow()
-    const requestId = randomUUID()
-
-    const browserPageId = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        ipcMain.removeListener('browser:tabCreateReply', handler)
-        reject(new Error('Tab creation timed out'))
-      }, 10_000)
-
-      const handler = (
-        event: Electron.IpcMainEvent,
-        reply: { requestId: string; browserPageId?: string; error?: string }
-      ): void => {
-        if (event.sender !== win.webContents || reply.requestId !== requestId) {
-          return
-        }
-        clearTimeout(timer)
-        ipcMain.removeListener('browser:tabCreateReply', handler)
-        if (reply.error) {
-          reject(new Error(reply.error))
-        } else {
-          resolve(reply.browserPageId!)
-        }
-      }
-      ipcMain.on('browser:tabCreateReply', handler)
-      win.webContents.send('browser:requestTabCreate', {
-        requestId,
-        url,
-        worktreeId,
-        ...(requestedPageId ? { browserPageId: requestedPageId } : {}),
-        // Why: keep these undefined (not null) when no profile is chosen so the renderer still applies default-profile inheritance.
-        sessionProfileId: profileId,
-        sessionPartition,
-        activate
-      })
-    })
-
-    return { browserPageId }
   }
 }

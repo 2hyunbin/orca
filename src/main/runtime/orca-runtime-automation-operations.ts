@@ -182,7 +182,7 @@ export class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWithPtyForeg
   }
 
   async reconcileLegacyWorkerTerminals(
-    options: { connectionId?: string; materializeRenderer?: boolean } = {}
+    options: { connectionId?: string } = {}
   ): Promise<LegacyWorkerTerminalRecoveryResult> {
     return this.legacyWorkerRecovery.reconcile(options)
   }
@@ -194,7 +194,7 @@ export class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWithPtyForeg
   protected updateLegacyWorkerTerminalRecoveryRetry(
     plan: LegacyWorkerTerminalRecoveryPlan,
     deferredDispatchIds: ReadonlySet<string>,
-    options: { connectionId?: string; materializeRenderer?: boolean }
+    options: { connectionId?: string }
   ): void {
     this.legacyWorkerRecovery.updateRetry(plan, deferredDispatchIds, options)
   }

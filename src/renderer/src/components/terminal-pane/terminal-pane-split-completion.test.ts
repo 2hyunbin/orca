@@ -53,20 +53,4 @@ describe('recordCreatedTerminalPaneSplit', () => {
       direction: 'horizontal'
     })
   })
-
-  it('keeps durable split completion when mirrored runtime telemetry is suppressed', () => {
-    expect(
-      recordCreatedTerminalPaneSplit(
-        { id: 2 },
-        {
-          source: 'command',
-          direction: 'vertical',
-          telemetrySuppressed: true
-        }
-      )
-    ).toBe(true)
-
-    expect(mocks.recordFeatureInteraction).toHaveBeenCalledWith('terminal-pane-split')
-    expect(mocks.trackTerminalPaneSplit).not.toHaveBeenCalled()
-  })
 })

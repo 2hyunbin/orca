@@ -82,7 +82,7 @@ describe('RuntimeFileCommands', () => {
     }
   })
 
-  it('opens source control diffs through the renderer host as owned by this desktop, not the focused server', async () => {
+  it('opens source control diffs through the runtime host', async () => {
     const openDiff = vi.fn()
     const { commands } = createRuntimeFileCommands({ openDiff })
 
@@ -93,7 +93,6 @@ describe('RuntimeFileCommands', () => {
       '/repo/docs/readme.md',
       'docs/readme.md',
       true,
-      null,
       undefined
     )
     expect(result).toEqual({
@@ -104,7 +103,7 @@ describe('RuntimeFileCommands', () => {
     })
   })
 
-  it('opens text files through the renderer host as owned by this desktop, not the focused server', async () => {
+  it('opens text files through the runtime host', async () => {
     const openFile = vi.fn()
     const { commands } = createRuntimeFileCommands({ openFile })
     resolveAuthorizedPathMock.mockResolvedValue('/repo/docs/readme.md')
@@ -116,7 +115,6 @@ describe('RuntimeFileCommands', () => {
       'wt-1',
       '/repo/docs/readme.md',
       'docs/readme.md',
-      null,
       undefined
     )
     expect(result).toEqual({
@@ -127,7 +125,7 @@ describe('RuntimeFileCommands', () => {
     })
   })
 
-  it('opens previewable images through the renderer host as an image tab', async () => {
+  it('opens previewable images through the runtime host as an image tab', async () => {
     const openFile = vi.fn()
     const { commands } = createRuntimeFileCommands({ openFile })
     resolveAuthorizedPathMock.mockResolvedValue('/repo/assets/logo.png')
@@ -139,7 +137,6 @@ describe('RuntimeFileCommands', () => {
       'wt-1',
       '/repo/assets/logo.png',
       'assets/logo.png',
-      null,
       undefined
     )
     expect(result).toEqual({
@@ -150,7 +147,7 @@ describe('RuntimeFileCommands', () => {
     })
   })
 
-  it('passes the caller navigation target to the renderer host', async () => {
+  it('passes the caller navigation target to the runtime host', async () => {
     const openFile = vi.fn()
     const openDiff = vi.fn()
     const { commands } = createRuntimeFileCommands({ openFile, openDiff })
@@ -160,19 +157,12 @@ describe('RuntimeFileCommands', () => {
     await commands.openMobileFile('id:wt-1', 'docs/readme.md', 'all')
     await commands.openMobileDiff('id:wt-1', 'docs/readme.md', false, 'host')
 
-    expect(openFile).toHaveBeenCalledWith(
-      'wt-1',
-      '/repo/docs/readme.md',
-      'docs/readme.md',
-      null,
-      'all'
-    )
+    expect(openFile).toHaveBeenCalledWith('wt-1', '/repo/docs/readme.md', 'docs/readme.md', 'all')
     expect(openDiff).toHaveBeenCalledWith(
       'wt-1',
       '/repo/docs/readme.md',
       'docs/readme.md',
       false,
-      null,
       'host'
     )
   })
@@ -195,30 +185,6 @@ describe('RuntimeFileCommands', () => {
     expect(openFile).not.toHaveBeenCalled()
   })
 
-  it('names a paired server as the owner of a diff its catalog row is stamped with', async () => {
-    const openDiff = vi.fn()
-    const resolveRuntimeFileTarget = vi.fn(async () => ({
-      worktree: { id: 'wt-1', repoId: 'repo-1', path: '/remote/repo' },
-      executionHostId: 'runtime:env-a'
-    }))
-    const { commands } = createRuntimeFileCommands({
-      openDiff,
-      path: '/remote/repo',
-      resolveRuntimeFileTarget
-    })
-
-    await commands.openMobileDiff('id:wt-1', 'docs/readme.md', true)
-
-    expect(openDiff).toHaveBeenCalledWith(
-      'wt-1',
-      '/remote/repo/docs/readme.md',
-      'docs/readme.md',
-      true,
-      'env-a',
-      undefined
-    )
-  })
-
   it.each(['docs/example.pdf', 'dist/bundle.zip'])(
     'opens binary %s in the desktop editor like the File Explorer does',
     async (relativePath) => {
@@ -233,7 +199,6 @@ describe('RuntimeFileCommands', () => {
         'wt-1',
         `/repo/${relativePath}`,
         relativePath,
-        null,
         undefined
       )
       expect(result).toEqual({ worktree: 'wt-1', relativePath, kind: 'binary', opened: true })

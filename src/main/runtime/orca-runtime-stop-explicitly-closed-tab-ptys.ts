@@ -110,22 +110,7 @@ export class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithF
       const closesTab =
         paneTarget !== null &&
         this.resolveTerminalCloseTarget(pty.pty.worktreeId, paneTarget) === 'last-pane'
-      if (closesTab && surface && this.tabs.has(tabId) && this.notifier?.closeTerminalTab) {
-        const ptyIdsToKill = this.getPtyIdsForExplicitTabClose(pty.pty.worktreeId, tabId)
-        try {
-          await this.closeMobileSessionTab(`id:${pty.pty.worktreeId}`, tabId, {
-            localPtyTeardownOwnedExternally: true
-          })
-        } catch (error) {
-          if (!(error instanceof Error) || error.message !== 'workspace_session_unavailable') {
-            throw error
-          }
-          this.notifyRendererOfHeadlessTerminalClose(tabId)
-        }
-        const stop = await this.stopExplicitlyClosedTabPtys(ptyIdsToKill, pty.pty.ptyId)
-        return this.describeTerminalClose(handle, tabId, pty.pty.ptyId, stop)
-      }
-      if (closesTab && surface && ptyCloseAuthority && !this.tabs.has(surface.tab.parentTabId)) {
+      if (closesTab && surface && ptyCloseAuthority) {
         try {
           await this.closeMobileSessionTab(`id:${pty.pty.worktreeId}`, tabId, {
             reason: 'user',
@@ -137,35 +122,10 @@ export class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithF
             throw error
           }
           const stop = await this.stopExplicitlyClosedTabPtys([pty.pty.ptyId], pty.pty.ptyId)
-          this.notifyRendererOfHeadlessTerminalClose(tabId)
           return this.describeTerminalClose(handle, tabId, pty.pty.ptyId, stop)
         }
         const stop = await this.stopExplicitlyClosedTabPtys([pty.pty.ptyId], pty.pty.ptyId)
         return this.describeTerminalClose(handle, tabId, pty.pty.ptyId, stop)
-      }
-      // Why the tabs guard: a headless host has no renderer tab to close through the notifier.
-      if (
-        closesTab &&
-        !surface &&
-        pty.pty.tabId &&
-        this.tabs.has(tabId) &&
-        this.notifier?.closeTerminalTab
-      ) {
-        const ptyIdsToKill = this.getPtyIdsForExplicitTabClose(pty.pty.worktreeId, tabId)
-        let tabClosed = true
-        try {
-          await this.notifier.closeTerminalTab(tabId, { localPtyTeardownOwnedExternally: true })
-        } catch (error) {
-          // The tab went away concurrently; fall through and close the PTY alone.
-          if (!(error instanceof Error) || error.message !== 'tab_not_found') {
-            throw error
-          }
-          tabClosed = false
-        }
-        if (tabClosed) {
-          const stop = await this.stopExplicitlyClosedTabPtys(ptyIdsToKill, pty.pty.ptyId)
-          return this.describeTerminalClose(handle, tabId, pty.pty.ptyId, stop)
-        }
       }
       const stop = await this.stopExplicitlyClosedTabPtys([pty.pty.ptyId], pty.pty.ptyId)
       if (!closesTab) {
@@ -184,10 +144,7 @@ export class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithF
           if (!(error instanceof Error) || error.message !== 'workspace_session_unavailable') {
             throw error
           }
-          this.notifyRendererOfHeadlessTerminalClose(tabId)
         }
-      } else {
-        this.notifyRendererOfHeadlessTerminalClose(tabId)
       }
       return this.describeTerminalClose(handle, tabId, pty.pty.ptyId, stop)
     }
@@ -200,16 +157,17 @@ export class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithF
       : leaf.ptyId
         ? [leaf.ptyId]
         : []
-    if (closesTab && this.notifier?.closeTerminalTab) {
-      await this.notifier.closeTerminalTab(leaf.tabId, { localPtyTeardownOwnedExternally: true })
+    if (closesTab) {
+      // The terminals stop below, so the close stops none of its own.
+      this.withClosedTerminalsStoppedByCaller(() =>
+        this.closeHeldSessionTab(leaf.worktreeId, leaf.tabId, { allowMissing: true })
+      )
     }
     const stop = leaf.ptyId
       ? await this.stopExplicitlyClosedTabPtys(ptyIdsToKill, leaf.ptyId)
       : NO_STOP
     if (!closesTab) {
       await this.closeTerminalPane(leaf.worktreeId, paneTarget)
-    } else if (!this.notifier?.closeTerminalTab) {
-      this.notifier?.closeTerminal(leaf.tabId)
     }
     return this.describeTerminalClose(handle, leaf.tabId, leaf.ptyId ?? null, stop)
   }

@@ -20,7 +20,6 @@ function stubRuntime(
   return {
     getRuntimeId: () => 'test-runtime',
     registerRemoteTerminalViewSubscriber: () => () => {},
-    requestRendererTerminalTabMount: () => false,
     resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
     handleMobileSubscribe: vi.fn().mockResolvedValue(true),
     handleMobileUnsubscribe: vi.fn(),

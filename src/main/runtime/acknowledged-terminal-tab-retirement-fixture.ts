@@ -1,11 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { PersistedState } from '../../shared/persisted-state-types'
 import type { RuntimeSyncWindowGraph } from '../../shared/runtime-types'
-import { closeTerminalTabInWorkspaceSession } from '../../shared/workspace-session-terminal-tab-close'
 import { ProfileStateSqliteAuthority } from '../persistence/profile-state/profile-state-sqlite-authority'
 import { DelayedAuthority } from '../persistence/loading-store/profile-state-delayed-authority-fixture'
 import { Store } from '../persistence/loading-store/store'
@@ -19,14 +17,6 @@ export const ACK_LEAF = '22222222-2222-4222-8222-222222222222'
 export const ACK_SECOND_LEAF = '44444444-4444-4444-8444-444444444444'
 export const ACK_INCARNATION = '33333333-3333-4333-8333-333333333333'
 const SECOND_INCARNATION = '55555555-5555-4555-8555-555555555555'
-
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void
-  const promise = new Promise<void>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
 
 export function createAcknowledgedTabRetirementFixture(bound = false) {
   const directory = mkdtempSync(join(tmpdir(), 'orca-close-ack-'))
@@ -130,29 +120,9 @@ export function createAcknowledgedTabRetirementFixture(bound = false) {
     advanceTerminalTopologyRevision(store.getWorkspaceSession(), ACK_WORKTREE)
   )
   let finalFlush: Promise<void> | undefined
-  const entered = deferred()
-  const acknowledgement = deferred()
-  const closeTerminalTab = vi.fn(async () => {
-    const closed = closeTerminalTabInWorkspaceSession(
-      store.getWorkspaceSession(),
-      ACK_WORKTREE,
-      ACK_TAB
-    )
-    store.setWorkspaceSession({ ...closed.session, terminalTopologyRevisionByRepoId: undefined })
-    await store.flushPendingOrThrowAsync()
-    entered.resolve()
-    await acknowledgement.promise
-  })
   runtime.setNotifier({
-    closeTerminalTab,
-    closeTerminal: () => {},
     worktreesChanged: () => {},
     reposChanged: () => {},
-    activateWorktree: () => {},
-    createTerminal: () => {},
-    splitTerminal: () => {},
-    renameTerminal: () => {},
-    focusTerminal: () => {},
     sleepWorktree: () => {},
     terminalFitOverrideChanged: () => {},
     terminalDriverChanged: () => {}
@@ -161,9 +131,6 @@ export function createAcknowledgedTabRetirementFixture(bound = false) {
     runtime,
     store,
     authority,
-    entered,
-    acknowledgement,
-    closeTerminalTab,
     publish,
     /** Reads what a relaunch would load, independent of the store's in-memory state. */
     readDisk: (): PersistedState => {

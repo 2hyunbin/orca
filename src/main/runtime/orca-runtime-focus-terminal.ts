@@ -2,8 +2,6 @@
 import { OrcaRuntimeWithWaitForLeafPtyId } from './orca-runtime-wait-for-leaf-pty-id'
 import type { RuntimeTerminalFocus } from '../../shared/runtime-types'
 import { parsePaneKey } from '../../shared/stable-pane-id'
-import { getLatestPtyTitle } from './runtime-worktree-status-projection'
-import { copySleepingAgentLaunchConfig } from './runtime-agent-launch-resolution'
 
 export class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitForLeafPtyId {
   async focusTerminal(
@@ -11,161 +9,25 @@ export class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitForLeafPtyI
     options: { navigateHost?: boolean } = {}
   ): Promise<RuntimeTerminalFocus> {
     const navigateHost = options.navigateHost !== false
-    const livePtyIdentity = (): RuntimeTerminalFocus => {
-      const live = this.getLivePtyForHandle(handle)
-      if (!live?.pty.connected) {
-        throw new Error('terminal_exited')
-      }
-      return {
-        handle,
-        tabId: live.pty.tabId ?? live.record.tabId,
-        worktreeId: live.pty.worktreeId,
-        navigated: false
-      }
-    }
-    const liveLeafIdentity = (): RuntimeTerminalFocus => {
-      this.assertGraphReady()
-      const { leaf: current } = this.getLiveLeafForHandle(handle)
-      return {
-        handle,
-        tabId: current.tabId,
-        worktreeId: current.worktreeId,
-        navigated: false
-      }
-    }
-
     const pty = this.getLivePtyForHandle(handle)
     if (pty) {
       if (!pty.pty.connected) {
         throw new Error('terminal_exited')
       }
-      if (navigateHost && !this.getAvailableAuthoritativeWindow()) {
-        // No window to reveal it: the desktop view, which paired clients follow, shows it.
-        this.focusHeldTerminalInDesktopView(pty.pty)
+      const tabId = pty.pty.tabId ?? pty.record.tabId
+      const navigated = navigateHost && this.layoutHolder.findTerminalTab(tabId) !== null
+      if (navigated) {
+        this.focusHeldTerminalInDesktopView(pty.pty, { navigate: true })
       }
-      if (!navigateHost || !this.notifier?.revealTerminalSession) {
-        return {
-          handle,
-          tabId: pty.pty.tabId ?? pty.record.tabId,
-          worktreeId: pty.pty.worktreeId,
-          navigated: false
-        }
-      }
-      // Coalesce concurrent host navigations: only the latest full reveal claims navigated.
-      return this.terminalFocusNavigationCoalescer.run({
-        key: handle,
-        resolveSuperseded: (completed) =>
-          completed ? { ...completed, navigated: false } : livePtyIdentity(),
-        run: async (ctx) => {
-          const live = this.getLivePtyForHandle(handle)
-          if (!live?.pty.connected) {
-            throw new Error('terminal_exited')
-          }
-          if (!ctx.isCurrent()) {
-            return {
-              handle,
-              tabId: live.pty.tabId ?? live.record.tabId,
-              worktreeId: live.pty.worktreeId,
-              navigated: false
-            }
-          }
-          const notifier = this.notifier
-          if (!notifier?.revealTerminalSession) {
-            return {
-              handle,
-              tabId: live.pty.tabId ?? live.record.tabId,
-              worktreeId: live.pty.worktreeId,
-              navigated: false
-            }
-          }
-          const parsedPaneKey = parsePaneKey(live.pty.paneKey ?? '')
-          const revealed = await notifier.revealTerminalSession(live.pty.worktreeId, {
-            ptyId: live.pty.ptyId,
-            title: getLatestPtyTitle(this.getPtyDisplayRecord(live.pty)),
-            ...(live.pty.launchConfig
-              ? { launchConfig: copySleepingAgentLaunchConfig(live.pty.launchConfig) }
-              : {}),
-            ...(live.pty.launchToken ? { launchToken: live.pty.launchToken } : {}),
-            ...(live.pty.launchAgent ? { launchAgent: live.pty.launchAgent } : {}),
-            ...(live.pty.tabId !== null ? { tabId: live.pty.tabId } : {}),
-            ...(parsedPaneKey ? { leafId: parsedPaneKey.leafId } : {})
-          })
-          if (!ctx.isCurrent() || this.notifier !== notifier) {
-            return {
-              handle,
-              tabId: revealed?.tabId ?? live.pty.tabId ?? live.record.tabId,
-              worktreeId: live.pty.worktreeId,
-              navigated: false
-            }
-          }
-          return {
-            handle,
-            tabId: revealed?.tabId ?? live.pty.tabId ?? live.record.tabId,
-            worktreeId: live.pty.worktreeId,
-            navigated: true
-          }
-        }
-      })
+      return { handle, tabId, worktreeId: pty.pty.worktreeId, navigated }
     }
     this.assertGraphReady()
     const { leaf } = this.getLiveLeafForHandle(handle)
-    if (!navigateHost) {
-      return {
-        handle,
-        tabId: leaf.tabId,
-        worktreeId: leaf.worktreeId,
-        navigated: false
-      }
+    const location = navigateHost ? this.layoutHolder.findTerminalTab(leaf.tabId) : null
+    if (location) {
+      this.navigateDesktopView(location.workspace, { tabId: location.tabId, leafId: leaf.leafId })
     }
-    if (!this.notifier?.focusTerminal) {
-      return {
-        handle,
-        tabId: leaf.tabId,
-        worktreeId: leaf.worktreeId,
-        navigated: false
-      }
-    }
-    return this.terminalFocusNavigationCoalescer.run({
-      key: handle,
-      resolveSuperseded: (completed) =>
-        completed ? { ...completed, navigated: false } : liveLeafIdentity(),
-      run: async (ctx) => {
-        this.assertGraphReady()
-        const { leaf: liveLeaf } = this.getLiveLeafForHandle(handle)
-        if (!ctx.isCurrent()) {
-          return {
-            handle,
-            tabId: liveLeaf.tabId,
-            worktreeId: liveLeaf.worktreeId,
-            navigated: false
-          }
-        }
-        const notifier = this.notifier
-        if (!notifier?.focusTerminal) {
-          return {
-            handle,
-            tabId: liveLeaf.tabId,
-            worktreeId: liveLeaf.worktreeId,
-            navigated: false
-          }
-        }
-        notifier.focusTerminal(liveLeaf.tabId, liveLeaf.worktreeId, liveLeaf.leafId)
-        if (!ctx.isCurrent() || this.notifier !== notifier) {
-          return {
-            handle,
-            tabId: liveLeaf.tabId,
-            worktreeId: liveLeaf.worktreeId,
-            navigated: false
-          }
-        }
-        return {
-          handle,
-          tabId: liveLeaf.tabId,
-          worktreeId: liveLeaf.worktreeId,
-          navigated: true
-        }
-      }
-    })
+    return { handle, tabId: leaf.tabId, worktreeId: leaf.worktreeId, navigated: location !== null }
   }
 
   protected getPtyIdsForExplicitTabClose(worktreeId: string, tabId: string): string[] {
@@ -183,17 +45,23 @@ export class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitForLeafPtyI
     return [...ptyIds]
   }
 
-  protected focusHeldTerminalInDesktopView(pty: {
-    worktreeId: string
-    tabId: string | null
-    paneKey: string | null
-  }): void {
+  /** The desktop view shows a terminal's pane; `navigate` also tells its window to go there. */
+  protected focusHeldTerminalInDesktopView(
+    pty: { worktreeId: string; tabId: string | null; paneKey: string | null },
+    options: { navigate?: boolean } = {}
+  ): void {
     const leafId = parsePaneKey(pty.paneKey ?? '')?.leafId
     const tab = this.heldWorkspaceLayout(pty.worktreeId)?.tabs.find(
       (candidate) => candidate.kind === 'terminal' && candidate.entityId === pty.tabId
     )
-    if (tab) {
-      this.focusInDesktopView(pty.worktreeId, { tabId: tab.id, ...(leafId ? { leafId } : {}) })
+    if (!tab) {
+      return
+    }
+    const target = { tabId: tab.id, ...(leafId ? { leafId } : {}) }
+    if (options.navigate) {
+      this.navigateDesktopView(pty.worktreeId, target)
+    } else {
+      this.focusInDesktopView(pty.worktreeId, target)
     }
   }
 }

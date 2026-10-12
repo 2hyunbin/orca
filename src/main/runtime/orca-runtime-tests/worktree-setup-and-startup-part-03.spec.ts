@@ -32,8 +32,7 @@ describe('OrcaRuntimeService', () => {
       })
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
-    const activateWorktree = vi.fn()
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-bg-setup-split' })
+    const navigations: unknown[] = []
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-bg-split-main' })
@@ -47,13 +46,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree,
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -81,15 +73,15 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-bg-split-setup',
       setupDecision: 'run'
     })
 
-    // Split launch modes reach the renderer through splitTerminal, not
-    // createTerminal — that path must suppress owner surfacing too.
-    expect(activateWorktree).not.toHaveBeenCalled()
+    // The split setup pane must not surface the workspace either.
+    expect(navigations).toEqual([])
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2))
     const mainEnv = (spawn.mock.calls[0]![0] as { env?: Record<string, string> }).env ?? {}
     const mainLeafId = mainEnv.ORCA_PANE_KEY!.slice(`${mainEnv.ORCA_TAB_ID!}:`.length)
@@ -101,9 +93,8 @@ describe('OrcaRuntimeService', () => {
       first: { type: 'leaf', leafId: mainLeafId }
     })
     expect(Object.values(layout?.ptyIdsByLeafId ?? {})).toContain('pty-bg-split-setup')
-    expect(revealTerminalSession).not.toHaveBeenCalledWith(
-      result.worktree.id,
-      expect.objectContaining({ ptyId: 'pty-bg-split-setup' })
+    expect(runtime.layoutCommands.views.record('desktop').activeWorktreeId).not.toBe(
+      result.worktree.id
     )
   })
 
@@ -117,7 +108,7 @@ describe('OrcaRuntimeService', () => {
       })
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-active-setup-split' })
+    const navigations: unknown[] = []
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-active-split-main' })
@@ -131,13 +122,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -167,6 +151,7 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-active-split-setup',
@@ -188,15 +173,7 @@ describe('OrcaRuntimeService', () => {
       first: { type: 'leaf', leafId: mainLeafId }
     })
     expect(Object.values(layout?.ptyIdsByLeafId ?? {})).toContain('pty-active-split-setup')
-    expect(revealTerminalSession).not.toHaveBeenCalledWith(
-      result.worktree.id,
-      expect.objectContaining({ ptyId: 'pty-active-split-setup' })
-    )
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      result.worktree.id,
-      expect.objectContaining({ ptyId: 'pty-active-split-main' })
-    )
-    expect(revealTerminalSession.mock.lastCall?.[1]).not.toHaveProperty('surfaceOwner')
+    expect(navigations).toContainEqual({ kind: 'revealWorkspace', workspace: result.worktree.id })
   })
 
   it('does not warn when setup is explicitly skipped for CLI-created worktrees', async () => {
@@ -221,13 +198,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-cli-setup-skip' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -284,13 +254,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged,
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-branch-added-setup' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -350,13 +313,9 @@ describe('OrcaRuntimeService', () => {
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     const spawn = vi
-      .fn()
+      .fn<(options: { env?: Record<string, string> }) => Promise<{ id: string }>>()
       .mockResolvedValueOnce({ id: 'pty-default-dev' })
       .mockResolvedValueOnce({ id: 'pty-default-test' })
-    const revealTerminalSession = vi
-      .fn()
-      .mockResolvedValueOnce({ tabId: 'tab-default-dev' })
-      .mockResolvedValueOnce({ tabId: 'tab-default-test' })
     runtime.setPtyController({
       spawn,
       write: () => true,
@@ -366,13 +325,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -413,15 +365,14 @@ describe('OrcaRuntimeService', () => {
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2))
     expect(spawn.mock.calls[0]![0]).toMatchObject({ command: 'pnpm dev' })
     expect(spawn.mock.calls[1]![0]).toMatchObject({ command: 'pnpm test' })
-    expect(revealTerminalSession).toHaveBeenNthCalledWith(
-      1,
-      result.worktree.id,
-      expect.objectContaining({ title: 'Dev', activate: false })
-    )
-    expect(revealTerminalSession).toHaveBeenNthCalledWith(
-      2,
-      result.worktree.id,
-      expect.objectContaining({ title: 'Test', activate: false })
+    const spawnedTabIds = spawn.mock.calls.map(([options]) => options.env?.ORCA_TAB_ID)
+    expect(
+      runtime
+        .heldWorkspaceLayout(result.worktree.id)
+        ?.tabs.flatMap((tab) => (tab.kind === 'terminal' ? [tab.entityId] : []))
+    ).toEqual(spawnedTabIds)
+    expect(runtime.layoutCommands.views.record('desktop').activeWorktreeId).not.toBe(
+      result.worktree.id
     )
   })
 
@@ -438,14 +389,11 @@ describe('OrcaRuntimeService', () => {
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     const spawn = vi
-      .fn<(options: { command?: string }) => Promise<{ id: string }>>()
+      .fn<
+        (options: { command?: string; env?: Record<string, string> }) => Promise<{ id: string }>
+      >()
       .mockResolvedValueOnce({ id: 'pty-default-agent' })
       .mockResolvedValueOnce({ id: 'pty-default-test' })
-    const revealTerminalSession = vi
-      .fn<(worktreeId: string, request: { tabId?: string }) => Promise<{ tabId: string }>>()
-      .mockResolvedValueOnce({ tabId: 'tab-default-agent' })
-      .mockResolvedValueOnce({ tabId: 'tab-default-test' })
-    const renameTerminal = vi.fn()
     runtime.setPtyController({
       spawn,
       write: () => true,
@@ -455,13 +403,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal,
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -494,21 +435,20 @@ describe('OrcaRuntimeService', () => {
       startup: { command: 'claude' }
     })
 
-    await vi.waitFor(() => expect(revealTerminalSession).toHaveBeenCalledTimes(2))
-    const agentTabId = revealTerminalSession.mock.calls[0]?.[1].tabId
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2))
+    const [agentTabId, testTabId] = spawn.mock.calls.map(([options]) => options.env?.ORCA_TAB_ID)
     expect(agentTabId).toEqual(expect.any(String))
-    expect(renameTerminal).toHaveBeenCalledWith(agentTabId, 'Dev', { recordInteraction: false })
+    await vi.waitFor(() => expect(runtime.heldTabCustomTitle(agentTabId!)).toBe('Dev'))
     // The first template's command never runs beside the agent; only the rest are created.
-    expect(spawn).toHaveBeenCalledTimes(2)
     expect(spawn.mock.calls.map(([options]) => options.command)).toEqual([
       expect.stringContaining('claude'),
       'pnpm test'
     ])
-    expect(revealTerminalSession).toHaveBeenNthCalledWith(
-      2,
-      result.worktree.id,
-      expect.objectContaining({ title: 'Test', activate: false })
-    )
+    expect(
+      runtime
+        .heldWorkspaceLayout(result.worktree.id)
+        ?.tabs.flatMap((tab) => (tab.kind === 'terminal' ? [tab.entityId] : []))
+    ).toEqual([agentTabId, testTabId])
   })
 
   it('uses desktop task agent selection and bracketed-pastes startup drafts for local worktrees', async () => {
@@ -544,13 +484,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-startup-draft' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -627,13 +560,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-claude-draft-timeout' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -697,13 +623,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-opencode-draft-budget' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -798,13 +717,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-cli-agent-startup' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()

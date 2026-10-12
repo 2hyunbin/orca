@@ -30,10 +30,6 @@ export const TERMINAL_SUBSCRIBE_METHODS = [
         return
       }
       let leaf = runtime.resolveLeafForHandle(params.terminal)
-      const serializerGenerationBeforeAnyMount = isMobile
-        ? (runtime.getRendererTerminalSerializerGenerationForHandle?.(params.terminal) ?? 0)
-        : 0
-      let rendererMountRequestedBeforePty = false
       const clientId = params.client?.id
       // Why: register before the pty wait so an unsubscribe, a same-slot replacement or a closed socket can end a pending stream.
       // Client-scoped keys also let a hidden watcher and a visible pane subscribe to one terminal.
@@ -46,21 +42,12 @@ export const TERMINAL_SUBSCRIBE_METHODS = [
         emit
       })
       try {
-        if (!leaf?.ptyId && params.client && runtime.startsPanesForSubscribers()) {
-          // No window owns the pane: the runtime starts it and streams once it is bound.
+        if (!leaf?.ptyId && params.client) {
+          // The runtime starts a pane no terminal runs in and streams once it is bound.
           leaf = { ptyId: await runtime.startPaneForHandle(params.terminal, registration.signal) }
           if (registration.released) {
             return
           }
-        } else if (!leaf?.ptyId && params.client) {
-          rendererMountRequestedBeforePty = runtime.requestRendererTerminalTabMount(params.terminal)
-          const ptyId = await runtime
-            .waitForLeafPtyId(params.terminal, 10_000, registration.signal)
-            .catch(() => null)
-          if (registration.released) {
-            return
-          }
-          leaf = { ptyId }
         }
         if (!leaf?.ptyId) {
           const read = await runtime.readTerminal(params.terminal)
@@ -82,8 +69,7 @@ export const TERMINAL_SUBSCRIBE_METHODS = [
           return
         }
         const missingHeadlessStateBeforeMobileFit =
-          isMobile &&
-          (rendererMountRequestedBeforePty || runtime.hasHeadlessTerminalState?.(ptyId) === false)
+          isMobile && runtime.hasHeadlessTerminalState?.(ptyId) === false
         const args: TerminalSubscriptionArgs = {
           params,
           runtime,
@@ -96,13 +82,7 @@ export const TERMINAL_SUBSCRIBE_METHODS = [
           isMobile,
           supportsDesktopViewportClaims: params.capabilities?.desktopViewportClaims === 1,
           supportsWriteUnavailable: params.capabilities?.writeUnavailable === 1,
-          rendererMountRequestedBeforePty,
-          missingHeadlessStateBeforeMobileFit,
-          serializerGenerationBeforeMobileFit: missingHeadlessStateBeforeMobileFit
-            ? rendererMountRequestedBeforePty
-              ? serializerGenerationBeforeAnyMount
-              : runtime.getRendererTerminalSerializerGeneration(ptyId)
-            : 0
+          missingHeadlessStateBeforeMobileFit
         }
         if (isMobile && params.capabilities?.mobileInputLeaseOnly === 1 && Boolean(clientId)) {
           await runTerminalLeaseSubscription(args)

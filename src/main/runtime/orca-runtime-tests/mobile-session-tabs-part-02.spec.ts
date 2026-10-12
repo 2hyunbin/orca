@@ -51,13 +51,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       resumeSleepingAgents,
       terminalFitOverrideChanged: vi.fn(),
@@ -107,13 +100,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       resumeSleepingAgents,
       terminalFitOverrideChanged: vi.fn(),
@@ -152,13 +138,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged,
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -202,13 +181,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -260,13 +232,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal,
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -334,13 +299,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal,
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -435,13 +393,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal,
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -500,13 +451,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal,
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -545,7 +489,6 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('closes browser mobile session tabs when addressed by browser workspace id', async () => {
-    const closeSessionTab = vi.fn()
     store.setWorkspaceSession({
       ...getDefaultWorkspaceSession(),
       unifiedTabs: {
@@ -598,29 +541,15 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
-      closeSessionTab,
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
-    // A live window owns the browser tab, so it is asked to close it.
-    electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: []
-    })
 
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'browser-workspace-1')
 
-    expect(closeSessionTab).toHaveBeenCalledWith('browser-unified-1', TEST_WORKTREE_ID)
+    // The runtime's layout closes the browser tab, with or without a window.
+    expect(runtime.heldWorkspaceLayout(TEST_WORKTREE_ID)?.tabs ?? []).toHaveLength(0)
     expect(forgetTabs).toHaveBeenCalledWith(TEST_WORKTREE_ID, ['browser-unified-1'])
   })
 })

@@ -680,31 +680,10 @@ describe('attachMainWindowServices', () => {
 
     notifier.worktreesChanged('repo-1')
     notifier.reposChanged()
-    notifier.activateWorktree('repo-1', 'wt-1', {
-      runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-      envVars: {
-        ORCA_ROOT_PATH: '/tmp/repo',
-        ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1'
-      }
-    })
 
     expect(sendMock.mock.calls).toEqual([
       ['worktrees:changed', { repoId: 'repo-1' }],
-      ['repos:changed'],
-      [
-        'ui:activateWorktree',
-        {
-          repoId: 'repo-1',
-          worktreeId: 'wt-1',
-          setup: {
-            runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-            envVars: {
-              ORCA_ROOT_PATH: '/tmp/repo',
-              ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1'
-            }
-          }
-        }
-      ]
+      ['repos:changed']
     ])
     expect(runWorktreeChangeInvalidatorsMock).toHaveBeenCalledWith('repo-1')
     expect(runWorktreeChangeInvalidatorsMock.mock.invocationCallOrder[0]).toBeLessThan(
@@ -725,123 +704,6 @@ describe('attachMainWindowServices', () => {
     }
 
     expect(runtime.markGraphReloadFailed).toHaveBeenCalledWith(1, 'renderer-process-gone')
-  })
-
-  it('accepts terminal reveal replies only from the main window renderer', async () => {
-    const sendMock = vi.fn()
-    const mainWindow = createMainWindow({ send: sendMock })
-    const runtime = createRuntime()
-
-    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
-
-    const notifier = runtime.setNotifier.mock.calls[0][0] as {
-      revealTerminalSession: (
-        worktreeId: string,
-        opts: {
-          ptyId: string
-          title?: string
-          cwd?: string
-          viewMode?: 'terminal' | 'chat'
-          activate?: boolean
-        }
-      ) => Promise<{ tabId: string; title?: string }>
-    }
-    const revealPromise = notifier.revealTerminalSession('wt-1', {
-      ptyId: 'pty-1',
-      title: 'SSH tmux',
-      cwd: '/repo/packages/web',
-      viewMode: 'chat'
-    })
-    const sentPayload = sendMock.mock.calls.find(
-      ([channel]) => channel === 'ui:createTerminal'
-    )?.[1]
-    const handler = onMock.mock.calls.find(
-      ([channel]) => channel === 'terminal:tabCreateReply'
-    )?.[1]
-    expect(sentPayload).toMatchObject({ cwd: '/repo/packages/web', viewMode: 'chat' })
-
-    handler?.(
-      { sender: { send: vi.fn() } },
-      { requestId: sentPayload.requestId, error: 'spoofed renderer reply' }
-    )
-    expect(removeListenerMock).not.toHaveBeenCalledWith('terminal:tabCreateReply', handler)
-
-    handler?.(
-      { sender: mainWindow.webContents },
-      { requestId: sentPayload.requestId, tabId: 'tab-1', title: 'SSH tmux' }
-    )
-
-    await expect(revealPromise).resolves.toEqual({ tabId: 'tab-1', title: 'SSH tmux' })
-    expect(removeListenerMock).toHaveBeenCalledWith('terminal:tabCreateReply', handler)
-  })
-
-  it('requires an exact renderer identity receipt for recovered worker reveals', async () => {
-    const sendMock = vi.fn()
-    const mainWindow = createMainWindow({ send: sendMock })
-    const runtime = createRuntime()
-
-    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
-
-    const notifier = runtime.setNotifier.mock.calls[0][0] as {
-      revealTerminalSession: (
-        worktreeId: string,
-        opts: {
-          ptyId: string
-          tabId: string
-          leafId: string
-          expectedProcessIdentity: { terminalHandle: string; incarnationId: string }
-        }
-      ) => Promise<unknown>
-    }
-    const opts = {
-      ptyId: 'pty-worker',
-      tabId: 'tab-worker',
-      leafId: 'leaf-worker',
-      expectedProcessIdentity: {
-        terminalHandle: 'term_worker',
-        incarnationId: 'inc-worker'
-      }
-    }
-    const mismatch = notifier.revealTerminalSession('worktree-1', opts)
-    const mismatchPayload = sendMock.mock.calls.at(-1)?.[1]
-    const mismatchHandler = onMock.mock.calls.findLast(
-      ([channel]) => channel === 'terminal:tabCreateReply'
-    )?.[1]
-    mismatchHandler?.(
-      { sender: mainWindow.webContents },
-      {
-        requestId: mismatchPayload.requestId,
-        tabId: 'tab-worker',
-        identity: {
-          worktreeId: 'worktree-1',
-          tabId: 'tab-worker',
-          leafId: 'leaf-worker',
-          ptyId: 'pty-replacement'
-        }
-      }
-    )
-    await expect(mismatch).rejects.toThrow('terminal_reveal_identity_mismatch')
-
-    const exact = notifier.revealTerminalSession('worktree-1', opts)
-    const exactPayload = sendMock.mock.calls.at(-1)?.[1]
-    const exactHandler = onMock.mock.calls.findLast(
-      ([channel]) => channel === 'terminal:tabCreateReply'
-    )?.[1]
-    const identity = {
-      worktreeId: 'worktree-1',
-      tabId: 'tab-worker',
-      leafId: 'leaf-worker',
-      ptyId: 'pty-worker'
-    }
-    exactHandler?.(
-      { sender: mainWindow.webContents },
-      { requestId: exactPayload.requestId, tabId: 'tab-worker', identity }
-    )
-    await expect(exact).resolves.toEqual({
-      tabId: 'tab-worker',
-      title: undefined,
-      identity
-    })
   })
 
   it('keeps deferred worktree watcher setup inside the service boundary', async () => {

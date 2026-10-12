@@ -1,226 +1,139 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getDefaultWorkspaceSession } from '../../shared/constants'
+import { describe, expect, it, vi } from 'vitest'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
+import {
+  addWorkspace,
+  emptySession,
+  GIT_KEY,
+  leaf
+} from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import { RuntimeLegacyWorkerTerminalRecoveryPersistence } from './runtime-legacy-worker-terminal-recovery-persistence'
 import type { LegacyWorkerRecoveryResolution } from './runtime-legacy-worker-terminal-recovery-types'
-import type { RuntimeStore } from './runtime-store-contract'
+import { fakeStore, holderFor, SSH_HOST, SSH_KEY } from './runtime-workspace-layouts.test-fixture'
 
-function makeResolution(index: number): LegacyWorkerRecoveryResolution {
-  return {
-    resolution: index % 2 === 0 ? 'adopted' : 'exited',
-    candidate: {
-      dispatchId: `dispatch-${index}`,
-      dispatchStatus: 'dispatched',
-      contractVersion: 1,
-      taskId: `task-${index}`,
-      worktreeId: index % 2 === 0 ? `repo::/workspace-${index}` : `folder:workspace-${index}`,
-      terminalHandle: `handle-${index}`,
-      paneKey: `tab-${index}:leaf-${index}`,
-      tabId: `tab-${index}`,
-      leafId: `leaf-${index}`,
-      processIncarnation: `pty-${index}:inc-${index}`,
-      ptyId: `pty-${index}`,
-      incarnationId: `inc-${index}`
-    }
-  }
-}
-
-function makeFixture(hosts: readonly ExecutionHostId[], count: number) {
-  const resolutions = Array.from({ length: count }, (_, index) => makeResolution(index))
-  const sessions = new Map<string, WorkspaceSessionState>()
-  const owners = new Map<string, ExecutionHostId>()
-  for (const [index, { candidate }] of resolutions.entries()) {
-    const host = hosts[index % hosts.length]!
-    owners.set(candidate.worktreeId, host)
-    const session = sessions.get(host) ?? {
-      ...getDefaultWorkspaceSession(),
-      sleepingAgentSessionsByPaneKey: {}
-    }
-    session.tabsByWorktree[candidate.worktreeId] = [
-      {
-        id: candidate.tabId,
-        ptyId: candidate.ptyId,
-        worktreeId: candidate.worktreeId,
-        title: 'Worker',
-        customTitle: null,
-        color: null,
-        sortOrder: 0,
-        createdAt: 1
-      }
-    ]
-    session.sleepingAgentSessionsByPaneKey![candidate.paneKey] = {
-      paneKey: candidate.paneKey,
-      worktreeId: candidate.worktreeId,
+function workerSession(key: string, host: ExecutionHostId = 'local'): WorkspaceSessionState {
+  const session = addWorkspace(
+    emptySession(),
+    key,
+    [{ id: 'group-a', tabs: [{ id: 'tab-1', leaves: [[leaf(1), 'pty-1']] }] }],
+    host
+  )
+  session.sleepingAgentSessionsByPaneKey = {
+    [`tab-1:${leaf(1)}`]: {
+      paneKey: `tab-1:${leaf(1)}`,
+      tabId: 'tab-1',
+      worktreeId: key,
       agent: 'claude',
-      providerSession: { key: 'session_id', id: `session-${index}` },
+      providerSession: { key: 'session_id', id: 'session-1' },
       prompt: '',
       state: 'waiting',
       capturedAt: 1,
       updatedAt: 1
     }
-    sessions.set(host, session)
   }
-  const getWorkspaceSession = (hostId?: string | null) => {
-    const session = sessions.get(hostId ?? 'local')
-    if (!session) {
-      throw new Error('Unexpected host')
-    }
-    return session
-  }
-  const setWorkspaceSession = vi.fn((session: WorkspaceSessionState, hostId?: string | null) => {
-    sessions.set(hostId ?? 'local', session)
-  })
-  const flushPendingOrThrowAsync = vi.fn(async () => {})
-  const unused = () => {
-    throw new Error('Unexpected persistence dependency')
-  }
-  const store: RuntimeStore = withDurableRuntimeStore({
-    getRepos: unused,
-    getRepo: unused,
-    addRepo: unused,
-    updateRepo: unused,
-    getAllWorktreeMeta: unused,
-    getWorktreeMeta: unused,
-    setWorktreeMeta: unused,
-    removeWorktreeMeta: unused,
-    getGitHubCache: unused,
-    getSettings: unused,
-    getWorkspaceSession,
-    setWorkspaceSession,
-    flushPendingOrThrowAsync
-  })
-  const persistence = new RuntimeLegacyWorkerTerminalRecoveryPersistence(
-    () => store,
-    unused,
-    (worktreeId) => owners.get(worktreeId) ?? null
-  )
+  return session
+}
+
+function resolution(
+  worktreeId: string,
+  kind: 'adopted' | 'exited',
+  hostId?: ExecutionHostId
+): LegacyWorkerRecoveryResolution {
   return {
-    persistence,
-    resolutions,
-    getWorkspaceSession,
-    setWorkspaceSession,
-    flushPendingOrThrowAsync
+    resolution: kind,
+    ...(hostId ? { hostId } : {}),
+    candidate: {
+      dispatchId: 'dispatch-1',
+      dispatchStatus: 'dispatched',
+      contractVersion: 1,
+      taskId: 'task-1',
+      worktreeId,
+      terminalHandle: 'handle-1',
+      paneKey: `tab-1:${leaf(1)}`,
+      tabId: 'tab-1',
+      leafId: leaf(1),
+      processIncarnation: 'pty-1:inc-1',
+      ptyId: 'pty-1',
+      incarnationId: 'inc-1'
+    }
   }
 }
 
-afterEach(() => vi.restoreAllMocks())
+function setup(sessions: Partial<Record<ExecutionHostId, WorkspaceSessionState>>) {
+  const store = fakeStore(sessions)
+  const { holder } = holderFor(store, new Set(['pty-1']))
+  const owners = new Map<string, ExecutionHostId>([
+    [GIT_KEY, 'local'],
+    [SSH_KEY, SSH_HOST]
+  ])
+  const unused = () => {
+    throw new Error('Unexpected persistence dependency')
+  }
+  const persistence = new RuntimeLegacyWorkerTerminalRecoveryPersistence(
+    () => holder,
+    unused,
+    (worktreeId) => owners.get(worktreeId) ?? null
+  )
+  return { store, holder, persistence }
+}
 
-describe('legacy worker recovery persistence snapshot budget', () => {
-  it.each([1, 10, 100])('takes two host snapshots for %i recovered workers', async (count) => {
-    const fixture = makeFixture(['local'], count)
-    const clone = vi.spyOn(globalThis, 'structuredClone')
+describe('legacy worker recovery through the layout holder', () => {
+  it('drops an adopted worker’s sleeping record and keeps its pane', async () => {
+    const { store, persistence } = setup({ local: workerSession(GIT_KEY) })
 
-    const result = await fixture.persistence.persist(fixture.resolutions)
+    const persisted = await persistence.persist([resolution(GIT_KEY, 'adopted')])
 
-    expect(result).toEqual(
-      new Set(fixture.resolutions.map(({ candidate }) => candidate.dispatchId))
-    )
-    expect(clone).toHaveBeenCalledTimes(2)
-    expect(fixture.flushPendingOrThrowAsync).toHaveBeenCalledTimes(1)
-    expect(fixture.getWorkspaceSession().sleepingAgentSessionsByPaneKey).toEqual({})
-    for (const { candidate, resolution } of fixture.resolutions) {
-      expect(fixture.getWorkspaceSession().tabsByWorktree[candidate.worktreeId]).toHaveLength(
-        resolution === 'exited' ? 0 : 1
-      )
-    }
+    expect(persisted).toEqual(new Set(['dispatch-1']))
+    const saved = store.sessions.local!
+    expect(saved.sleepingAgentSessionsByPaneKey ?? {}).toEqual({})
+    expect(saved.tabsByWorktree[GIT_KEY]).toHaveLength(1)
   })
 
-  it('bounds snapshots by host for an interleaved local, SSH and runtime batch', async () => {
-    const hosts = ['local', 'ssh:remote', 'runtime:peer'] as const
-    const fixture = makeFixture(hosts, 12)
-    const clone = vi.spyOn(globalThis, 'structuredClone')
+  it('retires an exited worker’s pane with its record', async () => {
+    const { store, persistence } = setup({ local: workerSession(GIT_KEY) })
 
-    expect((await fixture.persistence.persist(fixture.resolutions)).size).toBe(12)
+    await persistence.persist([resolution(GIT_KEY, 'exited')])
 
-    expect(clone).toHaveBeenCalledTimes(hosts.length * 2)
-    for (const host of hosts) {
-      expect(fixture.getWorkspaceSession(host).sleepingAgentSessionsByPaneKey).toEqual({})
-    }
-    expect(fixture.flushPendingOrThrowAsync).toHaveBeenCalledTimes(1)
+    const saved = store.sessions.local!
+    expect(saved.sleepingAgentSessionsByPaneKey ?? {}).toEqual({})
+    expect(saved.tabsByWorktree[GIT_KEY] ?? []).toHaveLength(0)
   })
 
-  it('rolls back every host without overwriting edits made during the durable write', async () => {
-    const hosts = ['local', 'ssh:remote', 'runtime:peer'] as const
-    const fixture = makeFixture(hosts, 12)
-    const originals = new Map(
-      hosts.map((host) => [host, structuredClone(fixture.getWorkspaceSession(host))])
-    )
-    const pendingWrite = Promise.withResolvers<void>()
-    const writeStarted = Promise.withResolvers<void>()
-    fixture.flushPendingOrThrowAsync.mockImplementationOnce(() => {
-      writeStarted.resolve()
-      return pendingWrite.promise
+  it('waits for the layout to be on disk before reporting the batch', async () => {
+    const { holder, persistence } = setup({ local: workerSession(GIT_KEY) })
+    const durable = Promise.withResolvers<void>()
+    vi.spyOn(holder, 'whenDurable').mockReturnValue(durable.promise)
+    let settled = false
+
+    const result = persistence.persist([resolution(GIT_KEY, 'adopted')]).then((ids) => {
+      settled = true
+      return ids
     })
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-    const result = fixture.persistence.persist(fixture.resolutions)
-    await writeStarted.promise
-    for (const host of hosts) {
-      const current = fixture.getWorkspaceSession(host)
-      expect(current.sleepingAgentSessionsByPaneKey).toEqual({})
-      // In-place edits must not mutate the final snapshot used by rollback.
-      current.activeWorktreeId = `new-selection-${host}`
-      current.tabsByWorktree[`new-folder-${host}`] = []
-    }
-    pendingWrite.reject(new Error('Disk write failed'))
-
-    expect(await result).toEqual(new Set())
-    for (const host of hosts) {
-      const original = originals.get(host)!
-      expect(fixture.getWorkspaceSession(host)).toEqual({
-        ...original,
-        activeWorktreeId: `new-selection-${host}`,
-        tabsByWorktree: { ...original.tabsByWorktree, [`new-folder-${host}`]: [] }
-      })
-    }
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    durable.resolve()
+    expect(await result).toEqual(new Set(['dispatch-1']))
   })
 
-  it('still flushes previously adopted surfaces when this batch makes no session edits', async () => {
-    const fixture = makeFixture(['local'], 10)
-    fixture.getWorkspaceSession().sleepingAgentSessionsByPaneKey = {}
-    for (const resolution of fixture.resolutions) {
-      resolution.resolution = 'adopted'
-    }
+  it('leaves a worker whose host the holder does not hold for a later pass', async () => {
+    const { persistence } = setup({ local: workerSession(GIT_KEY) })
 
-    expect((await fixture.persistence.persist(fixture.resolutions)).size).toBe(10)
-
-    expect(fixture.setWorkspaceSession).not.toHaveBeenCalled()
-    expect(fixture.flushPendingOrThrowAsync).toHaveBeenCalledTimes(1)
+    expect(await persistence.persist([])).toEqual(new Set())
+    expect(await persistence.persist([resolution('repo-x::/unknown', 'adopted')])).toEqual(
+      new Set()
+    )
   })
 
-  it('does not snapshot or flush an empty or unroutable batch', async () => {
-    const fixture = makeFixture(['local'], 1)
-    const clone = vi.spyOn(globalThis, 'structuredClone')
+  it('prefers the host that proved the exit over the workspace’s recorded host', async () => {
+    const { store, persistence } = setup({
+      local: workerSession(GIT_KEY),
+      [SSH_HOST]: workerSession(SSH_KEY, SSH_HOST)
+    })
+    const localBefore = store.sessions.local
 
-    expect(await fixture.persistence.persist([])).toEqual(new Set())
-    expect(await fixture.persistence.persist([makeResolution(100)])).toEqual(new Set())
+    await persistence.persist([resolution(SSH_KEY, 'exited', SSH_HOST)])
 
-    expect(clone).not.toHaveBeenCalled()
-    expect(fixture.flushPendingOrThrowAsync).not.toHaveBeenCalled()
-  })
-
-  it('uses the provider that proved absence when a deleted folder has no host lookup', async () => {
-    const fixture = makeFixture(['ssh:remote'], 1)
-    const resolution = makeResolution(100)
-    resolution.resolution = 'exited'
-    resolution.hostId = 'ssh:remote'
-
-    expect(await fixture.persistence.persist([resolution])).toEqual(new Set(['dispatch-100']))
-    expect(fixture.setWorkspaceSession.mock.calls[0][1]).toBe('ssh:remote')
-    expect(fixture.flushPendingOrThrowAsync).toHaveBeenCalledOnce()
-  })
-
-  it('prefers owning-provider evidence over stale workspace host metadata', async () => {
-    const fixture = makeFixture(['local', 'ssh:remote'], 2)
-    const localBefore = structuredClone(fixture.getWorkspaceSession('local'))
-    const resolution = fixture.resolutions[0]
-    resolution.resolution = 'exited'
-    resolution.hostId = 'ssh:remote'
-
-    expect(await fixture.persistence.persist([resolution])).toEqual(new Set(['dispatch-0']))
-    expect(fixture.setWorkspaceSession.mock.calls[0][1]).toBe('ssh:remote')
-    expect(fixture.getWorkspaceSession('local')).toEqual(localBefore)
+    expect(store.sessions[SSH_HOST]!.tabsByWorktree[SSH_KEY] ?? []).toHaveLength(0)
+    expect(store.sessions.local).toBe(localBefore)
   })
 })

@@ -19,23 +19,6 @@ function fixture() {
   return result
 }
 
-it('withholds the acknowledged close until its host retirement is durable', async () => {
-  const f = fixture()
-  let acknowledged = false
-  const closing = f.close().then((result) => {
-    acknowledged = true
-    return result
-  })
-  await f.entered.promise
-  const gate = f.authority.pause()
-  f.acknowledgement.resolve()
-  await gate.started.promise
-  expect(acknowledged).toBe(false)
-  gate.finish.resolve()
-  await expect(closing).resolves.toEqual({ closed: true })
-  expect(f.hasTab()).toBe(false)
-})
-
 it('publishes physical-exit retirement before its durable write completes', async () => {
   const f = fixture()
   await f.store.flushPendingOrThrowAsync()

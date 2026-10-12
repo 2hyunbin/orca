@@ -207,28 +207,16 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
       // win by timestamp), so stamp it as the freshest title.
       pty.pty.titleUpdatedAt = Date.now()
       this.touchMobileSessionSnapshotsForPty(pty.pty.ptyId)
-      // Why: without a renderer the rename only lived on the live pty and was
-      // lost on restart. Persist customTitle so a headless rebuild keeps it.
-      if (!this.notifier?.renameTerminal && pty.pty.tabId) {
-        this.persistHeadlessTerminalTitle(pty.pty.tabId, title)
-      }
-      for (const leaf of this.leaves.values()) {
-        if (leaf.ptyId === pty.pty.ptyId) {
-          this.notifier?.renameTerminal(leaf.tabId, title)
-          return { handle, tabId: leaf.tabId, title }
-        }
-      }
       const tabId = pty.pty.tabId ?? pty.record.tabId
-      // A notifier can exist before its pane graph; retain the rename on the known tab.
-      if (this.notifier?.renameTerminal && tabId) {
+      // The rename is the tab's custom title, so every view and a restart keep it (#19582).
+      if (tabId) {
         this.persistHeadlessTerminalTitle(tabId, title)
-        this.notifier.renameTerminal(tabId, title)
       }
       return { handle, tabId, title }
     }
     this.assertGraphReady()
     const { leaf } = this.getLiveLeafForHandle(handle)
-    this.notifier?.renameTerminal(leaf.tabId, title)
+    this.persistHeadlessTerminalTitle(leaf.tabId, title)
     return { handle, tabId: leaf.tabId, title }
   }
 

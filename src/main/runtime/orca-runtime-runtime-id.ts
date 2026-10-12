@@ -13,7 +13,6 @@ import type {
   RuntimeMobileSessionCreateTerminalResult,
   RuntimeMobileSessionTabsResult,
   RuntimeSyncedTab,
-  RuntimeTerminalFocus,
   RuntimeTerminalResolvePane,
   RuntimeWorktreeTerminalSleepResult
 } from '../../shared/runtime-types'
@@ -28,7 +27,6 @@ import { RemoteRuntimeTerminalCreateIdempotency } from './remote-runtime-termina
 import type { PtyIncarnationId } from '../../shared/pty-incarnation'
 import type { MobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
 import { createMobileSessionTabsAgentStatusHeartbeat } from './mobile-session-tabs-agent-status-heartbeat'
-import { TerminalFocusNavigationCoalescer } from './terminal-focus-navigation-coalescer'
 import type {
   PtyControllerInventory,
   RuntimePtyController
@@ -154,24 +152,6 @@ export class OrcaRuntimeWithRuntimeId {
   // the in-flight (or just-finished) operation instead of a duplicate worktree.
   protected worktreeCreateByMutationId = new Map<string, Promise<unknown>>()
 
-  // Why: a mobile create waits for the renderer to publish the new tab's surface
-  // via graph-sync, but a throttled/hidden renderer can park that past the surface
-  // timeout and the create would then destroy the live PTY (#7587). This lets the
-  // renderer's own PTY spawn publish the surface main-side, scoped to in-flight
-  // creates so ordinary renderer spawns never publish here.
-  protected pendingMobileTerminalCreatesByKey = new Map<
-    string,
-    {
-      activate: boolean
-      paired: boolean
-      selectIfNoActiveTab: boolean
-      viewMode?: 'terminal' | 'chat'
-      /** Resolved agent launch command, kept so a settle over a bare renderer
-       *  PTY can still deliver the launch instead of succeeding silently (STA-3214). */
-      startupCommand?: string
-    }
-  >()
-
   protected mobileSessionTabListeners = new Set<{
     listener: (snapshot: RuntimeMobileSessionTabsResult, changeSequence: number) => void
     clientNavigationId?: string
@@ -203,10 +183,6 @@ export class OrcaRuntimeWithRuntimeId {
       (ptyId) => this.getMobileSessionWorktreeIdsForPty(ptyId),
       (worktreeId) => this.touchMobileSessionTabsForWorktree(worktreeId)
     )
-
-  // Concurrent focus requests share one host reveal; the latest pane wins.
-  protected readonly terminalFocusNavigationCoalescer =
-    new TerminalFocusNavigationCoalescer<RuntimeTerminalFocus>()
 
   protected pendingMobileSessionPtyAggregateInventoryRefresh: Promise<PtyControllerInventory | null> | null =
     null
@@ -267,8 +243,6 @@ export class OrcaRuntimeWithRuntimeId {
   protected syntheticTerminalHandles = new Set<string>()
 
   protected detachedPreAllocatedLeaves = new Map<string, RuntimeLeafRecord>()
-
-  protected graphSyncCallbacks: (() => void)[] = []
 
   protected readonly terminalWaiters = new RuntimeTerminalWaiterRegistry()
 

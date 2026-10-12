@@ -13,7 +13,6 @@ import { discardStructuredAgentSessionChatSends } from '@/lib/structured-agent-s
 import { stopStructuredAgentSessionSends } from '@/components/native-chat/structured-agent-session-message-sender'
 import { retireStructuredAgentSessionReadOwner } from '@/components/native-chat/structured-agent-session-read-owner-registry'
 import { closeStructuredAgentSession } from './structured-agent-session-close'
-import { withLocalSessionTabCloseOwner } from './local-session-tab-close-owner'
 import {
   executionHostIdForStructuredTarget,
   structuredAgentSessionFocusOwner
@@ -49,13 +48,11 @@ export function retireStructuredAgentSessionTab(args: {
   const hostTabId = `agent-session:${args.sessionId}`
   // Why: main echoes the host tab id it was asked to close, never this window's tab id.
   const closeHostTab = () =>
-    withLocalSessionTabCloseOwner(args.worktreeId, hostTabId, () =>
-      callRuntimeRpc(args.target, 'session.tabs.close', {
-        worktree: toRuntimeWorktreeSelector(args.worktreeId),
-        tabId: hostTabId,
-        reason: 'user'
-      })
-    )
+    callRuntimeRpc(args.target, 'session.tabs.close', {
+      worktree: toRuntimeWorktreeSelector(args.worktreeId),
+      tabId: hostTabId,
+      reason: 'user'
+    })
   const promise = Promise.allSettled([
     closeStructuredAgentSession(args.target, args.sessionId),
     closeHostTab()

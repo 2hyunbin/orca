@@ -88,13 +88,6 @@ describe('OrcaRuntimeService', () => {
       runtime.setNotifier({
         worktreesChanged: vi.fn(),
         reposChanged: vi.fn(),
-        activateWorktree: vi.fn(),
-        createTerminal: vi.fn(),
-        revealTerminalSession: vi.fn(),
-        splitTerminal: vi.fn(),
-        renameTerminal: vi.fn(),
-        focusTerminal: vi.fn(),
-        closeTerminal: vi.fn(),
         sleepWorktree: vi.fn(),
         resumeSleepingAgents,
         terminalFitOverrideChanged: vi.fn(),
@@ -538,42 +531,6 @@ describe('OrcaRuntimeService', () => {
 
     await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-solo')
 
-    expect(events).toHaveLength(0)
-  })
-
-  it('does not persist active server-side when an authoritative renderer is attached', async () => {
-    // Why: an authoritative renderer re-syncs the snapshot itself, so the headless persist must not fire — the renderer stays source of truth.
-    let nextPty = 0
-    const spawn = vi.fn().mockImplementation(async () => ({ id: `attached-pty-${++nextPty}` }))
-    const runtime = new OrcaRuntimeService(store)
-    runtime.setPtyController({
-      spawn,
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null
-    })
-
-    const LEAF_A = '55555555-5555-4555-8555-555555555555'
-    const LEAF_B = '66666666-6666-4666-8666-666666666666'
-    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { tabId: 'tab-a', leafId: LEAF_A })
-    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { tabId: 'tab-b', leafId: LEAF_B })
-
-    // Make an authoritative renderer window present.
-    runtime.attachWindow(1)
-    runtime.markGraphReady(1)
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents: { send: vi.fn() }
-    })
-
-    // A read reloads the creates' own Store writes, so their republish lands before listening.
-    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-    const events: RuntimeMobileSessionTabsResult[] = []
-    runtime.onMobileSessionTabsChanged((snapshot) => events.push(snapshot))
-
-    await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-b')
-
-    // The headless persist is gated off by the authoritative window — nothing emitted.
     expect(events).toHaveLength(0)
   })
 

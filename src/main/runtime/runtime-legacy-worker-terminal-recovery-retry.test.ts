@@ -129,13 +129,12 @@ describe('RuntimeLegacyWorkerTerminalRecoveryController retry loop', () => {
       expect(vi.getTimerCount()).toBe(1)
       expect(warning).not.toHaveBeenCalled()
 
-      await fixture.controller.reconcile({ materializeRenderer: true })
+      await fixture.controller.reconcile()
       await vi.advanceTimersByTimeAsync(1_000)
       expect(fixture.reconcile).toHaveBeenCalledTimes(24)
       expect(fixture.reconcile).toHaveBeenLastCalledWith({
         retry: true,
-        dispatchIds: [DEFERRED_DISPATCH_ID],
-        materializeRenderer: true
+        dispatchIds: [DEFERRED_DISPATCH_ID]
       })
     } finally {
       warning.mockRestore()

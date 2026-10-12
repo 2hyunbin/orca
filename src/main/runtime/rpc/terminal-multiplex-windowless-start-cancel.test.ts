@@ -22,7 +22,6 @@ describe('terminal multiplex RPC without a window', () => {
         })
     )
     const harness = startDesktopMultiplexSubscribe({
-      startsPanesForSubscribers: vi.fn(() => true),
       resolveLiveLeafForHandle: vi.fn().mockReturnValue({ ptyId: null }),
       startPaneForHandle
     })

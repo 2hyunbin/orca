@@ -13,7 +13,6 @@ import {
   type LaunchWorkspace
 } from '../../shared/launch-parity-window-request.test-fixture'
 import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
-import { HOST_TAB_ID } from './pty-launch-parity-host.test-cases'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
@@ -135,7 +134,6 @@ export type ParityLanes = {
   persistPtyBinding: Mock
   /** The host partition as the runtime's holder last saved it. */
   session: () => WorkspaceSessionState
-  reveal: Mock
   spawnWindow: (request: Record<string, unknown>) => Promise<unknown>
 }
 
@@ -201,17 +199,9 @@ export function startParityLanes(
   vi.spyOn(resolver, 'resolveTerminalWorkspaceLaunchScope').mockResolvedValue(
     launchScope(args.workspace)
   )
-  const reveal = vi.fn().mockResolvedValue({ tabId: HOST_TAB_ID })
   runtime.setNotifier({
     worktreesChanged: vi.fn(),
     reposChanged: vi.fn(),
-    activateWorktree: vi.fn(),
-    createTerminal: vi.fn(),
-    revealTerminalSession: reveal,
-    splitTerminal: vi.fn(),
-    renameTerminal: vi.fn(),
-    focusTerminal: vi.fn(),
-    closeTerminal: vi.fn(),
     sleepWorktree: vi.fn(),
     terminalFitOverrideChanged: vi.fn(),
     terminalDriverChanged: vi.fn()
@@ -221,7 +211,6 @@ export function startParityLanes(
     provider,
     persistPtyBinding,
     session: () => session,
-    reveal,
     spawnWindow: async (request) => suite.handlers.get('pty:spawn')!(null, request)
   }
 }

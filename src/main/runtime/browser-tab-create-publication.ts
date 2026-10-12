@@ -28,7 +28,12 @@ export type BrowserTabCreatePublicationHost = {
     options: BrowserSessionTabSelectionOptions
   ): void
   notifyHeadlessBrowserSessionTabsChanged?(worktreeId: string): void
-  addHeadlessBrowserLayoutTab?(worktreeId: string, browserPageId: string, groupId?: string): void
+  addHeadlessBrowserLayoutTab?(
+    worktreeId: string,
+    browserPageId: string,
+    groupId?: string,
+    profileId?: string
+  ): void
 }
 
 export type BrowserSessionTabSelectionOptions = {
@@ -51,6 +56,8 @@ export type BrowserTabCreatePublication = {
   placementKind: BrowserTabCreatePlacementKind
   browserPageId: string
   worktreeId?: string
+  /** The page's browser profile, which the layout's tab names; absent is the default profile. */
+  profileId?: string
   focus: BrowserTabCreateFocusResolution
   clientNavigationId?: string
   targetGroupId?: string
@@ -61,14 +68,14 @@ export type BrowserTabCreatePublication = {
  * model, so a placement whose page never reaches that renderer has to name another source or it is
  * invisible on the host — which is exactly what `client` was before it declared `session-notify`.
  *
- * `create-ipc`: the create round-trips through the renderer, which mints the row itself.
+ * `layout`: the runtime's layout tab, which the window draws and backs with its own <webview>.
  * `session-notify`: main pushes a derived, ephemeral row off the session-tabs announcement.
  * `none`: no host renderer exists for this placement to appear in.
  */
-export type BrowserTabCreateHostRowSource = 'create-ipc' | 'session-notify' | 'none'
+export type BrowserTabCreateHostRowSource = 'layout' | 'session-notify' | 'none'
 
 type BrowserTabCreatePublicationRules = {
-  /** No window owns this page's tab, so the runtime's layout adds it. */
+  /** The runtime's layout adds the page's tab. */
   addsLayoutTab: boolean
   activatesBridgeTab: boolean
   marksSessionTabFocus: boolean
@@ -102,14 +109,12 @@ export const BROWSER_TAB_CREATE_PUBLICATION_RULES: Record<
     hostRowSource: 'none'
   },
   renderer: {
-    // Why: the renderer adds the tab to its own model and saves it.
-    addsLayoutTab: false,
+    addsLayoutTab: true,
     activatesBridgeTab: true,
-    // Why: the renderer owns its own tab model — `activate` rides the create IPC and the renderer
-    // publishes the resulting session snapshot itself.
-    marksSessionTabFocus: false,
+    marksSessionTabFocus: true,
+    // Why: the layout tab republishes the stream; a bare create has nothing else to announce.
     notifiesSessionTabsChanged: false,
-    hostRowSource: 'create-ipc'
+    hostRowSource: 'layout'
   }
 }
 
@@ -233,7 +238,8 @@ export function publishCreatedBrowserSessionTab(
     host.addHeadlessBrowserLayoutTab?.(
       publication.worktreeId,
       publication.browserPageId,
-      publication.targetGroupId
+      publication.targetGroupId,
+      publication.profileId
     )
   }
   if (rules.notifiesSessionTabsChanged && publication.worktreeId !== undefined) {

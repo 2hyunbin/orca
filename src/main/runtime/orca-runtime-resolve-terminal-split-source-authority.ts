@@ -154,40 +154,4 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
   releaseClaudeAgentTeamsLeaderForHandle(handle: string): void {
     this.claudeAgentTeams.removeTeamForLeaderHandle(handle)
   }
-
-  protected waitForLeafInTab(tabId: string, leafId: string, timeoutMs = 10_000): Promise<string> {
-    const tryResolve = (): string | null => {
-      const leaf = this.leaves.get(this.getLeafKey(tabId, leafId))
-      return leaf?.ptyId !== null && leaf?.ptyId !== undefined ? this.issueHandle(leaf) : null
-    }
-
-    const existing = tryResolve()
-    if (existing) {
-      return Promise.resolve(existing)
-    }
-
-    return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const idx = this.graphSyncCallbacks.indexOf(check)
-        if (idx !== -1) {
-          this.graphSyncCallbacks.splice(idx, 1)
-        }
-        reject(new Error('Timed out waiting for split pane handle'))
-      }, timeoutMs)
-
-      const check = (): void => {
-        const handle = tryResolve()
-        if (handle) {
-          clearTimeout(timer)
-          const idx = this.graphSyncCallbacks.indexOf(check)
-          if (idx !== -1) {
-            this.graphSyncCallbacks.splice(idx, 1)
-          }
-          resolve(handle)
-        }
-      }
-      this.graphSyncCallbacks.push(check)
-      check()
-    })
-  }
 }

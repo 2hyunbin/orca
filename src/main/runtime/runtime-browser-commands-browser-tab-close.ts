@@ -2,8 +2,6 @@
 import { RuntimeBrowserCommandsWithBrowserProfileImportFromBrowser } from './runtime-browser-commands-browser-profile-import-from-browser'
 import { closeRuntimeBrowserClientPage } from './runtime-browser-client-page-creation'
 import { BrowserError } from '../browser/browser-error'
-import { randomUUID } from 'node:crypto'
-import { ipcMain } from 'electron'
 import type { BrowserTabListResult } from '../../shared/runtime-types'
 import { browserManager } from '../browser/browser-manager'
 import { browserSessionRegistry } from '../browser/browser-session-registry'
@@ -89,7 +87,6 @@ export class RuntimeBrowserCommandsWithBrowserTabClose extends RuntimeBrowserCom
       }
       tabId = entries[params.index][0]
     } else {
-      // Why: try the bridge first; fall back to the renderer for tabs whose webview hasn't mounted yet (e.g. just created).
       const tabs = bridge.getRegisteredTabs(worktreeId)
       const entries = [...tabs.entries()]
       const activeEntry = entries.find(([, wcId]) => wcId === bridge.getActiveWebContentsId())
@@ -98,78 +95,33 @@ export class RuntimeBrowserCommandsWithBrowserTabClose extends RuntimeBrowserCom
       }
     }
 
-    // Why: headless serve has no renderer to ask, so destroy the offscreen page directly.
-    const authoritativeWindow = this.host.getAvailableAuthoritativeWindow()
-    const offscreen = authoritativeWindow ? null : this.host.getOffscreenBrowserBackend()
-    if (offscreen) {
-      // Why: resolve the active page for implicit close so we don't report success while closing nothing.
-      const resolvedTabId = tabId ?? bridge.getActivePageId(worktreeId)
-      if (!resolvedTabId) {
-        return { closed: false }
-      }
-      if (explicitPage && !bridge.getRegisteredTabs(worktreeId).has(resolvedTabId)) {
-        if (this.retireGhostBrowserSessionRow(worktreeId, resolvedTabId)) {
-          return { closed: true }
-        }
-        const scope = worktreeId ? ' in this worktree' : ''
-        throw new BrowserError(
-          'browser_tab_not_found',
-          `Browser page ${resolvedTabId} was not found${scope}`
-        )
-      }
-      await offscreen.closeTab(resolvedTabId)
-      // Why: closeTab only destroys the guest; without retirement, paired clients keep a
-      // dead session tab until an unrelated republish (closeMobileSessionTab already retires).
-      if (worktreeId) {
-        if (this.host.retireRuntimeOwnedBrowserSessionTab) {
-          this.host.retireRuntimeOwnedBrowserSessionTab(worktreeId, resolvedTabId)
-        } else {
-          this.host.notifyHeadlessBrowserSessionTabsChanged?.(worktreeId)
-        }
-      }
-      return { closed: true }
+    // Why: resolve the active page for implicit close so we don't report success while closing nothing.
+    const resolvedTabId = tabId ?? bridge.getActivePageId(worktreeId)
+    if (!resolvedTabId) {
+      return { closed: false }
     }
-
-    if (!authoritativeWindow && tabId && !bridge.getRegisteredTabs(worktreeId).has(tabId)) {
-      if (this.retireGhostBrowserSessionRow(worktreeId, tabId)) {
+    if (!bridge.getRegisteredTabs(worktreeId).has(resolvedTabId)) {
+      if (this.retireGhostBrowserSessionRow(worktreeId, resolvedTabId)) {
         return { closed: true }
       }
       const scope = worktreeId ? ' in this worktree' : ''
-      throw new BrowserError('browser_tab_not_found', `Browser page ${tabId} was not found${scope}`)
+      throw new BrowserError(
+        'browser_tab_not_found',
+        `Browser page ${resolvedTabId} was not found${scope}`
+      )
     }
-
-    const win = authoritativeWindow ?? this.host.getAuthoritativeWindow()
-    const requestId = randomUUID()
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        ipcMain.removeListener('browser:tabCloseReply', handler)
-        reject(new Error('Tab close timed out'))
-      }, 10_000)
-
-      const handler = (
-        _event: Electron.IpcMainEvent,
-        reply: { requestId: string; error?: string; code?: 'browser_tab_not_found' }
-      ): void => {
-        if (reply.requestId !== requestId) {
-          return
-        }
-        clearTimeout(timer)
-        ipcMain.removeListener('browser:tabCloseReply', handler)
-        if (reply.error) {
-          reject(
-            reply.code === 'browser_tab_not_found'
-              ? new BrowserError('browser_tab_not_found', reply.error)
-              : new Error(reply.error)
-          )
-        } else {
-          resolve()
-        }
+    // Why: headless serve destroys its offscreen page here; a window's <webview> goes when the
+    // layout's tab does.
+    await this.host.getOffscreenBrowserBackend()?.closeTab(resolvedTabId)
+    const pageWorktreeId = worktreeId ?? browserManager.getWorktreeIdForTab(resolvedTabId)
+    // Why: without retirement, paired clients keep a dead session tab until an unrelated republish.
+    if (pageWorktreeId) {
+      if (this.host.retireRuntimeOwnedBrowserSessionTab) {
+        this.host.retireRuntimeOwnedBrowserSessionTab(pageWorktreeId, resolvedTabId)
+      } else {
+        this.host.notifyHeadlessBrowserSessionTabsChanged?.(pageWorktreeId)
       }
-      ipcMain.on('browser:tabCloseReply', handler)
-      // Why: pass worktreeId so the renderer scopes the close correctly instead of falling back to the globally active tab in the wrong worktree.
-      win.webContents.send('browser:requestTabClose', { requestId, tabId, worktreeId })
-    })
-
+    }
     return { closed: true }
   }
 

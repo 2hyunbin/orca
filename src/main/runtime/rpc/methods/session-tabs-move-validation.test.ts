@@ -127,12 +127,9 @@ function runtimeWith(session: WorkspaceSessionState): OrcaRuntimeService {
   } as never)
 }
 
-/** A window applies moves until it hands the layout to the runtime; it is what these tests observe. */
-function windowAttached(runtime: OrcaRuntimeService) {
-  const moveSessionTab = vi.fn()
-  runtime.setNotifier({ moveSessionTab } as never)
-  return moveSessionTab
-}
+/** The order the runtime's layout holds for a group, hidden tabs included. */
+const heldOrder = (runtime: OrcaRuntimeService, groupId: string) =>
+  runtime.heldWorkspaceLayout(WT)?.groups.find((group) => group.id === groupId)?.tabOrder
 
 const liveBrowserPages = (runtime: OrcaRuntimeService, pageIds: string[]): void => {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: move validation reads only tabList from the agent browser bridge.
@@ -189,7 +186,6 @@ describe('session tab move validation', () => {
       agent: 'codex',
       activate: false
     })
-    const moveSessionTab = windowAttached(runtime)
 
     await runtime.moveMobileSessionTab(`id:${WT}`, {
       kind: 'reorder',
@@ -198,12 +194,12 @@ describe('session tab move validation', () => {
       tabOrder: ['README.md', 'terminal-tab']
     })
 
-    expect(moveSessionTab).toHaveBeenCalledWith(WT, {
-      kind: 'reorder',
-      tabId: 'README.md',
-      targetGroupId: 'group-1',
-      tabOrder: ['README.md', 'terminal-tab', 'agent-session:session-a']
-    })
+    const snapshot = await runtime.listMobileSessionTabs(`id:${WT}`)
+    expect(snapshot.tabGroups?.[0]?.tabOrder).toEqual([
+      'README.md',
+      'terminal-tab',
+      'agent-session:session-a'
+    ])
   })
 
   it('validates reorder moves against sanitized visible tab groups', async () => {
@@ -219,7 +215,6 @@ describe('session tab move validation', () => {
         'group-1'
       )
     )
-    const moveSessionTab = windowAttached(runtime)
     liveBrowserPages(runtime, ['page-live'])
 
     await expect(
@@ -231,12 +226,8 @@ describe('session tab move validation', () => {
       })
     ).resolves.toEqual({ moved: true })
 
-    expect(moveSessionTab).toHaveBeenCalledWith(WT, {
-      kind: 'reorder',
-      tabId: 'browser-live',
-      targetGroupId: 'group-1',
-      tabOrder: ['browser-live', 'terminal-tab']
-    })
+    // The stale page the client cannot see keeps its place.
+    expect(heldOrder(runtime, 'group-1')).toEqual(['browser-live', 'browser-stale', 'terminal-tab'])
   })
 
   it('rejects moves into groups hidden from the sanitized session model', async () => {
@@ -249,7 +240,6 @@ describe('session tab move validation', () => {
         'group-visible'
       )
     )
-    const moveSessionTab = windowAttached(runtime)
     liveBrowserPages(runtime, [])
 
     await expect(
@@ -260,7 +250,6 @@ describe('session tab move validation', () => {
         splitDirection: 'right'
       })
     ).rejects.toThrow('target_group_not_found')
-    expect(moveSessionTab).not.toHaveBeenCalled()
   })
 
   it('rejects reorder moves when the moved tab is absent from the target order', async () => {
@@ -273,7 +262,6 @@ describe('session tab move validation', () => {
         'group-1'
       )
     )
-    const moveSessionTab = windowAttached(runtime)
     liveBrowserPages(runtime, ['page-live'])
 
     await expect(
@@ -284,6 +272,5 @@ describe('session tab move validation', () => {
         tabOrder: ['terminal-tab']
       })
     ).rejects.toThrow('invalid_tab_order')
-    expect(moveSessionTab).not.toHaveBeenCalled()
   })
 })

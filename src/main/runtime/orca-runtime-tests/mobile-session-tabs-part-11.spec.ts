@@ -21,8 +21,6 @@ describe('OrcaRuntimeService', () => {
       runtime: OrcaRuntimeService
       getSession: () => WorkspaceSessionState
       kill: ReturnType<typeof vi.fn>
-      closeTerminal: ReturnType<typeof vi.fn>
-      closeTerminalTab: ReturnType<typeof vi.fn>
       listProcesses: ReturnType<typeof vi.fn>
       processes: { id: string; cwd: string; title: string }[]
     } {
@@ -50,8 +48,6 @@ describe('OrcaRuntimeService', () => {
         })
       )
       const kill = vi.fn(() => true)
-      const closeTerminal = vi.fn()
-      const closeTerminalTab = vi.fn(async () => {})
       const listProcesses = vi.fn(async () => processes)
       const runtime = new OrcaRuntimeService(runtimeStore as never)
       runtime.setPtyController({
@@ -60,7 +56,6 @@ describe('OrcaRuntimeService', () => {
         getForegroundProcess: async () => null,
         listProcesses
       })
-      runtime.setNotifier({ closeTerminal, closeTerminalTab } as never)
       runtime.syncWindowGraph(1, {
         tabs: [
           {
@@ -85,8 +80,6 @@ describe('OrcaRuntimeService', () => {
         runtime,
         getSession,
         kill,
-        closeTerminal,
-        closeTerminalTab,
         listProcesses,
         processes
       }
@@ -95,8 +88,7 @@ describe('OrcaRuntimeService', () => {
     it.each(['pty-exit', 'cleanup'] as const)(
       'refuses a %s echoed close while the PTY is live and republishes the snapshot',
       async (reason) => {
-        const { runtime, getSession, kill, closeTerminal, closeTerminalTab } =
-          makeAdoptedLiveTabRuntime()
+        const { runtime, getSession, kill } = makeAdoptedLiveTabRuntime()
         const before = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
         const events: { worktree: string; snapshotVersion: number; tabs: unknown[] }[] = []
         const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => events.push(snapshot))
@@ -114,8 +106,6 @@ describe('OrcaRuntimeService', () => {
           snapshotRepublished: true
         })
         expect(kill).not.toHaveBeenCalled()
-        expect(closeTerminalTab).not.toHaveBeenCalled()
-        expect(closeTerminal).not.toHaveBeenCalled()
         expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
         // The snapshot is republished (version bumped) so the echoing client
         // re-adds and re-attaches the still-live tab.
@@ -200,18 +190,19 @@ describe('OrcaRuntimeService', () => {
     })
 
     it('keeps an explicit user close destructive while the PTY is live', async () => {
-      const { runtime, closeTerminalTab } = makeAdoptedLiveTabRuntime()
+      const { runtime, kill } = makeAdoptedLiveTabRuntime()
 
       await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', {
         reason: 'user'
       })
 
-      // Legacy whole-parent relay: the renderer close transaction still runs.
-      expect(closeTerminalTab).toHaveBeenCalledWith('host-tab')
+      // The runtime's layout closes the tab and stops its terminal.
+      expect(runtime.heldWorkspaceLayout(TEST_WORKTREE_ID)?.tabs ?? []).toHaveLength(0)
+      expect(kill).toHaveBeenCalledWith('serve-live-1')
     })
 
     it('keeps a reasonless legacy close and republishes its live mirror', async () => {
-      const { runtime, kill, closeTerminal, closeTerminalTab } = makeAdoptedLiveTabRuntime()
+      const { runtime, kill } = makeAdoptedLiveTabRuntime()
       const before = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
       const result = await runtime.refuseUnattributedMobileSessionTabClose(
@@ -228,12 +219,10 @@ describe('OrcaRuntimeService', () => {
       })
       expect(after.snapshotVersion).toBeGreaterThan(before.snapshotVersion)
       expect(kill).not.toHaveBeenCalled()
-      expect(closeTerminalTab).not.toHaveBeenCalled()
-      expect(closeTerminal).not.toHaveBeenCalled()
     })
 
     it('refuses a lifecycle close from a stale host publication', async () => {
-      const { runtime, kill, closeTerminal, closeTerminalTab } = makeAdoptedLiveTabRuntime()
+      const { runtime, kill } = makeAdoptedLiveTabRuntime()
       const current = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
       const terminal = current.tabs.find((tab) => tab.type === 'terminal')
       if (!terminal || terminal.status !== 'ready') {
@@ -253,12 +242,10 @@ describe('OrcaRuntimeService', () => {
         snapshotRepublished: true
       })
       expect(kill).not.toHaveBeenCalled()
-      expect(closeTerminalTab).not.toHaveBeenCalled()
-      expect(closeTerminal).not.toHaveBeenCalled()
     })
 
     it('refuses a reused tab id that names a different terminal incarnation', async () => {
-      const { runtime, kill, closeTerminal, closeTerminalTab } = makeAdoptedLiveTabRuntime()
+      const { runtime, kill } = makeAdoptedLiveTabRuntime()
       const current = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
       const result = await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', {
@@ -274,13 +261,10 @@ describe('OrcaRuntimeService', () => {
         snapshotRepublished: true
       })
       expect(kill).not.toHaveBeenCalled()
-      expect(closeTerminalTab).not.toHaveBeenCalled()
-      expect(closeTerminal).not.toHaveBeenCalled()
     })
 
     it('leaves dead renderer-owned retirement to the renderer without relaying a close', async () => {
-      const { runtime, processes, kill, closeTerminal, closeTerminalTab } =
-        makeAdoptedLiveTabRuntime()
+      const { runtime, processes, kill } = makeAdoptedLiveTabRuntime()
       const current = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
       const terminal = current.tabs.find((tab) => tab.type === 'terminal')
       if (!terminal || terminal.status !== 'ready') {
@@ -301,15 +285,12 @@ describe('OrcaRuntimeService', () => {
         refusalReason: 'retirement-owner'
       })
       expect(kill).not.toHaveBeenCalled()
-      expect(closeTerminalTab).not.toHaveBeenCalled()
-      expect(closeTerminal).not.toHaveBeenCalled()
     })
 
     function makeSplitLeafRuntime(): {
       runtime: OrcaRuntimeService
       getSession: () => WorkspaceSessionState
       kill: ReturnType<typeof vi.fn>
-      closeTerminal: ReturnType<typeof vi.fn>
     } {
       const layout = makeHeadlessTerminalLayout({
         [HEADLESS_LEAF_ID]: 'serve-left',
@@ -335,7 +316,6 @@ describe('OrcaRuntimeService', () => {
         })
       )
       const kill = vi.fn(() => true)
-      const closeTerminal = vi.fn()
       const runtime = new OrcaRuntimeService(runtimeStore as never)
       runtime.setPtyController({
         write: () => true,
@@ -343,7 +323,6 @@ describe('OrcaRuntimeService', () => {
         getForegroundProcess: async () => null,
         listProcesses: async () => []
       })
-      runtime.setNotifier({ closeTerminal } as never)
       runtime.syncWindowGraph(1, {
         tabs: [
           {
@@ -373,11 +352,11 @@ describe('OrcaRuntimeService', () => {
           }
         ]
       })
-      return { runtime, getSession, kill, closeTerminal }
+      return { runtime, getSession, kill }
     }
 
     it('refuses a pty-exit echoed close of a live split leaf (direct-kill branch)', async () => {
-      const { runtime, getSession, kill, closeTerminal } = makeSplitLeafRuntime()
+      const { runtime, getSession, kill } = makeSplitLeafRuntime()
 
       await runtime.closeMobileSessionTab(
         `id:${TEST_WORKTREE_ID}`,
@@ -386,7 +365,6 @@ describe('OrcaRuntimeService', () => {
       )
 
       expect(kill).not.toHaveBeenCalled()
-      expect(closeTerminal).not.toHaveBeenCalled()
       expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
       expect(getSession().terminalLayoutsByTabId['host-tab']).toBeDefined()
     })
@@ -409,7 +387,7 @@ describe('OrcaRuntimeService', () => {
       // parent (live sibling included), so the close must be refused — but a
       // republish would re-add the dead leaf on the echoing client and feed a
       // refuse→republish→re-echo loop.
-      const { runtime, getSession, kill, closeTerminal } = makeSplitLeafRuntime()
+      const { runtime, getSession, kill } = makeSplitLeafRuntime()
       await runtime.onPtyExit('serve-right', 0)
       // Else the worktree scan the close starts publishes the worktree's first catalog entry.
       runtime.addCatalogWorktrees([{ id: TEST_WORKTREE_ID, repoId: TEST_REPO_ID }])
@@ -429,7 +407,6 @@ describe('OrcaRuntimeService', () => {
         refusalReason: 'live-host-pty'
       })
       expect(kill).not.toHaveBeenCalled()
-      expect(closeTerminal).not.toHaveBeenCalled()
       expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
       expect(events.filter((event) => event.worktree === TEST_WORKTREE_ID)).toEqual([])
     })
@@ -460,7 +437,6 @@ describe('OrcaRuntimeService', () => {
         })
       )
       const kill = vi.fn(() => true)
-      const closeTerminal = vi.fn()
       const runtime = new OrcaRuntimeService(runtimeStore as never)
       runtime.setPtyController({
         write: () => true,
@@ -468,7 +444,6 @@ describe('OrcaRuntimeService', () => {
         getForegroundProcess: async () => null,
         listProcesses: async () => []
       })
-      runtime.setNotifier({ closeTerminal } as never)
       runtime.syncWindowGraph(1, {
         tabs: [
           {
@@ -496,7 +471,6 @@ describe('OrcaRuntimeService', () => {
       })
 
       expect(kill).not.toHaveBeenCalled()
-      expect(closeTerminal).not.toHaveBeenCalled()
       expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
       expect(getSession().terminalLayoutsByTabId['host-tab']).toBeDefined()
     })

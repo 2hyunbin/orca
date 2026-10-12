@@ -4,6 +4,7 @@ import { RuntimeTerminalDriverController } from './runtime-terminal-driver-contr
 import { RuntimeEdgeCommandController } from './runtime-edge-command-controller'
 import { getBrowserHostLeaseRegistry } from './browser-host-lease-registry-instance'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
+import { DESKTOP_VIEW_ID } from '../../shared/workspace-layout/workspace-layout-views'
 import type {
   LayoutQueueEntry,
   PtyLayoutState,
@@ -48,8 +49,10 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
       getAvailableAuthoritativeWindow: () => this.getAvailableAuthoritativeWindow(),
       getOffscreenBrowserBackend: () => this.offscreenBrowserBackend,
       markHeadlessBrowserSessionTabActive: this.markHeadlessBrowserSessionTabActive.bind(this),
-      addHeadlessBrowserLayoutTab: (worktreeId, browserPageId, groupId) =>
-        this.addHeadlessBrowserLayoutTab(worktreeId, browserPageId, groupId),
+      addHeadlessBrowserLayoutTab: (worktreeId, browserPageId, groupId, profileId) =>
+        this.addHeadlessBrowserLayoutTab(worktreeId, browserPageId, groupId, profileId),
+      desktopViewWorkspaceId: () =>
+        this.layoutCommands.views.record(DESKTOP_VIEW_ID).activeWorktreeId,
       notifyHeadlessBrowserSessionTabsChanged: (worktreeId) =>
         this.notifyMobileSessionTabsChanged(worktreeId),
       retireRuntimeOwnedBrowserSessionTab: (worktreeId, browserPageId) =>

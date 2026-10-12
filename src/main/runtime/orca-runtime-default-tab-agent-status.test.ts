@@ -6,7 +6,6 @@ import { OrcaRuntimeService } from './orca-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { createMinimalPersistedTerminalTab } from '../persistence/restoring-sessions/session-owner-fields'
-import type { RuntimeNotifier } from './runtime-notifier-contract'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
 import { provisionWorktreeTerminals } from './runtime-worktree-terminal-provisioning'
@@ -78,22 +77,6 @@ function sessionStore(initial: WorkspaceSessionState): {
     })
   }
   return { store, getSession: () => session }
-}
-
-function notifierWithRename(renameTerminal: RuntimeNotifier['renameTerminal']): RuntimeNotifier {
-  return {
-    worktreesChanged: vi.fn(),
-    reposChanged: vi.fn(),
-    activateWorktree: vi.fn(),
-    createTerminal: vi.fn(),
-    splitTerminal: vi.fn(),
-    renameTerminal,
-    focusTerminal: vi.fn(),
-    closeTerminal: vi.fn(),
-    sleepWorktree: vi.fn(),
-    terminalFitOverrideChanged: vi.fn(),
-    terminalDriverChanged: vi.fn()
-  }
 }
 
 async function createHeadlessRuntimeWithAgent(
@@ -187,12 +170,10 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
       }
     })
     const { runtime, handle } = await createHeadlessRuntimeWithAgent(null, store)
-    const renameTerminal = vi.fn()
-    runtime.setNotifier(notifierWithRename(renameTerminal))
 
     await dressAgentTab(runtime, handle)
 
-    expect(renameTerminal).toHaveBeenCalledWith(AGENT_TAB_ID, 'Dev', { recordInteraction: false })
+    expect(runtime.heldTabCustomTitle(AGENT_TAB_ID)).toBe('Dev')
     expect(runtime.ptyTitle(AGENT_PTY_ID)).toBeNull()
     // A restarted headless host rebuilds the phone's tabs from the saved session.
     expect(await agentTab(new OrcaRuntimeService(store))).toEqual(
@@ -202,8 +183,6 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
 
   it("still titles the tab once the window's graph has taken over the handle", async () => {
     const { runtime, handle } = await createHeadlessRuntimeWithAgent()
-    const renameTerminal = vi.fn()
-    runtime.setNotifier(notifierWithRename(renameTerminal))
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [
@@ -228,6 +207,6 @@ describe('the agent tab a host-side create dresses as the first default tab', ()
 
     await runtime.provisioningHost().setTabTitle(handle, 'Dev')
 
-    expect(renameTerminal).toHaveBeenCalledWith(AGENT_TAB_ID, 'Dev', { recordInteraction: false })
+    expect(runtime.heldTabCustomTitle(AGENT_TAB_ID)).toBe('Dev')
   })
 })

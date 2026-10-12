@@ -3,10 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { parsePairingCode } from '../../shared/pairing'
+import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { PersistedMobileClientTabSelections } from '../../shared/persisted-state-types'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { LayoutNavigateRequest } from '../../shared/workspace-layout/workspace-layout-stream-frames'
+import { DESKTOP_VIEW_ID } from '../../shared/workspace-layout/workspace-layout-views'
 import { OrcaRuntimeService } from './orca-runtime'
 import { OrcaRuntimeRpcServer } from './runtime-rpc'
 import {
@@ -111,27 +114,24 @@ describe('paired runtime navigation isolation', () => {
   /** `headless: true` models `orca serve` — no renderer notifier and no attached window. */
   async function startHarness(options: { headless?: boolean } = {}) {
     const hostSelections = { worktreeId: HOST_WORKTREE_ID, tabId: 'host-tab' }
-    const activateWorktree = vi.fn((_repoId: string, nextWorktreeId: string) => {
-      hostSelections.worktreeId = nextWorktreeId
-    })
-    const focusTerminal = vi.fn((nextTabId: string) => {
-      hostSelections.tabId = nextTabId
-    })
     const runtime = new OrcaRuntimeService(
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime never calls getGitHubCache, the one RuntimeStore member this stub omits.
       (options.headless ? makeStore() : makeSessionStore()) as never
     )
+    // Host navigation is a navigate frame to the desktop view, which its window follows.
+    const hostNavigate = vi.fn((request: LayoutNavigateRequest) => {
+      if (request.kind === 'revealWorkspace') {
+        hostSelections.worktreeId = request.workspace
+      } else {
+        hostSelections.tabId =
+          request.kind === 'focusTab' ? request.tabId : (parsePaneKey(request.paneKey)?.tabId ?? '')
+      }
+    })
+    runtime.layoutCommands.views.onNavigate(DESKTOP_VIEW_ID, hostNavigate)
     if (!options.headless) {
       runtime.setNotifier({
         worktreesChanged: vi.fn(),
         reposChanged: vi.fn(),
-        activateWorktree,
-        createTerminal: vi.fn(),
-        revealTerminalSession: vi.fn(),
-        splitTerminal: vi.fn(),
-        renameTerminal: vi.fn(),
-        focusTerminal,
-        closeTerminal: vi.fn(),
         sleepWorktree: vi.fn(),
         terminalFitOverrideChanged: vi.fn(),
         terminalDriverChanged: vi.fn()
@@ -186,8 +186,7 @@ describe('paired runtime navigation isolation', () => {
     return {
       runtime,
       hostSelections,
-      activateWorktree,
-      focusTerminal,
+      hostNavigate,
       clientA,
       clientB,
       deviceIdA: offerA.deviceId,
@@ -316,7 +315,7 @@ describe('paired runtime navigation isolation', () => {
       b: CLIENT_B_WORKTREE_ID
     })
     expect(harness.hostSelections.worktreeId).toBe(HOST_WORKTREE_ID)
-    expect(harness.activateWorktree).not.toHaveBeenCalled()
+    expect(harness.hostNavigate).not.toHaveBeenCalled()
   })
 
   async function subscribeBothClientEventStreams(harness: {
@@ -386,7 +385,7 @@ describe('paired runtime navigation isolation', () => {
     // The observer must never be navigated by the creator...
     expect(observed.b).not.toContain('activateWorktree')
     expect(observed.b.at(-1)).toBe('reposChanged')
-    expect(harness.activateWorktree).not.toHaveBeenCalled()
+    expect(harness.hostNavigate).not.toHaveBeenCalled()
     expect(harness.hostSelections.worktreeId).toBe(HOST_WORKTREE_ID)
     // ...nor is the creator's own view driven from the host stream (it navigates from its RPC result)...
     expect(observed.a).not.toContain('activateWorktree')
@@ -478,7 +477,7 @@ describe('paired runtime navigation isolation', () => {
       'activateWorktree',
       'activateWorktree'
     ])
-    expect(harness.activateWorktree).toHaveBeenCalled()
+    expect(harness.hostNavigate.mock.calls.map(([{ kind }]) => kind)).toContain('revealWorkspace')
     expect(eventA).toMatchObject({ result: { navigation: 'all' } })
     expect(eventB).toMatchObject({ result: { navigation: 'all' } })
   })
@@ -591,7 +590,7 @@ describe('paired runtime navigation isolation', () => {
         expect(observed).not.toContain('activateWorktree')
         expect(observed).toContain('worktreesChanged')
       }
-      expect(harness.activateWorktree).toHaveBeenCalled()
+      expect(harness.hostNavigate.mock.calls.map(([{ kind }]) => kind)).toContain('revealWorkspace')
     }
   )
 
@@ -670,7 +669,7 @@ describe('paired runtime navigation isolation', () => {
     expect(activeTabId(updateA)).toBe(rowOf('client-a2-tab'))
     expect(activeTabId(updateB)).toBe(rowOf('client-b-tab'))
     expect(harness.hostSelections.tabId).toBe('host-tab')
-    expect(harness.focusTerminal).not.toHaveBeenCalled()
+    expect(harness.hostNavigate).not.toHaveBeenCalled()
     expect(
       (await harness.runtime.listMobileSessionTabs(`id:${SESSION_WORKTREE_ID}`)).activeTabId
     ).toBe(rowOf('host-tab'))
@@ -758,6 +757,9 @@ describe('paired runtime navigation isolation', () => {
       )
     ).toBe(rowOf('client-a-tab'))
     expect(harness.hostSelections.tabId).toBe('client-a-tab')
+    // The desktop view moved too, which republishes the host's selection to every subscriber.
+    await harness.readerA.next('tabs-a', (response) => resultType(response) === 'updated')
+    await harness.readerB.next('tabs-b', (response) => resultType(response) === 'updated')
 
     send(harness.clientB, {
       id: 'tabs-clients-follow',

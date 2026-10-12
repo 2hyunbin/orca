@@ -148,7 +148,6 @@ export type {
   RuntimeTerminalAgentStatusState,
   RuntimeTerminalClose,
   RuntimeTerminalCreate,
-  RuntimeTerminalCreateRequestPayload,
   RuntimeTerminalFocus,
   RuntimeTerminalInteractiveWait,
   RuntimeTerminalInteractiveWaitSource,

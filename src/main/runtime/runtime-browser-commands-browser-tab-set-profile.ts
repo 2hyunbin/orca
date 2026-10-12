@@ -130,18 +130,13 @@ export class RuntimeBrowserCommandsWithBrowserTabSetProfile extends RuntimeBrows
         `Browser profile ${params.profileId} was not found`
       )
     }
-    const created = await this.createBrowserTabInRenderer(
-      sourceTab.url,
-      sourceTab.worktreeId ?? target.worktreeId,
-      profile.id,
-      profile.partition
-    )
-    // Why: wait for the cloned tab's webview to register so the returned browserPageId is operable by the next CLI call.
-    try {
-      await waitForTabRegistration(created.browserPageId)
-    } catch {
-      // Best-effort: registration may not fire if the worktree is hidden.
-    }
+    const worktreeId = sourceTab.worktreeId ?? target.worktreeId
+    // Waits for the clone's webview to register, so the next CLI call can operate it.
+    const created = await this.browserTabCreate({
+      url: sourceTab.url,
+      ...(worktreeId ? { worktree: `id:${worktreeId}` } : {}),
+      profileId: profile.id
+    })
     return {
       browserPageId: created.browserPageId,
       sourceBrowserPageId,

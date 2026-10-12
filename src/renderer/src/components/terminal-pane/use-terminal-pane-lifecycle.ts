@@ -29,13 +29,11 @@ export {
   resolvePaneLinkCwd,
   resolvePaneSeedCwd,
   resolveQueuedInitialCwd,
-  recordRuntimeCreatedTerminalPaneSplit,
   shouldDetachPaneTransportOnUnmount,
   terminalSelectionExceedsPrimaryLimit,
   splitPaneWithOneShotStartup
 } from './terminal-pane-lifecycle-primitives'
 export {
-  applyTerminalPaneCloseRequest,
   retireMountedTerminalPaneSurface,
   suppressIntentionalPaneCloseExit
 } from './terminal-pane-lifecycle-close'

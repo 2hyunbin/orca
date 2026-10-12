@@ -38,7 +38,6 @@ function createRuntime(exitListeners: ExitListener[]) {
   const registry = createSubscriptionRegistryDouble()
   const runtime = {
     getRuntimeId: () => 'test-runtime',
-    requestRendererTerminalTabMount: () => false,
     resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
     handleMobileSubscribe: vi.fn().mockResolvedValue(true),
     handleMobileUnsubscribe: vi.fn(),

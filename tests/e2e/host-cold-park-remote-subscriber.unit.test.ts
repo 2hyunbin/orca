@@ -372,9 +372,7 @@ describe('STA-2854 B: remote subscriber survives a fully unmounted host renderer
       connected: true
     })
     const handle = internals(runtime).issuePtyHandle(record)
-    // The park, at its strictest: no authoritative window exists, so a renderer
-    // mount request is impossible — more unmounted than a cold-parked pane.
-    const mountSpy = vi.spyOn(runtime, 'requestRendererTerminalTabMount').mockReturnValue(false)
+    // The park, at its strictest: no authoritative window exists.
     // The pane produced bytes while it was mounted, so main already owns model
     // state for it — no subscriber-driven (re)attach is in play.
     expect(provider.emitData('host pane was live\r\n')).toBe(true)
@@ -417,7 +415,6 @@ describe('STA-2854 B: remote subscriber survives a fully unmounted host renderer
 
     // Stronger than expected: subscribe and reconnect never even ASK for a
     // renderer mount once the leaf owns a PTY, so a re-park cannot cycle them.
-    expect(mountSpy).not.toHaveBeenCalled()
     expect(provider.attachCalls).toEqual([])
     expect(errorFrames(reconnected)).toBe(0)
   })
@@ -431,7 +428,6 @@ describe('STA-2854 B: remote subscriber survives a fully unmounted host renderer
       connected: true
     })
     const handle = internals(runtime).issuePtyHandle(record)
-    vi.spyOn(runtime, 'requestRendererTerminalTabMount').mockReturnValue(false)
 
     const harness = startMultiplex(runtime, 'conn-counterfactual')
     await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
@@ -474,7 +470,6 @@ describe('STA-2854 C: an unattached host PTY with no mountable renderer pane', (
       connected: true
     })
     const handle = internals(runtime).issuePtyHandle(record)
-    const mountSpy = vi.spyOn(runtime, 'requestRendererTerminalTabMount').mockReturnValue(false)
 
     const harness = startMultiplex(runtime, 'conn-client-c')
     await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
@@ -488,7 +483,6 @@ describe('STA-2854 C: an unattached host PTY with no mountable renderer pane', (
     await vi.waitFor(() => expect(provider.attachCalls).toEqual([provider.ptyId]))
     expect(provider.emitData(`${MARKER_AFTER_PARK}\r\n`)).toBe(true)
     await vi.waitFor(() => expect(outputText(harness)).toContain(MARKER_AFTER_PARK))
-    expect(mountSpy).not.toHaveBeenCalled()
     expect(errorFrames(harness)).toBe(0)
   })
 })

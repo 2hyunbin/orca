@@ -2,7 +2,6 @@
 import { OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh } from './orca-runtime-perform-mobile-session-pty-records-refresh'
 import type {
   RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
 import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
@@ -113,12 +112,5 @@ export class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeW
     return (
       record?.origin === 'worktree-sleep' && runtimeWorktreeIdsEqual(record.worktreeId, worktreeId)
     )
-  }
-
-  protected shouldMaterializeHeadlessMobileSessionTab(
-    snapshot: RuntimeMobileSessionTabsSnapshot,
-    tab: RuntimeMobileSessionTerminalTab
-  ): boolean {
-    return !this.getAvailableAuthoritativeWindow() || this.hasServeOrSshOwnedBinding(tab)
   }
 }

@@ -208,15 +208,20 @@ export function translateSessionTabMove(
     })
   }
   const sent = params.tabOrder.map((rowId) => resolveSessionTabRow(workspace, rowId)?.tab.id)
+  // A client too old to show chats reorders without them: chats it sends none of keep their places.
+  const chats = shownOrder.filter((id) => kindOf(workspace, id) === 'agent-session')
+  const reordered = chats.some((id) => sent.includes(id))
+    ? shownOrder
+    : shownOrder.filter((id) => !chats.includes(id))
   if (
-    sent.length !== shownOrder.length ||
+    sent.length !== reordered.length ||
     new Set(sent).size !== sent.length ||
-    sent.some((id) => id === undefined || !shownOrder.includes(id)) ||
+    sent.some((id) => id === undefined || !reordered.includes(id)) ||
     !sent.includes(tab.id)
   ) {
     return refused('invalid_tab_order')
   }
-  const shownSet = new Set(shownOrder)
+  const shownSet = new Set(reordered)
   let next = 0
   const wanted = target.tabOrder.map((id) => (shownSet.has(id) ? sent[next++]! : id))
   const order = [...target.tabOrder]
@@ -229,6 +234,10 @@ export function translateSessionTabMove(
     }
   })
   return to(...commands)
+}
+
+function kindOf(workspace: WorkspaceLayout, tabId: string) {
+  return workspace.tabs.find((tab) => tab.id === tabId)?.kind
 }
 
 function toTabIds(workspace: WorkspaceLayout, rowIds: readonly string[]): string[] {

@@ -281,14 +281,12 @@
 1 src/renderer/src/hooks/editor-external-watch-target-rows.ts
 3 src/renderer/src/hooks/editor-external-watch-targets.ts
 1 src/renderer/src/hooks/ipc-events-close-routing-test-harness.ts
-1 src/renderer/src/hooks/ipc-events-terminal-create-test-harness.ts
 6 src/renderer/src/hooks/ipc-events-test-harness.ts
 2 src/renderer/src/hooks/ipc-events/app-lifetime-ipc-bridge.ts
 1 src/renderer/src/hooks/ipc-events/browser-state-ipc-bridge.ts
 1 src/renderer/src/hooks/ipc-events/runtime-environment-subscription-selection.ts
 1 src/renderer/src/hooks/ipc-events/settings-sidebar-ipc-bridge.ts
 2 src/renderer/src/hooks/ipc-events/tab-lifecycle-ipc-bridge.ts
-1 src/renderer/src/hooks/ipc-events/terminal-request-ipc-bridge.ts
 2 src/renderer/src/hooks/use-active-skill-discovery-runtime-target.ts
 1 src/renderer/src/hooks/use-terminal-quick-command-hosts.ts
 1 src/renderer/src/hooks/useActiveProjectSkillRuntime.ts

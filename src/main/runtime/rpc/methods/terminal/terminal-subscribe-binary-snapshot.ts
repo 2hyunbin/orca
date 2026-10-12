@@ -15,8 +15,6 @@ import type {
   TerminalSubscriptionArgs
 } from './terminal-subscribe-types'
 
-const MOBILE_RENDERER_MOUNT_READY_TIMEOUT_MS = 3_000
-
 export async function publishTerminalSubscribeBinarySnapshot(
   args: TerminalSubscriptionArgs,
   state: TerminalSubscribeBinaryState
@@ -30,11 +28,8 @@ export async function publishTerminalSubscribeBinarySnapshot(
     ptyId,
     clientId,
     isMobile,
-    missingHeadlessStateBeforeMobileFit,
-    rendererMountRequestedBeforePty,
-    serializerGenerationBeforeMobileFit
+    missingHeadlessStateBeforeMobileFit
   } = args
-  const { signal } = registration
   if (isMobile && clientId) {
     await registration.addMobilePresence(ptyId, clientId, params.viewport)
   } else if (clientId && params.viewport) {
@@ -72,59 +67,11 @@ export async function publishTerminalSubscribeBinarySnapshot(
     missingHeadlessStateBeforeMobileFit &&
     !hydratedFromRenderer &&
     serialized?.source !== 'renderer'
-  let rendererReady =
+  const rendererReady =
     needsRendererScreen &&
     (await runtime.serializeRendererTerminalBuffer(ptyId, { scrollbackRows: 0 })) !== null
   if (state.closed) {
     return
-  }
-  const mountRequested =
-    needsRendererScreen &&
-    !rendererReady &&
-    (rendererMountRequestedBeforePty || runtime.requestRendererTerminalTabMount(params.terminal))
-  if (mountRequested) {
-    // Why: an idle PTY emits no later byte, so wait for a settle proving this remount completed before replaying its screen.
-    const mountWaitController = new AbortController()
-    const abortMountWait = (): void => mountWaitController.abort()
-    state.abortRendererMountWait = abortMountWait
-    if (signal.aborted) {
-      abortMountWait()
-    } else {
-      signal.addEventListener('abort', abortMountWait, { once: true })
-    }
-    const rendererReadyPromise = runtime
-      .waitForRendererTerminalSerializer(
-        ptyId,
-        serializerGenerationBeforeMobileFit,
-        undefined,
-        mountWaitController.signal
-      )
-      .catch(() => false)
-    const finishMountWait = (): void => {
-      signal.removeEventListener('abort', abortMountWait)
-      if (state.abortRendererMountWait === abortMountWait) {
-        state.abortRendererMountWait = () => {}
-      }
-    }
-    void rendererReadyPromise.then(finishMountWait, finishMountWait)
-    let deadlineTimer: ReturnType<typeof setTimeout> | null = null
-    const initialDeadline = new Promise<boolean>((resolve) => {
-      deadlineTimer = setTimeout(() => resolve(false), MOBILE_RENDERER_MOUNT_READY_TIMEOUT_MS)
-      if (typeof deadlineTimer.unref === 'function') {
-        deadlineTimer.unref()
-      }
-    })
-    rendererReady = await Promise.race([rendererReadyPromise, initialDeadline])
-    if (deadlineTimer) {
-      clearTimeout(deadlineTimer)
-    }
-    if (state.closed || signal.aborted) {
-      return
-    }
-    if (!rendererReady) {
-      // Why: a renderer can settle after the bounded initial response; keep observing so an idle PTY self-heals without bytes.
-      state.lateRendererReadyPromise = rendererReadyPromise
-    }
   }
   if (rendererReady) {
     read = await runtime.readTerminal(params.terminal)

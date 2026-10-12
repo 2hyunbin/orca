@@ -50,8 +50,6 @@ export async function runTerminalBinarySubscription(args: TerminalSubscriptionAr
   let unsubscribeResize = (): void => {}
   let unsubscribeFit = (): void => {}
   let unregisterBinaryHandler = (): void => {}
-  let abortRendererMountWait = (): void => {}
-  let lateRendererReadyPromise: Promise<boolean> | null = null
   let outputBatcher: TerminalOutputBatcher | null = null
   let resolveStream = (): void => {}
   const streamClosed = new Promise<void>((resolve) => {
@@ -65,7 +63,6 @@ export async function runTerminalBinarySubscription(args: TerminalSubscriptionAr
     unsubscribeResize()
     unsubscribeFit()
     unregisterBinaryHandler()
-    abortRendererMountWait()
     // Why: phone presence belongs to the registration; only a desktop viewer owns a width floor here.
     if (!isMobile && registeredRemoteDesktopDriver && clientId) {
       runtime.unregisterRemoteDesktopViewer(ptyId, remoteDesktopSubscriptionKey)
@@ -221,18 +218,6 @@ export async function runTerminalBinarySubscription(args: TerminalSubscriptionAr
     },
     set pendingQueryOverflowed(value) {
       pendingQueryOverflowed = value
-    },
-    get lateRendererReadyPromise() {
-      return lateRendererReadyPromise
-    },
-    set lateRendererReadyPromise(value) {
-      lateRendererReadyPromise = value
-    },
-    get abortRendererMountWait() {
-      return abortRendererMountWait
-    },
-    set abortRendererMountWait(value) {
-      abortRendererMountWait = value
     },
     outputBatcher: outputBatcher!,
     get unsubscribeResize() {

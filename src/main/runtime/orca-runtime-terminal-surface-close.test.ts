@@ -72,7 +72,7 @@ afterEach(async () => {
   }
 })
 
-/** A desktop window is what main tells to drop a closed pane; a headless host closes it in the holder. */
+/** An attached desktop window; the holder closes the pane with or without one. */
 function showDesktopWindow(): void {
   setRuntimeDesktopSurface({
     showNotification: () => false,
@@ -216,9 +216,6 @@ describe('CLI close of one pane in a split tab', () => {
       root: { type: 'leaf', leafId: SIBLING_LEAF_ID },
       ptyIdsByLeafId: { [SIBLING_LEAF_ID]: SIBLING_PTY_ID }
     })
-    // No exit arrives to remove the pane, so the desktop renderer is told to drop that leaf.
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
-    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
   })
 
   it('commits the pane removal when the handle names a live PTY', async () => {
@@ -241,8 +238,6 @@ describe('CLI close of one pane in a split tab', () => {
       type: 'leaf',
       leafId: SIBLING_LEAF_ID
     })
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
-    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -256,8 +251,6 @@ describe('CLI close of one pane in a split tab', () => {
       harness.syncSplitFixtureGraph()
       harness.syncFixtureTabWithoutLeaf()
       harness.setVerifiedStopResult(stopResult)
-      // A renderer that honours a whole-tab close, so a widened close shows as the lost sibling.
-      harness.setCloseTerminalTabAction(() => harness.retirePersistedTab())
       const terminal = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals.find(
         (candidate) => candidate.ptyId === PTY_ID
       )!
@@ -274,8 +267,6 @@ describe('CLI close of one pane in a split tab', () => {
         type: 'leaf',
         leafId: SIBLING_LEAF_ID
       })
-      expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
-      expect(harness.closeTerminalTab).not.toHaveBeenCalled()
       // The owed stop still goes out through the controller's kill, which records SSH pending kills.
       expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
       expect(harness.kill).not.toHaveBeenCalledWith(SIBLING_PTY_ID)
@@ -349,21 +340,27 @@ describe('mobile close of one pane in a split tab', () => {
     expect(harness.getSession().terminalLayoutsByTabId[TAB_ID]).toMatchObject({
       root: { type: 'leaf', leafId: SIBLING_LEAF_ID }
     })
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
   })
 })
 
-describe('mobile close of a tab the desktop renderer lists', () => {
-  // Pins are renderer presentation that main's session can lag, so only the renderer can refuse.
-  it('still asks the renderer, whose pin guard can refuse it', async () => {
+describe('mobile close of a pinned tab', () => {
+  it('is refused and keeps the terminal', async () => {
     const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
-    harness.rejectTerminalTabClose(new Error('terminal_tab_pinned'))
+    harness.editSession((session) => ({
+      ...session,
+      tabsByWorktree: {
+        ...session.tabsByWorktree,
+        [WORKTREE_ID]: session.tabsByWorktree[WORKTREE_ID]!.map((tab) => ({
+          ...tab,
+          isPinned: true
+        }))
+      }
+    }))
 
     await expect(
       harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_ID, { reason: 'user' })
     ).rejects.toThrow('terminal_tab_pinned')
 
-    expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_ID)
     expect(harness.kill).not.toHaveBeenCalled()
     expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([
       expect.objectContaining({ id: TAB_ID })

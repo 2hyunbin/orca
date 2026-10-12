@@ -37,23 +37,6 @@ export const uiTabAndBrowserCommandsApi = {
   replyTabSetProfile: (reply: { requestId: string; error?: string }): void => {
     ipcRenderer.send('browser:tabSetProfileReply', reply)
   },
-  onRequestTabClose: (
-    callback: (data: { requestId: string; tabId: string | null; worktreeId?: string }) => void
-  ): (() => void) => {
-    const listener = (
-      _event: Electron.IpcRendererEvent,
-      data: { requestId: string; tabId: string | null; worktreeId?: string }
-    ) => callback(data)
-    ipcRenderer.on('browser:requestTabClose', listener)
-    return () => ipcRenderer.removeListener('browser:requestTabClose', listener)
-  },
-  replyTabClose: (reply: {
-    requestId: string
-    error?: string
-    code?: 'browser_tab_not_found'
-  }): void => {
-    ipcRenderer.send('browser:tabCloseReply', reply)
-  },
   onNewTerminalTab: (callback: () => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent) => callback()
     ipcRenderer.on('ui:newTerminalTab', listener)

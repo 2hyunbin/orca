@@ -57,7 +57,6 @@ function createRuntime(real: OrcaRuntimeService): {
   const registry = createSubscriptionRegistryDouble()
   const runtime = {
     getRuntimeId: () => 'test-runtime',
-    requestRendererTerminalTabMount: () => false,
     resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: PTY_ID }),
     handleMobileSubscribe: vi.fn().mockResolvedValue(true),
     handleMobileUnsubscribe: vi.fn(),

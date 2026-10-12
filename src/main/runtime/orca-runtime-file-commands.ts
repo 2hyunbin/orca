@@ -44,27 +44,10 @@ export class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreservedBranchC
         absolutePath
       }),
     resolveRuntimeGitTarget: (selector) => this.resolveRuntimeGitTarget(selector),
-    openFile: (worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation) => {
-      if (!this.notifier?.openFile || !this.getAvailableAuthoritativeWindow()) {
-        this.openHeldEditorFile(worktreeId, { filePath, relativePath }, navigation)
-        return
-      }
-      this.notifier.openFile(worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation)
-    },
-    openDiff: (worktreeId, filePath, relativePath, staged, runtimeEnvironmentId, navigation) => {
-      if (!this.notifier?.openDiff || !this.getAvailableAuthoritativeWindow()) {
-        this.openHeldEditorFile(worktreeId, { filePath, relativePath }, navigation, { staged })
-        return
-      }
-      this.notifier.openDiff(
-        worktreeId,
-        filePath,
-        relativePath,
-        staged,
-        runtimeEnvironmentId,
-        navigation
-      )
-    }
+    openFile: (worktreeId, filePath, relativePath, navigation) =>
+      this.openHeldEditorFile(worktreeId, { filePath, relativePath }, navigation),
+    openDiff: (worktreeId, filePath, relativePath, staged, navigation) =>
+      this.openHeldEditorFile(worktreeId, { filePath, relativePath }, navigation, { staged })
   })
 
   protected readonly fileWatcherRemoval = createRuntimeFileWatcherRemoval(this.fileCommands)

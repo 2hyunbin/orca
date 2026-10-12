@@ -12,7 +12,7 @@ import {
 
 describe('terminal rename before renderer graph hydration', () => {
   it.each(['Media Engine Orch', null])(
-    'persists and forwards title %s across PTY replacement',
+    'persists title %s across PTY replacement',
     async (title) => {
       const session = makeWorkspaceSessionWithHeadlessTerminal()
       session.tabsByWorktree[TEST_WORKTREE_ID][0].customTitle = 'Previous name'
@@ -20,25 +20,11 @@ describe('terminal rename before renderer graph hydration', () => {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The shared fixture supplies RuntimeStore methods; its legacy Mock return type loses callable signatures.
       const checkedStore = runtimeStore as RuntimeStore
       const runtime = new OrcaRuntimeService(checkedStore)
-      const renameTerminal = vi.fn()
       runtime.setPtyController({
         spawn: vi.fn(async () => ({ id: 'omp-initial-pty' })),
         write: () => true,
         kill: () => true,
         getForegroundProcess: async () => null
-      })
-      runtime.setNotifier({
-        worktreesChanged: vi.fn(),
-        reposChanged: vi.fn(),
-        activateWorktree: vi.fn(),
-        createTerminal: vi.fn(),
-        splitTerminal: vi.fn(),
-        renameTerminal,
-        focusTerminal: vi.fn(),
-        closeTerminal: vi.fn(),
-        sleepWorktree: vi.fn(),
-        terminalFitOverrideChanged: vi.fn(),
-        terminalDriverChanged: vi.fn()
       })
       const created = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
         tabId: 'host-tab',
@@ -48,7 +34,6 @@ describe('terminal rename before renderer graph hydration', () => {
       await runtime.renameTerminal(created.handle, title)
 
       expect(getSession().tabsByWorktree[TEST_WORKTREE_ID][0].customTitle).toBe(title)
-      expect(renameTerminal).toHaveBeenCalledWith('host-tab', title)
       // A lost process, not a proven exit: the pane stays for its replacement.
       runtime.onPtyExit('omp-initial-pty', -1)
       const restored = new OrcaRuntimeService(checkedStore)

@@ -1,12 +1,11 @@
 import { withDurableRuntimeStore } from '../runtime-durable-store-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService, electronMocks } from '../orca-runtime-test-mocks.spec'
+import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import type { RuntimeMobileSessionTabsResult } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
-  makeDeferred,
   makeHeadlessTerminalLayout,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal,
@@ -130,9 +129,7 @@ describe('OrcaRuntimeService', () => {
   it('operates PTY-backed mobile session terminals without a renderer graph', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'laptop-created-pty' })
     const kill = vi.fn(() => true)
-    const closeTerminal = vi.fn()
     const runtime = new OrcaRuntimeService(store)
-    runtime.setNotifier({ closeTerminal } as never)
     runtime.setPtyController({
       spawn,
       write: () => true,
@@ -154,7 +151,8 @@ describe('OrcaRuntimeService', () => {
       handle: laptopTerminal.handle,
       tabId: 'laptop-tab',
       worktreeId: TEST_WORKTREE_ID,
-      navigated: false
+      // The runtime's layout moves the desktop view to it, with or without a window.
+      navigated: true
     })
     await expect(runtime.closeTerminal(laptopTerminal.handle)).resolves.toEqual({
       handle: laptopTerminal.handle,
@@ -162,209 +160,7 @@ describe('OrcaRuntimeService', () => {
       ptyKilled: true
     })
     expect(kill).toHaveBeenCalledWith('laptop-created-pty')
-    expect(closeTerminal).toHaveBeenCalledWith('laptop-tab')
-  })
-
-  it('waits for renderer acknowledgement before returning a whole-tab close receipt', async () => {
-    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
-      makeWorkspaceSessionWithHeadlessTerminal()
-    )
-    const acknowledged = makeDeferred()
-    const closeTerminalTab = vi.fn(() => acknowledged.promise)
-    const runtime = new OrcaRuntimeService(runtimeStore as never)
-    runtime.setNotifier({ closeTerminal: vi.fn(), closeTerminalTab } as never)
-    runtime.setPtyController({
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null,
-      listProcesses: async () => []
-    })
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          title: 'Durable',
-          activeLeafId: HEADLESS_LEAF_ID,
-          layout: null
-        }
-      ],
-      leaves: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          leafId: HEADLESS_LEAF_ID,
-          paneRuntimeId: 1,
-          ptyId: 'persisted-pty'
-        }
-      ]
-    })
-    const [terminal] = (await runtime.listTerminals()).terminals
-    const pending = runtime.closeTerminalTab(terminal.handle)
-    let settled = false
-    void pending.finally(() => {
-      settled = true
-    })
-
-    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('host-tab'))
-    expect(settled).toBe(false)
-
-    acknowledged.resolve()
-    await expect(pending).resolves.toEqual({
-      handle: terminal.handle,
-      tabId: 'host-tab',
-      closeMode: 'tab',
-      ptyKilled: false
-    })
-  })
-
-  it('leases renderer publication until a paired whole-tab close is acknowledged', async () => {
-    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
-      makeWorkspaceSessionWithHeadlessTerminal()
-    )
-    const acknowledged = makeDeferred()
-    const closeTerminalTab = vi.fn(() => acknowledged.promise)
-    const setBackgroundThrottling = vi.fn()
-    const runtime = new OrcaRuntimeService(runtimeStore as never)
-    runtime.setNotifier({ closeTerminal: vi.fn(), closeTerminalTab } as never)
-    runtime.setPtyController({
-      write: () => true,
-      kill: () => true,
-      getForegroundProcess: async () => null,
-      listProcesses: async () => []
-    })
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          title: 'Durable',
-          activeLeafId: HEADLESS_LEAF_ID,
-          layout: null
-        }
-      ],
-      leaves: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          leafId: HEADLESS_LEAF_ID,
-          paneRuntimeId: 1,
-          ptyId: 'persisted-pty'
-        }
-      ],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'renderer:paired-close',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: `host-tab::${HEADLESS_LEAF_ID}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `host-tab::${HEADLESS_LEAF_ID}`,
-              parentTabId: 'host-tab',
-              leafId: HEADLESS_LEAF_ID,
-              ptyId: 'persisted-pty',
-              title: 'Durable',
-              isActive: true
-            }
-          ]
-        }
-      ]
-    })
-    runtime.registerPty('persisted-pty', TEST_WORKTREE_ID, null, {
-      tabId: 'host-tab',
-      leafId: HEADLESS_LEAF_ID
-    })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents: {
-        isDestroyed: () => false,
-        setBackgroundThrottling,
-        capturePage: vi.fn(async () => null)
-      }
-    })
-
-    const pending = runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', {
-      reason: 'user',
-      clientNavigationId: 'device-a'
-    })
-    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('host-tab'))
-    expect(setBackgroundThrottling.mock.calls).toEqual([[false]])
-
-    acknowledged.resolve()
-    await expect(pending).resolves.toEqual({ closed: true })
-    expect(setBackgroundThrottling.mock.calls).toEqual([[false], [true]])
-  })
-
-  it('accepts a paired close after the renderer already persisted its removal', async () => {
-    const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
-      makeWorkspaceSessionWithHeadlessTerminal()
-    )
-    const acknowledged = makeDeferred()
-    const closeTerminalTab = vi.fn(() => acknowledged.promise)
-    const kill = vi.fn(() => true)
-    const runtime = new OrcaRuntimeService(
-      withDurableRuntimeStore({ ...runtimeStore, flushOrThrow: vi.fn() })
-    )
-    runtime.setNotifier({ closeTerminal: vi.fn(), closeTerminalTab } as never)
-    runtime.setPtyController({
-      write: () => true,
-      kill,
-      getForegroundProcess: async () => null,
-      listProcesses: async () => []
-    })
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          title: 'Durable',
-          activeLeafId: HEADLESS_LEAF_ID,
-          layout: null
-        }
-      ],
-      leaves: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          leafId: HEADLESS_LEAF_ID,
-          paneRuntimeId: 1,
-          ptyId: 'persisted-pty'
-        }
-      ]
-    })
-    runtime.registerPty('persisted-pty', TEST_WORKTREE_ID, null, {
-      tabId: 'host-tab',
-      leafId: HEADLESS_LEAF_ID
-    })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents: {
-        isDestroyed: () => false,
-        setBackgroundThrottling: vi.fn(),
-        capturePage: vi.fn(async () => null)
-      }
-    })
-
-    const pending = runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', {
-      reason: 'user',
-      clientNavigationId: 'device-a'
-    })
-    await vi.waitFor(() => expect(closeTerminalTab).toHaveBeenCalledWith('host-tab'))
-    const session = getSession()
-    setSession({
-      ...session,
-      tabsByWorktree: { ...session.tabsByWorktree, [TEST_WORKTREE_ID]: [] },
-      terminalLayoutsByTabId: {}
-    })
-    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-
-    acknowledged.resolve()
-    await expect(pending).resolves.toEqual({ closed: true })
-    expect(kill).toHaveBeenCalledWith('persisted-pty')
+    expect(runtime.heldWorkspaceLayout(TEST_WORKTREE_ID)?.tabs ?? []).toHaveLength(0)
   })
 
   it('reuses pane close for live PTYs that do not own a renderer tab', async () => {

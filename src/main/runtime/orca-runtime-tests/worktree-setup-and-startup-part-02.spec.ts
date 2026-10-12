@@ -35,7 +35,6 @@ describe('OrcaRuntimeService', () => {
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     const createTerminal = vi.spyOn(runtime, 'createTerminal')
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-headless-startup' })
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-headless-startup' })
@@ -49,13 +48,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -129,7 +121,6 @@ describe('OrcaRuntimeService', () => {
 
   it('starts setup and startup side by side by default for local headless worktree creates', async () => {
     const runtime = new OrcaRuntimeService(store)
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-headless-parallel' })
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-headless-parallel-startup' })
@@ -143,13 +134,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -206,7 +190,6 @@ describe('OrcaRuntimeService', () => {
 
   it('observes setup completion through the launch shell the runner was written for', async () => {
     const runtime = new OrcaRuntimeService(store)
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-observed-wsl-shell' })
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-observed-wsl-startup' })
@@ -220,13 +203,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -275,8 +251,7 @@ describe('OrcaRuntimeService', () => {
 
   it('creates the first terminal for CLI-created worktrees without activating them', async () => {
     const runtime = new OrcaRuntimeService(store)
-    const activateWorktree = vi.fn()
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-created-worktree' })
+    const navigations: unknown[] = []
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-created-worktree' })
     runtime.setPtyController({
       spawn,
@@ -287,13 +262,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree,
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -313,12 +281,13 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-initial-terminal'
     })
 
-    expect(activateWorktree).not.toHaveBeenCalled()
+    expect(navigations).toEqual([])
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
         cwd: '/tmp/workspaces/runtime-initial-terminal',
@@ -329,26 +298,25 @@ describe('OrcaRuntimeService', () => {
     const initialSpawnEnv =
       (spawn.mock.calls[0]?.[0] as { env?: Record<string, string> } | undefined)?.env ?? {}
     expectStablePaneKeyEnv(initialSpawnEnv)
-    const initialLeafId = initialSpawnEnv.ORCA_PANE_KEY.slice(
-      `${initialSpawnEnv.ORCA_TAB_ID}:`.length
+    expect(
+      runtime
+        .heldWorkspaceLayout(result.worktree.id)
+        ?.tabs.some(
+          (tab) => tab.kind === 'terminal' && tab.entityId === initialSpawnEnv.ORCA_TAB_ID
+        )
+    ).toBe(true)
+    // Why: a background CLI create must not scroll the desktop to the new workspace.
+    expect(runtime.layoutCommands.views.record('desktop').activeWorktreeId).not.toBe(
+      result.worktree.id
     )
-    // Why: the renderer treats a missing surfaceOwner as "reveal the owner", which
-    // scrolled the sidebar to background CLI creates.
-    expect(revealTerminalSession).toHaveBeenCalledWith(result.worktree.id, {
-      ptyId: 'pty-created-worktree',
-      title: null,
-      activate: false,
-      surfaceOwner: false,
-      tabId: initialSpawnEnv.ORCA_TAB_ID,
-      leafId: initialLeafId
-    })
   })
 
   it('does not surface the new workspace when a background CLI create launches its agent', async () => {
     const runtime = new OrcaRuntimeService(store)
-    const activateWorktree = vi.fn()
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-background-agent' })
-    const spawn = vi.fn().mockResolvedValue({ id: 'pty-background-agent' })
+    const navigations: unknown[] = []
+    const spawn = vi
+      .fn<(options: { env?: Record<string, string> }) => Promise<{ id: string }>>()
+      .mockResolvedValue({ id: 'pty-background-agent' })
     runtime.setPtyController({
       spawn,
       write: () => true,
@@ -358,13 +326,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree,
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -384,6 +345,7 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-background-agent',
@@ -393,20 +355,21 @@ describe('OrcaRuntimeService', () => {
 
     // `orca worktree create --agent claude` without --activate: the agent tab is
     // adopted, but the sidebar must stay on whatever the user was reading.
-    expect(activateWorktree).not.toHaveBeenCalled()
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      result.worktree.id,
-      expect.objectContaining({
-        ptyId: 'pty-background-agent',
-        activate: false,
-        surfaceOwner: false
-      })
+    expect(navigations).toEqual([])
+    const agentEnv = spawn.mock.calls[0]![0].env ?? {}
+    expect(
+      runtime
+        .heldWorkspaceLayout(result.worktree.id)
+        ?.tabs.some((tab) => tab.kind === 'terminal' && tab.entityId === agentEnv.ORCA_TAB_ID)
+    ).toBe(true)
+    expect(runtime.layoutCommands.views.record('desktop').activeWorktreeId).not.toBe(
+      result.worktree.id
     )
   })
 
   it('still surfaces the new workspace when the caller explicitly activates it', async () => {
     const runtime = new OrcaRuntimeService(store)
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-activated-agent' })
+    const navigations: unknown[] = []
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-activated-agent' })
     runtime.setPtyController({
       spawn,
@@ -417,13 +380,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -443,6 +399,7 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-activated-agent',
@@ -451,21 +408,13 @@ describe('OrcaRuntimeService', () => {
       startup: { command: 'claude' }
     })
 
-    // No-regression guard: an explicit --activate still reveals the workspace, so
-    // surfaceOwner must stay absent.
-    const revealPayload = revealTerminalSession.mock.calls[0]?.[1] as
-      | { surfaceOwner?: boolean }
-      | undefined
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      result.worktree.id,
-      expect.objectContaining({ ptyId: 'pty-activated-agent' })
-    )
-    expect(revealPayload).not.toHaveProperty('surfaceOwner')
+    // No-regression guard: an explicit --activate still reveals the workspace.
+    expect(navigations).toContainEqual({ kind: 'revealWorkspace', workspace: result.worktree.id })
   })
 
   it('still surfaces the new workspace when hooks run in the foreground', async () => {
     const runtime = new OrcaRuntimeService(store)
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-hooks-agent' })
+    const navigations: unknown[] = []
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-hooks-agent' })
     runtime.setPtyController({
       spawn,
@@ -476,13 +425,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -502,6 +444,7 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-hooks-agent',
@@ -510,14 +453,7 @@ describe('OrcaRuntimeService', () => {
       startup: { command: 'claude' }
     })
 
-    const revealPayload = revealTerminalSession.mock.calls[0]?.[1] as
-      | { surfaceOwner?: boolean }
-      | undefined
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      result.worktree.id,
-      expect.objectContaining({ ptyId: 'pty-hooks-agent' })
-    )
-    expect(revealPayload).not.toHaveProperty('surfaceOwner')
+    expect(navigations).toContainEqual({ kind: 'revealWorkspace', workspace: result.worktree.id })
   })
 
   it('honors split setup placement for CLI-created worktrees without startup agents', async () => {
@@ -530,8 +466,7 @@ describe('OrcaRuntimeService', () => {
       })
     }
     const runtime = new OrcaRuntimeService(runtimeStore as never)
-    const activateWorktree = vi.fn()
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-cli-setup-split' })
+    const navigations: unknown[] = []
     const spawn = vi
       .fn()
       .mockResolvedValueOnce({ id: 'pty-cli-setup-main' })
@@ -545,13 +480,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree,
-      createTerminal: vi.fn(),
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -583,13 +511,14 @@ describe('OrcaRuntimeService', () => {
       }
     ])
 
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
     const result = await runtime.createManagedWorktree({
       repoSelector: 'id:repo-1',
       name: 'runtime-cli-setup-split',
       setupDecision: 'run'
     })
 
-    expect(activateWorktree).not.toHaveBeenCalled()
+    expect(navigations).toEqual([])
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2))
     const mainEnv = (spawn.mock.calls[0]![0] as { env?: Record<string, string> }).env ?? {}
     const setupEnv = (spawn.mock.calls[1]![0] as { env?: Record<string, string> }).env ?? {}
@@ -605,9 +534,8 @@ describe('OrcaRuntimeService', () => {
       first: { type: 'leaf', leafId: mainLeafId }
     })
     expect(Object.values(layout?.ptyIdsByLeafId ?? {})).toContain('pty-cli-setup-setup')
-    expect(revealTerminalSession).not.toHaveBeenCalledWith(
-      result.worktree.id,
-      expect.objectContaining({ ptyId: 'pty-cli-setup-setup' })
+    expect(runtime.layoutCommands.views.record('desktop').activeWorktreeId).not.toBe(
+      result.worktree.id
     )
   })
 
@@ -621,12 +549,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(() => publishedWhenNotified.push(published())),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()

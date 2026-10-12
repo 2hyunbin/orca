@@ -155,7 +155,6 @@ function setupNeverAttachedDaemonSession(opts: { snapshotCapable: boolean; scree
   runtime: OrcaRuntimeService
   model: ReturnType<typeof createDaemonProviderModel>
   handle: string
-  mountSpy: ReturnType<typeof vi.spyOn>
 } {
   const runtime = new OrcaRuntimeService()
   const model = createDaemonProviderModel(opts)
@@ -171,8 +170,7 @@ function setupNeverAttachedDaemonSession(opts: { snapshotCapable: boolean; scree
   // (controller inventory → recordPtyWorktree → issuePtyHandle).
   const record = internals(runtime).recordPtyWorktree(PTY_ID, WORKTREE_ID, { connected: true })
   const handle = internals(runtime).issuePtyHandle(record)
-  const mountSpy = vi.spyOn(runtime, 'requestRendererTerminalTabMount')
-  return { runtime, model, handle, mountSpy }
+  return { runtime, model, handle }
 }
 
 function startMultiplex(runtime: OrcaRuntimeService, connectionId = 'conn-desktop') {
@@ -282,7 +280,7 @@ function snapshotText(harness: ReturnType<typeof startMultiplex>): string {
 
 describe('subscriber-driven daemon attach (never-activated tab)', () => {
   it('attaches on first desktop multiplex subscribe and streams bytes (snapshot-null daemon)', async () => {
-    const { runtime, model, handle, mountSpy } = setupNeverAttachedDaemonSession({
+    const { runtime, model, handle } = setupNeverAttachedDaemonSession({
       snapshotCapable: false
     })
     const harness = startMultiplex(runtime)
@@ -306,9 +304,8 @@ describe('subscriber-driven daemon attach (never-activated tab)', () => {
     const read = await runtime.readTerminal(handle)
     expect(read.tail.join('\n')).toContain('hello from daemon')
 
-    // No resize, no renderer mount/focus/navigation, no window required.
+    // No resize, no window required.
     expect(model.resizeCalls).toEqual([])
-    expect(mountSpy).not.toHaveBeenCalled()
   })
 
   it('paints the provider snapshot first for a snapshot-capable daemon, then goes live', async () => {

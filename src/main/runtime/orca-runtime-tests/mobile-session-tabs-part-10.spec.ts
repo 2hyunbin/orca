@@ -153,7 +153,6 @@ describe('OrcaRuntimeService', () => {
       })
     )
     const kill = vi.fn(() => true)
-    const closeTerminal = vi.fn()
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     runtime.setPtyController({
       write: () => true,
@@ -161,8 +160,6 @@ describe('OrcaRuntimeService', () => {
       getForegroundProcess: async () => null,
       listProcesses: async () => []
     })
-    // Why: an attached renderer (closeTerminal exists) sends the close down the renderer-attached path that historically leaked serve-owned tabs.
-    runtime.setNotifier({ closeTerminal } as never)
     runtime.syncWindowGraph(1, {
       tabs: [
         {
@@ -191,74 +188,6 @@ describe('OrcaRuntimeService', () => {
     // De-persist so syncMobileSessionTabs cannot re-hydrate and resurrect it.
     expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toEqual([])
     expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
-    // Best-effort renderer notify so no adopted pane is left dead.
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
-  })
-
-  it('delegates a renderer-owned daemon-session (worktreeId@@uuid) local terminal to the renderer', async () => {
-    // Why: the daemon mints <worktreeId>@@<uuid> for ordinary renderer-owned terminals too, so id shape alone must not mark it runtime-owned (regression: killed normal locals).
-    const daemonPtyId = `${TEST_WORKTREE_ID}@@d9213842`
-    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
-      makeWorkspaceSessionWithHeadlessTerminal({
-        tabsByWorktree: {
-          [TEST_WORKTREE_ID]: [
-            {
-              id: 'host-tab',
-              ptyId: daemonPtyId,
-              worktreeId: TEST_WORKTREE_ID,
-              title: 'Daemon Session Terminal',
-              customTitle: null,
-              color: null,
-              sortOrder: 0,
-              createdAt: 1
-            }
-          ]
-        },
-        terminalLayoutsByTabId: {
-          'host-tab': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: daemonPtyId })
-        }
-      })
-    )
-    const kill = vi.fn(() => true)
-    const closeTerminal = vi.fn()
-    const runtime = new OrcaRuntimeService(runtimeStore as never)
-    runtime.setPtyController({
-      write: () => true,
-      kill,
-      getForegroundProcess: async () => null,
-      listProcesses: async () => []
-    })
-    runtime.setNotifier({ closeTerminal } as never)
-    // Renderer graph PUBLISHES this tab -> it is renderer-owned.
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          title: 'Daemon Session Terminal',
-          activeLeafId: HEADLESS_LEAF_ID,
-          layout: null
-        }
-      ],
-      leaves: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          leafId: HEADLESS_LEAF_ID,
-          paneRuntimeId: 1,
-          ptyId: daemonPtyId,
-          paneTitle: 'A'
-        }
-      ]
-    })
-
-    await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab')
-
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
-    expect(kill).not.toHaveBeenCalled()
-    // Not torn down by the runtime — left for the renderer's own close to prune.
-    expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
-    expect(getSession().terminalLayoutsByTabId['host-tab']).toBeDefined()
   })
 
   it('tears down a leaked daemon-session headless tab the renderer never published', async () => {
@@ -286,7 +215,6 @@ describe('OrcaRuntimeService', () => {
       })
     )
     const kill = vi.fn(() => true)
-    const closeTerminal = vi.fn()
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     runtime.setPtyController({
       write: () => true,
@@ -294,7 +222,6 @@ describe('OrcaRuntimeService', () => {
       getForegroundProcess: async () => null,
       listProcesses: async () => []
     })
-    runtime.setNotifier({ closeTerminal } as never)
     // Empty renderer graph -> the host's tab was never published by the renderer.
     runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
 
@@ -302,129 +229,6 @@ describe('OrcaRuntimeService', () => {
 
     expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toEqual([])
     expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
-  })
-
-  it('defers a renderer-published pending tab to the renderer instead of tearing it down', async () => {
-    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
-      makeWorkspaceSessionWithHeadlessTerminal()
-    )
-    const kill = vi.fn(() => true)
-    const closeTerminal = vi.fn()
-    const runtime = new OrcaRuntimeService(runtimeStore as never)
-    const forgetTabs = vi.spyOn(runtime['clientSessionTabSelections'], 'forgetTabs')
-    runtime.setPtyController({
-      write: () => true,
-      kill,
-      getForegroundProcess: async () => null,
-      listProcesses: async () => []
-    })
-    runtime.setNotifier({ closeTerminal } as never)
-    // Pending tab in the renderer graph (PTY not bound yet) is renderer-owned, so the runtime forwards the close but must not de-persist it.
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          title: 'Pending Terminal',
-          activeLeafId: HEADLESS_LEAF_ID,
-          layout: null
-        }
-      ],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'headless:pending',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: `host-tab::${HEADLESS_LEAF_ID}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `host-tab::${HEADLESS_LEAF_ID}`,
-              parentTabId: 'host-tab',
-              leafId: HEADLESS_LEAF_ID,
-              title: 'Pending Terminal',
-              isActive: true
-            }
-          ]
-        }
-      ]
-    })
-
-    await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab')
-
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
-    expect(forgetTabs).not.toHaveBeenCalled()
-    expect(kill).not.toHaveBeenCalled()
-    // Not torn down by the runtime: the renderer-owned tab is left for the renderer's own close to prune.
-    expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
-    expect(getSession().terminalLayoutsByTabId['host-tab']).toBeDefined()
-  })
-
-  it('returns a delegated close outcome with no selection tombstone when the renderer owns the outcome', async () => {
-    const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
-      makeWorkspaceSessionWithHeadlessTerminal()
-    )
-    const kill = vi.fn(() => true)
-    const closeTerminal = vi.fn()
-    const runtime = new OrcaRuntimeService(runtimeStore as never)
-    const forgetTabs = vi.spyOn(runtime['clientSessionTabSelections'], 'forgetTabs')
-    runtime.setPtyController({
-      write: () => true,
-      kill,
-      getForegroundProcess: async () => null,
-      listProcesses: async () => []
-    })
-    runtime.setNotifier({ closeTerminal } as never)
-    runtime.syncWindowGraph(1, {
-      tabs: [
-        {
-          tabId: 'host-tab',
-          worktreeId: TEST_WORKTREE_ID,
-          title: 'Pending Terminal',
-          activeLeafId: HEADLESS_LEAF_ID,
-          layout: null
-        }
-      ],
-      leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'headless:pending',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: `host-tab::${HEADLESS_LEAF_ID}`,
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: `host-tab::${HEADLESS_LEAF_ID}`,
-              parentTabId: 'host-tab',
-              leafId: HEADLESS_LEAF_ID,
-              title: 'Pending Terminal',
-              isActive: true
-            }
-          ]
-        }
-      ]
-    })
-
-    const result = await runtime.closeMobileSessionTab(
-      `id:${TEST_WORKTREE_ID}`,
-      `host-tab::${HEADLESS_LEAF_ID}`
-    )
-
-    // Why: a delegated close is handed to the renderer over a fire-and-forget
-    // notifier that may decline it, so tombstoning would hide a live tab from
-    // paired clients forever. Only a host-committed close may tombstone.
-    expect(result).toEqual({ closed: true })
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
-    expect(forgetTabs).not.toHaveBeenCalled()
-    expect(kill).not.toHaveBeenCalled()
-    expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
   })
 
   it('tears down a runtime pending shell the renderer never adopted on close', async () => {
@@ -432,7 +236,6 @@ describe('OrcaRuntimeService', () => {
       makeWorkspaceSessionWithHeadlessTerminal()
     )
     const kill = vi.fn(() => true)
-    const closeTerminal = vi.fn()
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     runtime.setPtyController({
       write: () => true,
@@ -440,7 +243,6 @@ describe('OrcaRuntimeService', () => {
       getForegroundProcess: async () => null,
       listProcesses: async () => []
     })
-    runtime.setNotifier({ closeTerminal } as never)
     // Empty graph → this persisted headless shell (no live PTY) is runtime-owned and must be torn down or it re-hydrates on next publish.
     runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
 
@@ -449,7 +251,6 @@ describe('OrcaRuntimeService', () => {
     expect(kill).not.toHaveBeenCalled()
     expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toEqual([])
     expect(getSession().terminalLayoutsByTabId['host-tab']).toBeUndefined()
-    expect(closeTerminal).toHaveBeenCalledWith('host-tab')
   })
 
   it('closes only the addressed serve-owned split leaf so siblings survive even with a renderer attached', async () => {
@@ -478,7 +279,6 @@ describe('OrcaRuntimeService', () => {
     )
     const kill = vi.fn(() => true)
     const closeTerminal = vi.fn()
-    const closeTerminalPane = vi.fn()
     const runtime = new OrcaRuntimeService(runtimeStore as never)
     runtime.setPtyController({
       write: () => true,
@@ -487,7 +287,7 @@ describe('OrcaRuntimeService', () => {
       listProcesses: async () => []
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these close paths call only the listed notifier methods.
-    runtime.setNotifier({ closeTerminal, closeTerminalPane } as never)
+    runtime.setNotifier({ closeTerminal } as never)
     electronMocks.BrowserWindow.fromId.mockReturnValue({
       isDestroyed: () => false,
       webContents: { send: vi.fn() }
@@ -531,8 +331,6 @@ describe('OrcaRuntimeService', () => {
     // Exact split leaf: kill only that leaf's PTY, keep the sibling, don't tear down the parent.
     expect(kill).toHaveBeenCalledWith('serve-right')
     expect(kill).not.toHaveBeenCalledWith('serve-left')
-    // Only the leaf-addressed notice for the closed pane; never a whole-tab close.
-    expect(closeTerminalPane).toHaveBeenCalledExactlyOnceWith('host-tab', HEADLESS_SECOND_LEAF_ID)
     expect(closeTerminal).not.toHaveBeenCalled()
     expect(getSession().tabsByWorktree[TEST_WORKTREE_ID]).toHaveLength(1)
     expect(getSession().terminalLayoutsByTabId['host-tab']?.root).toEqual({

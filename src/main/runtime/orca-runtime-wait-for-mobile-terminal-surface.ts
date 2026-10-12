@@ -5,7 +5,6 @@ import type {
   RuntimeMobileSessionCreateTerminalResult,
   RuntimeMobileSessionTerminalClientTab
 } from '../../shared/runtime-types'
-import { MOBILE_TERMINAL_SURFACE_TIMEOUT_MS } from './orca-runtime-core'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { resolveTerminalSessionWorktreeId } from './runtime-worktree-path-identity'
 import { worktreeIdsEqual } from '../../shared/worktree/id'
@@ -15,57 +14,9 @@ import type {
 } from './runtime-terminal-state-records'
 
 export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal {
-  protected waitForMobileTerminalSurface(
-    worktreeId: string,
-    parentTabId: string,
-    options: { timeoutMs?: number; requireReady?: boolean; signal?: AbortSignal } = {}
-  ): Promise<RuntimeMobileSessionCreateTerminalResult> {
-    const timeoutMs = options.timeoutMs ?? MOBILE_TERMINAL_SURFACE_TIMEOUT_MS
-    const existing = this.findMobileTerminalSurface(worktreeId, parentTabId, options)
-    if (existing) {
-      return Promise.resolve(existing)
-    }
-    if (options.signal?.aborted) {
-      return Promise.reject(new Error('client_disconnected'))
-    }
-
-    return new Promise<RuntimeMobileSessionCreateTerminalResult>((resolve, reject) => {
-      const cleanup = (): void => {
-        clearTimeout(timer)
-        options.signal?.removeEventListener('abort', onAbort)
-        const idx = this.graphSyncCallbacks.indexOf(check)
-        if (idx !== -1) {
-          this.graphSyncCallbacks.splice(idx, 1)
-        }
-      }
-      const timer = setTimeout(() => {
-        cleanup()
-        reject(new Error('Timed out waiting for terminal surface after creation'))
-      }, timeoutMs)
-      // Why: a dead client connection cancels the wait immediately instead of running down the timeout into rollback (#7718).
-      const onAbort = (): void => {
-        cleanup()
-        reject(new Error('client_disconnected'))
-      }
-      options.signal?.addEventListener('abort', onAbort, { once: true })
-
-      const check = (): void => {
-        const next = this.findMobileTerminalSurface(worktreeId, parentTabId, options)
-        if (!next) {
-          return
-        }
-        cleanup()
-        resolve(next)
-      }
-      this.graphSyncCallbacks.push(check)
-      check()
-    })
-  }
-
   protected findMobileTerminalSurface(
     worktreeId: string,
-    parentTabId: string,
-    options: { requireReady?: boolean } = {}
+    parentTabId: string
   ): RuntimeMobileSessionCreateTerminalResult | null {
     const snapshot = this.readSessionTabsSnapshot(worktreeId)
     if (!snapshot) {
@@ -78,15 +29,11 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
     if (!tab || tab.type !== 'terminal') {
       return null
     }
-    const surface = {
+    return {
       tab,
       publicationEpoch: result.publicationEpoch,
       snapshotVersion: result.snapshotVersion
     }
-    if (options.requireReady === true && !this.isReadyMobileTerminalSurface(surface)) {
-      return null
-    }
-    return surface
   }
 
   protected findMobileTerminalSurfaceForPty(
@@ -170,42 +117,5 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
       return null
     }
     return { pty: live.pty, surface }
-  }
-
-  // Why: an in-flight mobile create's live PTY is owned by this session as soon as it registers (#7587).
-  protected ensurePtyBackedMobileSurfaceForRendererTab(
-    worktreeId: string,
-    tabId: string
-  ): RuntimeMobileSessionCreateTerminalResult | null {
-    const pending = this.pendingMobileTerminalCreatesByKey.get(`${worktreeId}::${tabId}`)
-    if (!pending) {
-      return null
-    }
-    const pty = this.findLiveRegisteredPtyForRendererTab(worktreeId, tabId)
-    if (pty) {
-      pty.runtimeSessionOwned = true
-      if (pending.paired) {
-        this.setPairedRendererSessionOwnership(pty.ptyId, true)
-      }
-    }
-    return this.findMobileTerminalSurface(worktreeId, tabId)
-  }
-
-  /** The create's wait failed: a live PTY that the window has not placed yet gets its pane admitted (#7587). */
-  protected rescuePtyBackedMobileSurfaceForRendererTab(
-    worktreeId: string,
-    tabId: string
-  ): RuntimeMobileSessionCreateTerminalResult | null {
-    const pty = this.pendingMobileTerminalCreatesByKey.has(`${worktreeId}::${tabId}`)
-      ? this.findLiveRegisteredPtyForRendererTab(worktreeId, tabId)
-      : null
-    const placed = this.heldWorkspaceLayout(worktreeId)?.tabs.some(
-      (tab) => tab.kind === 'terminal' && tab.entityId === tabId
-    )
-    if (pty && !placed) {
-      // A stalled window save must not turn a running shell into a failed create.
-      this.admitRecoveredTerminal(worktreeId, pty, {})
-    }
-    return this.ensurePtyBackedMobileSurfaceForRendererTab(worktreeId, tabId)
   }
 }

@@ -10,10 +10,6 @@ import { OrcaRuntimeService } from '../../src/main/runtime/orca-runtime'
 import type { RpcContext } from '../../src/main/runtime/rpc/core'
 import { ORCHESTRATION_METHODS } from '../../src/main/runtime/rpc/methods/orchestration'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
-import {
-  resolveLegacyWorkerTerminalRecoveryAction,
-  rollbackLegacyWorkerTerminalSurfaceInStore
-} from '@/hooks/legacy-worker-terminal-recovery-event'
 import { useAppStore, type AppState } from '@/store'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
@@ -434,37 +430,7 @@ describe('completed background-worker retirement resume matrix', () => {
     expect(retiredRestart.tabsByWorktree[WORKTREE_ID]).toEqual([])
     expect(retiredRestart.sleepingAgentSessionsByPaneKey?.[ORIGINAL_PANE_KEY]).toBeUndefined()
 
-    // Case 4: legacy rollback preserves the settled worker's record as an ordinary sleeping
-    // record; with its tab gone it is passive completed evidence that wake clears, and an exited
-    // resolution clears it too. No fence: a finished worker follows the same rule as any agent pane.
-    seedWorkspace()
-    recordCompletedWorker()
-    const legacyAction = resolveLegacyWorkerTerminalRecoveryAction({
-      paneKey: ORIGINAL_PANE_KEY,
-      resolution: 'rolled_back',
-      ptyId: ORIGINAL_PTY_ID
-    })
-    expect(legacyAction.kind).toBe('rollback-surface')
-    if (legacyAction.kind === 'rollback-surface') {
-      expect(
-        rollbackLegacyWorkerTerminalSurfaceInStore(useAppStore.getState(), legacyAction.detail)
-      ).toBe('removed')
-    }
-    expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[ORIGINAL_PANE_KEY]).toMatchObject({
-      state: 'done'
-    })
-    expect(
-      useAppStore.getState().sleepingAgentSessionsByPaneKey[ORIGINAL_PANE_KEY]
-    ).not.toHaveProperty('automaticResumeBlockedBy')
-    expect(resumeSleepingAgentSessionsForWorktree(WORKTREE_ID)).toBe(0)
-    expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[ORIGINAL_PANE_KEY]).toBeUndefined()
-    const exitedAction = resolveLegacyWorkerTerminalRecoveryAction({
-      paneKey: ORIGINAL_PANE_KEY,
-      resolution: 'exited'
-    })
-    expect(exitedAction).toEqual({ kind: 'clear-sleeping', paneKey: ORIGINAL_PANE_KEY })
-
-    // Case 5: coordinator manual close is the same safe exact-tab retirement boundary.
+    // Case 4: coordinator manual close is the same safe exact-tab retirement boundary.
     seedWorkspace()
     recordCompletedWorker()
     closeTerminalTab(ORIGINAL_TAB_ID, {
@@ -475,7 +441,7 @@ describe('completed background-worker retirement resume matrix', () => {
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[ORIGINAL_PANE_KEY]).toBeUndefined()
     expectCanaryUnchanged()
 
-    // Case 6: normal Codex exit leaves the shell pane; helper close retires only the helper.
+    // Case 5: normal Codex exit leaves the shell pane; helper close retires only the helper.
     seedWorkspace({ helper: true })
     recordCompletedWorker()
     useAppStore.setState({
@@ -513,7 +479,7 @@ describe('completed background-worker retirement resume matrix', () => {
     expect(resumeSleepingAgentSessionsForWorktree(WORKTREE_ID)).toBe(0)
     expectCanaryUnchanged()
 
-    // Case 7: restart preserves owned panes, while post-retirement restart keeps authority absent.
+    // Case 6: restart preserves owned panes, while post-retirement restart keeps authority absent.
     seedWorkspace()
     const workingProviderSession = recordWorkingWorker()
     const beforeCompletion = persistAndParseCurrentSession()
@@ -555,7 +521,7 @@ describe('completed background-worker retirement resume matrix', () => {
     const restartAfterRetirement = persistAndParseCurrentSession()
     await hydrateSession(restartAfterRetirement)
 
-    // Case 8: first activation hands back a bare terminal and cannot resurrect authority.
+    // Case 7: first activation hands back a bare terminal and cannot resurrect authority.
     const beforeActivation = useAppStore.getState()
     expect(beforeActivation.everActivatedWorktreeIds.has(WORKTREE_ID)).toBe(false)
     expect(beforeActivation.agentStatusByPaneKey[ORIGINAL_PANE_KEY]).toBeUndefined()

@@ -1,8 +1,6 @@
-import type { RuntimeLegacyWorkerTerminalRecoveryController } from './runtime-legacy-worker-terminal-recovery-controller'
 import type {
   LegacyWorkerRecoveryCandidate,
   LegacyWorkerRecoveryInventory,
-  LegacyWorkerRecoveryOptions,
   LegacyWorkerRecoveryPorts,
   LegacyWorkerRecoveryResolution,
   LegacyWorkerRecoveryWorkspace
@@ -25,9 +23,7 @@ export async function isAbsentLegacyWorkerTerminalProvenExited(
 }
 
 export async function reconcileLegacyWorkerCandidate(args: {
-  controller: RuntimeLegacyWorkerTerminalRecoveryController
   ports: LegacyWorkerRecoveryPorts
-  options: LegacyWorkerRecoveryOptions
   candidate: LegacyWorkerRecoveryCandidate
   workspace: LegacyWorkerRecoveryWorkspace
   resolvedWorktrees: LegacyWorkerRecoveryWorkspace['resolved'][]
@@ -35,7 +31,7 @@ export async function reconcileLegacyWorkerCandidate(args: {
   deferredDispatchIds: Set<string>
   pendingResolutions: LegacyWorkerRecoveryResolution[]
 }): Promise<void> {
-  const { controller, ports, options, candidate, workspace, resolvedWorktrees } = args
+  const { ports, candidate, workspace, resolvedWorktrees } = args
   if (!args.inventory.livePtyIds.has(candidate.ptyId)) {
     if (
       await isAbsentLegacyWorkerTerminalProvenExited(ports, candidate, workspace.scope.connectionId)
@@ -115,42 +111,6 @@ export async function reconcileLegacyWorkerCandidate(args: {
     args.pendingResolutions.push({ candidate, resolution: 'exited' })
     return
   }
-  const rendererEpoch = ports.getRendererEpoch()
-  let rendererMaterialized =
-    options.materializeRenderer !== true || controller.hasReceipt(candidate.paneKey, rendererEpoch)
-  if (options.materializeRenderer && !rendererMaterialized) {
-    for (let attempt = 0; attempt < 2 && !rendererMaterialized; attempt += 1) {
-      try {
-        const reveal = await ports.reveal(candidate)
-        if (reveal === null) {
-          break
-        }
-        rendererMaterialized = reveal
-        if (!rendererMaterialized) {
-          throw new Error('terminal_reveal_identity_mismatch')
-        }
-        controller.setReceipt(candidate.paneKey, ports.getRendererEpoch())
-      } catch (error) {
-        if (attempt === 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 100))
-          continue
-        }
-        console.warn('[orchestration] adopted legacy worker was not revealed', {
-          dispatchId: candidate.dispatchId,
-          error
-        })
-      }
-    }
-  }
-  if (!rendererMaterialized) {
-    controller.deleteReceipt(candidate.paneKey)
-    args.deferredDispatchIds.add(candidate.dispatchId)
-    return
-  }
-  if (options.materializeRenderer === true && !ports.hasExactSurface(candidate)) {
-    args.deferredDispatchIds.add(candidate.dispatchId)
-    return
-  }
   const finalInventory = await ports.refreshInventory(
     resolvedWorktrees,
     workspace.scope.connectionId
@@ -160,7 +120,6 @@ export async function reconcileLegacyWorkerCandidate(args: {
     return
   }
   if (!finalInventory.livePtyIds.has(candidate.ptyId)) {
-    controller.deleteReceipt(candidate.paneKey)
     if (
       await isAbsentLegacyWorkerTerminalProvenExited(ports, candidate, workspace.scope.connectionId)
     ) {
@@ -173,7 +132,6 @@ export async function reconcileLegacyWorkerCandidate(args: {
   }
   const finalIdentity = finalInventory.terminalIdentityByPtyId.get(candidate.ptyId)
   if (!finalIdentity) {
-    controller.deleteReceipt(candidate.paneKey)
     args.deferredDispatchIds.add(candidate.dispatchId)
     return
   }
@@ -181,7 +139,6 @@ export async function reconcileLegacyWorkerCandidate(args: {
     finalIdentity.handle !== candidate.terminalHandle ||
     finalIdentity.incarnationId !== candidate.incarnationId
   ) {
-    controller.deleteReceipt(candidate.paneKey)
     args.pendingResolutions.push({ candidate, resolution: 'exited' })
     return
   }

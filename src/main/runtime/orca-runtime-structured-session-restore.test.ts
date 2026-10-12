@@ -290,13 +290,11 @@ describe('structured session cold restoration', () => {
 
   it('normalizes a restored tab id and removes it when closed', async () => {
     const runtime = new OrcaRuntimeService(sessionStore(splitTerminalSession()))
-    const closeSessionTab = vi.fn(async () => undefined)
     const closeStructuredSession = vi.fn(async () => {
       const snapshot = await runtime.listMobileSessionTabs('id:workspace-1')
       expect(snapshot.tabs.some((tab) => tab.type === 'agent-session')).toBe(false)
     })
     const setSessionTabVisibility = vi.fn(async () => undefined)
-    runtime.setNotifier({ closeSessionTab } as never)
     const internal = runtime as unknown as {
       hasPersistedStructuredAgentSessionStore(): boolean
       getKnownWorkspaceSessionWorktreeIds(): Set<string>
@@ -357,7 +355,6 @@ describe('structured session cold restoration', () => {
       reason: 'user'
     })
 
-    expect(closeSessionTab).toHaveBeenCalledWith('agent-session:restored-session', 'workspace-1')
     // The user closed this chat, so a turn the close cuts short is their cancellation.
     expect(closeStructuredSession).toHaveBeenCalledWith('restored-session', 'user-close')
     expect(setSessionTabVisibility).toHaveBeenCalledWith('restored-session', false)
@@ -419,27 +416,5 @@ describe('structured session cold restoration', () => {
         })
       ])
     )
-  })
-
-  it('commits the host close when the renderer already removed the structured tab', async () => {
-    const runtime = runtimeWithWorkspace()
-    runtime.setNotifier({
-      closeSessionTab: vi.fn(async () => {
-        throw new Error('session_tab_not_found')
-      })
-    } as never)
-    await runtime.publishStructuredAgentSessionTab({
-      workspaceId: 'workspace-1',
-      sessionId: 'session-1',
-      agent: 'codex',
-      activate: true
-    })
-
-    await runtime.closeMobileSessionTab('id:workspace-1', 'agent-session:session-1', {
-      reason: 'user'
-    })
-
-    const snapshot = await runtime.listMobileSessionTabs('id:workspace-1')
-    expect(snapshot.tabs).toEqual([])
   })
 })

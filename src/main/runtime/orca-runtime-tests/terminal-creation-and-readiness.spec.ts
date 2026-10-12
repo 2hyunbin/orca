@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService, electronMocks, makePaneKey } from '../orca-runtime-test-mocks.spec'
+import { OrcaRuntimeService, makePaneKey } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   RESTORED_AUTHORITY_TOKEN,
@@ -25,8 +25,6 @@ import {
 describe('OrcaRuntimeService', () => {
   it('creates visible terminal sessions without asking the renderer to focus a tab', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-bg' })
-    const createTerminal = vi.fn()
-    const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-bg' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
       spawn,
@@ -37,13 +35,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal,
-      revealTerminalSession,
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -75,12 +66,10 @@ describe('OrcaRuntimeService', () => {
       surface: 'visible'
     })
     expect(result.handle).toMatch(/^term_/)
-    expect(createTerminal).not.toHaveBeenCalled()
     // Why: agent status keys off `${tabId}:${leafId}`; main pre-allocates the tabId, env-stamps it before spawn, and reuses it for adoption.
     const spawnCall = spawn.mock.calls[0]?.[0] as { env?: Record<string, string> } | undefined
     const spawnedEnv = spawnCall?.env ?? {}
     expectStablePaneKeyEnv(spawnedEnv)
-    const spawnedLeafId = spawnedEnv.ORCA_PANE_KEY.slice(`${spawnedEnv.ORCA_TAB_ID}:`.length)
     expect(spawnedEnv.ORCA_WORKTREE_ID).toBe(TEST_WORKTREE_ID)
     expect(spawnedEnv.ORCA_AGENT_LAUNCH_TOKEN).toMatch(UUID_RE)
     // Why: the runtime spawn path must stamp the per-pane jcode runtime dir
@@ -92,18 +81,6 @@ describe('OrcaRuntimeService', () => {
     } else {
       expect(spawnedEnv[JCODE_RUNTIME_DIR_ENV_KEY]).toBeUndefined()
     }
-    expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
-      ptyId: 'pty-bg',
-      title: 'worker',
-      launchConfig: {
-        agentArgs: '--model gpt-5',
-        agentEnv: { CODEX_PROFILE: 'captured' }
-      },
-      launchToken: spawnedEnv.ORCA_AGENT_LAUNCH_TOKEN,
-      activate: false,
-      tabId: spawnedEnv.ORCA_TAB_ID,
-      leafId: spawnedLeafId
-    })
   })
 
   it('asks the pty controller for the requested shell instead of a startup command', async () => {
@@ -208,7 +185,6 @@ describe('OrcaRuntimeService', () => {
 
   it('refuses a requested shell with no workspace instead of creating a default-shell tab', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-no-workspace-shell' })
-    const send = vi.fn()
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
       spawn,
@@ -218,15 +194,10 @@ describe('OrcaRuntimeService', () => {
     })
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-    electronMocks.BrowserWindow.fromId.mockReturnValue({
-      isDestroyed: () => false,
-      webContents: { send }
-    })
 
-    await expect(
-      runtime.createTerminal(undefined, { shellOverride: 'cmd.exe', rendererBacked: true })
-    ).rejects.toThrow(/--shell cmd\.exe needs a workspace/)
-    expect(send).not.toHaveBeenCalled()
+    await expect(runtime.createTerminal(undefined, { shellOverride: 'cmd.exe' })).rejects.toThrow(
+      '--shell cmd.exe needs a workspace'
+    )
     expect(spawn).not.toHaveBeenCalled()
   })
 
@@ -249,13 +220,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn().mockResolvedValue({ tabId: 'tab-authority' }),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()

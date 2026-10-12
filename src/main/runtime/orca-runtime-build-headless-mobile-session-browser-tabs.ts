@@ -2,10 +2,8 @@
 import { OrcaRuntimeWithPersistTerminalSurfaceRetirements } from './orca-runtime-persist-terminal-surface-retirements'
 import type {
   RuntimeMobileSessionBrowserTab,
-  RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTerminalTab
+  RuntimeMobileSessionTabsResult
 } from '../../shared/runtime-types'
-import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
 import { holdAgentSessionInventory } from './structured-agent-session-inventory-hold'
 import type { Tab } from '../../shared/tab-types'
@@ -25,7 +23,6 @@ import type { PtyControllerInventory } from './runtime-pty-controller-contract'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
 import { captureAcknowledgedTerminalTabRetirement } from './workspace-session-terminal-tab-retirement-identity'
 import { closeLeafOrTab } from '../persistence/terminal-topology/terminal-topology-commit'
-import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
 
 export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithPersistTerminalSurfaceRetirements {
   // Why: headless serve backs browser panes with offscreen WebContents that live
@@ -186,52 +183,13 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
     })
   }
 
-  /**
-   * Commits a split pane's close that main started, then tells the desktop renderer to drop that
-   * pane. Never touches the tab: a pane the session no longer lists commits nothing.
-   */
+  /** Closes a split pane main started closing; the holder's close also tells a launch there that the user closed it. */
   protected async closeTerminalPane(
     worktreeId: string,
     target: TerminalPaneCloseTarget
   ): Promise<void> {
-    if (!this.getAvailableAuthoritativeWindow()) {
-      // The holder's close also tells a launch there that the user closed it.
-      this.closeHeldSessionTab(worktreeId, terminalRowId(target.tabId, target.leafId), {
-        allowMissing: true
-      })
-      return
-    }
-    // An explicit close (a phone's, the CLI's): a launch still starting or delivering there stops.
-    markAgentLaunchesClosedByUser(worktreeId, target)
-    try {
-      await this.closeTerminalSurface(worktreeId, target, { allowMissing: true })
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== 'workspace_session_unavailable') {
-        throw error
-      }
-    }
-    // Why: no exit may ever arrive to remove the pane. The notice is leaf-addressed, so it and the
-    // renderer's exit handling are each a no-op after the other.
-    this.notifier?.closeTerminalPane?.(target.tabId, target.leafId)
-  }
-
-  /** A paired client's close of one pane: stops only that pane's process, commits only that pane. */
-  protected async closeMobileSessionTerminalPane(
-    worktreeId: string,
-    tab: RuntimeMobileSessionTerminalTab
-  ): Promise<void> {
-    // Why best-effort, as for a tab: a failed kill must not keep a pane the user closed.
-    const pty = this.findPtyForMobileTerminalTab(worktreeId, tab)
-    if (pty) {
-      this.ptyController?.kill(pty.ptyId)
-    } else if (!this.tabs.has(tab.parentTabId) && tab.ptyId && parseAppSshPtyId(tab.ptyId)) {
-      // Why: with no renderer to own the kill, a dormant SSH pane's durable id is its stop order.
-      this.ptyController?.kill(tab.ptyId)
-    }
-    await this.closeTerminalPane(worktreeId, {
-      kind: 'pane',
-      tabId: tab.parentTabId,
-      leafId: tab.leafId
+    this.closeHeldSessionTab(worktreeId, terminalRowId(target.tabId, target.leafId), {
+      allowMissing: true
     })
   }
 

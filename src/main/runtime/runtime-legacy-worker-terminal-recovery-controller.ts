@@ -12,7 +12,6 @@ type RecoveryRetry = {
   attempt: number
   dispatchIds: string[]
   connectionId?: string
-  materializeRenderer: boolean
   timer: ReturnType<typeof setTimeout> | null
 }
 
@@ -29,7 +28,6 @@ export function __cancelLegacyWorkerTerminalRecoveryRetriesForTests(): void {
 export class RuntimeLegacyWorkerTerminalRecoveryController {
   private queue: Promise<void> = Promise.resolve()
   private readonly retries = new Map<string, RecoveryRetry>()
-  private readonly receiptEpochByPane = new Map<string, number>()
   private readonly recoveredPtys = new Set<string>()
   private readonly backgroundWork = new Set<Promise<unknown>>()
   private stopped = false
@@ -127,25 +125,11 @@ export class RuntimeLegacyWorkerTerminalRecoveryController {
       attempt: 0,
       dispatchIds,
       ...(options.connectionId ? { connectionId: options.connectionId } : {}),
-      materializeRenderer: options.materializeRenderer === true,
       timer: null
     }
-    retry.materializeRenderer ||= options.materializeRenderer === true
     retry.dispatchIds = dispatchIds
     this.retries.set(scopeKey, retry)
     this.armRetry(scopeKey, retry)
-  }
-
-  hasReceipt(paneKey: string, epoch: number): boolean {
-    return this.receiptEpochByPane.get(paneKey) === epoch
-  }
-
-  setReceipt(paneKey: string, epoch: number): void {
-    this.receiptEpochByPane.set(paneKey, epoch)
-  }
-
-  deleteReceipt(paneKey: string): void {
-    this.receiptEpochByPane.delete(paneKey)
   }
 
   addRecoveredPty(ptyId: string): void {
@@ -172,8 +156,7 @@ export class RuntimeLegacyWorkerTerminalRecoveryController {
         .reconcile({
           retry: true,
           dispatchIds: retry.dispatchIds,
-          ...(retry.connectionId ? { connectionId: retry.connectionId } : {}),
-          materializeRenderer: retry.materializeRenderer
+          ...(retry.connectionId ? { connectionId: retry.connectionId } : {})
         })
         .catch((error) => {
           console.warn('[orchestration] worker terminal recovery retry failed', {

@@ -23,8 +23,6 @@ export type TerminalSubscriptionArgs = {
   supportsDesktopViewportClaims: boolean
   supportsWriteUnavailable: boolean
   missingHeadlessStateBeforeMobileFit: boolean
-  rendererMountRequestedBeforePty: boolean
-  serializerGenerationBeforeMobileFit: number
 }
 
 export type TerminalSubscribeBinaryState = {
@@ -40,8 +38,6 @@ export type TerminalSubscribeBinaryState = {
   pendingOutputOverflowed: boolean
   readonly pendingQuerySequences: TerminalReplyQuerySequence[]
   pendingQueryOverflowed: boolean
-  lateRendererReadyPromise: Promise<boolean> | null
-  abortRendererMountWait: () => void
   outputBatcher: TerminalOutputBatcher
   unsubscribeResize: () => void
   unsubscribeFit: () => void

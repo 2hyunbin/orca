@@ -231,10 +231,7 @@ describe('OrcaRuntimeService', () => {
         terminal: expect.any(String)
       })
     ])
-    expect(reconcile).toHaveBeenCalledWith({
-      connectionId: 'ssh-1',
-      materializeRenderer: false
-    })
+    expect(reconcile).toHaveBeenCalledWith({ connectionId: 'ssh-1' })
   })
 
   it('does not preserve a normally exited SSH shell for pane recovery', async () => {
@@ -324,13 +321,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal,
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()

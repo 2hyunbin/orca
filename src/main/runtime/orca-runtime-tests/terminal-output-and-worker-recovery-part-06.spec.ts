@@ -20,7 +20,7 @@ import {
   makeWorkspaceSessionWithHeadlessTerminal,
   store
 } from '../orca-runtime-test-fixtures.spec'
-import { publishLegacyWorkerReveal } from '../orca-runtime-test-scenario-builders.spec'
+import { withLegacyWorkerTab } from '../orca-runtime-test-scenario-builders.spec'
 
 describe('OrcaRuntimeService', () => {
   it('adopts an SSH legacy worker only after its matching relay is ready', async () => {
@@ -29,8 +29,15 @@ describe('OrcaRuntimeService', () => {
     const workerPaneKey = `legacy-ssh-worker:${HEADLESS_LEAF_ID}`
     const incarnationId = '77777777-7777-4777-8777-777777777777'
     const session: WorkspaceSessionState = {
-      ...getDefaultWorkspaceSession(),
-      tabsByWorktree: { [TEST_WORKTREE_ID]: [] },
+      ...withLegacyWorkerTab(
+        { ...getDefaultWorkspaceSession(), tabsByWorktree: { [TEST_WORKTREE_ID]: [] } },
+        {
+          worktreeId: TEST_WORKTREE_ID,
+          tabId: 'legacy-ssh-worker',
+          leafId: HEADLESS_LEAF_ID,
+          ptyId
+        }
+      ),
       sleepingAgentSessionsByPaneKey: {
         [workerPaneKey]: {
           paneKey: workerPaneKey,
@@ -119,21 +126,8 @@ describe('OrcaRuntimeService', () => {
       serializeProviderBuffer,
       hasRendererSerializer: () => true
     })
-    const revealTerminalSession = vi.fn().mockImplementation(() =>
-      publishLegacyWorkerReveal(runtime, {
-        worktreeId: TEST_WORKTREE_ID,
-        tabId: 'legacy-ssh-worker',
-        leafId: HEADLESS_LEAF_ID,
-        ptyId
-      })
-    )
-    runtime.setNotifier({ revealTerminalSession } as never)
-
     await expect(
-      runtime.reconcileLegacyWorkerTerminals({
-        connectionId: 'ssh-wrong-host',
-        materializeRenderer: true
-      })
+      runtime.reconcileLegacyWorkerTerminals({ connectionId: 'ssh-wrong-host' })
     ).resolves.toMatchObject({
       adoptedDispatchIds: [],
       exitedDispatchIds: [],
@@ -143,12 +137,7 @@ describe('OrcaRuntimeService', () => {
     expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeDefined()
     expect(localSession.sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeUndefined()
 
-    await expect(
-      runtime.reconcileLegacyWorkerTerminals({
-        connectionId,
-        materializeRenderer: true
-      })
-    ).resolves.toMatchObject({
+    await expect(runtime.reconcileLegacyWorkerTerminals({ connectionId })).resolves.toMatchObject({
       adoptedDispatchIds: ['dispatch-ssh'],
       exitedDispatchIds: [],
       deferredDispatchIds: []
@@ -157,21 +146,10 @@ describe('OrcaRuntimeService', () => {
 
     expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeUndefined()
     expect(getWorkspaceSession).toHaveBeenCalledWith(`ssh:${connectionId}`)
-    expect(setWorkspaceSession).toHaveBeenCalledWith(expect.any(Object), `ssh:${connectionId}`)
-    expect(listProcesses).toHaveBeenCalledTimes(3)
-    expect(revealTerminalSession).toHaveBeenCalledWith(TEST_WORKTREE_ID, {
-      ptyId,
-      title: 'SSH legacy worker',
-      activate: false,
-      presentation: 'background',
-      tabId: 'legacy-ssh-worker',
-      leafId: HEADLESS_LEAF_ID,
-      focus: false,
-      expectedProcessIdentity: {
-        terminalHandle: 'term_ssh_legacy',
-        incarnationId
-      }
+    expect(setWorkspaceSession).toHaveBeenCalledWith(expect.any(Object), `ssh:${connectionId}`, {
+      fromLayoutHolder: true
     })
+    expect(listProcesses).toHaveBeenCalledTimes(3)
     await expect(
       runtime.waitForTerminal('term_ssh_legacy', { condition: 'tui-idle', timeoutMs: 100 })
     ).resolves.toMatchObject({ satisfied: true })
@@ -185,8 +163,15 @@ describe('OrcaRuntimeService', () => {
     const incarnationId = '88888888-8888-4888-8888-888888888888'
     let observedDistro = 'Debian'
     const session: WorkspaceSessionState = {
-      ...getDefaultWorkspaceSession(),
-      tabsByWorktree: { [TEST_WORKTREE_ID]: [] },
+      ...withLegacyWorkerTab(
+        { ...getDefaultWorkspaceSession(), tabsByWorktree: { [TEST_WORKTREE_ID]: [] } },
+        {
+          worktreeId: TEST_WORKTREE_ID,
+          tabId: 'legacy-wsl-worker',
+          leafId: HEADLESS_LEAF_ID,
+          ptyId: 'pty-wsl-legacy'
+        }
+      ),
       sleepingAgentSessionsByPaneKey: {
         [workerPaneKey]: {
           paneKey: workerPaneKey,
@@ -262,36 +247,20 @@ describe('OrcaRuntimeService', () => {
       hasPty: (ptyId) => ptyId === 'pty-wsl-legacy',
       listProcesses
     })
-    const revealTerminalSession = vi.fn().mockImplementation(() =>
-      publishLegacyWorkerReveal(runtime, {
-        worktreeId: TEST_WORKTREE_ID,
-        tabId: 'legacy-wsl-worker',
-        leafId: HEADLESS_LEAF_ID,
-        ptyId: 'pty-wsl-legacy'
-      })
-    )
-    runtime.setNotifier({ revealTerminalSession } as never)
-
-    await expect(
-      runtime.reconcileLegacyWorkerTerminals({ materializeRenderer: true })
-    ).resolves.toMatchObject({
+    await expect(runtime.reconcileLegacyWorkerTerminals()).resolves.toMatchObject({
       adoptedDispatchIds: [],
       exitedDispatchIds: [],
       deferredDispatchIds: ['dispatch-wsl']
     })
     expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeDefined()
-    expect(revealTerminalSession).not.toHaveBeenCalled()
 
     observedDistro = 'Ubuntu'
-    await expect(
-      runtime.reconcileLegacyWorkerTerminals({ materializeRenderer: true })
-    ).resolves.toMatchObject({
+    await expect(runtime.reconcileLegacyWorkerTerminals()).resolves.toMatchObject({
       adoptedDispatchIds: ['dispatch-wsl'],
       exitedDispatchIds: [],
       deferredDispatchIds: []
     })
     expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeUndefined()
-    expect(revealTerminalSession).toHaveBeenCalledOnce()
     expect(listProcesses).toHaveBeenCalledTimes(5)
     expect(listProcesses.mock.calls.map((call) => call[0])).toEqual([
       'local',

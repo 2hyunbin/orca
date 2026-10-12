@@ -17,7 +17,6 @@ const LIVE_PANE_SPAWN = {
 }
 
 function runtimeWithDesktopWindow(spawnResult: Record<string, unknown> = { id: 'pty-launch' }) {
-  const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: RESERVED_TAB_ID })
   const releaseStablePaneCreate = vi.fn()
   const kill = vi.fn(() => true)
   const runtime = new OrcaRuntimeService(store)
@@ -28,23 +27,15 @@ function runtimeWithDesktopWindow(spawnResult: Record<string, unknown> = { id: '
     kill,
     getForegroundProcess: async () => null
   })
-  runtime.setNotifier({
-    worktreesChanged: vi.fn(),
-    reposChanged: vi.fn(),
-    activateWorktree: vi.fn(),
-    createTerminal: vi.fn(),
-    revealTerminalSession,
-    splitTerminal: vi.fn(),
-    renameTerminal: vi.fn(),
-    focusTerminal: vi.fn(),
-    closeTerminal: vi.fn(),
-    sleepWorktree: vi.fn(),
-    terminalFitOverrideChanged: vi.fn(),
-    terminalDriverChanged: vi.fn()
-  })
   runtime.attachWindow(1)
   runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
-  return { runtime, revealTerminalSession, releaseStablePaneCreate, kill }
+  return { runtime, releaseStablePaneCreate, kill }
+}
+
+function heldTerminalTabIds(runtime: OrcaRuntimeService): string[] {
+  return (runtime.heldWorkspaceLayout(TEST_WORKTREE_ID)?.tabs ?? []).flatMap((tab) =>
+    tab.kind === 'terminal' ? [tab.entityId] : []
+  )
 }
 
 describe('OrcaRuntimeService', () => {
@@ -120,10 +111,10 @@ describe('OrcaRuntimeService', () => {
     expect(retained).not.toContain('AAAA')
   })
 
-  // agent.launch's reserved pane lands here: the host reveal stays the only tab creator, and it
-  // must create the tab under the caller's id so the caller's placement lookup can find it.
-  it('reveals an agent terminal under the pane the caller reserved', async () => {
-    const { runtime, revealTerminalSession } = runtimeWithDesktopWindow()
+  // agent.launch's reserved pane lands here: the tab must carry the caller's id so the caller's
+  // placement lookup can find it.
+  it('shows an agent terminal under the pane the caller reserved', async () => {
+    const { runtime } = runtimeWithDesktopWindow()
 
     const created = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
       startupAgent: 'claude',
@@ -131,16 +122,12 @@ describe('OrcaRuntimeService', () => {
       leafId: RESERVED_LEAF_ID
     })
 
-    expect(revealTerminalSession).toHaveBeenCalledTimes(1)
-    expect(revealTerminalSession).toHaveBeenCalledWith(
-      TEST_WORKTREE_ID,
-      expect.objectContaining({ tabId: RESERVED_TAB_ID, leafId: RESERVED_LEAF_ID })
-    )
+    expect(heldTerminalTabIds(runtime)).toEqual([RESERVED_TAB_ID])
     expect(created.paneKey).toBe(`${RESERVED_TAB_ID}:${RESERVED_LEAF_ID}`)
   })
 
   it('mints its own pane when the reserved leaf is malformed, and reports the one it used', async () => {
-    const { runtime, revealTerminalSession } = runtimeWithDesktopWindow()
+    const { runtime } = runtimeWithDesktopWindow()
 
     const created = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
       startupAgent: 'claude',
@@ -149,14 +136,13 @@ describe('OrcaRuntimeService', () => {
     })
 
     // Still exactly one tab — the caller's reservation lost, and the reported pane says so.
-    expect(revealTerminalSession).toHaveBeenCalledTimes(1)
+    expect(heldTerminalTabIds(runtime)).toEqual([created.tabId])
     expect(created.tabId).not.toBe(RESERVED_TAB_ID)
     expect(created.paneKey?.startsWith(`${created.tabId}:`)).toBe(true)
   })
 
   it('refuses a live reserved pane before issuing a handle or revealing it', async () => {
-    const { runtime, revealTerminalSession, releaseStablePaneCreate, kill } =
-      runtimeWithDesktopWindow(LIVE_PANE_SPAWN)
+    const { runtime, releaseStablePaneCreate, kill } = runtimeWithDesktopWindow(LIVE_PANE_SPAWN)
 
     await expect(
       runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
@@ -169,15 +155,13 @@ describe('OrcaRuntimeService', () => {
 
     // Nothing registered, so no handle was issued for the live PTY.
     expect((await runtime.listTerminals()).terminals).toEqual([])
-    // No reveal means no renderer launch-config re-registration over the running agent's.
-    expect(revealTerminalSession).not.toHaveBeenCalled()
     expect(kill).not.toHaveBeenCalled()
     expect(releaseStablePaneCreate).toHaveBeenCalled()
   })
 
   it('still attaches to a live pane when the caller did not require a fresh one', async () => {
     // `terminal.create` keeps its reattach; only agent.launch opts into the refusal.
-    const { runtime, revealTerminalSession } = runtimeWithDesktopWindow(LIVE_PANE_SPAWN)
+    const { runtime } = runtimeWithDesktopWindow(LIVE_PANE_SPAWN)
 
     const created = await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
       startupAgent: 'claude',
@@ -187,7 +171,7 @@ describe('OrcaRuntimeService', () => {
 
     expect(created.isReattach).toBe(true)
     expect((await runtime.listTerminals()).terminals.map((t) => t.handle)).toEqual([created.handle])
-    expect(revealTerminalSession).toHaveBeenCalledTimes(1)
+    expect(heldTerminalTabIds(runtime)).toEqual([RESERVED_TAB_ID])
   })
 
   // agent.launch now hands a terminal launch its session picks; this is where they must reach argv.

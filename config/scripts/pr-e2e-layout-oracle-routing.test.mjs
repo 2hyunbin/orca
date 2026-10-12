@@ -21,7 +21,6 @@ const LAYOUT_AUTHORITIES = [
   'src/main/runtime/orca-runtime-split-pty-backed-terminal.ts',
   'src/main/runtime/orca-runtime-close-headless-mobile-terminal-tab.ts',
   'src/main/runtime/orca-runtime-create-terminal.ts',
-  'src/renderer/src/runtime/mobile-session-tab-close.ts',
   'src/renderer/src/runtime/runtime-layout-client.ts',
   'src/renderer/src/store/slices/tabs.ts',
   'src/renderer/src/store/slices/tabs/tabs-move-actions.ts',

@@ -47,7 +47,7 @@ export class RuntimeBrowserCommandsWithBrowserClick extends RuntimeBrowserComman
     if (pageId) {
       this.notifyRendererNavigation(pageId, result.url, result.title)
     }
-    if (!this.host.getAvailableAuthoritativeWindow() && target.worktreeId) {
+    if (target.worktreeId) {
       this.host.notifyHeadlessBrowserSessionTabsChanged?.(target.worktreeId)
     }
     return result

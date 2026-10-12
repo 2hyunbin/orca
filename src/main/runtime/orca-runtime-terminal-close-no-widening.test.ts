@@ -14,7 +14,7 @@ import { setRuntimeDesktopSurface } from './runtime-desktop-surface'
 
 afterEach(() => setRuntimeDesktopSurface(null))
 
-/** The attached desktop window is live, so main closes panes through it. */
+/** An attached desktop window; the holder closes panes with or without one. */
 function showDesktopWindow(): void {
   setRuntimeDesktopSurface({
     showNotification: () => false,
@@ -160,8 +160,6 @@ function arrange(entry: Entry, condition: Condition): CloseContinuityHarness {
   } else if (condition === 'no-saved-layout') {
     harness.editSession((session) => ({ ...session, terminalLayoutsByTabId: {} }))
   }
-  // A renderer that honours a whole-tab close, so a widened close shows as the lost sibling.
-  harness.setCloseTerminalTabAction(() => harness.retirePersistedTab())
   return harness
 }
 
@@ -247,20 +245,13 @@ describe('an explicit close of one pane never widens into its tab', () => {
         leafId: SIBLING_LEAF_ID
       })
     }
-    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
-    expect(harness.closeTerminal).not.toHaveBeenCalled()
     expect(stopRequests(harness)).not.toContain(SIBLING_PTY_ID)
-    if (entry === 'renderer') {
-      return
-    }
     if (entry === 'phone-headless') {
       const snapshot = await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
       expect(snapshot.tabs.map((tab) => tab.id)).toEqual([`${TAB_ID}::${SIBLING_LEAF_ID}`])
       // The holder's close stops the pane's live PTY in the background.
       await vi.waitFor(() => expect(stopRequests(harness)).toContain(PTY_ID))
-      return
     }
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
   })
 
   // The saved session no longer lists the pane, so a phone's stale row is refused, not widened.
@@ -279,7 +270,7 @@ describe('an explicit close of one pane never widens into its tab', () => {
 
 describe('a pane close during the window-save race', () => {
   it.each(['cli-graph', 'phone-desktop'] as const)(
-    "from %s, reads the split from the window's published tree before the held layout has it",
+    'from %s, never stops the sibling the held layout does not have yet',
     async (entry) => {
       showDesktopWindow()
       const harness = createHarness({
@@ -287,7 +278,6 @@ describe('a pane close during the window-save race', () => {
         registerPtyBacked: entry === 'phone-desktop'
       })
       harness.setVerifiedStopResult(true)
-      harness.setCloseTerminalTabAction(() => harness.retirePersistedTab())
       // The window split the tab; its debounced save has not reached the held layout yet.
       const split = {
         type: 'split' as const,
@@ -336,30 +326,11 @@ describe('a pane close during the window-save race', () => {
 
       await closePane(entry, harness)
 
-      expect(harness.closeTerminalTab).not.toHaveBeenCalled()
-      expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
+      // The held layout closes its one pane; the window's pending save brings the split back (until
+      // 6f, when the window splits through the holder). Its sibling's terminal is never stopped.
       expect(stopRequests(harness)).not.toContain(SIBLING_PTY_ID)
     }
   )
-})
-
-describe("a phone's tab close with a window attached", () => {
-  it('does not stop again a terminal the window already stopped as it closed the tab', async () => {
-    showDesktopWindow()
-    const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
-    harness.setVerifiedStopResult(true)
-    harness.setCloseTerminalTabAction(() => {
-      // The window's own kill (`pty:kill`) of the pane it closed.
-      harness.runtime.markPtyStopRequested(PTY_ID)
-      harness.retirePersistedTab()
-    })
-
-    await harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_ID, { reason: 'user' })
-    await Promise.resolve()
-
-    expect(harness.closeTerminalTab.mock.calls.map((call) => call[0])).toEqual([TAB_ID])
-    expect(stopRequests(harness)).toEqual([])
-  })
 })
 
 describe("a close of a tab's last pane still closes the tab", () => {
@@ -401,28 +372,24 @@ describe("a close of a tab's last pane still closes the tab", () => {
     const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
     harness.syncFixtureTabWithoutLeaf()
     harness.setVerifiedStopResult(true)
-    harness.setCloseTerminalTabAction(() => harness.retirePersistedTab())
 
     await closePane('cli-pty', harness)
 
-    expect(harness.closeTerminalTab.mock.calls.map((call) => call[0])).toEqual([TAB_ID])
-    expect(harness.closeTerminalPane).not.toHaveBeenCalled()
+    expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([])
   })
 
   it.each(['phone-desktop', 'cli-graph'] as const)(
-    'from %s, goes through the renderer tab close so its pin guard still runs',
+    'from %s, closes the whole tab',
     async (entry) => {
       const harness = createHarness({
         publishMobileSurface: true,
         registerPtyBacked: entry === 'phone-desktop'
       })
       harness.setVerifiedStopResult(true)
-      harness.setCloseTerminalTabAction(() => harness.retirePersistedTab())
 
       await closePane(entry, harness)
 
-      expect(harness.closeTerminalTab.mock.calls.map((call) => call[0])).toEqual([TAB_ID])
-      expect(harness.closeTerminalPane).not.toHaveBeenCalled()
+      expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([])
     }
   )
 })

@@ -34,7 +34,6 @@ describe('terminal.subscribe reconnect rebind (STA-4510)', () => {
       getRuntimeId: () => 'test-runtime',
       subscribeToPtyExit: vi.fn(() => vi.fn()),
       registerRemoteTerminalViewSubscriber: () => () => {},
-      requestRendererTerminalTabMount: () => false,
       resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-1' }),
       handleMobileSubscribe: vi.fn().mockResolvedValue(true),
       handleMobileUnsubscribe: vi.fn(),

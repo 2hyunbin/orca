@@ -18,13 +18,12 @@ import {
   type BrowserTabCreatePublicationHost
 } from './browser-tab-create-publication'
 
-const { ipcMainOnMock, waitForTabRegistrationMock } = vi.hoisted(() => ({
-  ipcMainOnMock: vi.fn(),
+const { waitForTabRegistrationMock } = vi.hoisted(() => ({
   waitForTabRegistrationMock: vi.fn()
 }))
 
 vi.mock('electron', () => ({
-  ipcMain: { on: ipcMainOnMock, removeListener: vi.fn() },
+  ipcMain: { on: vi.fn(), removeListener: vi.fn() },
   webContents: { fromId: vi.fn() }
 }))
 
@@ -45,6 +44,7 @@ function createCommandHost(
   overrides: Partial<RuntimeBrowserCommandHost>
 ): RuntimeBrowserCommandHost {
   const runtimeBrowserPages = new RuntimeBrowserPageRegistry()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create paths under test read only the members supplied here.
   return {
     resolveWorktreeSelector: async (selector: string) => ({ id: selector.replace(/^id:/, '') }),
     resolveBrowserWorkspace: async (selector: string) => ({ id: selector.replace(/^id:/, '') }),
@@ -55,7 +55,7 @@ function createCommandHost(
         setActiveTab: vi.fn()
       }) as unknown as AgentBrowserBridge,
     getAuthoritativeWindow: vi.fn(),
-    getAvailableAuthoritativeWindow: vi.fn(() => null),
+    getAvailableAuthoritativeWindow: vi.fn(() => ({})),
     getOffscreenBrowserBackend: vi.fn(() => null),
     ...overrides
   } as unknown as RuntimeBrowserCommandHost
@@ -106,11 +106,11 @@ describe('publishCreatedBrowserSessionTab', () => {
         hostRowSource: 'none'
       },
       renderer: {
-        addsLayoutTab: false,
+        addsLayoutTab: true,
         activatesBridgeTab: true,
-        marksSessionTabFocus: false,
+        marksSessionTabFocus: true,
         notifiesSessionTabsChanged: false,
-        hostRowSource: 'create-ipc'
+        hostRowSource: 'layout'
       }
     })
   })
@@ -219,7 +219,7 @@ describe('publishCreatedBrowserSessionTab', () => {
   )
 
   it.each(BROWSER_TAB_CREATE_PLACEMENT_KINDS)(
-    'adds a %s create to the runtime layout only when no window owns its tab',
+    'adds a %s create to the runtime layout with its profile when its rule says so',
     (placementKind) => {
       const addHeadlessBrowserLayoutTab = vi.fn()
       const { host } = createPublicationHost()
@@ -230,13 +230,19 @@ describe('publishCreatedBrowserSessionTab', () => {
           placementKind,
           browserPageId: 'page-1',
           worktreeId: 'wt-1',
+          profileId: 'work',
           focus: resolveBrowserTabCreateFocus({ activate: true }),
           targetGroupId: 'group-right'
         }
       )
 
       if (BROWSER_TAB_CREATE_PUBLICATION_RULES[placementKind].addsLayoutTab) {
-        expect(addHeadlessBrowserLayoutTab).toHaveBeenCalledWith('wt-1', 'page-1', 'group-right')
+        expect(addHeadlessBrowserLayoutTab).toHaveBeenCalledWith(
+          'wt-1',
+          'page-1',
+          'group-right',
+          'work'
+        )
       } else {
         expect(addHeadlessBrowserLayoutTab).not.toHaveBeenCalled()
       }
@@ -372,7 +378,6 @@ describe('browser tab-create placement census', () => {
   // needs its real bookkeeping observed through browserTabCreate itself.
   describe('through browserTabCreate', () => {
     beforeEach(() => {
-      ipcMainOnMock.mockReset()
       waitForTabRegistrationMock.mockReset()
       waitForTabRegistrationMock.mockResolvedValue(undefined)
     })
@@ -414,62 +419,41 @@ describe('browser tab-create placement census', () => {
       expect(markHeadlessBrowserSessionTabActive).not.toHaveBeenCalled()
     })
 
-    it('leaves renderer tab focus to the create IPC instead of the session-tab marker', async () => {
+    it('adds a window-backed page to the layout and moves the host to it on a user create', async () => {
       const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
-      const webContents = { send: vi.fn() }
-      webContents.send = vi.fn((_channel: string, data: { requestId: string }) => {
-        const handler = ipcMainOnMock.mock.calls.find(
-          ([eventName]) => eventName === 'browser:tabCreateReply'
-        )?.[1] as
-          | ((event: unknown, reply: { requestId: string; browserPageId?: string }) => void)
-          | undefined
-        handler?.({ sender: webContents } as never, {
-          requestId: data.requestId,
-          browserPageId: 'page-created'
-        })
-      })
+      const addHeadlessBrowserLayoutTab = vi.fn()
       const markHeadlessBrowserSessionTabActive = vi.fn()
       const commands = new RuntimeBrowserCommands(
-        createCommandHost({
-          getAvailableAuthoritativeWindow: vi.fn(() => ({}) as never),
-          getAuthoritativeWindow: vi.fn(() => ({ webContents }) as never),
-          markHeadlessBrowserSessionTabActive
-        })
+        createCommandHost({ addHeadlessBrowserLayoutTab, markHeadlessBrowserSessionTabActive })
       )
 
-      await commands.browserTabCreate({
+      const { browserPageId } = await commands.browserTabCreate({
         worktree: 'id:wt-1',
         url: 'about:blank',
+        page: 'page-created',
         activate: true,
         targetGroupId: 'group-right'
       })
 
-      expect(webContents.send).toHaveBeenCalledWith(
-        'browser:requestTabCreate',
-        expect.objectContaining({ activate: true })
+      expect(browserPageId).toBe('page-created')
+      expect(addHeadlessBrowserLayoutTab).toHaveBeenCalledWith(
+        'wt-1',
+        'page-created',
+        'group-right',
+        undefined
       )
-      expect(markHeadlessBrowserSessionTabActive).not.toHaveBeenCalled()
+      expect(markHeadlessBrowserSessionTabActive).toHaveBeenCalledWith('wt-1', 'page-created', {
+        targetGroupId: 'group-right',
+        focusesHost: true
+      })
+      expect(waitForTabRegistrationMock).toHaveBeenCalledWith('page-created')
     })
 
-    it('does not focus the host renderer for a create addressed to the caller', async () => {
+    it('does not move the host for a window-backed create addressed to the caller', async () => {
       const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
-      const webContents = { send: vi.fn() }
-      webContents.send = vi.fn((_channel: string, data: { requestId: string }) => {
-        const handler = ipcMainOnMock.mock.calls.find(
-          ([eventName]) => eventName === 'browser:tabCreateReply'
-        )?.[1] as
-          | ((event: unknown, reply: { requestId: string; browserPageId?: string }) => void)
-          | undefined
-        handler?.({ sender: webContents } as never, {
-          requestId: data.requestId,
-          browserPageId: 'page-created'
-        })
-      })
+      const markHeadlessBrowserSessionTabActive = vi.fn()
       const commands = new RuntimeBrowserCommands(
-        createCommandHost({
-          getAvailableAuthoritativeWindow: vi.fn(() => ({}) as never),
-          getAuthoritativeWindow: vi.fn(() => ({ webContents }) as never)
-        })
+        createCommandHost({ markHeadlessBrowserSessionTabActive })
       )
 
       await commands.browserTabCreate(
@@ -477,10 +461,27 @@ describe('browser tab-create placement census', () => {
         { pairedDeviceId: 'device-a', clientKind: 'runtime' }
       )
 
-      // The create IPC is the host renderer's only focus signal, so this flag is the steal.
-      expect(webContents.send).toHaveBeenCalledWith(
-        'browser:requestTabCreate',
-        expect.objectContaining({ activate: false })
+      expect(markHeadlessBrowserSessionTabActive).toHaveBeenCalledWith(
+        'wt-1',
+        expect.any(String),
+        expect.objectContaining({ focusesHost: false })
+      )
+    })
+
+    it('creates a window-backed page in the workspace the desktop view shows when none is named', async () => {
+      const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
+      const addHeadlessBrowserLayoutTab = vi.fn()
+      const commands = new RuntimeBrowserCommands(
+        createCommandHost({ addHeadlessBrowserLayoutTab, desktopViewWorkspaceId: () => 'wt-shown' })
+      )
+
+      await commands.browserTabCreate({ url: 'about:blank', page: 'page-created' })
+
+      expect(addHeadlessBrowserLayoutTab).toHaveBeenCalledWith(
+        'wt-shown',
+        'page-created',
+        undefined,
+        undefined
       )
     })
 

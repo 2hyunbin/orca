@@ -47,6 +47,8 @@ import {
 import type { Worktree } from '../../shared/worktree/types'
 import { closedPaneTerminals } from './closed-pane-terminal-stop'
 import { isStoreRecordedLocalWorkspace } from './runtime-spilled-terminal-tabs'
+import { AgentLaunchHeldTabs } from './agent-launch-held-tab'
+import { DESKTOP_VIEW_ID } from '../../shared/workspace-layout/workspace-layout-views'
 
 class OrcaRuntimeService extends OrcaRuntimeWithHeldLayout {
   /** The one copy of every host partition's tab layout (PR 6). */
@@ -165,29 +167,26 @@ class OrcaRuntimeService extends OrcaRuntimeWithHeldLayout {
     }
   }
 
-  /** Whether a window owns the layout and can show a launch's tab ahead of its process. */
-  canPublishAgentLaunchTab(): boolean {
-    return Boolean(this.notifier?.publishAgentLaunchTab && this.getAvailableAuthoritativeWindow())
-  }
+  private readonly agentLaunchTabs = new AgentLaunchHeldTabs({
+    holder: this.layoutHolder,
+    desktopActiveGroup: (worktreeId) => this.desktopActiveGroup(worktreeId),
+    focusInDesktopView: (worktreeId, target) => this.focusInDesktopView(worktreeId, target),
+    navigateDesktopView: (navigation) =>
+      this.layoutCommands.views.navigate(DESKTOP_VIEW_ID, navigation)
+  })
 
-  /** Shows an agent launch's tab before its process exists, in the window that owns the layout;
-   *  null when no window does, and the launch's tab then appears when it spawns, as before. */
+  /** Shows an agent launch's tab before its process exists; null when the runtime does not hold
+   *  the workspace's layout, and the launch's tab then appears when it spawns. */
   publishAgentLaunchTab(
     request: Omit<AgentLaunchTabPublishRequest, 'requestId'>
   ): Promise<AgentLaunchTabPublished> | null {
-    if (!this.notifier?.publishAgentLaunchTab || !this.getAvailableAuthoritativeWindow()) {
-      return null
-    }
-    return this.notifier.publishAgentLaunchTab(request)
+    const published = this.agentLaunchTabs.show(request)
+    return published ? Promise.resolve(published) : null
   }
 
-  /** Tells the window a launch pane's fate: it keeps a final one on the tab, clears a settled one,
-   *  and takes a withdrawn pane back (the pane alone when the user split the tab). */
-  reportAgentLaunchPaneVerdict(
-    pane: AgentLaunchPaneAddress,
-    verdict: AgentLaunchPaneVerdict
-  ): void {
-    this.notifier?.agentLaunchPaneVerdict?.({ ...pane, verdict })
+  /** A launch pane's fate, kept on its tab. */
+  reportAgentLaunchPaneVerdict(pane: AgentLaunchPaneAddress, verdict: AgentLaunchPaneVerdict) {
+    this.agentLaunchTabs.verdict({ ...pane, verdict })
   }
 
   private readonly agentLaunchRecordWarmup = createAgentLaunchRecordWarmupGate({

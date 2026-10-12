@@ -1,11 +1,7 @@
-import type { TerminalPaneSplitSource } from '../../../shared/feature-education-telemetry'
-
 export const TOGGLE_TERMINAL_PANE_EXPAND_EVENT = 'orca-toggle-terminal-pane-expand'
 export const FOCUS_TERMINAL_PANE_EVENT = 'orca-focus-terminal-pane'
 export const PASTE_TERMINAL_TEXT_EVENT = 'orca-paste-terminal-text'
-export const SPLIT_TERMINAL_PANE_EVENT = 'orca-split-terminal-pane'
 export const REQUEST_ACTIVE_TERMINAL_PANE_SPLIT_EVENT = 'orca-request-active-terminal-pane-split'
-export const CLOSE_TERMINAL_PANE_EVENT = 'orca-close-terminal-pane'
 export const REQUEST_ACTIVE_TERMINAL_PANE_CLOSE_EVENT = 'orca-request-active-terminal-pane-close'
 export const BACKGROUND_MOUNT_TERMINAL_WORKTREE_EVENT = 'orca-background-mount-terminal-worktree'
 
@@ -47,19 +43,6 @@ export type PasteTerminalTextDetail = {
   text: string
 }
 
-export type SplitTerminalPaneDetail = {
-  tabId: string
-  worktreeId?: string
-  paneRuntimeId: number
-  direction: 'horizontal' | 'vertical'
-  command?: string
-  sourceLeafId?: string
-  sourcePtyId?: string
-  telemetrySource?: TerminalPaneSplitSource
-  newLeafId?: string
-  ptyId?: string
-}
-
 export type RequestActiveTerminalPaneSplitDetail = {
   tabId?: string | null
   direction: 'horizontal' | 'vertical'
@@ -68,15 +51,6 @@ export type RequestActiveTerminalPaneSplitDetail = {
 /** Unlike a split request, a close always names its tab: an untargeted close must not reach every mounted pane. */
 export type RequestActiveTerminalPaneCloseDetail = {
   tabId: string
-}
-
-export type CloseTerminalPaneDetail = {
-  tabId: string
-  paneRuntimeId?: number
-  leafId?: string
-  preservePty?: boolean
-  retireSurface?: boolean
-  expectedPtyId?: string
 }
 
 export type BackgroundMountTerminalWorktreeDetail = {

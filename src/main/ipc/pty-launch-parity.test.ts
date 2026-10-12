@@ -267,10 +267,9 @@ describe('host lane: producer call -> runtime controller -> provider', () => {
 })
 
 const POSIX_REPO = { kind: 'repo', path: POSIX_PATH } as const
-const WORKER = HOST_LAUNCH_CASES.find((c) => c.name.startsWith('orchestration worker'))!
 
-// Pins main's current launch behaviour as the convergence parity baseline (rows 2 and 10; failed
-// spawn, reveal, pane identity): the facts no single table row carries.
+// Pins main's current launch behaviour as the convergence parity baseline (row 2; failed
+// spawn, pane identity): the facts no single table row carries.
 describe('launch facts outside the tables', () => {
   const suite = setupPtyIpcSuite()
   afterEach(() => restoreMainPlatform())
@@ -301,19 +300,6 @@ describe('launch facts outside the tables', () => {
     })
     await expect(launch).rejects.toThrow('spawn boom')
     expect(trackMock.mock.calls.filter(([event]) => event === 'agent_error')).toEqual(c.calls)
-  })
-
-  // C5e (presentation merge): a worker asks the window to reveal its titled tab without activating it.
-  it('row 10: an orchestration worker requests a titled, inactive reveal', async () => {
-    setMainPlatform(WORKER.os)
-    const lanes = startParityLanes(suite, { workspace: WORKER.workspace })
-    await runHostCall(lanes, WORKER)
-    expect(lanes.reveal.mock.calls[0]?.[1]).toMatchObject({
-      title: 'worker-task-1',
-      activate: false,
-      surfaceOwner: false
-    })
-    expect(lanes.reveal.mock.calls[0]?.[1]).not.toHaveProperty('presentation')
   })
 
   // C5c (pane identity built once in main): main rewrites stale pane keys from the request's tab and

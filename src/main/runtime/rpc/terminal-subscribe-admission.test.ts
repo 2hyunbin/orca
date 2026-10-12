@@ -62,21 +62,19 @@ const resultTypes = (messages: string[]): unknown[] =>
 
 const flush = (ms = 20): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Resolves pending `waitForLeafPtyId` calls on demand and rejects them when their signal aborts, like the runtime. */
+/** Resolves pending `startPaneForHandle` calls on demand and with null when their signal aborts, like the runtime. */
 function createPtyWaits() {
-  const waits: { resolve: (ptyId: string) => void }[] = []
+  const waits: { resolve: (ptyId: string | null) => void }[] = []
   return {
     waits,
-    waitForLeafPtyId: vi.fn(
-      (_handle: string, _timeoutMs?: number, signal?: AbortSignal) =>
-        new Promise<string>((resolve, reject) => {
+    startPaneForHandle: vi.fn(
+      (_handle: string, signal?: AbortSignal) =>
+        new Promise<string | null>((resolve) => {
           if (signal?.aborted) {
-            reject(new Error('request_aborted'))
+            resolve(null)
             return
           }
-          signal?.addEventListener('abort', () => reject(new Error('request_aborted')), {
-            once: true
-          })
+          signal?.addEventListener('abort', () => resolve(null), { once: true })
           waits.push({ resolve })
         })
     ),
@@ -96,11 +94,8 @@ function stubRuntime(overrides: Record<string, unknown> = {}) {
   const runtime = {
     getRuntimeId: () => 'test-runtime',
     registerRemoteTerminalViewSubscriber: () => () => {},
-    // Why: these cases cover the window-attached path, which mounts the tab and waits for its pty.
-    startsPanesForSubscribers: vi.fn(() => false),
-    requestRendererTerminalTabMount: vi.fn(() => false),
     resolveLeafForHandle: vi.fn(() => ({ ptyId: ptyReady ? PTY_ID : null })),
-    waitForLeafPtyId: ptyWaits.waitForLeafPtyId,
+    startPaneForHandle: ptyWaits.startPaneForHandle,
     handleMobileSubscribe: vi.fn().mockResolvedValue(true),
     handleMobileUnsubscribe: vi.fn(),
     subscribeToTerminalData: vi.fn(() => vi.fn()),
@@ -128,7 +123,7 @@ function stubRuntime(overrides: Record<string, unknown> = {}) {
   return { runtime, registry, ptyWaits, spawn }
 }
 
-/** The real runtime, with only handle resolution, the pty wait, the scrollback read and tab mounting doubled. */
+/** The real runtime, with only handle resolution, the pane start and the scrollback read doubled. */
 function createRealRuntime() {
   const runtime = new OrcaRuntimeService()
   const sizes = new Map<string, { cols: number; rows: number }>([[PTY_ID, { cols: 120, rows: 40 }]])
@@ -147,7 +142,7 @@ function createRealRuntime() {
   vi.spyOn(runtime, 'resolveLeafForHandle').mockImplementation(() => ({
     ptyId: ptyReady ? PTY_ID : null
   }))
-  vi.spyOn(runtime, 'waitForLeafPtyId').mockImplementation(ptyWaits.waitForLeafPtyId)
+  vi.spyOn(runtime, 'startPaneForHandle').mockImplementation(ptyWaits.startPaneForHandle)
   vi.spyOn(runtime, 'readTerminal').mockResolvedValue({
     handle: 'terminal-1',
     status: 'running',
@@ -155,9 +150,6 @@ function createRealRuntime() {
     truncated: false,
     nextCursor: null
   })
-  vi.spyOn(runtime, 'requestRendererTerminalTabMount').mockReturnValue(false)
-  // Why: keep the window-attached pty wait; a windowless runtime would start the pane itself.
-  vi.spyOn(runtime, 'startsPanesForSubscribers').mockReturnValue(false)
   const spawn = (): void => {
     ptyReady = true
     ptyWaits.spawn()
@@ -175,7 +167,7 @@ describe('terminal.subscribe registers at admission', () => {
       (message) => messages.push(message),
       phoneConnection('conn-a')
     )
-    await vi.waitFor(() => expect(ptyWaits.waitForLeafPtyId).toHaveBeenCalled())
+    await vi.waitFor(() => expect(ptyWaits.startPaneForHandle).toHaveBeenCalled())
 
     const replies: string[] = []
     await dispatcher.dispatchStreaming(unsubscribeRequest(), (reply) => replies.push(reply), {
@@ -195,28 +187,6 @@ describe('terminal.subscribe registers at admission', () => {
     }
   })
 
-  it('starts the pane itself when no window owns it, without a mount request', async () => {
-    const { runtime, registry } = stubRuntime({
-      startsPanesForSubscribers: vi.fn(() => true),
-      startPaneForHandle: vi.fn().mockResolvedValue(PTY_ID)
-    })
-    const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
-    const subscribe = dispatcher.dispatchStreaming(
-      subscribeRequest(binaryParams),
-      vi.fn(),
-      phoneConnection('conn-a')
-    )
-    try {
-      await vi.waitFor(() => expect(runtime.handleMobileSubscribe).toHaveBeenCalled())
-      expect(runtime.startPaneForHandle).toHaveBeenCalledWith('terminal-1', expect.any(AbortSignal))
-      expect(runtime.requestRendererTerminalTabMount).not.toHaveBeenCalled()
-      expect(runtime.waitForLeafPtyId).not.toHaveBeenCalled()
-    } finally {
-      registry.cleanupSubscriptionsForConnection('conn-a')
-      await subscribe
-    }
-  })
-
   it('leaves the desktop driver idle when the phone leaves before the pty is ready', async () => {
     const { runtime, ptyWaits, spawn } = createRealRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
@@ -226,7 +196,7 @@ describe('terminal.subscribe registers at admission', () => {
       (message) => messages.push(message),
       phoneConnection('conn-a')
     )
-    await vi.waitFor(() => expect(ptyWaits.waitForLeafPtyId).toHaveBeenCalled())
+    await vi.waitFor(() => expect(ptyWaits.startPaneForHandle).toHaveBeenCalled())
 
     await dispatcher.dispatchStreaming(unsubscribeRequest(), vi.fn(), { connectionId: 'conn-a' })
     spawn()
@@ -251,14 +221,14 @@ describe('terminal.subscribe registers at admission', () => {
       (message) => firstMessages.push(message),
       phoneConnection('conn-a')
     )
-    await vi.waitFor(() => expect(ptyWaits.waitForLeafPtyId).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(ptyWaits.startPaneForHandle).toHaveBeenCalledTimes(1))
 
     const second = dispatcher.dispatchStreaming(
       subscribeRequest(binaryParams),
       vi.fn(),
       phoneConnection('conn-b')
     )
-    await vi.waitFor(() => expect(ptyWaits.waitForLeafPtyId).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(ptyWaits.startPaneForHandle).toHaveBeenCalledTimes(2))
     const replacement = registry.peekCleanup(SUBSCRIPTION_ID)
     spawn()
     await first
@@ -323,7 +293,7 @@ describe('terminal.subscribe registers at admission', () => {
       (message) => messages.push(message),
       phoneConnection('conn-a', request.signal)
     )
-    await vi.waitFor(() => expect(ptyWaits.waitForLeafPtyId).toHaveBeenCalled())
+    await vi.waitFor(() => expect(ptyWaits.startPaneForHandle).toHaveBeenCalled())
 
     request.abort()
     spawn()
@@ -389,7 +359,7 @@ describe('terminal.subscribe registers at admission', () => {
 describe('terminal.subscribe characterization', () => {
   it('answers a dead pty with a scrollback preview, then one end, and keeps no registration', async () => {
     const { runtime, registry } = stubRuntime({
-      waitForLeafPtyId: vi.fn().mockRejectedValue(new Error('Timed out waiting for PTY to spawn'))
+      startPaneForHandle: vi.fn().mockResolvedValue(null)
     })
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
     const messages: string[] = []
@@ -400,7 +370,7 @@ describe('terminal.subscribe characterization', () => {
       phoneConnection('conn-a')
     )
 
-    expect(runtime.waitForLeafPtyId).toHaveBeenCalled()
+    expect(runtime.startPaneForHandle).toHaveBeenCalled()
     expect(messages.map((message) => JSON.parse(message).result)).toEqual([
       { type: 'subscribed', streamId: null, lines: ['scrollback'], truncated: false },
       { type: 'end' }
@@ -460,7 +430,7 @@ describe('terminal.subscribe characterization', () => {
 
   it('rejects a phone without binary streaming before it can replace the live stream', async () => {
     const { runtime, registry } = stubRuntime({
-      waitForLeafPtyId: vi.fn().mockRejectedValue(new Error('Timed out waiting for PTY to spawn'))
+      startPaneForHandle: vi.fn().mockResolvedValue(null)
     })
     const live = vi.fn()
     registry.registerOwnedSubscriptionCleanup(SUBSCRIPTION_ID, live, 'conn-a')
@@ -479,7 +449,7 @@ describe('terminal.subscribe characterization', () => {
       error: { message: 'binary_terminal_stream_required' }
     })
     expect(messages).toHaveLength(1)
-    expect(runtime.waitForLeafPtyId).not.toHaveBeenCalled()
+    expect(runtime.startPaneForHandle).not.toHaveBeenCalled()
     expect(live).not.toHaveBeenCalled()
     expect(registry.peekCleanup(SUBSCRIPTION_ID)).toBe(live)
   })
@@ -528,7 +498,7 @@ describe('terminal.unsubscribe addressed by request', () => {
       (message) => messages.push(message),
       phoneConnection('conn-a')
     )
-    await vi.waitFor(() => expect(ptyWaits.waitForLeafPtyId).toHaveBeenCalled())
+    await vi.waitFor(() => expect(ptyWaits.startPaneForHandle).toHaveBeenCalled())
 
     await dispatcher.dispatchStreaming(requestUnsubscribe(pending.id), vi.fn(), {
       connectionId: 'conn-a'

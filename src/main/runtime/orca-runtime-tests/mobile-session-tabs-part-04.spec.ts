@@ -456,7 +456,8 @@ describe('OrcaRuntimeService', () => {
 
     const phoneTabs = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
-    expect(laptopTerminal.surface).toBe('background')
+    // The runtime's layout holds the tab, so the create is visible with or without a window.
+    expect(laptopTerminal.surface).toBe('visible')
     expect(phoneTabs.tabs).toEqual([
       expect.objectContaining({
         type: 'terminal',

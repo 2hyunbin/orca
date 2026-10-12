@@ -109,7 +109,6 @@ describe('PR E2E gate contract', () => {
       'src/main/window/attach-main-window-services.ts',
       'src/preload/api/ui-command-event-api.ts',
       'src/preload/index.ts',
-      'src/renderer/src/components/terminal-pane/terminal-pane-split-request-routing.ts',
       'src/renderer/src/components/terminal-pane/use-terminal-pane-lifecycle.ts',
       'src/renderer/src/components/terminal-pane/use-terminal-tab-cold-parking.ts',
       'src/renderer/src/hooks/ipc-events/terminal-ui-routing-ipc-bridge.ts'

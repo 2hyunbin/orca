@@ -53,7 +53,6 @@ export type RuntimeFileCommandHost = {
     worktreeId: string,
     filePath: string,
     relativePath: string,
-    runtimeEnvironmentId?: string | null,
     navigation?: RuntimeNavigationTarget
   ): void
   openDiff(
@@ -61,7 +60,6 @@ export type RuntimeFileCommandHost = {
     filePath: string,
     relativePath: string,
     staged: boolean,
-    runtimeEnvironmentId?: string | null,
     navigation?: RuntimeNavigationTarget
   ): void
 }

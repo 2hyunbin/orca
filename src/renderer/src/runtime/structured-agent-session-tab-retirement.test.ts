@@ -40,13 +40,6 @@ vi.mock('./structured-agent-session-close', () => ({
 vi.mock('./runtime-rpc-client', () => ({
   callRuntimeRpc: mocks.callRuntime
 }))
-vi.mock('./local-session-tab-close-owner', () => ({
-  withLocalSessionTabCloseOwner: async (
-    _worktreeId: string,
-    _tabId: string,
-    close: () => Promise<unknown>
-  ) => close()
-}))
 vi.mock('./local-structured-session-tabs-sync/inventory-refresh', () => ({
   refreshLocalStructuredSessionWorktreeTabs: mocks.reacceptLocal
 }))

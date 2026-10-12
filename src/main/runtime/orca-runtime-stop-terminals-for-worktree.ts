@@ -19,10 +19,7 @@ import {
 import { worktreePtyBelongsToHost, type WorktreePtyHostFence } from './worktree-pty-host-fence'
 import { summarizeWorktreePtyStopVerdict } from './worktree-pty-stop-verdict'
 import { describeMobileSessionTabCloseRefusal } from './mobile-session-tab-close-refusal-message'
-import {
-  clearHeldWorktreeResumeRecords,
-  clearStoredWorktreeResumeRecords
-} from './worktree-terminal-resume-records'
+import { clearHeldWorktreeResumeRecords } from './worktree-terminal-resume-records'
 
 export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithResolveTerminalSplitSourceAuthority {
   private collectWorktreePtyIds(
@@ -117,15 +114,6 @@ export class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithReso
     closedTabIds: readonly string[]
   ): Promise<void> {
     const args = { worktreeId, hostId, closedTabIds }
-    if (this.getAvailableAuthoritativeWindow()) {
-      const store = this.store
-      // The window's close leaves the records in the Store (until PR 6d), so they are cleared there.
-      return clearStoredWorktreeResumeRecords(
-        store,
-        args,
-        store?.setWorkspaceSession ? (next, id) => store.setWorkspaceSession?.(next, id) : undefined
-      )
-    }
     this.assertHeldTerminalsClosed(worktreeId)
     await clearHeldWorktreeResumeRecords(this.layoutHolder, this.store, args)
   }

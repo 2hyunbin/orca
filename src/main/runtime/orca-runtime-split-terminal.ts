@@ -2,7 +2,6 @@
 import { OrcaRuntimeWithStopExplicitlyClosedTabPtys } from './orca-runtime-stop-explicitly-closed-tab-ptys'
 import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
 import type { RuntimeTerminalSplit } from '../../shared/runtime-types'
-import { randomUUID } from 'node:crypto'
 import type { Worktree } from '../../shared/worktree/types'
 
 export class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyClosedTabPtys {
@@ -23,30 +22,9 @@ export class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyC
     createdWorktree?: Worktree
   ): Promise<RuntimeTerminalSplit> {
     const livePty = this.getLivePtyForHandle(handle)
-    if (livePty) {
-      return await this.splitPtyBackedTerminal(livePty.pty, opts, createdWorktree)
+    if (!livePty) {
+      throw new Error('terminal_handle_stale')
     }
-    this.assertGraphReady()
-    const { leaf } = this.getLiveLeafForHandle(handle)
-    const direction = opts.direction ?? 'horizontal'
-
-    const newLeafId = randomUUID()
-
-    this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
-      direction,
-      command: opts.command,
-      worktreeId: leaf.worktreeId,
-      sourceLeafId: leaf.leafId,
-      telemetrySource: opts.telemetrySource,
-      newLeafId
-    })
-
-    const newHandle = await this.waitForLeafInTab(leaf.tabId, newLeafId)
-    return {
-      handle: newHandle,
-      tabId: leaf.tabId,
-      paneRuntimeId: leaf.paneRuntimeId,
-      leafId: newLeafId
-    }
+    return await this.splitPtyBackedTerminal(livePty.pty, opts, createdWorktree)
   }
 }

@@ -1,61 +1,23 @@
-/* oxlint-disable anti-slop/no-module-mocking -- Vitest support module for the 4 close-routing ipc-events specs, not shipped code, and it falls
-   outside the *.test / *.spec / tests glob set. The stubs and the hook invocation are one unit; splitting the 11 doMock
-   calls back out would duplicate them into all 4 specs. */
+/* oxlint-disable anti-slop/no-module-mocking -- Vitest support module for the 3 close-routing ipc-events specs, not shipped code, and it falls
+   outside the *.test / *.spec / tests glob set. The stubs and the hook invocation are one unit; splitting the 9 doMock
+   calls back out would duplicate them into all 3 specs. */
 import type * as ReactModule from 'react'
 import { vi } from 'vitest'
-import type { TerminalSurfaceCloseTarget } from '../../../shared/terminal-surface-close-target'
 
-export type RequestTabCloseListener = (data: {
-  requestId: string
-  tabId: string | null
-  worktreeId?: string
-}) => void
 export type CloseActiveTabListener = (payload?: { sourceId: string }) => void
 export type CloseFloatingItemListener = (payload: { sourceId: string }) => void
 export type SelectFloatingIndexListener = (payload: { index: number }) => void
-export type CloseTerminalListener = (target: TerminalSurfaceCloseTarget) => void
-export type CloseSessionTabListener = (data: { tabId: string; worktreeId: string }) => void
-export type SessionTabCloseRequestListener = (data: {
-  requestId: string
-  tabId: string
-  worktreeId: string
-  expiresAt?: number
-}) => void
-export type TerminalTabCloseRequestListener = (data: {
-  requestId: string
-  tabId: string
-  localPtyTeardownOwnedExternally?: boolean
-  force?: boolean
-}) => void
 
 export async function useIpcEventsForCloseRouting({
   closeActiveTabListenerRef,
   closeFloatingItemListenerRef,
   selectFloatingIndexListenerRef,
-  closeSessionTabListenerRef,
-  sessionTabCloseRequestListenerRef,
-  respondSessionTabClose = vi.fn(),
-  closeTerminalListenerRef,
-  getState,
-  requestTabCloseListenerRef,
-  replyTabClose = vi.fn(),
-  terminalTabCloseRequestListenerRef,
-  respondTerminalTabClose = vi.fn(),
-  persistWorkspaceSession = vi.fn().mockResolvedValue(undefined)
+  getState
 }: {
   closeActiveTabListenerRef?: { current: CloseActiveTabListener | null }
   closeFloatingItemListenerRef?: { current: CloseFloatingItemListener | null }
   selectFloatingIndexListenerRef?: { current: SelectFloatingIndexListener | null }
-  closeSessionTabListenerRef?: { current: CloseSessionTabListener | null }
-  sessionTabCloseRequestListenerRef?: { current: SessionTabCloseRequestListener | null }
-  respondSessionTabClose?: ReturnType<typeof vi.fn>
-  closeTerminalListenerRef?: { current: CloseTerminalListener | null }
   getState: () => Record<string, unknown>
-  requestTabCloseListenerRef?: { current: RequestTabCloseListener | null }
-  replyTabClose?: ReturnType<typeof vi.fn>
-  terminalTabCloseRequestListenerRef?: { current: TerminalTabCloseRequestListener | null }
-  respondTerminalTabClose?: ReturnType<typeof vi.fn>
-  persistWorkspaceSession?: ReturnType<typeof vi.fn>
 }): Promise<void> {
   if (typeof HTMLElement === 'undefined') {
     vi.stubGlobal('HTMLElement', class {})
@@ -142,12 +104,6 @@ export async function useIpcEventsForCloseRouting({
   vi.doMock('@/lib/zoom-events', () => ({
     dispatchZoomLevelChanged: vi.fn()
   }))
-  vi.doMock('@/lib/workspace-session-host-persistence', () => ({
-    persistWorkspaceSessionByHost: persistWorkspaceSession
-  }))
-  vi.doMock('@/lib/workspace-session', () => ({
-    buildWorkspaceSessionPayload: vi.fn(() => ({}))
-  }))
 
   vi.stubGlobal('window', {
     dispatchEvent: vi.fn(),
@@ -176,58 +132,12 @@ export async function useIpcEventsForCloseRouting({
         onJumpToTabIndex: () => () => {},
         onWorktreeHistoryNavigate: () => () => {},
         onActivateWorktree: () => () => {},
-        onCreateTerminal: () => () => {},
-        onRequestTerminalCreate: () => () => {},
-        onPublishAgentLaunchTab: () => () => {},
-        onAgentLaunchPaneVerdict: () => () => {},
-        onRequestTerminalTabMount: () => () => {},
-        replyTerminalCreate: () => {},
-        onSplitTerminal: () => () => {},
-        onRenameTerminal: () => () => {},
         onFocusTerminal: () => () => {},
         onFocusEditorTab: () => () => {},
-        onCloseSessionTab: (listener: CloseSessionTabListener) => {
-          if (closeSessionTabListenerRef) {
-            closeSessionTabListenerRef.current = listener
-          }
-          return () => {}
-        },
-        onSessionTabCloseRequest: (listener: SessionTabCloseRequestListener) => {
-          if (sessionTabCloseRequestListenerRef) {
-            sessionTabCloseRequestListenerRef.current = listener
-          }
-          return () => {}
-        },
-        respondSessionTabClose,
-        onMoveSessionTab: () => () => {},
-        onOpenFileFromMobile: () => () => {},
-        onOpenDiffFromMobile: () => () => {},
-        onCloseTerminal: (listener: CloseTerminalListener) => {
-          if (closeTerminalListenerRef) {
-            closeTerminalListenerRef.current = listener
-          }
-          return () => {}
-        },
-        onTerminalTabCloseRequest: (listener: TerminalTabCloseRequestListener) => {
-          if (terminalTabCloseRequestListenerRef) {
-            terminalTabCloseRequestListenerRef.current = listener
-          }
-          return () => {}
-        },
-        respondTerminalTabClose,
         onSleepWorktree: () => () => {},
         onResumeSleepingAgents: () => () => {},
         onNewBrowserTab: () => () => {},
         onNewMarkdownTab: () => () => {},
-        onRequestTabCreate: () => () => {},
-        replyTabCreate: () => {},
-        onRequestTabClose: (listener: RequestTabCloseListener) => {
-          if (requestTabCloseListenerRef) {
-            requestTabCloseListenerRef.current = listener
-          }
-          return () => {}
-        },
-        replyTabClose,
         onRequestTabSetProfile: () => () => {},
         replyTabSetProfile: () => {},
         onNewTerminalTab: () => () => {},

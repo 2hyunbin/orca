@@ -2,7 +2,6 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '@/store'
 import { useAppStore } from '@/store'
-import { registerTerminalPresentationIpcBridge } from '@/hooks/ipc-events/terminal-presentation-ipc-bridge'
 import { getDefaultSettings } from '../../../shared/constants'
 import type { RuntimeTerminalSummary } from '../../../shared/runtime-types'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
@@ -14,15 +13,14 @@ import { makeCreatedAgentWorktree as makeWorktree } from './worktree-activation-
  * STA-9417, converted from the natural repro: a host-created worktree whose setup script runs in a
  * split of the (unmounted) primary tab, then the first activation of that worktree. When main's
  * split reveal does not reach the window, the activation sweep mints a second tab for the setup
- * PTY, so two saved panes own one terminal and one of them freezes.
+ * PTY, so two saved panes own one terminal and one of them freezes. Main no longer reveals runtime
+ * splits to the window (PR 6d), so every run here is the "reveal never arrives" case.
  */
 
 const initialState = useAppStore.getState()
 const TAB_B = 'b3f1c1de-5e0f-4a51-9d0c-7a8e2a9f6b11'
 const PRIMARY_LEAF = '11111111-1111-4111-8111-111111111111'
 const SETUP_LEAF = '22222222-2222-4222-8222-222222222222'
-
-type CreateTerminalListener = Parameters<Window['api']['ui']['onCreateTerminal']>[0]
 
 function baseState(): Partial<AppState> {
   const worktree = makeWorktree()
@@ -93,12 +91,8 @@ function orphanRow(ptyId: string, leafId: string): RuntimeTerminalSummary {
   }
 }
 
-function stubHost(
-  primaryPtyId: string,
-  setupPtyId: string
-): { reveal: () => CreateTerminalListener } {
+function stubHost(primaryPtyId: string, setupPtyId: string): void {
   const worktree = makeWorktree()
-  let listener: CreateTerminalListener | undefined
   const runtimeCall = vi.fn(async ({ method }: { method: string }) => {
     if (method === 'session.tabs.list') {
       return {
@@ -137,26 +131,10 @@ function stubHost(
   vi.stubGlobal('window', {
     api: {
       runtime: { call: runtimeCall },
-      pty: { listSessions },
-      ui: {
-        onCreateTerminal: (next: CreateTerminalListener) => {
-          listener = next
-          return () => {}
-        },
-        onRequestTerminalTabMount: () => () => {},
-        replyTerminalCreate: vi.fn()
-      }
+      pty: { listSessions }
     },
     dispatchEvent: vi.fn()
   })
-  return {
-    reveal: () => {
-      if (!listener) {
-        throw new Error('presentation bridge did not register')
-      }
-      return listener
-    }
-  }
 }
 
 /** Main's background reveal of the primary terminal: the tab exists here but never mounted. */
@@ -177,24 +155,6 @@ function leafIdsInOrder(node: TerminalPaneLayoutNode | null): string[] {
   return node.type === 'leaf'
     ? [node.leafId]
     : [...leafIdsInOrder(node.first), ...leafIdsInOrder(node.second)]
-}
-
-function setupSplitReveal(
-  requestId: string,
-  worktreeId: string,
-  setupPtyId: string
-): Parameters<CreateTerminalListener>[0] {
-  return {
-    requestId,
-    worktreeId,
-    ptyId: setupPtyId,
-    activate: false,
-    surfaceOwner: false,
-    tabId: TAB_B,
-    leafId: SETUP_LEAF,
-    splitFromLeafId: PRIMARY_LEAF,
-    splitDirection: 'vertical'
-  }
 }
 
 /** ptyId → every tab:leaf in the worktree that holds it. */
@@ -226,18 +186,13 @@ afterEach(() => {
 })
 
 describe('STA-9417: setup split of an unmounted tab, then first activation', () => {
-  async function runScenario(revealSplit: boolean): Promise<void> {
+  async function runScenario(): Promise<void> {
     const worktree = makeWorktree()
     const primaryPtyId = `${worktree.id}@@primary`
     const setupPtyId = `${worktree.id}@@setup`
     useAppStore.setState(baseState())
-    const host = stubHost(primaryPtyId, setupPtyId)
-    registerTerminalPresentationIpcBridge([])
+    stubHost(primaryPtyId, setupPtyId)
     seedRevealedPrimaryTab(worktree.id, primaryPtyId)
-
-    if (revealSplit) {
-      host.reveal()(setupSplitReveal('reveal-setup-split', worktree.id, setupPtyId))
-    }
     await activateFirstTime(worktree.id)
 
     const tabs = useAppStore.getState().tabsByWorktree[worktree.id] ?? []
@@ -248,17 +203,13 @@ describe('STA-9417: setup split of an unmounted tab, then first activation', () 
     })
   }
 
-  it('ends with one tab and one owner per terminal when main reveals the split', async () => {
-    await runScenario(true)
-  })
-
   // STA-9417: fails until the mirror refactor (B2-4) pushes main's split before the sweep runs.
   it.fails('ends with one tab and one owner per terminal when the split reveal never arrives', async () => {
-    await runScenario(false)
+    await runScenario()
   })
 
-  // STA-9417: fails until the mirror refactor (B2-4); the odd runs mint the duplicate.
-  it.fails('stays duplicate-free across 8 create-then-activate cycles, with or without the reveal', async () => {
+  // STA-9417: fails until the mirror refactor (B2-4).
+  it.fails('stays duplicate-free across 8 create-then-activate cycles', async () => {
     let duplicates = 0
     for (let run = 0; run < 8; run++) {
       const worktree = makeWorktree()
@@ -266,13 +217,8 @@ describe('STA-9417: setup split of an unmounted tab, then first activation', () 
       const setupPtyId = `${worktree.id}@@setup-${run}`
       useAppStore.setState(initialState, true)
       useAppStore.setState(baseState())
-      const host = stubHost(primaryPtyId, setupPtyId)
-      registerTerminalPresentationIpcBridge([])
+      stubHost(primaryPtyId, setupPtyId)
       seedRevealedPrimaryTab(worktree.id, primaryPtyId)
-      // Odd runs lose the reveal, as the natural repro did.
-      if (run % 2 === 0) {
-        host.reveal()(setupSplitReveal(`reveal-${run}`, worktree.id, setupPtyId))
-      }
       await activateFirstTime(worktree.id)
       duplicates += [...ownersByPty(worktree.id).values()].filter(
         (owners) => owners.length > 1

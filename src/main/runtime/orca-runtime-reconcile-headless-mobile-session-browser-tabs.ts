@@ -1,6 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithWaitForSessionTabsInventoryPublication } from './orca-runtime-wait-for-session-tabs-inventory-publication'
-import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
 import { parseAppSshPtyId, toComparableRelaySshPtyId } from '../../shared/ssh-pty-id'
 import { toSshExecutionHostId } from '../../shared/execution-host'
 import { parsePaneKey } from '../../shared/stable-pane-id'
@@ -158,14 +157,5 @@ export class OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs extends Or
   // classify ownership for that form — renderer-graph membership does (below).
   protected isServeOrSshOwnedPtyId(ptyId: string | null | undefined): boolean {
     return this.isServeOwnedPtyId(ptyId) || this.isSshOwnedPtyId(ptyId)
-  }
-
-  protected hasServeOrSshOwnedBinding(tab: RuntimeMobileSessionTerminalTab): boolean {
-    if (this.isServeOrSshOwnedPtyId(tab.ptyId)) {
-      return true
-    }
-    return Object.values(tab.parentLayout?.ptyIdsByLeafId ?? {}).some((ptyId) =>
-      this.isServeOrSshOwnedPtyId(ptyId)
-    )
   }
 }

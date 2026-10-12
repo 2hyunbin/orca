@@ -19,7 +19,7 @@ import {
   makeFolderWorkspace,
   makeRuntimeStoreWithWorkspaceSession
 } from '../orca-runtime-test-fixtures.spec'
-import { publishLegacyWorkerReveal } from '../orca-runtime-test-scenario-builders.spec'
+import { withLegacyWorkerTab } from '../orca-runtime-test-scenario-builders.spec'
 
 describe('OrcaRuntimeService', () => {
   it('defers live workers without exact controller identity evidence', async () => {
@@ -67,8 +67,16 @@ describe('OrcaRuntimeService', () => {
       })
     ) as WorkspaceSessionState['sleepingAgentSessionsByPaneKey']
     const session: WorkspaceSessionState = {
-      ...getDefaultWorkspaceSession(),
-      tabsByWorktree: { [TEST_WORKTREE_ID]: [] },
+      ...cases.reduce<WorkspaceSessionState>(
+        (withTabs, { name, leafId }) =>
+          withLegacyWorkerTab(withTabs, {
+            worktreeId: TEST_WORKTREE_ID,
+            tabId: `legacy-${name}`,
+            leafId,
+            ptyId: `pty-${name}`
+          }),
+        { ...getDefaultWorkspaceSession(), tabsByWorktree: { [TEST_WORKTREE_ID]: [] } }
+      ),
       sleepingAgentSessionsByPaneKey
     }
     const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(session)
@@ -171,8 +179,17 @@ describe('OrcaRuntimeService', () => {
     const folderPath = await mkdtemp(join(tmpdir(), 'orca-legacy-worker-folder-'))
     const session: WorkspaceSessionState = {
       ...getDefaultWorkspaceSession(),
+      ...withLegacyWorkerTab(
+        { ...getDefaultWorkspaceSession(), tabsByWorktree: { [TEST_FOLDER_WORKSPACE_KEY]: [] } },
+        {
+          worktreeId: TEST_FOLDER_WORKSPACE_KEY,
+          tabId: 'legacy-folder-worker',
+          leafId: HEADLESS_LEAF_ID,
+          ptyId: 'pty-folder-legacy',
+          title: 'Folder worker'
+        }
+      ),
       activeWorktreeId: TEST_FOLDER_WORKSPACE_KEY,
-      tabsByWorktree: { [TEST_FOLDER_WORKSPACE_KEY]: [] },
       sleepingAgentSessionsByPaneKey: {
         [workerPaneKey]: {
           paneKey: workerPaneKey,
@@ -235,19 +252,8 @@ describe('OrcaRuntimeService', () => {
       hasPty: (candidate) => candidate === 'pty-folder-legacy',
       listProcesses
     })
-    const revealTerminalSession = vi.fn().mockImplementation(() =>
-      publishLegacyWorkerReveal(runtime, {
-        worktreeId: TEST_FOLDER_WORKSPACE_KEY,
-        tabId: 'legacy-folder-worker',
-        leafId: HEADLESS_LEAF_ID,
-        ptyId: 'pty-folder-legacy'
-      })
-    )
-    runtime.setNotifier({ revealTerminalSession } as never)
 
-    await expect(
-      runtime.reconcileLegacyWorkerTerminals({ materializeRenderer: true })
-    ).resolves.toMatchObject({
+    await expect(runtime.reconcileLegacyWorkerTerminals()).resolves.toMatchObject({
       adoptedDispatchIds: ['dispatch-folder'],
       exitedDispatchIds: [],
       deferredDispatchIds: []
@@ -262,19 +268,6 @@ describe('OrcaRuntimeService', () => {
     expect(getSession().sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeUndefined()
     expect(listProcesses).toHaveBeenCalledTimes(3)
     expect(listProcesses).toHaveBeenCalledWith('local', LIST_PROVIDER_DEADLINE)
-    expect(revealTerminalSession).toHaveBeenCalledWith(TEST_FOLDER_WORKSPACE_KEY, {
-      ptyId: 'pty-folder-legacy',
-      title: 'Folder worker',
-      activate: false,
-      presentation: 'background',
-      tabId: 'legacy-folder-worker',
-      leafId: HEADLESS_LEAF_ID,
-      focus: false,
-      expectedProcessIdentity: {
-        terminalHandle: 'term_folder',
-        incarnationId
-      }
-    })
   })
 
   it('defers an SSH folder legacy worker while its folder path is unavailable', async () => {
@@ -363,30 +356,14 @@ describe('OrcaRuntimeService', () => {
       hasPty: (candidate) => candidate === ptyId,
       listProcesses
     })
-    const revealTerminalSession = vi.fn().mockImplementation(() =>
-      publishLegacyWorkerReveal(runtime, {
-        worktreeId: TEST_FOLDER_WORKSPACE_KEY,
-        tabId: 'legacy-ssh-folder-worker',
-        leafId: HEADLESS_LEAF_ID,
-        ptyId
-      })
-    )
-    runtime.setNotifier({ revealTerminalSession } as never)
-
     expect(sshSession.sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeDefined()
     // Why: this process serves no SSH filesystem, so the folder path stays unavailable.
-    await expect(
-      runtime.reconcileLegacyWorkerTerminals({
-        connectionId,
-        materializeRenderer: true
-      })
-    ).resolves.toMatchObject({
+    await expect(runtime.reconcileLegacyWorkerTerminals({ connectionId })).resolves.toMatchObject({
       adoptedDispatchIds: [],
       exitedDispatchIds: [],
       deferredDispatchIds: ['dispatch-ssh-folder']
     })
     expect(sshSession.sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeDefined()
     expect(localSession.sleepingAgentSessionsByPaneKey?.[workerPaneKey]).toBeUndefined()
-    expect(revealTerminalSession).not.toHaveBeenCalled()
   })
 })

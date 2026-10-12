@@ -480,62 +480,17 @@ describe('a surface the host retired stays retired when a restored sibling regis
   })
 })
 
-// A phone creates a terminal while the desktop's frame still lacks it: the spawn registered and the
-// host published the tab itself, as it does for a create the desktop has not published yet.
-const PHONE_LEAF = '33333333-3333-4333-8333-333333333333'
-
-async function runtimeWithUnpublishedPhoneCreate(): Promise<OrcaRuntimeService> {
-  const { runtime, sessions } = coldRestoredRuntime()
-  const handlers = new Map<string, (event: unknown, reply: unknown) => void>()
-  const webContents = {
-    isDestroyed: () => false,
-    setBackgroundThrottling: () => {},
-    capturePage: async () => null,
-    send: (channel: string, payload: { requestId: string }) => {
-      if (channel !== 'terminal:requestTabCreate') {
-        return
-      }
-      runtime.registerPty('pty-phone', WORKTREE_ID, null, {
-        tabId: 'tab-phone',
-        leafId: PHONE_LEAF,
-        incarnationId: 'incarnation-phone'
-      })
-      // The window saves the created tab, as its session save would.
-      const session = sessions.get(LOCAL_EXECUTION_HOST_ID)!
-      sessions.set(LOCAL_EXECUTION_HOST_ID, {
-        ...session,
-        tabsByWorktree: {
-          [WORKTREE_ID]: [
-            ...(session.tabsByWorktree[WORKTREE_ID] ?? []),
-            { ...session.tabsByWorktree[WORKTREE_ID]![0]!, id: 'tab-phone', ptyId: 'pty-phone' }
-          ]
-        },
-        terminalLayoutsByTabId: {
-          ...session.terminalLayoutsByTabId,
-          'tab-phone': {
-            root: { type: 'leaf', leafId: PHONE_LEAF },
-            activeLeafId: PHONE_LEAF,
-            expandedLeafId: null,
-            ptyIdsByLeafId: { [PHONE_LEAF]: 'pty-phone' }
-          }
-        }
-      })
-      handlers.get('terminal:tabCreateReply')?.(
-        { sender: webContents },
-        { requestId: payload.requestId, tabId: 'tab-phone', title: 'Terminal' }
-      )
-    }
-  }
-  setRuntimeDesktopSurface({
-    showNotification: () => false,
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create path reads only liveness and these webContents members off its authoritative window.
-    findWindowById: () => ({ isDestroyed: () => false, webContents }) as never,
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the tab-create reply channel is registered on this path.
-    onIpc: (channel, listener) => handlers.set(channel, listener as never),
-    removeIpcListener: (channel) => handlers.delete(channel)
-  })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create path focuses only when activating, which this create does not.
-  runtime.setNotifier({ focusTerminal: vi.fn() } as never)
+// A phone creates a terminal while the desktop's frame still lacks it: the runtime's layout holds
+// the tab it spawned.
+async function runtimeWithPhoneCreate(): Promise<{ runtime: OrcaRuntimeService; row: string }> {
+  const { runtime } = coldRestoredRuntime()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create path spawns, writes and reads the foreground process only.
+  runtime.setPtyController({
+    spawn: vi.fn(async () => ({ id: 'pty-phone' })),
+    write: () => true,
+    kill: () => true,
+    getForegroundProcess: async () => null
+  } as never)
   Object.assign(runtime, {
     resolveTerminalWorkspaceLaunchScope: vi.fn(async () => ({
       id: WORKTREE_ID,
@@ -546,22 +501,20 @@ async function runtimeWithUnpublishedPhoneCreate(): Promise<OrcaRuntimeService> 
     }))
   })
   publishRendererFrame(runtime, makeRendererFrame(LOCAL_HOST))
-  await runtime.createMobileSessionTerminal(`id:${WORKTREE_ID}`, {
+  const created = await runtime.createMobileSessionTerminal(`id:${WORKTREE_ID}`, {
     activate: false,
     clientNavigationId: 'phone'
   })
-  return runtime
+  return { runtime, row: created.tab.id }
 }
 
 describe('a surface the host added stays listed when a restored sibling registers', () => {
-  afterEach(() => setRuntimeDesktopSurface(null))
-
   it('keeps a phone-created terminal listed', async () => {
-    const runtime = await runtimeWithUnpublishedPhoneCreate()
-    expect(await listedSurfaces(runtime)).toContain(`tab-phone::${PHONE_LEAF}:ready`)
+    const { runtime, row } = await runtimeWithPhoneCreate()
+    expect(await listedSurfaces(runtime)).toContain(`${row}:ready`)
 
     registerLeaf(runtime, LOCAL_HOST, 'left')
 
-    expect(await listedSurfaces(runtime)).toContain(`tab-phone::${PHONE_LEAF}:ready`)
+    expect(await listedSurfaces(runtime)).toContain(`${row}:ready`)
   })
 })

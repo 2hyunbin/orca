@@ -24,7 +24,6 @@ import {
 } from '../../src/renderer/src/runtime/web-session-tabs-sync'
 import { acceptPairedHostStructuredSessions } from '../../src/renderer/src/runtime/structured-agent-session-tab-retirement'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from '../../src/renderer/src/runtime/local-structured-session-owner'
-import { registerSessionTabIpcBridge } from '../../src/renderer/src/hooks/ipc-events/session-tab-ipc-bridge'
 import {
   isWebSessionCloseIntentPending,
   resetWebSessionCloseIntentForTests
@@ -33,8 +32,6 @@ import {
 const WORKTREE = 'repo-1::/tmp/wt-stale-frame'
 const SESSIONS = ['chat-a', 'chat-b', 'chat-c'] as const
 const tabIdOf = (sessionId: string): string => `structured-agent-session-${sessionId}`
-
-type CloseRequest = { requestId: string; tabId: string; worktreeId: string; expiresAt?: number }
 
 type ProcessBoundary = {
   runtime: Pick<OrcaRuntimeService, 'closeMobileSessionTab' | 'listMobileSessionTabs'> | null
@@ -81,9 +78,7 @@ vi.mock('../../src/renderer/src/runtime/structured-agent-session-close', () => (
   closeStructuredAgentSession: async () => 'closed'
 }))
 
-async function setup(options: { hostFailsClose?: boolean } = {}) {
-  let closeRequest: ((request: CloseRequest) => void) | undefined
-  const pendingResponses = new Map<string, (error?: string) => void>()
+async function setup() {
   // The saved workspace session the runtime's tab layout loads from and writes to.
   let session: WorkspaceSessionState = getDefaultWorkspaceSession()
   const runtime = new OrcaRuntimeService(
@@ -98,36 +93,6 @@ async function setup(options: { hostFailsClose?: boolean } = {}) {
   // The worktree as a scan lists it: the runtime's layout holds it, still without tabs.
   runtime.addCatalogWorkspaces([WORKTREE])
   bridge.runtime = runtime
-  vi.stubGlobal('api', {
-    ui: {
-      onCloseSessionTab: () => () => {},
-      onSessionTabCloseRequest: (listener: (request: CloseRequest) => void) => {
-        closeRequest = listener
-        return () => {}
-      },
-      onMoveSessionTab: () => () => {},
-      respondSessionTabClose: ({ requestId, error }: { requestId: string; error?: string }) =>
-        pendingResponses.get(requestId)?.(error)
-    }
-  })
-  registerSessionTabIpcBridge([])
-
-  let nextRequest = 0
-  runtime.setNotifier(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the chat close path calls only this notifier member.
-    {
-      closeSessionTab: (tabId: string, worktreeId: string) =>
-        new Promise<void>((resolve, reject) => {
-          if (options.hostFailsClose) {
-            reject(new Error('window relay failed'))
-            return
-          }
-          const requestId = `close-${++nextRequest}`
-          pendingResponses.set(requestId, (error) => (error ? reject(new Error(error)) : resolve()))
-          closeRequest!({ requestId, tabId, worktreeId })
-        })
-    } as never
-  )
   // No durable store, PTYs or workspace session on disk: the host tab list below is the whole state.
   Object.assign(runtime, {
     hasPersistedStructuredAgentSessionStore: () => true,
@@ -215,18 +180,6 @@ describe('a host frame published while a chat tab close is in flight', () => {
     )
     runtime.touchMobileSessionTabsForWorktree(WORKTREE, { immediate: true })
     expect(strip()).toEqual([tabIdOf('chat-a'), tabIdOf('chat-c')])
-  })
-
-  it('shows the chat again when the host could not close it', async () => {
-    const { strip } = await setup({ hostFailsClose: true })
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    useAppStore.getState().closeUnifiedTab(tabIdOf('chat-b'))
-    expect(strip()).toEqual([tabIdOf('chat-a'), tabIdOf('chat-c')])
-
-    // The host still has the chat, so once the close fails the window re-reads and shows it.
-    await vi.waitFor(() => expect(strip()).toContain(tabIdOf('chat-b')))
-    expect(strip()).toHaveLength(3)
-    warn.mockRestore()
   })
 
   it("does not bring a paired server's closed chat back either", async () => {

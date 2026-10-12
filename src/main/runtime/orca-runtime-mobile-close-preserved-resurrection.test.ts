@@ -14,8 +14,7 @@ import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
  * session alone decides what a phone sees.
  *
  * The harness is the close-continuity pattern: a real OrcaRuntimeService with
- * injected store/notifier/pty controller. Interleavings are controlled with a
- * deferred relay ack; time is never the oracle.
+ * injected store and pty controller; time is never the oracle.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
@@ -82,14 +81,6 @@ function makeSession(tabIds: readonly string[]): WorkspaceSessionState {
   }
 }
 
-function makeDeferred() {
-  let resolve!: () => void
-  const promise = new Promise<void>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
-
 function createHarness() {
   let session = makeSession([TAB_A, TAB_B])
   const repo = {
@@ -112,12 +103,8 @@ function createHarness() {
     },
     flushOrThrow: () => {}
   })
-  const relayAck = makeDeferred()
-  const closeTerminal = vi.fn()
-  const closeTerminalTab = vi.fn(() => relayAck.promise)
   const kill = vi.fn(() => true)
   const runtime = new OrcaRuntimeService(store as never)
-  runtime.setNotifier({ closeTerminal, closeTerminalTab } as never)
   runtime.setPtyController({
     write: () => true,
     kill,
@@ -175,8 +162,6 @@ function createHarness() {
 
   return {
     runtime,
-    relayAck,
-    closeTerminalTab,
     kill,
     publishRendererSnapshot,
     retirePersistedTab: (tabId: string) => {
@@ -252,7 +237,6 @@ function createSplitHarness() {
     flushOrThrow: () => {}
   })
   const runtime = new OrcaRuntimeService(store as never)
-  runtime.setNotifier({ closeTerminal: vi.fn(), closeTerminalTab: vi.fn(async () => {}) } as never)
   runtime.setPtyController({
     write: () => true,
     kill: vi.fn(() => true),
@@ -337,43 +321,17 @@ async function listParentTabIds(runtime: OrcaRuntimeService): Promise<string[]> 
 }
 
 describe('a committed paired close stays closed while its PTY lingers', () => {
-  it('control: a renderer prune that lands after the relay ack retires the tab for good', async () => {
+  it('a paired close stays closed when the window then saves and publishes its pruned graph', async () => {
     const harness = createHarness()
 
-    const closing = harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_A, {
-      reason: 'user'
-    })
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_A))
+    await expect(
+      harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_A, { reason: 'user' })
+    ).resolves.toMatchObject({ closed: true })
+    // The kill has not produced an exit yet, so the PTY record is still connected.
     harness.retirePersistedTab(TAB_A)
-    harness.relayAck.resolve()
-    await expect(closing).resolves.toMatchObject({ closed: true })
-    // The renderer's prune publication arrives only after the ack (and after
-    // the close cleared the ownership flags).
     harness.publishRendererSnapshot([TAB_B])
 
     expect(await listParentTabIds(harness.runtime)).toEqual([TAB_B])
-  })
-
-  it('red: the preserved-merge resurrects a pre-ack renderer prune only until the close cleans up', async () => {
-    const harness = createHarness()
-
-    const closing = harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_A, {
-      reason: 'user'
-    })
-    await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_A))
-    // Production ordering: the renderer durably retires the tab and publishes
-    // the pruned graph BEFORE replying to the relay. The kill it dispatched has
-    // not produced an exit yet, so the PTY record is still connected.
-    harness.retirePersistedTab(TAB_A)
-    harness.publishRendererSnapshot([TAB_B])
-    harness.relayAck.resolve()
-    await expect(closing).resolves.toMatchObject({ closed: true })
-
-    const republished = await listParentTabIds(harness.runtime)
-    expect(
-      republished,
-      'the preserved-merge resurrected a tab whose user close was committed'
-    ).toEqual([TAB_B])
   })
 
   it('red: a host-side close (no paired close RPC) must not be resurrected by the preserved-merge', async () => {

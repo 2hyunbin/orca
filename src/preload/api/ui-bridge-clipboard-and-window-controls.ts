@@ -10,37 +10,11 @@ import {
   type RichMarkdownContextMenuCommandPayload,
   type RichMarkdownContextMenuTableTarget
 } from '../../shared/rich-markdown-context-menu'
-import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
-import type { TerminalSurfaceCloseTarget } from '../../shared/terminal-surface-close-target'
 import type { ClipboardImageThumbnail } from '../../shared/clipboard-image'
 import type { ReadClipboardTextOptions } from '../../shared/clipboard-text'
 import type { PreloadApi } from '../api-types'
 
 export const uiClipboardAndWindowControlsApi = {
-  onOpenDiffFromMobile: (
-    callback: (data: {
-      worktreeId: string
-      filePath: string
-      relativePath: string
-      staged: boolean
-      runtimeEnvironmentId?: string | null
-      navigation?: RuntimeNavigationTarget
-    }) => void
-  ): (() => void) => {
-    const listener = (
-      _event: Electron.IpcRendererEvent,
-      data: {
-        worktreeId: string
-        filePath: string
-        relativePath: string
-        staged: boolean
-        runtimeEnvironmentId?: string | null
-        navigation?: RuntimeNavigationTarget
-      }
-    ) => callback(data)
-    ipcRenderer.on('ui:openDiffFromMobile', listener)
-    return () => ipcRenderer.removeListener('ui:openDiffFromMobile', listener)
-  },
   onMobileMarkdownRequest: (
     callback: (request: RuntimeMobileMarkdownRequest) => void
   ): (() => void) => {
@@ -51,21 +25,6 @@ export const uiClipboardAndWindowControlsApi = {
   },
   respondMobileMarkdownRequest: (response: RuntimeMobileMarkdownResponse): void => {
     ipcRenderer.send('ui:mobileMarkdownResponse', response)
-  },
-  onCloseTerminal: (callback: (target: TerminalSurfaceCloseTarget) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, target: TerminalSurfaceCloseTarget) =>
-      callback(target)
-    ipcRenderer.on('ui:closeTerminal', listener)
-    return () => ipcRenderer.removeListener('ui:closeTerminal', listener)
-  },
-  onTerminalTabCloseRequest: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, request: Parameters<typeof callback>[0]) =>
-      callback(request)
-    ipcRenderer.on('ui:terminalTabCloseRequest', listener)
-    return () => ipcRenderer.removeListener('ui:terminalTabCloseRequest', listener)
-  },
-  respondTerminalTabClose: (response) => {
-    ipcRenderer.send('ui:terminalTabCloseResponse', response)
   },
   onSleepWorktree: (callback: (data: { worktreeId: string }) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: { worktreeId: string }) =>

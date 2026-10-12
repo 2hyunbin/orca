@@ -211,7 +211,6 @@ describe('OrcaRuntimeService', () => {
     const rightLeafId = '22222222-2222-4222-8222-222222222222'
     seedTerminalTab({ [leftLeafId]: 'pty-left', [rightLeafId]: 'pty-right' }, rightLeafId)
     const closeTerminal = vi.fn()
-    const closeTerminalPane = vi.fn()
     const kill = vi.fn(() => true)
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
@@ -223,14 +222,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal,
-      closeTerminalPane,
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -271,14 +262,11 @@ describe('OrcaRuntimeService', () => {
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, `tab-1::${rightLeafId}`)
 
     expect(kill).toHaveBeenCalledWith('pty-right')
-    // Only the leaf-addressed notice for the closed pane; never a whole-tab close.
-    expect(closeTerminalPane).toHaveBeenCalledExactlyOnceWith('tab-1', rightLeafId)
     expect(closeTerminal).not.toHaveBeenCalled()
   })
 
   it('closes the whole mobile terminal tab when addressed by parent tab id', async () => {
     seedTerminalTab({ 'pane:1': 'pty-1' })
-    const closeTerminal = vi.fn()
     const kill = vi.fn(() => true)
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
@@ -290,13 +278,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal,
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -326,39 +307,35 @@ describe('OrcaRuntimeService', () => {
 
     await runtime.closeMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-1')
 
-    expect(closeTerminal).toHaveBeenCalledWith('tab-1')
-    expect(kill).not.toHaveBeenCalled()
+    // The runtime's layout closes the whole tab, with or without a window.
+    expect(runtime.heldWorkspaceLayout(TEST_WORKTREE_ID)?.tabs ?? []).toHaveLength(0)
   })
 
   it('activates the active split leaf when addressed by parent tab id', async () => {
-    seedTerminalTab({ 'pane:1': undefined, 'pane:2': undefined }, 'pane:2')
-    const focusTerminal = vi.fn()
+    const leafA = '11111111-1111-4111-8111-111111111111'
+    const leafB = '22222222-2222-4222-8222-222222222222'
+    seedTerminalTab({ [leafA]: 'pty-pane-1', [leafB]: 'pty-pane-2' }, leafB)
     const runtime = new OrcaRuntimeService(store)
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal,
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
-    // A live window owns the layout, so it focuses the pane rather than the runtime spawning one.
-    electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
-    runtime.attachWindow(1)
-    runtime.syncWindowGraph(1, {
-      tabs: [],
-      leaves: []
-    })
+    runtime.registerPty('pty-pane-1', TEST_WORKTREE_ID)
+    runtime.registerPty('pty-pane-2', TEST_WORKTREE_ID)
+
+    const navigations: unknown[] = []
+    runtime.layoutCommands.views.onNavigate('desktop', (request) => navigations.push(request))
 
     await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'tab-1')
 
-    expect(focusTerminal).toHaveBeenCalledWith('tab-1', TEST_WORKTREE_ID, 'pane:2')
+    // The desktop view shows the split's active pane, and its window is told to go there.
+    expect(runtime.layoutCommands.views.record('desktop').panes['tab-1']?.activeLeafId).toBe(leafB)
+    expect(navigations).toEqual([
+      { kind: 'focusPane', workspace: TEST_WORKTREE_ID, paneKey: `tab-1:${leafB}` }
+    ])
   })
 
   it('activates mobile session tabs without focusing desktop clients when requested', async () => {
@@ -368,13 +345,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree: vi.fn(),
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal,
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -425,13 +395,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged,
       reposChanged: vi.fn(),
-      activateWorktree,
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -480,13 +443,6 @@ describe('OrcaRuntimeService', () => {
     runtime.setNotifier({
       worktreesChanged: vi.fn(),
       reposChanged: vi.fn(),
-      activateWorktree,
-      createTerminal: vi.fn(),
-      revealTerminalSession: vi.fn(),
-      splitTerminal: vi.fn(),
-      renameTerminal: vi.fn(),
-      focusTerminal: vi.fn(),
-      closeTerminal: vi.fn(),
       sleepWorktree: vi.fn(),
       resumeSleepingAgents,
       terminalFitOverrideChanged: vi.fn(),

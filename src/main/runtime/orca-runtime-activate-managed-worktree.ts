@@ -84,7 +84,7 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
       // Why: inactive worktree terminal panes are renderer-owned and may not have
       // live PTYs until the desktop activates the worktree and mounts them.
       if (targetsHost) {
-        this.notifyHostActivateWorktree(repo.id, worktree.id)
+        this.notifyHostActivateWorktree(worktree.id)
       }
       if (targetsClients) {
         this.notifyClientsActivateWorktree(

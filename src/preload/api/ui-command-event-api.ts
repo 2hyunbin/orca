@@ -1,13 +1,5 @@
 import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
-import type { TuiAgent } from '../../shared/tui-agent'
-import type {
-  AgentLaunchTabPublishReply,
-  AgentLaunchTabPublishRequest
-} from '../../shared/agent-launch-tab-publication'
-import type { AgentLaunchPaneVerdictEvent } from '../../shared/agent-launch-pane-verdict'
-import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
-import type { TerminalSurfaceCloseTarget } from '../../shared/terminal-surface-close-target'
 import type {
   WorktreeDefaultTabsLaunch,
   WorktreeSetupLaunch,
@@ -22,28 +14,9 @@ import type {
 } from '../../shared/browser-page-command-target'
 import type { BrowserPageZoomCommand } from '../../shared/browser-page-zoom'
 import type {
-  AgentProviderSessionMetadata,
-  SleepingAgentLaunchConfig
-} from '../../shared/agent-session-resume'
-import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
-import type {
-  RuntimeMobileSessionTabMove,
-  RuntimeTerminalCreateRequestPayload,
-  RuntimeTerminalPresentation
-} from '../../shared/runtime-types'
-import type {
   RuntimeMobileMarkdownRequest,
   RuntimeMobileMarkdownResponse
 } from '../../shared/mobile-markdown-document'
-import type { TerminalTabCreateReply } from '../../shared/terminal-reveal-identity'
-import type {
-  TerminalTabCloseRequest,
-  TerminalTabCloseResponse
-} from '../../shared/terminal-tab-close'
-import type {
-  SessionTabCloseRequest,
-  SessionTabCloseResponse
-} from '../../shared/session-tab-close'
 
 export type CloseActiveTabPayload = { sourceId: string }
 
@@ -88,18 +61,6 @@ export type UiCommandEventApi = {
   onNewBrowserTab: (callback: () => void) => () => void
   onNewMarkdownTab: (callback: () => void) => () => void
   onNewSimulatorTab: (callback: () => void) => () => void
-  onRequestTabCreate: (
-    callback: (data: {
-      requestId: string
-      url: string
-      worktreeId?: string
-      browserPageId?: string
-      sessionProfileId?: string | null
-      sessionPartition?: string
-      activate?: boolean
-    }) => void
-  ) => () => void
-  replyTabCreate: (reply: { requestId: string; browserPageId?: string; error?: string }) => void
   onRequestTabSetProfile: (
     callback: (data: {
       requestId: string
@@ -109,14 +70,6 @@ export type UiCommandEventApi = {
     }) => void
   ) => () => void
   replyTabSetProfile: (reply: { requestId: string; error?: string }) => void
-  onRequestTabClose: (
-    callback: (data: { requestId: string; tabId: string | null; worktreeId?: string }) => void
-  ) => () => void
-  replyTabClose: (reply: {
-    requestId: string
-    error?: string
-    code?: 'browser_tab_not_found'
-  }) => void
   onNewTerminalTab: (callback: () => void) => () => void
   onFocusBrowserAddressBar: (callback: (target: BrowserPageCommandTarget) => void) => () => void
   onFindInBrowserPage: (source: BrowserFindSource, callback: () => void) => () => void
@@ -153,56 +106,6 @@ export type UiCommandEventApi = {
       defaultTabs?: WorktreeDefaultTabsLaunch
     }) => void
   ) => () => void
-  onCreateTerminal: (
-    callback: (data: {
-      requestId?: string
-      worktreeId: string
-      command?: string
-      cwd?: string
-      env?: Record<string, string>
-      launchConfig?: SleepingAgentLaunchConfig
-      resumeProviderSession?: AgentProviderSessionMetadata
-      launchToken?: string
-      launchAgent?: TuiAgent
-      viewMode?: 'terminal' | 'chat'
-      title?: string
-      ptyId?: string
-      activate?: boolean
-      focus?: boolean
-      presentation?: RuntimeTerminalPresentation
-      surfaceOwner?: false
-      tabId?: string
-      leafId?: string
-      splitFromLeafId?: string
-      splitDirection?: 'horizontal' | 'vertical'
-      splitTelemetrySource?: TerminalPaneSplitSource
-    }) => void
-  ) => () => void
-  onRequestTerminalCreate: (
-    callback: (data: RuntimeTerminalCreateRequestPayload) => void
-  ) => () => void
-  onRequestTerminalTabMount: (
-    callback: (data: { worktreeId: string; tabId?: string; ptyId?: string }) => void
-  ) => () => void
-  replyTerminalCreate: (reply: TerminalTabCreateReply) => void
-  onPublishAgentLaunchTab: (callback: (data: AgentLaunchTabPublishRequest) => void) => () => void
-  replyAgentLaunchTabPublish: (reply: AgentLaunchTabPublishReply) => void
-  onAgentLaunchPaneVerdict: (callback: (data: AgentLaunchPaneVerdictEvent) => void) => () => void
-  onSplitTerminal: (
-    callback: (data: {
-      tabId: string
-      paneRuntimeId: number
-      direction: 'horizontal' | 'vertical'
-      command?: string
-      worktreeId?: string
-      sourceLeafId?: string
-      telemetrySource?: TerminalPaneSplitSource
-      newLeafId?: string
-    }) => void
-  ) => () => void
-  onRenameTerminal: (
-    callback: (data: { tabId: string; title: string | null; recordInteraction?: false }) => void
-  ) => () => void
   onFocusTerminal: (
     callback: (data: {
       tabId: string
@@ -221,36 +124,8 @@ export type UiCommandEventApi = {
       userInitiated?: boolean
     }) => void
   ) => () => void
-  onCloseSessionTab: (callback: (data: { tabId: string; worktreeId: string }) => void) => () => void
-  onSessionTabCloseRequest: (callback: (request: SessionTabCloseRequest) => void) => () => void
-  respondSessionTabClose: (response: SessionTabCloseResponse) => void
-  onMoveSessionTab: (
-    callback: (data: { worktreeId: string } & RuntimeMobileSessionTabMove) => void
-  ) => () => void
-  onOpenFileFromMobile: (
-    callback: (data: {
-      worktreeId: string
-      filePath: string
-      relativePath: string
-      runtimeEnvironmentId?: string | null
-      navigation?: RuntimeNavigationTarget
-    }) => void
-  ) => () => void
-  onOpenDiffFromMobile: (
-    callback: (data: {
-      worktreeId: string
-      filePath: string
-      relativePath: string
-      staged: boolean
-      runtimeEnvironmentId?: string | null
-      navigation?: RuntimeNavigationTarget
-    }) => void
-  ) => () => void
   onMobileMarkdownRequest: (callback: (request: RuntimeMobileMarkdownRequest) => void) => () => void
   respondMobileMarkdownRequest: (response: RuntimeMobileMarkdownResponse) => void
-  onCloseTerminal: (callback: (target: TerminalSurfaceCloseTarget) => void) => () => void
-  onTerminalTabCloseRequest: (callback: (request: TerminalTabCloseRequest) => void) => () => void
-  respondTerminalTabClose: (response: TerminalTabCloseResponse) => void
   onSleepWorktree: (callback: (data: { worktreeId: string }) => void) => () => void
   onResumeSleepingAgents: (callback: (data: { worktreeId: string }) => void) => () => void
   onTerminalZoom: (callback: (direction: 'in' | 'out' | 'reset') => void) => () => void

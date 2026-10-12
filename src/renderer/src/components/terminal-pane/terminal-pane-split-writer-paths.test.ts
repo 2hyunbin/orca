@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { recordKeyboardCreatedTerminalPaneSplit } from './keyboard-handlers'
 import { recordContextMenuCreatedTerminalPaneSplit } from './use-terminal-pane-split-actions'
-import { recordRuntimeCreatedTerminalPaneSplit } from './use-terminal-pane-lifecycle'
 
 const mocks = vi.hoisted(() => ({
   recordFeatureInteraction: vi.fn(),
@@ -55,39 +54,5 @@ describe('terminal split writer paths', () => {
       source: 'context_menu',
       direction: 'horizontal'
     })
-  })
-
-  it('records runtime split completion after SPLIT_TERMINAL_PANE_EVENT creates a pane', () => {
-    expect(
-      recordRuntimeCreatedTerminalPaneSplit(
-        { id: 2 },
-        {
-          source: 'command',
-          direction: 'vertical'
-        }
-      )
-    ).toBe(true)
-
-    expect(mocks.recordFeatureInteraction).toHaveBeenCalledWith('terminal-pane-split')
-    expect(mocks.trackTerminalPaneSplit).toHaveBeenCalledWith({
-      source: 'command',
-      direction: 'vertical'
-    })
-  })
-
-  it('keeps runtime split completion when mirrored telemetry is suppressed', () => {
-    expect(
-      recordRuntimeCreatedTerminalPaneSplit(
-        { id: 2 },
-        {
-          source: 'command',
-          direction: 'horizontal',
-          telemetrySuppressed: true
-        }
-      )
-    ).toBe(true)
-
-    expect(mocks.recordFeatureInteraction).toHaveBeenCalledWith('terminal-pane-split')
-    expect(mocks.trackTerminalPaneSplit).not.toHaveBeenCalled()
   })
 })
