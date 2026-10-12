@@ -57,8 +57,10 @@ describe('scripts', () => {
       expect(script).not.toContain('$')
     }
     expect(WSL_INTEROP_REPAIR_SCRIPT).toContain(
-      "printf ':WSLInterop:M::MZ::/init:PF\\n' > /proc/sys/fs/binfmt_misc/register"
+      "printf ':WSLInterop:M::MZ::/init:P' > /proc/sys/fs/binfmt_misc/register"
     )
+    // A failed write must not decide the verdict; only the re-check does.
+    expect(WSL_INTEROP_REPAIR_SCRIPT).not.toContain('|| exit')
   })
 
   it('parses repair results', () => {

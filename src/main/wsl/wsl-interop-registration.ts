@@ -32,11 +32,14 @@ export const WSL_INTEROP_PROBE_SCRIPT = [
 /**
  * Idempotent; runs as root. Re-checks so a concurrent repair (or WSL itself)
  * never gets a duplicate entry. Never `systemctl restart systemd-binfmt`:
- * that flushes every entry first.
+ * that flushes every entry first. Flags match WSL's own `P` registration; `F`
+ * would pin the repairing distro's /init open for the life of the VM.
  */
 export const WSL_INTEROP_REPAIR_SCRIPT = [
   `if ${PRESENT_TEST}; then echo '${MARKER}present'; exit 0; fi`,
-  `printf ':WSLInterop:M::MZ::/init:PF\\n' > ${BINFMT_DIR}/register || exit 1`,
+  // No trailing newline: busybox printf writes it separately and the kernel rejects that write
+  // with EINVAL after registering. The re-check below, not the write status, is the verdict.
+  `printf ':WSLInterop:M::MZ::/init:P' > ${BINFMT_DIR}/register`,
   `if ${PRESENT_TEST}; then echo '${MARKER}repaired'; else exit 1; fi`
 ].join('\n')
 

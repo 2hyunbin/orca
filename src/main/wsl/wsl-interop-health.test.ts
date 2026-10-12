@@ -10,6 +10,7 @@ import {
   ACTIVITY_CHECK_DELAY_MS,
   ACTIVITY_CHECK_INTERVAL_MS,
   REPAIR_FAILURE_BACKOFF_MS,
+  STOP_CHECK_FLOOR_MS,
   WslInteropHealthMonitor,
   type WslInteropHealthDeps
 } from './wsl-interop-health'
@@ -195,5 +196,48 @@ describe('WslInteropHealthMonitor triggers', () => {
     h.emitStop(['Ubuntu'], [])
     await flush()
     expect(h.deps.runScript).toHaveBeenCalledTimes(2)
+  })
+
+  it('bounds probes under bursts of activity and stop events', async () => {
+    const h = harness()
+    for (let i = 0; i < 50; i++) {
+      h.monitor.noteActivity('Ubuntu')
+    }
+    await flush()
+    h.runTimers()
+    await flush()
+    for (let elapsed = 0; elapsed < ACTIVITY_CHECK_INTERVAL_MS - 1_000; elapsed += 1_000) {
+      h.advance(1_000)
+      h.monitor.noteActivity('Ubuntu')
+      await flush()
+      h.runTimers()
+      await flush()
+    }
+    expect(h.deps.runScript).toHaveBeenCalledTimes(1)
+
+    // Stop-triggered checks are rate-floored and skip distros the list no longer shows.
+    h.emitStop(['docker-desktop'], ['Ubuntu'])
+    await flush()
+    expect(h.deps.runScript).toHaveBeenCalledTimes(2)
+    h.advance(STOP_CHECK_FLOOR_MS - 1)
+    h.emitStop(['Debian'], ['Ubuntu'])
+    h.emitStop(['Debian'], ['Ubuntu'])
+    await flush()
+    expect(h.deps.runScript).toHaveBeenCalledTimes(2)
+    h.advance(1)
+    h.emitStop(['Ubuntu'], [])
+    await flush()
+    expect(h.deps.runScript).toHaveBeenCalledTimes(2)
+  })
+
+  it('treats an entry restored between probe and repair as intact', async () => {
+    const h = harness({
+      runScript: vi.fn(async (_distro: string, script: string) => ({
+        code: 0,
+        stdout: script === WSL_INTEROP_PROBE_SCRIPT ? MISSING : PRESENT
+      }))
+    })
+    await expect(h.monitor.check('Ubuntu', { confirmRunning: false })).resolves.toBe('intact')
+    expect(h.deps.log).not.toHaveBeenCalled()
   })
 })

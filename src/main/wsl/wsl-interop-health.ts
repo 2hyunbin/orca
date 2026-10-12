@@ -149,6 +149,10 @@ export class WslInteropHealthMonitor {
       this.deps.log(`[wsl] could not restore Windows interop in ${distro} (exit ${repair.code})`)
       return 'repair-failed'
     }
+    if (repaired === 'present') {
+      // Another repair (or WSL itself) restored it between probe and repair.
+      return 'intact'
+    }
     this.deps.log(
       `[wsl] restored the WSLInterop binfmt entry from ${distro}; another distro's systemd ` +
         'shutdown removed it (fixed in WSL 3.0.1, run `wsl --update`)'
