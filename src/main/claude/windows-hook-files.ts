@@ -7,7 +7,14 @@ import {
   buildWindowsHookEnvironmentGuardLines,
   buildWindowsHookStdinDrainEpilogue
 } from '../agent-hooks/hook-stdin-contract'
+import {
+  installWindowsNativeHookExecutable,
+  refreshWindowsNativeHookExecutable,
+  resolveBundledWindowsNativeHookExecutable
+} from '../agent-hooks/windows-native-hook-executable'
 import { WINDOWS_CLAUDE_BACKGROUND_JOB_GUARD } from './hook-script'
+import type { ClaudeCompatibleHookSettings } from './hook-settings'
+import { getWindowsNativeHookPath } from './managed-event-hook-status'
 
 const PAYLOAD_FILE_NAME = 'claude-hook-impl.cmd'
 
@@ -15,13 +22,27 @@ export function getWindowsClaudeHookPayloadPath(entryPath: string): string {
   return join(dirname(entryPath), PAYLOAD_FILE_NAME)
 }
 
+/** The installed hook executable to register, or null to register the `.cmd` hook. */
+export function installWindowsClaudeHookExecutable(
+  settings: ClaudeCompatibleHookSettings
+): string | null {
+  const destination = getWindowsNativeHookPath(settings)
+  const source = destination ? resolveBundledWindowsNativeHookExecutable() : null
+  return destination && source && installWindowsNativeHookExecutable(source, destination)
+    ? destination
+    : null
+}
+
 export function getWindowsClaudeHookFileStatus(
   status: AgentHookInstallStatus,
-  entryPath: string
+  entryPath: string,
+  registeredExecutablePath: string | null
 ): AgentHookInstallStatus {
   if (
     status.state === 'installed' &&
-    (!existsSync(entryPath) || !existsSync(getWindowsClaudeHookPayloadPath(entryPath)))
+    (!existsSync(entryPath) ||
+      !existsSync(getWindowsClaudeHookPayloadPath(entryPath)) ||
+      (registeredExecutablePath !== null && !existsSync(registeredExecutablePath)))
   ) {
     return { ...status, state: 'partial', detail: 'Managed Claude hook script is missing' }
   }
@@ -54,8 +75,15 @@ export function getWindowsClaudeHookEntry(): string {
 
 export async function refreshWindowsClaudeHookFiles(
   entryPath: string,
-  payload: string
+  payload: string,
+  settings: ClaudeCompatibleHookSettings
 ): Promise<void> {
+  // A surviving exe copy is Orca-owned too; bring it to this build's binary after an update.
+  const nativeHookPath = getWindowsNativeHookPath(settings)
+  const bundledHook = nativeHookPath ? resolveBundledWindowsNativeHookExecutable() : null
+  if (nativeHookPath && bundledHook) {
+    await refreshWindowsNativeHookExecutable(bundledHook, nativeHookPath)
+  }
   // A surviving entry is Orca-owned; creating a missing one stays install()'s presence-gated job.
   if (!(await scriptStillExists(entryPath))) {
     return

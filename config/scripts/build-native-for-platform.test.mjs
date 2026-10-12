@@ -37,6 +37,10 @@ function startBuild(mode, options = {}) {
     "console.log('windows launcher only')"
   )
   writeFileSync(
+    join(directory, 'config', 'scripts', 'build-windows-agent-hook.mjs'),
+    "console.log('windows agent hook only')"
+  )
+  writeFileSync(
     cli,
     `
     import { appendFileSync, existsSync } from 'node:fs'
@@ -359,5 +363,8 @@ describe.skipIf(process.platform !== 'darwin')('parallel native builds', () => {
         ? 'windows launcher only'
         : 'no macOS native computer build required on linux'
     )
+    if (platform === 'win32') {
+      expect(result.output).toContain('windows agent hook only')
+    }
   })
 })

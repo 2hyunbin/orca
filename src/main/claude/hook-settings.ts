@@ -32,12 +32,15 @@ export type ClaudeCompatibleHookSettings = {
     | 'codebuddy-hook'
   usesWindowsCompatLauncher: boolean
   windowsHookShell?: 'powershell'
+  /** Register native-Windows hooks as the bundled orca-hook.exe when it installs (#20913). */
+  windowsNativeHookExecutable?: boolean
 }
 
 export const CLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
   configDirName: '.claude',
   scriptBaseName: 'claude-hook',
-  usesWindowsCompatLauncher: true
+  usesWindowsCompatLauncher: true,
+  windowsNativeHookExecutable: true
 }
 
 export const OPENCLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
@@ -102,10 +105,11 @@ export function getManagedCommand(
 export function getManagedEventHook(
   eventName: string,
   scriptPath: string,
-  settings = CLAUDE_HOOK_SETTINGS
+  settings = CLAUDE_HOOK_SETTINGS,
+  nativeHookPath: string | null = null
 ): HookCommandConfig {
   return process.platform === 'win32'
-    ? getManagedLifecycleHook(scriptPath, settings)
+    ? getManagedLifecycleHook(scriptPath, settings, nativeHookPath)
     : buildManagedCommandHook(getRemoteManagedEventCommand(eventName, scriptPath))
 }
 
@@ -116,12 +120,22 @@ export function getRemoteManagedEventCommand(eventName: string, scriptPath: stri
     : getRemoteManagedCommand(scriptPath)
 }
 
+/** `nativeHookPath` is the installed orca-hook.exe copy, or null to keep the `.cmd` form. */
 export function getManagedLifecycleHook(
   scriptPath: string,
-  settings = CLAUDE_HOOK_SETTINGS
+  settings = CLAUDE_HOOK_SETTINGS,
+  nativeHookPath: string | null = null
 ): HookCommandConfig {
   if (process.platform !== 'win32' || !settings.usesWindowsCompatLauncher) {
     return buildManagedCommandHook(getManagedCommand(scriptPath, { neutralJsonWhenMissing: true }))
+  }
+  // Why a bare exe path: Git Bash, PowerShell and CreateProcess all start it without cmd.exe.
+  const nativeCommand =
+    settings.windowsNativeHookExecutable && nativeHookPath
+      ? wrapWindowsDirectCmdHookCommand(nativeHookPath)
+      : null
+  if (nativeCommand) {
+    return { type: 'command', command: nativeCommand, timeout: MANAGED_HOOK_TIMEOUT_SECONDS }
   }
   if (settings.windowsHookShell === 'powershell') {
     return {

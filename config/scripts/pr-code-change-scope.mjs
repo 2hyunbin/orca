@@ -349,9 +349,13 @@ const LINUX_PACKAGE_PREFIXES = [
 const WINDOWS_PACKAGE_PREFIXES = [
   ...SHARED_PACKAGE_PREFIXES,
   'native/windows-cli-launcher/',
+  'native/windows-agent-hook/',
   'native/computer-use-windows/',
   'resources/win32/',
   'config/scripts/build-windows-cli-launcher',
+  'config/scripts/build-windows-agent-hook',
+  'config/scripts/windows-rust-executable-build',
+  'config/scripts/verify-packaged-windows-agent-hook',
   'config/scripts/windows-pty-native-capability',
   'tests/tools/windows-pty-native-capability-smoke/'
 ]
@@ -376,6 +380,7 @@ const WINDOWS_PACKAGE_TESTS = [
   'config/scripts/verify-packaged-node-pty-job-ownership.test.mjs',
   'config/scripts/windows-pe-machine.test.mjs',
   'config/scripts/build-windows-cli-launcher.test.mjs',
+  'config/scripts/verify-packaged-windows-agent-hook.test.mjs',
   'config/scripts/script-module-dependencies.test.mjs',
   'src/main/windows-registry-addon.test.ts',
   'src/main/providers/windows-conpty-wide-char-duplication.node-pty.test.ts',
@@ -386,6 +391,9 @@ const WINDOWS_PACKAGE_TESTS = [
   'src/main/agent-hooks/windows-hook-payload-delivery.test.ts',
   'src/main/jcode/hook-gate-script.test.ts',
   'src/main/agent-hooks/windows-direct-cmd-hook-command.test.ts',
+  'src/main/agent-hooks/windows-native-hook-exe-hosts.test.ts',
+  'src/main/agent-hooks/windows-native-hook-executable.test.ts',
+  'src/main/claude/windows-native-hook-registration.test.ts',
   'src/main/agent-hooks/windows-cmd-hook-command-unicode.test.ts',
   'src/main/agent-hooks/windows-batch-hook-launcher.test.ts',
   'src/main/agent-hooks/windows-powershell-hook-launcher.test.ts',

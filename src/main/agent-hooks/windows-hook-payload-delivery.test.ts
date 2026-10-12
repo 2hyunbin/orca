@@ -12,9 +12,17 @@ import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type * as osModule from 'node:os'
+import type * as NativeHookExecutableModule from './windows-native-hook-executable'
 
-const { homedirMock } = vi.hoisted(() => ({
-  homedirMock: vi.fn<() => string>()
+const { homedirMock, bundledHook } = vi.hoisted(() => {
+  const bundledHook: { path: string | null } = { path: null }
+  return { homedirMock: vi.fn<() => string>(), bundledHook }
+})
+
+// Why: no packaged resources here; the exe case points install at the real built binary.
+vi.mock('./windows-native-hook-executable', async (importOriginal) => ({
+  ...(await importOriginal<typeof NativeHookExecutableModule>()),
+  resolveBundledWindowsNativeHookExecutable: () => bundledHook.path
 }))
 
 vi.mock('electron', () => ({
@@ -37,6 +45,10 @@ import { getMuseManagedHooksPath } from '../muse/hook-settings'
 import { readHooksJson, WINDOWS_CMD_SAFE_PATH } from './installer-utils'
 import { getConfigPath, getWindowsManagedLifecycleHook } from '../claude/hook-settings'
 import { findGitBash } from './windows-git-bash-path.test-fixture'
+import {
+  buildWindowsNativeHookExecutable,
+  WINDOWS_NATIVE_HOOK_BUILD_TIMEOUT_MS
+} from './windows-native-hook-exe.test-fixture'
 
 const PANE_KEY = 'tab-1:leaf-1'
 const HOOK_TOKEN = 'payload-delivery-token'
@@ -130,6 +142,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
 
   afterEach(() => {
     vi.unstubAllEnvs()
+    bundledHook.path = null
     server?.close()
     server = null
     homedirMock.mockImplementation(() => process.env.HOME ?? tmpdir())
@@ -145,6 +158,16 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
       install: () => new ClaudeHookService().install(),
       configPath: getConfigPath,
       script: 'claude-hook.cmd',
+      stdout: '{}'
+    },
+    {
+      name: 'Claude (orca-hook.exe)',
+      install: () => {
+        bundledHook.path = buildWindowsNativeHookExecutable()
+        return new ClaudeHookService().install()
+      },
+      configPath: getConfigPath,
+      script: 'claude-hook.exe',
       stdout: '{}'
     },
     {
@@ -170,6 +193,7 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
       if (!registeredCommand) {
         throw new Error('Missing managed PreToolUse command')
       }
+      expect(registeredCommand.endsWith(provider.script)).toBe(true)
       // ...with one exception: a cmd-safe profile must reach the script with no interpreter in
       // front of it, or #18875's per-event PowerShell start-up has quietly come back.
       if (WINDOWS_CMD_SAFE_PATH.test(join(home, '.orca', 'agent-hooks', provider.script))) {
@@ -219,8 +243,8 @@ describe.skipIf(process.platform !== 'win32')('Windows managed hook payload deli
         expect(outsideOrca.exitCode, `${shell.name} outside Orca exit code`).toBe(0)
         expect(listener.posts).toHaveLength(before + 1)
       }
-      // Why: two shell launches plus a real install can overrun the default under load.
+      // Why: two shell launches plus a real install (and a cold exe build) can overrun the default.
     },
-    60_000
+    WINDOWS_NATIVE_HOOK_BUILD_TIMEOUT_MS
   )
 })

@@ -24,6 +24,9 @@ const {
   verifyPackagedMainRuntimeDeps
 } = require('./packaged-runtime-node-modules.cjs')
 const { verifyLinuxGlibcFloor } = require('./scripts/verify-linux-glibc-floor.cjs')
+const {
+  verifyPackagedWindowsAgentHook
+} = require('./scripts/verify-packaged-windows-agent-hook.cjs')
 const { writeMacBuildCompatibility } = require('./scripts/mac-build-compatibility.cjs')
 const {
   MOBILE_WEB_BUNDLE_DIR,
@@ -444,6 +447,7 @@ module.exports = {
     const canExecuteTargetArch = context.arch === hostArchEnum || context.arch === 4
     if (context.electronPlatformName === 'win32') {
       verifyPackagedWindowsNodePty(resourcesDir, context.arch, { canExecuteTargetArch })
+      verifyPackagedWindowsAgentHook(resourcesDir, context.arch)
     }
     verifySkillsCliRuntime(join(resourcesDir, 'app.asar.unpacked', 'out'), resourcesDir, {
       executeCommands: canExecuteTargetArch
@@ -533,6 +537,12 @@ module.exports = {
       {
         from: 'native/windows-cli-launcher/.build/orca.exe',
         to: 'bin/orca.exe'
+      },
+      // Why resources/bin: SignPath signs every unsigned PE under win-unpacked, and the hook
+      // installer copies this signed file into ~/.orca/agent-hooks (#20913).
+      {
+        from: 'native/windows-agent-hook/.build/orca-hook.exe',
+        to: 'bin/orca-hook.exe'
       },
       {
         from: 'node_modules/agent-browser/bin/agent-browser-win32-x64.exe',
