@@ -1,11 +1,9 @@
 // One plan per mutating method: what it fingerprints, what it does, and how its
 // answer is rebuilt on a replay.
 //
-// The replay half matters more than it looks. The ledger records only that an
-// operation happened, so the durable answer usually comes back out of the
-// journal. Send is fail-closed: admission alone cannot prove non-delivery, so
-// its success commits with the row that accepts it, and a row still pending is
-// one that wrote nothing.
+// A plan with `commandReceipt` proves acceptance by that receipt, the rest by their ledger row. A
+// prompt answer's replay answers from the resolution its receipt keeps; the journal projects the
+// others' current answer.
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import {
@@ -20,6 +18,7 @@ import type {
   AgentSessionMutationEnvelope,
   AgentSessionOptionResult,
   AgentSessionPromptResult,
+  AgentSessionQueuedSendReceipt,
   AgentSessionSendResult
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionConversationCommandResult } from '../../../shared/agent-session-conversation-command'
@@ -40,8 +39,17 @@ import {
   type AgentSessionTurnContext,
   type TurnOutcome
 } from './structured-agent-session-turns'
-import type { AgentSessionPromptRequest } from './structured-agent-session-turns-prompt'
+import {
+  acceptedPromptAnswer,
+  promptAnswerReceipt,
+  promptRowAnswer,
+  type AgentSessionPromptRequest
+} from './structured-agent-session-turns-prompt'
 import { queuedSendAnswer } from './structured-agent-session-queued-send-answer'
+import type { JournalOperationReceipt } from '../agent-session-journal/journal-row-writer'
+import type { CommandReceiptResult } from '../agent-session-journal/command-receipt-schema'
+import type { JournalRow } from '../agent-session-journal/journal-row-schema'
+import { refusingNewerOrcaJournal } from '../agent-session-journal/journal-open-failure'
 
 export type MutationPlan<TValue> = {
   method: string
@@ -52,22 +60,64 @@ export type MutationPlan<TValue> = {
   /** Still runs, decided from the committed ledger, when its ledger row cannot be written. */
   runsWithoutLedgerRow?: true
   run: (ctx: AgentSessionTurnContext) => Promise<TurnOutcome<TValue>>
-  replay: (ctx: AgentSessionTurnContext, outcome: AgentSessionOperationOutcome) => TValue | null
+  /** `receipt`: the accepted command receipt's result, for a plan with `commandReceipt`. */
+  replay: (
+    ctx: AgentSessionTurnContext,
+    outcome: AgentSessionOperationOutcome,
+    receipt?: CommandReceiptResult
+  ) => TValue | null
   rerunWhenReplayMissing?: (ctx: AgentSessionTurnContext) => boolean
   recoverUnknownFromDurableState?: boolean
 } & (
   | {
-      /** Its success is the row its run writes, so it commits in that row's transaction
-       *  (`AgentSessionTurnContext.operationReceipt`): a row left pending wrote nothing. That
-       *  success is fixed before the value exists, so it records no `settledOutcome`. */
-      settlesWithWrite: true
+      commandReceipt: MutationCommandReceipt<TValue>
+      settlesWithWrite?: never
+      successReceipt?: never
       settledOutcome?: never
     }
   | {
+      /** Commits success with its row; paths without a committed receipt use fallback settlement. */
+      settlesWithWrite: true
+      commandReceipt?: never
+      successReceipt?: () => JournalOperationReceipt
+      settledOutcome?: (value: TValue) => AgentSessionOperationOutcome
+    }
+  | {
       settlesWithWrite?: never
+      commandReceipt?: never
       settledOutcome?: (value: TValue) => AgentSessionOperationOutcome
     }
 )
+
+/** Accepted through its own command receipt, inserted if absent in the transaction of its effect. */
+export type MutationCommandReceipt<TValue> = {
+  /** Inside the effect's transaction: the journal row it wrote, or none for a draft-table write. */
+  result: (row: JournalRow | undefined) => CommandReceiptResult
+  /** A run that wrote nothing: the receipt committed alone, before the answer goes out (a no-op's
+   *  answer, or the earlier write it acknowledged), or null to record nothing. */
+  unwritten?: (value: TValue, ctx: AgentSessionTurnContext) => CommandReceiptResult | null
+}
+
+/** The journal row an accepted command wrote, which must be of the kind it accepts with. */
+export function journalRowReceiptResult(
+  row: JournalRow | undefined,
+  kind: JournalRow['kind']
+): CommandReceiptResult {
+  if (row?.kind !== kind) {
+    throw new Error(`an accepted command requires its ${kind} row`)
+  }
+  return { kind: 'journal-row', epoch: row.epoch, sequence: row.seq }
+}
+
+/** A send accepts with its submission, or a draft held while the agent works, keyed by its id. */
+function submissionOrDraftReceipt<TValue>(clientMessageId: string): MutationCommandReceipt<TValue> {
+  return {
+    result: (row) =>
+      row
+        ? journalRowReceiptResult(row, 'submission')
+        : { kind: 'queued-draft', messageId: clientMessageId }
+  }
+}
 
 /** Who a send is from, read off what it carries, the one place it is decided: the person's own
  *  send, another agent's message (its body names the sender), or neither, such as a dispatch
@@ -100,7 +150,7 @@ export function sendPlan(params: {
     method: 'agentSession.send',
     operationIdScope: 'global',
     conversationWrite: true,
-    settlesWithWrite: true,
+    commandReceipt: submissionOrDraftReceipt(clientMessageId),
     // `delivery` joins the OPERATION fingerprint only; the submission row keeps
     // the body-only fingerprint the reducer's echo-aliasing recomputes.
     fields: {
@@ -167,21 +217,29 @@ export function sendPlan(params: {
 
 export type ConversationCommandAcceptance =
   | { clientMessageId: string }
+  /** Held as a card, keyed by the operation id, behind work in flight. */
+  | { queued: AgentSessionQueuedSendReceipt }
   /** What an older build's run of this operation recorded. */
   | { recorded: AgentSessionConversationCommandResult }
 
 /** `/compact` accepted like a send: one submission, keyed by the operation id, that the delivery
- *  loop carries out as the command's own turn. */
+ *  loop carries out as the command's own turn — or, asked with `delivery`, a card while the
+ *  agent works, which the queue's drain turns into that submission. */
 export function conversationCommandPlan(params: {
   envelope: AgentSessionMutationEnvelope
+  delivery?: 'queue-if-active'
   priorRecord: () => AgentSessionConversationCommandResult | null
 }): MutationPlan<ConversationCommandAcceptance> {
   const clientMessageId = params.envelope.clientOperationId
   return {
     method: 'agentSession.conversationCommand',
+    operationIdScope: 'global',
     conversationWrite: true,
-    settlesWithWrite: true,
-    fields: { command: STRUCTURED_AGENT_SESSION_COMPACT_COMMAND },
+    commandReceipt: submissionOrDraftReceipt(clientMessageId),
+    fields: {
+      command: STRUCTURED_AGENT_SESSION_COMPACT_COMMAND,
+      ...(params.delivery ? { delivery: params.delivery } : {})
+    },
     recoverUnknownFromDurableState: true,
     run: async (ctx) => {
       const sent = await performSend(ctx, {
@@ -194,9 +252,17 @@ export function conversationCommandPlan(params: {
       })
       return sent.ok ? { ok: true, value: { clientMessageId } } : sent
     },
-    replay: (ctx, outcome) => {
-      if (outcome.status === 'succeeded' && outcome.conversationCommand) {
-        return { recorded: outcome.conversationCommand }
+    replay: (ctx) => {
+      // A card answers from itself until drained, then from the submission it became; only a
+      // command that asked to wait can have one, as for a send.
+      const queued =
+        params.delivery === 'queue-if-active'
+          ? queuedSendAnswer(ctx.journal, clientMessageId)
+          : null
+      if (queued) {
+        return 'queued' in queued
+          ? { queued: queued.queued }
+          : { clientMessageId: queued.submission.clientMessageId }
       }
       if (ctx.journal.submissions().some((entry) => entry.clientMessageId === clientMessageId)) {
         return { clientMessageId }
@@ -258,17 +324,13 @@ export function promptPlan(
       optionId: params.optionId,
       answers: params.answers
     },
-    run: (ctx) => performPrompt(ctx, params),
-    replay: (ctx) => {
-      const item = ctx.journal.snapshot().items.find((entry) => entry.itemId === params.itemId)
-      const body = item?.body
-      if (!item || !body || (body.kind !== 'approval' && body.kind !== 'question')) {
-        return null
-      }
-      return body.resolution.state === 'pending'
-        ? null
-        : { itemId: item.itemId, revision: item.revision, resolution: body.resolution }
-    }
+    // The resolved revision's answer, or the answer the prompt already held, kept in the receipt.
+    commandReceipt: {
+      result: (row) => promptAnswerReceipt(promptRowAnswer(row)),
+      unwritten: (value) => promptAnswerReceipt(value)
+    },
+    run: (ctx) => refusingNewerOrcaJournal(performPrompt(ctx, params)),
+    replay: (_ctx, _outcome, receipt) => acceptedPromptAnswer(receipt)
   }
 }
 

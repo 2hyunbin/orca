@@ -21,13 +21,26 @@ function message(text: string, role: NativeChatMessage['role'] = 'assistant'): N
 }
 
 describe('transcript row height estimate', () => {
+  it('estimates a long prompt at its folded height, however long it runs', () => {
+    const height = (lines: number, role: NativeChatMessage['role']): number =>
+      estimateNativeChatRowHeight(
+        nativeChatRowContentMetrics(message(Array(lines).fill('line').join('\n'), role)),
+        NO_CHROME
+      )
+    expect(height(40, 'user')).toBe(height(400, 'user'))
+    expect(height(40, 'user')).toBeLessThan(height(40, 'assistant'))
+    expect(height(8, 'user')).toBeGreaterThan(height(7, 'user'))
+    expect(height(400, 'user')).toBe(height(9, 'user'))
+  })
+
   it('reuses row metrics across a one-pixel resize and refreshes after a substantial resize', () => {
     const prose = message('x'.repeat(900))
     const metricsAtWidth = (width: number) => {
       const style = nativeChatAppearanceStyle({ nativeChatAppearance: { width: 'wide' } }, width)
       return nativeChatRowContentMetrics(prose, {
         lineHeightPx: style['--chat-estimated-line-height'],
-        charsPerLine: style['--chat-estimated-chars-per-line']
+        charsPerLine: style['--chat-estimated-chars-per-line'],
+        spacingScale: style['--chat-estimated-spacing-scale']
       })
     }
     const initial = metricsAtWidth(800)
@@ -48,7 +61,8 @@ describe('transcript row height estimate', () => {
       )
       const typography = {
         lineHeightPx: style['--chat-estimated-line-height'],
-        charsPerLine: style['--chat-estimated-chars-per-line']
+        charsPerLine: style['--chat-estimated-chars-per-line'],
+        spacingScale: style['--chat-estimated-spacing-scale']
       }
       return estimateNativeChatRowHeight(
         nativeChatRowContentMetrics(prose, typography),
@@ -222,7 +236,8 @@ describe('transcript row height estimate', () => {
       const style = nativeChatAppearanceStyle({ nativeChatAppearance: { fontSize } })
       const typography = {
         lineHeightPx: style['--chat-estimated-line-height'],
-        charsPerLine: style['--chat-estimated-chars-per-line']
+        charsPerLine: style['--chat-estimated-chars-per-line'],
+        spacingScale: style['--chat-estimated-spacing-scale']
       }
       const heightFor = (command: string): number =>
         estimateNativeChatRowHeight(
@@ -254,7 +269,8 @@ describe('transcript row height estimate', () => {
       const style = nativeChatAppearanceStyle({ nativeChatAppearance: { fontSize } })
       return estimateNativeChatRowHeight(reasoning, NO_CHROME, {
         lineHeightPx: style['--chat-estimated-line-height'],
-        charsPerLine: style['--chat-estimated-chars-per-line']
+        charsPerLine: style['--chat-estimated-chars-per-line'],
+        spacingScale: style['--chat-estimated-spacing-scale']
       })
     })
 

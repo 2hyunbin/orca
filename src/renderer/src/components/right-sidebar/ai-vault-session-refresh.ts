@@ -1,4 +1,3 @@
-import { recoverLoadedAiVaultStructuredTitles } from './ai-vault-structured-title-recovery'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   isAiVaultScanCancelledError,
@@ -18,29 +17,39 @@ import { EMPTY_AI_VAULT_SESSIONS } from './ai-vault-session-identity'
 import { useAppliedAiVaultScan } from './ai-vault-applied-scan'
 import {
   aiVaultSessionResultCacheKey,
-  applyAiVaultTitleChangesSince,
-  cacheAiVaultSessionResult,
-  readAiVaultSessionResultSnapshot,
-  readCachedAiVaultSessionResult,
   resetAiVaultSessionResultCacheForTest
 } from './ai-vault-session-result-cache'
-import { createBrowserUuid } from '@/lib/browser-uuid'
-import { aiVaultProjectedMetadataEqual } from './ai-vault-structured-title-projection'
-import { AiVaultPendingTitleProjection } from './ai-vault-pending-title-projection'
 import {
-  getAiVaultLiveProviderSessionIdsKey,
-  recordAiVaultLiveProviderSessionIds,
-  resetAiVaultLiveProviderSessionIdsForTest
-} from './ai-vault-live-provider-session-ids'
+  refreshAiVaultSessionList,
+  type AiVaultConditionalSnapshot,
+  cacheAiVaultSessionList,
+  readCachedAiVaultSessionList
+} from './ai-vault-session-list-request'
+import {
+  getAgentSessionIdsKey,
+  resetAgentSessionIdsRefreshKeys
+} from './ai-vault-agent-session-refresh-key'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 
 // In-app session creation bypasses the cache so the new session appears promptly.
 // Keep the budget at module scope so tab remounts cannot amplify full scans.
 const FORCED_RESCAN_MIN_INTERVAL_MS = 30_000
 let lastForcedRescanAt = 0
 
+/** Takes the shared forced-rescan budget when it is free. Every caller outside the panel that forces
+ *  a scan must take it too, or it would amplify full scans the same way. */
+export function claimAiVaultForcedRescan(): boolean {
+  const now = Date.now()
+  if (lastForcedRescanAt + FORCED_RESCAN_MIN_INTERVAL_MS > now) {
+    return false
+  }
+  lastForcedRescanAt = now
+  return true
+}
+
 export function resetAiVaultForcedRescanThrottleForTest(): void {
   lastForcedRescanAt = 0
-  resetAiVaultLiveProviderSessionIdsForTest()
+  resetAgentSessionIdsRefreshKeys()
   resetAiVaultSessionResultCacheForTest()
 }
 
@@ -49,6 +58,15 @@ export function resetAiVaultForcedRescanThrottleForTest(): void {
 export const isAiVaultScanCancellation = isAiVaultScanCancelledError
 
 type AiVaultRefreshArgs = { force?: boolean; background?: boolean; reuseLoadedDepth?: boolean }
+
+// Shares main's request resolver, so this is exactly the scope that fans out on
+// the desktop IPC path. Deliberately over-inclusive: the paired web transport
+// drops the scope and serves one host, so 'all' there costs a redundant
+// reconcile. Erring the other way would re-enable the stamp fast-path on a real
+// merge, which is the bug this guard exists to prevent.
+function isMergedAiVaultHostScope(scope: ExecutionHostScope): boolean {
+  return requestedExecutionHostScope(scope) === ALL_EXECUTION_HOSTS_SCOPE
+}
 
 export function useAiVaultSessionRefresh(
   scopePaths: readonly string[],
@@ -75,10 +93,12 @@ export function useAiVaultSessionRefresh(
   const pendingRefreshRef = useRef(false)
   const pendingForceRef = useRef(false)
   const pendingBackgroundRef = useRef(true)
-  const lastAppliedScanRef = useRef<{ scopeKey: string; result: AiVaultListResult } | null>(null)
+  const lastAppliedScanRef = useRef<{ scopeKey: string; scannedAt: string } | null>(null)
+  const conditionalSnapshotRef = useRef<(AiVaultConditionalSnapshot & { scopeKey: string }) | null>(
+    null
+  )
   const mountedRef = useRef(true)
   const publicationGateRef = useRef<AiVaultSessionPublicationGate>(undefined!)
-  const pendingTitlesRef = useRef<AiVaultPendingTitleProjection | null>(null)
   publicationGateRef.current ??= new AiVaultSessionPublicationGate()
   const scanScopeKey = `${aiVaultSessionResultCacheKey(executionHostScope, scopePaths)}\n${sessionLimit}`
   const scopePathsRef = useRef<readonly string[]>(scopePaths)
@@ -105,18 +125,22 @@ export function useAiVaultSessionRefresh(
       const baseKey = aiVaultSessionResultCacheKey(hostScope, scopePathsRef.current)
       const cachedResult =
         args.reuseLoadedDepth === true
-          ? readCachedAiVaultSessionResult({
-              key: baseKey,
-              limit: selectedLimit,
-              scopePaths: scopePathsRef.current
+          ? readCachedAiVaultSessionList({
+              scopePaths: scopePathsRef.current,
+              executionHostScope: hostScope,
+              sessionLimit: selectedLimit
             })
           : null
       if (cachedResult) {
         const scanKey = `${baseKey}\n${selectedLimit}`
-        lastAppliedScanRef.current = { scopeKey: scanKey, result: cachedResult }
+        lastAppliedScanRef.current = { scopeKey: scanKey, scannedAt: cachedResult.scannedAt }
         setError(null)
         publicationGateRef.current.publish(cachedResult, (published) => {
-          applyScan(published, selectedLimit, baseKey)
+          applyScan(published, selectedLimit, (applied) => {
+            conditionalSnapshotRef.current = published.fingerprint
+              ? { scopeKey: scanKey, fingerprint: published.fingerprint, result: applied }
+              : null
+          })
         })
         setLoading(false)
         return
@@ -145,24 +169,22 @@ export function useAiVaultSessionRefresh(
         setLoading(true)
       }
       setError(null)
-      const limit = selectedLimit === 'unlimited' ? undefined : selectedLimit
       const scanKey = `${baseKey}\n${selectedLimit}`
-      const titleSnapshot = readAiVaultSessionResultSnapshot(baseKey)
-      const pendingTitles = new AiVaultPendingTitleProjection(hostScope)
-      pendingTitlesRef.current = pendingTitles
+      const request = {
+        scopePaths: scopePathsRef.current,
+        executionHostScope: hostScope,
+        sessionLimit: selectedLimit
+      }
       try {
-        const response = await window.api.aiVault.listSessions({
-          includeAntigravityIdeSessions: true,
-          limit,
-          unlimited: selectedLimit === 'unlimited',
-          scopePaths: scopePathsRef.current,
-          executionHostScope: hostScope,
-          force: args.force,
-          requestToken: requestTokenRef.current
-        })
+        const previous = conditionalSnapshotRef.current
+        const result = await refreshAiVaultSessionList(
+          request,
+          { force: args.force, requestToken: requestTokenRef.current },
+          previous?.scopeKey === scanKey ? previous : undefined
+        )
         // A superseded scan resolves cancelled rather than rejecting, so the
         // main-process log stays clean; its empty body must not be painted.
-        if (response.cancelled || !mountedRef.current || refreshIdRef.current !== refreshId) {
+        if (result.cancelled || !mountedRef.current || refreshIdRef.current !== refreshId) {
           return
         }
         // Why: host/scope changes queue a follow-up scan, but the older result
@@ -170,36 +192,30 @@ export function useAiVaultSessionRefresh(
         if (scanKey !== currentScanScopeKey()) {
           return
         }
-        const result = pendingTitles.apply(
-          applyAiVaultTitleChangesSince(response, baseKey, titleSnapshot)
-        )
         // A cache hit returns the snapshot already on screen; skip the state
         // updates so refocus flips don't force pointless re-renders.
-        // Single-host stamps cover transcript data, but names/ownership are projected afterward.
-        // Merged host clocks can repeat despite other changed fields, so reconcile their full body.
+        // Single-host results carry one scanner's stamp minted when that scan
+        // finished, so an equal stamp does mean equal content. An 'all' result
+        // is a merge of legs on independent clocks stamped with the newest leg,
+        // so a lagging host's leg can change while the merged stamp stands
+        // still — there, only the structural reconcile below may decide.
         if (
-          requestedExecutionHostScope(hostScope) !== ALL_EXECUTION_HOSTS_SCOPE &&
+          !isMergedAiVaultHostScope(hostScope) &&
           lastAppliedScanRef.current?.scopeKey === scanKey &&
-          lastAppliedScanRef.current.result.scannedAt === result.scannedAt &&
-          aiVaultProjectedMetadataEqual(lastAppliedScanRef.current.result, result)
+          lastAppliedScanRef.current.scannedAt === result.scannedAt &&
+          result.fingerprint === undefined
         ) {
           return
         }
-        lastAppliedScanRef.current = { scopeKey: scanKey, result }
-        cacheAiVaultSessionResult({
-          key: baseKey,
-          executionHostScope: hostScope,
-          limit: selectedLimit,
-          result,
-          tabs: useAppStore.getState().unifiedTabsByWorktree,
-          replaceHostEntries: args.force === true
-        })
-        if (!titleSnapshot) {
-          recoverLoadedAiVaultStructuredTitles(result)
-        }
+        lastAppliedScanRef.current = { scopeKey: scanKey, scannedAt: result.scannedAt }
+        cacheAiVaultSessionList(request, result, { replaceHostEntries: args.force === true })
         publicationGateRef.current.publish(result, (published) => {
           if (mountedRef.current && scanKey === currentScanScopeKey()) {
-            applyScan(published, selectedLimit, baseKey)
+            applyScan(published, selectedLimit, (applied) => {
+              conditionalSnapshotRef.current = published.fingerprint
+                ? { scopeKey: scanKey, fingerprint: published.fingerprint, result: applied }
+                : null
+            })
           }
         })
       } catch (err) {
@@ -215,23 +231,18 @@ export function useAiVaultSessionRefresh(
           setError(describeAiVaultScanError(err instanceof Error ? err.message : String(err)))
         }
       } finally {
-        pendingTitles.stop()
-        if (pendingTitlesRef.current === pendingTitles && refreshIdRef.current === refreshId) {
-          pendingTitlesRef.current = null
-          pendingRefreshRef.current ||= pendingTitles.overflowed
-          refreshInFlightRef.current = false
-          if (mountedRef.current && refreshIdRef.current === refreshId) {
-            setLoading(false)
-          }
-          if (pendingRefreshRef.current && mountedRef.current) {
-            pendingRefreshRef.current = false
-            const force = pendingForceRef.current
-            // The queued refresh is background-only if every queued caller was.
-            const background = pendingBackgroundRef.current
-            pendingForceRef.current = false
-            pendingBackgroundRef.current = true
-            void refresh({ force, background })
-          }
+        refreshInFlightRef.current = false
+        if (mountedRef.current && refreshIdRef.current === refreshId) {
+          setLoading(false)
+        }
+        if (pendingRefreshRef.current && mountedRef.current) {
+          pendingRefreshRef.current = false
+          const force = pendingForceRef.current
+          // The queued refresh is background-only if every queued caller was.
+          const background = pendingBackgroundRef.current
+          pendingForceRef.current = false
+          pendingBackgroundRef.current = true
+          void refresh({ force, background })
         }
       }
       // Deps intentionally avoid changing scope values: refresh reads them
@@ -246,12 +257,11 @@ export function useAiVaultSessionRefresh(
   // until some unrelated later trigger.
   const forcedRescanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestForcedRescan = useCallback(() => {
-    const waitMs = lastForcedRescanAt + FORCED_RESCAN_MIN_INTERVAL_MS - Date.now()
-    if (waitMs <= 0) {
-      lastForcedRescanAt = Date.now()
+    if (claimAiVaultForcedRescan()) {
       void refresh({ background: true, force: true })
       return
     }
+    const waitMs = lastForcedRescanAt + FORCED_RESCAN_MIN_INTERVAL_MS - Date.now()
     if (forcedRescanTimerRef.current !== null) {
       return
     }
@@ -268,8 +278,6 @@ export function useAiVaultSessionRefresh(
     return () => {
       mountedRef.current = false
       publicationGate.cancel()
-      pendingTitlesRef.current?.stop()
-      pendingTitlesRef.current = null
       refreshIdRef.current += 1
       refreshInFlightRef.current = false
       void window.api.aiVault.cancelListSessions({
@@ -334,19 +342,24 @@ export function useAiVaultSessionRefresh(
   // can't surface them. Agent hooks already report provider sessions; re-scan
   // only when a session id we haven't seen appears — state transitions are
   // deliberately ignored, they fire constantly while agents work.
-  const agentSessionIdsKey = useAppStore((s) =>
-    getAiVaultLiveProviderSessionIdsKey(s.agentStatusByPaneKey)
-  )
+  const agentSessionIdsKey = useAppStore((s) => getAgentSessionIdsKey(s.agentStatusByPaneKey))
   const seenAgentSessionIdsRef = useRef<Set<string> | null>(null)
   useEffect(() => {
-    const observed = recordAiVaultLiveProviderSessionIds(
-      agentSessionIdsKey,
-      seenAgentSessionIdsRef.current
-    )
-    seenAgentSessionIdsRef.current = observed.seen
-    if (observed.added) {
-      requestForcedRescan()
+    const ids = agentSessionIdsKey === '' ? [] : agentSessionIdsKey.split('\n')
+    // The mount refresh already covers sessions live at mount time.
+    if (seenAgentSessionIdsRef.current === null) {
+      seenAgentSessionIdsRef.current = new Set(ids)
+      return
     }
+    const seen = seenAgentSessionIdsRef.current
+    const freshIds = ids.filter((id) => !seen.has(id))
+    if (freshIds.length === 0) {
+      return
+    }
+    for (const id of freshIds) {
+      seen.add(id)
+    }
+    requestForcedRescan()
   }, [agentSessionIdsKey, requestForcedRescan])
 
   return { error, loading, refresh, scanResult, sessions, loadedSessionLimit: scan?.limit ?? null }

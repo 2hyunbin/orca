@@ -60,7 +60,6 @@ export class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
     stats?: StatsCollector,
     deps?: {
       getLocalProvider?: () => IPtyProvider
-      getSshProvider?: (connectionId: string) => IPtyProvider | undefined
       prepareClaudeAuth?: PrepareClaudeAuth
       onPtyStopped?: (ptyId: string) => void
       onTerminalAgentStatus?: (event: RuntimeTerminalAgentStatusEvent) => void
@@ -116,6 +115,8 @@ export class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
       resolveCodexStructuredLaunchHome?: (input: {
         launchEnv: NodeJS.ProcessEnv
       }) => string | null | Promise<string | null>
+      // The sync launch prep runs on the shared mirror, for the catalog probe's read-only server.
+      prepareCodexCatalogProbeHome?: (homePath: string) => void
       buildAgentHookPtyEnv?: () => Record<string, string>
       getDesktopWindowStatus?: () => RuntimeDesktopWindowStatus
       agentSessionClaimSigner?: AgentSessionClaimSigner
@@ -190,7 +191,6 @@ export class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
       showManagedWorktree: (selector) => this.showManagedWorktree(selector),
       resolveProjectRuntimeForWorktree: (worktreeId) =>
         this.resolveProjectRuntimeForWorktree(worktreeId),
-      getSshProvider: (connectionId) => this.getSshProviderFn?.(connectionId),
       getClaudeConfigDirectory: (target) => this.accounts.getClaudeConfigDirectory(target),
       skillTransactionRecovery: (deps?.skillTransactionRecovery ?? Promise.resolve()).catch(
         (error) => {
@@ -261,7 +261,6 @@ export class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
     // lazily via thunk so teardown always sees the currently-installed
     // provider (design §4.3 wire-up).
     this.getLocalProviderFn = deps?.getLocalProvider ?? null
-    this.getSshProviderFn = deps?.getSshProvider ?? null
     this.onPtyStopped = deps?.onPtyStopped ?? null
     this.onTerminalAgentStatus = deps?.onTerminalAgentStatus ?? null
     this.onClaudeTerminalEvidence = deps?.onClaudeTerminalEvidence ?? null
@@ -270,6 +269,7 @@ export class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
     this.prepareAiVaultSessionResumeFn = deps?.prepareAiVaultSessionResume ?? null
     this.prepareCodexStructuredLaunchFn = deps?.prepareCodexStructuredLaunch ?? null
     this.resolveCodexStructuredLaunchHomeFn = deps?.resolveCodexStructuredLaunchHome ?? null
+    this.prepareCodexCatalogProbeHomeFn = deps?.prepareCodexCatalogProbeHome ?? null
     this.agentSessionClaimSigner =
       deps?.agentSessionClaimSigner ?? createEphemeralAgentSessionClaimSigner(this.runtimeId)
     this.onTerminalSideEffects = deps?.onTerminalSideEffects ?? null

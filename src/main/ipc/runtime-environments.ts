@@ -6,6 +6,7 @@ import {
 import { app, ipcMain } from 'electron'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import type { Store } from '../persistence'
+import { recordRemoteLayoutFrame } from '../remote-layout-snapshot'
 import {
   isRuntimeEnvironmentManuallyDisconnected,
   registerRuntimeEnvironmentConnectivityHandlers,
@@ -19,9 +20,18 @@ import { registerRuntimeEnvironmentRecoveryHandler } from './runtime-environment
 import { advanceRuntimeEnvironmentTransportGeneration } from './runtime-environment-transport-generation'
 import { resetSharedControlSupport } from './runtime-environment-transport-routing'
 import { RUNTIME_ENVIRONMENT_HANDLER_CHANNELS } from './runtime-environment-handler-channels'
+import { registerOrcadRuntimeLifecycleHandlers } from './orcad-runtime-lifecycle-handlers'
+import { registerOrcadRuntimeConversionHandlers } from './orcad-runtime-conversion-handlers'
+import { registerOrcadDeltaMoveHandlers } from './orcad-delta-move-handlers'
+import { registerOrcadRuntimeMaintenanceHandlers } from './orcad-runtime-maintenance-handlers'
+import { clearPublishedManagedServer } from './ssh-renderer-broadcast'
+import { clearManagedServerNotes } from './runtime-environment-managed-tunnel'
+import { reconcileOrphanedRuntimeSessions } from './runtime-environment-session-reconcile'
+import { registerRuntimeSshAccessHandlers } from './runtime-ssh-access-handlers'
 import { retirePairedRuntimeBrowserClientHostEnvironment } from '../browser/paired-runtime-browser-client-host-runtime'
 import { registerRuntimeEnvironmentBrowserClientHostHandler } from './runtime-environment-browser-client-host-handler'
 import { advanceRuntimeEnvironmentCapabilityIncarnation } from './runtime-environment-capability-evidence'
+import { retireMobileDesktopRelayEnvironment } from './runtime-environment-mobile-relay-hosts'
 import { watchRuntimeEnvironmentPreference } from './runtime-environment-preference'
 
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
@@ -64,6 +74,8 @@ export function invalidateRuntimeEnvironmentTransport(environmentId: string): Pr
   advanceRuntimeEnvironmentTransportGeneration(environmentId)
   closeRemoteRuntimeRequestConnection(environmentId)
   closeSubscriptionsForEnvironment(environmentId)
+  retireMobileDesktopRelayEnvironment(environmentId)
+  reactivateRuntimeEnvironmentStatus(environmentId)
   return retirePairedRuntimeBrowserClientHostEnvironment(
     environmentId,
     new Error('Runtime environment transport was invalidated')
@@ -73,6 +85,21 @@ export function invalidateRuntimeEnvironmentTransport(environmentId: string): Pr
       console.warn('[runtime-environments] browser client host retirement failed:', error)
     }
   )
+}
+
+/**
+ * A re-pair main ran (an update or rollback from the CLI) reaches renderers only through status
+ * published under the new revision; without an owner nothing publishes it (P1-C).
+ */
+function reactivateRuntimeEnvironmentStatus(environmentId: string): void {
+  const userDataPath = getUserDataPath()
+  if (
+    isRuntimeEnvironmentManuallyDisconnected(environmentId) ||
+    !listEnvironments(userDataPath).some((environment) => environment.id === environmentId)
+  ) {
+    return
+  }
+  getRuntimeEnvironmentStatusOwner(userDataPath, environmentId).activate()
 }
 
 const pendingSubscriptions = new Map<string, PendingRuntimeSubscription>()
@@ -92,6 +119,7 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
     ipcMain.removeHandler(channel)
   }
   ipcMain.removeAllListeners('runtimeEnvironments:subscriptionBinary')
+  reconcileOrphanedRuntimeSessions(store, getUserDataPath())
 
   registerRuntimeEnvironmentConnectivityHandlers({
     store,
@@ -109,9 +137,26 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
       getRuntimeEnvironmentStatusOwner(getUserDataPath(), environment.id).activate()
     }
   }
+  registerRuntimeSshAccessHandlers({
+    getUserDataPath,
+    invalidateTransport: invalidateRuntimeEnvironmentTransport
+  })
+  registerOrcadRuntimeLifecycleHandlers({ getUserDataPath })
+  registerOrcadRuntimeConversionHandlers(getUserDataPath)
+  registerOrcadDeltaMoveHandlers(getUserDataPath)
+  registerOrcadRuntimeMaintenanceHandlers({
+    getUserDataPath,
+    getActiveEnvironmentId: () => store.getSettings().activeRuntimeEnvironmentId,
+    invalidateTransport: invalidateRuntimeEnvironmentTransport,
+    clearHostServerStatus: clearPublishedManagedServer,
+    clearHostServerNotes: clearManagedServerNotes,
+    store
+  })
   registerRuntimeEnvironmentSubscriptionHandlers({
     getUserDataPath,
     remoteRuntimeSubscriptions,
-    pendingSubscriptions
+    pendingSubscriptions,
+    recordLayoutFrame: (environmentId, method, response) =>
+      recordRemoteLayoutFrame(store, environmentId, method, response)
   })
 }

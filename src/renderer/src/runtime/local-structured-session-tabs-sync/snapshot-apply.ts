@@ -11,9 +11,8 @@ import {
 } from '../web-session-tabs-sync'
 import type { WebSessionTabsSyncState } from '../web-session-tabs-sync'
 import {
-  hasRetiredValue,
+  admitRetiredValueUnderAuthority,
   noteRetiredValue,
-  reviveRetiredValue,
   sameSessionTabsPublicationLineage
 } from '../web-session-tabs-sync/publisher-identity-fences'
 import { knownStructuredSessionWorktreeIds } from '../local-structured-session-tab-retirement'
@@ -36,7 +35,6 @@ import {
 import { suppressCancelledStructuredSessionTabs } from '../structured-agent-session-tab-retirement'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from '../local-structured-session-owner'
 import { closeStructuredAgentSession } from '../structured-agent-session-close'
-import { publishAiVaultSavedTitle } from '@/components/right-sidebar/ai-vault-session-result-cache'
 
 /** The host saying it no longer publishes this worktree at all, rather than publishing an empty one. */
 function isWorktreeRetraction(
@@ -53,13 +51,14 @@ export type StructuredSessionSnapshotApplyOptions = {
    * whereas a subscription frame can be, and stays fenced.
    */
   authoritative?: boolean
+  /** Re-applies a publication at the version already applied: the window removed a chat early. */
+  reacceptCurrentVersion?: boolean
   /** Sequence allocated when the inventory request began, before a close can race its reply. */
   authoritativeInventory?: number
   /** Called for each snapshot the retired-epoch fence rejects; the repair lane listens here. */
   onRetiredEpochDrop?: (worktreeId: string, publicationEpoch: string) => void
   /** Collects accepted publications so lifecycle listeners run after the store patch settles. */
   onAcceptedAgentSession?: (worktreeId: string, sessionId: string) => void
-  onAcceptedSnapshot?: (snapshot: RuntimeMobileSessionTabsResult) => void
 }
 
 export function applyStructuredSessionTabSnapshots(
@@ -68,15 +67,10 @@ export function applyStructuredSessionTabSnapshots(
   options: StructuredSessionSnapshotApplyOptions = {}
 ): void {
   const acceptedAgentSessions: { worktreeId: string; sessionId: string }[] = []
-  const acceptedSnapshots: RuntimeMobileSessionTabsResult[] = []
   const settleStructuredSessionMirror = applyWebSessionTabsStorePatch(
     (state) =>
       applyLocalStructuredSessionTabSnapshots(state, snapshots, owner, undefined, {
         ...options,
-        onAcceptedSnapshot: (snapshot) => {
-          acceptedSnapshots.push(snapshot)
-          options.onAcceptedSnapshot?.(snapshot)
-        },
         onAcceptedAgentSession: (worktreeId, sessionId) => {
           acceptedAgentSessions.push({ worktreeId, sessionId })
           options.onAcceptedAgentSession?.(worktreeId, sessionId)
@@ -85,9 +79,6 @@ export function applyStructuredSessionTabSnapshots(
     { frames: [] }
   )
   settleStructuredSessionMirror()
-  for (const snapshot of acceptedSnapshots) {
-    publishAiVaultSavedTitle(snapshot, LOCAL_EXECUTION_HOST_ID)
-  }
   markStructuredAgentSessionLaunchesPublished(LOCAL_EXECUTION_HOST_ID, acceptedAgentSessions)
   if (options.authoritative) {
     startStructuredAgentLaunchCancellationCleanup(LOCAL_EXECUTION_HOST_ID, (sessionId) =>
@@ -140,14 +131,24 @@ export function applyLocalStructuredSessionTabSnapshots<
     // headless rebuild), and the structured publish inherits the worktree's existing epoch rather
     // than minting its own. So a retired epoch is not proof of a dead generation — only authority
     // can settle it, and the repair lane goes and asks.
-    if (hasRetiredValue(epochHistory, snapshot.publicationEpoch) && !sharesLineage) {
-      if (!options.authoritative) {
-        options.onRetiredEpochDrop?.(snapshot.worktree, snapshot.publicationEpoch)
-        continue
-      }
-      reviveRetiredValue(epochHistory, snapshot.publicationEpoch)
+    if (
+      !sharesLineage &&
+      !admitRetiredValueUnderAuthority(
+        epochHistory,
+        snapshot.publicationEpoch,
+        options.authoritative === true
+      )
+    ) {
+      options.onRetiredEpochDrop?.(snapshot.worktree, snapshot.publicationEpoch)
+      continue
     }
-    if (prior && sharesLineage && snapshot.snapshotVersion <= prior.snapshotVersion) {
+    if (
+      prior &&
+      sharesLineage &&
+      (options.reacceptCurrentVersion
+        ? snapshot.snapshotVersion < prior.snapshotVersion
+        : snapshot.snapshotVersion <= prior.snapshotVersion)
+    ) {
       continue
     }
     const effectiveSnapshot = suppressCancelledStructuredSessionTabs(snapshot, { kind: 'local' })
@@ -168,7 +169,6 @@ export function applyLocalStructuredSessionTabSnapshots<
       }
     )
     next = patch === next ? next : ({ ...next, ...patch } as State)
-    options.onAcceptedSnapshot?.(effectiveSnapshot)
     if (isWorktreeRetraction(effectiveSnapshot)) {
       // A retraction was applied above — the mirrored rows must go — but it is not a publication
       // to fence later frames against. Recording it would retire the renderer's own epoch, which

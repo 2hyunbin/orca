@@ -63,6 +63,10 @@ export type AssignmentUnavailableCause =
   | 'relay_connection_headroom_exhausted'
   | 'relay_home_cell_unavailable'
   | 'relay_assignment_row_busy'
+  // Step 5: a starting director's map, a never-seen host with the database down, or intake.
+  | 'reserve-map-incomplete'
+  | 'reserve-database'
+  | 'reserve-paced'
 
 // Row-lock waiters seen in one pg_stat_activity sample, by who waits, on which
 // table, behind whom. Roles come from each pool's application_name.
@@ -165,6 +169,7 @@ type RelayMetricDeltas = {
   controlRenewalFlushRowsMax: number
   controlActivityRecoveries: number
   controlActivityRecoveryFailures: number
+  hostHellosShed: number
 }
 
 // A host chooses how often it answers a ping, so the process-wide window is a
@@ -221,7 +226,8 @@ const emptyDeltas = (): RelayMetricDeltas => ({
   controlRenewalFlushLatenciesMs: [],
   controlRenewalFlushRowsMax: 0,
   controlActivityRecoveries: 0,
-  controlActivityRecoveryFailures: 0
+  controlActivityRecoveryFailures: 0,
+  hostHellosShed: 0
 })
 
 function ascending(values: number[]): number[] {
@@ -287,6 +293,10 @@ export class RelayObservability implements RelayRuntimeObserver {
 
   recordReconnect(): void {
     this.deltas.reconnects++
+  }
+
+  recordHostHelloShed(): void {
+    this.deltas.hostHellosShed++
   }
 
   recordAssignmentAdmission(outcome: AssignmentAdmissionOutcome): void {
@@ -475,6 +485,8 @@ export class RelayObservability implements RelayRuntimeObserver {
     const controlRenewalFlush = latencySummary(deltas.controlRenewalFlushLatenciesMs)
     const memory = process.memoryUsage()
     const p99 = this.eventLoop.count === 0 ? 0 : this.eventLoop.percentile(99) / 1_000_000
+    // One sample covers a whole freeze, so p99 cannot see a single long one; max can.
+    const max = this.eventLoop.count === 0 ? 0 : this.eventLoop.max / 1_000_000
     this.eventLoop.reset()
     this.write({
       severity: 'INFO',
@@ -571,6 +583,7 @@ export class RelayObservability implements RelayRuntimeObserver {
         deltas.controlRenewalsByOutcome.control_activity_not_found ?? 0,
       controlActivityRecoveriesDelta: deltas.controlActivityRecoveries,
       controlActivityRecoveryFailuresDelta: deltas.controlActivityRecoveryFailures,
+      hostHellosShedDelta: deltas.hostHellosShed,
       // Meaning changed when renewals began batching: for a batched row this is
       // the flush's duration, not that row's own statement latency. The
       // per-flush fields below are the ones to read for statement cost.
@@ -584,7 +597,8 @@ export class RelayObservability implements RelayRuntimeObserver {
       httpLatencyMsMax: roundMs(deltas.httpLatencyMsMax),
       heapUsedBytes: memory.heapUsed,
       heapTotalBytes: memory.heapTotal,
-      eventLoopDelayMsP99: Number(p99.toFixed(3))
+      eventLoopDelayMsP99: Number(p99.toFixed(3)),
+      eventLoopDelayMsMax: Number(max.toFixed(3))
     })
   }
 }

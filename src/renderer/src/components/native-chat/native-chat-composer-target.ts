@@ -1,11 +1,9 @@
 import { translate } from '@/i18n/i18n'
 import { NATIVE_CHAT_TURN_STATUS_COPY } from '../../../../shared/native-chat-turn-status'
 import { isRemoteRuntimePtyId } from '@/runtime/runtime-terminal-inspection'
-import type { getSettingsForAgentTabRuntimeOwner } from '@/lib/agent-paste-draft'
 
 export type NativeChatResolvedTarget = {
   ptyId: string
-  settings: ReturnType<typeof getSettingsForAgentTabRuntimeOwner>
 }
 
 /** Upper bound for clipboard text pulled into the composer via Cmd/Ctrl+V, so a
@@ -42,11 +40,21 @@ export function nativeChatComposerPlaceholder(
       NATIVE_CHAT_TURN_STATUS_COPY.sendAfterStop
     )
   }
-  return translate('components.native-chat.composer.placeholder', 'Send a message…')
+  return translate(
+    'components.native-chat.composer.placeholder',
+    'Ask anything, @ to mention files, / for commands'
+  )
 }
 
 export function nativeChatComposerTargetIsRemote(ptyId: string | null): boolean {
   return ptyId !== null && isRemoteRuntimePtyId(ptyId)
+}
+
+export function nativeChatLocalAttachmentUnsupportedNotice(): string {
+  return translate(
+    'components.native-chat.composer.localAttachmentUnsupported',
+    'Local attachments are not available for remote sessions.'
+  )
 }
 
 export { formatNativeChatFileReference } from '../../../../shared/agent-image-paste'

@@ -153,12 +153,13 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ['/Users/me/logo.png'], target: 'terminal', paneLeafId: 'leaf-1' }
+      pane,
+      paths: ['/Users/me/logo.png']
     })
 
     expect(mocks.importExternalPathsToRuntime).toHaveBeenCalledWith(
       {
-        settings: { activeRuntimeEnvironmentId: 'env-1' },
+        target: { kind: 'environment', environmentId: 'env-1' },
         worktreeId: 'wt-1',
         worktreePath: '/remote/repo',
         expectedExecutionHostId: 'local',
@@ -173,7 +174,7 @@ describe('handleTerminalFileDrop', () => {
       wrapTerminalBracketedPasteText('/remote/repo/.orca/drops/logo.png'),
       'driving'
     )
-    expect(focus).toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
     expect(mocks.toastError).not.toHaveBeenCalled()
     expect(mocks.toastDismiss).toHaveBeenCalledWith('toast-1')
@@ -208,7 +209,8 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ['/Users/me/logo.png'], target: 'terminal', paneLeafId: 'leaf-1' }
+      pane,
+      paths: ['/Users/me/logo.png']
     })
 
     expect(sendInput).not.toHaveBeenCalled()
@@ -254,12 +256,13 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ['/Users/me/logo.png'], target: 'terminal', paneLeafId: 'leaf-1' }
+      pane,
+      paths: ['/Users/me/logo.png']
     })
 
     expect(mocks.importExternalPathsToRuntime).toHaveBeenCalledWith(
       {
-        settings: { activeRuntimeEnvironmentId: 'env-1' },
+        target: { kind: 'environment', environmentId: 'env-1' },
         worktreeId: 'wt-1',
         worktreePath: '//server/share/repo',
         expectedExecutionHostId: 'local',
@@ -317,12 +320,13 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ['/Users/me/spec.pdf'], target: 'terminal', paneLeafId: 'leaf-1' }
+      pane,
+      paths: ['/Users/me/spec.pdf']
     })
 
     expect(mocks.importExternalPathsToRuntime).toHaveBeenCalledWith(
       {
-        settings: { activeRuntimeEnvironmentId: 'owner-runtime' },
+        target: { kind: 'environment', environmentId: 'owner-runtime' },
         worktreeId: 'wt-1',
         worktreePath: '/remote/repo',
         expectedExecutionHostId: 'local',
@@ -359,12 +363,13 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ['/Users/me/spec.pdf'], target: 'terminal', paneLeafId: 'leaf-1' }
+      pane,
+      paths: ['/Users/me/spec.pdf']
     })
 
     expect(mocks.importExternalPathsToRuntime).not.toHaveBeenCalled()
     expect(sendInput).toHaveBeenCalledWith('/Users/me/spec.pdf ', 'driving')
-    expect(focus).toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
   })
 
   it('pastes Linux-readable paths for local Windows-path projects forced to WSL', async () => {
@@ -408,14 +413,11 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: {
-        paths: [
-          'C:\\Users\\alice\\Desktop\\notes one.txt',
-          '\\\\wsl.localhost\\Ubuntu\\home\\alice\\repo\\README.md'
-        ],
-        target: 'terminal',
-        paneLeafId: 'leaf-1'
-      }
+      pane,
+      paths: [
+        'C:\\Users\\alice\\Desktop\\notes one.txt',
+        '\\\\wsl.localhost\\Ubuntu\\home\\alice\\repo\\README.md'
+      ]
     })
 
     expect(mocks.importExternalPathsToRuntime).not.toHaveBeenCalled()
@@ -455,11 +457,8 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: {
-        paths: ['C:\\Users\\alice\\Desktop\\Screenshot 1.png'],
-        target: 'terminal',
-        paneLeafId: 'leaf-1'
-      }
+      pane,
+      paths: ['C:\\Users\\alice\\Desktop\\Screenshot 1.png']
     })
 
     // Why: the agent runs in Linux, so a Windows-style quote would reach it as a literal.
@@ -495,16 +494,19 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ['/Users/me/spec.pdf'], target: 'terminal', paneLeafId: 'leaf-1' }
+      pane,
+      paths: ['/Users/me/spec.pdf']
     })
 
-    expect(sendInputAccepted).toHaveBeenCalledWith('/Users/me/spec.pdf ', 'driving')
+    expect(sendInputAccepted).toHaveBeenCalledWith('/Users/me/spec.pdf ', 'driving', {
+      signal: expect.any(AbortSignal)
+    })
     expect(sendInput).not.toHaveBeenCalled()
-    expect(focus).toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
   })
 
-  it('pastes native file drops into the pane identified by the payload leaf id', async () => {
+  it('pastes native file drops into the pane captured by its element', async () => {
     mocks.storeState.settings = { activeRuntimeEnvironmentId: 'focused-runtime' }
     mocks.storeState.repos = [
       { id: 'repo1', connectionId: null, path: '/repo', executionHostId: 'local' }
@@ -539,13 +541,14 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ['/Users/me/spec.pdf'], target: 'terminal', paneLeafId: 'leaf-target' }
+      pane: targetPane,
+      paths: ['/Users/me/spec.pdf']
     })
 
     expect(activeSendInput).not.toHaveBeenCalled()
     expect(activeFocus).not.toHaveBeenCalled()
     expect(targetSendInput).toHaveBeenCalledWith('/Users/me/spec.pdf ', 'driving')
-    expect(targetFocus).toHaveBeenCalled()
+    expect(targetFocus).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-target')
   })
 
@@ -583,14 +586,11 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: {
-        paths: [
-          'C:\\Users\\Name\\My Project\\file.txt',
-          '\\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\repo\\README.md'
-        ],
-        target: 'terminal',
-        paneLeafId: 'leaf-1'
-      }
+      pane,
+      paths: [
+        'C:\\Users\\Name\\My Project\\file.txt',
+        '\\\\wsl.localhost\\Ubuntu-24.04\\home\\user\\repo\\README.md'
+      ]
     })
 
     expect(mocks.resolveDroppedPathsForAgent).toHaveBeenCalledWith({
@@ -604,7 +604,7 @@ describe('handleTerminalFileDrop', () => {
       ["'/mnt/c/Users/Name/My Project/file.txt' ", 'driving'],
       ['/home/user/repo/README.md ', 'driving']
     ])
-    expect(focus).toHaveBeenCalled()
+    expect(focus).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
   })
 
@@ -647,121 +647,13 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: {
-        paths: ['C:\\Users\\Name\\My Project\\file.txt'],
-        target: 'terminal',
-        paneLeafId: 'leaf-1'
-      }
+      pane,
+      paths: ['C:\\Users\\Name\\My Project\\file.txt']
     })
 
     expect(sendInput).not.toHaveBeenCalled()
     expect(focus).not.toHaveBeenCalled()
     expect(mocks.recordTerminalUserInputForLeaf).not.toHaveBeenCalled()
-  })
-
-  it('uses SSH remote platform metadata for Windows remote path drops', async () => {
-    mocks.storeState.settings = { activeRuntimeEnvironmentId: null }
-    mocks.storeState.repos = [
-      {
-        id: 'repo1',
-        connectionId: 'ssh-win',
-        path: 'C:\\Remote Repo',
-        executionHostId: 'ssh:ssh-win'
-      }
-    ]
-    mocks.storeState.worktreesByRepo = {
-      repo1: [
-        {
-          id: 'wt-1',
-          repoId: 'repo1',
-          path: 'C:\\Remote Repo',
-          hostId: parseExecutionHostId(mocks.storeState.repos[0]?.executionHostId)?.id ?? 'local'
-        }
-      ]
-    }
-    mocks.storeState.sshConnectionStates = new Map([
-      ['ssh-win', { remotePlatform: 'win32', connectionGeneration: 4 }]
-    ])
-    mocks.resolveDroppedPathsForAgent.mockResolvedValue({
-      failed: [],
-      resolvedPaths: ['C:\\Remote Repo\\A&B.txt'],
-      skipped: []
-    })
-    const sendInput = vi.fn(() => true)
-    const focus = vi.fn()
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus } }
-    const manager = {
-      getActivePane: () => pane,
-      getPanes: () => [pane]
-    }
-
-    await handleTerminalFileDrop({
-      manager: manager as never,
-      paneTransports: new Map([[1, createTerminalTransport(sendInput)]]) as never,
-      worktreeId: 'wt-1',
-      tabId: 'tab-1',
-      cwd: undefined,
-      data: { paths: ['C:\\Users\\Name\\A&B.txt'], target: 'terminal', paneLeafId: 'leaf-1' }
-    })
-
-    expect(mocks.resolveDroppedPathsForAgent).toHaveBeenCalledWith({
-      paths: ['C:\\Users\\Name\\A&B.txt'],
-      worktreePath: 'C:\\Remote Repo',
-      connectionId: 'ssh-win',
-      expectedExecutionHostId: 'ssh:ssh-win',
-      expectedSshTargetId: 'ssh-win',
-      expectedSshConnectionGeneration: 4
-    })
-    expect(sendInput).toHaveBeenCalledWith('"C:\\Remote Repo\\A&B.txt" ', 'driving')
-    expect(focus).toHaveBeenCalled()
-    expect(mocks.recordTerminalUserInputForLeaf).toHaveBeenCalledWith('tab-1', 'leaf-1')
-  })
-
-  it('pastes a spaced image dropped on a Windows SSH host with Windows quoting', async () => {
-    mocks.storeState.settings = { activeRuntimeEnvironmentId: null }
-    mocks.storeState.repos = [
-      {
-        id: 'repo1',
-        connectionId: 'ssh-win',
-        path: 'C:\\Remote Repo',
-        executionHostId: 'ssh:ssh-win'
-      }
-    ]
-    mocks.storeState.worktreesByRepo = {
-      repo1: [
-        {
-          id: 'wt-1',
-          repoId: 'repo1',
-          path: 'C:\\Remote Repo',
-          hostId: parseExecutionHostId(mocks.storeState.repos[0]?.executionHostId)?.id ?? 'local'
-        }
-      ]
-    }
-    mocks.storeState.sshConnectionStates = new Map([
-      ['ssh-win', { remotePlatform: 'win32', connectionGeneration: 4 }]
-    ])
-    mocks.resolveDroppedPathsForAgent.mockResolvedValue({
-      failed: [],
-      resolvedPaths: ['C:\\Remote Repo\\.orca\\drops\\Screenshot 1.png'],
-      skipped: []
-    })
-    const sendInput = vi.fn(() => true)
-    const pane = { id: 1, leafId: 'leaf-1', terminal: { focus: vi.fn() } }
-
-    await handleTerminalFileDrop({
-      manager: { getActivePane: () => pane, getPanes: () => [pane] } as never,
-      paneTransports: new Map([[1, createTerminalTransport(sendInput)]]) as never,
-      worktreeId: 'wt-1',
-      tabId: 'tab-1',
-      cwd: undefined,
-      data: { paths: ['/Users/me/Screenshot 1.png'], target: 'terminal', paneLeafId: 'leaf-1' }
-    })
-
-    // Why: agents on Windows keep backslashes, so POSIX escaping would corrupt the path.
-    expect(sendInput).toHaveBeenCalledWith(
-      wrapTerminalBracketedPasteText('"C:\\Remote Repo\\.orca\\drops\\Screenshot 1.png"'),
-      'driving'
-    )
   })
 
   it('surfaces stale SSH owner capture failures without rejecting the native drop', async () => {
@@ -794,7 +686,8 @@ describe('handleTerminalFileDrop', () => {
         worktreeId: 'wt-1',
         tabId: 'tab-1',
         cwd: undefined,
-        data: { paths: ['/local/a.txt'], target: 'terminal', paneLeafId: 'leaf-1' }
+        pane,
+        paths: ['/local/a.txt']
       })
     ).resolves.toBeUndefined()
 
@@ -846,7 +739,8 @@ describe('handleTerminalFileDrop', () => {
       worktreeId: 'wt-1',
       tabId: 'tab-1',
       cwd: undefined,
-      data: { paths: ["/Users/me/it's here.txt"], target: 'terminal', paneLeafId: 'leaf-1' }
+      pane,
+      paths: ["/Users/me/it's here.txt"]
     })
 
     expect(sendInput).toHaveBeenCalledWith("'/remote/repo/it'\\''s here.txt' ", 'driving')

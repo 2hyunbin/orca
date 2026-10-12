@@ -104,7 +104,6 @@ export async function setupTerminalCreateSurfacing(
     settings: {
       terminalFontSize: 13,
       experimentalNativeChat: false,
-      openAgentTabsInChatByDefault: false,
       activeRuntimeEnvironmentId: undefined as string | undefined
     }
   }
@@ -189,7 +188,7 @@ export async function setupTerminalCreateSurfacing(
   vi.doMock('@/lib/focus-terminal-tab-surface', () => ({
     focusTerminalTabSurface
   }))
-  vi.doMock('@/runtime/sync-runtime-graph', () => ({
+  vi.doMock('@/runtime/mounted-terminal-tab-registry', () => ({
     focusRuntimeTerminalSurface
   }))
   vi.doMock('@/lib/activate-tab-and-focus-pane', () => ({

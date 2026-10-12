@@ -15,6 +15,7 @@ import type {
   RuntimeMobileSessionTerminalClientTab
 } from './runtime-mobile-session-tab-contracts'
 import type { CliStatusCaller } from './orchestration-caller-status'
+import type { RuntimeHostDescriptor } from './runtime-host-descriptor'
 
 export type * from './runtime-mobile-session-tab-contracts'
 
@@ -93,6 +94,8 @@ export type RuntimeStatus = {
   hostPlatform?: NodeJS.Platform
   /** Optional display name reported by the answering runtime. */
   machineName?: string
+  /** Absent from older hosts and from hosts whose profile could not persist an installation id. */
+  hostDescriptor?: RuntimeHostDescriptor
   terminalWindowsShell?: string | null
   deviceScope?: DeviceScope
   floatingWorkspaceEnabled?: boolean
@@ -261,12 +264,6 @@ export type RuntimeMobileSessionTabsResult = {
   tabGroupLayout?: TabGroupLayoutNode | null
   retiredTerminalSurfaces?: RuntimeMobileSessionRetiredTerminalSurface[]
   tabs: RuntimeMobileSessionClientTab[]
-  /** Saved host title publication, including for a conversation whose tab has closed. */
-  structuredConversationTitle?: {
-    sessionId: string
-    agent: 'claude' | 'codex'
-    title: string
-  }
   /**
    * Set while a freshly started runtime has not yet taken back the client-hosted pages its paired
    * hosts are still holding. Such a snapshot is authoritative about terminals, which it rehydrated

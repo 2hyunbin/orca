@@ -1,3 +1,4 @@
+import type { AgentSessionProviderContextBoundary } from './agent-session-provider-context'
 // ─── Native chat conversation model (cross-process, IPC-serializable) ────────
 // The single renderer-facing conversation contract for the native chat view.
 // Assembled from layered sources in priority order: on-disk JSONL transcripts,
@@ -11,6 +12,7 @@ import type {
   AgentSessionBackgroundTaskRunState
 } from './agent-session-background-task-wire'
 import type { AgentSessionTokenUsage } from './agent-session-context-usage'
+import type { AgentSessionOrcaStop } from './agent-session-orca-stop'
 import type { AgentSessionFailureFact } from './agent-session-failure'
 import type {
   AgentJournalMessageSendMode,
@@ -49,6 +51,7 @@ export type NativeChatTextBlock = {
   text: string
   /** Optional journal display hints; readers narrow only the values they know. */
   presentation?: string
+  contextClear?: AgentSessionProviderContextBoundary
   tone?: string
   /** Optional structured detail for an otherwise ordinary fallback line. */
   providerFrame?: {
@@ -63,6 +66,8 @@ export type NativeChatTextBlock = {
   }
   /** On a status line that reports a failure: what failed, typed. */
   failure?: AgentSessionFailureFact
+  /** On the line about a reply Orca's own stop cut off: why, and the turn it cut. */
+  orcaStop?: AgentSessionOrcaStop & { turnItemId?: string }
 }
 
 /** A tool invocation by the agent. `input` is the (already-serialized) tool
@@ -214,6 +219,8 @@ export type NativeChatMessage = AgentJournalProducerLinkage & {
   source: NativeChatSource
   /** Optional provider row cursor; split projections share it for whole-row paging. */
   transcriptOffset?: number
+  /** Display order when the provider's sequence differs from its stable paging cursor. */
+  transcriptOrder?: number
   /** Model id that produced an assistant response, as the provider API names it. */
   model?: string
   /** The agent's provider that served `model`, where the agent records one. */
@@ -243,6 +250,9 @@ export type NativeChatMessage = AgentJournalProducerLinkage & {
   unsent?: true
   /** This client's send, made while the chat read Stopping, that the host has not recorded yet. */
   sentWhileStopping?: true
+  /** This client's send the host has not recorded, which only the user's Retry sends again: the
+   *  host holds nothing for it, so it never waits behind a turn. */
+  awaitsRetry?: true
   /** A send a Stop took back (its submission withdrawn): no rail tick, as the conversation
    *  outline the host serves leaves it out. */
   stoppedBeforeStart?: true
@@ -252,6 +262,8 @@ export type NativeChatMessage = AgentJournalProducerLinkage & {
   /** Set only by the tool fold, on a row that absorbed later tool rows: the newest
    *  absorbed row's journal position. The row still sorts by its own. */
   foldedJournalPosition?: AgentJournalPosition
+  /** Private presentation row; raw host messages never publish this fold-only marker. */
+  unpairedToolResults?: true
 }
 
 /** Split reasoning and its answer share the provider's row identity. */

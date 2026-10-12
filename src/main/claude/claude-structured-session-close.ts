@@ -15,7 +15,7 @@ import {
 import type { ClaudeStreamJsonConnection } from './claude-stream-json-connection'
 import type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
 import type { ClaudePromptRegistry } from './claude-structured-prompt-replies'
-import { closeProcessRegistry } from '../../shared/child-process/close-process-registry'
+import { closeProcessRegistry } from '@orca/process-host/close-process-registry'
 import { retireClaudeDispatchWaiters } from './claude-structured-dispatch'
 import { settledClaudeTurnEndLeaf } from './claude-structured-resume-point'
 import { settleClaudeTurnEndWaiters } from './claude-request-end-wait'
@@ -143,7 +143,7 @@ async function finalizeClaudePublishedSession(
   }
   if (!session.closeEnded) {
     session.closeEnded = true
-    const ended = {
+    const ended: ClaudeStructuredSessionEvent = {
       type: 'ended',
       sessionId: input.sessionId,
       reason: 'claude session closed',
@@ -151,8 +151,9 @@ async function finalizeClaudePublishedSession(
       cause: 'requested-close',
       fence: session.fence,
       acquisitionGeneration: session.acquisitionGeneration,
-      observedAt: Date.now()
-    } as const
+      observedAt: Date.now(),
+      ...(session.startup.answered ? {} : { startupUnanswered: true as const })
+    }
     try {
       try {
         session.translator?.handle(ended)

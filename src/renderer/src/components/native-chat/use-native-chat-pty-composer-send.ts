@@ -13,7 +13,6 @@ import { sendNativeChatMessageWithImageAttachments } from './native-chat-runtime
 import { resolveNativeChatLaunchDraftSend } from './native-chat-launch-draft-send'
 import { nativeChatComposerTargetIsRemote } from './native-chat-composer-target'
 import type { NativeChatResolvedTarget } from './native-chat-composer-target'
-import { pushHistory, type HistoryState } from './native-chat-composer-state'
 import { isSlashCommandDraft } from '../../../../shared/native-chat-slash-commands'
 import type { NativeChatPickerState } from './use-native-chat-picker-state'
 import type { NativeChatSendLifecycle } from './use-native-chat-send-lifecycle'
@@ -43,12 +42,11 @@ export function useNativeChatPtyComposerSend(args: {
   sessionOptionsSurface: NativeChatPtySessionOptionsSurface | null
   terminalTabId: string
   trackPendingSend: NativeChatSendLifecycle['trackPendingSend']
-  setHistory: Dispatch<SetStateAction<HistoryState>>
   setDraft: (value: string) => void
   setCaret: Dispatch<SetStateAction<number>>
   clearSkillOrigin: () => void
   clearImageAttachments: () => void
-  setNotice: Dispatch<SetStateAction<string | null>>
+  setNotice: (notice: string | null) => void
 }): () => void {
   return useCallback(() => {
     const text = args.draft
@@ -96,21 +94,20 @@ export function useNativeChatPtyComposerSend(args: {
     if (classification !== 'chat' && imagePaths.length === 0) {
       pendingHandle =
         args.agent === 'codex' && isSlashCommandDraft(text)
-          ? sendNativeChatTypedCommand(target.settings, target.ptyId, text)
-          : sendNativeChatMessage(target.settings, target.ptyId, text, sendOptions)
+          ? sendNativeChatTypedCommand(target.ptyId, text)
+          : sendNativeChatMessage(target.ptyId, text, sendOptions)
     } else if (imagePaths.length > 0) {
       pendingHandle = sendNativeChatMessageWithImageAttachments(
         args.agent,
-        target.settings,
         target.ptyId,
         text,
         imagePaths,
         sendOptions
       )
     } else if (text.trim().length > 0) {
-      pendingHandle = sendNativeChatMessage(target.settings, target.ptyId, text, sendOptions)
+      pendingHandle = sendNativeChatMessage(target.ptyId, text, sendOptions)
     } else {
-      submitNativeChatPrompt(target.settings, target.ptyId)
+      submitNativeChatPrompt(target.ptyId)
     }
     if (classification !== 'chat') {
       if (pendingHandle) {
@@ -131,7 +128,6 @@ export function useNativeChatPtyComposerSend(args: {
       runtime: nativeChatComposerTargetIsRemote(target.ptyId) ? 'remote' : 'local'
     })
     args.onSubmitted?.()
-    args.setHistory((previous) => pushHistory(previous, text))
     args.setDraft('')
     args.setCaret(0)
     args.clearSkillOrigin()

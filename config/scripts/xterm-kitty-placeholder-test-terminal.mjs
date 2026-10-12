@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { vi } from 'vitest'
 
 const require = createRequire(import.meta.url)
-const { Terminal } = require('@xterm/xterm')
+const { Terminal } = require(process.env.ORCA_IMAGE_CONTRACT_CORE_PATH ?? '@xterm/xterm')
 const { Unicode11Addon } = require('@xterm/addon-unicode11')
 const { ImageAddon } = require(process.env.ORCA_IMAGE_CONTRACT_ADDON_PATH ?? '@xterm/addon-image')
 

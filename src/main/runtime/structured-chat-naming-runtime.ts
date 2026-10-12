@@ -18,7 +18,7 @@ type StructuredChatNamingRuntime = {
   ) => Promise<{ path: string; executionHostId: ExecutionHostId }>
   getAgentEnvResolvers: () => CommitMessageAgentEnvironmentResolvers | undefined
   hasOpenDispatch: StructuredChatNamingDeps['hasOpenDispatch']
-  onNamed: StructuredChatNamingDeps['onNamed']
+  retitleOpenTab: StructuredChatNamingDeps['onNamed']
 }
 
 export function structuredChatNamingDeps(
@@ -55,12 +55,7 @@ export function structuredChatNamingDeps(
       ) {
         throw new Error('Chat name generation target is not this native execution host')
       }
-      const target = await resolveGenerationTarget(
-        workspace.path,
-        settings.params.agentId,
-        null,
-        runtime
-      )
+      const target = await resolveGenerationTarget(workspace.path, settings.params.agentId, runtime)
       if (!target) {
         return null
       }
@@ -75,7 +70,19 @@ export function structuredChatNamingDeps(
       }
       return result.name
     },
-    onNamed: runtime.onNamed,
+    onNamed: (workspaceId, sessionId) => {
+      try {
+        // Lists that show the chat without its tab, a closed one too, learn the name from the feed.
+        getStructuredAgentSessionHost()?.publishConversationName(sessionId)
+      } catch (error) {
+        logger.warn('Chat name publication failed', {
+          scope: 'conversation-name',
+          sessionId,
+          error
+        })
+      }
+      runtime.retitleOpenTab(workspaceId, sessionId)
+    },
     logger
   }
 }

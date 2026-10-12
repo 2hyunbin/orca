@@ -2,14 +2,18 @@ import { OrcaRuntimeWithGetRuntimeId } from './orca-runtime-get-runtime-id'
 import type { RuntimeDegradation, RuntimeStatus } from '../../shared/runtime-types'
 import {
   runtimeBrowserCommandsFactoryIsHeadless,
+  runtimeBrowserCommandsFactorySupportsClientHosting,
   runtimeBrowserUnavailableCause
 } from './runtime-browser-commands-factory'
 import { isBrowserIdentityModeStoreInitialized } from '../browser/browser-identity-mode-store'
 import type { RuntimeCapability } from '../../shared/protocol-version'
 import {
   BROWSER_CERTIFICATE_TRUST_RUNTIME_CAPABILITY,
+  BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
   BROWSER_HEADLESS_RUNTIME_CAPABILITY,
   BROWSER_IDENTITY_RUNTIME_CAPABILITY,
+  BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY,
+  MANAGED_SERVER_RUNTIME_CAPABILITY,
   MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION,
   REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY,
   RUNTIME_CAPABILITIES,
@@ -29,6 +33,10 @@ import { isWindowsProcessStartTimeAvailable } from '../windows/windows-process-t
 import type { RuntimeWorktreeLifecycleEvent } from './orca-runtime-core'
 import { WORKTREE_CREATE_RESULT_TTL_MS } from './orca-runtime-core'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
+import type {
+  AutomaticWorkResumeOutcome,
+  AutomaticWorkStatus
+} from '../../shared/host-spawn-admission'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
 import type {
   AutomationsChangedPayload,
@@ -38,6 +46,7 @@ import { parsePaneKey } from '../../shared/stable-pane-id'
 import { wakeFolderRepoGitUpgradeWatch } from '../ipc/folder-repo-git-upgrade-wake'
 import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidators'
 import { MACHINE_NAME_PUBLISH_WAIT_MS } from './runtime-machine-name'
+import { getManagedServerActions } from './managed-server-actions-registry'
 
 type RuntimeStatusHost = {
   getAvailableAuthoritativeWindow(): unknown
@@ -75,6 +84,7 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     const hasOffscreen = !hasRenderer && Boolean(this.offscreenBrowserBackend)
     const hasHeadlessCommands = runtimeBrowserCommandsFactoryIsHeadless()
     const canBrowse = hasRenderer || hasOffscreen
+    const canHostClientPages = runtimeBrowserCommandsFactorySupportsClientHosting()
     // TEMPORARY: nothing on this host reads it any more. Clients older than this build keep
     // re-probing their WSL capabilities until it is true, so it is published for one
     // compatibility window and then removed.
@@ -83,6 +93,11 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     const capabilities: RuntimeCapability[] = RUNTIME_CAPABILITIES.filter(
       (capability) =>
         (capability !== 'browser.screencast.v1' || canBrowse) &&
+        (capability !== BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY || canHostClientPages) &&
+        (capability !== BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY ||
+          canBrowse ||
+          hasHeadlessCommands ||
+          canHostClientPages) &&
         // Why: the nested-runtime E2E needs a real legacy transport without maintaining an old binary fixture.
         (process.env.ORCA_E2E_DISABLE_RUNTIME_SHARED_CONTROL !== '1' ||
           capability !== REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY) &&
@@ -107,6 +122,9 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     // can host a page so remote clients can surface Proceed Anyway (Unsafe).
     if (canBrowse) {
       capabilities.push(BROWSER_CERTIFICATE_TRUST_RUNTIME_CAPABILITY)
+    }
+    if (getManagedServerActions()) {
+      capabilities.push(MANAGED_SERVER_RUNTIME_CAPABILITY)
     }
     // Why not a static capability: dev trees and `orca serve` installs may carry no
     // out/mobile-web, and advertising a bundle this install cannot produce would promise a
@@ -176,6 +194,15 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     // instead of tunneling back through renderer IPC, or live handles could
     // drift from the process they are supposed to control during reloads.
     this.ptyController = controller
+  }
+
+  /** Null when the local terminal owner has no fork gate (in-process fallback, older daemon). */
+  async getAutomaticWorkStatus(): Promise<AutomaticWorkStatus | null> {
+    return (await this.ptyController?.getAutomaticWorkStatus?.()) ?? null
+  }
+
+  async resumeAutomaticWork(): Promise<AutomaticWorkResumeOutcome> {
+    return (await this.ptyController?.resumeAutomaticWork?.()) ?? null
   }
 
   setNotifier(notifier: RuntimeNotifier | null): void {
@@ -253,12 +280,24 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
     return { tabId, worktreeId: pty.worktreeId }
   }
 
-  protected notifyWorktreesChanged(repoId: string): void {
-    // Why here: the listing re-runs a scan this generation overtook, and a headless host has no
-    // window notifier to bump it, so the runtime's own change event bumps before it is sent.
-    runWorktreeChangeInvalidators(repoId)
-    this.notifier?.worktreesChanged(repoId)
-    this.emitClientEvent({ type: 'worktreesChanged', repoId })
+  protected notifyWorktreesChanged(
+    repoId: string,
+    options?: { invalidateGitScans?: boolean; sortOrderOnly?: boolean }
+  ): void {
+    // Headless hosts invalidate here unless only metadata changed.
+    if (options?.invalidateGitScans !== false) {
+      runWorktreeChangeInvalidators(repoId)
+    }
+    if (options) {
+      this.notifier?.worktreesChanged(repoId, undefined, options)
+    } else {
+      this.notifier?.worktreesChanged(repoId)
+    }
+    this.emitClientEvent({
+      type: 'worktreesChanged',
+      repoId,
+      ...(options?.sortOrderOnly === true ? { sortOrderOnly: true } : {})
+    })
   }
 
   /** Detail-level worktree lifecycle tap (plugin event bus). The coarse

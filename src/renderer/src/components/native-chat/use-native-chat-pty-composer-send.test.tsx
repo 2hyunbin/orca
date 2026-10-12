@@ -44,7 +44,6 @@ function send(
       sessionOptionsSurface: null,
       terminalTabId: 'tab',
       trackPendingSend: vi.fn(),
-      setHistory: vi.fn(),
       setDraft: vi.fn(),
       setCaret: vi.fn(),
       clearSkillOrigin: vi.fn(),
@@ -63,7 +62,7 @@ beforeEach(() => {
 
 it('routes a Claude chat send outcome to its own pending echo', () => {
   const callbacks = send('claude', 'chat', 'hello')
-  const options = vi.mocked(sendNativeChatMessage).mock.calls[0]?.[3]
+  const options = vi.mocked(sendNativeChatMessage).mock.calls[0]?.[2]
   options?.onWriteRejected?.()
   options?.onWriteUnconfirmed?.()
   expect(callbacks.rejected).toHaveBeenCalledWith('pending-1')
@@ -72,7 +71,7 @@ it('routes a Claude chat send outcome to its own pending echo', () => {
 
 it('routes a Claude image send outcome to its own pending echo', () => {
   const callbacks = send('claude', 'chat', 'look', ['/tmp/shot.png'])
-  vi.mocked(sendNativeChatMessageWithImageAttachments).mock.calls[0]?.[5]?.onWriteRejected?.()
+  vi.mocked(sendNativeChatMessageWithImageAttachments).mock.calls[0]?.[4]?.onWriteRejected?.()
   expect(callbacks.rejected).toHaveBeenCalledWith('pending-1')
 })
 
@@ -81,7 +80,7 @@ it.each([
   ['claude', 'command', '/compact']
 ] as const)('leaves a %s %s send on the unobserved write path', (agent, classification, draft) => {
   send(agent, classification, draft)
-  expect(vi.mocked(sendNativeChatMessage).mock.calls[0]?.[3]?.onWriteRejected).toBeUndefined()
+  expect(vi.mocked(sendNativeChatMessage).mock.calls[0]?.[2]?.onWriteRejected).toBeUndefined()
 })
 
 // The pane brings the latest into view on this, whatever the send was classified as.
