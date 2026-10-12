@@ -10,8 +10,12 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { WINDOWS_CMD_SAFE_PATH, wrapWindowsHookCommand } from '../agent-hooks/installer-utils'
 import { DshHookService } from './hook-service'
-import { DSH_HOOK_EVENTS } from './hook-settings'
+import { buildDshManagedHooksFile, DSH_HOOK_EVENTS } from './hook-settings'
+
+const WINDOWS_POWERSHELL_LAUNCHER =
+  /^[A-Za-z]:\/[^"]*\/System32\/WindowsPowerShell\/v1\.0\/powershell\.exe -NoProfile -EncodedCommand \S+$/
 
 // Why: getSharedManagedScriptPath() writes under homedir()/.orca and the patch layer
 // resolves via DSH_HOME ?? ~/.dsh. Point the home env at a temp dir and clear DSH_HOME so
@@ -102,6 +106,59 @@ describe('DshHookService', () => {
     expect(script).toContain('ORCA_AGENT_LAUNCH')
     expect(restoreAt).toBeLessThan(guardAt)
   })
+
+  // Why: DSH already runs hooks in PowerShell; a second, encoded PowerShell cost ~0.6s per event.
+  it.skipIf(process.platform !== 'win32')(
+    'registers the managed .cmd path directly on a cmd-safe profile',
+    () => {
+      expect(WINDOWS_CMD_SAFE_PATH.test(scriptPath()), 'test home must be cmd-safe').toBe(true)
+      expect(new DshHookService().install().state).toBe('installed')
+
+      for (const event of DSH_HOOK_EVENTS) {
+        expect(readManagedHooks().hooks[event]).toEqual([
+          { hooks: [expect.objectContaining({ command: scriptPath().replaceAll('\\', '/') })] }
+        ])
+      }
+    }
+  )
+
+  it.skipIf(process.platform !== 'win32')(
+    'rewrites a stale encoded launcher registration to the direct form',
+    () => {
+      mkdirSync(join(home, '.orca', 'agent-hooks'), { recursive: true })
+      writeFileSync(
+        managedHooksPath(),
+        buildDshManagedHooksFile(wrapWindowsHookCommand(scriptPath()))
+      )
+      expect(new DshHookService().install().state).toBe('installed')
+
+      expect(readManagedHooks().hooks.Stop).toEqual([
+        { hooks: [expect.objectContaining({ command: scriptPath().replaceAll('\\', '/') })] }
+      ])
+    }
+  )
+
+  it.skipIf(process.platform !== 'win32').each(['profile with spaces', 'profile-hömé'])(
+    'keeps the encoded launcher for a profile the bare path cannot carry (%s)',
+    (profileName) => {
+      const profile = join(home, profileName)
+      mkdirSync(profile, { recursive: true })
+      process.env.USERPROFILE = profile
+      process.env.HOME = profile
+      expect(new DshHookService().install().state).toBe('installed')
+
+      const installed = JSON.parse(
+        readFileSync(join(profile, '.orca', 'agent-hooks', 'dsh-hooks.json'), 'utf-8')
+      )
+      expect(installed.hooks.Stop).toEqual([
+        {
+          hooks: [
+            expect.objectContaining({ command: expect.stringMatching(WINDOWS_POWERSHELL_LAUNCHER) })
+          ]
+        }
+      ])
+    }
+  )
 
   it('is idempotent', () => {
     const service = new DshHookService()

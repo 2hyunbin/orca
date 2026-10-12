@@ -19,6 +19,7 @@ vi.mock('os', async () => {
 })
 
 import { CommandCodeHookService } from './hook-service'
+import { WINDOWS_CMD_SAFE_PATH, wrapWindowsHookCommand } from '../agent-hooks/installer-utils'
 
 const WINDOWS_POWERSHELL_LAUNCHER =
   /^[A-Za-z]:\/[^"]*\/System32\/WindowsPowerShell\/v1\.0\/powershell\.exe -NoProfile -EncodedCommand \S+$/
@@ -51,9 +52,7 @@ describe('CommandCodeHookService', () => {
     expect(config.hooks.PreToolUse[0].matcher).toBe('.*')
     expect(config.hooks.PostToolUse[0].matcher).toBe('.*')
     expect(config.hooks.Stop[0].matcher).toBeUndefined()
-    expect(config.hooks.PreToolUse[0].hooks[0].command).toMatch(
-      process.platform === 'win32' ? WINDOWS_POWERSHELL_LAUNCHER : /command-code-hook/
-    )
+    expect(config.hooks.PreToolUse[0].hooks[0].command).toMatch(/command-code-hook/)
     if (process.platform !== 'win32') {
       expect(config.hooks.PreToolUse[0].hooks[0].command).toContain(join(homeDir, '.orca'))
     }
@@ -62,14 +61,51 @@ describe('CommandCodeHookService', () => {
     }
   })
 
-  // Why: #6078 — a Windows user profile path with a space used to be written
-  // verbatim as the hook command, so the agent split it at the space. The
-  // managed command must use an encoded launcher so the path never appears raw
-  // on the cmd.exe command line.
+  // Why: Command Code already runs hooks through cmd.exe; an encoded PowerShell in between cost ~0.6s per event.
   it.skipIf(process.platform !== 'win32')(
-    'wraps the managed hook command to survive spaces in the profile path (#6078)',
+    'registers the managed .cmd path directly on a cmd-safe profile',
     () => {
-      const spaceHome = join(tmpdir(), 'orca command-code home with spaces')
+      const scriptPath = join(homeDir, '.orca', 'agent-hooks', 'command-code-hook.cmd')
+      expect(WINDOWS_CMD_SAFE_PATH.test(scriptPath), 'test home must be cmd-safe').toBe(true)
+      expect(new CommandCodeHookService().install().state).toBe('installed')
+
+      const config = JSON.parse(
+        readFileSync(join(homeDir, '.commandcode', 'settings.json'), 'utf8')
+      )
+      for (const eventName of ['PreToolUse', 'PostToolUse', 'Stop']) {
+        expect(config.hooks[eventName][0].hooks[0].command).toBe(scriptPath.replaceAll('\\', '/'))
+      }
+    }
+  )
+
+  it.skipIf(process.platform !== 'win32')(
+    'rewrites a stale encoded launcher registration to the direct form',
+    () => {
+      const scriptPath = join(homeDir, '.orca', 'agent-hooks', 'command-code-hook.cmd')
+      const configPath = join(homeDir, '.commandcode', 'settings.json')
+      mkdirSync(join(homeDir, '.commandcode'), { recursive: true })
+      const stale = { type: 'command', command: wrapWindowsHookCommand(scriptPath) }
+      writeFileSync(configPath, JSON.stringify({ hooks: { Stop: [{ hooks: [stale] }] } }))
+
+      expect(new CommandCodeHookService().install().state).toBe('installed')
+
+      const config = JSON.parse(readFileSync(configPath, 'utf8'))
+      expect(config.hooks.Stop).toHaveLength(1)
+      expect(config.hooks.Stop[0].hooks).toEqual([
+        expect.objectContaining({ command: scriptPath.replaceAll('\\', '/') })
+      ])
+    }
+  )
+
+  // Why: #6078 — a Windows user profile path with a space used to be written
+  // verbatim as the hook command, so the agent split it at the space. A profile
+  // the bare path cannot carry keeps the encoded launcher.
+  it
+    .skipIf(process.platform !== 'win32')
+    .each(['orca command-code home with spaces', 'orca-command-code-hömé'])(
+    'keeps the encoded launcher for a profile the bare path cannot carry (%s)',
+    (homeName) => {
+      const spaceHome = join(tmpdir(), homeName)
       mkdirSync(spaceHome, { recursive: true })
       homedirMock.mockReturnValue(spaceHome)
       try {

@@ -16,6 +16,7 @@ import {
   type HookDefinition,
   type HooksConfig
 } from '../agent-hooks/installer-utils'
+import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 import { refreshManagedScriptIfPresent } from '../agent-hooks/managed-hook-script-refresh'
 import {
   readHooksJsonRemote,
@@ -70,11 +71,10 @@ function getManagedScriptPath(): string {
 }
 
 function getManagedCommand(scriptPath: string): string {
-  // Why: Factory invokes the .cmd via cmd.exe, but the raw path still splits at
-  // whitespace when the user profile contains a space (e.g. `C:\Users\Jane Doe`).
-  // The shared Windows wrapper keeps the path out of cmd.exe's raw command line. #6078.
+  // Why: Factory invokes the hook via cmd.exe, so a cmd-safe path needs no PowerShell hop; a
+  // profile with a space (e.g. `C:\Users\Jane Doe`) would split, so it keeps the encoded wrapper. #6078.
   return process.platform === 'win32'
-    ? wrapWindowsHookCommand(scriptPath)
+    ? (wrapWindowsDirectCmdHookCommand(scriptPath) ?? wrapWindowsHookCommand(scriptPath))
     : wrapPosixHookCommand(scriptPath)
 }
 

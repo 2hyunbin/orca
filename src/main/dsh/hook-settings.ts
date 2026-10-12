@@ -8,6 +8,7 @@ import {
   wrapWindowsHookCommand,
   type HookDefinition
 } from '../agent-hooks/installer-utils'
+import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 import { readManagedHookEventsFromJson } from '../agent-hooks/managed-hooks-json-events'
 
 const DSH_SCRIPT_BASE = 'dsh-hook'
@@ -77,7 +78,7 @@ export function getDshManagedCommand(scriptPath: string): string {
   // everywhere except Windows, where it binds to PowerShell — the same split these two
   // wrappers already encode.
   return process.platform === 'win32'
-    ? wrapWindowsHookCommand(scriptPath)
+    ? (wrapWindowsDirectCmdHookCommand(scriptPath) ?? wrapWindowsHookCommand(scriptPath))
     : wrapPosixHookCommand(scriptPath)
 }
 

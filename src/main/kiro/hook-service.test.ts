@@ -3,9 +3,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createManagedHookLocalFilesystem } from '../agent-hooks/managed-hook-local-filesystem.test-fixture'
-import { isPlainObject } from '../agent-hooks/installer-utils'
+import {
+  isPlainObject,
+  WINDOWS_CMD_SAFE_PATH,
+  wrapWindowsHookCommand
+} from '../agent-hooks/installer-utils'
 import { KiroHookService } from './hook-service'
 import { getKiroManagedCommandMatcher, KIRO_HOOK_EVENTS } from './hook-settings'
+
+const WINDOWS_POWERSHELL_LAUNCHER =
+  /^[A-Za-z]:\/[^"]*\/System32\/WindowsPowerShell\/v1\.0\/powershell\.exe -NoProfile -EncodedCommand \S+$/
 
 // Why both names: os.homedir() reads $HOME on POSIX and %USERPROFILE% on Windows; setting
 // only one would let a run edit the developer's real ~/.kiro or ~/.orca.
@@ -233,6 +240,67 @@ describe('KiroHookService', () => {
     expect(result.detail).not.toContain('not valid JSON')
     expect(readAgent('kept').hooks).toBeDefined()
   })
+
+  // Why: Kiro already runs hooks in a shell; an encoded PowerShell in between cost ~0.7s per event.
+  it.skipIf(process.platform !== 'win32')(
+    'registers the managed .cmd path directly on a cmd-safe profile',
+    () => {
+      expect(WINDOWS_CMD_SAFE_PATH.test(scriptPath()), 'test home must be cmd-safe').toBe(true)
+      writeAgent('mine', { name: 'mine' })
+      expect(new KiroHookService().install().state).toBe('installed')
+
+      const hooks = readAgent('mine').hooks
+      if (!isPlainObject(hooks)) {
+        throw new Error('Expected hooks object')
+      }
+      for (const event of KIRO_HOOK_EVENTS) {
+        expect(hooks[event]).toEqual([
+          expect.objectContaining({ command: scriptPath().replaceAll('\\', '/') })
+        ])
+      }
+    }
+  )
+
+  it.skipIf(process.platform !== 'win32')(
+    'rewrites a stale encoded launcher registration to the direct form',
+    () => {
+      writeAgent('mine', {
+        name: 'mine',
+        hooks: { stop: [USER_STOP_HOOK, { command: wrapWindowsHookCommand(scriptPath()) }] }
+      })
+      expect(new KiroHookService().install().state).toBe('installed')
+
+      const hooks = readAgent('mine').hooks
+      if (!isPlainObject(hooks)) {
+        throw new Error('Expected hooks object')
+      }
+      expect(hooks.stop).toEqual([
+        USER_STOP_HOOK,
+        expect.objectContaining({ command: scriptPath().replaceAll('\\', '/') })
+      ])
+    }
+  )
+
+  it.skipIf(process.platform !== 'win32').each(['profile with spaces', 'profile-hömé'])(
+    'keeps the encoded launcher for a profile the bare path cannot carry (%s)',
+    (profileName) => {
+      const profile = join(home, profileName)
+      const agentFile = join(profile, '.kiro', 'agents', 'mine.json')
+      mkdirSync(join(profile, '.kiro', 'agents'), { recursive: true })
+      writeFileSync(agentFile, JSON.stringify({ name: 'mine' }))
+      process.env.USERPROFILE = profile
+      process.env.HOME = profile
+      expect(new KiroHookService().install().state).toBe('installed')
+
+      const hooks = JSON.parse(readFileSync(agentFile, 'utf-8')).hooks
+      if (!isPlainObject(hooks)) {
+        throw new Error('Expected hooks object')
+      }
+      expect(hooks.stop).toEqual([
+        expect.objectContaining({ command: expect.stringMatching(WINDOWS_POWERSHELL_LAUNCHER) })
+      ])
+    }
+  )
 
   it('ignores non-JSON files such as the shipped example config', () => {
     mkdirSync(agentsDir(), { recursive: true })

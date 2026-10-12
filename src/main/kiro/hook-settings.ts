@@ -11,6 +11,7 @@ import {
   wrapWindowsHookCommand,
   type HookDefinition
 } from '../agent-hooks/installer-utils'
+import { wrapWindowsDirectCmdHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 
 const KIRO_SCRIPT_BASE = 'kiro-hook'
 
@@ -68,7 +69,7 @@ export function getKiroManagedScriptPath(): string {
 export function getKiroManagedCommand(scriptPath: string): string {
   // Why: Kiro runs hook commands through PowerShell on Windows and sh elsewhere.
   return process.platform === 'win32'
-    ? wrapWindowsHookCommand(scriptPath)
+    ? (wrapWindowsDirectCmdHookCommand(scriptPath) ?? wrapWindowsHookCommand(scriptPath))
     : wrapPosixHookCommand(scriptPath)
 }
 
