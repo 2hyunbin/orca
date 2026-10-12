@@ -26,6 +26,48 @@ export function restoredCodexSessionOptions(
   return new Map(Object.entries(options ?? {}).filter(([key]) => isCodexTurnOptionKey(key)))
 }
 
+export function readCodexAcquisitionOptions(
+  session: CodexSession,
+  priorOptions: Readonly<Record<string, string>> | undefined
+): Readonly<Record<string, string>> | undefined {
+  const options = {
+    ...Object.fromEntries(
+      Object.entries(priorOptions ?? {}).filter(([key]) => !isCodexTurnOptionKey(key))
+    ),
+    ...Object.fromEntries(session.options)
+  }
+  const reported = session.reportedOptions
+  // The thread's effort belongs to the thread's model, not to a different saved one.
+  if (
+    options.effort === undefined &&
+    reported.effort &&
+    (options.model === undefined || options.model === reported.model)
+  ) {
+    options.effort = reported.effort
+  }
+  if (options.model === undefined && reported.model) {
+    options.model = reported.model
+  }
+  return Object.keys(options).length > 0 ? options : undefined
+}
+
+/** Startup reports the thread's defaults together with the saved next-turn intent. */
+export function reportedCodexSessionOptions(
+  session: CodexSession
+): AgentSessionOptionsResult['current'] {
+  const model = session.options.get('model') ?? session.reportedOptions.model ?? ''
+  const effort =
+    session.options.get('effort') ??
+    (model === session.reportedOptions.model ? session.reportedOptions.effort : undefined)
+  // The saved tier, which the next turn sends as-is.
+  const serviceTier = session.options.get('serviceTier')
+  return {
+    model,
+    ...(effort ? { effort } : {}),
+    ...(serviceTier ? { serviceTier } : {})
+  }
+}
+
 export type { CodexSessionOptionCatalog } from './codex-structured-model-catalog'
 
 export { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'

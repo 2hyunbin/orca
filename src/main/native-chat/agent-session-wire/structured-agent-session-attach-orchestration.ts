@@ -244,15 +244,18 @@ async function runAttachUnderAbort(
         await bindAndDrain(eventSink, attached.journal, fence, (activity) =>
           context.subscribers.publish(sessionId, attached.journal, activity)
         )
-        attempt.candidate = {
-          sink: eventSink,
-          child: {
-            generation: acquisitionGeneration ?? current?.generation ?? null,
-            fence,
-            // An acquire reports its phase; a re-attach keeps what its child already proved.
-            phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
-            ...(startedFor === undefined ? {} : { startedFor }),
-            ...launchedOptionsOf(owner, attempt.startup, current)
+        // A replayed create over a chat at rest has no child to index.
+        if (owner !== 'none') {
+          attempt.candidate = {
+            sink: eventSink,
+            child: {
+              generation: acquisitionGeneration ?? current?.generation ?? null,
+              fence,
+              // An acquire reports its phase; a re-attach keeps what its child already proved.
+              phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
+              ...(startedFor === undefined ? {} : { startedFor }),
+              ...launchedOptionsOf(owner, attempt.startup, current)
+            }
           }
         }
         // Only a proven child has the protocol session recovery asks; a starting one recovers in

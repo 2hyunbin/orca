@@ -17,7 +17,8 @@ import { CodexStructuredSessionTeardown } from './codex-structured-session-teard
 import {
   applyCodexStructuredSessionOption,
   prepareLiveCodexSessionOptions,
-  readLiveCodexSessionOptions
+  readLiveCodexSessionOptions,
+  readCodexAcquisitionOptions
 } from './codex-structured-session-options'
 import {
   CodexAcquisitionRegistry,
@@ -177,6 +178,14 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   // `ended` is set in the same turn as the connection's own exit report.
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
     const session = this.sessions.get(sessionId)
+    const starting = this.acquisitions.get(sessionId)
+    if (starting?.startingChild?.acquisitionGeneration === acquisitionGeneration) {
+      return (
+        !starting.startingChild.ended &&
+        !starting.exitProven &&
+        starting.window.connection?.pid !== undefined
+      )
+    }
     return (
       session?.acquisitionGeneration === acquisitionGeneration &&
       session.connection.pid !== undefined &&
@@ -302,28 +311,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     sessionId: string
     fence: number
     priorOptions?: Readonly<Record<string, string>>
-  }) => {
-    const session = this.session(input.sessionId)
-    const options = {
-      ...Object.fromEntries(
-        Object.entries(input.priorOptions ?? {}).filter(([key]) => !isCodexTurnOptionKey(key))
-      ),
-      ...Object.fromEntries(session.options)
-    }
-    const reported = session.reportedOptions
-    // The thread's effort belongs to the thread's model, not to a different saved one.
-    if (
-      options.effort === undefined &&
-      reported.effort &&
-      (options.model === undefined || options.model === reported.model)
-    ) {
-      options.effort = reported.effort
-    }
-    if (options.model === undefined && reported.model) {
-      options.model = reported.model
-    }
-    return Object.keys(options).length > 0 ? options : undefined
-  }
+  }) => readCodexAcquisitionOptions(this.session(input.sessionId), input.priorOptions)
 
   closeSession = (sessionId: string): Promise<boolean> => this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)

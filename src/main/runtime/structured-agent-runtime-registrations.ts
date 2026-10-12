@@ -151,8 +151,11 @@ function createCodexAdapter(context: StructuredAgentAdapterContext): StructuredA
     onPrimaryThreadStoppedRunning: followUps.releaseUnansweredDispatches,
     logger: deps.logger,
     onEvent: (event) => {
-      // Every exit, expected or not: the host ends that child's record.
-      if (event.type === 'ended' && 'cause' in event) {
+      if (
+        event.type === 'started' ||
+        event.type === 'options-reported' ||
+        (event.type === 'ended' && 'cause' in event)
+      ) {
         context.deliverLifecycle(event)
       }
     }

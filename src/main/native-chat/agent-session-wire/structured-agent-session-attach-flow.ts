@@ -54,7 +54,7 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
 
-export type AttachedOwner = 'acquired' | 'kept'
+export type AttachedOwner = 'acquired' | 'kept' | 'none'
 
 export type AttachFlowInput = {
   store: AgentSessionRecordStore
@@ -200,6 +200,10 @@ export async function performAttach(
     })
     if (agentSessionLeaseAdmitsWriter(record.lease)) {
       // Kept: re-attached to the live child.
+    } else if (replayed && reserved.operationRow.outcome.status === 'succeeded') {
+      // A create that succeeded replays its answer; the child it started ended since, so the chat
+      // opens at rest and the next send starts one.
+      owner = 'none'
     } else {
       const acquired = await withAgentSessionCreatePhase('acquire_owner', input.recordPhase, () =>
         acquireOwner(input, record)

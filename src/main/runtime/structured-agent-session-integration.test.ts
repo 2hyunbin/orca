@@ -522,10 +522,12 @@ describe('a structured codex session over agentSession.*', () => {
       createIntentParams()
     )
     expect(created.page.items).toEqual([])
-    expect(codex.live().calls[0]).toMatchObject({
-      method: 'thread/start',
-      params: { cwd: `/repos/${WORKSPACE}` }
-    })
+    // Create answers at spawn; the thread opens once Codex has initialized.
+    await vi.waitFor(() =>
+      expect(codex.live().calls.find((call) => call.method === 'thread/start')).toMatchObject({
+        params: { cwd: `/repos/${WORKSPACE}` }
+      })
+    )
     const fence = created.fence
 
     const stream = await subscribe('sub-1')
