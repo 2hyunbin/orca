@@ -7966,7 +7966,11 @@
           "81057d5f71": "保存中…",
           "da37d6f10e": "コピー",
           "3149964b66": "コピーしました",
-          "waitForSetupBeforeAgent": "セットアップが完了するまで待ってから Agent を開始してください"
+          "waitForSetupBeforeAgent": "セットアップが完了するまで待ってから Agent を開始してください",
+          "issueCommandDescription": "オプションの上書き。使用 <artifactUrl>{{artifact_url}}</artifactUrl> リンクされた号または PR URL をご覧ください。",
+          "issueCommandSharedDefault": "リポジトリのデフォルトを使用するには空白のままにします <yaml>orca.yaml</yaml>.",
+          "issueCommandOptionalDefault": "リポジトリのデフォルトを使用するには空白のままにします <yaml>orca.yaml</yaml>存在するとき。",
+          "commandSourceDescription": "両方のとき <yaml>orca.yaml</yaml> ローカルコマンドが存在する場合は、どのコマンドを実行するかを選択します。"
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "{{value0}} リポジトリカラーを使用する",

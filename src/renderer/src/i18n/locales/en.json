@@ -8258,7 +8258,11 @@
           "81057d5f71": "Saving...",
           "da37d6f10e": "Copy",
           "3149964b66": "Copied",
-          "waitForSetupBeforeAgent": "Wait for setup to complete before starting agent"
+          "waitForSetupBeforeAgent": "Wait for setup to complete before starting agent",
+          "issueCommandDescription": "Optional override. Use <artifactUrl>{{artifact_url}}</artifactUrl> for the linked issue or PR URL.",
+          "issueCommandSharedDefault": "Leave blank to use the repo default from <yaml>orca.yaml</yaml>.",
+          "issueCommandOptionalDefault": "Leave blank to use the repo default from <yaml>orca.yaml</yaml> when one exists.",
+          "commandSourceDescription": "When both <yaml>orca.yaml</yaml> and local commands exist, choose which run."
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "Use {{value0}} repo color",

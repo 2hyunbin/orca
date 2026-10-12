@@ -7944,7 +7944,11 @@
           "81057d5f71": "Guardando...",
           "da37d6f10e": "Copiar",
           "3149964b66": "Copiado",
-          "waitForSetupBeforeAgent": "Espera a que se complete la configuración antes de iniciar el agente"
+          "waitForSetupBeforeAgent": "Espera a que se complete la configuración antes de iniciar el agente",
+          "issueCommandDescription": "Anulación opcional. Usa <artifactUrl>{{artifact_url}}</artifactUrl> para la URL del Issue o PR vinculado.",
+          "issueCommandSharedDefault": "Déjalo en blanco para usar el valor predeterminado del repositorio desde <yaml>orca.yaml</yaml>.",
+          "issueCommandOptionalDefault": "Déjalo en blanco para usar el valor predeterminado del repositorio desde <yaml>orca.yaml</yaml>cuando uno existe.",
+          "commandSourceDescription": "Cuando ambos <yaml>orca.yaml</yaml> y hay comandos locales, elige cuáles se ejecutan."
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "Usar {{value0}} como color del repositorio",

@@ -8088,7 +8088,11 @@
           "81057d5f71": "Enregistrement...",
           "da37d6f10e": "Copier",
           "3149964b66": "Copied",
-          "waitForSetupBeforeAgent": "Attendre la fin du setup avant de démarrer l'agent"
+          "waitForSetupBeforeAgent": "Attendre la fin du setup avant de démarrer l'agent",
+          "issueCommandDescription": "Remplacement facultatif. Utilisez <artifactUrl>{{artifact_url}}</artifactUrl> pour l'URL de l'issue ou de la pull request liée.",
+          "issueCommandSharedDefault": "Laissez vide pour utiliser la valeur par défaut du dépôt définie dans <yaml>orca.yaml</yaml>.",
+          "issueCommandOptionalDefault": "Laissez vide pour utiliser la valeur par défaut du dépôt définie dans <yaml>orca.yaml</yaml>lorsqu'il en existe un.",
+          "commandSourceDescription": "Lorsque les deux <yaml>orca.yaml</yaml> et des commandes locales existent, choisissez celles qui s'exécutent."
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "Utiliser la couleur de dépôt {{value0}}",

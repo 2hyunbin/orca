@@ -7929,7 +7929,11 @@
           "81057d5f71": "保存中...",
           "da37d6f10e": "复制",
           "3149964b66": "已复制",
-          "waitForSetupBeforeAgent": "等待设置完成后再启动智能体"
+          "waitForSetupBeforeAgent": "等待设置完成后再启动智能体",
+          "issueCommandDescription": "可选覆盖。使用 <artifactUrl>{{artifact_url}}</artifactUrl> 对于链接的议题或 PR URL。",
+          "issueCommandSharedDefault": "留空以使用仓库默认值 <yaml>orca.yaml</yaml>.",
+          "issueCommandOptionalDefault": "留空以使用仓库默认值 <yaml>orca.yaml</yaml>当一个存在时。",
+          "commandSourceDescription": "当两者 <yaml>orca.yaml</yaml> 并且本地命令存在，选择哪个运行。"
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "使用 {{value0}} 仓库颜色",

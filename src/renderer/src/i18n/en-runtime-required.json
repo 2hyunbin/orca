@@ -1452,9 +1452,16 @@
         "RepositoryHooksSection": {
           "0e0dd5b9a5": "loaded",
           "32f417fe17": "text-emerald-700 dark:text-emerald-300",
+          "3397879bee": "and local commands exist, choose which run.",
+          "52aef29e69": "Leave blank to use the repo default from",
+          "70ad20f883": "for the linked issue or PR URL.",
           "8dbe6bedf5": "invalid",
           "925f9e0dc4": "text-foreground",
+          "9b12f15b1e": "when one exists.",
+          "ac9038d2cc": "When both",
           "b5e3e77e89": "action",
+          "b997331366": "Optional override. Use",
+          "c85c2c88a2": "{{artifact_url}}",
           "c90b858573": "text-amber-700 dark:text-amber-300"
         },
         "RepositoryIconPicker": {
