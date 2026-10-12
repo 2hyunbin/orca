@@ -138,11 +138,11 @@ function fitBudget(previous: NotebookOutput[], outputs: NotebookOutput[]): Noteb
   if (last?.output_type === 'stream' && outputs.length <= MAX_OUTPUTS) {
     const text = String(last.text)
     keep = text.length - Math.max(streamChars - MAX_STREAM_CHARS, totalChars - MAX_OUTPUT_CHARS)
-    // Why: never split a surrogate pair at the cut.
-    keep -= /[\ud800-\udbff]/.test(text.charAt(keep - 1)) ? 1 : 0
     // Why: text already on screen stays, even when unbudgeted outputs pushed the cell over.
     const shown = outputs.length === previous.length ? String(previous.at(-1)?.text).length : 0
     keep = Math.max(keep, Math.min(shown, text.length))
+    // Why: never split a surrogate pair at the cut.
+    keep -= /[\ud800-\udbff]/.test(text.charAt(keep - 1)) ? 1 : 0
   }
   return [
     ...outputs.slice(0, -1),

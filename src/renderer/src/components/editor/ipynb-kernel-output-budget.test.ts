@@ -172,12 +172,38 @@ describe('applyKernelOutput output budget', () => {
       'execute_result',
       { execution_count: count, data: { 'text/plain': 'r'.repeat(MAX_OUTPUT_CHARS) }, metadata: {} }
     ]
-    const live = apply([result(1), result(2), result(3)])
+    const error = (name: string): [KernelOutputType, Record<string, unknown>] => [
+      'error',
+      { ename: name, evalue: '', traceback: [] }
+    ]
+    const live = apply([result(1), result(2), error('First'), result(3), error('Second')])
     expect(live.outputs.map((output) => output.output_type)).toEqual([
       'execute_result',
-      'display_data'
+      'display_data',
+      'error'
     ])
     expect(live.outputs[1]).toEqual(NOTICE)
+    expect(live.outputs[2]?.ename).toBe('First')
+  })
+
+  it('never splits an emoji when a progress rewrite lands on the cut', () => {
+    const live = apply([
+      [
+        'display_data',
+        { data: { 'text/plain': 'd' }, metadata: {}, transient: { display_id: 'd' } }
+      ],
+      ['stream', { name: 'stderr', text: 'abc\r' }],
+      [
+        'update_display_data',
+        {
+          data: { 'image/png': 'A'.repeat(MAX_OUTPUT_CHARS) },
+          metadata: {},
+          transient: { display_id: 'd' }
+        }
+      ],
+      ['stream', { name: 'stderr', text: 'xyz\u{1F600} 50%' }]
+    ])
+    expect(textOf(live, 1)).toBe('xyz')
   })
 
   it('drops rich outputs past 16 MiB but still updates displays already shown', () => {
