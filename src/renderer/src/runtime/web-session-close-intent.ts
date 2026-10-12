@@ -8,14 +8,28 @@ import {
 } from '../../../shared/session-tab-close-ledger'
 import { getRuntimeEnvironmentRevision } from './runtime-environment-revision'
 import { webSessionIntentOwnerKey, type WebSessionIntentOwner } from './web-session-intent-owner'
-import { useAppStore } from '../store'
+import { LOCAL_STRUCTURED_SESSION_OWNER } from './local-structured-session-owner'
 import { localStructuredSessionGeneration } from './local-structured-session-tabs-sync/inventory-generation-fence'
 import {
   captureHostSessionTabClosePlacement,
-  type HostSessionTabClosePlacement
+  type HostSessionTabClosePlacement,
+  type HostSessionTabClosePlacementState
 } from './host-session-tab-close-placement'
 
-const ledger = new SessionTabCloseLedger()
+type CloseRecovery = {
+  ticket: WebSessionCloseIntentTicket
+  aliases: readonly WebSessionCloseIntentTicket[]
+}
+
+const ledger = new SessionTabCloseLedger<CloseRecovery>()
+let readClosePlacementState: (() => HostSessionTabClosePlacementState) | undefined
+
+// Store slices import close records; bind the reader only after store creation finishes.
+export function registerWebSessionClosePlacementStateReader(
+  reader: () => HostSessionTabClosePlacementState
+): void {
+  readClosePlacementState = reader
+}
 // The pairing each partition was recorded under, so an ended pairing's closes can be found.
 const ownerByPartition = new Map<string, Required<WebSessionIntentOwner>>()
 
@@ -51,8 +65,11 @@ export function beginWebSessionCloseIntent(
   }
   let placement: HostSessionTabClosePlacement | undefined
   try {
+    if (!readClosePlacementState) {
+      throw new Error('closed tab placement state reader is not registered')
+    }
     placement = captureHostSessionTabClosePlacement(
-      useAppStore.getState(),
+      readClosePlacementState(),
       owner.environmentId,
       worktreeId,
       hostTabId
@@ -74,7 +91,48 @@ export function settleWebSessionCloseIntent(
   outcome: SessionTabCloseOutcome,
   now: number
 ): boolean {
-  return ledger.settle(ticket, outcome, now)
+  return settleWebSessionCloseIntents([ticket], outcome, now)[0]
+}
+
+/** All aliases of one host command share its captured occurrence and operation fence. */
+export function settleWebSessionCloseIntents(
+  tickets: readonly WebSessionCloseIntentTicket[],
+  outcome: SessionTabCloseOutcome,
+  now: number
+): boolean[] {
+  const ticket = tickets.find((candidate) => candidate.placement) ?? tickets[0]
+  const recovery = ticket ? { ticket, aliases: tickets } : undefined
+  return tickets.map((alias) => ledger.settle(alias, outcome, now, recovery))
+}
+
+export function failedWebSessionCloseIntentTickets(
+  owner: WebSessionIntentOwner,
+  worktreeId: string,
+  now: number
+): WebSessionCloseIntentTicket[] {
+  const recoveries = new Set(ledger.failedRecoveries(closePartition(owner, worktreeId), now))
+  return [...recoveries].flatMap(({ ticket, aliases }) =>
+    isFailedWebSessionCloseIntents(aliases, now) &&
+    (ticket.owner.environmentId === LOCAL_STRUCTURED_SESSION_OWNER
+      ? ticket.localGeneration === localStructuredSessionGeneration()
+      : ticket.owner.pairingRevision === getRuntimeEnvironmentRevision(owner.environmentId))
+      ? [ticket]
+      : []
+  )
+}
+
+export function isFailedWebSessionCloseIntents(
+  tickets: readonly WebSessionCloseIntentTicket[],
+  now: number
+): boolean {
+  return tickets.length > 0 && tickets.every((ticket) => ledger.isFailed(ticket, now))
+}
+
+export function takeFailedWebSessionCloseIntent(
+  ticket: WebSessionCloseIntentTicket,
+  now: number
+): boolean {
+  return ledger.takeFailed(ticket, now)
 }
 
 /** Ends closes the host has confirmed and drops tabs whose close is still pending. */
@@ -86,7 +144,20 @@ export function filterWebSessionCloseIntents<T extends { id: string }>(
   now: number,
   confirmOmission: boolean | ((closedId: string) => boolean) = true
 ): readonly T[] {
-  return ledger.filter(closePartition(owner, worktreeId), tabs, topLevelIdOf, now, confirmOmission)
+  const partition = closePartition(owner, worktreeId)
+  const recoveries = ledger.failedRecoveries(partition, now)
+  const confirms = (closedId: string): boolean => {
+    const recovery = recoveries.find(({ aliases }) =>
+      aliases.some((alias) => alias.closedId === closedId && ledger.isFailed(alias, now))
+    )
+    const hostTabId = recovery?.ticket.closedId ?? closedId
+    // A client alias is not host omission while this action's canonical occurrence is still named.
+    if (recovery && tabs.some((tab) => tab.id === hostTabId || topLevelIdOf(tab) === hostTabId)) {
+      return false
+    }
+    return typeof confirmOmission === 'function' ? confirmOmission(hostTabId) : confirmOmission
+  }
+  return ledger.filter(partition, tabs, topLevelIdOf, now, confirms)
 }
 
 export function isWebSessionCloseIntentPending(

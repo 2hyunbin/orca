@@ -13,11 +13,12 @@ export const SESSION_TAB_CLOSE_UNSETTLED_EXPIRY_MS = SESSION_TAB_CLOSE_UNSETTLED
 export const SESSION_TAB_CLOSE_SETTLED_TTL_MS = 20_000
 export const MAX_SESSION_TAB_CLOSE_PARTITIONS = 512
 
-type Entry = {
-  state: 'unsettled' | 'closed' | 'absent'
+type Entry<Recovery> = {
+  state: 'unsettled' | SessionTabCloseOutcome
   since: number
   // Why: the host's removal can be applied before its answer arrives; a settled close then ends at once.
   omittedByLatest: boolean
+  recovery?: Recovery
 }
 
 export type SessionTabCloseTicket = {
@@ -37,8 +38,8 @@ export type SessionTabCloseLedgerOptions = {
  * matches an entry when its id or its top-level id is the closed id, so a tab entry hides its panes
  * and a pane entry hides only that pane.
  */
-export class SessionTabCloseLedger {
-  private readonly partitions = new Map<string, Map<string, Entry>>()
+export class SessionTabCloseLedger<Recovery = never> {
+  private readonly partitions = new Map<string, Map<string, Entry<Recovery>>>()
   private readonly unsettledBoundMs: number
   private readonly settledTtlMs: number
   private readonly maxPartitions: number
@@ -66,13 +67,18 @@ export class SessionTabCloseLedger {
       entries = new Map()
       this.partitions.set(partition, entries)
     }
-    const entry: Entry = { state: 'unsettled', since: now, omittedByLatest: false }
+    const entry: Entry<Recovery> = { state: 'unsettled', since: now, omittedByLatest: false }
     entries.set(id, entry)
     return { partition, closedId: id, entry }
   }
 
   /** Returns false when the entry was already replaced or expired; the answer is then ignored. */
-  settle(ticket: SessionTabCloseTicket, outcome: SessionTabCloseOutcome, now: number): boolean {
+  settle(
+    ticket: SessionTabCloseTicket,
+    outcome: SessionTabCloseOutcome,
+    now: number,
+    recovery?: Recovery
+  ): boolean {
     const entries = this.partitions.get(ticket.partition)
     const entry = entries?.get(ticket.closedId)
     if (!entries || entry !== ticket.entry || this.expired(entry, now)) {
@@ -82,7 +88,10 @@ export class SessionTabCloseLedger {
       return false
     }
     if (outcome === 'failed') {
-      this.remove(ticket.partition, ticket.closedId)
+      // Keep bounded operation context without hiding a failed close.
+      entry.state = outcome
+      entry.since = now
+      entry.recovery = recovery
       return true
     }
     if (entry.omittedByLatest) {
@@ -94,10 +103,34 @@ export class SessionTabCloseLedger {
     return true
   }
 
+  /** Recovery data belongs to the current failed entry, with the same replacement and expiry fences. */
+  failedRecoveries(partition: string, now: number): Recovery[] {
+    return [...(this.partitions.get(partition)?.values() ?? [])].flatMap((entry) =>
+      entry.state === 'failed' && !this.expired(entry, now) && entry.recovery !== undefined
+        ? [entry.recovery]
+        : []
+    )
+  }
+
+  isFailed(ticket: SessionTabCloseTicket, now: number): boolean {
+    const entry = this.partitions.get(ticket.partition)?.get(ticket.closedId)
+    return entry === ticket.entry && entry.state === 'failed' && !this.expired(entry, now)
+  }
+
+  /** Consumes only this failed operation; a newer close owns recovery instead. */
+  takeFailed(ticket: SessionTabCloseTicket, now: number): boolean {
+    const entry = this.partitions.get(ticket.partition)?.get(ticket.closedId)
+    if (entry !== ticket.entry || entry.state !== 'failed') {
+      return false
+    }
+    this.remove(ticket.partition, ticket.closedId)
+    return !this.expired(entry, now)
+  }
+
   /** Whether a close of exactly this id is still hiding it; reads only, ends nothing. */
   isPending(partition: string, closedId: string, now: number): boolean {
     const entry = this.partitions.get(partition)?.get(closedId)
-    return entry !== undefined && !this.expired(entry, now)
+    return entry !== undefined && entry.state !== 'failed' && !this.expired(entry, now)
   }
 
   hasPending(partition: string, now: number): boolean {
@@ -114,7 +147,7 @@ export class SessionTabCloseLedger {
       this.partitions.delete(partition)
       return false
     }
-    return true
+    return [...entries.values()].some((entry) => entry.state !== 'failed')
   }
 
   /**
@@ -152,7 +185,11 @@ export class SessionTabCloseLedger {
       this.partitions.delete(partition)
       return tabs
     }
-    const visible = tabs.filter((tab) => !entries.has(tab.id) && !entries.has(topLevelIdOf(tab)))
+    const hides = (id: string): boolean => {
+      const entry = entries.get(id)
+      return entry !== undefined && entry.state !== 'failed'
+    }
+    const visible = tabs.filter((tab) => !hides(tab.id) && !hides(topLevelIdOf(tab)))
     return visible.length === tabs.length ? tabs : visible
   }
 
@@ -164,11 +201,11 @@ export class SessionTabCloseLedger {
     this.partitions.clear()
   }
 
-  private expired(entry: Entry, now: number): boolean {
+  private expired(entry: Entry<Recovery>, now: number): boolean {
     if (entry.state === 'unsettled') {
       return now - entry.since > this.unsettledBoundMs
     }
-    return entry.state === 'closed' && now - entry.since > this.settledTtlMs
+    return entry.state !== 'absent' && now - entry.since > this.settledTtlMs
   }
 
   private remove(partition: string, closedId: string): void {
