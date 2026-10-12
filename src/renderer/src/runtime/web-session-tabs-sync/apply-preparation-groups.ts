@@ -1,4 +1,9 @@
-import { insertTabAtHostSessionTabClosePosition } from '../host-session-tab-close-placement'
+import {
+  insertTabAtHostSessionTabClosePosition,
+  survivingHostSessionTabClosePlacement
+} from '../host-session-tab-close-placement'
+import { failedWebSessionCloseIntentTickets } from '../web-session-close-intent'
+import { hostSessionTabSourceMatchesWorkspaceOwner } from '../host-session-tab-source-owner'
 import type { ClientOwnedAdoptedTab } from '../web-session-client-owned-tab-placement'
 import type { TabGroup } from '../../../../shared/tab-types'
 import type { prepareWebSessionTabsSnapshotUnified } from './apply-preparation-unified'
@@ -40,15 +45,25 @@ export function prepareWebSessionTabsSnapshotGroups(
     reservedEmptyPreviewFallbackTabId
   } = base
   const currentGroups = state.groupsByWorktree[worktreeId] ?? []
-  const restoredTabId = options?.closeRestoration
-    ? hostToLocalTabId.get(options.closeRestoration.hostTabId)
-    : undefined
-  const closeRestoration =
-    options?.projectionOnly &&
-    restoredTabId &&
-    !state.unifiedTabsByWorktree[worktreeId]?.some((tab) => tab.id === restoredTabId)
-      ? options.closeRestoration
-      : undefined
+  const failedRestorations = failedWebSessionCloseIntentTickets({ environmentId }, worktreeId, now)
+    .filter((ticket) => hostSessionTabSourceMatchesWorkspaceOwner(state, ticket.owner, worktreeId))
+    .flatMap((ticket) =>
+      ticket.placement ? [{ ...ticket.placement, hostTabId: ticket.closedId }] : []
+    )
+  const candidates =
+    options?.projectionOnly && options.closeRestoration
+      ? [options.closeRestoration, ...failedRestorations]
+      : failedRestorations
+  // The first apply restoring a missing occurrence owns placement, regardless of recovery module timing.
+  const closeRestorations = candidates.flatMap((candidate) => {
+    const tabId = hostToLocalTabId.get(candidate.hostTabId)
+    const placement = survivingHostSessionTabClosePlacement(state, worktreeId, candidate)
+    return tabId &&
+      placement &&
+      !state.unifiedTabsByWorktree[worktreeId]?.some((tab) => tab.id === tabId)
+      ? [{ tabId, placement }]
+      : []
+  })
   const clientGroupIdByLocalTabId = new Map(
     mirroredBrowserTabs.flatMap((entry) =>
       entry.clientGroupId ? [[entry.unifiedTab.id, entry.clientGroupId]] : []
@@ -113,13 +128,13 @@ export function prepareWebSessionTabsSnapshotGroups(
         })
       }
     }
-    if (closeRestoration && restoredTabId) {
+    for (const { tabId, placement } of closeRestorations) {
       placementMoves.push({
-        tabId: restoredTabId,
-        groupId: closeRestoration.groupId,
+        tabId,
+        groupId: placement.groupId,
         position: {
-          previousTabId: closeRestoration.previousTabId,
-          nextTabId: closeRestoration.nextTabId
+          previousTabId: placement.previousTabId,
+          nextTabId: placement.nextTabId
         }
       })
     }
@@ -243,14 +258,16 @@ export function prepareWebSessionTabsSnapshotGroups(
     for (const tabId of hostOrMirroredOrder) {
       push(tabId)
     }
-    return closeRestoration && restoredTabId
-      ? insertTabAtHostSessionTabClosePosition(
-          next,
-          restoredTabId,
-          closeRestoration.previousBarId,
-          closeRestoration.nextBarId
-        )
-      : next
+    return closeRestorations.reduce(
+      (order, { tabId, placement }) =>
+        insertTabAtHostSessionTabClosePosition(
+          order,
+          tabId,
+          placement.previousBarId,
+          placement.nextBarId
+        ),
+      next
+    )
   })()
   return {
     ...base,

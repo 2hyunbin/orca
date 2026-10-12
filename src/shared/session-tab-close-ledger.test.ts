@@ -89,6 +89,34 @@ describe('SessionTabCloseLedger', () => {
     expect(apply(ledger, [{ id: 'b' }])).toEqual(['b'])
   })
 
+  it('keeps recovery data with the failed operation through visible lists, replacement and omission', () => {
+    const ledger = new SessionTabCloseLedger<{ anchor: string }>()
+    const first = ledger.begin(P, 'b', NOW)!
+    const original = { anchor: 'a' }
+    ledger.settle(first, 'failed', NOW, original)
+    expect(ledger.filter(P, [{ id: 'b' }], topLevel, NOW)).toEqual([{ id: 'b' }])
+    expect(ledger.failedRecoveries(P, NOW)).toEqual([original])
+    const newer = ledger.begin(P, 'b', NOW + 1)!
+    expect(ledger.failedRecoveries(P, NOW + 1)).toEqual([])
+    expect(ledger.isFailed(first, NOW + 1)).toBe(false)
+    const latest = { anchor: 'c' }
+    ledger.settle(newer, 'failed', NOW + 2, latest)
+    expect(ledger.failedRecoveries(P, NOW + 2)).toEqual([latest])
+    ledger.filter(P, [], topLevel, NOW + 2)
+    expect(ledger.failedRecoveries(P, NOW + 2)).toEqual([])
+    expect(ledger.isFailed(newer, NOW + 2)).toBe(false)
+  })
+
+  it('bounds failed recovery data without hiding the tab or leaving a pending obligation', () => {
+    const ledger = new SessionTabCloseLedger<string>()
+    const ticket = ledger.begin(P, 'b', NOW)!
+    ledger.settle(ticket, 'failed', NOW, 'position')
+    expect(ledger.hasPending(P, NOW)).toBe(false)
+    expect(ledger.failedRecoveries(P, NOW + SESSION_TAB_CLOSE_SETTLED_TTL_MS + 1)).toEqual([])
+    ledger.clearPartition(P)
+    expect(ledger.failedRecoveries(P, NOW)).toEqual([])
+  })
+
   it('keeps an absent tab hidden with no time limit until a list omits it', () => {
     const ledger = new SessionTabCloseLedger()
     const ticket = ledger.begin(P, 'b', NOW)!

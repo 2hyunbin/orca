@@ -6,8 +6,8 @@ import type { RuntimeClientTarget } from './runtime-rpc-client'
 import { sessionTabCloseAnswerOutcome } from '../../../shared/session-tab-close-answer'
 import { hasRuntimeRpcErrorCode } from './runtime-rpc-result'
 import {
-  settleWebSessionCloseIntent,
-  takeFailedWebSessionCloseIntent,
+  settleWebSessionCloseIntents,
+  isFailedWebSessionCloseIntents,
   type WebSessionCloseIntentTicket
 } from './web-session-close-intent'
 
@@ -100,9 +100,7 @@ export async function settleHostSessionTabClose(args: {
     )
   }
   const tickets = [...args.tickets()]
-  for (const ticket of tickets) {
-    settleWebSessionCloseIntent(ticket, outcome, Date.now())
-  }
+  settleWebSessionCloseIntents(tickets, outcome, Date.now())
   if (outcome === 'failed') {
     void recoverFailedHostSessionTabs(tickets)
     void Promise.resolve()
@@ -125,8 +123,7 @@ async function recoverFailedHostSessionTabs(
   }
   try {
     const { reprojectHostSessionTabSource } = await import('./host-session-tab-source-projection')
-    const current = tickets.map((ticket) => takeFailedWebSessionCloseIntent(ticket, Date.now()))
-    if (!current.every(Boolean)) {
+    if (!isFailedWebSessionCloseIntents(tickets, Date.now())) {
       return
     }
     // Aliases describe one close; replay once with its captured occurrence, not an alias without it.
@@ -138,9 +135,5 @@ async function recoverFailedHostSessionTabs(
     }
   } catch (error) {
     console.warn('[session-tabs] could not load closed tab recovery', error)
-  } finally {
-    for (const ticket of tickets) {
-      takeFailedWebSessionCloseIntent(ticket, Date.now())
-    }
   }
 }

@@ -71,7 +71,7 @@ it.each([
   const { useAppStore } = await import('../store')
   const { settleHostSessionTabClose } = await import('./host-session-tab-close')
   const intent = await import('./web-session-close-intent')
-  const take = vi.spyOn(intent, 'takeFailedWebSessionCloseIntent')
+  const take = vi.spyOn(intent, 'isFailedWebSessionCloseIntents')
   const revision = await import('./runtime-environment-revision')
   const { applyWebSessionTabsSnapshot } = await import('./web-session-tabs-sync/snapshot-api')
   const { applyWebSessionTabsStorePatch } = await import('./web-session-tabs-sync/store-patch')
@@ -229,11 +229,13 @@ it.each([
           })
         )
       )
-      expect(intent.takeFailedWebSessionCloseIntent(ticket, Date.now())).toBe(false)
+      expect(intent.isFailedWebSessionCloseIntents([ticket], Date.now())).toBe(
+        scenario === 'reject'
+      )
       expect(project).not.toHaveBeenCalled()
     } else if (scenario === 'reclose' || scenario === 'removed') {
       await vi.waitFor(() => expect(loaded).toHaveBeenCalledOnce())
-      expect(intent.takeFailedWebSessionCloseIntent(ticket, Date.now())).toBe(false)
+      expect(intent.isFailedWebSessionCloseIntents([ticket], Date.now())).toBe(false)
     } else if (scenario === 'overlap' || scenario === 'alias-overlap') {
       await vi.waitFor(() => expect(strip()).toEqual(['c', 'b', 'a']))
     } else {
@@ -252,7 +254,7 @@ it.each([
         (_, index) => take.mock.results[index].value === true
       )
       expect(recovered).toHaveLength(1)
-      expect(recovered[0]?.[0]).toBe(newer)
+      expect(recovered[0]?.[0]).toEqual([newer])
       expect(project).not.toHaveBeenCalledWith(ticket)
       expect(
         useAppStore.getState().unifiedTabsByWorktree[wt].find((tab) => tab.entityId === `${wt}-b`)
