@@ -94,9 +94,7 @@ describe('CopilotHookService', () => {
     expect(firstPromptHook.timeoutSec).toBe(5)
     if (process.platform === 'win32') {
       const scriptPath = join(tmpDir, '.orca', 'agent-hooks', 'copilot-hook.cmd')
-      expect(firstPromptHook.powershell).toBe(
-        `${scriptPath.replaceAll('\\', '/')} UserPromptSubmit`
-      )
+      expect(firstPromptHook.powershell).toBe(getManagedCommand(scriptPath, 'UserPromptSubmit'))
     } else {
       expect(firstPromptHook.bash).toContain('if [ -f ')
       expect(firstPromptHook.bash).toContain('] && [ -x ')
@@ -116,12 +114,16 @@ describe('CopilotHookService', () => {
       vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     })
 
-    it('registers the .cmd by bare path with the event as its argument', () => {
+    it('runs the .cmd through cmd.exe /d with the event as its argument', () => {
+      vi.stubEnv('SystemRoot', 'C:\\Windows')
       for (const eventName of COPILOT_EVENTS) {
         expect(
           getManagedCommand('C:\\Users\\alice\\.orca\\agent-hooks\\copilot-hook.cmd', eventName)
-        ).toBe(`C:/Users/alice/.orca/agent-hooks/copilot-hook.cmd ${eventName}`)
+        ).toBe(
+          `C:/Windows/System32/cmd.exe /d /c C:/Users/alice/.orca/agent-hooks/copilot-hook.cmd ${eventName}`
+        )
       }
+      vi.unstubAllEnvs()
     })
 
     it('passes the event through the encoded launcher when the path is not cmd-safe', () => {
