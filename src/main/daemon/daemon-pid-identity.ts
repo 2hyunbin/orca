@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { getDaemonPidPath } from './daemon-spawner'
 import { parseDaemonPidFile, type ParsedDaemonPid } from './daemon-pid-file-parse'
-import { getPsProcessIdentityAsync, type PsProcessIdentity } from './daemon-process-identity-query'
+import { getPsProcessIdentityAsync, type ProcessIdentity } from './daemon-process-identity-query'
 import { queryWindowsProcess } from './daemon-process-inspection'
 import {
   START_TIME_TOLERANCE_MS,
@@ -12,7 +12,7 @@ import { PROTOCOL_VERSION } from './types'
 import { isStartupDiagnosticsEnabled, logStartupDiagnostic } from '../startup/startup-diagnostics'
 
 // Why: on Windows the pid file's startedAtMs is the daemon's self-reported
-// Node start time, while verification reads the kernel process creation time —
+// Node start time, while verification reads the OS process creation time —
 // the gap between them is the exe bootstrap, which AV/disk pressure can
 // stretch to seconds. Pid recycling differs by minutes-to-days, so a wide
 // tolerance keeps the guard effective without false mismatches.
@@ -43,7 +43,7 @@ export function isNoSuchProcessError(error: unknown): boolean {
 export type DaemonProcessIdentity = 'match' | 'mismatch' | 'unknown'
 
 // Timed under ORCA_STARTUP_DIAGNOSTICS so the cold-start benchmark can attribute startup cost.
-async function queryWindowsProcessIdentity(pid: number): Promise<PsProcessIdentity | null> {
+async function queryWindowsProcessIdentity(pid: number): Promise<ProcessIdentity | null> {
   const startedAt = performance.now()
   try {
     const evidence = await queryWindowsProcess(pid)

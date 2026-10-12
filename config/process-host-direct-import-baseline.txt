@@ -34,6 +34,7 @@ src/main/computer/macos-computer-use-permissions.ts
 src/main/computer/macos-native-provider-transport.ts
 src/main/computer/sidecar-client.ts
 src/main/daemon/daemon-launched-child.ts
+src/main/daemon/daemon-process-identity-query.ts
 src/main/daemon/daemon-process-inspection.ts
 src/main/daemon/daemon-process-start-time.ts
 src/main/emulator/android/android-avd-boot.ts

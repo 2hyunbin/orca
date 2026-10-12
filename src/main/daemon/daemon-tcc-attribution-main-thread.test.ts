@@ -1,6 +1,5 @@
 import type * as ChildProcessModule from 'node:child_process'
 import type * as FsModule from 'node:fs'
-import type * as ProcessHostModule from '@orca/process-host'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -10,36 +9,23 @@ import { PROTOCOL_VERSION } from './daemon-protocol-version'
 const PS_START = 'Thu Aug 13 12:34:56 2026'
 const PS_STARTED_AT_MS = Date.parse(PS_START)
 
-const { runProcessMock, runProcessSyncMock, execFileSyncMock, psCommandLine, psError } = vi.hoisted(
-  () => ({
-    runProcessMock: vi.fn(async (_spec: { program: string; args?: readonly string[] }) => {
-      if (psError.value) {
-        throw psError.value
-      }
-      return {
-        code: 0,
-        signal: null,
-        stdout: `${PS_START} ${psCommandLine.value}
-`,
-        stderr: '',
-        timedOut: false
-      }
-    }),
-    runProcessSyncMock: vi.fn(),
-    execFileSyncMock: vi.fn(() => ''),
-    psCommandLine: { value: '' },
-    psError: { value: null as Error | null }
-  })
-)
-
-vi.mock('@orca/process-host', async (importOriginal) => ({
-  ...(await importOriginal<typeof ProcessHostModule>()),
-  runProcess: runProcessMock,
-  runProcessSync: runProcessSyncMock
+const { execFileMock, execFileSyncMock, psCommandLine, psError } = vi.hoisted(() => ({
+  execFileMock: vi.fn(
+    (
+      _file: string,
+      _args: readonly string[],
+      _options: unknown,
+      callback: (error: Error | null, stdout: string, stderr: string) => void
+    ) => callback(psError.value, psError.value ? '' : `${PS_START} ${psCommandLine.value}\n`, '')
+  ),
+  execFileSyncMock: vi.fn(() => ''),
+  psCommandLine: { value: '' },
+  psError: { value: null as Error | null }
 }))
 
 vi.mock('node:child_process', async (importOriginal) => ({
   ...(await importOriginal<typeof ChildProcessModule>()),
+  execFile: execFileMock,
   execFileSync: execFileSyncMock
 }))
 
@@ -55,11 +41,6 @@ vi.mock('node:fs', async (importOriginal) => {
     }) as typeof actual.readFileSync
   }
 })
-
-function expectNoSynchronousSpawn(): void {
-  expect(runProcessSyncMock).not.toHaveBeenCalled()
-  expect(execFileSyncMock).not.toHaveBeenCalled()
-}
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
 const { getMacDaemonTccAttributionHealth } = await import('./daemon-tcc-attribution')
@@ -83,8 +64,7 @@ describe('macOS daemon TCC attribution main-thread cost', () => {
     writeFileSync(spawnerExecPath, '')
     psCommandLine.value = `node daemon-entry --socket ${socketPath} --token ${tokenPath}`
     psError.value = null
-    runProcessMock.mockClear()
-    runProcessSyncMock.mockClear()
+    execFileMock.mockClear()
     execFileSyncMock.mockClear()
   })
 
@@ -123,14 +103,14 @@ describe('macOS daemon TCC attribution main-thread cost', () => {
     await expect(isDaemonStaleForCurrentBundle(dir, socketPath, tokenPath, '1.2.3')).resolves.toBe(
       true
     )
-    expect(runProcessMock).toHaveBeenCalledTimes(1)
+    expect(execFileMock).toHaveBeenCalledTimes(1)
 
     writePidRecord('1.2.3')
     await expect(isDaemonStaleForCurrentBundle(dir, socketPath, tokenPath, '1.2.3')).resolves.toBe(
       false
     )
-    expect(runProcessMock).toHaveBeenCalledTimes(2)
-    expectNoSynchronousSpawn()
+    expect(execFileMock).toHaveBeenCalledTimes(2)
+    expect(execFileSyncMock).not.toHaveBeenCalled()
   })
 
   it('retries an indeterminate bundle-staleness identity inspection', async () => {
@@ -144,8 +124,8 @@ describe('macOS daemon TCC attribution main-thread cost', () => {
     await expect(isDaemonStaleForCurrentBundle(dir, socketPath, tokenPath, '1.2.3')).resolves.toBe(
       true
     )
-    expect(runProcessMock).toHaveBeenCalledTimes(2)
-    expectNoSynchronousSpawn()
+    expect(execFileMock).toHaveBeenCalledTimes(2)
+    expect(execFileSyncMock).not.toHaveBeenCalled()
   })
 
   it('deduplicates identity inspection by daemon generation without a synchronous spawn', async () => {
@@ -161,26 +141,26 @@ describe('macOS daemon TCC attribution main-thread cost', () => {
       'intact'
     )
 
-    expectNoSynchronousSpawn()
-    expect(runProcessMock).toHaveBeenCalledTimes(1)
-    expect(runProcessMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        program: 'ps',
-        args: ['-p', String(process.pid), '-o', 'lstart=', '-o', 'command=']
-      })
+    expect(execFileSyncMock).not.toHaveBeenCalled()
+    expect(execFileMock).toHaveBeenCalledTimes(1)
+    expect(execFileMock).toHaveBeenCalledWith(
+      'ps',
+      ['-p', String(process.pid), '-o', 'lstart=', '-o', 'command='],
+      expect.anything(),
+      expect.any(Function)
     )
 
     writePidRecord('1.2.3')
     await expect(getMacDaemonTccAttributionHealth(dir, socketPath, tokenPath)).resolves.toBe(
       'intact'
     )
-    expect(runProcessMock).toHaveBeenCalledTimes(2)
+    expect(execFileMock).toHaveBeenCalledTimes(2)
 
     rmSync(spawnerExecPath)
     await expect(getMacDaemonTccAttributionHealth(dir, socketPath, tokenPath)).resolves.toBe(
       'severed'
     )
-    expect(runProcessMock).toHaveBeenCalledTimes(3)
+    expect(execFileMock).toHaveBeenCalledTimes(3)
   })
 
   it('retries an indeterminate identity inspection', async () => {
@@ -195,8 +175,8 @@ describe('macOS daemon TCC attribution main-thread cost', () => {
       'intact'
     )
 
-    expectNoSynchronousSpawn()
-    expect(runProcessMock).toHaveBeenCalledTimes(2)
+    expect(execFileSyncMock).not.toHaveBeenCalled()
+    expect(execFileMock).toHaveBeenCalledTimes(2)
   })
 
   it('fails open for a legacy pid record without app-version metadata', async () => {
@@ -206,7 +186,7 @@ describe('macOS daemon TCC attribution main-thread cost', () => {
       'unknown'
     )
 
-    expect(runProcessMock).toHaveBeenCalledTimes(1)
-    expectNoSynchronousSpawn()
+    expect(execFileMock).toHaveBeenCalledTimes(1)
+    expect(execFileSyncMock).not.toHaveBeenCalled()
   })
 })
