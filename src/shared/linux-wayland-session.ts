@@ -4,7 +4,10 @@ export function isLinuxWaylandSession(host: {
   ozonePlatform?: string
 }): boolean {
   const platform = (host.ozonePlatform ?? '').trim().toLowerCase()
-  if (platform && platform !== 'auto') {
+  if (platform === 'auto') {
+    return host.platform === 'linux' && host.env.XDG_SESSION_TYPE === 'wayland'
+  }
+  if (platform) {
     return host.platform === 'linux' && platform === 'wayland'
   }
   return (

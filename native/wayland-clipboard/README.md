@@ -51,7 +51,11 @@ also excludes library paths inside the AppImage mount.
 
 ## Building and testing
 
-With Docker running, use `pnpm run build:native` on Linux, or select a slice:
+Linux `pnpm run build`, `pnpm run build:native`, and packaging require Docker
+running when no verified cached helper exists. This keeps builds on the supported
+library floor rather than linking against a newer development host. Before
+running `pnpm dev` on native Wayland, build the helper with `pnpm run build:native`.
+macOS and Windows builds do not invoke it. To select a slice directly:
 
 ```sh
 node config/scripts/build-wayland-clipboard.mjs --arch x64

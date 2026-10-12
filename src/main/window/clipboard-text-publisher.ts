@@ -40,6 +40,9 @@ export function createClipboardTextPublisher(
     if (text.length > CLIPBOARD_TEXT_WRITE_MAX_BYTES) {
       return Promise.reject(new Error(CLIPBOARD_TEXT_WRITE_TOO_LARGE_ERROR))
     }
+    if (!deps.isWayland()) {
+      return deps.validate(text).then((safeText) => deps.write(safeText, kind))
+    }
     if (
       count >= MAX_PENDING_CLIPBOARD_WRITES ||
       text.length > CLIPBOARD_TEXT_WRITE_MAX_BYTES - queuedCodeUnits
@@ -52,10 +55,6 @@ export function createClipboardTextPublisher(
     const next = pending
       .then(async () => {
         const safeText = await deps.validate(text)
-        if (!deps.isWayland()) {
-          deps.write(safeText, kind)
-          return
-        }
         const result = await deps.run({
           program: await deps.helperPath(),
           input: safeText,
