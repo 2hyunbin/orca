@@ -1,17 +1,18 @@
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mobile-desktop-relay-contract'
 import type { RpcClient } from './rpc-client'
+import type { RpcEnvelopeFields } from './rpc-envelope-fields'
 
 const scopedViews = new WeakMap<RpcClient, Map<ExecutionHostId, RpcClient>>()
 
 /**
  * Whether this phone can reach the desktop's servers: the desktop relays, over a transport that
- * keeps `executionHost` (a shell older than it would strip it and run the call on the desktop).
+ * carries the `envelope` naming the server (an older shell would refuse every such call).
  */
 export function relaysToServers(client: RpcClient, hostCapabilities: readonly string[]): boolean {
   return (
     hostCapabilities.includes(MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY) &&
-    (client.carriesExecutionHost?.() ?? true)
+    (client.carriesRpcEnvelope?.() ?? true)
   )
 }
 
@@ -30,6 +31,14 @@ export function workspaceRouteExecutionHost(
   return client && relaysToServers(client, hostCapabilities) ? executionHost : null
 }
 
+/** `options` with the call's envelope naming `executionHost`, or untouched for the desktop. */
+function onExecutionHost<Options extends { envelope?: RpcEnvelopeFields }>(
+  options: Options | undefined,
+  executionHost: ExecutionHostId | undefined
+): Options | { envelope: RpcEnvelopeFields } | undefined {
+  return executionHost ? { ...options, envelope: { ...options?.envelope, executionHost } } : options
+}
+
 /**
  * A view of the paired desktop's client that runs each call on the host `hostOf` names for its
  * params, and on the desktop when it names none. The view owns no connection, so `close` leaves
@@ -40,23 +49,10 @@ export function routeRpcClientCalls(
   hostOf: (params: unknown) => ExecutionHostId | undefined
 ): RpcClient {
   return {
-    sendRequest: (method, params, options) => {
-      const executionHost = hostOf(params)
-      return client.sendRequest(
-        method,
-        params,
-        executionHost ? { ...options, executionHost } : options
-      )
-    },
-    subscribe: (method, params, onData, options) => {
-      const executionHost = hostOf(params)
-      return client.subscribe(
-        method,
-        params,
-        onData,
-        executionHost ? { ...options, executionHost } : options
-      )
-    },
+    sendRequest: (method, params, options) =>
+      client.sendRequest(method, params, onExecutionHost(options, hostOf(params))),
+    subscribe: (method, params, onData, options) =>
+      client.subscribe(method, params, onData, onExecutionHost(options, hostOf(params))),
     updateTerminalSubscriptionViewport: (terminal, viewport) =>
       client.updateTerminalSubscriptionViewport(terminal, viewport),
     getState: () => client.getState(),
@@ -64,7 +60,7 @@ export function routeRpcClientCalls(
     getLastConnectedAt: () => client.getLastConnectedAt(),
     getLastInboundAt: client.getLastInboundAt && (() => client.getLastInboundAt?.() ?? null),
     getGeneration: client.getGeneration && (() => client.getGeneration?.() ?? 0),
-    carriesExecutionHost: () => client.carriesExecutionHost?.() ?? true,
+    carriesRpcEnvelope: () => client.carriesRpcEnvelope?.() ?? true,
     onStateChange: (listener) => client.onStateChange(listener),
     notifyForeground: (reason) => client.notifyForeground(reason),
     close: () => {}

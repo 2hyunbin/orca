@@ -1,6 +1,7 @@
 import { createElement, Suspense, type ReactElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import type { RpcClient } from '../transport/rpc-client'
 
 const asyncStorage = vi.hoisted(() => ({
@@ -52,6 +53,8 @@ import { MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY } from '../../../src/shared/mob
 import { MOBILE_RELAY_HOSTS_LIST_METHOD } from '../../../src/shared/mobile-relay-hosts-contract'
 import { NewWorktreeModal } from './NewWorktreeModal'
 import { NewWorktreeModalController } from './NewWorktreeModalController'
+
+const RelayedOptionsSchema = z.object({ envelope: z.object({ executionHost: z.string() }) })
 
 const LOCAL_HOST_LABEL = getLocalExecutionHostLabel('darwin')
 
@@ -407,11 +410,7 @@ describe('NewWorktreeModal project targets', () => {
     // One desktop: its own repos, its server list, and a server's repos relayed through it.
     const desktop = new FakeSession('connected')
     desktop.sendRequest.mockImplementation(async (method: string, ...rest: unknown[]) => {
-      const options = rest[1]
-      const relayed =
-        typeof options === 'object' && options !== null && 'executionHost' in options
-          ? options.executionHost
-          : undefined
+      const relayed = RelayedOptionsSchema.safeParse(rest[1]).data?.envelope.executionHost
       const result =
         method === MOBILE_RELAY_HOSTS_LIST_METHOD
           ? {

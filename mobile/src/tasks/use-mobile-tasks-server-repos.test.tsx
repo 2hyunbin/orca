@@ -105,9 +105,13 @@ function recording(
   const sent: Sent[] = []
   sentBy.set(client, sent)
   client.sendRequest.mockImplementation(
-    async (method: string, params?: unknown, options?: { executionHost?: string }) => {
-      sent.push({ method, params, executionHost: options?.executionHost })
-      return answer(method, options?.executionHost)
+    async (
+      method: string,
+      params?: unknown,
+      options?: { envelope?: { executionHost?: string } }
+    ) => {
+      sent.push({ method, params, executionHost: options?.envelope?.executionHost })
+      return answer(method, options?.envelope?.executionHost)
     }
   )
   return client

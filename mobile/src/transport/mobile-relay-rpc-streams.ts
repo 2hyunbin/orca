@@ -11,19 +11,19 @@ import {
 import { buildReadyStreamUnsubscribe, isReadyIdStream } from './rpc-client-server-subscription'
 import { isStreamingOpenerReply } from './rpc-acceptance-policies'
 import type { RpcClient } from './rpc-client'
+import type { RpcEnvelopeFields, RpcRequestFrame } from './rpc-envelope-fields'
 import type { RpcResponse, RpcSuccess } from './types'
-import type { ExecutionHostId } from '../../../src/shared/execution-host'
 
 type StreamRecord = {
   method: string
   params: unknown
+  envelope?: RpcEnvelopeFields
   listener: (result: unknown) => void
   onBinaryFrame?: Parameters<RpcClient['subscribe']>[3] extends
     | { onBinaryFrame?: infer Listener }
     | undefined
     ? Listener
     : never
-  executionHost?: ExecutionHostId
   streamIds: Set<number>
   subscriptionId?: string
   cancelled: boolean
@@ -33,11 +33,12 @@ type StreamRecord = {
 }
 
 type StreamUnsubscribe = { method: string; params: Record<string, unknown> }
-type Target = ExecutionHostId | undefined
-type RelayFrame = { id: string; method: string; params?: unknown }
 
-/** The host cleanup slot an unsubscribe names; the rest of its params never identify a sibling. */
-function unsubscribeSlot({ method, params }: StreamUnsubscribe, target: Target): string | null {
+/** The host cleanup slot an unsubscribe names; the envelope routes it, so it is part of the slot. */
+function unsubscribeSlot(
+  { method, params }: StreamUnsubscribe,
+  envelope: RpcEnvelopeFields | undefined
+): string | null {
   if (!('subscriptionId' in params)) {
     return null
   }
@@ -46,7 +47,7 @@ function unsubscribeSlot({ method, params }: StreamUnsubscribe, target: Target):
       ? params.client
       : null
   const clientId = client && 'id' in client ? client.id : null
-  return JSON.stringify([method, params.subscriptionId, clientId, target ?? null])
+  return JSON.stringify([method, params.subscriptionId, clientId, envelope ?? null])
 }
 
 /** Unsubscribe derived from the subscribe params alone (no server-assigned id). */
@@ -64,7 +65,8 @@ function buildParamsUnsubscribe(
 
 type StreamManagerOptions = {
   nextId: () => string
-  sendFrame: (request: RelayFrame & { executionHost?: ExecutionHostId }) => boolean
+  // A stream's envelope rides its subscribe and unsubscribes alike, so routing reaches one host.
+  sendFrame: (frame: RpcRequestFrame) => boolean
   waitForConnected: () => Promise<void>
 }
 
@@ -72,7 +74,7 @@ export class MobileRelayRpcStreams {
   private readonly streams = new Map<string, StreamRecord>()
   private readonly cancelledSubscriptions = new Map<
     string,
-    { method: string; unsubscribe?: StreamUnsubscribe; target: Target }
+    { method: string; unsubscribe?: StreamUnsubscribe; envelope?: RpcEnvelopeFields }
   >()
   private readonly terminalListeners = new Map<number, (result: unknown) => void>()
   private readonly terminalSnapshots = new Map<number, TerminalSnapshotState>()
@@ -91,9 +93,9 @@ export class MobileRelayRpcStreams {
     const stream: StreamRecord = {
       method,
       params,
+      envelope: subscribeOptions?.envelope,
       listener,
       onBinaryFrame: subscribeOptions?.onBinaryFrame,
-      executionHost: subscribeOptions?.executionHost,
       streamIds: new Set(),
       cancelled: false,
       sendOrder: null
@@ -104,7 +106,8 @@ export class MobileRelayRpcStreams {
       .then(() => {
         if (!stream.cancelled) {
           stream.sendOrder = ++this.sendCount
-          if (!this.send({ id, method, params: stream.params }, stream.executionHost)) {
+          const { envelope } = stream
+          if (!this.options.sendFrame({ id, method, params: stream.params, envelope })) {
             this.fail(id, stream, 'Connection interrupted')
           }
         }
@@ -131,12 +134,20 @@ export class MobileRelayRpcStreams {
           this.cancelledSubscriptions.delete(response.id)
         } else if (result.type === 'snapshot' && cancelled.unsubscribe) {
           this.cancelledSubscriptions.delete(response.id)
-          this.send({ id: this.options.nextId(), ...cancelled.unsubscribe }, cancelled.target)
+          this.options.sendFrame({
+            id: this.options.nextId(),
+            ...cancelled.unsubscribe,
+            envelope: cancelled.envelope
+          })
         } else if (typeof result.subscriptionId === 'string') {
           this.cancelledSubscriptions.delete(response.id)
           const unsubscribe = buildReadyStreamUnsubscribe(cancelled.method, result.subscriptionId)
           if (unsubscribe) {
-            this.send({ id: this.options.nextId(), ...unsubscribe }, cancelled.target)
+            this.options.sendFrame({
+              id: this.options.nextId(),
+              ...unsubscribe,
+              envelope: cancelled.envelope
+            })
           }
         }
       }
@@ -213,10 +224,9 @@ export class MobileRelayRpcStreams {
       const byParams = buildParamsUnsubscribe(stream.method, stream.params, id)
       if (stream.method === 'terminal.subscribe') {
         if (byParams) {
-          this.sendUnsubscribe(byParams, stream.sendOrder, stream.executionHost, id)
+          this.sendUnsubscribe(byParams, stream.sendOrder, stream.envelope, id)
         }
       } else {
-        const target = stream.executionHost
         const unsubscribe = stream.subscriptionId
           ? buildReadyStreamUnsubscribe(stream.method, stream.subscriptionId)
           : null
@@ -225,13 +235,13 @@ export class MobileRelayRpcStreams {
           this.cancelledSubscriptions.set(id, {
             method: stream.method,
             unsubscribe: byParams,
-            target
+            envelope: stream.envelope
           })
         } else if (unsubscribe || byParams) {
-          this.sendUnsubscribe((unsubscribe ?? byParams)!, stream.sendOrder, target)
+          this.sendUnsubscribe((unsubscribe ?? byParams)!, stream.sendOrder, stream.envelope)
         } else if (isReadyIdStream(stream.method)) {
           // Keep only the cleanup route while the server assigns its subscription ID.
-          this.cancelledSubscriptions.set(id, { method: stream.method, target })
+          this.cancelledSubscriptions.set(id, { method: stream.method, envelope: stream.envelope })
         }
       }
     }
@@ -242,26 +252,30 @@ export class MobileRelayRpcStreams {
   private sendUnsubscribe(
     unsubscribe: StreamUnsubscribe,
     sendOrder: number,
-    target: Target,
+    envelope: RpcEnvelopeFields | undefined,
     terminalRequestId?: string
   ): void {
-    if (this.hasNewerSlotOwner(unsubscribe, sendOrder, target)) {
+    if (this.hasNewerSlotOwner(unsubscribe, sendOrder, envelope)) {
       return
     }
     // Why: added after the sibling check; an old host strips it and would evict the live sibling.
     const params = terminalRequestId
       ? { ...unsubscribe.params, requestId: terminalRequestId }
       : unsubscribe.params
-    const frame = { id: this.options.nextId(), method: unsubscribe.method, params }
-    this.send(frame, target)
+    this.options.sendFrame({
+      id: this.options.nextId(),
+      method: unsubscribe.method,
+      params,
+      envelope
+    })
   }
 
   private hasNewerSlotOwner(
     unsubscribe: StreamUnsubscribe,
     sendOrder: number,
-    target: Target
+    envelope: RpcEnvelopeFields | undefined
   ): boolean {
-    const slot = unsubscribeSlot(unsubscribe, target)
+    const slot = unsubscribeSlot(unsubscribe, envelope)
     if (slot === null) {
       return false
     }
@@ -270,19 +284,11 @@ export class MobileRelayRpcStreams {
         continue
       }
       const siblingUnsubscribe = buildParamsUnsubscribe(sibling.method, sibling.params, siblingId)
-      if (
-        siblingUnsubscribe &&
-        unsubscribeSlot(siblingUnsubscribe, sibling.executionHost) === slot
-      ) {
+      if (siblingUnsubscribe && unsubscribeSlot(siblingUnsubscribe, sibling.envelope) === slot) {
         return true
       }
     }
     return false
-  }
-
-  /** Every frame about a stream names the host it runs on. */
-  private send(frame: RelayFrame, target: Target): boolean {
-    return this.options.sendFrame(target ? { ...frame, executionHost: target } : frame)
   }
 
   private remove(id: string): void {

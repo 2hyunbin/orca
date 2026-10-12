@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { scopeRpcClientToExecutionHost } from '../../transport/execution-host-scoped-rpc-client'
 import type { RpcClient } from '../../transport/rpc-client'
 import type { RpcResponse } from '../../transport/types'
 import { createBridgePortPair } from './bridge-port-pair-test-harness'
@@ -27,44 +28,36 @@ function recordingShellClient() {
   return { client, sendRequest, subscribe }
 }
 
-describe('executionHost across the shell bridge', () => {
-  it('reaches the shell client on both doors and keeps untargeted calls as they were', async () => {
+describe('a server workspace call across the shell bridge', () => {
+  it('reaches the shell client with its executionHost on the envelope', async () => {
     const shell = recordingShellClient()
     const pair = createBridgePortPair({ rpc: shell.client })
     await pair.flush()
-    expect(pair.client.carriesExecutionHost?.()).toBe(true)
+    expect(pair.client.carriesRpcEnvelope?.()).toBe(true)
 
-    void pair.client.sendRequest('worktree.ps', { limit: 1 }, { executionHost: SERVER })
-    void pair.client.sendRequest('worktree.ps', { limit: 1 })
-    pair.client.subscribe('terminal.subscribe', { terminal: 't1' }, () => {}, {
-      executionHost: SERVER
-    })
-    pair.client.subscribe('terminal.subscribe', { terminal: 't2' }, () => {})
+    const server = scopeRpcClientToExecutionHost(pair.client, SERVER)
+    void server.sendRequest('worktree.ps', { limit: 1 })
+    server.subscribe('terminal.subscribe', { terminal: 't1' }, () => {})
     await pair.flush()
 
     expect(shell.sendRequest.mock.calls).toEqual([
-      ['worktree.ps', { limit: 1 }, { executionHost: SERVER }],
-      ['worktree.ps', { limit: 1 }]
+      ['worktree.ps', { limit: 1 }, { envelope: { executionHost: SERVER } }]
     ])
     expect(shell.subscribe.mock.calls.map((call) => call[3])).toEqual([
-      { executionHost: SERVER },
-      undefined
+      { envelope: { executionHost: SERVER } }
     ])
   })
 
-  it('refuses a target under a shell that would strip it, instead of running it on the desktop', async () => {
+  it('refuses it under a shell without the envelope, instead of running it on the desktop', async () => {
     const page = createPageClient()
     page.deliver({ ...INIT, grants: { ...INIT.grants, native: [] } })
-    expect(page.client.carriesExecutionHost?.()).toBe(false)
+    expect(page.client.carriesRpcEnvelope?.()).toBe(false)
 
-    await expect(
-      page.client.sendRequest('worktree.ps', {}, { executionHost: SERVER })
-    ).rejects.toThrow(/cannot reach workspaces on other computers/)
-    expect(() =>
-      page.client.subscribe('terminal.subscribe', { terminal: 't1' }, () => {}, {
-        executionHost: SERVER
-      })
-    ).toThrow(/cannot reach workspaces on other computers/)
+    const server = scopeRpcClientToExecutionHost(page.client, SERVER)
+    await expect(server.sendRequest('worktree.ps', {})).rejects.toThrow(/update the Orca app/)
+    expect(() => server.subscribe('terminal.subscribe', { terminal: 't1' }, () => {})).toThrow(
+      /update the Orca app/
+    )
     expect(page.frames().filter((frame) => frame.type !== 'ready')).toEqual([])
   })
 })

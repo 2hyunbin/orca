@@ -12,6 +12,8 @@ import {
 } from '../../shared/orcad-local-serve-selection'
 import { waitForRecipeJson } from './serve-recipe-json'
 import { superviseForegroundServe } from './serve-update-supervisor'
+import { isSupervisedSpawnHeld } from './serve-supervised-stop'
+import { redactingSpawn, shouldRedactSupervisedStdout } from './serve-pairing-redaction'
 
 type SupervisorArgs = Parameters<typeof superviseForegroundServe>[0]
 
@@ -95,8 +97,11 @@ export function serveWithOrcad(
   userDataPath: string,
   /** The caller's environment without `ELECTRON_RUN_AS_NODE`. */
   baseEnv: NodeJS.ProcessEnv,
-  spawnChild: SupervisorArgs['spawnChild'] = spawnThroughChokepoint
+  spawnChildRaw: SupervisorArgs['spawnChild'] = spawnThroughChokepoint
 ): Promise<number> {
+  const spawnChild = shouldRedactSupervisedStdout(args.supervise === true)
+    ? redactingSpawn(spawnChildRaw)
+    : spawnChildRaw
   const childArgs = [selection.entry, ...orcadServeArgs(args)]
   const spawnOptions: SupervisorArgs['spawnOptions'] = {
     detached: args.recipeJson === true,
@@ -108,6 +113,9 @@ export function serveWithOrcad(
       ORCA_USER_DATA: userDataPath,
       ORCA_VERSION: selection.version
     }
+  }
+  if (isSupervisedSpawnHeld()) {
+    return Promise.resolve(0)
   }
   const child = spawnChild(selection.runtime, childArgs, spawnOptions)
   if (args.recipeJson) {
