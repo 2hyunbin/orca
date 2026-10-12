@@ -179,26 +179,48 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
     await expect(page.getByText('orcad upgrade folder', { exact: true })).toBeVisible({
       timeout: 120_000
     })
-    // The client mirrors the server's tab as `web-terminal-<tab::leaf>`.
+    // The client mirrors the server's tab as `web-terminal-<tab::leaf>`, under its worktree key.
     let storeTabId = ''
+    let storeWorktreeKey = ''
+    let seen = ''
     await expect
       .poll(
-        async () =>
-          (storeTabId = await page.evaluate(
-            ({ worktreeId, tabId }) =>
-              (window.__store!.getState().tabsByWorktree[worktreeId] ?? [])
-                .map((tab) => tab.id)
-                .find((id) => {
-                  const host = id.startsWith('web-terminal-')
-                    ? decodeURIComponent(id.slice('web-terminal-'.length))
-                    : id
-                  return host === tabId || host.startsWith(`${tabId}::`)
-                }) ?? '',
-            { worktreeId: seeded.worktreeId, tabId: terminalTabId }
-          )),
-        { timeout: 120_000, message: 'the client never mirrored the relay-era terminal tab' }
+        async () => {
+          const found = await page.evaluate((tabId) => {
+            const all = window.__store!.getState().tabsByWorktree
+            for (const [key, tabs] of Object.entries(all)) {
+              for (const tab of tabs ?? []) {
+                const host = tab.id.startsWith('web-terminal-')
+                  ? decodeURIComponent(tab.id.slice('web-terminal-'.length))
+                  : tab.id
+                if (host === tabId || host.startsWith(`${tabId}::`)) {
+                  return { key, id: tab.id, seen: '' }
+                }
+              }
+            }
+            return {
+              key: '',
+              id: '',
+              seen: JSON.stringify(
+                Object.fromEntries(
+                  Object.entries(all).map(([key, tabs]) => [key, (tabs ?? []).map((t) => t.id)])
+                )
+              )
+            }
+          }, terminalTabId)
+          storeTabId = found.id
+          storeWorktreeKey = found.key
+          seen = found.seen
+          return storeTabId
+        },
+        { timeout: 120_000 }
       )
       .not.toBe('')
+      .catch((error: unknown) => {
+        throw new Error(`the client never mirrored the relay-era tab; saw ${seen}`, {
+          cause: error
+        })
+      })
     // The old tab, now under the managed server, shows the old shell's screen and takes input.
     await page.evaluate(
       ({ worktreeId, environmentId, tabId }) => {
@@ -211,7 +233,7 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
         state.setActiveTab(tabId)
         state.setActiveTabType('terminal', worktreeId)
       },
-      { worktreeId: seeded.worktreeId, environmentId: environment.id, tabId: storeTabId }
+      { worktreeId: storeWorktreeKey, environmentId: environment.id, tabId: storeTabId }
     )
     await page.screenshot({ path: testInfo.outputPath('bridged-tab-activated.png') })
     await expect
