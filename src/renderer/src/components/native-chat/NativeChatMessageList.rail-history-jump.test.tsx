@@ -39,8 +39,6 @@ const TOP_GUTTER_PX = 40
 /** The "load earlier" row plus the column gap under it, present only while older
  *  history remains — so the page that exhausts history takes it away. */
 const OLDER_HISTORY_ROW_PX = 52
-/** A ~500ms smooth scroll at 60fps. */
-const SMOOTH_SCROLL_FRAMES = 30
 
 function message(index: number): NativeChatMessage {
   return index % 5 === 0
@@ -104,44 +102,6 @@ function PagedTranscript({
   )
 }
 
-/** Chromium's two scroll kinds: an instant write lands at once; a smooth scroll
- *  eases in and out over frames, and any instant write cancels it. Only the
- *  smooth scroll's landing is ever marked as the application's own, so its first
- *  frames — a pixel or two off where it started — reach the list as unmarked. */
-function installScrollModel(): { frame: () => void } {
-  let animation: { from: number; to: number; step: number } | null = null
-  vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(function scrollTo(
-    this: HTMLElement,
-    options?: ScrollToOptions | number
-  ): void {
-    const top = typeof options === 'object' ? options.top : undefined
-    if (top === undefined) {
-      return
-    }
-    if (typeof options === 'object' && options.behavior === 'smooth') {
-      animation = { from: this.scrollTop, to: top, step: 0 }
-      return
-    }
-    animation = null
-    this.scrollTop = top
-  })
-  return {
-    frame: () => {
-      const scroller = document.querySelector<HTMLElement>('[data-native-chat-scroll]')
-      if (!scroller || !animation) {
-        return
-      }
-      animation.step += 1
-      const t = animation.step / SMOOTH_SCROLL_FRAMES
-      const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
-      scroller.scrollTop = animation.from + (animation.to - animation.from) * eased
-      if (animation.step >= SMOOTH_SCROLL_FRAMES) {
-        animation = null
-      }
-    }
-  }
-}
-
 /** The row's own prose, without the timestamp line the row also carries. */
 function rowText(row: HTMLElement): string {
   return /(?:prompt|marker)-\d+/.exec(row.querySelector('p')?.textContent ?? '')?.[0] ?? ''
@@ -150,7 +110,6 @@ function rowText(row: HTMLElement): string {
 // A jump must detach end-follow and retain its landing as older history arrives.
 describe('jumping from the rail while following the end', () => {
   let restore: (() => void)[] = []
-  let scrollModel: ReturnType<typeof installScrollModel>
   let lastEventScrollTop = 0
 
   beforeEach(() => {
@@ -198,7 +157,14 @@ describe('jumping from the rail while following the end', () => {
           ? OLDER_HISTORY_ROW_PX
           : 0)
     })
-    scrollModel = installScrollModel()
+    vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(function scrollTo(
+      this: HTMLElement,
+      options?: ScrollToOptions | number
+    ): void {
+      if (typeof options === 'object' && options.top !== undefined) {
+        this.scrollTop = options.top
+      }
+    })
     lastEventScrollTop = 0
   })
 
@@ -222,9 +188,7 @@ describe('jumping from the rail while following the end', () => {
     return element
   }
 
-  /** One painted frame: layout clamps the offset to the new document, observers
-   *  deliver, a smooth scroll advances, any offset change dispatches one scroll
-   *  event — whoever made it — and queued callbacks and animation frames run. */
+  /** Deliver layout changes and scroll events before the virtualizer's next frame. */
   async function frame(): Promise<void> {
     const element = scroller()
     act(() => {
@@ -232,7 +196,6 @@ describe('jumping from the rail while following the end', () => {
       const offset = element.scrollTop
       element.scrollTop = offset
       deliverResizes()
-      scrollModel.frame()
     })
     if (element.scrollTop !== lastEventScrollTop) {
       lastEventScrollTop = element.scrollTop
@@ -268,7 +231,7 @@ describe('jumping from the rail while following the end', () => {
     ['in the page that exhausts older history', 'prompt-5', false],
     ['in a page with older history still behind it', 'prompt-25', false],
     ['that is already loaded', 'prompt-45', true]
-  ])('lands on a message %s', async (_case, prompt, loaded) => {
+  ])('jumps without animation to a message %s', async (_case, prompt, loaded) => {
     render(<PagedTranscript />)
     await settle(10)
     // Anti-vacuous: the reader starts pinned to the very end.
@@ -276,9 +239,15 @@ describe('jumping from the rail while following the end', () => {
     expect(screen.queryByText(prompt) !== null).toBe(loaded)
 
     fireEvent.click(screen.getByRole('button', { name: prompt }))
+    if (loaded) {
+      expect(Math.abs(rowOffsetFromViewportTop(prompt))).toBeLessThanOrEqual(2)
+    }
     await settle(60)
 
-    // The failure mode: the jump cancelled itself a few pixels above the end.
+    expect(HTMLElement.prototype.scrollTo).toHaveBeenCalled()
+    expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalledWith(
+      expect.objectContaining({ behavior: 'smooth' })
+    )
     expect(distanceFromBottom()).toBeGreaterThan(100)
     expect(Math.abs(rowOffsetFromViewportTop(prompt))).toBeLessThanOrEqual(2)
   })
@@ -424,6 +393,17 @@ describe('jumping from the rail while following the end', () => {
     expect(pages.asked()).toBe(1)
     expect(screen.queryByText('prompt-5')).toBeNull()
     expect(distanceFromBottom()).toBe(0)
+  })
+
+  it('lands a jump to a loaded message within one frame', async () => {
+    render(<PagedTranscript />)
+    await settle(10)
+
+    fireEvent.click(screen.getByRole('button', { name: 'prompt-45' }))
+    await frame()
+
+    // A smooth scroll would still be easing in here, a few pixels from where it started.
+    expect(Math.abs(rowOffsetFromViewportTop('prompt-45'))).toBeLessThanOrEqual(2)
   })
 })
 
