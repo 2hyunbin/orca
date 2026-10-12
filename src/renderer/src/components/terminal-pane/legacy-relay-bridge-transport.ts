@@ -93,7 +93,14 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       }),
       onLegacyRelayBridgedPanesChanged(() => {
         const pane = legacyRelayBridgedPane(ptyId)
-        if (mode !== 'bridge' || !pane) {
+        if (mode !== 'bridge') {
+          return
+        }
+        if (!pane) {
+          // Still waiting on the relay: ask again, which answers exited once it is proven gone.
+          if (!attached) {
+            void reattach()
+          }
           return
         }
         if (pane.state === 'unverifiable') {

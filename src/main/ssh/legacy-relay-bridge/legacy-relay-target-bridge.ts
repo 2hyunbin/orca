@@ -60,6 +60,8 @@ export class LegacyRelayTargetBridge {
   private readonly waiters = new LegacyRelayWaiters()
   private readonly retry = new LegacyRelayRetry(() => void this.refresh())
   private refreshing: Promise<void> | null = null
+  /** Set once a refresh has read the relays, so an attach never answers from an empty first look. */
+  private looked = false
   private readonly abort = new AbortController()
   private disposed = false
 
@@ -92,7 +94,7 @@ export class LegacyRelayTargetBridge {
   }
 
   async attach(ptyId: string): Promise<LegacyRelayBridgeAttachResult> {
-    await this.refreshing
+    await (this.looked ? this.refreshing : this.refresh())
     let pane = this.panes.get(ptyId)
     if (pane?.state === 'unverifiable') {
       await this.waiters.waitUntil(
@@ -166,6 +168,7 @@ export class LegacyRelayTargetBridge {
     if (this.disposed) {
       return
     }
+    this.looked = true
     const leases = new Map<string, SshRemotePtyLease>()
     for (const lease of this.deps.leases()) {
       if (isBridgeableLease(lease)) {

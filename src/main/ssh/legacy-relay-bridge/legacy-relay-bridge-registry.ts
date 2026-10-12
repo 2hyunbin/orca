@@ -168,16 +168,16 @@ export async function attachLegacyRelayPane(ptyId: string): Promise<LegacyRelayB
   if (!targetId || !host || !hasBridgeableLeases(targetId)) {
     return { status: 'not-bridged' }
   }
-  let bridge = bridges.get(targetId)
+  const bridge = bridgeFor(targetId)
   if (!bridge) {
-    // A pane can mount before its host's connect finishes; wait for the connection it needs.
-    if (!(await waitForConnection(targetId))) {
-      return { status: 'unverifiable' }
-    }
-    bridge = bridgeFor(targetId) ?? undefined
-    await bridge?.refresh()
+    return { status: 'not-bridged' }
   }
-  return bridge ? bridge.attach(ptyId) : { status: 'not-bridged' }
+  // A pane can mount before its host's connect finishes; the bridge keeps retrying until it can ask.
+  if (!(await waitForConnection(targetId))) {
+    void bridge.refresh()
+    return { status: 'unverifiable' }
+  }
+  return bridge.attach(ptyId)
 }
 
 async function waitForConnection(targetId: string): Promise<boolean> {

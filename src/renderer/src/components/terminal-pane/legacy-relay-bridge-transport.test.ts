@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LegacyRelayBridgedPane } from '../../../../shared/legacy-relay-bridge-contract'
 import type { PtyTransport } from './pty-transport-types'
 
@@ -39,8 +39,16 @@ vi.stubGlobal('window', {
   }
 })
 
-const { createLegacyRelayBridgeTransport } = await import('./legacy-relay-bridge-transport')
+const { createLegacyRelayBridgeTransport: createTransport } =
+  await import('./legacy-relay-bridge-transport')
 const { legacyRelayBridgePtyIdForPane } = await import('./legacy-relay-bridge-panes')
+
+const created: PtyTransport[] = []
+function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransport): PtyTransport {
+  const transport = createTransport(ptyId, inner)
+  created.push(transport)
+  return transport
+}
 
 function publishPanes(panes: LegacyRelayBridgedPane[]): void {
   bridge.panes.forEach((listener) => listener(panes))
@@ -73,6 +81,10 @@ function callbacks() {
 beforeEach(() => {
   vi.clearAllMocks()
   publishPanes([])
+})
+
+afterEach(async () => {
+  await Promise.all(created.splice(0).map((transport) => transport.destroy?.()))
 })
 
 describe('a runtime pane bridged to an older relay’s terminal', () => {
@@ -157,6 +169,16 @@ describe('a runtime pane bridged to an older relay’s terminal', () => {
       expect(cb.onReplayData).toHaveBeenCalledWith('BACK', { clearBeforeReplay: true })
     )
     expect(cb.onErrorCleared).toHaveBeenCalledTimes(1)
+  })
+
+  it('ends a pane it was still waiting on once the relay proves the terminal gone', async () => {
+    bridge.attach.mockResolvedValueOnce({ status: 'unverifiable' })
+    const transport = createLegacyRelayBridgeTransport(PTY, innerTransport())
+    const cb = callbacks()
+    await transport.connect({ url: '', sessionId: PTY, callbacks: cb })
+    bridge.attach.mockResolvedValueOnce({ status: 'exited' })
+    publishPanes([])
+    await vi.waitFor(() => expect(cb.onExit).toHaveBeenCalledWith(-1))
   })
 
   it('hands any other connect straight to the managed server’s transport', async () => {
