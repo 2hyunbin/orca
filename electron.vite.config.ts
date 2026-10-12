@@ -254,6 +254,11 @@ export const electronViteConfig: UserConfig = {
           'port-scan-command-worker-entry': resolve(
             'src/main/ports/port-scan-command-worker-entry.ts'
           ),
+          // Why (#27362): the Codex usage probe spawns on window focus; a cold
+          // CreateProcessW must not block the UI loop.
+          'worker-thread-child-process-entry': resolve(
+            'src/main/worker-thread-child-process/worker-thread-child-process-entry.ts'
+          ),
           // Why: the Claude/Codex/OpenCode usage scans walk whole history
           // corpora and read SQLite synchronously; a worker thread keeps that
           // off the main-process event loop.
