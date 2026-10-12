@@ -134,6 +134,10 @@ function main() {
     }
 
     try {
+      // Elevated POSIX users can pass W_OK even when the install is deliberately read-only.
+      if (process.platform !== 'win32' && (statSync(electronPackageDir).mode & 0o222) === 0) {
+        throw new Error('Electron package directory has no write permission bits')
+      }
       accessSync(electronPackageDir, constants.W_OK)
     } catch {
       console.log(`skip  ${worktree}  (Electron package directory is not writable)`)

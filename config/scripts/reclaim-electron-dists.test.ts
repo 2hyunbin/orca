@@ -39,14 +39,14 @@ async function fixture() {
         ...(apply ? ['--apply'] : [])
       ],
       cwd: root,
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, CI: '', ORCA_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 20_000,
       terminationBarrier: true
     })
   return { root, pkg, executable, run }
 }
 
-it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+it.skipIf(process.platform === 'win32')(
   'reports a read-only package as protected in preview and apply',
   async () => {
     const { pkg, executable, run } = await fixture()
