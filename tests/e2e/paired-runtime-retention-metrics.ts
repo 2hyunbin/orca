@@ -2,7 +2,7 @@ import type { JSHandle, Page } from '@stablyai/playwright-test'
 
 export type PairedRetentionSample = {
   bufferCells: number
-  heapBytes: number | null
+  heapBytes: number
   mountedTargetManagers: number
   targetPanes: number
 }
@@ -11,19 +11,15 @@ export async function readPairedRetentionSample(
   page: Page,
   tabIds: string[]
 ): Promise<PairedRetentionSample> {
-  let heapBytes: number | null = null
-  try {
-    const session = await page.context().newCDPSession(page)
-    // Why twice: right after parking, one pass leaves the disposed terminals' garbage (~20 MB)
-    // for the next; the second frees it.
-    await session.send('HeapProfiler.collectGarbage')
-    await session.send('HeapProfiler.collectGarbage')
-    // Why not performance.memory: it is a cached, rounded figure that can predate the GC above.
-    heapBytes = (await session.send('Runtime.getHeapUsage')).usedSize
-    await session.detach()
-  } catch {
-    // GC only improves measurement fidelity.
-  }
+  // Why no catch: without CDP there is no exact heap figure; the budget check must not skip.
+  const session = await page.context().newCDPSession(page)
+  // Why twice: right after parking, one pass leaves the disposed terminals' garbage (~20 MB)
+  // for the next; the second frees it.
+  await session.send('HeapProfiler.collectGarbage')
+  await session.send('HeapProfiler.collectGarbage')
+  // Why not performance.memory: it is a cached, rounded figure that can predate the GC above.
+  const heapBytes = (await session.send('Runtime.getHeapUsage')).usedSize
+  await session.detach()
   const sample = await page.evaluate((targets) => {
     let bufferCells = 0
     let mountedTargetManagers = 0
