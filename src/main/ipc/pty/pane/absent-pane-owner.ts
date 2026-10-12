@@ -4,6 +4,7 @@ import type { Store } from '../../../persistence'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import { ptyOwnership } from '../provider/ownership-state'
 import { clearProviderPtyState } from '../provider/state-cleanup'
+import { retireReplacedPaneBinding } from './pane-owner-replacement'
 
 /**
  * The owning host answered that the pane's process is gone. The pane outlives it: a fresh spawn
@@ -34,8 +35,13 @@ export async function releaseAbsentPaneOwner(
   if (!worktreeId || !store) {
     return true
   }
-  return store.retirePtyBinding(
-    { worktreeId, tabId: owner.tabId, leafId: owner.leafId, ptyId: owner.ptyId },
-    connectionId ? toSshExecutionHostId(connectionId) : undefined
-  )
+  return retireReplacedPaneBinding(store, {
+    ptyId: owner.ptyId,
+    pane: {
+      worktreeId,
+      tabId: owner.tabId,
+      leafId: owner.leafId,
+      hostId: connectionId ? toSshExecutionHostId(connectionId) : undefined
+    }
+  })
 }
