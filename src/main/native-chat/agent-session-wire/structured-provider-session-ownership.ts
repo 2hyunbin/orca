@@ -1,8 +1,6 @@
 import type { AgentSessionLease, AgentSessionRecord } from '../../../shared/agent-session-record'
-import type {
-  AgentSessionProviderHandleLink,
-  StructuredAgentId
-} from '../../../shared/agent-session-provider-handle'
+import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
+import { structuredAgentRuntimeRegistration } from '../../runtime/structured-agent-runtime-registrations'
 
 export type StructuredProviderSessionOwnership = {
   sessionId: string
@@ -13,29 +11,22 @@ export type StructuredProviderSessionOwnership = {
   lease: AgentSessionLease
 }
 
+/** Which chat owns each conversation, under the Session History row id its agent's registration
+ *  names: the one index both the duplicate-adoption check and Session History ownership read. */
 export function listStructuredProviderSessionOwnership(
-  records: readonly AgentSessionRecord[],
-  /** The id a link is owned under; a link it answers undefined for is owned under none. */
-  providerSessionId: (
-    record: AgentSessionRecord,
-    link: AgentSessionProviderHandleLink
-  ) => string | undefined
+  records: readonly AgentSessionRecord[]
 ): StructuredProviderSessionOwnership[] {
-  return records.flatMap((record) =>
-    record.providerHandleChain.flatMap((link) => {
-      const id = providerSessionId(record, link)
-      return id === undefined
-        ? []
-        : [
-            {
-              sessionId: record.sessionId,
-              workspaceId: record.location.workspaceId,
-              provider: record.provider,
-              providerSessionId: id,
-              conversationName: record.conversationName,
-              lease: record.lease
-            }
-          ]
-    })
-  )
+  return records.flatMap((record) => {
+    const history = structuredAgentRuntimeRegistration(record.provider)?.sessionHistory
+    return history
+      ? record.providerHandleChain.map((link) => ({
+          sessionId: record.sessionId,
+          workspaceId: record.location.workspaceId,
+          provider: record.provider,
+          providerSessionId: history.rowSessionId(link),
+          conversationName: record.conversationName,
+          lease: record.lease
+        }))
+      : []
+  })
 }

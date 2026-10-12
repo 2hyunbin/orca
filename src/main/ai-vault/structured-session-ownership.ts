@@ -6,8 +6,10 @@ import type { AiVaultSearchResponse } from '../../shared/ai-vault-search-types'
 import type { AiVaultPrepareSessionResumeArgs } from '../../shared/ai-vault-resume-preparation'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { ensureStructuredAgentSessionHostUnlessRefused } from '../runtime/structured-agent-session-host-refusal'
-import type { StructuredProviderSessionOwnership } from '../native-chat/agent-session-wire/structured-provider-session-ownership'
-import { listStructuredSessionHistoryOwnership } from '../runtime/structured-agent-session-history-ownership'
+import {
+  listStructuredProviderSessionOwnership,
+  type StructuredProviderSessionOwnership
+} from '../native-chat/agent-session-wire/structured-provider-session-ownership'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 import {
   sessionHistoryBinaryNames,
@@ -128,7 +130,7 @@ function ownershipLookup():
 function historyRowOwner(rowAgent: string): StructuredAgentId | null {
   return (
     STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.find(({ sessionHistory }) =>
-      sessionHistory?.rowAgents.some((agent) => agent === rowAgent)
+      sessionHistory.rowAgents.some((agent) => agent === rowAgent)
     )?.definition.agent ?? null
   )
 }
@@ -199,7 +201,7 @@ function findOwnership(
 
 function listOwnership(): StructuredProviderSessionOwnership[] {
   const host = getStructuredAgentSessionHost()
-  return host ? listStructuredSessionHistoryOwnership(host.deps.store.listRecords()) : []
+  return host ? listStructuredProviderSessionOwnership(host.deps.store.listRecords()) : []
 }
 
 function resumesOwnedSession(
@@ -239,9 +241,7 @@ function parseResumeInvocations(command: string): ResumeInvocation[] {
   const normalized = tokens.map((token) => token.replace(/^['"]|['"]$/g, ''))
   const binaries = new Map<string, StructuredAgentRuntimeRegistration>()
   for (const registration of STRUCTURED_AGENT_RUNTIME_REGISTRATIONS) {
-    for (const name of registration.sessionHistory
-      ? sessionHistoryBinaryNames(registration.sessionHistory)
-      : []) {
+    for (const name of sessionHistoryBinaryNames(registration.sessionHistory)) {
       binaries.set(name, registration)
     }
   }
@@ -252,8 +252,8 @@ function parseResumeInvocations(command: string): ResumeInvocation[] {
   const readCommand = (end: number) => {
     for (const [registration, mention] of firstMentions) {
       const history = registration.sessionHistory
-      const invocation = history?.parseResumeArgs(normalized.slice(mention + 1, end))
-      if (history && invocation) {
+      const invocation = history.parseResumeArgs(normalized.slice(mention + 1, end))
+      if (invocation) {
         invocations.push({ ...invocation, provider: registration.definition.agent, history })
       }
     }

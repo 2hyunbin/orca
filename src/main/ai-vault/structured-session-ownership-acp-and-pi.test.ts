@@ -109,6 +109,14 @@ describe('Session History rows owned by OpenCode, Grok, OMP and Pi chats', () =>
     installOwnership({ handle: acp('omp', OMP_ID) })
     expect(ownedRow('pi', OMP_ID, OMP_FILE)).not.toHaveProperty('structuredSession')
   })
+
+  // A row agent's owner is the first registration claiming it, so a second claim would be ignored.
+  it('gives each history row agent one owning registration', () => {
+    const rowAgents = STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.flatMap(
+      ({ sessionHistory }) => sessionHistory.rowAgents
+    )
+    expect(new Set(rowAgents).size).toBe(rowAgents.length)
+  })
 })
 
 describe('terminal resumes of a conversation an OpenCode chat owns', () => {
@@ -300,8 +308,8 @@ describe('parsing cost', () => {
 
   it('reads each token once per agent however often agents are named', async () => {
     installOwnership({ handle: PI_HANDLE })
-    const parsedArgs = STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.flatMap(({ sessionHistory }) =>
-      sessionHistory ? [vi.spyOn(sessionHistory, 'parseResumeArgs')] : []
+    const parsedArgs = STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.map(({ sessionHistory }) =>
+      vi.spyOn(sessionHistory, 'parseResumeArgs')
     )
     const line = 'the claude agent said codex and pi and grok are fine; omp wrote opencode output\n'
     const text = line.repeat(2_000)
@@ -316,8 +324,8 @@ describe('parsing cost', () => {
 
   it('reads one long command once per agent', async () => {
     installOwnership({ handle: PI_HANDLE })
-    const parsedArgs = STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.flatMap(({ sessionHistory }) =>
-      sessionHistory ? [vi.spyOn(sessionHistory, 'parseResumeArgs')] : []
+    const parsedArgs = STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.map(({ sessionHistory }) =>
+      vi.spyOn(sessionHistory, 'parseResumeArgs')
     )
     const text = `claude ${'pi codex grok ~/src/claude '.repeat(20_000)}`
     const tokenCount = text.split(/\s+/).filter(Boolean).length

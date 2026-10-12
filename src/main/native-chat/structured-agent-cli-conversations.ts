@@ -41,20 +41,13 @@ export type StructuredAgentSessionHistory = {
   resumeTargetMatches?: (target: string, rowSessionId: string) => boolean
 }
 
-/** Required on every registration, as `modelCatalog` is: an agent without one says `null`. An
- *  importer needs `sessionHistory`: adopting makes the chat the conversation's owner, and the
- *  duplicate-adoption check finds owners by the row id it names. */
-export type StructuredAgentCliConversations =
-  | {
-      /** How a chat adopts a conversation this agent's CLI recorded; null when it cannot. */
-      transcriptImport: null
-      /** How this agent's chats own their Session History rows; null when they own none. */
-      sessionHistory: StructuredAgentSessionHistory | null
-    }
-  | {
-      transcriptImport: StructuredAgentTranscriptImport
-      sessionHistory: StructuredAgentSessionHistory
-    }
+/** Required on every registration, as `modelCatalog` is. */
+export type StructuredAgentCliConversations = {
+  /** How a chat adopts a conversation this agent's CLI recorded; null when it cannot. */
+  transcriptImport: StructuredAgentTranscriptImport | null
+  /** How this agent's chats own their conversations' Session History rows. */
+  sessionHistory: StructuredAgentSessionHistory
+}
 
 /** The command names that run the agent's CLI binaries, lower-case, with and without `.exe`: a
  *  token names one when its path's last name does, in any case. */
