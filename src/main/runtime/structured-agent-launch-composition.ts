@@ -5,7 +5,7 @@
 
 import type { AgentSessionJournalIdentity } from '../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
-import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
+import { isNativeLocalLocation } from '../../shared/execution-host'
 import type { StructuredAgentDefinition } from '../native-chat/agent-session-wire/structured-agent-definition'
 import { agentDrivesSession } from '../native-chat/agent-session-wire/structured-agent-session-provider-support'
 import type { StructuredAgentCommandSettings } from '../native-chat/structured-agent-command-resolution'
@@ -107,7 +107,7 @@ function admittedRecord(
   const { location } = record
   // A session pinned elsewhere belongs to that host's runtime; starting it here would put a second
   // writer on the same provider session.
-  if (location.executionHostId !== LOCAL_EXECUTION_HOST_ID || location.wslDistro !== null) {
+  if (!isNativeLocalLocation(location)) {
     throw new Error(
       `${definition.agent} structured sessions run on the local host, not ${location.executionHostId}`
     )
