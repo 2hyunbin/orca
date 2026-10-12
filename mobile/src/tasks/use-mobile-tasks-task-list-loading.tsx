@@ -273,18 +273,23 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       tasksSupported
     ]
   )
-  // A server's repos joining or leaving an unfiltered list reload it quietly, so the items already
-  // listed stay on screen. A filter they change makes a new load, which its own effect runs.
-  const listedServerReposRef = useRef(serverRepoList)
+  // Server repos changing reload an unfiltered repo list quietly; when loadTasks changed too (the
+  // filter widened), its own effect already loads, and Linear doesn't read repos.
+  const listedServerReposRef = useRef({ serverRepoList, loadTasks })
   useEffect(() => {
-    if (listedServerReposRef.current === serverRepoList) {
-      return
-    }
-    listedServerReposRef.current = serverRepoList
-    if (effectiveRepoIds.size === 0 && connState === 'connected' && taskStateHydrated) {
+    const prev = listedServerReposRef.current
+    listedServerReposRef.current = { serverRepoList, loadTasks }
+    if (
+      prev.serverRepoList !== serverRepoList &&
+      prev.loadTasks === loadTasks &&
+      effectiveRepoIds.size === 0 &&
+      provider !== 'linear' &&
+      connState === 'connected' &&
+      taskStateHydrated
+    ) {
       void loadTasks({ silent: true })
     }
-  }, [serverRepoList])
+  }, [serverRepoList, loadTasks])
   return Object.assign(model, { loadTasks })
 }
 

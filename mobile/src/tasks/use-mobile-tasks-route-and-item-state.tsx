@@ -119,8 +119,8 @@ export function useMobileTasksRouteAndItemState() {
   const [linearConnectError, setLinearConnectError] = useState('')
   const [taskSort, setTaskSort] = useState<TaskSort>('updated')
   const [selectedRepoIds, setSelectedRepoIds] = useState<Set<string>>(new Set())
-  // The user's saved choice narrowed to what is listed now (empty = all); the choice itself is
-  // never pruned, so a server that answers late or drops out briefly keeps its repos selected.
+  // The saved choice narrowed to what is listed now (empty = all). Listing changes never prune the
+  // choice; a user edit rewrites it from what's shown, so it can drop a briefly gone server's ids.
   const effectiveRepoKey = [...reconcileRepoSelection(repos, [...selectedRepoIds])]
     .sort()
     .join('\n')
