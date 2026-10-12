@@ -82,6 +82,8 @@ function createHarness(
     rendererMounted?: boolean
     rendererPtyId?: string | null
     graphOnlySource?: boolean
+    // The handle a window's graph issues for the source leaf, which `terminal.list` hands the CLI.
+    leafHandle?: boolean
     sourceIncarnationId?: string
     stopAndWaitResult?: boolean
   } = {}
@@ -182,9 +184,10 @@ function createHarness(
     leaves: Map<string, unknown>
     ptysById: Map<string, unknown>
   }
-  const handle = options.graphOnlySource
-    ? internals.issueHandle([...internals.leaves.values()][0])
-    : internals.issuePtyHandle(internals.ptysById.get(SOURCE_PTY_ID))
+  const handle =
+    options.graphOnlySource || options.leafHandle
+      ? internals.issueHandle([...internals.leaves.values()][0])
+      : internals.issuePtyHandle(internals.ptysById.get(SOURCE_PTY_ID))
   return {
     runtime,
     handle,
@@ -216,6 +219,14 @@ function createHarness(
 }
 
 describe('remote runtime terminal split authority', () => {
+  it("splits a window terminal addressed by its leaf's handle", async () => {
+    const harness = createHarness(true, { rendererMounted: true, leafHandle: true })
+    const split = await harness.runtime.splitTerminal(harness.handle, { direction: 'vertical' })
+    expect(split.tabId).toBe(TAB_ID)
+    expect(harness.spawn).toHaveBeenCalledOnce()
+    expect(harness.getSession().terminalLayoutsByTabId[TAB_ID]?.root?.type).toBe('split')
+  })
+
   it('shows a persisted split in the desktop view while its mounted source is still publishing its PTY binding', async () => {
     const harness = createHarness(true, { rendererMounted: true, rendererPtyId: null })
     const split = await harness.runtime.splitTerminal(harness.handle, { direction: 'vertical' })

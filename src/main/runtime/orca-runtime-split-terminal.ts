@@ -21,10 +21,13 @@ export class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopExplicitlyC
     // Internal creation evidence; RPC and preload callers never supply it.
     createdWorktree?: Worktree
   ): Promise<RuntimeTerminalSplit> {
-    const livePty = this.getLivePtyForHandle(handle)
-    if (!livePty) {
+    // A window terminal's handle names its leaf; the split runs on the PTY that leaf shows.
+    const pty =
+      this.getLivePtyForHandle(handle)?.pty ??
+      this.ptysById.get(this.getLiveLeafForHandle(handle).leaf.ptyId ?? '')
+    if (!pty) {
       throw new Error('terminal_handle_stale')
     }
-    return await this.splitPtyBackedTerminal(livePty.pty, opts, createdWorktree)
+    return await this.splitPtyBackedTerminal(pty, opts, createdWorktree)
   }
 }
