@@ -31,7 +31,9 @@ const PI_HANDLE: AgentSessionProviderHandle = {
 }
 
 const allowed = (command: string) =>
-  expect(assertLegacyAiVaultResumeCommandAllowed(command, async () => undefined)).resolves
+  expect(
+    assertLegacyAiVaultResumeCommandAllowed(command, async () => undefined)
+  ).resolves.toBeUndefined()
 const refused = (command: string) =>
   expect(assertLegacyAiVaultResumeCommandAllowed(command, async () => undefined)).rejects.toThrow(
     'agent_session_conflict'

@@ -20,6 +20,7 @@ import {
   STRUCTURED_AGENT_RUNTIME_REGISTRATIONS,
   type StructuredAgentRuntimeRegistration
 } from '../runtime/structured-agent-runtime-registrations'
+import { commandName, shellCommands } from './shell-command-words'
 
 /** Whether the client a projection answers opens a chat of this agent from its history row. A row
  *  owned by a chat it cannot open is hidden from it: resuming that row in a terminal is refused. */
@@ -228,17 +229,7 @@ type ResumeInvocation = StructuredAgentResumeInvocation & {
   history: StructuredAgentSessionHistory
 }
 
-// A line break ends a shell command as `;` does, so the tokenizer keeps it as a token. A PTY's
-// Enter sends a bare `\r`.
-const LINE_BREAKS = new Set(['\r\n', '\r', '\n'])
-const SHELL_COMMAND_SEPARATORS = new Set(['&&', '||', ';', '|', '&', ...LINE_BREAKS])
-
 function parseResumeInvocations(command: string): ResumeInvocation[] {
-  // Keep this deliberately conservative: shell quoting is normalized only
-  // enough to identify executable/flag tokens; an unrecognized shape is not
-  // treated as proof that a different session is being resumed.
-  const tokens = command.match(/"[^"\\]*(?:\\.[^"\\]*)*"|'[^']*'|\r\n|\r|\n|[^\s]+/g) ?? []
-  const normalized = tokens.map((token) => token.replace(/^['"]|['"]$/g, ''))
   const binaries = new Map<string, StructuredAgentRuntimeRegistration>()
   for (const registration of STRUCTURED_AGENT_RUNTIME_REGISTRATIONS) {
     for (const name of sessionHistoryBinaryNames(registration.sessionHistory)) {
@@ -246,39 +237,25 @@ function parseResumeInvocations(command: string): ResumeInvocation[] {
     }
   }
   // Each shell command is read alone: in it, each agent reads its arguments from its own first
-  // binary token, so another agent's name earlier (`claude --model pi -r x`) never hides it.
+  // binary word, so another agent's name earlier (`claude --model pi -r x`) never hides it.
   const invocations: ResumeInvocation[] = []
-  let firstMentions = new Map<StructuredAgentRuntimeRegistration, number>()
-  const readCommand = (end: number) => {
+  for (const words of shellCommands(command)) {
+    const firstMentions = new Map<StructuredAgentRuntimeRegistration, number>()
+    for (const [index, word] of words.entries()) {
+      const registration = binaries.get(commandName(word))
+      if (registration && !firstMentions.has(registration)) {
+        firstMentions.set(registration, index)
+      }
+    }
     for (const [registration, mention] of firstMentions) {
       const history = registration.sessionHistory
-      const invocation = history.parseResumeArgs(normalized.slice(mention + 1, end))
+      const invocation = history.parseResumeArgs(words.slice(mention + 1))
       if (invocation) {
         invocations.push({ ...invocation, provider: registration.definition.agent, history })
       }
     }
-    firstMentions = new Map()
   }
-  for (const [index, token] of normalized.entries()) {
-    // A quoted operator is an argument, so separators are read before quotes are stripped.
-    if (SHELL_COMMAND_SEPARATORS.has(tokens[index]!) && !continuesLine(tokens, index)) {
-      readCommand(index)
-      continue
-    }
-    const name = token.slice(Math.max(token.lastIndexOf('/'), token.lastIndexOf('\\')) + 1)
-    const registration = binaries.get(name.toLowerCase())
-    if (registration && !firstMentions.has(registration)) {
-      firstMentions.set(registration, index)
-    }
-  }
-  readCommand(tokens.length)
   return invocations
-}
-
-/** A line break after a line-continuation mark (POSIX `\`, PowerShell `` ` ``, cmd `^`) is inside
- *  one command. */
-function continuesLine(tokens: readonly string[], index: number): boolean {
-  return LINE_BREAKS.has(tokens[index]!) && /[\\`^]$/.test(tokens[index - 1] ?? '')
 }
 
 function refuseLegacyWriter(ownership: StructuredProviderSessionOwnership): never {
