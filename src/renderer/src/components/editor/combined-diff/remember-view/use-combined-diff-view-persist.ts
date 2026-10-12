@@ -1,7 +1,10 @@
 import { useEffect } from 'react'
 import type React from 'react'
 import type { DiffSection } from '../../diff-section-types'
-import { combinedDiffScrollTopCache, rememberCombinedDiffViewState } from './combined-diff-view-memory'
+import {
+  combinedDiffScrollTopCache,
+  rememberCombinedDiffViewState
+} from './combined-diff-view-memory'
 
 export function useCombinedDiffViewPersist({
   combinedGitStatusSignature,
