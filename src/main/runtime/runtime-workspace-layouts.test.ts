@@ -7,6 +7,7 @@ import {
   leaf
 } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
 import { reloadHolderOnExternalWrites } from './holder-external-write-reload'
+import { beginPaneStart } from './runtime-pane-admission'
 import {
   fakeStore,
   gitSession,
@@ -63,7 +64,7 @@ describe('RuntimeWorkspaceLayouts: the holder', () => {
     expect(store.setWorkspaceSession).toHaveBeenCalledTimes(1)
 
     const started = { workspace: GIT_KEY, paneKey: start!.paneKey, ptyId: 'pty-2' }
-    const superseding = holder.beginStart(start!.paneKey)!
+    const superseding = beginPaneStart(holder, start!.paneKey)!
     expect(holder.bindStarted('local', started, start!.attempt)).toBe('superseded')
     live.add('pty-2')
     expect(holder.bindStarted('local', started, superseding.attempt)).toBe('bound')
@@ -190,7 +191,7 @@ describe('holder-external-write-reload (stack-internal bridge)', () => {
     const store = fakeStore({ local: gitSession() })
     const { holder, events } = holderFor(store)
     reloadHolderOnExternalWrites(holder, store)
-    const start = holder.beginStart(`tab-1:${leaf(1)}`)!
+    const start = beginPaneStart(holder, `tab-1:${leaf(1)}`)!
     const ownSaves = events.length
 
     const external = structuredClone(store.sessions.local!)

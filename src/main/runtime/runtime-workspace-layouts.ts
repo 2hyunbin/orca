@@ -106,15 +106,15 @@ export class RuntimeWorkspaceLayouts {
   }
 
   /** What a held partition keeps beside its layout: the desktop view's part and content facts. */
-  beside(hostId: ExecutionHostId): Omit<LoadedWorkspaceLayout, 'layout'> | undefined {
-    return this.partition(hostId) ?? undefined
+  beside(hostId: ExecutionHostId): Omit<LoadedWorkspaceLayout, 'layout'> | null {
+    return this.partition(hostId)
   }
 
   /** View records or content facts changed: saved on the debounce, never published. */
   updateBeside(hostId: ExecutionHostId, beside: Partial<Omit<LoadedWorkspaceLayout, 'layout'>>) {
-    const loaded = this.partition(hostId)
+    const loaded = this.beside(hostId)
     if (loaded) {
-      this.partitions.set(hostId, { ...loaded, ...beside })
+      this.partitions.set(hostId, { ...this.partitions.get(hostId)!, ...beside })
       this.save(hostId, false)
     }
   }
@@ -150,11 +150,6 @@ export class RuntimeWorkspaceLayouts {
       }
     }
     return null
-  }
-
-  /** A fresh attempt for a pane already in the layout, as when a start attaches to it. */
-  beginStart(paneKey: string): PaneStart | null {
-    return beginStarts(null, [paneKey], this.starts)[0] ?? null
   }
 
   /**

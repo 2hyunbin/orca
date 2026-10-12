@@ -5,6 +5,7 @@ import { paneKeyOf } from '../../shared/workspace-layout/workspace-layout-model'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { PaneStart } from './runtime-pane-start-attempts'
 import type { RuntimeWorkspaceLayouts } from './runtime-workspace-layouts'
+import { beginStarts } from './runtime-workspace-layout-pane-facts'
 
 type Spawn = NonNullable<RuntimePtyController['spawn']>
 type AdmittedSpawnArgs = Parameters<Spawn>[0] & {
@@ -63,6 +64,11 @@ export function withdrawRuntimePane(
   )
 }
 
+/** A fresh attempt for a pane already in the layout, as when a start attaches to it. */
+export function beginPaneStart(holder: RuntimeWorkspaceLayouts, paneKey: string): PaneStart | null {
+  return beginStarts(null, [paneKey], holder.starts)[0] ?? null
+}
+
 /** Admits the pane in the holder, or starts a new attempt when it is already there. */
 function admit(
   holder: RuntimeWorkspaceLayouts,
@@ -74,7 +80,8 @@ function admit(
   const hostId = hostIdOf(args)
   const paneKey = paneKeyOf(args.tabId, args.leafId)
   const workspace = holder.model(hostId)?.workspaces[args.worktreeId]
-  const existing = workspace && locatePane(workspace, paneKey) ? holder.beginStart(paneKey) : null
+  const existing =
+    workspace && locatePane(workspace, paneKey) ? beginPaneStart(holder, paneKey) : null
   if (existing) {
     return { start: existing, admitted: false }
   }
