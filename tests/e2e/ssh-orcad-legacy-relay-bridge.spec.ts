@@ -303,12 +303,14 @@ test('terminals a 1.4.224 relay keeps running stay usable in their old tabs afte
       .toEqual([])
     await session.close(app)
     app = null
+    // Retired: terminated, and its tombstone pruned once nothing names it.
     const leases = readPersistedProfileState(session.userDataDir).sshRemotePtyLeases
-    expect(leases).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ ptyId: ours.relayPtyId, state: 'terminated' })
-      ])
-    )
+    expect(
+      (Array.isArray(leases) ? leases : []).filter(
+        (lease: { ptyId?: unknown; state?: unknown }) =>
+          lease.ptyId === ours.relayPtyId && lease.state !== 'terminated'
+      )
+    ).toEqual([])
 
     // Another desktop's relay keeps running its shell, in its directory, untouched.
     expect(await echoThroughDockerRelay(host, relay, theirs, 'still-here')).toContain(
