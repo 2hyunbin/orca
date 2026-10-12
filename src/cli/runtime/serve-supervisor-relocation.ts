@@ -15,7 +15,7 @@ export const SERVE_SUPERVISOR_APP_ROOT_ENV = 'ORCA_SERVE_SUPERVISOR_APP_ROOT'
 
 const PACKAGED_APP_ROOT_NAME = 'app.asar.unpacked'
 const COMPLETE_MARKER = '.complete'
-const SUPERVISORS_DIR = 'supervisors'
+const USERS_DIR = '.users'
 const TEMPORARY_PREFIX = '.tmp-'
 
 export type SupervisorRelocationDeps = {
@@ -59,11 +59,23 @@ async function exists(path: string): Promise<boolean> {
   )
 }
 
-async function buildSnapshot(resources: string, snapshotDir: string, pid: number): Promise<void> {
+/** Who runs from each copy, kept beside the copies so it never blocks publishing one. */
+const usersDir = (root: string, id: string): string => join(root, USERS_DIR, id)
+
+async function buildSnapshot(
+  resources: string,
+  root: string,
+  id: string,
+  pid: number
+): Promise<void> {
+  // Why mark before checking: another supervisor's cleanup keeps any copy with a live user.
+  await mkdir(usersDir(root, id), { recursive: true })
+  await writeFile(join(usersDir(root, id), String(pid)), '')
+  const snapshotDir = join(root, id)
   if (await exists(join(snapshotDir, COMPLETE_MARKER))) {
     return
   }
-  const temporary = join(dirname(snapshotDir), `${TEMPORARY_PREFIX}${pid}-${basename(snapshotDir)}`)
+  const temporary = join(root, `${TEMPORARY_PREFIX}${pid}-${id}`)
   await rm(temporary, { recursive: true, force: true })
   // Why both: bare requires from out/ walk up into Resources/node_modules.
   for (const name of [PACKAGED_APP_ROOT_NAME, 'node_modules']) {
@@ -88,21 +100,9 @@ async function buildSnapshot(resources: string, snapshotDir: string, pid: number
   }
 }
 
-async function markInUse(snapshotDir: string, pid: number): Promise<void> {
-  await mkdir(join(snapshotDir, SUPERVISORS_DIR), { recursive: true })
-  await writeFile(join(snapshotDir, SUPERVISORS_DIR, String(pid)), '')
-}
-
-async function isInUse(dir: string, isProcessAlive: (pid: number) => boolean): Promise<boolean> {
-  if (basename(dir).startsWith(TEMPORARY_PREFIX)) {
-    const owner = Number(basename(dir).slice(TEMPORARY_PREFIX.length).split('-')[0])
-    return Number.isSafeInteger(owner) && owner > 0 && isProcessAlive(owner)
-  }
-  const pids = await readdir(join(dir, SUPERVISORS_DIR)).catch(() => [])
-  return pids.some((name) => {
-    const pid = Number(name)
-    return Number.isSafeInteger(pid) && pid > 0 && isProcessAlive(pid)
-  })
+function isLivePidName(name: string, isProcessAlive: (pid: number) => boolean): boolean {
+  const pid = Number(name)
+  return Number.isSafeInteger(pid) && pid > 0 && isProcessAlive(pid)
 }
 
 async function removeUnusedSnapshots(
@@ -111,9 +111,17 @@ async function removeUnusedSnapshots(
   isProcessAlive: (pid: number) => boolean
 ): Promise<void> {
   for (const name of await readdir(root).catch(() => [])) {
-    const dir = join(root, name)
-    if (name !== keep && !(await isInUse(dir, isProcessAlive))) {
-      await rm(dir, { recursive: true, force: true }).catch(() => undefined)
+    if (name === keep || name === USERS_DIR) {
+      continue
+    }
+    const inUse = name.startsWith(TEMPORARY_PREFIX)
+      ? isLivePidName(name.slice(TEMPORARY_PREFIX.length).split('-')[0], isProcessAlive)
+      : (await readdir(usersDir(root, name)).catch(() => [])).some((pid) =>
+          isLivePidName(pid, isProcessAlive)
+        )
+    if (!inUse) {
+      await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined)
+      await rm(usersDir(root, name), { recursive: true, force: true }).catch(() => undefined)
     }
   }
 }
@@ -139,12 +147,10 @@ export async function relocateServeSupervisor(
   }
   const root = serveSupervisorSnapshotRoot(deps.userDataPath)
   const id = snapshotId(deps.appRoot, deps.execPath)
-  const snapshotDir = join(root, id)
-  const cliEntry = join(snapshotDir, PACKAGED_APP_ROOT_NAME, 'out', 'cli', 'index.js')
+  const cliEntry = join(root, id, PACKAGED_APP_ROOT_NAME, 'out', 'cli', 'index.js')
   try {
     await mkdir(root, { recursive: true, mode: 0o700 })
-    await buildSnapshot(dirname(deps.appRoot), snapshotDir, deps.pid)
-    await markInUse(snapshotDir, deps.pid)
+    await buildSnapshot(dirname(deps.appRoot), root, id, deps.pid)
     await removeUnusedSnapshots(root, id, deps.isProcessAlive)
   } catch (error) {
     deps.log(

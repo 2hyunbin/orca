@@ -104,14 +104,17 @@ describe('relocateServeSupervisor', () => {
     await expect(relocateServeSupervisor(failing)).resolves.toBe('in-place')
   })
 
+  const releaseCopies = async (): Promise<string[]> =>
+    (await readdir(serveSupervisorSnapshotRoot(userData))).filter((name) => !name.startsWith('.'))
+
   it('removes copies of older releases unless a live supervisor still runs from them', async () => {
     await relocateServeSupervisor(deps({ pid: 100 }))
     await writeFile(join(appRoot, 'out', 'package.json'), '{"version":"1.0.1","commit":"bbb"}')
     await relocateServeSupervisor(deps({ pid: 200, isProcessAlive: (pid) => pid === 100 }))
-    expect(await readdir(serveSupervisorSnapshotRoot(userData))).toHaveLength(2)
+    expect(await releaseCopies()).toHaveLength(2)
 
     await writeFile(join(appRoot, 'out', 'package.json'), '{"version":"1.0.2","commit":"ccc"}')
     await relocateServeSupervisor(deps({ pid: 300, isProcessAlive: (pid) => pid === 300 }))
-    expect(await readdir(serveSupervisorSnapshotRoot(userData))).toHaveLength(1)
+    expect(await releaseCopies()).toHaveLength(1)
   })
 })
