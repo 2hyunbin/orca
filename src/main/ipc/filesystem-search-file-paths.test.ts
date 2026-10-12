@@ -225,6 +225,27 @@ describe('searchQuickOpenFilePaths', () => {
     expect(spawnOptions?.wslDistro).toBeUndefined()
   })
 
+  it('keeps a symlink-following scan of a Windows-drive worktree in WSL', async () => {
+    getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
+    const child = createMockProcess()
+    wslAwareSpawnMock.mockReturnValue(child)
+
+    const promise = searchQuickOpenFilePaths('C:\\repo', {} as Store, {
+      query: 'target',
+      limit: 32,
+      followSymlinks: true
+    })
+    await flushMicrotasks()
+    child.emit('close', 1, null)
+    await promise
+
+    expect(wslAwareSpawnMock).toHaveBeenCalledWith(
+      '/bundled/linux/rg',
+      expect.arrayContaining(['--follow']),
+      expect.objectContaining({ cwd: 'C:\\repo', wslDistro: 'Ubuntu' })
+    )
+  })
+
   it('retries a transient rg spawn failure instead of reporting the bundled rg broken', async () => {
     const failed = createMockProcess(false)
     const succeeded = createMockProcess()

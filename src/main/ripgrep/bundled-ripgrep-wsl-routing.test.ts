@@ -18,6 +18,13 @@ describe('resolveBundledRipgrepWslRouting', () => {
     }
   )
 
+  it('keeps a symlink-following scan of a drive root in WSL', () => {
+    setPlatform('win32')
+    expect(
+      resolveBundledRipgrepWslRouting('C:\\Users\\me\\repo', 'Ubuntu', { followSymlinks: true })
+    ).toEqual({ wslDistro: 'Ubuntu', wslDistroForOutput: 'Ubuntu' })
+  })
+
   it('keeps a distro-owned UNC root inside its own distro', () => {
     setPlatform('win32')
     expect(

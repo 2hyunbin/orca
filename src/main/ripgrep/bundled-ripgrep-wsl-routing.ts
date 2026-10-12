@@ -15,12 +15,14 @@ const WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/
  * Why a Windows drive root stays on the host even under a WSL project runtime: rg only reads files,
  * so unlike git there is no index whose stat cache two writers would invalidate, and the host reads
  * NTFS directly instead of through drvfs (content search measured ~18x faster on a 21.6k-file repo).
+ * Following symlinks stays in WSL: Windows cannot resolve symlinks WSL created on drvfs.
  */
 export function resolveBundledRipgrepWslRouting(
   rootPath: string,
-  projectWslDistro: string | undefined
+  projectWslDistro: string | undefined,
+  options: { followSymlinks?: boolean } = {}
 ): BundledRipgrepWslRouting {
-  if (WINDOWS_DRIVE_PATH.test(rootPath)) {
+  if (WINDOWS_DRIVE_PATH.test(rootPath) && !options.followSymlinks) {
     return {}
   }
   return {

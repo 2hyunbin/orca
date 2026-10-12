@@ -47,7 +47,8 @@ export async function listQuickOpenFiles(
   const authorizedRootPath = await resolveAuthorizedPath(rootPath, store)
   const { wslDistro, wslDistroForOutput } = resolveBundledRipgrepWslRouting(
     authorizedRootPath,
-    getLocalGitOptionsForRegisteredWorktree(store, rootPath, authorizedRootPath).wslDistro
+    getLocalGitOptionsForRegisteredWorktree(store, rootPath, authorizedRootPath).wslDistro,
+    { followSymlinks: options.followSymlinks }
   )
 
   // Why: when the main worktree sits at the repo root, linked worktrees are

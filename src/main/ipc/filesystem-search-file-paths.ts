@@ -60,7 +60,8 @@ export async function searchQuickOpenFilePaths(
   )
   const { wslDistro, wslDistroForOutput } = resolveBundledRipgrepWslRouting(
     authorizedRootPath,
-    localGitOptions.wslDistro
+    localGitOptions.wslDistro,
+    { followSymlinks: args.followSymlinks }
   )
 
   const excludePathPrefixes = [

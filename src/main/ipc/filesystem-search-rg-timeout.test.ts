@@ -273,6 +273,36 @@ describe('filesystem rg search timeout', () => {
     expect(spawnOptions?.wslDistro).toBeUndefined()
   })
 
+  it('does not fail a Windows host search over files only WSL can open', async () => {
+    const originalPlatform = process.platform
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+    try {
+      const child = createMockProcess()
+      Object.defineProperty(child, 'pid', { value: 1 })
+      wslAwareSpawnMock.mockReturnValue(child)
+      getLocalGitOptionsForRegisteredWorktreeMock.mockReturnValue({ wslDistro: 'Ubuntu' })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: all store access is mocked for this handler.
+      registerFilesystemHandlers({} as never)
+
+      const promise = Promise.resolve(
+        handlers.get('fs:search')!({ sender: { id: 7 } }, { rootPath: 'C:\\repo', query: 'absent' })
+      )
+      await flushMicrotasks()
+      child.stderr?.emit(
+        'data',
+        Buffer.from(
+          'rg: .\\nul: Incorrect function. (os error 1)\n' +
+            'rg: .\\link: The file cannot be accessed by the system. (os error 1920)\n'
+        )
+      )
+      child.emit('close', 2, null)
+
+      await expect(promise).resolves.toMatchObject({ files: [], truncated: false })
+    } finally {
+      Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
+    }
+  })
+
   it('routes rg through the registered WSL project runtime for non-drive roots', async () => {
     const child = createMockProcess()
     Object.defineProperty(child, 'pid', { value: 1 })
