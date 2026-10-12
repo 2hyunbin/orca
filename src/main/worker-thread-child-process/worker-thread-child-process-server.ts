@@ -1,4 +1,4 @@
-import type { ChildProcess } from 'node:child_process'
+import type { PipedChildProcess } from '@orca/process-host/process-spec'
 import { spawnProcess } from '@orca/process-host'
 import {
   WORKER_THREAD_CHILD_SPAWN_FAILED_EXIT_CODE,
@@ -25,10 +25,10 @@ function toErrorPayload(error: unknown): WorkerThreadChildErrorPayload {
 }
 
 export function serveWorkerThreadChildProcesses(port: WorkerThreadChildPort): void {
-  const children = new Map<number, ChildProcess>()
+  const children = new Map<number, PipedChildProcess>()
 
   const spawnChild = ({ id, spec }: Extract<WorkerThreadChildRequest, { type: 'spawn' }>): void => {
-    let child: ChildProcess
+    let child: PipedChildProcess
     try {
       child = spawnProcess({ ...spec, stdio: ['pipe', 'pipe', 'pipe'] })
     } catch (error) {
