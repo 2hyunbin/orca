@@ -27,8 +27,9 @@ export function serverOnlyServeMessage(platform: NodeJS.Platform): string {
   return `${NOT_AN_APP_CLI} Install the Orca app on this machine and run \`${appCliName(platform)} serve\` from a plain login shell, or set ORCA_APP_EXECUTABLE to the Orca app executable.`
 }
 
-export function serverOnlyServiceInstallMessage(platform: NodeJS.Platform): string {
-  return `${NOT_AN_APP_CLI} Install the Orca app on this machine, then run \`${appCliName(platform)} serve service install\` from a plain login shell, not an Orca terminal (which would point the service at that connection's profile).`
+function serverOnlyServiceInstallMessage(platform: NodeJS.Platform): string {
+  const name = appCliName(platform)
+  return `Could not find the installed Orca app's \`${name}\` command on PATH. ${NOT_AN_APP_CLI} Install the Orca app on this machine, then run \`${name} serve service install\` from a plain login shell so the service uses the app's own profile, or pass --command <absolute path to the app's ${name}>.`
 }
 
 function isVersionScopedDir(dir: string, userData: string): boolean {
@@ -79,6 +80,8 @@ export function resolveServiceCommand(
   }
   throw new RuntimeClientError(
     'cli_not_found',
-    `Could not find the \`${name}\` command on PATH. Install it from Orca Settings, or pass --command <absolute path>.`
+    canStartOrcaServer(deps.env)
+      ? `Could not find the \`${name}\` command on PATH. Install it from Orca Settings, or pass --command <absolute path>.`
+      : serverOnlyServiceInstallMessage(deps.platform)
   )
 }

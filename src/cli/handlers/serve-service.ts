@@ -17,11 +17,7 @@ import {
   resolveServeServiceManager,
   type ServeServiceSpec
 } from '../runtime/serve-service-unit'
-import {
-  canStartOrcaServer,
-  resolveServiceCommand,
-  serverOnlyServiceInstallMessage
-} from '../runtime/serve-app-launcher'
+import { resolveServiceCommand } from '../runtime/serve-app-launcher'
 
 type Run = (program: string, args: string[]) => Promise<{ code: number | null; out: string }>
 
@@ -108,12 +104,6 @@ export async function installServeService(
   deps: ServeServiceDeps = defaultDeps()
 ): Promise<Record<string, unknown>> {
   requireManager(deps.platform)
-  if (!canStartOrcaServer(deps.env)) {
-    throw new RuntimeClientError(
-      'runtime_serve_failed',
-      serverOnlyServiceInstallMessage(deps.platform)
-    )
-  }
   const spec = serviceSpec(deps, {
     ...options,
     command: resolveServiceCommand(options.command, deps)

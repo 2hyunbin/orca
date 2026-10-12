@@ -151,27 +151,33 @@ describe('orca serve service', () => {
       resolveServiceCommand(null, { platform: 'darwin', env: { PATH: '/nonexistent' } })
     ).toThrow(/PATH/)
   })
-  it('refuses, naming the command to run, when this orca cannot start a server', async () => {
+  it('names the command to run when only a server-only orca exists here', async () => {
     // The `orca` an SSH-launched Orca server puts on a remote host runs on plain Node.
-    const serverCli = (platform: NodeJS.Platform): ServeServiceDeps => {
+    const serverCli = (platform: NodeJS.Platform, path: string): ServeServiceDeps => {
       const base = deps(platform)
       const { ELECTRON_RUN_AS_NODE: _electron, ...env } = base.env
-      return { ...base, env }
+      return { ...base, env: { ...env, PATH: path } }
     }
-    for (const command of [null, join(bin, 'orca-ide')]) {
-      await expect(
-        installServeService({ command, dryRun: false }, serverCli('linux'))
-      ).rejects.toThrow(/orca-ide serve service install/)
-    }
+    const scoped = join(home, 'profile', 'cli', 'bin')
+    await mkdir(scoped, { recursive: true })
+    await writeFile(join(scoped, 'orca'), '#!/bin/sh\n')
+    await chmod(join(scoped, 'orca'), 0o755)
     await expect(
-      installServeService({ command: null, dryRun: true }, serverCli('darwin'))
+      installServeService({ command: null, dryRun: false }, serverCli('linux', scoped))
+    ).rejects.toThrow(/install the Orca app.*`orca-ide serve service install`/i)
+    await expect(
+      installServeService({ command: null, dryRun: true }, serverCli('darwin', scoped))
     ).rejects.toThrow(/`orca serve service install`/)
     expect(calls).toEqual([])
-    // An app launcher pointed at by ORCA_APP_EXECUTABLE can start a server.
-    const pointed = serverCli('linux')
-    pointed.env.ORCA_APP_EXECUTABLE = join(bin, 'orca-ide')
+    // An installed app's launcher on PATH (or named by --command) still works from that terminal.
     await expect(
-      installServeService({ command: null, dryRun: true }, pointed)
+      installServeService({ command: null, dryRun: true }, serverCli('linux', `${scoped}:${bin}`))
+    ).resolves.toMatchObject({ dryRun: true })
+    await expect(
+      installServeService(
+        { command: join(bin, 'orca-ide'), dryRun: true },
+        serverCli('linux', scoped)
+      )
     ).resolves.toMatchObject({ dryRun: true })
   })
 
