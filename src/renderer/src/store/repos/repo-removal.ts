@@ -11,6 +11,7 @@ import { hasRuntimeRpcErrorCode } from '../../runtime/runtime-rpc-result'
 import { ipcOrRuntimeTargetForHostId } from '../../runtime/runtime-client-target'
 import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
 import { translate } from '@/i18n/i18n'
+import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { destroyRecipeVmBeforeProjectRemoval } from './recipe-vm-project-removal'
 import type { RepoSlice } from './repo-state'
@@ -109,6 +110,20 @@ export function createRepoRemovalActions(
             executionHostId: ownerHostId
           }))
         )
+        // Why before repo.rm: the host resolves `terminal.stop` through the project's workspace
+        // rows, which repo.rm deletes, so stopping afterwards left the shells running.
+        if (target.kind === 'environment' && !vmServerDestroyed) {
+          await Promise.allSettled(
+            getKnownRepoWorktreeIds(get(), projectId, ownerHostId).map((worktreeId) =>
+              callRuntimeRpc(
+                target,
+                'terminal.stop',
+                { worktree: toRuntimeWorktreeSelector(worktreeId) },
+                { timeoutMs: 15_000 }
+              )
+            )
+          )
+        }
         try {
           // Why: destroying the VM took its server, and the catalog holding this row, with it.
           if (!vmServerDestroyed) {
@@ -158,18 +173,6 @@ export function createRepoRemovalActions(
               ]
             : []
         const killedTabIds = new Set<string>()
-        if (target.kind === 'environment') {
-          await Promise.allSettled(
-            worktreeIds.map((worktreeId) =>
-              callRuntimeRpc(
-                target,
-                'terminal.stop',
-                { worktree: toRuntimeWorktreeSelector(worktreeId) },
-                { timeoutMs: 15_000 }
-              )
-            )
-          )
-        }
         for (const wId of worktreeIds) {
           const tabs = get().tabsByWorktree[wId] ?? []
           for (const tab of tabs) {
@@ -305,7 +308,7 @@ export function createRepoRemovalActions(
           toast.error(
             translate('auto.store.slices.repos.removeProjectFailed', 'Failed to remove project'),
             {
-              description: err instanceof Error ? err.message : String(err),
+              description: readIpcErrorMessage(err) ?? String(err),
               duration: ERROR_TOAST_DURATION
             }
           )
