@@ -2,7 +2,11 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RuntimeClient, RuntimeRpcFailureError } from '../../src/cli/runtime-client'
+import {
+  RuntimeClient,
+  RuntimeClientError,
+  RuntimeRpcFailureError
+} from '../../src/cli/runtime-client'
 import { createWorktreeWithAgent } from '../../src/cli/handlers/worktree-create-agent-launch'
 import { formatCliError } from '../../src/cli/cli-error'
 import { AGENT_LAUNCH_RUNTIME_CAPABILITIES } from '../../src/shared/agent-launch-runtime-capability'
@@ -99,6 +103,7 @@ describe('CLI setup choice across durable launch admission', () => {
     const firstError = await launch(hostClient(first)).catch((error: unknown) => error)
     expect(formatCliError(firstError)).toContain('--setup run')
     expect(formatCliError(firstError)).toContain('--setup skip')
+    expect(formatCliError(firstError)).not.toContain('Remove --retry-launch')
     expect(firstError).toMatchObject({ message: SETUP_CHOICE })
     expect(first.createTerminal).not.toHaveBeenCalled()
     const row = store.listOperationRows()[0]
@@ -117,10 +122,63 @@ describe('CLI setup choice across durable launch admission', () => {
     )
     expect(replayError).toMatchObject({ message: SETUP_CHOICE })
     expect(formatCliError(replayError)).toContain('--setup run')
+    expect(formatCliError(replayError)).toContain('Remove --retry-launch')
     expect(replay.createManagedWorktree).not.toHaveBeenCalled()
     await expect(
       launch(hostClient(replay), { operationId: row.operationId, setupDecision: 'skip' })
     ).rejects.toMatchObject({ code: 'agent_session_operation_conflict' })
+  })
+
+  it('changes setup with a fresh ID only after replay proves the lost refusal had no effects', async () => {
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    const runtime = runtimeStub({ settings: {} })
+    runtime.createManagedWorktree.mockRejectedValueOnce(
+      new WorktreeCreateSetupChoiceRefusedError(SETUP_CHOICE)
+    )
+    const client = hostClient(runtime)
+    const hostCall = vi.mocked(client.call).getMockImplementation()
+    if (!hostCall) {
+      throw new Error('Missing host adapter')
+    }
+    let dropReply = true
+    vi.mocked(client.call).mockImplementation(async (name, params) => {
+      try {
+        return await hostCall(name, params)
+      } catch (error) {
+        if (name === 'agent.launchReplay' && dropReply) {
+          dropReply = false
+          throw new RuntimeClientError('runtime_unavailable', 'Connection closed before response')
+        }
+        throw error
+      }
+    })
+    const uncertain = await launch(client).catch((error: unknown) => error)
+    expect(uncertain).toMatchObject({ code: 'agent_session_operation_unknown' })
+    expect(formatCliError(uncertain)).toContain('Keep that ID on every retry')
+    expect(formatCliError(uncertain)).not.toContain('Remove --retry-launch')
+    const row = store.listOperationRows()[0]
+    if (!row) {
+      throw new Error('Missing refused operation')
+    }
+    const refused = await launch(client, { operationId: row.operationId }).catch(
+      (error: unknown) => error
+    )
+    expect(formatCliError(refused)).toContain('--setup run')
+    expect(formatCliError(refused)).toContain('--setup skip')
+    expect(formatCliError(refused)).toContain('Remove --retry-launch')
+    expect(formatCliError(refused)).toContain('new launch ID')
+    await expect(
+      launch(client, { operationId: row.operationId, setupDecision: 'skip' })
+    ).rejects.toMatchObject({ code: 'agent_session_operation_conflict' })
+    expect(runtime.createManagedWorktree).toHaveBeenCalledOnce()
+    expect(runtime.createTerminal).not.toHaveBeenCalled()
+    await launch(client, { setupDecision: 'skip' })
+    expect(runtime.createManagedWorktree).toHaveBeenCalledTimes(2)
+    const rows = store.listOperationRows()
+    expect(rows).toHaveLength(2)
+    expect(rows.find((entry) => entry.operationId !== row.operationId)?.outcome.status).toBe(
+      'succeeded'
+    )
   })
 
   it.each(['run', 'skip'] as const)(

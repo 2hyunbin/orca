@@ -37,7 +37,11 @@ import {
   type TerminalSpawnDispatch
 } from '../../../agent-launch/agent-launch-not-started'
 import { AgentLaunchTabClosedError } from '../../../../shared/agent-launch-tab-closed'
-import { agentLaunchMovesHostWindow, type AgentLaunchView } from './agent-launch-tab-publication'
+import {
+  agentLaunchMovesHostWindow,
+  agentLaunchTabViewerRule,
+  type AgentLaunchView
+} from './agent-launch-tab-publication'
 
 /** Replay-safe launches keep the nested attach in the same stable caller namespace as the launch. */
 export function agentLaunchSurfaceFactory(
@@ -131,7 +135,7 @@ export function agentLaunchSurfaceFactory(
     }) => {
       const launchPreferences = toAgentLaunchPreferences(options)
       let promptRodeLaunchCommand = false
-      const windowOwnsPresentation = earlyTab?.windowOwnsPresentation() === true
+      const hasEarlyTab = earlyTab !== null
       if (earlyTab?.closedByUser()) {
         // The user closed its tab while it waited: nothing is spawned, and that is the answer.
         terminalSpawn.rethrow(new AgentLaunchTabClosedError())
@@ -158,11 +162,18 @@ export function agentLaunchSurfaceFactory(
         ...(paneKey ? { ...paneIdentity(paneKey), requireFreshPane: true } : {}),
         ...(launchSource ? { launchSource } : {}),
         ...(viewMode ? { viewMode } : {}),
-        ...(presentation &&
-        (!movesHostWindow || !windowOwnsPresentation || presentation === 'background')
+        ...(presentation && (!movesHostWindow || !hasEarlyTab || presentation === 'background')
           ? { presentation: movesHostWindow ? presentation : ('background' as const) }
           : {}),
-        ...(windowOwnsPresentation || !movesHostWindow ? { surfaceOwner: false as const } : {}),
+        ...(hasEarlyTab || !movesHostWindow ? { surfaceOwner: false as const } : {}),
+        ...(earlyTab
+          ? {
+              agentLaunchViewer: () =>
+                earlyTab.windowOwnsPresentation()
+                  ? ('none' as const)
+                  : agentLaunchTabViewerRule(context, presentation)
+            }
+          : {}),
         onPtySpawnDispatched: terminalSpawn.onPtySpawnDispatched
       })
       const terminal = await created.catch(terminalSpawn.rethrow)

@@ -260,7 +260,7 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
               ...(launchOpts.viewMode ? { viewMode: launchOpts.viewMode } : {}),
               activate: presentation === 'focused',
               ...(presentation ? { presentation } : {}),
-              ...dependencies.ownerSurfacing(opts.surfaceOwner !== false),
+              ...dependencies.terminalRevealViewerOptions(opts),
               tabId,
               leafId
             })

@@ -82,7 +82,8 @@ export async function createWorktreeWithAgent(args: {
       },
       capabilities,
       rawArgs
-    )
+    ),
+    launch.operationId !== undefined
   )
   const worktree = await showLaunchedWorktree(client, launched.result.worktreeId)
   const result: WorktreeAgentLaunchResult = {
