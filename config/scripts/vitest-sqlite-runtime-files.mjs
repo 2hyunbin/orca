@@ -22,6 +22,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/acp/acp-structured-child-work.test.ts',
   'src/main/acp/acp-structured-host-subagent-stop.test.ts',
   'src/main/acp/acp-timeline-grok-subagent-retention.test.ts',
+  'src/main/acp/acp-scripted-child-runtime.test.ts',
   'src/main/active-view-persistence-boundary.test.ts',
   'src/main/automations/automation-dispatch-host-fence.test.ts',
   'src/main/automations/automation-owner-fencing.test.ts',

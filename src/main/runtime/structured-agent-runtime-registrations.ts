@@ -231,6 +231,7 @@ function acpRegistration(spec: AcpLaunchSpec): StructuredAgentRuntimeRegistratio
       const sources = structuredAgentLaunchSources(context)
       const part = acpStructuredLaunchPart(spec, {
         readJournal,
+        ...deps.acpLaunchCommand,
         ...(deps.resolveAgentFullAccess ? { resolveFullAccess: deps.resolveAgentFullAccess } : {}),
         logger: deps.logger
       })
@@ -239,18 +240,13 @@ function acpRegistration(spec: AcpLaunchSpec): StructuredAgentRuntimeRegistratio
         readJournal,
         resolveLaunch: composeStructuredLaunch(definition, sources, part),
         readLaunch: composeStructuredLaunchRead(definition, sources, part),
-        connect: (launch, options) => createAcpAgentConnection(launch, options),
+        connect: deps.openAcpConnection ?? createAcpAgentConnection,
         onChildWorkEvidence: (sessionId, evidence) =>
           context.host()?.publishChildWorkEvidence(sessionId, evidence),
         ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {}),
         onDispatchSettledLate: followUps.onDispatchSettledLate,
         logger: deps.logger,
-        // Every exit, expected or not: the host ends that child's record.
-        onEvent: (event) => {
-          if (event.type === 'ended') {
-            context.deliverLifecycle(event)
-          }
-        }
+        onEvent: context.deliverLifecycle
       })
     }
   }
