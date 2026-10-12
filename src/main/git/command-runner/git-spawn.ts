@@ -2,7 +2,7 @@ import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
 import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
 import { startGitSpan } from '../../observability/instrumentation'
 import { createAbortError } from './abort-error'
-import { resolveGitCommand } from './git-command-resolution'
+import { pendingWslWindowsCheckoutGitConfig, resolveGitCommand } from './git-command-resolution'
 import { untranslatedGitOutputEnv } from './git-process-env'
 import { prepareWindowsHostGitEnvironment } from './windows-host-git-environment'
 import type { GitAdmissionTier } from './git-exec-options'
@@ -26,6 +26,10 @@ export async function gitSpawnAfterWindowsEnvironmentReady(
 ): Promise<ChildProcess> {
   if (options.signal?.aborted) {
     throw createAbortError()
+  }
+  const lineEndingsReady = pendingWslWindowsCheckoutGitConfig(options)
+  if (lineEndingsReady) {
+    await lineEndingsReady
   }
   const resolved = resolveGitCommand(args, {
     cwd: options.cwd,
