@@ -2,6 +2,7 @@ import type {
   RuntimeMobileSessionClientTab,
   RuntimeMobileSessionTabsResult
 } from '../shared/runtime-types'
+import { collectTabGroupLayoutGroupIds } from '../shared/workspace-layout/tab-group-moves'
 
 export type WorkspaceTabKind = 'terminal' | 'chat' | 'editor' | 'browser'
 
@@ -26,7 +27,34 @@ export type WorkspaceTabRow = {
   url?: string
 }
 
-export type WorkspaceTabListResult = { tabs: WorkspaceTabRow[] }
+type WorkspaceTabInventoryHold = Pick<
+  RuntimeMobileSessionTabsResult,
+  'agentSessionsUnverifiable' | 'clientHostedPagesUnreconciled'
+> & { worktreeId: string }
+
+export type WorkspaceTabListResult = {
+  tabs: WorkspaceTabRow[]
+  incompleteWorktrees?: WorkspaceTabInventoryHold[]
+}
+
+export function projectWorkspaceTabList(
+  snapshots: RuntimeMobileSessionTabsResult[]
+): WorkspaceTabListResult {
+  const incompleteWorktrees: WorkspaceTabInventoryHold[] = []
+  for (const snapshot of snapshots) {
+    if (snapshot.agentSessionsUnverifiable || snapshot.clientHostedPagesUnreconciled) {
+      incompleteWorktrees.push({
+        worktreeId: snapshot.worktree,
+        ...(snapshot.agentSessionsUnverifiable ? { agentSessionsUnverifiable: true } : {}),
+        ...(snapshot.clientHostedPagesUnreconciled ? { clientHostedPagesUnreconciled: true } : {})
+      })
+    }
+  }
+  return {
+    tabs: snapshots.flatMap(projectWorkspaceTabRows),
+    ...(incompleteWorktrees.length ? { incompleteWorktrees } : {})
+  }
+}
 
 function rowFor(tab: RuntimeMobileSessionClientTab, worktreeId: string): WorkspaceTabRow {
   const base = {
@@ -84,13 +112,49 @@ export function projectWorkspaceTabRows(
     }
     rows.push(row)
   }
-  return rows
+  return orderWorkspaceTabRows(rows, snapshot)
+}
+
+function orderWorkspaceTabRows(
+  rows: WorkspaceTabRow[],
+  snapshot: RuntimeMobileSessionTabsResult
+): WorkspaceTabRow[] {
+  const groups = snapshot.tabGroups ?? []
+  const groupsById = new Map(groups.map((group) => [group.id, group]))
+  const groupIds = snapshot.tabGroupLayout
+    ? [...collectTabGroupLayoutGroupIds(snapshot.tabGroupLayout)]
+    : groups.map((group) => group.id)
+  if (
+    groupsById.size !== groups.length ||
+    groupIds.length !== groups.length ||
+    groupIds.some((id) => !groupsById.has(id))
+  ) {
+    return rows
+  }
+  const remaining = new Map(rows.map((row) => [row.tabId, row]))
+  const ordered: WorkspaceTabRow[] = []
+  const seen = new Set<string>()
+  for (const groupId of groupIds) {
+    for (const tabId of groupsById.get(groupId)?.tabOrder ?? []) {
+      if (seen.has(tabId)) {
+        return rows
+      }
+      seen.add(tabId)
+      const row = remaining.get(tabId)
+      if (row) {
+        ordered.push(row)
+        remaining.delete(tabId)
+      }
+    }
+  }
+  // Why: partial host groups cannot place the remaining rows reliably.
+  return remaining.size === 0 && ordered.length === rows.length ? ordered : rows
 }
 
 function rowDetail(row: WorkspaceTabRow): string {
   switch (row.kind) {
     case 'terminal':
-      return row.terminals?.length ? row.terminals.join(', ') : 'starting'
+      return row.terminals?.length ? row.terminals.join(', ') : 'handle unavailable'
     case 'chat':
       return row.agent ?? ''
     case 'editor':
@@ -101,11 +165,20 @@ function rowDetail(row: WorkspaceTabRow): string {
 }
 
 export function formatWorkspaceTabList(result: WorkspaceTabListResult): string {
-  if (result.tabs.length === 0) {
+  const holds = result.incompleteWorktrees ?? []
+  if (result.tabs.length === 0 && holds.length === 0) {
     return 'No tabs open.'
   }
   const worktrees = new Set(result.tabs.map((row) => row.worktreeId))
-  const lines: string[] = []
+  const lines = holds.map((hold) => {
+    const reasons = [
+      ...(hold.agentSessionsUnverifiable ? ['chat inventory unavailable'] : []),
+      ...(hold.clientHostedPagesUnreconciled
+        ? ['client-hosted browser inventory not yet reconciled']
+        : [])
+    ]
+    return `Inventory incomplete for ${hold.worktreeId}: ${reasons.join('; ')}.`
+  })
   let currentWorktree: string | null = null
   for (const row of result.tabs) {
     if (worktrees.size > 1 && row.worktreeId !== currentWorktree) {
