@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { RpcClient } from '../transport/rpc-client'
 import {
   localAgentDetectionRead,
@@ -13,8 +14,13 @@ import {
 } from '../tasks/workspace-ssh-gate'
 
 type DetectedAgentIdsState = {
-  connectionId: string | null
+  target: string
   ids: Set<string>
+}
+
+type SshStateEntry = {
+  target: string
+  record: WorkspaceSshRecord
 }
 
 function fallbackSshState(
@@ -28,25 +34,30 @@ function fallbackSshState(
 export function useNewWorkspaceExecutionTarget(args: {
   client: RpcClient | null
   connectionId: string | null
+  /** The server the repo runs on, which holds its SSH target; undefined for the desktop's own. */
+  server?: ExecutionHostId
   visible: boolean
 }): {
   sshGate: WorkspaceSshGate
   detectedAgentIds: Set<string> | null
   connect: () => Promise<void>
 } {
-  const { client, connectionId, visible } = args
-  const [sshState, setSshState] = useState<WorkspaceSshRecord | null>(null)
-  const [connectingTargetId, setConnectingTargetId] = useState<string | null>(null)
+  const { client, connectionId, server, visible } = args
+  // Why the host too: the desktop and a server can each hold a target with the same id.
+  const target = JSON.stringify([server ?? null, connectionId])
+  const [sshState, setSshEntry] = useState<SshStateEntry | null>(null)
+  const setSshState = (record: WorkspaceSshRecord) => setSshEntry({ target, record })
+  const [connectingTarget, setConnectingTarget] = useState<string | null>(null)
   const [detectedAgentIdsState, setDetectedAgentIdsState] = useState<DetectedAgentIdsState | null>(
     null
   )
   const sshGate = deriveWorkspaceSshGate({
     connectionId,
-    state: sshState,
-    connecting: connectingTargetId === connectionId
+    state: sshState?.target === target ? sshState.record : null,
+    connecting: connectingTarget === target
   })
   const detectedAgentIds =
-    detectedAgentIdsState?.connectionId === connectionId &&
+    detectedAgentIdsState?.target === target &&
     (connectionId === null || sshGate.status === 'connected')
       ? detectedAgentIdsState.ids
       : null
@@ -79,7 +90,7 @@ export function useNewWorkspaceExecutionTarget(args: {
     return () => {
       stale = true
     }
-  }, [client, connectionId, visible])
+  }, [client, target, visible])
 
   useEffect(() => {
     if (!visible || !client || (connectionId && sshGate.status !== 'connected')) {
@@ -95,26 +106,26 @@ export function useNewWorkspaceExecutionTarget(args: {
           : localAgentDetectionRead.interpret(await localAgentDetectionRead.request(client))
         if (!stale) {
           setDetectedAgentIdsState({
-            connectionId,
+            target,
             ids: detected.accepted ? new Set(detected.value) : new Set()
           })
         }
       } catch {
         if (!stale) {
-          setDetectedAgentIdsState({ connectionId, ids: new Set() })
+          setDetectedAgentIdsState({ target, ids: new Set() })
         }
       }
     })()
     return () => {
       stale = true
     }
-  }, [client, connectionId, sshGate.status, visible])
+  }, [client, target, sshGate.status, visible])
 
   async function connect(): Promise<void> {
     if (!client || !connectionId) {
       return
     }
-    setConnectingTargetId(connectionId)
+    setConnectingTarget(target)
     setSshState(fallbackSshState(connectionId, 'connecting', null))
     try {
       const reply = await sshRepoConnectRun.request(
@@ -133,7 +144,7 @@ export function useNewWorkspaceExecutionTarget(args: {
         )
       )
     } finally {
-      setConnectingTargetId((current) => (current === connectionId ? null : current))
+      setConnectingTarget((current) => (current === target ? null : current))
     }
   }
 

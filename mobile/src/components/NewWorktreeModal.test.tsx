@@ -490,6 +490,64 @@ describe('NewWorktreeModal project targets', () => {
     expect(desktopMethods).not.toContain('worktree.create')
   })
 
+  it("never shows the desktop's SSH state for a server target with the same id", async () => {
+    const sshRepo = { ...repos[0]!, id: 'ssh-repo', path: '/home/dev/orca', connectionId: 'devbox' }
+    const desktop = vi.fn((method: string) => {
+      if (method === 'repo.list') {
+        return Promise.resolve({ ok: true, result: { repos: [sshRepo] } })
+      }
+      if (method === 'ssh.getState') {
+        return Promise.resolve({
+          ok: true,
+          result: {
+            state: { targetId: 'devbox', status: 'connected', error: null, reconnectAttempt: 0 }
+          }
+        })
+      }
+      if (method === 'preflight.detectRemoteAgents') {
+        return Promise.resolve({ ok: true, result: ['codex'] })
+      }
+      return new Promise(() => {})
+    })
+    // The server has not answered yet, so it has no state to show.
+    const server = vi.fn((method: string) =>
+      method === 'repo.list'
+        ? Promise.resolve({ ok: true, result: { repos: [{ ...sshRepo, path: '/srv/orca' }] } })
+        : new Promise(() => {})
+    )
+
+    await act(async () => {
+      renderer = create(
+        createElement(NewWorktreeModal, {
+          visible: true,
+          client: requestsOnly(desktop),
+          serverClients: new Map([['runtime:env-1', requestsOnly(server)]]),
+          hostId: 'host-same-ssh-id',
+          onCreated: () => {},
+          onClose: () => {}
+        })
+      )
+    })
+    await flushUpdates()
+    const gate = () => renderer.root.find((node) => node.props.sshGate !== undefined).props.sshGate
+    const picker = runTargetPicker(renderer)
+    expect(picker.props.items.map((item: { id: string }) => item.id)).toEqual([
+      'ssh:devbox',
+      'runtime:env-1'
+    ])
+    await act(async () => picker.props.onSelect(picker.props.items[0]))
+    await flushUpdates()
+    expect(gate().status).toBe('connected')
+
+    await act(async () => runTargetPicker(renderer).props.onSelect(picker.props.items[1]))
+    await flushUpdates()
+
+    expect(runTargetPicker(renderer).props.selectedId).toBe('runtime:env-1')
+    expect(server).toHaveBeenCalledWith('ssh.getState', { targetId: 'devbox' })
+    expect(gate()).toMatchObject({ status: null, requiresConnection: true })
+    expect(server).not.toHaveBeenCalledWith('worktree.create', expect.anything(), expect.anything())
+  })
+
   it("lists the desktop's repos at once while a server has not answered", async () => {
     const desktop = vi.fn((method: string) =>
       method === 'repo.list'
