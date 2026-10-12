@@ -11,6 +11,8 @@ import {
 
 let panes: LegacyRelayBridgedPane[] = []
 const listeners = new Set<() => void>()
+/** Which pane (tab and leaf) holds each bridged PTY; a second pane never drives the same shell. */
+const claims = new Map<string, string>()
 let subscribed = false
 
 function ensureSubscribed(): void {
@@ -21,6 +23,11 @@ function ensureSubscribed(): void {
   subscribed = true
   const apply = (next: LegacyRelayBridgedPane[]): void => {
     panes = Array.isArray(next) ? next : []
+    for (const ptyId of claims.keys()) {
+      if (!panes.some((pane) => pane.ptyId === ptyId)) {
+        claims.delete(ptyId)
+      }
+    }
     listeners.forEach((listener) => listener())
   }
   api.onPanes(apply)
@@ -52,15 +59,24 @@ export function legacyRelayBridgePtyIdForPane(args: {
   const [hostTabId, hostLeafId] = toHostSessionTabId(args.tabId).split(
     HOST_TERMINAL_SURFACE_SEPARATOR
   )
-  const served = panes.find(
-    (pane) =>
-      pane.tabId === hostTabId &&
-      (!pane.leafId || pane.leafId === (hostLeafId ?? args.leafId) || pane.leafId === args.leafId)
-  )
-  if (served) {
-    return served.ptyId
+  const leaf = hostLeafId ?? args.leafId ?? ''
+  const inTab = panes.filter((pane) => pane.tabId === hostTabId)
+  // A lease without a leaf names its tab's pane only when it is that tab's sole bridged terminal.
+  const served =
+    inTab.find((pane) => pane.leafId === leaf || pane.leafId === args.leafId) ??
+    (inTab.length === 1 && !inTab[0].leafId ? inTab[0] : undefined)
+  const candidate =
+    served?.ptyId ?? (args.boundPtyId && parseAppSshPtyId(args.boundPtyId) ? args.boundPtyId : null)
+  if (!candidate) {
+    return null
   }
-  return args.boundPtyId && parseAppSshPtyId(args.boundPtyId) ? args.boundPtyId : null
+  const claimant = `${args.tabId}\u0000${args.leafId ?? ''}`
+  const holder = claims.get(candidate)
+  if (holder && holder !== claimant) {
+    return null
+  }
+  claims.set(candidate, claimant)
+  return candidate
 }
 
 export function onLegacyRelayBridgedPanesChanged(listener: () => void): () => void {

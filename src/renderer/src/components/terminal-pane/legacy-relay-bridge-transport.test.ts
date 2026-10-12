@@ -102,6 +102,21 @@ describe('a runtime pane bridged to an older relay’s terminal', () => {
     ).toBeNull()
   })
 
+  it('never lets a second pane, such as a later split, drive the same old shell', () => {
+    publishPanes([{ ptyId: PTY, targetId: 'ssh-box', tabId: 'tab-7', state: 'live' }])
+    const mirrored = `web-terminal-${encodeURIComponent('tab-7::leaf-a')}`
+    expect(legacyRelayBridgePtyIdForPane({ tabId: mirrored, leafId: 'p1', boundPtyId: null })).toBe(
+      PTY
+    )
+    // The same pane remounting keeps it; another pane in that tab gets its own shell.
+    expect(legacyRelayBridgePtyIdForPane({ tabId: mirrored, leafId: 'p1', boundPtyId: null })).toBe(
+      PTY
+    )
+    expect(
+      legacyRelayBridgePtyIdForPane({ tabId: mirrored, leafId: 'p2', boundPtyId: null })
+    ).toBeNull()
+  })
+
   it('finds the pane main serves for its tab and leaf, or the ssh id it still names', () => {
     publishPanes([
       { ptyId: PTY, targetId: 'ssh-box', tabId: 'tab-1', leafId: 'leaf-1', state: 'live' }

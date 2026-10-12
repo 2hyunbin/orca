@@ -27,6 +27,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
   let unsubscribe: (() => void)[] = []
   let reattaching = false
   let showingUnreachable = false
+  let lastState: 'live' | 'unverifiable' | null = null
 
   const release = (): void => {
     unsubscribe.forEach((dispose) => dispose())
@@ -97,16 +98,20 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
           return
         }
         if (!pane) {
+          lastState = null
           // Still waiting on the relay: ask again, which answers exited once it is proven gone.
           if (!attached) {
             void reattach()
           }
           return
         }
+        const previous = lastState
+        lastState = pane.state
         if (pane.state === 'unverifiable') {
           attached = false
           showUnreachable()
-        } else if (!attached) {
+        } else if (!attached && previous !== 'live') {
+          // Only on the change to live: a terminal that refuses to attach waits for the next one.
           void reattach()
         }
       })
@@ -132,6 +137,7 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       return undefined
     }
     next.onConnect?.()
+    lastState = result.status === 'attached' ? 'live' : 'unverifiable'
     if (result.status === 'unverifiable') {
       showUnreachable()
       return { id: ptyId, isReattach: true, replay: '' }

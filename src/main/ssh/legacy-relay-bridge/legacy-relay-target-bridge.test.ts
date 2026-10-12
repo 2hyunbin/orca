@@ -247,6 +247,10 @@ describe('one target’s legacy relay bridge', () => {
     relay.attachError = new Error('PTY "pty-1" not found')
     await expect(subject.attach(PTY)).resolves.toEqual({ status: 'unverifiable' })
     expect(leases[0].state).toBe('detached')
+    expect(subject.snapshot()[0].state).toBe('unverifiable')
+    // Re-listed on backoff, never in a tight loop.
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(subject.snapshot()[0].state).toBe('live')
     relay.attachError = new Error('PTY "pty-1" not found (process exited)')
     await expect(subject.attach(PTY)).resolves.toEqual({ status: 'exited' })
     expect(leases[0].state).toBe('terminated')

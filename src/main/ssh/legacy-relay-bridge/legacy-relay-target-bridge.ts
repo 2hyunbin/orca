@@ -16,11 +16,13 @@ import type {
 import type { LegacyRelayClient, LegacyRelayOwnerClaim } from './legacy-relay-client'
 import type { LegacyRelayEndpoint, LegacyRelayEndpointListing } from './legacy-relay-endpoints'
 import { LegacyRelayRetry, LegacyRelayWaiters } from './legacy-relay-bridge-timers'
-import { bridgeableLeasesByRelayId } from './legacy-relay-bridge-leases'
-
-/** How long an attach waits for an unreachable relay before answering `unverifiable`. */
-const ATTACH_WAIT_MS = 20_000
-const PROVEN_EXITED = /PTY ".+" not found \(process exited\)/i
+import {
+  ATTACH_WAIT_MS,
+  bridgeableLeasesByRelayId,
+  PROVEN_EXITED,
+  toBridgedPane,
+  type Pane
+} from './legacy-relay-bridge-leases'
 
 export type LegacyRelayTargetBridgeDeps = {
   targetId: string
@@ -46,13 +48,6 @@ type EndpointState = {
   claim: LegacyRelayOwnerClaim | null
 }
 
-type Pane = {
-  lease: SshRemotePtyLease
-  relayPtyId: string
-  endpoint: string | null
-  state: 'live' | 'unverifiable'
-}
-
 export class LegacyRelayTargetBridge {
   private readonly endpoints = new Map<string, EndpointState>()
   private readonly panes = new Map<string, Pane>()
@@ -62,6 +57,8 @@ export class LegacyRelayTargetBridge {
   private refreshing: Promise<void> | null = null
   /** Set once a refresh has read the relays, so an attach never answers from an empty first look. */
   private looked = false
+  /** Keeps the backoff growing while a listed terminal still refuses to attach. */
+  private attachFailing = false
   private readonly abort = new AbortController()
   private disposed = false
 
@@ -76,13 +73,7 @@ export class LegacyRelayTargetBridge {
   }
 
   snapshot(): LegacyRelayBridgedPane[] {
-    return [...this.panes.entries()].map(([ptyId, pane]) => ({
-      ptyId,
-      targetId: this.deps.targetId,
-      tabId: pane.lease.tabId ?? '',
-      ...(pane.lease.leafId ? { leafId: pane.lease.leafId } : {}),
-      state: pane.state
-    }))
+    return [...this.panes].map(([ptyId, pane]) => toBridgedPane(this.deps.targetId, ptyId, pane))
   }
 
   /** Re-reads every relay; concurrent callers share one pass. */
@@ -117,6 +108,7 @@ export class LegacyRelayTargetBridge {
     this.attached.set(ptyId, (this.attached.get(ptyId) ?? 0) + 1)
     try {
       const { replay } = await client.attach(pane.relayPtyId)
+      this.attachFailing = false
       return { status: 'attached', replay }
     } catch (error) {
       this.detach(ptyId)
@@ -124,8 +116,11 @@ export class LegacyRelayTargetBridge {
         this.retire(ptyId, pane, null)
         return { status: 'exited' }
       }
-      // An unmarked "not found" also means "never minted here"; the next listing decides.
-      void this.refresh()
+      // An unmarked refusal also means "never minted here": the next listing decides, on backoff.
+      pane.state = 'unverifiable'
+      this.attachFailing = true
+      this.deps.onPanesChanged()
+      this.retry.schedule()
       return { status: 'unverifiable' }
     }
   }
@@ -157,10 +152,7 @@ export class LegacyRelayTargetBridge {
     this.disposed = true
     this.abort.abort()
     this.retry.cancel()
-    for (const state of this.endpoints.values()) {
-      state.client?.close()
-    }
-    this.endpoints.clear()
+    this.closeIdleClients(new Set())
     this.panes.clear()
     this.attached.clear()
     this.waiters.wake()
@@ -229,7 +221,7 @@ export class LegacyRelayTargetBridge {
     this.replacePanes(next)
     if (!complete) {
       this.retry.schedule()
-    } else {
+    } else if (!this.attachFailing) {
       this.retry.reset()
     }
   }
