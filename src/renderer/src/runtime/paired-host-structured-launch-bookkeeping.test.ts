@@ -3,10 +3,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { closeStructuredAgentSession } from './structured-agent-session-close'
 
 const mocks = vi.hoisted(() => ({
-  closeSession:
-    vi.fn<(target: RuntimeClientTarget, sessionId: string) => Promise<'closed' | 'unsupported'>>(),
+  closeSession: vi.fn<typeof closeStructuredAgentSession>(),
   callRuntime:
     vi.fn<(target: RuntimeClientTarget, method: string, params?: unknown) => Promise<unknown>>()
 }))
@@ -17,7 +17,10 @@ vi.mock('@/lib/structured-agent-session-launch-prompt', () => ({
 vi.mock('./structured-agent-session-close', () => ({
   closeStructuredAgentSession: mocks.closeSession
 }))
-vi.mock('./runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntime }))
+vi.mock('./runtime-rpc-client', () => ({
+  callRuntimeRpc: mocks.callRuntime,
+  ensureRuntimeEnvironmentCompatible: vi.fn(async () => {})
+}))
 vi.mock('./local-session-tab-close-owner', () => ({
   withLocalSessionTabCloseOwner: async (_w: string, _t: string, close: () => Promise<unknown>) =>
     close()
@@ -97,7 +100,9 @@ describe('a chat closed before its create landed on a paired server', () => {
     const applied = acceptPairedHostStructuredSessions(serverFrame(), 'server-1')
 
     expect(applied.tabs).toEqual([])
-    expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat')
+    expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat', {
+      expectedEnvironmentPairingRevision: undefined
+    })
   })
 
   // A tombstone guards a random session id, so it is inert once stale; its 30-day TTL ends it.
@@ -112,7 +117,9 @@ describe('a chat closed before its create landed on a paired server', () => {
     const applied = acceptPairedHostStructuredSessions(serverFrame(), 'server-1')
 
     expect(applied.tabs).toEqual([])
-    expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat')
+    expect(mocks.closeSession).toHaveBeenCalledWith(SERVER, 'remote-chat', {
+      expectedEnvironmentPairingRevision: undefined
+    })
     expect(mocks.closeSession).not.toHaveBeenCalledWith({ kind: 'local' }, 'remote-chat')
     expect(hasStructuredAgentSessionLaunchCancellationTombstone(WORKTREE, 'remote-chat')).toBe(true)
   })
