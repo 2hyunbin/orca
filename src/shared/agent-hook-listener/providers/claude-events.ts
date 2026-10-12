@@ -33,6 +33,7 @@ import { buildClaudeStatusPayload } from './claude-status-build'
 import { trackClaudeTaskNotificationDelivery } from './claude-task-notification-delivery'
 import { recordClaudeTeammateSpawn } from './claude-teammate-spawn'
 
+/** Maps one Claude hook event to the pane's status payload, tracking subagent rows from lifecycle and typed or known child tool events. */
 export function normalizeClaudeEvent(
   state: HookListenerState,
   eventName: unknown,
