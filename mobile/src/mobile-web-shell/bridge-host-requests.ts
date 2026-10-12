@@ -78,8 +78,12 @@ export class BridgeHostRequests {
       message.params,
       this.deps.readClientIdentity()
     )
-    if (message.options !== undefined) {
-      return client.sendRequest(message.method, params, message.options)
+    const options =
+      message.envelope === undefined
+        ? message.options
+        : { ...message.options, envelope: message.envelope }
+    if (options !== undefined) {
+      return client.sendRequest(message.method, params, options)
     }
     return 'params' in message
       ? client.sendRequest(message.method, params)

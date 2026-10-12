@@ -1,6 +1,7 @@
 import { markRpcDeliveryUnknown } from './rpc-delivery-ambiguity'
 import { openRpcRequestBudget, resolvePostConnectRequestTimeout } from './rpc-request-budget'
 import type { SendRequestOptions } from './rpc-client'
+import { withRpcEnvelopeFields, type RpcEnvelopeFields } from './rpc-envelope-fields'
 import type { ConnectionState, RpcResponse } from './types'
 
 const REQUEST_TIMEOUT_MS = 30_000
@@ -45,7 +46,8 @@ export class RpcClientRequestTracker {
     return this.sendConnectedRequest(
       method,
       params,
-      resolvePostConnectRequestTimeout(budget, REQUEST_TIMEOUT_MS)
+      resolvePostConnectRequestTimeout(budget, REQUEST_TIMEOUT_MS),
+      requestOptions?.envelope
     )
   }
 
@@ -60,7 +62,8 @@ export class RpcClientRequestTracker {
   private sendConnectedRequest(
     method: string,
     params: unknown,
-    timeoutMs: number
+    timeoutMs: number,
+    envelope?: RpcEnvelopeFields
   ): Promise<RpcResponse> {
     return new Promise((resolve, reject) => {
       const id = this.options.nextId()
@@ -84,12 +87,12 @@ export class RpcClientRequestTracker {
         }
       })
       if (
-        !this.options.sendEncrypted({
-          id,
-          deviceToken: this.options.deviceToken,
-          method,
-          params
-        })
+        !this.options.sendEncrypted(
+          withRpcEnvelopeFields(
+            { id, deviceToken: this.options.deviceToken, method, params },
+            envelope
+          )
+        )
       ) {
         this.pending.delete(id)
         clearTimeout(timeout)
