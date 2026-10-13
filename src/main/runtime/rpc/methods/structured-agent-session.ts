@@ -182,7 +182,8 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
             )
           ),
         ...(params.cursor ? { cursor: params.cursor } : {}),
-        ...(params.boundedFrames ? { boundedFrames: true } : {})
+        // Every phone's app, whatever its version, ends a stream over a frame its bridge cannot carry.
+        ...(ctx.clientKind === 'mobile' ? { boundedFrames: true } : {})
       })
       if (stream.isClosed()) {
         dispose()

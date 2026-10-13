@@ -50,9 +50,8 @@ export type AgentSessionQueuedMessage = {
    *  `classifyDispatchRejection({ reason: returnedReason, rejection: returnedRejection })`. */
   returnedReason?: string | null
   returnedRejection?: UnreadAgentSessionFailureFact
-  /** Only to a bounded-frame reader: the card is a preview, and `byteLength` is the whole card's
-   *  serialized size. Its shortened text ends in `…`. */
-  truncated?: { byteLength: number }
+  /** Only to a bounded-frame reader: the card is a preview, its shortened text ending in `…`. */
+  truncated?: true
 }
 
 /** No body: the card leaving the published list IS the outcome, so a lost

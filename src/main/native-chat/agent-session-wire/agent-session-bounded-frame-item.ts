@@ -40,10 +40,9 @@ function displayedBody(body: AgentJournalItemBody): AgentJournalItemBody {
     : { ...body, input, ...(output ? { output } : {}) }
 }
 
-/** What the body may weigh once the rest of the row, and the mark a cut adds, are paid for. */
+/** What the body may weigh once the rest of the row is paid for. */
 function bodyBudget(item: AgentJournalRenderItem): number {
-  const widest = { ...item, body: null, truncated: { byteLength: Number.MAX_SAFE_INTEGER } }
-  return BOUNDED_FRAME_ROW_BYTES - (jsonBytes(widest) - jsonBytes(null))
+  return BOUNDED_FRAME_ROW_BYTES - (jsonBytes({ ...item, body: null }) - jsonBytes(null))
 }
 
 /** The too-large marker with every identifier it carries held to a key's bound, so the marker
@@ -75,7 +74,7 @@ function boundFrameItem(item: AgentJournalRenderItem): AgentJournalRenderItem {
   if (body === null) {
     return oversizedFrameItem(item)
   }
-  return body === item.body ? item : { ...item, body, truncated: { byteLength: jsonBytes(item) } }
+  return body === item.body ? item : { ...item, body }
 }
 
 // Items are immutable per revision, so a catch-up or a second subscriber reuses the bound form.

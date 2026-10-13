@@ -15,7 +15,6 @@ import {
   useMobileNativeChatSendError,
   type MobileNativeChatSendErrorDetails
 } from './use-mobile-native-chat-send-error'
-import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 
 const asyncStorage = vi.hoisted(() => ({
   getItem: vi.fn(),
@@ -95,7 +94,7 @@ describe('mobile structured send actions', () => {
       enabled: true,
       connected: true,
       agent,
-      hostSupport: structuredAgentSessionHostSupport([]),
+      hostSupport: null,
       onSendError
     })
     return createElement('span', null, banner.message)

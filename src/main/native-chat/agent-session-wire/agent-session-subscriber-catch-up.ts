@@ -12,7 +12,10 @@ import {
 import { sameJournalCursor } from '../agent-session-journal/journal-cursor'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
-import { createAgentSessionCatchUpReader } from './agent-session-history-page'
+import {
+  createAgentSessionCatchUpReader,
+  readAgentSessionHydrationPage
+} from './agent-session-history-page'
 import { subscriberItemForm } from './agent-session-bounded-frames'
 import {
   subscriberCommandsChanged,
@@ -56,7 +59,8 @@ export function deliverToSubscriber(
     emitCaughtUp(port, subscriber, emitCheckpoint, shared)
     return
   }
-  const readPage = createAgentSessionCatchUpReader(journal, subscriberItemForm(subscriber))
+  const form = subscriberItemForm(subscriber)
+  const readPage = createAgentSessionCatchUpReader(journal, form)
   while (true) {
     const result = readPage({
       sessionId: subscriber.sessionId,
@@ -81,6 +85,21 @@ export function deliverToSubscriber(
     const advanced = page.window.nextCursor.sequence > subscriber.cursor.sequence
     if (!advanced) {
       emitCaughtUp(port, subscriber, emitCheckpoint, shared)
+      return
+    }
+    // A phone's app ends a stream that outruns its unacked window, so a gap of more than one page
+    // arrives as the newest page instead; older rows load on scroll.
+    if (page.hasNewer && subscriber.boundedFrames) {
+      const tail = readAgentSessionHydrationPage(journal, subscriber.fence, form)
+      port.emit(subscriber, {
+        type: 'snapshot',
+        sessionId: subscriber.sessionId,
+        page: tail,
+        fence: subscriber.fence,
+        hostNow,
+        activity: port.activity(subscriber.sessionId)
+      })
+      subscriber.cursor = tail.liveCursor ?? tail.window.nextCursor
       return
     }
     port.emit(

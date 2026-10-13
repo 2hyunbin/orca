@@ -32,7 +32,7 @@ export type AgentSessionSubscribeInput = {
   sessionId: string
   emit: AgentSessionSubscriberEmit
   cursor?: AgentJournalCursor
-  /** Every frame to fit a phone's bridge frame (`agentSession.subscribe`'s `boundedFrames`). */
+  /** Every frame to fit a phone's bridge frame; the RPC sets it for every phone. */
   boundedFrames?: boolean
 }
 

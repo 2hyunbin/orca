@@ -63,16 +63,25 @@ export function oversizedHistoryItem(item: AgentJournalRenderItem): AgentJournal
   }
 }
 
+/** How a reader receives each item; a bounded-frame reader gets the form that fits its frame. A
+ *  page is measured in that form, so it carries what it will actually send. */
+export type HistoryItemForm = (item: AgentJournalRenderItem) => AgentJournalRenderItem
+
+export const asStoredHistoryItem: HistoryItemForm = (item) => item
+
+/** Rows are put in `form` only as the page takes them. */
 export function boundHistoryItemsByBytes(
   items: AgentJournalRenderItem[],
   keep: 'newest' | 'oldest',
   submissionBytes: ReadonlyMap<string, number>,
-  maxBytes: number
+  maxBytes: number,
+  form: HistoryItemForm = asStoredHistoryItem
 ): { items: AgentJournalRenderItem[]; dropped: number } {
   const ordered = groupItemsBySequence(items, keep)
   const kept: AgentJournalRenderItem[][] = []
   let total = 0
-  for (const group of ordered) {
+  for (const stored of ordered) {
+    const group = stored.map(form)
     const bytes = group.reduce((sum, item) => sum + historyEntryBytes(item, submissionBytes), 0)
     if (kept.length === 0 && bytes > maxBytes) {
       kept.push(group.map((item) => oversizedHistoryItem(item)))

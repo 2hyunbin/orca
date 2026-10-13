@@ -247,8 +247,46 @@ describe('frames to a bounded-frame subscriber', () => {
       frame.type === 'batch' && frame.queuedMessages ? [frame.queuedMessages] : []
     )
     expect(cards.at(-1)).toHaveLength(queue.queuedMessages.length)
-    expect(cards.at(-1)?.every((card) => card.truncated !== undefined)).toBe(true)
+    expect(cards.at(-1)?.every((card) => card.truncated === true)).toBe(true)
     expect(frames.some((frame) => frame.type === 'batch' && frame.backgroundTasks)).toBe(true)
+  })
+
+  it('keep a burst of rows to one page, so no publish outruns the bridge window', async () => {
+    const queue = largeQueue()
+    const subscribers = new AgentSessionSubscribers({
+      readQueuePublication: () => queue,
+      readBackgroundTasks: () => largeRoster
+    })
+    const frames: AgentSessionSubscribeEvent[] = []
+    subscribers.open({
+      id: 'phone',
+      sessionId: SESSION,
+      journal,
+      fence: 1,
+      emit: (event) => frames.push(event),
+      boundedFrames: true
+    })
+    // About 10 MB of rows land before one publish, as a drain of buffered events can.
+    for (let index = 0; index < 40; index += 1) {
+      await append(message('x'.repeat(256 * 1024)))
+    }
+    frames.length = 0
+    subscribers.publish(SESSION, journal)
+
+    // The phone's shell ends a stream past 4 MiB unacked.
+    const bytes = frames.reduce((sum, frame) => sum + bridgeFrameBytes(frame), 0)
+    expect(bytes).toBeLessThan(4 * 1024 * 1024)
+    // One page of rows; the rest are the side lists a hydrating frame owes.
+    const [tail, ...side] = frames
+    expect(tail?.type === 'snapshot' && tail.page).toMatchObject({ hasOlder: true })
+    expect(side.every((frame) => frame.type === 'batch' && frame.batch.items.length === 0)).toBe(
+      true
+    )
+    // Live rows after it arrive as batches again.
+    await append(message('next'))
+    frames.length = 0
+    subscribers.publish(SESSION, journal)
+    expect(frames.map((frame) => frame.type)).toEqual(['batch'])
   })
 
   it('fit even a queue an older build let grow past what previews can shrink', async () => {
@@ -341,7 +379,6 @@ describe('frames to a bounded-frame subscriber', () => {
             ? frame.batch.items
             : []
       expect(items.map((item) => item.body)).toEqual(items.map(() => stored))
-      expect(items.every((item) => item.truncated === undefined)).toBe(true)
     }
   })
 })

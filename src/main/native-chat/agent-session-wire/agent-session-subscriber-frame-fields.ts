@@ -33,7 +33,8 @@ export type SubscriberFieldHooks = {
 export type SubscriberFrame = {
   /** In order: one for most subscribers; for a bounded-frame one, its side lists follow. */
   frames: AgentSessionSubscribeEvent[]
-  commands: AgentSessionSlashCommand[] | null
+  /** Undefined for a bounded-frame subscriber, which is never sent the list. */
+  commands: AgentSessionSlashCommand[] | null | undefined
   attachedQueued: boolean
   queued: QueuePublication | undefined
   /** The attached roster's fingerprint; undefined when the frame carries none. */
@@ -52,7 +53,9 @@ export function buildSubscriberFrame(
   event: AgentSessionSubscribeEvent,
   withholdQueued: boolean
 ): SubscriberFrame {
-  const commands = hooks.readCommands?.(subscriber.sessionId) ?? null
+  const commands = subscriber.boundedFrames
+    ? undefined
+    : (hooks.readCommands?.(subscriber.sessionId) ?? null)
   const includeCommands =
     hooks.readCommands !== undefined &&
     event.type !== 'end' &&

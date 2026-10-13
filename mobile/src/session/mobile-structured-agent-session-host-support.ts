@@ -6,7 +6,6 @@ import {
   AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY,
   AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY
 } from '../../../src/shared/protocol-version'
-import { AGENT_SESSION_BOUNDED_FRAMES_RUNTIME_CAPABILITY } from '../../../src/shared/structured-agent-session-surface-capabilities'
 
 /** Structured-session features the connected host advertised; null until the status probe answers. */
 export type StructuredAgentSessionHostSupport = {
@@ -21,9 +20,6 @@ export type StructuredAgentSessionHostSupport = {
   statusFeed: boolean
   /** A Stop that stopped nothing adds no row, so a repeated Stop is quiet. */
   quietRepeatedStop: boolean
-  /** The host sizes the transcript stream's frames to fit this app's bridge; an older one may
-   *  send a frame the bridge ends the stream over. */
-  boundedFrames: boolean
 }
 
 export function structuredAgentSessionHostSupport(
@@ -35,7 +31,6 @@ export function structuredAgentSessionHostSupport(
     queuedMessages: capabilities.includes(AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY),
     queuedCommands: capabilities.includes(AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY),
     statusFeed: capabilities.includes(AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY),
-    quietRepeatedStop: capabilities.includes(AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY),
-    boundedFrames: capabilities.includes(AGENT_SESSION_BOUNDED_FRAMES_RUNTIME_CAPABILITY)
+    quietRepeatedStop: capabilities.includes(AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY)
   }
 }

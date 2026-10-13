@@ -29,8 +29,10 @@ import {
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { projectJournalBatch } from './agent-session-journal-batch'
 import {
+  asStoredHistoryItem,
   boundHistoryItemsByBytes,
   HISTORY_PAGE_CONTENT_BUDGET_BYTES,
+  type HistoryItemForm,
   historyEntryBytes,
   newestWholeSequenceGroups,
   wholeSubagentGroupsStart,
@@ -88,12 +90,6 @@ function isSubagentRow(item: AgentJournalRenderItem): boolean {
   return item.body.kind === 'message' && item.body.blocks.some(isSubagentBlock)
 }
 
-/** How a reader receives each item; a bounded-frame reader gets the form that fits its frame. The
- *  page is measured in that form, so a page sized for it carries what it will actually send. */
-export type HistoryItemForm = (item: AgentJournalRenderItem) => AgentJournalRenderItem
-
-export const asStoredHistoryItem: HistoryItemForm = (item) => item
-
 export function readAgentSessionHistory(
   journal: AgentSessionJournal,
   request: AgentSessionHistoryRequest,
@@ -125,12 +121,13 @@ export function readAgentSessionHistory(
   const scoped =
     scope === 'own-agent' ? snapshot.items.filter(isRootAgentJournalItem) : snapshot.items
   const older = cursor ? scoped.filter((item) => item.sequence < cursor.sequence) : scoped
-  const windowed = conversationWindow(older, limit).map(form)
+  const windowed = conversationWindow(older, limit)
   const { items, dropped } = boundHistoryItemsByBytes(
     windowed,
     'newest',
     submissionBytesByItemId(snapshot.submissions),
-    HISTORY_PAGE_CONTENT_BUDGET_BYTES
+    HISTORY_PAGE_CONTENT_BUDGET_BYTES,
+    form
   )
   return {
     ok: true,
@@ -181,12 +178,13 @@ function buildHydrationPage(
   fence: number | undefined,
   form: HistoryItemForm
 ): AgentSessionHistoryPage {
-  const items = conversationWindow(snapshot.items, AGENT_SESSION_HISTORY_MAX_LIMIT).map(form)
+  const items = conversationWindow(snapshot.items, AGENT_SESSION_HISTORY_MAX_LIMIT)
   const bounded = boundHistoryItemsByBytes(
     items,
     'newest',
     submissionBytesByItemId(snapshot.submissions),
-    HISTORY_PAGE_CONTENT_BUDGET_BYTES
+    HISTORY_PAGE_CONTENT_BUDGET_BYTES,
+    form
   )
   return buildPage({
     snapshot,

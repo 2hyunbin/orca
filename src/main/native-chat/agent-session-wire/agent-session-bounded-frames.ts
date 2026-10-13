@@ -14,8 +14,11 @@ import type {
 import { boundedFrameItem } from './agent-session-bounded-frame-item'
 import { boundedQueuePublication } from './agent-session-bounded-queue'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
-import { asStoredHistoryItem, type HistoryItemForm } from './agent-session-history-page'
-import { HISTORY_PAGE_CONTENT_BUDGET_BYTES } from './agent-session-history-page-bounds'
+import {
+  asStoredHistoryItem,
+  HISTORY_PAGE_CONTENT_BUDGET_BYTES,
+  type HistoryItemForm
+} from './agent-session-history-page-bounds'
 import { jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
 
@@ -27,8 +30,8 @@ export function subscriberItemForm(subscriber: { boundedFrames: boolean }): Hist
 /** The latest turn and the activity line are each a few hundred bytes, their ids and text bounded
  *  where they are made. Only a provider id far past any real one could pass these; the frame then
  *  leaves the field out, which a reader takes as a host that did not say. */
-export const BOUNDED_FRAME_LATEST_TURN_BYTES = 8 * 1024
-export const BOUNDED_FRAME_ACTIVITY_BYTES = 2 * 1024
+const BOUNDED_FRAME_LATEST_TURN_BYTES = 8 * 1024
+const BOUNDED_FRAME_ACTIVITY_BYTES = 2 * 1024
 
 type HistoryFrame = Exclude<AgentSessionSubscribeEvent, { type: 'end' }>
 type BatchFrame = Extract<AgentSessionSubscribeEvent, { type: 'batch' }>

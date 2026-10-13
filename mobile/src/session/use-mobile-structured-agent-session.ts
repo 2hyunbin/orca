@@ -81,14 +81,7 @@ export function useMobileStructuredAgentSession(args: {
   const commandPendingRef = useRef(false)
   // Against a host that predates the quiet repeated Stop, a Stop of a turn still being stopped joins it.
   const inFlightStopsRef = useRef(new Map<string, Promise<boolean>>())
-  const stateArgs = {
-    client,
-    sessionId,
-    sessionKey,
-    enabled,
-    connected,
-    boundedFrames: hostSupport === null ? null : hostSupport?.boundedFrames === true
-  }
+  const stateArgs = { client, sessionId, sessionKey, enabled, connected }
   const { state, stateRef, queuedMessages, queuePause, loadingOlder, loadEarlier } =
     useMobileStructuredAgentState(stateArgs)
 
