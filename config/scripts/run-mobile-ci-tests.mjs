@@ -8,11 +8,21 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('../..', import.meta.url))
 const require = createRequire(import.meta.url)
 const cli = join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs')
-const reporters = process.argv.slice(2)
+const args = process.argv.slice(2)
+const selections = args.filter((argument) => argument.startsWith('--runtime='))
+const runtime = selections[0]?.slice('--runtime='.length) ?? 'all'
+if (selections.length > 1 || !['all', 'node', 'bun'].includes(runtime)) {
+  throw new Error('Choose one mobile test runtime: all, node, or bun')
+}
+if (process.versions.bun) {
+  throw new Error('Launch mobile CI tests with Node.js')
+}
+const reporters = args.filter((argument) => !argument.startsWith('--runtime='))
 if (reporters.some((argument) => !argument.startsWith('--reporter='))) {
   throw new Error('Only additional Vitest reporters are accepted')
 }
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'orca-mobile-tests-')))
+const roles = runtime === 'all' ? ['node', 'bun'] : [runtime]
 const abort = new AbortController()
 const closed = new Set()
 let signalExitCode
@@ -71,10 +81,11 @@ async function runRole(role, program, runtimeArgs) {
 }
 
 try {
-  const results = await Promise.allSettled([
-    runRole('node', process.execPath, []),
-    runRole('bun', 'bun', ['--bun'])
-  ])
+  const results = await Promise.allSettled(
+    roles.map((role) =>
+      role === 'node' ? runRole(role, process.execPath, []) : runRole(role, 'bun', ['--bun'])
+    )
+  )
   let exitCode = 0
   for (const result of results) {
     if (result.status === 'rejected') {
@@ -88,7 +99,7 @@ try {
 } finally {
   process.removeListener('SIGINT', onInterrupt)
   process.removeListener('SIGTERM', onTerminate)
-  if (closed.size === 2) {
+  if (closed.size === roles.length) {
     rmSync(scratch, { recursive: true, force: true })
   } else {
     console.error(`Mobile test process closure is unverifiable; retained ${scratch}`)

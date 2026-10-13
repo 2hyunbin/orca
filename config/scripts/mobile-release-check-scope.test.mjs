@@ -8,7 +8,7 @@ import { shouldRunMobileReleaseChecks } from './mobile-release-check-scope.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const workflow = parse(readFileSync(join(root, '.github/workflows/mobile.yml'), 'utf8'))
-const steps = workflow.jobs.verify.steps
+const steps = workflow.jobs.checks.steps
 const detector = steps.find((step) => step.id === 'ruby-scope')
 const directories = []
 
@@ -106,7 +106,7 @@ it('gates Ruby independently and retains mobile static validation', () => {
   ]) {
     expect(workflow.on.pull_request.paths.some((pattern) => matchesGlob(file, pattern))).toBe(true)
   }
-  expect(workflow.jobs.verify.env.BUNDLE_FROZEN).toBe('true')
+  expect(workflow.jobs.checks.env.BUNDLE_FROZEN).toBe('true')
   expect(steps.find((step) => step.name === 'Setup Ruby and fastlane').with['bundler-cache']).toBe(
     true
   )

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { matchesGlob } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { parse } from 'yaml'
 import { expect, it } from 'vitest'
 import { shouldRunMobileTests } from './mobile-test-change-scope.mjs'
@@ -67,7 +68,7 @@ it('skips only tests, after successful detection, and retains all other mobile g
   const workflow = parse(
     readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8')
   )
-  const steps = workflow.jobs.verify.steps
+  const steps = workflow.jobs.checks.steps
   expect(workflow.on.pull_request.paths).toContain('config/scripts/mobile-test-change-scope*')
   const detector = steps.find((step) => step.id === 'test-scope')
   expect(detector.run).toContain('git diff --name-only --no-renames -z HEAD^1 HEAD')
@@ -84,18 +85,18 @@ it('overlaps both typechecks with tests and collects their failures before the s
   const workflow = parse(
     readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8')
   )
-  const steps = workflow.jobs.verify.steps
+  const steps = workflow.jobs.checks.steps
   const install = steps.findIndex((step) => step.name === 'Install dependencies')
   const test = steps.findIndex((step) => step.name === 'Test')
   const summary = steps.findIndex((step) => step.name === 'Summarize RPC recording changes')
   const waits = steps.filter((step) => step.wait !== undefined)
   expect(waits).toHaveLength(1)
   const [wait] = waits
-  expect(wait.wait).toEqual(['production-types', 'test-types'])
+  expect(wait.wait).toEqual(['production-types', 'test-types', 'ruby-tools'])
   expect(wait.if).toBeUndefined()
   expect(steps.indexOf(wait)).toBeGreaterThan(test)
   expect(steps.indexOf(wait)).toBeLessThan(summary)
-  for (const id of wait.wait) {
+  for (const id of ['production-types', 'test-types']) {
     const step = steps.find((candidate) => candidate.id === id)
     expect(step.background).toBe(true)
     expect(step['continue-on-error']).toBeUndefined()
@@ -104,4 +105,47 @@ it('overlaps both typechecks with tests and collects their failures before the s
     expect(steps.indexOf(step)).toBeLessThan(test)
     expect(step.run).toMatch(/^node /)
   }
+  const ruby = steps.find((step) => step.id === 'ruby-tools')
+  expect(ruby.uses).toBe('ruby/setup-ruby@v1')
+  expect(ruby.background).toBe(true)
+  expect(ruby.if).toBe("steps.ruby-scope.outputs.should_run != 'false'")
+  expect(ruby['continue-on-error']).toBeUndefined()
+  expect(steps.indexOf(ruby)).toBeLessThan(install)
+})
+
+it('requires both runtime jobs and rejects failed, skipped or cancelled dependencies', () => {
+  const workflow = parse(
+    readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8')
+  )
+  expect(workflow.jobs.verify.needs).toEqual(['checks', 'native-tests'])
+  expect(workflow.jobs.verify.if).toContain('!cancelled()')
+  const [gate] = workflow.jobs.verify.steps
+  expect(gate.env.CHECKS_RESULT).toBe('${{ needs.checks.result }}')
+  expect(gate.env.NATIVE_RESULT).toBe('${{ needs.native-tests.result }}')
+  const code = gate.run.slice('node -e "'.length, -1)
+  for (const checks of ['success', 'failure', 'skipped', 'cancelled']) {
+    for (const native of ['success', 'failure', 'skipped', 'cancelled']) {
+      let exitCode = 0
+      runInNewContext(code, {
+        process: {
+          env: { CHECKS_RESULT: checks, NATIVE_RESULT: native },
+          exit: (code) => {
+            exitCode = code
+          }
+        }
+      })
+      expect(exitCode).toBe(checks === 'success' && native === 'success' ? 0 : 1)
+    }
+  }
+  for (const [job, runtime] of [
+    [workflow.jobs.checks, 'bun'],
+    [workflow.jobs['native-tests'], 'node']
+  ]) {
+    const test = job.steps.find((step) => step.name === 'Test')
+    expect(test.run).toBe(`node ../config/scripts/run-mobile-ci-tests.mjs --runtime=${runtime}`)
+    expect(test.if).toBe("steps.test-scope.outputs.should_run != 'false'")
+    expect(test['continue-on-error']).toBeUndefined()
+  }
+  const main = workflow.jobs['main-tests'].steps.find((step) => step.name === 'Test')
+  expect(main.run).toBe('node ../config/scripts/run-mobile-ci-tests.mjs')
 })
