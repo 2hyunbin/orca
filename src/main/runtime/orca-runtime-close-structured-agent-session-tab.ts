@@ -269,23 +269,33 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     if (!host || !structuredSessionTabRetired(host, sessionId)) {
       return
     }
-    for (const worktreeId of this.savedAgentSessionTabs().get(sessionId) ?? []) {
-      this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
-        withClosedAgentSessionTab(hostId, session, worktreeId, sessionId)
+    for (const { worktreeId, hostId } of this.savedAgentSessionTabs().get(sessionId) ?? []) {
+      this.saveWindowlessAgentSessionTabLayout(
+        worktreeId,
+        (partitionHostId, session) =>
+          withClosedAgentSessionTab(partitionHostId, session, worktreeId, sessionId),
+        hostId
       )
     }
   }
 
-  /** Each of this host's chats with a saved tab, and the worktrees that save one. */
-  protected savedAgentSessionTabs(): Map<string, Set<string>> {
-    const saved = new Map<string, Set<string>>()
-    for (const session of this.listWorkspaceSessionPartitions()) {
-      for (const [worktreeId, tabs] of Object.entries(session.unifiedTabs ?? {})) {
+  /**
+   * Each of this host's chats with a saved tab, and where: every saved partition, so a tab left in
+   * a rotated runtime partition (#18202) is found as a terminal close finds one.
+   */
+  protected savedAgentSessionTabs(): Map<
+    string,
+    { worktreeId: string; hostId: ExecutionHostId }[]
+  > {
+    const saved = new Map<string, { worktreeId: string; hostId: ExecutionHostId }[]>()
+    for (const hostId of this.store?.getWorkspaceSessionHostIds?.() ?? []) {
+      const session = this.store?.getWorkspaceSession?.(hostId)
+      for (const [worktreeId, tabs] of Object.entries(session?.unifiedTabs ?? {})) {
         for (const tab of tabs) {
           // Another execution host's chat is in that host's index, not this one's.
           const ownHost = !tab.executionHostId || tab.executionHostId === LOCAL_EXECUTION_HOST_ID
           if (tab.contentType === 'agent-session' && ownHost) {
-            saved.set(tab.entityId, (saved.get(tab.entityId) ?? new Set()).add(worktreeId))
+            saved.set(tab.entityId, [...(saved.get(tab.entityId) ?? []), { worktreeId, hostId }])
           }
         }
       }
@@ -299,18 +309,19 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     change: (
       hostId: ExecutionHostId,
       session: WorkspaceSessionState
-    ) => WorkspaceSessionState | null
+    ) => WorkspaceSessionState | null,
+    /** The partition to edit; the worktree's own when unnamed. */
+    partitionHostId?: ExecutionHostId
   ): void {
     if (this.getAvailableAuthoritativeWindow()) {
       return
     }
     try {
-      const session = this.getWorkspaceSessionForWorktree(worktreeId)
-      const next = session
-        ? change(this.getWorkspaceSessionHostIdForWorktree(worktreeId), session)
-        : null
+      const hostId = partitionHostId ?? this.getWorkspaceSessionHostIdForWorktree(worktreeId)
+      const session = this.store?.getWorkspaceSession?.(hostId)
+      const next = session ? change(hostId, session) : null
       if (next) {
-        this.setWorkspaceSessionForWorktree(worktreeId, next)
+        this.store.setWorkspaceSession(next, hostId)
       }
     } catch (error) {
       // The chat itself opened or closed; a layout that cannot be written must not undo that.

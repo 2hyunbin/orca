@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from './orca-runtime'
+import { withOpenedAgentSessionTab } from './agent-session-tab-layout'
 
 const WT = 'repo-1::/tmp/worktree-a'
 
@@ -42,6 +43,10 @@ function useChatHost(fake: Record<string, unknown>): void {
   setStructuredAgentSessionHost(fake as never)
 }
 
+function chat(sessionId: string) {
+  return { sessionId, agent: 'codex' as const }
+}
+
 function savedChatIds(state: { session: WorkspaceSessionState }): string[] {
   return (state.session.unifiedTabs?.[WT] ?? [])
     .filter((tab) => tab.contentType === 'agent-session')
@@ -76,6 +81,43 @@ describe('a chat tab on a host with no window', () => {
     fresh.onStructuredSessionTabHidden('chat-1')
 
     expect(savedChatIds(state)).toEqual([])
+  })
+
+  it("leaves another partition that still saves this host's tab, and another host's chat alone", () => {
+    const empty: WorkspaceSessionState = {
+      activeRepoId: 'repo-1',
+      activeWorktreeId: WT,
+      activeTabId: null,
+      tabsByWorktree: {},
+      terminalLayoutsByTabId: {}
+    }
+    const sessions = new Map<string, WorkspaceSessionState>([
+      ['local', empty],
+      // This host's tab, left in a rotated runtime partition (#18202).
+      ['runtime:env-old', withOpenedAgentSessionTab('local', empty, WT, chat('chat-1'))!],
+      // A chat that runtime runs, which this host's index never lists.
+      ['runtime:env-x', withOpenedAgentSessionTab('runtime:env-x', empty, WT, chat('chat-x'))!]
+    ])
+    const remote = sessions.get('runtime:env-x')
+    const store = {
+      getRepos: () => [],
+      getSettings: () => ({}),
+      getWorkspaceSessionHostIds: () => [...sessions.keys()],
+      getWorkspaceSession: (hostId = 'local') => sessions.get(hostId) ?? null,
+      setWorkspaceSession: (next: WorkspaceSessionState, hostId = 'local') => {
+        sessions.set(hostId, next)
+      }
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
+    const runtime = new OrcaRuntimeService(store as never)
+    useChatHost({ getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: [] }) })
+
+    runtime.onStructuredSessionTabHidden('chat-1')
+    runtime.onStructuredSessionTabHidden('chat-x')
+
+    expect(sessions.get('runtime:env-old')?.unifiedTabs?.[WT] ?? []).toEqual([])
+    expect(sessions.get('local')).toBe(empty)
+    expect(sessions.get('runtime:env-x')).toBe(remote)
   })
 
   it('keeps its saved tab when a failed close put it back in the index', async () => {
