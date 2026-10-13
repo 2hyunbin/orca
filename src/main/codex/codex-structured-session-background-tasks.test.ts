@@ -10,6 +10,7 @@ import type {
 import { CodexStructuredSessionAdapter } from './codex-structured-session-adapter'
 import { CodexBackgroundTaskTracker } from './codex-background-task-tracker'
 import type { CodexStructuredSessionEvent } from './codex-structured-session-state'
+import type { StructuredAgentSessionEndedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 
@@ -25,7 +26,10 @@ const CHILD_ID = '01a07d54-5523-78a3-91f5-e0acb1dab065'
 
 /** A three-route stand-in, deliberately smaller than the full adapter harness:
  *  this suite only needs a thread and a notification pipe. */
-function fakeCodex(close: () => Promise<boolean> = async () => true): {
+function fakeCodex(
+  close: () => Promise<boolean> = async () => true,
+  proof?: StructuredAgentSessionEndedEvent['processExit']
+): {
   handlers: () => CodexAppServerConnectionHandlers
   openConnection: typeof openCodexAppServerConnection
 } {
@@ -42,6 +46,11 @@ function fakeCodex(close: () => Promise<boolean> = async () => true): {
       respondWithError: () => {},
       close
     } as unknown as CodexAppServerConnection
+    if (proof) {
+      Object.defineProperty(connection, 'closeResult', {
+        value: { root: proof.root, tree: proof.workload }
+      })
+    }
     return connection
   }) as typeof openCodexAppServerConnection
   return { handlers: () => live, openConnection }
@@ -83,9 +92,10 @@ async function adapterWithSession(
   published: Published[],
   events?: StructuredAgentSessionEventSink,
   onEvent?: (event: CodexStructuredSessionEvent) => void,
-  close?: () => Promise<boolean>
+  close?: () => Promise<boolean>,
+  proof?: StructuredAgentSessionEndedEvent['processExit']
 ): Promise<{ adapter: CodexStructuredSessionAdapter; codex: ReturnType<typeof fakeCodex> }> {
-  const codex = fakeCodex(close)
+  const codex = fakeCodex(close, proof)
   const adapter = new CodexStructuredSessionAdapter({
     resolveLaunch: async () => ({
       command: 'codex',
@@ -261,5 +271,46 @@ describe("codex background tasks reach the host's child records", () => {
     // The records hear the session end, which settles the child still running.
     expect(published).toEqual([{ sessionId: 'session-1', evidence: ['session-ended'] }])
     expect(adapter.backgroundTaskState('session-1')).toBeUndefined()
+  })
+
+  it.each([
+    [{ root: 'exited', workload: 'exited' }, true],
+    [{ root: 'exited', workload: 'unverifiable' }, false],
+    [{ root: 'live', workload: 'exited' }, false]
+  ] as const)('hands close proof %j to the host child-work path', async (proof, ended) => {
+    const published: Published[] = []
+    const { adapter, codex } = await adapterWithSession(
+      published,
+      undefined,
+      undefined,
+      undefined,
+      proof
+    )
+    const spawn = subagentNotification('started')
+    codex.handlers().onNotification?.(spawn.method, spawn.params)
+    published.length = 0
+    const drain = vi.spyOn(CodexBackgroundTaskTracker.prototype, 'drainChildWorkEvidence')
+    try {
+      expect(await adapter.closeSession('session-1')).toBe(true)
+      const endings = drain.mock.results.flatMap((result) =>
+        result.type === 'return' ? result.value.filter((edge) => edge.type === 'ended') : []
+      )
+      expect(endings).toEqual(
+        ended
+          ? [
+              expect.objectContaining({
+                type: 'ended',
+                handle: { idKind: 'thread_id', id: CHILD_ID, runId: 'child-turn' },
+                outcome: 'cancelled'
+              })
+            ]
+          : []
+      )
+      expect(published).toEqual([
+        { sessionId: 'session-1', evidence: ended ? ['ended', 'session-ended'] : ['session-ended'] }
+      ])
+    } finally {
+      drain.mockRestore()
+    }
   })
 })
