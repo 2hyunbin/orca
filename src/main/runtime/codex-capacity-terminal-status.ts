@@ -46,15 +46,21 @@ export function observeCodexCapacityTerminalStatus(
     tracker = new CodexCapacityNoticeTracker()
     trackers.set(emulator, tracker)
   }
-  if (!tracker.observe(data, () => emulator.getVisibleLines())) {
+  if (
+    !tracker.observe(
+      data,
+      () => emulator.getVisibleLines(),
+      () => emulator.isSynchronizedOutput
+    )
+  ) {
     return null
   }
   const previous = readStatus()
   if (previous && previous.agentType !== 'codex') {
     return null
   }
-  // Queued emulator writes must not close a newer turn opened by a live hook.
-  if (previous?.turnStartedAt !== undefined && previous.turnStartedAt > outputObservedAt) {
+  // Same-tick ordering is ambiguous; queued output must yield to a newer hook turn.
+  if (previous?.turnStartedAt !== undefined && previous.turnStartedAt >= outputObservedAt) {
     return null
   }
   if (previous?.mainAgent?.outcome === 'failure') {

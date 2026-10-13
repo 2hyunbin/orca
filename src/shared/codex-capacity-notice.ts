@@ -12,7 +12,11 @@ export class CodexCapacityNoticeTracker {
   private synchronized = false
   private readonly scanner = createTerminalEscapeScanner({
     onCsi: (marker, params, final) => {
-      if (marker === '?' && params === '2026') {
+      if (
+        marker === '?' &&
+        params.split(';').includes('2026') &&
+        (final === 'h' || final === 'l')
+      ) {
         this.synchronized = final === 'h'
       } else if ((final === 'H' || final === 'f') && this.tail && !this.tail.endsWith(' ')) {
         this.tail += ' '
@@ -54,9 +58,13 @@ export class CodexCapacityNoticeTracker {
     }
   }
 
-  observe(data: string, readScreen: () => readonly string[]): boolean {
+  observe(
+    data: string,
+    readScreen: () => readonly string[],
+    readSynchronized?: () => boolean
+  ): boolean {
     this.scanner.observe(data)
-    if (!this.pending || this.synchronized) {
+    if (!this.pending || (readSynchronized?.() ?? this.synchronized)) {
       return false
     }
     this.pending = false

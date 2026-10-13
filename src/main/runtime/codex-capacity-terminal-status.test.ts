@@ -171,28 +171,62 @@ describe('Codex model capacity terminal status', () => {
     }
   })
 
-  it('does not let queued terminal output close a newer hook turn', async () => {
-    const emulator = new HeadlessEmulator({ cols: 80, rows: 24 })
-    try {
-      await emulator.write(transcript)
-      expect(
-        observeCodexCapacityTerminalStatus(
-          emulator,
-          transcript,
-          undefined,
-          'codex',
-          () => ({
-            agentType: 'codex',
-            prompt: 'Retry',
-            turnStartedAt: 101
-          }),
-          100
-        )
-      ).toBeNull()
-    } finally {
-      emulator.dispose()
+  it.each([100, 101])(
+    'does not close a hook turn starting at or after output time (%i)',
+    async (turnStartedAt) => {
+      const emulator = new HeadlessEmulator({ cols: 80, rows: 24 })
+      try {
+        await emulator.write(transcript)
+        expect(
+          observeCodexCapacityTerminalStatus(
+            emulator,
+            transcript,
+            undefined,
+            'codex',
+            () => ({
+              agentType: 'codex',
+              prompt: 'Retry',
+              turnStartedAt
+            }),
+            100
+          )
+        ).toBeNull()
+      } finally {
+        emulator.dispose()
+      }
     }
-  })
+  )
+
+  it.each([1, 7, 64, 8192])(
+    'detects a first shell-launched notice in %i-character chunks',
+    async (size) => {
+      const start = fullscreenTranscript.lastIndexOf(
+        '\x1b[?2026h',
+        fullscreenTranscript.indexOf('■ Selected model')
+      )
+      const end = fullscreenTranscript.indexOf('\x1b[?2026l', start) + '\x1b[?2026l'.length
+      const emulator = new HeadlessEmulator({ cols: 40, rows: 24 })
+      let detections = 0
+      try {
+        await emulator.write(fullscreenTranscript.slice(0, start))
+        for (let index = start; index < end; index += size) {
+          const chunk = fullscreenTranscript.slice(index, Math.min(index + size, end))
+          await emulator.write(chunk)
+          if (
+            observeCodexCapacityTerminalStatus(emulator, chunk, 'zsh', undefined, () => ({
+              agentType: 'codex',
+              prompt: 'Say hi'
+            }))
+          ) {
+            detections++
+          }
+        }
+        expect(detections).toBe(1)
+      } finally {
+        emulator.dispose()
+      }
+    }
+  )
 
   it('recognizes an unrelated launch once and invalidates when its command changes', () => {
     const emulator = new HeadlessEmulator({ cols: 80, rows: 24 })
