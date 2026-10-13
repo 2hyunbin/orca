@@ -27,6 +27,7 @@ import {
   collectBrowserGroupAssignment
 } from './mobile-session-browser-group-projection'
 import { headlessMobileSnapshotContentUnchanged } from './mobile-session-snapshot-equality'
+import { projectWindowlessSessionTabs } from './windowless-session-tabs'
 
 export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession extends OrcaRuntimeWithWaitForSessionTabsInventoryPublication {
   protected hydrateHeadlessMobileSessionTabsFromWorkspaceSession(
@@ -105,6 +106,16 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
         }
       }
       const existing = this.mobileSessionTabsByWorktree.get(entryWorktreeId)
+      if (!hasAuthoritativeWindow) {
+        this.publishWindowlessSessionTabs(
+          entryWorktreeId,
+          options.workspaceSession ??
+            this.getWorkspaceSessionForWorktree(entryWorktreeId) ??
+            session
+        )
+        reconciledWorktreeIds.add(entryWorktreeId)
+        continue
+      }
       if (
         existing &&
         existing.tabs.length > 0 &&
@@ -266,5 +277,35 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
       this.storeMobileSessionSnapshot(entryWorktreeId, nextSnapshot)
     }
     return reconciledWorktreeIds
+  }
+
+  /** Stores the saved layout's list for a worktree when it changed; nothing to list keeps the old. */
+  protected publishWindowlessSessionTabs(worktreeId: string, session: WorkspaceSessionState): void {
+    const liveTabs =
+      this.offscreenBrowserBackend && this.agentBrowserBridge?.tabList
+        ? this.agentBrowserBridge.tabList(worktreeId).tabs
+        : []
+    const projected = projectWindowlessSessionTabs({
+      hostId: this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+      session,
+      worktreeId,
+      generatedTitlesEnabled: this.store?.getSettings?.()?.tabAutoGenerateTitle === true,
+      livePages: new Map(liveTabs.map((tab) => [tab.browserPageId, tab])),
+      clientPages: this.buildClientHostedSessionBrowserTabs(worktreeId)
+    })
+    if (!projected) {
+      return
+    }
+    const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const next: RuntimeMobileSessionTabsSnapshot = {
+      ...projected,
+      worktree: existing?.worktree ?? worktreeId,
+      publicationEpoch: `headless-hydrated:${Date.now().toString(36)}`,
+      snapshotVersion: (existing?.snapshotVersion ?? 0) + 1
+    }
+    if (existing && headlessMobileSnapshotContentUnchanged(existing, next)) {
+      return
+    }
+    this.storeMobileSessionSnapshot(worktreeId, next)
   }
 }

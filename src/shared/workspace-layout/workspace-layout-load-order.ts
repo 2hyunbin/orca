@@ -46,10 +46,15 @@ export function resolveGroupOrder(args: {
   for (const candidate of [...unplaced].sort(compareUnplaced)) {
     let group = groups.find((entry) => entry.id === candidate.groupId) ?? groups[0]
     if (!group) {
-      group = { id: args.mintId(`group:${args.workspaceKey}`), tabOrder: [] }
+      group = { id: args.mintId(firstGroupSeed(args.workspaceKey)), tabOrder: [] }
       groups.push(group)
     }
     group.tabOrder.push(candidate.id)
   }
   return groups.filter((group) => group.tabOrder.length > 0)
+}
+
+/** What the Loader mints a workspace's first group from when nothing stored names one. */
+export function firstGroupSeed(workspaceKey: string): string {
+  return `group:${workspaceKey}`
 }

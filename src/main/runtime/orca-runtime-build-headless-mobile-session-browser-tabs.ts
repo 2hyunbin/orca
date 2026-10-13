@@ -65,23 +65,7 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
         isActive: tab.active === true
       }
     })
-    const publishedClientTabs = getRuntimeBrowserPageRegistry(this)
-      .listPages(worktreeId)
-      .map((page) => ({
-        type: 'browser' as const,
-        id: page.browserPageId,
-        title: page.title || page.url || 'Browser',
-        browserWorkspaceId: page.browserPageId,
-        browserPageId: page.browserPageId,
-        browserProfileId: page.browserProfileId,
-        executionHostKey: page.executionHostKey,
-        placement: page.placement,
-        url: page.url,
-        loading: page.loading,
-        canGoBack: page.canGoBack,
-        canGoForward: page.canGoForward,
-        isActive: page.active
-      }))
+    const publishedClientTabs = this.buildClientHostedSessionBrowserTabs(worktreeId)
     const publishedSavedTabs = this.serveBrowserTabs.listRestorable(worktreeId).map((page) => {
       const persistedProps = this.getPersistedUnifiedSessionTabProps(worktreeId, page.tabId)
       return {
@@ -100,6 +84,29 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
       }
     })
     return [...publishedServerTabs, ...publishedClientTabs, ...publishedSavedTabs]
+  }
+
+  /** Pages paired clients run for this host's worktree. */
+  protected buildClientHostedSessionBrowserTabs(
+    worktreeId: string
+  ): RuntimeMobileSessionBrowserTab[] {
+    return getRuntimeBrowserPageRegistry(this)
+      .listPages(worktreeId)
+      .map((page) => ({
+        type: 'browser' as const,
+        id: page.browserPageId,
+        title: page.title || page.url || 'Browser',
+        browserWorkspaceId: page.browserPageId,
+        browserPageId: page.browserPageId,
+        browserProfileId: page.browserProfileId,
+        executionHostKey: page.executionHostKey,
+        placement: page.placement,
+        url: page.url,
+        loading: page.loading,
+        canGoBack: page.canGoBack,
+        canGoForward: page.canGoForward,
+        isActive: page.active
+      }))
   }
 
   protected getPersistedUnifiedSessionTabProps(
