@@ -122,7 +122,9 @@ export function nextWindowlessSnapshot(
         tabs: []
       }),
       worktree: existing?.worktree ?? worktreeId,
-      publicationEpoch: `headless-hydrated:${Date.now().toString(36)}`,
+      // Clients read a new epoch as a new publisher and recover from a fresh list.
+      publicationEpoch:
+        existing?.publicationEpoch ?? `headless-hydrated:${Date.now().toString(36)}`,
       snapshotVersion: (existing?.snapshotVersion ?? 0) + 1
     },
     existing

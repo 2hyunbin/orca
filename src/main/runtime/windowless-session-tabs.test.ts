@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from './orca-runtime'
+import { nextWindowlessSnapshot } from './windowless-session-tabs'
 import {
   TEST_WORKTREE_ID,
   makeHeadlessTerminalLayout,
@@ -167,5 +168,19 @@ describe('the session-tabs list of a host with no window', () => {
     expect(listed.tabs).toEqual([
       expect.objectContaining({ parentTabId: 'host-tab', ptyId: 'persisted-pty' })
     ])
+  })
+
+  it('republishes a saved change in the same publication, one version on', async () => {
+    const { runtime } = twoGroupHost()
+    const listed = await runtime.listMobileSessionTabs(WT)
+    const existing = { ...listed, publicationEpoch: 'earlier-publication', snapshotVersion: 4 }
+
+    const next = nextWindowlessSnapshot(
+      TEST_WORKTREE_ID,
+      { ...listed, activeTabId: null },
+      existing
+    )
+
+    expect(next).toMatchObject({ publicationEpoch: 'earlier-publication', snapshotVersion: 5 })
   })
 })
