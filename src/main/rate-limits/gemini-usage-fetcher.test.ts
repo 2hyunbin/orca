@@ -91,6 +91,23 @@ describe('fetchGeminiRateLimits', () => {
     expect(result.buckets).toHaveLength(2)
   })
 
+  it('tags a quota request that throws as a network failure', async () => {
+    setupAuthJsonValid()
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('retrieveUserQuota')) {
+        return Promise.reject(new Error('net::ERR_PROXY_CONNECTION_FAILED'))
+      }
+      if (url.includes('loadCodeAssist')) {
+        return Promise.resolve(makeResponse({ cloudaicompanionProject: 'proj-123' }))
+      }
+      return Promise.resolve(makeResponse({}, 404))
+    })
+    const result = await fetchGeminiRateLimits(true)
+    expect(result.status).toBe('error')
+    expect(result.error).toBe('net::ERR_PROXY_CONNECTION_FAILED')
+    expect(result.usageMetadata?.failureKind).toBe('network')
+  })
+
   it('deduplicates buckets', async () => {
     setupAuthJsonValid()
     fetchMock.mockImplementation((url: string) => {
