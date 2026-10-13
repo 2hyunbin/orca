@@ -653,6 +653,8 @@ describe('arch-aware packaging guard', () => {
     } else {
       expect(packWindows).toThrow('@vscode/windows-process-tree')
       expect(packWindows).toThrow('Windows packaging requires a Windows host')
+      // A workspace link exists everywhere; only its compiled binary proves the addon will load.
+      expect(packWindows).toThrow('@orca/windows-security')
     }
   })
 })

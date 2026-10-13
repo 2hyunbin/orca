@@ -36,6 +36,11 @@ const PACKAGED_RUNTIME_PACKAGE_ROOTS = [
 // Why macOS only: serve-sim drives the iOS Simulator, and its native addon is a Mach-O that
 // Windows signing rejects as a PE file.
 const DARWIN_PACKAGED_RUNTIME_PACKAGE_ROOTS = ['serve-sim']
+/** The compiled binary each workspace Windows addon loads, relative to its package. */
+const WORKSPACE_WINDOWS_ADDON_BINARIES = [
+  ['@orca/windows-registry', 'build/Release/orca_windows_registry.node'],
+  ['@orca/windows-security', 'build/Release/orca_windows_security.node']
+]
 const WINDOWS_PACKAGED_RUNTIME_PACKAGE_ROOTS = [
   '@vscode/windows-process-tree',
   '@orca/windows-registry',
@@ -617,6 +622,16 @@ function assertPackagedNativeVariantsInstalled(electronPlatformName, electronArc
   const missingWindowsAddons = []
   if (electronPlatformName === 'win32' && !isInstalled('@vscode/windows-process-tree')) {
     missingWindowsAddons.push('@vscode/windows-process-tree')
+  }
+  // Why the binary, not the package: the link exists everywhere, and a missing or foreign-arch
+  // .node would otherwise surface only at runtime (secure files unrestricted, orcad refusing to start).
+  if (electronPlatformName === 'win32') {
+    for (const [name, binary] of WORKSPACE_WINDOWS_ADDON_BINARIES) {
+      const addon = join(projectDir, 'native', name.slice('@orca/'.length), binary)
+      if (!existsSync(addon) || readPeMachine(addon) !== PE_MACHINE[architecture]) {
+        missingWindowsAddons.push(`${name} (${binary} for ${architecture})`)
+      }
+    }
   }
 
   if (missing.length === 0 && missingWindowsAddons.length === 0) {
