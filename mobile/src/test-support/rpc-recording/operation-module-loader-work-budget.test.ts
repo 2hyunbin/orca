@@ -1,17 +1,19 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import type * as FsModule from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { nativeMountingSubstitutes } from './native-mounting-substitutes'
+import type * as NativeSubstitutesModule from './native-mounting-substitutes'
 import { operationModuleLoader } from './operation-module-loader'
 
 vi.mock('node:fs', async (original) => {
-  const fs = await original<typeof import('node:fs')>()
+  const fs = await original<typeof FsModule>()
   return { ...fs, existsSync: vi.fn(fs.existsSync) }
 })
 
 vi.mock('./native-mounting-substitutes', async (original) => {
-  const module = await original<typeof import('./native-mounting-substitutes')>()
+  const module = await original<typeof NativeSubstitutesModule>()
   return { ...module, nativeMountingSubstitutes: vi.fn(module.nativeMountingSubstitutes) }
 })
 
