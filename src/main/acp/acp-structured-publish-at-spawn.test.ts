@@ -37,8 +37,7 @@ describe('ACP child published before its handshake', () => {
     })
     const acquired = await rig.acquire({
       waitForStart: false,
-      options: { effort: 'low', model: 'grok-4.6' },
-      optionRevision: () => 7
+      options: { effort: 'low', model: 'grok-4.6' }
     })
     expect(acquired.process.pid).toBe(4242)
     if (!acquired.acquisitionGeneration) {
@@ -60,8 +59,7 @@ describe('ACP child published before its handshake', () => {
     expect(await opening).toMatchObject({
       link: { handle: { nativeId: PROVIDER_SESSION }, origin: 'created' },
       reportedOptions: { model: 'grok-4.6', effort: 'low' },
-      restoreSkippedOptions: [],
-      optionRevision: 7
+      restoreSkippedOptions: []
     })
     expect(writes).toEqual(['model', 'reasoning_effort'])
     rig.child().agent.notify('session/update', {

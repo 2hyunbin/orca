@@ -1,4 +1,3 @@
-import { saveStructuredAgentSessionStartListing } from './structured-agent-session-start-listing'
 // A chat's options, live or at rest.
 //
 // At rest nothing here needs a child. The pick is the record's own `options` — what the next start replays —
@@ -6,6 +5,7 @@ import { saveStructuredAgentSessionStartListing } from './structured-agent-sessi
 // exists. A pick made at rest is written to the record as intent, through the same transition a live
 // pick takes, so the next start applies it.
 
+import { saveStructuredAgentSessionListing } from './structured-agent-session-start-listing'
 import {
   refuse,
   type AgentSessionModelCatalogResult,
@@ -219,7 +219,7 @@ export async function readStructuredAgentSessionOptions(
     const { catalogListing, ...answer } = live
     if (catalogListing) {
       // What a running child listed is its account's catalog too, so the next chat opens warm.
-      saveStructuredAgentSessionStartListing(context, sessionId, catalogListing)
+      saveStructuredAgentSessionListing(context, sessionId, catalogListing)
     }
     options = answer
   } else {
