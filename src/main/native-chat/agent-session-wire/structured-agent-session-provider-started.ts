@@ -2,7 +2,6 @@
 
 import type {
   StructuredAgentSessionOptionsReportedEvent,
-  StructuredAgentSessionOptionsSkippedEvent,
   StructuredAgentSessionStartedEvent
 } from './structured-agent-session-adapter'
 import type {
@@ -16,7 +15,7 @@ import {
   structuredAgentSessionConversationFence
 } from './structured-agent-session-provider-child'
 import {
-  saveStructuredAgentSessionStartListing,
+  saveStructuredAgentSessionListing,
   saveStructuredAgentSessionStartReadbackListing
 } from './structured-agent-session-start-listing'
 import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
@@ -80,7 +79,7 @@ export async function settleStructuredAgentSessionProviderStarted(
     void context.wakeDelivery(event.sessionId)
     noteStructuredAgentSessionProviderStarted(context.deps, event.sessionId)
     if (event.catalogListing) {
-      saveStructuredAgentSessionStartListing(context, event.sessionId, event.catalogListing)
+      saveStructuredAgentSessionListing(context, event.sessionId, event.catalogListing)
     }
     context.publishStatus?.(event.sessionId)
     return undefined
@@ -180,12 +179,4 @@ export async function settleStructuredAgentSessionOptionsReported(
     void saveStructuredAgentSessionStartReadbackListing(context, event, event.catalogListing)
   }
   return undefined
-}
-
-/** A rejected provider value is live protocol evidence; it does not change a later pick. */
-export function settleStructuredAgentSessionOptionsSkipped(
-  _context: StructuredAgentSessionProviderStartedContext,
-  _event: StructuredAgentSessionOptionsSkippedEvent
-): Promise<void> {
-  return Promise.resolve()
 }

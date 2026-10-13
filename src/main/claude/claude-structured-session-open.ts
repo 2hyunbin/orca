@@ -27,8 +27,7 @@ export async function openClaudeStructuredSession(input: {
   ) {
     throw new Error('claude session was replaced before open')
   }
-  const { proof, account, resumesTranscript, optionRevision, onLateRefusal } =
-    session.initialization
+  const { proof, account, resumesTranscript, onLateRefusal } = session.initialization
   const opened = openClaudeSession({
     session,
     facts: readClaudeStartupFacts({
@@ -46,7 +45,6 @@ export async function openClaudeStructuredSession(input: {
     isCurrent: () => sessions.get(request.sessionId) === session,
     diagnose: (diagnostic) =>
       emit(session, { type: 'auth-diagnostic', sessionId: request.sessionId, diagnostic }),
-    optionRevision,
     onLateRefusal,
     report: (event) =>
       emit(session, {

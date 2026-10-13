@@ -88,8 +88,7 @@ function proveStart(): Promise<void> {
     fence: store.getRecord(SESSION)?.lease.runtimeFence ?? 0,
     acquisitionGeneration: 'generation-1',
     reportedOptions: { model: 'sonnet' },
-    restoreSkippedOptions: [],
-    optionRevision: 0
+    restoreSkippedOptions: []
   })
 }
 

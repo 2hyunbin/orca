@@ -137,7 +137,6 @@ async function attach(
       probe: { outcome: 'reservation-unused' }
     },
     callerKey: 'client-1',
-    optionRevision: () => 0,
     params: attachParams(transcriptPath),
     now: () => NOW,
     onAttached

@@ -80,9 +80,6 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       sessionId,
       atRest
     )
-    if (closed) {
-      host.context().runtimeState.optionRevisions.forget(sessionId)
-    }
     return closed
   }
 

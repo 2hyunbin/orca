@@ -65,7 +65,6 @@ export type AcpAdapterRig = {
     signal?: AbortSignal
     waitForStart?: boolean
     options?: Readonly<Record<string, string>>
-    optionRevision?: () => number
   }): ReturnType<AcpStructuredSessionAdapter['acquire']>
   /** Frames Orca wrote to the agent with this method. */
   sent(method: string): FakeFrame[]
@@ -196,7 +195,6 @@ export async function openAcpAdapterRig(
         spawnToken: 'spawn-1',
         events: rig.eventSink,
         ...(acquireOptions.options ? { options: acquireOptions.options } : {}),
-        ...(acquireOptions.optionRevision ? { optionRevision: acquireOptions.optionRevision } : {}),
         ...(acquireOptions.signal ? { signal: acquireOptions.signal } : {}),
         onSpawned: async () => {
           spawned.push('onSpawned')

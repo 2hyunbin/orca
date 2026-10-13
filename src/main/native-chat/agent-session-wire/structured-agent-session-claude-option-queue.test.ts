@@ -82,8 +82,7 @@ function adapter(): StructuredAgentSessionAdapter {
         releaseOpen = () =>
           resolve({
             reportedOptions: { model: DEFAULT_MODEL },
-            restoreSkippedOptions: [],
-            optionRevision: 0
+            restoreSkippedOptions: []
           })
       }),
     acquire,
@@ -162,4 +161,34 @@ describe('Claude structured session options', () => {
     await host.flushAllStreamedEvents()
     expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
   })
+})
+
+it('applies model and effort picks on a running Claude chat to the next message', async () => {
+  releaseOpen()
+  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
+  for (const [key, value] of [
+    ['model', PICKED_MODEL],
+    ['effort', 'high']
+  ]) {
+    expect(
+      await host.setOption(CALLER, {
+        envelope: envelope('agentSession.setOption', { key, value }),
+        key,
+        value
+      })
+    ).toMatchObject({ ok: true })
+  }
+  const body = hostTestMessage('with the new choices')
+  dispatch.mockImplementationOnce(async () => {
+    expect(activeModel).toBe(PICKED_MODEL)
+    expect(setOption).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'effort', value: 'high' })
+    )
+    return { state: 'admitted' as const }
+  })
+  expect(
+    await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+  ).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+  expect(order).toEqual(['model=opus', 'effort=high'])
 })
