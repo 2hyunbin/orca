@@ -5,6 +5,7 @@ import type { ProjectOrderBy } from '../../../../../../shared/ui-chrome-types'
 import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shared/worktree/types'
 import { cloneDefaultWorkspaceStatuses } from '../../../../../../shared/workspace-statuses'
+import type { SortBy } from '../../smart-sort'
 import type { AppState } from '../../../../store/types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../../../shared/execution-host'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
@@ -70,13 +71,20 @@ export function buildRows(
   folderWorkspaces: readonly FolderWorkspace[] = [],
   hostLabelById?: ReadonlyMap<string, string>,
   defaultHostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID,
-  pinnedDisplayPolicy: PinnedWorktreeDisplayPolicy = getPinnedWorktreeDisplayPolicy(settings)
+  pinnedDisplayPolicy: PinnedWorktreeDisplayPolicy = getPinnedWorktreeDisplayPolicy(settings),
+  sortBy: SortBy = 'manual'
 ): Row[] {
   const result: Row[] = []
   const projectIndex = buildProjectGroupingIndex(projectGrouping)
   // Membership is decided once, above the groupBy switch: every mode renders the
   // same set of folder workspaces and only chooses where they land (#15362).
-  const renderableFolderWorkspaces = getRenderableFolderWorkspaces(folderWorkspaces, projectGroups)
+  const now = Date.now()
+  const renderableFolderWorkspaces = getRenderableFolderWorkspaces(
+    folderWorkspaces,
+    projectGroups
+  ).sort((left, right) =>
+    compareFolderWorkspacesForDisplay(left.folderWorkspace, right.folderWorkspace, sortBy, now)
+  )
   const cyclicLineageIds = nestLineage
     ? getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
     : new Set<string>()
@@ -185,9 +193,7 @@ export function buildRows(
           hostContextLabelByWorktreeIdentity: mixedWorktreeHostContextLabels,
           cyclicLineageIds
         })
-        for (const pair of [...renderableFolderWorkspaces].sort((left, right) =>
-          compareFolderWorkspacesForDisplay(left.folderWorkspace, right.folderWorkspace)
-        )) {
+        for (const pair of renderableFolderWorkspaces) {
           result.push(buildFolderWorkspaceRow(pair, 0))
         }
       }

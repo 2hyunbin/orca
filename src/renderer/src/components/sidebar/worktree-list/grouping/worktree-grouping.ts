@@ -7,11 +7,7 @@ import {
   getWorkspaceStatusFromGroupKey,
   getWorkspaceStatusGroupKey
 } from '../../workspace-status'
-import {
-  compareFolderWorkspacesForDisplay,
-  getFolderWorkspaceLaneKey,
-  type RenderableFolderWorkspace
-} from './folder-workspace-lanes'
+import { getFolderWorkspaceLaneKey, type RenderableFolderWorkspace } from './folder-workspace-lanes'
 import { PR_GROUP_META, PR_GROUP_ORDER, getPRGroupKey, getPRLaneKey } from './group-keys'
 import type { PRGroupKey } from './group-keys'
 import { addRepoIdToGroup, getProjectGroupingForRepo } from './project-grouping'
@@ -122,11 +118,6 @@ export function buildOrderedGroups(args: {
       const group = grouped.get(key)!
       group.folderWorkspaces ??= []
       group.folderWorkspaces.push(pair)
-    }
-    for (const group of grouped.values()) {
-      group.folderWorkspaces?.sort((left, right) =>
-        compareFolderWorkspacesForDisplay(left.folderWorkspace, right.folderWorkspace)
-      )
     }
   }
   if (groupBy === 'repo') {

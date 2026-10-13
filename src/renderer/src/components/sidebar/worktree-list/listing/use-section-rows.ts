@@ -73,6 +73,7 @@ function collectRenderedSidebarRowKeys(sectionRows: ReturnType<typeof addHostSec
 // tier wrapped around them.
 export function useSidebarSectionRows(args: SectionRowsArgs) {
   const { repos, worktrees, repoMap, effectiveCollapsedGroups, defaultHostId } = args
+  const sortBy = useAppStore((s) => s.sortBy)
   const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
@@ -179,10 +180,12 @@ export function useSidebarSectionRows(args: SectionRowsArgs) {
         args.visibleFolderWorkspacesForRows,
         hostLabelById,
         defaultHostId,
-        args.pinnedDisplayPolicy
+        args.pinnedDisplayPolicy,
+        sortBy
       ),
     [
       args.groupBy,
+      sortBy,
       worktrees,
       repoMap,
       args.prCache,
