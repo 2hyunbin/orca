@@ -224,27 +224,31 @@ describe('sealStructuredSessionChild identity', () => {
     }
   )
 
-  it('on Windows, strips a pane identity spelled in any case, through the final provider merge', () => {
+  it('on Windows, strips a pane identity an overlay spells in any case, and nothing else', () => {
     // Windows reads a child's environment case-insensitively, so `orca_pane_key` still names a pane.
     pinPlatform('win32')
     installFakeAppEnvironment({ isPackaged: () => false, getPath: () => USER_DATA })
-    const foreign = {
-      orca_pane_key: 'tab-parent:leaf-parent',
-      Orca_Agent_Hook_Endpoint: 'C:\\hook-endpoint',
-      orca_terminal_handle: 'term_parent'
-    }
     const sealed = sealStructuredSessionChild({
       sessionId: SESSION_ID,
       spawnToken: SEALED_TEST_SPAWN_TOKEN,
-      env: { Path: 'C:\\Windows', ...foreign },
+      env: {
+        Path: 'C:\\Windows',
+        orca_pane_key: 'tab-parent:leaf-parent',
+        Orca_Agent_Hook_Endpoint: 'C:\\hook-endpoint',
+        orca_terminal_handle: 'term_parent',
+        // A caller's deliberate lowercase override is not identity and stays.
+        opencode_config_dir: 'C:\\opencode'
+      },
       inheritedEnvToDelete: []
     })
-    const child = resolveProviderChildEnv(sealed, { SystemRoot: 'C:\\Windows', ...foreign })
+    // The host env reached here after startup dropped the identity in every casing.
+    const child = resolveProviderChildEnv(sealed, { SystemRoot: 'C:\\Windows' })
 
     const named = Object.keys(child).filter((key) =>
       /pane_key|hook_endpoint|terminal_handle/i.test(key)
     )
     expect(named).toEqual([])
+    expect(child.opencode_config_dir).toBe('C:\\opencode')
     expect(child.ORCA_AGENT_SESSION_ID).toBe(SESSION_ID)
   })
 

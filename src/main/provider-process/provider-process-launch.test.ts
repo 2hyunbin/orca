@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deleteProviderChildEnvKeys, resolveProviderChildEnv } from './provider-process-launch'
+import { resolveProviderChildEnv } from './provider-process-launch'
 
 describe('resolveProviderChildEnv', () => {
   it('overlays the launch env on the inherited env, then strips deleted keys', () => {
@@ -23,19 +23,5 @@ describe('resolveProviderChildEnv', () => {
 
     expect(childEnv).toEqual(baseEnv)
     expect(childEnv).not.toBe(baseEnv)
-  })
-})
-
-describe('deleteProviderChildEnvKeys', () => {
-  it('deletes every casing on Windows and only the exact key elsewhere', () => {
-    const env = () => ({ ORCA_PANE_KEY: 'a', orca_pane_key: 'b', Path: 'C:\\Windows' })
-
-    const windows = env()
-    deleteProviderChildEnvKeys(windows, ['ORCA_PANE_KEY'], 'win32')
-    const posix = env()
-    deleteProviderChildEnvKeys(posix, ['ORCA_PANE_KEY'], 'linux')
-
-    expect(windows).toEqual({ Path: 'C:\\Windows' })
-    expect(posix).toEqual({ orca_pane_key: 'b', Path: 'C:\\Windows' })
   })
 })

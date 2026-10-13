@@ -59,7 +59,6 @@ import {
   AGENT_HOOK_RUNTIME_ENV_KEYS,
   ORCA_PANE_IDENTITY_ENV_KEYS
 } from '../ipc/pty/host-env/spawn-env-keys'
-import { deleteProviderChildEnvKeys } from '../provider-process/provider-process-launch'
 import { resolveStructuredWorkerIdentityForSession } from './structured-worker-authority'
 
 /**
@@ -109,10 +108,20 @@ export function sealStructuredSessionChild(input: {
   }
 }
 
+/** On Windows in any casing: the child reads its environment case-insensitively, so an
+ *  `orca_pane_key` from a settings or shell overlay still names a pane there. The inherited host
+ *  env needs no such pass; startup already dropped these keys from Windows' case-insensitive env. */
 function withoutPaneIdentity(env: Record<string, string>): Record<string, string> {
-  const next = { ...env }
-  deleteProviderChildEnvKeys(next, STRUCTURED_CHILD_ENV_TO_DELETE)
-  return next
+  const identityKeys = new Set(
+    STRUCTURED_CHILD_ENV_TO_DELETE.map((key) =>
+      process.platform === 'win32' ? key.toUpperCase() : key
+    )
+  )
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([key]) => !identityKeys.has(process.platform === 'win32' ? key.toUpperCase() : key)
+    )
+  )
 }
 
 function childIdentity(
