@@ -125,6 +125,44 @@ beforeEach(() => {
 })
 
 describe('guest policy profiles', () => {
+  it('keeps plugin viewers out of browsing registration and uses common guest cleanup', () => {
+    const guest = createGuest(390, 'orca-plugin-viewer://lease/')
+    const dispose = vi.fn()
+    const install = vi.fn(() => dispose)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fake implements the guest methods exercised by policy attachment.
+    browserManager.attachGuestPolicies(guest as never, null, { profile: 'plugin-viewer', install })
+    expect(install).toHaveBeenCalledOnce()
+    expect(listenerCount(guest, 'dom-ready')).toBe(0)
+    expect(listenerCount(guest, 'frame-created')).toBe(0)
+    expect(listenerCount(guest, 'did-create-window')).toBe(0)
+    expect(guest.debugger.on).not.toHaveBeenCalled()
+    browserMocks.webContentsFromIdMock.mockReturnValue(guest)
+    expect(
+      browserManager.registerGuest({
+        browserPageId: 'ordinary-looking-page',
+        webContentsId: guest.id,
+        rendererWebContentsId: host.id
+      })
+    ).toBe(false)
+    const destroyed = guest.listeners.get('destroyed')?.[0]
+    expect(destroyed).toBeDefined()
+    destroyed?.()
+    expect(dispose).toHaveBeenCalledOnce()
+    expect(listenerCount(guest, 'destroyed')).toBe(0)
+  })
+
+  it('refuses a document guest disguised with an ordinary browsing page identity', () => {
+    const { guest } = attachPreviewGuest(391)
+    browserMocks.webContentsFromIdMock.mockReturnValue(guest)
+    expect(
+      browserManager.registerGuest({
+        browserPageId: 'ordinary-looking-page',
+        webContentsId: guest.id,
+        rendererWebContentsId: host.id
+      })
+    ).toBe(false)
+  })
+
   function attachPreviewGuest(id = 301): {
     guest: GuestFake
     grantId: string

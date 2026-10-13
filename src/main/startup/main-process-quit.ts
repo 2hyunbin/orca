@@ -14,6 +14,8 @@ import { awaitRuntimeFileWatcherUnsubscribes } from '../runtime/orca-runtime-fil
 import { clearRuntimeMetadataIfOwned } from '../runtime/runtime-metadata'
 import { shutdownPairedRuntimeBrowserClientHosts } from '../browser/paired-runtime-browser-client-host-runtime'
 import { browserManager } from '../browser/browser-manager'
+import { disposePluginViewerSessions } from '../plugins/plugin-viewer-session-runtime'
+import { disposePluginViewerGuests } from '../ipc/plugin-viewer-guests'
 import { stopCodexStateDbBackfillRecoveries } from '../codex/codex-state-db-backfill-recovery'
 import { stopCodexAccountSessionBridges } from '../codex/codex-account-session-bridge'
 import { awaitPackedRefsLockRelease } from '../git/local-repo-ref-maintenance'
@@ -234,6 +236,9 @@ function installWillQuitHandler(): void {
     ]).then(() => {})
     const browserClientHostShutdown = shutdownPairedRuntimeBrowserClientHosts()
     const skillUploadShutdown = state.runtime?.disposeSkillUploadSessions() ?? Promise.resolve()
+    const pluginViewerShutdown = disposePluginViewerGuests().then(() =>
+      disposePluginViewerSessions()
+    )
     // Why: capture pid/runtimeId synchronously (before any await) so a later teardown path can't null them out mid-chain.
     const ownedPid = process.pid
     const ownedRuntimeId = state.runtime?.getRuntimeId()
@@ -273,6 +278,7 @@ function installWillQuitHandler(): void {
       { name: 'local-ssh-browser-routes', promise: localSshRouteShutdown },
       { name: 'ssh', promise: sshShutdown },
       { name: 'plugin-hosts', promise: pluginHostShutdown },
+      { name: 'plugin-viewers', promise: pluginViewerShutdown },
       { name: 'skill-uploads', promise: skillUploadShutdown },
       { name: 'grok-hooks', promise: grokHookCleanup },
       { name: 'ref-maintenance', promise: refMaintenanceShutdown },

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { registerPluginRendererHandler } from './plugin-renderer-ipc'
 import { z } from 'zod'
 import { PLUGIN_COMMIT_PATTERN } from '../../shared/plugins/plugin-install-lockfile'
 import { isQualifiedPluginKey } from '../../shared/plugins/plugin-manifest'
@@ -7,6 +7,11 @@ import type { PluginMarketplaceInstaller } from '../plugins/plugin-marketplace-i
 import type { PluginMarketplaceService } from '../plugins/plugin-marketplace-service'
 import { PLUGIN_MARKETPLACE_SOURCE_ID_PATTERN } from '../plugins/plugin-marketplace-store'
 import type { PluginService } from '../plugins/plugin-service'
+import type { Store } from '../persistence'
+import { installMarketplaceDataPlugin } from '../plugins/plugin-marketplace-data-action'
+import { installReviewedMarketplaceUpdate } from '../plugins/plugin-marketplace-reviewed-update'
+import { pluginReviewedMarketplaceUpdateSchema } from '../../shared/plugins/plugin-reviewed-update'
+import { isTrustedBrowserRenderer } from './browser-renderer-trust'
 
 export type PluginMarketplaceHandlerServices = {
   marketplace: PluginMarketplaceService
@@ -30,47 +35,101 @@ const installedPluginSchema = z.strictObject({
 
 export function registerPluginMarketplaceHandlers(
   pluginService: PluginService,
-  services: PluginMarketplaceHandlerServices
+  services: PluginMarketplaceHandlerServices,
+  store?: Store
 ): void {
-  ipcMain.handle('plugins:listMarketplaces', () => services.marketplace.listSources())
-  ipcMain.handle('plugins:addMarketplace', async (_event, args: unknown) => {
+  registerPluginRendererHandler('plugins:listMarketplaces', () =>
+    services.marketplace.listSources()
+  )
+  registerPluginRendererHandler('plugins:addMarketplace', async (_event, args: unknown) => {
     const source = pluginMarketplaceGitSourceSchema.parse(args)
     return services.marketplace.addSource(source)
   })
-  ipcMain.handle('plugins:removeMarketplace', async (_event, args: unknown) => {
+  registerPluginRendererHandler('plugins:removeMarketplace', async (_event, args: unknown) => {
     const { sourceId } = removeMarketplaceSchema.parse(args)
     await services.marketplace.removeSource(sourceId)
     return services.marketplace.listSources()
   })
-  ipcMain.handle('plugins:refreshMarketplaces', async (_event, args: unknown) => {
+  registerPluginRendererHandler('plugins:refreshMarketplaces', async (_event, args: unknown) => {
     const { sourceId } = refreshMarketplaceSchema.parse(args ?? {})
     return sourceId
       ? [await services.marketplace.refreshSource(sourceId)]
       : services.marketplace.refreshAll()
   })
-  ipcMain.handle('plugins:listMarketplacePlugins', () => services.marketplace.listPlugins())
-  ipcMain.handle('plugins:previewMarketplacePlugin', async (_event, args: unknown) => {
-    const parsed = marketplacePluginSchema.parse(args)
-    return services.installer.preview(parsed.marketplaceSourceId, parsed.pluginKey)
-  })
-  ipcMain.handle('plugins:installMarketplacePlugin', async (_event, args: unknown) => {
-    const result = await services.installer.install(installMarketplacePluginSchema.parse(args))
-    if (result.ok) {
-      await pluginService.refresh()
+  registerPluginRendererHandler('plugins:listMarketplacePlugins', () =>
+    services.marketplace.listPlugins()
+  )
+  registerPluginRendererHandler(
+    'plugins:previewMarketplacePlugin',
+    async (_event, args: unknown) => {
+      const parsed = marketplacePluginSchema.parse(args)
+      return services.installer.preview(parsed.marketplaceSourceId, parsed.pluginKey)
     }
-    return result
-  })
-  ipcMain.handle('plugins:previewMarketplaceUpdate', async (_event, args: unknown) => {
-    const { pluginKey } = installedPluginSchema.parse(args)
-    return services.installer.previewInstalledUpdate(pluginKey)
-  })
-  ipcMain.handle('plugins:rollbackMarketplacePlugin', async (_event, args: unknown) => {
-    const { pluginKey } = installedPluginSchema.parse(args)
-    await pluginService.deactivatePlugin(pluginKey)
-    const result = await services.installer.rollback(pluginKey)
-    if (result.ok) {
-      await pluginService.refresh()
+  )
+  registerPluginRendererHandler(
+    'plugins:installMarketplacePlugin',
+    async (_event, args: unknown) => {
+      const result = await services.installer.install(installMarketplacePluginSchema.parse(args))
+      if (result.ok) {
+        await pluginService.refresh()
+      }
+      return result
     }
-    return result
-  })
+  )
+  if (store) {
+    registerPluginRendererHandler(
+      'plugins:approveMarketplaceUpdate',
+      async (event, args: unknown) => {
+        if (
+          !isTrustedBrowserRenderer(event.sender) ||
+          event.senderFrame !== event.sender.mainFrame
+        ) {
+          return { ok: false, error: 'plugin update requires the trusted application window' }
+        }
+        return installReviewedMarketplaceUpdate({
+          request: pluginReviewedMarketplaceUpdateSchema.parse(args),
+          store,
+          pluginService,
+          installer: services.installer,
+          originWebContentsId: event.sender.id
+        })
+      }
+    )
+    registerPluginRendererHandler(
+      'plugins:installMarketplaceDataPlugin',
+      async (event, args: unknown) => {
+        const parsed = marketplacePluginSchema
+          .extend({
+            marketplaceCommit: z.string().regex(PLUGIN_COMMIT_PATTERN)
+          })
+          .parse(args)
+        return installMarketplaceDataPlugin({
+          ...parsed,
+          ...services,
+          store,
+          pluginService,
+          originWebContentsId: event.sender.id
+        })
+      }
+    )
+  }
+  registerPluginRendererHandler(
+    'plugins:previewMarketplaceUpdate',
+    async (_event, args: unknown) => {
+      const { pluginKey } = installedPluginSchema.parse(args)
+      return services.installer.previewInstalledUpdate(pluginKey)
+    }
+  )
+  registerPluginRendererHandler(
+    'plugins:rollbackMarketplacePlugin',
+    async (_event, args: unknown) => {
+      const { pluginKey } = installedPluginSchema.parse(args)
+      await pluginService.deactivatePlugin(pluginKey)
+      const result = await services.installer.rollback(pluginKey)
+      if (result.ok) {
+        await pluginService.refresh()
+      }
+      return result
+    }
+  )
 }

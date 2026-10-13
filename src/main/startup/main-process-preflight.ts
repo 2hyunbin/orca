@@ -85,6 +85,7 @@ import { initCodexUsagePath } from '../codex-usage/store'
 import { initOpenCodeUsagePath } from '../opencode-usage/store'
 import { initMuseUsagePath } from '../muse-usage/store'
 import { registerDocPreviewSchemePrivileges } from '../browser/doc-preview-protocol'
+import { PLUGIN_VIEWER_SCHEME } from '../plugins/plugin-viewer-session-pool'
 import { MEDIA_PREVIEW_CUSTOM_SCHEME } from '../media/media-preview-protocol'
 import { startCrashpadCapture } from '../crash-reporting/crashpad-capture'
 import { CrashReportStore } from '../crash-reporting/crash-report-store'
@@ -360,7 +361,10 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   initMuseUsagePath()
   // Why: Electron freezes the privileged scheme table at ready, so the doc-preview
   // scheme must be declared here or its webview loses fetch/secure-origin privileges.
-  registerDocPreviewSchemePrivileges([MEDIA_PREVIEW_CUSTOM_SCHEME])
+  registerDocPreviewSchemePrivileges([
+    MEDIA_PREVIEW_CUSTOM_SCHEME,
+    { scheme: PLUGIN_VIEWER_SCHEME, privileges: { standard: true, secure: true } }
+  ])
   // Why: must precede app.whenReady() so Crashpad is installed before the
   // first renderer spawns; a CHECK before this point is still exit-code-only.
   startCrashpadCapture()

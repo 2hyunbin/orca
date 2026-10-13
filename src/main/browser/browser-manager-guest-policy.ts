@@ -23,6 +23,10 @@ export abstract class BrowserManagerGuestPolicy extends BrowserManagerGuestClean
       this.attachWorkspaceDocGuestPolicies(guest, policy.host)
       return
     }
+    if (policy.profile === 'plugin-viewer') {
+      this.attachNonBrowsingGuestPolicies(guest, policy.install(guest))
+      return
+    }
     if (inheritedOwnerContext) {
       this.popupOwnerContextByGuestId.set(guest.id, inheritedOwnerContext)
     }
@@ -50,12 +54,17 @@ export abstract class BrowserManagerGuestPolicy extends BrowserManagerGuestClean
     host: Electron.WebContents
   ): void {
     const disposeDocPolicy = installDocPreviewGuestPolicy(guest, host)
+    this.attachNonBrowsingGuestPolicies(guest, disposeDocPolicy)
+  }
+
+  private attachNonBrowsingGuestPolicies(guest: Electron.WebContents, dispose: () => void): void {
+    this.nonBrowsingGuestIds.add(guest.id)
     const handleDestroyed = (): void => {
       this.cleanupGuestPolicyAttachment(guest.id)
     }
     guest.on('destroyed', handleDestroyed)
     this.policyCleanupByGuestId.set(guest.id, () => {
-      disposeDocPolicy()
+      dispose()
       try {
         guest.off('destroyed', handleDestroyed)
       } catch {

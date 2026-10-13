@@ -1,12 +1,50 @@
+import type { PluginEnvironmentProviderMigrationPreview } from '../../shared/plugins/plugin-environment-provider-migration-api'
+import type { PluginEnvironmentProviderHistory } from '../../shared/plugins/plugin-environment-provider-history-api'
+import type {
+  PluginEnvironmentProviderRecoverRequest,
+  PluginEnvironmentProviderRecoveryResult
+} from '../../shared/plugins/plugin-environment-provider-recovery-api'
+import type { SshTarget } from '../../shared/ssh-types'
+import type { EnvironmentProviderSshPreview } from '../../shared/plugins/plugin-environment-provider-ssh-api'
+import type {
+  PluginEnvironmentProviderEntry,
+  PluginEnvironmentProviderReview
+} from '../../shared/plugins/plugin-environment-provider-api'
+import type { EnvironmentRecipeRequest } from '../../shared/environment-recipe-protocol'
+import type { EnvironmentRecipeJournal } from '../../shared/plugins/plugin-environment-recipe-journal'
+import type { JournaledEnvironmentRecipeResult } from '../../shared/plugins/plugin-environment-recipe-result'
+import type { PluginEnvironmentRecipePreview } from '../../shared/plugins/plugin-environment-recipe-preview'
+import type { PluginExecutionProfile } from '../../shared/plugins/plugin-execution-profile'
+import type { PluginThemeRegistration } from '../../shared/plugins/plugin-theme-artifact'
+import type {
+  PluginIconThemeMetadata,
+  PluginIconThemeRegistration
+} from '../../shared/plugins/plugin-icon-theme-artifact'
+import type { PluginTerminalThemeRegistration } from '../../shared/plugins/plugin-terminal-theme-artifact'
 import type {
   PluginPanelActionOutcome,
   PluginPanelEntry
 } from '../../shared/plugins/plugin-panel-bridge'
 import type { PluginConsentRequest } from '../../shared/plugins/plugin-consent-request'
 import type { PluginLanguagePackRegistration } from '../../shared/plugins/plugin-language-pack-artifact'
+import type { PluginBundledDataAliases } from '../../shared/plugins/plugin-bundled-data-aliases'
+import type { PluginBundledDataState } from '../../shared/plugins/plugin-bundled-data-state'
 import type { PluginChangeEvent } from '../../shared/plugins/plugin-change-event'
 import type { PluginManifest } from '../../shared/plugins/plugin-manifest'
 import type { PluginMarketplaceGitSource } from '../../shared/plugins/plugin-marketplace'
+import type { PluginCatalogRelease } from '../../shared/plugins/plugin-catalog-release'
+import type { PluginViewerMetadata } from '../../shared/plugins/plugin-viewer-package'
+import type { PluginReviewedMarketplaceUpdate } from '../../shared/plugins/plugin-reviewed-update'
+import type { PluginViewerUnavailable } from '../../shared/plugins/plugin-viewer-unavailable'
+import type {
+  PluginViewerOpenRequest,
+  PluginViewerOpenResponse,
+  PluginViewerGuestLease
+} from '../../shared/plugins/plugin-viewer-open'
+import type {
+  PluginSyntaxPackMetadata,
+  PluginSyntaxPackPayload
+} from '../../shared/plugins/plugin-syntax-pack'
 
 /** Panel contribution as surfaced by the main-process plugin service. */
 export type PluginHostPanel = {
@@ -32,8 +70,12 @@ export type PluginHostStatus =
 /** Wire shape of plugins:list — must stay assignable from the main-process
  *  projection in src/main/plugins/plugin-list-projection.ts. */
 export type PluginHostListEntry = {
+  environmentRecipes?: PluginEnvironmentRecipePreview[]
+  environmentRecipeCount?: number
+  execution?: PluginExecutionProfile
   pluginKey: string
   consentFingerprint: string | null
+  reviewRevision?: string
   name: string
   version: string
   publisher: string
@@ -44,8 +86,10 @@ export type PluginHostListEntry = {
   isDev: boolean
   official: boolean
   bundled: boolean
+  bundledData?: boolean
   capabilities: { kind: string; description: string }[]
   panels: PluginHostPanel[]
+  fileViewers?: { id: string; displayName: string; mode: 'readonly' }[]
   commands: {
     id: string
     title: string
@@ -70,7 +114,7 @@ export type PluginHostListEntry = {
     reference: string
     resolvedCommit: string | null
     contentHash: string
-    marketplace?: { reference: string; resolvedCommit: string }
+    marketplace?: { reference: string; resolvedCommit: string; owner?: string }
   }
 }
 
@@ -117,6 +161,8 @@ export type PluginMarketplaceHostListing = {
   marketplaceCommit: string
   pluginKey: string
   source: PluginMarketplaceGitSource
+  name?: string
+  release?: PluginCatalogRelease
   description?: string
   categories: string[]
   official: boolean
@@ -134,15 +180,79 @@ export type PluginMarketplaceHostInstallPreview = {
   resolvedCommit: string
   contentHash: string
   consentFingerprint: string
+  reviewRevision?: string
   manifest: PluginManifest
+  environmentRecipes?: PluginEnvironmentRecipePreview[]
+  environmentRecipeReviewDigest?: string
   official: boolean
   bundled: boolean
   blockedByKillList?: { reason: string; advisoryUrl?: string }
 }
 
+export type PluginMarketplaceDataActionResult =
+  | { kind: 'installed'; pluginKey: string }
+  | { kind: 'review'; preview: PluginMarketplaceHostInstallPreview }
+  | { kind: 'error'; error: string }
+
 export type PluginsApi = {
+  prepareEnvironmentProviderMigration?: (input: {
+    review: PluginEnvironmentProviderReview
+    queryId: string
+  }) => Promise<PluginEnvironmentProviderMigrationPreview>
+  commitEnvironmentProviderMigration?: (input: {
+    ticketId: string
+  }) => Promise<PluginEnvironmentProviderEntry[]>
+  previousEnvironmentProviderSnapshot?: (input: {
+    review: PluginEnvironmentProviderReview
+    offset?: number
+  }) => Promise<PluginEnvironmentProviderHistory>
+  recoverEnvironmentProvider?: (
+    input: PluginEnvironmentProviderRecoverRequest
+  ) => Promise<PluginEnvironmentProviderRecoveryResult>
+  prepareEnvironmentProviderSsh?: (input: {
+    operationId: string
+    review: PluginEnvironmentProviderReview
+    resourceId: string
+    expectedRevision: string
+  }) => Promise<EnvironmentProviderSshPreview>
+  saveEnvironmentProviderSsh?: (input: {
+    ticketId: string
+    identityFile?: string
+  }) => Promise<SshTarget>
+  listEnvironmentProviders?: () => Promise<PluginEnvironmentProviderEntry[]>
+  configureEnvironmentProvider?: (
+    review: PluginEnvironmentProviderReview
+  ) => Promise<PluginEnvironmentProviderEntry[]>
+  environmentProviderSnapshot?: (
+    review: PluginEnvironmentProviderReview
+  ) => Promise<EnvironmentRecipeJournal>
+  executeEnvironmentProvider?: (input: {
+    review: PluginEnvironmentProviderReview
+    request: EnvironmentRecipeRequest
+  }) => Promise<JournaledEnvironmentRecipeResult>
+  cancelEnvironmentProvider?: (input: { operationId: string }) => Promise<boolean>
   list: () => Promise<PluginHostListEntry[]>
+  listThemes: () => Promise<PluginThemeRegistration[]>
+  listIconThemes: () => Promise<PluginIconThemeMetadata[]>
+  loadIconTheme: (id: string) => Promise<PluginIconThemeRegistration | null>
+  listTerminalThemes: () => Promise<PluginTerminalThemeRegistration[]>
   listLanguagePacks: () => Promise<PluginLanguagePackRegistration[]>
+  getBundledDataAliases?: () => Promise<PluginBundledDataAliases>
+  listBundledData?: () => Promise<PluginBundledDataState[]>
+  setBundledDataEnabled?: (args: {
+    pluginKey: string
+    enabled: boolean
+  }) => Promise<PluginBundledDataState[]>
+  listSyntaxPacks?: (options?: { bundledDataAliases?: true }) => Promise<PluginSyntaxPackMetadata[]>
+  listFileViewers?: () => Promise<PluginViewerMetadata[]>
+  openViewerTab?: (request: PluginViewerOpenRequest) => Promise<PluginViewerOpenResponse>
+  closeViewerTab?: (lease: PluginViewerGuestLease) => Promise<void>
+  onViewerUnavailable?: (callback: (event: PluginViewerUnavailable) => void) => () => void
+  loadSyntaxPack?: (args: {
+    pluginKey: string
+    revision: string
+    bundledDataAliases?: true
+  }) => Promise<PluginSyntaxPackPayload | null>
   /** Records the consent-dialog answer; approval is keyed to the plugin's
    *  current capability and trusted-worker fingerprint. */
   consent: (args: PluginConsentRequest) => Promise<PluginHostListEntry[]>
@@ -172,11 +282,19 @@ export type PluginsApi = {
     marketplaceSourceId: string
     pluginKey: string
   }) => Promise<PluginMarketplaceHostInstallPreview>
+  installMarketplaceDataPlugin?: (args: {
+    marketplaceSourceId: string
+    marketplaceCommit: string
+    pluginKey: string
+  }) => Promise<PluginMarketplaceDataActionResult>
   installMarketplacePlugin: (
     preview: Pick<
       PluginMarketplaceHostInstallPreview,
       'marketplaceSourceId' | 'marketplaceCommit' | 'pluginKey' | 'resolvedCommit'
     >
+  ) => Promise<PluginHostInstallResult>
+  approveMarketplaceUpdate?: (
+    request: PluginReviewedMarketplaceUpdate
   ) => Promise<PluginHostInstallResult>
   previewMarketplaceUpdate: (args: {
     pluginKey: string

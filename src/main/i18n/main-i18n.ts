@@ -10,11 +10,22 @@ import { isPseudoLocalizationLocale, pseudoLocalizeString } from '../../shared/p
 import { DEFAULT_UI_LOCALE, resolveUiLocale, type SupportedUiLocale } from '../../shared/ui-locale'
 import { UI_LANGUAGE_SYSTEM, type UiLanguage } from '../../shared/ui-language'
 import type { PluginLanguagePackRegistration } from '../../shared/plugins/plugin-language-pack-artifact'
+import {
+  NO_BUNDLED_DATA_ALIASES,
+  resolvePluginUiResourceLanguage,
+  type PluginBundledDataAliases
+} from '../../shared/plugins/plugin-bundled-data-aliases'
+import {
+  SPANISH_SECURITY_RESOURCE,
+  installPluginLanguagePluralRules,
+  pluginLanguageFallbacks
+} from '../../shared/plugins/plugin-language-i18next'
 
 export const mainI18n: I18nInstance = i18next.createInstance()
 
 let initialized = false
 let pluginLanguagePacks: readonly PluginLanguagePackRegistration[] = []
+let bundledDataAliases = NO_BUNDLED_DATA_ALIASES
 const registeredPluginLanguages = new Set<string>()
 
 // Why: main-process callers pass English fallbacks to translateMain(), so the
@@ -35,6 +46,13 @@ const lazyLocaleBackend: BackendModule = {
   type: 'backend',
   init: () => {},
   read: (language: string, _namespace: string, callback: ReadCallback) => {
+    if (language === SPANISH_SECURITY_RESOURCE) {
+      import('../../renderer/src/i18n/locales/es-plugin-security.json').then(
+        (mod) => callback(null, mod.default),
+        (error) => callback(error instanceof Error ? error : new Error(String(error)), false)
+      )
+      return
+    }
     const loader = LAZY_LOCALE_LOADERS[language as Exclude<SupportedUiLocale, 'en'>]
     if (!loader) {
       // English is intentionally represented by the empty bundled resource; its
@@ -60,7 +78,7 @@ export function getMainSystemLocale(): string {
 export async function ensureMainI18n(): Promise<I18nInstance> {
   if (!initialized) {
     await mainI18n.use(lazyLocaleBackend).init({
-      fallbackLng: DEFAULT_UI_LOCALE,
+      fallbackLng: (code) => pluginLanguageFallbacks(code, pluginLanguagePacks),
       lng: DEFAULT_UI_LOCALE,
       // Why: mark the default locale loaded with an empty resource bundle. Main
       // process English strings come from translateMain() fallbacks, and
@@ -76,6 +94,7 @@ export async function ensureMainI18n(): Promise<I18nInstance> {
       }
     })
     initialized = true
+    installPluginLanguagePluralRules(mainI18n, () => pluginLanguagePacks)
     applyMainPluginLanguagePacks()
   }
   return mainI18n
@@ -87,9 +106,11 @@ export async function setMainUiLanguage(language: UiLanguage): Promise<string> {
     language,
     language === UI_LANGUAGE_SYSTEM ? getMainSystemLocale() : DEFAULT_UI_LOCALE
   )
-  const locale =
-    pluginLanguagePacks.find((pack) => pack.id === selectedLocale)?.resourceLanguage ??
-    (selectedLocale.startsWith('plugin:') ? DEFAULT_UI_LOCALE : selectedLocale)
+  const locale = resolvePluginUiResourceLanguage(
+    selectedLocale,
+    pluginLanguagePacks,
+    bundledDataAliases
+  )
   if (mainI18n.language !== locale) {
     // changeLanguage triggers the lazy backend load for non-English locales and
     // resolves once the catalog is in memory, so callers that await this have
@@ -111,12 +132,14 @@ function applyMainPluginLanguagePacks(): void {
 }
 
 export function setMainPluginLanguagePacks(
-  packs: readonly PluginLanguagePackRegistration[]
+  packs: readonly PluginLanguagePackRegistration[],
+  aliases: PluginBundledDataAliases = NO_BUNDLED_DATA_ALIASES
 ): boolean {
-  if (pluginLanguagePacks === packs) {
+  if (pluginLanguagePacks === packs && bundledDataAliases === aliases) {
     return false
   }
   pluginLanguagePacks = packs
+  bundledDataAliases = aliases
   if (initialized) {
     applyMainPluginLanguagePacks()
   }

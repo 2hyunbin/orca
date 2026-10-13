@@ -38,6 +38,9 @@ export abstract class BrowserManagerRegistration extends BrowserManagerGuestPoli
     if (guest.getType() !== 'webview') {
       return false
     }
+    if (this.nonBrowsingGuestIds.has(webContentsId)) {
+      return false
+    }
     if (!this.policyAttachedGuestIds.has(webContentsId)) {
       // Why: only trust guests that passed attach-time policy install, or a renderer could point us at an arbitrary webview.
       return false

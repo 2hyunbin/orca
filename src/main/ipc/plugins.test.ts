@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginLockfile } from '../../shared/plugins/plugin-install-lockfile'
+import { pluginManifestSchema } from '../../shared/plugins/plugin-manifest'
+import type { ValidDiscoveredPlugin } from '../plugins/plugin-discovery'
 import type { PluginService } from '../plugins/plugin-service'
 import type { Store } from '../persistence'
 
@@ -97,14 +99,45 @@ describe('plugin install IPC schema', () => {
   })
 })
 
+function removalPlugin(pluginKey: string, isDev = false): ValidDiscoveredPlugin {
+  const [publisher, id] = pluginKey.split('.')
+  return {
+    pluginKey,
+    isDev,
+    rootDir: 'fixture',
+    contentHash: null,
+    consentFingerprint: 'fixture-reviewed',
+    manifest: pluginManifestSchema.parse({
+      manifestVersion: 1,
+      publisher,
+      id,
+      name: id,
+      version: '1.0.0',
+      engines: { orca: '>=1.0.0' },
+      pluginApi: 1,
+      contributes: {},
+      capabilities: []
+    })
+  }
+}
+
 describe('plugin removal authority', () => {
+  it('refuses app-owned data even without a user-data installation lock', () => {
+    const service: Pick<PluginService, 'getDiscovered' | 'isBundledDataPlugin'> = {
+      getDiscovered: () => [removalPlugin('stablyai.orca-locale-es')],
+      isBundledDataPlugin: () => true
+    }
+    expect(canRemoveInstalledPlugin(service, 'stablyai.orca-locale-es')).toBe(false)
+  })
+
   it('allows installed rows but refuses dev overrides and unknown keys', () => {
-    const service = {
+    const service: Pick<PluginService, 'getDiscovered' | 'isBundledDataPlugin'> = {
+      isBundledDataPlugin: () => false,
       getDiscovered: () => [
-        { pluginKey: 'orca-samples.installed', isDev: false },
-        { pluginKey: 'orca-samples.dev', isDev: true }
+        removalPlugin('orca-samples.installed'),
+        removalPlugin('orca-samples.dev', true)
       ]
-    } as unknown as PluginService
+    }
 
     expect(canRemoveInstalledPlugin(service, 'orca-samples.installed')).toBe(true)
     expect(canRemoveInstalledPlugin(service, 'orca-samples.dev')).toBe(false)
@@ -112,9 +145,10 @@ describe('plugin removal authority', () => {
   })
 
   it('refuses bundled installs because startup would restore them', () => {
-    const service = {
-      getDiscovered: () => [{ pluginKey: 'stablyai.orca-theme', isDev: false }]
-    } as unknown as PluginService
+    const service: Pick<PluginService, 'getDiscovered' | 'isBundledDataPlugin'> = {
+      isBundledDataPlugin: () => false,
+      getDiscovered: () => [removalPlugin('stablyai.orca-theme')]
+    }
     const lock = {
       version: 1,
       plugins: {

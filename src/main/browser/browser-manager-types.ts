@@ -53,6 +53,7 @@ export type PopupOwnerContext = {
 export type BrowserGuestPolicy =
   | { profile: 'browsing' }
   | { profile: 'workspace-doc'; host: Electron.WebContents }
+  | { profile: 'plugin-viewer'; install(guest: Electron.WebContents): () => void }
 
 export const BROWSING_GUEST_POLICY: BrowserGuestPolicy = { profile: 'browsing' }
 

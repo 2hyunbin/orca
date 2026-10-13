@@ -6,7 +6,11 @@ const mocks = vi.hoisted(() => ({
   installNavigationPolicy: vi.fn(),
   isAllowedPartition: vi.fn(),
   attachRouteGuest: vi.fn(),
-  registerPluginGuard: vi.fn()
+  registerPluginGuard: vi.fn(),
+  reserveViewerAttach: vi.fn(),
+  activeViewerLease: vi.fn(),
+  retireViewerHost: vi.fn(async () => {}),
+  installViewerPolicy: vi.fn(() => () => {})
 }))
 
 vi.mock('../browser/browser-manager', () => ({
@@ -32,6 +36,15 @@ vi.mock('../browser/local-ssh-browser-partitions', () => ({
 vi.mock('../browser/doc-preview-protocol', () => ({
   isDocPreviewSession: (candidate: unknown) => candidate === 'doc-preview-session'
 }))
+vi.mock('../plugins/plugin-viewer-session-runtime', () => ({
+  reservePluginViewerAttach: mocks.reserveViewerAttach,
+  getActivePluginViewerLease: mocks.activeViewerLease,
+  retirePluginViewerHost: mocks.retireViewerHost,
+  isPluginViewerSession: (candidate: unknown) => candidate === 'private-viewer-session'
+}))
+vi.mock('../plugins/plugin-viewer-guest-policy', () => ({
+  installPluginViewerGuestPolicy: mocks.installViewerPolicy
+}))
 
 import { installMainWindowWebviewSecurity } from './main-window-webview-security'
 import {
@@ -46,15 +59,17 @@ import {
 import { buildDocPreviewUrl, DOC_PREVIEW_PARTITION } from '../../shared/doc-preview-scheme'
 
 function installOnFakeWindow(): {
-  handlers: Record<string, (...args: never[]) => void>
-  webContents: { on: ReturnType<typeof vi.fn> }
+  handlers: Record<string, (...args: unknown[]) => void>
+  webContents: { id: number; on: ReturnType<typeof vi.fn> }
 } {
-  const handlers: Record<string, (...args: never[]) => void> = {}
+  const handlers: Record<string, (...args: unknown[]) => void> = {}
   const webContents = {
-    on: vi.fn((event: string, handler: (...args: never[]) => void) => {
+    id: 7,
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       handlers[event] = handler
     })
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fake records the WebContents listeners used by the admission policy.
   installMainWindowWebviewSecurity({ webContents } as never)
   return { handlers, webContents }
 }
@@ -119,6 +134,87 @@ describe('main window webview security', () => {
     })
     expect(preferences).not.toHaveProperty('preloadURL')
     expect(String(preferences.preload)).toMatch(/browser-window-close-preload\.js$/)
+  })
+})
+
+describe('private viewer guest admission', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.reserveViewerAttach.mockReturnValue(false)
+    mocks.activeViewerLease.mockReturnValue(null)
+  })
+
+  it('pins its minimal preload and denies author-supplied Node and subframe preferences', () => {
+    const { handlers } = installOnFakeWindow()
+    mocks.reserveViewerAttach.mockReturnValue(true)
+    const event = { preventDefault: vi.fn() }
+    const preferences = {
+      partition: 'private-partition',
+      preload: 'attacker.js',
+      additionalArguments: ['attacker'],
+      nodeIntegrationInWorker: true,
+      nodeIntegrationInSubFrames: true,
+      nodeIntegration: true
+    }
+    const params = { src: 'orca-plugin-viewer://lease/', preload: 'attacker.js' }
+    handlers['will-attach-webview']?.(event, preferences, params)
+    expect(event.preventDefault).not.toHaveBeenCalled()
+    expect(mocks.reserveViewerAttach).toHaveBeenCalledWith(7, preferences.partition, params.src)
+    expect(preferences.preload).toMatch(/plugin-viewer-preload\.js$/)
+    expect(params).not.toHaveProperty('preload')
+    expect(preferences).toMatchObject({
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      nodeIntegrationInWorker: false,
+      nodeIntegrationInSubFrames: false,
+      additionalArguments: ['--blink-settings=dnsPrefetchingEnabled=false']
+    })
+  })
+
+  it('refuses the viewer scheme and private partition without a current reservation', () => {
+    const { handlers } = installOnFakeWindow()
+    mocks.isAllowedPartition.mockReturnValue(false)
+    const event = { preventDefault: vi.fn() }
+    handlers['will-attach-webview']?.(
+      event,
+      { partition: 'private-partition' },
+      { src: 'orca-plugin-viewer://lease/' }
+    )
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+  })
+
+  it('attaches the restricted profile without browser routes or document grants', () => {
+    const { handlers } = installOnFakeWindow()
+    const lease = { owner: { hostWebContentsId: 7 } }
+    mocks.activeViewerLease.mockReturnValue(lease)
+    const guest = { session: 'private-viewer-session', close: vi.fn() }
+    handlers['did-attach-webview']?.({}, guest)
+    expect(guest.close).not.toHaveBeenCalled()
+    expect(mocks.attachGuestPolicies).toHaveBeenCalledWith(guest, null, {
+      profile: 'plugin-viewer',
+      install: expect.any(Function)
+    })
+    expect(mocks.attachRouteGuest).not.toHaveBeenCalled()
+  })
+
+  it('closes a stale or differently owned private guest before attaching policies', () => {
+    const { handlers } = installOnFakeWindow()
+    const guest = { session: 'private-viewer-session', close: vi.fn() }
+    handlers['did-attach-webview']?.({}, guest)
+    mocks.activeViewerLease.mockReturnValue({ owner: { hostWebContentsId: 8 } })
+    handlers['did-attach-webview']?.({}, guest)
+    expect(guest.close).toHaveBeenCalledTimes(2)
+    expect(mocks.attachGuestPolicies).not.toHaveBeenCalled()
+  })
+
+  it('withdraws host leases on navigation and destruction', () => {
+    const { handlers } = installOnFakeWindow()
+    handlers['did-start-navigation']?.({ isMainFrame: true, isSameDocument: true })
+    expect(mocks.retireViewerHost).not.toHaveBeenCalled()
+    handlers['did-start-navigation']?.({ isMainFrame: true, isSameDocument: false })
+    handlers['destroyed']?.()
+    expect(mocks.retireViewerHost.mock.calls).toEqual([[7], [7]])
   })
 })
 

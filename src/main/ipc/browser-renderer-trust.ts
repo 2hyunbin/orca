@@ -4,7 +4,9 @@ export function setTrustedBrowserRendererWebContentsId(webContentsId: number | n
   trustedBrowserRendererWebContentsId = webContentsId
 }
 
-export function isTrustedBrowserRenderer(sender: Electron.WebContents): boolean {
+export function isTrustedBrowserRenderer(
+  sender: Pick<Electron.WebContents, 'id' | 'getType' | 'getURL' | 'isDestroyed'>
+): boolean {
   if (sender.isDestroyed() || sender.getType() !== 'window') {
     return false
   }

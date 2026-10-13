@@ -22,6 +22,13 @@ import {
 import { isDocPreviewSession } from '../browser/doc-preview-protocol'
 import { registerHostFrameNavigationGuard } from './host-frame-navigation-guard'
 import { installPrivilegedWindowNavigationPolicy } from './privileged-window-navigation'
+import {
+  getActivePluginViewerLease,
+  isPluginViewerSession,
+  reservePluginViewerAttach,
+  retirePluginViewerHost
+} from '../plugins/plugin-viewer-session-runtime'
+import { installPluginViewerGuestPolicy } from '../plugins/plugin-viewer-guest-policy'
 
 /**
  * Why a separate admission rule: `normalizeBrowserNavigationUrl` answers only for
@@ -38,6 +45,10 @@ function isAdmissibleDocPreviewAttach(partition: string, src: string): boolean {
 }
 
 export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): void {
+  const hostWebContentsId = mainWindow.webContents.id
+  const retireViewerHost = (): void => {
+    void retirePluginViewerHost(hostWebContentsId).catch(() => {})
+  }
   installPrivilegedWindowNavigationPolicy(mainWindow.webContents)
   // Why here and on every fresh shell document: the renderer holds the only record of which
   // preview owns which grant, and a reload throws that record away. Grants it can no longer
@@ -46,6 +57,7 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
   mainWindow.webContents.on('did-start-navigation', (details) => {
     if (details.isMainFrame && !details.isSameDocument) {
       revokeAllDocPreviewGrants()
+      retireViewerHost()
     }
   })
   // Why these contents and not the window: every live preview is a guest of this WebContents, and
@@ -53,6 +65,7 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
   mainWindow.webContents.on('destroyed', () => {
     setDocPreviewFailureSink(null)
     revokeAllDocPreviewGrants()
+    retireViewerHost()
   })
   // Why: containment must be listening before any plugin panel or chat visual frame is
   // created, so register it with the window's other navigation policy.
@@ -63,6 +76,7 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
   // one only decides what a click on a link means, and it is pinned here so no renderer-supplied
   // value can reach a preview guest and no other attach path can acquire it.
   const docPreviewLinkPreload = join(__dirname, 'doc-preview-link-preload.js')
+  const pluginViewerPreload = join(__dirname, 'plugin-viewer-preload.js')
   mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const src = typeof params.src === 'string' ? params.src : ''
     const normalizedSrc = normalizeBrowserNavigationUrl(src)
@@ -74,10 +88,12 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
     // profile partitions — the renderer owns their URLs, no main-side grants.
     const isLocalSshPartition = isLocalSshBrowserPartition(partition)
     const isDocPreviewAttach = isAdmissibleDocPreviewAttach(partition, src)
+    const isViewerAttach = reservePluginViewerAttach(mainWindow.webContents.id, partition, src)
 
     // Why: fail closed — deny any src or partition not in the registry allowlist so a renderer bug can't smuggle preload/Node into an unprivileged guest.
     if (
       !isDocPreviewAttach &&
+      !isViewerAttach &&
       (!normalizedSrc ||
         (!isProfilePartition && !isRoutePartition && !isLocalSshPartition) ||
         (isRoutePartition && normalizedSrc !== ORCA_BROWSER_BLANK_URL))
@@ -88,7 +104,11 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
 
     delete params.preload
     // Why: preload runs in the page's main world before inline scripts can call window.close().
-    webPreferences.preload = isDocPreviewAttach ? docPreviewLinkPreload : browserWindowClosePreload
+    webPreferences.preload = isViewerAttach
+      ? pluginViewerPreload
+      : isDocPreviewAttach
+        ? docPreviewLinkPreload
+        : browserWindowClosePreload
     // Why: older Electron builds expose preloadURL alongside preload; delete both so the guest can't inherit the main preload bridge.
     delete (webPreferences as Record<string, unknown>).preloadURL
     // Why delete something Electron does not set: 43 does not pass the embedder's
@@ -97,6 +117,7 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
     delete webPreferences.additionalArguments
     webPreferences.nodeIntegration = false
     webPreferences.nodeIntegrationInSubFrames = false
+    webPreferences.nodeIntegrationInWorker = false
     webPreferences.enableBlinkFeatures = ''
     webPreferences.disableBlinkFeatures = ''
     webPreferences.webSecurity = true
@@ -107,9 +128,25 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
     Object.assign(webPreferences, ORCA_BROWSER_GUEST_WEB_PREFERENCES)
     // Why: keep the registry-validated partition so isolated session profiles use their own storage while other hardening stays intact.
     webPreferences.partition = partition
+    if (isViewerAttach) {
+      webPreferences.backgroundThrottling = false
+      webPreferences.additionalArguments = ['--blink-settings=dnsPrefetchingEnabled=false']
+    }
   })
 
   mainWindow.webContents.on('did-attach-webview', (_event, guest) => {
+    if (isPluginViewerSession(guest.session)) {
+      const lease = getActivePluginViewerLease(guest.session)
+      if (!lease || lease.owner.hostWebContentsId !== mainWindow.webContents.id) {
+        guest.close({ waitForBeforeUnload: false })
+        return
+      }
+      browserManager.attachGuestPolicies(guest, null, {
+        profile: 'plugin-viewer',
+        install: () => installPluginViewerGuestPolicy(guest, mainWindow.webContents, lease)
+      })
+      return
+    }
     if (isDocPreviewSession(guest.session)) {
       // Why: preview guests never join browser-tab routing, popups or auth-identity tracking; the
       // workspace-doc profile is what refuses all three. The attach is also the point a live window

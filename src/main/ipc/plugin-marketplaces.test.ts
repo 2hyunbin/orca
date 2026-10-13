@@ -51,7 +51,20 @@ async function invoke(channel: string, args?: unknown): Promise<unknown> {
   if (!handler) {
     throw new Error(`missing IPC handler: ${channel}`)
   }
-  return handler({}, args)
+  const mainFrame = {}
+  return handler(
+    {
+      sender: {
+        id: 1,
+        mainFrame,
+        getType: () => 'window',
+        getURL: () => 'file:///orca/index.html',
+        isDestroyed: () => false
+      },
+      senderFrame: mainFrame
+    },
+    args
+  )
 }
 
 beforeEach(() => {
@@ -168,5 +181,41 @@ describe('plugin marketplace IPC authority', () => {
     vi.mocked(services.installer.rollback).mockResolvedValueOnce({ ok: false, error: 'failed' })
     await invoke('plugins:rollbackMarketplacePlugin', { pluginKey: PLUGIN_KEY })
     expect(pluginService.refresh).not.toHaveBeenCalled()
+  })
+  it('denies guest, subframe and destroyed callers before parsing or touching marketplace state', async () => {
+    const services = createServices(),
+      pluginService = createPluginService()
+    registerPluginMarketplaceHandlers(pluginService, services)
+    const mainFrame = {}
+    const sender = {
+      id: 1,
+      mainFrame,
+      getType: () => 'window',
+      getURL: () => 'file:///orca/index.html',
+      isDestroyed: () => false
+    }
+    for (const channel of [
+      'plugins:addMarketplace',
+      'plugins:installMarketplacePlugin',
+      'plugins:rollbackMarketplacePlugin',
+      'plugins:refreshMarketplaces'
+    ]) {
+      const handler = handlers.get(channel)
+      if (!handler) {
+        throw new Error('Missing management handler')
+      }
+      for (const event of [
+        { sender: { ...sender, getType: () => 'webview' }, senderFrame: mainFrame },
+        { sender, senderFrame: {} },
+        { sender: { ...sender, isDestroyed: () => true }, senderFrame: mainFrame }
+      ]) {
+        expect(() => handler(event, { forged: true })).toThrow('trusted application window')
+      }
+    }
+    expect(services.marketplace.addSource).not.toHaveBeenCalled()
+    expect(services.marketplace.refreshAll).not.toHaveBeenCalled()
+    expect(services.installer.install).not.toHaveBeenCalled()
+    expect(services.installer.rollback).not.toHaveBeenCalled()
+    expect(pluginService.deactivatePlugin).not.toHaveBeenCalled()
   })
 })

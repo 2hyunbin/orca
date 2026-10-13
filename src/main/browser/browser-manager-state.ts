@@ -141,6 +141,7 @@ export abstract class BrowserManagerState extends BrowserManagerViewportScrollSt
   protected readonly annotationViewportBridgeOpsByTabId = new Map<string, Promise<unknown>>()
   protected readonly worktreeIdByTabId = new Map<string, string>()
   protected readonly policyAttachedGuestIds = new Set<number>()
+  protected readonly nonBrowsingGuestIds = new Set<number>()
   protected readonly offscreenGuestIds = new Set<number>()
   protected readonly policyCleanupByGuestId = new Map<number, () => void>()
   protected readonly loadErrorsByGuestId = new Map<number, BrowserLoadError>()

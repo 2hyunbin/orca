@@ -21,6 +21,12 @@ import { logStartupMilestone } from './startup-diagnostics'
 import { agentHookServer } from '../agent-hooks/server'
 import { emitPluginWorktreeLifecycle } from './main-process-pty-startup'
 import { mainProcessState as state } from './main-process-state'
+import { resolveLoginShellEnvironment } from './login-shell-environment'
+import { setEnvironmentProviderSshAuthorizer } from '../ssh/environment-provider-ssh-admission'
+import {
+  retireEnvironmentProviderConnections,
+  watchEnvironmentProviderSshLease
+} from '../ipc/environment-provider-ssh-retirement'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 
 export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService): Promise<void> {
@@ -54,11 +60,18 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     hostVersion: app.getVersion(),
     blockedPluginReason: (pluginKey) => state.pluginKillListService?.reason(pluginKey) ?? null
   })
+  const bundledPluginRoot = resolveBundledPluginRoot({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath()
+  })
   state.pluginService = new PluginService({
+    getEnvironmentRecipeLaunchEnvironment: () => resolveLoginShellEnvironment(),
+    retireEnvironmentProviderConnections,
     userDataPath: app.getPath('userData'),
     hostVersion: app.getVersion(),
-    // Feature flag: with the setting off, discovery returns nothing and no
-    // plugin code path runs at all.
+    bundledPluginsRoot: bundledPluginRoot,
+    getDisabledBundledDataPlugins: () => store.getSettings().disabledBundledDataPlugins ?? [],
     isPluginSystemEnabled: () => state.store?.getSettings().pluginSystemEnabled === true,
     getDisabledPlugins: () => normalizePluginIdList(state.store?.getSettings().disabledPlugins),
     getPluginConsents: () => normalizePluginConsents(state.store?.getSettings().pluginConsents),
@@ -67,12 +80,14 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     getPluginKillListEntry: (pluginKey) => state.pluginKillListService?.find(pluginKey) ?? null,
     hostEntryPath: resolvePluginHostEntryPath(app.getAppPath(), app.isPackaged)
   })
+  const providers = state.pluginService.environmentProviders
+  setEnvironmentProviderSshAuthorizer(async (target) => {
+    const lease = await providers.ssh.authorize(target)
+    watchEnvironmentProviderSshLease(target, lease)
+    return lease
+  })
   const bundledPluginBootstrap = new PluginBundledBootstrapCoordinator({
-    root: resolveBundledPluginRoot({
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      appPath: app.getAppPath()
-    }),
+    root: bundledPluginRoot,
     userDataPath: app.getPath('userData'),
     hostVersion: app.getVersion(),
     isEnabled: () => state.store?.getSettings().pluginSystemEnabled === true,
@@ -139,7 +154,10 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
   state.pluginService.onChanged((event) => {
     if (
       event.contentPacksChanged &&
-      setMainPluginLanguagePacks(state.pluginService?.contentPacks.languagePacks.list() ?? [])
+      setMainPluginLanguagePacks(
+        state.pluginService?.contentPacks.languagePacks.list() ?? [],
+        state.pluginService!.getBundledDataAliases()
+      )
     ) {
       void setMainUiLanguage(store.getSettings().uiLanguage).then(() => rebuildAppMenu())
     }
