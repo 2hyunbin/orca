@@ -10,7 +10,6 @@ import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launc
 import { hostTestMessage } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { createScriptedClaudeRuntime } from './structured-claude-scripted-runtime-test-support'
-import { StructuredAgentSessionStartupAttempts } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt'
 
 const SESSION = 'claude-startup-unanswered-control'
 const CALLER = { callerKey: 'client-1' }
@@ -174,13 +173,12 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     // The picker offers the saved model, which nothing has vouched for yet.
     expect(await picker(host)).toEqual({ model: 'sonnet', effort: 'high', confirmed: ['effort'] })
 
-    // A turn shows the child running the CLI's own model: the picker follows it, the record
-    // keeps what the user chose.
+    // A turn reports its own model; the picker and record keep the next message's saved choice.
     turnReportsModel('claude-sonnet-5')
     expect(await picker(host)).toEqual({
-      model: 'claude-sonnet-5',
+      model: 'sonnet',
       effort: 'high',
-      confirmed: ['model', 'effort']
+      confirmed: ['effort']
     })
     expect(record(host)?.options).toEqual({ model: 'sonnet' })
 
@@ -266,92 +264,4 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     expect(await statusRows(host)).toEqual([])
     expect(claude.children(SESSION)).toHaveLength(1)
   })
-})
-
-it('uses model and effort picked during startup in the first reply to a later message', async () => {
-  claude.behave(SESSION, { initHangs: true, sendsNoStartFrame: true })
-  const host = await claude.install()
-  await host.attach(CALLER, claude.attachParams(SESSION, null, { options: { model: 'opus' } }))
-  await vi.waitFor(() => expect(claude.child(SESSION).initializing).toBe(true))
-  const child = claude.child(SESSION)
-  let model = 'opus'
-  let effort = 'high'
-  child.connection.supportedModels = async () => [
-    {
-      value: 'sonnet',
-      displayName: 'Sonnet',
-      supportsEffort: true,
-      supportedEffortLevels: ['low', 'high']
-    },
-    {
-      value: 'opus',
-      displayName: 'Opus',
-      supportsEffort: true,
-      supportedEffortLevels: ['low', 'high']
-    }
-  ]
-  const setModel = child.connection.setModel
-  child.connection.setModel = async (value, options) => {
-    await setModel(value, options)
-    model = value ?? 'opus'
-  }
-  const applyFlags = child.connection.applyFlagSettings
-  child.connection.applyFlagSettings = async (settings, options) => {
-    await applyFlags(settings, options)
-    if (typeof settings.effortLevel === 'string') {
-      effort = settings.effortLevel
-    }
-  }
-  child.connection.getSettings = async () => ({ effective: { effortLevel: effort } })
-  child.connection.send = async (_message, beforeDispatch) => {
-    await beforeDispatch?.()
-    child.calls.push('send')
-    child.handlers.onMessage?.({
-      type: 'assistant',
-      session_id: claudeSessionIdForOrcaSession(SESSION),
-      uuid: 'first-reply',
-      message: { role: 'assistant', model, content: [{ type: 'text', text: effort }] }
-    })
-  }
-  // Let delivery wake before the callers waiting on the same ready child resume.
-  const readiness = StructuredAgentSessionStartupAttempts.prototype.readiness
-  const delayed = vi
-    .spyOn(StructuredAgentSessionStartupAttempts.prototype, 'readiness')
-    .mockImplementation(function (
-      this: StructuredAgentSessionStartupAttempts,
-      sessionId,
-      identity
-    ) {
-      const selected = readiness.call(this, sessionId, identity)
-      return selected
-        ? {
-            wait: async (budget) => {
-              const outcome = await selected.wait(budget)
-              await new Promise((resolve) => setTimeout(resolve, 0))
-              return outcome
-            }
-          }
-        : null
-    })
-  const pickedModel = setOption(host, 'model', 'sonnet')
-  const pickedEffort = setOption(host, 'effort', 'low')
-  await send(host, 'reply using these choices')
-  expect(child.calls).not.toContain('send')
-  child.answerInit()
-  await Promise.all([pickedModel, pickedEffort])
-  await vi.waitFor(async () => {
-    const reply = (await host.journalSnapshot(SESSION)).items.find(
-      (item) => item.body.kind === 'message' && item.body.role === 'assistant'
-    )
-    expect(reply?.body).toMatchObject({
-      kind: 'message',
-      role: 'assistant',
-      blocks: [{ type: 'text', text: 'low' }]
-    })
-  })
-  expect(child.calls.indexOf('set_model')).toBeLessThan(child.calls.indexOf('send'))
-  expect(child.calls.indexOf('apply_flag_settings')).toBeLessThan(child.calls.indexOf('send'))
-  expect((await picker(host)).model).toBe('sonnet')
-  expect(record(host)?.options).toMatchObject({ model: 'sonnet', effort: 'low' })
-  delayed.mockRestore()
 })

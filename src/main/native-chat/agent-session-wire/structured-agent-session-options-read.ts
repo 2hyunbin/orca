@@ -236,9 +236,28 @@ export async function readStructuredAgentSessionOptions(
   const permissionMode = record
     ? await structuredAgentSessionLaunchPermission(context.deps, record)
     : null
+  const saved = record?.options
+  const selected =
+    live && (saved?.model !== undefined || saved?.effort !== undefined)
+      ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
+      : options
+  const current = {
+    ...options.current,
+    ...(saved?.model !== undefined ? { model: selected.current.model } : {}),
+    ...(saved?.effort !== undefined ? { effort: selected.current.effort } : {})
+  }
+  const confirmed = current.confirmed?.filter((key) =>
+    key === 'model'
+      ? current.model === options.current.model
+      : key !== 'effort' || current.effort === options.current.effort
+  )
   return {
     ...options,
-    ...(permissionMode ? { current: { ...options.current, permissionMode } } : {}),
+    current: {
+      ...current,
+      ...(confirmed ? { confirmed } : {}),
+      ...(permissionMode ? { permissionMode } : {})
+    },
     rewind:
       phase === 'prepared' || phase === 'provider-succeeded'
         ? { supported: false, reason: 'outcome-unknown' }
