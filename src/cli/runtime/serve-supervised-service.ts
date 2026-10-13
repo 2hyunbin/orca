@@ -4,6 +4,7 @@ import {
   clearServeSupervisorBrake,
   readServeSupervisorBrake,
   recordSupervisedFailure,
+  SERVE_GAVE_UP_ADVICE,
   standbyDelayMs,
   writeServeSupervisorBrake,
   type ServeSupervisorBrake
@@ -126,9 +127,7 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
     record = null
   }
   const refuseGaveUp = (gaveUp: { reason: string }): number => {
-    log(
-      `[serve] Not starting: ${gaveUp.reason} Fix the cause, then run \`orca serve --supervise --force\` once, or reinstall Orca.`
-    )
+    log(`[serve] Not starting: ${gaveUp.reason} ${SERVE_GAVE_UP_ADVICE}`)
     return 0
   }
   if (record?.gaveUp && record.build === identify(options.executable)) {
@@ -256,7 +255,10 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
         failure = `exited with code ${code}`
       } else {
         const error: unknown = attempt.settled.reason
-        failure = error instanceof Error ? error.message : String(error)
+        // Why: the child's own errors read "Orca serve exited via SIGKILL."; the log line names serve once.
+        failure = (error instanceof Error ? error.message : String(error))
+          .replace(/^Orca serve /, '')
+          .replace(/\.$/, '')
       }
       standbyAttempt = 0
       const next = recordSupervisedFailure(record, { now: now(), reason: failure, random })
