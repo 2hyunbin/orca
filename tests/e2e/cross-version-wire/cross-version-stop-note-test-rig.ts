@@ -96,6 +96,7 @@ export function createReleasedStopNoteRig(port: ScenarioPort, ref: string) {
         {
           supportsCreate: () => true,
           acquire: async ({ fence, spawnToken }) => ({
+            acquisitionGeneration: `stop-note-${fence}`,
             process: {
               hostId: 'local',
               pid: 4242,

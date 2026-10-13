@@ -703,6 +703,7 @@ describe('cross-version structured agent sessions', () => {
             starts += 1
             await startGate
             return {
+              acquisitionGeneration: `cursor-${fence}`,
               process: {
                 hostId: 'local',
                 pid: 4242,
