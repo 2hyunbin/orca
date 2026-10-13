@@ -178,24 +178,28 @@ describe('install-dir package grant passes', () => {
     })
   })
 
-  // The Win32 security APIs fail with error 123 past MAX_PATH; the loader adds the escape once.
-  it('reaches a path past MAX_PATH through the extended-length prefix', async () => {
-    const calls = installFakeAddon()
-    const longDir = `C:\\Program Files\\${'orca'.repeat(70)}`
-    const seen: string[] = []
-    setWindowsSecurityForTests({
-      currentUserSid: () => 'S-1-5-21-1-2-3-1001',
-      getDaclAces: unexpected,
-      setDaclSddl: unexpected,
-      setDaclSddlAsync: unexpected,
-      createFileWithDacl: unexpected,
-      grantAccess: unexpected,
-      grantAccessAsync: async (path) => {
-        seen.push(path)
-      }
-    })
-    await grantInstallDirPackageRoot(longDir)
-    expect(calls).toEqual([])
-    expect(seen).toEqual([`\\\\?\\${longDir}`])
-  })
+  // The Win32 security APIs fail with error 123 past MAX_PATH; the loader adds the escape once
+  // through the host's toNamespacedPath, which is the identity off Windows.
+  it.runIf(process.platform === 'win32')(
+    'reaches a path past MAX_PATH through the extended-length prefix',
+    async () => {
+      const calls = installFakeAddon()
+      const longDir = `C:\\Program Files\\${'orca'.repeat(70)}`
+      const seen: string[] = []
+      setWindowsSecurityForTests({
+        currentUserSid: () => 'S-1-5-21-1-2-3-1001',
+        getDaclAces: unexpected,
+        setDaclSddl: unexpected,
+        setDaclSddlAsync: unexpected,
+        createFileWithDacl: unexpected,
+        grantAccess: unexpected,
+        grantAccessAsync: async (path) => {
+          seen.push(path)
+        }
+      })
+      await grantInstallDirPackageRoot(longDir)
+      expect(calls).toEqual([])
+      expect(seen).toEqual([`\\\\?\\${longDir}`])
+    }
+  )
 })
