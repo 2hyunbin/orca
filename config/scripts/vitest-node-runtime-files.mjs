@@ -45,6 +45,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/plugins/plugin-worker-supervision.integration.test.ts',
   'src/main/plugins/plugin-environment-recipe-journal-file.test.ts',
   'src/main/plugins/plugin-environment-recipe-recovery-journal.test.ts',
+  'src/main/plugins/plugin-environment-recovery-execution.test.ts',
   'src/main/plugins/plugin-environment-recipe-journal-store.test.ts',
   'src/main/plugins/plugin-environment-recipe-journal-store.integration.test.ts',
   'src/main/plugins/plugin-environment-recipe-operation.test.ts',

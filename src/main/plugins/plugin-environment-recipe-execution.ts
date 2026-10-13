@@ -1,45 +1,27 @@
 import { createHash } from 'node:crypto'
-import { runProcess } from '@orca/process-host'
 import {
-  ENVIRONMENT_RECIPE_INPUT_BYTES,
-  ENVIRONMENT_RECIPE_OUTPUT_BYTES,
+  environmentCommandInput,
+  executeReviewedEnvironmentCommand,
+  type EnvironmentCommandInvocation
+} from './plugin-environment-command-execution'
+import {
   environmentRecipeRequestSchema,
   parseEnvironmentRecipeResponse,
-  type EnvironmentRecipeRequest,
-  type EnvironmentRecipeResponse
+  type EnvironmentRecipeRequest
 } from '../../shared/environment-recipe-protocol'
 import {
   environmentRecipeProviderId,
   pluginEnvironmentRecipeSchema,
   validateEnvironmentRecipeProtocol,
   validateEnvironmentRecipeCreateParameters,
-  type EnvironmentRecipeCommand,
   type PluginEnvironmentRecipe
 } from '../../shared/plugins/plugin-environment-recipe-artifact'
 
-export type EnvironmentRecipeInvocation = Readonly<{
-  pluginKey: string
-  providerId: string
-  operationId: string
+export type EnvironmentRecipeInvocation = EnvironmentCommandInvocation<EnvironmentRecipeRequest> & {
   action: EnvironmentRecipeRequest['action']
-  recipeDigest: string
-  requestDigest: string
-  command: Readonly<Omit<EnvironmentRecipeCommand, 'args'>> & { readonly args: readonly string[] }
-  request: Readonly<EnvironmentRecipeRequest>
-}>
-export type EnvironmentRecipeExecutionResult =
-  | { kind: 'completed'; response: EnvironmentRecipeResponse }
-  | { kind: 'refused'; reason: 'approval-required' | 'unsupported-action' | 'cancelled' }
-  | {
-      kind: 'unverifiable'
-      reason:
-        | 'cancelled'
-        | 'timeout'
-        | 'output-limit'
-        | 'command-failed'
-        | 'invalid-response'
-        | 'authority-changed'
-    }
+}
+export type { EnvironmentRecipeExecutionResult } from '../../shared/plugins/plugin-environment-recipe-result'
+import type { EnvironmentRecipeExecutionResult } from '../../shared/plugins/plugin-environment-recipe-result'
 
 export function environmentRecipeDigest(recipe: PluginEnvironmentRecipe): string {
   return createHash('sha256')
@@ -74,10 +56,7 @@ export async function executePluginEnvironmentRecipe(input: {
   if (request.action === 'create') {
     validateEnvironmentRecipeCreateParameters(recipe, request.parameters)
   }
-  const stdin = `${JSON.stringify(request)}\n`
-  if (Buffer.byteLength(stdin) > ENVIRONMENT_RECIPE_INPUT_BYTES) {
-    throw new Error('Environment recipe request exceeds its byte limit')
-  }
+  const { stdin, requestDigest } = environmentCommandInput(request)
   if (request.action === 'create') {
     Object.freeze(request.parameters)
   }
@@ -87,54 +66,21 @@ export async function executePluginEnvironmentRecipe(input: {
     operationId: request.operationId,
     action: request.action,
     recipeDigest: environmentRecipeDigest(recipe),
-    requestDigest: createHash('sha256').update(stdin).digest('hex'),
+    requestDigest,
     request: Object.freeze(request),
     command: Object.freeze({ ...command, args: Object.freeze([...command.args]) })
   })
-  const authority = await input.authorize(invocation)
-  if (!authority || !authority.isCurrent() || authority.signal.aborted) {
-    return { kind: 'refused', reason: 'approval-required' }
-  }
-  if (input.signal?.aborted) {
-    return { kind: 'refused', reason: 'cancelled' }
-  }
-  let result: Awaited<ReturnType<typeof runProcess>>
-  const signal = input.signal ? AbortSignal.any([input.signal, authority.signal]) : authority.signal
-  try {
-    result = await runProcess({
-      program: command.program,
-      args: command.args,
-      cwd,
-      env,
-      input: stdin,
-      timeoutMs: command.timeoutSeconds * 1000,
-      maxOutputBytes: ENVIRONMENT_RECIPE_OUTPUT_BYTES,
-      killOnOutputLimit: true,
-      signal,
-      detached: process.platform !== 'win32',
-      terminationBarrier: true
-    })
-  } catch {
-    return { kind: 'unverifiable', reason: 'command-failed' }
-  }
-  if (!authority.isCurrent() || authority.signal.aborted) {
-    return { kind: 'unverifiable', reason: 'authority-changed' }
-  }
-  if (input.signal?.aborted) {
-    return { kind: 'unverifiable', reason: 'cancelled' }
-  }
-  if (result.outputTruncated) {
-    return { kind: 'unverifiable', reason: 'output-limit' }
-  }
-  if (result.timedOut) {
-    return { kind: 'unverifiable', reason: 'timeout' }
-  }
-  if (result.code !== 0) {
-    return { kind: 'unverifiable', reason: 'command-failed' }
-  }
-  try {
-    return { kind: 'completed', response: parseEnvironmentRecipeResponse(result.stdout, request) }
-  } catch {
-    return { kind: 'unverifiable', reason: 'invalid-response' }
-  }
+  return executeReviewedEnvironmentCommand({
+    invocation,
+    stdin,
+    cwd,
+    env,
+    signal: input.signal,
+    authorize: () => input.authorize(invocation),
+    parseResponse: parseEnvironmentRecipeResponse,
+    rejectResponse: (response) =>
+      request.action !== 'list' && response.kind === 'error' && response.code === 'unavailable'
+        ? 'provider-unavailable'
+        : null
+  })
 }

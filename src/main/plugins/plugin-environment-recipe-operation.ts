@@ -5,27 +5,21 @@ import {
   validateEnvironmentRecipeProtocol,
   validateEnvironmentRecipeCreateParameters
 } from '../../shared/plugins/plugin-environment-recipe-artifact'
-import type { EnvironmentRecipeJournalOperation } from '../../shared/plugins/plugin-environment-recipe-journal'
 import {
   environmentRecipeDigest,
-  executePluginEnvironmentRecipe,
-  type EnvironmentRecipeExecutionResult
+  executePluginEnvironmentRecipe
 } from './plugin-environment-recipe-execution'
 import { PluginEnvironmentRecipeJournalStore } from './plugin-environment-recipe-journal-store'
 
-export type JournaledEnvironmentRecipeResult =
-  | { kind: 'recorded'; operation: EnvironmentRecipeJournalOperation }
-  | {
-      kind: 'executed'
-      operation: EnvironmentRecipeJournalOperation
-      result: EnvironmentRecipeExecutionResult
-    }
+export type { JournaledEnvironmentRecipeResult } from '../../shared/plugins/plugin-environment-recipe-result'
+import type { JournaledEnvironmentRecipeResult } from '../../shared/plugins/plugin-environment-recipe-result'
 
 export async function executeJournaledPluginEnvironmentRecipe(
   input: Parameters<typeof executePluginEnvironmentRecipe>[0] & {
     userDataPath: string
     executionHostId: string
     sourceDigest: string
+    journalId?: string
   }
 ): Promise<JournaledEnvironmentRecipeResult> {
   const recipe = pluginEnvironmentRecipeSchema.parse(structuredClone(input.recipe))
@@ -44,6 +38,7 @@ export async function executeJournaledPluginEnvironmentRecipe(
     providerId,
     ...(request.contextId !== undefined ? { contextId: request.contextId } : {}),
     sourceDigest: input.sourceDigest,
+    ...(input.journalId ? { journalId: input.journalId } : {}),
     recipeDigest: environmentRecipeDigest(recipe)
   })
   const intent = await journal.begin(request)
