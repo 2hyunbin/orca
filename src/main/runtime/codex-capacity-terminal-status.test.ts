@@ -6,6 +6,7 @@ import {
   CodexCapacityNoticeTracker
 } from '../../shared/codex-capacity-notice'
 import { observeCodexCapacityTerminalStatus } from './codex-capacity-terminal-status'
+import * as agentProcessRecognition from '../../shared/agent-process-recognition'
 import { createTranscriptPane, TRANSCRIPT_PANE_PTY_ID } from './agent-transcript-pane-test-harness'
 
 const transcript = readFileSync(
@@ -189,6 +190,30 @@ describe('Codex model capacity terminal status', () => {
         )
       ).toBeNull()
     } finally {
+      emulator.dispose()
+    }
+  })
+
+  it('recognizes an unrelated launch once and invalidates when its command changes', () => {
+    const emulator = new HeadlessEmulator({ cols: 80, rows: 24 })
+    const recognize = vi.spyOn(agentProcessRecognition, 'recognizeAgentProcessFromCommandLine')
+    const readStatus = vi.fn(() => undefined)
+    try {
+      for (let index = 0; index < 1000; index++) {
+        observeCodexCapacityTerminalStatus(
+          emulator,
+          'ordinary output',
+          'zsh',
+          undefined,
+          readStatus
+        )
+      }
+      expect(recognize).toHaveBeenCalledTimes(1)
+      observeCodexCapacityTerminalStatus(emulator, 'ordinary output', 'bash', undefined, readStatus)
+      expect(recognize).toHaveBeenCalledTimes(2)
+      expect(readStatus).not.toHaveBeenCalled()
+    } finally {
+      recognize.mockRestore()
       emulator.dispose()
     }
   })

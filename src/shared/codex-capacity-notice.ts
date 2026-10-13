@@ -18,17 +18,41 @@ export class CodexCapacityNoticeTracker {
         this.tail += ' '
       }
     },
-    onText: (text) => {
-      if (!this.tail && !text.includes('■') && !text.includes('⚠')) {
-        return
-      }
-      const input = (this.tail + text).replace(/\s+/g, ' ')
-      if (/[■⚠]\s+Selected model is at capacity\. Please try a different model\./.test(input)) {
-        this.pending = true
-      }
-      this.tail = input.includes('■') || input.includes('⚠') ? input.slice(-MAX_NOTICE_LENGTH) : ''
-    }
+    onText: (text) => this.observeText(text)
   })
+
+  private observeText(text: string): void {
+    if (this.tail) {
+      this.updateCandidate(this.tail + text.slice(0, MAX_NOTICE_LENGTH))
+    }
+    let error = text.indexOf('■')
+    let warning = text.indexOf('⚠')
+    while (error !== -1 || warning !== -1) {
+      const start = error === -1 ? warning : warning === -1 ? error : Math.min(error, warning)
+      this.updateCandidate(text.slice(start, start + MAX_NOTICE_LENGTH))
+      if (start === error) {
+        error = text.indexOf('■', start + 1)
+      } else {
+        warning = text.indexOf('⚠', start + 1)
+      }
+    }
+  }
+
+  private updateCandidate(text: string): void {
+    const content = text.slice(1).trimStart()
+    if (content && content[0] !== CODEX_CAPACITY_MESSAGE[0]) {
+      this.tail = ''
+      return
+    }
+    const candidate = text.replace(/\s+/g, ' ')
+    const message = candidate.slice(1).trimStart()
+    if (message.startsWith(CODEX_CAPACITY_MESSAGE)) {
+      this.pending = true
+      this.tail = ''
+    } else {
+      this.tail = CODEX_CAPACITY_MESSAGE.startsWith(message) ? candidate : ''
+    }
+  }
 
   observe(data: string, readScreen: () => readonly string[]): boolean {
     this.scanner.observe(data)

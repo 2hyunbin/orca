@@ -10,6 +10,7 @@ import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process
 import type { HeadlessEmulator } from '../daemon/headless-emulator'
 
 const trackers = new WeakMap<HeadlessEmulator, CodexCapacityNoticeTracker>()
+const launchIdentities = new WeakMap<HeadlessEmulator, { command?: string; codex: boolean }>()
 type CodexCapacityStatus = Pick<
   AgentStatusIpcPayload,
   'agentType' | 'prompt' | 'model' | 'subagents' | 'mainAgent' | 'turnStartedAt'
@@ -24,13 +25,20 @@ export function observeCodexCapacityTerminalStatus(
   outputObservedAt = Date.now()
 ): ParsedAgentStatusPayload | null {
   let tracker = trackers.get(emulator)
-  if (
-    !tracker &&
-    launchAgent !== 'codex' &&
-    recognizeAgentProcessFromCommandLine(startupCommand)?.agent !== 'codex'
-  ) {
+  if (!tracker && launchAgent !== 'codex') {
+    let identity = launchIdentities.get(emulator)
+    if (!identity || identity.command !== startupCommand) {
+      identity = {
+        command: startupCommand,
+        codex: recognizeAgentProcessFromCommandLine(startupCommand)?.agent === 'codex'
+      }
+      launchIdentities.set(emulator, identity)
+    }
     // A Codex started from an existing shell is identified by its host-owned hook row.
-    if ((!data.includes('■') && !data.includes('⚠')) || readStatus()?.agentType !== 'codex') {
+    if (
+      !identity.codex &&
+      ((!data.includes('■') && !data.includes('⚠')) || readStatus()?.agentType !== 'codex')
+    ) {
       return null
     }
   }
