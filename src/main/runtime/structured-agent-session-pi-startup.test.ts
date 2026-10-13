@@ -110,10 +110,10 @@ it('attaches Pi at spawn and holds the opening send until the provider answers i
   expect(script.closes()).toBe(1)
 })
 
-it('saves a startup model pick without writing it to the starting Pi child', async () => {
+it('writes a startup model pick once the Pi child is ready', async () => {
   const { script, host, caller, fence } = await setup()
   const fields = { key: 'model', value: 'scripted/model-2' }
-  const picked = await host.setOption(caller, {
+  const picked = host.setOption(caller, {
     envelope: {
       sessionId: HOST_TEST_SESSION,
       clientOperationId: operationId(),
@@ -126,18 +126,19 @@ it('saves a startup model pick without writing it to the starting Pi child', asy
     },
     ...fields
   })
-  expect(picked.ok).toBe(true)
+  expect(script.wire()).not.toContain('set_model')
+  script.releaseHandshake()
+  expect((await picked).ok).toBe(true)
+  expect(script.prompts()).toEqual([])
   const body = hostTestMessage('first message')
   const sent = await host.send(caller, {
     envelope: envelope('agentSession.send', { body }),
     body
   })
   expect(sent.ok).toBe(true)
-  script.releaseHandshake()
-  // A startup pick is saved for a later start at this piece.
   await vi.waitFor(() => expect(script.prompts()).toEqual(['first message']))
   const wire = script.wire()
-  expect(wire).not.toContain('set_model')
+  expect(wire).toContain('set_model')
   const { sessions, serialize } = host.collaboratorsForTests()
   await vi.waitFor(() => expect(sessions.get(HOST_TEST_SESSION)?.child?.phase).toBe('ready'))
   await serialize(HOST_TEST_SESSION, async () => {})

@@ -119,7 +119,6 @@ export class PiRpcSessionStartup {
     return {
       link,
       reportedOptions: options?.current ?? current,
-      restoreSkippedOptions: skipped,
       ...(catalogListing ? { catalogListing } : {})
     }
   }

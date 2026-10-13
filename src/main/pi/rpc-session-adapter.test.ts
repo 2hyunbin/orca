@@ -171,7 +171,7 @@ describe('Pi RPC session ownership and delivery', () => {
       origin: 'created',
       mintedAtFence: 7
     })
-    expect(h.started.restoreSkippedOptions).toEqual(['unknown', 'effort'])
+    expect(h.adapter.readOptionRestoreFailures(sessionId)).toEqual(['unknown', 'effort'])
     expect(h.connection.requests).toContain('get_commands')
   })
 
