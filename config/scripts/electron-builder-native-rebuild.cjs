@@ -10,10 +10,10 @@ function electronBuilderNativeRebuild(context) {
 function runElectronBuilderNativeRebuild(context, runner = execFileSync, runtime = {}) {
   const args = buildNativeRebuildArgs(context, runtime)
   if (readPlatformName(context?.platform) === 'win32') {
-    runner(process.execPath, ['config/scripts/build-windows-cli-launcher.mjs'], {
-      cwd: projectDir,
-      stdio: 'inherit'
-    })
+    // Both ship in resources\bin, and packaging verifies each exists.
+    for (const script of ['build-windows-cli-launcher.mjs', 'build-windows-agent-hook.mjs']) {
+      runner(process.execPath, [`config/scripts/${script}`], { cwd: projectDir, stdio: 'inherit' })
+    }
   }
   runner(process.execPath, args, {
     cwd: projectDir,
