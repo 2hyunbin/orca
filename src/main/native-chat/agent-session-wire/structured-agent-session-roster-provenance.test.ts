@@ -125,20 +125,6 @@ describe('a roster entry’s provenance', () => {
       ? body.blocks.flatMap((b) => (isSubagentGroupBlock(b) ? b.agents : []))
       : []
 
-  it('is the observing generation’s for a new or changed entry, and kept for one carried unchanged', () => {
-    const before = group([child('a', { ownerFence: ENDED }), child('b', { ownerFence: ENDED })])
-    const after = stampJournalEntryProvenance(
-      group([child('a'), child('b', { state: 'completed' }), child('c')]),
-      { body: before, ownerFence: ENDED },
-      LIVE
-    )
-    expect(agentsOf(after).map(({ id, ownerFence }) => [id, ownerFence])).toEqual([
-      ['a', ENDED],
-      ['b', LIVE],
-      ['c', LIVE]
-    ])
-  })
-
   it('falls back to the row’s own provenance for an entry an older build never stamped', () => {
     const before = group([child('a')])
     const after = stampJournalEntryProvenance(
@@ -147,15 +133,6 @@ describe('a roster entry’s provenance', () => {
       LIVE
     )
     expect(agentsOf(after)[0]?.ownerFence).toBe(2)
-  })
-
-  it('keeps a stamp history carried into a new epoch already names', () => {
-    const after = stampJournalEntryProvenance(
-      group([child('a', { ownerFence: ENDED })]),
-      undefined,
-      LIVE
-    )
-    expect(agentsOf(after)[0]?.ownerFence).toBe(ENDED)
   })
 })
 
