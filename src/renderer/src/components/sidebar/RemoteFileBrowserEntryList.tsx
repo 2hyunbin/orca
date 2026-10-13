@@ -2,7 +2,8 @@ import type React from 'react'
 import { useMemo, type RefObject } from 'react'
 import { ChevronRight, Folder, LoaderCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getFileTypeIcon } from '@/lib/file-type-icons'
+import { FileTypeIcon } from '@/components/FileTypeIcon'
+import { PluginIconSlot } from '@/components/PluginIconSlot'
 import {
   filterEntries,
   isRemoteFileBrowserPathResolveTextTooLarge,
@@ -91,7 +92,6 @@ export function RemoteFileBrowserEntryList({
           </div>
         ) : (
           displayEntries.map((entry) => {
-            const FileIcon = getFileTypeIcon(entry.name)
             return (
               <button
                 key={entry.name}
@@ -108,9 +108,16 @@ export function RemoteFileBrowserEntryList({
                 )}
               >
                 {entry.isDirectory ? (
-                  <Folder className="size-3.5 text-muted-foreground shrink-0" />
+                  <PluginIconSlot
+                    slot="folder"
+                    className="size-3.5 text-muted-foreground shrink-0"
+                    fallback={<Folder className="size-3.5 text-muted-foreground shrink-0" />}
+                  />
                 ) : (
-                  <FileIcon className="size-3.5 text-muted-foreground/60 shrink-0" />
+                  <FileTypeIcon
+                    filePath={entry.name}
+                    className="size-3.5 text-muted-foreground/60 shrink-0"
+                  />
                 )}
                 <span className="truncate flex-1 min-w-0">{entry.name}</span>
                 {entry.isDirectory && (

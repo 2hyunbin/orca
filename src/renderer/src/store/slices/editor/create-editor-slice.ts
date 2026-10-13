@@ -6,6 +6,7 @@ import { createRightSidebarState } from './actions/right-sidebar-state'
 import { createExplorerDirState } from './actions/explorer-dir-state'
 import { createOpenFileState } from './actions/open-file-state'
 import { createOpenFileAction } from './actions/open-file-action'
+import { createResolveFileOpening } from './actions/resolve-file-opening'
 import { createMarkdownPreviewActions } from './actions/markdown-preview-actions'
 import { createCloseFileAction } from './actions/close-file-action'
 import { createRecentlyClosedEditorTabs } from './actions/recently-closed-editor-tabs'
@@ -36,6 +37,7 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
   ...createExplorerDirState(set, get),
   ...createOpenFileState(set, get),
   ...createOpenFileAction(set, get),
+  ...createResolveFileOpening(set, get),
   ...createMarkdownPreviewActions(set, get),
   ...createCloseFileAction(set, get),
   ...createRecentlyClosedEditorTabs(set, get),

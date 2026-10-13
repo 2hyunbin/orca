@@ -20,9 +20,12 @@ import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 import type { ArtifactWriteRequest } from '../../../../shared/artifacts'
 import { ArtifactPublishButton } from '@/components/artifacts/ArtifactPublishButton'
 import { editorArtifactSourceKey } from './editor-artifact-upload'
+import { PluginSyntaxPicker } from './PluginSyntaxPicker'
+import { PluginFileViewerPicker } from './PluginFileViewerPicker'
 
 type EditorPanelHeaderProps = {
   activeFile: OpenFile
+  viewStateId?: string
   copiedPathVisible: boolean
   isSingleDiff: boolean
   isDiffSurface: boolean
@@ -57,6 +60,7 @@ type EditorPanelHeaderProps = {
 
 export function EditorPanelHeader({
   activeFile,
+  viewStateId,
   copiedPathVisible,
   isSingleDiff,
   isDiffSurface,
@@ -112,6 +116,12 @@ export function EditorPanelHeader({
         onCopyPath={onCopyPath}
         onOpenMarkdownPreview={onOpenMarkdownPreview}
       />
+      {!isCsv && !isNotebook && (activeFile.mode === 'edit' || isSingleDiff) && (
+        <PluginSyntaxPicker filePath={activeFile.filePath} coreLanguage={activeFile.language} />
+      )}
+      {activeFile.mode === 'edit' && (
+        <PluginFileViewerPicker file={activeFile} viewStateId={viewStateId} />
+      )}
       {canOpenPreviewToSide && (
         <TooltipProvider delayDuration={300}>
           <Tooltip>
@@ -196,6 +206,17 @@ export function EditorPanelHeader({
                 type="button"
                 className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
                 onClick={onToggleSideBySide}
+                aria-label={
+                  sideBySide
+                    ? translate(
+                        'auto.components.editor.EditorPanelHeader.94756f08ba',
+                        'Switch to inline diff'
+                      )
+                    : translate(
+                        'auto.components.editor.EditorPanelHeader.e836faacfa',
+                        'Switch to side-by-side diff'
+                      )
+                }
               >
                 {sideBySide ? <Rows2 size={14} /> : <Columns2 size={14} />}
               </button>

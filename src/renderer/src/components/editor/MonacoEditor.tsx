@@ -25,6 +25,8 @@ import { useMonacoEditorMount } from './use-monaco-editor-mount'
 import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
 import { snapshotMonacoViewState } from './monaco-view-state-persistence'
 import { MonacoMarkdownAnnotationOverlay } from './MonacoMarkdownAnnotationOverlay'
+import { usePluginSyntaxLanguage } from '@/store/plugin-syntax-packs'
+import { PluginSyntaxRecovery } from './PluginSyntaxRecovery'
 
 type MonacoEditorProps = {
   fileId: string
@@ -70,6 +72,7 @@ export default function MonacoEditor({
   liveTail = false,
   autoHeight = false
 }: MonacoEditorProps): React.JSX.Element {
+  const syntaxLanguage = usePluginSyntaxLanguage(filePath, language)
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const [mountedEditor, setMountedEditor] = useState<editor.IStandaloneCodeEditor | null>(null)
@@ -245,7 +248,7 @@ export default function MonacoEditor({
       <Editor
         key={modelUri}
         height={renderedEditorHeight === null ? '100%' : `${renderedEditorHeight}px`}
-        language={language}
+        language={syntaxLanguage}
         // Why: defaultValue, not controlled value — Orca owns post-mount content sync; a controlled path would double setValue.
         defaultValue={content}
         theme={isDark ? 'vs-dark' : 'vs'}
@@ -289,6 +292,7 @@ export default function MonacoEditor({
         keepCurrentModel
       />
 
+      <PluginSyntaxRecovery modelUris={[modelUri]} />
       {toastNode}
       <MonacoGutterContextMenu
         open={gutterMenuOpen}

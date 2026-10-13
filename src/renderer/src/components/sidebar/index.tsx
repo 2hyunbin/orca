@@ -1,3 +1,4 @@
+import { usePluginTerminalThemes } from '@/store/plugin-terminal-themes'
 import React, { useEffect, useMemo } from 'react'
 import { useAppStore } from '@/store'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -92,10 +93,11 @@ function Sidebar({
   const activeModal = useAppStore((s) => s.activeModal)
   const statusBarVisible = useAppStore((s) => s.statusBarVisible)
   const systemPrefersDark = useSystemPrefersDark()
+  const pluginTerminalThemes = usePluginTerminalThemes()
   const leftSidebarStyle = useMemo(
-    () => resolveLeftSidebarStyleVariables(settings, systemPrefersDark),
-    [settings, systemPrefersDark]
-  ) as React.CSSProperties | undefined
+    () => resolveLeftSidebarStyleVariables(settings, systemPrefersDark, pluginTerminalThemes),
+    [settings, systemPrefersDark, pluginTerminalThemes]
+  )
   const { dropOwnerRef, dropHandlers, affordance } = useSidebarProjectDrop()
   const {
     workspaceBoardOpen,

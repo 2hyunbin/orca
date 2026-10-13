@@ -17,7 +17,7 @@ export type EditorHeaderOpenFileState = {
 
 /** Whether the panel shows its own path header; virtual tabs name the document themselves. */
 export function shouldShowEditorPanelHeader(file: OpenFile, isCombinedDiff: boolean): boolean {
-  return !isCombinedDiff && !isVirtualEditorFile(file)
+  return !isCombinedDiff && !isVirtualEditorFile(file) && file.mode !== 'plugin-viewer' && file.mode !== 'file-opening'
 }
 
 export function getEditorHeaderCopyState(file: OpenFile): EditorHeaderCopyState {

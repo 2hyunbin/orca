@@ -125,6 +125,12 @@ function populate(loaded: LoadedWorkspaceLayout): LoadedWorkspaceLayout {
   fill(loaded, 'file.runtimeEnvironmentId', 'env')
   fill(loaded, 'file.readOnly', true)
   fill(loaded, 'file.liveTail', true)
+  fill(loaded, 'file.fileOpening', { readOnly: true })
+  fill(loaded, 'file.pluginViewer', {
+    key: 'viewer:community.viewer/table',
+    sourceView: { readOnly: true }
+  })
+  fill(loaded, 'file.pluginViewerUserSelectedFile', true)
   // A focused and an expanded pane that is not the first, so a fallback is visible.
   fill(loaded, 'viewPane.activeLeafId', leaf(2), (holder) => holder.activeLeafId === leaf(1))
   fill(loaded, 'viewPane.expandedLeafId', leaf(2), (holder) => holder.activeLeafId === leaf(2))

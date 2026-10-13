@@ -8,6 +8,8 @@ import {
 } from '../../../shared/tui-agent-launch-defaults'
 import { normalizeTerminalQuickCommands } from '../../../shared/terminal-quick-commands'
 import { normalizeTerminalCustomThemes } from '../../../shared/terminal-custom-themes'
+import { normalizePluginSyntaxAssociations } from '../../../shared/plugins/plugin-syntax-associations'
+import { normalizePluginViewerAssociations } from '../../../shared/plugins/plugin-viewer-associations'
 import { normalizeTerminalCursorStyleDefault } from '../../../shared/terminal-cursor-style-settings'
 import { normalizeDesktopTerminalScrollbackRows } from '../../../shared/terminal-scrollback-policy'
 import { normalizeTerminalMinimumContrastRatio } from '../../../shared/terminal-minimum-contrast-settings'
@@ -17,6 +19,7 @@ import { normalizeTerminalShortcutPolicy } from '../../../shared/keybindings'
 import { normalizeSourceControlGroupOrder } from '../../../shared/source-control-group-order'
 import { normalizeAppIconId } from '../../../shared/app-icon'
 import { normalizeUiLanguage } from '../../../shared/ui-language'
+import { normalizeDisabledBundledDataPlugins } from '../../../shared/plugins/plugin-bundled-data-state'
 import { normalizeWorktreeVisibilityDefaults } from '../../../shared/external-worktree-visibility'
 import { normalizePRBotAuthorOverrides } from '../../../shared/pr-bot-author-overrides'
 import { normalizeMachineName } from '../../../shared/machine-name'
@@ -62,6 +65,11 @@ export function updateSettings(
   if (linkBehavior === 'actions' || linkBehavior === 'open' || linkBehavior === 'none') {
     // Loaded defaults are ambiguous; synchronize the legacy switch only on an explicit write.
     sanitizedUpdates.terminalLinkActionPopoverEnabled = linkBehavior === 'actions'
+  }
+  if ('disabledBundledDataPlugins' in updates) {
+    sanitizedUpdates.disabledBundledDataPlugins = normalizeDisabledBundledDataPlugins(
+      updates.disabledBundledDataPlugins
+    )
   }
   if ('opencodeSessionCookie' in updates && !updates.opencodeSessionCookie) {
     operations.removeRetainedBlob(PROTECTED_SECRET_SLOT.opencodeSessionCookie)
@@ -120,6 +128,16 @@ export function updateSettings(
   if ('terminalCustomThemes' in updates) {
     sanitizedUpdates.terminalCustomThemes = normalizeTerminalCustomThemes(
       updates.terminalCustomThemes
+    )
+  }
+  if ('pluginViewerAssociations' in updates) {
+    sanitizedUpdates.pluginViewerAssociations = normalizePluginViewerAssociations(
+      updates.pluginViewerAssociations
+    )
+  }
+  if ('pluginSyntaxAssociations' in updates) {
+    sanitizedUpdates.pluginSyntaxAssociations = normalizePluginSyntaxAssociations(
+      updates.pluginSyntaxAssociations
     )
   }
   if ('terminalCursorStyle' in updates) {

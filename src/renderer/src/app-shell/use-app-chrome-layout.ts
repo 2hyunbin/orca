@@ -1,3 +1,5 @@
+import { usePluginTerminalThemes } from '@/store/plugin-terminal-themes'
+import { usePluginFileOpeningResolution } from '@/store/plugin-file-opening-resolution'
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { SYNC_FIT_PANES_EVENT } from '@/constants/terminal'
@@ -21,6 +23,7 @@ export type AppChromeLayout = ReturnType<typeof useAppChromeLayout>
  * workspace owns the tab strip, and which surfaces stay mounted — from store state.
  */
 export function useAppChromeLayout() {
+  usePluginFileOpeningResolution()
   const activeView = useAppStore((s) => s.activeView)
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
@@ -49,10 +52,11 @@ export function useAppChromeLayout() {
   )
 
   const systemPrefersDark = useSystemPrefersDark()
+  const pluginTerminalThemes = usePluginTerminalThemes()
   const leftSidebarStyle = useMemo(
-    () => resolveLeftSidebarStyleVariables(settings, systemPrefersDark),
-    [settings, systemPrefersDark]
-  ) as React.CSSProperties | undefined
+    () => resolveLeftSidebarStyleVariables(settings, systemPrefersDark, pluginTerminalThemes),
+    [settings, systemPrefersDark, pluginTerminalThemes]
+  )
 
   // Why floating tabs count: the workbench owns every tab's unsaved-close and quit protection, and
   // floating tabs exist without an active worktree.

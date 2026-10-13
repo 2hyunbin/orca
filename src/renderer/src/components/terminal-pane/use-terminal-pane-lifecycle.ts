@@ -1,3 +1,4 @@
+import { usePluginTerminalThemeStore } from '@/store/plugin-terminal-themes'
 import { useEffect } from 'react'
 import type { IDisposable } from '@xterm/xterm'
 import { normalizeDesktopTerminalScrollbackRows } from '../../../../shared/terminal-scrollback-policy'
@@ -19,6 +20,7 @@ import { listenForHibernatedAgentWake } from './hibernated-agent-wake-listener'
 
 /** Coordinates mount, visibility, and live appearance effects for terminal panes. */
 export function useTerminalPaneLifecycle(deps: UseTerminalPaneLifecycleDeps): void {
+  const pluginTerminalThemes = usePluginTerminalThemeStore((state) => state.themes)
   const refs = useTerminalPaneLifecycleRefs()
   useTerminalPaneMountLifecycle(deps, refs)
 
@@ -108,6 +110,7 @@ export function useTerminalPaneLifecycle(deps: UseTerminalPaneLifecycleDeps): vo
     )
   }, [
     deps.settings,
+    pluginTerminalThemes,
     deps.systemPrefersDark,
     deps.effectiveMacOptionAsAlt,
     deps.managerRef,

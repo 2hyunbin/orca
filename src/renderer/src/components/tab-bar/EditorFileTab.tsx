@@ -8,6 +8,7 @@ import { getEditorDisplayLabel } from '@/components/editor/editor-labels'
 import { renameFileOnDisk } from '@/lib/rename-file'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
 import { detectLanguage } from '@/lib/language-detect'
+import { FileTypeIcon } from '@/components/FileTypeIcon'
 import { getFileTypeIcon } from '@/lib/file-type-icons'
 import { useRepoById, useWorktreeById } from '@/store/selectors'
 import { useAppStore } from '@/store'
@@ -75,7 +76,6 @@ export default function EditorFileTab({
 }): React.JSX.Element {
   const worktree = useWorktreeById(file.worktreeId)
   const repo = useRepoById(worktree?.repoId ?? null)
-  const FileIcon = getFileTypeIcon(file.filePath)
   // Why: no transform/transition/isDragging styling — the drag design is
   // that tabs stay visually anchored; only the blue insertion bar moves.
   const { attributes, listeners, setNodeRef } = useSortable({
@@ -91,6 +91,7 @@ export default function EditorFileTab({
   const isCheckDetails = file.mode === 'check-details'
   const isChatVisual = file.mode === 'chat-visual'
   const isMarkdownPreviewTab = file.mode === 'markdown-preview'
+  const FileIcon = getFileTypeIcon(file.filePath)
   const HoverIcon = isConflictReview
     ? ShieldAlert
     : isCheckDetails
@@ -287,7 +288,8 @@ export default function EditorFileTab({
           className={`w-3.5 h-3.5 mr-1.5 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
         />
       ) : (
-        createElement(HoverIcon, {
+        createElement(FileTypeIcon, {
+          filePath: file.filePath,
           className: `w-3 h-3 mr-1 shrink-0 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`
         })
       )}

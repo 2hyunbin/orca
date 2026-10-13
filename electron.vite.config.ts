@@ -9,6 +9,8 @@ import { createPdfjsViewerAssetsPlugin } from './config/build-plugins/pdfjs-view
 import { createProcessHostDevRebuildPlugin } from './config/build-plugins/process-host-dev-rebuild'
 import { MAIN_BUILD_ENTRY_POINTS } from './config/build-plugins/main-build-entry-points'
 import { createPlainNodeEntryGuardPlugin } from './config/build-plugins/plain-node-entry-guard'
+import { createSandboxedPreloadGuardPlugin } from './config/build-plugins/sandboxed-preload-guard'
+import { createPluginViewerAssetsPlugin } from './config/build-plugins/plugin-viewer-assets'
 import packageJson from './package.json' with { type: 'json' }
 import { resolveBuildSourceCommit } from './config/scripts/build-source-commit.mjs'
 
@@ -232,7 +234,7 @@ export const electronViteConfig: UserConfig = {
         // Why: native dependencies must resolve from packaged node_modules,
         // while the unpacked daemon needs its pure-JS xterm graph bundled.
         external: isExternalMainModule,
-        input: MAIN_BUILD_ENTRY_POINTS,
+        input: { ...MAIN_BUILD_ENTRY_POINTS, 'plugin-viewer-preload': resolve('src/preload/plugin-viewer.ts') },
         // Why: Rolldown's SSR default is ESM, but Electron and sidecar launchers
         // consume these stable CommonJS paths.
         output: {
@@ -242,8 +244,14 @@ export const electronViteConfig: UserConfig = {
         },
         plugins: [
           createMainBootstrapPlugin(),
+          createProcessHostDevRebuildPlugin(),
+          createPluginViewerAssetsPlugin(),
           createPlainNodeEntryGuardPlugin(),
-          createProcessHostDevRebuildPlugin()
+          createSandboxedPreloadGuardPlugin([
+            'browser-window-close-preload',
+            'doc-preview-link-preload',
+            'plugin-viewer-preload'
+          ])
         ]
       }
     },

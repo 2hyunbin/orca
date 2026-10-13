@@ -11,6 +11,8 @@ import { MACHINE_NAME_MAX_LENGTH } from '../machine-name'
 import { normalizePRBotAuthorOverrides } from '../pr-bot-author-overrides'
 import { WorktreeVisibilityDefaultsUpdate } from './worktree-visibility-defaults-params'
 import { AGENT_CHAT_PERMISSION_MODES } from '../agent-chat-permission-mode'
+import { pluginSyntaxAssociationsSchema } from '../plugins/plugin-syntax-associations'
+import { pluginViewerAssociationsSchema } from '../plugins/plugin-viewer-associations'
 
 export const TaskProviderParam = z.custom<TaskProvider>(isTaskProvider, {
   message: 'Unknown task provider'
@@ -87,6 +89,8 @@ export const GitHubProjectSettings = z
 export const SettingsUpdate = z
   .object({
     machineName: z.string().trim().max(MACHINE_NAME_MAX_LENGTH).optional(),
+    pluginSyntaxAssociations: pluginSyntaxAssociationsSchema.optional(),
+    pluginViewerAssociations: pluginViewerAssociationsSchema.optional(),
     worktreeVisibilityDefaults: WorktreeVisibilityDefaultsUpdate.optional(),
     defaultTuiAgent: z
       .unknown()

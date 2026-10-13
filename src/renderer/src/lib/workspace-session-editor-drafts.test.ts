@@ -41,6 +41,53 @@ function createSnapshot(
 }
 
 describe('workspace session editor drafts', () => {
+  it('persists a qualified viewer and its viewport without executable state or a dirty draft', () => {
+    const pluginViewer = {
+      key: 'viewer:community.viewer/table',
+      sourceView: { readOnly: true, liveTail: true },
+      viewport: {
+        kind: 'table' as const,
+        sheetId: 'budget',
+        startRow: 64,
+        startColumn: 0,
+        rowCount: 64,
+        columnCount: 8
+      }
+    }
+    const payload = buildWorkspaceSessionPayload(
+      createSnapshot({
+        openFiles: [
+          {
+            id: 'viewer-tab',
+            filePath: '/workspace/budget.xlsx',
+            relativePath: 'budget.xlsx',
+            worktreeId: 'wt-1',
+            language: 'plaintext',
+            mode: 'plugin-viewer',
+            isDirty: true,
+            pluginViewer
+          }
+        ],
+        editorDrafts: { 'viewer-tab': 'stray draft must not persist' },
+        activeFileIdByWorktree: { 'wt-1': 'viewer-tab' },
+        activeTabTypeByWorktree: { 'wt-1': 'editor' }
+      })
+    )
+    expect(payload.openFilesByWorktree?.['wt-1']).toEqual([
+      {
+        filePath: '/workspace/budget.xlsx',
+        relativePath: 'budget.xlsx',
+        worktreeId: 'wt-1',
+        language: 'plaintext',
+        isPreview: undefined,
+        runtimeEnvironmentId: undefined,
+        externalSshTargetId: undefined,
+        readOnly: true,
+        pluginViewer
+      }
+    ])
+    expect(payload.activeFileIdByWorktree?.['wt-1']).toBe('viewer-tab')
+  })
   it('persists dirty editor drafts without saving clean file content', () => {
     const payload = buildWorkspaceSessionPayload(
       createSnapshot({

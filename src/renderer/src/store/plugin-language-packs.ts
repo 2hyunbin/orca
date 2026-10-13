@@ -1,6 +1,11 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import {
+  NO_BUNDLED_DATA_ALIASES,
+  pluginBundledDataAliasesSchema,
+  type PluginBundledDataAliases
+} from '../../../shared/plugins/plugin-bundled-data-aliases'
+import {
   isPluginLanguagePackRegistration,
   type PluginLanguagePackRegistration
 } from '../../../shared/plugins/plugin-language-pack-artifact'
@@ -8,6 +13,7 @@ import {
 type PluginLanguagePackState = {
   packs: PluginLanguagePackRegistration[]
   loaded: boolean
+  aliases: PluginBundledDataAliases
   fetchPacks: () => Promise<void>
 }
 
@@ -27,6 +33,7 @@ let changeSubscriptionStarted = false
 export const usePluginLanguagePackStore = create<PluginLanguagePackState>()((set) => ({
   packs: [],
   loaded: false,
+  aliases: NO_BUNDLED_DATA_ALIASES,
   fetchPacks: async () => {
     const generation = ++requestGeneration
     latestRequestStartedAt = Date.now()
@@ -34,12 +41,26 @@ export const usePluginLanguagePackStore = create<PluginLanguagePackState>()((set
     if (!api?.listLanguagePacks) {
       if (generation === requestGeneration) {
         latestRequestStartedAt = null
-        set({ packs: [], loaded: true })
+        set({ packs: [], aliases: NO_BUNDLED_DATA_ALIASES, loaded: true })
       }
       return
     }
+    let aliases = usePluginLanguagePackStore.getState().aliases
     try {
-      const response = await api.listLanguagePacks()
+      const [packResult, aliasResult] = await Promise.allSettled([
+        api.listLanguagePacks(),
+        api.getBundledDataAliases?.().catch(() => null) ?? Promise.resolve(null)
+      ])
+      const parsedAliases = pluginBundledDataAliasesSchema.safeParse(
+        aliasResult.status === 'fulfilled' ? aliasResult.value : null
+      )
+      if (parsedAliases.success) {
+        aliases = parsedAliases.data
+      }
+      if (packResult.status === 'rejected') {
+        throw packResult.reason
+      }
+      const response = packResult.value
       const packs = Array.isArray(response) ? response.filter(isPluginLanguagePackRegistration) : []
       // Why: a non-array response and a rejected member are different upstream bugs; keep them distinguishable in the log.
       if (!Array.isArray(response)) {
@@ -50,11 +71,11 @@ export const usePluginLanguagePackStore = create<PluginLanguagePackState>()((set
         )
       }
       if (generation === requestGeneration) {
-        set({ packs, loaded: true })
+        set({ packs, aliases, loaded: true })
       }
     } catch {
       if (generation === requestGeneration) {
-        set({ packs: [], loaded: true })
+        set({ packs: [], aliases, loaded: true })
       }
     } finally {
       if (generation === requestGeneration) {

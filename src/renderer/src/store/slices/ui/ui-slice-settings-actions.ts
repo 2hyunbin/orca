@@ -28,6 +28,13 @@ export function createUiSettingsActions(set: UISliceSet, get: UISliceGet): Parti
       set({ settingsNavigationTarget: target })
     },
     clearSettingsTarget: () => set({ settingsNavigationTarget: null }),
+    pluginCatalogTypeFilter: 'all',
+    setPluginCatalogTypeFilter: (type) => set({ pluginCatalogTypeFilter: type }),
+    openPluginFileViewerCatalog: () => {
+      get().setPluginCatalogTypeFilter('file-viewer')
+      get().openSettingsTarget({ pane: 'plugins', repoId: null })
+      get().openSettingsPage()
+    },
     settingsProjectHostSelection: {},
     settingsProjectSetupSelection: {},
     // Why: renderer-only, never persisted — no window.api.ui.set, and absent from the debounced UI writer in App.tsx.

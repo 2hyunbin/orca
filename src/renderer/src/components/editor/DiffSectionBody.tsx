@@ -18,6 +18,8 @@ import {
 } from './diff-editor-word-wrap-options'
 import { monacoFindOptions } from './monaco-find-options'
 import { installDiffEditorShiftWheelScroll } from './diff-editor-shift-wheel-scroll'
+import { usePluginSyntaxLanguage } from '@/store/plugin-syntax-packs'
+import { registerPluginGrammarDiffRefresh } from '@/lib/monaco-languages/plugin-grammar-diff-refresh'
 
 const ImageDiffViewer = lazy(() => import('./ImageDiffViewer'))
 
@@ -62,6 +64,7 @@ export function DiffSectionBody({
   onSaveLimitedDiff,
   onMount
 }: DiffSectionBodyProps): React.JSX.Element {
+  const syntaxLanguage = usePluginSyntaxLanguage(section.path, language)
   const renderLimit = section.largeDiffRenderLimit?.limited ? section.largeDiffRenderLimit : null
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null)
   const wordWrapOptionsSubRef = useRef<{ dispose: () => void } | null>(null)
@@ -72,6 +75,8 @@ export function DiffSectionBody({
   }, [diffWordWrap])
   const handleEditorMount: DiffOnMount = (diffEditor, monaco) => {
     diffEditorRef.current = diffEditor
+    const syntaxRefresh = registerPluginGrammarDiffRefresh(diffEditor, () => true)
+    diffEditor.onDidDispose(syntaxRefresh.dispose)
     const cleanupShiftWheelScroll = installDiffEditorShiftWheelScroll(diffEditor)
     diffEditor.getModifiedEditor().onDidDispose(() => {
       cleanupShiftWheelScroll()
@@ -204,7 +209,7 @@ export function DiffSectionBody({
       ) : (
         <DiffEditor
           height="100%"
-          language={language}
+          language={syntaxLanguage}
           original={section.originalContent}
           modified={section.modifiedContent}
           theme={isDark ? 'vs-dark' : 'vs'}
@@ -222,6 +227,7 @@ export function DiffSectionBody({
             readOnly: !isEditable,
             originalEditable: false,
             renderSideBySide: sideBySide,
+            renderIndicators: true,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
             fontSize: diffEditorFontSize,

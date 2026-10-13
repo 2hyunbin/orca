@@ -48,6 +48,11 @@ export {
   isTabEntryAbsolutePathAllowed
 } from './tab-create-entry-local-path'
 import { statUserOpenedPath } from '@/lib/user-opened-local-path'
+import { isWindowsAbsolutePathLike } from '../../../../shared/cross-platform-path'
+import {
+  absoluteTabEntryViewerOwner,
+  openAbsoluteTabEntryViewerFile
+} from './tab-create-entry-viewer-file'
 
 export type TabCreateEntryArgs = {
   classification?: TabEntryActionClassification
@@ -67,6 +72,7 @@ export type TabEntryOperations = {
   statRuntimePath: typeof statRuntimePath
   statUserOpenedPath: typeof statUserOpenedPath
   assertAbsolutePathAllowed: () => void
+  openAbsoluteViewerFile?: typeof openAbsoluteTabEntryViewerFile
 }
 
 type OpenTabEntryWithOperationsArgs = {
@@ -77,6 +83,8 @@ type OpenTabEntryWithOperationsArgs = {
   worktreePath: string
   runtimeContext: RuntimeFileOperationArgs
   allowAbsolutePaths: boolean
+  allowAbsoluteViewerPaths?: boolean
+  absoluteViewerOwner?: string
   localPlatform: TabEntryLocalPlatform
   searchEngine: SearchEngine
   searchUrlOptions?: SearchUrlOptions
@@ -179,6 +187,8 @@ function getNetworkTabRequest(
 
 export async function openTabEntryWithOperations({
   allowAbsolutePaths,
+  allowAbsoluteViewerPaths,
+  absoluteViewerOwner,
   classification: selectedClassification,
   fileList,
   groupId,
@@ -191,7 +201,13 @@ export async function openTabEntryWithOperations({
   worktreeId,
   worktreePath
 }: OpenTabEntryWithOperationsArgs): Promise<void> {
-  const entryContext: TabEntryOptionsContext = { allowAbsolutePaths, localPlatform, searchEngine }
+  const entryContext: TabEntryOptionsContext = {
+    allowAbsolutePaths,
+    allowAbsoluteViewerPaths,
+    absoluteViewerOwner,
+    localPlatform,
+    searchEngine
+  }
   const classification =
     selectedClassification ?? classifyTabEntryQuery(query, fileList, entryContext)
   if (classification.kind === 'empty' || classification.kind === 'blocked') {
@@ -206,6 +222,18 @@ export async function openTabEntryWithOperations({
   }
 
   if (classification.kind === 'absolute-file') {
+    if (classification.viewerOnly) {
+      if (!allowAbsoluteViewerPaths || !operations.openAbsoluteViewerFile) {
+        throw new Error(TAB_ENTRY_ABSOLUTE_PATH_REMOTE_BLOCKED_MESSAGE)
+      }
+      operations.openAbsoluteViewerFile({
+        filePath: classification.filePath,
+        worktreeId,
+        groupId,
+        expectedOwner: classification.viewerOwner
+      })
+      return
+    }
     if (!allowAbsolutePaths) {
       throw new Error(TAB_ENTRY_ABSOLUTE_PATH_REMOTE_BLOCKED_MESSAGE)
     }
@@ -271,7 +299,15 @@ export async function openTabBarEntry(args: TabCreateEntryArgs): Promise<void> {
   }
   const runtimeContext = getTabEntryFileOperationContext(state, args.worktreeId, worktree.path)
   const allowAbsolutePaths = isTabEntryAbsolutePathAllowed(runtimeContext)
-  const localPlatform = getRendererAppPlatform() === 'win32' ? 'windows' : 'posix'
+  const absoluteViewerOwner = absoluteTabEntryViewerOwner(state, args.worktreeId)
+  const allowAbsoluteViewerPaths = absoluteViewerOwner !== null
+  const localPlatform = allowAbsoluteViewerPaths
+    ? isWindowsAbsolutePathLike(worktree.path)
+      ? 'windows'
+      : 'posix'
+    : getRendererAppPlatform() === 'win32'
+      ? 'windows'
+      : 'posix'
   await openTabEntryWithOperations({
     query: args.query,
     fileList: args.fileList,
@@ -280,6 +316,8 @@ export async function openTabBarEntry(args: TabCreateEntryArgs): Promise<void> {
     worktreePath: worktree.path,
     runtimeContext,
     allowAbsolutePaths,
+    allowAbsoluteViewerPaths,
+    absoluteViewerOwner: absoluteViewerOwner ?? undefined,
     localPlatform,
     searchEngine,
     searchUrlOptions,
@@ -290,6 +328,7 @@ export async function openTabBarEntry(args: TabCreateEntryArgs): Promise<void> {
       openFile: state.openFile,
       statRuntimePath,
       statUserOpenedPath,
+      openAbsoluteViewerFile: openAbsoluteTabEntryViewerFile,
       assertAbsolutePathAllowed: () => {
         if (!getTabEntryAllowAbsolutePaths(useAppStore.getState(), args.worktreeId)) {
           throw new Error(TAB_ENTRY_ABSOLUTE_PATH_REMOTE_BLOCKED_MESSAGE)

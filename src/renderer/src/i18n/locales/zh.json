@@ -3021,6 +3021,11 @@
         },
         "sheet": {
           "1189e9fe0a": "关闭"
+        },
+        "team": {
+          "multi": {
+            "combobox": {}
+          }
         }
       },
       "terminal": {
@@ -6412,7 +6417,8 @@
           "title": "排序更改为手动",
           "description": "手动将工作区保留在您放置它们的位置。",
           "restore": "返回{{label}}"
-        }
+        },
+        "SshDisconnectedDialog": {}
       },
       "shared": {
         "useDaemonActions": {
@@ -8326,7 +8332,9 @@
           "builtin_themes": "内置",
           "imported_from": "从 {{value0}} 导入",
           "imported_themes": "已导入",
-          "search_terminal_themes": "搜索终端主题"
+          "search_terminal_themes": "搜索终端主题",
+          "plugin_themes": "Plugin themes",
+          "contributed_by": "Contributed by {{value0}}"
         },
         "SettingsSidebar": {
           "e0900f83e7": "SSH",
@@ -9268,7 +9276,11 @@
             "zcodeUsageDescription": "在状态栏中显示 ZCode 编码计划配额使用情况。",
             "zcode": "零码",
             "zai": "在",
-            "glm": "格鲁姆"
+            "glm": "格鲁姆",
+            "plugin": "插件",
+            "file": "文件",
+            "icon": "图标",
+            "0ce176909a": "主题"
           }
         },
         "auto": {
@@ -11536,7 +11548,7 @@
           "mixedTitle": "审查访问和内容",
           "instructionalTitle": "审查插件内容",
           "subtitle": "{{value0}} v{{value1}} · {{value2}}",
-          "reconsent": "权限、工作进程信任级别或指令内容自您上次审查此插件以来已更改。在运行之前请再次审查。",
+          "reconsent": "自您上次审查此插件以来，权限、可执行内容或指令已更改。请在运行前再次审查。",
           "capabilities": "此插件可以",
           "warning": "这些权限限制了插件如何使用 Orca 的 API。其工作进程仍作为普通进程在您的计算机上运行，可以完全访问您的文件、网络和其他进程。",
           "instructionalWarning": "此插件没有工作进程。其指令内容在您或智能体使用时仍可能引发操作。在启用之前，请审查以下指令和命令。",
@@ -11657,7 +11669,13 @@
           "close": "关闭",
           "cancel": "取消",
           "update": "更新插件",
-          "install": "安装插件"
+          "install": "安装插件",
+          "themesOne": "1 app theme",
+          "themes": "{{value0}} app themes",
+          "iconThemesOne": "1 icon theme",
+          "iconThemes": "{{value0}} icon themes",
+          "terminalThemesOne": "1 terminal theme",
+          "terminalThemes": "{{value0}} terminal themes"
         },
         "PluginMarketplaceSourceDialog": {
           "addFailed": "无法添加此市场。请检查 Git URL、引用和您的 Git 凭据。",
@@ -11710,7 +11728,8 @@
           "experimental": "实验性",
           "description": "安装和管理 Orca 插件。插件在此计算机上运行，即使是 SSH 工作区也是如此。",
           "logsFailed": "无法加载插件日志。",
-          "rollbackFailed": "无法回滚此插件。之前的不可变版本可能不可用。"
+          "rollbackFailed": "无法回滚此插件。之前的不可变版本可能不可用。",
+          "themeApplyFailed": "The plugin was enabled, but Orca could not apply its terminal theme."
         },
         "PluginSettingsRow": {
           "blocked": "已阻止",
@@ -11740,7 +11759,9 @@
           "remove": "移除",
           "disableLabel": "禁用 {{value0}}",
           "enableLabel": "启用 {{value0}}",
-          "invalidPluginError": "插件清单或安装的文件无效。请修复插件，然后刷新。"
+          "invalidPluginError": "插件清单或安装的文件无效。请修复插件，然后刷新。",
+          "inUse": "In use",
+          "useTheme": "Use theme"
         },
         "PluginVmRecipeConsentPreview": {
           "create": "创建",
@@ -12402,6 +12423,18 @@
           "description": "此主机将按原样恢复为使用其受管服务器。较旧版本的 Orca 在此处添加或更改的内容不会被迁移；它们只会保留在这台电脑保存的设置中，直到被清理。",
           "cancel": "取消",
           "confirm": "保留服务器的版本"
+        },
+        "AppearanceInterfaceSection": {
+          "pluginTheme": {
+            "title": "Plugin theme",
+            "description": "Apply a theme from an enabled Orca plugin.",
+            "builtIn": "Use built-in theme"
+          },
+          "pluginIconTheme": {
+            "title": "Icon theme",
+            "description": "Use file, folder, sidebar, and agent icons from an enabled Orca plugin.",
+            "builtIn": "Use built-in icons"
+          }
         }
       },
       "right": {
@@ -14147,7 +14180,11 @@
               }
             }
           }
-        }
+        },
+        "FeatureSetupChecklist": {},
+        "OnboardingTourStep": {},
+        "RepoStep": {},
+        "AgentFeatureSetupStep": {}
       },
       "new": {
         "workspace": {
@@ -14233,7 +14270,8 @@
             "cloneFromUrl": "从 URL 克隆",
             "cloneFromUrlHelp": "将此存储库克隆到 {{host}} 上。",
             "saveLocation": "设置位置"
-          }
+          },
+          "ProjectHostSetupCombobox": {}
         }
       },
       "mobile": {
@@ -14935,7 +14973,9 @@
             "0d6efe9cf4": "当项目或工作树位于受保护文件夹时，建议在 macOS 上开启。",
             "dac08ec03e": "正在打开...",
             "6e3d62b816": "打开完全磁盘访问权限"
-          }
+          },
+          "FeatureTourPreview": {},
+          "FeatureTourWorkspaceCard": {}
         },
         "tips": {
           "CliFeatureTipVisual": {
@@ -17275,6 +17315,48 @@
               "description": "你将在此设备上退出 Orca。本地项目和工作树不会受到影响。",
               "cancel": "取消",
               "action": "退出登录"
+            }
+          },
+          "switcher": {
+            "cloud": {},
+            "create": {
+              "profile": {
+                "for": {}
+              }
+            },
+            "org": {}
+          },
+          "management": {},
+          "project": {
+            "transfer": {
+              "confirm": {
+                "move": {},
+                "copy": {},
+                "live": {}
+              }
+            }
+          },
+          "switch": {
+            "confirm": {
+              "live": {}
+            }
+          },
+          "org": {
+            "members": {
+              "role": {},
+              "not": {
+                "signed": {}
+              },
+              "remove": {},
+              "load": {},
+              "pending": {},
+              "invite": {},
+              "error": {
+                "remove": {},
+                "own": {},
+                "not": {}
+              },
+              "subtitle": {}
             }
           }
         }

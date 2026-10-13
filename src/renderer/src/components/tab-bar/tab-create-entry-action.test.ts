@@ -8,6 +8,25 @@ import {
 const readyFiles = (files: string[]) => ({ files, loading: false, loadError: null })
 
 describe('openTabEntryWithOperations', () => {
+  it('never turns a stale remote viewer action into a local editor action', async () => {
+    const operations = makeOperations()
+    await expect(
+      openTabEntryWithOperations({
+        ...baseArgs,
+        query: '/outside/file.sample',
+        classification: {
+          kind: 'absolute-file',
+          filePath: '/outside/file.sample',
+          viewerOnly: true
+        },
+        allowAbsolutePaths: true,
+        allowAbsoluteViewerPaths: false,
+        operations
+      })
+    ).rejects.toThrow()
+    expect(operations.statUserOpenedPath).not.toHaveBeenCalled()
+    expect(operations.openFile).not.toHaveBeenCalled()
+  })
   function makeOperations(overrides: Partial<TabEntryOperations> = {}): TabEntryOperations {
     return {
       createRuntimePath: vi.fn().mockResolvedValue(undefined),
@@ -346,7 +365,7 @@ describe('openTabEntryWithOperations', () => {
         query: 'C:\\tmp\\notes.md',
         operations
       })
-    ).rejects.toThrow('Enter an absolute path for this computer.')
+    ).rejects.toThrow('Enter an absolute path for this host.')
 
     expect(operations.statUserOpenedPath).not.toHaveBeenCalled()
     expect(operations.openFile).not.toHaveBeenCalled()

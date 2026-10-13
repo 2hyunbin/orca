@@ -7,13 +7,15 @@ import {
   takeNextEditorFocusRequestToken
 } from '../focus/editor-focus-reveal'
 import { applyOpenFileToState } from './open-file-apply'
+import { prepareFileOpening } from './prepare-file-opening'
 
 export function createOpenFileAction(
   set: EditorSet,
   get: EditorGet
 ): Pick<EditorSlice, 'openFile'> {
   return {
-    openFile: (file, options) => {
+    openFile: (input, options) => {
+      const file = prepareFileOpening(get(), input, options)
       const editorItemWorktreeId = file.worktreeId
       const editorItemLabel = file.relativePath
       const editorItemContentType: EditorTabContentType =

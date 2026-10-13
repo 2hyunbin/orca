@@ -142,6 +142,9 @@ export function useEditorPanelContentState({
   // branches on the tab mode so every consumer reloads the right store.
   const reloadContent = useCallback(
     (file: OpenFile): void => {
+      if (file.mode === 'plugin-viewer' || file.mode === 'file-opening') {
+        return
+      }
       if (file.mode === 'diff') {
         setDiffContents((prev) => {
           if (!prev[file.id]) {

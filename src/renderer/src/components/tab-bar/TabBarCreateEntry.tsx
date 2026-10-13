@@ -35,6 +35,8 @@ import {
 import { EMPTY_AGENT_OPTIONS, EMPTY_MENU_OPTIONS } from './tab-create-entry-empty-options'
 import type { TabEntryActionClassification } from './tab-create-entry-classifier'
 import type { TabBarCreateEntryProps } from './tab-create-entry-props'
+import { absoluteTabEntryViewerOwner } from './tab-create-entry-viewer-file'
+import { isWindowsAbsolutePathLike } from '../../../../shared/cross-platform-path'
 
 export default function TabBarCreateEntry(props: TabBarCreateEntryProps): React.JSX.Element {
   return <TabBarCreateEntrySession key={String(props.menuOpen)} {...props} />
@@ -89,12 +91,23 @@ function TabBarCreateEntrySession({
     [shouldResolveAbsolutePaths, worktreeId]
   )
   const allowAbsolutePaths = useAppStore(allowAbsolutePathsSelector)
+  const absoluteViewerOwner = useAppStore((state) =>
+    shouldResolveAbsolutePaths ? absoluteTabEntryViewerOwner(state, worktreeId) : null
+  )
+  const allowAbsoluteViewerPaths = absoluteViewerOwner !== null
   // Why the worktree path: editor↔file dedupe folds case by the worktree's
   // filesystem, which a Windows client's own platform does not describe.
   const worktreePath = useAppStore((state) =>
     menuOpen ? (state.getKnownWorktreeById(worktreeId)?.path ?? null) : null
   )
-  const localPlatform = getRendererAppPlatform() === 'win32' ? 'windows' : 'posix'
+  const localPlatform =
+    allowAbsoluteViewerPaths && worktreePath
+      ? isWindowsAbsolutePathLike(worktreePath)
+        ? 'windows'
+        : 'posix'
+      : getRendererAppPlatform() === 'win32'
+        ? 'windows'
+        : 'posix'
   const searchEngine = useAppStore(
     (state) => state.browserDefaultSearchEngine ?? DEFAULT_SEARCH_ENGINE
   )
@@ -118,6 +131,8 @@ function TabBarCreateEntrySession({
     const entryOptions = dropFileEntriesCoveredByTabResults(
       getTabEntryOptions(query, fileList, 4, {
         allowAbsolutePaths,
+        allowAbsoluteViewerPaths,
+        absoluteViewerOwner: absoluteViewerOwner ?? undefined,
         localPlatform,
         searchEngine
       }),
@@ -131,6 +146,8 @@ function TabBarCreateEntrySession({
     return entryOptions.filter((option) => option.classification.kind !== 'new-file')
   }, [
     allowAbsolutePaths,
+    allowAbsoluteViewerPaths,
+    absoluteViewerOwner,
     fileList,
     localPlatform,
     matchingMenuOptions.length,

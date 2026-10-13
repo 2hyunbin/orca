@@ -30,6 +30,11 @@ import { useDiffEditorRegistration } from './diff-navigation-context'
 import { preserveDiffViewStateAcrossModelSwaps } from './diff-model-swap-view-state'
 import { monacoFindOptions } from './monaco-find-options'
 import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
+import { usePluginSyntaxLanguage } from '@/store/plugin-syntax-packs'
+import { registerPluginGrammarDiffRefresh } from '@/lib/monaco-languages/plugin-grammar-diff-refresh'
+import { PluginSyntaxRecovery } from './PluginSyntaxRecovery'
+import { installMonacoDiffE2EProbe } from './monaco-diff-e2e-probe'
+import { URI } from 'monaco-editor/esm/vs/base/common/uri.js'
 
 export default function DiffViewer({
   modelKey,
@@ -72,6 +77,7 @@ export default function DiffViewer({
     diffEditorFontSize = computeDiffEditorFontSize(terminalFontSize, editorFontZoomLevel)
   const diffWordWrap = settings?.diffWordWrap
 
+  const syntaxLanguage = usePluginSyntaxLanguage(filePath, language)
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null)
   const { registerDiffEditor, unregisterDiffEditor } = useDiffEditorRegistration()
   const lineNumberOptionsSubRef = useRef<{ dispose: () => void } | null>(null)
@@ -206,6 +212,7 @@ export default function DiffViewer({
     (diffEditor, monaco) => {
       diffEditorRef.current = diffEditor
       registerDiffEditor(diffEditor)
+      diffEditor.onDidDispose(installMonacoDiffE2EProbe(diffEditor, modelKey))
       // Why: Monaco applies the inline-layout wrap override after mount, once width is known.
       wordWrapMountFrameRef.current = requestAnimationFrame(() => {
         if (diffEditorRef.current !== diffEditor) {
@@ -236,6 +243,8 @@ export default function DiffViewer({
         setModifiedEditor(null)
       })
       diffEditor.onDidDispose(preserveDiffViewStateAcrossModelSwaps(diffEditor).dispose)
+      const syntaxRefresh = registerPluginGrammarDiffRefresh(diffEditor, () => true)
+      diffEditor.onDidDispose(syntaxRefresh.dispose)
 
       setupCopy(originalEditor, monaco, filePath, propsRef)
       setupCopy(modifiedEditor, monaco, filePath, propsRef)
@@ -329,7 +338,7 @@ export default function DiffViewer({
         ) : (
           <DiffEditor
             height="100%"
-            language={language}
+            language={syntaxLanguage}
             original={originalContent}
             modified={modifiedContent}
             theme={isDark ? 'vs-dark' : 'vs'}
@@ -344,6 +353,7 @@ export default function DiffViewer({
               readOnly: !editable,
               originalEditable: false,
               renderSideBySide: sideBySide,
+              renderIndicators: true,
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
               fontSize: diffEditorFontSize,
@@ -360,6 +370,16 @@ export default function DiffViewer({
             }}
           />
         )}
+        <PluginSyntaxRecovery
+          modelUris={[
+            URI.parse(currentDiffModelPaths.originalModelPath).toString(),
+            URI.parse(currentDiffModelPaths.modifiedModelPath).toString()
+          ]}
+          labels={[
+            translate('auto.components.editor.PluginSyntaxRecovery.original', 'Original'),
+            translate('auto.components.editor.PluginSyntaxRecovery.modified', 'Modified')
+          ]}
+        />
       </div>
       {toastNode}
     </div>

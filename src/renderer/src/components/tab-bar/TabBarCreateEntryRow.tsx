@@ -228,7 +228,10 @@ function getActionPresentation(
           ? classification.filePath
           : classification.relativePath,
       icon: <FileText className="size-3.5 shrink-0" aria-hidden="true" />,
-      label: translate('auto.components.tab.bar.TabBarCreateEntry.25dc1cd653', 'Open file'),
+      label:
+        classification.kind === 'absolute-file' && classification.viewerOnly
+          ? `${translate('auto.components.tab.bar.TabBarCreateEntry.25dc1cd653', 'Open file')} · ${translate('plugins.viewer.readOnly', 'Read only')}`
+          : translate('auto.components.tab.bar.TabBarCreateEntry.25dc1cd653', 'Open file'),
       prioritizeFilename: true,
       showDetail: true
     }

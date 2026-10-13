@@ -4,8 +4,8 @@ import { I18nextProvider } from 'react-i18next'
 import { useAppStore } from '../store'
 import { i18n, setRendererPluginLanguagePacks } from './i18n'
 import { resolveUiLocale } from './supported-languages'
-import { isPluginUiLanguage } from '../../../shared/ui-language'
-import { usePluginLanguagePacks } from '../store/plugin-language-packs'
+import { resolvePluginUiResourceLanguage } from '../../../shared/plugins/plugin-bundled-data-aliases'
+import { usePluginLanguagePacks, usePluginLanguagePackStore } from '../store/plugin-language-packs'
 
 export function I18nProvider({ children }: { children: ReactNode }): React.JSX.Element {
   // Why: settings arrive async over IPC; until they load we must not apply any
@@ -14,18 +14,17 @@ export function I18nProvider({ children }: { children: ReactNode }): React.JSX.E
   // persisted preference applied moments later.
   const uiLanguage = useAppStore((state) => state.settings?.uiLanguage ?? null)
   const pluginLanguagePacks = usePluginLanguagePacks()
-  const selectedPluginLanguage = pluginLanguagePacks.find((pack) => pack.id === uiLanguage)
+  const aliases = usePluginLanguagePackStore((state) => state.aliases)
   const locale =
     uiLanguage === null
       ? null
-      : (selectedPluginLanguage?.resourceLanguage ??
-        (isPluginUiLanguage(uiLanguage) ? 'en' : resolveUiLocale(uiLanguage)))
+      : resolvePluginUiResourceLanguage(resolveUiLocale(uiLanguage), pluginLanguagePacks, aliases)
   const requestedLocale = useRef<string | null>(null)
 
   useEffect(() => {
-    setRendererPluginLanguagePacks(pluginLanguagePacks)
+    setRendererPluginLanguagePacks(pluginLanguagePacks, aliases)
     requestedLocale.current = null
-  }, [pluginLanguagePacks])
+  }, [pluginLanguagePacks, aliases])
 
   useEffect(() => {
     // Why: track the last *requested* locale instead of checking i18n.language —
@@ -36,7 +35,7 @@ export function I18nProvider({ children }: { children: ReactNode }): React.JSX.E
     }
     requestedLocale.current = locale
     void i18n.changeLanguage(locale)
-  }, [locale, pluginLanguagePacks])
+  }, [locale, pluginLanguagePacks, aliases])
 
   return <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
 }

@@ -1,12 +1,38 @@
+import { usePluginThemes } from '@/store/plugin-themes'
+import { usePluginIconThemes, usePluginIconThemeStore } from '@/store/plugin-icon-themes'
+import { usePluginTerminalThemes } from '@/store/plugin-terminal-themes'
+import { publishTerminalViewAttributesAtAppStart } from '@/components/terminal-pane/terminal-appearance'
+import { getSystemPrefersDark } from '@/lib/terminal-theme'
 import { useEffect } from 'react'
 import { buildAppFontFamily } from '@/lib/app-font-family'
-import { applyDocumentTheme } from '../lib/document-theme'
+import { applyDocumentTheme, applyPluginAppTheme } from '../lib/document-theme'
 import { scheduleRuntimeGraphSync } from '../runtime/sync-runtime-graph'
 import { useAppStore } from '../store'
 
 /** Applies the settings-driven theme and app font to the document root. */
 export function useDocumentAppearance(): void {
-  const theme = useAppStore((s) => s.settings?.theme)
+  const builtInTheme = useAppStore((s) => s.settings?.theme)
+  const selectedPluginTheme = useAppStore((s) => s.settings?.pluginAppTheme)
+  const selectedIconTheme = useAppStore((s) => s.settings?.pluginIconTheme)
+  const pluginThemes = usePluginThemes()
+  usePluginIconThemes()
+  const pluginTerminalThemes = usePluginTerminalThemes()
+  const setActiveIconTheme = usePluginIconThemeStore((s) => s.setActiveId)
+  const activePluginTheme = pluginThemes.find((t) => t.id === selectedPluginTheme) ?? null
+  const theme = activePluginTheme?.base ?? builtInTheme
+
+  useEffect(() => {
+    applyPluginAppTheme(activePluginTheme)
+  }, [activePluginTheme])
+
+  useEffect(() => {
+    setActiveIconTheme(selectedIconTheme ?? null)
+  }, [selectedIconTheme, setActiveIconTheme])
+
+  useEffect(() => {
+    publishTerminalViewAttributesAtAppStart(useAppStore.getState().settings, getSystemPrefersDark())
+    scheduleRuntimeGraphSync()
+  }, [pluginTerminalThemes])
   const appFontFamily = useAppStore((s) => s.settings?.appFontFamily)
 
   useEffect(() => {

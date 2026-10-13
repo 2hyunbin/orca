@@ -12,8 +12,20 @@ import { DEFAULT_LOCALE, resolveUiLocale } from './supported-languages'
 import type { SupportedUiLocale } from '../../../shared/ui-locale'
 import { isPluginUiLanguage, type UiLanguage } from '../../../shared/ui-language'
 import type { PluginLanguagePackRegistration } from '../../../shared/plugins/plugin-language-pack-artifact'
+import {
+  NO_BUNDLED_DATA_ALIASES,
+  resolvePluginUiResourceLanguage,
+  type PluginBundledDataAliases
+} from '../../../shared/plugins/plugin-bundled-data-aliases'
+import {
+  SPANISH_SECURITY_RESOURCE,
+  installPluginLanguagePluralRules,
+  pluginLanguageFallbacks
+} from '../../../shared/plugins/plugin-language-i18next'
 
 export const i18n: I18nInstance = i18next.createInstance()
+let pluginLanguagePacks: readonly PluginLanguagePackRegistration[] = []
+let bundledDataAliases = NO_BUNDLED_DATA_ALIASES
 
 // Why: only the English catalog is bundled eagerly. The other four locales add
 // ~2MB to the renderer's startup chunk (parsed on every launch) even though the
@@ -36,6 +48,13 @@ const lazyLocaleBackend: BackendModule = {
   type: 'backend',
   init: () => {},
   read: (language: string, _namespace: string, callback: ReadCallback) => {
+    if (language === SPANISH_SECURITY_RESOURCE) {
+      import('./locales/es-plugin-security.json').then(
+        (mod) => callback(null, mod.default),
+        (error) => callback(error instanceof Error ? error : new Error(String(error)), false)
+      )
+      return
+    }
     const loader = NON_DEFAULT_LOCALE_LOADERS[language as Exclude<SupportedUiLocale, 'en'>]
     if (!loader) {
       // English (and unknown locales) are served from bundled resources; signal
@@ -54,7 +73,7 @@ void i18n
   .use(lazyLocaleBackend)
   .use(initReactI18next)
   .init({
-    fallbackLng: DEFAULT_LOCALE,
+    fallbackLng: (code) => pluginLanguageFallbacks(code, pluginLanguagePacks),
     lng: DEFAULT_LOCALE,
     // Why: `resources` seeds the eager English catalog while
     // `partialBundledLanguages` lets the backend supply the lazy locales — so
@@ -81,6 +100,7 @@ void i18n
       useSuspense: false
     }
   })
+  .then(() => installPluginLanguagePluralRules(i18n, () => pluginLanguagePacks))
 
 export function translate(key: string, fallback: string, options?: TOptions): string {
   const value = i18n.t(key, { defaultValue: fallback, ...options })
@@ -102,7 +122,6 @@ export async function setRendererUiLanguage(language: UiLanguage): Promise<void>
 }
 
 const registeredPluginLanguages = new Set<string>()
-let pluginLanguagePacks: readonly PluginLanguagePackRegistration[] = []
 
 /**
  * BCP-47 tag for `Intl` formatting. Plugin catalogs register under a synthetic
@@ -123,17 +142,19 @@ export function getIntlLocale(): string {
 }
 
 export function resolveRendererResourceLanguage(language: string): string {
-  return pluginLanguagePacks.find((pack) => pack.id === language)?.resourceLanguage ?? language
+  return resolvePluginUiResourceLanguage(language, pluginLanguagePacks, bundledDataAliases)
 }
 
 export function setRendererPluginLanguagePacks(
-  packs: readonly PluginLanguagePackRegistration[]
+  packs: readonly PluginLanguagePackRegistration[],
+  aliases: PluginBundledDataAliases = NO_BUNDLED_DATA_ALIASES
 ): void {
   for (const language of registeredPluginLanguages) {
     i18n.removeResourceBundle(language, 'translation')
   }
   registeredPluginLanguages.clear()
   pluginLanguagePacks = packs
+  bundledDataAliases = aliases
   for (const pack of packs) {
     i18n.addResourceBundle(pack.resourceLanguage, 'translation', pack.catalog, true, true)
     registeredPluginLanguages.add(pack.resourceLanguage)

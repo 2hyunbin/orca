@@ -85,6 +85,10 @@ export function useEditorPanelFileContentLoader({
       relativePath?: string,
       options?: EditorPanelContentLoadOptions
     ): Promise<void> => {
+      const restoredOpenFile = openFilesRef.current.find((file) => file.id === id)
+      if (restoredOpenFile?.mode === 'plugin-viewer' || restoredOpenFile?.mode === 'file-opening') {
+        return
+      }
       const generation = fileReadGenerationCounterRef.current + 1
       fileReadGenerationCounterRef.current = generation
       fileReadGenerationRef.current[id] = generation

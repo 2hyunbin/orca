@@ -4,6 +4,8 @@ import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import type { OnboardingFeatureSetupDeps } from '@/components/onboarding/onboarding-feature-setup'
 import type { languages } from 'monaco-editor'
 import type { MonacoE2EProbe } from './components/editor/monaco-e2e-probe'
+import type { MonacoDiffE2EProbe } from './components/editor/monaco-diff-e2e-probe'
+import type { PluginGrammarE2EProbe } from './lib/monaco-languages/plugin-grammar-e2e-probe'
 import type { TerminalWorktreeParkingDebugVerdict } from './components/terminal-pane/terminal-parking-e2e-overrides'
 import type { TerminalPtyPreSpawnE2EBarrier } from './components/terminal-pane/terminal-pty-pre-spawn-e2e-barrier'
 
@@ -135,6 +137,8 @@ declare global {
       worktreeVerdicts: () => TerminalWorktreeParkingDebugVerdict[]
     }
     __monacoEditorE2E?: MonacoE2EProbe
+    __monacoDiffE2E?: MonacoDiffE2EProbe
+    __pluginGrammarE2E?: PluginGrammarE2EProbe
     __e2ePtyAppliedSizeReadDelayMs?: number
     __terminalPtyPreSpawnE2EBarrier?: TerminalPtyPreSpawnE2EBarrier
   }

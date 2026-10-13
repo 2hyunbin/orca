@@ -9,6 +9,7 @@ import type { ContextualTourId } from '../../../../../shared/contextual-tours'
 import type { OrcaHookScriptKind } from '../../../lib/orca-hook-trust'
 import type { SettingsNavigationTarget } from '../../../lib/settings-navigation-types'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
+import type { PluginCatalogTypeFilter } from '../../../components/plugin-catalog/plugin-catalog-filter'
 
 export type UISliceContextual = {
   openSettingsPage: () => void
@@ -16,6 +17,9 @@ export type UISliceContextual = {
   settingsNavigationTarget: SettingsNavigationTarget | null
   openSettingsTarget: (target: NonNullable<UISliceContextual['settingsNavigationTarget']>) => void
   clearSettingsTarget: () => void
+  pluginCatalogTypeFilter: PluginCatalogTypeFilter
+  setPluginCatalogTypeFilter: (type: PluginCatalogTypeFilter) => void
+  openPluginFileViewerCatalog: () => void
   /** Entry keys retain last-pick order so regrouping resolves aliases. Renderer-only; never persisted. */
   settingsProjectHostSelection: Record<string, ExecutionHostId>
   settingsProjectSetupSelection: Record<string, string>

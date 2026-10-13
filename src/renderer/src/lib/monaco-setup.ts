@@ -21,6 +21,7 @@ import { installMonacoDiffEditorDisposalGuard } from './monaco-diff-editor-dispo
 import { installMonacoPeekReferencesPreviewOptions } from './monaco-peek-preview-options'
 import { installMonacoContextMenuPaste } from '@/components/editor/install-monaco-context-menu-paste'
 import { runMonacoSetupSteps } from './monaco-setup-steps'
+import { installPluginSyntaxRuntime } from '@/store/plugin-syntax-packs'
 
 globalThis.MonacoEnvironment = {
   getWorker(_workerId, label) {
@@ -84,7 +85,14 @@ runMonacoSetupSteps([
   ['Svelte language registration', () => registerSvelteLanguage(monaco)],
   ['Astro language registration', () => registerAstroLanguage(monaco)],
   ['Nim language registration', () => registerNimLanguage(monaco)],
-  ['Typst language registration', () => registerTypstLanguage(monaco)],
+  [
+    'Legacy Typst registration',
+    () => {
+      if (!window.api?.plugins?.getBundledDataAliases) {
+        registerTypstLanguage(monaco)
+      }
+    }
+  ],
   ['JSONL language registration', () => registerJsonlLanguage(monaco)],
   ['Quarto language registration', () => registerQuartoLanguage(monaco)],
   ['shell Markdown alias registration', () => registerShellMarkdownAliases(monaco)],
@@ -99,8 +107,16 @@ runMonacoSetupSteps([
 
 // Configure Monaco to use the locally bundled editor instead of CDN
 loader.config({ monaco })
+installPluginSyntaxRuntime(monaco)
 
 const unregisterEditorModelRegistry = editorModelRegistry.register(monaco)
+if (import.meta.env.MODE === 'e2e') {
+  void import('./monaco-languages/plugin-grammar-e2e-probe').then(
+    ({ installPluginGrammarE2EProbe }) => {
+      installPluginGrammarE2EProbe(monaco)
+    }
+  )
+}
 if (import.meta.hot) {
   import.meta.hot.dispose(unregisterEditorModelRegistry)
 }

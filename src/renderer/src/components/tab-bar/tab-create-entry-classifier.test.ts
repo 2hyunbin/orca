@@ -508,7 +508,7 @@ describe('tab create entry classification', () => {
         allowAbsolutePaths: true,
         localPlatform: 'posix'
       })
-    ).toMatchObject({ kind: 'blocked', message: 'Enter an absolute path for this computer.' })
+    ).toMatchObject({ kind: 'blocked', message: 'Enter an absolute path for this host.' })
   })
 
   it('classifies drive and UNC paths only for Windows clients', () => {
@@ -533,7 +533,7 @@ describe('tab create entry classification', () => {
         allowAbsolutePaths: true,
         localPlatform: 'windows'
       })
-    ).toMatchObject({ kind: 'blocked', message: 'Enter an absolute path for this computer.' })
+    ).toMatchObject({ kind: 'blocked', message: 'Enter an absolute path for this host.' })
   })
 
   it('blocks absolute paths for remote workspaces', () => {
@@ -590,15 +590,11 @@ describe('tab create entry path validation', () => {
   })
 
   it('rejects path families that are not native to the client', () => {
-    expect(() => validateNewTabEntryAbsolutePath('C:\\tmp\\notes.md', 'posix')).toThrow(
-      'this computer'
-    )
+    expect(() => validateNewTabEntryAbsolutePath('C:\\tmp\\notes.md', 'posix')).toThrow('this host')
     expect(() => validateNewTabEntryAbsolutePath('\\\\server\\share\\notes.md', 'posix')).toThrow(
-      'this computer'
+      'this host'
     )
-    expect(() => validateNewTabEntryAbsolutePath('/tmp/notes.md', 'windows')).toThrow(
-      'this computer'
-    )
+    expect(() => validateNewTabEntryAbsolutePath('/tmp/notes.md', 'windows')).toThrow('this host')
   })
 
   it('rejects invalid absolute paths', () => {

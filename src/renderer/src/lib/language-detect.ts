@@ -10,6 +10,7 @@ function extname(filePath: string): string {
 }
 
 const EXT_TO_LANGUAGE: Record<string, string> = {
+  '.txt': 'plaintext',
   // Why: Monaco's built-in language registry maps .tsx/.cts/.mts onto the
   // 'typescript' language id and .jsx/.mjs/.cjs onto 'javascript' — there is
   // no separate 'typescriptreact'/'javascriptreact' id. Returning the base id
@@ -149,7 +150,7 @@ const FILENAME_LOWER_TO_LANGUAGE: Record<string, string> = Object.fromEntries(
   Object.entries(FILENAME_TO_LANGUAGE).map(([name, language]) => [name.toLowerCase(), language])
 )
 
-export function detectLanguage(filePath: string): string {
+export function detectKnownFileLanguage(filePath: string): string | undefined {
   // Check exact filename first
   const parts = filePath.split(/[\\/]/)
   const filename = parts.at(-1)!
@@ -168,6 +169,10 @@ export function detectLanguage(filePath: string): string {
   return (
     EXT_TO_LANGUAGE[ext] ??
     detectMonacoFilenameLanguage(filename) ??
-    (lowerName === '.env' || lowerName.startsWith('.env.') ? 'ini' : 'plaintext')
+    (lowerName === '.env' || lowerName.startsWith('.env.') ? 'ini' : undefined)
   )
+}
+
+export function detectLanguage(filePath: string): string {
+  return detectKnownFileLanguage(filePath) ?? 'plaintext'
 }

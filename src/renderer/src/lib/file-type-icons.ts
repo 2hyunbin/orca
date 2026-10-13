@@ -1,3 +1,8 @@
+import type {
+  PluginIconThemeImage,
+  PluginIconThemeRegistration
+} from '../../../shared/plugins/plugin-icon-theme-artifact'
+import { isPluginIconThemeImage } from './plugin-icon-theme'
 import { File, FileCog, FileLock, FileTerminal, Smartphone, type LucideIcon } from 'lucide-react'
 import { COMPOUND_EXTENSIONS, FILE_ICON_BY_EXTENSION } from './file-type-icon-extension-table'
 import { FILE_ICON_BY_NAME } from './file-type-icon-name-table'
@@ -56,4 +61,20 @@ export function getFileTypeIcon(filePath: string | undefined | null): LucideIcon
   // Why: filename/extension matching keeps icons deterministic for SSH worktrees
   // where OS-native file associations are not available.
   return FILE_ICON_BY_EXTENSION[getExtension(filename)] ?? File
+}
+
+export function getPluginFileTypeIconImage(
+  theme: PluginIconThemeRegistration | null | undefined,
+  filePath: string | undefined | null
+): PluginIconThemeImage | null {
+  if (!theme) {
+    return null
+  }
+  const filename = getFilename(filePath).toLowerCase()
+  if (!filename) {
+    return null
+  }
+  const image =
+    theme.fileNames[filename] ?? theme.fileExtensions[getExtension(filename)] ?? theme.icons.file
+  return isPluginIconThemeImage(image) ? image : null
 }

@@ -41,7 +41,7 @@ export function installMonacoViewStateTracking(params: MonacoViewStateTrackingPa
 }
 
 export function restoreMonacoViewState(
-  editorInstance: editor.IStandaloneCodeEditor,
+  editorInstance: Pick<editor.IStandaloneCodeEditor, 'setSelections' | 'setScrollTop' | 'focus'>,
   viewStateKey: string
 ): void {
   const savedSelections = editorSelectionCache.get(viewStateKey)
@@ -55,11 +55,21 @@ export function restoreMonacoViewState(
       if (savedScrollTop !== undefined) {
         editorInstance.setScrollTop(savedScrollTop)
       }
-      editorInstance.focus()
+      focusRestoredEditor(editorInstance)
     })
   } else {
-    editorInstance.focus()
+    focusRestoredEditor(editorInstance)
   }
+}
+
+function focusRestoredEditor(editorInstance: Pick<editor.IStandaloneCodeEditor, 'focus'>): void {
+  if (
+    typeof document !== 'undefined' &&
+    document.querySelector('[data-slot="popover-content"][data-state="open"]')
+  ) {
+    return
+  }
+  editorInstance.focus()
 }
 
 // Why: takes the ref, not the instance — the caller runs this from an effect cleanup, where reading `.current` inline trips the ref-in-cleanup lint.

@@ -1,3 +1,6 @@
+import { usePluginIconThemeStore } from '@/store/plugin-icon-themes'
+import { getPluginIconSlotImage, type PluginIconThemeSlot } from './plugin-icon-theme'
+import { PluginIconImage } from '@/components/PluginIconImage'
 import type React from 'react'
 import { ClaudeIcon, DroidIcon, OpenAIIcon } from '@/components/status-bar/icons'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -46,6 +49,19 @@ export function AgentIcon({
   agent: TerminalAgent | null | undefined
   size?: number
 }): React.JSX.Element {
+  const activeTheme = usePluginIconThemeStore((state) => state.activeTheme)
+  const slot: PluginIconThemeSlot =
+    agent === 'codex'
+      ? 'agent.codex'
+      : agent === 'claude' || agent === 'claude-agent-teams'
+        ? 'agent.claude'
+        : 'agent.default'
+  const pluginIcon =
+    getPluginIconSlotImage(activeTheme, slot) ??
+    (slot === 'agent.default' ? null : getPluginIconSlotImage(activeTheme, 'agent.default'))
+  if (pluginIcon) {
+    return <PluginIconImage image={pluginIcon} size={size} />
+  }
   // Why: render a neutral question-mark glyph when the agent identity is not
   // yet known. Before, the caller coerced null → 'claude', which caused Codex
   // panes to briefly show the Claude icon until the first hook callback

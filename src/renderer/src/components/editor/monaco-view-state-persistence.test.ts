@@ -36,6 +36,21 @@ afterEach(() => {
 })
 
 describe('Monaco view state persistence', () => {
+  it('restores the viewport without stealing focus from an open picker', () => {
+    vi.stubGlobal('document', { querySelector: () => ({}) })
+    scrollTopCache.set('file.ts::tab-1', 320)
+    editorSelectionCache.set('file.ts::tab-1', selections)
+    const focus = vi.fn()
+    const setSelections = vi.fn()
+    const setScrollTop = vi.fn()
+    const remountedEditor = { focus, setSelections, setScrollTop }
+    restoreMonacoViewState(remountedEditor, 'file.ts::tab-1')
+    expect(setSelections).toHaveBeenCalledWith(selections)
+    expect(setScrollTop).toHaveBeenCalledWith(320)
+    expect(focus).not.toHaveBeenCalled()
+    restoreMonacoViewState(remountedEditor, 'uncached')
+    expect(focus).not.toHaveBeenCalled()
+  })
   it('restores selected ranges and their direction after a tab remount', () => {
     const sourceEditor = {
       getScrollTop: () => 320,

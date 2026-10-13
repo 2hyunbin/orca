@@ -3021,6 +3021,11 @@
         },
         "sheet": {
           "1189e9fe0a": "閉じる"
+        },
+        "team": {
+          "multi": {
+            "combobox": {}
+          }
         }
       },
       "terminal": {
@@ -6412,7 +6417,8 @@
           "title": "並べ替えが手動に変更されました",
           "description": "手動では、ドロップした場所にワークスペースが保持されます。",
           "restore": "{{label}} に戻る"
-        }
+        },
+        "SshDisconnectedDialog": {}
       },
       "shared": {
         "useDaemonActions": {
@@ -8363,7 +8369,9 @@
           "search_terminal_themes": "ターミナルテーマを検索",
           "cb330ef7f8": "/{{value0}}",
           "c822571b2e": " 「{{value0}}」に一致",
-          "3119c012a5": "文字列"
+          "3119c012a5": "文字列",
+          "plugin_themes": "Plugin themes",
+          "contributed_by": "Contributed by {{value0}}"
         },
         "SettingsSidebar": {
           "e0900f83e7": "SSH",
@@ -9305,7 +9313,11 @@
             "zcodeUsageDescription": "ZCode コーディングプランのクォータの使用状況をステータスバーに表示します。",
             "zcode": "zコード",
             "zai": "ザイ",
-            "glm": "グルム"
+            "glm": "グルム",
+            "plugin": "プラグイン",
+            "file": "ファイル",
+            "icon": "アイコン",
+            "0ce176909a": "テーマ"
           }
         },
         "auto": {
@@ -11536,7 +11548,7 @@
           "mixedTitle": "アクセスとコンテンツを確認",
           "instructionalTitle": "プラグインコンテンツを確認",
           "subtitle": "{{value0}} v{{value1}} · {{value2}}",
-          "reconsent": "前回このプラグインを確認した以降に、権限、ワーカー信頼階層、またはインストラクショナルコンテンツが変更されました。実行する前に再確認してください。",
+          "reconsent": "前回このプラグインを確認した後に、権限、実行可能なコンテンツ、または指示内容が変更されました。実行する前に再確認してください。",
           "capabilities": "このプラグインは",
           "warning": "これらの権限は、プラグインが Orca APIを使用する方法を制限します。ワーカーは引き続きコンピュータで通常のプロセスとして実行され、ファイル、ネットワーク、その他のプロセスへの完全なアクセス権を持ちます。",
           "instructionalWarning": "このプラグインにはワーカープロセスがありません。それでも、ユーザーや Agent が使用したときに、記載された手順が操作を引き起こす可能性があります。有効にする前に、以下の手順とコマンドを確認してください。",
@@ -11657,7 +11669,13 @@
           "close": "閉じる",
           "cancel": "キャンセル",
           "update": "プラグインを更新",
-          "install": "プラグインをインストール"
+          "install": "プラグインをインストール",
+          "themesOne": "1 app theme",
+          "themes": "{{value0}} app themes",
+          "iconThemesOne": "1 icon theme",
+          "iconThemes": "{{value0}} icon themes",
+          "terminalThemesOne": "1 terminal theme",
+          "terminalThemes": "{{value0}} terminal themes"
         },
         "PluginMarketplaceSourceDialog": {
           "addFailed": "このマーケットプレイスを追加できませんでした。Git URL、ref、Git 認証情報を確認してください。",
@@ -11710,7 +11728,8 @@
           "experimental": "実験的機能",
           "description": "Orca プラグインをインストールおよび管理。SSH ワークスペースでもこのコンピュータでプラグインが実行されます。",
           "logsFailed": "プラグインログをロードできませんでした。",
-          "rollbackFailed": "このプラグインをロールバックできませんでした。以前の不変バージョンが利用できない可能性があります。"
+          "rollbackFailed": "このプラグインをロールバックできませんでした。以前の不変バージョンが利用できない可能性があります。",
+          "themeApplyFailed": "The plugin was enabled, but Orca could not apply its terminal theme."
         },
         "PluginSettingsRow": {
           "blocked": "ブロック中",
@@ -11740,7 +11759,9 @@
           "remove": "削除",
           "disableLabel": "{{value0}}を無効にする",
           "enableLabel": "{{value0}}を有効にする",
-          "invalidPluginError": "プラグインマニフェストまたはインストールされたファイルが無効です。プラグインを修正してから更新してください。"
+          "invalidPluginError": "プラグインマニフェストまたはインストールされたファイルが無効です。プラグインを修正してから更新してください。",
+          "inUse": "In use",
+          "useTheme": "Use theme"
         },
         "PluginVmRecipeConsentPreview": {
           "create": "作成",
@@ -12388,6 +12409,18 @@
           "description": "このホストはそのまま管理対象サーバーに戻ります。古いバージョンの Orca がここに追加または変更したものは移動されず、クリーンアップされるまでこのコンピュータの保存済み設定にのみ残ります。",
           "cancel": "キャンセル",
           "confirm": "サーバーのバージョンを保持"
+        },
+        "AppearanceInterfaceSection": {
+          "pluginTheme": {
+            "title": "Plugin theme",
+            "description": "Apply a theme from an enabled Orca plugin.",
+            "builtIn": "Use built-in theme"
+          },
+          "pluginIconTheme": {
+            "title": "Icon theme",
+            "description": "Use file, folder, sidebar, and agent icons from an enabled Orca plugin.",
+            "builtIn": "Use built-in icons"
+          }
         }
       },
       "right": {
@@ -14133,7 +14166,11 @@
               }
             }
           }
-        }
+        },
+        "FeatureSetupChecklist": {},
+        "OnboardingTourStep": {},
+        "RepoStep": {},
+        "AgentFeatureSetupStep": {}
       },
       "new": {
         "workspace": {
@@ -14219,7 +14256,8 @@
             "cloneFromUrl": "URL からクローン",
             "cloneFromUrlHelp": "このリポジトリのクローンを {{host}} に作成します。",
             "saveLocation": "場所を設定する"
-          }
+          },
+          "ProjectHostSetupCombobox": {}
         }
       },
       "mobile": {
@@ -14921,7 +14959,9 @@
             "0d6efe9cf4": "プロジェクトやワークツリーが保護されたフォルダーにある場合、macOS で推奨されます。",
             "dac08ec03e": "開いています…",
             "6e3d62b816": "フルディスクアクセスを開く"
-          }
+          },
+          "FeatureTourPreview": {},
+          "FeatureTourWorkspaceCard": {}
         },
         "tips": {
           "CliFeatureTipVisual": {
@@ -17261,6 +17301,48 @@
               "description": "このデバイスで Orca からログアウトします。ローカルのプロジェクトとワークツリーには影響しません。",
               "cancel": "キャンセル",
               "action": "サインアウト"
+            }
+          },
+          "switcher": {
+            "cloud": {},
+            "create": {
+              "profile": {
+                "for": {}
+              }
+            },
+            "org": {}
+          },
+          "management": {},
+          "project": {
+            "transfer": {
+              "confirm": {
+                "move": {},
+                "copy": {},
+                "live": {}
+              }
+            }
+          },
+          "switch": {
+            "confirm": {
+              "live": {}
+            }
+          },
+          "org": {
+            "members": {
+              "role": {},
+              "not": {
+                "signed": {}
+              },
+              "remove": {},
+              "load": {},
+              "pending": {},
+              "invite": {},
+              "error": {
+                "remove": {},
+                "own": {},
+                "not": {}
+              },
+              "subtitle": {}
             }
           }
         }

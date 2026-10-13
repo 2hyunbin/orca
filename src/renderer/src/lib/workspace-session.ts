@@ -126,13 +126,16 @@ export function buildEditorSessionData(
   | 'activeTabTypeByWorktree'
   | 'markdownFrontmatterVisible'
 > {
-  const editFiles = openFiles.filter((f) => f.mode === 'edit')
+  const editFiles = openFiles.filter(
+    (f) => f.mode === 'edit' || f.mode === 'plugin-viewer' || f.mode === 'file-opening'
+  )
   const byWorktree: Record<string, PersistedOpenFile[]> = {}
   const editFileIdsByWorktree: Record<string, Set<string>> = {}
   for (const f of editFiles) {
     const arr = byWorktree[f.worktreeId] ?? (byWorktree[f.worktreeId] = [])
     // Why: never persist a dirty draft for a read-only tab — restoring one would reintroduce writable/hot-exit state for an agent transcript.
-    const dirtyDraftContent = f.isDirty && f.readOnly !== true ? editorDrafts[f.id] : undefined
+    const dirtyDraftContent =
+      f.mode === 'edit' && f.isDirty && f.readOnly !== true ? editorDrafts[f.id] : undefined
     arr.push({
       filePath: f.filePath,
       relativePath: f.relativePath,
@@ -141,6 +144,13 @@ export function buildEditorSessionData(
       isPreview: f.isPreview || undefined,
       runtimeEnvironmentId: f.runtimeEnvironmentId,
       externalSshTargetId: f.externalSshTargetId,
+      ...(f.pluginViewerUserSelectedFile ? { pluginViewerUserSelectedFile: true as const } : {}),
+      ...(f.mode === 'file-opening'
+        ? { fileOpening: f.fileOpening ?? { readOnly: true }, readOnly: true }
+        : {}),
+      ...(f.mode === 'plugin-viewer' && f.pluginViewer
+        ? { pluginViewer: f.pluginViewer, readOnly: true }
+        : {}),
       // Why: persist readOnly only when true; absence is the writable default on restore.
       ...(f.readOnly === true ? { readOnly: true } : {}),
       ...(f.readOnly === true && f.liveTail === true ? { liveTail: true } : {}),

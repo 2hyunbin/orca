@@ -25,6 +25,8 @@ export {
 
 export type TabEntryOptionsContext = {
   allowAbsolutePaths?: boolean
+  allowAbsoluteViewerPaths?: boolean
+  absoluteViewerOwner?: string
   localPlatform?: TabEntryLocalPlatform
   searchEngine?: SearchEngine
 }
@@ -39,7 +41,7 @@ export type TabEntryClassification =
   | { kind: 'host-url'; url: string }
   | { kind: 'search'; engine: SearchEngine; query: string }
   | { kind: 'new-file'; relativePath: string }
-  | { kind: 'absolute-file'; filePath: string }
+  | { kind: 'absolute-file'; filePath: string; viewerOnly?: true; viewerOwner?: string }
   | { kind: 'blocked'; message: string }
 
 export type TabEntryActionClassification = Exclude<
@@ -163,7 +165,7 @@ export function getTabEntryOptions(
   }
 
   if (isTabEntryAbsolutePathLike(trimmed)) {
-    if (!context.allowAbsolutePaths) {
+    if (!context.allowAbsolutePaths && !context.allowAbsoluteViewerPaths) {
       return [
         blockedOption(
           'absolute-path-blocked',
@@ -176,7 +178,18 @@ export function getTabEntryOptions(
     }
     try {
       const filePath = validateNewTabEntryAbsolutePath(trimmed, context.localPlatform)
-      return toOptions([{ kind: 'absolute-file', filePath }], limit)
+      return toOptions(
+        [
+          {
+            kind: 'absolute-file',
+            filePath,
+            ...(!context.allowAbsolutePaths
+              ? { viewerOnly: true as const, viewerOwner: context.absoluteViewerOwner }
+              : {})
+          }
+        ],
+        limit
+      )
     } catch (error) {
       return [blockedOption('invalid-absolute-path', errorMessage(error))]
     }

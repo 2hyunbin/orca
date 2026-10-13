@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { HEX_COLOR_RE } from '../../../shared/color-validation'
 import {
@@ -5,6 +6,7 @@ import {
   normalizeLeftSidebarTintOpacity
 } from '../../../shared/left-sidebar-appearance'
 import { resolveEffectiveTerminalAppearance } from './terminal-theme'
+import type { PluginTerminalThemeRegistration } from '../../../shared/plugins/plugin-terminal-theme-artifact'
 
 type LeftSidebarAppearanceSettings = Pick<
   GlobalSettings,
@@ -22,7 +24,7 @@ type LeftSidebarAppearanceSettings = Pick<
   | 'terminalBackgroundOpacity'
 >
 
-export type LeftSidebarStyleVariables = Record<string, string>
+export type LeftSidebarStyleVariables = CSSProperties & Record<`--${string}`, string>
 
 function hexToRgba(hex: string, alpha: number): string {
   const normalized = normalizeLeftSidebarTintColor(hex)
@@ -91,9 +93,10 @@ function buildSurfaceVariables(args: {
 
 function resolveTerminalSurfaceVariables(
   settings: LeftSidebarAppearanceSettings,
-  systemPrefersDark: boolean
+  systemPrefersDark: boolean,
+  pluginThemes?: readonly PluginTerminalThemeRegistration[]
 ): LeftSidebarStyleVariables {
-  const appearance = resolveEffectiveTerminalAppearance(settings, systemPrefersDark)
+  const appearance = resolveEffectiveTerminalAppearance(settings, systemPrefersDark, pluginThemes)
   const background = applyAlpha(
     settings.terminalColorOverrides?.background ?? appearance.theme?.background ?? '#000000',
     settings.terminalBackgroundOpacity
@@ -115,7 +118,8 @@ function resolveTintedSurfaceVariables(
 
 export function resolveLeftSidebarStyleVariables(
   settings: LeftSidebarAppearanceSettings | null | undefined,
-  systemPrefersDark: boolean
+  systemPrefersDark: boolean,
+  pluginThemes?: readonly PluginTerminalThemeRegistration[]
 ): LeftSidebarStyleVariables | undefined {
   if (!settings) {
     return undefined
@@ -124,7 +128,7 @@ export function resolveLeftSidebarStyleVariables(
     case 'default':
       return undefined
     case 'match-terminal':
-      return resolveTerminalSurfaceVariables(settings, systemPrefersDark)
+      return resolveTerminalSurfaceVariables(settings, systemPrefersDark, pluginThemes)
     case 'tinted':
       return resolveTintedSurfaceVariables(settings)
   }

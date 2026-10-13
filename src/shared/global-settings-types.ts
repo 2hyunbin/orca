@@ -12,6 +12,8 @@ import type { SourceControlAiSettings } from './source-control-ai-types'
 import type { ClaudeAgentTeamsMode } from './claude-agent-teams-tmux-compat'
 import type { TerminalCustomTheme } from './terminal-custom-themes'
 import type { UiLanguage } from './ui-language'
+import type { PluginSyntaxAssociation } from './plugins/plugin-syntax-associations'
+import type { PluginViewerAssociation } from './plugins/plugin-viewer-associations'
 import type { GlobalWindowsRuntimeDefault } from './project-execution-runtime'
 import type { PersistedNativeChatSessionOptions } from './native-chat-session-options'
 import type { AgentChatPermissionMode } from './agent-chat-permission-mode'
@@ -71,6 +73,8 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   branchPrefix: BranchPrefixStrategy
   branchPrefixCustom: string
   theme: 'system' | 'dark' | 'light'
+  pluginAppTheme?: `plugin:${string}` | null
+  pluginIconTheme?: `plugin:${string}` | null
   /** Controls the left sidebar surface without changing terminal brightness. */
   leftSidebarAppearanceMode: LeftSidebarAppearanceMode
   leftSidebarTintColor?: string
@@ -345,13 +349,12 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   defaultTuiAgent: TuiAgent | 'blank' | null
   /** Agents hidden from picker/auto-launch; detection stays a raw PATH snapshot. */
   disabledTuiAgents: TuiAgent[]
-  /** Master switch for the experimental plugin system. Off by default: no
-   *  discovery, no panels, no plugin code paths run at all. */
+  /** Optional plugin discovery and execution; shipped language data is separate. */
   pluginSystemEnabled: boolean
   /** Qualified plugin keys (`publisher.id`) the user disabled. Discovered
    *  plugins stay listed but are not activated. */
   disabledPlugins: string[]
-  disabledBundledDataPlugins: string[]
+  disabledBundledDataPlugins?: string[]
   /** Consent records: qualified plugin key → capability/worker-trust fingerprint.
    *  A plugin whose current fingerprint differs is pending again, so an update
    *  crossing either trust boundary re-prompts before code runs. Absent key =
@@ -359,6 +362,8 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   pluginConsents: Record<string, string>
   /** Local directories loaded as dev-mode plugins (manifest hot-reload). */
   devPluginPaths: string[]
+  pluginSyntaxAssociations?: PluginSyntaxAssociation[]
+  pluginViewerAssociations?: PluginViewerAssociation[]
   /** One-shot guard: start Claude Agent Teams hidden for existing profiles without overriding later opt-ins. */
   claudeAgentTeamsDefaultDisabledMigrated?: boolean
   /** Why: worktree deletion is destructive (rm -rf of the working dir), so confirm by default. */

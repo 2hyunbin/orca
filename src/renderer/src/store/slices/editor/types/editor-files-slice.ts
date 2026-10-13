@@ -47,8 +47,10 @@ export type EditorFilesSlice = {
       focusEditor?: boolean
       reopenId?: string
       selection?: EditorTabSelection
+      fileViewer?: 'core'
     }
   ) => string
+  resolveFileOpening: (fileId: string, viewerKey: string) => boolean
   openNewMarkdownInActiveWorkspace: (groupId: string) => Promise<void>
   // Why: sequences openFile/setMarkdownViewMode/reveal around an async Monaco remount. See docs/markdown-internal-link-opening-design.md.
   activateMarkdownLink: (

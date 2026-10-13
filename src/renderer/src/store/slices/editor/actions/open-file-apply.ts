@@ -1,4 +1,6 @@
 import { toast } from 'sonner'
+import { pluginViewerFileId } from '../file-ids/plugin-viewer-file-id'
+import { fileOpeningFileId } from '../file-ids/file-opening-file-id'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { captureEditorFileOperationProvenance } from '@/lib/editor-file-operation-owner'
 import { getRecentlyClosedTabPosition, pushRecentlyClosedTabKind } from '../../recently-closed-tabs'
@@ -22,6 +24,8 @@ import {
   resolveEditorOpenTargetGroupId
 } from '../tabs/editor-open-target-group'
 import { resolveEditorPreviewIntent } from '../tabs/editor-preview-tab-setting'
+import { resolveExistingEditorViewIntent } from './editor-read-only-view-intent'
+import { pluginViewerReopenState } from './plugin-viewer-reopen-state'
 import {
   getReplaceablePreviewFileId,
   removeEditorStateForReplacedPreview
@@ -36,7 +40,7 @@ export type OpenFileApplyScratch = {
 
 export function applyOpenFileToState(
   s: AppState,
-  file: Omit<OpenFile, 'id' | 'isDirty'>,
+  fileInput: Omit<OpenFile, 'id' | 'isDirty'>,
   options:
     | {
         preview?: boolean
@@ -51,6 +55,10 @@ export function applyOpenFileToState(
     | undefined,
   scratch: OpenFileApplyScratch
 ): Partial<AppState> | AppState {
+  const file =
+    fileInput.mode === 'plugin-viewer' || fileInput.mode === 'file-opening'
+      ? { ...fileInput, readOnly: true, liveTail: undefined }
+      : fileInput
   const worktreeId = file.worktreeId
   let operationProvenance = file.operationProvenance
   if (!operationProvenance && file.mode === 'edit' && file.readOnly !== true) {
@@ -78,6 +86,7 @@ export function applyOpenFileToState(
   const existing = s.openFiles.find(
     (f) =>
       matchesEditorMode(f, reusableOpenFileModes) &&
+      (file.mode !== 'plugin-viewer' || f.pluginViewer?.key === file.pluginViewer?.key) &&
       isSameEditorOwner(f, worktreeId, runtimeEnvironmentId) &&
       (f.filePath === file.filePath || canReuseLocalWslAlias(s, f, file, runtimeEnvironmentId))
   )
@@ -86,13 +95,22 @@ export function applyOpenFileToState(
     ? existing.id
     : options?.reopenId && !s.openFiles.some((candidate) => candidate.id === options.reopenId)
       ? options.reopenId
-      : resolveEditorFileIdForOwner(
-          s,
-          file.filePath,
-          worktreeId,
-          runtimeEnvironmentId,
-          reusableOpenFileModes
-        )
+      : file.mode === 'plugin-viewer'
+        ? pluginViewerFileId(
+            file.filePath,
+            worktreeId,
+            runtimeEnvironmentId,
+            file.pluginViewer?.key ?? ''
+          )
+        : file.mode === 'file-opening'
+          ? fileOpeningFileId(file.filePath, worktreeId, runtimeEnvironmentId)
+          : resolveEditorFileIdForOwner(
+              s,
+              file.filePath,
+              worktreeId,
+              runtimeEnvironmentId,
+              reusableOpenFileModes
+            )
   scratch.editorItemFileId = id
   const isPreview = resolveEditorPreviewIntent(s, options?.preview)
   scratch.editorItemIsPreview = isPreview
@@ -104,24 +122,29 @@ export function applyOpenFileToState(
   const activeResult =
     options?.selection === 'none' ? {} : buildEditorActiveResult(s, worktreeId, id)
   if (existing) {
+    const viewerReopen = pluginViewerReopenState(s, existing, file)
     // If opening as non-preview, also pin the existing tab
     const updatedPreview = isPreview ? existing.isPreview : false
     const nextExternalSshTargetId = file.externalSshTargetId ?? existing.externalSshTargetId
     const refreshExternalSshProvenance = file.externalSshTargetId !== undefined
-    // Why: a re-click mints a fresh grant; the old one may have expired.
     const nextGrantId = file.terminalArtifactGrantId ?? existing.terminalArtifactGrantId
-    const fileContentReloadNonce = shouldRequestExistingFileContentReload(
-      existing,
-      file.mode,
-      options
-    )
-      ? (existing.fileContentReloadNonce ?? 0) + 1
-      : existing.fileContentReloadNonce
-    // View Log is the only read-only open path. A normal open of the same path
-    // is an explicit request to edit it, so drop the log-only restrictions while
-    // keeping View Log from downgrading an already writable tab.
-    const nextReadOnly = existing.readOnly === true && file.readOnly === true ? true : undefined
-    const nextLiveTail = file.liveTail === true && nextReadOnly === true ? true : undefined
+    const openingIntentChanged =
+      file.mode === 'file-opening' &&
+      (existing.operationProvenance !== operationProvenance ||
+        existing.fileOpening !== file.fileOpening ||
+        existing.fileOpeningChoicePending !== file.fileOpeningChoicePending ||
+        existing.fileOpeningOwnerUnresolved !== file.fileOpeningOwnerUnresolved)
+    const fileContentReloadNonce =
+      viewerReopen?.fileContentReloadNonce ??
+      (shouldRequestExistingFileContentReload(existing, file.mode, options)
+        ? (existing.fileContentReloadNonce ?? 0) + 1
+        : existing.fileContentReloadNonce)
+    const {
+      readOnly: nextReadOnly,
+      liveTail: nextLiveTail,
+      pluginViewer,
+      pluginViewerUserSelectedFile
+    } = resolveExistingEditorViewIntent(existing, file)
     const needsExistingUpdate =
       existing.mode !== file.mode ||
       existing.diffSource !== file.diffSource ||
@@ -141,7 +164,10 @@ export function applyOpenFileToState(
       refreshExternalSshProvenance ||
       existing.fileContentReloadNonce !== fileContentReloadNonce ||
       existing.readOnly !== nextReadOnly ||
-      existing.liveTail !== nextLiveTail
+      existing.liveTail !== nextLiveTail ||
+      existing.pluginViewer !== pluginViewer ||
+      existing.pluginViewerUserSelectedFile !== pluginViewerUserSelectedFile ||
+      openingIntentChanged
     if (!needsExistingUpdate) {
       return activeResult
     }
@@ -156,9 +182,11 @@ export function applyOpenFileToState(
               runtimeEnvironmentId,
               externalSshTargetId: nextExternalSshTargetId,
               terminalArtifactGrantId: nextGrantId,
-              operationProvenance: refreshExternalSshProvenance
-                ? operationProvenance
-                : f.operationProvenance,
+              operationProvenance:
+                viewerReopen?.operationProvenance ??
+                (refreshExternalSshProvenance || file.mode === 'file-opening'
+                  ? operationProvenance
+                  : f.operationProvenance),
               mode: file.mode,
               diffSource: file.diffSource,
               branchCompare: file.branchCompare,
@@ -172,8 +200,20 @@ export function applyOpenFileToState(
               conflictReview: file.conflictReview,
               isPreview: updatedPreview,
               fileContentReloadNonce,
+              pluginViewerOwnerExpired: viewerReopen ? undefined : f.pluginViewerOwnerExpired,
               readOnly: nextReadOnly,
-              liveTail: nextLiveTail
+              liveTail: nextLiveTail,
+              pluginViewer,
+              pluginViewerUserSelectedFile,
+              fileOpening: file.mode === 'file-opening' ? file.fileOpening : f.fileOpening,
+              fileOpeningChoicePending:
+                file.mode === 'file-opening'
+                  ? file.fileOpeningChoicePending
+                  : f.fileOpeningChoicePending,
+              fileOpeningOwnerUnresolved:
+                file.mode === 'file-opening'
+                  ? file.fileOpeningOwnerUnresolved
+                  : f.fileOpeningOwnerUnresolved
             }
           : f
       ),

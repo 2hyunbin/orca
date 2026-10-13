@@ -17,6 +17,8 @@ import { translate } from '@/i18n/i18n'
 import { useEditorConflictNavigation } from './useEditorConflictNavigation'
 import { useMarkdownDocuments } from './useMarkdownDocuments'
 import type { MarkdownRenderState } from './markdown-render-mode'
+import { PluginFileViewer } from './PluginFileViewer'
+import { FileOpeningSurface } from './FileOpeningSurface'
 
 const noopCloseMarkdownTableOfContents = (): void => {}
 
@@ -115,7 +117,12 @@ export function EditorContent({
   const pdfPreferenceKey = buildPdfScalePreferenceKey(activeFile)
   const monacoLanguage = resolvedLanguage === 'notebook' ? 'json' : resolvedLanguage
   const reloadOpenCheckRunDetailsTab = useAppStore((state) => state.reloadOpenCheckRunDetailsTab)
-  const markdownDocuments = useMarkdownDocuments(activeFile, isMarkdown, mdViewMode, handleSave)
+  const markdownDocuments = useMarkdownDocuments(
+    activeFile,
+    isMarkdown && activeFile.mode !== 'plugin-viewer' && activeFile.mode !== 'file-opening',
+    mdViewMode,
+    handleSave
+  )
   const getConflictNavigation = useEditorConflictNavigation()
   const activeConflictEntry =
     worktreeEntries.find((entry) => entry.path === activeFile.relativePath) ?? null
@@ -125,6 +132,13 @@ export function EditorContent({
       activeFile.diffSource === 'combined-uncommitted' ||
       activeFile.diffSource === 'combined-branch' ||
       activeFile.diffSource === 'combined-commit')
+
+  if (activeFile.mode === 'file-opening') {
+    return <FileOpeningSurface file={activeFile} scopeId={viewStateScopeId} />
+  }
+  if (activeFile.mode === 'plugin-viewer') {
+    return <PluginFileViewer key={viewStateScopeId} file={activeFile} scopeId={viewStateScopeId} />
+  }
 
   if (activeFile.mode === 'check-details') {
     const checkRunDetails = activeFile.checkRunDetails

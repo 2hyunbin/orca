@@ -1,4 +1,6 @@
 import type { RecentlyClosedTabPosition } from '../../recently-closed-tabs'
+import type { PluginViewerViewport } from '../../../../../../shared/plugins/plugin-viewer-surface'
+import type { PluginViewerSourceView } from '../../../../../../shared/plugins/plugin-viewer-source-view'
 import type { EditorFileOperationProvenance } from '@/lib/editor-file-operation-owner'
 import type {
   GitBranchChangeEntry,
@@ -49,6 +51,10 @@ export type OpenFile = {
   terminalArtifactGrantId?: string
   /** Host provenance captured when the tab opened; mutations reject replacement owners. */
   operationProvenance?: EditorFileOperationProvenance
+  /** Ephemeral: a verified reopen must replace authority after owner withdrawal. */
+  pluginViewerOwnerExpired?: boolean
+  /** User-named remote file: reselect through the host, never upgrade to core editor access. */
+  pluginViewerUserSelectedFile?: true
   /** Why: preview tabs mirror a source file's live draft; storing its ID lets the preview follow unsaved edits without becoming editable. */
   markdownPreviewSourceFileId?: string
   /** Hash fragment to reveal when a preview tab opens from a link (`./guide.md#setup`); kept on tab state so repeat opens can retarget it. */
@@ -98,7 +104,24 @@ export type OpenFile = {
   csvPreviewOnly?: boolean
   /** Why: explicit live tail, only meaningful for a read-only local log. */
   liveTail?: boolean
-  mode: 'edit' | 'diff' | 'conflict-review' | 'markdown-preview' | 'check-details' | 'chat-visual'
+  fileOpening?: PluginViewerSourceView
+  fileOpeningChoicePending?: boolean
+  fileOpeningOwnerUnresolved?: boolean
+  pluginViewer?: {
+    key: string
+    viewport?: PluginViewerViewport
+    viewportsByTab?: Record<string, PluginViewerViewport>
+    sourceView?: PluginViewerSourceView
+  }
+  mode:
+    | 'edit'
+    | 'diff'
+    | 'conflict-review'
+    | 'markdown-preview'
+    | 'chat-visual'
+    | 'check-details'
+    | 'plugin-viewer'
+    | 'file-opening'
 }
 
 export type ActivityBarPosition = 'top' | 'side'

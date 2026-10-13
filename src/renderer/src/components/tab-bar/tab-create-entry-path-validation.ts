@@ -41,7 +41,7 @@ export function validateNewTabEntryAbsolutePath(
     (localPlatform === 'windows' &&
       (normalized.rootKind === 'windows' || normalized.rootKind === 'unc'))
   if (!rootMatchesLocalPlatform) {
-    throw new Error('Enter an absolute path for this computer.')
+    throw new Error('Enter an absolute path for this host.')
   }
   return normalized.normalized
 }

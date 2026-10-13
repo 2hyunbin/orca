@@ -1,5 +1,6 @@
 import type { HighlighterCore, RegexEngine, ThemeInput } from 'shiki/core'
 import type * as ShikiTextmate from 'shiki/textmate'
+import type { IOnigLib } from 'shiki/textmate'
 import { loadOniguruma, type Oniguruma } from './oniguruma'
 
 // Why: one regex scan over a line cannot be interrupted, and its cost grows with the square of the line's length.
@@ -27,6 +28,14 @@ function onigurumaEngine(oniguruma: Oniguruma): RegexEngine {
       }
     },
     createString: (text) => oniguruma.createOnigString(text)
+  }
+}
+
+export function textmateOnigurumaLibrary(oniguruma: Oniguruma): IOnigLib {
+  const engine = onigurumaEngine(oniguruma)
+  return {
+    createOnigScanner: (sources) => engine.createScanner(sources),
+    createOnigString: (text) => engine.createString(text)
   }
 }
 
