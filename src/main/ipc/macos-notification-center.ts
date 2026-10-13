@@ -2,9 +2,6 @@ import { Notification, type NotificationConstructorOptions } from 'electron'
 import type { NotificationDispatchRequest } from '../../shared/notification-settings-types'
 import type { AnnouncedNotification } from '../notifications/announced-notification-registry'
 
-// Why: close() needs the live object (released at 5 min, gone after restart); Notification Center
-// removes by thread or identifier without one.
-
 function paneGroupId(paneKey: string): string {
   return `pane:${paneKey}`
 }
@@ -25,6 +22,7 @@ export function macosNotificationIdentity(
 }
 
 /** Removes a read pane's thread and the structured alerts this read retired. */
+// Why: close() needs the live object (released at 5 min, gone after restart); this needs none.
 export function removeReadMacosNotifications(
   paneKey: string,
   retired: readonly AnnouncedNotification[]
