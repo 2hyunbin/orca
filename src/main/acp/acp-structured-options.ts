@@ -2,6 +2,8 @@
 // effort), the older model list, and its `/` commands — as Orca's option and command surfaces.
 // Kept as the agent last reported it; nothing here is guessed or listed by Orca itself.
 
+import { abortSignalReason } from '../../shared/abort-signal-reason'
+
 import type {
   AgentSessionModelOption,
   AgentSessionOptionChoice,
@@ -243,7 +245,7 @@ export function writeAcpSessionOption(
 ): Promise<void> {
   const { agent, timeoutMs, signal } = bound
   if (signal?.aborted) {
-    return Promise.reject(new Error(`${agent} option write abandoned before it was sent`))
+    return Promise.reject(abortSignalReason(signal))
   }
   const applied =
     write.method === 'config'
@@ -256,7 +258,11 @@ export function writeAcpSessionOption(
       settle()
       reject(error)
     }
-    const onAbort = (): void => fail(new Error(`${agent} option write abandoned`))
+    const onAbort = (): void => {
+      if (signal) {
+        fail(abortSignalReason(signal))
+      }
+    }
     const timer = setTimeout(
       () => fail(new Error(`${agent} did not answer an option write within ${timeoutMs}ms`)),
       timeoutMs

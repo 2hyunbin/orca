@@ -6,14 +6,12 @@ import type {
   StructuredAgentSessionAdapter
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { stopCurrentClaudeBackgroundTasks } from './claude-structured-control-actions'
-import { dispatchClaudeTurn } from './claude-structured-dispatch'
 import { claudeHoldsDispatch } from './claude-command-lifecycle'
 import { releaseClaudeAcquisition } from './claude-structured-acquisition-release'
 import { acquireClaudeSession } from './claude-structured-session-acquisition'
 import { supportsClaudeStructuredLocation } from './claude-structured-location-support'
 import { setClaudeStructuredSessionOption } from './claude-structured-options'
-import { applyClaudeMessageOptions } from './claude-structured-message-options'
-import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
+import { dispatchClaudeMessage } from './claude-structured-message-options'
 import { readClaudeStructuredSessionOptions } from './claude-structured-session-options'
 import {
   ClaudeAcquisitionRegistry,
@@ -164,26 +162,8 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
     this.sessions.get(sessionId)?.prompts.bindJournalItemId(journalItemId, promptKey)
   }
 
-  dispatch: StructuredAgentSessionAdapter['dispatch'] = (input) => {
-    const session = this.session(input.sessionId)
-    const messageOptions = input.executionOptions
-    return dispatchClaudeTurn(
-      session,
-      input,
-      messageOptions === undefined
-        ? input.beforeDispatch
-        : async () => {
-            await input.beforeDispatch?.()
-            try {
-              await applyClaudeMessageOptions(session, messageOptions, this.deps.requestTimeoutMs)
-            } catch (error) {
-              throw error instanceof AgentSessionOptionRejectedError
-                ? error
-                : new AgentSessionOptionRejectedError(error)
-            }
-          }
-    )
-  }
+  dispatch: StructuredAgentSessionAdapter['dispatch'] = (input) =>
+    dispatchClaudeMessage(this.session(input.sessionId), input, this.deps.requestTimeoutMs)
 
   compact: NonNullable<StructuredAgentSessionAdapter['compact']> = (input) =>
     dispatchClaudeCommand(this.session(input.sessionId), input.command)

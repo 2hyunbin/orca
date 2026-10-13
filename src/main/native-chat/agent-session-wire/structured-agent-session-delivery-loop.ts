@@ -42,6 +42,7 @@ import type { StructuredAgentSessionStartReadiness } from './structured-agent-se
 import { holdRestartedStructuredAgentSessionSends } from './structured-agent-session-host-lifetime'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import { waitsForCodexTurnOptions } from './structured-agent-session-message-options'
+import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
@@ -75,9 +76,8 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   /** A person's Stop is still ending the session's work: the status feed's own reading. */
   stopping: (sessionId: string) => boolean
   now: () => number
+  acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
 }
-
-type Step = 'continue' | 'stop'
 
 type RefusedStart = Extract<StructuredAgentSessionResumeOutcome, { ok: false }>
 
@@ -232,7 +232,7 @@ export class StructuredAgentSessionDeliveryLoop {
     sessionId: string,
     awaited: StructuredAgentSessionProviderChildIdentity | null,
     waited: boolean
-  ): Promise<Step> {
+  ): Promise<'continue' | 'stop'> {
     const session = this.deps.sessions.get(sessionId)
     if (!session || this.disposed) {
       return this.stop(sessionId)
@@ -297,7 +297,8 @@ export class StructuredAgentSessionDeliveryLoop {
         failureTextContext: this.deps.failureTextContext(sessionId),
         record: () => this.deps.record(sessionId),
         childWork: () => this.deps.readChildWork(sessionId),
-        now: this.deps.now
+        now: this.deps.now,
+        acquireAborts: this.deps.acquireAborts
       },
       next
     )

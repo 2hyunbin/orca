@@ -242,6 +242,50 @@ describe('Pi RPC session ownership and delivery', () => {
     ])
   })
 
+  it('keeps legacy sends on the current selection when execution options are absent', async () => {
+    const h = await setup()
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'override',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'first' }] },
+      executionOptions: { model: 'anthropic/model-2' }
+    })
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'legacy',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'second' }] }
+    })
+    expect(h.connection.requests.filter((command) => command === 'set_model')).toEqual([
+      'set_model'
+    ])
+    expect(h.connection.sent).toHaveLength(2)
+  })
+
+  it('refuses an omitted effort whose new model default cannot be confirmed', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'override-effort',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'first' }] },
+      executionOptions: { model: 'anthropic/model-1', effort: 'low' }
+    })
+    await expect(
+      h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId: 'unknown-default',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'second' }] },
+        executionOptions: { model: 'anthropic/model-2' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(h.connection.sent).toHaveLength(1)
+  })
+
   it('applies the displayed default model and effort after different message choices', async () => {
     const h = await setup()
     h.connection.requestOverride = (command) =>

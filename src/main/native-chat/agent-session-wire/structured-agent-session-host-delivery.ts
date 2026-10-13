@@ -26,6 +26,7 @@ import { structuredAgentSessionFailureWordsContext } from './structured-agent-se
 import { recoverStructuredRewind } from './structured-rewind-recovery'
 import { retireOutgrownStructuredAgentSessionChild } from './structured-agent-session-outgrown-child'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
+import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 
 export type StructuredAgentSessionConversationDelivery = {
   loop: StructuredAgentSessionDeliveryLoop
@@ -52,6 +53,7 @@ export type StructuredAgentSessionConversationDelivery = {
 
 export function createStructuredAgentSessionConversationDelivery(input: {
   deps: StructuredAgentSessionHostDeps
+  acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
   sessions: Map<string, StructuredAgentSessionHostSession>
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   trackStart: <T>(start: Promise<T>) => Promise<T>
@@ -122,7 +124,8 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     record: (sessionId) => deps.store.getRecord(sessionId),
     readChildWork: input.clientDelivery.readChildWork,
     stopping: input.clientDelivery.readStopping,
-    now: () => deps.now?.() ?? Date.now()
+    now: () => deps.now?.() ?? Date.now(),
+    acquireAborts: input.acquireAborts
   })
   const adoptOpened = async (
     sessionId: string,

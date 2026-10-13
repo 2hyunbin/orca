@@ -306,6 +306,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     body: AgentJournalMessageItem
     /** Immutable choices of this submission; adapters apply them only to this dispatch. */
     executionOptions?: AgentSessionExecutionOptions
+    /** Host-local cancellation while choices are applied before prompt admission. */
+    signal?: AbortSignal
     fence: number
     /** Host clock on the submission row this send came from; the origin the turn
      *  it opens records as `requestedAt`. */

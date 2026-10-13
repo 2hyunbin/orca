@@ -27,6 +27,7 @@ import type { ProviderStartAttempt } from '../provider-process/provider-acquisit
 import { waitForAcpExit, type AcpStructuredConnection } from './acp-structured-connection'
 import { AcpConnectionClosedError } from './acp-errors'
 import { applyAcpMessageOptions } from './acp-message-execution-options'
+import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import { awaitAcpTurnEnd, interruptAcpTurn } from './acp-structured-stop'
 import { acpDispatchPrompt } from './acp-prompt-content'
 import {
@@ -179,18 +180,20 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
       // The child ended while its attachments were read: nothing left Orca.
       return this.rejected(session, 'providerExited')
     }
+    const { sessionId, fence, signal } = input
     const optionsApplied = await applyAcpMessageOptions(
       session,
       input.executionOptions,
-      (key, value) =>
-        this.setOption({ sessionId: input.sessionId, fence: input.fence, key, value }),
+      (key, value) => this.setOption({ sessionId, fence, key, value, signal }),
       () =>
         this.children.sessions.get(input.sessionId) === session && session.journalClosed === null
     )
     if (!optionsApplied) {
       return this.rejected(session, 'providerExited')
     }
+    input.signal?.throwIfAborted()
     await input.beforeDispatch?.()
+    input.signal?.throwIfAborted()
     session.turns.dispatch({
       clientMessageId: input.clientMessageId,
       prompt,
@@ -239,7 +242,9 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     const session = this.live(input.sessionId)
     const write = session.options.write(input.key, input.value)
     if (!write) {
-      throw new Error(`${session.spec.agent} offers no session option named ${input.key}`)
+      throw new AgentSessionOptionRejectedError(
+        `${session.spec.agent} offers no session option named ${input.key}`
+      )
     }
     session.options.notePick(input.key)
     // Bounded, and abandoned by a close or Stop: the session's queue waits on it.
