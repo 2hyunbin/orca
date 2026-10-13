@@ -5,6 +5,7 @@ import {
   getWorkspaceStatus,
   getWorkspaceStatusGroupKey
 } from '../../../../../../shared/workspace-statuses'
+import { effectiveRecentActivity, type SortBy } from '../../smart-sort'
 import { ALL_GROUP_KEY, getPRLaneKey } from './group-keys'
 import type { WorktreeGroupBy } from './row-types'
 
@@ -65,12 +66,23 @@ export function getFolderWorkspaceLaneKey(
   }
 }
 
-/** Sidebar display order: user-authored order first, then name. Mirrors the rule
- *  the project-group emitter has always used, so lanes and groups agree. */
+/** Folder rows share the selected sort across project groups and status lanes. */
 export function compareFolderWorkspacesForDisplay(
   left: FolderWorkspace,
-  right: FolderWorkspace
+  right: FolderWorkspace,
+  sortBy: SortBy,
+  now: number
 ): number {
+  if (sortBy === 'name' || sortBy === 'repo') {
+    return left.name.localeCompare(right.name)
+  }
+  if (sortBy === 'recent') {
+    return (
+      effectiveRecentActivity(right, now) - effectiveRecentActivity(left, now) ||
+      left.name.localeCompare(right.name)
+    )
+  }
+  // Smart retains the saved folder order until folder attention signals are supported.
   const leftOrder = left.manualOrder ?? left.sortOrder
   const rightOrder = right.manualOrder ?? right.sortOrder
   return rightOrder - leftOrder || left.name.localeCompare(right.name)
