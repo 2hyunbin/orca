@@ -28,6 +28,8 @@ const storeState = {
         localhostWorktreeLabelsEnabled?: boolean
       }
     | undefined,
+  floatingWorkspacePanelOpen: false,
+  updateSettings: vi.fn(),
   setActiveWorktree: setActiveWorktreeMock,
   createBrowserTab: createBrowserTabMock,
   repos: [] as { id: string; displayName: string; repoIcon?: null; badgeColor?: string }[],
@@ -46,6 +48,7 @@ const storeState = {
 beforeEach(() => {
   vi.clearAllMocks()
   storeState.settings = undefined
+  storeState.floatingWorkspacePanelOpen = false
   storeState.workspacePortScansByKey = {}
   registerHttpLinkStoreAccessor(() => storeState)
   registerWorkspaceHttpLinkBrowserOpener(openRuntimeBrowserTabMock)
@@ -89,11 +92,14 @@ describe('openHttpLink', () => {
   })
 
   it('routes floating workspace links into Orca without changing the active repo worktree', () => {
-    storeState.settings = { openLinksInApp: true }
+    // The link was clicked inside the floating panel, so the panel is on screen.
+    storeState.settings = Object.assign({ openLinksInApp: true }, { floatingTerminalEnabled: true })
+    storeState.floatingWorkspacePanelOpen = true
 
     openHttpLink('https://example.com/', { worktreeId: FLOATING_TERMINAL_WORKTREE_ID })
 
     expect(setActiveWorktreeMock).not.toHaveBeenCalled()
+    expect(storeState.updateSettings).not.toHaveBeenCalled()
     expect(createBrowserTabMock).toHaveBeenCalledWith(
       FLOATING_TERMINAL_WORKTREE_ID,
       'https://example.com/',

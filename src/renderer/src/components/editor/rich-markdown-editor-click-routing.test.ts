@@ -55,6 +55,8 @@ beforeEach(() => {
   })
   registerHttpLinkStoreAccessor(() => ({
     settings: routing.settings,
+    floatingWorkspacePanelOpen: false,
+    updateSettings: vi.fn(),
     setActiveWorktree: vi.fn(),
     createBrowserTab
   }))

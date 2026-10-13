@@ -16,6 +16,8 @@ describe('modifier routing across link source owners', () => {
       openLinksInAppModifierInverts?: boolean
       activeRuntimeEnvironmentId?: string | null
     },
+    floatingWorkspacePanelOpen: false,
+    updateSettings: vi.fn(),
     setActiveWorktree: setActiveWorktreeMock,
     createBrowserTab: createBrowserTabMock
   }

@@ -10,10 +10,10 @@ import { singlePaneLayoutSnapshot } from '@/store/slices/terminal-helpers'
 import { verifyTerminalRevealIdentity } from '@/lib/terminal-reveal-identity'
 import { tryMakePaneKey } from './agent-status-routing'
 import { wasAgentLaunchPaneClosedByUser } from '@/lib/agent-launch-pane-closes'
+import { revealWorkspaceSurface } from '@/lib/workspace-surface-reveal'
 import { useAppStore } from '../../store'
 import {
   activateExistingLeafInLayout,
-  activateTerminalInitiatedWorktree,
   addSplitLeafToLayout,
   focusTerminalInitiatedTab,
   resolveTerminalPresentation
@@ -69,7 +69,7 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
             throw new Error(`Terminal tab ${tabId} not found`)
           }
           if (shouldActivate) {
-            activateTerminalInitiatedWorktree(store, worktreeId)
+            revealWorkspaceSurface(store, worktreeId)
           }
           if (ptyId && tabId && leafId && wasAgentLaunchPaneClosedByUser(tabId, leafId)) {
             // The user closed the launch's tab or pane while it waited. That close wins: it stays
@@ -143,7 +143,10 @@ export function registerTerminalPresentationIpcBridge(unsubs: (() => void)[]): v
             store.setActiveTab(tab.id)
           }
           if (shouldSurfaceOwner) {
-            store.revealWorktreeInSidebar(worktreeId)
+            // An activated owner was already revealed where it lives.
+            if (!shouldActivate) {
+              store.revealWorktreeInSidebar(worktreeId)
+            }
             focusTerminalInitiatedTab(tab.id, leafId, worktreeId)
           }
           if (agentLaunchViewer) {

@@ -1,6 +1,11 @@
 import type { AppState } from '@/store/types'
-import { selectFloatingWorkspacePanelVisible } from '@/store/floating-workspace-panel-selector'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { TOGGLE_FLOATING_TERMINAL_EVENT } from './floating-terminal'
+
+export type FloatingWorkspacePanelRevealState = Pick<
+  AppState,
+  'updateSettings' | 'floatingWorkspacePanelOpen'
+> & { settings?: Pick<Partial<GlobalSettings>, 'floatingTerminalEnabled'> | null }
 
 function toggleFloatingWorkspacePanel(): void {
   window.dispatchEvent(new Event(TOGGLE_FLOATING_TERMINAL_EVENT))
@@ -9,11 +14,9 @@ function toggleFloatingWorkspacePanel(): void {
 /** Opens the floating panel unless it is already on screen. */
 // Why enable first: floating tabs outlive a feature disable, and the panel ignores the toggle
 // while disabled, so a live floating agent row would otherwise be a silent no-op.
-export function revealFloatingWorkspacePanel(
-  state: Pick<AppState, 'settings' | 'updateSettings' | 'floatingWorkspacePanelOpen'>
-): void {
+export function revealFloatingWorkspacePanel(state: FloatingWorkspacePanelRevealState): void {
   if (state.settings?.floatingTerminalEnabled === true) {
-    if (!selectFloatingWorkspacePanelVisible(state)) {
+    if (!state.floatingWorkspacePanelOpen) {
       toggleFloatingWorkspacePanel()
     }
     return

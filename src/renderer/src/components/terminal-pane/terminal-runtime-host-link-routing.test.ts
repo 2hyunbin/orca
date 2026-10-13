@@ -105,6 +105,8 @@ beforeEach(() => {
   vi.stubGlobal('window', { api: { shell: { openUrl: openUrlMock } } })
   registerHttpLinkStoreAccessor(() => ({
     settings: { openLinksInApp: true, activeRuntimeEnvironmentId: null },
+    floatingWorkspacePanelOpen: false,
+    updateSettings: vi.fn(),
     setActiveWorktree: setActiveWorktreeMock,
     createBrowserTab: createBrowserTabMock
   }))

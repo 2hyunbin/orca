@@ -1,5 +1,4 @@
 import { translate } from '@/i18n/i18n'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import {
   parseLoopbackUrlWithPort,
   type LocalhostWorktreeLabelRoute
@@ -7,6 +6,10 @@ import {
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { WorkspacePort, WorkspacePortScanResult } from '../../../shared/workspace-ports'
 import { toast } from 'sonner'
+import {
+  selectWorkspaceSurfaceOwner,
+  type WorkspaceSurfaceRevealState
+} from './workspace-surface-reveal'
 
 export type OpenHttpLinkOptions = {
   worktreeId?: string | null
@@ -27,7 +30,10 @@ export type HttpLinkSourceOwner =
   | { kind: 'ssh'; connectionId: string }
   | { kind: 'unknown' }
 
-type StoreAccessor = () => {
+type StoreAccessor = () => Pick<
+  WorkspaceSurfaceRevealState,
+  'floatingWorkspacePanelOpen' | 'updateSettings'
+> & {
   settings?: Partial<
     Pick<
       GlobalSettings,
@@ -35,6 +41,7 @@ type StoreAccessor = () => {
       | 'openLinksInAppModifierInverts'
       | 'activeRuntimeEnvironmentId'
       | 'localhostWorktreeLabelsEnabled'
+      | 'floatingTerminalEnabled'
     >
   > | null
   setActiveWorktree: (worktreeId: string) => void
@@ -177,11 +184,7 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
     // history entry — the user isn't changing worktrees, they're opening a tab
     // in the one they're already in. activateAndRevealWorktree is reserved for
     // file-link jumps that genuinely switch worktrees.
-    if (worktreeId !== FLOATING_TERMINAL_WORKTREE_ID) {
-      // Why: the floating workspace uses a synthetic worktree id. Promoting it
-      // to the global activeWorktreeId deselects the real repo workspace.
-      state.setActiveWorktree(worktreeId)
-    }
+    selectWorkspaceSurfaceOwner(state, worktreeId)
     const localhostRoute = localhostLabelRouteForHttpLink(url, state, sourceOwner)
     if (!localhostRoute) {
       state.createBrowserTab(worktreeId, url, { activate: true })
