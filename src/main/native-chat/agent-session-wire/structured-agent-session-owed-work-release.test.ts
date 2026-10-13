@@ -175,24 +175,19 @@ function waitOutSeveralSweeps(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, SWEEP_MS * 20))
 }
 
-function deliverySettled(): Promise<void> {
-  return vi.waitFor(() =>
-    expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(false)
-  )
-}
-
 describe('a Claude chat whose CLI is still starting', () => {
   it('holds a message until startup lands, and keeps the agent inside the idle window meanwhile', async () => {
     await attachStarting()
     const sent = await send('sent while starting')
 
     // Held, never written, while initialize is unanswered.
-    await deliverySettled()
     expect(claude.connections[0].sent).toEqual([])
     expect(await dispatchState(sent)).toBe('pending')
     clock += IDLE_MS - 1
     await waitOutSeveralSweeps()
 
+    expect(claude.connections[0].sent).toEqual([])
+    expect(await dispatchState(sent)).toBe('pending')
     expect(host.hasSession(SESSION)).toBe(true)
     expect(claude.connections[0].closeCount).toBe(0)
 
@@ -212,10 +207,12 @@ describe('a Claude chat whose CLI is still starting', () => {
       connection.sent.push(message)
     }
     const held = await send('sent while starting')
-    await deliverySettled()
     expect(connection.sent).toEqual([])
+    expect(await dispatchState(held)).toBe('pending')
     clock += IDLE_MS - 1
     await waitOutSeveralSweeps()
+    expect(connection.sent).toEqual([])
+    expect(await dispatchState(held)).toBe('pending')
     expect(host.hasSession(SESSION)).toBe(true)
 
     // Startup lands just before the window closes and the message is handed over; the agent stays

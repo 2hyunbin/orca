@@ -123,6 +123,8 @@ export class StructuredAgentSessionHost {
       trackStart: (start) => this.tasks.trackAttach(start),
       ensureProviderChild: (sessionId, startedFor) =>
         agentStart.ensureStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
+      readiness: (sessionId, child) =>
+        this.runtimeState.startupAttempts.readiness(sessionId, child),
       // Put to rest like an idle agent: the stop writes nothing, and the next start is new.
       stopOutgrownAgent: (id) => this.lifetime.stopAgent(id, { cause: 'evict', resting: true }),
       clientDelivery: this.clientDelivery
@@ -282,6 +284,7 @@ export class StructuredAgentSessionHost {
       openConversation: this.conversationDelivery.open,
       ensureAgent: (sessionId) =>
         agentStart.ensureStructuredAgentSessionAgentForOperation(this.attachContext(), sessionId),
+      startupAttempts: this.runtimeState.startupAttempts,
       joinChildClose: (sessionId) =>
         agentStart.joinClosingStructuredAgentSessionChild(this.attachContext(), sessionId),
       wakeDelivery: (sessionId) => this.conversationDelivery.loop.wake(sessionId),
