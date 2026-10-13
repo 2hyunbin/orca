@@ -17,9 +17,13 @@ function sameOptions(
 
 /** A different Codex choice needs a new turn: steer has no choice parameters. */
 export function waitsForCodexTurnOptions(
-  journal: Pick<AgentSessionJournal, 'newestTurn' | 'submissions'>,
+  journal: Pick<AgentSessionJournal, 'newestTurn' | 'submissions' | 'itemBody'>,
   next: AgentJournalSubmission
 ): boolean {
+  const body = journal.itemBody(agentJournalSubmissionKey(next.clientMessageId))
+  if (body?.kind !== 'message' || body.command) {
+    return false
+  }
   const turn = journal.newestTurn()
   if (turn?.state !== 'running') {
     return false
