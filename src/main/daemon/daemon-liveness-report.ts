@@ -87,18 +87,17 @@ export async function readTerminalDaemonLiveness(
 /** A reused pid is a different process: on Linux the recorded start time tells them apart. */
 export async function inspectDaemonRecordProcess(
   record: ParsedDaemonPid,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  readStat: typeof readLinuxStat = readLinuxStat
 ): Promise<'live' | 'exited' | 'unverifiable'> {
   const signal = inspectProcessLiveness(record.pid).status
   if (signal !== 'live' || platform !== 'linux' || !record.linuxStartTicks) {
     return signal
   }
-  const stat = await readLinuxStat(record.pid)
-  if (stat.status === 'missing') {
-    return 'exited'
-  }
+  const stat = await readStat(record.pid)
+  // Why not exited on a missing stat: the signal just proved the pid live; procfs may hide it.
   if (stat.status !== 'present') {
-    return 'live'
+    return stat.status === 'missing' ? 'unverifiable' : 'live'
   }
   const startTicks = parseLinuxStartTicks(stat.value)
   return startTicks !== null && startTicks !== record.linuxStartTicks ? 'exited' : 'live'

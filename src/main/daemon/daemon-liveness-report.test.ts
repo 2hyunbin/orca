@@ -84,6 +84,14 @@ describe('terminal daemon liveness report', () => {
     }
   )
 
+  it('never reads a signal-live pid as exited because procfs hides its stat', async () => {
+    await expect(
+      inspectDaemonRecordProcess({ ...record, pid: process.pid }, 'linux', async () => ({
+        status: 'missing'
+      }))
+    ).resolves.toBe('unverifiable')
+  })
+
   it('reads a pid with no process as exited', async () => {
     await expect(inspectDaemonRecordProcess({ ...record, pid: 2 ** 22 + 12_345 })).resolves.toBe(
       'exited'
