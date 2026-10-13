@@ -27,7 +27,7 @@ export class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPt
 
     const pane = parsePaneKey(pty.paneKey ?? '')
     const orphaned = !ptyHoldsRecordedSurface(pty, this.ptySurfaceTopology())
-    // A restarted host's terminal has no title yet; its tab's saved name stands in, as a window's does.
+    // A restarted host's terminal has no title yet; until it has one, its tab's saved name stands in.
     const title =
       getLatestPtyTitle(this.getPtyDisplayRecord(pty)) ??
       (orphaned ? null : this.getSavedTerminalTabCustomTitle(pty.worktreeId, pty.tabId))

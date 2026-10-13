@@ -38,6 +38,20 @@ describe('a titled terminal on a host with no window', () => {
     expect(saved?.find((tab) => tab.id === created.tabId)?.customTitle).toBe('cli-created')
   })
 
+  // A window reads a saved name on hydration and shows it over the agent's live title, so a tab
+  // the window never revealed (a background worker) must not get one.
+  it('saves no name for a background terminal', async () => {
+    const { runtime, getSession } = headlessRuntime()
+
+    const created = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
+      title: 'worker-1',
+      presentation: 'background'
+    })
+
+    const saved = getSession().tabsByWorktree[TEST_WORKTREE_ID]
+    expect(saved?.find((tab) => tab.id === created.tabId)?.customTitle ?? null).toBeNull()
+  })
+
   it('lists the saved name once the terminal itself has no title, as after a restart', async () => {
     const { runtime } = headlessRuntime()
     const created = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
