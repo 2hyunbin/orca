@@ -18,9 +18,9 @@ import { toast } from 'sonner'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   findFolderWorkspaceOwner,
-  getExecutionHostIdForFolderWorkspace,
   getRuntimeEnvironmentIdForFolderWorkspace
 } from './folder-workspace-runtime-owner'
+import { getFolderWorkspaceHostId } from '@/store/folder-workspaces/folder-workspace-catalog'
 import type { WorktreeStartupPayload } from '@/lib/worktree-startup-payload'
 import {
   ensureFolderWorkspaceInitialTerminal,
@@ -150,11 +150,8 @@ export function activateAndRevealFolderWorkspace(
   }
   if (opts?.revealInSidebar !== false) {
     state.revealWorktreeInSidebar(workspaceKey, {
-      executionHostId: getExecutionHostIdForFolderWorkspace(
-        state,
-        folderWorkspaceId,
-        opts?.executionHostId
-      ),
+      executionHostId:
+        opts?.executionHostId ?? getFolderWorkspaceHostId(folderWorkspace, state.projectGroups),
       ...(opts?.sidebarRevealBehavior ? { behavior: opts.sidebarRevealBehavior } : {})
     })
   }

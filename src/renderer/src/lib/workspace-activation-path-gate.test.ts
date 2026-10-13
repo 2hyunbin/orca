@@ -3,6 +3,7 @@ import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../shared/project-group-types'
 import type { FolderWorkspacePathStatusReason } from '../../../shared/folder-workspace-path-status'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { getDefaultSettings } from '../../../shared/constants'
 import { getFolderWorkspaceStatusRequestSnapshot } from '@/store/folder-workspaces/folder-path-status'
 import { makeGroup, makeUnifiedTab } from '@/components/worktree-jump-palette-test-fixtures'
 
@@ -133,6 +134,32 @@ describe('Cmd/Ctrl+1-9 folder-workspace path gate (#10716)', () => {
 
       activateAndRevealWorkspace(folderWorkspaceKey(folderWorkspace.id), {
         executionHostId,
+        providesInitialSurface: true
+      })
+
+      expect(store.getState().pendingRevealWorktree).toMatchObject({
+        worktreeId: folderWorkspaceKey(folderWorkspace.id),
+        executionHostId
+      })
+    }
+  )
+
+  it.each([
+    ['local', null],
+    ['ssh:builder', 'builder']
+  ] as const)(
+    'reveals the %s catalog owner when an unrelated server is focused',
+    async (executionHostId, connectionId) => {
+      await seedFolderWorkspace({ exists: true })
+      store.setState({
+        projectGroups: [{ ...projectGroup, connectionId }],
+        settings: {
+          ...getDefaultSettings('/tmp'),
+          activeRuntimeEnvironmentId: 'focused-server'
+        }
+      })
+
+      activateAndRevealWorkspace(folderWorkspaceKey(folderWorkspace.id), {
         providesInitialSurface: true
       })
 
