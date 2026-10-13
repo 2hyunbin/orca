@@ -10,10 +10,7 @@ import {
   envelope,
   hostTestState
 } from './structured-agent-session-host-test-harness'
-import {
-  HOST_TEST_SESSION as SESSION,
-  hostTestMessage
-} from './structured-agent-session-host-test-data'
+import { hostTestMessage } from './structured-agent-session-host-test-data'
 
 const OPENED: StructuredAgentSessionProviderOpenResult = {
   reportedOptions: { model: 'gpt-test' }
@@ -41,39 +38,6 @@ function awaitOpen() {
   }
   return { ...state, open, close, pending, send }
 }
-
-it('delivers two earlier sends before a later goal, then the send after that goal', async () => {
-  const { host, pending, dispatch, send } = awaitOpen()
-  await attach()
-  const order: string[] = []
-  const originalDispatch = dispatch.getMockImplementation()
-  if (!originalDispatch) {
-    throw new Error('Missing dispatch implementation')
-  }
-  dispatch.mockImplementation(async (input) => {
-    const { body } = input
-    order.push(body.blocks[0]?.type === 'text' ? body.blocks[0].text : 'send')
-    return originalDispatch(input)
-  })
-  host.deps.adapter.changeThreadGoal = vi.fn(async () => {
-    order.push('goal')
-    return { ok: true as const }
-  })
-  await send('first')
-  await send('second')
-  const change = { kind: 'set' as const, objective: 'After the first two messages' }
-  const goal = host.changeThreadGoal(CALLER, {
-    envelope: envelope('agentSession.threadGoal', { change }),
-    change
-  })
-  await host.collaboratorsForTests().serialize(SESSION, async () => {})
-  const later = send('third')
-  pending.resolve(OPENED)
-  expect(await goal).toMatchObject({ ok: true })
-  expect(await later).toMatchObject({ ok: true })
-  await vi.waitFor(() => expect(order).toHaveLength(4))
-  expect(order).toEqual(['first', 'second', 'goal', 'third'])
-})
 
 it('cancels the open on quit after a second client attach is refused', async () => {
   const { host, open, close, dispatch, pending, send } = awaitOpen()

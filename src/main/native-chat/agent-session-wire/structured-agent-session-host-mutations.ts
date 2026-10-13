@@ -240,7 +240,7 @@ export async function setStructuredAgentSessionOption(
     {
       needsAgent: () => {
         const child = context.sessions.get(params.envelope.sessionId)?.child
-        return !recordOnly && child !== undefined && !child.close
+        return !recordOnly && Boolean(child && !child.close)
       },
       runAfterAgentEnds: true
     }
