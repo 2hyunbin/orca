@@ -30,7 +30,7 @@ it.each(['folder', 'ssh', 'wsl'] as const)(
         { worktree: 'id:workspace' }
       )
     expect(result).toBe('opencode')
-    expect(context.getAgentLaunchPlatformForWorkspace).toHaveBeenCalledWith(scope)
+    expect(context.getAgentLaunchPlatformForWorkspace).toHaveBeenCalledWith(scope, scope.path)
     expect(context.resolveOrchestrationAgentLauncher).toHaveBeenCalledWith(
       'opencode-private',
       'linux',
@@ -51,6 +51,27 @@ describe('canonical worker agent target', () => {
     ).toBe('opencode')
     expect(resolve).not.toHaveBeenCalled()
   })
+})
+
+it('keeps repository-target aliases on their existing shell without a folder id', async () => {
+  const context = {
+    store: { getSettings: () => ({ terminalWindowsShell: 'cmd.exe' }) },
+    resolveRepoSelector: vi.fn(async () => ({ path: 'C:\\repo', connectionId: null })),
+    getAgentLaunchPlatformForWorkspace: vi.fn(() => 'win32' as const),
+    resolveOrchestrationAgentLauncher: vi.fn(() => 'opencode' as const)
+  }
+  expect(
+    await OrcaRuntimeService.prototype.resolveOrchestrationAgentLauncherForTarget.call(
+      context,
+      'opencode-private',
+      { repo: 'repo-1' }
+    )
+  ).toBe('opencode')
+  expect(context.resolveOrchestrationAgentLauncher).toHaveBeenCalledWith(
+    'opencode-private',
+    'win32',
+    'cmd'
+  )
 })
 
 it('resolves local Windows shell settings rather than assuming PowerShell', async () => {

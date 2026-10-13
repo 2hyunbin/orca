@@ -192,10 +192,10 @@ export function resolveLocalProjectRuntimeForWorktreeId(
 /** Quotes project-owned folder launches for the same shell their PTY selects. */
 export function resolveFolderProjectStartupShell(
   store: ProjectRuntimeResolutionStore | undefined,
-  worktreeId: string,
+  worktreeId: string | undefined,
   options: { cwd?: string; fallbackHostShell?: string } = {}
 ): string | undefined {
-  if (parseWorkspaceKey(worktreeId)?.type !== 'folder') {
+  if (!worktreeId || parseWorkspaceKey(worktreeId)?.type !== 'folder') {
     return undefined
   }
   const projectRuntime = resolveLocalProjectRuntimeForWorktreeId(store, worktreeId, undefined, {
