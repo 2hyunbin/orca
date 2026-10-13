@@ -289,7 +289,10 @@ export async function initializeMainProcessRuntimeLaunch(
     desktopWindow = desktopStartup.window
   } else {
     // Why before the daemon starts: its host choice waits briefly for a copy unpacking here.
-    void startAppImageCopyPreExtraction()
+    // Serve unpacks for itself, with a deadline and progress on its own output.
+    if (!serveOptions) {
+      void startAppImageCopyPreExtraction()
+    }
     await shellPathReady
     bindTerminalRuntimeStartupServices(Promise.resolve(startTerminalRuntimeStartupServices()))
   }

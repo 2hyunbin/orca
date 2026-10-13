@@ -1,5 +1,5 @@
 /**
- * A validated AppImage unpacks its extracted copy in the background, so the next terminal daemon
+ * A validated AppImage desktop unpacks its extracted copy in the background, so the next terminal daemon
  * runs from the copy instead of a FUSE mount that can vanish under it (appimage-extraction-cache.md):
  * at a launch that finds no copy for this file, and when an update finishes downloading. Lowest
  * priority, under the registration lock, never publishes the CLI launcher, and never blocks the
