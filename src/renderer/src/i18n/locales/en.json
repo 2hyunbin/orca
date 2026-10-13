@@ -216,7 +216,13 @@
         "administratorFinishWork": "Finish your work in local terminals, then exit Orca.",
         "administratorStartMenu": "Find Orca in the Windows Start menu, right-click it, and choose Run as administrator. Approve Windows’ prompt using your own account.",
         "administratorRestartDaemon": "To replace a retained ordinary terminal host, open Settings → Terminal → Manage Sessions → Restart daemon. This ends local terminals on that daemon. New local terminals then inherit administrator permissions.",
-        "administratorHostScope": "SSH and WSL permissions are controlled on their hosts. Orca CLI commands in external PowerShell windows must use the same administrator mode as Orca."
+        "administratorHostScope": "SSH and WSL permissions are controlled on their hosts. Orca CLI commands in external PowerShell windows must use the same administrator mode as Orca.",
+        "keywordAdmin": "admin",
+        "keywordAdministrator": "administrator",
+        "keywordElevated": "elevated",
+        "keywordPermissions": "permissions",
+        "keywordRestart": "restart",
+        "keywordUac": "uac"
       }
     },
     "appearance": {

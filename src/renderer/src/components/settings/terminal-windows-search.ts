@@ -10,15 +10,15 @@ export const getTerminalWindowsAdministratorSearchEntry = createLocalizedCatalog
       'Administrator mode applies to the whole Orca desktop. Existing terminal hosts keep their original permissions.'
     ),
     keywords: [
-      'windows',
-      'terminal',
-      'powershell',
-      'admin',
-      'administrator',
-      'elevated',
-      'permissions',
-      'uac',
-      'restart'
+      ...getTerminalWindowsShellSearchEntry()[0].keywords,
+      ...translateSearchKeyword('settings.terminal.windows.keywordAdmin', 'admin'),
+      ...translateSearchKeyword('settings.terminal.windows.keywordAdministrator', 'administrator'),
+      ...translateSearchKeyword('settings.terminal.windows.keywordElevated', 'elevated'),
+      ...translateSearchKeyword('settings.terminal.windows.keywordPermissions', 'permissions'),
+      ...translateSearchKeyword('settings.terminal.windows.keywordRestart', 'restart'),
+      ...translateSearchKeyword('settings.terminal.windows.keywordUac', 'uac', {
+        englishOnly: true
+      })
     ]
   }
 ])
