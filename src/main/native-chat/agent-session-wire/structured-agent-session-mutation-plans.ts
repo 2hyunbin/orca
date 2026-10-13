@@ -12,7 +12,6 @@ import {
   USER_MESSAGE_SOURCE,
   type AgentSessionMessageSource
 } from '../../../shared/agent-session-message-source'
-import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentSessionOperationOutcome } from '../../../shared/agent-session-operation-ledger'
 import type {
   AgentSessionCancelResult,
@@ -24,6 +23,7 @@ import type {
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionConversationCommandResult } from '../../../shared/agent-session-conversation-command'
 import { DISPATCH_DOUBT_SUBMISSION_MISSING } from '../agent-session-journal/journal-dispatch-doubt-reasons'
+import type { StructuredAgentSessionBackgroundStopInput } from './structured-agent-session-background-stop'
 import {
   agentSessionMessagePayload,
   agentSessionSendBodyFingerprint
@@ -275,15 +275,10 @@ export function conversationCommandPlan(params: {
   }
 }
 
-export function cancelPlan(params: {
-  envelope: AgentSessionMutationEnvelope
-  turnId?: string
-  scope?: 'background-tasks'
-  taskId?: string
-  prompt?: { itemId: string; expectedRevision: number }
-  /** The session's child records, which name the tasks a background Stop reaches. */
-  childWork?: () => readonly AgentChildWorkView[] | undefined
-}): MutationPlan<AgentSessionCancelResult> {
+export function cancelPlan(
+  params: { envelope: AgentSessionMutationEnvelope } & StructuredAgentSessionBackgroundStopInput &
+    Pick<Parameters<typeof performCancel>[1], 'turnId' | 'scope' | 'prompt'>
+): MutationPlan<AgentSessionCancelResult> {
   return {
     method: 'agentSession.cancel',
     // Stop is a conversation write; a prompt or background-task cancel needs the live child.
@@ -303,7 +298,9 @@ export function cancelPlan(params: {
         ...(params.scope ? { scope: params.scope } : {}),
         ...(params.taskId ? { taskId: params.taskId } : {}),
         ...(params.prompt ? { prompt: params.prompt } : {}),
-        ...(params.childWork ? { childWork: params.childWork } : {})
+        ...(params.childWork ? { childWork: params.childWork } : {}),
+        ...(params.acknowledgeStops ? { acknowledgeStops: params.acknowledgeStops } : {}),
+        ...(params.unlisted ? { unlisted: params.unlisted } : {})
       }),
     // Interrupting twice would kill a turn the client never asked to stop, so a
     // replay reports the turn as already handled.
