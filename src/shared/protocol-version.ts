@@ -1,3 +1,8 @@
+import {
+  WORKTREE_RUNTIME_CAPABILITIES,
+  WORKTREE_RUNTIME_CLIENT_CAPABILITIES
+} from './worktree-runtime-capabilities'
+export * from './worktree-runtime-capabilities'
 import { WORKSPACE_ATTACHMENT_RUNTIME_CAPABILITIES } from './workspace-attachment-capabilities'
 import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from './ssh-target-management'
 import {
@@ -86,11 +91,6 @@ export const MIN_COMPATIBLE_RUNTIME_SERVER_VERSION = 2
 export const PROJECT_HOST_SETUP_RUNTIME_CAPABILITY = 'project-host-setup.v1' as const
 export const TASK_SOURCE_CONTEXT_RUNTIME_CAPABILITY = 'task-source-context.v1' as const
 export const WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY = 'workspace-run-context.v1' as const
-export const WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY = 'worktree.provisioned-root.v1' as const
-export const WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY =
-  'worktree.linked-work-item-context.v1' as const
-export const WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY =
-  'worktree.github-pr-suppression.v1' as const
 // Legacy clients cannot safely derive a branch name from a qualified ref selector.
 export const REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY =
   'repo.search-qualified-refs.v1' as const
@@ -150,22 +150,6 @@ export const RUNTIME_AUTOMATIC_WORK_RUNTIME_CAPABILITY = 'runtime.automatic-work
 // Why: older hosts lack the targeted settings RPCs and strip agentPrompt from
 // terminal creation, so mobile must hide Quick Commands unless both are present.
 export const TERMINAL_QUICK_COMMANDS_RUNTIME_CAPABILITY = 'terminal.quick-commands.v1' as const
-// Why: older hosts strip worktree.create's clientMutationId, so mobile must only
-// replay ambiguous cutovers when the host advertises idempotent create support;
-// status.worktreeCreateIdempotency carries the optional host retention policy.
-export const WORKTREE_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY =
-  'worktree.create-idempotency.v1' as const
-// Scope of the claim: a hook that RUNS and fails cannot delete the checkout. It does not promise
-// the hook was found — an SSH host whose orca.yaml cannot be read answers "no hook" and the removal
-// proceeds, because a failed read is indistinguishable from an absent file across the relay
-// (#20196 tracks the provider contract that would separate them).
-// Why (#19334): "accepts --run-hooks" and "refuses to delete when the archive hook fails" were
-// indistinguishable from the outside — both take the flag and behave identically on success, so
-// the only way to tell an unfixed host apart was to fail a hook and see whether the checkout
-// survived. Lifecycle integrations keep teardown evidence inside the checkout and cannot risk
-// that. Advertised unconditionally: every build carrying this constant has the gate.
-export const WORKTREE_ARCHIVE_FAILURE_BLOCKING_RUNTIME_CAPABILITY =
-  'worktree.archive-failure-blocking.v1' as const
 export const CODEX_RESET_CREDIT_RUNTIME_CAPABILITY = 'accounts.codex-reset-credit.v1' as const
 export const ACCOUNT_IMPORT_RUNTIME_CAPABILITY = 'accounts.import-host-credentials.v1' as const
 // Why: `orca account add claude` signs in to an account folder the host creates first.
@@ -307,15 +291,6 @@ export const GITLAB_READY_FOR_REVIEW_RUNTIME_CAPABILITY =
   'gitlab.updateMR.readyForReview.v1' as const
 export const GITLAB_READY_FOR_REVIEW_UPDATE_REQUIRED_MESSAGE =
   'Marking a merge request ready requires a newer Orca server. Update the server and try again.'
-export const WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY =
-  'worktree.visibility-defaults.v1' as const
-export const WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY =
-  'worktree.visibility-source-defaults.v1' as const
-// Why: Git's checkout delete outlives worktree.rm's older client timeouts. A client with this waits
-// for the reply and shows `removing` rows as Deleting; one without it is answered on acceptance and
-// would re-show that row as a normal workspace, so the host leaves such rows out of its listings.
-export const WORKTREE_BACKGROUND_REMOVAL_RUNTIME_CAPABILITY =
-  'worktree.background-removal.v1' as const
 // Why: older hosts discard preflight.detectAgents params and probe their own PATH, so a client
 // must not read that answer as the workspace's (a WSL project on a Windows host differs).
 export const PREFLIGHT_WORKSPACE_SCOPED_RUNTIME_CAPABILITY =
@@ -339,11 +314,9 @@ export const NOTIFICATIONS_REMOTE_PUSH_RUNTIME_CAPABILITY = 'notifications.remot
 // Generic native clients include the CLI and must not claim Electron-only page
 // placement support.
 export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
+  ...WORKTREE_RUNTIME_CLIENT_CAPABILITIES,
   SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY,
   AGENT_SESSION_BOUNDARY_RUNTIME_CAPABILITY,
-  WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY,
-  WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY,
-  WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY,
   REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY,
   ...AUTOMATION_RUNTIME_CLIENT_CAPABILITIES,
   AGENT_LAUNCH_RUNTIME_CAPABILITY
@@ -353,6 +326,7 @@ export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
   'git.antigravity-configured-model.v1' as const
 
 export const RUNTIME_CAPABILITIES = [
+  ...WORKTREE_RUNTIME_CAPABILITIES,
   ...ORCAD_RUNTIME_CAPABILITIES,
   ...DEVICE_KEY_RUNTIME_CAPABILITIES,
   QODER_OWNED_TERMINAL_CREATE_CAPABILITY,
@@ -380,10 +354,7 @@ export const RUNTIME_CAPABILITIES = [
   PROJECT_HOST_SETUP_RUNTIME_CAPABILITY,
   TASK_SOURCE_CONTEXT_RUNTIME_CAPABILITY,
   WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY,
-  WORKTREE_PROVISIONED_ROOT_RUNTIME_CAPABILITY,
-  WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY,
   ...WORKSPACE_ATTACHMENT_RUNTIME_CAPABILITIES,
-  WORKTREE_GITHUB_PR_SUPPRESSION_RUNTIME_CAPABILITY,
   REPO_SEARCH_QUALIFIED_REFS_RUNTIME_CAPABILITY,
   FOLDER_WORKSPACE_PATH_STATUS_RUNTIME_CAPABILITY,
   LINEAR_ISSUE_ATTRIBUTE_FILTER_RUNTIME_CAPABILITY,
@@ -396,8 +367,6 @@ export const RUNTIME_CAPABILITIES = [
   TERMINAL_SPAWN_INTENT_RUNTIME_CAPABILITY,
   RUNTIME_AUTOMATIC_WORK_RUNTIME_CAPABILITY,
   TERMINAL_QUICK_COMMANDS_RUNTIME_CAPABILITY,
-  WORKTREE_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY,
-  WORKTREE_ARCHIVE_FAILURE_BLOCKING_RUNTIME_CAPABILITY,
   TERMINAL_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY,
   TERMINAL_CREATE_SHELL_SELECTION_RUNTIME_CAPABILITY,
   SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY,
@@ -433,8 +402,6 @@ export const RUNTIME_CAPABILITIES = [
   FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY,
   GITHUB_MARK_PR_READY_RUNTIME_CAPABILITY,
   GITLAB_READY_FOR_REVIEW_RUNTIME_CAPABILITY,
-  WORKTREE_VISIBILITY_DEFAULTS_RUNTIME_CAPABILITY,
-  WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY,
   ACCOUNT_IMPORT_RUNTIME_CAPABILITY,
   CLAUDE_SIGN_IN_RUNTIME_CAPABILITY,
   ANTIGRAVITY_ACCOUNTS_RUNTIME_CAPABILITY,

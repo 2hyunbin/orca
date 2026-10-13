@@ -1,3 +1,4 @@
+import { WorktreeRemove } from '../../../shared/rpc-contract/worktree-params'
 import type { WebSocket } from 'ws'
 import type {
   PairingGetEndpointsParams,
@@ -48,6 +49,16 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     const target = parseExecutionHostId(typeof executionHost === 'string' ? executionHost : null)
     if (target?.kind === 'local' || target?.kind === 'ssh') {
       return false
+    }
+    if (target?.kind === 'runtime' && request.method === 'worktree.rm') {
+      const params = WorktreeRemove.safeParse({
+        ...(typeof request.params === 'object' && request.params !== null ? request.params : {}),
+        hostId: target.id
+      })
+      if (params.success && this.runtime.ownsRecipeWorkspaceRemoval?.(params.data)) {
+        request.params = params.data
+        return false
+      }
     }
     // Why: the phone tags every call on a workspace screen; only this Mac's routing table decides.
     if (target && MOBILE_RPC_METHOD_ROUTES.get(request.method) !== 'execution-host') {

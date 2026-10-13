@@ -1,3 +1,4 @@
+import type { RecipeWorkspaceRemoveParams } from '../ephemeral-vm-workspace-removal'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
@@ -27,6 +28,28 @@ import type { RuntimeReferenceFindParams } from '../../shared/runtime-reference-
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 
 class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
+  private recipeWorkspaceRemoval: {
+    owns: (params: RecipeWorkspaceRemoveParams) => boolean
+    remove: (params: RecipeWorkspaceRemoveParams) => Promise<{ removed: true }>
+  } | null = null
+
+  setRecipeWorkspaceRemoval(
+    removal: NonNullable<OrcaRuntimeService['recipeWorkspaceRemoval']>
+  ): void {
+    this.recipeWorkspaceRemoval = removal
+  }
+
+  ownsRecipeWorkspaceRemoval(params: RecipeWorkspaceRemoveParams): boolean {
+    return this.recipeWorkspaceRemoval?.owns(params) ?? false
+  }
+
+  removeRecipeWorkspace(params: RecipeWorkspaceRemoveParams): Promise<{ removed: true }> {
+    if (!this.recipeWorkspaceRemoval) {
+      throw new Error('Recipe workspace removal is unavailable.')
+    }
+    return this.recipeWorkspaceRemoval.remove(params)
+  }
+
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
       this.requireStore(),

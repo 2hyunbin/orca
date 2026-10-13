@@ -210,3 +210,25 @@ describe('worktree.rm host qualification', () => {
     expect(runtime.removeManagedWorktree).not.toHaveBeenCalled()
   })
 })
+
+it('runs an owned recipe removal on the provisioning host instead of deleting locally', async () => {
+  const runtime = makeRuntime()
+  const removeRecipeWorkspace = vi.fn().mockResolvedValue({ removed: true })
+  Object.assign(runtime, {
+    ownsRecipeWorkspaceRemoval: vi.fn().mockReturnValue(true),
+    removeRecipeWorkspace
+  })
+  const dispatcher = new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
+  const response = await dispatcher.dispatch(
+    makeRequest({
+      worktree: `id:${WORKTREE_ID}`,
+      hostId: 'runtime:env-a',
+      force: true
+    })
+  )
+  expect(response).toMatchObject({ ok: true, result: { removed: true } })
+  expect(removeRecipeWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({ hostId: 'runtime:env-a' })
+  )
+  expect(runtime.removeManagedWorktree).not.toHaveBeenCalled()
+})
