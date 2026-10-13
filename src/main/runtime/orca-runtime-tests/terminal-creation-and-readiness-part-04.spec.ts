@@ -586,7 +586,8 @@ describe('OrcaRuntimeService', () => {
         { id: 'group-left', worktreeId: TEST_WORKTREE_ID, activeTabId: null, tabOrder: [] },
         { id: 'group-right', worktreeId: TEST_WORKTREE_ID, activeTabId: null, tabOrder: [] }
       ],
-      { cols: 120, rows: 40 }
+      // Side by side: the columns are split between the two groups.
+      { cols: 119, rows: 40 }
     ]
   ])(
     'sizes a workspace the window has not shown, with %s, from the single-group size',
@@ -594,7 +595,15 @@ describe('OrcaRuntimeService', () => {
       const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
       const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
         ...getDefaultWorkspaceSession(),
-        ...(tabGroups ? { tabGroups: { [TEST_WORKTREE_ID]: tabGroups } } : {})
+        ...(tabGroups ? { tabGroups: { [TEST_WORKTREE_ID]: tabGroups } } : {}),
+        tabGroupLayouts: {
+          [TEST_WORKTREE_ID]: {
+            type: 'split',
+            direction: 'horizontal',
+            first: { type: 'leaf', groupId: 'group-left' },
+            second: { type: 'leaf', groupId: 'group-right' }
+          }
+        }
       })
       const runtime = new OrcaRuntimeService(runtimeStore)
       runtime.setPtyController({

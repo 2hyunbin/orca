@@ -5,6 +5,7 @@ import { createDesktopTerminal } from './orca-runtime-create-terminal-desktop'
 import { buildRuntimeAgentTeamsLaunchPlan } from './orca-runtime-agent-teams-launch-plan'
 import { createPtySpawnCommitReporter } from './orca-runtime-report-pty-spawn-commit'
 import { recordPtySurface, spawnSurfaceClaimSequence } from './pty-recorded-surface-topology'
+import { UNMEASURED_GRID_SIZE, unshownWorkspaceGridSize } from './unshown-workspace-grid-size'
 
 export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
   async createTerminal(
@@ -39,17 +40,13 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
         launchOpts.targetGroupId ??
         this.mobileSessionTabsByWorktree.get(workspace.id)?.activeGroupId ??
         session?.activeGroupIdByWorktree?.[workspace.id]
-      // A workspace not shown since launch has no measured group; with at most one group, its tab
-      // opens in a lone group, which every workspace sizes alike.
-      const singleGroupSize =
-        (session?.tabGroups?.[workspace.id]?.length ?? 0) <= 1
-          ? this.singleGroupWorkspaceGridSize
-          : undefined
-      // Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), a
-      // multi-group workspace not shown since launch, or no pane at the default font mounted yet.
-      // #1707's original size.
-      const initialSize = (groupId && this.terminalGroupGridSizes?.[groupId]) ||
-        singleGroupSize || { cols: 120, rows: 40 }
+      const unshownSize = unshownWorkspaceGridSize(
+        this.singleGroupWorkspaceGridSize,
+        session?.tabGroups?.[workspace.id]?.length ?? 0,
+        session?.tabGroupLayouts?.[workspace.id]
+      )
+      const initialSize =
+        (groupId && this.terminalGroupGridSizes?.[groupId]) || unshownSize || UNMEASURED_GRID_SIZE
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
