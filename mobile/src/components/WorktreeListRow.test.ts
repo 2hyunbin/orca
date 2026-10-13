@@ -119,7 +119,6 @@ const baseItem: TestItem = {
   branch: 'feature/mobile-list',
   displayName: 'mobile-list',
   liveTerminalCount: 1,
-  preview: 'Waiting',
   unread: false,
   linkedPR: null,
   agents: [agent()],
@@ -151,7 +150,6 @@ describe('memoized worktree rows', () => {
 
     let expectedRenders = 1
     const liveUpdates: TestItem[] = [
-      { ...baseItem, preview: 'Running tests' },
       { ...baseItem, unread: true },
       { ...baseItem, lastOutputAt: 2_000 },
       { ...baseItem, agents: [agent({ state: 'waiting', updatedAt: 2_000 })] },

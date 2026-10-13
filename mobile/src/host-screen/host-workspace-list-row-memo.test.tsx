@@ -57,7 +57,6 @@ function worktree(id: string, overrides: Partial<Worktree> = {}): Worktree {
     path: id,
     liveTerminalCount: 1,
     hasAttachedPty: true,
-    preview: '$ codex',
     unread: false,
     isPinned: false,
     linkedPR: null,
@@ -116,7 +115,7 @@ describe('host list rows across polls', () => {
     })
     rowRenders.mockClear()
 
-    const changed = [rows[0]!, { ...rows[1]!, preview: 'Running tests' }, rows[2]!]
+    const changed = [rows[0]!, { ...rows[1]!, branch: 'feature/b-renamed' }, rows[2]!]
     act(() => tree!.update(createElement(HostWorkspaceList, listProps(changed))))
 
     expect(rowRenders.mock.calls.map(([comment]) => comment)).toEqual(['b'])
