@@ -319,7 +319,18 @@
       "codexSharedServerWarning": {
         "title": "Warn when a Codex tab shares a server",
         "description": "Shows a notice on a Codex you started yourself when it shares a server with other tabs, because its agent status may be wrong."
-      }
+      },
+      "environmentName": "Environment variable name",
+      "environmentValue": "Value for {{name}}",
+      "savedEnvironment": "Saved value · enter to replace",
+      "newEnvironment": "Value",
+      "removeEnvironment": "Remove",
+      "loadingHost": "Loading agent settings…",
+      "updateHost": "Update this server to edit its agent launch settings.",
+      "readFailed": "Couldn’t read agent settings. Check the host connection and try again.",
+      "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
+      "hostDefaults": "Defaults for new agents on the selected host.",
+      "save": "Save"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",
@@ -19698,7 +19709,6 @@
   "projectField": {
     "updateFailed": "Failed to update project field"
   },
-  "settings.appearance.chat.title": "Chat",
   "mediaPreview": {
     "unavailable": "Unable to play this media file. The file may be unavailable or use an unsupported codec.",
     "openFailed": "Could not open this file in the default app.",
@@ -19779,17 +19789,6 @@
       "updateRuntimeSafely": "Update the remote runtime to safely change workspace links"
     }
   },
-  "settings.agents.environmentName": "Environment variable name",
-  "settings.agents.environmentValue": "Value for {{name}}",
-  "settings.agents.savedEnvironment": "Saved value · enter to replace",
-  "settings.agents.newEnvironment": "Value",
-  "settings.agents.removeEnvironment": "Remove",
-  "settings.agents.loadingHost": "Loading agent settings…",
-  "settings.agents.updateHost": "Update this server to edit its agent launch settings.",
-  "settings.agents.readFailed": "Couldn’t read agent settings. Check the host connection and try again.",
-  "settings.agents.saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
-  "settings.agents.hostDefaults": "Defaults for new agents on the selected host.",
-  "settings.agents.save": "Save",
   "tabHoverCard": {
     "browser": "Browser",
     "editor": "Editor",

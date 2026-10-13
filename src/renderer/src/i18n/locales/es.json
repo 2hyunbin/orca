@@ -151,7 +151,18 @@
       "codexSharedServerWarning": {
         "title": "Avisar cuando una pestaña de Codex comparte un servidor",
         "description": "Muestra un aviso en un Codex que usted mismo inició cuando comparte un servidor con otras pestañas, porque su estado de agente puede ser incorrecto."
-      }
+      },
+      "environmentName": "Nombre de la variable de entorno",
+      "environmentValue": "Valor de {{name}}",
+      "savedEnvironment": "Valor guardado · escribe para reemplazarlo",
+      "newEnvironment": "Valor",
+      "removeEnvironment": "Eliminar",
+      "loadingHost": "Cargando la configuración de agentes…",
+      "updateHost": "Actualiza este servidor para editar su configuración de inicio de agentes.",
+      "readFailed": "No se pudo leer la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
+      "saveFailed": "No se pudo guardar la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
+      "hostDefaults": "Valores predeterminados para nuevos agentes en el host seleccionado.",
+      "save": "Guardar"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "enlace simbólico",
@@ -19519,16 +19530,5 @@
   },
   "projectField": {
     "updateFailed": "No se pudo actualizar el campo del proyecto"
-  },
-  "settings.agents.environmentName": "Nombre de la variable de entorno",
-  "settings.agents.environmentValue": "Valor de {{name}}",
-  "settings.agents.savedEnvironment": "Valor guardado · escribe para reemplazarlo",
-  "settings.agents.newEnvironment": "Valor",
-  "settings.agents.removeEnvironment": "Eliminar",
-  "settings.agents.loadingHost": "Cargando la configuración de agentes…",
-  "settings.agents.updateHost": "Actualiza este servidor para editar su configuración de inicio de agentes.",
-  "settings.agents.readFailed": "No se pudo leer la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
-  "settings.agents.saveFailed": "No se pudo guardar la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
-  "settings.agents.hostDefaults": "Valores predeterminados para nuevos agentes en el host seleccionado.",
-  "settings.agents.save": "Guardar"
+  }
 }

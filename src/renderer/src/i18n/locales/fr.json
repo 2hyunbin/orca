@@ -252,7 +252,18 @@
       "codexSharedServerWarning": {
         "title": "Avertir lorsqu'un onglet Codex partage un serveur",
         "description": "Affiche un avis sur un Codex que vous avez démarré vous-même lorsqu'il partage un serveur avec d'autres onglets, car son statut d'agent peut être erroné."
-      }
+      },
+      "environmentName": "Nom de la variable d’environnement",
+      "environmentValue": "Valeur de {{name}}",
+      "savedEnvironment": "Valeur enregistrée · saisir pour remplacer",
+      "newEnvironment": "Valeur",
+      "removeEnvironment": "Supprimer",
+      "loadingHost": "Chargement des paramètres des agents…",
+      "updateHost": "Mettez ce serveur à jour pour modifier ses paramètres de lancement des agents.",
+      "readFailed": "Impossible de lire les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
+      "saveFailed": "Impossible d’enregistrer les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
+      "hostDefaults": "Paramètres par défaut des nouveaux agents sur l’hôte sélectionné.",
+      "save": "Enregistrer"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "lien symbolique",
@@ -19520,16 +19531,5 @@
   },
   "projectField": {
     "updateFailed": "Échec de la mise à jour du champ du projet"
-  },
-  "settings.agents.environmentName": "Nom de la variable d’environnement",
-  "settings.agents.environmentValue": "Valeur de {{name}}",
-  "settings.agents.savedEnvironment": "Valeur enregistrée · saisir pour remplacer",
-  "settings.agents.newEnvironment": "Valeur",
-  "settings.agents.removeEnvironment": "Supprimer",
-  "settings.agents.loadingHost": "Chargement des paramètres des agents…",
-  "settings.agents.updateHost": "Mettez ce serveur à jour pour modifier ses paramètres de lancement des agents.",
-  "settings.agents.readFailed": "Impossible de lire les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
-  "settings.agents.saveFailed": "Impossible d’enregistrer les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
-  "settings.agents.hostDefaults": "Paramètres par défaut des nouveaux agents sur l’hôte sélectionné.",
-  "settings.agents.save": "Enregistrer"
+  }
 }
