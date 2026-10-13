@@ -60,8 +60,10 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
       targets,
       restored.map((session) => session.sessionId)
     )
-    // Past the seed, projecting records nothing.
+    // Past the seed, projecting records nothing in the index. A chat closes out of both the index
+    // and the layout, so one listed here without a saved tab predates saving it: give it one.
     for (const session of restored) {
+      this.saveWindowlessAgentSessionTab(session.workspaceId, session)
       this.projectStructuredAgentSessionTab({ ...session, activate: false, notify: false })
     }
     const wasUnverifiable = this.structuredAgentSessionInventoryUnverifiable
@@ -97,6 +99,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
           })
         })
     }
+    this.saveWindowlessAgentSessionTab(input.workspaceId, input)
     this.projectStructuredAgentSessionTab(input)
   }
 

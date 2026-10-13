@@ -15,6 +15,10 @@ import { applyBrowserSessionTabSelection } from './browser-session-tab-selection
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-tab-retirement'
+import { withClosedAgentSessionTab, withOpenedAgentSessionTab } from './agent-session-tab-layout'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { ExecutionHostId } from '../../shared/execution-host'
+import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
   protected async closeStructuredAgentSessionTab(
@@ -60,6 +64,9 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
       if (!nextSnapshot) {
         continue
       }
+      this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
+        withClosedAgentSessionTab(hostId, session, worktreeId, sessionId)
+      )
       this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
       this.emitMobileSessionTabsSnapshot(nextSnapshot)
       return true
@@ -242,6 +249,41 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
         options.caller.navigation,
         options.caller.clientNavigationId
       )
+    }
+  }
+
+  /** Saves a chat's tab in a windowless host's layout, where it is listed from once read there. */
+  protected saveWindowlessAgentSessionTab(
+    worktreeId: string,
+    chat: { sessionId: string; agent: StructuredAgentId }
+  ): void {
+    this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
+      withOpenedAgentSessionTab(hostId, session, worktreeId, chat)
+    )
+  }
+
+  // A window saves its own layout whole, chat tabs included; only a host with none saves them here.
+  private saveWindowlessAgentSessionTabLayout(
+    worktreeId: string,
+    change: (
+      hostId: ExecutionHostId,
+      session: WorkspaceSessionState
+    ) => WorkspaceSessionState | null
+  ): void {
+    if (this.getAvailableAuthoritativeWindow()) {
+      return
+    }
+    try {
+      const session = this.getWorkspaceSessionForWorktree(worktreeId)
+      const next = session
+        ? change(this.getWorkspaceSessionHostIdForWorktree(worktreeId), session)
+        : null
+      if (next) {
+        this.setWorkspaceSessionForWorktree(worktreeId, next)
+      }
+    } catch (error) {
+      // The chat itself opened or closed; a layout that cannot be written must not undo that.
+      console.warn('[structured-agent-session] could not save a chat tab in the layout:', error)
     }
   }
 }
