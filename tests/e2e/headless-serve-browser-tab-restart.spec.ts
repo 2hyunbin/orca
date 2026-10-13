@@ -36,11 +36,16 @@ async function browserRows(client: RuntimeClient, worktree: string) {
   )
 }
 
+async function liveTabs(client: RuntimeClient, worktree: string) {
+  const listed = await client.call<{ tabs: { browserPageId: string; url: string }[] }>(
+    'browser.tabList',
+    { worktree }
+  )
+  return listed.result.tabs
+}
+
 async function livePageIds(client: RuntimeClient, worktree: string): Promise<string[]> {
-  const listed = await client.call<{ tabs: { browserPageId: string }[] }>('browser.tabList', {
-    worktree
-  })
-  return listed.result.tabs.map((tab) => tab.browserPageId)
+  return (await liveTabs(client, worktree)).map((tab) => tab.browserPageId)
 }
 
 test('a serve browser tab survives a restart and starts when opened', async () => {
@@ -70,12 +75,13 @@ test('a serve browser tab survives a restart and starts when opened', async () =
     expect(await livePageIds(cli, worktree)).toEqual([])
 
     // Driving it by page id, as an old client's stream does, starts it at that address.
-    const snapshot = await phone.call<{ url?: string }>('browser.snapshot', {
-      worktree,
-      page: pageId
-    })
-    expect(snapshot.result.url).toBe(`${page.url}/next`)
+    await phone.call('browser.snapshot', { worktree, page: pageId })
     expect(await livePageIds(cli, worktree)).toEqual([pageId])
+    await expect
+      .poll(
+        async () => (await liveTabs(cli, worktree)).find((tab) => tab.browserPageId === pageId)?.url
+      )
+      .toBe(`${page.url}/next`)
 
     await phone.call('session.tabs.close', { worktree, tabId: pageId, reason: 'user' })
     await expect.poll(async () => browserRows(phone, worktree)).toEqual([])
