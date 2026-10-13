@@ -1,19 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setMainHttpClient } from '../network/http-client'
 import { fetchClaudeOAuthUsage } from './claude-oauth-usage-request'
 
-const { netFetchMock } = vi.hoisted(() => ({ netFetchMock: vi.fn() }))
-
-vi.mock('electron', () => ({
-  net: { fetch: netFetchMock },
-  session: { defaultSession: {} }
-}))
+const fetchMock = vi.fn()
 
 vi.mock('../network/proxy-settings', () => ({
   ensureElectronProxyFromEnvironment: vi.fn(async () => {})
 }))
 
+setMainHttpClient({ fetch: fetchMock, proxySession: () => null })
+
 async function fetchUsageResponse(body: string) {
-  netFetchMock.mockResolvedValueOnce(new Response(body, { status: 200 }))
+  fetchMock.mockResolvedValueOnce(new Response(body, { status: 200 }))
   return fetchClaudeOAuthUsage('oauth-token')
 }
 
@@ -23,7 +21,7 @@ describe('Claude OAuth usage extra usage', () => {
   })
 
   it('maps the usage-credits spend object into a capped balance in major units', async () => {
-    netFetchMock.mockResolvedValueOnce(
+    fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           five_hour: { utilization: 10 },
@@ -56,7 +54,7 @@ describe('Claude OAuth usage extra usage', () => {
   })
 
   it('keeps the usage-credits cap visible without inventing an out-of-credits balance', async () => {
-    netFetchMock.mockResolvedValueOnce(
+    fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           five_hour: { utilization: 10 },
@@ -89,7 +87,7 @@ describe('Claude OAuth usage extra usage', () => {
   })
 
   it('keeps legacy extra_usage spend data without inventing a missing balance', async () => {
-    netFetchMock.mockResolvedValueOnce(
+    fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           five_hour: { utilization: 10 },
