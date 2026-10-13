@@ -43,8 +43,13 @@ describe('fingerprintPluginConsent', () => {
   })
 
   it('changes when a panel-only plugin gains a trusted Node worker', () => {
-    const panelOnly = fingerprintPluginConsent({ main: undefined, capabilities: [] })
-    const withWorker = fingerprintPluginConsent({ main: 'worker.js', capabilities: [] })
+    const contributes = { panels: [{ id: 'panel', title: 'Panel', entry: 'panel.html' }] }
+    const panelOnly = fingerprintPluginConsent({ main: undefined, capabilities: [], contributes })
+    const withWorker = fingerprintPluginConsent({
+      main: 'worker.js',
+      capabilities: [],
+      contributes
+    })
 
     expect(withWorker).not.toBe(panelOnly)
     const lists = {
@@ -55,13 +60,44 @@ describe('fingerprintPluginConsent', () => {
     expect(needsReconsent('orca-samples.demo', withWorker, lists)).toBe(true)
   })
 
-  it('preserves capability-only fingerprints for existing panel plugins', () => {
+  it('preserves capability-only fingerprints for existing data packs', () => {
     const capabilities = [workspaceRead, storage]
     const legacy = `sha256-${createHash('sha256')
       .update(canonicalizeCapabilitySet(capabilities))
       .digest('base64')}`
 
     expect(fingerprintPluginConsent({ main: undefined, capabilities })).toBe(legacy)
+  })
+
+  it('requires fresh approval when a data pack gains sandboxed UI without new capabilities', () => {
+    const data = { main: undefined, capabilities: [] }
+    const approved = fingerprintPluginConsent(data)
+    const changed = fingerprintPluginConsent({
+      ...data,
+      contributes: { panels: [{ id: 'panel', title: 'Panel', entry: 'panel.html' }] }
+    })
+    const lists = { pluginConsents: { 'orca-samples.demo': approved }, disabledPlugins: [] }
+
+    expect(getPluginActivationState('orca-samples.demo', changed, lists)).toBe('pending')
+    expect(needsReconsent('orca-samples.demo', changed, lists)).toBe(true)
+  })
+
+  it('does not silently migrate legacy panel approvals that omitted executable UI', () => {
+    const capabilities = [workspaceRead]
+    const legacy = `sha256-${createHash('sha256')
+      .update(canonicalizeCapabilitySet(capabilities))
+      .digest('base64')}`
+    const current = fingerprintPluginConsent({
+      capabilities,
+      contributes: { panels: [{ id: 'panel', title: 'Panel', entry: 'panel.html' }] }
+    })
+
+    expect(
+      getPluginActivationState('orca-samples.demo', current, {
+        pluginConsents: { 'orca-samples.demo': legacy },
+        disabledPlugins: []
+      })
+    ).toBe('pending')
   })
 
   it('requires re-consent when instructional content bytes change', () => {

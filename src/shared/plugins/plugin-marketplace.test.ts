@@ -167,6 +167,26 @@ describe('marketplace provenance contracts', () => {
     })
   })
 
+  it.each([
+    'https://github.com/stablyai/nested/orca-plugins.git',
+    'https://github.com//stablyai/orca-plugins.git',
+    'https://github.com/stablyai/orca-plugins.git?repository=other',
+    'https://github.com/stablyai/orca-plugins.git#other',
+    'https://user:password@github.com/stablyai/orca-plugins.git',
+    'https://github.com:8443/stablyai/orca-plugins.git',
+    'ssh://other@github.com/stablyai/orca-plugins.git',
+    'GIT@github.com:stablyai/orca-plugins.git',
+    'https://github.com/stablyai/orca-plugins.git?',
+    'https://github.com/stablyai/orca-plugins.git#',
+    'ssh://git@github.com/stablyai/orca-plugins.git?',
+    'ssh://git@github.com/stablyai/orca-plugins.git#',
+    'ssh://git@github.com:2222/stablyai/orca-plugins.git',
+    'git@github.com:stablyai/nested/orca-plugins.git'
+  ])('does not award official provenance to an ambiguous address: %s', (url) => {
+    expect(isOfficialOrganizationGitSource(url)).toBe(false)
+    expect(isOfficialMarketplaceGitSource(url)).toBe(false)
+  })
+
   it('prevents an untrusted listing from self-awarding trust metadata', () => {
     expect(pluginMarketplaceTrustMetadataSchema.parse({ official: true, bundled: true })).toEqual({
       official: true,
@@ -177,12 +197,14 @@ describe('marketplace provenance contracts', () => {
     ).toBe(false)
   })
 
-  it('marks listings with a deferred contribution category as unsupported', () => {
+  it('marks listings with a dropped contribution category as unsupported', () => {
     expect(isMarketplaceListingSupported(['vm-recipes', 'official'])).toBe(true)
     expect(isMarketplaceListingSupported(['keybindings'])).toBe(true)
     expect(isMarketplaceListingSupported([])).toBe(true)
-    for (const deferred of ['themes', 'icons', 'icon-themes', 'terminal-themes', 'skills']) {
-      expect(isMarketplaceListingSupported([deferred, 'official'])).toBe(false)
+    // Theming is restored in this pass, so only skills stay unreachable.
+    for (const restored of ['themes', 'icons', 'icon-themes', 'terminal-themes']) {
+      expect(isMarketplaceListingSupported([restored, 'official'])).toBe(true)
     }
+    expect(isMarketplaceListingSupported(['skills', 'official'])).toBe(false)
   })
 })

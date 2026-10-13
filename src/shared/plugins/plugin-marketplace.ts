@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { isAllowedPluginGitUrl } from './plugin-install-lockfile'
+import { pluginCatalogReleaseSchema } from './plugin-catalog-release'
 import { isQualifiedPluginKey } from './plugin-manifest'
 
 export const PLUGIN_MARKETPLACE_FILENAME = 'orca-marketplace.json'
@@ -11,18 +12,12 @@ export const OFFICIAL_PLUGIN_ID_PREFIX = 'orca-'
 export const OFFICIAL_MARKETPLACE_OWNER = 'stablyai'
 export const OFFICIAL_MARKETPLACE_REPOSITORY = 'orca-plugins'
 
-// Why: theme/icon/skill contributions were deferred, so `contributes` now
-// rejects them and any plugin declaring one fails to install wholesale. The
-// shared marketplace index (which this build does not control) still advertises
-// such packs; hide listings that carry these categories so users never hit a
-// dead "install" path until the marketplace catches up.
-export const UNSUPPORTED_MARKETPLACE_CATEGORIES: readonly string[] = [
-  'themes',
-  'icons',
-  'icon-themes',
-  'terminal-themes',
-  'skills'
-]
+// Why: skill contributions were dropped, so `contributes` now rejects them and
+// any plugin declaring one fails to install wholesale. The shared marketplace
+// index (which this build does not control) still advertises such packs; hide
+// listings that carry these categories so users never hit a dead "install" path
+// until the marketplace catches up.
+export const UNSUPPORTED_MARKETPLACE_CATEGORIES: readonly string[] = ['skills']
 
 export function isMarketplaceListingSupported(categories: readonly string[]): boolean {
   return !categories.some((category) => UNSUPPORTED_MARKETPLACE_CATEGORIES.includes(category))
@@ -78,7 +73,7 @@ export const pluginMarketplaceEntrySchema = z
     }
   })
 
-export const pluginMarketplaceSchema = z
+const legacyPluginMarketplaceSchema = z
   .strictObject({
     name: z.string().min(1).max(256),
     owner: marketplaceOwnerSchema,
@@ -98,6 +93,18 @@ export const pluginMarketplaceSchema = z
     }
   })
 
+export const pluginCatalogEntrySchema = pluginMarketplaceEntrySchema.safeExtend({
+  name: z.string().min(1).max(256),
+  release: pluginCatalogReleaseSchema
+})
+
+export const pluginCatalogSchema = legacyPluginMarketplaceSchema.safeExtend({
+  formatVersion: z.literal(2),
+  plugins: z.array(pluginCatalogEntrySchema).max(PLUGIN_MARKETPLACE_ENTRY_LIMIT)
+})
+
+export const pluginMarketplaceSchema = z.union([legacyPluginMarketplaceSchema, pluginCatalogSchema])
+
 /** Host-derived trust metadata. Marketplace JSON cannot self-award either bit. */
 export const pluginMarketplaceTrustMetadataSchema = z
   .strictObject({
@@ -110,7 +117,7 @@ export const pluginMarketplaceTrustMetadataSchema = z
   })
 
 export type PluginMarketplace = z.infer<typeof pluginMarketplaceSchema>
-export type PluginMarketplaceEntry = z.infer<typeof pluginMarketplaceEntrySchema>
+export type PluginMarketplaceEntry = PluginMarketplace['plugins'][number]
 export type PluginMarketplaceGitSource = z.infer<typeof pluginMarketplaceGitSourceSchema>
 export type PluginMarketplaceTrustMetadata = z.infer<typeof pluginMarketplaceTrustMetadataSchema>
 
@@ -193,15 +200,46 @@ function repositoryIdentity(host: string, repositoryPath: string): GitRepository
 }
 
 export function isOfficialOrganizationGitSource(url: string): boolean {
-  const source = parseGitRepositoryIdentity(url)
+  const source = officialGitRepositoryIdentity(url)
   return source?.host === 'github.com' && source.owner.toLowerCase() === OFFICIAL_PLUGIN_PUBLISHER
 }
 
 export function isOfficialMarketplaceGitSource(url: string): boolean {
-  const source = parseGitRepositoryIdentity(url)
+  const source = officialGitRepositoryIdentity(url)
   return (
     source?.host === 'github.com' &&
     source.owner.toLowerCase() === OFFICIAL_MARKETPLACE_OWNER &&
     source.repository.toLowerCase() === OFFICIAL_MARKETPLACE_REPOSITORY
   )
+}
+
+function officialGitRepositoryIdentity(url: string): GitRepositoryIdentity | null {
+  const trimmed = url.trim()
+  if (trimmed.includes('?') || trimmed.includes('#')) {
+    return null
+  }
+  const scp = /^git@github\.com:([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/?$/i.exec(trimmed)
+  if (scp) {
+    return trimmed.startsWith('git@') ? repositoryIdentity('github.com', scp[1]!) : null
+  }
+  try {
+    const parsed = new URL(trimmed)
+    if (
+      parsed.hostname !== 'github.com' ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash ||
+      !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/.test(parsed.pathname)
+    ) {
+      return null
+    }
+    const canonicalTransport =
+      (parsed.protocol === 'https:' && !parsed.username && !parsed.port) ||
+      (parsed.protocol === 'ssh:' &&
+        parsed.username === 'git' &&
+        (!parsed.port || parsed.port === '22'))
+    return canonicalTransport ? repositoryIdentity(parsed.hostname, parsed.pathname) : null
+  } catch {
+    return null
+  }
 }

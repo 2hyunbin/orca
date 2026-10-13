@@ -2,12 +2,18 @@ import { z } from 'zod'
 import { pluginCapabilitySchema } from './plugin-capabilities'
 import {
   PLUGIN_AGENT_PROFILE_LIMIT,
+  PLUGIN_ICON_THEME_LIMIT,
   PLUGIN_KEYBINDING_LIMIT,
   PLUGIN_LANGUAGE_PACK_LIMIT,
+  PLUGIN_THEME_LIMIT,
+  PLUGIN_TERMINAL_THEME_LIMIT,
   PLUGIN_VM_RECIPE_LIMIT,
   pluginAgentProfileContributionSchema,
+  pluginIconThemeContributionSchema,
   pluginKeybindingContributionSchema,
   pluginLanguagePackContributionSchema,
+  pluginThemeContributionSchema,
+  pluginTerminalThemeContributionSchema,
   pluginVmRecipeContributionSchema
 } from './plugin-content-pack-contributions'
 import {
@@ -15,10 +21,30 @@ import {
   pluginIdSchema,
   pluginRelativePathSchema
 } from './plugin-manifest-fields'
+import {
+  pluginExecutionProfileSchema,
+  validatePluginExecutionProfile
+} from './plugin-execution-profile'
 import { validatePluginManifestContributions } from './plugin-manifest-contribution-validation'
+import {
+  PLUGIN_SYNTAX_LANGUAGE_LIMIT,
+  PLUGIN_SYNTAX_GRAMMAR_LIMIT,
+  pluginSyntaxLanguageSchema,
+  pluginSyntaxGrammarSchema,
+  validatePluginSyntaxContributions
+} from './plugin-syntax-contributions'
+import {
+  PLUGIN_VIEWER_CONTRIBUTION_LIMIT,
+  pluginViewerContributionSchema,
+  validatePluginViewerContributions
+} from './plugin-viewer-contributions'
+import {
+  PLUGIN_ENVIRONMENT_RECIPE_LIMIT,
+  pluginEnvironmentRecipeContributionSchema
+} from './plugin-environment-recipe-contributions'
 
 /**
- * Plugin manifest v1 (`orca-plugin.json` at the plugin root). The
+ * Plugin manifest v1 (legacy) and v2 (strict execution profiles) (`orca-plugin.json` at the plugin root). The
  * `contributes` key names deliberately mirror common Electron-ecosystem
  * manifest conventions so future adapters stay cheap.
  *
@@ -73,62 +99,125 @@ const eventContributionSchema = z.object({
   on: z.enum(PLUGIN_EVENT_NAMES)
 })
 
-export const pluginManifestSchema = z
-  .object({
-    manifestVersion: z.literal(1),
-    id: pluginIdSchema,
-    /** Publisher slug; canonical identity is `<publisher>.<id>` — bare-id
-     *  global uniqueness is unverifiable without a registry. */
-    publisher: pluginIdSchema,
-    name: z.string().min(1).max(256),
-    version: z.string().regex(SEMVER_RE, 'must be semver'),
-    description: z.string().max(4096).optional(),
-    author: z
-      .object({ name: z.string().min(1).max(256), url: z.string().max(2048).optional() })
-      .optional(),
-    repository: z.string().max(2048).optional(),
-    icon: pluginRelativePathSchema.optional(),
-    /** Minimum host version gate; the host refuses to load below it. */
-    engines: z.object({ orca: orcaEngineRangeSchema }),
-    /** Host-API major version this plugin targets. */
-    pluginApi: z.literal(1),
-    /** Node entry executed inside the out-of-process plugin worker. */
-    main: pluginRelativePathSchema.optional(),
-    contributes: z
-      .object({
-        panels: z.array(panelContributionSchema).max(PLUGIN_PANEL_LIMIT).default([]),
-        commands: z.array(commandContributionSchema).max(PLUGIN_COMMAND_LIMIT).default([]),
-        events: z.array(eventContributionSchema).max(PLUGIN_EVENT_SUBSCRIPTION_LIMIT).default([]),
-        languagePacks: z
-          .array(pluginLanguagePackContributionSchema)
-          .max(PLUGIN_LANGUAGE_PACK_LIMIT)
+const legacyPluginManifestObject = z.object({
+  manifestVersion: z.literal(1),
+  id: pluginIdSchema,
+  /** Publisher slug; canonical identity is `<publisher>.<id>` — bare-id
+   *  global uniqueness is unverifiable without a registry. */
+  publisher: pluginIdSchema,
+  name: z.string().min(1).max(256),
+  version: z.string().regex(SEMVER_RE, 'must be semver'),
+  description: z.string().max(4096).optional(),
+  author: z
+    .object({ name: z.string().min(1).max(256), url: z.string().max(2048).optional() })
+    .optional(),
+  repository: z.string().max(2048).optional(),
+  icon: pluginRelativePathSchema.optional(),
+  /** Minimum host version gate; the host refuses to load below it. */
+  engines: z.object({ orca: orcaEngineRangeSchema }),
+  /** Host-API major version this plugin targets. */
+  pluginApi: z.literal(1),
+  /** Node entry executed inside the out-of-process plugin worker. */
+  main: pluginRelativePathSchema.optional(),
+  contributes: z
+    .object({
+      panels: z.array(panelContributionSchema).max(PLUGIN_PANEL_LIMIT).default([]),
+      commands: z.array(commandContributionSchema).max(PLUGIN_COMMAND_LIMIT).default([]),
+      events: z.array(eventContributionSchema).max(PLUGIN_EVENT_SUBSCRIPTION_LIMIT).default([]),
+      themes: z.array(pluginThemeContributionSchema).max(PLUGIN_THEME_LIMIT).default([]),
+      iconThemes: z
+        .array(pluginIconThemeContributionSchema)
+        .max(PLUGIN_ICON_THEME_LIMIT)
+        .default([]),
+      terminalThemes: z
+        .array(pluginTerminalThemeContributionSchema)
+        .max(PLUGIN_TERMINAL_THEME_LIMIT)
+        .default([]),
+      languagePacks: z
+        .array(pluginLanguagePackContributionSchema)
+        .max(PLUGIN_LANGUAGE_PACK_LIMIT)
+        .default([]),
+      keybindings: z
+        .array(pluginKeybindingContributionSchema)
+        .max(PLUGIN_KEYBINDING_LIMIT)
+        .default([]),
+      vmRecipes: z.array(pluginVmRecipeContributionSchema).max(PLUGIN_VM_RECIPE_LIMIT).default([]),
+      agents: z
+        .array(pluginAgentProfileContributionSchema)
+        .max(PLUGIN_AGENT_PROFILE_LIMIT)
+        .default([])
+    })
+    .strict()
+    .default(() => ({
+      panels: [],
+      commands: [],
+      events: [],
+      themes: [],
+      iconThemes: [],
+      terminalThemes: [],
+      languagePacks: [],
+      keybindings: [],
+      vmRecipes: [],
+      agents: []
+    })),
+  capabilities: z.array(pluginCapabilitySchema).max(32).default([])
+})
+
+export const pluginManifestV1Schema = legacyPluginManifestObject.superRefine(
+  validatePluginManifestContributions
+)
+
+const pluginManifestV2Object = legacyPluginManifestObject
+  .extend({
+    manifestVersion: z.literal(2),
+    execution: pluginExecutionProfileSchema,
+    author: legacyPluginManifestObject.shape.author.unwrap().strict().optional(),
+    engines: legacyPluginManifestObject.shape.engines.strict(),
+    contributes: legacyPluginManifestObject.shape.contributes
+      .removeDefault()
+      .extend({
+        environmentRecipes: z
+          .array(pluginEnvironmentRecipeContributionSchema)
+          .max(PLUGIN_ENVIRONMENT_RECIPE_LIMIT)
           .default([]),
-        keybindings: z
-          .array(pluginKeybindingContributionSchema)
-          .max(PLUGIN_KEYBINDING_LIMIT)
+        fileViewers: z
+          .array(pluginViewerContributionSchema)
+          .max(PLUGIN_VIEWER_CONTRIBUTION_LIMIT)
           .default([]),
-        vmRecipes: z
-          .array(pluginVmRecipeContributionSchema)
-          .max(PLUGIN_VM_RECIPE_LIMIT)
+        languages: z
+          .array(pluginSyntaxLanguageSchema)
+          .max(PLUGIN_SYNTAX_LANGUAGE_LIMIT)
           .default([]),
-        agents: z
-          .array(pluginAgentProfileContributionSchema)
-          .max(PLUGIN_AGENT_PROFILE_LIMIT)
+        grammars: z.array(pluginSyntaxGrammarSchema).max(PLUGIN_SYNTAX_GRAMMAR_LIMIT).default([]),
+        panels: z.array(panelContributionSchema.strict()).max(PLUGIN_PANEL_LIMIT).default([]),
+        commands: z.array(commandContributionSchema.strict()).max(PLUGIN_COMMAND_LIMIT).default([]),
+        events: z
+          .array(eventContributionSchema.strict())
+          .max(PLUGIN_EVENT_SUBSCRIPTION_LIMIT)
           .default([])
       })
       .strict()
       .default(() => ({
-        panels: [],
-        commands: [],
-        events: [],
-        languagePacks: [],
-        keybindings: [],
-        vmRecipes: [],
-        agents: []
-      })),
-    capabilities: z.array(pluginCapabilitySchema).max(32).default([])
+        ...legacyPluginManifestObject.shape.contributes.parse({}),
+        languages: [],
+        grammars: [],
+        fileViewers: [],
+        environmentRecipes: []
+      }))
   })
-  .superRefine(validatePluginManifestContributions)
+  .strict()
+
+export const pluginManifestV2Schema = pluginManifestV2Object.superRefine((manifest, ctx) => {
+  validatePluginManifestContributions(manifest, ctx)
+  validatePluginExecutionProfile(manifest, ctx)
+  validatePluginSyntaxContributions(manifest.contributes, ctx)
+  validatePluginViewerContributions(manifest.contributes.fileViewers, ctx)
+})
+
+export const pluginManifestSchema = z.discriminatedUnion('manifestVersion', [
+  pluginManifestV1Schema,
+  pluginManifestV2Schema
+])
 
 export type PluginManifest = z.infer<typeof pluginManifestSchema>
 export type PluginPanelContribution = z.infer<typeof panelContributionSchema>

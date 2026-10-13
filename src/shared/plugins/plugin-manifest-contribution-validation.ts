@@ -11,9 +11,13 @@ type ContributionValidationManifest = {
     panels: IdentifiedContribution[]
     commands: (IdentifiedContribution & { action?: string; context?: 'global' | 'worktree' })[]
     events: { on: string }[]
+    themes: IdentifiedContribution[]
+    iconThemes: IdentifiedContribution[]
+    terminalThemes: IdentifiedContribution[]
     languagePacks: { locale: string }[]
     keybindings: { command: string; key: string; when?: 'global' | 'worktree' }[]
     vmRecipes: PathContribution[]
+    environmentRecipes?: PathContribution[]
     agents: PathContribution[]
   }
   capabilities: { kind: string }[]
@@ -44,7 +48,7 @@ export function validatePluginManifestContributions(
   manifest: ContributionValidationManifest,
   ctx: RefinementCtx
 ): void {
-  for (const path of ['panels', 'commands'] as const) {
+  for (const path of ['panels', 'commands', 'themes', 'iconThemes', 'terminalThemes'] as const) {
     rejectDuplicateValues(
       manifest.contributes[path],
       (entry) => (entry as IdentifiedContribution).id,
@@ -60,9 +64,9 @@ export function validatePluginManifestContributions(
     'language pack locale',
     ctx
   )
-  for (const path of ['vmRecipes', 'agents'] as const) {
+  for (const path of ['vmRecipes', 'agents', 'environmentRecipes'] as const) {
     rejectDuplicateValues(
-      manifest.contributes[path],
+      manifest.contributes[path] ?? [],
       (entry) => (entry as PathContribution).path,
       path,
       `${path} path`,
