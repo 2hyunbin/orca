@@ -15,10 +15,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  StructuredAgentSessionAdapter,
-  StructuredAgentSessionLifecycleEvent
-} from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionAdapter } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter'
 import { StructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-host'
 import { startsWhenPublished } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-instant-start.test-support'
 import { setStructuredAgentSessionHost } from '../../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
@@ -692,16 +689,16 @@ describe('cross-version structured agent sessions', () => {
     /** Phase 2 owns provider processes; the adapter is the only stub here. A ready provider
      *  proves its start once its handshake answers. */
     function adapter(host: () => StructuredAgentSessionHost): StructuredAgentSessionAdapter {
-      const proves = {
-        handleAdapterEvent: (event: StructuredAgentSessionLifecycleEvent) =>
-          handshake.then(() => host().handleAdapterEvent(event))
-      }
       return startsWhenPublished(
         {
           // Every real adapter answers this; without it adapterSupportsCreate falls through to
           // `supportsLocation`, which this fake also lacks, so the client-supplied-location gate
           // refused for the fake's silence rather than for the location.
           supportsCreate: () => true,
+          open: async () => {
+            await handshake
+            return { reportedOptions: { model: '' } }
+          },
           acquire: async ({ fence }) => {
             starts += 1
             await startGate
@@ -739,7 +736,7 @@ describe('cross-version structured agent sessions', () => {
           answerPrompt: async () => undefined,
           setOption: async () => undefined
         },
-        () => proves
+        host
       )
     }
 
