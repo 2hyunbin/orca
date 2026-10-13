@@ -13,6 +13,7 @@ import {
   mapCursorUsageSummary,
   parseCursorUsageSummary
 } from './cursor-usage-mapping'
+import { parseUsageRetryAfterMs } from './usage-retry-after'
 
 const DASHBOARD_ORIGIN = 'https://cursor.com'
 const USAGE_SUMMARY_URL = `${DASHBOARD_ORIGIN}/api/usage-summary`
@@ -101,7 +102,8 @@ async function fetchDashboardJson(
     }
   }
   if (res.status === 429) {
-    const retryAfterSeconds = Number(res.headers.get('retry-after'))
+    const nowMs = Date.now()
+    const retryAfterMs = parseUsageRetryAfterMs(res.headers.get('retry-after'), nowMs)
     return {
       kind: 'result',
       result: result('error', 'Cursor usage is rate limited right now', {
@@ -110,9 +112,7 @@ async function fetchDashboardJson(
           credentialSource: session.source,
           authProvenance: provenance,
           failureKind: 'rate-limited',
-          ...(Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-            ? { retryAtMs: Date.now() + retryAfterSeconds * 1000 }
-            : {})
+          ...(retryAfterMs !== null ? { retryAtMs: nowMs + retryAfterMs } : {})
         }
       })
     }
