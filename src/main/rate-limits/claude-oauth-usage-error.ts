@@ -1,3 +1,5 @@
+import { classifyThrownUsageRequestError } from './usage-request-failure-kind'
+
 // Why: a corrupt/hostile Retry-After must not gate usage refreshes for days.
 const MAX_RETRY_AFTER_MS = 24 * 60 * 60 * 1000
 
@@ -9,6 +11,16 @@ export class OAuthUsageError extends Error {
     readonly retryAfterMs: number | null = null
   ) {
     super(message)
+  }
+}
+
+/** The usage request threw before a usable body: a transport failure or malformed JSON. */
+export class ClaudeUsageRequestError extends Error {
+  readonly failureKind: 'network' | 'parse'
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause })
+    this.failureKind = classifyThrownUsageRequestError(cause)
   }
 }
 
