@@ -262,10 +262,13 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
     const hubRuntime = new RuntimeClient(
       await electronApp.evaluate(({ app }) => app.getPath('userData'))
     )
+    // Live shells only: the hub may keep a pty-less tab record for a moment after its shell ends.
     const hubTerminalsIn = async (dir: string): Promise<number> => {
-      const listed = await hubRuntime.call<{ terminals: { worktreeId: string }[] }>('terminal.list')
-      return listed.result.terminals.filter((terminal) =>
-        terminal.worktreeId.includes(path.basename(dir))
+      const listed = await hubRuntime.call<{
+        terminals: { worktreeId: string; ptyId: string | null }[]
+      }>('terminal.list')
+      return listed.result.terminals.filter(
+        (terminal) => terminal.ptyId !== null && terminal.worktreeId.includes(path.basename(dir))
       ).length
     }
     const hubHasRepo = async (dir: string): Promise<boolean> => {
