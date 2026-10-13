@@ -291,6 +291,8 @@ async function runAttachUnderAbort(
         startupAttempts.published(sessionId, attempt.startup.attemptId, candidate.child)
         if (candidate.child.phase === 'ready') {
           noteStructuredAgentSessionProviderStarted(context.deps, sessionId)
+        } else {
+          context.openProviderChild?.(sessionId, candidate.child)
         }
       }
       context.publishStatus?.(sessionId)

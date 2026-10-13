@@ -155,7 +155,9 @@ export class StructuredAgentSessionHost {
       now: () => this.now(),
       runtimeState: this.runtimeState,
       wakeDelivery: (sessionId) => this.conversationDelivery.loop.wake(sessionId),
-      stopStartingChild: (...args) => this.lifetime.stopStartingChild(...args)
+      stopStartingChild: (...args) => this.lifetime.stopStartingChild(...args),
+      failStartingChild: (...args) => this.lifetime.failStartingChild(...args),
+      trackOpen: (open) => this.tasks.trackAttach(open)
     })
     this.restartResume = createStructuredAgentSessionRestartResume(deps, this.sessions, {
       ...structuredAgentSessionRestartResumeSurfaces(this, this.now),
@@ -178,8 +180,7 @@ export class StructuredAgentSessionHost {
   private now = (): number => this.deps.now?.() ?? Date.now()
 
   hasSession = (sessionId: string): boolean => this.sessions.has(sessionId)
-  hasLoadedProviders = (): boolean =>
-    [...this.sessions.values()].some(({ child }) => child !== null)
+  hasLoadedProviders = () => [...this.sessions.values()].some(({ child }) => child !== null)
   sessionAgent = (sessionId: string) => this.deps.store.getRecord(sessionId)?.provider ?? null
 
   handleAdapterEvent = (event: Parameters<StructuredAgentSessionEventRecovery['handle']>[0]) =>
@@ -206,6 +207,7 @@ export class StructuredAgentSessionHost {
       tasks: this.tasks,
       reconcileLeases: (sessionId) => this.reconcileLeases(sessionId),
       serialize: (sessionId, task) => this.serialize(sessionId, task),
+      openProviderChild: this.eventRecovery.openProviderChild,
       openConversation: this.conversationDelivery.open
     }
   }

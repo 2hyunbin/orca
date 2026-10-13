@@ -25,9 +25,9 @@ import { commandReceiptScope } from '../agent-session-journal/command-receipt-sc
 import { parseAgentSessionOperationTimestamp } from '../../../shared/agent-session-host-authority'
 import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 
-type ReadyOperationPlan = Pick<
-  MutationPlan<unknown>,
-  'method' | 'fields' | 'operationIdScope' | 'acceptsWithCommandReceipt'
+type ReadyOperationPlan<T> = Pick<
+  MutationPlan<T>,
+  'method' | 'fields' | 'operationIdScope' | 'commandReceipt'
 >
 type QueuedReadyOperation<T> =
   | { result: AgentSessionMutationResult<T> }
@@ -49,7 +49,7 @@ export async function runAfterRewindStart<T>(
   context: StructuredAgentSessionMutationContext,
   callerKey: string,
   envelope: AgentSessionMutationEnvelope,
-  plan: ReadyOperationPlan,
+  plan: ReadyOperationPlan<T>,
   run: (selection: ReadyOperationSelection) => Promise<AgentSessionMutationResult<T>>
 ): Promise<AgentSessionMutationResult<T>> {
   return runWithReadyStructuredAgentSessionOperation(context, callerKey, envelope, plan, run, {
@@ -81,7 +81,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
   context: StructuredAgentSessionMutationContext,
   callerKey: string,
   envelope: AgentSessionMutationEnvelope,
-  plan: ReadyOperationPlan,
+  plan: ReadyOperationPlan<T>,
   run: (selection: ReadyOperationSelection) => Promise<AgentSessionMutationResult<T>>,
   options: {
     beforeAgent?: (
@@ -107,7 +107,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       if (options.needsAgent && !options.needsAgent(record)) {
         return { result: await run({ ok: true, child: null }) }
       }
-      if (plan.acceptsWithCommandReceipt) {
+      if (plan.commandReceipt) {
         if (parseAgentSessionOperationTimestamp(envelope.clientOperationId) === null) {
           return { result: await run({ ok: true, child: null }) }
         }
