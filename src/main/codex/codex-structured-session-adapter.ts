@@ -5,7 +5,7 @@ import { isCodexAppServerRequestError } from './codex-app-server-connection'
 import type {
   AgentSessionAcquisition,
   AgentSessionDispatchOutcome,
-  StructuredAgentSessionAcquireInput,
+  StructuredAgentSessionSpawnInput,
   StructuredAgentSessionAdapter,
   StructuredAgentSessionSetOptionInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
@@ -18,8 +18,7 @@ import { CodexStructuredSessionTeardown } from './codex-structured-session-teard
 import {
   applyCodexStructuredSessionOption,
   prepareLiveCodexSessionOptions,
-  readLiveCodexSessionOptions,
-  readCodexAcquisitionOptions
+  readLiveCodexSessionOptions
 } from './codex-structured-session-options'
 import { resolvedCodexMessageOptions } from './codex-structured-message-options'
 import {
@@ -41,7 +40,7 @@ import {
   settleCodexSendsInEndedTurn
 } from './codex-structured-turn-end-settlement'
 import { createCodexStructuredNotificationRetry } from './codex-structured-notification-retry'
-import { acquireCodexStructuredSession } from './codex-structured-session-acquire'
+import { spawnCodexStructuredSession } from './codex-structured-session-spawn'
 import { codexStoppedRequestEndWait, settleCodexRequestEndWaiters } from './codex-request-end-wait'
 import { changeCodexThreadGoal } from './codex-structured-thread-goal'
 import { startCodexTerminalStopProbe } from './codex-background-terminals'
@@ -88,8 +87,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
 
   supportsLocation = supportsCodexStructuredLocation
 
-  acquire = (input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> =>
-    acquireCodexStructuredSession({
+  spawn = (input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition> =>
+    spawnCodexStructuredSession({
       input,
       deps: this.deps,
       sessions: this.sessions,
@@ -318,12 +317,6 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
 
   prepareReadOptions = (input: { sessionId: string; fence: number }) =>
     prepareLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
-
-  readAcquisitionOptions = (input: {
-    sessionId: string
-    fence: number
-    priorOptions?: Readonly<Record<string, string>>
-  }) => readCodexAcquisitionOptions(this.session(input.sessionId), input.priorOptions)
 
   closeSession: NonNullable<StructuredAgentSessionAdapter['closeSession']> = (sessionId, cause) =>
     this.teardown.close(sessionId, { cause })

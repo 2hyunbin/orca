@@ -66,7 +66,13 @@ async function createHarness(options: { attached?: boolean } = {}) {
   const setOption = vi.fn<StructuredAgentSessionAdapter['setOption']>(async () => undefined)
   const adapter: StructuredAgentSessionAdapter = startsWhenPublished(
     {
-      acquire: async ({ fence }) => ({
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn: async ({ fence }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',
           pid: 4242,

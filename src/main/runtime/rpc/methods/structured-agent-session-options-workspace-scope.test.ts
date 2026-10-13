@@ -113,7 +113,7 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
   })
   await rig.restart({ modelCatalog })
   setStructuredAgentSessionHost(rig.host)
-  rig.adapter.acquire.mockClear()
+  rig.adapter.spawn.mockClear()
 }
 
 beforeEach(async () => {
@@ -145,7 +145,7 @@ describe('options at rest in a repo whose config may pick the model', () => {
       result: { current: { model: 'gpt-5.5' }, conversationCommands: ['clear'] }
     })
     expect(reply).not.toHaveProperty('result.current.effort')
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
   })
 
   it('names no model or effort for a client that takes an answer without one', async () => {

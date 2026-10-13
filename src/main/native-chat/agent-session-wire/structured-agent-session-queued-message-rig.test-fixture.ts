@@ -183,7 +183,7 @@ export async function createQueuedMessageTestRig(
     await result
     await eventually(async () => {
       if (host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase === 'starting') {
-        await emitStarted()
+        await proveProviderOpen()
       }
       expect((await submission(id))?.handedOverAt).toBeDefined()
     })
@@ -254,25 +254,17 @@ export async function createQueuedMessageTestRig(
     })
   }
 
-  /** The starting child proves its start, as a publish-first provider's `started` event does: the
-   *  host hands it what it held. */
+  /** The starting child proves its open before the host hands it queued work. */
   async function proveStart(): Promise<void> {
     await eventually(() =>
       expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('starting')
     )
-    await emitStarted()
+    await proveProviderOpen()
   }
 
-  function emitStarted(): Promise<void> {
-    return host.handleAdapterEvent({
-      type: 'started',
-      sessionId: SESSION,
-      fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: 'generation-1',
-      reportedOptions: { model: 'default' },
-      restoreSkippedOptions: [],
-      optionRevision: host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
-    })
+  async function proveProviderOpen(): Promise<void> {
+    provider.proveOpen()
+    await Promise.resolve()
   }
 
   async function dispose(): Promise<void> {

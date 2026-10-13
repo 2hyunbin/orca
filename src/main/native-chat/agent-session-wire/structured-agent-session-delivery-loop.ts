@@ -13,6 +13,7 @@
 // settles it first (`journal-unsent-send-hold.ts`).
 
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
@@ -31,9 +32,9 @@ import type {
 import {
   oldestQueuedSubmission,
   recordStructuredAgentSessionStartFailure,
-  refusedStructuredAgentSessionStart
+  refusedStructuredAgentSessionStart,
+  startThatFailedWhileQueued
 } from './structured-agent-session-start-failure-row'
-import { failedProviderChildStart } from './structured-agent-session-provider-child'
 import { handOverSubmission } from './structured-agent-session-turns'
 import { structuredAgentSessionNextHandover } from './structured-agent-session-opening-send'
 import { structuredAgentSessionCommandRunning } from './structured-agent-session-command-turn'
@@ -42,7 +43,7 @@ import type { StructuredAgentSessionStartReadiness } from './structured-agent-se
 import { holdRestartedStructuredAgentSessionSends } from './structured-agent-session-host-lifetime'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import { waitsForCodexTurnOptions } from './structured-agent-session-message-options'
-import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
+import type { StructuredAgentSessionProviderWaits } from './structured-agent-session-provider-waits'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
@@ -76,7 +77,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   /** A person's Stop is still ending the session's work: the status feed's own reading. */
   stopping: (sessionId: string) => boolean
   now: () => number
-  acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
+  providerWaits: Pick<StructuredAgentSessionProviderWaits, 'begin'>
 }
 
 type RefusedStart = Extract<StructuredAgentSessionResumeOutcome, { ok: false }>
@@ -281,8 +282,11 @@ export class StructuredAgentSessionDeliveryLoop {
         return 'continue'
       }
     }
+    const nextBody = session.journal.itemBody(agentJournalSubmissionKey(next.clientMessageId))
     if (
       this.deps.record(sessionId)?.provider === 'codex' &&
+      nextBody?.kind === 'message' &&
+      !nextBody.command &&
       waitsForCodexTurnOptions(session.journal, next)
     ) {
       return this.stop(sessionId)
@@ -298,7 +302,7 @@ export class StructuredAgentSessionDeliveryLoop {
         record: () => this.deps.record(sessionId),
         childWork: () => this.deps.readChildWork(sessionId),
         now: this.deps.now,
-        acquireAborts: this.deps.acquireAborts
+        providerWaits: this.deps.providerWaits
       },
       next
     )
@@ -353,23 +357,4 @@ export class StructuredAgentSessionDeliveryLoop {
     this.running.delete(sessionId)
     return 'stop'
   }
-}
-
-/** A start that died while this message waited on it — a view's, say — is the message's failed
- *  start: settled with it, under its key, rather than started again into the same failure. */
-function startThatFailedWhileQueued(
-  session: StructuredAgentSessionHostSession,
-  oldest: NonNullable<ReturnType<typeof oldestQueuedSubmission>>
-): StartFailure | null {
-  const ended = failedProviderChildStart(session)
-  if (
-    !ended ||
-    oldest.acceptedSequence === undefined ||
-    ended.endedAt.epoch !== session.journal.cursor().epoch ||
-    ended.endedAt.sequence < oldest.acceptedSequence
-  ) {
-    return null
-  }
-  const cause = structuredAgentSessionEndedChildFailure(ended)
-  return cause ? { startKey: ended.generation, cause } : null
 }

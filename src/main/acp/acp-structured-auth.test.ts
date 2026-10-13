@@ -59,7 +59,7 @@ async function signInWith(options: {
     initialize: { authMethods: options.authMethods },
     script: requiresSignIn
   })
-  await rig.acquire()
+  await rig.spawn()
   const methods = rig.sent('authenticate').map((frame) => METHOD.parse(frame.params).methodId)
   return { rig, acquired: rig.openFailure() ?? rig.started(), methods }
 }

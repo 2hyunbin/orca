@@ -73,9 +73,9 @@ async function seedFold() {
     throw new Error('Fixture attach was refused')
   }
   await rig.store.setSessionTabVisibility(SESSION, true)
-  const events = rig.adapter.acquire.mock.calls.at(-1)?.[0].events
+  const events = rig.adapter.spawn.mock.calls.at(-1)?.[0].events
   if (!events) {
-    throw new Error('Fixture provider did not acquire an event sink')
+    throw new Error('Fixture provider did not spawn an event sink')
   }
   const digest = createHash('sha256')
   for (let index = 0; index < COMMAND_COUNT; index += 1) {
@@ -229,7 +229,7 @@ describe('subscriber journal lifetime', () => {
     const releasedWhileSubscribed = seeded.journal.deref() === undefined
 
     await restoreDurableHistory(seeded.digest)
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
     const sibling = observer()
     const disposeSibling = await rig.host.subscribe({
       id: 'new-reader',

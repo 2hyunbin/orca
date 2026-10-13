@@ -1,12 +1,25 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import {
   AgentSessionAcquisitionExitProvenError,
   AgentSessionAcquisitionExitUnprovenError,
   AgentSessionAcquisitionRefusal,
-  AgentSessionAcquisitionRootExitObservedError
+  AgentSessionAcquisitionRootExitObservedError,
+  type AgentSessionAcquisition,
+  type StructuredAgentSessionAdapter,
+  type StructuredAgentSessionLifecycleEvent
 } from './structured-agent-session-adapter'
 import { rethrowAfterAgentSessionAcquisitionCleanup } from './structured-agent-session-provider-exit-proof'
+
+it('requires owned spawn identity and protocol open, without a started event', () => {
+  expectTypeOf<AgentSessionAcquisition['acquisitionGeneration']>().toEqualTypeOf<string>()
+  expectTypeOf<StructuredAgentSessionAdapter['open']>().toEqualTypeOf<
+    NonNullable<StructuredAgentSessionAdapter['open']>
+  >()
+  expectTypeOf<
+    Extract<StructuredAgentSessionLifecycleEvent, { type: 'started' }>
+  >().toEqualTypeOf<never>()
+})
 
 describe('failed agent-session acquisition cleanup', () => {
   it('names a failure exit-proven after proven cleanup, keeping its diagnostic and cause', async () => {

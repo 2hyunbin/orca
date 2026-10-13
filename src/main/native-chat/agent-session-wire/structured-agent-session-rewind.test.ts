@@ -23,7 +23,7 @@ import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-rec
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import type {
   StructuredAgentSessionAdapter,
-  StructuredAgentSessionAcquireInput,
+  StructuredAgentSessionSpawnInput,
   AgentSessionDispatchOutcome
 } from './structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
@@ -49,7 +49,7 @@ let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let sink: StructuredAgentSessionEventSink
 let adapter: StructuredAgentSessionAdapter
-let acquires: StructuredAgentSessionAcquireInput[]
+let acquires: StructuredAgentSessionSpawnInput[]
 const rewind = vi.fn<NonNullable<StructuredAgentSessionAdapter['rewind']>>()
 const recoverRewind = vi.fn<NonNullable<StructuredAgentSessionAdapter['recoverRewind']>>()
 
@@ -73,7 +73,12 @@ beforeEach(async () => {
     {
       supportsCreate: (_location, agent) => agent === 'codex',
       supportsLocation: () => true,
-      acquire: async (input) => {
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn: async (input) => {
         acquires.push(input)
         sink = input.events!
         return {

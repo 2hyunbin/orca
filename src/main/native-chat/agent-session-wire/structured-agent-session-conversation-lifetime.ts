@@ -224,7 +224,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
      *  still queued waits for the chat's next turn; a person's unsent message stays as a card. */
     close: (sessionId: string, cause: StructuredAgentSessionCloseCause): Promise<void> => {
       // Outside the queue: a start the provider never answers must not hold the close behind it.
-      host.context().runtimeState.acquireAborts.abort(sessionId, 'closed while starting')
+      host.context().runtimeState.providerWaits.abort(sessionId, 'closed while starting')
       return serialize(sessionId, async () => {
         readRefusals.forget(sessionId)
         const session = sessions.get(sessionId)

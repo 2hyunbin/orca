@@ -61,13 +61,13 @@ function offersFile(root: string): Promise<Buffer> {
 async function keptWithoutAWord(
   host: Awaited<ReturnType<typeof interruptedRestart>>['host'],
   root: string,
-  acquire: ReturnType<typeof vi.fn>
+  spawn: ReturnType<typeof vi.fn>
 ) {
   const before = await offersFile(root)
   expect(await host.restartResume.list()).toEqual([])
   expect(await offersFile(root)).toEqual(before)
   expect((await host.restartResume.continueAfterRestart([SESSION], 'modal')).continued).toEqual([])
-  expect(acquire).not.toHaveBeenCalled()
+  expect(spawn).not.toHaveBeenCalled()
   expect(await host.restartResume.listFailures()).toEqual([])
   expect(await offersFile(root)).toEqual(before)
   const capsule = new AgentSessionRecoveryCapsule(root)
@@ -76,18 +76,18 @@ async function keptWithoutAWord(
 }
 
 it('keeps the offer of a chat whose journal a newer Orca wrote, and offers, runs and counts nothing', async () => {
-  const { host, root, acquire } = await interruptedRestart()
+  const { host, root, spawn } = await interruptedRestart()
   newerOrcaRow(root)
-  await keptWithoutAWord(host, root, acquire)
+  await keptWithoutAWord(host, root, spawn)
 })
 
 // A newer Orca's whole database: every chat in it is a newer Orca's, even one whose tables changed.
 it('keeps the offer of every chat in a newer Orca database, and offers, runs and counts nothing', async () => {
-  const { host, root, acquire } = await interruptedRestart()
+  const { host, root, spawn } = await interruptedRestart()
   const database = openTestJournalHostDatabase(root)
   Object.defineProperty(database, 'readOnly', { value: true })
   database.db.exec('ALTER TABLE journal_sessions RENAME TO journal_sessions_newer')
-  await keptWithoutAWord(host, root, acquire)
+  await keptWithoutAWord(host, root, spawn)
 })
 
 // However a newer Orca's refusal reaches a send (a journal first opened when sending), it files
@@ -116,9 +116,9 @@ it('keeps the offer and files nothing when the send is refused as a newer Orca c
 
 // A failure filed before the chat became a newer Orca's stays for that Orca, and is not shown here.
 it('keeps a failure already filed for a chat a newer Orca saved since, but does not show it', async () => {
-  const { host, root, acquire } = await interruptedRestart()
+  const { host, root, spawn } = await interruptedRestart()
   await host.restartResume.list()
-  acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
   await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(await host.restartResume.listFailures()).toMatchObject([{ sessionId: SESSION }])
   await host.close(SESSION, 'evict')
@@ -133,7 +133,7 @@ it('keeps a failure already filed for a chat a newer Orca saved since, but does 
 // What listing does with a journal that throws for another reason: a damaged chat stays offered,
 // and acting on it files the failure, which names the damage.
 it('still offers a damaged chat, and files its failure when acting on it', async () => {
-  const { host, root, acquire } = await interruptedRestart()
+  const { host, root, spawn } = await interruptedRestart()
   updateTestJournalRowJson(openTestJournalHostDatabase(root).db, SESSION, 1, '}{')
 
   expect((await host.restartResume.list()).map((candidate) => candidate.sessionId)).toEqual([
@@ -141,7 +141,7 @@ it('still offers a damaged chat, and files its failure when acting on it', async
   ])
   await host.restartResume.continueAfterRestart([SESSION], 'modal')
 
-  expect(acquire).not.toHaveBeenCalled()
+  expect(spawn).not.toHaveBeenCalled()
   expect(await host.restartResume.listFailures()).toMatchObject([
     {
       sessionId: SESSION,
@@ -169,7 +169,7 @@ it.each([
       attachParams({ envelope: { ...attachParams().envelope, sessionId: NEWER } })
     )
     expect(created.ok).toBe(true)
-    hostTestState().acquire.mockClear()
+    hostTestState().spawn.mockClear()
     const { host, root, marker } = await interruptedRestart()
     newerOrcaRow(root, NEWER)
     const path = join(root, AGENT_SESSION_RECOVERY_CAPSULE_FILE)

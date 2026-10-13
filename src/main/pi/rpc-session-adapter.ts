@@ -6,7 +6,7 @@ import {
   AgentSessionAcquisitionExitUnprovenError,
   AgentSessionAcquisitionExitProvenError,
   type AgentSessionAcquisition,
-  type StructuredAgentSessionAcquireInput,
+  type StructuredAgentSessionSpawnInput,
   type StructuredAgentSessionAdapter
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { providerSpawnedProcessIdentity } from '../provider-process/provider-spawned-process-identity'
@@ -21,7 +21,7 @@ import { supportsSupervisedProviderChildLocation } from '../provider-process/sup
 
 export type PiRpcSessionAdapterDeps = PiRpcSessionDeps & {
   resolveLaunch: (input: {
-    identity: StructuredAgentSessionAcquireInput['identity']
+    identity: StructuredAgentSessionSpawnInput['identity']
     spawnToken: string
   }) => Promise<PiRpcResolvedLaunch>
   readProcessStartTime?: (pid: number) => Promise<number | null>
@@ -40,7 +40,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
     agent
   ) => agent === 'pi' && this.supportsLocation(location)
 
-  async acquire(input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> {
+  async spawn(input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition> {
     const id = input.identity.sessionId
     if (this.acquiring.has(id)) {
       throw new AgentSessionPreSpawnError(new Error('Pi session already owns a child'))

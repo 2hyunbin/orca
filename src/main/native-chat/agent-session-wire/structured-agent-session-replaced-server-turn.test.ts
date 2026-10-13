@@ -66,7 +66,7 @@ async function streamThenServerKilled(): Promise<void> {
     throw new Error(`send refused: ${sent.refusal.code}`)
   }
   await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-  const events = rig.adapter.acquire.mock.calls[0]?.[0].events
+  const events = rig.adapter.spawn.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('the provider has no event sink')
   }
@@ -174,7 +174,7 @@ describe('a server replaced mid-turn on the same execution host', () => {
     )
     expect(sent.ok).toBe(true)
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
-    const events = rig.adapter.acquire.mock.calls[1]?.[0].events
+    const events = rig.adapter.spawn.mock.calls[1]?.[0].events
     if (!events) {
       throw new Error('the new provider has no event sink')
     }

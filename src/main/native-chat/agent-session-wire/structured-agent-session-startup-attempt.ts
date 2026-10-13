@@ -55,11 +55,11 @@ export function isStructuredAgentSessionStartupExpired(reason: unknown): boolean
   return reason instanceof Error && reason.name === 'StructuredAgentSessionStartupExpiredError'
 }
 
-/** Where an expired attempt stood: still inside its acquire, or published as a starting child. */
+/** Where an expired attempt stood: still spawning, or published as a starting child. */
 export type StructuredAgentSessionExpiredStartup = {
   sessionId: string
   attemptId: string
-  /** Null while the acquire has not returned. */
+  /** Null while spawn has not returned. */
   child: StructuredAgentSessionProviderChildIdentity | null
 }
 
@@ -71,7 +71,7 @@ export type StructuredAgentSessionStartupSettled = {
   durationMs: number
 }
 
-/** What the host learns about a start while its acquire runs. */
+/** What the host learns about a start while spawn runs. */
 export type StructuredAgentSessionStartupProgress = {
   /** The process exists: the clock starts. */
   spawned: () => void
@@ -86,7 +86,7 @@ type Tracked = {
   lastOutputAt: number
   timer: ReturnType<typeof setTimeout> | null
   expired: boolean
-  /** The limit's measure, held until an acquire it aborted settles: one that is ready anyway
+  /** The limit's measure, held until an aborted spawn settles: one that is ready anyway
    *  reports that instead. */
   expiry: StructuredAgentSessionStartupSettled | null
   readiness: PromiseWithResolvers<'ready' | 'ended'>
@@ -106,7 +106,7 @@ export class StructuredAgentSessionStartupAttempts {
 
   constructor(
     private readonly deps: {
-      /** Runs outside the session's queue: an acquire may hold it for the whole handshake. */
+      /** Runs outside the session's queue: spawn or open may hold it through the handshake. */
       expire: (expired: StructuredAgentSessionExpiredStartup) => void
       /** Never throws back into the clock. */
       settled?: (settled: StructuredAgentSessionStartupSettled) => void
@@ -184,7 +184,7 @@ export class StructuredAgentSessionStartupAttempts {
     }
   }
 
-  /** The acquire returned: its `starting` child stays on the clock until it proves its start, and
+  /** Spawn returned: its `starting` child stays on the clock until open proves readiness, and
    *  one published after the limit passed is expired now. */
   published(
     sessionId: string,
@@ -300,7 +300,7 @@ export class StructuredAgentSessionStartupAttempts {
     }
   }
 
-  /** `reason` null: a start whose limit already passed inside its acquire was published now. */
+  /** `reason` null: a start whose limit already passed inside spawn was published now. */
   private expire(sessionId: string, tracked: Tracked, reason: 'silent' | 'ceiling' | null): void {
     if (this.open.get(sessionId) !== tracked || this.disposed) {
       return
@@ -310,7 +310,7 @@ export class StructuredAgentSessionStartupAttempts {
     }
     tracked.expired = true
     // A published child's stop is under way and ends nothing a newer attempt owns; one still
-    // acquiring stays tracked until its aborted acquire is abandoned or published.
+    // spawning stays tracked until its aborted spawn is abandoned or published.
     if (tracked.child) {
       this.report(tracked.expiry)
       this.end(sessionId)

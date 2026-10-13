@@ -118,7 +118,8 @@ beforeEach(async () => {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
-      acquire: vi.fn(async ({ fence, spawnToken }) => {
+      open: () => new Promise(() => {}),
+      spawn: vi.fn(async ({ fence, spawnToken }) => {
         const child = {
           process: {
             hostId: 'local',

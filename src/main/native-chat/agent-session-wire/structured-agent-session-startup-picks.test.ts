@@ -11,6 +11,7 @@ import type { AgentSessionRecordStore } from '../../runtime/agent-session-record
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from './structured-agent-session-provider-open-contract'
 import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
@@ -32,6 +33,8 @@ let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let acquires = 0
 let phases: (string | undefined)[]
+let answerOpen: (model: string) => void
+let opened: Promise<StructuredAgentSessionProviderOpenResult>
 const setOption = vi.fn<StructuredAgentSessionAdapter['setOption']>()
 const dispatch = vi.fn<StructuredAgentSessionAdapter['dispatch']>()
 const closeSession = vi.fn(async () => true)
@@ -43,6 +46,10 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   acquires = 0
   phases = []
+  opened = new Promise((resolve) => {
+    answerOpen = (model) =>
+      resolve({ reportedOptions: { model }, restoreSkippedOptions: [], optionRevision: 0 })
+  })
   setOption.mockReset().mockResolvedValue(undefined)
   dispatch.mockReset().mockResolvedValue({ state: 'unknown', reason: 'unused' })
   closeSession.mockClear()
@@ -55,7 +62,8 @@ beforeEach(async () => {
     adapter: {
       supportsCreate: (_location, agent) => agent === 'codex',
       supportsLocation: () => true,
-      acquire: async (input) => {
+      open: () => opened,
+      spawn: async (input) => {
         acquires += 1
         return {
           process: {
@@ -140,17 +148,10 @@ async function sendHeld(text: string): Promise<string> {
   return sent.value.clientMessageId
 }
 
-/** The child reports its start, as an adapter does once its protocol session answers. */
+/** Answer the host's pending protocol open. */
 function started(reportedModel = 'launched-model'): Promise<void> {
-  return host.handleAdapterEvent({
-    type: 'started',
-    sessionId: SESSION,
-    fence: store.getRecord(SESSION)!.lease.runtimeFence,
-    acquisitionGeneration: `generation-${acquires}`,
-    reportedOptions: { model: reportedModel },
-    restoreSkippedOptions: [],
-    optionRevision: 0
-  })
+  answerOpen(reportedModel)
+  return Promise.resolve()
 }
 
 async function dispatchState(clientMessageId: string) {
@@ -168,7 +169,7 @@ it('saves a startup pick without writing it to the opening child', async () => {
 
   expect(setOption).not.toHaveBeenCalled()
   expect(store.getRecord(SESSION)?.options?.model).toBe('picked-model')
-  expect(phases.at(-1)).toBe('ready')
+  await vi.waitFor(() => expect(phases.at(-1)).toBe('ready'))
 })
 
 it('hands a held message over with its accepted choice after a later startup pick', async () => {

@@ -74,7 +74,7 @@ describe("the account catalog facts a child's listing hands the host", () => {
       routes: { list_models: () => [NATIVE_OPUS, LAUNCHED_ROW] }
     })
     const adapter = adapterFor(claude)
-    await adapter.acquire({
+    await adapter.spawn({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -136,7 +136,7 @@ describe('a live child still launched with a retired model', () => {
       }
     })
     const adapter = adapterFor(claude)
-    await adapter.acquire({
+    await adapter.spawn({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',

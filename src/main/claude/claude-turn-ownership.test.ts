@@ -50,7 +50,7 @@ async function acquiredWithJournal(claude: ReturnType<typeof fakeClaude>): Promi
 }> {
   const { sink, bodies } = journalSink()
   const adapter = adapterFor(claude)
-  await adapter.acquire({
+  await adapter.spawn({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-9',

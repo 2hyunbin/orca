@@ -35,7 +35,7 @@ describe('ACP child published before its handshake', () => {
         })
       }
     })
-    const acquired = await rig.acquire({
+    const acquired = await rig.spawn({
       waitForStart: false,
       options: { effort: 'low', model: 'grok-4.6' },
       optionRevision: () => 7
@@ -83,12 +83,12 @@ describe('ACP child published before its handshake', () => {
             frame = request
           })
       })
-      const acquired = await rig.acquire({ waitForStart: false })
+      const acquired = await rig.spawn({ waitForStart: false })
       const opening = rig.adapter
         .open({
           sessionId: SESSION,
           fence: 1,
-          acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+          acquisitionGeneration: acquired.acquisitionGeneration,
           signal: new AbortController().signal
         })
         .catch((error: unknown) => error)
@@ -119,7 +119,7 @@ describe('ACP child published before its handshake', () => {
       const rig = await openAcpAdapterRig({
         script: (agent) => agent.on(answered ? 'session/new' : 'initialize', () => {})
       })
-      await rig.acquire({ waitForStart: false })
+      await rig.spawn({ waitForStart: false })
       const opening = rig.adapter
         .open({
           sessionId: SESSION,
@@ -144,12 +144,12 @@ describe('ACP child published before its handshake', () => {
       script: (agent) =>
         agent.on('session/new', (frame) => agent.fail(frame, -32000, 'Authentication required'))
     })
-    const acquired = await rig.acquire({ waitForStart: false })
+    const acquired = await rig.spawn({ waitForStart: false })
     await expect(
       rig.adapter.open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
     ).rejects.toMatchObject({ reason: 'notSignedIn' })
@@ -165,7 +165,7 @@ describe('ACP child published before its handshake', () => {
           agent.fail(frame, -32602, 'model unavailable')
         )
     })
-    await rig.acquire({ options: { model: 'retired-model' } })
+    await rig.spawn({ options: { model: 'retired-model' } })
     expect(rig.started()).toMatchObject({
       restoreSkippedOptions: [],
       reportedOptions: { model: 'grok-4.7', effort: 'high' }
@@ -196,7 +196,7 @@ describe('ACP child published before its handshake', () => {
         }
       }
     })
-    const acquired = await rig.acquire()
+    const acquired = await rig.spawn()
     expect(acquired.link).toBeUndefined()
     expect(rig.started().link).toMatchObject({
       handle: { nativeId: 'saved-session' },

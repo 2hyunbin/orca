@@ -25,7 +25,7 @@ it('publishes idle provider reloads only when the actual command catalog changes
   const claude = fakeClaude()
   const adapter = adapterFor(claude)
   const publish = vi.fn()
-  await adapter.acquire({
+  await adapter.spawn({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'commands',

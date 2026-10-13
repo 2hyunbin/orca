@@ -52,7 +52,12 @@ function adapter(): StructuredAgentSessionAdapter {
     {
       supportsCreate: (_location, agent) => agent === 'codex',
       supportsLocation: () => true,
-      acquire: async (input) => {
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn: async (input) => {
         acquires += 1
         sink = input.events!
         return {

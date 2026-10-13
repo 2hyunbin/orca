@@ -197,7 +197,7 @@ async function piHost() {
       logger: { warn: vi.fn(), error: vi.fn() }
     })
     adapters.push(adapter)
-    const acquired = await adapter.acquire({
+    const spawned = await adapter.spawn({
       identity: {
         sessionId,
         workspaceId: 'ws-1',
@@ -210,21 +210,21 @@ async function piHost() {
       options: opts.saved ?? {},
       events: rig.eventSink
     })
-    const started = await adapter
+    const opened = await adapter
       .open({
         sessionId,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: spawned.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch(async (error: unknown) => {
         await adapter.closeSession(sessionId)
         throw error
       })
-    if (!started.catalogListing) {
+    if (!opened.catalogListing) {
       throw new Error('a Pi start hands the host its listing')
     }
-    catalog.recordLiveListing(sessionId, started.catalogListing)
+    catalog.recordLiveListing(sessionId, opened.catalogListing)
     if (opts.afterStart && child) {
       await opts.afterStart({ child, adapter, sessionId })
     }
@@ -235,7 +235,7 @@ async function piHost() {
       }
     }
     await read()
-    return { listing: started.catalogListing, read }
+    return { listing: opened.catalogListing, read }
   }
   return { catalog, chat, store, clock }
 }

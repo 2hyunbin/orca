@@ -103,7 +103,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI fold', () => {
         readProcessStartTime: async () => 1
       })
       try {
-        await adapter.acquire({
+        await adapter.spawn({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-fold',

@@ -18,12 +18,12 @@ import {
 } from './structured-agent-session-host-test-data'
 
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let cancelTurn: Mock<StructuredAgentSessionAdapter['cancelTurn']>
 let log: ReturnType<typeof hostTestState>['log']
 
 beforeEach(() => {
-  ;({ host, acquire, cancelTurn, log } = hostTestState())
+  ;({ host, spawn, cancelTurn, log } = hostTestState())
   vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 })
 
@@ -33,7 +33,7 @@ afterEach(() => {
 
 async function runningTurn(): Promise<AgentSessionJournal> {
   await attach()
-  acquire.mock.calls
+  spawn.mock.calls
     .at(-1)![0]
     .events!.appendItem(
       { provider: 'codex', threadId: THREAD, turnId: 'turn-1', ordinal: 900 },
@@ -51,10 +51,8 @@ async function runningTurn(): Promise<AgentSessionJournal> {
 
 /** A child whose handshake never answers, so a Stop ends the start. */
 async function startingChild(): Promise<{ journal: AgentSessionJournal; closeSession: Mock }> {
-  const handle = host.handleAdapterEvent.bind(host)
-  vi.spyOn(host, 'handleAdapterEvent').mockImplementation(async (event) =>
-    event.type === 'started' ? undefined : handle(event)
-  )
+  const open: StructuredAgentSessionAdapter['open'] = () => new Promise(() => {})
+  Object.assign(host.deps.adapter, { open })
   const closeSession = vi.fn(async () => true)
   Object.assign(host.deps.adapter, { closeSession })
   await attach()

@@ -132,7 +132,7 @@ describe('Codex session options through the host catalog store', () => {
     const store = new AgentModelCatalogStore()
     const request = vi.fn(async () => listAnswer('gpt-live', 'gpt-next'))
     const session = storeSession(request, store)
-    // The acquire-time restore read.
+    // The spawn-time restore read.
     const first = await readLiveCodexSessionOptions(session, undefined)
     expect(first.models.map((model) => model.id)).toEqual(['gpt-live', 'gpt-next'])
     expect(modelListCalls(request)).toBe(1)
@@ -157,7 +157,7 @@ describe('Codex session options through the host catalog store', () => {
     )
     const request = vi.fn(async () => listAnswer('gpt-live'))
     const session = storeSession(request, store)
-    // The acquire-time restore read: joining the probe would fail the chat at the probe's deadline.
+    // The spawn-time restore read: joining the probe would fail the chat at the probe's deadline.
     const result = await readLiveCodexSessionOptions(session, undefined)
     expect(result.models.map((model) => model.id)).toEqual(['gpt-live'])
     expect(modelListCalls(request)).toBe(1)

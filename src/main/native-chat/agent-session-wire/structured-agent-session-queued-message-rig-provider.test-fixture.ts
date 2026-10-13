@@ -59,9 +59,25 @@ export function createQueuedRigProvider(
     async () => true
   )
   let events: StructuredAgentSessionEventSink | undefined
+  let proveOpen: (() => void) | null = null
 
   const scripted: StructuredAgentSessionAdapter = {
-    acquire: async ({ identity, fence, spawnToken, events: sink }) => {
+    open: () =>
+      options.starting
+        ? new Promise((resolve) => {
+            proveOpen = () =>
+              resolve({
+                reportedOptions: { model: 'default' },
+                restoreSkippedOptions: [],
+                optionRevision: -1
+              })
+          })
+        : Promise.resolve({
+            reportedOptions: { model: 'default' },
+            restoreSkippedOptions: [],
+            optionRevision: -1
+          }),
+    spawn: async ({ identity, fence, spawnToken, events: sink }) => {
       starts()
       const hold = startHold
       startHold = null
@@ -170,6 +186,7 @@ export function createQueuedRigProvider(
 
   return {
     adapter,
+    proveOpen: () => proveOpen?.(),
     dispatch,
     starts,
     holdNextStart,

@@ -81,7 +81,7 @@ it('imports adoption at rest and resumes its original provider identity after it
   expect(rig.store.getRecord(SESSION)?.providerHandleChain).toMatchObject([
     { origin: 'adopted', mintedAtFence: 1, handle: { nativeId: THREAD } }
   ])
-  expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  expect(rig.adapter.spawn).not.toHaveBeenCalled()
   expect(history).not.toHaveBeenCalled()
   await rm(join(rig.root, 'rollout.jsonl'))
   expect(
@@ -93,7 +93,7 @@ it('imports adoption at rest and resumes its original provider identity after it
   ).toMatchObject({ ok: true, replayed: true })
   expect(await rig.host.send(CALLER, restTestSend('new work'))).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-  expect(rig.adapter.acquire).toHaveBeenCalledWith(
+  expect(rig.adapter.spawn).toHaveBeenCalledWith(
     expect.objectContaining({
       identity: expect.objectContaining({
         providerHandle: expect.objectContaining({ nativeId: THREAD })
@@ -102,7 +102,7 @@ it('imports adoption at rest and resumes its original provider identity after it
   )
   expect(history).toHaveBeenCalledOnce()
   expect(history.mock.invocationCallOrder[0]).toBeLessThan(
-    rig.adapter.acquire.mock.invocationCallOrder[0]
+    rig.adapter.spawn.mock.invocationCallOrder[0]
   )
   expect(rig.store.getRecord(SESSION)?.accountHome).toEqual(params.accountHome)
 })
@@ -121,7 +121,7 @@ it('refuses concurrent adoption of a provider conversation by another session', 
   ])
   expect(rig.store.listRecords()).toHaveLength(1)
   expect(rig.store.listOperationRows()).toHaveLength(1)
-  expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  expect(rig.adapter.spawn).not.toHaveBeenCalled()
 })
 
 it('refuses concurrent founding under a tab another chat already owns', async () => {
@@ -135,7 +135,7 @@ it('refuses concurrent founding under a tab another chat already owns', async ()
     { refusal: { code: 'agent_session_conflict', details: { reason: 'tabIdTaken' } } }
   ])
   expect(rig.store.listVisibleSessionIds()).toHaveLength(1)
-  expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  expect(rig.adapter.spawn).not.toHaveBeenCalled()
 })
 
 it('validates adoption history before founding anything', async () => {
@@ -174,11 +174,11 @@ it.each([
     })
     expect(await rig.host.create(CALLER, params)).toMatchObject({ ok: true })
     expect(rig.store.getRecord(SESSION)?.location).toEqual(params.location)
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
   }
 )
 
-it('pins the host-resolved directory of a floating chat before any acquire', async () => {
+it('pins the host-resolved directory of a floating chat before any spawn', async () => {
   const params = createTestParams(undefined, {
     location: {
       executionHostId: 'local',
@@ -191,7 +191,7 @@ it('pins the host-resolved directory of a floating chat before any acquire', asy
     ok: true
   })
   expect(rig.store.getRecord(SESSION)?.launchDirectory).toBe(rig.root)
-  expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  expect(rig.adapter.spawn).not.toHaveBeenCalled()
 })
 
 it.each(['adopted', 'blank'] as const)(
@@ -245,6 +245,6 @@ it.each(['adopted', 'blank'] as const)(
       )
     }
     expect(await stopping).toMatchObject({ ok: true })
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
   }
 )

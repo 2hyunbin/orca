@@ -68,7 +68,7 @@ async function acquired(
   const adapter = adapterFor(claude, {}, [], [], undefined, undefined, undefined, (settlement) =>
     settlements.push(settlement)
   )
-  await adapter.acquire({
+  await adapter.spawn({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-9',

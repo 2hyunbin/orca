@@ -14,7 +14,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void; reject: (e: 
 describe('runExclusivelyForCodexTrustConfig', () => {
   // Why: the grant lane runs inside the installer that already owns the file;
   // a non-reentrant lane would queue it behind itself and never settle.
-  it('passes through a nested acquire of a lane the caller already holds', async () => {
+  it('passes through a nested spawn of a lane the caller already holds', async () => {
     const nested = await runExclusivelyForCodexTrustConfig('/a/config.toml', () =>
       runExclusivelyForCodexTrustConfig('/a/config.toml', () => Promise.resolve('inner'))
     )

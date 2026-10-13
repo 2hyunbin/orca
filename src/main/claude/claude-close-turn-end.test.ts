@@ -39,7 +39,7 @@ async function childInsideTurn() {
   const events: ClaudeStructuredSessionEvent[] = []
   const adapter = adapterFor(claude, {}, events)
   const { sink, turns } = turnSink()
-  await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
+  await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
   const connection = claude.connections[0]!
   connection.handlers.onMessage?.({
     session_id: PROVIDER_SESSION_ID,

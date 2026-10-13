@@ -29,7 +29,7 @@ const within = <T>(promise: Promise<T>, ms: number): Promise<T | typeof STALLED>
 
 /** Runs `atEnd` once, right before the host ends an attach's controller: after its commit. */
 function beforeAttachEnds(host: StructuredAgentSessionHost, atEnd: () => void): void {
-  const aborts = host.collaboratorsForTests().runtimeState.acquireAborts
+  const aborts = host.collaboratorsForTests().runtimeState.providerWaits
   const begin = aborts.begin.bind(aborts)
   let fired = false
   aborts.begin = (sessionId) => {

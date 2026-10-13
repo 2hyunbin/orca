@@ -27,12 +27,13 @@ describe.each(['claude', 'codex'] as const)('%s first-message naming status hook
   ] as const)(
     'names a live $outcome send (first turn completes during journal read: $completesDuringRead)',
     async ({ outcome, completesDuringRead }) => {
-      const { host, store, acquire, dispatch, log } = hostTestState()
+      const { host, store, spawn, dispatch, log } = hostTestState()
       const handle =
         provider === 'claude'
           ? claudeProviderHandle(HOST_TEST_THREAD, null)
           : codexProviderHandle(HOST_TEST_THREAD)
-      acquire.mockImplementation(async ({ fence }) => ({
+      spawn.mockImplementation(async ({ fence }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',
           pid: 4242,
@@ -111,12 +112,12 @@ describe.each(['claude', 'codex'] as const)('%s first-message naming status hook
       expect(generate).not.toHaveBeenCalled()
       if (completesDuringRead) {
         await vi.waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1))
-        const events = acquire.mock.calls.at(-1)?.[0].events
+        const events = spawn.mock.calls.at(-1)?.[0].events
         const first = (await host.journalSnapshot(HOST_TEST_SESSION)).items.find(
           (item) => item.body.kind === 'message' && item.body.role === 'user'
         )
         if (!events || !first) {
-          throw new Error('Missing acquired first turn')
+          throw new Error('Missing spawnd first turn')
         }
         events.appendItem(
           provider === 'claude'

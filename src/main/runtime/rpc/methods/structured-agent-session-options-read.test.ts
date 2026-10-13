@@ -2,7 +2,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { AgentSessionUnavailable } from '../../../../shared/agent-session-availability'
 import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
 import type { AgentSessionModelCatalogResult } from '../../../../shared/agent-session-wire'
 import { agentSessionRecordFixture } from '../../../../shared/agent-session-record.test-fixture'
@@ -176,11 +175,8 @@ const PI_CLIENT = {
   ]
 }
 
-describe("agentSession.modelCatalog with what the running agent's start said", () => {
+describe('agentSession.modelCatalog with a running Pi chat', () => {
   const read = vi.fn(async (): Promise<AgentSessionModelCatalogResult> => ({ origin: 'unknown' }))
-  const startUnavailable = vi.fn((_sessionId: string): AgentSessionUnavailable | undefined => ({
-    reason: 'notSignedIn'
-  }))
   const record: AgentSessionRecord = { ...agentSessionRecordFixture(), provider: 'pi' }
   const readFor = (agent: string) =>
     call('agentSession.modelCatalog', { agent, sessionId: record.sessionId }, PI_CLIENT)
@@ -188,22 +184,19 @@ describe("agentSession.modelCatalog with what the running agent's start said", (
   beforeEach(() => {
     read.mockReset()
     read.mockResolvedValue({ origin: 'unknown' })
-    startUnavailable.mockClear()
     setStructuredAgentSessionHost(
       Object.assign(hostStub(), {
         deps: {
           modelCatalog: { read },
-          store: { getRecord: () => record },
-          adapter: { startUnavailable }
+          store: { getRecord: () => record }
         }
       })
     )
   })
 
-  it("answers a Pi chat's catalog with its signed-out start", async () => {
-    const reply = await readFor('pi')
-    expect(startUnavailable).toHaveBeenCalledWith(record.sessionId)
-    expect(reply).toMatchObject({
+  it('uses the catalog sign-in result without a retained child failure', async () => {
+    read.mockResolvedValue({ origin: 'unknown', unavailable: { reason: 'notSignedIn' } })
+    expect(await readFor('pi')).toMatchObject({
       ok: true,
       result: { origin: 'unknown', unavailable: { reason: 'notSignedIn' } }
     })
@@ -217,17 +210,9 @@ describe("agentSession.modelCatalog with what the running agent's start said", (
     })
   })
 
-  it("never lends one agent's start to another agent's read", async () => {
-    const reply = await readFor('codex')
-    expect(startUnavailable).not.toHaveBeenCalled()
-    expect(reply).toMatchObject({ ok: true, result: { origin: 'unknown' } })
-    expect(reply).not.toMatchObject({ result: { unavailable: expect.anything() } })
-  })
-
-  it('stays quiet while the start said nothing', async () => {
-    startUnavailable.mockReturnValueOnce(undefined)
+  it('returns unknown when the catalog has no availability evidence', async () => {
     const reply = await readFor('pi')
-    expect(reply).toMatchObject({ ok: true })
+    expect(reply).toMatchObject({ ok: true, result: { origin: 'unknown' } })
     expect(reply).not.toMatchObject({ result: { unavailable: expect.anything() } })
   })
 })

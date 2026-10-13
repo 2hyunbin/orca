@@ -27,7 +27,13 @@ let root = ''
 function claudeAdapter(): StructuredAgentSessionAdapter {
   return {
     supportsCreate: (_location, agent) => agent === 'claude',
-    acquire: async ({ fence, spawnToken }) => ({
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: async ({ fence, spawnToken }) => ({
+      acquisitionGeneration: globalThis.crypto.randomUUID(),
       process: {
         hostId: 'local',
         pid: 4242,

@@ -100,7 +100,7 @@ async function riggedAdapter(
     onDispatchSettledLate: settled
   }
   const adapter = new ClaudeStructuredSessionAdapter(deps)
-  await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
+  await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
   await claudeStartupSettled(adapter, 'session-1')
   return {
     adapter,

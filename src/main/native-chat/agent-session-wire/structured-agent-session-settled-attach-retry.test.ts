@@ -53,7 +53,7 @@ vi.mock('../../runtime/agent-session-record-rows', async (importOriginal) => {
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let releaseAcquisition: Mock<NonNullable<StructuredAgentSessionAdapter['releaseAcquisition']>>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 
@@ -67,7 +67,12 @@ function accepted(): AgentSessionDispatchOutcome {
 function adapter(): StructuredAgentSessionAdapter {
   return startsWhenPublished(
     {
-      acquire,
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn,
       releaseAcquisition,
       dispatch,
       cancelTurn: vi.fn(async () => ({ cancelled: true })),
@@ -96,7 +101,8 @@ beforeEach(async () => {
   publishFault.failOnPublish = 0
   publishFault.publishCount = 0
   resetHostTestOperationIds()
-  acquire = vi.fn(async ({ fence }) => ({
+  spawn = vi.fn(async ({ fence }) => ({
+    acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: {
       hostId: 'local',
       pid: 4242,
@@ -170,7 +176,7 @@ describe('settled attach retry', () => {
     ).toMatchObject({ status: 'failed' })
 
     await expect(host.attach(CALLER, hostTestAttachParams(2))).resolves.toMatchObject({ ok: true })
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'live',
       handoffStage: null,
@@ -180,12 +186,13 @@ describe('settled attach retry', () => {
 
   it('continues a safe same-host pending replay with the reserved token', async () => {
     const spawnTokens: string[] = []
-    acquire.mockImplementation(async ({ fence, spawnToken }) => {
+    spawn.mockImplementation(async ({ fence, spawnToken }) => {
       spawnTokens.push(spawnToken)
       if (spawnTokens.length === 1) {
         throw new Error('reply lost')
       }
       return {
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',
           pid: 4242,
@@ -225,12 +232,13 @@ describe('settled attach retry', () => {
 
   it('releases a reservation a crash left ownerless at restart, so the next start goes ahead', async () => {
     const spawnTokens: string[] = []
-    acquire.mockImplementation(async ({ fence, spawnToken }) => {
+    spawn.mockImplementation(async ({ fence, spawnToken }) => {
       spawnTokens.push(spawnToken)
       if (spawnTokens.length === 1) {
         throw new Error('reply lost')
       }
       return {
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',
           pid: 4242,
@@ -396,7 +404,7 @@ describe('settled attach retry', () => {
   })
 
   it('records proven acquisition cleanup as durable death evidence', async () => {
-    acquire.mockRejectedValueOnce(new Error('resume rejected'))
+    spawn.mockRejectedValueOnce(new Error('resume rejected'))
 
     await expect(host.attach(CALLER, hostTestAttachParams(null))).resolves.toMatchObject({
       ok: false,

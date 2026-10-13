@@ -72,11 +72,7 @@ beforeEach(async () => {
   const adapter = adapterFor(codex, launch, [], {
     onDispatchSettledLate: (settlement) => void host.settleLateDispatch(settlement),
     onEvent: (event) => {
-      if (
-        event.type === 'started' ||
-        event.type === 'options-reported' ||
-        (event.type === 'ended' && 'cause' in event)
-      ) {
+      if (event.type === 'options-reported' || (event.type === 'ended' && 'cause' in event)) {
         void host.handleAdapterEvent(event)
       }
     }

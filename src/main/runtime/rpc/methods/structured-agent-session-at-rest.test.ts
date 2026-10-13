@@ -68,7 +68,7 @@ async function restingChat(): Promise<void> {
   })
   await rig.restart()
   setStructuredAgentSessionHost(rig.host)
-  rig.adapter.acquire.mockClear()
+  rig.adapter.spawn.mockClear()
   rig.adapter.dispatch.mockClear()
   rig.adapter.readOptions.mockClear()
 }
@@ -105,7 +105,7 @@ describe('opening a chat at rest (P2-01)', () => {
     const [status] = await call('agentSession.handoffStatus', { sessionId: SESSION })
     const [held] = await call('agentSession.hold', { sessionId: SESSION, holderId: 'pane' })
 
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
     expect(history).toMatchObject({ ok: true, result: { ok: true } })
     const snapshot = frames.find((frame) => frame.ok && 'result' in frame)
     expect(snapshot).toMatchObject({ result: { type: 'snapshot', commands: null } })
@@ -143,7 +143,7 @@ describe('opening a chat at rest (P2-01)', () => {
     }
     // Awaits the provider's answer itself rather than polling for it, however slow the start.
     await rig.host.waitForSendSettlement(SESSION, sent.value.clientMessageId)
-    expect(rig.adapter.acquire).toHaveBeenCalledOnce()
+    expect(rig.adapter.spawn).toHaveBeenCalledOnce()
     expect(rig.adapter.dispatch).toHaveBeenCalledOnce()
   })
 })
@@ -153,7 +153,7 @@ describe('the accessor', () => {
     // Written by the provider alone, so nothing but the readers below ever opens it here.
     const attached = await rig.host.attach(CALLER, hostTestAttachParams(null))
     expect(attached.ok).toBe(true)
-    rig.adapter.acquire.mock.calls
+    rig.adapter.spawn.mock.calls
       .at(-1)?.[0]
       .events?.appendItem(
         { provider: 'codex', threadId: REST_TEST_THREAD, turnId: 'turn-1', ordinal: 1 },
@@ -163,7 +163,7 @@ describe('the accessor', () => {
     await rig.host.flushStreamedEvents(SESSION)
     await rig.restart()
     setStructuredAgentSessionHost(rig.host)
-    rig.adapter.acquire.mockClear()
+    rig.adapter.spawn.mockClear()
     const open = vi.spyOn(rig.host.collaboratorsForTests().conversationDelivery, 'open')
     await Promise.all([
       ...Array.from({ length: 5 }, () =>
@@ -175,7 +175,7 @@ describe('the accessor', () => {
       await Promise.all(open.mock.results.map((result) => result.value))
     )
     expect(openedJournals.size).toBe(1)
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
   })
 
   it('opens nothing once quit began, for a read that was already waiting on the lock', async () => {
@@ -327,13 +327,13 @@ describe('the accessor', () => {
 
   it('subscribes an old mobile client that holds first even when no agent can start (P2-06)', async () => {
     await restingChat()
-    rig.adapter.acquire.mockRejectedValue(new Error('auth expired'))
+    rig.adapter.spawn.mockRejectedValue(new Error('auth expired'))
 
     const [held] = await call('agentSession.hold', { sessionId: SESSION, holderId: 'mobile' })
     const frames = await call('agentSession.subscribe', { sessionId: SESSION })
     expect(held).toMatchObject({ ok: true })
     expect(frames.find((frame) => frame.ok)).toMatchObject({ result: { type: 'snapshot' } })
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
   })
 })
 
@@ -356,12 +356,12 @@ describe('options at rest', () => {
     })
     expect(picked).toMatchObject({ ok: true, result: { ok: true } })
     expect(rig.store.getRecord(SESSION)?.options).toMatchObject({ model: 'gpt-picked' })
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
 
     const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
     await rig.host.send(CALLER, restTestSend('use the new model', fence))
-    await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
-    expect(rig.adapter.acquire.mock.calls[0]?.[0]).toMatchObject({
+    await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledOnce())
+    expect(rig.adapter.spawn.mock.calls[0]?.[0]).toMatchObject({
       options: expect.objectContaining({ model: 'gpt-picked' })
     })
   })
@@ -379,7 +379,7 @@ describe('options at rest', () => {
       ok: true,
       result: { threadGoal: { current: null }, rewind: { supported: true } }
     })
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
     expect(rig.adapter.readOptions).not.toHaveBeenCalled()
   })
 })
@@ -397,12 +397,12 @@ describe('an agent exit', () => {
       acquisitionGeneration: running.generation!
     })
     await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(rig.adapter.acquire).toHaveBeenCalledOnce()
+    expect(rig.adapter.spawn).toHaveBeenCalledOnce()
 
     const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
     expect(rig.store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
     await rig.host.send(CALLER, restTestSend('again', fence))
-    await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledTimes(2))
   })
 
   it('whose settlement write failed is settled by the next send, which is delivered', async () => {
@@ -410,7 +410,7 @@ describe('an agent exit', () => {
     const open = rig.host.collaboratorsForTests().sessions.get(SESSION)!
     const running = open.child!
     // A turn in flight, so the exit has something to settle.
-    rig.adapter.acquire.mock.calls
+    rig.adapter.spawn.mock.calls
       .at(-1)?.[0]
       .events?.appendItem(
         { provider: 'codex', threadId: REST_TEST_THREAD, turnId: 'working', ordinal: 50 },
@@ -430,7 +430,7 @@ describe('an agent exit', () => {
       fence: running.fence,
       acquisitionGeneration: running.generation!
     })
-    // Released with its death evidence, not latched: the next acquire settles from that evidence.
+    // Released with its death evidence, not latched: the next spawn settles from that evidence.
     await vi.waitFor(() =>
       expect(rig.store.getRecord(SESSION)?.lease).toMatchObject({
         claimStatus: 'released',
@@ -492,6 +492,6 @@ describe('every close withdraws what is queued (P2-29)', () => {
     )
     expect(JSON.stringify(reader)).toContain('"rejection":{"kind":"chatClosed"}')
     expect(rig.host.hasSession(SESSION)).toBe(false)
-    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.spawn).not.toHaveBeenCalled()
   })
 })

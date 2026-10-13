@@ -12,8 +12,7 @@ import type {
 import type { StructuredAgentSessionSinkBarrier } from './structured-agent-session-event-sink'
 import {
   settleStructuredAgentSessionOptionsReported,
-  settleStructuredAgentSessionOptionsSkipped,
-  settleStructuredAgentSessionProviderStarted
+  settleStructuredAgentSessionOptionsSkipped
 } from './structured-agent-session-provider-started'
 import {
   endExitedStructuredAgentSessionChildUnderSerialize,
@@ -83,7 +82,7 @@ export class StructuredAgentSessionEventRecovery {
         acknowledgeRelease: (sessionId) => deps.adapter.acknowledgeSessionRelease?.(sessionId)
       },
       abortOpen: (sessionId) =>
-        runtimeState.acquireAborts.abort(sessionId, 'provider exited while opening')
+        runtimeState.providerWaits.abort(sessionId, 'provider exited while opening')
     }
   }
 
@@ -133,9 +132,6 @@ export class StructuredAgentSessionEventRecovery {
    *  nothing restarts the child. The next send does, through the delivery loop, which also owns any
    *  message still queued. */
   async handle(event: StructuredAgentSessionLifecycleEvent): Promise<void> {
-    if (event.type === 'started') {
-      return settleStructuredAgentSessionProviderStarted(this.context, event)
-    }
     if (event.type === 'options-reported') {
       return settleStructuredAgentSessionOptionsReported(this.context, event)
     }

@@ -1,7 +1,4 @@
-import type {
-  AgentSessionAccountKind,
-  AgentSessionUnavailable
-} from '../../../shared/agent-session-availability'
+import type { AgentSessionAccountKind } from '../../../shared/agent-session-availability'
 import type {
   AgentSessionRewindReason,
   AgentSessionRewindSupport
@@ -55,7 +52,10 @@ import type { ProviderHistoryWindow } from '../agent-session-journal/journal-sub
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
 import type { AgentSessionCreatePhaseRecorder } from '../../observability/agent-session-instrumentation'
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
-import type { StructuredAgentSessionProviderOpen } from './structured-agent-session-provider-open-contract'
+import type {
+  StructuredAgentSessionProviderOpen,
+  StructuredAgentSessionProviderOpenResult
+} from './structured-agent-session-provider-open-contract'
 
 /** A live options read, plus what the child listed for its account's saved catalog. The host
  *  saves that listing and strips it before answering; an adapter whose listing reaches the
@@ -105,17 +105,14 @@ export {
   AgentSessionAcquisitionRootExitObservedError
 } from './structured-agent-session-acquisition-errors'
 
-/** What a reservation turns into once a process is running under it. Every acquire answers as
- *  soon as its process exists, before any handshake: the host publishes the child `starting` and
- *  hands it nothing until its `started` event. */
+/** The owned process returned before protocol construction begins. */
 export type AgentSessionAcquisition = {
   process: AgentSessionProcessIdentity
-  /** Only a handle the adapter already holds at spawn (one Orca chose itself); a handle the
-   *  provider answers with comes on `started`, never made up here. */
+  /** Only a handle the adapter already holds at spawn; protocol handles come from open. */
   link?: AgentSessionProviderHandleLink
   /** Host-local identity for this exact provider child, distinct even when the durable fence is
    *  reused by a superseding acquisition. */
-  acquisitionGeneration?: string
+  acquisitionGeneration: string
 }
 
 /** A refusal before spawn that a person can act on; the site that refused names it. */
@@ -212,30 +209,6 @@ export type StructuredAgentSessionEndedEvent = {
   startupUnanswered?: true
 }
 
-/** The child an acquire handed over has now proven its start: its protocol session exists and the
- *  saved options it launched with are applied. What it reports from here on is fact. */
-export type StructuredAgentSessionStartedEvent = {
-  type: 'started'
-  sessionId: string
-  fence: number
-  acquisitionGeneration: string
-  /** The provider handle its protocol session answered with; absent when the acquisition held it. */
-  link?: AgentSessionProviderHandleLink
-  /** What the child proved, snapshotted by the adapter from what startup already read. The host
-   *  handles this inside the session's serialized step, so it must not ask the CLI. */
-  reportedOptions: AgentSessionOptionsResult['current']
-  /** Saved options the child could not take; the host drops them rather than persist them. */
-  restoreSkippedOptions: readonly string[]
-  /** Values the child showed it cannot run: a report naming the same value is not persisted. */
-  retiredOptions?: Readonly<Record<string, string>>
-  /** What the child listed at startup, with the configured default its start resolved, saved once
-   *  as its account's catalog. Claude's default comes on its settings readback's `options-reported`. */
-  catalogListing?: AgentModelCatalogLiveListing
-  /** The attempt's `optionRevision()` as the read behind this report began: a pick the host took
-   *  since makes it out of date. An earlier report never does, whenever the host took it. */
-  optionRevision: number
-}
-
 /** A running child showed saved options it cannot run, as a model the provider reports missing.
  *  The record drops them, so the next start uses the provider's own. */
 export type StructuredAgentSessionOptionsSkippedEvent = {
@@ -247,26 +220,26 @@ export type StructuredAgentSessionOptionsSkippedEvent = {
   options: Readonly<Record<string, string>>
 }
 
-/** What a child that already proved its start reports later, such as an optional read that came
- *  after `started`: persisted as the start's report is. Never delays a start. */
-export type StructuredAgentSessionOptionsReportedEvent = Omit<
-  StructuredAgentSessionStartedEvent,
-  'type' | 'link'
-> & { type: 'options-reported' }
+/** An optional report after open; it never delays readiness. */
+export type StructuredAgentSessionOptionsReportedEvent =
+  StructuredAgentSessionProviderOpenResult & {
+    type: 'options-reported'
+    sessionId: string
+    fence: number
+    acquisitionGeneration: string
+  }
 
 export type StructuredAgentSessionLifecycleEvent =
   | StructuredAgentSessionEndedEvent
-  | StructuredAgentSessionStartedEvent
   | StructuredAgentSessionOptionsReportedEvent
   | StructuredAgentSessionOptionsSkippedEvent
 
-/** Whether the provider child behind an acquisition has proven its start. Every acquire hands
- *  over a `starting` child, which the host gives no input until the `started` event flips it. */
+/** Whether the host's open has proven the child ready for input. */
 export type StructuredAgentSessionProviderChildPhase = 'starting' | 'ready'
 
 /** The host's startup attempt (`structured-agent-session-startup-attempt`), which the host always
  *  passes whole. Only the fields every caller has are required, so an adapter test may pass less. */
-export type StructuredAgentSessionAcquireInput = Pick<
+export type StructuredAgentSessionSpawnInput = Pick<
   StructuredAgentSessionStartupAttempt,
   'identity' | 'fence' | 'spawnToken'
 > &
@@ -289,7 +262,7 @@ export type StructuredAgentSessionSetOptionInput = {
 
 export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & {
   /** Opens the published process under the host's startup signal. */
-  open?: StructuredAgentSessionProviderOpen
+  open: StructuredAgentSessionProviderOpen
   /** Provider-aware capability check for hosts that route more than one adapter. */
   supportsCreate?(location: AgentSessionExecutionLocation, agent: string): boolean
   /** Provider/runtime support, kept here so remote enablement changes adapter data, not UI logic. */
@@ -297,7 +270,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** Makes the reservation real. Called once per reservation, with the spawn
    *  token the lease was reserved under and the fence the handle must be minted
    *  at — the store rejects a link minted at any other fence. */
-  acquire(input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition>
+  spawn(input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition>
   /** Reaps an acquired provider when the host cannot commit or prove its lease.
    *  Returns true only after provider child exit is proven. Throws
    *  `AgentSessionAcquisitionRootExitObservedError` when the provider root's own
@@ -390,9 +363,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** The adapter's own child for this exact acquisition has a pid and its root exit has not been
    *  seen: first-hand proof of life for lease renewal. Absent or false falls back to a PID probe. */
   holdsLiveProviderProcess?(sessionId: string, acquisitionGeneration: string): boolean
-  /** Why the session's running child can take no turn, as its own start found; undefined when
-   *  unknown or no child runs. Lives and dies with that child. */
-  startUnavailable?(sessionId: string): AgentSessionUnavailable | undefined
   /** The `/` surface the running provider reports for itself. Undefined when the
    *  provider never reports one, which is what keeps the client on its catalog. */
   readCommands?(sessionId: string): AgentSessionSlashCommand[] | undefined

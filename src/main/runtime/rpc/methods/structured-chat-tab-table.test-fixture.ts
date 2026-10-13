@@ -55,12 +55,18 @@ function providerAdapter(): StructuredAgentSessionAdapter {
   return {
     supportsLocation: (location) =>
       location.executionHostId === 'local' && location.wslDistro === null,
-    acquire: vi.fn(async (input) => {
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: vi.fn(async (input) => {
       if (acquireFails) {
         throw new Error('provider failed to start')
       }
       acquisitions++
       return {
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',
           pid: 4000 + acquisitions,

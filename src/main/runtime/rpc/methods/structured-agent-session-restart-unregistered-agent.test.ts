@@ -113,7 +113,7 @@ it.each(['empty', 'claude-codex'] as const)(
     const agents =
       registrations === 'empty' ? new StructuredAgentRegistry([]) : claudeAndCodexDeclared()
     const router = new StructuredAgentSessionAdapterRouter(agents, async () => {})
-    const acquire = vi.spyOn(router, 'acquire')
+    const spawn = vi.spyOn(router, 'spawn')
     host = new StructuredAgentSessionHost({
       store,
       agents,
@@ -145,7 +145,7 @@ it.each(['empty', 'claude-codex'] as const)(
       expect(await capsule.list(NOW + 1)).toMatchObject([{ sessionId: PENDING }])
       expect(await capsule.listFailed(NOW + 1)).toMatchObject([{ marker: { sessionId: FAILED } }])
     }
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
 
     expect(await call('agentSession.restartResumable', {}, NEW_CLIENT)).toMatchObject({
       ok: true,

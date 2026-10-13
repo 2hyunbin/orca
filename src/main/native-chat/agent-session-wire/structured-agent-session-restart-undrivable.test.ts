@@ -26,7 +26,7 @@ function codexOnAnotherTransport(): StructuredAgentRegistry {
 }
 
 it('does not offer to resume a chat whose agent this build no longer drives, and keeps the offer', async () => {
-  const { host, root, acquire } = await interruptedRestart(
+  const { host, root, spawn } = await interruptedRestart(
     undefined,
     undefined,
     undefined,
@@ -38,7 +38,7 @@ it('does not offer to resume a chat whose agent this build no longer drives, and
     resumed: [],
     continued: []
   })
-  expect(acquire).not.toHaveBeenCalled()
+  expect(spawn).not.toHaveBeenCalled()
   expect(await new AgentSessionRecoveryCapsule(root).list(NOW + 1)).toHaveLength(1)
 })
 

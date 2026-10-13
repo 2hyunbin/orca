@@ -6,7 +6,7 @@ import {
   type StructuredAgentSessionSinkBarrier
 } from './structured-agent-session-event-sink'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host'
-import { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
+import { StructuredAgentSessionProviderWaits } from './structured-agent-session-provider-waits'
 import { StructuredAgentSessionLeaseRenewer } from './structured-agent-session-lease-renewer'
 import {
   heldProviderChildReader,
@@ -23,7 +23,7 @@ import {
 
 export class StructuredAgentSessionHostRuntimeState {
   private readonly eventSinks = new Map<string, DeferredStructuredAgentSessionEventSink>()
-  readonly acquireAborts = new StructuredAgentSessionAcquireAborts()
+  readonly providerWaits = new StructuredAgentSessionProviderWaits()
   readonly startupAttempts: StructuredAgentSessionStartupAttempts
   readonly optionRevisions = new StructuredAgentSessionOptionRevisions()
   private readonly leaseRenewer: StructuredAgentSessionLeaseRenewer
@@ -43,7 +43,7 @@ export class StructuredAgentSessionHostRuntimeState {
       settled: recordAgentSessionStartup,
       expire: (expired) => {
         // Still acquiring, or applying the picks made meanwhile: either wait ends now.
-        this.acquireAborts.abort(expired.sessionId, new StructuredAgentSessionStartupExpiredError())
+        this.providerWaits.abort(expired.sessionId, new StructuredAgentSessionStartupExpiredError())
         if (expired.child !== null) {
           onStartupExpired?.(expired)
         }

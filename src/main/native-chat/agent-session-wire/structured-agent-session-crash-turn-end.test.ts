@@ -168,7 +168,12 @@ function openHost(overrides: Partial<StructuredAgentSessionHostDeps>): void {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
-      acquire: vi.fn(),
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn: vi.fn(),
       dispatch: vi.fn(),
       cancelTurn: vi.fn(),
       answerPrompt: vi.fn(),
@@ -428,10 +433,15 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
     const stopOwnerProcess = vi.fn(() => {
       alive = false
     })
-    const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>()
+    const spawn = vi.fn<StructuredAgentSessionAdapter['spawn']>()
     openHost({
       adapter: {
-        acquire,
+        open: async () => ({
+          reportedOptions: { model: '' },
+          restoreSkippedOptions: [],
+          optionRevision: -1
+        }),
+        spawn,
         dispatch: vi.fn(),
         cancelTurn: vi.fn(),
         answerPrompt: vi.fn(),
@@ -449,7 +459,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
     await drainSession()
 
     expect(stopOwnerProcess).toHaveBeenCalledOnce()
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
     expect(await settledTurn()).toMatchObject({
       state: 'interrupted',
       completedAt: LAST_RENEWED_AT
@@ -457,7 +467,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
   })
 
   it('never touches the turn a start after the crash is writing', async () => {
-    const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>(
+    const spawn = vi.fn<StructuredAgentSessionAdapter['spawn']>(
       async ({ fence, spawnToken, onSpawned, events }) => {
         const process = {
           hostId: 'local',
@@ -473,6 +483,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
           { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
         )
         return {
+          acquisitionGeneration: globalThis.crypto.randomUUID(),
           process,
           link: {
             linkId: `claude-${fence}-link`,
@@ -486,7 +497,12 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
     )
     openHost({
       adapter: {
-        acquire,
+        open: async () => ({
+          reportedOptions: { model: '' },
+          restoreSkippedOptions: [],
+          optionRevision: -1
+        }),
+        spawn,
         dispatch: vi.fn(),
         cancelTurn: vi.fn(),
         answerPrompt: vi.fn(),
@@ -544,7 +560,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
  *  later start succeeds. The crashed owner, and any child left behind, probe gone. */
 async function hostWithFailingFirstStart(failure: Error) {
   let now = RELAUNCHED_AT
-  const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>(
+  const spawn = vi.fn<StructuredAgentSessionAdapter['spawn']>(
     async ({ fence, spawnToken, onSpawned }) => {
       const process = { hostId: 'local', pid: 7_000 + fence, processStartTimeMs: now, spawnToken }
       await onSpawned?.(process)
@@ -552,6 +568,7 @@ async function hostWithFailingFirstStart(failure: Error) {
         throw failure
       }
       return {
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process,
         link: {
           linkId: `claude-${fence}-link`,
@@ -565,7 +582,12 @@ async function hostWithFailingFirstStart(failure: Error) {
   )
   openHost({
     adapter: {
-      acquire,
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn,
       releaseAcquisition: async () => true,
       dispatch: vi.fn(),
       cancelTurn: vi.fn(),

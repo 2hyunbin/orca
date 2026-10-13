@@ -1,3 +1,4 @@
+import { eventually } from './structured-agent-session-queued-message-rig.test-fixture'
 import { envelope as mutationEnvelope } from './structured-agent-session-host-test-harness'
 // A Stop that names no turn stops what the conversation has in flight: it withdraws what is
 // queued, and interrupts a handed-over message even before the provider has opened its turn —
@@ -16,7 +17,7 @@ import type { AgentSessionRecordStore } from '../../runtime/agent-session-record
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import type {
   AgentSessionAcquisition,
-  StructuredAgentSessionAcquireInput,
+  StructuredAgentSessionSpawnInput,
   StructuredAgentSessionAdapter
 } from './structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
@@ -65,12 +66,8 @@ let log: ReturnType<typeof recordingStructuredAgentSessionLogger>
 let events: StructuredAgentSessionEventSink | undefined
 /** Set by a test whose later children are real Codex ones; the first stays the fake. */
 let acquireNext:
-  | ((input: StructuredAgentSessionAcquireInput) => Promise<AgentSessionAcquisition>)
+  | ((input: StructuredAgentSessionSpawnInput) => Promise<AgentSessionAcquisition>)
   | undefined
-
-function eventually(assertion: () => void | Promise<void>): Promise<void> {
-  return vi.waitFor(assertion, { timeout: 10_000 })
-}
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-conversation-stop-'))
@@ -91,7 +88,12 @@ beforeEach(async () => {
     store,
     adapter: startsWhenPublished(
       {
-        acquire: async (input) => {
+        open: async () => ({
+          reportedOptions: { model: '' },
+          restoreSkippedOptions: [],
+          optionRevision: -1
+        }),
+        spawn: async (input) => {
           const { fence, spawnToken, events: sink } = input
           events = sink
           // A child started after a Stop ended the last one resumes the chat's thread.

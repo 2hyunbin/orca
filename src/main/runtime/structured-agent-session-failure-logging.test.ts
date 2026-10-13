@@ -94,7 +94,7 @@ describe('failures the desktop host used to drop', () => {
     )
   })
 
-  it('logs a provider start or exit the host could not take', async () => {
+  it('logs a provider report or exit the host could not take', async () => {
     const log = recordingStructuredAgentSessionLogger()
     const error = new Error('host refused the event')
     const lifecycle = createStructuredAgentSessionLifecycleDelivery({
@@ -106,7 +106,7 @@ describe('failures the desktop host used to drop', () => {
     })
 
     lifecycle.deliver({
-      type: 'started',
+      type: 'options-reported',
       sessionId: SESSION,
       fence: 1,
       acquisitionGeneration: 'generation-1',
@@ -125,7 +125,7 @@ describe('failures the desktop host used to drop', () => {
     await lifecycle.drain()
 
     expect(log.entries.map((entry) => entry.fields)).toEqual([
-      { scope: 'lifecycle-started', sessionId: SESSION, error },
+      { scope: 'lifecycle-options-reported', sessionId: SESSION, error },
       { scope: 'lifecycle-exit', sessionId: SESSION, error }
     ])
   })

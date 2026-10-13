@@ -1,6 +1,6 @@
 // The host's half of a provider child proving its start.
 //
-// Every acquire hands the host a child that has answered nothing yet, so the record keeps only the
+// Every spawn hands the host a child that has answered nothing yet, so the record keeps only the
 // saved options the reservation carried, and the delivery loop hands it nothing. This is where the
 // host learns the start landed: the provider handle the child answered with is recorded (a resume
 // needs it), a rewind left in doubt is settled, the child turns
@@ -14,9 +14,9 @@
 
 import type {
   StructuredAgentSessionOptionsReportedEvent,
-  StructuredAgentSessionOptionsSkippedEvent,
-  StructuredAgentSessionStartedEvent
+  StructuredAgentSessionOptionsSkippedEvent
 } from './structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from './structured-agent-session-provider-open-contract'
 import type {
   StructuredAgentSessionHostDeps,
   StructuredAgentSessionHostSession,
@@ -32,7 +32,7 @@ import {
   saveStructuredAgentSessionStartReadbackListing
 } from './structured-agent-session-start-listing'
 import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
-import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
+import type { StructuredAgentSessionProviderWaits } from './structured-agent-session-provider-waits'
 import { recordAgentSessionProviderHandle } from '../../runtime/agent-session-provider-handle-transition'
 import { recoverStructuredRewind } from './structured-rewind-recovery'
 
@@ -44,7 +44,7 @@ export type StructuredAgentSessionProviderStartedContext = {
   publishStatus?: (sessionId: string) => void
   runtimeState: {
     startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'ready' | 'onClock' | 'readiness'>
-    acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
+    providerWaits: Pick<StructuredAgentSessionProviderWaits, 'begin'>
   }
   /** The barrier lifts: what was accepted while the child started is handed over now. Settles once
    *  the loop has handed over all it can. */
@@ -53,9 +53,15 @@ export type StructuredAgentSessionProviderStartedContext = {
   stopStartingChild: (sessionId: string, child: StructuredAgentSessionProviderChildIdentity) => void
 }
 
+type OpenedProvider = StructuredAgentSessionProviderOpenResult & {
+  sessionId: string
+  fence: number
+  acquisitionGeneration: string
+}
+
 export async function settleStructuredAgentSessionProviderStarted(
   context: StructuredAgentSessionProviderStartedContext,
-  event: StructuredAgentSessionStartedEvent
+  event: OpenedProvider
 ): Promise<void> {
   // Serialized behind the attach that published this child, so the lease it proved is committed.
   await context.serialize(event.sessionId, async () => {
@@ -129,12 +135,12 @@ async function recoverRewindAtStart(
  *  without it a later start could not resume what this child ran. False when there is none. */
 async function recordStartedHandle(
   context: StructuredAgentSessionProviderStartedContext,
-  event: StructuredAgentSessionStartedEvent
+  event: OpenedProvider
 ): Promise<boolean> {
   const { store, logger } = context.deps
   const { link } = event
   if (!link) {
-    // Only an acquisition that already held its handle may prove its start without one.
+    // Only a spawn that already held its handle may prove its open without one.
     return store.getRecord(event.sessionId)?.lease.provenHandleLinkId != null
   }
   try {

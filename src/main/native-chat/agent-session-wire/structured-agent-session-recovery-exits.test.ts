@@ -31,7 +31,7 @@ const CALLER = { callerKey: 'client-1' }
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 const spawnedOwners = new Set<ReturnType<typeof spawnProcess>>()
 const supersededHosts = new Set<StructuredAgentSessionHost>()
 
@@ -73,13 +73,18 @@ async function startAgent(): Promise<void> {
 
 function adapter(): StructuredAgentSessionAdapter {
   return {
-    acquire,
-    releaseAcquisition: vi.fn(async () => undefined),
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn,
+    releaseAcquisition: vi.fn(async () => false),
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
     answerPrompt: vi.fn(),
     setOption: vi.fn()
-  } as unknown as StructuredAgentSessionAdapter
+  }
 }
 
 function openHost(overrides: Partial<StructuredAgentSessionHostDeps> = {}): void {
@@ -104,7 +109,8 @@ async function reopenStore(): Promise<void> {
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-recovery-exits-'))
   resetHostTestOperationIds()
-  acquire = vi.fn(async ({ fence }) => ({
+  spawn = vi.fn(async ({ fence }) => ({
+    acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: {
       hostId: 'local',
       pid: 4242,
@@ -133,7 +139,7 @@ afterEach(async () => {
 
 describe('recovery exits', () => {
   it('releases an ownerless unproven acquisition, so the next start goes ahead', async () => {
-    acquire.mockRejectedValueOnce(new Error('simulated crash before identity commit'))
+    spawn.mockRejectedValueOnce(new Error('simulated crash before identity commit'))
     await expect(host.attach(CALLER, hostTestAttachParams(null))).rejects.toThrow(
       'agent_session_acquisition_exit_unproven'
     )
@@ -152,7 +158,7 @@ describe('recovery exits', () => {
     openHost({ mintSpawnToken: () => 'spawn-b' })
 
     expect(await host.attach(CALLER, hostTestAttachParams(2))).toMatchObject({ ok: true })
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
   })
 
   it('releases an unproven acquisition whose owner later dies, without replaying it as a handoff', async () => {
@@ -190,7 +196,7 @@ describe('recovery exits', () => {
 
     // Death proof releases the residue outright: no handoff continuation, no spawned child,
     // no stage a user would have to clear by hand.
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
       handoffStage: null,
@@ -202,7 +208,7 @@ describe('recovery exits', () => {
 
     // The ordinary native recovery path remains: the next start resumes it.
     await startAgent()
-    expect(acquire).toHaveBeenCalledTimes(3)
+    expect(spawn).toHaveBeenCalledTimes(3)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'live',
       handoffStage: null,
@@ -237,7 +243,7 @@ describe('recovery exits', () => {
     const retried = await host.attach(CALLER, hostTestAttachParams(2))
     expect(retried).toMatchObject({ ok: true })
     // A fresh child was spawned; the orphan pid's lease did not survive as the owner.
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       runtimeFence: 3,
       claimStatus: 'live',
@@ -267,7 +273,7 @@ describe('recovery exits', () => {
     // Healing is startup's job; spawning is not. The orphan is stopped and the lease is free, but
     // nothing has asked this session for work, so no replacement child exists yet.
     expect(stopOwnerProcess).toHaveBeenCalledWith(4242, 'SIGTERM')
-    expect(acquire).toHaveBeenCalledTimes(1)
+    expect(spawn).toHaveBeenCalledTimes(1)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
       handoffStage: null,
@@ -276,7 +282,7 @@ describe('recovery exits', () => {
 
     await startAgent()
 
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       runtimeFence: 3,
       claimStatus: 'live',
@@ -287,7 +293,8 @@ describe('recovery exits', () => {
 
   it('recovers when the outgoing runtime writes after the replacement probes its dying owner', async () => {
     const outgoing = await spawnOwner('spawn-a')
-    acquire.mockResolvedValueOnce({
+    spawn.mockResolvedValueOnce({
+      acquisitionGeneration: globalThis.crypto.randomUUID(),
       process: outgoing.process,
       link: {
         linkId: 'link-outgoing',
@@ -329,10 +336,11 @@ describe('recovery exits', () => {
       claimStatus: 'released',
       ownerProcess: null
     })
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
 
     const replacement = await spawnOwner('spawn-b')
-    acquire.mockResolvedValueOnce({
+    spawn.mockResolvedValueOnce({
+      acquisitionGeneration: globalThis.crypto.randomUUID(),
       process: replacement.process,
       link: {
         linkId: 'link-replacement',

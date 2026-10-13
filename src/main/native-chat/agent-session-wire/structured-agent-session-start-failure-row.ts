@@ -11,6 +11,27 @@ import type {
 import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
+import { failedProviderChildStart } from './structured-agent-session-provider-child'
+import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
+
+/** A queued message whose child died while it waited inherits that child's failure. */
+export function startThatFailedWhileQueued(
+  session: StructuredAgentSessionHostSession,
+  oldest: AgentJournalSubmission
+): { startKey: string | null; cause: StructuredAgentSessionStartFailureCause } | null {
+  const ended = failedProviderChildStart(session)
+  if (
+    !ended ||
+    oldest.acceptedSequence === undefined ||
+    ended.endedAt.epoch !== session.journal.cursor().epoch ||
+    ended.endedAt.sequence < oldest.acceptedSequence
+  ) {
+    return null
+  }
+  const cause = structuredAgentSessionEndedChildFailure(ended)
+  return cause ? { startKey: ended.generation, cause } : null
+}
 
 export function refusedStructuredAgentSessionStart(
   record: AgentSessionRecord | null,

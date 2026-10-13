@@ -5,7 +5,7 @@
 // it sends is written except context usage.
 
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
-import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionSpawnInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import {
   ACP_REOPEN_FAILED,
@@ -28,7 +28,7 @@ import {
 } from './acp-structured-child'
 
 type AcpHandshakeInput = {
-  acquire: StructuredAgentSessionAcquireInput
+  spawn: StructuredAgentSessionSpawnInput
   deps: AcpStructuredSessionAdapterDeps
   generation: string
   launch: AcpStructuredLaunch
@@ -48,13 +48,13 @@ type AcpHandshakeInput = {
 export async function initializeAcpStructuredSession(
   input: AcpHandshakeInput
 ): Promise<StructuredAgentSessionProviderOpenResult> {
-  const { acquire, deps, launch, connection, options, prompts, child, onSettled } = input
+  const { spawn, deps, launch, connection, options, prompts, child, onSettled } = input
   const { spec } = deps
-  const sessionId = acquire.identity.sessionId
+  const sessionId = spawn.identity.sessionId
   const now = deps.now ?? Date.now
   const assertStarting = () => assertAcpStartingSession(child, input.abandoned)
   const agentName = acpAgentName(spec.agent)
-  const optionRevision = acquire.optionRevision?.() ?? 0
+  const optionRevision = spawn.optionRevision?.() ?? 0
   assertStarting()
   const initialized = await connection.initialize()
   assertStarting()
@@ -106,10 +106,10 @@ export async function initializeAcpStructuredSession(
   const restoreSkipped: string[] = []
   const link: AgentSessionProviderHandleLink = {
     linkId:
-      deps.mintLinkId?.() ?? `${spec.agent}-${acquire.fence}-${started.sessionId}`.slice(0, 128),
+      deps.mintLinkId?.() ?? `${spec.agent}-${spawn.fence}-${started.sessionId}`.slice(0, 128),
     handle: { transport: ACP_HANDLE_TRANSPORT, agent: spec.agent, nativeId: started.sessionId },
     origin: started.kind === 'new' ? 'created' : 'resumed',
-    mintedAtFence: acquire.fence,
+    mintedAtFence: spawn.fence,
     observedAt: now(),
     ...takeover
   }
@@ -127,7 +127,7 @@ export async function initializeAcpStructuredSession(
     restoreSkipped
   })
   const reading = liveLane
-  const unbind = acquire.events?.bindReadingControl?.({
+  const unbind = spawn.events?.bindReadingControl?.({
     pauseReading: () => connection.pauseReading(),
     resumeReading: () => {
       connection.resumeReading()

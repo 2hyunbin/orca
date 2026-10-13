@@ -14,14 +14,14 @@ import {
   isAgentSessionPreSpawnError,
   type AgentSessionAcquisition,
   type AgentSessionDispatchOutcome,
-  type StructuredAgentSessionAcquireInput,
+  type StructuredAgentSessionSpawnInput,
   type StructuredAgentSessionAdapter,
   type StructuredAgentSessionSetOptionInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { supportsSupervisedProviderChildLocation } from '../provider-process/supervised-provider-child-location'
 import { withObservedProviderExit } from '../native-chat/agent-session-wire/structured-agent-session-failure-text'
 import { acpAgentName } from './acp-structured-agent-definitions'
-import { acquireAcpStructuredSession } from './acp-structured-acquire'
+import { spawnAcpStructuredSession } from './acp-structured-spawn'
 import type { AcpStructuredSession } from './acp-structured-session'
 import type { ProviderStartAttempt } from '../provider-process/provider-acquisition-starts'
 import { waitForAcpExit, type AcpStructuredConnection } from './acp-structured-connection'
@@ -60,7 +60,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   supportsLocation = (location: AgentSessionExecutionLocation): boolean =>
     supportsSupervisedProviderChildLocation(location, this.deps.isWindowsProcessStartTimeAvailable)
 
-  async acquire(input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> {
+  async spawn(input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition> {
     const sessionId = input.identity.sessionId
     const attempt = this.children.starts.begin(input.signal)
     try {
@@ -78,14 +78,14 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   }
 
   private async start(
-    input: StructuredAgentSessionAcquireInput,
+    input: StructuredAgentSessionSpawnInput,
     attempt: ProviderStartAttempt<AcpStructuredConnection>
   ): Promise<AgentSessionAcquisition> {
     const sessionId = input.identity.sessionId
     const generation = this.deps.mintGeneration?.() ?? randomUUID()
     try {
-      const { acquisition, session } = await acquireAcpStructuredSession({
-        acquire: input,
+      const { acquisition, session } = await spawnAcpStructuredSession({
+        spawn: input,
         deps: this.deps,
         generation,
         abandoned: () => attempt.signal.aborted,
@@ -256,11 +256,6 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
 
   readOptions = async (input: { sessionId: string; fence: number }) =>
     readAcpLiveOptions(this.live(input.sessionId))
-
-  readOptionRestoreFailures = (sessionId: string): readonly string[] => {
-    const session = this.children.sessions.get(sessionId)
-    return session && isAcpReadySession(session) ? session.restoreSkipped : []
-  }
 
   readCommands = (sessionId: string) => {
     const session = this.children.sessions.get(sessionId)

@@ -19,7 +19,7 @@ describe('Pi RPC session ownership and delivery', () => {
     const h = await setup()
     await h.adapter.closeSession(sessionId)
     h.resolveLaunch.mockRejectedValueOnce(agentSessionLaunchFolderMissing('/gone/floating'))
-    await expect(h.adapter.acquire({ ...h.input, fence: 8 })).rejects.toMatchObject({
+    await expect(h.adapter.spawn({ ...h.input, fence: 8 })).rejects.toMatchObject({
       name: 'AgentSessionPreSpawnError',
       reason: 'launchFolderMissing'
     })
@@ -33,12 +33,12 @@ describe('Pi RPC session ownership and delivery', () => {
     const resolving = Promise.withResolvers<NonNullable<typeof launch>>()
     h.resolveLaunch.mockImplementationOnce(() => resolving.promise)
     const controller = new AbortController()
-    const started = h.adapter.acquire({ ...h.input, fence: 8, signal: controller.signal })
+    const started = h.adapter.spawn({ ...h.input, fence: 8, signal: controller.signal })
     await Promise.resolve()
     controller.abort(new Error('Pi closed while starting'))
     await expect(started).rejects.toThrow('closed while starting')
     expect(h.connections).toHaveLength(1)
-    await expect(h.adapter.acquire({ ...h.input, fence: 9 })).resolves.toMatchObject({
+    await expect(h.adapter.spawn({ ...h.input, fence: 9 })).resolves.toMatchObject({
       process: { pid: 4123 }
     })
     resolving.resolve(launch!)
@@ -46,7 +46,7 @@ describe('Pi RPC session ownership and delivery', () => {
     expect(h.connections).toHaveLength(2)
   })
 
-  it('closes a published child during a stalled handshake without reporting started', async () => {
+  it('closes a published child during a stalled handshake', async () => {
     const h = await setup()
     await h.adapter.closeSession(sessionId)
     const opened = Promise.withResolvers<FakeConnection>()
@@ -60,7 +60,7 @@ describe('Pi RPC session ownership and delivery', () => {
       opened.resolve(connection)
       return connection
     })
-    const acquired = h.adapter.acquire({ ...h.input, fence: 8 })
+    const acquired = h.adapter.spawn({ ...h.input, fence: 8 })
     const child = await opened.promise
     await Promise.resolve()
     const owned = await acquired
@@ -69,7 +69,7 @@ describe('Pi RPC session ownership and delivery', () => {
       .open({
         sessionId,
         fence: 8,
-        acquisitionGeneration: owned.acquisitionGeneration ?? null,
+        acquisitionGeneration: owned.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch((error: unknown) => error)
@@ -84,9 +84,6 @@ describe('Pi RPC session ownership and delivery', () => {
         startupUnproven: true,
         cause: 'requested-close'
       })
-    )
-    expect(h.lifecycle).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'started', fence: 8 })
     )
     expect(child.rootVerdict).toBe('exited')
     expect(await opening).toBeInstanceOf(Error)
@@ -133,7 +130,7 @@ describe('Pi RPC session ownership and delivery', () => {
     h.connection.deferExit = true
     await h.adapter.closeSession(sessionId)
     h.adapter.acknowledgeSessionRelease(sessionId)
-    await expect(h.adapter.acquire({ ...h.input, fence: 8 })).resolves.toMatchObject({
+    await expect(h.adapter.spawn({ ...h.input, fence: 8 })).resolves.toMatchObject({
       process: { pid: 4123 }
     })
     let drained = false
@@ -572,12 +569,12 @@ describe('Pi RPC start without a model', () => {
       h.connections.push(connection)
       return connection
     })
-    const acquired = await h.adapter.acquire({ ...h.input, fence: 8 })
+    const acquired = await h.adapter.spawn({ ...h.input, fence: 8 })
     await expect(
       h.adapter.open({
         sessionId,
         fence: 8,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
     ).rejects.toMatchObject({ reason: 'notSignedIn' })

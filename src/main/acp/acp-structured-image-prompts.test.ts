@@ -32,7 +32,7 @@ describe('ACP image prompts', () => {
       spec: acpLaunchSpecFor('opencode')!,
       initialize: { agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } }
     })
-    await rig.acquire()
+    await rig.spawn()
     await expect(
       rig.adapter.dispatch({ sessionId: SESSION, clientMessageId: 'm1', body: withImage, fence: 1 })
     ).resolves.toEqual({ state: 'admitted' })
@@ -49,7 +49,7 @@ describe('ACP image prompts', () => {
 
   it('refuses the message, sending nothing, when the agent did not advertise images', async () => {
     const rig = await openAcpAdapterRig({ spec: acpLaunchSpecFor('opencode')! })
-    await rig.acquire()
+    await rig.spawn()
     await expect(
       rig.adapter.dispatch({ sessionId: SESSION, clientMessageId: 'm1', body: withImage, fence: 1 })
     ).resolves.toMatchObject({ state: 'rejected', rejection: { kind: 'attachmentInvalid' } })
@@ -61,7 +61,7 @@ describe('ACP image prompts', () => {
     const rig = await openAcpAdapterRig({
       initialize: { agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } }
     })
-    await rig.acquire()
+    await rig.spawn()
     await expect(
       rig.adapter.dispatch({ sessionId: SESSION, clientMessageId: 'm1', body: withImage, fence: 1 })
     ).resolves.toMatchObject({ state: 'rejected' })

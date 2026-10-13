@@ -20,6 +20,7 @@ import { openTestJournalHostDatabase } from '../agent-session-journal/journal-ho
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { structuredAgentSessionHeldStarts } from './structured-agent-session-held-start.test-support'
 
 const CALLER = { callerKey: 'client-1' }
 
@@ -27,9 +28,10 @@ let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 const providerStarted = vi.fn()
+const starts = structuredAgentSessionHeldStarts(() => host)
 
 function startHost(): void {
-  const acquire: StructuredAgentSessionAdapter['acquire'] = async ({ fence, spawnToken }) => ({
+  const spawn: StructuredAgentSessionAdapter['spawn'] = async ({ fence, spawnToken }) => ({
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -44,15 +46,20 @@ function startHost(): void {
     agents: NO_STRUCTURED_AGENTS,
     logger: createStructuredAgentSessionLogger(),
     store,
-    adapter: {
-      acquire,
+    adapter: starts.wrap({
+      spawn: starts.held(spawn),
       releaseAcquisition: vi.fn(async () => true),
       closeSession: vi.fn(async () => true),
       dispatch: vi.fn(async () => ({ state: 'admitted' as const })),
       cancelTurn: vi.fn(async () => ({ cancelled: true })),
       answerPrompt: vi.fn(async () => undefined),
-      setOption: vi.fn(async () => undefined)
-    },
+      setOption: vi.fn(async () => undefined),
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      })
+    }),
     modelCatalog: {
       read: vi.fn(),
       recordLiveListing: vi.fn(),
@@ -75,21 +82,19 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  starts.clear()
   await host.flushAllStreamedEvents()
   await rm(root, { recursive: true, force: true })
 })
 
 /** The adapter's report that the child's protocol session exists. */
-function proveStart(): Promise<void> {
-  return host.handleAdapterEvent({
-    type: 'started',
+async function proveStart(): Promise<void> {
+  await starts.prove({
     sessionId: SESSION,
     fence: store.getRecord(SESSION)?.lease.runtimeFence ?? 0,
-    acquisitionGeneration: 'generation-1',
-    reportedOptions: { model: 'sonnet' },
-    restoreSkippedOptions: [],
-    optionRevision: 0
+    acquisitionGeneration: 'generation-1'
   })
+  await vi.waitFor(() => expect(providerStarted).toHaveBeenCalledOnce())
 }
 
 it('a published child tells the catalog only once its start is proven, with its record', async () => {

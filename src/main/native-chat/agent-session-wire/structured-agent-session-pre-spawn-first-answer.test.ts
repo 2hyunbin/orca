@@ -78,7 +78,12 @@ async function firstAnswerAndReplay(thrown: AgentSessionPreSpawnError) {
     throw new Error('not reached before a spawn')
   }
   const adapter: StructuredAgentSessionAdapter = {
-    acquire: async () => {
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: async () => {
       throw thrown
     },
     dispatch: unused,

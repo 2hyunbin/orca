@@ -41,7 +41,13 @@ const NON_DEFAULT: StructuredAgentDefinition = {
 
 function fakeAdapter(): StructuredAgentSessionAdapter {
   return {
-    acquire: vi.fn(async ({ fence, spawnToken }) => ({
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: vi.fn(async ({ fence, spawnToken }) => ({
+      acquisitionGeneration: globalThis.crypto.randomUUID(),
       process: { hostId: 'local', pid: 1, processStartTimeMs: 1, spawnToken },
       link: {
         linkId: `link-${fence}`,
@@ -99,7 +105,7 @@ describe('a registered definition', () => {
     const agents = new StructuredAgentRegistry([{ definition: NON_DEFAULT, adapter }])
     const router = new StructuredAgentSessionAdapterRouter(agents, async () => {})
 
-    await router.acquire({
+    await router.spawn({
       identity: {
         sessionId: 'session-routed',
         workspaceId: 'workspace-1',
@@ -110,7 +116,7 @@ describe('a registered definition', () => {
       fence: 1,
       spawnToken: 'spawn-1'
     })
-    expect(adapter.acquire).toHaveBeenCalledOnce()
+    expect(adapter.spawn).toHaveBeenCalledOnce()
     expect(agents.capabilities(RECORD.provider)).toBe(NON_DEFAULT.capabilities)
 
     const accepted = pick(agents, RECORD, 'pilotOption')

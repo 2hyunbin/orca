@@ -63,7 +63,7 @@ describe('Claude root-exit stop', () => {
       now: NOW
     })
     const fence = reservation.record.lease.runtimeFence
-    const acquisition = await adapter.acquire({
+    const acquisition = await adapter.spawn({
       identity: { ...identityFor(), hostId: 'local', workspaceId: 'folder-1' },
       fence,
       spawnToken: 'spawn-1'
@@ -112,7 +112,7 @@ describe('Claude root-exit stop', () => {
           journal,
           params,
           child: {
-            generation: acquisition.acquisitionGeneration ?? null,
+            generation: acquisition.acquisitionGeneration,
             fence,
             phase: 'ready'
           }

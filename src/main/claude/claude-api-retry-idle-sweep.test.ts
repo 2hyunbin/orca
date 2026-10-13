@@ -58,7 +58,12 @@ beforeEach(async () => {
   closeSession = vi.fn(async () => true)
   const store = await openTestAgentSessionRecordStore(root)
   const adapter: StructuredAgentSessionAdapter = {
-    acquire: async ({ fence, spawnToken, events }) => {
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: async ({ fence, spawnToken, events }) => {
       sink = events ?? null
       return {
         process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW - 1_000, spawnToken },

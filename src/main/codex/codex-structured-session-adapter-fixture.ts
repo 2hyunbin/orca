@@ -1,5 +1,5 @@
 import type {
-  StructuredAgentSessionAcquireInput,
+  StructuredAgentSessionSpawnInput,
   StructuredAgentSessionOptionsReportedEvent
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
@@ -44,13 +44,13 @@ export function codexStartedLink(adapter: CodexStructuredSessionAdapter, session
 
 export async function acquireReadyCodexForTest(
   adapter: CodexStructuredSessionAdapter,
-  input: StructuredAgentSessionAcquireInput
+  input: StructuredAgentSessionSpawnInput
 ) {
-  const acquired = await adapter.acquire(input)
+  const acquired = await adapter.spawn(input)
   const result = await adapter.open({
     sessionId: input.identity.sessionId,
     fence: input.fence,
-    acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+    acquisitionGeneration: acquired.acquisitionGeneration,
     signal: new AbortController().signal
   })
   startReports.get(adapter)?.set(input.identity.sessionId, result)

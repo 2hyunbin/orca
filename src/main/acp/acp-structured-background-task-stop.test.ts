@@ -277,7 +277,7 @@ describe('Grok kill route check', () => {
       deps: { onChildWorkEvidence: (_session, edges) => evidence.push(...edges) }
     })
     cleanup.push(() => rig.adapter.closeAll())
-    await rig.acquire()
+    await rig.spawn()
     rig.child().agent.notify('_x.ai/task_backgrounded', {
       sessionId: PROVIDER_SESSION,
       update: { sessionUpdate: 'task_backgrounded', task_id: TASK, command: 'pnpm dev' }

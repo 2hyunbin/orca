@@ -115,7 +115,7 @@ async function startChild(
     now: () => 1_700_000_000_500,
     persistHandle: async () => {}
   })
-  await adapter.acquire({
+  await adapter.spawn({
     identity: identityFor(SESSION),
     fence: 7,
     spawnToken: 'spawn-9',

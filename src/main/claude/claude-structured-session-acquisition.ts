@@ -1,6 +1,6 @@
 import type {
   AgentSessionAcquisition,
-  StructuredAgentSessionAcquireInput
+  StructuredAgentSessionSpawnInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { openClaudeStreamJsonConnection } from './claude-stream-json-connection'
 import { buildClaudePermissionCallbacks } from './claude-structured-inbound-control'
@@ -38,7 +38,7 @@ import {
   createClaudeSessionJournalTranslator
 } from './claude-structured-session-journal-control'
 
-export async function acquireClaudeSession({
+export async function spawnClaudeSession({
   input,
   deps,
   sessions,
@@ -46,7 +46,7 @@ export async function acquireClaudeSession({
   exits,
   callbacks
 }: {
-  input: StructuredAgentSessionAcquireInput
+  input: StructuredAgentSessionSpawnInput
   deps: ClaudeStructuredSessionAdapterDeps
   sessions: Map<string, ClaudeSession>
   acquisitions: ClaudeAcquisitionRegistry
@@ -267,7 +267,7 @@ export async function acquireClaudeSession({
       )
     }
     // The host calls open after publication and holds input until it settles.
-    return { ...publication.acquisition, providerChildPhase: 'starting' }
+    return publication.acquisition
   } catch (error) {
     unbindReadingControl?.()
     const acquisitionError = await resolveClaudeAcquisitionError({

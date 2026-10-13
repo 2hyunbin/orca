@@ -16,7 +16,7 @@ import { openTestJournalHostDatabase } from '../agent-session-journal/journal-ho
 import type { StructuredAgentDefinition } from './structured-agent-definition'
 import { StructuredAgentRegistry } from './structured-agent-registry'
 import type {
-  StructuredAgentSessionAcquireInput,
+  StructuredAgentSessionSpawnInput,
   StructuredAgentSessionAdapter
 } from './structured-agent-session-adapter'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
@@ -55,23 +55,22 @@ function handle(definition: StructuredAgentDefinition): AgentSessionProviderHand
 async function hostFor(definition: StructuredAgentDefinition): Promise<{
   host: StructuredAgentSessionHost
   store: AgentSessionRecordStore
-  acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+  spawn: Mock<StructuredAgentSessionAdapter['spawn']>
   dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
   ready: () => void
 }> {
   root = await mkdtemp(join(tmpdir(), 'orca-startup-registrations-'))
   resetHostTestOperationIds()
   const store = await openTestAgentSessionRecordStore(root)
-  const acquire: Mock<StructuredAgentSessionAdapter['acquire']> = vi.fn(
-    async (input: StructuredAgentSessionAcquireInput) => ({
+  const spawn: Mock<StructuredAgentSessionAdapter['spawn']> = vi.fn(
+    async (input: StructuredAgentSessionSpawnInput) => ({
       process: {
         hostId: 'local',
         pid: 4242,
         processStartTimeMs: 1_700_000_000_000,
         spawnToken: input.spawnToken
       },
-      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
-      providerChildPhase: 'starting' as const,
+      acquisitionGeneration: `generation-${spawn.mock.calls.length}`,
       link: {
         linkId: `link-${input.fence}`,
         handle: handle(definition),
@@ -90,7 +89,7 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
       new Promise((resolve) => {
         ready = () => resolve({ reportedOptions: {}, restoreSkippedOptions: [], optionRevision: 0 })
       }),
-    acquire,
+    spawn,
     dispatch,
     closeSession: vi.fn(async () => true),
     releaseAcquisition: vi.fn(async () => true),
@@ -110,10 +109,10 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
     adapter,
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
-    mintSpawnToken: () => `spawn-${acquire.mock.calls.length}`,
+    mintSpawnToken: () => `spawn-${spawn.mock.calls.length}`,
     now: () => NOW
   })
-  return { host, store, acquire, dispatch, ready: () => ready() }
+  return { host, store, spawn, dispatch, ready: () => ready() }
 }
 
 describe.each(
@@ -122,7 +121,7 @@ describe.each(
   )
 )('%s starts under the host attempt', (agent, definition) => {
   it('acquires under a host-minted attempt and is handed nothing until it proves its start', async () => {
-    const { host, store, acquire, dispatch, ready } = await hostFor(definition)
+    const { host, store, spawn, dispatch, ready } = await hostFor(definition)
     try {
       const attached = await host.attach(
         CALLER,
@@ -130,13 +129,13 @@ describe.each(
           provider: agent,
           agent,
           accountHome: accountHome(definition),
-          // A new chat: the provider mints its handle at acquire.
+          // A new chat: the provider mints its handle at spawn.
           providerHandle: undefined
         })
       )
       expect(attached, JSON.stringify(attached)).toMatchObject({ ok: true })
       const record = store.getRecord(SESSION)!
-      expect(acquire.mock.calls[0]?.[0]).toMatchObject({
+      expect(spawn.mock.calls[0]?.[0]).toMatchObject({
         attemptId: expect.any(String),
         fence: record.lease.runtimeFence,
         launch: { location: record.location, accountHome: record.accountHome },

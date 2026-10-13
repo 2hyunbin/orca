@@ -65,8 +65,8 @@ it('deletes the offer when the chat itself is closed', async () => {
 
 // A failure record is the same obligation in a later state; the chat's close ends it too.
 it('deletes a failed-resume record when the chat itself is closed', async () => {
-  const { host, root, acquire } = await interruptedRestart()
-  acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  const { host, root, spawn } = await interruptedRestart()
+  spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
   await host.restartResume.continueAfterRestart([SESSION], 'modal')
   const capsule = new AgentSessionRecoveryCapsule(root)
   expect(await capsule.listFailed(NOW)).toHaveLength(1)

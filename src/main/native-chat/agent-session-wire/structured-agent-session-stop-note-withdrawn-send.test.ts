@@ -79,7 +79,12 @@ async function stopEndingTheChild(options: {
     agents: NO_STRUCTURED_AGENTS,
     agent: 'codex',
     adapter: {
-      acquire: vi.fn(),
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn: vi.fn(),
       dispatch: vi.fn(),
       closeSession: vi.fn(),
       cancelTurn: vi.fn(async () => ({

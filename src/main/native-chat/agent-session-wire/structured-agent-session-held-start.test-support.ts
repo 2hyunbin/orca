@@ -1,62 +1,52 @@
-// A fake adapter's children prove their start once published, except those a test holds `starting`.
+// Fake protocol opens use the same awaited host path as production adapters.
 
-import type {
-  StructuredAgentSessionAdapter,
-  StructuredAgentSessionLifecycleEvent
-} from './structured-agent-session-adapter'
+import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 
-type Acquire = StructuredAgentSessionAdapter['acquire']
-
-/** A report read at this revision is never admitted, so the empty report persists nothing. */
-const NO_OPTIONS_REPORTED = -1
+type Spawn = StructuredAgentSessionAdapter['spawn']
+type Open = StructuredAgentSessionAdapter['open']
 
 export type StructuredAgentSessionHeldStarts = {
-  /** Wraps an acquire so the child it answers stays `starting`. */
-  held(acquire: Acquire): Acquire
-  /** Wraps the adapter's acquire: every child not held proves its start once published. */
-  wrap<A extends StructuredAgentSessionAdapter>(adapter: A): A
-  /** Settles `started` for a child, as its provider answering the handshake does. */
+  held(spawn: Spawn): Spawn
+  wrap<A extends StructuredAgentSessionAdapter>(adapter: A): A & StructuredAgentSessionAdapter
   prove(child: { sessionId: string; fence: number; acquisitionGeneration: string }): Promise<void>
   clear(): void
 }
 
 export function structuredAgentSessionHeldStarts(
-  host: () => { handleAdapterEvent(event: StructuredAgentSessionLifecycleEvent): Promise<void> }
+  _host: () => unknown
 ): StructuredAgentSessionHeldStarts {
-  const heldGenerations = new Set<string>()
-  let generations = 0
-  const prove: StructuredAgentSessionHeldStarts['prove'] = (child) =>
-    host().handleAdapterEvent({
-      type: 'started',
-      ...child,
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: NO_OPTIONS_REPORTED
-    })
+  const held = new Map<string, () => void>()
+  const waiting = new Map<string, Promise<void>>()
+  const prove: StructuredAgentSessionHeldStarts['prove'] = async (child) => {
+    held.get(child.acquisitionGeneration)?.()
+    await Promise.resolve()
+  }
   return {
-    held: (acquire) => async (input) => {
-      const acquired = await acquire(input)
-      const acquisitionGeneration = acquired.acquisitionGeneration ?? `held-start-${++generations}`
-      heldGenerations.add(acquisitionGeneration)
-      return { ...acquired, acquisitionGeneration }
+    held: (spawn) => async (input) => {
+      const acquired = await spawn(input)
+      const generation = acquired.acquisitionGeneration
+      waiting.set(generation, new Promise<void>((resolve) => held.set(generation, resolve)))
+      return acquired
     },
     wrap: (adapter) => {
-      const acquire: Acquire = async (input) => {
-        const acquired = await adapter.acquire(input)
-        const acquisitionGeneration =
-          acquired.acquisitionGeneration ?? `instant-start-${++generations}`
-        if (!heldGenerations.has(acquisitionGeneration)) {
-          void prove({
-            sessionId: input.identity.sessionId,
-            fence: input.fence,
-            acquisitionGeneration
-          })
+      const open: Open = async (input) => {
+        const generation = input.acquisitionGeneration
+        if (generation) {
+          await waiting.get(generation)
+          waiting.delete(generation)
+          held.delete(generation)
         }
-        return { ...acquired, acquisitionGeneration }
+        return adapter.open(input)
       }
-      return { ...adapter, acquire }
+      return { ...adapter, open }
     },
     prove,
-    clear: () => heldGenerations.clear()
+    clear: () => {
+      for (const resolve of held.values()) {
+        resolve()
+      }
+      held.clear()
+      waiting.clear()
+    }
   }
 }

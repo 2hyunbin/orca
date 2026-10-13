@@ -32,7 +32,7 @@ function listing(tier = 'priority') {
   }
 }
 
-async function acquire(adapter: CodexStructuredSessionAdapter, sessionId = 'session-1') {
+async function spawn(adapter: CodexStructuredSessionAdapter, sessionId = 'session-1') {
   return acquireReadyCodexForTest(adapter, {
     identity: identityFor(sessionId),
     fence: 7,
@@ -62,7 +62,7 @@ describe('Codex structured service tier without send-path catalog waits', () => 
     codex.routes['turn/start'] = answerWithOpenedTurn(codex, 'turn-tier')
     const adapter = adapterFor(codex)
 
-    await acquire(adapter)
+    await spawn(adapter)
     expect(codexStartReport(adapter).reportedOptions).toMatchObject({
       serviceTier: 'priority'
     })
@@ -79,7 +79,7 @@ describe('Codex structured service tier without send-path catalog waits', () => 
     const adapter = adapterFor(codex, { codexHome: '/codex/home' }, [], {
       modelCatalog: new AgentModelCatalogStore()
     })
-    await acquire(adapter)
+    await spawn(adapter)
     await vi.waitFor(() =>
       expect(codex.connections[0].calls.some((call) => call.method === 'model/list')).toBe(true)
     )
@@ -96,7 +96,7 @@ describe('Codex structured service tier without send-path catalog waits', () => 
     codex.routes['turn/start'] = answerWithOpenedTurn(codex, 'running-turn')
     codex.routes['turn/steer'] = () => ({ turn: { id: 'running-turn' } })
     const adapter = adapterFor(codex)
-    await acquire(adapter)
+    await spawn(adapter)
     await send(adapter, 'first')
     await send(adapter, 'follow-up')
     expect(codex.connections[0].calls.some((call) => call.method === 'turn/steer')).toBe(true)
@@ -111,7 +111,7 @@ describe('Codex structured service tier without send-path catalog waits', () => 
     const codex = fakeCodex({ 'model/list': () => pending.promise })
     codex.routes['turn/start'] = answerWithOpenedTurn(codex, 'running-turn')
     const adapter = adapterFor(codex)
-    await acquire(adapter)
+    await spawn(adapter)
     await send(adapter, 'first')
 
     await expect(adapter.cancelTurn({ sessionId: 'session-1', fence: 7 })).resolves.toMatchObject({
@@ -145,16 +145,16 @@ describe('Codex structured service tier without send-path catalog waits', () => 
       '/codex/home'
     )!
     try {
-      await acquire(adapter)
+      await spawn(adapter)
       await vi.waitFor(() => expect(modelCatalog.hasActiveFailure(access.fingerprint)).toBe(true))
       await send(adapter, 'first')
       expect(
         codex.connections[0].calls.find((call) => call.method === 'turn/start')?.params
       ).toMatchObject({ serviceTier: 'priority' })
-      await acquire(adapter, 'session-2')
+      await spawn(adapter, 'session-2')
       expect(listModels).toHaveBeenCalledOnce()
       now += AGENT_MODEL_CATALOG_FAILURE_TTL_MS
-      await acquire(adapter, 'session-3')
+      await spawn(adapter, 'session-3')
       await vi.waitFor(() => expect(listModels).toHaveBeenCalledTimes(2))
     } finally {
       clock.mockRestore()
@@ -177,8 +177,8 @@ describe('Codex structured service tier without send-path catalog waits', () => 
       CODEX_STRUCTURED_AGENT,
       '/codex/home'
     )!
-    await acquire(adapter)
-    await acquire(adapter)
+    await spawn(adapter)
+    await spawn(adapter)
     oldListing.resolve(listing('priority-old'))
     newListing.resolve(listing('priority-new'))
     await vi.waitFor(() =>

@@ -48,7 +48,7 @@ const attachParams = (): AgentSessionAttachParams => hostTestAttachParams(null)
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let answerPrompt: Mock<StructuredAgentSessionAdapter['answerPrompt']>
 let ordinal = 0
 
@@ -61,7 +61,12 @@ function adapter(): StructuredAgentSessionAdapter {
     }
   })
   return {
-    acquire,
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn,
     releaseAcquisition: vi.fn(async () => true),
     dispatch,
     cancelTurn: vi.fn(async () => ({ cancelled: true })),
@@ -72,7 +77,7 @@ function adapter(): StructuredAgentSessionAdapter {
 
 async function seedGroupedQuestion(): Promise<{ itemId: string; revision: number }> {
   const identity = { provider: 'codex' as const, threadId: THREAD, turnId: 'turn-1', ordinal: 100 }
-  const events = acquire.mock.calls.at(-1)?.[0].events
+  const events = spawn.mock.calls.at(-1)?.[0].events
   if (!events) {
     throw new Error('seedGroupedQuestion requires an acquired session')
   }
@@ -118,7 +123,8 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-wire-grouped-'))
   resetHostTestOperationIds()
   ordinal = 0
-  acquire = vi.fn(async ({ fence }) => ({
+  spawn = vi.fn(async ({ fence }) => ({
+    acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: {
       hostId: 'local',
       pid: 4242,

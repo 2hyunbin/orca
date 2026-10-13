@@ -4,7 +4,7 @@ import {
   providerDiagnosticOf
 } from '../../shared/agent-session-failure'
 import type {
-  StructuredAgentSessionAcquireInput,
+  StructuredAgentSessionSpawnInput,
   StructuredAgentSessionLifecycleEvent,
   AgentSessionDispatchOutcome
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
@@ -73,7 +73,7 @@ export class PiRpcSession {
   private releaseAfterExit?: () => void
 
   constructor(
-    readonly input: StructuredAgentSessionAcquireInput,
+    readonly input: StructuredAgentSessionSpawnInput,
     readonly generation: string,
     launch: ProviderProcessLaunch,
     private readonly deps: PiRpcSessionDeps,

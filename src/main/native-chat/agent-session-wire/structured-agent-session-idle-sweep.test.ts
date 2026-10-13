@@ -32,7 +32,7 @@ afterEach(async () => {
 })
 
 function providerEvents() {
-  const events = rig.adapter.acquire.mock.calls.at(-1)?.[0].events
+  const events = rig.adapter.spawn.mock.calls.at(-1)?.[0].events
   if (!events) {
     throw new Error('no provider child was started')
   }
@@ -89,7 +89,7 @@ describe('the idle sweep', () => {
     await expect(rig.host.readOptions(SESSION)).resolves.toMatchObject({ current: {} })
     const sent = await rig.host.send(CALLER, restTestSend('carry on', fence()))
     expect(sent.ok).toBe(true)
-    await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledTimes(2))
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
     await vi.waitFor(() => expect(readerSaw(reader.events).texts).toContain('carry on'))
   })

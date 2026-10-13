@@ -14,16 +14,16 @@ import {
 it('keeps a permission pick while accepting the startup model report', async () => {
   const rig = await createRestTestRig({ idleSweep: { intervalMs: 3_600_000 } })
   try {
-    const acquire = rig.adapter.acquire.getMockImplementation()
-    if (!acquire) {
+    const spawn = rig.adapter.spawn.getMockImplementation()
+    if (!spawn) {
       throw new Error('missing test acquisition')
     }
-    rig.adapter.acquire.mockImplementationOnce(rig.heldStart(acquire))
+    rig.adapter.spawn.mockImplementationOnce(rig.heldStart(spawn))
     const attached = await rig.host.attach(CALLER, hostTestAttachParams(null))
     if (!attached.ok) {
       throw new Error('test attach refused')
     }
-    const child = await rig.adapter.acquire.mock.results[0].value
+    const child = await rig.adapter.spawn.mock.results[0].value
     const fields = { key: 'permissionMode', value: 'full-access' }
     expect(
       await rig.host.setOption(CALLER, {
@@ -41,14 +41,10 @@ it('keeps a permission pick while accepting the startup model report', async () 
       })
     ).toMatchObject({ ok: true })
 
-    await rig.host.handleAdapterEvent({
-      type: 'started',
+    await rig.proveStart({
       sessionId: SESSION,
       fence: attached.fence,
-      acquisitionGeneration: child.acquisitionGeneration!,
-      reportedOptions: { model: 'provider-model', effort: 'medium' },
-      restoreSkippedOptions: [],
-      optionRevision: 0
+      acquisitionGeneration: child.acquisitionGeneration!
     })
     await vi.waitFor(() =>
       expect(rig.store.getRecord(SESSION)?.options).toEqual({ permissionMode: 'full-access' })
@@ -66,11 +62,11 @@ it.each([false, true])(
       hasOpenDispatch: () => hasOpenDispatch
     })
     try {
-      const acquire = rig.adapter.acquire.getMockImplementation()
-      if (!acquire) {
+      const spawn = rig.adapter.spawn.getMockImplementation()
+      if (!spawn) {
         throw new Error('missing test acquisition')
       }
-      rig.adapter.acquire.mockImplementationOnce(rig.heldStart(acquire))
+      rig.adapter.spawn.mockImplementationOnce(rig.heldStart(spawn))
       const writes = vi.spyOn(rig.host.deps.adapter, 'setOption')
       const attached = await rig.host.attach(CALLER, {
         ...hostTestAttachParams(null),
@@ -79,7 +75,7 @@ it.each([false, true])(
       if (!attached.ok) {
         throw new Error('test attach refused')
       }
-      const firstChild = await rig.adapter.acquire.mock.results[0].value
+      const firstChild = await rig.adapter.spawn.mock.results[0].value
       const sent = await rig.host.send(CALLER, restTestSend('held while starting', attached.fence))
       expect(sent.ok).toBe(true)
       for (const [key, value] of [
@@ -107,14 +103,10 @@ it.each([false, true])(
       expect(writes).not.toHaveBeenCalled()
       expect(rig.adapter.dispatch).not.toHaveBeenCalled()
 
-      await rig.host.handleAdapterEvent({
-        type: 'started',
+      await rig.proveStart({
         sessionId: SESSION,
         fence: attached.fence,
-        acquisitionGeneration: firstChild.acquisitionGeneration!,
-        reportedOptions: { model: 'launched-model', effort: 'low' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        acquisitionGeneration: firstChild.acquisitionGeneration!
       })
       await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
       expect(writes).not.toHaveBeenCalled()
@@ -124,15 +116,15 @@ it.each([false, true])(
       })
       const options = { model: 'picked-model', effort: 'high', permissionMode: 'full-access' }
       expect(rig.adapter.closeSession).toHaveBeenCalledTimes(hasOpenDispatch ? 0 : 1)
-      expect(rig.adapter.acquire).toHaveBeenCalledTimes(hasOpenDispatch ? 1 : 2)
-      expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
+      expect(rig.adapter.spawn).toHaveBeenCalledTimes(hasOpenDispatch ? 1 : 2)
+      expect(rig.adapter.spawn).toHaveBeenLastCalledWith(
         expect.objectContaining(
           hasOpenDispatch
             ? { permissionMode: 'ask' }
             : { permissionMode: 'full-access', options: { model: 'launched-model', effort: 'low' } }
         )
       )
-      expect(rig.adapter.acquire.mock.invocationCallOrder[hasOpenDispatch ? 0 : 1]).toBeLessThan(
+      expect(rig.adapter.spawn.mock.invocationCallOrder[hasOpenDispatch ? 0 : 1]).toBeLessThan(
         rig.adapter.dispatch.mock.invocationCallOrder[0]
       )
       expect(rig.store.getRecord(SESSION)?.options).toEqual(options)
@@ -142,7 +134,7 @@ it.each([false, true])(
       const nextFence = rig.store.getRecord(SESSION)!.lease.runtimeFence
       expect((await rig.host.send(CALLER, restTestSend('after restart', nextFence))).ok).toBe(true)
       await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
-      expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
+      expect(rig.adapter.spawn).toHaveBeenLastCalledWith(
         expect.objectContaining({
           permissionMode: 'full-access',
           options: { model: 'picked-model', effort: 'high' }

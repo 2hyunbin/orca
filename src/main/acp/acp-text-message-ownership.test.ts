@@ -46,7 +46,7 @@ describe.each(['omp', 'opencode', 'grok'] as const)('%s provider message ownersh
           })
         }
       })
-      await rig.acquire()
+      await rig.spawn()
       await sendHello(rig, 'send-1')
       await waitFor(async () =>
         expect(await rig.rig.turns()).toMatchObject([

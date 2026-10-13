@@ -2,8 +2,8 @@
 //
 // Both shipped adapters look the session up in a live map and throw when it is absent
 // (`claude-structured-session-adapter.ts:331-337`, `codex-structured-session-state.ts`'s
-// `requireLiveCodexSession`), and both populate that map as the last step of `acquire`
-// (`claude-structured-session-acquisition.ts:278`, `codex-structured-session-acquire.ts:275`).
+// `requireLiveCodexSession`), and both populate that map as the last step of `spawn`
+// (`claude-structured-session-acquisition.ts:278`, `codex-structured-session-spawn.ts:275`).
 // So the question is purely one of ordering, and that is what these model.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,13 +19,13 @@ import { HOST_TEST_NOW as NOW } from './structured-agent-session-host-test-data'
 
 let host: StructuredAgentSessionHost
 
-/** Mirrors both adapters: `acquire` publishes into the live map, `dispatch` throws without it. */
+/** Mirrors both adapters: `spawn` publishes into the live map, `dispatch` throws without it. */
 function modelAdapterLiveness(registerOnAcquire: boolean): void {
-  const { acquire, dispatch } = hostTestState()
+  const { spawn, dispatch } = hostTestState()
   const live = new Set<string>()
-  const spawn = acquire.getMockImplementation()!
-  acquire.mockImplementation(async (input) => {
-    const acquisition = await spawn(input)
+  const spawnChild = spawn.getMockImplementation()!
+  spawn.mockImplementation(async (input) => {
+    const acquisition = await spawnChild(input)
     if (registerOnAcquire) {
       live.add(input.identity.sessionId)
     }
@@ -80,7 +80,7 @@ beforeEach(() => {
 })
 
 describe('a launch prompt sent the instant the create resolves', () => {
-  it('reaches a live provider, because attach returns only after acquire published it', async () => {
+  it('reaches a live provider, because attach returns only after spawn published it', async () => {
     modelAdapterLiveness(true)
 
     await expect(launchAndDeliver()).resolves.toEqual({
@@ -92,7 +92,7 @@ describe('a launch prompt sent the instant the create resolves', () => {
 
   // Positive control: the assertion above is only evidence if this arm can fail, and it names
   // the user-visible symptom precisely — a committed row that no agent will ever answer.
-  it('would commit a row and strand it if acquire ever resolved before publication', async () => {
+  it('would commit a row and strand it if spawn ever resolved before publication', async () => {
     modelAdapterLiveness(false)
 
     await expect(launchAndDeliver()).resolves.toEqual({

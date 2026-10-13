@@ -26,7 +26,7 @@ describe('structured agent-session host teardown', () => {
       runtimeState: {
         stopLeaseRenewal: () => undefined,
         flushAllEventSinks: noop,
-        acquireAborts: { abortAll: () => {} }
+        providerWaits: { abortAll: () => {} }
       },
       tasks: { drainAttaches: noop },
       evictOwnedSessions: noop,
@@ -75,7 +75,7 @@ describe('structured agent-session host teardown', () => {
       runtimeState: {
         stopLeaseRenewal: () => undefined,
         flushAllEventSinks: noop,
-        acquireAborts: { abortAll: () => {} }
+        providerWaits: { abortAll: () => {} }
       },
       tasks: { drainAttaches: noop },
       evictOwnedSessions: noop,
@@ -109,7 +109,7 @@ describe('structured agent-session host teardown', () => {
       runtimeState: {
         stopLeaseRenewal: () => {},
         flushAllEventSinks: flush,
-        acquireAborts: { abortAll: () => {} }
+        providerWaits: { abortAll: () => {} }
       },
       tasks: { drainAttaches: cleaned },
       evictOwnedSessions: cleaned,

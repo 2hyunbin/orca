@@ -52,7 +52,7 @@ export type StructuredAgentSessionAttachOptions = {
   startupOptions?: Readonly<Record<string, string>>
   /** A close, an admitted Stop or quit aborted this attach: its refusal is that abort's. */
   onAborted?: () => void
-  /** The startup limit aborted this attach's acquire: it failed, nobody stopped it. */
+  /** The startup limit aborted this attach's spawn: it failed, nobody stopped it. */
   onStartupExpired?: () => void
 }
 
@@ -112,14 +112,14 @@ async function runAttach(
   options: StructuredAgentSessionAttachOptions
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   // Begun first, so a close or Stop during any phase below still stops the start.
-  const acquire = context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
+  const startup = context.runtimeState.providerWaits.begin(params.envelope.sessionId)
   try {
-    return await runAttachUnderAbort(context, callerKey, params, options, acquire.signal)
+    return await runAttachUnderAbort(context, callerKey, params, options, startup.signal)
   } finally {
-    acquire.end()
-    if (isStructuredAgentSessionStartupExpired(acquire.signal.reason)) {
+    startup.end()
+    if (isStructuredAgentSessionStartupExpired(startup.signal.reason)) {
       options.onStartupExpired?.()
-    } else if (acquire.signal.aborted) {
+    } else if (startup.signal.aborted) {
       options.onAborted?.()
     }
   }
@@ -130,7 +130,7 @@ async function runAttachUnderAbort(
   callerKey: string,
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionAttachOptions,
-  acquireSignal: AbortSignal
+  startupSignal: AbortSignal
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   const sessionId = params.envelope.sessionId
   const recordPhase = options.recordPhase
@@ -180,7 +180,7 @@ async function runAttachUnderAbort(
       logger: context.deps.logger,
       eventSink: attemptSink.sink,
       // The superseded child's writes settle into its own journal before a new child starts.
-      onAcquiring: async () => {
+      beforeSpawn: async () => {
         const barrier = await context.runtimeState.currentEventSink(sessionId)?.drained()
         if (barrier && !barrier.ok) {
           throw barrier.error
@@ -199,9 +199,7 @@ async function runAttachUnderAbort(
       params,
       now: () => context.now(),
       recordPhase,
-      acquireSignal,
-      onStartCatalogListing: (listing) =>
-        context.deps.modelCatalog?.recordLiveListing(sessionId, listing),
+      startupSignal,
       onStartupAttempt: (startup) => {
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
@@ -221,7 +219,7 @@ async function runAttachUnderAbort(
       // The cleanup released the acquisition, which for a re-attach is the live child itself.
       onAcquisitionReleased: (cause, verdict) =>
         endStructuredAgentSessionReleasedChild(context, sessionId, cause, verdict),
-      onAttached: async (attached, acquisitionGeneration, owner, providerChildPhase) => {
+      onAttached: async (attached, acquisitionGeneration, owner) => {
         const fence = structuredAgentSessionConversationFence(context.deps.store, sessionId)
         const current = context.sessions.get(sessionId)?.child ?? null
         const startedFor = owner === 'acquired' ? options.startedFor : current?.startedFor
@@ -255,15 +253,15 @@ async function runAttachUnderAbort(
             child: {
               generation: acquisitionGeneration ?? current?.generation ?? null,
               fence,
-              // An acquire reports its phase; a re-attach keeps what its child already proved.
-              phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
+              // A spawned child starts unready; a re-attach keeps what its child already proved.
+              phase: owner === 'acquired' ? 'starting' : (current?.phase ?? 'ready'),
               ...(startedFor === undefined ? {} : { startedFor }),
               ...(permissionMode === undefined ? {} : { permissionMode })
             }
           }
         }
         // Only a proven child has the protocol session recovery asks; a starting one recovers in
-        // its `started` step, before it is handed anything.
+        // its open step, before it is handed anything.
         if (attempt.candidate?.child.phase === 'ready') {
           await recoverStructuredRewind(
             context.deps,

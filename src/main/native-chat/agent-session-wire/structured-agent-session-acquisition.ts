@@ -5,14 +5,12 @@ import type {
 } from '../../../shared/agent-session-record'
 import {
   AgentSessionPreSpawnError,
-  isAgentSessionPreSpawnError,
-  type StructuredAgentSessionProviderChildPhase
+  isAgentSessionPreSpawnError
 } from './structured-agent-session-adapter'
 import { rethrowAfterAgentSessionAcquisitionCleanup } from './structured-agent-session-provider-exit-proof'
 import { journalIdentityFor } from './structured-agent-session-attach'
 import type { AttachFlowInput } from './structured-agent-session-attach-flow'
 import { mintStructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt'
-import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
 
 /** The same process, whatever Orca runtime the store stamped on its record (`runtime`): that stamp
  *  is about who holds the process, not which process it is. */
@@ -25,32 +23,14 @@ function sameOwnerProcess(
   return isDeepStrictEqual(storedProcess, acquiredProcess)
 }
 
-/** Bookkeeping: a failure is logged, never the proven start's. */
-function handOverStartCatalogListing(
-  input: AttachFlowInput,
-  sessionId: string,
-  listing: AgentModelCatalogLiveListing
-): void {
-  try {
-    input.onStartCatalogListing?.(listing)
-  } catch (error) {
-    input.logger.warn('saving what a started provider listed failed', {
-      scope: 'provider-started-catalog',
-      sessionId,
-      error
-    })
-  }
-}
-
 /** A reservation with no process behind it is only a promise to spawn; the
  * adapter makes it real and the store then grants the writer. */
-export async function acquireOwner(
+export async function spawnOwner(
   input: AttachFlowInput,
   record: AgentSessionRecord
 ): Promise<{
   record: AgentSessionRecord
-  acquisitionGeneration: string | null
-  providerChildPhase: StructuredAgentSessionProviderChildPhase
+  acquisitionGeneration: string
 }> {
   const fence = record.lease.runtimeFence
   const spawnToken = record.lease.reservedSpawnToken
@@ -59,9 +39,9 @@ export async function acquireOwner(
   }
   try {
     try {
-      await input.onAcquiring?.()
+      await input.beforeSpawn?.()
       // A close or Stop that landed while the attach was still reconciling launches nothing.
-      input.acquireSignal?.throwIfAborted()
+      input.startupSignal?.throwIfAborted()
     } catch (error) {
       throw new AgentSessionPreSpawnError(error)
     }
@@ -73,12 +53,12 @@ export async function acquireOwner(
       spawnToken,
       ...(permissionMode ? { permissionMode } : {}),
       ...(input.eventSink ? { events: input.eventSink } : {}),
-      ...(input.acquireSignal ? { signal: input.acquireSignal } : {}),
+      ...(input.startupSignal ? { signal: input.startupSignal } : {}),
       optionRevision: input.optionRevision,
       ...(input.startupOptions ? { startupOptions: input.startupOptions } : {})
     })
     const progress = input.onStartupAttempt?.(attempt)
-    const acquired = await input.adapter.acquire({
+    const acquired = await input.adapter.spawn({
       ...attempt,
       ...(progress ? { onOutput: progress.output } : {}),
       ...(input.recordPhase ? { recordPhase: input.recordPhase } : {}),
@@ -92,7 +72,6 @@ export async function acquireOwner(
         })
       }
     })
-    const providerChildPhase = acquired.providerChildPhase ?? 'ready'
     if (record.lease.ownerProcess === null) {
       await input.store.commitProcessIdentity({
         sessionId: record.sessionId,
@@ -103,20 +82,14 @@ export async function acquireOwner(
     } else if (!sameOwnerProcess(record.lease.ownerProcess, acquired.process)) {
       throw new Error('agent_session_ownership_unknown')
     }
+    // The process owns the lease now; a handle the provider answers with is returned by `open`.
     const proved = await input.store.proveOwner({
       sessionId: record.sessionId,
       fence,
       ...(acquired.link ? { link: acquired.link } : {}),
       now: input.now()
     })
-    if (providerChildPhase === 'ready' && acquired.catalogListing) {
-      handOverStartCatalogListing(input, record.sessionId, acquired.catalogListing)
-    }
-    return {
-      record: proved,
-      acquisitionGeneration: acquired.acquisitionGeneration ?? null,
-      providerChildPhase
-    }
+    return { record: proved, acquisitionGeneration: acquired.acquisitionGeneration }
   } catch (error) {
     if (isAgentSessionPreSpawnError(error)) {
       throw error

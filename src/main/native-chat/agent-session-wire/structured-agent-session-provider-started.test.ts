@@ -221,8 +221,8 @@ describe('a publish-first Claude create whose init is slow', () => {
       host.create(CALLER, createTestParams(first, claudeParams()), { firstMessage: first })
     ).resolves.toMatchObject({ ok: true })
 
-    // Delivery, not create, starts the CLI. Its `started` event carries the account listing; the
-    // settings read after it (`options-reported`) resolves the configured model and says so once.
+    // Delivery starts the CLI. Its open result carries the account listing; a later settings read
+    // resolves the configured model and says so once.
     await vi.waitFor(() => expect(savedListings.length).toBeGreaterThanOrEqual(1))
     expect(savedListings[0]).toEqual({
       sessionId: SESSION,

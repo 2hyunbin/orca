@@ -39,14 +39,14 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     this.adapters().some((adapter) => adapter.supportsLocation?.(location) ?? false)
 
   /** Every adapter already gates its own shutdown, so the router only has to stop UNDOING that:
-   *  a late acquire must not clear `allAdaptersClosed` and fan a session back out to closed
+   *  a late spawn must not clear `allAdaptersClosed` and fan a session back out to closed
    *  adapters. Once closed, the router stays closed. */
-  async acquire(input: Parameters<StructuredAgentSessionAdapter['acquire']>[0]) {
+  async spawn(input: Parameters<StructuredAgentSessionAdapter['spawn']>[0]) {
     if (this.allAdaptersClosed) {
       throw new Error('structured session adapter router is closed')
     }
     const registration = this.requireAgent(input.identity)
-    const acquired = await registration.adapter.acquire(input)
+    const acquired = await registration.adapter.spawn(input)
     if (this.allAdaptersClosed) {
       throw new Error('structured session adapter router is closed')
     }
@@ -70,13 +70,7 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     return released
   }
 
-  open: NonNullable<StructuredAgentSessionAdapter['open']> = (input) => {
-    const adapter = this.owner(input.sessionId)
-    if (!adapter.open) {
-      return Promise.reject(new Error('The provider cannot open a published child.'))
-    }
-    return adapter.open(input)
-  }
+  open: StructuredAgentSessionAdapter['open'] = (input) => this.owner(input.sessionId).open(input)
 
   dispatch: StructuredAgentSessionAdapter['dispatch'] = (input) =>
     this.owner(input.sessionId).dispatch(input)
@@ -137,9 +131,6 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean =>
     this.liveOwnerOrNull(sessionId)?.holdsLiveProviderProcess?.(sessionId, acquisitionGeneration) ??
     false
-
-  startUnavailable: NonNullable<StructuredAgentSessionAdapter['startUnavailable']> = (sessionId) =>
-    this.liveOwnerOrNull(sessionId)?.startUnavailable?.(sessionId)
 
   awaitStoppedRequestEnd = async (sessionId: string, stoppedAt: number) =>
     this.liveOwnerOrNull(sessionId)?.awaitStoppedRequestEnd?.(sessionId, stoppedAt)

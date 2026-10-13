@@ -160,7 +160,7 @@ export async function producer(host?: AgentHookServer) {
     // Production's journal publication is what republishes the parent's own row.
     publish: () => deliveries.push({ kind: 'publish', detail: '' })
   }
-  await adapter.acquire({
+  await adapter.spawn({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-9',

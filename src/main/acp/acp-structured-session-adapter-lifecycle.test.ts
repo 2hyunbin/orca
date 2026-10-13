@@ -30,7 +30,7 @@ const turnIdOf = (promptId: string) => providerTurnId(promptId, PROVIDER_SESSION
 describe('ACP Stop names a turn', () => {
   it('a Stop naming a turn that has ended stops nothing running now', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'old')
     const old = await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:old', 'done'))
@@ -61,7 +61,7 @@ describe('ACP Stop names a turn', () => {
 
   it('a Stop naming an ended turn during the gap before the next prompt opens stops that prompt', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'old')
     const old = await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:old', 'done'))
@@ -84,7 +84,7 @@ describe('ACP Stop names a turn', () => {
 
   it('a Stop naming the turn running now stops it and withdraws the steer waiting on its cancel', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'new')
     const current = await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:new', 'working'))
@@ -117,7 +117,7 @@ describe('ACP Stop names a turn', () => {
 describe('ACP Stop of a turn Grok began itself', () => {
   it('cancels a turn opened by a background completion; the Stop waits for it to end', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     const { agent } = rig.child()
     agent.notify('session/update', replyChunk('task-completed-background-1', 'Working on it'))
     await rig.settle()
@@ -144,7 +144,7 @@ describe('ACP Stop of a turn Grok began itself', () => {
 
   it("ends the Stop's wait at its grace when Grok never ends its own turn", async () => {
     const rig = await openAcpAdapterRig({ deps: { stopGraceMs: 20 } })
-    await rig.acquire()
+    await rig.spawn()
     rig.child().agent.notify('session/update', replyChunk('task-completed-background-1', 'Busy'))
     await rig.settle()
     await expect(rig.adapter.cancelTurn({ sessionId: SESSION, fence: 1 })).resolves.toEqual({
@@ -159,7 +159,7 @@ describe('ACP Stop of a turn Grok began itself', () => {
 describe('ACP connection loss', () => {
   it('settles a send the agent never took as unknown when its stdin breaks, stops the child and tells the host', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'lost')
     await rig.frame('session/prompt')
     await sendHello(rig, 'held')
@@ -184,7 +184,7 @@ describe('ACP connection loss', () => {
 
   it("ends a crash whose stdout closed before its exit at that exit, with Grok's last words", async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     rig.child().stderr = 'panic: out of memory'
     rig.child().agent.stdout.end()
     await rig.settle()
@@ -201,7 +201,7 @@ describe('ACP connection loss', () => {
 
   it('keeps a crash a crash when a stop Orca asks for lands before its unproven exit', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     const child = rig.child()
     child.proveClose = async () => false
     child.stderr = 'panic: late'
@@ -222,7 +222,7 @@ describe('ACP connection loss', () => {
       rejection: { kind: 'providerExited' }
     })
     // The next start's stop of the old child is one Orca asked for; it does not rename the crash.
-    await expect(rig.acquire()).rejects.toMatchObject({
+    await expect(rig.spawn()).rejects.toMatchObject({
       name: 'AgentSessionAcquisitionExitUnprovenError'
     })
     child.exit()
@@ -236,7 +236,7 @@ describe('ACP connection loss', () => {
 
   it('leaves a running turn unverifiable, never completed, when its stdin breaks mid-turn', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'lost')
     await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:lost', 'partial'))
@@ -250,7 +250,7 @@ describe('ACP connection loss', () => {
 
   it('ends the turn as failed on an answer Orca cannot read, and sends the next message', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'garbled')
     const prompt = await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:garbled', 'partial'))
@@ -277,7 +277,7 @@ describe('ACP connection loss', () => {
 
   it('leaves Grok running when it ends its stdout but can still be written to', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'quiet')
     await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:quiet', 'partial'))
@@ -298,7 +298,7 @@ describe('ACP refusals', () => {
       script: (agent) =>
         agent.on('session/prompt', (frame) => agent.fail(frame, -32602, 'unsupported input'))
     })
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'refused')
     await waitFor(() =>
       expect(rig.settled).toMatchObject([
@@ -314,7 +314,7 @@ describe('ACP refusals', () => {
 
   it('ends a started turn as failed when the agent answers its prompt with an error', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'failing')
     const prompt = await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:failing', 'partial'))
@@ -334,12 +334,12 @@ describe('ACP refusals', () => {
 describe('ACP startup that never answers', () => {
   it('lets a close stop the published child while initialize is unanswered', async () => {
     const rig = await openAcpAdapterRig({ script: (agent) => agent.on('initialize', () => {}) })
-    const acquired = await rig.acquire({ waitForStart: false })
+    const acquired = await rig.spawn({ waitForStart: false })
     const opening = rig.adapter
       .open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch((error: unknown) => error)
@@ -348,13 +348,12 @@ describe('ACP startup that never answers', () => {
     expect(await opening).toBeInstanceOf(Error)
     expect(rig.child().exited).toBe(true)
     expect(rig.ended).toMatchObject([{ cause: 'requested-close' }])
-    expect(rig.lifecycle.some((event) => event.type === 'started')).toBe(false)
   })
 
   it('leaves a published child alone when the acquisition signal aborts later', async () => {
     const rig = await openAcpAdapterRig()
     const start = new AbortController()
-    await rig.acquire({ signal: start.signal })
+    await rig.spawn({ signal: start.signal })
     start.abort(new Error('closed while starting'))
     await rig.settle()
     expect(rig.child().closes).toBe(0)
@@ -363,12 +362,12 @@ describe('ACP startup that never answers', () => {
 
   it('does not time out a published handshake, and closes it through the session', async () => {
     const rig = await openAcpAdapterRig({ script: (agent) => agent.on('session/new', () => {}) })
-    const acquired = await rig.acquire({ waitForStart: false })
+    const acquired = await rig.spawn({ waitForStart: false })
     const opening = rig.adapter
       .open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch((error: unknown) => error)
@@ -387,12 +386,12 @@ describe('ACP startup that never answers', () => {
 
   it('keeps a failed startup child until its exit is proven, and spawns no other meanwhile', async () => {
     const rig = await openAcpAdapterRig({ script: (agent) => agent.on('initialize', () => {}) })
-    const acquired = await rig.acquire({ waitForStart: false })
+    const acquired = await rig.spawn({ waitForStart: false })
     const opening = rig.adapter
       .open({
         sessionId: SESSION,
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
       .catch((error: unknown) => error)
@@ -405,7 +404,7 @@ describe('ACP startup that never answers', () => {
     expect(rig.ended).toEqual([])
     expect(await rig.adapter.closeSession(SESSION)).toBe(false)
     await expect(rig.adapter.closeAll()).rejects.toThrow('could not be proven stopped')
-    await expect(rig.acquire()).rejects.toMatchObject({
+    await expect(rig.spawn()).rejects.toMatchObject({
       name: 'AgentSessionAcquisitionExitUnprovenError'
     })
     expect(rig.spawned.filter((step) => step === 'spawn')).toHaveLength(1)
@@ -436,7 +435,7 @@ describe('ACP startup that never answers', () => {
       }
     })
     const start = new AbortController()
-    const failed = rig.acquire({ signal: start.signal }).catch((error: unknown) => error)
+    const failed = rig.spawn({ signal: start.signal }).catch((error: unknown) => error)
     await tick()
     start.abort()
     releaseLaunch()
@@ -452,7 +451,7 @@ describe('ACP startup that never answers', () => {
         }
       }
     })
-    expect(await rig.acquire().catch((error: unknown) => error)).toMatchObject({
+    expect(await rig.spawn().catch((error: unknown) => error)).toMatchObject({
       name: 'AgentSessionPreSpawnError',
       reason: 'launchFolderMissing'
     })
@@ -470,7 +469,7 @@ describe('ACP session release', () => {
 
   it('keeps nothing of a chat once its child is proven closed', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     expect(rig.adapter.backgroundTaskStops(SESSION)).toBeDefined()
     await rig.adapter.closeSession(SESSION)
     // Both answer from the entry the adapter holds for a chat; none is left.
@@ -480,7 +479,7 @@ describe('ACP session release', () => {
 
   it('keeps nothing of a chat whose child exited on its own', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.acquire()
+    await rig.spawn()
     rig.child().exit()
     await waitFor(() => expect(rig.ended).toHaveLength(1))
     expect(rig.adapter.backgroundTaskStops(SESSION)).toBeUndefined()

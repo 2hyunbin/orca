@@ -22,6 +22,7 @@ function claudeIdentity(sessionId: string): AgentSessionJournalIdentity {
 
 function acquisition(fence: number, spawnToken: string): AgentSessionAcquisition {
   return {
+    acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: { hostId: 'local', pid: 1, processStartTimeMs: 1, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -37,7 +38,12 @@ function adapterOf(
   releaseAcquisition: StructuredAgentSessionAdapter['releaseAcquisition']
 ): StructuredAgentSessionAdapter {
   return {
-    acquire: vi.fn(async ({ fence, spawnToken }) => acquisition(fence, spawnToken)),
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: vi.fn(async ({ fence, spawnToken }) => acquisition(fence, spawnToken)),
     releaseAcquisition,
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
@@ -53,7 +59,7 @@ describe('StructuredAgentSessionAdapterRouter.releaseAcquisition', () => {
     const codex = adapterOf(vi.fn(async () => false))
     const router = claudeAndCodexRouter({ claude, codex }, async () => {})
     const identity = claudeIdentity('session-1')
-    await router.acquire({ identity, fence: 1, spawnToken: 'spawn-1' })
+    await router.spawn({ identity, fence: 1, spawnToken: 'spawn-1' })
 
     await expect(router.releaseAcquisition({ sessionId: 'session-1' })).rejects.toBe(failure)
     // With no owner left, a later release asks every adapter instead of the stale one.
@@ -73,7 +79,7 @@ describe('StructuredAgentSessionAdapterRouter.closeSession', () => {
     const codex = adapterOf(vi.fn(async () => false))
     const router = claudeAndCodexRouter({ claude, codex }, async () => {})
     const identity = claudeIdentity('session-1')
-    await router.acquire({ identity, fence: 1, spawnToken: 'spawn-1' })
+    await router.spawn({ identity, fence: 1, spawnToken: 'spawn-1' })
 
     await expect(router.closeSession('session-1')).resolves.toBe(false)
     await expect(
@@ -101,7 +107,7 @@ describe('StructuredAgentSessionAdapterRouter.closeSession', () => {
       async () => {}
     )
     const identity = claudeIdentity('session-1')
-    await router.acquire({ identity, fence: 1, spawnToken: 'spawn-1' })
+    await router.spawn({ identity, fence: 1, spawnToken: 'spawn-1' })
 
     await expect(router.closeSession('session-1')).resolves.toBe(true)
     await expect(closeJournal()).rejects.toThrow('journal close failed')
@@ -110,7 +116,7 @@ describe('StructuredAgentSessionAdapterRouter.closeSession', () => {
     router.acknowledgeSessionRelease('session-1')
     await expect(router.closeSession('session-1')).resolves.toBe(false)
 
-    await router.acquire({ identity, fence: 2, spawnToken: 'spawn-2' })
+    await router.spawn({ identity, fence: 2, spawnToken: 'spawn-2' })
     await expect(router.closeSession('session-1')).resolves.toBe(true)
     expect(closeSession).toHaveBeenCalledTimes(2)
   })
@@ -127,7 +133,7 @@ describe('StructuredAgentSessionAdapterRouter optional lifecycle methods', () =>
         { claude, codex: adapterOf(vi.fn(async () => false)) },
         async () => {}
       )
-      await router.acquire({
+      await router.spawn({
         identity: claudeIdentity('session-1'),
         fence: 1,
         spawnToken: 'spawn-1'
@@ -152,7 +158,7 @@ describe('StructuredAgentSessionAdapterRouter optional lifecycle methods', () =>
       const codex = adapterOf(vi.fn(async () => false))
       const router = claudeAndCodexRouter({ claude, codex }, async () => {})
       const identity = claudeIdentity('session-1')
-      await router.acquire({ identity, fence: 1, spawnToken: 'spawn-1' })
+      await router.spawn({ identity, fence: 1, spawnToken: 'spawn-1' })
       const stopSession = router[method]
 
       await expect(stopSession('session-1')).resolves.toBe(false)
@@ -178,7 +184,7 @@ describe('StructuredAgentSessionAdapterRouter optional lifecycle methods', () =>
       claude.closeSession = closeSession
       const codex = adapterOf(vi.fn(async () => false))
       const router = claudeAndCodexRouter({ claude, codex }, async () => {})
-      await router.acquire({
+      await router.spawn({
         identity: claudeIdentity('session-1'),
         fence: 1,
         spawnToken: 'spawn-1'
@@ -208,7 +214,7 @@ describe('StructuredAgentSessionAdapterRouter Stop wind-down', () => {
 
     await router.awaitStoppedRequestEnd('session-1', 5)
     expect(claude.awaitStoppedRequestEnd).not.toHaveBeenCalled()
-    await router.acquire({ identity: claudeIdentity('session-1'), fence: 1, spawnToken: 'spawn-1' })
+    await router.spawn({ identity: claudeIdentity('session-1'), fence: 1, spawnToken: 'spawn-1' })
     await router.awaitStoppedRequestEnd('session-1', 5)
     expect(claude.awaitStoppedRequestEnd).toHaveBeenCalledWith('session-1', 5)
   })
@@ -220,7 +226,7 @@ describe('StructuredAgentSessionAdapterRouter Stop wind-down', () => {
     const router = claudeAndCodexRouter({ claude, codex }, async () => {})
 
     expect(router.routePromptCancel({ sessionId: 'session-1', prompt: QUESTION })).toBeUndefined()
-    await router.acquire({ identity: claudeIdentity('session-1'), fence: 1, spawnToken: 'spawn-1' })
+    await router.spawn({ identity: claudeIdentity('session-1'), fence: 1, spawnToken: 'spawn-1' })
     expect(router.routePromptCancel({ sessionId: 'session-1', prompt: QUESTION })).toEqual({
       kind: 'stop'
     })
@@ -228,10 +234,10 @@ describe('StructuredAgentSessionAdapterRouter Stop wind-down', () => {
 })
 
 describe('StructuredAgentSessionAdapterRouter.closeAll', () => {
-  it('refuses to acquire once the global close proof is published', async () => {
-    const acquire = vi.fn(async ({ fence, spawnToken }) => acquisition(fence, spawnToken))
+  it('refuses to spawn once the global close proof is published', async () => {
+    const spawn = vi.fn(async ({ fence, spawnToken }) => acquisition(fence, spawnToken))
     const claude = adapterOf(vi.fn(async () => true))
-    claude.acquire = acquire
+    claude.spawn = spawn
     const router = claudeAndCodexRouter(
       { claude, codex: adapterOf(vi.fn(async () => false)) },
       async () => undefined
@@ -239,13 +245,13 @@ describe('StructuredAgentSessionAdapterRouter.closeAll', () => {
     await router.closeAll()
 
     await expect(
-      router.acquire({
+      router.spawn({
         identity: claudeIdentity('session-1'),
         fence: 1,
         spawnToken: 'spawn-1'
       })
     ).rejects.toThrow('router is closed')
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
   })
 
   it('keeps a per-session stop proof and reports no stop for a session it never routed', async () => {
@@ -255,7 +261,7 @@ describe('StructuredAgentSessionAdapterRouter.closeAll', () => {
       { claude, codex: adapterOf(vi.fn(async () => false)) },
       closeAdapters
     )
-    await router.acquire({
+    await router.spawn({
       identity: claudeIdentity('session-1'),
       fence: 1,
       spawnToken: 'spawn-1'
@@ -300,7 +306,7 @@ describe('StructuredAgentSessionAdapterRouter.closeAll', () => {
         throw failure
       })
     )
-    await router.acquire({
+    await router.spawn({
       identity: claudeIdentity('session-1'),
       fence: 1,
       spawnToken: 'spawn-1'
@@ -326,7 +332,7 @@ describe('StructuredAgentSessionAdapterRouter.closeAll', () => {
     const closeSession = vi.fn(async () => true)
     const claude = adapterOf(vi.fn(async () => true))
     claude.closeSession = closeSession
-    claude.acquire = vi.fn(
+    claude.spawn = vi.fn(
       () =>
         new Promise<AgentSessionAcquisition>((resolve) => {
           resolveAcquire = resolve
@@ -336,7 +342,7 @@ describe('StructuredAgentSessionAdapterRouter.closeAll', () => {
       { claude, codex: adapterOf(vi.fn(async () => false)) },
       async () => undefined
     )
-    const acquiring = router.acquire({
+    const acquiring = router.spawn({
       identity: claudeIdentity('session-1'),
       fence: 2,
       spawnToken: 'spawn-2'

@@ -103,7 +103,7 @@ describe('closing the handle', () => {
 
     const sent = await rig.host.send(CALLER, restTestSend('after the close', fence()))
     expect(sent.ok).toBe(true)
-    // A cold start: reopen, reconcile and acquire.
+    // A cold start: reopen, reconcile and spawn.
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2), COLD_START)
     // The reader opened on the first handle is fed by the second.
     await vi.waitFor(() => expect(readerSaw(reader.events).texts).toContain('after the close'))
@@ -172,7 +172,7 @@ describe('closing the handle', () => {
     // And the handle a write finds is a live one.
     const sent = await rig.host.send(CALLER, restTestSend('after the close', fence()))
     expect(sent.ok).toBe(true)
-    // A cold start: reopen, reconcile and acquire.
+    // A cold start: reopen, reconcile and spawn.
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2), COLD_START)
   })
 
@@ -223,8 +223,8 @@ describe('the sweep and the lease (P2-20)', () => {
 describe('a start that never finishes (P2-15)', () => {
   it('is stopped by the sweep, and the message held for it carries its one row and rejection', async () => {
     const stopReason = 'Codex never finished starting, so Orca stopped it.'
-    const spawn = rig.adapter.acquire.getMockImplementation()!
-    rig.adapter.acquire.mockImplementationOnce(rig.heldStart(spawn))
+    const spawn = rig.adapter.spawn.getMockImplementation()!
+    rig.adapter.spawn.mockImplementationOnce(rig.heldStart(spawn))
     // Held for the starting child, which never proves its start.
     const reader = collectSubscriber()
     const attached = await rig.host.attach(CALLER, hostTestAttachParams(null))

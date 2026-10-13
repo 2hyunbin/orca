@@ -111,7 +111,7 @@ it('publishes a real continuation through an overlapping audience exclusion', as
 })
 
 it('publishes skipped when an offer disappears during reservation without starting its agent', async () => {
-  const { host, acquire, dispatch } = await interruptedRestart()
+  const { host, spawn, dispatch } = await interruptedRestart()
   expect(await host.restartResume.list()).toHaveLength(1)
   vi.spyOn(AgentSessionRecoveryCapsule.prototype, 'beginResume').mockResolvedValueOnce([])
   const phases: (string | undefined)[] = []
@@ -127,7 +127,7 @@ it('publishes skipped when an offer disappears during reservation without starti
     const result = await host.restartResume.continueAfterRestart([SESSION], 'modal')
     expect(result).toMatchObject({ skipped: [SESSION], resumed: [], continued: [] })
     expect(phases).toEqual(['skipped', undefined])
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
     expect(dispatch).not.toHaveBeenCalled()
   } finally {
     release()
@@ -138,7 +138,7 @@ it('publishes skipped for an offer started elsewhere and sends no continuation',
   const state = await interruptedRestart()
   expect(await state.host.restartResume.list()).toHaveLength(1)
   await startAgent(state)
-  state.acquire.mockClear()
+  state.spawn.mockClear()
   const summaries: AgentSessionStatusSummary[] = []
   const release = state.host.subscribeStatus({
     id: 'skipped',
@@ -151,7 +151,7 @@ it('publishes skipped for an offer started elsewhere and sends no continuation',
   try {
     const result = await state.host.restartResume.continueAfterRestart([SESSION], 'modal')
     expect(result).toMatchObject({ skipped: [SESSION], resumed: [], continued: [] })
-    expect(state.acquire).not.toHaveBeenCalled()
+    expect(state.spawn).not.toHaveBeenCalled()
     expect(state.dispatch).not.toHaveBeenCalled()
     expect(summaries.map((summary) => summary.restartResume?.phase)).toContain('skipped')
     expect(summaries.at(-1)).not.toHaveProperty('restartResume')
@@ -163,7 +163,7 @@ it('publishes skipped for an offer started elsewhere and sends no continuation',
 it.each(['continued', 'refused', 'unconfirmed'] as const)(
   'publishes %s before bookkeeping finishes, then clears progress on return',
   async (phase) => {
-    const { host, acquire } = await interruptedRestart()
+    const { host, spawn } = await interruptedRestart()
     await host.restartResume.list()
     const summaries: AgentSessionStatusSummary[] = []
     const release = host.subscribeStatus({
@@ -175,7 +175,7 @@ it.each(['continued', 'refused', 'unconfirmed'] as const)(
       }
     })
     if (phase === 'refused') {
-      acquire.mockRejectedValueOnce(new Error('start refused'))
+      spawn.mockRejectedValueOnce(new Error('start refused'))
     }
     if (phase === 'unconfirmed') {
       continuationCannotFold()

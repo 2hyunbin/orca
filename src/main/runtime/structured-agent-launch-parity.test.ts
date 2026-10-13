@@ -132,7 +132,7 @@ import {
   ORCA_AGENT_SESSION_CALLER_ENV_KEYS
 } from '../ipc/pty/host-env/spawn-env-keys'
 import { NATIVE_CHAT_VISUALS_DIR_ENV } from '../native-chat/native-chat-visuals-delivery'
-import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionSpawnInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { JournalHostDatabase } from '../native-chat/agent-session-journal/journal-host-database'
 import { createClaudeCliFlagSupport } from '../claude/claude-cli-flag-support'
@@ -628,7 +628,7 @@ describe.skipIf(process.platform === 'win32')('native-chat launch parity', () =>
         })
       }
       const adapter: StructuredAgentRuntimeAdapter = registration.createAdapter(adapterContext())
-      const input: StructuredAgentSessionAcquireInput = {
+      const input: StructuredAgentSessionSpawnInput = {
         identity: {
           sessionId,
           workspaceId: record.location.workspaceId,
@@ -648,7 +648,7 @@ describe.skipIf(process.platform === 'win32')('native-chat launch parity', () =>
       capture.launches.length = 0
       pins.length = 0
       try {
-        const outcome = await adapter.acquire(input).then(
+        const outcome = await adapter.spawn(input).then(
           () => null,
           (error: unknown) => error
         )

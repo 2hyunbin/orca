@@ -103,14 +103,14 @@ it.each(['turn', 'submission'] as const)(
 // Orca stopped; the continuation asks the agent
 // to check what finished rather than refusing.
 it('still continues a chat whose last send acquisition proves was never delivered', async () => {
-  const { host, acquire, dispatch } = await interruptedRestart('submission')
+  const { host, spawn, dispatch } = await interruptedRestart('submission')
   expect(await host.restartResume.list()).toHaveLength(1)
   const result = await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect((await host.journalSnapshot(SESSION)).submissions[0]).toMatchObject({
     dispatchState: 'rejected',
     rejection: { kind: 'notDelivered' }
   })
-  expect(acquire).toHaveBeenCalledTimes(1)
+  expect(spawn).toHaveBeenCalledTimes(1)
   expect(dispatch).toHaveBeenCalledTimes(1)
   expect(result.continued).toMatchObject([{ outcome: 'continued' }])
 })
@@ -196,8 +196,8 @@ it('reports a continuation delivered when its send throws after its message is i
 // The continuation is accepted, then its start fails: the message is rejected with the cause and
 // the failure is filed, and nothing is stopped because nothing started.
 it('rejects the continuation when its start fails, and files a retryable refusal', async () => {
-  const { host, acquire, dispatch, closeSession } = await interruptedRestart()
-  acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  const { host, spawn, dispatch, closeSession } = await interruptedRestart()
+  spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
   const result = await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(result.resumed).toMatchObject([{ outcome: 'refused' }])
   expect(result.continued).toMatchObject([{ outcome: 'refused' }])
@@ -210,13 +210,13 @@ it('rejects the continuation when its start fails, and files a retryable refusal
   expect((await host.journalSnapshot(SESSION)).submissions).toMatchObject([
     { dispatchState: 'rejected' }
   ])
-  expect(acquire).toHaveBeenCalledTimes(1)
+  expect(spawn).toHaveBeenCalledTimes(1)
   expect(dispatch).not.toHaveBeenCalled()
   expect(closeSession).not.toHaveBeenCalled()
 })
 
 it('admits one durable continuation under concurrent calls', async () => {
-  const { host, root, acquire, dispatch } = await interruptedRestart()
+  const { host, root, spawn, dispatch } = await interruptedRestart()
   const results = await Promise.all([
     host.restartResume.continueAfterRestart([SESSION], 'window-one'),
     host.restartResume.continueAfterRestart([SESSION], 'window-two')
@@ -227,7 +227,7 @@ it('admits one durable continuation under concurrent calls', async () => {
   expect(
     results.flatMap((result) => result.continued).filter((r) => r.outcome === 'continued')
   ).toHaveLength(1)
-  expect(acquire).toHaveBeenCalledTimes(1)
+  expect(spawn).toHaveBeenCalledTimes(1)
   expect(dispatch).toHaveBeenCalledTimes(1)
   expect((await host.journalSnapshot(SESSION)).submissions).toHaveLength(1)
   expect(await new AgentSessionRecoveryCapsule(root).list(NOW)).toEqual([])
@@ -265,12 +265,12 @@ it('waits out a slow provider answer before reporting the continuation', async (
 // Opening the chat is inspection only: it starts nothing, and the explicit restart action is what
 // removes the durable offer, so reading the chat must not make this status disappear.
 it('keeps offering a chat after the user opens it', async () => {
-  const { host, root, acquire } = await interruptedRestart()
+  const { host, root, spawn } = await interruptedRestart()
   expect(await host.restartResume.list()).toHaveLength(1)
   const unsubscribe = await host.subscribe({ id: 'pane', sessionId: SESSION, emit: vi.fn() })
   await host.history({ sessionId: SESSION, direction: 'tail' })
   unsubscribe()
-  expect(acquire).not.toHaveBeenCalled()
+  expect(spawn).not.toHaveBeenCalled()
 
   expect(await host.restartResume.list()).toHaveLength(1)
   await host.restartResume.recordMarkers()
@@ -296,8 +296,8 @@ it('keeps a durable offer intact through a teardown with no explicit action', as
 
 it('serializes teardown publication behind an explicit dismissal', async () => {
   await attach()
-  const { host, root, acquire } = hostTestState()
-  const events = acquire.mock.calls[0]?.[0].events
+  const { host, root, spawn } = hostTestState()
+  const events = spawn.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('missing provider event sink')
   }
@@ -390,7 +390,7 @@ it("refuses a continuation quietly when the user's own message was accepted firs
 /** A continuation whose start failed, filed as a retryable failure. */
 async function failedContinuation() {
   const state = await interruptedRestart()
-  state.acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  state.spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
   const result = await state.host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(result.failed).toMatchObject([{ sessionId: SESSION, outcome: 'refused' }])
   return state
@@ -464,7 +464,7 @@ it('dismisses one failure by name and leaves the rest of the durable records alo
 it('logs teardown capsule publication failure and still releases the provider', async () => {
   const previous = hostTestState()
   await attach()
-  const events = previous.acquire.mock.calls[0]?.[0].events
+  const events = previous.spawn.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('missing provider event sink')
   }

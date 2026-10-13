@@ -111,7 +111,7 @@ describe('the reattach window', () => {
 
   it('writes nothing Grok sends while it loads, even unmarked as replay', async () => {
     const rig = await openAcpAdapterRig(resumesUnmarked)
-    await rig.acquire()
+    await rig.spawn()
     await rig.settle()
     expect(await rig.rig.rows()).toEqual([])
   })
@@ -126,7 +126,7 @@ describe('the reattach window', () => {
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
-    await rig.acquire()
+    await rig.spawn()
     await rig.settle()
     await expect(rig.adapter.cancelTurn({ sessionId: SESSION, fence: 1 })).resolves.toEqual({
       cancelled: false,
@@ -153,7 +153,7 @@ describe('the context meter across a reopen', () => {
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS, models })
         )
     })
-    await rig.acquire()
+    await rig.spawn()
     await sendHello(rig, 'm1')
     const prompt = await rig.frame('session/prompt')
     const { agent } = rig.child()
@@ -165,7 +165,7 @@ describe('the context meter across a reopen', () => {
     agent.reply(prompt, { stopReason: 'end_turn' })
     await rig.settle()
     await rig.adapter.closeSession(SESSION)
-    await rig.acquire({ fence: 2 })
+    await rig.spawn({ fence: 2 })
     await rig.settle()
     const usage = (await rig.rig.rows())
       .flatMap((row) => readAgentJournalTurn(row.body) ?? [])
@@ -188,11 +188,11 @@ describe('reattaching a Grok chat the journal holds', () => {
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
-    await rig.acquire()
+    await rig.spawn()
     await exchange(rig, 'hi', true)
     const before = (await rig.rig.rows()).map((row) => row.itemId)
     await rig.adapter.closeSession(SESSION)
-    await rig.acquire({ fence: 2 })
+    await rig.spawn({ fence: 2 })
     await rig.settle()
     expect(rig.sent('session/load')).toHaveLength(1)
     expect(rig.sent('session/resume')).toHaveLength(0)
@@ -214,11 +214,11 @@ describe('reattaching a Grok chat the journal holds', () => {
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
-    await rig.acquire()
+    await rig.spawn()
     await exchange(rig, 'hi', true)
     const before = await rig.rig.rows()
     await rig.adapter.closeSession(SESSION)
-    await rig.acquire({ fence: 2 })
+    await rig.spawn({ fence: 2 })
     await rig.settle()
     expect(rig.sent('session/resume')).toHaveLength(0)
     expect((await rig.rig.rows()).map((row) => row.itemId)).toEqual(before.map((row) => row.itemId))
@@ -234,10 +234,10 @@ describe('reattaching a Grok chat the journal holds', () => {
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
-    await rig.acquire()
+    await rig.spawn()
     await exchange(rig, 'complete', false)
     await rig.adapter.closeSession(SESSION)
-    await rig.acquire({ fence: 2 })
+    await rig.spawn({ fence: 2 })
     await rig.settle()
     const rows = await rig.rig.rows()
     expect(await texts(rig)).toEqual(['hello', 'complete'])
@@ -256,13 +256,13 @@ describe('reattaching a Grok chat the journal holds', () => {
           agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
         })
     })
-    await rig.acquire()
+    await rig.spawn()
     await exchange(rig, 'hi', true)
     await rig.adapter.closeSession(SESSION)
     const before = await rig.rig.rows()
     // The host's order: a fresh sink per start, bound to the journal once the start succeeded.
     const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging(SESSION))
-    await rig.adapter.acquire({
+    await rig.adapter.spawn({
       identity: {
         sessionId: SESSION,
         workspaceId: 'workspace-1',
@@ -295,7 +295,7 @@ describe('reattaching a Grok chat the journal holds', () => {
       script: (agent) =>
         agent.on('session/load', (frame) => agent.fail(frame, -32002, 'Resource not found'))
     })
-    await rig.acquire()
+    await rig.spawn()
     expect(rig.started().link).toMatchObject({
       origin: 'created',
       handle: { nativeId: PROVIDER_SESSION },
@@ -327,7 +327,7 @@ describe('reattaching a Grok chat the journal holds', () => {
         initialize: RESUMES,
         script: (agent) => agent.on('session/load', (frame) => agent.fail(frame, code, message))
       })
-      await rig.acquire()
+      await rig.spawn()
       expect(rig.started().link).toMatchObject({
         origin: 'created',
         handle: { nativeId: PROVIDER_SESSION },
@@ -358,7 +358,7 @@ describe('reattaching a Grok chat the journal holds', () => {
       script: (agent) =>
         agent.on('session/load', (frame) => agent.fail(frame, -32000, 'Authentication required'))
     })
-    await rig.acquire()
+    await rig.spawn()
     expect(rig.openFailure()).toMatchObject({ reason: 'notSignedIn' })
     expect(rig.sent('session/new')).toEqual([])
   })
@@ -383,7 +383,7 @@ describe('reattaching a Grok chat the journal holds', () => {
           agent.fail(frame, -32603, 'session file is corrupt')
         })
     })
-    await rig.acquire({ signal: start.signal })
+    await rig.spawn({ signal: start.signal })
     expect(rig.ended).toMatchObject([{ cause: 'requested-close' }])
     expect(rig.sent('session/new')).toEqual([])
     expect(await notRestoredRows(rig)).toEqual([])
@@ -407,7 +407,7 @@ describe('reattaching a Grok chat the journal holds', () => {
           agent.reply(frame, { configOptions: [] })
         })
     })
-    await rig.acquire()
+    await rig.spawn()
     await rig.settle()
     expect(rig.adapter.readCommands(SESSION)).toEqual([
       { name: 'compact', kind: 'command', description: 'Compress' }

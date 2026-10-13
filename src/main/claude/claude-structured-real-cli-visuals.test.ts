@@ -78,7 +78,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
         const folder = nativeChatVisualsFolderFor(stateDirectory, SESSION_ID)
         expect(launch.options.additionalDirectories).toEqual([folder])
         expect(launch.options.plugins).toHaveLength(1)
-        await adapter.acquire({
+        await adapter.spawn({
           identity: {
             ...identity,
             providerHandle: claudeProviderHandle(launch.providerSessionId, null)

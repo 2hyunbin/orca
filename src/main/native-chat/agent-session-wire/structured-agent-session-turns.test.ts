@@ -385,7 +385,12 @@ describe('what a conversation Stop reports when the provider stopped nothing', (
       agents: NO_STRUCTURED_AGENTS,
       agent: 'codex',
       adapter: {
-        acquire: vi.fn(),
+        open: async () => ({
+          reportedOptions: { model: '' },
+          restoreSkippedOptions: [],
+          optionRevision: -1
+        }),
+        spawn: vi.fn(),
         dispatch: vi.fn(),
         closeSession: vi.fn(),
         cancelTurn: vi.fn(async () => outcome),
@@ -470,7 +475,12 @@ describe('the note a Stop writes', () => {
       agents: NO_STRUCTURED_AGENTS,
       agent: 'codex',
       adapter: {
-        acquire: vi.fn(),
+        open: async () => ({
+          reportedOptions: { model: '' },
+          restoreSkippedOptions: [],
+          optionRevision: -1
+        }),
+        spawn: vi.fn(),
         dispatch: vi.fn(),
         closeSession: vi.fn(),
         cancelTurn: vi.fn(async () => ({ cancelled: true })),

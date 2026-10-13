@@ -100,9 +100,15 @@ function params(
 function grokAdapter(): StructuredAgentSessionAdapter {
   return {
     supportsLocation: () => true,
-    acquire: vi
-      .fn<StructuredAgentSessionAdapter['acquire']>()
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: vi
+      .fn<StructuredAgentSessionAdapter['spawn']>()
       .mockImplementation(async ({ fence, spawnToken }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW, spawnToken },
         link: {
           linkId: `grok-link-${fence}`,
@@ -183,7 +189,7 @@ it('refuses an unregistered agent before creating a durable record', async () =>
     spawnToken: 'spawn-unregistered'
   })
   expect(result).toMatchObject(UNSUPPORTED)
-  expect(adapter.acquire).not.toHaveBeenCalled()
+  expect(adapter.spawn).not.toHaveBeenCalled()
   expect(store.getRecord(SESSION)).toBeNull()
 })
 
@@ -203,7 +209,7 @@ it('keeps saved history readable without a registration and resumes when it retu
   const store = await openTestAgentSessionRecordStore(root!)
   const agents = new StructuredAgentRegistry([])
   const router = new StructuredAgentSessionAdapterRouter(agents, async () => {})
-  const acquire = vi.spyOn(router, 'acquire')
+  const spawn = vi.spyOn(router, 'spawn')
   const host = new StructuredAgentSessionHost({
     store,
     agents,
@@ -243,7 +249,7 @@ it('keeps saved history readable without a registration and resumes when it retu
     await expect(
       host.attach({ callerKey: 'client-1' }, params('2', before))
     ).resolves.toMatchObject(UNSUPPORTED)
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
     expect(store.getRecord(SESSION)!.lease.runtimeFence).toBe(before)
   } finally {
     await host.flushAllStreamedEvents()
@@ -258,7 +264,7 @@ it('keeps saved history readable without a registration and resumes when it retu
     store
   })
   expect(result).toMatchObject({ ok: true })
-  expect(adapter.acquire).toHaveBeenCalledOnce()
+  expect(adapter.spawn).toHaveBeenCalledOnce()
   expect(store.listVisibleSessionIds()).toEqual([SESSION])
 })
 
@@ -280,7 +286,7 @@ it.each([
     })
 
     expect(result).toMatchObject(UNSUPPORTED)
-    expect(adapter.acquire).not.toHaveBeenCalled()
+    expect(adapter.spawn).not.toHaveBeenCalled()
     // Still listed and readable: its tab publishes and its history opens.
     expect(store.getRecord(SESSION)).toMatchObject({ provider: 'grok', accountHome: GROK_HOME })
     expect(store.getRecord(SESSION)?.providerHandleChain[0]?.handle.transport).toBe('acp')
@@ -299,7 +305,7 @@ it("refuses to start a chat that pins another agent's account variable", async (
   })
 
   expect(result).toMatchObject(UNSUPPORTED)
-  expect(adapter.acquire).not.toHaveBeenCalled()
+  expect(adapter.spawn).not.toHaveBeenCalled()
 })
 
 it('starts the same chat again once its agent is declared as it was', async () => {
@@ -315,7 +321,7 @@ it('starts the same chat again once its agent is declared as it was', async () =
   })
 
   expect(result).toMatchObject({ ok: true })
-  expect(adapter.acquire).toHaveBeenCalledOnce()
+  expect(adapter.spawn).toHaveBeenCalledOnce()
 })
 
 it('refuses an attach whose agent is not the session it names', async () => {
@@ -344,6 +350,6 @@ it('refuses an attach whose agent is not the session it names', async () => {
     ok: false,
     refusal: { code: 'agent_session_operation_invalid', details: { reason: 'requestMalformed' } }
   })
-  expect(adapter.acquire).not.toHaveBeenCalled()
+  expect(adapter.spawn).not.toHaveBeenCalled()
   expect(store.getRecord(SESSION)).toBeNull()
 })

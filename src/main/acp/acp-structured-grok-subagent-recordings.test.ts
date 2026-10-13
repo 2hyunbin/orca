@@ -35,7 +35,7 @@ async function replaying(name: string) {
     script: (agent) => replay.attach(agent),
     deps: { onChildWorkEvidence: (_sessionId, batch) => evidence.push(...batch) }
   })
-  await rig.acquire()
+  await rig.spawn()
   return { rig, replay, evidence }
 }
 

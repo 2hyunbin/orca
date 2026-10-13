@@ -40,7 +40,7 @@ describe('a requested stop of a structured Claude chat', () => {
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, {}, events)
     const journal = journalSink()
-    await adapter.acquire({
+    await adapter.spawn({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',

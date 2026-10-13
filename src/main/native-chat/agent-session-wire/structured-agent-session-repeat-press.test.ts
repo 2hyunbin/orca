@@ -47,7 +47,12 @@ beforeEach(async () => {
   store = await openTestAgentSessionRecordStore(root)
   const adapter: StructuredAgentSessionAdapter = startsWhenPublished(
     {
-      acquire: async ({ fence, spawnToken }) => ({
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn: async ({ fence, spawnToken }) => ({
         process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
         acquisitionGeneration: 'generation-1',
         link: {

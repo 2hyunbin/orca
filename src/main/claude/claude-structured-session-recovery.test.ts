@@ -32,7 +32,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
       appendTombstone: () => {},
       publish: () => {}
     }
-    await adapter.acquire({
+    await adapter.spawn({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -88,7 +88,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
       appendTombstone: () => {},
       publish: () => {}
     }
-    await adapter.acquire({
+    await adapter.spawn({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -118,7 +118,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
       .mockRejectedValueOnce(persistenceError)
       .mockResolvedValueOnce(undefined)
     const adapter = adapterFor(claude, {}, [], [], undefined, persistHandle)
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
 
     // The exit is proven, so the close ends the session; the write after it is bookkeeping.
     await expect(adapter.closeSession('session-1')).resolves.toBe(true)
@@ -132,7 +132,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
     const events: ClaudeStructuredSessionEvent[] = []
     const persistedHandles: unknown[] = []
     const adapter = adapterFor(claude, {}, events, persistedHandles)
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     claude.connections[0].handlers.onMessage?.({
       type: 'assistant',
       session_id: PROVIDER_SESSION_ID,
@@ -177,7 +177,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
     const persistedHandles: unknown[] = []
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, {}, events, persistedHandles)
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const frame = (message: Record<string, unknown>) =>
       claude.connections[0].handlers.onMessage?.({ session_id: PROVIDER_SESSION_ID, ...message })
     frame({ type: 'assistant', uuid: 'crash-leaf' })
@@ -215,7 +215,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
       undefined,
       vi.fn().mockRejectedValue(new Error('store unavailable'))
     )
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
 
     claude.connections[0].handlers.onExit?.(new Error('crashed'))
     await tick()
@@ -227,7 +227,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
     const claude = fakeClaude()
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, {}, events)
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const close = vi.spyOn(claude.connections[0], 'close').mockResolvedValue(true)
 
     claude.connections[0].handlers.onExit?.(new Error('crashed'))
@@ -242,7 +242,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
     const events: ClaudeStructuredSessionEvent[] = []
     const persistedHandles: unknown[] = []
     const adapter = adapterFor(claude, {}, events, persistedHandles)
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     claude.connections[0].close = vi
       .fn<() => Promise<boolean>>()
       .mockResolvedValueOnce(false)
@@ -259,7 +259,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
     const claude = fakeClaude()
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, {}, events)
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const answered = invokeCanUseTool(claude.connections[0], 'Bash', 'permission-1', 'tool-1')
     claude.connections[0].close = vi
       .fn<() => Promise<boolean>>()
@@ -276,7 +276,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
     const claude = fakeClaude()
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, {}, events)
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     claude.connections[0].close = vi
       .fn<() => Promise<boolean>>()
       .mockResolvedValueOnce(false)
@@ -345,7 +345,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
       now: () => 1_700_000_000_500,
       persistHandle
     })
-    const firstAcquisition = await adapter.acquire({
+    const firstAcquisition = await adapter.spawn({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -388,7 +388,7 @@ describe('ClaudeStructuredSessionAdapter close and exit recovery', () => {
     expect(oldPrompt.settled()).toBe(false)
     expect(events.filter((event) => event.type === 'ended')).toEqual([])
 
-    await adapter.acquire({
+    await adapter.spawn({
       identity: {
         ...identityFor(),
         providerHandle: claudeProviderHandle(PROVIDER_SESSION_ID, 'observed-retained-leaf')

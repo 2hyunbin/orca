@@ -31,7 +31,7 @@ let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let router: StructuredAgentSessionAdapter
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let closeNativeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
 let activeModel: string
 let activeEffort: string | null
@@ -54,34 +54,22 @@ function envelope(method: string, fields: Record<string, unknown>): AgentSession
 }
 
 function adapter(): StructuredAgentSessionAdapter {
-  acquire = vi.fn(async ({ fence, spawnToken, options, identity }) => {
+  spawn = vi.fn(async ({ fence, spawnToken, options }) => {
     activeModel = options?.model ?? DEFAULT_MODEL
     activeEffort = options?.effort ?? null
-    const acquisitionGeneration = `generation-${acquire.mock.calls.length}`
-    // The handshake answers at once, reporting the options the child runs with.
-    void host.handleAdapterEvent({
-      type: 'started',
-      sessionId: identity.sessionId,
-      fence,
-      acquisitionGeneration,
-      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) },
-      restoreSkippedOptions: [],
-      optionRevision: host
-        .collaboratorsForTests()
-        .runtimeState.optionRevisions.current(identity.sessionId)
-    })
+    const acquisitionGeneration = `generation-${spawn.mock.calls.length}`
     return {
       acquisitionGeneration,
       process: {
         hostId: 'local',
-        pid: 4200 + acquire.mock.calls.length,
+        pid: 4200 + spawn.mock.calls.length,
         processStartTimeMs: NOW,
         spawnToken
       },
       link: {
         linkId: `native-link-${fence}`,
         handle: codexProviderHandle(THREAD),
-        origin: acquire.mock.calls.length === 1 ? 'created' : 'resumed',
+        origin: spawn.mock.calls.length === 1 ? 'created' : 'resumed',
         mintedAtFence: fence,
         observedAt: NOW
       }
@@ -93,7 +81,12 @@ function adapter(): StructuredAgentSessionAdapter {
   })
   return {
     supportsLocation: () => true,
-    acquire,
+    open: async () => ({
+      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) },
+      restoreSkippedOptions: [],
+      optionRevision: 0
+    }),
+    spawn,
     dispatch: vi.fn<StructuredAgentSessionAdapter['dispatch']>(async () => {
       dispatchedModels.push(activeModel)
       return {

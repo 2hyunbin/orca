@@ -49,7 +49,7 @@ let host: StructuredAgentSessionHost
 let runtime: OrcaRuntimeService
 let dispatcher: RpcDispatcher
 let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let requests = 0
 let structuredNativeChatEnabled = true
 
@@ -70,7 +70,8 @@ beforeEach(async () => {
   requests = 0
   structuredNativeChatEnabled = true
   closeSession = vi.fn(async () => true)
-  acquire = vi.fn(async ({ fence, spawnToken }) => ({
+  spawn = vi.fn(async ({ fence, spawnToken }) => ({
+    acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -88,9 +89,14 @@ beforeEach(async () => {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
-      acquire,
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn,
       // A failed acquisition is proven gone, as the real adapters prove it; without this an
-      // acquire that throws leaves an unverifiable owner nothing may replace.
+      // spawn that throws leaves an unverifiable owner nothing may replace.
       releaseAcquisition: vi.fn(async () => true),
       closeSession,
       dispatch: async () => ({
@@ -136,13 +142,13 @@ describe('the hold surface, for clients that still call it', () => {
     await host.close(SESSION, 'evict')
     expect(host.hasSession(SESSION)).toBe(false)
     const registered = vi.spyOn(runtime, 'registerOwnedSubscriptionCleanup')
-    const acquiresBefore = acquire.mock.calls.length
+    const acquiresBefore = spawn.mock.calls.length
 
     expect(
       await call('agentSession.hold', { sessionId: SESSION, holderId: 'chat-1' })
     ).toMatchObject({ ok: true, result: { held: true } })
 
-    expect(acquire.mock.calls.length).toBe(acquiresBefore)
+    expect(spawn.mock.calls.length).toBe(acquiresBefore)
     expect(registered).not.toHaveBeenCalled()
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
   })
@@ -174,13 +180,13 @@ describe('the hold surface, for clients that still call it', () => {
 
   it('answers a hold even when no agent could be started', async () => {
     await host.close(SESSION, 'evict')
-    acquire.mockRejectedValue(new Error('provider unavailable'))
-    const acquiresBefore = acquire.mock.calls.length
+    spawn.mockRejectedValue(new Error('provider unavailable'))
+    const acquiresBefore = spawn.mock.calls.length
 
     expect(
       await call('agentSession.hold', { sessionId: SESSION, holderId: 'chat-1' })
     ).toMatchObject({ ok: true, result: { held: true } })
-    expect(acquire.mock.calls.length).toBe(acquiresBefore)
+    expect(spawn.mock.calls.length).toBe(acquiresBefore)
   })
 })
 
@@ -188,7 +194,7 @@ describe('a stream', () => {
   it('reads a closed conversation without starting its agent', async () => {
     await host.close(SESSION, 'evict')
     expect(host.hasSession(SESSION)).toBe(false)
-    const acquiresBefore = acquire.mock.calls.length
+    const acquiresBefore = spawn.mock.calls.length
     const frames: unknown[] = []
 
     await dispatcher.dispatchStreaming(
@@ -205,7 +211,7 @@ describe('a stream', () => {
     expect(frames).toContainEqual(
       expect.objectContaining({ result: expect.objectContaining({ type: 'snapshot' }) })
     )
-    expect(acquire.mock.calls.length).toBe(acquiresBefore)
+    expect(spawn.mock.calls.length).toBe(acquiresBefore)
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
   })
 

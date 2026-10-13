@@ -22,7 +22,7 @@ describe.each(['claude', 'codex'] as const)('%s command-first naming', (provider
   it.each(['Please repair login', ''])(
     'keeps the first real input eligible after compact: %j',
     async (input) => {
-      const { host, store, acquire, dispatch, log } = hostTestState()
+      const { host, store, spawn, dispatch, log } = hostTestState()
       const compact = vi.fn<NonNullable<StructuredAgentSessionAdapter['compact']>>(async () => ({
         state: 'accepted',
         providerIdentity: null
@@ -32,7 +32,8 @@ describe.each(['claude', 'codex'] as const)('%s command-first naming', (provider
         provider === 'claude'
           ? claudeProviderHandle(HOST_TEST_THREAD, null)
           : codexProviderHandle(HOST_TEST_THREAD)
-      acquire.mockImplementation(async ({ fence, spawnToken }) => ({
+      spawn.mockImplementation(async ({ fence, spawnToken }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
         link: {
           linkId: `link-${fence}`,
@@ -91,7 +92,7 @@ describe.each(['claude', 'codex'] as const)('%s command-first naming', (provider
             summary.status === 'working' && options.firstInputSubmissionKey === null
         )
       ).toBe(true)
-      const events = acquire.mock.calls.at(-1)?.[0].events
+      const events = spawn.mock.calls.at(-1)?.[0].events
       const command = compact.mock.calls[0]?.[0].command
       if (!events || !command) {
         throw new Error('Missing actual compact turn')

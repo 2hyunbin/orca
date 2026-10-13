@@ -43,11 +43,11 @@ let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let answerPrompt: Mock<StructuredAgentSessionAdapter['answerPrompt']>
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let serial = 0
 
 beforeEach(() => {
-  ;({ root, store, host, answerPrompt, acquire } = hostTestState())
+  ;({ root, store, host, answerPrompt, spawn } = hostTestState())
 })
 
 function opId(at = NOW): string {
@@ -99,7 +99,7 @@ async function reviseFromProvider(itemId: string): Promise<void> {
   if (body.kind !== 'approval') {
     throw new Error('expected an approval')
   }
-  const events = acquire.mock.calls.at(-1)?.[0].events
+  const events = spawn.mock.calls.at(-1)?.[0].events
   events?.appendItem(
     PROMPT,
     {
@@ -314,7 +314,7 @@ describe('a prompt answer', () => {
   it('replays a grouped answer whole after a rewind, free text included', async () => {
     await attach()
     const question = { ...PROMPT, ordinal: 100 }
-    acquire.mock.calls.at(-1)?.[0].events?.appendItem(
+    spawn.mock.calls.at(-1)?.[0].events?.appendItem(
       question,
       {
         kind: 'question',

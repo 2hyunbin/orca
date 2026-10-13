@@ -1,6 +1,6 @@
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
-import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionSpawnInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { AgentSessionAcquisitionRefusal } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type {
   StructuredAgentSessionProviderOpenInput,
@@ -35,7 +35,7 @@ import type { CodexStructuredSessionTeardown } from './codex-structured-session-
 import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
 
 type CodexOpenContext = {
-  input: StructuredAgentSessionAcquireInput
+  input: StructuredAgentSessionSpawnInput
   deps: CodexStructuredSessionAdapterDeps
   launch: CodexStructuredLaunch
   account: AgentSessionAccountKind | undefined

@@ -120,7 +120,7 @@ describe('the startup clock', () => {
     expect(expired).toEqual([])
   })
 
-  it('fails a spawned agent that says nothing for the silence limit, naming the acquire', () => {
+  it('fails a spawned agent that says nothing for the silence limit, naming the spawn', () => {
     const attempt = mint()
     attempts.track(SESSION, attempt).spawned()
 
@@ -131,7 +131,7 @@ describe('the startup clock', () => {
     expect(expired).toEqual([{ sessionId: SESSION, attemptId: attempt.attemptId, child: null }])
     vi.advanceTimersByTime(CEILING_MS)
     expect(expired).toHaveLength(1)
-    // Measured at the limit, recorded once the aborted acquire settles.
+    // Measured at the limit, recorded once the aborted spawn settles.
     expect(settled).toEqual([])
     attempts.abandon(SESSION, attempt.attemptId)
     expect(settled).toEqual([{ agent: 'codex', outcome: 'silent', durationMs: SILENCE_MS }])
@@ -234,7 +234,7 @@ describe('an attempt ends', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('when an acquire the expiry aborted is abandoned, or publishes late and is expired then', () => {
+  it('when an spawn the expiry aborted is abandoned, or publishes late and is expired then', () => {
     const abandoned = mint()
     attempts.track(SESSION, abandoned).spawned()
     vi.advanceTimersByTime(SILENCE_MS)

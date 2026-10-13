@@ -78,7 +78,7 @@ export async function interruptedRestart(
     serveHostTestChildWork(() => children)
   }
   await attach()
-  const events = previous.acquire.mock.calls[0]?.[0].events
+  const events = previous.spawn.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('missing provider event sink')
   }
@@ -181,7 +181,7 @@ export async function interruptedRestart(
     now: () => clock.now
   })
   replaceHostTestState({ store, host })
-  previous.acquire.mockClear()
+  previous.spawn.mockClear()
   previous.releaseAcquisition.mockClear()
   previous.dispatch.mockClear()
   const capsule = JSON.parse(
@@ -249,7 +249,7 @@ export const QUIT_CUT_NOTICE = {
  *  client's send lands after the action reserved the offer, just before the continuation is
  *  accepted. `userAnswers` instead has the user send before or after the whole attempt. */
 export async function supersededRefusal(userAnswers?: 'before' | 'after') {
-  const { host, store, acquire, dispatch, root } = await interruptedRestart()
+  const { host, store, spawn, dispatch, root } = await interruptedRestart()
   await host.restartResume.list()
   const body = hostTestMessage('A newer task from another client')
   const answer = () =>
@@ -276,7 +276,7 @@ export async function supersededRefusal(userAnswers?: 'before' | 'after') {
   }
   try {
     const result = await host.restartResume.continueAfterRestart([SESSION], 'modal')
-    return { host, store, acquire, dispatch, root, result }
+    return { host, store, spawn, dispatch, root, result }
   } finally {
     writing.mockRestore()
     admitting.mockRestore()

@@ -52,7 +52,7 @@ function idleMonitor() {
 }
 
 function providerEvents() {
-  const events = rig.adapter.acquire.mock.calls.at(-1)?.[0].events
+  const events = rig.adapter.spawn.mock.calls.at(-1)?.[0].events
   if (!events) {
     throw new Error('no provider was started')
   }

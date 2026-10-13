@@ -23,13 +23,12 @@ const OPENED: StructuredAgentSessionProviderOpenResult = {
 
 function awaitOpen() {
   const state = hostTestState()
-  const acquire = state.acquire.getMockImplementation()
-  if (!acquire) {
+  const spawn = state.spawn.getMockImplementation()
+  if (!spawn) {
     throw new Error('The host fixture has no spawn implementation.')
   }
-  state.host.deps.adapter.acquire = async (input) => ({
-    ...(await acquire(input)),
-    providerChildPhase: 'starting',
+  state.host.deps.adapter.spawn = async (input) => ({
+    ...(await spawn(input)),
     acquisitionGeneration: 'awaited-open'
   })
   const pending = Promise.withResolvers<StructuredAgentSessionProviderOpenResult>()

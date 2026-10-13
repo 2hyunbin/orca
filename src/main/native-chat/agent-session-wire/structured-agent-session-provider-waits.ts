@@ -1,14 +1,12 @@
-// The acquire each session has in flight, owned by the host that runs it, or another provider wait
-// its queue is on (an option write). The queue runs one step at a time, so a session has at most
-// one; a close, a Stop admitted now, quit, or the startup limit aborts it from outside the queue
-// instead of waiting behind a provider that may never answer.
+// One provider wait per session: startup or a message option write at handover. Close, Stop, quit,
+// or the startup limit aborts it from outside the queue instead of waiting for a stalled provider.
 
-export class StructuredAgentSessionAcquireAborts {
+export class StructuredAgentSessionProviderWaits {
   private readonly inFlight = new Map<string, { controller: AbortController; handover: boolean }>()
   /** Set by quit: the host is going away, so an attach that begins after it starts aborted. */
   private quitReason: Error | null = null
 
-  /** For the attach about to run; `end` once it settles. */
+  /** For the provider wait about to run; `end` once it settles. */
   begin(sessionId: string, handover = false): { signal: AbortSignal; end: () => void } {
     const controller = new AbortController()
     if (this.quitReason) {
@@ -33,7 +31,7 @@ export class StructuredAgentSessionAcquireAborts {
     return stoppedHandover
   }
 
-  /** Quit: every start under way stops, and so does any the attach drain still runs. */
+  /** Quit: every provider wait under way stops, including those queued in the attach drain. */
   abortAll(reason: string): void {
     this.quitReason ??= new Error(reason)
     for (const { controller } of this.inFlight.values()) {

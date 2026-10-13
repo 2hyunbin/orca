@@ -27,7 +27,7 @@ import { createCodexStructuredLaunchResolver } from '../runtime/structured-agent
 import { agentSessionRecordFixture } from '../native-chat/agent-session-record-test-fixture'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 
-describe('CodexStructuredSessionAdapter.acquire', () => {
+describe('CodexStructuredSessionAdapter.spawn', () => {
   it('keeps a started thread usable when its model listing never answers', async () => {
     const codex = fakeCodex({ 'model/list': () => new Promise<never>(() => {}) })
     const adapter = adapterFor(codex)
@@ -274,7 +274,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
   it('rejects a resume that lands on a different thread; the host closes once', async () => {
     const codex = fakeCodex({ 'thread/resume': () => ({ thread: { id: 'thread-other' } }) })
     const adapter = adapterFor(codex, { resumeThreadId: 'thread-proven' })
-    const acquired = await adapter.acquire({
+    const acquired = await adapter.spawn({
       identity: identityFor('session-1'),
       fence: 9,
       spawnToken: 'spawn-9'
@@ -283,7 +283,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       adapter.open({
         sessionId: 'session-1',
         fence: 9,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
     ).rejects.toThrow('resumed thread-other instead of thread-proven')
@@ -295,7 +295,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
   it('rejects a thread Codex never named; the host closes once', async () => {
     const codex = fakeCodex({ 'thread/start': () => ({}) })
     const adapter = adapterFor(codex)
-    const acquired = await adapter.acquire({
+    const acquired = await adapter.spawn({
       identity: identityFor('session-1'),
       fence: 1,
       spawnToken: 'spawn-9'
@@ -304,7 +304,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       adapter.open({
         sessionId: 'session-1',
         fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        acquisitionGeneration: acquired.acquisitionGeneration,
         signal: new AbortController().signal
       })
     ).rejects.toThrow('did not name the thread')
@@ -414,7 +414,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
     })
 
     await expect(
-      adapter.acquire({ identity: identityFor('session-1'), fence: 7, spawnToken: 'spawn-9' })
+      adapter.spawn({ identity: identityFor('session-1'), fence: 7, spawnToken: 'spawn-9' })
     ).rejects.toThrow('exited while being acquired')
     expect(codex.connections[0].closeCount).toBe(1)
     await expect(
@@ -437,7 +437,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
     })
 
     const error = await adapter
-      .acquire({ identity: identityFor('session-1'), fence: 7, spawnToken: 'spawn-9' })
+      .spawn({ identity: identityFor('session-1'), fence: 7, spawnToken: 'spawn-9' })
       .catch((cause: unknown) => cause)
 
     expect(error).toMatchObject({
@@ -473,7 +473,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       openConnection,
       readProcessStartTime: async () => 1_700_000_000_000
     })
-    const acquiring = adapter.acquire({
+    const acquiring = adapter.spawn({
       identity: identityFor('session-1'),
       fence: 7,
       spawnToken: 'spawn-9'
@@ -496,7 +496,7 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       openConnection: codex.openConnection,
       readProcessStartTime: async () => 1_700_000_000_000
     })
-    const acquiring = adapter.acquire({
+    const acquiring = adapter.spawn({
       identity: identityFor('session-1'),
       fence: 7,
       spawnToken: 'spawn-9'

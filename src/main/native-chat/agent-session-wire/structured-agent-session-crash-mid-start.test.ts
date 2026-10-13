@@ -77,7 +77,7 @@ function adapterThatNeverFinishesStarting(): StructuredAgentSessionAdapter {
   return Object.assign(adapterFor(codex), { supportsCreate: () => true })
 }
 
-/** A Codex adapter whose child spawns and reports its pid, and whose acquire never answers: the
+/** A Codex adapter whose child spawns and reports its pid, and whose spawn never answers: the
  *  host dies with the child recorded and the create still unanswered. */
 function adapterThatNeverAnswersItsSpawn(): StructuredAgentSessionAdapter {
   const codex = fakeCodex()

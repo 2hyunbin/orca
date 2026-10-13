@@ -56,7 +56,7 @@ const IDLE_MS = 1_000
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let sink: StructuredAgentSessionEventSink | null
@@ -66,7 +66,12 @@ let clock: number
 function adapter(): StructuredAgentSessionAdapter {
   return startsWhenPublished(
     {
-      acquire,
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn,
       closeSession,
       releaseAcquisition: vi.fn(async () => true),
       dispatch,
@@ -91,7 +96,7 @@ function openHost(
     adapter: adapter(),
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
-    mintSpawnToken: () => `spawn-${acquire.mock.calls.length}`,
+    mintSpawnToken: () => `spawn-${spawn.mock.calls.length}`,
     idleSweep: { intervalMs: SWEEP_MS, idleMs: IDLE_MS },
     now: () => clock,
     statusSink,
@@ -104,7 +109,7 @@ async function reboot(): Promise<void> {
   await host.flushAllStreamedEvents()
   store = await openTestAgentSessionRecordStore(root)
   openHost(async () => ({ outcome: 'pid-absent' }))
-  acquire.mockClear()
+  spawn.mockClear()
   closeSession.mockClear()
 }
 
@@ -221,7 +226,7 @@ beforeEach(async () => {
   clock = NOW
   statusSink = { publish: vi.fn(), forget: vi.fn() }
   let generation = 0
-  acquire = vi.fn(async ({ fence, spawnToken, events }) => {
+  spawn = vi.fn(async ({ fence, spawnToken, events }) => {
     sink = events ?? null
     return {
       process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
@@ -286,7 +291,7 @@ describe('a chat that closes', () => {
       emit: () => undefined
     })
     unsubscribe()
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
   })
 
@@ -434,7 +439,7 @@ describe('startup', () => {
     await host.restoreReadableSessions()
 
     // The record is readable — the tab comes back, history answers — and nothing is running.
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
     expect(host.listSessionTabs()).toEqual([
       { sessionId: SESSION, workspaceId: 'workspace-1', agent: 'codex' }
     ])
@@ -452,11 +457,11 @@ describe('startup', () => {
       sessionId: SESSION,
       emit: () => undefined
     })
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
     await startAgent()
     unsubscribe()
 
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'live',
       runtimeKind: 'native',
@@ -569,9 +574,9 @@ describe('an unexpected provider exit', () => {
     replaceFailedSink()
 
     // Nothing restarts it on its own; the next send does, and the chat still loads.
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     await startAgent()
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     emitTurnLifecycle('running', 2)
     await host.flushAllStreamedEvents()
     await reboot()
@@ -619,7 +624,7 @@ describe('an unexpected provider exit', () => {
         hasUnansweredStructuredAgentSessionDispatch(recoveredHistory.page.submissions)
     ).toBe(false)
     // No respawn: the exit is settled and shown, and the conversation waits for work.
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(dispatch).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
@@ -638,7 +643,7 @@ describe('an unexpected provider exit', () => {
     await vi.waitFor(async () =>
       expect(await submissionState(nextEnvelope.clientOperationId)).toBe('accepted')
     )
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(dispatch).toHaveBeenCalledTimes(2)
   })
 
@@ -659,7 +664,7 @@ describe('an unexpected provider exit', () => {
       fence: exitedFence,
       acquisitionGeneration: 'generation-stale'
     })
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
 
     await host.handleAdapterEvent({
@@ -670,7 +675,7 @@ describe('an unexpected provider exit', () => {
       fence: exitedFence,
       acquisitionGeneration: 'generation-1'
     })
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
       runtimeFence: exitedFence + 1,
@@ -692,7 +697,7 @@ describe('an unexpected provider exit', () => {
       acquisitionGeneration: 'generation-1'
     })
 
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(host['sessions'].get(SESSION)?.child).toBeNull()
     expect(host['sessions'].get(SESSION)?.lastEndedChild).not.toHaveProperty('failure')
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
@@ -737,7 +742,7 @@ describe('an unexpected provider exit', () => {
       claimStatus: 'released',
       runtimeFence: exitedFence + 1
     })
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(dispatch).toHaveBeenCalledOnce()
     expect(hostErrors).toContainEqual(expect.objectContaining({ message: 'journal failed' }))
     const history = await host.history({ sessionId: SESSION, direction: 'tail' })
@@ -812,7 +817,7 @@ describe('an unexpected provider exit', () => {
       deathEvidence: { kind: 'exit-observed', detail: 'provider exited', observedAt: NOW }
     })
     // The retry recording the exit queues is refused too; once the journal writes again, the next
-    // acquire re-derives it.
+    // spawn re-derives it.
     await host.collaboratorsForTests().serialize(SESSION, async () => {})
     refusing.mockRestore()
 
@@ -829,8 +834,8 @@ describe('an unexpected provider exit', () => {
     await vi.waitFor(async () =>
       expect(await submissionState(sentEnvelope.clientOperationId)).toBe('accepted')
     )
-    expect(acquire).toHaveBeenCalledTimes(2)
-    // The new child's acquire settled the turn from the release's evidence: ended at the exit's
+    expect(spawn).toHaveBeenCalledTimes(2)
+    // The new child's spawn settled the turn from the release's evidence: ended at the exit's
     // receipt. The evidence is Orca's log text, so the row says only that the provider stopped.
     const history = await host.history({ sessionId: SESSION, direction: 'tail' })
     const items = history.ok ? history.page.items : []

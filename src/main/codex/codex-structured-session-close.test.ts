@@ -70,7 +70,12 @@ function adapterFixture() {
 
 function claudeAdapterStub(): StructuredAgentSessionAdapter {
   return {
-    acquire: vi.fn(async () => ({ process: { pid: 1 } }) as never),
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: vi.fn<StructuredAgentSessionAdapter['spawn']>(),
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
     answerPrompt: vi.fn(),
@@ -264,7 +269,7 @@ describe('Codex structured session close lifecycle', () => {
       { claude: claudeAdapterStub(), codex: adapter },
       async () => {}
     )
-    await router.acquire({ identity: identity('session-1'), fence: 7, spawnToken: 'spawn-1' })
+    await router.spawn({ identity: identity('session-1'), fence: 7, spawnToken: 'spawn-1' })
     const current = connections[0]
     if (!current) {
       throw new Error('missing connection')

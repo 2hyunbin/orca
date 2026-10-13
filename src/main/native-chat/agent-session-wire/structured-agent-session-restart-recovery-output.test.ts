@@ -50,7 +50,7 @@ beforeEach(async () => {
       adapter: rig.host.deps.adapter
     }
   ])
-  rig.adapter.acquire.mockImplementation(async ({ fence, spawnToken }) => ({
+  rig.adapter.spawn.mockImplementation(async ({ fence, spawnToken }) => ({
     acquisitionGeneration: 'acp-generation',
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
@@ -115,7 +115,7 @@ async function beginTurn(workspaceKind: 'git-worktree' | 'folder') {
     throw new Error('send refused')
   }
   await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-  const events = rig.adapter.acquire.mock.calls[0]?.[0].events
+  const events = rig.adapter.spawn.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('event sink absent')
   }

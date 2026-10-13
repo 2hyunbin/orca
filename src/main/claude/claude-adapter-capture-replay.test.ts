@@ -126,7 +126,7 @@ async function replayCapture(name: string): Promise<Replay> {
     onDispatchSettledLate: settled
   }
   const adapter = new ClaudeStructuredSessionAdapter(deps)
-  await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
+  await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
 
   // Captured uuids -> the uuids the live dispatches mint during this replay.
   const uuidMap = new Map<string, string>()

@@ -44,7 +44,7 @@ describe('a chat permission mode', () => {
 
   it('starts a chat saved before modes existed as Ask, and reads it back as Ask', async () => {
     await foundRestTestChat(rig)
-    expect(rig.adapter.acquire).toHaveBeenCalledWith(
+    expect(rig.adapter.spawn).toHaveBeenCalledWith(
       expect.objectContaining({ permissionMode: 'ask' })
     )
     expect((await rig.host.readOptions(SESSION)).current.permissionMode).toBe('ask')
@@ -80,14 +80,14 @@ describe('a chat permission mode', () => {
     expect((await rig.host.send(CALLER, restTestSend('after the change', fence()))).ok).toBe(true)
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
     expect(rig.adapter.closeSession).toHaveBeenCalledWith(SESSION, 'evict')
-    expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
-    expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
+    expect(rig.adapter.spawn).toHaveBeenCalledTimes(2)
+    expect(rig.adapter.spawn).toHaveBeenLastCalledWith(
       expect.objectContaining({ permissionMode: 'auto' })
     )
 
     expect((await rig.host.send(CALLER, restTestSend('and again', fence()))).ok).toBe(true)
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(3))
-    expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
+    expect(rig.adapter.spawn).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the running agent for a send while its reply runs', async () => {
@@ -99,7 +99,7 @@ describe('a chat permission mode', () => {
     expect((await rig.host.send(CALLER, restTestSend('mid-reply', fence()))).ok).toBe(true)
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
     expect(rig.adapter.closeSession).not.toHaveBeenCalled()
-    expect(rig.adapter.acquire).toHaveBeenCalledTimes(1)
+    expect(rig.adapter.spawn).toHaveBeenCalledTimes(1)
     holds.mockReturnValue(false)
   })
 })

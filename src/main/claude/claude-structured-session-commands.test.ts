@@ -12,7 +12,7 @@ describe('session command updates', () => {
     const claude = fakeClaude()
     const changed = vi.fn()
     const adapter = adapterFor(claude)
-    await adapter.acquire({
+    await adapter.spawn({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -54,7 +54,7 @@ it.each([
   const claude = fakeClaude({ initProof: 'session-start', initCommands: commands })
   const adapter = adapterFor(claude)
   try {
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const described = commands[0]?.description
     expect(adapter.readCommands('session-1')).toEqual(
       commands.map(({ name, description }) => ({
@@ -104,7 +104,7 @@ it('keeps a buffered stream catalog newer than the initialization response', asy
   }
   const adapter = adapterFor(claude)
   try {
-    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     expect(adapter.readCommands('session-1')?.map(({ name }) => name)).toEqual(['fresh'])
   } finally {
     await adapter.closeSession('session-1')

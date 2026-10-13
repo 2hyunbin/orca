@@ -54,7 +54,7 @@ const CHAT_CLOSED = agentSessionFailureWords(agentSessionFailureFact('chatClosed
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let adapterExtras: Partial<StructuredAgentSessionAdapter>
 
@@ -63,10 +63,10 @@ function eventually(assertion: () => void | Promise<void>): Promise<void> {
 }
 
 function generation(): string {
-  return `generation-${acquire.mock.calls.length}`
+  return `generation-${spawn.mock.calls.length}`
 }
 
-const spawnChild: StructuredAgentSessionAdapter['acquire'] = async ({ fence, spawnToken }) => ({
+const spawnChild: StructuredAgentSessionAdapter['spawn'] = async ({ fence, spawnToken }) => ({
   process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
   acquisitionGeneration: generation(),
   link: {
@@ -98,11 +98,18 @@ function startHost(): void {
       answerPrompt: vi.fn(async () => undefined),
       setOption: vi.fn(async () => undefined),
       ...adapterExtras,
-      acquire
+      spawn,
+      open:
+        adapterExtras.open ??
+        (async () => ({
+          reportedOptions: { model: '' },
+          restoreSkippedOptions: [],
+          optionRevision: -1
+        }))
     }),
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
-    mintSpawnToken: () => `spawn-${acquire.mock.calls.length}`,
+    mintSpawnToken: () => `spawn-${spawn.mock.calls.length}`,
     now: () => NOW
   })
 }
@@ -117,7 +124,7 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   adapterExtras = {}
   starts.clear()
-  acquire = vi.fn(spawnChild)
+  spawn = vi.fn(spawnChild)
   dispatch = vi.fn(async (input) => ({
     state: 'accepted' as const,
     providerIdentity: {
@@ -216,17 +223,9 @@ function currentChild() {
   return { sessionId: SESSION, fence: child.fence, acquisitionGeneration: child.generation }
 }
 
-/** The current child proves its start, as a publish-first provider's `started` event does. */
+/** Release this child's held protocol open. */
 function prove(): Promise<void> {
-  const { acquisitionGeneration, ...child } = currentChild()
-  return host.handleAdapterEvent({
-    type: 'started',
-    ...child,
-    acquisitionGeneration,
-    reportedOptions: { model: 'default' },
-    restoreSkippedOptions: [],
-    optionRevision: host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
-  })
+  return starts.prove(currentChild())
 }
 
 function exit(child: ReturnType<typeof currentChild>, reason: string, startupUnproven?: true) {
@@ -291,7 +290,7 @@ describe('Stop on a child still proving its start', () => {
   it('ends the child and keeps the conversation and its readers (R1)', async () => {
     adapterExtras = { closeSession: vi.fn(async () => true) }
     await restartHost()
-    acquire.mockImplementationOnce(spawnStartingChild)
+    spawn.mockImplementationOnce(spawnStartingChild)
     // Held for the starting child, which never proves its start.
     const first = await accept('hello')
     const journal = conversation()?.journal
@@ -399,7 +398,7 @@ describe('a published child that dies while it proves its start', () => {
 
   it('leaves one error row keyed by the start, and every message held for it rejected with it (R2)', async () => {
     await restartHost()
-    acquire.mockImplementation(spawnStartingChild)
+    spawn.mockImplementation(spawnStartingChild)
     // Both are held for the starting child, which never proves its start.
     const first = await accept('first')
     const events = await subscribe()
@@ -426,7 +425,7 @@ describe('a published child that dies while it proves its start', () => {
       })
     }
     expect(rejectedIn(events, second)).toBe(true)
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(dispatch).not.toHaveBeenCalled()
   })
 })
@@ -444,7 +443,7 @@ describe('a start another operation made that dies while a sent message waits on
 
   it("is the message's own failed start: one error row, the message rejected, no second start (R2)", async () => {
     await restartHost()
-    acquire.mockImplementation(spawnStartingChild)
+    spawn.mockImplementation(spawnStartingChild)
     // An operation that needs the agent starts a child that has not proven its start.
     await startForOperation()
     const operationChild = currentChild()
@@ -474,13 +473,13 @@ describe('a start another operation made that dies while a sent message waits on
     ])
     expect(rejectedIn(events, id)).toBe(true)
     // The setup's child and the operation's: nothing started again into the same failure.
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(dispatch).not.toHaveBeenCalled()
   })
 
   it('leaves a message sent after that start failed to a fresh start (R2)', async () => {
     await restartHost()
-    acquire.mockImplementationOnce(spawnStartingChild)
+    spawn.mockImplementationOnce(spawnStartingChild)
     await startForOperation()
     await exit(currentChild(), EXIT, true)
     expect(await statusRows()).toHaveLength(1)
@@ -488,7 +487,7 @@ describe('a start another operation made that dies while a sent message waits on
     const id = await accept('after the failure')
 
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
-    expect(acquire).toHaveBeenCalledTimes(3)
+    expect(spawn).toHaveBeenCalledTimes(3)
   })
 
   it('starts again for a message whose proven child crashed: only a failed start settles it (R2)', async () => {
@@ -504,12 +503,12 @@ describe('a start another operation made that dies while a sent message waits on
 
     await eventually(async () => expect((await submission(id))?.dispatchState).not.toBe('pending'))
     expect((await submission(id))?.dispatchState).toBe('accepted')
-    expect(acquire).toHaveBeenCalledTimes(3)
+    expect(spawn).toHaveBeenCalledTimes(3)
   })
 
   it('hands over to a child started since the failed one, not to the failure (R2)', async () => {
     await restartHost()
-    acquire.mockImplementation(spawnStartingChild)
+    spawn.mockImplementation(spawnStartingChild)
     await startForOperation()
     const params = sendParams('hello')
 
@@ -525,16 +524,15 @@ describe('a start another operation made that dies while a sent message waits on
 
     await eventually(async () => expect((await submission(id))?.dispatchState).not.toBe('pending'))
     expect((await submission(id))?.dispatchState).toBe('accepted')
-    expect(acquire).toHaveBeenCalledTimes(3)
+    expect(spawn).toHaveBeenCalledTimes(3)
   })
 })
 
-describe('a child that ends before its message is handed over', () => {
-  it('starts one child for the message, then rejects it and stops (R2)', async () => {
+describe('a child that ends before open completes', () => {
+  it('starts one child for the message, then rejects its start and stops (R2)', async () => {
     await restartHost()
-    // The child the loop starts proves its start, then exits as its start step returns: that exit,
-    // asked for on the lane then, lands before the handover step.
-    acquire.mockImplementation(async (input) => {
+    // The exit lands before the host's awaited open can establish readiness.
+    spawn.mockImplementation(async (input) => {
       const child = await spawnStartingChild(input)
       const { acquisitionGeneration } = child
       if (acquisitionGeneration === undefined) {
@@ -561,11 +559,11 @@ describe('a child that ends before its message is handed over', () => {
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
     // The exit's stderr rides beside the sentence, never in it.
     const failure = {
-      kind: 'providerExited',
+      kind: 'providerStartFailed',
       detail: { text: 'codex app-server crashed', audience: 'log' }
     }
     expect(await submission(id)).toMatchObject({
-      reason: 'Codex stopped before this message was sent.',
+      reason: 'Codex stopped before it finished starting. Send your message to try again.',
       rejection: failure
     })
     expect(await statusRows()).toEqual([
@@ -573,7 +571,7 @@ describe('a child that ends before its message is handed over', () => {
     ])
     expect(rejectedIn(events, id)).toBe(true)
     await eventually(() => expect(host['conversationDelivery'].loop.isRunning(SESSION)).toBe(false))
-    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(spawn).toHaveBeenCalledTimes(2)
     expect(dispatch).not.toHaveBeenCalled()
   })
 })
@@ -582,7 +580,7 @@ describe('another child indexed after a Stop ended the starting one', () => {
   it('hands the next message to the child now there once it proves its start (R2)', async () => {
     adapterExtras = { closeSession: vi.fn(async () => true) }
     await restartHost()
-    acquire.mockImplementation(spawnStartingChild)
+    spawn.mockImplementation(spawnStartingChild)
     // Held for the starting child, which never proves its start.
     const first = await accept('first')
     await eventually(() => expect(conversation()?.child?.phase).toBe('starting'))
@@ -611,7 +609,7 @@ describe('another child indexed after a Stop ended the starting one', () => {
       phase: 'ready'
     })
     expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([secondId])
-    expect(acquire).toHaveBeenCalledTimes(3)
+    expect(spawn).toHaveBeenCalledTimes(3)
     expect(await submission(first)).toMatchObject({ reason: DISPATCH_REJECTED_CANCELLED })
   })
 })
@@ -670,14 +668,14 @@ describe('a quit with a message still queued', () => {
     })
     const id = await accept('hello', { person: true })
     await eventually(() => expect(recovering).toHaveBeenCalled())
-    const acquiresBefore = acquire.mock.calls.length
+    const acquiresBefore = spawn.mock.calls.length
 
     const quit = host.flushAllStreamedEvents()
     starting.resolve()
     await quit
 
     // Quit aborts the start, so nothing is launched behind it and nothing is left to stop.
-    expect(acquire).toHaveBeenCalledTimes(acquiresBefore)
+    expect(spawn).toHaveBeenCalledTimes(acquiresBefore)
     expect(closeSession).not.toHaveBeenCalled()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
@@ -692,7 +690,7 @@ describe('a quit with a message still queued', () => {
 
 describe('a send whose start failed, sent again with the same operation id', () => {
   it('replays the recorded rejection and starts no second agent (R2)', async () => {
-    acquire.mockRejectedValueOnce(new Error('spawn claude ENOENT'))
+    spawn.mockRejectedValueOnce(new Error('spawn claude ENOENT'))
     const fenceBefore = store.getRecord(SESSION)!.lease.runtimeFence
     const params = sendParams('hello')
     // A failed start is a rejected message, never a refused send.
@@ -704,7 +702,7 @@ describe('a send whose start failed, sent again with the same operation id', () 
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
     // The start moved the fence while the message was out.
     expect(store.getRecord(SESSION)!.lease.runtimeFence).toBeGreaterThan(fenceBefore)
-    const starts = acquire.mock.calls.length
+    const starts = spawn.mock.calls.length
 
     const replay = await host.send(CALLER, params)
 
@@ -714,7 +712,7 @@ describe('a send whose start failed, sent again with the same operation id', () 
       value: { submission: { clientMessageId: id, dispatchState: 'rejected' } }
     })
     await settleLoop()
-    expect(acquire).toHaveBeenCalledTimes(starts)
+    expect(spawn).toHaveBeenCalledTimes(starts)
     expect(dispatch).not.toHaveBeenCalled()
   })
 })
@@ -729,7 +727,7 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
   async function stoppedWhileStarting(stop: () => Promise<void>) {
     adapterExtras = { closeSession: vi.fn(async () => true) }
     await restartHost()
-    acquire.mockImplementationOnce(spawnStartingChild)
+    spawn.mockImplementationOnce(spawnStartingChild)
     await accept('first')
     await eventually(() => expect(conversation()?.child?.phase).toBe('starting'))
     await stop()
@@ -764,18 +762,18 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
     const start = deferred<void>()
     adapterExtras = { closeSession: vi.fn(async () => true) }
     await restartHost()
-    acquire.mockImplementationOnce(async (input) => {
+    spawn.mockImplementationOnce(async (input) => {
       await start.promise
       return spawnStartingChild(input)
     })
     const first = await accept('first')
-    await eventually(() => expect(acquire).toHaveBeenCalledTimes(2))
+    await eventually(() => expect(spawn).toHaveBeenCalledTimes(2))
     let starts = 0
     const closed = host['serialize'](SESSION, async () => {
       await stopStructuredAgentSessionAgentUnderSerialize(host['lifetimeContext'](), SESSION, {
         cause: 'user-close'
       })
-      starts = acquire.mock.calls.length
+      starts = spawn.mock.calls.length
       beforeStart()
     })
     start.resolve()
@@ -791,7 +789,7 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
       dispatchState: 'rejected',
       ...CHAT_CLOSED
     })
-    expect(acquire).toHaveBeenCalledTimes(starts)
+    expect(spawn).toHaveBeenCalledTimes(starts)
     expect(dispatch).not.toHaveBeenCalled()
     expect(await statusRows()).toEqual([])
   })
@@ -801,15 +799,15 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
     adapterExtras = { closeSession: vi.fn(async () => true) }
     await restartHost()
     // The start step holds the queue: the message is still queued when the close's stop runs.
-    acquire.mockImplementationOnce(async (input) => {
+    spawn.mockImplementationOnce(async (input) => {
       await start.promise
       return spawnStartingChild(input)
     })
     const first = await accept('first', { person: true })
-    await eventually(() => expect(acquire).toHaveBeenCalledTimes(2))
+    await eventually(() => expect(spawn).toHaveBeenCalledTimes(2))
     let starts = 0
     const closed = closeStopOnly().then(() => {
-      starts = acquire.mock.calls.length
+      starts = spawn.mock.calls.length
     })
     start.resolve()
     await closed
@@ -818,7 +816,7 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
     expect(await submission(first)).toMatchObject({ dispatchState: 'rejected', ...CHAT_CLOSED })
     const page = await host.history({ sessionId: SESSION, direction: 'tail' })
     expect(page.ok && page.page.queuedMessages?.map((card) => card.messageId)).toEqual([first])
-    expect(acquire).toHaveBeenCalledTimes(starts)
+    expect(spawn).toHaveBeenCalledTimes(starts)
     expect(dispatch).not.toHaveBeenCalled()
     // The close stopped the chat running: the card waits for its next turn, by a mark the
     // re-check wrote once, when it kept the card.
@@ -845,7 +843,7 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
     })
 
     expect((await submission(first))?.dispatchState).toBe('pending')
-    expect(acquire).toHaveBeenCalledTimes(starts)
+    expect(spawn).toHaveBeenCalledTimes(starts)
     expect(dispatch).not.toHaveBeenCalled()
 
     const second = await accept('second')
@@ -886,7 +884,7 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
     const reason = 'the start watchdog fired'
     adapterExtras = { closeSession: vi.fn(async () => true) }
     await restartHost()
-    acquire.mockImplementationOnce(spawnStartingChild)
+    spawn.mockImplementationOnce(spawnStartingChild)
     const first = await accept('first')
     await eventually(() => expect(conversation()?.child?.phase).toBe('starting'))
     await host['serialize'](SESSION, () =>

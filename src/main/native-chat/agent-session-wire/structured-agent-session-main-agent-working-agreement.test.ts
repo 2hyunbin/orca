@@ -71,7 +71,12 @@ beforeEach(async () => {
     store,
     adapter: startsWhenPublished(
       {
-        acquire: async (input) => {
+        open: async () => ({
+          reportedOptions: { model: '' },
+          restoreSkippedOptions: [],
+          optionRevision: -1
+        }),
+        spawn: async (input) => {
           events = input.events
           return {
             process: {

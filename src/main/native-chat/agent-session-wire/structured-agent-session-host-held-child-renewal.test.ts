@@ -43,7 +43,12 @@ async function hostWithStartTimeLessChild(platform: NodeJS.Platform) {
     (_sessionId: string, generation: string) => process.live && generation === 'gen-1'
   )
   const adapter: StructuredAgentSessionAdapter = {
-    acquire: async ({ fence }) => ({
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: async ({ fence }) => ({
       process: {
         hostId: 'local',
         pid: 4242,

@@ -7,7 +7,7 @@ import type {
 } from '../../shared/agent-session-wire'
 import {
   AgentSessionAcquisitionRefusal,
-  type StructuredAgentSessionAcquireInput
+  type StructuredAgentSessionSpawnInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import {
@@ -32,7 +32,7 @@ export class PiRpcSessionStartup {
   options?: AgentSessionOptionsResult
 
   constructor(
-    private readonly input: StructuredAgentSessionAcquireInput,
+    private readonly input: StructuredAgentSessionSpawnInput,
     private readonly connection: PiRpcConnection,
     private readonly deps: PiRpcSessionDeps,
     /** A new Pi session starts on its config's model; a resumed or forked one keeps its own. */

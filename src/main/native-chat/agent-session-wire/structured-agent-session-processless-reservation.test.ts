@@ -68,20 +68,33 @@ function attachParams(
   }
 }
 
+function adapterForSpawn(
+  spawn: StructuredAgentSessionAdapter['spawn']
+): StructuredAgentSessionAdapter {
+  return {
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn,
+    dispatch: vi.fn(),
+    cancelTurn: vi.fn(),
+    answerPrompt: vi.fn(),
+    setOption: vi.fn()
+  }
+}
+
 describe('processless structured session reservation', () => {
   it('refuses an adapter that declares no create support before reserving a lease', async () => {
     root = await mkdtemp(join(tmpdir(), 'orca-unsupported-attach-'))
     const store = await openTestAgentSessionRecordStore(root)
     const reserveOwner = vi.spyOn(store, 'reserveOwner')
-    const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>()
+    const spawn = vi.fn<StructuredAgentSessionAdapter['spawn']>()
     const adapter = {
-      supportsCreate: vi.fn(() => false),
-      acquire,
-      dispatch: vi.fn(),
-      cancelTurn: vi.fn(),
-      answerPrompt: vi.fn(),
-      setOption: vi.fn()
-    } as unknown as StructuredAgentSessionAdapter
+      ...adapterForSpawn(spawn),
+      supportsCreate: vi.fn(() => false)
+    }
 
     await expect(
       performAttach({
@@ -107,7 +120,7 @@ describe('processless structured session reservation', () => {
       refusal: { code: 'structured_agent_session_unsupported' }
     })
     expect(reserveOwner).not.toHaveBeenCalled()
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
   })
 
   it('refuses a replay when adapter support drifts after durable reservation', async () => {
@@ -118,10 +131,11 @@ describe('processless structured session reservation', () => {
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(false)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the attach reaches only `supportsCreate` and `acquire` on this fake adapter.
     const adapter = {
+      ...adapterForSpawn(vi.fn()),
       supportsCreate,
-      acquire: vi.fn(async ({ fence, spawnToken }) => ({
+      spawn: vi.fn(async ({ fence, spawnToken }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW, spawnToken },
         link: {
           linkId: 'link-1',
@@ -131,7 +145,7 @@ describe('processless structured session reservation', () => {
           observedAt: NOW
         }
       }))
-    } as unknown as StructuredAgentSessionAdapter
+    }
     const input = {
       agents: NO_STRUCTURED_AGENTS,
       logger: createStructuredAgentSessionLogger(),
@@ -158,7 +172,7 @@ describe('processless structured session reservation', () => {
       refusal: { code: 'structured_agent_session_unsupported' }
     })
     expect(supportsCreate).toHaveBeenCalledTimes(3)
-    expect(adapter.acquire).toHaveBeenCalledOnce()
+    expect(adapter.spawn).toHaveBeenCalledOnce()
   })
 
   it('releases a new reservation when support drifts before acquisition', async () => {
@@ -170,8 +184,8 @@ describe('processless structured session reservation', () => {
       .mockReturnValueOnce(false)
       .mockReturnValueOnce(true)
       .mockReturnValueOnce(true)
-    const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>()
-    const adapter = { supportsCreate, acquire } as unknown as StructuredAgentSessionAdapter
+    const spawn = vi.fn<StructuredAgentSessionAdapter['spawn']>()
+    const adapter = { ...adapterForSpawn(spawn), supportsCreate }
     const input = {
       agents: NO_STRUCTURED_AGENTS,
       logger: createStructuredAgentSessionLogger(),
@@ -197,7 +211,7 @@ describe('processless structured session reservation', () => {
       refusal: { code: 'structured_agent_session_unsupported' }
     })
 
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
       handoffStage: null,
@@ -213,17 +227,17 @@ describe('processless structured session reservation', () => {
       ok: false,
       refusal: { code: 'structured_agent_session_unsupported' }
     })
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
   })
 
   it('settles a pre-spawn failure and its processless evidence in one durable transaction', async () => {
     root = await mkdtemp(join(tmpdir(), 'orca-processless-reservation-'))
     const store = await openTestAgentSessionRecordStore(root)
-    const adapter = {
-      acquire: vi.fn(async () => {
+    const adapter = adapterForSpawn(
+      vi.fn(async () => {
         throw new AgentSessionPreSpawnError(new Error('workspace no longer exists'))
       })
-    } as unknown as StructuredAgentSessionAdapter
+    )
     const settlement = vi.spyOn(store, 'settleFailedAcquisition')
 
     await expect(
@@ -274,12 +288,13 @@ describe('processless structured session reservation', () => {
   it('does not rerun a settled pre-spawn failure and admits a fresh operation', async () => {
     root = await mkdtemp(join(tmpdir(), 'orca-processless-retry-'))
     const store = await openTestAgentSessionRecordStore(root)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the attach reaches only the members this fake adapter defines.
     const adapter = {
-      acquire: vi
-        .fn<StructuredAgentSessionAdapter['acquire']>()
+      ...adapterForSpawn(vi.fn()),
+      spawn: vi
+        .fn<StructuredAgentSessionAdapter['spawn']>()
         .mockRejectedValueOnce(new AgentSessionPreSpawnError(new Error('launch not ready')))
         .mockImplementationOnce(async ({ fence, spawnToken }) => ({
+          acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',
             pid: 4242,
@@ -295,7 +310,7 @@ describe('processless structured session reservation', () => {
           }
         })),
       releaseAcquisition: vi.fn(async () => true)
-    } as unknown as StructuredAgentSessionAdapter
+    }
     const input = {
       agents: NO_STRUCTURED_AGENTS,
       logger: createStructuredAgentSessionLogger(),
@@ -323,7 +338,7 @@ describe('processless structured session reservation', () => {
       ok: false,
       refusal: { code: 'agent_session_operation_invalid' }
     })
-    expect(adapter.acquire).toHaveBeenCalledOnce()
+    expect(adapter.spawn).toHaveBeenCalledOnce()
 
     await expect(
       performAttach({

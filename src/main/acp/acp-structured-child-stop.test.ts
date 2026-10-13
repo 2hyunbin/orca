@@ -62,7 +62,7 @@ describe('Grok targeted child control contract', () => {
         }
       })
       cleanup.push(() => rig.adapter.closeAll())
-      await rig.acquire()
+      await rig.spawn()
       expect(rig.adapter.backgroundTaskStops(SESSION)).toEqual({
         supportsTaskStop: false,
         supportsStopAll: false
@@ -79,7 +79,7 @@ describe('Grok targeted child control contract', () => {
   it('enables only the proved route and checks the acquisition fence before addressing a child', async () => {
     const rig = await openAcpAdapterRig()
     cleanup.push(() => rig.adapter.closeAll())
-    await rig.acquire()
+    await rig.spawn()
     expect(rig.adapter.backgroundTaskStops(SESSION)).toEqual({
       supportsTaskStop: true,
       supportsStopAll: false
@@ -100,7 +100,7 @@ describe('Grok targeted child control contract', () => {
       }
     })
     cleanup.push(() => rig.adapter.closeAll())
-    await rig.acquire()
+    await rig.spawn()
     expect(rig.adapter.backgroundTaskStops(SESSION)?.supportsTaskStop).toBe(false)
     expect(rig.child().closed).toBe(false)
   })

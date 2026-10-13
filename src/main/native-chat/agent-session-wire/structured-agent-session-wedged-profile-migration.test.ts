@@ -69,7 +69,7 @@ const DEAD_OWNER: AgentSessionProcessIdentity = {
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 
 type WedgeOverrides = {
   claimStatus: AgentSessionClaimStatus
@@ -132,14 +132,19 @@ function openHost(overrides: Partial<StructuredAgentSessionHostDeps> = {}): void
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
-      acquire,
-      releaseAcquisition: vi.fn(async () => undefined),
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn,
+      releaseAcquisition: vi.fn(async () => false),
       dispatch: vi.fn(),
       cancelTurn: vi.fn(),
       answerPrompt: vi.fn(),
       setOption: vi.fn(),
       supportsCreate: () => true
-    } as unknown as StructuredAgentSessionAdapter,
+    },
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
     mintSpawnToken: () => 'spawn-new',
@@ -157,7 +162,8 @@ function startAgent(): Promise<unknown> {
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-wedged-profile-'))
   resetHostTestOperationIds()
-  acquire = vi.fn(async ({ fence }) => ({
+  spawn = vi.fn(async ({ fence }) => ({
+    acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: {
       hostId: 'local',
       pid: 4242,
@@ -279,7 +285,7 @@ describe('already-wedged profiles become usable on load', () => {
         claimStatus: 'released',
         handoffStage: null
       })
-      expect(acquire).not.toHaveBeenCalled()
+      expect(spawn).not.toHaveBeenCalled()
 
       await host.flushAllStreamedEvents()
       store = await openTestAgentSessionRecordStore(root)
@@ -340,7 +346,7 @@ describe('already-wedged profiles become usable on load', () => {
 
       await host.restoreReadableSessions()
 
-      expect(acquire).not.toHaveBeenCalled()
+      expect(spawn).not.toHaveBeenCalled()
       expect(turnLifecycle('turn-1')).toEqual({
         turnId: 'turn-1',
         startedAt: NOW - 5_000,
@@ -384,7 +390,7 @@ describe('already-wedged profiles become usable on load', () => {
     expect(stale.ok || stale.refusal.code === 'agent_session_checkpoint_stale').toBe(true)
     expect(stale.ok || (await host.attach(CALLER, hostTestAttachParams(fence))).ok).toBe(true)
 
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(activeStructuredAgentSessionTurnId(restoredJournal().snapshot().items)).toBe(null)
     // A pid probe proved the owner gone, so the turn was cut short when it was last proven alive.
     expect(turnLifecycle('turn-1')).toEqual({
@@ -422,7 +428,7 @@ describe('already-wedged profiles become usable on load', () => {
 
     expect(await host.attach(CALLER, hostTestAttachParams(13))).toMatchObject({ ok: true })
 
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(activeStructuredAgentSessionTurnId(restoredJournal().snapshot().items)).toBe(null)
     // The exit was observed, so its receipt is the turn's end.
     expect(turnLifecycle('turn-1')).toEqual({
@@ -445,7 +451,7 @@ describe('already-wedged profiles become usable on load', () => {
     ['a restart eviction', false],
     ['a proven eviction by recovery', true]
   ] as const)(
-    'settles the turn %s left at the next acquire when the read restore could not write it',
+    'settles the turn %s left at the next spawn when the read restore could not write it',
     async (_origin, ownerOutlivedRestart) => {
       await seedStore(
         wedgedRecord({ claimStatus: 'live', handoffStage: null, ownerProcess: DEAD_OWNER })
@@ -478,7 +484,7 @@ describe('already-wedged profiles become usable on load', () => {
 
       await startAgent()
 
-      expect(acquire).toHaveBeenCalledOnce()
+      expect(spawn).toHaveBeenCalledOnce()
       expect(store.getRecord(SESSION)?.lease).toMatchObject({ claimStatus: 'live' })
       // A pid probe proved the owner gone, so the turn was cut short when it was last proven alive.
       expect(turnLifecycle('turn-1')).toEqual({
@@ -524,7 +530,7 @@ describe('already-wedged profiles become usable on load', () => {
       deathEvidence: null
     })
     expect(await host.attach(CALLER, hostTestAttachParams(14))).toMatchObject({ ok: true })
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
   })
 
   it.each([
@@ -548,11 +554,11 @@ describe('already-wedged profiles become usable on load', () => {
         deathEvidence: null
       })
       expect(await host.attach(CALLER, hostTestAttachParams(14))).toMatchObject({ ok: true })
-      expect(acquire).toHaveBeenCalledOnce()
+      expect(spawn).toHaveBeenCalledOnce()
     }
   )
 
-  it('interrupts a running turn left behind by a released lease on a cold acquire', async () => {
+  it('interrupts a running turn left behind by a released lease on a cold spawn', async () => {
     // No settlement latch: the record was released cleanly, but the journal still says a turn is
     // running. Nothing observed the child's exit, but the runtime that held it was replaced, and
     // nothing after its start proves it alive.
@@ -562,7 +568,7 @@ describe('already-wedged profiles become usable on load', () => {
 
     expect(await host.attach(CALLER, hostTestAttachParams(13))).toMatchObject({ ok: true })
 
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(turnLifecycle('turn-1')).toEqual({
       turnId: 'turn-1',
       state: 'interrupted',
@@ -597,7 +603,7 @@ describe('already-wedged profiles become usable on load', () => {
     // A reconnecting client replays its attach; the same operation admits the live owner.
     expect(await host.attach(CALLER, params)).toMatchObject({ ok: true, replayed: true })
 
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(turnLifecycle('turn-2')).toEqual({ turnId: 'turn-2', state: 'running', startedAt: NOW })
   })
 
@@ -627,7 +633,7 @@ describe('already-wedged profiles become usable on load', () => {
     })
     // Why NOT acquired here: startup spawning a provider child for every recovered record is the
     // accumulation this stack removed. Unlatching is the migration's job; spawning is a hold's.
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
   })
 
   it('unlatches a released record that reloaded into recovery with nothing outstanding', async () => {
@@ -692,9 +698,10 @@ describe('already-wedged profiles become usable on load', () => {
           [DEAD_OWNER.spawnToken, [12_546]]
         ])
     )
-    acquire.mockImplementation(async ({ fence }) => {
-      order.push('acquire')
+    spawn.mockImplementation(async ({ fence }) => {
+      order.push('spawn')
       return {
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: { hostId: 'local', pid: 4242, processStartTimeMs: 1, spawnToken: 'spawn-new' },
         link: {
           linkId: `link-${fence}`,
@@ -716,7 +723,7 @@ describe('already-wedged profiles become usable on load', () => {
     const fence = store.getRecord(SESSION)?.lease.runtimeFence ?? null
     expect(await host.attach(CALLER, hostTestAttachParams(fence))).toMatchObject({ ok: true })
 
-    expect(order).toEqual(['acquire'])
+    expect(order).toEqual(['spawn'])
   })
 
   it('waits out a conflicted owner it cannot verify, signalling nothing, until it is proven gone', async () => {
@@ -738,12 +745,12 @@ describe('already-wedged profiles become usable on load', () => {
       ok: false,
       refusal: { code: 'agent_session_conflict' }
     })
-    expect(acquire).not.toHaveBeenCalled()
+    expect(spawn).not.toHaveBeenCalled()
 
     // The user quits that terminal: the next start proves it gone and the chat takes over.
     probe = { outcome: 'pid-absent' }
     await startAgent()
-    expect(acquire).toHaveBeenCalledOnce()
+    expect(spawn).toHaveBeenCalledOnce()
     expect(stopOwnerProcess).not.toHaveBeenCalled()
   })
 })

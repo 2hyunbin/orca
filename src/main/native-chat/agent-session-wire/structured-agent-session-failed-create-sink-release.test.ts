@@ -31,12 +31,12 @@ const EXIT_REASON = 'claude stream-json exited (code 1): claude: not signed in'
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
+let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-failed-create-sink-'))
   resetHostTestOperationIds()
-  acquire = vi.fn(async ({ fence, spawnToken }) => ({
+  spawn = vi.fn(async ({ fence, spawnToken }) => ({
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -54,7 +54,12 @@ beforeEach(async () => {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
-      acquire,
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn,
       releaseAcquisition: vi.fn(async () => true),
       dispatch: vi.fn(async () => ({ state: 'admitted' as const })),
       cancelTurn: vi.fn(async () => ({ cancelled: true })),
@@ -81,7 +86,7 @@ describe('a create that fails after its child wrote through the unbound sink', (
   ])(
     'releases the sink when %s, so a new create and shutdown both proceed',
     async (_how, cause) => {
-      acquire.mockImplementationOnce(async ({ events }) => {
+      spawn.mockImplementationOnce(async ({ events }) => {
         // The published child's exit reached the translator before any journal was attached.
         events?.setActivity?.(null)
         throw cause
@@ -99,7 +104,7 @@ describe('a create that fails after its child wrote through the unbound sink', (
         ok: true
       })
       await expect(host.flushAllStreamedEvents()).resolves.toBeUndefined()
-      expect(acquire).toHaveBeenCalledTimes(2)
+      expect(spawn).toHaveBeenCalledTimes(2)
     }
   )
 
@@ -120,7 +125,7 @@ describe('a create that fails after its child wrote through the unbound sink', (
       acquisitionGeneration: `generation-${exitedFence}`
     })
     const releasedFence = store.getRecord(SESSION)?.lease.runtimeFence ?? 0
-    acquire.mockImplementationOnce(async ({ events }) => {
+    spawn.mockImplementationOnce(async ({ events }) => {
       events?.setActivity?.(null)
       throw cause
     })
@@ -135,10 +140,10 @@ describe('a create that fails after its child wrote through the unbound sink', (
     await expect(host.attach(CALLER, hostTestAttachParams(fence))).resolves.toMatchObject({
       ok: true
     })
-    expect(acquire).toHaveBeenCalledTimes(3)
+    expect(spawn).toHaveBeenCalledTimes(3)
     // Only the adopted child's sink still takes writes: the failed attempt's closed with it, and
     // the exited generation's closed when the resume replaced it.
-    const [exited, failedAttempt, resumed] = acquire.mock.calls.map(([input]) => input.events)
+    const [exited, failedAttempt, resumed] = spawn.mock.calls.map(([input]) => input.events)
     expect(failedAttempt?.tryPublish?.()).toEqual({ accepted: false, reason: 'closed' })
     expect(exited?.tryPublish?.()).toEqual({ accepted: false, reason: 'closed' })
     expect(resumed?.tryPublish?.()).toEqual({ accepted: true })

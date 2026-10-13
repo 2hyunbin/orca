@@ -34,7 +34,7 @@ async function replaying(name: string) {
     spec: acpLaunchSpecFor('omp')!,
     script: (scripted) => replay.attach(scripted)
   })
-  await rig.acquire()
+  await rig.spawn()
   await rig.adapter.dispatch({ sessionId: SESSION, clientMessageId: 'send-1', body: ask, fence: 1 })
   return { rig, replay }
 }
@@ -77,7 +77,7 @@ describe('OMP recordings through the adapter', () => {
         spec: acpLaunchSpecFor('omp')!,
         script: (scripted) => replay.attach(scripted)
       })
-      await rig.acquire()
+      await rig.spawn()
       await rig.adapter.dispatch({
         sessionId: SESSION,
         clientMessageId: 'send-1',

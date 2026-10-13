@@ -38,12 +38,18 @@ describe('abandoning a structured agent-session host', () => {
       reportEntered = resolve
     })
     const adapter: StructuredAgentSessionAdapter = {
-      acquire: async ({ fence }) => {
+      open: async () => ({
+        reportedOptions: { model: '' },
+        restoreSkippedOptions: [],
+        optionRevision: -1
+      }),
+      spawn: async ({ fence }) => {
         if (gate) {
           reportEntered()
           await gate
         }
         return {
+          acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',
             pid: 4242,

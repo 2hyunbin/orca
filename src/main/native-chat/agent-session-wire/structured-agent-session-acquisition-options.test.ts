@@ -78,12 +78,17 @@ function attachParams(
 function adapter(input: {
   origin: 'created' | 'resumed'
   options?: AgentSessionOptionsResult
-  restoreFailures?: readonly string[]
 }): StructuredAgentSessionAdapter {
   return {
-    acquire: vi
-      .fn<StructuredAgentSessionAdapter['acquire']>()
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: vi
+      .fn<StructuredAgentSessionAdapter['spawn']>()
       .mockImplementation(async ({ fence, spawnToken }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',
           pid: 4242,
@@ -99,9 +104,6 @@ function adapter(input: {
         }
       })),
     ...(input.options ? { readOptions: vi.fn(async () => input.options!) } : {}),
-    ...(input.restoreFailures
-      ? { readOptionRestoreFailures: vi.fn(() => input.restoreFailures!) }
-      : {}),
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
     answerPrompt: vi.fn(),
@@ -119,7 +121,7 @@ function expectSettledAttachLease(record: AgentSessionRecord | null): void {
 
 describe('structured session acquisition options', () => {
   it('samples provider history before acquiring a replacement child', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-history-before-acquire-'))
+    root = await mkdtemp(join(tmpdir(), 'orca-history-before-spawn-'))
     const initialStore = await openTestAgentSessionRecordStore(root)
     let childAcquired = false
     const historyWindow = (): ProviderHistoryWindow => ({
@@ -129,10 +131,11 @@ describe('structured session acquisition options', () => {
     })
     const withHistory = (origin: 'created' | 'resumed'): StructuredAgentSessionAdapter => {
       const sessionAdapter = adapter({ origin })
-      const acquire = vi.mocked(sessionAdapter.acquire)
-      acquire.mockImplementation(async (input) => {
+      const spawn = vi.mocked(sessionAdapter.spawn)
+      spawn.mockImplementation(async (input) => {
         childAcquired = true
         return {
+          acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',
             pid: 4242,
@@ -248,7 +251,7 @@ describe('structured session acquisition options', () => {
     })
 
     expect(created).toMatchObject({ ok: true })
-    expect(sessionAdapter.acquire).toHaveBeenCalledWith(
+    expect(sessionAdapter.spawn).toHaveBeenCalledWith(
       expect.objectContaining({ options, recordPhase })
     )
     expect(store.getRecord(SESSION)?.options).toEqual(options)
@@ -359,41 +362,6 @@ describe('structured session acquisition options', () => {
     })
   })
 
-  it('keeps a saved Fast choice when the provider skips restoring it', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-acquisition-fast-restore-'))
-    const store = await openTestAgentSessionRecordStore(root)
-    const sessionAdapter = adapter({
-      origin: 'created',
-      options: { current: { model: 'gpt-standard' }, models: [] },
-      restoreFailures: ['fastMode']
-    })
-
-    const created = await performAttach({
-      agents: NO_STRUCTURED_AGENTS,
-      logger: createStructuredAgentSessionLogger(),
-      store,
-      adapter: sessionAdapter,
-      openConversation: openTestAttachConversation(openTestJournalHostDatabase(root!)),
-      authority: {
-        spawnToken: 'spawn-a',
-        claimKeyId: 'key-1',
-        handoffOperationId: CREATE_OPERATION,
-        probe: { outcome: 'reservation-unused' }
-      },
-      callerKey: 'client-1',
-      optionRevision: () => 0,
-      params: attachParams(CREATE_OPERATION, null, {
-        model: 'gpt-standard',
-        fastMode: 'true'
-      }),
-      now: () => NOW,
-      onAttached: () => {}
-    })
-
-    expect(created).toMatchObject({ ok: true })
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'gpt-standard', fastMode: 'true' })
-  })
-
   it('proves an opened Codex owner without replacing saved choices from readback', async () => {
     root = await mkdtemp(join(tmpdir(), 'orca-acquisition-known-options-'))
     const store = await openTestAgentSessionRecordStore(root)
@@ -401,8 +369,7 @@ describe('structured session acquisition options', () => {
       ...adapter({ origin: 'created' }),
       readOptions: vi.fn(async () => {
         throw new Error('model list unavailable')
-      }),
-      readAcquisitionOptions: vi.fn(() => ({ model: 'gpt-reported', effort: 'high' }))
+      })
     }
 
     const created = await performAttach({
@@ -426,7 +393,6 @@ describe('structured session acquisition options', () => {
 
     expect(created).toMatchObject({ ok: true })
     expect(sessionAdapter.readOptions).not.toHaveBeenCalled()
-    expect(sessionAdapter.readAcquisitionOptions).not.toHaveBeenCalled()
     expect(store.getRecord(SESSION)?.options).toEqual({ model: 'gpt-saved', effort: 'medium' })
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
   })
@@ -438,8 +404,7 @@ describe('structured session acquisition options', () => {
       ...adapter({ origin: 'created' }),
       readOptions: vi.fn(async () => {
         throw new Error('model list unavailable')
-      }),
-      readAcquisitionOptions: vi.fn(() => undefined)
+      })
     }
     const options = { model: 'gpt-saved', effort: 'medium' }
 
@@ -468,7 +433,7 @@ describe('structured session acquisition options', () => {
   })
 
   describe.each([
-    ['adapter acquire', 'acquire'],
+    ['adapter spawn', 'spawn'],
     ['identity commit', 'identity'],
     ['owner proof', 'proof'],
     ['journal attach', 'journal']
@@ -486,15 +451,16 @@ describe('structured session acquisition options', () => {
         options: { current: { model: 'gpt-5.6-terra' }, models: [] }
       })
       const injected = new Error(`${failurePoint} failed`)
-      const acquire = vi.mocked(base.acquire)
-      if (failurePoint === 'acquire') {
-        acquire.mockRejectedValueOnce(injected)
+      const spawn = vi.mocked(base.spawn)
+      if (failurePoint === 'spawn') {
+        spawn.mockRejectedValueOnce(injected)
       } else if (failurePoint === 'identity') {
         vi.spyOn(store, 'commitProcessIdentity').mockRejectedValueOnce(injected)
       } else if (failurePoint === 'proof') {
         vi.spyOn(store, 'proveOwner').mockRejectedValueOnce(injected)
       } else if (failurePoint === 'journal') {
-        acquire.mockImplementation(async ({ fence, spawnToken }) => ({
+        spawn.mockImplementation(async ({ fence, spawnToken }) => ({
+          acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',
             pid: 4242,
@@ -516,7 +482,7 @@ describe('structured session acquisition options', () => {
         }
         return cleanup
       })
-      const failingAdapter = { ...base, acquire, releaseAcquisition }
+      const failingAdapter = { ...base, spawn, releaseAcquisition }
       let journalFailure = failurePoint === 'journal' ? injected : null
       const perform = (
         target: AgentSessionRecordStore,

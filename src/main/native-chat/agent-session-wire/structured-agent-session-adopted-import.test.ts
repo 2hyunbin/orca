@@ -97,9 +97,15 @@ function attachParams(transcriptPath?: string): AgentSessionAttachParams {
 
 function adapter(): StructuredAgentSessionAdapter {
   return {
-    acquire: vi
-      .fn<StructuredAgentSessionAdapter['acquire']>()
+    open: async () => ({
+      reportedOptions: { model: '' },
+      restoreSkippedOptions: [],
+      optionRevision: -1
+    }),
+    spawn: vi
+      .fn<StructuredAgentSessionAdapter['spawn']>()
       .mockImplementation(async ({ fence, spawnToken }) => ({
+        acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW, spawnToken },
         link: {
           linkId: 'resumed-link',
@@ -184,7 +190,7 @@ describe('adopting a provider conversation on create', () => {
     }
     expect(replay.cursor.epoch).toBe(first.cursor.epoch)
     expect(JSON.stringify(replay.value.page.items)).toContain('not yet in rollout')
-    expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
+    expect(sessionAdapter.spawn).toHaveBeenCalledTimes(1)
   })
 
   it.each(['missing', 'oversized', 'empty', 'invalid', 'source-less'] as const)(
@@ -209,7 +215,7 @@ describe('adopting a provider conversation on create', () => {
         ok: false,
         refusal: { code: 'agent_session_identity_required' }
       })
-      expect(sessionAdapter.acquire).not.toHaveBeenCalled()
+      expect(sessionAdapter.spawn).not.toHaveBeenCalled()
       expect(sessionAdapter.releaseAcquisition).not.toHaveBeenCalled()
       expect(onAttached).not.toHaveBeenCalled()
       expect(store?.getRecord(SESSION)).toBeNull()
@@ -229,7 +235,7 @@ describe('adopting a provider conversation on create', () => {
     )
     const sessionAdapter = adapter()
     await expect(attach(transcriptPath, sessionAdapter)).rejects.toThrow('disk write failed')
-    expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
+    expect(sessionAdapter.spawn).toHaveBeenCalledTimes(1)
     expect(sessionAdapter.releaseAcquisition).toHaveBeenCalledTimes(1)
   })
 
@@ -284,11 +290,11 @@ describe('adopting a provider conversation on create', () => {
     await writeCodexRollout(transcriptPath, 'prepared before acquiring')
     const prepare = vi.spyOn(legacyImport, 'prepareLegacyTranscriptImport')
     const sessionAdapter = adapter()
-    const acquire = sessionAdapter.acquire
-    sessionAdapter.acquire = vi.fn(async (input) => {
+    const spawn = sessionAdapter.spawn
+    sessionAdapter.spawn = vi.fn(async (input) => {
       expect(prepare).toHaveBeenCalledTimes(1)
       await rm(transcriptPath)
-      return acquire(input)
+      return spawn(input)
     })
     const result = await attach(transcriptPath, sessionAdapter, async ({ journal }) =>
       journal.close()
