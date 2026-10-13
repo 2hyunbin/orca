@@ -60,9 +60,18 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
       targets,
       restored.map((session) => session.sessionId)
     )
-    // Past the seed, projecting records nothing.
+    // Past the seed, projecting records nothing in the index. Every close leaves both the index and
+    // the layout (the index's hidden notice), so one listed here without a saved tab predates it.
     for (const session of restored) {
+      this.saveWindowlessAgentSessionTab(session.workspaceId, session)
       this.projectStructuredAgentSessionTab({ ...session, activate: false, notify: false })
+    }
+    // A chat whose record went missing between runs leaves the index with no hidden notice; its saved
+    // tab goes the same way. One a newer Orca wrote is only unreadable here, so it keeps its tab.
+    for (const sessionId of this.savedAgentSessionTabs().keys()) {
+      if (!host?.deps?.store?.isSessionUnreadable?.(sessionId)) {
+        this.removeWindowlessAgentSessionTab(sessionId)
+      }
     }
     const wasUnverifiable = this.structuredAgentSessionInventoryUnverifiable
     // No host means no one can say which chats exist; with none on disk, empty is the answer.
@@ -97,6 +106,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
           })
         })
     }
+    this.saveWindowlessAgentSessionTab(input.workspaceId, input)
     this.projectStructuredAgentSessionTab(input)
   }
 
@@ -110,7 +120,10 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
   }): void {
     const id = `agent-session:${input.sessionId}`
     if (this.isWindowlessSessionTabs()) {
-      this.saveWindowlessAgentSessionTab(input.workspaceId, input, input.activate ? id : null)
+      // Every caller saved the tab first; a projection saves only the selection.
+      if (input.activate) {
+        this.saveWindowlessTabSelection(input.workspaceId, id)
+      }
       if (input.notify === false) {
         const session = this.getWorkspaceSessionForWorktree(input.workspaceId)
         if (session) {

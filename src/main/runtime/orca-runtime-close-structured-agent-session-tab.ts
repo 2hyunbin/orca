@@ -1,6 +1,4 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { withClosedAgentSessionTab, withOpenedAgentSessionTab } from './windowless-session-tabs'
-import type { AgentType } from '../../shared/agent-status-types'
 import { OrcaRuntimeWithCloseMobileSessionTab } from './orca-runtime-close-mobile-session-tab'
 import type {
   RuntimeMobileSessionAgentTab,
@@ -17,6 +15,11 @@ import { applyBrowserSessionTabSelection } from './browser-session-tab-selection
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-tab-retirement'
+import { withClosedAgentSessionTab, withOpenedAgentSessionTab } from './agent-session-tab-layout'
+import { structuredSessionTabRetired } from './structured-worker-custody'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
+import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
   protected async closeStructuredAgentSessionTab(
@@ -58,7 +61,15 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
    */
   retireStructuredAgentSessionTabFromSnapshot(sessionId: string): boolean {
     if (this.isWindowlessSessionTabs()) {
-      return this.closeWindowlessAgentSessionTab(sessionId)
+      // The index's hidden notice removed the saved tab; the list follows the layout.
+      this.removeWindowlessAgentSessionTab(sessionId)
+      const listed = [...this.mobileSessionTabsByWorktree].find(([, snapshot]) =>
+        snapshot.tabs.some((tab) => tab.type === 'agent-session' && tab.sessionId === sessionId)
+      )
+      if (listed) {
+        this.republishWindowlessSessionTabs(listed[0])
+      }
+      return listed !== undefined
     }
     for (const [worktreeId, snapshot] of this.mobileSessionTabsByWorktree) {
       const nextSnapshot = retireStructuredAgentSessionTabFrom(snapshot, sessionId)
@@ -274,52 +285,82 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     }
   }
 
-  /** Saves a chat's tab in a windowless worktree's layout, and its selection when `rowId` is set. */
+  /** Saves a chat's tab in a windowless host's layout, where it is listed from once read there. */
   protected saveWindowlessAgentSessionTab(
     worktreeId: string,
-    chat: { sessionId: string; agent: AgentType },
-    rowId: string | null
+    chat: { sessionId: string; agent: StructuredAgentId }
   ): void {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    const next = session
-      ? withOpenedAgentSessionTab(
-          this.getWorkspaceSessionHostIdForWorktree(worktreeId),
-          session,
-          worktreeId,
-          { sessionId: chat.sessionId, agent: chat.agent }
-        )
-      : null
-    if (next) {
-      this.setWorkspaceSessionForWorktree(worktreeId, next)
+    this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
+      withOpenedAgentSessionTab(hostId, session, worktreeId, chat)
+    )
+  }
+
+  /**
+   * Removes a chat's saved tab once the index no longer lists it. Called from the index's hidden
+   * notice, which every chat close reaches; a close that put the tab back keeps it.
+   */
+  protected removeWindowlessAgentSessionTab(sessionId: string): void {
+    const host = getStructuredAgentSessionHost()
+    if (!host || !structuredSessionTabRetired(host, sessionId)) {
+      return
     }
-    if (rowId) {
-      this.saveWindowlessTabSelection(worktreeId, rowId)
+    for (const { worktreeId, hostId } of this.savedAgentSessionTabs().get(sessionId) ?? []) {
+      this.saveWindowlessAgentSessionTabLayout(
+        worktreeId,
+        (partitionHostId, session) =>
+          withClosedAgentSessionTab(partitionHostId, session, worktreeId, sessionId),
+        hostId
+      )
     }
   }
 
-  /** Closes a chat's saved tab in whichever windowless worktree lists it. */
-  protected closeWindowlessAgentSessionTab(sessionId: string): boolean {
-    for (const [worktreeId, snapshot] of this.mobileSessionTabsByWorktree) {
-      if (
-        !snapshot.tabs.some((tab) => tab.type === 'agent-session' && tab.sessionId === sessionId)
-      ) {
-        continue
+  /**
+   * Each of this host's chats with a saved tab, and where: every saved partition, so a tab left in
+   * a rotated runtime partition (#18202) is found as a terminal close finds one.
+   */
+  protected savedAgentSessionTabs(): Map<
+    string,
+    { worktreeId: string; hostId: ExecutionHostId }[]
+  > {
+    const saved = new Map<string, { worktreeId: string; hostId: ExecutionHostId }[]>()
+    for (const hostId of this.store?.getWorkspaceSessionHostIds?.() ?? []) {
+      const session = this.store?.getWorkspaceSession?.(hostId)
+      for (const [worktreeId, tabs] of Object.entries(session?.unifiedTabs ?? {})) {
+        for (const tab of tabs) {
+          // Another execution host's chat is in that host's index, not this one's.
+          const ownHost = !tab.executionHostId || tab.executionHostId === LOCAL_EXECUTION_HOST_ID
+          if (tab.contentType === 'agent-session' && ownHost) {
+            saved.set(tab.entityId, [...(saved.get(tab.entityId) ?? []), { worktreeId, hostId }])
+          }
+        }
       }
-      const session = this.getWorkspaceSessionForWorktree(worktreeId)
-      const next = session
-        ? withClosedAgentSessionTab(
-            this.getWorkspaceSessionHostIdForWorktree(worktreeId),
-            session,
-            worktreeId,
-            sessionId
-          )
-        : null
-      if (next) {
-        this.setWorkspaceSessionForWorktree(worktreeId, next)
-      }
-      this.republishWindowlessSessionTabs(worktreeId)
-      return true
     }
-    return false
+    return saved
+  }
+
+  // A window saves its own layout whole, chat tabs included; only a host with none saves them here.
+  private saveWindowlessAgentSessionTabLayout(
+    worktreeId: string,
+    change: (
+      hostId: ExecutionHostId,
+      session: WorkspaceSessionState
+    ) => WorkspaceSessionState | null,
+    /** The partition to edit; the worktree's own when unnamed. */
+    partitionHostId?: ExecutionHostId
+  ): void {
+    if (this.getAvailableAuthoritativeWindow()) {
+      return
+    }
+    try {
+      const hostId = partitionHostId ?? this.getWorkspaceSessionHostIdForWorktree(worktreeId)
+      const session = this.store?.getWorkspaceSession?.(hostId)
+      const next = session ? change(hostId, session) : null
+      if (next) {
+        this.store.setWorkspaceSession(next, hostId)
+      }
+    } catch (error) {
+      // The chat itself opened or closed; a layout that cannot be written must not undo that.
+      console.warn('[structured-agent-session] could not save a chat tab in the layout:', error)
+    }
   }
 }

@@ -91,11 +91,11 @@ it('overlaps both typechecks with tests and collects their failures before the s
   const waits = steps.filter((step) => step.wait !== undefined)
   expect(waits).toHaveLength(1)
   const [wait] = waits
-  expect(wait.wait).toEqual(['production-types', 'test-types'])
+  expect(wait.wait).toEqual(['production-types', 'test-types', 'ruby-tools'])
   expect(wait.if).toBeUndefined()
   expect(steps.indexOf(wait)).toBeGreaterThan(test)
   expect(steps.indexOf(wait)).toBeLessThan(summary)
-  for (const id of wait.wait) {
+  for (const id of ['production-types', 'test-types']) {
     const step = steps.find((candidate) => candidate.id === id)
     expect(step.background).toBe(true)
     expect(step['continue-on-error']).toBeUndefined()
@@ -104,4 +104,10 @@ it('overlaps both typechecks with tests and collects their failures before the s
     expect(steps.indexOf(step)).toBeLessThan(test)
     expect(step.run).toMatch(/^node /)
   }
+  const ruby = steps.find((step) => step.id === 'ruby-tools')
+  expect(ruby.uses).toBe('ruby/setup-ruby@v1')
+  expect(ruby.background).toBe(true)
+  expect(ruby.if).toBe("steps.ruby-scope.outputs.should_run != 'false'")
+  expect(ruby['continue-on-error']).toBeUndefined()
+  expect(steps.indexOf(ruby)).toBeLessThan(install)
 })

@@ -16,14 +16,11 @@ import {
   resolveSessionTabRow,
   type ProjectedSessionTabs
 } from '../../shared/workspace-layout/old-client'
-import { applyLayoutCommand } from '../../shared/workspace-layout/workspace-layout-commands'
-import { randomUUID } from 'node:crypto'
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import type { WorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-model'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import type { AgentType } from '../../shared/agent-status-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 
 export type WindowlessSessionTabsInput = {
@@ -215,70 +212,6 @@ export function withSavedTabSelection(
     }
   }
   return saveWorkspaceLayout(loaded)
-}
-
-/**
- * The partition with a chat's tab saved in the active group; null when it is saved already. A tab
- * saved before tabs named their agent learns it here, since a list cannot open a chat without it.
- */
-export function withOpenedAgentSessionTab(
-  hostId: ExecutionHostId,
-  session: WorkspaceSessionState,
-  worktreeId: string,
-  chat: { sessionId: string; agent: AgentType }
-): WorkspaceSessionState | null {
-  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const saved = loaded.layout.workspaces[worktreeId]?.tabs.find(
-    (tab) => tab.kind === 'agent-session' && tab.entityId === chat.sessionId
-  )
-  if (saved?.agentSessionAgent) {
-    return null
-  }
-  if (saved) {
-    return {
-      ...session,
-      unifiedTabs: {
-        ...session.unifiedTabs,
-        [worktreeId]: (session.unifiedTabs?.[worktreeId] ?? []).map((tab) =>
-          tab.id === saved.id ? { ...tab, agentSessionAgent: chat.agent } : tab
-        )
-      }
-    }
-  }
-  const groupId = loaded.desktopView.activeGroupIdByWorktree?.[worktreeId]
-  const applied = applyLayoutCommand(
-    loaded.layout,
-    {
-      type: 'openAgentSessionTab',
-      workspace: worktreeId,
-      ...chat,
-      ...(groupId ? { groupId } : {})
-    },
-    { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
-  )
-  return applied.ok ? saveWorkspaceLayout({ ...loaded, layout: applied.model }) : null
-}
-
-/** The partition without a chat's tab; null when no saved tab shows the chat. */
-export function withClosedAgentSessionTab(
-  hostId: ExecutionHostId,
-  session: WorkspaceSessionState,
-  worktreeId: string,
-  sessionId: string
-): WorkspaceSessionState | null {
-  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const tab = loaded.layout.workspaces[worktreeId]?.tabs.find(
-    (entry) => entry.kind === 'agent-session' && entry.entityId === sessionId
-  )
-  if (!tab) {
-    return null
-  }
-  const applied = applyLayoutCommand(
-    loaded.layout,
-    { type: 'closeTabs', workspace: worktreeId, tabIds: [tab.id], force: true },
-    { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
-  )
-  return applied.ok ? saveWorkspaceLayout({ ...loaded, layout: applied.model }) : null
 }
 
 /**
