@@ -2615,8 +2615,8 @@
         "34c8fbb46e": "SSH remote",
         "63c2be1914": "SSH disconnected",
         "95be6587d3": "Create worktree \"{{value0}}\"",
-        "worktreesHeader": "Worktrees",
-        "recentWorktreesHeader": "Recent Worktrees",
+        "worktreesHeader": "Workspaces",
+        "recentWorktreesHeader": "Recent Workspaces",
         "settingsBadge": "Settings",
         "actionBadge": "Action",
         "paletteHostBadge": "Host: {{value0}}",
@@ -2626,8 +2626,8 @@
         "repoGroupBadge": "Repo group",
         "pluginCommandFailed": "Could not run the plugin command.",
         "recentChatsTerminalsHeader": "Recent Chats & Terminals",
-        "27f10cca63": "Search chats, terminals, worktrees, settings, and actions...",
-        "2770f02910": "Search chats, terminals, worktrees, settings, and actions",
+        "27f10cca63": "Search chats, terminals, workspaces, settings, and actions...",
+        "2770f02910": "Search chats, terminals, workspaces, settings, and actions",
         "lastActiveTime": "Last active {{value0}} ago"
       },
       "github": {

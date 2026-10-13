@@ -2489,8 +2489,8 @@
         "34c8fbb46e": "Remote SSH",
         "63c2be1914": "SSH déconnecté",
         "95be6587d3": "Créer le worktree « {{value0}} »",
-        "worktreesHeader": "Worktrees",
-        "recentWorktreesHeader": "Worktrees récents",
+        "worktreesHeader": "Espaces de travail",
+        "recentWorktreesHeader": "Espaces de travail récents",
         "settingsBadge": "Paramètres",
         "actionBadge": "Action",
         "paletteHostBadge": "Hôte : {{value0}}",
@@ -2500,8 +2500,8 @@
         "repoGroupBadge": "Groupe de dépôts",
         "pluginCommandFailed": "Impossible d'exécuter la commande du plugin.",
         "recentChatsTerminalsHeader": "Chats et terminaux récents",
-        "27f10cca63": "Rechercher chats, terminaux, worktrees, paramètres et actions...",
-        "2770f02910": "Rechercher chats, terminaux, worktrees, paramètres et actions",
+        "27f10cca63": "Rechercher chats, terminaux, espaces de travail, paramètres et actions...",
+        "2770f02910": "Rechercher chats, terminaux, espaces de travail, paramètres et actions",
         "lastActiveTime": "Dernière activité il y a {{value0}}"
       },
       "github": {
