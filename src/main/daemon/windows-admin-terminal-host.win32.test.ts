@@ -45,7 +45,7 @@ setTimeout(()=>process.exit(1),30000).unref();`
       expect(foreign).toMatchObject({ code: 1, timedOut: false })
       expect(foreign.stderr).toContain('must be this Orca installation')
       const first = await launch()
-      expect(first).toMatchObject({ code: 0, timedOut: false })
+      expect(first, first.stderr).toMatchObject({ code: 0, timedOut: false })
       const pid = Number(readFileSync(pidPath, 'utf8'))
       expect(pid).toBeGreaterThan(0)
       hostPid = pid

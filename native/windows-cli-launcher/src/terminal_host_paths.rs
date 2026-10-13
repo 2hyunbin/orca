@@ -33,6 +33,21 @@ pub struct TrustedHost {
     pub entry: PathBuf,
 }
 
+fn installation_root(launcher: &Path) -> Option<&Path> {
+    let directory = launcher.parent()?;
+    let parent = directory.parent()?;
+    let root = parent.parent()?;
+    // The dev launcher has one extra directory compared with resources\bin\orca.exe.
+    if directory.file_name() == Some(std::ffi::OsStr::new(".build"))
+        && parent.file_name() == Some(std::ffi::OsStr::new("windows-cli-launcher"))
+        && root.file_name() == Some(std::ffi::OsStr::new("native"))
+    {
+        root.parent()
+    } else {
+        Some(root)
+    }
+}
+
 // Read from the shell, not %LOCALAPPDATA%: the unelevated caller controls the environment.
 fn local_app_data() -> Option<PathBuf> {
     let mut raw = std::ptr::null_mut();
@@ -62,11 +77,7 @@ pub fn trusted_host(launcher: &Path, program: &Path, entry: &Path) -> Option<Tru
         return None;
     }
     // <install>\resources\bin\orca.exe and <repo>\native\windows-cli-launcher\.build\orca.exe
-    let install = launcher
-        .parent()
-        .and_then(Path::parent)
-        .and_then(Path::parent)
-        .and_then(|root| std::fs::canonicalize(root).ok())?;
+    let install = std::fs::canonicalize(installation_root(launcher)?).ok()?;
     let relocated = local_app_data().and_then(|root| {
         std::fs::canonicalize(root.join("Orca").join("daemon-host-profiles")).ok()
     });
@@ -99,6 +110,25 @@ pub fn is_inside(root: &Path, path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolves_packaged_and_development_installations() {
+        for (launcher, root) in [
+            (
+                r"C:\Program Files\Orca\resources\bin\orca.exe",
+                r"C:\Program Files\Orca",
+            ),
+            (
+                r"C:\repo 雪\native\windows-cli-launcher\.build\orca.exe",
+                r"C:\repo 雪",
+            ),
+        ] {
+            assert_eq!(
+                installation_root(Path::new(launcher)),
+                Some(Path::new(root))
+            );
+        }
+    }
 
     #[test]
     fn rejects_paths_escaping_user_data() {

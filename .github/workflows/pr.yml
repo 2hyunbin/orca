@@ -1283,6 +1283,25 @@ jobs:
       - name: Build the Windows agent hook
         run: node config/scripts/build-windows-agent-hook.mjs
 
+      - name: Set up Bun for administrator terminal tests
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: config/.bun-version
+
+      - name: Test the real Windows administrator terminal launcher
+        env:
+          ORCA_BACKGROUND_LAUNCH: '1'
+          ORCA_WINDOWS_ADMIN_TERMINAL_TEST: '1'
+        shell: pwsh
+        run: |
+          node config/scripts/build-windows-cli-launcher.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows CLI launcher build failed' }
+          $env:ORCA_LAUNCHER_VERSION = (Get-Content package.json | ConvertFrom-Json).version
+          cargo test --locked --manifest-path native/windows-cli-launcher/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw 'Windows CLI launcher tests failed' }
+          pnpm test src/main/daemon/windows-admin-terminal-host.win32.test.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Administrator terminal launcher regression failed' }
+
       - name: Test Windows-specific boundaries
         run: >-
           pnpm exec vitest run --config config/vitest.config.ts
