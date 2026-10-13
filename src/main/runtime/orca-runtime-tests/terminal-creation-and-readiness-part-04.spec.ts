@@ -524,7 +524,9 @@ describe('OrcaRuntimeService', () => {
       terminalGroupGridSizes: {
         'group-active': { cols: 63, rows: 60 },
         'group-named': { cols: 90, rows: 30 }
-      }
+      },
+      // A measured group beats the single-group size.
+      singleGroupWorkspaceGridSize: { cols: 238, rows: 80 }
     })
 
     await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { command: 'codex', ...opts })

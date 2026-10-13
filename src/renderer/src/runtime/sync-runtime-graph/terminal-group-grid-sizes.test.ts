@@ -35,16 +35,22 @@ function pane(opts: { fontSize: number; cellWidth: number; title?: boolean }): F
   }
 }
 
-function groupBody(id: string, width: number, height: number): void {
+function groupBody(
+  id: string,
+  width: number,
+  height: number,
+  parent: HTMLElement = document.body
+): void {
   const body = withRect(document.createElement('div'), width, height)
   body.dataset.tabGroupBodyId = id
-  document.body.appendChild(body)
+  parent.appendChild(body)
 }
 
-function contentArea(width: number, height: number): void {
+function contentArea(width: number, height: number): HTMLElement {
   const content = withRect(document.createElement('div'), width, height)
   content.setAttribute('data-terminal-workbench-container', '')
   document.body.appendChild(content)
+  return content
 }
 
 afterEach(() => {
@@ -73,16 +79,19 @@ describe('measureTerminalGroupGridSizes', () => {
 
   it("sizes a single-group workspace from the content area minus a lone group's tab row", () => {
     panes.list = [pane({ fontSize: 14, cellWidth: 8 })]
-    contentArea(1930, 1330)
-    groupBody('group-a', 1929, 1294)
+    const content = contentArea(1930, 1330)
+    groupBody('group-a', 1929, 1294, content)
+    // Neither the floating panel's body nor a hidden workspace's body is another group here.
+    groupBody('floating', 600, 400)
+    groupBody('hidden', 0, 0, content)
     // The lone body's inset (1, 36) is remembered and applied to the content area, so later
     // measurements on a split workspace still know what a single-group workspace gets.
     expect(measureTerminalGroupGridSizes(14)?.singleGroupWorkspace).toEqual({ cols: 238, rows: 80 })
 
     document.body.replaceChildren()
-    contentArea(1600, 1330)
-    groupBody('group-a', 799, 1294)
-    groupBody('group-b', 800, 1294)
+    const splitContent = contentArea(1600, 1330)
+    groupBody('group-a', 799, 1294, splitContent)
+    groupBody('group-b', 800, 1294, splitContent)
     // (1600 - 1 - 4 inset - 14 scrollbar) / 8 = 197; (1330 - 36 - 4) / 16 = 80.
     expect(measureTerminalGroupGridSizes(14)?.singleGroupWorkspace).toEqual({ cols: 197, rows: 80 })
   })

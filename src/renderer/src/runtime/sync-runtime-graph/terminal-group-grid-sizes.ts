@@ -74,22 +74,24 @@ export function measureTerminalGroupGridSizes(
       fit.metrics
     )
   const groups: Record<string, GridSize> = {}
-  const bodies = [...document.querySelectorAll<HTMLElement>('[data-tab-group-body-id]')]
-  for (const body of bodies) {
+  const shownBodies: { body: HTMLElement; rect: DOMRect }[] = []
+  for (const body of document.querySelectorAll<HTMLElement>('[data-tab-group-body-id]')) {
     const groupId = body.dataset.tabGroupBodyId
     const rect = body.getBoundingClientRect()
     if (groupId && rect.width > 0 && rect.height > 0) {
       groups[groupId] = gridFor(rect)
+      shownBodies.push({ body, rect })
     }
   }
-  const content = document
-    .querySelector('[data-terminal-workbench-container]')
-    ?.getBoundingClientRect()
-  if (!content || content.width <= 0 || content.height <= 0) {
+  const contentElement = document.querySelector('[data-terminal-workbench-container]')
+  const content = contentElement?.getBoundingClientRect()
+  if (!contentElement || !content || content.width <= 0 || content.height <= 0) {
     return { groups }
   }
-  if (bodies.length === 1) {
-    const body = bodies[0].getBoundingClientRect()
+  // The floating terminal panel's body lies outside the content area and is never the lone group.
+  const contentBodies = shownBodies.filter(({ body }) => contentElement.contains(body))
+  if (contentBodies.length === 1) {
+    const body = contentBodies[0].rect
     singleGroupBodyInset = {
       width: content.width - body.width,
       height: content.height - body.height
