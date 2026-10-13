@@ -1,0 +1,84 @@
+name: QA packaged Linux runtime floor
+on:
+  pull_request:
+    paths:
+      - .github/workflows/qa-packaged-linux-floor.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  floor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      SELECTED_RUN: '38466942746'
+      SELECTED_RUN_SHA: 'a9c4b2cb2aa5350192f26b10127f10f4c89cfce1'
+      SELECTED_ARTIFACT: '11852242657'
+      SELECTED_DIGEST: 'sha256:72c80d06b749b5f97294db94a2c75c42dff53033e264249d0873c04ca5bf884d'
+      SELECTED_PACKAGE_JOB: '115543767913'
+      SELECTED_PAYLOAD_SHA: '01a53a16d5eea3f05bceb389678273ab5dbdfea7b38839d0808519e0d3a4b7c6'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 5c731f5845435748146ed42fe8a5a6ec2164377d
+          persist-credentials: false
+      - name: Verify fixed source and Linux host
+        shell: bash
+        run: |
+          mkdir -p floor-evidence
+          test "$(git rev-parse HEAD)" = 5c731f5845435748146ed42fe8a5a6ec2164377d
+          test "$(git rev-parse 'HEAD^{tree}')" = 986cb287f695f907364c7f7fda9c7d19cee301f1
+          sha256sum config/scripts/run-linux-packaged-node-pty-floor-smoke.mjs config/scripts/linux-packaged-node-pty-floor-child.cjs > floor-evidence/source.sha256
+          git rev-parse HEAD 'HEAD^{tree}' > floor-evidence/source.txt
+          uname -s -m > floor-evidence/host.txt
+          docker info --format '{{.OSType}} {{.Architecture}}' >> floor-evidence/host.txt
+      - name: Verify and download the selected package artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api "repos/stablyai/orca/actions/runs/$SELECTED_RUN" > floor-evidence/run.json
+          gh api "repos/stablyai/orca/actions/jobs/$SELECTED_PACKAGE_JOB" > floor-evidence/package-job.json
+          gh api "repos/stablyai/orca/actions/artifacts/$SELECTED_ARTIFACT" > floor-evidence/artifact.json
+          gh api "repos/stablyai/orca/git/commits/$SELECTED_RUN_SHA" > floor-evidence/package-source.json
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          read = lambda name: json.loads(Path('floor-evidence', name).read_text())
+          run, artifact, job = read('run.json'), read('artifact.json'), read('package-job.json')
+          assert run['id'] == int(os.environ['SELECTED_RUN'])
+          assert run['head_sha'] == '5c731f5845435748146ed42fe8a5a6ec2164377d'
+          assert read('package-source.json')['tree']['sha'] == '986cb287f695f907364c7f7fda9c7d19cee301f1'
+          assert artifact['id'] == int(os.environ['SELECTED_ARTIFACT']) and not artifact['expired']
+          assert artifact['workflow_run']['id'] == run['id']
+          if 'head_sha' in artifact['workflow_run']:
+              assert artifact['workflow_run']['head_sha'] == run['head_sha']
+          assert artifact['name'] == 'orca-linux-appimage-5c731f5845435748146ed42fe8a5a6ec2164377d'
+          assert artifact['digest'].removeprefix('sha256:') == os.environ['SELECTED_DIGEST'].removeprefix('sha256:')
+          assert job['run_id'] == run['id'] and job['id'] == int(os.environ['SELECTED_PACKAGE_JOB'])
+          assert job['head_sha'] == run['head_sha'] and job['name'] == 'package'
+          assert job['status'] == 'completed' and job['conclusion'] == 'success'
+          PYTHON
+          gh api "repos/stablyai/orca/actions/artifacts/$SELECTED_ARTIFACT/zip" > "$RUNNER_TEMP/floor-package.zip"
+          printf '%s  %s\n' "${SELECTED_DIGEST#sha256:}" "$RUNNER_TEMP/floor-package.zip" | sha256sum --check | tee floor-evidence/archive-check.txt
+          mkdir -p dist
+          unzip -q "$RUNNER_TEMP/floor-package.zip" -d dist
+          test -f dist/orca-linux.AppImage
+          sha256sum dist/orca-linux.AppImage > floor-evidence/appimage.sha256
+          printf '%s  %s\n' "$SELECTED_PAYLOAD_SHA" dist/orca-linux.AppImage | sha256sum --check | tee floor-evidence/payload-check.txt
+      - name: Extract and run the canonical floor helper
+        shell: bash
+        run: |
+          chmod +x dist/orca-linux.AppImage
+          (cd dist && ./orca-linux.AppImage --appimage-extract >/dev/null)
+          mv dist/squashfs-root dist/linux-unpacked
+          node --version > floor-evidence/node.txt
+          node config/scripts/run-linux-packaged-node-pty-floor-smoke.mjs --app-dir dist/linux-unpacked | tee floor-evidence/floor.log
+          docker image inspect ubuntu:20.04 --format '{{.Id}} {{.Architecture}} {{json .RepoDigests}}' > floor-evidence/floor-image.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qa-linux-floor-evidence-${{ github.run_id }}
+          path: floor-evidence
+          retention-days: 3
