@@ -25,8 +25,6 @@ import type { AgentJournalSubmission } from '../../shared/agent-session-journal-
 import { classifyDispatchRejection } from '../../shared/structured-agent-session-dispatch-rejection'
 import { owesStructuredAgentSessionWork } from '../../shared/structured-agent-session-owed-work'
 import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
-import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
-import { structuredAgentSessionStopNoteIdentity } from '../native-chat/agent-session-wire/structured-agent-session-command-turn'
 import {
   HOST_TEST_SESSION as SESSION,
   HOST_TEST_THREAD as THREAD,
@@ -647,11 +645,11 @@ describe('a Stop in that window that the turn never opens for', () => {
 
     expect(interrupts).toBe(1)
     expect(childCloses).toBe(1)
-    // The end took the send back, so its own row says it never started and no Stop note repeats it.
+    // The request stays visible; the withdrawn send has its own stopped result.
     await vi.waitFor(async () =>
       expect(verdictOf((await settled()).submissions, sent)).toBe('withdrawn')
     )
-    expect(await statusRows()).not.toContain('Cancellation requested.')
+    expect(await statusRows()).toEqual(['Cancellation requested.'])
   })
 
   it('lets a chat closed behind it close within its bound and one eviction', async () => {
@@ -732,9 +730,8 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     await vi.waitFor(async () => expect((await settled()).owesWork).toBe(false))
   })
 
-  // The Stop was read with no turn running; its note is the turn the interrupt took, as a normal
-  // Stop's is, never a conversation row below whatever came next.
-  it('keeps its note with the turn the interrupt took', async () => {
+  // The request was recorded before a turn was known, so a later turn cannot take its identity.
+  it('keeps its request separate from a turn that opens after acceptance', async () => {
     const release = turns.holdNextAnswer()
     await send('look around')
     await vi.waitFor(() => expect(answers).toBe(1))
@@ -750,12 +747,8 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     const notes = items.filter(
       (item) => item.body.kind === 'status' && item.body.text === 'Cancellation requested.'
     )
-    expect(notes.map((note) => [note.itemId, note.turnScope])).toEqual([
-      [
-        agentJournalItemKey(structuredAgentSessionStopNoteIdentity('turn-1')),
-        { kind: 'turn', turnItemId: turn?.itemId }
-      ]
-    ])
+    expect(notes.map((note) => note.turnScope)).toEqual([{ kind: 'thread' }])
+    expect(notes[0]?.itemId).toMatch(/^orca:stop%3A\d{13}-/)
   })
 
   it('ends the child when its interrupt was refused and the turn has not opened by the end of its wait', async () => {
@@ -796,8 +789,8 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     await nextSendStartsANewChild()
   })
 
-  // Nothing it stopped stays in the transcript, so a Stop row would read as stopping the turn before.
-  it('leaves no Stop row under the turn before once it takes the send back', async () => {
+  // The accepted request remains separate from the previous completed turn.
+  it('keeps the Stop request after taking back a send, without changing the previous turn', async () => {
     const warmUp = await send('warm up')
     await vi.waitFor(() => expect(answers).toBe(1))
     turns.start()
@@ -809,15 +802,15 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     await stopWhenItsTurnNeverOpens(release)
 
     expect(verdictOf((await settled()).submissions, sent)).toBe('withdrawn')
-    expect(await statusRows()).toEqual([])
+    expect(await statusRows()).toEqual(['Cancellation requested.'])
     expect(turnRow((await host.journalSnapshot(SESSION)).items)).toMatchObject({
       state: 'completed'
     })
   })
 
   // Its turn/start answer lost, the send is in doubt rather than pending; the child's end takes it
-  // back all the same, so it writes no row either.
-  it('leaves no Stop row under the turn before when it takes back a send whose answer was lost', async () => {
+  // back all the same, while the accepted request remains visible.
+  it('keeps the Stop request after taking back a send whose answer was lost', async () => {
     const warmUp = await send('warm up')
     await vi.waitFor(() => expect(answers).toBe(1))
     turns.start()
@@ -838,7 +831,7 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
 
     expect(childCloses).toBe(1)
     expect(verdictOf((await settled()).submissions, sent)).toBe('withdrawn')
-    expect(await statusRows()).toEqual([])
+    expect(await statusRows()).toEqual(['Cancellation requested.'])
   })
 
   it('withdraws it too when the child end fails and a later retry lands it', async () => {
