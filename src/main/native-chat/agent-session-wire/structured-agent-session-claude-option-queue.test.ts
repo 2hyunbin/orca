@@ -193,3 +193,22 @@ it('applies model and effort picks on a running Claude chat to the next message'
     effort: 'high'
   })
 })
+
+it('saves a waiting startup pick when Stop ends the child before it is ready', async () => {
+  const fields = { key: 'model', value: PICKED_MODEL }
+  const picked = host.setOption(CALLER, {
+    envelope: envelope('agentSession.setOption', fields),
+    ...fields
+  })
+  await host.collaboratorsForTests().serialize(SESSION, async () => {})
+  try {
+    expect(
+      await host.cancel(CALLER, { envelope: envelope('agentSession.cancel', {}) })
+    ).toMatchObject({ ok: true })
+    expect(await picked).toMatchObject({ ok: true })
+    expect(store.getRecord(SESSION)?.options?.model).toBe(PICKED_MODEL)
+    expect(setOption).not.toHaveBeenCalled()
+  } finally {
+    releaseOpen()
+  }
+})
