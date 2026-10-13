@@ -32,6 +32,7 @@ vi.mock('../serve-sim-execution', () => ({
   execServeSimCommand: execServeSimCommandMock,
   parseServeSimCommandArgs: vi.fn((input: string) => input.split(' ').filter(Boolean)),
   resolveServeSimExecutable: vi.fn(() => ({ command: '/serve-sim', env: {} })),
+  serveSimKillArgs: (udid: string) => [`--kill=${udid}`, '-q'],
   stripEmulatorTargetArgs: vi.fn((args: string[]) => args)
 }))
 
@@ -373,7 +374,7 @@ describe('IosEmulatorBackend', () => {
     await backend.stopHelperForDevice('device-1', { helperPid: 1234, includeOrphaned: true })
     expect(execServeSimCommandMock).toHaveBeenCalledWith(
       EXECUTABLE,
-      ['--kill', '-q', 'device-1'],
+      ['--kill=device-1', '-q'],
       undefined
     )
     expect(killServeSimHelperProcessesForDeviceMock).toHaveBeenCalledWith('device-1', {
