@@ -79,7 +79,12 @@ async function takeDesktopStrips(page: Page): Promise<Strip[]> {
   )
 }
 
-const TRIGGERS = ['network outage', 'serve restart'] as const
+const TRIGGERS = [
+  'network outage',
+  'silent network outage',
+  'desktop reload',
+  'serve restart'
+] as const
 
 for (const trigger of TRIGGERS) {
   test(`a paired desktop keeps its mixed tab order through a ${trigger}`, async ({
@@ -131,7 +136,7 @@ for (const trigger of TRIGGERS) {
       const expected = JSON.stringify([['T1', 'B', 'agent']])
 
       const findings: string[] = []
-      const settle = async (step: string): Promise<void> => {
+      const settle = async (step: string, transientsCount = true): Promise<void> => {
         const history: string[] = []
         const take = async (): Promise<string | undefined> => {
           for (const strip of named(await takeDesktopStrips(client!.page))) {
@@ -149,17 +154,30 @@ for (const trigger of TRIGGERS) {
         console.log(
           `[mixed-tab-order] ${trigger} / ${step}: desktop ${history.join(' -> ')}; server ${JSON.stringify(server.map((group) => group.tabOrder.map(name)))}`
         )
-        if (history.at(-1) !== expected || history.some((strip) => strip !== expected)) {
+        if (
+          history.at(-1) !== expected ||
+          (transientsCount && history.some((s) => s !== expected))
+        ) {
           findings.push(`${step}: desktop drew ${history.join(' -> ')}`)
         }
       }
-      await settle('server opens an agent terminal after the browser')
+      await settle('server opens an agent terminal after the browser', false)
 
-      if (trigger === 'network outage') {
-        // Past the 15 s lease grace, so the host drops the desktop's connection and lease.
-        proxy.cut('reset')
-        await new Promise((resolve) => setTimeout(resolve, 25_000))
+      if (trigger === 'network outage' || trigger === 'silent network outage') {
+        // Past the lease grace, so the host drops the desktop's lease: a reset starts the 15 s grace
+        // at once; a silent drop first needs the host's heartbeat to reap the socket.
+        proxy.cut(trigger === 'network outage' ? 'reset' : 'silent')
+        await new Promise((resolve) =>
+          setTimeout(resolve, trigger === 'network outage' ? 25_000 : 100_000)
+        )
         proxy.restore()
+      } else if (trigger === 'desktop reload') {
+        await client.page.reload()
+        await client.page.waitForFunction(
+          () => window.__store?.getState().workspaceSessionReady === true
+        )
+        await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
+        await recordDesktopStrips(client.page, worktreeId)
       } else {
         const runtimeId = await refreshAuthorityRuntimeId(client)
         await host.restartServeProcess()
