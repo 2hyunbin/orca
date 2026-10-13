@@ -254,7 +254,7 @@ describe('CliInstaller', () => {
       await expect(readlink(installPath)).resolves.toBe(second.launcherPath)
       // Only the live payload survives the upgrade, beside the record of which AppImage it is.
       const liveRoot = resolveAppImageExtractedRoot({ appImagePath, cacheRootPath })!.rootPath
-      await expect(readdir(dirname(liveRoot))).resolves.toEqual(
+      expect((await readdir(dirname(liveRoot))).sort()).toEqual(
         [basename(liveRoot), 'source-appimage'].sort()
       )
     }
