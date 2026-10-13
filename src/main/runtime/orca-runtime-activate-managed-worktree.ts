@@ -87,14 +87,7 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
         this.notifyHostActivateWorktree(repo.id, worktree.id)
       }
       if (targetsClients) {
-        this.notifyClientsActivateWorktree(
-          repo.id,
-          worktree.id,
-          undefined,
-          undefined,
-          undefined,
-          navigation
-        )
+        this.notifyClientsActivateWorktree(repo.id, worktree.id, undefined, navigation)
       }
     }
     if (!targetsHost) {

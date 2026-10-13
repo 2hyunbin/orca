@@ -157,27 +157,20 @@ export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStat
     this.emitClientEvent({ type: 'reposChanged' })
   }
 
+  /** `setup` goes to the host window only: it is a setup main tried and failed to start. */
   protected notifyActivateWorktree(
     repoId: string,
     worktreeId: string,
     setup?: CreateWorktreeResult['setup'],
     startup?: WorktreeStartupLaunch,
-    defaultTabs?: CreateWorktreeResult['defaultTabs'],
     navigationTarget?: RuntimeNavigationTarget
   ): void {
     const navigation = navigationTarget ?? 'host'
     if (navigationTargetsHost(navigation)) {
-      this.notifyHostActivateWorktree(repoId, worktreeId, setup, startup, defaultTabs)
+      this.notifyHostActivateWorktree(repoId, worktreeId, setup, startup)
     }
     if (navigationTargetsClients(navigation)) {
-      this.notifyClientsActivateWorktree(
-        repoId,
-        worktreeId,
-        setup,
-        startup,
-        defaultTabs,
-        navigation
-      )
+      this.notifyClientsActivateWorktree(repoId, worktreeId, startup, navigation)
     }
   }
 
@@ -185,22 +178,19 @@ export class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWithGetStat
     repoId: string,
     worktreeId: string,
     setup?: CreateWorktreeResult['setup'],
-    startup?: WorktreeStartupLaunch,
-    defaultTabs?: CreateWorktreeResult['defaultTabs']
+    startup?: WorktreeStartupLaunch
   ): void {
-    this.notifier?.activateWorktree(repoId, worktreeId, setup, startup, defaultTabs)
+    this.notifier?.activateWorktree(repoId, worktreeId, setup, startup)
   }
 
   protected notifyClientsActivateWorktree(
     repoId: string,
     worktreeId: string,
-    setup?: CreateWorktreeResult['setup'],
     startup?: WorktreeStartupLaunch,
-    defaultTabs?: CreateWorktreeResult['defaultTabs'],
     navigation: RuntimeNavigationTarget = 'clients'
   ): void {
     this.emitClientEvent(
-      toRuntimeActivateWorktreeEvent(repoId, worktreeId, setup, startup, defaultTabs, navigation)
+      toRuntimeActivateWorktreeEvent(repoId, worktreeId, undefined, startup, undefined, navigation)
     )
   }
 
