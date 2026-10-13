@@ -11,7 +11,7 @@ import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-lay
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { randomUUID } from 'node:crypto'
 
-/** The partition with a tab for the chat in the active group; null when a saved tab shows it. */
+/** The partition with a tab for the chat in the active group; null when a saved tab names it. */
 export function withOpenedAgentSessionTab(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState,
@@ -19,8 +19,22 @@ export function withOpenedAgentSessionTab(
   chat: { sessionId: string; agent: AgentType }
 ): WorkspaceSessionState | null {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  if (savedAgentSessionTabId(loaded.layout.workspaces[worktreeId], chat.sessionId)) {
+  const workspace = loaded.layout.workspaces[worktreeId]
+  const savedId = savedAgentSessionTabId(workspace, chat.sessionId)
+  const saved = workspace?.tabs.find((tab) => tab.id === savedId)
+  if (saved?.agentSessionAgent) {
     return null
+  }
+  if (workspace && saved) {
+    // A tab saved before tabs named their agent is listed only once it does.
+    const tabs = workspace.tabs.map((tab) =>
+      tab === saved ? { ...tab, agentSessionAgent: chat.agent } : tab
+    )
+    const layout = {
+      ...loaded.layout,
+      workspaces: { ...loaded.layout.workspaces, [worktreeId]: { ...workspace, tabs } }
+    }
+    return saveWorkspaceLayout({ ...loaded, layout })
   }
   const groupId = loaded.desktopView.activeGroupIdByWorktree?.[worktreeId]
   const applied = applyLayoutCommand(

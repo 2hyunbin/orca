@@ -66,8 +66,8 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
    */
   retireStructuredAgentSessionTabFromSnapshot(sessionId: string): boolean {
     if (this.isWindowlessSessionTabs()) {
-      // The index's hidden notice removed the saved tab; the list follows the layout.
-      this.removeWindowlessAgentSessionTab(sessionId)
+      // A settled close: its saved tab goes whatever the index says, and the list follows.
+      this.removeWindowlessAgentSessionTab(sessionId, true)
       const listed = [...this.mobileSessionTabsByWorktree].find(([, snapshot]) =>
         snapshot.tabs.some((tab) => tab.type === 'agent-session' && tab.sessionId === sessionId)
       )
@@ -304,9 +304,9 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
    * Removes a chat's saved tab once the index no longer lists it. Called from the index's hidden
    * notice, which every chat close reaches; a close that put the tab back keeps it.
    */
-  protected removeWindowlessAgentSessionTab(sessionId: string): void {
+  protected removeWindowlessAgentSessionTab(sessionId: string, settled = false): void {
     const host = getStructuredAgentSessionHost()
-    if (!host || !structuredSessionTabRetired(host, sessionId)) {
+    if (!settled && (!host || !structuredSessionTabRetired(host, sessionId))) {
       return
     }
     for (const { worktreeId, hostId } of this.savedAgentSessionTabs().get(sessionId) ?? []) {

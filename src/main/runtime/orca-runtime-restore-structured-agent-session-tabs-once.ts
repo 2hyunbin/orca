@@ -120,7 +120,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
   }): void {
     const id = `agent-session:${input.sessionId}`
     if (this.isWindowlessSessionTabs()) {
-      // Every caller saved the tab first; a projection saves only the selection.
+      this.saveWindowlessAgentSessionTab(input.workspaceId, input)
       if (input.activate) {
         this.saveWindowlessTabSelection(input.workspaceId, id)
       }
