@@ -361,6 +361,7 @@ export class StructuredAgentSessionDeliveryLoop {
   /** Inside the serialized step that found nothing to do, so an accept after it wakes anew. */
   private stop(sessionId: string): 'stop' {
     this.running.delete(sessionId)
+    this.deps.deliveryOrder.parkSends(sessionId)
     return 'stop'
   }
 }
