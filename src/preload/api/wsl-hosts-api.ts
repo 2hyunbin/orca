@@ -1,4 +1,7 @@
-/** WSL distros as hosts; desktop-only and Windows-only (or the e2e fake), else undefined. */
+/**
+ * WSL distros as hosts; desktop-only and Windows-only (or the e2e fake) behind the internal gate,
+ * else undefined.
+ */
 import { ipcRenderer } from 'electron'
 import {
   WSL_HOST_STATUS_CHANNEL,
@@ -8,6 +11,7 @@ import {
   type WslHostServerStop,
   type WslHostStatus
 } from '../../shared/wsl-host-types'
+import { isWslHostsInternalGateOpen } from '../../shared/wsl-host-internal-gate'
 
 export type WslHostsPreloadApi = {
   getCapability: () => Promise<WslHostCapability>
@@ -37,8 +41,13 @@ const wslHostsApi: WslHostsPreloadApi = {
   setVisibleWork: (args) => ipcRenderer.invoke('wslHosts:setVisibleWork', args)
 }
 
-export function getWslHostsApi(): WslHostsPreloadApi | undefined {
-  return process.platform === 'win32' || process.env.ORCA_E2E_FAKE_WSL_HOSTS
-    ? wslHostsApi
-    : undefined
+/** Undefined hides every WSL host surface in the renderer; main refuses the calls regardless. */
+export function getWslHostsApi(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  platform: NodeJS.Platform = process.platform
+): WslHostsPreloadApi | undefined {
+  if (!isWslHostsInternalGateOpen(env)) {
+    return undefined
+  }
+  return platform === 'win32' || env.ORCA_E2E_FAKE_WSL_HOSTS ? wslHostsApi : undefined
 }

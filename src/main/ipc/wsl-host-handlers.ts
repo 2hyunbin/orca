@@ -1,7 +1,11 @@
-/** IPC for WSL hosts (WSL-via-orcad C7); Windows only, or an e2e fake on any OS. */
+/**
+ * IPC for WSL hosts (WSL-via-orcad C7); Windows only, or an e2e fake on any OS, and only with the
+ * internal gate open.
+ */
 import { BrowserWindow, ipcMain } from 'electron'
 import {
   WSL_HOST_STATUS_CHANNEL,
+  type WslHostAddResult,
   type WslHostCapability,
   type WslHostStatus
 } from '../../shared/wsl-host-types'
@@ -13,6 +17,7 @@ import {
 } from '../wsl/wsl-host-e2e-fake-connector'
 import { hasOrcadTemplate } from '../orcad/orcad-artifact-materializer'
 import { WslHostService } from '../wsl/wsl-host-service'
+import { WSL_HOSTS_GATED_OFF_MESSAGE, wslHostsGateOpen } from '../wsl/wsl-host-gate'
 import { getWslHostService, setWslHostService } from '../wsl/wsl-host-service-instance'
 import { retireRemovedRuntimeEnvironment } from './runtime-environment-removal-cleanup'
 import { getRuntimeEnvironmentStatus } from './runtime-environment-status-probe'
@@ -72,6 +77,10 @@ function createService(args: {
   getUserDataPath: () => string
   invalidateTransport: (environmentId: string) => Promise<void> | void
 }): WslHostService | null {
+  // Closed gate: no service, so no holder adoption, wsl.exe spawn or reconnect can start.
+  if (!wslHostsGateOpen()) {
+    return null
+  }
   const fake = readFakeWslHostsConfig()
   if (process.platform !== 'win32' && !fake) {
     return null
@@ -131,12 +140,25 @@ export function registerWslHostHandlers(args: {
   }
   const wsl = getWslHostService()
   ipcMain.handle('wslHosts:listDistros', () => wsl?.listDistros() ?? [])
-  ipcMain.handle('wslHosts:add', (_event, request: { distro: string; startIfStopped?: boolean }) =>
-    wsl
-      ? wsl.add(request)
-      : { ok: false, kind: 'failed', message: 'WSL hosts are not available on this computer.' }
+  ipcMain.handle(
+    'wslHosts:add',
+    (
+      _event,
+      request: { distro: string; startIfStopped?: boolean }
+    ): Promise<WslHostAddResult> | WslHostAddResult => {
+      if (!wslHostsGateOpen()) {
+        return { ok: false, kind: 'disabled', message: WSL_HOSTS_GATED_OFF_MESSAGE }
+      }
+      return wsl
+        ? wsl.add(request)
+        : { ok: false, kind: 'failed', message: 'WSL hosts are not available on this computer.' }
+    }
   )
   ipcMain.handle('wslHosts:remove', async (_event, request: { environmentId: string }) => {
+    // A closed gate leaves persisted WSL hosts untouched on disk.
+    if (!wslHostsGateOpen()) {
+      throw new Error(WSL_HOSTS_GATED_OFF_MESSAGE)
+    }
     if (args.store.getSettings().activeRuntimeEnvironmentId === request.environmentId) {
       throw new Error(
         'This server is the default host for new projects. Choose another one in Advanced before removing it.'
@@ -145,6 +167,9 @@ export function registerWslHostHandlers(args: {
     return wsl ? wsl.remove(request.environmentId) : { stopped: true }
   })
   ipcMain.handle('wslHosts:connect', async (_event, request: { environmentId: string }) => {
+    if (!wslHostsGateOpen()) {
+      throw new Error(WSL_HOSTS_GATED_OFF_MESSAGE)
+    }
     await wsl?.connect(request.environmentId)
   })
   ipcMain.handle('wslHosts:getCapability', (): WslHostCapability => ({
