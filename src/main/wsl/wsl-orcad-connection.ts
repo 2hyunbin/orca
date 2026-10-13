@@ -122,10 +122,19 @@ export class WslOrcadConnectionManager {
     const key = wslDistroHolderKey(name)
     const pending = this.inFlight.get(key)
     if (pending) {
+      if (!options.force) {
+        return pending
+      }
       // Force needs its own deploy; joining a plain connect would silently drop it.
-      return options.force
-        ? pending.catch(() => {}).then(() => this.ensure(distro, options))
-        : pending
+      const generation = this.generation(key)
+      return pending
+        .catch(() => {})
+        .then(() => {
+          if (this.generation(key) !== generation) {
+            throw new WslOrcadConnectionSupersededError(name)
+          }
+          return this.ensure(distro, options)
+        })
     }
     const status = options.status ?? { pending: CONNECTING, ready: READY }
     // A refresh of a live connection stays quiet; liveness recovery always reports.

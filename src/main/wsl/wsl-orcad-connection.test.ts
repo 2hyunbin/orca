@@ -247,6 +247,16 @@ describe('WslOrcadConnectionManager', () => {
     )
   })
 
+  it('drops a queued forced connect that a close overtook', async () => {
+    const { manager, deployAndLaunch } = setup()
+    const plain = manager.ensure('Ubuntu')
+    const forced = manager.ensure('Ubuntu', { force: true })
+    await manager.close('Ubuntu')
+    await plain.catch(() => {})
+    await expect(forced).rejects.toBeInstanceOf(WslOrcadConnectionSupersededError)
+    expect(deployAndLaunch).toHaveBeenCalledTimes(1)
+  })
+
   it('throws the deferral and starts no bridge', async () => {
     const { manager, launches, children } = setup()
     launches.push({

@@ -98,7 +98,7 @@ function dependencies(overrides: Partial<WslOrcadIncumbentDependencies> = {}) {
 describe('readWslOrcadIncumbent', () => {
   it('asks a serving incumbent over a bridge to its bound port, then closes the bridge', async () => {
     const { deps, close } = dependencies()
-    await expect(readWslOrcadIncumbent({ context: context(), slot }, deps)).resolves.toEqual({
+    await expect(readWslOrcadIncumbent({ context: context(), slot }, deps)).resolves.toMatchObject({
       census: LIVE,
       readiness: READINESS
     })
@@ -114,6 +114,16 @@ describe('readWslOrcadIncumbent', () => {
     expect(activatedAt).toBe(Date.parse('2026-10-12T01:00:00.000Z'))
     expect(options).toEqual({ releaseFinishedAutomationTerminals: true })
     expect(close).toHaveBeenCalledTimes(1)
+  })
+
+  it('recounts over a fresh bridge without waking anything again', async () => {
+    const { deps, close } = dependencies()
+    const incumbent = await readWslOrcadIncumbent({ context: context(), slot }, deps)
+    vi.mocked(deps.census).mockResolvedValueOnce({ ...LIVE, liveSessions: 3 })
+    await expect(incumbent.recount?.()).resolves.toMatchObject({ liveSessions: 3 })
+    expect(deps.wake).toHaveBeenCalledTimes(1)
+    expect(deps.listen).toHaveBeenCalledTimes(2)
+    expect(close).toHaveBeenCalledTimes(2)
   })
 
   // After a reboot the woken incumbent's daemon starts empty, so the census proves zero.
@@ -142,7 +152,8 @@ describe('readWslOrcadIncumbent', () => {
     })
     await expect(readWslOrcadIncumbent({ context: context(), slot }, deps)).resolves.toEqual({
       census: UNVERIFIABLE,
-      readiness: null
+      readiness: null,
+      recount: null
     })
     expect(deps.listen).not.toHaveBeenCalled()
   })
@@ -153,7 +164,7 @@ describe('readWslOrcadIncumbent', () => {
         throw new Error('socket closed')
       })
     })
-    await expect(readWslOrcadIncumbent({ context: context(), slot }, deps)).resolves.toEqual({
+    await expect(readWslOrcadIncumbent({ context: context(), slot }, deps)).resolves.toMatchObject({
       census: UNVERIFIABLE,
       readiness: READINESS
     })
@@ -164,7 +175,8 @@ describe('readWslOrcadIncumbent', () => {
     const { deps } = dependencies()
     await expect(readWslOrcadIncumbent({ context: context(null), slot }, deps)).resolves.toEqual({
       census: UNVERIFIABLE,
-      readiness: null
+      readiness: null,
+      recount: null
     })
     expect(deps.wake).not.toHaveBeenCalled()
   })

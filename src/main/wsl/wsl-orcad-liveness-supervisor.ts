@@ -155,10 +155,15 @@ export class WslOrcadLivenessSupervisor {
     entry.verifyStreak = 0
     entry.backoff.noteReady(this.now())
     if (!entry.watch && (await this.attachWatch(entry, connection)) !== 'ready') {
-      this.scheduleVerify(entry)
+      if (entry.generation === generation) {
+        this.scheduleVerify(entry)
+      }
       return
     }
-    this.scheduleHeartbeat(entry)
+    // A later connect owns the timer now; this arm must not replace it.
+    if (entry.generation === generation) {
+      this.scheduleHeartbeat(entry)
+    }
   }
 
   private async attachWatch(

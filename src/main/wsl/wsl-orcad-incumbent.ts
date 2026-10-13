@@ -26,6 +26,8 @@ export type WslOrcadIncumbent = {
   census: OrcadTerminalCensus
   /** The incumbent's proven readiness; null when it could not be started or proven. */
   readiness: ServeReadiness | null
+  /** Counts again (no wake) just before activation stops the incumbent; null without readiness. */
+  recount: (() => Promise<OrcadTerminalCensus>) | null
 }
 
 const UNVERIFIABLE: OrcadTerminalCensus = {
@@ -74,7 +76,7 @@ export async function readWslOrcadIncumbent(
   const record = args.context.activationRecord
   const activatedAt = record.activatedAt ? Date.parse(record.activatedAt) : Number.NaN
   if (!record.active || !Number.isFinite(activatedAt) || activatedAt < 0) {
-    return { census: UNVERIFIABLE, readiness: null }
+    return { census: UNVERIFIABLE, readiness: null, recount: null }
   }
   let readiness: ServeReadiness
   try {
@@ -91,11 +93,22 @@ export async function readWslOrcadIncumbent(
         }
       )
     } else {
-      return { census: UNVERIFIABLE, readiness: null }
+      return { census: UNVERIFIABLE, readiness: null, recount: null }
     }
   } catch {
-    return { census: UNVERIFIABLE, readiness: null }
+    return { census: UNVERIFIABLE, readiness: null, recount: null }
   }
+  const recount = (): Promise<OrcadTerminalCensus> =>
+    countIncumbentTerminals(args, readiness, activatedAt, dependencies)
+  return { census: await recount(), readiness, recount }
+}
+
+async function countIncumbentTerminals(
+  args: { context: OrcadRemoteContext<WslOrcadHostTarget>; slot: OrcadSlotOptions },
+  readiness: ServeReadiness,
+  activatedAt: number,
+  dependencies: WslOrcadIncumbentDependencies
+): Promise<OrcadTerminalCensus> {
   let forward: StartedPortForward | null = null
   try {
     forward = await dependencies.listen(
@@ -105,18 +118,17 @@ export async function readWslOrcadIncumbent(
     )
     const offer = parsePairingCode(tunneledOrcadPairingCode(readiness, forward.entry.localPort))
     if (!offer) {
-      return { census: UNVERIFIABLE, readiness }
+      return UNVERIFIABLE
     }
     // Why release: finished automation shells would otherwise defer every update, as on SSH.
-    const census = await dependencies.census(
+    return await dependencies.census(
       pairedRuntimeConnectionFromOffer(offer),
       activatedAt,
       undefined,
       { releaseFinishedAutomationTerminals: true }
     )
-    return { census, readiness }
   } catch {
-    return { census: UNVERIFIABLE, readiness }
+    return UNVERIFIABLE
   } finally {
     await forward?.close().catch(() => {})
   }
