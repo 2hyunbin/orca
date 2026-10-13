@@ -96,6 +96,8 @@ it('only skips the unchanged smoke after a successful diff and dependency analys
     (candidate) => candidate.name === 'Boot orcad and round-trip a terminal'
   )
   expect(step.env).toEqual({
+    PREFLIGHT_PHASE_SELECTED: "${{ needs.code_paths.outputs.static_analysis == 'true' }}",
+    PREFLIGHT_PRIOR_SUCCESS: "${{ job.status == 'success' }}",
     BASE_SHA: '${{ github.event.pull_request.base.sha }}',
     ORCA_BACKGROUND_LAUNCH: '1'
   })
@@ -105,5 +107,7 @@ it('only skips the unchanged smoke after a successful diff and dependency analys
   expect(step.run).toContain('git diff --name-only --no-renames -z "$DIFF_BASE" HEAD')
   expect(step.run).not.toContain('--diff-filter')
   expect(step.run).toContain('&& [ "$scope" = false ]; then')
-  expect(step.run).toMatch(/else\s+pnpm run smoke:orcad-terminal\s+fi/)
+  expect(step.run).toMatch(
+    /else\s+node config\/scripts\/ensure-native-runtime.mjs --runtime=node\s+node config\/scripts\/build-orcad-node.mjs\s+node config\/scripts\/runtime-serve-terminal-smoke.mjs --target orcad\s+fi/
+  )
 })
