@@ -52,7 +52,6 @@ import type { StructuredAgentSessionStartupAttempt } from './structured-agent-se
 import type { StructuredAgentSessionStartupProgress } from './structured-agent-session-startup-attempt'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
-
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
 
 export type AttachedOwner = 'acquired' | 'kept' | 'none'
