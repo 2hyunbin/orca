@@ -10,10 +10,12 @@ import type { Worktree } from '../../../shared/worktree/types'
 import { resetStaleDocumentVisibilityForTesting } from '@/components/terminal-pane/stale-document-visibility'
 import type * as WorktreeRuntimeOwnerModule from '@/lib/worktree-runtime-owner'
 import type * as WebRuntimeTerminalCreationModule from './web-runtime-terminal-creation'
+import type * as RuntimeRpcClientModule from './runtime-rpc-client'
 
 const mocks = vi.hoisted(() => ({
   createTerminal: vi.fn(),
   getExplicitRuntimeEnvironmentIdForWorktree: vi.fn(),
+  hostAnswersEmptyWorktree: vi.fn(async () => true),
   recoverSnapshot: vi.fn(),
   runtimeSessionMirrorEnvironmentKey: vi.fn(),
   runtimeSessionMirrorEnvironmentKeys: vi.fn(() => ({
@@ -33,6 +35,11 @@ vi.mock('@/lib/worktree-runtime-owner', async (importOriginal) => {
     ...actual,
     getExplicitRuntimeEnvironmentIdForWorktree: mocks.getExplicitRuntimeEnvironmentIdForWorktree
   }
+})
+
+vi.mock('./runtime-rpc-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof RuntimeRpcClientModule>()
+  return { ...actual, runtimeEnvironmentSupportsCapability: mocks.hostAnswersEmptyWorktree }
 })
 
 vi.mock('./web-session-terminal-orphan-recovery', () => ({
@@ -371,6 +378,7 @@ describe('activating a host-owned workspace before the host has answered', () =>
     mocks.createTerminal.mockReset().mockResolvedValue({ status: 'created' })
     mocks.recoverSnapshot.mockReset().mockImplementation(async (_state, snapshot) => snapshot)
     mocks.getExplicitRuntimeEnvironmentIdForWorktree.mockReset().mockReturnValue(ENV)
+    mocks.hostAnswersEmptyWorktree.mockReset().mockResolvedValue(true)
     mocks.runtimeSessionMirrorEnvironmentKey.mockReset().mockReturnValue(MIRROR_KEY)
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -454,6 +462,38 @@ describe('activating a host-owned workspace before the host has answered', () =>
     await publish(subscription, { type: 'updated', ...hostTerminalSnapshot(1) })
 
     expect(mocks.createTerminal).not.toHaveBeenCalled()
+    hook.unmount()
+  })
+  it('opens one terminal on an older host whose "ask me later" is never followed by an answer', async () => {
+    mocks.hostAnswersEmptyWorktree.mockResolvedValue(false)
+    const hook = renderHook(() => useWebSessionTabsSync())
+    await act(settle)
+    await publish(findActiveSubscription(0), {
+      type: 'snapshot',
+      ...emptyActiveSnapshot(0),
+      publicationEpoch: UNPUBLISHED_WORKTREE_PUBLICATION_EPOCH
+    })
+
+    ensureWebRuntimeWorktreeTerminalAfterWake(WORKTREE, { runtimeEnvironmentId: ENV })
+    await act(settle)
+
+    expect(mocks.createTerminal).toHaveBeenCalledTimes(1)
+    hook.unmount()
+  })
+
+  it('opens the first terminal of a workspace this client just created without waiting', async () => {
+    const hook = renderHook(() => useWebSessionTabsSync())
+    await act(settle)
+
+    ensureWebRuntimeWorktreeTerminalAfterWake(WORKTREE, {
+      runtimeEnvironmentId: ENV,
+      activate: false,
+      unknownHostCountIsEmpty: true
+    })
+    await act(settle)
+
+    expect(mocks.hostAnswersEmptyWorktree).not.toHaveBeenCalled()
+    expect(mocks.createTerminal).toHaveBeenCalledTimes(1)
     hook.unmount()
   })
 })

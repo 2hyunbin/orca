@@ -43,7 +43,8 @@ function openBackgroundDeclinedTerminal(
     ensureWebRuntimeWorktreeTerminalAfterWake(args.worktreeId, {
       startup,
       agent: args.request.agent,
-      activate: false
+      activate: false,
+      unknownHostCountIsEmpty: true
     })
     return { opened: true }
   }

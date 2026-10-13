@@ -207,6 +207,7 @@ describe('empty remote worktree activation', () => {
       }))
     })
 
+    rememberEmptyHostAnswerForTests('web-runtime-1', worktree.id)
     ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -258,6 +259,7 @@ describe('empty remote worktree activation', () => {
       }))
     })
 
+    rememberEmptyHostAnswerForTests('web-runtime-1', worktree.id)
     ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
