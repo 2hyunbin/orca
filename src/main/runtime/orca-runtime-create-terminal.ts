@@ -22,15 +22,9 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       dependencies.setPairedViewerColors(callerColors)
     }
     const presentation = dependencies.resolveTerminalPresentation(opts)
-    const requiresRendererFocus = opts.presentation === 'focused' || opts.focus === true
-    const availableAuthoritativeWindow = this.getAvailableAuthoritativeWindow()
-    const rendererWindow = opts.rendererBacked === true ? availableAuthoritativeWindow : null
-    const shouldCreateInBackground =
-      worktreeSelector !== undefined &&
-      (Boolean(opts.agentSessionClaim || opts.requireFreshPane) ||
-        (!requiresRendererFocus && opts.rendererBacked !== true) ||
-        availableAuthoritativeWindow === null)
-    if (shouldCreateInBackground) {
+    // Why: this process starts every terminal it can place, so a slow window only delays showing
+    // it; a window-made create that timed out here still ran later, and a retry duplicated it.
+    if (worktreeSelector !== undefined) {
       if (!this.ptyController?.spawn) {
         throw new Error('runtime_unavailable')
       }
@@ -294,13 +288,6 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
     }
     // The renderer owns this spawn, so this process cannot see when it is requested.
     opts.onPtySpawnDispatched?.()
-    return createDesktopTerminal(
-      this,
-      worktreeSelector,
-      opts,
-      presentation,
-      rendererWindow,
-      created
-    )
+    return createDesktopTerminal(this, opts, presentation)
   }
 }

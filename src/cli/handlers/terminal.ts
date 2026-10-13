@@ -9,7 +9,6 @@ import type {
   RuntimeTerminalWait
 } from '../../shared/runtime-types'
 import type { CommandHandler } from '../dispatch'
-import { shouldUseRendererBackedInteractiveTerminal } from '../codex-command-classification'
 import {
   formatTerminalCreate,
   formatTerminalFocus,
@@ -155,8 +154,6 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
       )
     }
     const command = getOptionalStringFlag(flags, 'command')
-    const useRendererBackedInteractiveTerminal =
-      !client.isRemote && shouldUseRendererBackedInteractiveTerminal(command)
     const focus = flags.get('focus') === true
     const shell = getOptionalStringFlag(flags, 'shell')
     if (shell !== undefined) {
@@ -193,12 +190,8 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
       command,
       ...(shell !== undefined ? { shell } : {}),
       title: getOptionalStringFlag(flags, 'title'),
-      // Why: interactive local agent TUIs need the renderer-backed terminal
-      // path for browser-side features, but CLI creates must stay backgrounded
-      // unless the caller explicitly asks for focus.
       focus,
-      ...(focus ? { presentation: 'focused' } : {}),
-      ...(useRendererBackedInteractiveTerminal ? { rendererBacked: true, activate: focus } : {})
+      ...(focus ? { presentation: 'focused' } : {})
     })
     printResult(result, json, formatTerminalCreate)
   },
