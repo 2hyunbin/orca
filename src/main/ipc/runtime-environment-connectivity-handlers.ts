@@ -34,6 +34,7 @@ import {
   getRuntimeEnvironmentStatus
 } from './runtime-environment-transport-routing'
 import { publicRuntimeEnvironmentWithHostKey } from './runtime-environment-host-key'
+import { clearSshCredentialDeclinedForEnvironment } from '../ssh/ssh-credential-decline'
 
 function manuallyDisconnectedResponse(
   environment: ReturnType<typeof resolveEnvironment>
@@ -135,6 +136,7 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
     ): Promise<RuntimeRpcResponse<RuntimeStatus>> => {
       const environment = resolveEnvironment(getUserDataPath(), args.selector)
       clearRuntimeEnvironmentManualDisconnect(environment.id)
+      clearSshCredentialDeclinedForEnvironment(environment)
       return getRuntimeEnvironmentStatus(getUserDataPath(), environment.id, args.timeoutMs, {
         reconnect: true
       })
