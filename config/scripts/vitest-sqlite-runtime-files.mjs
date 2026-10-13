@@ -5,6 +5,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/pi/rpc-session-adapter.test.ts',
   'src/main/pi/rpc-session-startup.test.ts',
   'src/main/acp/acp-structured-publish-at-spawn.test.ts',
+  'tests/e2e/native-chat-startup-option-pickers.unit.test.ts',
   ...SQLITE_DATABASE_RUNTIME_INCLUDE,
   'src/main/acp/acp-structured-host-live-listing.test.ts',
   'src/main/acp/acp-structured-host-configured-default.test.ts',
