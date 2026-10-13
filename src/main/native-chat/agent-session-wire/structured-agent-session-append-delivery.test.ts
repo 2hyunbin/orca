@@ -133,9 +133,7 @@ beforeEach(async () => {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
-      open: async () => ({
-        reportedOptions: { model: '' }
-      }),
+      open: () => new Promise(() => {}),
       acquire,
       releaseAcquisition: vi.fn(async () => true),
       closeSession: vi.fn(async () => true),
