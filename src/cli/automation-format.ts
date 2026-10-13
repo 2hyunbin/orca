@@ -106,17 +106,44 @@ export function formatAutomationRemoved(result: { removed: boolean; id: string }
     : `Automation ${result.id} not removed.`
 }
 
+function formatAutomationRunAcknowledgement(run: { id: string; status: string }): string {
+  switch (run.status) {
+    case 'pending':
+      return `Queued run ${run.id} (pending).`
+    case 'dispatching':
+      return `Accepted run ${run.id}; launch is still in progress (dispatching).`
+    case 'dispatched':
+      return `Started run ${run.id} (dispatched).`
+    case 'completed':
+      return `Completed run ${run.id}.`
+    case 'dispatch_failed':
+      return `Run ${run.id} failed (dispatch_failed).`
+    case 'skipped_precheck':
+    case 'skipped_missed':
+    case 'skipped_unavailable':
+    case 'skipped_needs_interactive_auth':
+      return `Skipped run ${run.id} (${run.status}).`
+    default:
+      return `Run ${run.id}: ${run.status}.`
+  }
+}
+
 export function formatAutomationRun(result: { run: AutomationRun }): string {
   return [
+    formatAutomationRunAcknowledgement(result.run),
     `id: ${result.run.id}`,
     `automationId: ${result.run.automationId}`,
     `title: ${result.run.title}`,
     `status: ${result.run.status}`,
     `trigger: ${result.run.trigger}`,
     `scheduledFor: ${new Date(result.run.scheduledFor).toISOString()}`,
-    `workspaceId: ${result.run.workspaceId ?? 'null'}`,
-    `precheck: ${formatAutomationRunPrecheck(result.run)}`,
-    `error: ${result.run.error ?? 'null'}`
+    ...(result.run.workspaceId ? [`workspaceId: ${result.run.workspaceId}`] : []),
+    ...(result.run.terminalSessionId ? [`terminalSessionId: ${result.run.terminalSessionId}`] : []),
+    ...(result.run.terminalPaneKey ? [`terminalPaneKey: ${result.run.terminalPaneKey}`] : []),
+    ...(result.run.terminalPtyId ? [`terminalPtyId: ${result.run.terminalPtyId}`] : []),
+    ...(result.run.precheckResult ? [`precheck: ${formatAutomationRunPrecheck(result.run)}`] : []),
+    ...(result.run.error ? [`error: ${result.run.error}`] : []),
+    `Follow up: orca automations runs --id ${result.run.automationId}`
   ].join('\n')
 }
 

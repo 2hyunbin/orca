@@ -278,7 +278,11 @@ export const AUTOMATION_HANDLERS: Record<string, CommandHandler> = {
       id,
       ...(expectedOwner ? { expectedOwner } : {})
     })
-    printResult(result, json, formatAutomationRun)
+    printResult(
+      { ...result, result: { ...result.result, runId: result.result.run.id } },
+      json,
+      formatAutomationRun
+    )
   },
   'automations runs': async ({ flags, client, json }) => {
     const result = await client.call<{ runs: AutomationRun[] }>('automation.runs', {
