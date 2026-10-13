@@ -3,7 +3,7 @@ import type { StructuredAgentSessionAdapter } from './structured-agent-session-a
 import { encodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
 
 export async function readNativeSessionOptions(input: {
-  adapter: Pick<StructuredAgentSessionAdapter, 'readOptions' | 'readOptionRestoreFailures'>
+  adapter: Pick<StructuredAgentSessionAdapter, 'readOptions'>
   sessionId: string
   fence: number
   priorOptions?: Readonly<Record<string, string>>
@@ -15,7 +15,6 @@ export async function readNativeSessionOptions(input: {
   }
   return nativeSessionOptionsFromReport({
     reported: reported.current,
-    restoreSkipped: adapter.readOptionRestoreFailures?.(sessionId) ?? [],
     ...(priorOptions ? { priorOptions } : {})
   })
 }
@@ -24,7 +23,6 @@ export async function readNativeSessionOptions(input: {
  *  replace the saved ones, other saved options stay, and any the child could not take are dropped. */
 export function nativeSessionOptionsFromReport(input: {
   reported: AgentSessionOptionsResult['current']
-  restoreSkipped: readonly string[]
   priorOptions?: Readonly<Record<string, string>>
   /** Values the child showed it cannot run: its report of the same value is not kept. */
   retired?: Readonly<Record<string, string>>
@@ -35,9 +33,6 @@ export function nativeSessionOptionsFromReport(input: {
   delete restored.effort
   delete restored.fastMode
   delete restored.serviceTier
-  for (const key of input.restoreSkipped) {
-    delete restored[key]
-  }
   // A reported tier is the speed itself; the Fast it implies for older clients is not kept.
   const fastMode =
     reported.fastMode === undefined || reported.serviceTier !== undefined

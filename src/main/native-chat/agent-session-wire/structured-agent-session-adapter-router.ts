@@ -195,9 +195,6 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
       : readNativeSessionOptions({ adapter, ...input })
   }
 
-  readOptionRestoreFailures = (sessionId: string): readonly string[] =>
-    this.owner(sessionId).readOptionRestoreFailures?.(sessionId) ?? []
-
   providerHistoryWindow = (input: {
     identity: AgentSessionJournalIdentity
     accountHome: AgentSessionAccountHome

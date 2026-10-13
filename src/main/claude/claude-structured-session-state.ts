@@ -168,7 +168,6 @@ export type ClaudeSession = {
   reportedModelMutation: number
   /** Options whose recorded value the provider reported, not merely accepted. */
   confirmedOptions: Set<string>
-  restoreSkippedOptions: Set<string>
   /** The model the child was launched with, as `--model`; null when it runs the CLI's own. */
   launchedModel: string | null
   /** The launch left the saved Fast out, so the start applies it once the settings are read. */

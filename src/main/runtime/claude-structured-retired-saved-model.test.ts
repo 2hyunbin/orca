@@ -61,7 +61,6 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
 
     claude.child(SESSION).handlers.onMessage?.(modelNotFoundReply('reply-1'))
     await host.flushStreamedEvents(SESSION)
-    expect(host.deps.adapter.readOptionRestoreFailures?.(SESSION)).toEqual(['model'])
     expect(host.deps.store.getRecord(SESSION)?.options).toMatchObject({
       model: RETIRED,
       effort: 'high'
@@ -125,7 +124,6 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
     })
     claude.child(SESSION).handlers.onMessage?.(modelNotFoundReply('reply-1'))
     await host.flushStreamedEvents(SESSION)
-    expect(host.deps.adapter.readOptionRestoreFailures?.(SESSION)).toEqual(['model'])
     expect(host.deps.store.getRecord(SESSION)?.options?.model).toBe(RETIRED)
 
     // The settings read gives up at its deadline and reports what the child showed.

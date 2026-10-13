@@ -78,7 +78,6 @@ function attachParams(
 function adapter(input: {
   origin: 'created' | 'resumed'
   options?: AgentSessionOptionsResult
-  restoreFailures?: readonly string[]
 }): StructuredAgentSessionAdapter {
   return {
     acquire: vi
@@ -99,9 +98,6 @@ function adapter(input: {
         }
       })),
     ...(input.options ? { readOptions: vi.fn(async () => input.options!) } : {}),
-    ...(input.restoreFailures
-      ? { readOptionRestoreFailures: vi.fn(() => input.restoreFailures!) }
-      : {}),
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
     answerPrompt: vi.fn(),
@@ -353,13 +349,12 @@ describe('structured session acquisition options', () => {
     })
   })
 
-  it('keeps a saved Fast choice when the provider skips restoring it', async () => {
+  it('keeps a saved Fast choice without an acquisition report', async () => {
     root = await mkdtemp(join(tmpdir(), 'orca-acquisition-fast-restore-'))
     const store = await openTestAgentSessionRecordStore(root)
     const sessionAdapter = adapter({
       origin: 'created',
-      options: { current: { model: 'gpt-standard' }, models: [] },
-      restoreFailures: ['fastMode']
+      options: { current: { model: 'gpt-standard' }, models: [] }
     })
 
     const created = await performAttach({

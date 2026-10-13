@@ -39,8 +39,6 @@ export type ClaudeStructuredSpawnOptions = {
   sdkOptions: ClaudeStructuredSdkOptions
   /** The chat's options as the session holds them: what was launched, and a Fast the start applies. */
   options: Map<string, string>
-  /** Saved options left out: the provider's own value wins and is re-persisted. */
-  skipped: readonly string[]
   /** A saved Fast the launch does not carry, which the start applies. */
   fastModeAtStart: boolean
 }
@@ -56,7 +54,6 @@ export function claudeStructuredSpawnOptions(input: {
 }): ClaudeStructuredSpawnOptions {
   const saved = restoredClaudeStructuredSessionOptions(input.saved)
   const options = new Map<string, string>()
-  const skipped: string[] = []
   let sdkOptions: ClaudeStructuredSdkOptions = { ...input.launch.options }
   let fastModeAtStart = false
   const model = saved.get('model')
@@ -69,16 +66,12 @@ export function claudeStructuredSpawnOptions(input: {
     if (isEffortLevel(effort)) {
       options.set('effort', effort)
       sdkOptions = { ...withoutConfiguredFlag(sdkOptions, 'effort'), effort }
-    } else {
-      skipped.push('effort')
     }
   }
   const fastMode = saved.get('fastMode')
   if (fastMode !== undefined) {
     const decoded = decodeStructuredAgentSessionOptionValue('fastMode', fastMode)
-    if (typeof decoded !== 'boolean') {
-      skipped.push('fastMode')
-    } else {
+    if (typeof decoded === 'boolean') {
       options.set('fastMode', fastMode)
       // A new CLI session may opt in to Fast per session; the first message applies a saved Fast
       // when launch settings cannot carry it.
@@ -92,22 +85,16 @@ export function claudeStructuredSpawnOptions(input: {
       }
     }
   }
-  return { sdkOptions, options, skipped, fastModeAtStart }
+  return { sdkOptions, options, fastModeAtStart }
 }
 
 /** The published session takes on what its child was launched with. */
 export function adoptClaudeStructuredSpawnOptions(
-  session: Pick<
-    ClaudeSession,
-    'restoreSkippedOptions' | 'translator' | 'launchedModel' | 'fastModeAtStart'
-  >,
-  spawn: Pick<ClaudeStructuredSpawnOptions, 'options' | 'skipped' | 'fastModeAtStart'>
+  session: Pick<ClaudeSession, 'translator' | 'launchedModel' | 'fastModeAtStart'>,
+  spawn: Pick<ClaudeStructuredSpawnOptions, 'options' | 'fastModeAtStart'>
 ): void {
   session.launchedModel = spawn.options.get('model') ?? null
   session.fastModeAtStart = spawn.fastModeAtStart
-  for (const key of spawn.skipped) {
-    session.restoreSkippedOptions.add(key)
-  }
   const model = spawn.options.get('model')
   if (model !== undefined) {
     session.translator?.modelWritten(model)
