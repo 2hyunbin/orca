@@ -750,13 +750,6 @@
             }
           }
         },
-        "worktree": {
-          "background": {
-            "terminals": {
-              "setupTitle": "Configuration"
-            }
-          }
-        },
         "work": {
           "item": {
             "direct": {

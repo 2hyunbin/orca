@@ -1691,6 +1691,26 @@ async function performLocalWorktreeCreate(
     })
   )
 
+  // Why: nobody watches an automation's create, so main provisions its tabs in the background
+  // instead of handing them to the window.
+  const hostProvisioner =
+    args.automationProvenance && (setup || defaultTabs?.tabs.length) ? runtime : undefined
+  if (hostProvisioner) {
+    void hostProvisioner.provisionManagedWorktreeTerminals(
+      {
+        worktreeSelector: `id:${worktree.id}`,
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+        ...(setup ? { setup } : {}),
+        ...(defaultTabs ? { defaultTabs } : {}),
+        hasStartupTerminal: false,
+        setupCommandPlatform: getSetupRunnerCommandPlatformForLaunch(setup, 'posix'),
+        surfaceOwner: false
+      },
+      worktree
+    )
+  }
+
   notifyWorktreesChanged(mainWindow, repo.id)
   return {
     worktree: {
@@ -1702,12 +1722,16 @@ async function performLocalWorktreeCreate(
     },
     ...(worktreeLineage ? { lineage: worktreeLineage } : {}),
     ...(workspaceLineage ? { workspaceLineage } : {}),
-    ...(stagedStartup.activationSetup
-      ? { setup: stagedStartup.activationSetup }
-      : setup && !stagedStartup.didSpawnSetup
-        ? { setup }
-        : {}),
-    ...(defaultTabs ? { defaultTabs } : {}),
+    ...(hostProvisioner
+      ? {}
+      : {
+          ...(stagedStartup.activationSetup
+            ? { setup: stagedStartup.activationSetup }
+            : setup && !stagedStartup.didSpawnSetup
+              ? { setup }
+              : {}),
+          ...(defaultTabs ? { defaultTabs } : {})
+        }),
     ...(addResult.localBaseRefRefresh
       ? { localBaseRefRefresh: addResult.localBaseRefRefresh }
       : {}),

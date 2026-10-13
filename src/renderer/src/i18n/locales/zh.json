@@ -649,13 +649,6 @@
             }
           }
         },
-        "worktree": {
-          "background": {
-            "terminals": {
-              "setupTitle": "设置"
-            }
-          }
-        },
         "work": {
           "item": {
             "direct": {

@@ -649,13 +649,6 @@
             }
           }
         },
-        "worktree": {
-          "background": {
-            "terminals": {
-              "setupTitle": "설정"
-            }
-          }
-        },
         "work": {
           "item": {
             "direct": {

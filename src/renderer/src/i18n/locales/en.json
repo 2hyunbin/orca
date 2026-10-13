@@ -832,13 +832,6 @@
             }
           }
         },
-        "worktree": {
-          "background": {
-            "terminals": {
-              "setupTitle": "Setup"
-            }
-          }
-        },
         "work": {
           "item": {
             "direct": {
