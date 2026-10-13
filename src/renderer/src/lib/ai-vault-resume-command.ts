@@ -1,3 +1,4 @@
+import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import {
   assertAntigravityReferenceTarget,
   buildAntigravityReferenceStartup
@@ -30,8 +31,7 @@ import { getAiVaultResumeCodexHome, getAiVaultResumePlatform } from '@/lib/ai-va
 export type AiVaultResumeCommandSession = Pick<
   AiVaultSession,
   'agent' | 'sessionId' | 'cwd' | 'codexHome'
-> &
-  Partial<
+> & { accountHome?: AgentSessionAccountHome } & Partial<
     Pick<AiVaultSession, 'executionHostId' | 'executionHostPlatform' | 'resumeCommand' | 'filePath'>
   >
 

@@ -1,3 +1,4 @@
+import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
 import { resolveHostCapabilities, workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
 import {
   structuredAgentSessionLaunchFeasible,
@@ -5,7 +6,6 @@ import {
 } from '@/lib/agent-session-launch-plan'
 import { resolveStructuredAgentSessionOwner } from '@/runtime/structured-agent-session-owner'
 import { useAppStore } from '@/store'
-import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import { normalizeExecutionHostId } from '../../../../shared/execution-host'
 import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
 import { STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
@@ -21,7 +21,7 @@ import {
 } from './ai-vault-session-resume'
 
 export function resolveAiVaultSessionResumeInChatForWorkspace(args: {
-  session: AiVaultSession
+  session: AiVaultSessionLaunchContext
   resumeState: AiVaultSessionResumeState
   activeWorkspaceId: string | null
   targetState: AiVaultSessionResumeTargetState

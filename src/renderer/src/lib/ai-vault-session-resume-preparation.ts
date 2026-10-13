@@ -1,4 +1,4 @@
-import type { AiVaultSession } from '../../../shared/ai-vault-types'
+import type { AiVaultSessionLaunchContext } from '../../../shared/ai-vault-selected-session'
 import {
   isLegacySharedCodexHome,
   isPerAccountManagedCodexHome
@@ -9,21 +9,25 @@ import {
 } from '../../../shared/execution-host'
 import type { AiVaultResumeCommandSession } from './ai-vault-resume-command'
 
-export function prepareAiVaultSessionForResume(session: AiVaultSession): Promise<AiVaultSession> {
+export function prepareAiVaultSessionForResume<T extends AiVaultSessionLaunchContext>(
+  session: T
+): Promise<T> {
   return session.structuredSession
     ? Promise.resolve(session)
     : prepareAiVaultSessionHome(session, false)
 }
 
 /** Picks the Codex home a fork of `session` runs under, the same way a resume picks it. */
-export function prepareAiVaultSessionForFork(session: AiVaultSession): Promise<AiVaultSession> {
+export function prepareAiVaultSessionForFork<T extends AiVaultSessionLaunchContext>(
+  session: T
+): Promise<T> {
   return prepareAiVaultSessionHome(session, true)
 }
 
-async function prepareAiVaultSessionHome(
-  session: AiVaultSession,
+async function prepareAiVaultSessionHome<T extends AiVaultSessionLaunchContext>(
+  session: T,
   fork: boolean
-): Promise<AiVaultSession> {
+): Promise<T> {
   if (!aiVaultSessionNeedsResumePreparation(session)) {
     return session
   }
@@ -36,16 +40,26 @@ async function prepareAiVaultSessionHome(
     ...(fork ? { fork: true } : {})
   })
   if (result.useRealCodexHome) {
-    return { ...session, codexHome: null }
+    return {
+      ...session,
+      codexHome: null,
+      ...(session.accountHome ? { accountHome: undefined } : {})
+    }
   }
   if (result.substituteCodexHome) {
-    return { ...session, codexHome: result.substituteCodexHome }
+    return {
+      ...session,
+      codexHome: result.substituteCodexHome,
+      ...(session.accountHome
+        ? { accountHome: { variable: 'CODEX_HOME', path: result.substituteCodexHome } }
+        : {})
+    }
   }
   return session
 }
 
 export function aiVaultSessionNeedsResumePreparation(
-  session: Pick<AiVaultSession, 'agent' | 'codexHome' | 'executionHostId'>
+  session: Pick<AiVaultSessionLaunchContext, 'agent' | 'codexHome' | 'executionHostId'>
 ): boolean {
   if (session.agent !== 'codex') {
     return false
@@ -63,7 +77,10 @@ export function aiVaultSessionNeedsResumePreparation(
 
 // Why: these sessions are keyed by their folder. Elsewhere Kimi rejects the resume or (1.52+) opens
 // a new empty session under the same id, so the visible `cd` failure is the honest outcome.
-const RESUMES_ONLY_IN_RECORDED_CWD: ReadonlySet<AiVaultSession['agent']> = new Set(['kimi', 'muse'])
+const RESUMES_ONLY_IN_RECORDED_CWD: ReadonlySet<AiVaultSessionLaunchContext['agent']> = new Set([
+  'kimi',
+  'muse'
+])
 
 /**
  * Drops an SSH session's recorded folder once its host confirms the folder is gone, so the resume

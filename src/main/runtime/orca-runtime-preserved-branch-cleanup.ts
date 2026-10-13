@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { resolveSelectedSessionOnHost } from '../ai-vault/selected-session-resolver'
 import { OrcaRuntimeWithTerminalDrivers } from './orca-runtime-terminal-drivers'
 import { confirmRunTerminalShellAlone, readRunTerminalClientUse } from './run-terminal-client-use'
 import { ALL_EXECUTION_HOSTS_SCOPE, type ExecutionHostScope } from '../../shared/execution-host'
@@ -336,7 +337,11 @@ export class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeWithTermin
       this.workspaceSessionWorktreeHasRuntimeOwnedPtyCandidate(session, worktreeId, tabs)
   })
 
-  protected readonly aiVault = new RuntimeAiVaultCommands(() => this.prepareAiVaultSessionResumeFn)
+  protected readonly aiVault = new RuntimeAiVaultCommands(
+    () => this.prepareAiVaultSessionResumeFn,
+    (source, signal) =>
+      resolveSelectedSessionOnHost(source, this, this.requireStore().getSettings(), signal)
+  )
 
   protected readonly claudeAgentTeams = new ClaudeAgentTeamsService()
 

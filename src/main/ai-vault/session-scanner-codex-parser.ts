@@ -1,3 +1,4 @@
+import { selectedTranscriptLines, type SelectedTranscriptRead } from './selected-transcript-lines'
 import { openTranscriptReadStream } from '../native-chat/wsl-transcript-fs-access'
 import { createInterface } from 'node:readline'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
@@ -46,8 +47,19 @@ export async function parseCodexSessionFile(
   platform: NodeJS.Platform = process.platform,
   codexHome: string | null = null,
   executionHostId?: ExecutionHostId,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  selectedRead?: SelectedTranscriptRead
 ): Promise<AiVaultSession | null> {
+  if (selectedRead) {
+    return parseCodexSessionLines({
+      file,
+      lines: selectedTranscriptLines(file.path, selectedRead),
+      platform,
+      codexHome,
+      executionHostId,
+      messages
+    })
+  }
   const lines = createInterface({
     input: openTranscriptReadStream(file.path, { encoding: 'utf-8' }, 'scan'),
     crlfDelay: Infinity

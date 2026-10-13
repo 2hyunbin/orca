@@ -1,3 +1,4 @@
+import { findSelectedTranscriptPath } from '../native-chat/selected-transcript-path'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
@@ -16,10 +17,12 @@ const CLAUDE_TRANSCRIPT_IMPORT: StructuredAgentTranscriptImport = {
     join(homedir(), '.claude'),
     ...(getClaudeProfileRouter()?.accountHomes() ?? [])
   ],
-  findTranscript: ({ providerSessionId, accountHomePath }) =>
-    resolveSessionFilePath('claude', providerSessionId, {
-      claudeProjectsDir: join(accountHomePath, 'projects')
-    })
+  findTranscript: ({ providerSessionId, accountHomePath, selected }) =>
+    selected
+      ? findSelectedTranscriptPath('claude', providerSessionId, accountHomePath, selected)
+      : resolveSessionFilePath('claude', providerSessionId, {
+          claudeProjectsDir: join(accountHomePath, 'projects')
+        })
 }
 
 const CLAUDE_SESSION_HISTORY: StructuredAgentSessionHistory = {

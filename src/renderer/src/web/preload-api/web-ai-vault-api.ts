@@ -1,3 +1,4 @@
+import { resolveWebSelectedSession, cancelWebSelectedSession } from './web-selected-session'
 import {
   createSessionSearchClient,
   unavailableSessionSearchStatus
@@ -44,6 +45,8 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
     setSearchEnabled: () => Promise.reject(new Error('unsupported')),
     clearSearchIndex: () =>
       Promise.reject(new Error('Clearing Agent Session History is unavailable in the browser.')),
+    resolveSession: resolveWebSelectedSession,
+    cancelResolveSession: cancelWebSelectedSession,
     listSessions: (args?: AiVaultListArgs) => {
       const environment = requireActiveEnvironment()
       const executionHostId = toRuntimeExecutionHostId(environment.id)

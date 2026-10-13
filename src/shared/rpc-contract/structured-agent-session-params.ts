@@ -1,3 +1,4 @@
+import { SelectedCliSourceSchema } from '../ai-vault-selected-session-contract'
 import {
   SendBody,
   MAX_OPTION_LABEL,
@@ -114,11 +115,10 @@ export const AttachParams = z
 /** An identity, and nothing the host would otherwise read off disk. A transcript path or account
  *  home here would let a client choose which file this host imports and which credential directory
  *  the provider child launches against; both are derived host-side from this id instead. */
-export const ResumeSource = z
-  .object({
-    providerSessionId: Identifier('Invalid provider session id')
-  })
-  .strict()
+export const ResumeSource = z.strictObject({
+  providerSessionId: Identifier('Invalid provider session id'),
+  selectedSource: SelectedCliSourceSchema.optional()
+})
 
 export const CreateSupportParams = z
   .object({

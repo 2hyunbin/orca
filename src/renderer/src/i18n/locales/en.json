@@ -19104,6 +19104,12 @@
     },
     "automations": {
       "runTerminalUnavailable": "Run terminal is unavailable."
+    },
+    "tabBar": {
+      "sessionSwitch": {
+        "loading": "Loading conversation…",
+        "opening": "Opening…"
+      }
     }
   },
   "dashboardPopout": {

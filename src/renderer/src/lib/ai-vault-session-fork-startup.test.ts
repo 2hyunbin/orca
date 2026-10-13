@@ -44,13 +44,20 @@ describe('AI Vault fork into the CLI', () => {
     const startup = buildAiVaultForkStartupForWorktree({
       state: makeState(),
       worktreeId: 'repo-1::worktree-1',
-      session: { agent: 'claude', sessionId: SESSION_ID, cwd: '/Users/ada/repo', codexHome: null }
+      session: {
+        agent: 'claude',
+        sessionId: SESSION_ID,
+        cwd: '/Users/ada/repo',
+        codexHome: null,
+        accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: '/Users/ada/account' }
+      }
     })
 
     expect(startup).toMatchObject({
       command: `claude '--resume' '${SESSION_ID}' '--fork-session'`,
       cwd: '/Users/ada/repo'
     })
+    expect(startup?.launchConfig?.agentEnv.CLAUDE_CONFIG_DIR).toBe('/Users/ada/account')
     // A cold restore of the tab must never re-enter the conversation the chat still owns.
     expect(startup).not.toHaveProperty('providerSession')
   })

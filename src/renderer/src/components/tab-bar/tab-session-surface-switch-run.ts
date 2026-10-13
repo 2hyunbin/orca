@@ -1,40 +1,96 @@
+import { aiVaultSessionListArgs } from '../right-sidebar/ai-vault-session-list-request'
+import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
 import { useAppStore } from '@/store'
+import { isAiVaultSessionResumableContent } from '../../../../shared/ai-vault-types'
+import type {
+  AiVaultSessionLaunchContext,
+  AiVaultSelectedSessionSource
+} from '../../../../shared/ai-vault-selected-session'
 import {
-  isAiVaultSessionResumableContent,
-  type AiVaultSession
-} from '../../../../shared/ai-vault-types'
+  SELECTED_SESSION_LOOKUP_TIMEOUT_MS,
+  LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS,
+  AI_VAULT_SELECTED_SESSION_CAPABILITY
+} from '../../../../shared/ai-vault-selected-session'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
+import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
+import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
+import { resolveHostCapabilities } from '@/lib/agent-launch-route-input'
 import { formatAgentTypeLabel } from '../../../../shared/agent-type-label'
 import {
-  lookupTabSessionHistoryRow,
   resolveTabSessionSwitch,
   type TabSessionHistorySubject
 } from './tab-session-history-switch'
 
-// Module scope so the tab menu and the pane header share it, and a reopened menu still sees it.
-const runningSwitches = new Set<string>()
+type Stage = 'loading' | 'opening'
+type PendingSwitch = { stage: Stage; controller: AbortController }
+const runningSwitches = new Map<string, PendingSwitch>()
+const listeners = new Set<() => void>()
+const changed = () => listeners.forEach((listener) => listener())
 
-/** A terminal tab or a native chat tab, by the id its menu or pane header knows it by. */
 export function isTabStillOpen(tab: { id: string; worktreeId: string }): boolean {
   const state = useAppStore.getState()
-  const isThisTab = (candidate: { id: string }): boolean => candidate.id === tab.id
+  const matches = (candidate: { id: string }) => candidate.id === tab.id
   return (
-    (state.tabsByWorktree[tab.worktreeId]?.some(isThisTab) ?? false) ||
-    (state.unifiedTabsByWorktree[tab.worktreeId]?.some(isThisTab) ?? false)
+    (state.tabsByWorktree[tab.worktreeId]?.some(matches) ?? false) ||
+    (state.unifiedTabsByWorktree[tab.worktreeId]?.some(matches) ?? false)
   )
 }
 
 function subjectKey(subject: TabSessionHistorySubject): string {
-  return subject.kind === 'chat'
-    ? `chat:${subject.sessionId}`
-    : `cli:${subject.agent}:${subject.providerSessionId}`
+  return [
+    subject.request.executionHostScope,
+    subject.kind,
+    subject.agent,
+    subject.kind === 'chat' ? subject.sessionId : subject.providerSessionId
+  ].join('\0')
 }
 
-function notifySwitchFailed(subject: TabSessionHistorySubject, error: unknown): void {
-  const description = error instanceof Error && error.message ? error.message : undefined
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+export function useTabSessionSurfaceSwitchPending(
+  subject: TabSessionHistorySubject | null
+): Stage | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => (subject ? (runningSwitches.get(subjectKey(subject))?.stage ?? null) : null),
+    () => null
+  )
+}
+
+function sourceIdentityIsCurrent(
+  subject: TabSessionHistorySubject,
+  tab: { id: string; worktreeId: string }
+): boolean {
+  if (!isTabStillOpen(tab)) {
+    return false
+  }
+  if (subject.kind === 'chat') {
+    const source = useAppStore
+      .getState()
+      .unifiedTabsByWorktree[tab.worktreeId]?.find((candidate) => candidate.id === tab.id)
+    return source?.contentType === 'agent-session' && source.entityId === subject.sessionId
+  }
+  const current = useAppStore.getState().agentStatusByPaneKey[subject.paneKey]
+  return (
+    current?.agentType === subject.agent &&
+    current.providerSession?.id === subject.providerSessionId
+  )
+}
+
+export function tabSessionSwitchPendingLabel(stage: Stage): string {
+  return stage === 'loading'
+    ? translate('components.tabBar.sessionSwitch.loading', 'Loading conversation…')
+    : translate('components.tabBar.sessionSwitch.opening', 'Opening…')
+}
+
+function notifyFailure(subject: TabSessionHistorySubject, error: unknown): void {
   toast.error(
     subject.kind === 'chat'
       ? translate(
@@ -45,85 +101,152 @@ function notifySwitchFailed(subject: TabSessionHistorySubject, error: unknown): 
           'auto.components.right.sidebar.AiVaultPanel.resumeInChatFailed',
           'Could not resume this session in a new chat.'
         ),
-    description ? { description } : undefined
+    error instanceof Error && error.message ? { description: error.message } : undefined
   )
 }
 
-function notifySwitchRefused(subject: TabSessionHistorySubject): void {
-  toast.error(
-    subject.kind === 'chat'
-      ? translate(
-          'auto.components.right.sidebar.AiVaultPanel.resumeInNewCliUnavailable',
-          'This session cannot be opened in the CLI.'
-        )
-      : translate(
-          'components.native-chat.resumeInNewChat.cannotResume',
-          "This {{agent}} conversation can't be resumed in a native chat.",
-          { agent: formatAgentTypeLabel(subject.agent) }
-        )
-  )
-}
-
-/** A tab's "Resume in New CLI" / "Resume in New Native Chat" click: finds the tab's Session History
- *  row now, then runs the row's own move under the row's gate. `launch` is that move's handler. */
 export async function runTabSessionSurfaceSwitch(args: {
   subject: TabSessionHistorySubject
-  /** False once the tab the click came from has closed, which abandons the click. */
-  isSourceOpen: () => boolean
-  launch: (row: AiVaultSession, worktreeId: string) => Promise<void>
+  sourceTab: { id: string; worktreeId: string }
+  intent?: 'new-chat' | 'open-or-resume-chat'
+  launch: (
+    row: AiVaultSessionLaunchContext,
+    worktreeId: string,
+    operation: AiVaultSurfaceSwitchOperation
+  ) => Promise<void>
 }): Promise<void> {
-  const key = subjectKey(args.subject)
-  if (runningSwitches.has(key)) {
+  const { subject, sourceTab } = args
+  if (subject.request.executionHostScope === 'all') {
     return
   }
-  runningSwitches.add(key)
+  const key = subjectKey(subject)
+  if (runningSwitches.has(key) || !sourceIdentityIsCurrent(subject, sourceTab)) {
+    return
+  }
+  const owner: PendingSwitch = { stage: 'loading', controller: new AbortController() }
+  const requestToken = createBrowserUuid()
+  const release = () => {
+    if (runningSwitches.get(key) === owner) {
+      runningSwitches.delete(key)
+      changed()
+    }
+  }
+  const abandon = () => {
+    owner.controller.abort()
+    release()
+    void window.api.aiVault.cancelResolveSession({ requestToken }).catch(() => undefined)
+  }
+  runningSwitches.set(key, owner)
+  changed()
+  const stopWatching = useAppStore.subscribe(() => {
+    if (!sourceIdentityIsCurrent(subject, sourceTab)) {
+      abandon()
+    }
+  })
+  const host = subject.request.executionHostScope
+  const legacyHost =
+    host !== LOCAL_EXECUTION_HOST_ID &&
+    resolveHostCapabilities(useAppStore.getState(), host)?.includes(
+      AI_VAULT_SELECTED_SESSION_CAPABILITY
+    ) !== true
+  const timer = setTimeout(
+    () => {
+      owner.controller.abort(new Error('Conversation lookup timed out.'))
+      release()
+      void window.api.aiVault.cancelResolveSession({ requestToken }).catch(() => undefined)
+    },
+    legacyHost ? LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS : SELECTED_SESSION_LOOKUP_TIMEOUT_MS
+  )
   try {
-    await switchTabSession(args)
+    const source: AiVaultSelectedSessionSource =
+      subject.kind === 'chat'
+        ? { kind: 'chat', workspaceId: subject.workspaceId, sessionId: subject.sessionId }
+        : {
+            kind: 'cli',
+            workspaceId: subject.workspaceId,
+            paneKey: subject.paneKey,
+            agent: subject.agent,
+            providerSessionId: subject.providerSessionId
+          }
+    const result = await waitForPromiseWithSignal(
+      window.api.aiVault.resolveSession({
+        source,
+        executionHostId: host,
+        requestToken,
+        ...(legacyHost ? { legacyHost: true } : {}),
+        legacyList: aiVaultSessionListArgs(subject.request, { requestToken })
+      }),
+      owner.controller.signal
+    )
+    clearTimeout(timer)
+    if (!sourceIdentityIsCurrent(subject, sourceTab)) {
+      return
+    }
+    if (result.status === 'cancelled') {
+      throw new Error('Conversation lookup was cancelled.')
+    }
+    const row = result.status === 'ready' ? result.session : null
+    if (subject.kind === 'cli' && row?.structuredSession) {
+      if (args.intent === 'open-or-resume-chat') {
+        owner.stage = 'opening'
+        changed()
+        await waitForPromiseWithSignal(
+          activateAiVaultStructuredSession(row),
+          owner.controller.signal
+        )
+      } else {
+        toast.error(
+          translate(
+            'auto.components.right.sidebar.AiVaultPanel.resumeInChatConflict',
+            'Another chat is already holding this conversation.'
+          )
+        )
+      }
+      return
+    }
+    if (!row || !isAiVaultSessionResumableContent(row)) {
+      toast.error(
+        translate(
+          'components.native-chat.resumeInNewChat.notSavedYet',
+          "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
+          { agent: formatAgentTypeLabel(subject.agent) }
+        )
+      )
+      return
+    }
+    const move = resolveTabSessionSwitch(useAppStore.getState(), row, subject)
+    if (!move) {
+      toast.error(
+        subject.kind === 'chat'
+          ? translate(
+              'auto.components.right.sidebar.AiVaultPanel.resumeInNewCliUnavailable',
+              'This session cannot be opened in the CLI.'
+            )
+          : translate(
+              'components.native-chat.resumeInNewChat.cannotResume',
+              "This {{agent}} conversation can't be resumed in a native chat.",
+              { agent: formatAgentTypeLabel(subject.agent) }
+            )
+      )
+      return
+    }
+    owner.stage = 'opening'
+    changed()
+    await waitForPromiseWithSignal(
+      args.launch(row, move.worktreeId, {
+        signal: owner.controller.signal,
+        isSourceOpen: () =>
+          !owner.controller.signal.aborted && sourceIdentityIsCurrent(subject, sourceTab)
+      }),
+      owner.controller.signal
+    )
   } catch (error) {
-    if (args.isSourceOpen()) {
-      notifySwitchFailed(args.subject, error)
+    if (sourceIdentityIsCurrent(subject, sourceTab)) {
+      notifyFailure(subject, error)
     }
   } finally {
-    runningSwitches.delete(key)
+    clearTimeout(timer)
+    stopWatching()
+    release()
   }
-}
-
-async function switchTabSession({
-  subject,
-  isSourceOpen,
-  launch
-}: Parameters<typeof runTabSessionSurfaceSwitch>[0]): Promise<void> {
-  const row = await lookupTabSessionHistoryRow(
-    subject,
-    (listArgs) => window.api.aiVault.listSessions(listArgs),
-    { requestToken: createBrowserUuid(), isCancelled: () => !isSourceOpen() }
-  )
-  if (!isSourceOpen()) {
-    return
-  }
-  if (row === undefined) {
-    notifySwitchFailed(subject, null)
-    return
-  }
-  // Already resumed in a chat: open that chat, as the Session History row's Resume does.
-  if (subject.kind === 'cli' && row?.structuredSession) {
-    await activateAiVaultStructuredSession(row)
-    return
-  }
-  if (!row || !isAiVaultSessionResumableContent(row)) {
-    toast.error(
-      translate(
-        'components.native-chat.resumeInNewChat.notSavedYet',
-        "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
-        { agent: formatAgentTypeLabel(subject.agent) }
-      )
-    )
-    return
-  }
-  const move = resolveTabSessionSwitch(useAppStore.getState(), row, subject)
-  if (!move) {
-    notifySwitchRefused(subject)
-    return
-  }
-  await launch(row, move.worktreeId)
 }

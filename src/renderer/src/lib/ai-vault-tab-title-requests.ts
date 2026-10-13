@@ -9,6 +9,7 @@ import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { AppState } from '@/store/types'
 
 export type AiVaultTitleRequest = {
+  paneKey?: string
   agent: AiVaultSessionTitle['agent']
   executionHostId: ExecutionHostId
   providerSession: AgentProviderSessionMetadata
@@ -63,6 +64,7 @@ function registerCandidate(
     refresh: args.refresh,
     tabId,
     worktreeId,
+    paneKey: args.paneKey,
     priority
   })
 }

@@ -122,6 +122,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
     const subject: TabSessionHistorySubject = {
       kind: 'cli',
       agent: 'claude',
+      paneKey: 'tab-1:leaf-1',
       providerSessionId: session.sessionId,
       workspaceId: WORKTREE_ID,
       request
@@ -145,6 +146,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
       resolveTabSessionSwitch(state, owned, {
         kind: 'cli',
         agent: 'claude',
+        paneKey: 'tab-1:leaf-1',
         providerSessionId: owned.sessionId,
         workspaceId: WORKTREE_ID,
         request
@@ -162,6 +164,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
       resolveTabSessionSwitch(state, session, {
         kind: 'cli',
         agent: 'claude',
+        paneKey: 'tab-1:leaf-1',
         providerSessionId: session.sessionId,
         workspaceId: WORKTREE_ID,
         request
@@ -224,6 +227,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
       resolveTabSessionSwitch(state, session, {
         kind: 'cli',
         agent: 'claude',
+        paneKey: 'tab-1:leaf-1',
         providerSessionId: session.sessionId,
         workspaceId: WORKTREE_ID,
         request

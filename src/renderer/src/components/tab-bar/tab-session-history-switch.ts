@@ -1,3 +1,4 @@
+import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
 // Resolves a tab to its Agent Session History row, so the tab menu runs the same "Resume in New
 // Native Chat" / "Resume in New CLI" move the row menu does, under the row menu's gating.
 
@@ -7,12 +8,7 @@ import {
   collectAiVaultTitleRequests,
   resolvePaneAiVaultTitleRequest
 } from '@/lib/ai-vault-tab-title-requests'
-import {
-  isAiVaultSessionResumableContent,
-  type AiVaultListArgs,
-  type AiVaultListResult,
-  type AiVaultSession
-} from '../../../../shared/ai-vault-types'
+import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
@@ -29,17 +25,12 @@ import {
   aiVaultSessionOwnerWorkspaces,
   resolveAiVaultSessionWorktreeDisplay
 } from '../right-sidebar/ai-vault-session-worktree'
-import {
-  aiVaultSessionListArgs,
-  type AiVaultSessionListRequest
-} from '../right-sidebar/ai-vault-session-list-request'
+import type { AiVaultSessionListRequest } from '../right-sidebar/ai-vault-session-list-request'
 import { resolveAiVaultPanelSessionListRequest } from '../right-sidebar/ai-vault-panel-session-list-request'
 import { resolveAiVaultHostScopeDefaults } from '../right-sidebar/ai-vault-host-scope'
 import { getAiVaultResumeWorkspaceExecutionHostId } from '@/lib/ai-vault-resume-target'
-import { claimAiVaultForcedRescan } from '../right-sidebar/ai-vault-session-refresh'
 import { structuredAgentSessionLaunchFeasible } from '@/lib/agent-session-launch-plan'
 import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
-import { blockingAiVaultScanIssue } from '../right-sidebar/ai-vault-scan-issue-state'
 
 /** What a tab's history row is found by: a native chat tab by the chat it shows, a terminal tab by
  *  the provider conversation its agent reported. */
@@ -53,6 +44,7 @@ export type TabSessionHistorySubject = {
       kind: 'cli'
       agent: AgentSessionHandleProvider
       providerSessionId: string
+      paneKey: string
     }
 )
 
@@ -152,12 +144,13 @@ export function resolveTabSessionHistorySubject(
     titleRequest && canOpenChatRoute(state, titleRequest)
       ? workspace(titleRequest.worktreeId, 'cli')
       : null
-  return titleRequest && target
+  return titleRequest?.paneKey && target
     ? {
         ...target,
         kind: 'cli',
         agent: titleRequest.agent,
-        providerSessionId: titleRequest.providerSession.id
+        providerSessionId: titleRequest.providerSession.id,
+        paneKey: titleRequest.paneKey
       }
     : null
 }
@@ -184,7 +177,7 @@ export function findTabSessionHistoryRow(
  *  active one. A chat tab only forks into a CLI; a CLI tab only resumes into a chat. */
 export function resolveTabSessionSwitch(
   state: AppState,
-  session: AiVaultSession,
+  session: AiVaultSessionLaunchContext,
   subject: TabSessionHistorySubject
 ): TabSessionSwitch | null {
   const worktrees = aiVaultSessionOwnerWorkspaces(
@@ -220,53 +213,4 @@ export function resolveTabSessionSwitch(
         worktreeId: targets.resumeInNewChatWorkspaceId
       }
     : null
-}
-
-/** Reads the row through the panel's own list request, for a click. It never uses the panel's
- *  renderer cache: cached rows miss chat ownership the host projects per reply, and a write here
- *  would let a later-opened panel paint this pre-launch list without asking the host.
- *  Resolves `undefined` when it got no answer (cancelled), as opposed to `null` for "no row", and
- *  rejects with the host's message when the scan itself failed. */
-export async function lookupTabSessionHistoryRow(
-  subject: TabSessionHistorySubject,
-  listSessions: (args: AiVaultListArgs) => Promise<AiVaultListResult>,
-  options: { requestToken: string; isCancelled: () => boolean }
-): Promise<AiVaultSession | null | undefined> {
-  const { request } = subject
-  const { requestToken } = options
-  const list = async (force: boolean): Promise<AiVaultListResult | undefined> => {
-    const listed = await listSessions(
-      aiVaultSessionListArgs(request, { ...(force ? { force } : {}), requestToken })
-    )
-    return listed.cancelled ? undefined : listed
-  }
-  const listed = await list(false)
-  if (!listed) {
-    return undefined
-  }
-  // A failed scan answers with no rows, which must not read as "not saved yet".
-  const failure = blockingAiVaultScanIssue(listed)
-  const row = findTabSessionHistoryRow(listed.sessions, subject)
-  if (row && isAiVaultSessionResumableContent(row)) {
-    return row
-  }
-  // The host caches the list for a minute, so a conversation newer than that needs a fresh scan,
-  // claimed from the panel's forced-rescan budget the way its Refresh does; it also retries a failed
-  // scan. An abandoned click checks first: its cancel may have landed before this scan registered.
-  if (
-    options.isCancelled() ||
-    request.executionHostScope !== LOCAL_EXECUTION_HOST_ID ||
-    !claimAiVaultForcedRescan(true)
-  ) {
-    if (failure) {
-      throw new Error(failure.message)
-    }
-    return row
-  }
-  const fresh = await list(true)
-  const freshFailure = fresh ? blockingAiVaultScanIssue(fresh) : null
-  if (freshFailure) {
-    throw new Error(freshFailure.message)
-  }
-  return fresh ? findTabSessionHistoryRow(fresh.sessions, subject) : undefined
 }

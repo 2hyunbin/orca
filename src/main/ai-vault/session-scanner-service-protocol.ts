@@ -1,4 +1,9 @@
-import type { AiVaultListResult, AiVaultSubagentListResult } from '../../shared/ai-vault-types'
+import type { SelectedSessionFileRequest } from './selected-session-file-reader'
+import type {
+  AiVaultSession,
+  AiVaultListResult,
+  AiVaultSubagentListResult
+} from '../../shared/ai-vault-types'
 import type {
   AiVaultSessionTitle,
   AiVaultSessionTitleRequest,
@@ -23,6 +28,7 @@ export type AiVaultServiceScanOptions = Omit<AiVaultScanOptions, 'signal'>
 export type AiVaultServiceLane = 'cache' | 'interactive'
 export type AiVaultServiceOperation =
   | 'scan'
+  | 'selectedSession'
   | 'titles'
   | 'subagents'
   | 'firstPrompt'
@@ -35,6 +41,7 @@ export type AiVaultServiceOperation =
 // and held as strings so recognising one costs no assertion.
 const AI_VAULT_SERVICE_OPERATIONS: ReadonlySet<string> = new Set<AiVaultServiceOperation>([
   'scan',
+  'selectedSession',
   'titles',
   'subagents',
   'firstPrompt',
@@ -69,6 +76,7 @@ export type AiVaultServiceInit = {
 }
 
 export type AiVaultServiceRequestBody =
+  | { type: 'request'; operation: 'selectedSession'; request: SelectedSessionFileRequest }
   | { type: 'request'; operation: 'scan'; options: AiVaultServiceScanOptions }
   | {
       type: 'request'
@@ -109,6 +117,7 @@ export type AiVaultServiceParentMessage =
   | { type: 'shutdown' }
 
 export type AiVaultServiceResultValue =
+  | { operation: 'selectedSession'; value: AiVaultSession | null }
   | { operation: 'scan'; value: { result: AiVaultListResult; durationMs: number } }
   | { operation: 'titles'; value: AiVaultSessionTitlesResult }
   | { operation: 'subagents'; value: AiVaultSubagentListResult }

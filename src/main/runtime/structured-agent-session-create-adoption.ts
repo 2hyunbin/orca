@@ -1,3 +1,9 @@
+import { prepareSelectedCodexAdoption } from '../native-chat/selected-codex-adoption-preparation'
+import type { AiVaultSessionResumePreparation } from '../../shared/ai-vault-resume-preparation'
+import type { SelectedCliSessionSource } from '../../shared/ai-vault-selected-session'
+import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
+import { resolveSelectedCliTranscript } from '../native-chat/selected-cli-transcript'
+import { withSelectedSessionDeadline } from '../ai-vault/selected-session-deadline'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 import { agentSessionExecutionLocationsEqual } from '../../shared/agent-session-record'
@@ -65,6 +71,10 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
   providerSessionId: string
   selfSessionId: string
   selectedAccountHomePath: string
+  selectedSource?: SelectedCliSessionSource
+  sourceRows?: readonly AgentStatusIpcPayload[]
+  sourceCwd?: string | null
+  prepareSessionResume?: AiVaultSessionResumePreparation
 }) {
   const conflict = input.host
     ? findConflictingStructuredAdoption({
@@ -76,6 +86,33 @@ export async function resolveStructuredAgentSessionAdoptionForCreate(input: {
     : null
   if (conflict) {
     throw structuredAdoptionConflictError(conflict)
+  }
+  const source = input.selectedSource
+  if (source) {
+    const agent = input.agent
+    if ((agent !== 'claude' && agent !== 'codex') || !input.sourceCwd) {
+      throw new Error('The source conversation is unavailable on this host.')
+    }
+    return withSelectedSessionDeadline(async (signal) => {
+      const resolved = await resolveSelectedCliTranscript({
+        agent,
+        providerSessionId: input.providerSessionId,
+        source,
+        rows: input.sourceRows ?? [],
+        cwd: input.sourceCwd ?? '',
+        selectedAccountHomePath: input.selectedAccountHomePath,
+        settings: input.settings,
+        signal
+      })
+      return agent === 'codex'
+        ? prepareSelectedCodexAdoption(
+            resolved,
+            input.providerSessionId,
+            input.prepareSessionResume,
+            signal
+          )
+        : resolved
+    })
   }
   return resolveStructuredAgentSessionAdoption({
     providerSessionId: input.providerSessionId,

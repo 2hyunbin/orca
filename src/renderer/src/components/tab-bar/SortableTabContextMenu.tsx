@@ -196,6 +196,7 @@ export function SortableTabContextMenu({
           tab={tab}
           nativeChat={nativeChat}
           leadingSeparator={!showTerminalViewSwitch}
+          onComplete={() => onOpenChange(false)}
         />
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onTogglePin}>

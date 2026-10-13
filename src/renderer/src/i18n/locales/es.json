@@ -18820,6 +18820,12 @@
       "important": "Importante",
       "warning": "Advertencia",
       "caution": "Precaución"
+    },
+    "tabBar": {
+      "sessionSwitch": {
+        "loading": "Cargando conversación…",
+        "opening": "Abriendo…"
+      }
     }
   },
   "dashboardPopout": {

@@ -18820,6 +18820,12 @@
       "important": "重要",
       "warning": "警告",
       "caution": "注意"
+    },
+    "tabBar": {
+      "sessionSwitch": {
+        "loading": "会話を読み込み中…",
+        "opening": "開いています…"
+      }
     }
   },
   "dashboardPopout": {

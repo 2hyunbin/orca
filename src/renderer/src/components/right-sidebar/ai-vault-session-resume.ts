@@ -1,3 +1,4 @@
+import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
 import { getAiVaultResumeWorkspaceWslDistro } from '@/lib/ai-vault-resume-shell'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -94,7 +95,7 @@ export function resolveAiVaultHistorySessionResumeState(
     Parameters<typeof resolveAiVaultSessionResumeState>[0],
     'sessionFilePath' | 'sessionExecutionHostId'
   > & {
-    session: AiVaultSession
+    session: AiVaultSessionLaunchContext
   }
 ): AiVaultSessionResumeState {
   const child = Boolean(args.session.subagent)

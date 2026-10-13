@@ -1,3 +1,4 @@
+import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { normalizeAiVaultResumeFilePath } from '../../../shared/ai-vault-resume-path'
 import { isResumableTuiAgent } from '../../../shared/agent-session-resume'
 import {
@@ -45,7 +46,12 @@ export function buildAiVaultForkStartupForWorktree(
     platform,
     shell: liveShell,
     agentArgs: resolveTuiAgentLaunchArgs(session.agent, state.settings?.agentDefaultArgs),
-    agentEnv: resolveTuiAgentLaunchEnv(session.agent, state.settings?.agentDefaultEnv),
+    agentEnv: {
+      ...resolveTuiAgentLaunchEnv(session.agent, state.settings?.agentDefaultEnv),
+      ...(session.accountHome && isLegacyAgentSessionAccountHome(session.accountHome)
+        ? { [session.accountHome.variable]: session.accountHome.path }
+        : {})
+    },
     resumeInLaunchCwd: true,
     fork: true
   })

@@ -1,4 +1,8 @@
 import type {
+  AiVaultResolveSessionArgs,
+  AiVaultResolveSessionResult
+} from '../../shared/ai-vault-selected-session'
+import type {
   AiVaultSearchRequest,
   AiVaultSearchResponse,
   AiVaultSearchStatus
@@ -44,6 +48,8 @@ export type AiVaultApi = {
   ) => Promise<AiVaultSearchStatus>
   /** Deletes and rebuilds this desktop's local search index. */
   clearSearchIndex: () => Promise<void>
+  resolveSession: (args: AiVaultResolveSessionArgs) => Promise<AiVaultResolveSessionResult>
+  cancelResolveSession: (args: { requestToken: string }) => Promise<void>
   listSessions: (args?: AiVaultListArgs) => Promise<AiVaultListResult>
   resolveSessionTitles: (args: AiVaultSessionTitlesArgs) => Promise<AiVaultSessionTitlesResult>
   cancelListSessions: (args: { requestToken: string }) => Promise<void>

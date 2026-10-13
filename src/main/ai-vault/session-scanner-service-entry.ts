@@ -1,3 +1,4 @@
+import { readSelectedSessionFile } from './selected-session-file-reader'
 import { requestSessionSearchRoots } from './session-scanner-service-root-request'
 import type { AiVaultSessionTitle } from '../../shared/ai-vault-session-title'
 import { readAiVaultFirstUserPrompt } from './session-first-user-prompt-read'
@@ -60,6 +61,12 @@ async function executeRequest(request: AiVaultServiceRequest): Promise<AiVaultSe
   try {
     if (cancelled.delete(request.id)) {
       controller.abort()
+    }
+    if (request.operation === 'selectedSession') {
+      return {
+        operation: 'selectedSession',
+        value: await readSelectedSessionFile(request.request, controller.signal)
+      }
     }
     if (request.operation === 'titles') {
       const requests = await resolveHostReadableAiVaultTitleRequests(

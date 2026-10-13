@@ -18922,6 +18922,12 @@
       "important": "Important",
       "warning": "Avertissement",
       "caution": "Attention"
+    },
+    "tabBar": {
+      "sessionSwitch": {
+        "loading": "Chargement de la conversation…",
+        "opening": "Ouverture…"
+      }
     }
   },
   "dashboardPopout": {

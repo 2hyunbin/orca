@@ -11,6 +11,7 @@ import type { RuntimeSessionSearchSettingsController } from './runtime-session-s
 import type { RuntimeSubscriptionRegistry } from './runtime-subscription-registry'
 
 export type RuntimeServiceCommandSurface = {
+  resolveAiVaultSelectedSession: RuntimeAiVaultCommands['selected']
   listAiVaultSessions: RuntimeAiVaultCommands['list']
   resolveAiVaultSessionTitles: RuntimeAiVaultCommands['resolveTitles']
   prepareAiVaultSessionResume: RuntimeAiVaultCommands['prepare']
@@ -110,6 +111,7 @@ export function installRuntimeServiceCommandSurface(
   const browsers = owners.browserDrivers
   const waiters = owners.messageWaiters
   Object.assign(target, {
+    resolveAiVaultSelectedSession: vault.selected.bind(vault),
     listAiVaultSessions: vault.list.bind(vault),
     resolveAiVaultSessionTitles: vault.resolveTitles.bind(vault),
     prepareAiVaultSessionResume: vault.prepare.bind(vault),

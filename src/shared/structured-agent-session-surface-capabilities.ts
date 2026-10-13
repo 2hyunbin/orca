@@ -1,3 +1,4 @@
+import { AI_VAULT_SELECTED_SESSION_CAPABILITY } from './ai-vault-selected-session'
 // Why: a host's structured agents are the ones it registered, not a list every build ships. A host
 // advertising this accepts any agent it lists through `agentSession.agents` (with each agent's
 // capability record) in `agentSession.*` params, and refuses one it did not register; a client
@@ -33,6 +34,7 @@ export const AGENT_SESSION_MODEL_CATALOG_SAVED_ONLY_RUNTIME_CAPABILITY =
   'agent-session.model-catalog.saved-only.v1' as const
 
 export const STRUCTURED_AGENT_SESSION_SURFACE_RUNTIME_CAPABILITIES = [
+  AI_VAULT_SELECTED_SESSION_CAPABILITY,
   STRUCTURED_AGENT_SESSION_HOLD_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,

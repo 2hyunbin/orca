@@ -1,3 +1,4 @@
+import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { MessagesSquare, SquareTerminal } from 'lucide-react'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ContextMenuItem } from '@/components/ui/context-menu'
@@ -11,34 +12,46 @@ export function AiVaultSessionSurfaceSwitchMenuItems({
   menuKind,
   tooltipSide,
   onResumeInNewChat,
-  onResumeInNewCli
+  onResumeInNewCli,
+  pendingLabel
 }: {
   menuKind: 'dropdown' | 'context'
   tooltipSide: 'left' | 'right'
-  onResumeInNewChat?: () => void
-  onResumeInNewCli?: () => void
+  onResumeInNewChat?: (event: Event) => void
+  onResumeInNewCli?: (event: Event) => void
+  pendingLabel?: string
 }): React.JSX.Element {
   const Item = menuKind === 'context' ? ContextMenuItem : DropdownMenuItem
   return (
     <>
       {onResumeInNewChat ? (
-        <Item onSelect={onResumeInNewChat}>
-          <MessagesSquare className="size-3.5" />
-          {translate(
-            'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewNativeChat',
-            'Resume in New Native Chat'
+        <Item onSelect={onResumeInNewChat} disabled={Boolean(pendingLabel)}>
+          {pendingLabel ? (
+            <LoadingSpinner className="size-3.5" />
+          ) : (
+            <MessagesSquare className="size-3.5" />
           )}
+          {pendingLabel ??
+            translate(
+              'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewNativeChat',
+              'Resume in New Native Chat'
+            )}
         </Item>
       ) : null}
       {onResumeInNewCli ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Item onSelect={onResumeInNewCli}>
-              <SquareTerminal className="size-3.5" />
-              {translate(
-                'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewCli',
-                'Resume in New CLI'
+            <Item onSelect={onResumeInNewCli} disabled={Boolean(pendingLabel)}>
+              {pendingLabel ? (
+                <LoadingSpinner className="size-3.5" />
+              ) : (
+                <SquareTerminal className="size-3.5" />
               )}
+              {pendingLabel ??
+                translate(
+                  'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewCli',
+                  'Resume in New CLI'
+                )}
             </Item>
           </TooltipTrigger>
           <TooltipContent side={tooltipSide} sideOffset={8}>

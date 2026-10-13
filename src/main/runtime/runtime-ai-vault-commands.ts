@@ -1,4 +1,8 @@
 import type {
+  AiVaultSelectedSessionSource,
+  AiVaultResolveSessionResult
+} from '../../shared/ai-vault-selected-session'
+import type {
   AiVaultPrepareSessionResumeArgs,
   AiVaultPrepareSessionResumeResult
 } from '../../shared/ai-vault-resume-preparation'
@@ -14,8 +18,22 @@ export class RuntimeAiVaultCommands {
   constructor(
     private readonly getPrepareResume: () =>
       | ((args: AiVaultPrepareSessionResumeArgs) => Promise<AiVaultPrepareSessionResumeResult>)
-      | null
+      | null,
+    private readonly resolveSelected?: (
+      source: AiVaultSelectedSessionSource,
+      signal?: AbortSignal
+    ) => Promise<AiVaultResolveSessionResult>
   ) {}
+
+  selected(
+    source: AiVaultSelectedSessionSource,
+    signal?: AbortSignal
+  ): Promise<AiVaultResolveSessionResult> {
+    return (
+      this.resolveSelected?.(source, signal) ??
+      Promise.reject(new Error('Selected conversation lookup is unavailable.'))
+    )
+  }
 
   list(args?: AiVaultListArgs): Promise<AiVaultListResult> {
     return listAiVaultSessions(args)

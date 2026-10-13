@@ -1,3 +1,4 @@
+import { registerAiVaultSelectedSessionHandlers } from '../ai-vault-selected-session'
 import { app } from 'electron'
 import { registerAppHandlers } from '../app'
 import { registerCliHandlers } from '../cli'
@@ -250,6 +251,7 @@ export function registerCoreHandlers(
       callRuntimeSessionSearch(app.getPath('userData'), environmentId, method, params),
     ensureStructuredSessionOwnership
   })
+  registerAiVaultSelectedSessionHandlers(runtime, app.getPath('userData'))
   registerAiVaultHandlers({
     ensureStructuredSessionOwnership,
     getAdditionalCodexHomePaths: lifecycleOptions.getAdditionalAiVaultCodexHomePaths,

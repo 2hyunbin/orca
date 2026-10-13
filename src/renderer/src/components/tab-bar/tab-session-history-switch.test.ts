@@ -4,21 +4,12 @@ import type { AppState } from '@/store/types'
 import { makeRepo, makeTerminalTab, makeWorktree } from '../worktree-jump-palette-test-fixtures'
 import { makeAgentStatusEntry } from '@/runtime/sync-runtime-graph-test-harness'
 import { collectAiVaultTitleRequests } from '@/lib/ai-vault-tab-title-requests'
-import type { AiVaultListArgs, AiVaultSession } from '../../../../shared/ai-vault-types'
+import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import { getDefaultSettings } from '../../../../shared/constants'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import {
-  claimAiVaultForcedRescan,
-  resetAiVaultForcedRescanThrottleForTest
-} from '../right-sidebar/ai-vault-session-refresh'
-import {
-  cacheAiVaultSessionList,
-  readCachedAiVaultSessionList
-} from '../right-sidebar/ai-vault-session-list-request'
-import {
   canPaneOfferResumeInNewChat,
   findTabSessionHistoryRow,
-  lookupTabSessionHistoryRow,
   resolveTabSessionHistorySubject,
   resolveTabSessionSwitch,
   type TabSessionHistorySubject
@@ -129,13 +120,13 @@ const chatSubject: TabSessionHistorySubject = {
 const cliSubject: TabSessionHistorySubject = {
   kind: 'cli',
   agent: 'claude',
+  paneKey: 'term-1:leaf-1',
   providerSessionId: 'claude-session-1',
   workspaceId: WORKTREE_ID,
   request: PANEL_REQUEST
 }
 
 beforeEach(() => {
-  resetAiVaultForcedRescanThrottleForTest()
   mocks.resumeState = { blocked: false, worktreeId: WORKTREE_ID }
   mocks.platform = 'darwin'
   mocks.resumeInChat.mockReset()
@@ -274,7 +265,7 @@ describe('resolveTabSessionHistorySubject', () => {
       resolveTabSessionHistorySubject(useAppStore.getState(), {
         tab: { id: 'term-1', worktreeId: WORKTREE_ID }
       })
-    ).toEqual(cliSubject)
+    ).toEqual({ ...cliSubject, paneKey: 'term-1:leaf-2' })
   })
 
   it('looks nothing up over SSH, where neither move is ever offered', () => {
@@ -472,173 +463,5 @@ describe('resolveTabSessionSwitch', () => {
     })
     mocks.resumeInChat.mockReturnValue({ available: false, reason: 'empty' })
     expect(resolveTabSessionSwitch(makeState(), row(), cliSubject)).toBeNull()
-  })
-})
-
-describe('lookupTabSessionHistoryRow', () => {
-  const listResult = (sessions: AiVaultSession[], cancelled = false) => ({
-    sessions,
-    issues: [],
-    scannedAt: 'now',
-    ...(cancelled ? { cancelled: true as const } : {})
-  })
-  const emptyRow = row({ messageCount: 0, previewMessages: [] })
-  const lookupOptions = { requestToken: 't', isCancelled: () => false }
-
-  it("sends the panel's own request without writing the panel's cache", async () => {
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => listResult([row()]))
-    await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).resolves.toMatchObject({
-      id: 'row-1'
-    })
-    expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(listSessions).toHaveBeenCalledWith({
-      includeAntigravityIdeSessions: true,
-      limit: 250,
-      unlimited: false,
-      scopePaths: PANEL_REQUEST.scopePaths,
-      executionHostScope: 'local',
-      force: undefined,
-      requestToken: 't'
-    })
-    expect(readCachedAiVaultSessionList(PANEL_REQUEST)).toBeNull()
-  })
-
-  it("leaves the panel's cached list as it was, even after a forced rescan", async () => {
-    cacheAiVaultSessionList(PANEL_REQUEST, listResult([row({ id: 'panel-row' })]), {
-      replaceHostEntries: false
-    })
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => listResult([emptyRow]))
-    await lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-
-    expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
-    expect(readCachedAiVaultSessionList(PANEL_REQUEST)?.sessions.map((s) => s.id)).toEqual([
-      'panel-row'
-    ])
-  })
-
-  it('rescans once on a miss, from the shared forced-rescan budget', async () => {
-    const listSessions = vi
-      .fn()
-      .mockResolvedValueOnce(listResult([emptyRow]))
-      .mockResolvedValueOnce(listResult([row()]))
-    await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).resolves.toMatchObject({
-      messageCount: 2
-    })
-    expect(listSessions).toHaveBeenCalledTimes(2)
-    expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
-  })
-
-  const failedScan = {
-    sessions: [],
-    issues: [
-      {
-        executionHostId: 'local' as const,
-        agent: 'codex' as const,
-        kind: 'host' as const,
-        path: 'this computer',
-        message: 'Agent Session History timed out.'
-      }
-    ],
-    scannedAt: 'now'
-  }
-
-  it('retries a failed scan with a forced one, which can find the row', async () => {
-    const listSessions = vi
-      .fn()
-      .mockResolvedValueOnce(failedScan)
-      .mockResolvedValueOnce(listResult([row()]))
-    await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).resolves.toMatchObject({ id: 'row-1' })
-    expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
-  })
-
-  it("rejects with the host's message when the forced scan failed too", async () => {
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => failedScan)
-    await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).rejects.toThrow('Agent Session History timed out.')
-    expect(listSessions).toHaveBeenCalledTimes(2)
-  })
-
-  it('rejects at once where no forced scan can run', async () => {
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => failedScan)
-    await expect(
-      lookupTabSessionHistoryRow(
-        { ...chatSubject, request: { ...PANEL_REQUEST, executionHostScope: 'runtime:server-1' } },
-        listSessions,
-        lookupOptions
-      )
-    ).rejects.toThrow('Agent Session History timed out.')
-    expect(listSessions).toHaveBeenCalledTimes(1)
-  })
-
-  it('starts no forced scan once the click is abandoned, and leaves the budget free', async () => {
-    let tabOpen = true
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => {
-      tabOpen = false
-      return listResult([emptyRow])
-    })
-    await lookupTabSessionHistoryRow(cliSubject, listSessions, {
-      requestToken: 't',
-      isCancelled: () => !tabOpen
-    })
-    expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(claimAiVaultForcedRescan()).toBe(true)
-  })
-
-  it('forces no scan on a remote Orca server', async () => {
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => listResult([]))
-    await lookupTabSessionHistoryRow(
-      {
-        ...chatSubject,
-        request: { ...PANEL_REQUEST, executionHostScope: 'runtime:server-1' }
-      },
-      listSessions,
-      lookupOptions
-    )
-    expect(listSessions).toHaveBeenCalledTimes(1)
-  })
-
-  it('finds a chat-owned row without spending a forced rescan', async () => {
-    const owned = row({ structuredSession: { sessionId: 'orca-chat-1', workspaceId: WORKTREE_ID } })
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => listResult([owned]))
-    await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).resolves.toMatchObject({ structuredSession: { sessionId: 'orca-chat-1' } })
-    expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(claimAiVaultForcedRescan()).toBe(true)
-  })
-
-  it('forces a rescan for a click even while the budget is spent, and takes the budget', async () => {
-    expect(claimAiVaultForcedRescan()).toBe(true)
-    const listSessions = vi
-      .fn()
-      .mockResolvedValueOnce(listResult([emptyRow]))
-      .mockResolvedValueOnce(listResult([row()]))
-    await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).resolves.toMatchObject({ messageCount: 2 })
-    expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
-    resetAiVaultForcedRescanThrottleForTest()
-    await lookupTabSessionHistoryRow(
-      cliSubject,
-      vi.fn().mockResolvedValue(listResult([])),
-      lookupOptions
-    )
-    expect(claimAiVaultForcedRescan()).toBe(false)
-  })
-
-  it('reports no answer when the lookup is cancelled', async () => {
-    const listSessions = vi.fn().mockResolvedValue(listResult([], true))
-    await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).resolves.toBeUndefined()
-    expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(readCachedAiVaultSessionList(PANEL_REQUEST)).toBeNull()
   })
 })

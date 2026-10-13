@@ -1,3 +1,4 @@
+import type { SelectedCliSessionSource } from './ai-vault-selected-session'
 import type { StructuredAgentId } from './agent-session-provider-handle'
 import type { AgentSessionMutationEnvelope } from './agent-session-wire'
 import type { z } from 'zod'
@@ -10,7 +11,7 @@ import {
 /**
  * The conversation a create adopts instead of starting a fresh one.
  *
- * Deliberately carries an identity and nothing else. The transcript file and the account home it
+ * Carries provider identity and an optional host-attested source pane. The transcript file and the account home it
  * lives under are derived by the executing host, never sent: `agentSession.create` is reachable by
  * paired mobile clients, and a client-supplied path would let one choose which file the host reads
  * into a journal and which credential directory the provider child launches against.
@@ -18,6 +19,8 @@ import {
 export type StructuredAgentSessionResumeSource = {
   /** claude: the session id. codex: the thread id. */
   providerSessionId: string
+  /** The execution host revalidates this pane; no client path or credential is accepted. */
+  selectedSource?: SelectedCliSessionSource
 }
 
 export type StructuredAgentSessionCreateParams = {

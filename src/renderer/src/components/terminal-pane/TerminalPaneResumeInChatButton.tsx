@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { MessagesSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -10,8 +10,9 @@ import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-p
 import { resumeAiVaultSessionInNewChat } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
 import { resolveTabSessionHistorySubject } from '../tab-bar/tab-session-history-switch'
 import {
-  isTabStillOpen,
-  runTabSessionSurfaceSwitch
+  runTabSessionSurfaceSwitch,
+  useTabSessionSurfaceSwitchPending,
+  tabSessionSwitchPendingLabel
 } from '../tab-bar/tab-session-surface-switch-run'
 
 function notifyResumeFailed(): void {
@@ -33,7 +34,14 @@ export function TerminalPaneResumeInChatButton({
   worktreeId: string
   paneKey: string
 }): React.JSX.Element {
-  const [pending, setPending] = useState(false)
+  const sourceStatus = useAppStore((state) => state.agentStatusByPaneKey[paneKey])
+  const subject = sourceStatus
+    ? resolveTabSessionHistorySubject(useAppStore.getState(), {
+        tab: { id: tabId, worktreeId },
+        paneKey
+      })
+    : null
+  const pending = useTabSessionSurfaceSwitchPending(subject)
   const label = translate(
     'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewNativeChat',
     'Resume in New Native Chat'
@@ -50,14 +58,16 @@ export function TerminalPaneResumeInChatButton({
     }
     await runTabSessionSurfaceSwitch({
       subject,
-      isSourceOpen: () => isTabStillOpen({ id: tabId, worktreeId }),
-      launch: async (row, targetWorktreeId) => {
+      sourceTab: { id: tabId, worktreeId },
+      intent: 'open-or-resume-chat',
+      launch: async (row, targetWorktreeId, operation) => {
         if (isAgentSessionHandleProvider(row.agent)) {
           await resumeAiVaultSessionInNewChat(
             row,
             row.agent,
             targetWorktreeId,
-            newAgentLaunchRequestId()
+            newAgentLaunchRequestId(),
+            operation
           )
         }
       }
@@ -73,21 +83,18 @@ export function TerminalPaneResumeInChatButton({
           size="icon-xs"
           // Same class as split so it shares the hover/active reveal.
           className="pane-title-split-trigger"
-          aria-label={label}
-          disabled={pending}
+          aria-label={pending ? tabSessionSwitchPendingLabel(pending) : label}
+          disabled={Boolean(pending)}
           onClick={(event) => {
             event.stopPropagation()
-            setPending(true)
-            void resume()
-              .catch(notifyResumeFailed)
-              .finally(() => setPending(false))
+            void resume().catch(notifyResumeFailed)
           }}
         >
-          <MessagesSquare className="size-3" />
+          {pending ? <LoadingSpinner className="size-3" /> : <MessagesSquare className="size-3" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={4}>
-        {label}
+        {pending ? tabSessionSwitchPendingLabel(pending) : label}
       </TooltipContent>
     </Tooltip>
   )

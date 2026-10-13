@@ -1,3 +1,5 @@
+import type { AiVaultSession } from '../../../../shared/ai-vault-types'
+import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
 import { useMemo } from 'react'
 import { parseWslUncPath } from '../../../../shared/wsl-paths'
 import { splitWorktreeIdForFilesystem } from '../../../../shared/worktree/id'
@@ -12,7 +14,6 @@ import {
   isRuntimePathAbsolute,
   normalizeRuntimePathForComparison
 } from '../../../../shared/cross-platform-path'
-import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import type { Repo } from '../../../../shared/repo-types'
@@ -81,7 +82,7 @@ export function resolveAiVaultSessionWorktreeInfo({
   worktrees,
   activeWorktreeId
 }: {
-  session: AiVaultSession
+  session: AiVaultSessionLaunchContext
   repos?: readonly Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>[]
   worktrees: readonly Worktree[]
   activeWorktreeId: string | null
@@ -107,7 +108,7 @@ export function withAiVaultCurrentWorktreeStatus(
 }
 
 function resolveWorktreeInfoFromCandidates(
-  session: AiVaultSession,
+  session: AiVaultSessionLaunchContext,
   candidates: readonly WorktreeCandidate[]
 ): AiVaultSessionWorktreeInfo | null {
   if (!session.cwd) {
@@ -154,7 +155,7 @@ export function extractWorktreePathFromSessionTitle(title: string): string | nul
 }
 
 export function resolveAiVaultSessionWorktreeDisplay(args: {
-  session: AiVaultSession
+  session: AiVaultSessionLaunchContext
   repos?: readonly Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>[]
   worktrees: readonly Worktree[]
   activeWorktreeId: string | null
@@ -169,7 +170,7 @@ export function resolveAiVaultSessionWorktreeDisplay(args: {
 }
 
 function resolveWorktreeDisplayFromCandidates(
-  session: AiVaultSession,
+  session: AiVaultSessionLaunchContext,
   candidates: readonly WorktreeCandidate[]
 ): AiVaultSessionWorktreeInfo | null {
   const resolved = resolveWorktreeInfoFromCandidates(session, candidates)

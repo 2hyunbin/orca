@@ -1,3 +1,4 @@
+import type { SelectedTranscriptLookup } from './selected-transcript-path'
 // How a structured agent's chats meet the conversations its own CLI records: adopting one into a new
 // chat, and owning the Session History rows a chat's conversation shows as.
 
@@ -21,6 +22,7 @@ export type StructuredAgentTranscriptImport = {
   findTranscript: (input: {
     providerSessionId: string
     accountHomePath: string
+    selected?: SelectedTranscriptLookup
   }) => Promise<string | null>
 }
 

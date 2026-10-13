@@ -1,3 +1,4 @@
+import { selectedTranscriptLines, type SelectedTranscriptRead } from './selected-transcript-lines'
 import {
   remoteSessionContentLines,
   type RemoteSessionContent
@@ -36,6 +37,7 @@ import {
 type ParserSessionOptions = {
   executionHostId?: ExecutionHostId
   executionHostPlatform?: NodeJS.Platform | null
+  skipSubagents?: boolean
 }
 
 // Parse state kept resumable so the scan cache can append newly written
@@ -189,7 +191,7 @@ export async function finalizeClaudeSessionParseState(
   // already covered by the undefined-executionHostId branch.
   const ownsTranscriptDisk =
     !options.executionHostId || options.executionHostId === LOCAL_EXECUTION_HOST_ID
-  if (ownsTranscriptDisk) {
+  if (ownsTranscriptDisk && !options.skipSubagents) {
     snapshot.accumulator.subagentTranscriptCount = await countSubagentTranscripts(
       snapshot.accumulator.filePath
     )
@@ -221,8 +223,18 @@ function claudeResumeStateFromParseState(
 export async function parseClaudeSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  selectedRead?: SelectedTranscriptRead
 ): Promise<AiVaultSession | null> {
+  if (selectedRead) {
+    return parseClaudeSessionLines({
+      file,
+      lines: selectedTranscriptLines(file.path, selectedRead),
+      platform,
+      messages,
+      options: { skipSubagents: true }
+    })
+  }
   const lines = createInterface({
     input: openTranscriptReadStream(file.path, { encoding: 'utf-8' }, 'scan'),
     crlfDelay: Infinity

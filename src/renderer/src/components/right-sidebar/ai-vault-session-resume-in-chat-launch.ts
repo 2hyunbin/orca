@@ -1,7 +1,9 @@
+import type { AiVaultSurfaceSwitchOperation } from '@/lib/ai-vault-surface-switch-operation'
+import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
+import type { AiVaultSessionLaunchContext } from '../../../../shared/ai-vault-selected-session'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import type { AgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
 import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-code'
 import { prepareAiVaultSessionForResume } from '@/lib/ai-vault-session-resume-preparation'
@@ -19,21 +21,30 @@ export function activateAiVaultResumeWorkspace(workspaceId: string): boolean {
  *  resume has no terminal equivalent short of the resume command, and switching surface silently
  *  would hide the refusal the user needs to see. */
 export async function resumeAiVaultSessionInNewChat(
-  session: AiVaultSession,
+  session: AiVaultSessionLaunchContext,
   agent: AgentSessionHandleProvider,
   worktreeId: string,
-  requestId: AgentLaunchRequestId
+  requestId: AgentLaunchRequestId,
+  operation?: AiVaultSurfaceSwitchOperation
 ): Promise<void> {
   try {
     // Codex rows can live under a shared legacy home; the same preparation the terminal resume
     // runs re-pins them, and its result is what names the conversation the host will look for.
     const preparedSession = await prepareAiVaultSessionForResume(session)
+    if (operation && !operation.isSourceOpen()) {
+      return
+    }
     const plan = adoptAgentSessionLaunchVerdict({
       route: 'structured-native-chat',
       requestId,
       agent,
       worktreeId,
-      resumeFrom: { providerSessionId: preparedSession.sessionId }
+      resumeFrom: {
+        providerSessionId: preparedSession.sessionId,
+        ...(preparedSession.selectedSource
+          ? { selectedSource: preparedSession.selectedSource }
+          : {})
+      }
     })
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan,
@@ -46,14 +57,24 @@ export async function resumeAiVaultSessionInNewChat(
       }
     })
     if (launch) {
-      void launch.settlement.then((settlement) => {
+      const settlement = launch.settlement.then((settlement) => {
+        if (operation?.signal.aborted) {
+          return
+        }
         if (settlement.kind === 'failed' && !settlement.notified) {
           notifyAiVaultSessionResumeInChatFailure(settlement.error)
         }
       })
+      if (operation) {
+        await waitForPromiseWithSignal(settlement, operation.signal)
+      } else {
+        void settlement
+      }
     }
   } catch (error) {
-    notifyAiVaultSessionResumeInChatFailure(error)
+    if (!operation?.signal.aborted) {
+      notifyAiVaultSessionResumeInChatFailure(error)
+    }
   }
 }
 

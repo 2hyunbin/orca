@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import type { StructuredAgentSessionResumeSource } from '../../shared/structured-agent-session-create'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { OrcaRuntimeWithGetWorktreePs } from './orca-runtime-get-worktree-ps'
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -142,7 +143,7 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
     worktree: string
     agent: StructuredAgentId
     callerKey?: string
-    resumeFrom?: { providerSessionId: string }
+    resumeFrom?: StructuredAgentSessionResumeSource
   }): Promise<AgentSessionAttachParams & { hostLaunchDirectory?: string }> {
     const hostLaunchDirectory = isFloatingWorkspaceSelector(input.worktree)
       ? (await this.resolveRuntimeFileTarget(input.worktree)).worktree.path
@@ -189,7 +190,7 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
       worktree: string
       agent: StructuredAgentId
       callerKey?: string
-      resumeFrom?: { providerSessionId: string }
+      resumeFrom?: StructuredAgentSessionResumeSource
     },
     resolveAccountHome: (context: {
       launchEnv: NodeJS.ProcessEnv
@@ -244,7 +245,17 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
             transcriptImport,
             providerSessionId: input.resumeFrom.providerSessionId,
             selfSessionId: input.envelope.sessionId,
-            selectedAccountHomePath: selectedAccountHome.path
+            selectedAccountHomePath: selectedAccountHome.path,
+            ...(input.resumeFrom.selectedSource
+              ? {
+                  selectedSource: input.resumeFrom.selectedSource,
+                  sourceRows: this.getAgentProviderSessionRows(),
+                  prepareSessionResume: this.prepareAiVaultSessionResumeFn ?? undefined,
+                  sourceCwd: await this.resolveStructuredAgentSessionLocalWorkspacePath(
+                    input.resumeFrom.selectedSource.workspaceId
+                  )
+                }
+              : {})
           })
         : null
     return {

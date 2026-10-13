@@ -1,3 +1,4 @@
+import { findSelectedTranscriptPath } from '../native-chat/selected-transcript-path'
 import { join } from 'node:path'
 import { configuredAdditionalCodexHomePaths } from '../ai-vault/cached-session-list'
 import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
@@ -17,10 +18,12 @@ const CODEX_TRANSCRIPT_IMPORT: StructuredAgentTranscriptImport = {
     getOrcaManagedCodexHomePath(),
     getSystemCodexHomePath()
   ],
-  findTranscript: ({ providerSessionId, accountHomePath }) =>
-    resolveSessionFilePath('codex', providerSessionId, {
-      codexSessionsDirs: [join(accountHomePath, 'sessions')]
-    })
+  findTranscript: ({ providerSessionId, accountHomePath, selected }) =>
+    selected
+      ? findSelectedTranscriptPath('codex', providerSessionId, accountHomePath, selected)
+      : resolveSessionFilePath('codex', providerSessionId, {
+          codexSessionsDirs: [join(accountHomePath, 'sessions')]
+        })
 }
 
 const CODEX_SESSION_HISTORY: StructuredAgentSessionHistory = {

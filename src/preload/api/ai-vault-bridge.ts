@@ -1,3 +1,4 @@
+import type { AiVaultResolveSessionArgs } from '../../shared/ai-vault-selected-session'
 import { createSessionSearchClient } from '../../shared/ai-vault-search-client'
 import type { AiVaultSearchRequest, AiVaultSearchStatus } from '../../shared/ai-vault-search-types'
 import type { ExecutionHostId, ExecutionHostScope } from '../../shared/execution-host'
@@ -39,6 +40,10 @@ export const aiVaultApi = {
   ): Promise<AiVaultSearchStatus> =>
     ipcRenderer.invoke('aiVault:setSearchEnabled', executionHostId, enabled),
   clearSearchIndex: (): Promise<void> => ipcRenderer.invoke('aiVault:clearSearchIndex'),
+  resolveSession: (args: AiVaultResolveSessionArgs) =>
+    ipcRenderer.invoke('aiVault:resolveSession', args),
+  cancelResolveSession: (args: { requestToken: string }): Promise<void> =>
+    ipcRenderer.invoke('aiVault:cancelResolveSession', args),
   listSessions: (args?: AiVaultListArgs) => ipcRenderer.invoke('aiVault:listSessions', args),
   resolveSessionTitles: (args: AiVaultSessionTitlesArgs) =>
     ipcRenderer.invoke('aiVault:resolveSessionTitles', args),
