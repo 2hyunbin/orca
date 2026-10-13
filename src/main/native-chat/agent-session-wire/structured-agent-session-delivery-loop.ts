@@ -148,7 +148,10 @@ export class StructuredAgentSessionDeliveryLoop {
           return
         }
         if (prepared.readiness) {
-          await prepared.readiness.wait()
+          if ((await prepared.readiness.wait()) === 'ready') {
+            // Re-derive launch permission and queued work after the wait released the lane.
+            continue
+          }
         }
         const handed = await this.deps.serialize(sessionId, () =>
           this.handOver(sessionId, prepared.awaited)
