@@ -103,10 +103,13 @@ function hardenExistingWindowsFile(targetPath: string): boolean {
   if (!mayAttemptHardening(targetPath)) {
     return false
   }
-  const restricted = restrictWindowsPathSync(targetPath, false)
-  recordHardeningOutcome(targetPath, restricted)
+  // The sync lane records a success itself; only a failure is left to record here.
+  const restricted =
+    applySecurePathRestriction(targetPath, false, process.platform, true) === 'applied'
   if (restricted) {
     rememberHardenedPath(targetPath, false)
+  } else {
+    recordHardeningOutcome(targetPath, false)
   }
   return restricted
 }
