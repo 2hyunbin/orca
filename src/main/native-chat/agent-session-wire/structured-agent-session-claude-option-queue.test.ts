@@ -165,3 +165,31 @@ describe('Claude structured session options', () => {
     expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
   })
 })
+
+it('applies model and effort picks on a running Claude chat to the next message', async () => {
+  releaseOpen()
+  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
+  for (const [key, value] of [
+    ['model', PICKED_MODEL],
+    ['effort', 'high']
+  ]) {
+    expect(
+      await host.setOption(CALLER, {
+        envelope: envelope('agentSession.setOption', { key, value }),
+        key,
+        value
+      })
+    ).toMatchObject({ ok: true })
+  }
+  const body = hostTestMessage('with the new choices')
+  expect(
+    await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+  ).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+  expect(order).toEqual(['dispatch'])
+  expect(setOption).not.toHaveBeenCalled()
+  expect(dispatch.mock.calls[0]?.[0].executionOptions).toEqual({
+    model: PICKED_MODEL,
+    effort: 'high'
+  })
+})

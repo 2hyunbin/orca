@@ -71,6 +71,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     database: host.database,
     readOnly: host.readOnly,
     highestFence: () => host.state().highestFence,
+    state: host.state,
     queuePauseRestatement: () =>
       journalQueuePauseRestatement(
         host.state().queuePauseMarks,
