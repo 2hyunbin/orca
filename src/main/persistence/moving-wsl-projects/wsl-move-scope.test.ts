@@ -44,14 +44,17 @@ describe('collectWslMoveScope', () => {
           repo('b', unc('/home/dev/b', 'ubuntu', 'wsl$'), {
             worktreeBasePath: unc('/home/dev/worktrees')
           }),
-          repo('relative-base', unc('/home/dev/c'), { worktreeBasePath: '../worktrees' })
+          repo('relative-base', unc('/home/dev/c'), { worktreeBasePath: '..\\worktrees' }),
+          // A Linux base path resolves inside the repo's distro.
+          repo('linux-base', unc('/home/dev/d'), { worktreeBasePath: '/home/dev/trees' })
         ],
-        folderWorkspaces: [folder('notes', unc('/srv/notes'))]
+        folderWorkspaces: [folder('notes', unc('/srv/notes'))],
+        projectGroups: []
       },
       'Ubuntu'
     )
     expect(scope).toEqual({
-      repoIds: ['a', 'b', 'relative-base'],
+      repoIds: ['a', 'b', 'relative-base', 'linux-base'],
       folderWorkspaceIds: ['notes'],
       refused: []
     })
@@ -61,7 +64,8 @@ describe('collectWslMoveScope', () => {
     const scope = collectWslMoveScope(
       {
         repos: [repo('win', 'C:\\src\\win'), repo('deb', unc('/home/dev/x', 'Debian'))],
-        folderWorkspaces: []
+        folderWorkspaces: [],
+        projectGroups: []
       },
       'Ubuntu'
     )
@@ -74,9 +78,20 @@ describe('collectWslMoveScope', () => {
         repos: [
           repo('drive', unc('/mnt/c/src/app')),
           repo('base-on-windows', unc('/home/dev/a'), { worktreeBasePath: 'D:\\worktrees' }),
-          repo('ssh', unc('/home/dev/s'), { executionHostId: 'ssh:target' })
+          repo('ssh', unc('/home/dev/s'), { executionHostId: 'ssh:target' }),
+          repo('dotted', unc('/home/../mnt/c/app')),
+          repo('upper-mount', unc('/MNT/C/app')),
+          repo('relative-into-drive', unc('/home/dev/e'), { worktreeBasePath: '../../../mnt/c/t' }),
+          repo('upgrade-root', unc('/home/dev/f'), { folderUpgradeGitRootPath: 'C:\\src\\f' }),
+          repo('visibility', unc('/home/dev/g'), {
+            customWorktreeVisibilitySources: [{ id: 'source-1', rootPath: unc('/x', 'Debian') }]
+          })
         ],
-        folderWorkspaces: [folder('remote', unc('/srv/r'), { connectionId: 'ssh-1' })]
+        folderWorkspaces: [
+          folder('remote', unc('/srv/r'), { connectionId: 'ssh-1' }),
+          folder('runtime', unc('/srv/q'), { executionHostId: 'ssh:target' })
+        ],
+        projectGroups: []
       },
       'Ubuntu'
     )
@@ -85,7 +100,13 @@ describe('collectWslMoveScope', () => {
       { kind: 'repo', id: 'drive', reason: 'windows-drive' },
       { kind: 'repo', id: 'base-on-windows', reason: 'mixed-locations' },
       { kind: 'repo', id: 'ssh', reason: 'not-local' },
-      { kind: 'folder-workspace', id: 'remote', reason: 'not-local' }
+      { kind: 'repo', id: 'dotted', reason: 'windows-drive' },
+      { kind: 'repo', id: 'upper-mount', reason: 'windows-drive' },
+      { kind: 'repo', id: 'relative-into-drive', reason: 'windows-drive' },
+      { kind: 'repo', id: 'upgrade-root', reason: 'mixed-locations' },
+      { kind: 'repo', id: 'visibility', reason: 'mixed-locations' },
+      { kind: 'folder-workspace', id: 'remote', reason: 'not-local' },
+      { kind: 'folder-workspace', id: 'runtime', reason: 'not-local' }
     ])
   })
 })
@@ -99,12 +120,24 @@ describe('createUncToLinuxPathRewriter', () => {
     [unc('/home/dev/app', 'Debian'), 'absolute', unc('/home/dev/app', 'Debian')],
     ['/home/dev/app', 'absolute', '/home/dev/app'],
     ['../worktrees', 'maybe-absolute', '../worktrees'],
+    ['..\\worktrees', 'maybe-absolute', '../worktrees'],
+    ['C:\\trees', 'maybe-absolute', 'C:\\trees'],
+    ['file://wsl.localhost/My%20Ubuntu/a.html', 'url', 'file://wsl.localhost/My%20Ubuntu/a.html'],
     ['src\\main\\a.ts', 'relative', 'src/main/a.ts'],
     ['file://wsl.localhost/Ubuntu/home/a.html', 'url', 'file:///home/a.html'],
     ['file://wsl.localhost/Debian/home/a.html', 'url', 'file://wsl.localhost/Debian/home/a.html'],
     ['https://example.com/', 'url', 'https://example.com/']
   ] as const)('%s (%s) → %s', (value, form, expected) => {
     expect(rewriter.path(value, form)).toBe(expected)
+  })
+
+  it('matches a percent-encoded distro name in a file URL', () => {
+    expect(
+      createUncToLinuxPathRewriter('My Ubuntu').path(
+        'file://wsl.localhost/My%20Ubuntu/a.html',
+        'url'
+      )
+    ).toBe('file:///a.html')
   })
 
   it('rewrites a whole catalog, including worktree ids and owner keys', () => {

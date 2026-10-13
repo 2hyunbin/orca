@@ -18,18 +18,35 @@ export function createUncToLinuxPathRewriter(distro: string): OrcadMigrationPath
     path: (value, form) => {
       switch (form) {
         case 'absolute':
-        case 'maybe-absolute':
           return wslUncPathToLinux(value, distro) ?? value
+        case 'maybe-absolute':
+          return wslUncPathToLinux(value, distro) ?? (isRelative(value) ? toPosix(value) : value)
         case 'relative':
-          // Windows built these against a UNC root; the host's own paths use `/`.
-          return value.replace(/\\/g, '/')
+          return toPosix(value)
         case 'url': {
           const match = fileUrl.exec(value)
-          return match && match[1].toLowerCase() === distro.toLowerCase()
+          return match && decodeSegment(match[1]).toLowerCase() === distro.toLowerCase()
             ? `file://${match[2] ?? '/'}`
             : value
         }
       }
     }
+  }
+}
+
+/** Windows built these against a UNC root; the host's own paths use `/`. */
+function toPosix(value: string): string {
+  return value.replace(/\\/g, '/')
+}
+
+function isRelative(value: string): boolean {
+  return !/^(?:[A-Za-z]:)?[\\/]/.test(value)
+}
+
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
   }
 }

@@ -4,10 +4,13 @@
  * Windows drive mount. Anything that touches the distro but breaks the rule is refused with a
  * reason, so the preview can say why instead of silently leaving it behind.
  */
+import { posix } from 'node:path'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
+import { resolveFolderWorkspaceHost } from '../../../shared/folder-workspace-execution-host'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
 import type { Repo } from '../../../shared/repo-types'
-import { isDrvfsLinuxPath, parseWslUncPath } from '../../../shared/wsl-paths'
+import { isDrvfsLinuxPath, resolveWslRepoWorktreeBasePath } from '../../../shared/wsl-paths'
 import { wslUncPathToLinux } from './wsl-move-path-rewriter'
 
 export type WslMoveScopeRefusal =
@@ -24,36 +27,36 @@ export type WslMoveScope = {
   refused: { kind: 'repo' | 'folder-workspace'; id: string; reason: WslMoveScopeRefusal }[]
 }
 
-export function collectWslMoveScope(
-  state: { repos: readonly Repo[]; folderWorkspaces: readonly FolderWorkspace[] },
-  distro: string
-): WslMoveScope {
+type WslMoveScopeState = {
+  repos: readonly Repo[]
+  folderWorkspaces: readonly FolderWorkspace[]
+  projectGroups: readonly ProjectGroup[]
+}
+
+export function collectWslMoveScope(state: WslMoveScopeState, distro: string): WslMoveScope {
   const scope: WslMoveScope = { repoIds: [], folderWorkspaceIds: [], refused: [] }
   for (const repo of state.repos) {
-    if (!inDistro(repo.path, distro)) {
+    if (wslUncPathToLinux(repo.path, distro) === null) {
       continue
     }
-    const paths = [
-      repo.path,
-      // A relative base path stays inside the repo; an absolute one must stay in the distro too.
-      ...(repo.worktreeBasePath && isAbsoluteWindowsSidePath(repo.worktreeBasePath)
-        ? [repo.worktreeBasePath]
-        : []),
-      ...(repo.externalWorktreeInboxBaselinePaths ?? []),
-      ...(repo.importedExternalWorktreePaths ?? [])
-    ]
-    const reason = refusalFor(paths, distro, getRepoExecutionHostId(repo) !== 'local')
+    const reason = refusalFor(repoPaths(repo), distro, getRepoExecutionHostId(repo) !== 'local')
     if (reason) {
       scope.refused.push({ kind: 'repo', id: repo.id, reason })
     } else {
       scope.repoIds.push(repo.id)
     }
   }
+  const hostState = {
+    repos: [...state.repos],
+    folderWorkspaces: [...state.folderWorkspaces],
+    projectGroups: [...state.projectGroups]
+  }
   for (const workspace of state.folderWorkspaces) {
-    if (!inDistro(workspace.folderPath, distro)) {
+    if (wslUncPathToLinux(workspace.folderPath, distro) === null) {
       continue
     }
-    const reason = refusalFor([workspace.folderPath], distro, Boolean(workspace.connectionId))
+    const remote = resolveFolderWorkspaceHost(hostState, workspace.id).kind !== 'local'
+    const reason = refusalFor([workspace.folderPath], distro, remote)
     if (reason) {
       scope.refused.push({ kind: 'folder-workspace', id: workspace.id, reason })
     } else {
@@ -63,12 +66,29 @@ export function collectWslMoveScope(
   return scope
 }
 
-function isAbsoluteWindowsSidePath(path: string): boolean {
-  return parseWslUncPath(path) !== null || /^(?:[A-Za-z]:)?[\\/]/.test(path)
+/** Every absolute path a repo row keeps; each must stay in the distro after the move. */
+function repoPaths(repo: Repo): string[] {
+  const base = repo.worktreeBasePath
+    ? resolveWslRepoWorktreeBasePath(repo.path, repo.worktreeBasePath)
+    : undefined
+  return [
+    repo.path,
+    // A relative base stays beside the repo; it is checked once resolved against it.
+    ...(base ? [isRelative(base) ? posixJoinUnc(repo.path, base) : base] : []),
+    ...(repo.folderUpgradeGitRootPath ? [repo.folderUpgradeGitRootPath] : []),
+    ...(repo.customWorktreeVisibilitySources ?? []).map((source) => source.rootPath),
+    ...(repo.externalWorktreeInboxBaselinePaths ?? []),
+    ...(repo.importedExternalWorktreePaths ?? [])
+  ]
 }
 
-function inDistro(path: string, distro: string): boolean {
-  return wslUncPathToLinux(path, distro) !== null
+function isRelative(path: string): boolean {
+  return !/^(?:[A-Za-z]:)?[\\/]/.test(path)
+}
+
+/** `repoUnc` joined with a relative base, kept in UNC form so the distro check still applies. */
+function posixJoinUnc(repoUnc: string, relative: string): string {
+  return `${repoUnc.replace(/[\\/]+$/, '')}/${relative.replace(/\\/g, '/')}`
 }
 
 function refusalFor(
@@ -79,9 +99,14 @@ function refusalFor(
   if (remote) {
     return 'not-local'
   }
-  const linuxPaths = paths.map((path) => wslUncPathToLinux(path, distro))
-  if (linuxPaths.some((path) => path === null)) {
-    return 'mixed-locations'
+  const linuxPaths: string[] = []
+  for (const path of paths) {
+    const linux = wslUncPathToLinux(path, distro)
+    if (linux === null) {
+      return 'mixed-locations'
+    }
+    linuxPaths.push(posix.normalize(linux.replace(/\\/g, '/')))
   }
-  return linuxPaths.some((path) => path !== null && isDrvfsLinuxPath(path)) ? 'windows-drive' : null
+  // Windows folds the `/mnt/<drive>` tail of a UNC path case-insensitively, so `\MNT\C` is drive C.
+  return linuxPaths.some((path) => isDrvfsLinuxPath(path.toLowerCase())) ? 'windows-drive' : null
 }
