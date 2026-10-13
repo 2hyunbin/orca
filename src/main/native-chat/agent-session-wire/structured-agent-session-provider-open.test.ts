@@ -115,3 +115,26 @@ it('closes a child while its open is pending and refuses its late readiness resu
   expect(dispatch).not.toHaveBeenCalled()
   expect(close).toHaveBeenCalledTimes(1)
 })
+
+it('ends the host open wait when the matching child exits without answering', async () => {
+  const { host, open, dispatch, send } = awaitOpen()
+  const attached = await attach()
+  if (!attached) {
+    throw new Error('The spawned child has no owner record.')
+  }
+  await send('held')
+  await host.handleAdapterEvent({
+    type: 'ended',
+    sessionId: SESSION,
+    fence: attached.lease.runtimeFence,
+    acquisitionGeneration: 'awaited-open',
+    reason: 'The provider exited before answering.',
+    cause: 'unexpected-exit'
+  })
+  expect(open.mock.calls[0]?.[0].signal.aborted).toBe(true)
+  await vi.waitFor(async () => {
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(snapshot.submissions[0]?.dispatchState).toBe('rejected')
+  })
+  expect(dispatch).not.toHaveBeenCalled()
+})
