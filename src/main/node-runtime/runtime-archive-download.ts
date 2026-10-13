@@ -8,7 +8,7 @@ import { isDefinitiveAbsence } from '../../shared/definitive-filesystem-absence'
 import { getZipExtractorCommand } from '../../shared/zip-extractor-command'
 import type { MainHttpClient } from '../network/http-client'
 import { isRetryableDownloadError, type HttpStatusError } from '../network/transient-download-error'
-import type { PinnedRuntimeArchive, PinnedRuntimeExecutable } from './pinned-runtime-materializer'
+import type { PinnedRuntimeArchive } from './pinned-runtime-materializer'
 
 const MAX_RUNTIME_ARCHIVE_BYTES = 200 * 1024 * 1024
 /** Pauses before attempts 2..n; a network change or a CDN 5xx usually clears within seconds. */
@@ -24,7 +24,7 @@ export const RUNTIME_ARCHIVE_RETRY_DELAYS_MS = [1_000, 3_000, 9_000]
  * succeeds from a deleted cwd, even though `process.cwd()` itself throws ENOENT there.
  */
 export async function extractRuntimeArchive(
-  runtime: Pick<PinnedRuntimeExecutable, 'label' | 'member'>,
+  runtime: { label: string; members: readonly string[] },
   archivePath: string,
   extractDir: string,
   signal?: AbortSignal
@@ -35,7 +35,7 @@ export async function extractRuntimeArchive(
     ? getZipExtractorCommand(archivePath, extractDir)
     : {
         file: 'tar',
-        args: ['-xzf', archivePath, '-C', extractDir, runtime.member],
+        args: ['-xzf', archivePath, '-C', extractDir, ...runtime.members],
         label: 'tar'
       }
   try {
@@ -94,6 +94,7 @@ async function downloadVerifiedArchiveOnce(
   signal?: AbortSignal
 ): Promise<void> {
   const { label, url, archiveSha256: expectedSha256 } = archive
+  const maxBytes = archive.maxArchiveBytes ?? MAX_RUNTIME_ARCHIVE_BYTES
   const stall = new AbortController()
   const downloadSignal = signal ? AbortSignal.any([signal, stall.signal]) : stall.signal
   const stalled: HttpStatusError = Object.assign(new Error(`${label} download stalled`), {
@@ -110,7 +111,7 @@ async function downloadVerifiedArchiveOnce(
       )
     }
     const declaredLength = Number(response.headers.get('content-length'))
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_RUNTIME_ARCHIVE_BYTES) {
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
       await response.body.cancel().catch(() => undefined)
       throw new Error(`${label} download exceeded the archive size limit`)
     }
@@ -132,7 +133,7 @@ async function downloadVerifiedArchiveOnce(
           stallTimer.refresh()
         }
         total += chunk.value.byteLength
-        if (total > MAX_RUNTIME_ARCHIVE_BYTES) {
+        if (total > maxBytes) {
           throw new Error(`${label} download exceeded the archive size limit`)
         }
         hash.update(chunk.value)

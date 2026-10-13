@@ -234,6 +234,7 @@ function acpRegistration(spec: AcpLaunchSpec): StructuredAgentRuntimeRegistratio
       const part = acpStructuredLaunchPart(spec, {
         readJournal,
         ...(deps.resolveAgentFullAccess ? { resolveFullAccess: deps.resolveAgentFullAccess } : {}),
+        dataDirectory: deps.stateDirectory,
         logger: deps.logger
       })
       return new AcpStructuredSessionAdapter({
@@ -241,6 +242,7 @@ function acpRegistration(spec: AcpLaunchSpec): StructuredAgentRuntimeRegistratio
         readJournal,
         resolveLaunch: composeStructuredLaunch(definition, sources, part),
         readLaunch: composeStructuredLaunchRead(definition, sources, part),
+        dataDirectory: deps.stateDirectory,
         connect: (launch, options) => createAcpAgentConnection(launch, options),
         onChildWorkEvidence: (sessionId, evidence) =>
           context.host()?.publishChildWorkEvidence(sessionId, evidence),
