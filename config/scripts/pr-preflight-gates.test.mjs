@@ -59,13 +59,8 @@ it('uses the shared Bun pin for every current-toolchain workflow', () => {
         if (!String(step.uses).startsWith('oven-sh/setup-bun@')) {
           continue
         }
-        // The legacy server lane checks the runtime that release actually shipped with.
-        if (file === 'node-server-tests.yml') {
-          expect(step.with['bun-version'], file).toBe('1.4.2')
-        } else {
-          expect(step.with['bun-version-file'], file).toBe('config/.bun-version')
-          expect(step.with['bun-version'], file).toBeUndefined()
-        }
+        expect(step.with['bun-version-file'], file).toBe('config/.bun-version')
+        expect(step.with['bun-version'], file).toBeUndefined()
       }
     }
   }
