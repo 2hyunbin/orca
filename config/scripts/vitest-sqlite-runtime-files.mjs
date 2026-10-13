@@ -2,6 +2,8 @@ import { SQLITE_DATABASE_RUNTIME_INCLUDE } from './vitest-sqlite-database-runtim
 
 // Real SQLite fixtures keep Node publication and close semantics.
 export const SQLITE_RUNTIME_INCLUDE = [
+  'src/main/pi/rpc-session-adapter.test.ts',
+  'src/main/pi/rpc-session-startup.test.ts',
   'src/main/acp/acp-structured-publish-at-spawn.test.ts',
   ...SQLITE_DATABASE_RUNTIME_INCLUDE,
   'src/main/acp/acp-structured-host-live-listing.test.ts',
