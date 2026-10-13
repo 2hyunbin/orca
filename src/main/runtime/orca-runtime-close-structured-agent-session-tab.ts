@@ -15,10 +15,15 @@ import { applyBrowserSessionTabSelection } from './browser-session-tab-selection
 import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-tab-retirement'
-import { withClosedAgentSessionTab, withOpenedAgentSessionTab } from './agent-session-tab-layout'
+import {
+  listSavedAgentSessionTabs,
+  withClosedAgentSessionTab,
+  withOpenedAgentSessionTab,
+  type SavedAgentSessionTab
+} from './agent-session-tab-layout'
 import { structuredSessionTabRetired } from './structured-worker-custody'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
@@ -279,28 +284,12 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     }
   }
 
-  /**
-   * Each of this host's chats with a saved tab, and where: every saved partition, so a tab left in
-   * a rotated runtime partition (#18202) is found as a terminal close finds one.
-   */
-  protected savedAgentSessionTabs(): Map<
-    string,
-    { worktreeId: string; hostId: ExecutionHostId }[]
-  > {
-    const saved = new Map<string, { worktreeId: string; hostId: ExecutionHostId }[]>()
-    for (const hostId of this.store?.getWorkspaceSessionHostIds?.() ?? []) {
-      const session = this.store?.getWorkspaceSession?.(hostId)
-      for (const [worktreeId, tabs] of Object.entries(session?.unifiedTabs ?? {})) {
-        for (const tab of tabs) {
-          // Another execution host's chat is in that host's index, not this one's.
-          const ownHost = !tab.executionHostId || tab.executionHostId === LOCAL_EXECUTION_HOST_ID
-          if (tab.contentType === 'agent-session' && ownHost) {
-            saved.set(tab.entityId, [...(saved.get(tab.entityId) ?? []), { worktreeId, hostId }])
-          }
-        }
-      }
-    }
-    return saved
+  /** Each of this host's chats with a saved tab, and where, across every saved partition. */
+  protected savedAgentSessionTabs(): Map<string, SavedAgentSessionTab[]> {
+    const hostIds = this.store?.getWorkspaceSessionHostIds?.() ?? []
+    return listSavedAgentSessionTabs(
+      hostIds.map((hostId) => ({ hostId, session: this.store?.getWorkspaceSession?.(hostId) }))
+    )
   }
 
   // A window saves its own layout whole, chat tabs included; only a host with none saves them here.
