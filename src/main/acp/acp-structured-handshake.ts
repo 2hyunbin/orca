@@ -155,7 +155,6 @@ export async function initializeAcpStructuredSession(
   return {
     link,
     reportedOptions: options.read().current,
-    restoreSkippedOptions: restoreSkipped,
     // Its saved picks restored: what it runs now is what its start resolved.
     catalogListing: options.startListing()
   }

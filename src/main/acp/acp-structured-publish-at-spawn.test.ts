@@ -58,8 +58,7 @@ describe('ACP child published before its handshake', () => {
     answer?.()
     expect(await opening).toMatchObject({
       link: { handle: { nativeId: PROVIDER_SESSION }, origin: 'created' },
-      reportedOptions: { model: 'grok-4.6', effort: 'low' },
-      restoreSkippedOptions: []
+      reportedOptions: { model: 'grok-4.6', effort: 'low' }
     })
     expect(writes).toEqual(['model', 'reasoning_effort'])
     rig.child().agent.notify('session/update', {
@@ -156,7 +155,7 @@ describe('ACP child published before its handshake', () => {
     expect(rig.child().exited).toBe(true)
   })
 
-  it('reports saved picks the provider refused without delaying readiness for another read', async () => {
+  it('keeps refused picks in provider-local facts without delaying readiness for another read', async () => {
     const rig = await openAcpAdapterRig({
       script: (agent) =>
         agent.on('session/set_config_option', (frame) =>
@@ -165,9 +164,9 @@ describe('ACP child published before its handshake', () => {
     })
     await rig.acquire({ options: { model: 'retired-model' } })
     expect(rig.started()).toMatchObject({
-      restoreSkippedOptions: ['model'],
       reportedOptions: { model: 'grok-4.7', effort: 'high' }
     })
+    expect(rig.adapter.readOptionRestoreFailures(SESSION)).toEqual(['model'])
     expect(rig.child().exited).toBe(false)
   })
 

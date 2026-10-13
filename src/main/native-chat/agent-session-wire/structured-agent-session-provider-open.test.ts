@@ -18,8 +18,7 @@ import {
 } from './structured-agent-session-host-test-data'
 
 const OPENED: StructuredAgentSessionProviderOpenResult = {
-  reportedOptions: { model: 'gpt-test' },
-  restoreSkippedOptions: []
+  reportedOptions: { model: 'gpt-test' }
 }
 
 function awaitOpen() {
@@ -245,20 +244,19 @@ it.each(['stop', 'close'] as const)(
   }
 )
 
-it('saves startup picks and writes running picks to the live child', async () => {
+it('writes both startup and running picks to the live child', async () => {
   const { host, store, pending, setOption } = awaitOpen()
   await attach()
   for (const model of ['model-before-ready', 'model-after-ready']) {
-    expect(
-      await host.setOption(CALLER, {
-        envelope: envelope('agentSession.setOption', { key: 'model', value: model }),
-        key: 'model',
-        value: model
-      })
-    ).toMatchObject({ ok: true })
-    expect(store.getRecord(SESSION)?.options?.model).toBe(model)
-    expect(setOption).toHaveBeenCalledTimes(model === 'model-before-ready' ? 0 : 1)
+    const picked = host.setOption(CALLER, {
+      envelope: envelope('agentSession.setOption', { key: 'model', value: model }),
+      key: 'model',
+      value: model
+    })
     pending.resolve(OPENED)
+    expect(await picked).toMatchObject({ ok: true })
+    expect(store.getRecord(SESSION)?.options?.model).toBe(model)
+    expect(setOption).toHaveBeenCalledTimes(model === 'model-before-ready' ? 1 : 2)
     await vi.waitFor(() =>
       expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
     )

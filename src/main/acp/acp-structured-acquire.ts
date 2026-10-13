@@ -174,8 +174,7 @@ export async function acquireAcpStructuredSession(input: {
           sessionId,
           fence: acquire.fence,
           acquisitionGeneration: generation,
-          reportedOptions: options.read().current,
-          restoreSkippedOptions: []
+          reportedOptions: options.read().current
         })
       }
     })
