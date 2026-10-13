@@ -5,6 +5,7 @@
  * the desktop's strip must keep that order through each trigger below. Every strip the desktop
  * draws is recorded, so a transient regroup shows even when the final strip recovers.
  */
+import { mkdirSync } from 'node:fs'
 import type { Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
@@ -171,6 +172,20 @@ for (const trigger of TRIGGERS) {
           setTimeout(resolve, trigger === 'network outage' ? 25_000 : 100_000)
         )
         proxy.restore()
+      } else if (trigger === 'workspace switch') {
+        const other = testInfo.outputPath('other-workspace')
+        mkdirSync(other, { recursive: true })
+        await host.client.call('repo.add', { path: other, kind: 'folder' })
+        const otherId = await waitForPairedWorktreeId(client.page, other)
+        await selectPairedWorktreeGroup(client.page, client.environmentId, otherId)
+        await client.page.waitForTimeout(2_000)
+        await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
+      } else if (trigger === 'sleep and wake') {
+        // The worktree's terminals stop, as when agents hibernate; opening a tab starts it again.
+        await host.client.call('worktree.sleep', { worktree })
+        for (const tabId of [first!, agent]) {
+          await host.client.call('session.tabs.activate', { worktree, tabId })
+        }
       } else if (trigger === 'desktop reload') {
         await client.page.reload()
         await client.page.waitForFunction(
