@@ -384,4 +384,26 @@ describe('hidden Chromium native popup request compatibility', () => {
       )
     }
   })
+
+  it('blocks the first adopted link request when route preparation fails during creation', async () => {
+    const page = guest('route')
+    for (const failure of ['authority', 'webrtc', 'close']) {
+      const path = `/adopted-${failure}`
+      await page.locator('#link').evaluate((link, path) => link.setAttribute('href', path), path)
+      await page.evaluate((failure) => console.log(`orca-popup-fixture:fail-${failure}`), failure)
+      const receiptCount = receipts.length
+      await page.locator('#link').click()
+      await new Promise((resolve) => setTimeout(resolve, 750))
+      expect(receipts.slice(receiptCount).some((receipt) => receipt.path === path)).toBe(false)
+      await page.evaluate('console.log("orca-popup-fixture:restore-authority")')
+    }
+    // Control: once preparation passes, the same adopted link does load.
+    const receiptCount = receipts.length
+    await page.locator('#link').click()
+    await expect
+      .poll(() => receipts.slice(receiptCount).some((receipt) => receipt.path === '/adopted-close'))
+      .toBe(true)
+    await closeChildren(page)
+    await page.locator('#link').evaluate((link) => link.setAttribute('href', '/docs'))
+  })
 })

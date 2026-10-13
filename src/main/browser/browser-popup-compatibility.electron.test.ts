@@ -152,6 +152,60 @@ describe('hidden Chromium popup compatibility', () => {
     await closeChildren(page)
   })
 
+  it('opens opener-less OAuth links as local tabs without their discarded page loading', async () => {
+    const page = guest('local')
+    const before = receipts.length
+    const hostedBefore = status().childRequests.length
+    const oauthUrl = `${origin}/authorize-link?client_id=synthetic&redirect_uri=${origin}/callback&response_type=code`
+    for (const [modifiers, activate] of [
+      [[], true],
+      [['ControlOrMeta', 'Shift'], true],
+      [['ControlOrMeta'], false]
+    ] as const) {
+      const tabCount = status().tabOpens.length
+      await page.locator('#oauth-link').click({ modifiers: [...modifiers] })
+      await expect.poll(() => status().tabOpens.length).toBe(tabCount + 1)
+      expect(status().tabOpens.at(-1)).toEqual({ url: oauthUrl, activate })
+    }
+    expect(status().childRequests.length).toBe(hostedBefore)
+    // A POST arrives without a page too, but reopening it by URL would drop its body.
+    await page.locator('#post').click({ modifiers: ['ControlOrMeta', 'Shift'] })
+    await new Promise((resolve) => setTimeout(resolve, 750))
+    expect(
+      receipts.slice(before).filter(({ path }) => path === '/authorize-link' || path === '/post')
+    ).toEqual([])
+    expect(status().windowsHidden).toBe(true)
+  })
+
+  it('loads remote modifier-opened GETs itself and never replays their POSTs', async () => {
+    const page = guest('route')
+    const before = receipts.length
+    await page.locator('#link').click({ modifiers: ['ControlOrMeta', 'Shift'] })
+    await expect
+      .poll(() => receipts.slice(before).find((receipt) => receipt.path === '/docs'))
+      .toMatchObject({ method: 'GET', cookie: 'synthetic_session=route', proxied: true })
+    await expect
+      .poll(() =>
+        browser
+          ?.contexts()
+          .flatMap((context) => context.pages())
+          .some((candidate) => candidate.url() === `${origin}/docs`)
+      )
+      .toBe(true)
+    await page.evaluate('console.log("orca-popup-fixture:snapshot")')
+    expect(
+      status().routeContents.every(({ webRtcPolicy }) => webRtcPolicy === 'disable_non_proxied_udp')
+    ).toBe(true)
+    await closeChildren(page)
+    const beforePost = receipts.length
+    const blockedBefore = status().blocked.length
+    await page.locator('#post').click({ modifiers: ['ControlOrMeta', 'Shift'] })
+    await expect.poll(() => status().blocked.length).toBe(blockedBefore + 1)
+    await new Promise((resolve) => setTimeout(resolve, 750))
+    expect(receipts.slice(beforePost).some((receipt) => receipt.path === '/post')).toBe(false)
+    expect(status().windowsHidden).toBe(true)
+  })
+
   it('retains remote no-gesture, stale-gesture, scheme and four-window guards', async () => {
     const page = guest('route')
     expect(await page.evaluate('window.open("about:blank")===null')).toBe(true)

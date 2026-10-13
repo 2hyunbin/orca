@@ -107,7 +107,8 @@ function attachClickedGuest(): WindowOpenHandler {
   })
   const onInput = guestOnMock.mock.calls.find(([event]) => event === 'input-event')?.[1]
   onInput?.({}, { type: 'mouseDown' })
-  return guestSetWindowOpenHandlerMock.mock.calls[0][0] as WindowOpenHandler
+  const handler: WindowOpenHandler = guestSetWindowOpenHandlerMock.mock.calls[0][0]
+  return handler
 }
 
 function routedTabs(): unknown[] {
@@ -182,7 +183,7 @@ describe('tab-shaped OAuth opens without an opener', () => {
     response.createWindow?.({})
 
     expect(routedTabs()).toEqual([{ browserPageId: 'browser-1', url: OAUTH_URL }])
-    const prepare = openPopupWithOriginBarMock.mock.calls.at(-1)?.[2] as () => boolean
+    const prepare: () => boolean = openPopupWithOriginBarMock.mock.calls.at(-1)?.[2]
     expect(prepare()).toBe(false)
   })
 
@@ -194,10 +195,8 @@ describe('tab-shaped OAuth opens without an opener', () => {
       disposition: 'background-tab'
     })
     expect(response).toMatchObject({ action: 'allow' })
-    const onWindowCreated = appPrependOnceListenerMock.mock.calls.at(-1)?.[1] as (
-      event: unknown,
-      window: unknown
-    ) => void
+    const onWindowCreated: (event: unknown, window: unknown) => void =
+      appPrependOnceListenerMock.mock.calls.at(-1)?.[1]
     const nativeWindow = {
       webContents: popupContents(null),
       isDestroyed: vi.fn(() => false),
@@ -212,7 +211,7 @@ describe('tab-shaped OAuth opens without an opener', () => {
     expect(routedTabs()).toEqual([{ browserPageId: 'browser-1', url: OAUTH_URL, activate: false }])
     const [options, , prepare] = openPopupWithOriginBarMock.mock.calls.at(-1) ?? []
     expect(options).toMatchObject({ nativeWindow })
-    expect((prepare as () => boolean)()).toBe(false)
+    expect(prepare()).toBe(false)
   })
 
   it('never turns a POST into a tab when no page was handed over', () => {

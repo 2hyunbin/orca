@@ -489,9 +489,8 @@ function createRouteGuest(session: Session) {
         listener({}, { type })
       }
     },
-    openWindow: (url: string, postBody?: Electron.PostBody) =>
-      windowOpenHandler?.({ url, postBody }) ??
-      ({ action: 'deny' } as Electron.WindowOpenHandlerResponse),
+    openWindow: (url: string, postBody?: Electron.PostBody): Electron.WindowOpenHandlerResponse =>
+      windowOpenHandler?.({ url, postBody }) ?? { action: 'deny' },
     destroy: () => {
       destroyed = true
       for (const listener of listeners.get('destroyed') ?? []) {

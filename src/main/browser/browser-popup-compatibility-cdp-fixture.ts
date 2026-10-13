@@ -9,6 +9,7 @@ import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, expect } from 'vitest'
 import { build as buildVite } from 'vite'
 import { waitForBrowserCdpEndpoint } from './browser-session-ua-cdp-collector'
+import { resolveElectronProbeLaunch } from './electron-probe-display-launch'
 
 export type PopupFixtureReceipt = {
   path: string
@@ -78,6 +79,7 @@ function fixtureHtml(): string {
     <form method="post" target="_blank" action="/multipart" enctype="multipart/form-data"><input name="code" value="synthetic-multipart"><button id="multipart">Multipart</button></form>
     <form method="post" target="_blank" action="/empty"><button id="empty">Empty POST</button></form>
     <a id="link" href="/docs" target="_blank">Docs</a>
+    <a id="oauth-link" href="/authorize-link?client_id=synthetic&amp;redirect_uri=${origin}/callback&amp;response_type=code" target="_blank">OAuth link</a>
     <a id="background" href="/background">Background</a>
     <a id="shift" href="/shift">Popup link</a>
     <script>window.addEventListener('message',event=>document.body.dataset.message=event.data)</script>
@@ -174,18 +176,20 @@ beforeAll(async () => {
     throw new Error('Missing Electron executable')
   }
   const cdpPort = await reservePort()
-  const args = [
-    join(root, 'main.cjs'),
-    `--user-data-dir=${join(root, 'profile')}`,
-    `--remote-debugging-port=${cdpPort}`
-  ]
   const { ELECTRON_RUN_AS_NODE: _runAsNode, ...env } = process.env
+  const { executable, args } = resolveElectronProbeLaunch({
+    electronBinary,
+    electronArgs: [
+      join(root, 'main.cjs'),
+      `--user-data-dir=${join(root, 'profile')}`,
+      `--remote-debugging-port=${cdpPort}`
+    ],
+    platform: process.platform,
+    display: env.DISPLAY
+  })
   fixture = spawnProcess({
-    program: process.platform === 'linux' ? 'xvfb-run' : electronBinary,
-    args:
-      process.platform === 'linux'
-        ? ['--auto-servernum', electronBinary, ...args, '--no-sandbox']
-        : args,
+    program: executable,
+    args,
     env: {
       ...env,
       ORCA_BACKGROUND_LAUNCH: '1',
