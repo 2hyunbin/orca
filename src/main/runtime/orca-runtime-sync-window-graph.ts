@@ -77,6 +77,9 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
         ...graph.terminalGroupGridSizes
       }
     }
+    if (graph.singleGroupWorkspaceGridSize) {
+      this.singleGroupWorkspaceGridSize = graph.singleGroupWorkspaceGridSize
+    }
     const graphWasReady = this.graphStatus === 'ready'
     const previousTabs = this.tabs
     const previousLeaves = this.leaves

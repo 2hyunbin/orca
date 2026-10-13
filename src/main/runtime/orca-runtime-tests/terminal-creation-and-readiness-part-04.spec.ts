@@ -571,6 +571,50 @@ describe('OrcaRuntimeService', () => {
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ cols: 70, rows: 50 }))
   })
 
+  it.each([
+    ['no saved group', undefined, { cols: 238, rows: 80 }],
+    [
+      'one saved group',
+      [{ id: 'group-old', worktreeId: TEST_WORKTREE_ID, activeTabId: null, tabOrder: [] }],
+      { cols: 238, rows: 80 }
+    ],
+    [
+      'two saved groups',
+      [
+        { id: 'group-left', worktreeId: TEST_WORKTREE_ID, activeTabId: null, tabOrder: [] },
+        { id: 'group-right', worktreeId: TEST_WORKTREE_ID, activeTabId: null, tabOrder: [] }
+      ],
+      { cols: 120, rows: 40 }
+    ]
+  ])(
+    'sizes a workspace the window has not shown, with %s, from the single-group size',
+    async (_case, tabGroups, expected) => {
+      const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
+      const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
+        ...getDefaultWorkspaceSession(),
+        ...(tabGroups ? { tabGroups: { [TEST_WORKTREE_ID]: tabGroups } } : {})
+      })
+      const runtime = new OrcaRuntimeService(runtimeStore)
+      runtime.setPtyController({
+        spawn,
+        write: () => true,
+        kill: () => true,
+        getForegroundProcess: async () => null
+      })
+      runtime.attachWindow(1)
+      runtime.syncWindowGraph(1, {
+        tabs: [],
+        leaves: [],
+        terminalGroupGridSizes: { 'group-shown': { cols: 66, rows: 63 } },
+        singleGroupWorkspaceGridSize: { cols: 238, rows: 80 }
+      })
+
+      await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { command: 'codex' })
+
+      expect(spawn).toHaveBeenCalledWith(expect.objectContaining(expected))
+    }
+  )
+
   it('starts a host terminal at 120x40 when no window measured its group', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({

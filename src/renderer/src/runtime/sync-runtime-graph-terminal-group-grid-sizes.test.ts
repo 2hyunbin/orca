@@ -7,7 +7,12 @@ import {
 import type { AppState } from '../store/types'
 import type { RuntimeSyncWindowGraph } from '../../../shared/runtime-types'
 
-type GridSizes = Record<string, { cols: number; rows: number }> | undefined
+type GridSizes =
+  | {
+      groups: Record<string, { cols: number; rows: number }>
+      singleGroupWorkspace?: { cols: number; rows: number }
+    }
+  | undefined
 const measured = vi.hoisted((): { sizes: GridSizes } => ({ sizes: undefined }))
 vi.mock('./sync-runtime-graph/terminal-group-grid-sizes', () => ({
   measureTerminalGroupGridSizes: () => measured.sizes
@@ -54,18 +59,25 @@ describe('terminal group grid sizes in the window graph', () => {
     vi.stubGlobal('HTMLElement', class HTMLElement {})
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: graph sync reads only these collections of the store.
     setRuntimeGraphStoreStateGetter(() => EMPTY_STATE as unknown as AppState)
-    measured.sizes = { 'group-a': { cols: 63, rows: 60 } }
+    measured.sizes = {
+      groups: { 'group-a': { cols: 63, rows: 60 } },
+      singleGroupWorkspace: { cols: 130, rows: 60 }
+    }
     setRuntimeGraphSyncEnabled(true)
     await flushSync()
-    expect(syncWindowGraph.mock.calls[0]?.[0].terminalGroupGridSizes).toEqual({
-      'group-a': { cols: 63, rows: 60 }
+    expect(syncWindowGraph.mock.calls[0]?.[0]).toMatchObject({
+      terminalGroupGridSizes: { 'group-a': { cols: 63, rows: 60 } },
+      singleGroupWorkspaceGridSize: { cols: 130, rows: 60 }
     })
 
     scheduleRuntimeGraphSyncIfGroupGridSizesChanged()
     await flushSync()
     expect(syncWindowGraph).toHaveBeenCalledTimes(1)
 
-    measured.sizes = { 'group-a': { cols: 66, rows: 60 } }
+    measured.sizes = {
+      groups: { 'group-a': { cols: 66, rows: 60 } },
+      singleGroupWorkspace: { cols: 130, rows: 60 }
+    }
     scheduleRuntimeGraphSyncIfGroupGridSizesChanged()
     await flushSync()
     expect(syncWindowGraph).toHaveBeenCalledTimes(2)

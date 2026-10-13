@@ -41,6 +41,12 @@ function groupBody(id: string, width: number, height: number): void {
   document.body.appendChild(body)
 }
 
+function contentArea(width: number, height: number): void {
+  const content = withRect(document.createElement('div'), width, height)
+  content.setAttribute('data-terminal-workbench-container', '')
+  document.body.appendChild(content)
+}
+
 afterEach(() => {
   panes.list = []
   document.body.replaceChildren()
@@ -58,9 +64,27 @@ describe('measureTerminalGroupGridSizes', () => {
 
     // (548 - 4 inset - 14 scrollbar) / 8 = 66; (1004 - 4) / 16 = 62.
     expect(measureTerminalGroupGridSizes(14)).toEqual({
-      'group-a': { cols: 66, rows: 62 },
-      'group-b': { cols: 135, rows: 31 }
+      groups: {
+        'group-a': { cols: 66, rows: 62 },
+        'group-b': { cols: 135, rows: 31 }
+      }
     })
+  })
+
+  it("sizes a single-group workspace from the content area minus a lone group's tab row", () => {
+    panes.list = [pane({ fontSize: 14, cellWidth: 8 })]
+    contentArea(1930, 1330)
+    groupBody('group-a', 1929, 1294)
+    // The lone body's inset (1, 36) is remembered and applied to the content area, so later
+    // measurements on a split workspace still know what a single-group workspace gets.
+    expect(measureTerminalGroupGridSizes(14)?.singleGroupWorkspace).toEqual({ cols: 238, rows: 80 })
+
+    document.body.replaceChildren()
+    contentArea(1600, 1330)
+    groupBody('group-a', 799, 1294)
+    groupBody('group-b', 800, 1294)
+    // (1600 - 1 - 4 inset - 14 scrollbar) / 8 = 197; (1330 - 36 - 4) / 16 = 80.
+    expect(measureTerminalGroupGridSizes(14)?.singleGroupWorkspace).toEqual({ cols: 197, rows: 80 })
   })
 
   it('leaves the sizes out when no pane at the default font is measurable', () => {

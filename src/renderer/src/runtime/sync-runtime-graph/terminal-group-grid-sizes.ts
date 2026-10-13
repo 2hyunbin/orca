@@ -50,25 +50,58 @@ function readDefaultPaneFit(
   return null
 }
 
-/** The grid an unsplit terminal would get in each shown tab group; undefined until a pane at the
- *  default font is measurable. */
+// Content area minus a lone group's body (its tab row and border), last seen on a single-group workspace.
+let singleGroupBodyInset: { width: number; height: number } | null = null
+
+export type TerminalGroupGridSizes = {
+  groups: Record<string, GridSize>
+  /** What a workspace with one group gets: every workspace shares the same content area. */
+  singleGroupWorkspace?: GridSize
+}
+
+/** The grid an unsplit terminal would get in each shown tab group, and in a single-group workspace
+ *  that is not shown; undefined until a pane at the default font is measurable. */
 export function measureTerminalGroupGridSizes(
   defaultFontSize: number
-): Record<string, GridSize> | undefined {
+): TerminalGroupGridSizes | undefined {
   const fit = readDefaultPaneFit(defaultFontSize)
   if (!fit) {
     return undefined
   }
-  const sizes: Record<string, GridSize> = {}
-  for (const body of document.querySelectorAll<HTMLElement>('[data-tab-group-body-id]')) {
+  const gridFor = (rect: { width: number; height: number }): GridSize =>
+    terminalGridSizeForBox(
+      { width: rect.width - fit.inset.width, height: rect.height - fit.inset.height },
+      fit.metrics
+    )
+  const groups: Record<string, GridSize> = {}
+  const bodies = [...document.querySelectorAll<HTMLElement>('[data-tab-group-body-id]')]
+  for (const body of bodies) {
     const groupId = body.dataset.tabGroupBodyId
     const rect = body.getBoundingClientRect()
     if (groupId && rect.width > 0 && rect.height > 0) {
-      sizes[groupId] = terminalGridSizeForBox(
-        { width: rect.width - fit.inset.width, height: rect.height - fit.inset.height },
-        fit.metrics
-      )
+      groups[groupId] = gridFor(rect)
     }
   }
-  return sizes
+  const content = document
+    .querySelector('[data-terminal-workbench-container]')
+    ?.getBoundingClientRect()
+  if (!content || content.width <= 0 || content.height <= 0) {
+    return { groups }
+  }
+  if (bodies.length === 1) {
+    const body = bodies[0].getBoundingClientRect()
+    singleGroupBodyInset = {
+      width: content.width - body.width,
+      height: content.height - body.height
+    }
+  }
+  return singleGroupBodyInset
+    ? {
+        groups,
+        singleGroupWorkspace: gridFor({
+          width: content.width - singleGroupBodyInset.width,
+          height: content.height - singleGroupBodyInset.height
+        })
+      }
+    : { groups }
 }

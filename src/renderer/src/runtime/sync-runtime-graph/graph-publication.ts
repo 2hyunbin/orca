@@ -59,16 +59,17 @@ export async function syncRuntimeGraph(): Promise<void> {
     ambiguousTerminalTabIds
   )
   const publication = partitionMobileSessionPublication(mobileSessionTabs)
-  const terminalGroupGridSizes = measureTerminalGroupGridSizes(
-    state.settings?.terminalFontSize ?? 14
-  )
+  const gridSizes = measureTerminalGroupGridSizes(state.settings?.terminalFontSize ?? 14)
   const graph: RuntimeRendererSyncWindowGraph = {
     tabs: [],
     leaves: [],
     rendererGeneration: mobilePublicationEpoch,
     mobileSessionTabs: publication.changed,
     unchangedMobileSessionWorktrees: publication.unchangedWorktrees,
-    ...(terminalGroupGridSizes ? { terminalGroupGridSizes } : {})
+    ...(gridSizes ? { terminalGroupGridSizes: gridSizes.groups } : {}),
+    ...(gridSizes?.singleGroupWorkspace
+      ? { singleGroupWorkspaceGridSize: gridSizes.singleGroupWorkspace }
+      : {})
   }
 
   for (const [registrationKey, registeredTab] of mountedTerminalTabEntries()) {
@@ -196,7 +197,7 @@ export async function syncRuntimeGraph(): Promise<void> {
 
   try {
     const result = await window.api.runtime.syncWindowGraph(graph)
-    graphState.publishedTerminalGroupGridSizesKey = JSON.stringify(terminalGroupGridSizes ?? null)
+    graphState.publishedTerminalGroupGridSizesKey = JSON.stringify(gridSizes ?? null)
     commitMobileSessionPublication(mobileSessionTabs, result?.mobileSessionResyncWorktrees)
     const currentState = graphState.getStoreState()
     currentState?.setRuntimeAgentOrchestrationByPaneKey?.(result?.agentOrchestrationByPaneKey ?? {})

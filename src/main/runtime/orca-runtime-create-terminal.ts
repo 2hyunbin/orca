@@ -33,17 +33,23 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       const reportPtySpawnCommitted = createPtySpawnCommitReporter(launchOpts.onPtySpawnCommitted)
       const cwd =
         this.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd) ?? workspace.path
+      const session = this.getWorkspaceSessionForWorktree(workspace.id)
       // The window's latest published active group is where its reveal places the tab.
       const groupId =
         launchOpts.targetGroupId ??
         this.mobileSessionTabsByWorktree.get(workspace.id)?.activeGroupId ??
-        this.getWorkspaceSessionForWorktree(workspace.id)?.activeGroupIdByWorktree?.[workspace.id]
-      // Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), the
-      // worktree never shown, or no pane at the default font mounted yet. #1707's original size.
-      const initialSize = (groupId && this.terminalGroupGridSizes?.[groupId]) || {
-        cols: 120,
-        rows: 40
-      }
+        session?.activeGroupIdByWorktree?.[workspace.id]
+      // A workspace not shown since launch has no measured group; with at most one group, its tab
+      // opens in a lone group, which every workspace sizes alike.
+      const singleGroupSize =
+        (session?.tabGroups?.[workspace.id]?.length ?? 0) <= 1
+          ? this.singleGroupWorkspaceGridSize
+          : undefined
+      // Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), a
+      // multi-group workspace not shown since launch, or no pane at the default font mounted yet.
+      // #1707's original size.
+      const initialSize = (groupId && this.terminalGroupGridSizes?.[groupId]) ||
+        singleGroupSize || { cols: 120, rows: 40 }
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
