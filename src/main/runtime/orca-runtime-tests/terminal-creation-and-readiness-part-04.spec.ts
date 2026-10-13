@@ -495,6 +495,48 @@ describe('OrcaRuntimeService', () => {
     }
   )
 
+  it('starts a CLI terminal at the size of the pane active in its worktree', async () => {
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
+    const runtime = new OrcaRuntimeService(store)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      getSize: (ptyId) => (ptyId === 'pty-visible' ? { cols: 211, rows: 57 } : null)
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      mobileSessionTabs: [
+        {
+          worktree: TEST_WORKTREE_ID,
+          publicationEpoch: 'epoch-1',
+          snapshotVersion: 1,
+          activeGroupId: 'group-1',
+          activeTabId: 'tab-visible::pane:1',
+          activeTabType: 'terminal',
+          tabs: [
+            {
+              type: 'terminal',
+              id: 'tab-visible::pane:1',
+              parentTabId: 'tab-visible',
+              leafId: 'pane:1',
+              ptyId: 'pty-visible',
+              title: 'Visible',
+              isActive: true
+            }
+          ]
+        }
+      ]
+    })
+
+    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { command: 'codex' })
+
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ cols: 211, rows: 57 }))
+  })
+
   it('accepts workspace-less terminal create replies only from the target renderer', async () => {
     const webContents = { send: vi.fn() }
     const send = vi.fn((_channel: string, payload: { requestId: string }) => {

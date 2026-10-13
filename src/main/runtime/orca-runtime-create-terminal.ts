@@ -5,6 +5,7 @@ import { createDesktopTerminal } from './orca-runtime-create-terminal-desktop'
 import { buildRuntimeAgentTeamsLaunchPlan } from './orca-runtime-agent-teams-launch-plan'
 import { createPtySpawnCommitReporter } from './orca-runtime-report-pty-spawn-commit'
 import { recordPtySurface, spawnSurfaceClaimSequence } from './pty-recorded-surface-topology'
+import { resolveNewTerminalTabSize } from './new-terminal-tab-initial-size'
 
 export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
   async createTerminal(
@@ -33,6 +34,10 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       const reportPtySpawnCommitted = createPtySpawnCommitReporter(launchOpts.onPtySpawnCommitted)
       const cwd =
         this.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd) ?? workspace.path
+      const initialSize = resolveNewTerminalTabSize(
+        this.mobileSessionTabsByWorktree.get(workspace.id),
+        (ptyId) => this.ptyController.getSize?.(ptyId) ?? null
+      )
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
@@ -55,8 +60,7 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
           throw new Error('client_disconnected')
         }
         const adoptedBeforeLaunch = await this.ptyController.adoptStablePane?.({
-          cols: 120,
-          rows: 40,
+          ...initialSize,
           cwd,
           connectionId: workspace.connectionId,
           worktreeId: workspace.id,
@@ -118,8 +122,7 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
           const { launchAgent } = launchOpts
           launchOpts.onPtySpawnDispatched?.({ launchConfig: effectiveLaunchConfig, launchAgent })
           result = await dependencies.spawnInAdmittedPane(this.store, this.ptyController, {
-            cols: 120,
-            rows: 40,
+            ...initialSize,
             cwd,
             command: sequencedStartupCommand
               ? launchOpts.command
