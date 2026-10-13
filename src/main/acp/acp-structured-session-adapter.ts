@@ -325,7 +325,8 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     }
     closeAcpSessionJournal(
       session,
-      `${session.spec.agent} ACP connection closed: ${error.message || error.name}`
+      `${session.spec.agent} ACP connection closed: ${error.message || error.name}`,
+      error
     )
     void this.stop(session.sessionId, false)
   }
