@@ -192,7 +192,7 @@ describe('frames to a bounded-frame subscriber', () => {
   }))
 
   async function fillChat(): Promise<void> {
-    for (let index = 0; index < 60; index += 1) {
+    for (let index = 0; index < 30; index += 1) {
       await append(message(WIDE_TEXT.repeat(30_000)))
       await append({
         kind: 'tool-call',

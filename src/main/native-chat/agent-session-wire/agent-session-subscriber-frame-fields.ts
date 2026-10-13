@@ -110,6 +110,19 @@ function subscriberBackgroundTasks(
     : undefined
 }
 
+/** Whether the `/` list changed since this subscriber was last sent it. A bounded-frame subscriber
+ *  is never sent it: a phone reads it from `agentSession.options`. */
+export function subscriberCommandsChanged(
+  hooks: SubscriberFieldHooks,
+  subscriber: SubscriberFieldState
+): boolean {
+  return (
+    !subscriber.boundedFrames &&
+    hooks.readCommands !== undefined &&
+    (hooks.readCommands(subscriber.sessionId) ?? null) !== subscriber.commands
+  )
+}
+
 /** Whether a caught-up publish with no rows still owes this subscriber a frame:
  *  draft inserts and pause changes write no journal row, so an unchanged cursor
  *  must still deliver the changed publication. */

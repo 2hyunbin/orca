@@ -14,6 +14,7 @@ import type {
 import {
   backgroundTaskFingerprint,
   buildSubscriberFrame,
+  subscriberCommandsChanged,
   type SubscriberFieldHooks
 } from './agent-session-subscriber-frame-fields'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
@@ -222,11 +223,7 @@ export class AgentSessionSubscribers {
     const hostNow = this.now()
     for (const sessionId of this.bySession.keys()) {
       for (const subscriber of this.subscribers(sessionId)) {
-        // A bounded-frame subscriber is never sent the list.
-        if (
-          !subscriber.boundedFrames &&
-          (this.hooks.readCommands?.(sessionId) ?? null) !== subscriber.commands
-        ) {
+        if (subscriberCommandsChanged(this.hooks, subscriber)) {
           this.emit(subscriber, {
             type: 'batch',
             sessionId,

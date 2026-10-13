@@ -15,6 +15,7 @@ import { emptyAgentSessionBatch } from './agent-session-empty-batch'
 import { createAgentSessionCatchUpReader } from './agent-session-history-page'
 import { subscriberItemForm } from './agent-session-bounded-frames'
 import {
+  subscriberCommandsChanged,
   subscriberQueuedMessagesChanged,
   type SubscriberFieldHooks
 } from './agent-session-subscriber-frame-fields'
@@ -117,10 +118,7 @@ function emitCaughtUp(
     activity?: AgentSessionTurnActivity | null
   }
 ): void {
-  const commandsChanged =
-    !subscriber.boundedFrames &&
-    port.hooks.readCommands !== undefined &&
-    (port.hooks.readCommands(subscriber.sessionId) ?? null) !== subscriber.commands
+  const commandsChanged = subscriberCommandsChanged(port.hooks, subscriber)
   const queuedChanged = subscriberQueuedMessagesChanged(port.hooks, subscriber)
   if (emitCheckpoint || shared.activity !== undefined || commandsChanged || queuedChanged) {
     port.emit(subscriber, {

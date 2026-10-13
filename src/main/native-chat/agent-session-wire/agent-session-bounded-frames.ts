@@ -38,7 +38,7 @@ type SideFields = Pick<
 >
 
 function within(value: unknown, maxBytes: number): boolean {
-  return value === undefined || value === null || jsonBytes(value) <= maxBytes
+  return value === null || jsonBytes(value) <= maxBytes
 }
 
 /** The cursor a reader holds once it has applied `event`, which a side frame must name. */
@@ -61,16 +61,20 @@ function boundedHistoryFrame(event: HistoryFrame): HistoryFrame {
   } = event
   const frame = {
     ...rest,
-    ...(within(activity, BOUNDED_FRAME_ACTIVITY_BYTES) && activity !== undefined
+    ...(activity !== undefined && within(activity, BOUNDED_FRAME_ACTIVITY_BYTES)
       ? { activity }
       : {})
   }
   if (frame.type === 'batch') {
     const { latestTurn, ...batch } = frame
-    return within(latestTurn, BOUNDED_FRAME_LATEST_TURN_BYTES) ? frame : batch
+    return latestTurn === undefined || within(latestTurn, BOUNDED_FRAME_LATEST_TURN_BYTES)
+      ? frame
+      : batch
   }
   const { latestTurn, ...page } = frame.page
-  return within(latestTurn, BOUNDED_FRAME_LATEST_TURN_BYTES) ? frame : { ...frame, page }
+  return latestTurn === undefined || within(latestTurn, BOUNDED_FRAME_LATEST_TURN_BYTES)
+    ? frame
+    : { ...frame, page }
 }
 
 function isEmptyBatch(frame: HistoryFrame): frame is BatchFrame {
