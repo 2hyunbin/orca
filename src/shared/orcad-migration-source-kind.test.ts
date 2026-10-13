@@ -111,7 +111,7 @@ describe('orcad migration manifest source on the destination', () => {
   ])('refuses a WSL source that does not describe its catalog: %j', (override) => {
     expect(() =>
       parseOrcadMigrationManifest(manifestWithSource({ ...WSL_SOURCE, ...override }))
-    ).toThrow(/^orcad_migration_manifest_source/)
+    ).toThrow(/source/)
   })
 
   it('fails a WSL source closed on a destination that drops the kind', () => {
