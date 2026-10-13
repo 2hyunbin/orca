@@ -120,14 +120,14 @@ describe('options at rest', () => {
 })
 
 describe('live Codex option reads', () => {
-  it('leaves the session lane free while a cold listing waits, then applies it under the child fence', async () => {
+  it('keeps newer saved picks after a cold live listing waits without holding the session lane', async () => {
     const listing = Promise.withResolvers<void>()
     const queue = new StructuredAgentSessionTaskQueue()
     const record = { ...restingRecord(), options: { model: 'gpt-picked', effort: 'high' } }
     const child = { fence: 7 }
     const apply = vi.fn(() => ({
       models: [{ id: 'gpt-live', label: 'GPT Live', efforts: [] }],
-      current: { model: 'gpt-live' }
+      current: { model: 'gpt-live', effort: 'high', confirmed: ['model', 'effort'] as const }
     }))
     const prepareReadOptions = vi.fn(async () => {
       await listing.promise
@@ -161,10 +161,10 @@ describe('live Codex option reads', () => {
       'delivery can proceed'
     )
     expect(apply).not.toHaveBeenCalled()
+    record.options = { model: 'gpt-next', effort: 'low' }
     listing.resolve()
     await expect(reading).resolves.toMatchObject({
-      models: [{ id: 'gpt-live' }],
-      current: { model: 'gpt-picked', effort: 'high' }
+      current: { model: 'gpt-next', effort: 'low' }
     })
     expect(apply).toHaveBeenCalledOnce()
   })
