@@ -6,6 +6,7 @@ import type { AgentSubagentSnapshot } from '../../shared/agent-status-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { toAppSshPtyId } from '../../shared/ssh-pty-id'
 import { AgentHookServer } from './server'
+import { buildBody, postHookEvent } from './server.test-fixtures'
 import {
   indexPersistedPaneKeyPtyIds,
   isLocalExecutionHost,
@@ -40,6 +41,7 @@ type PersistedRow = {
   state?: 'working' | 'waiting' | 'blocked' | 'done'
   connectionId?: string | null
   subagents?: AgentSubagentSnapshot[]
+  providerSessionOnly?: boolean
 }
 
 /** Start a server over the last-status.json an Orca that closed mid-turn leaves behind. */
@@ -56,6 +58,9 @@ async function restartWith(rows: PersistedRow[] = [{}]): Promise<AgentHookServer
           worktreeId: 'wt-1',
           connectionId: row.connectionId ?? null,
           providerSession: { key: 'session_id', id: `resume-${paneKey}` },
+          ...(row.providerSessionOnly
+            ? { providerSessionOnly: true, retainedForLiveness: true }
+            : {}),
           payload: {
             state: row.state ?? 'working',
             prompt: 'review the PR',
@@ -152,16 +157,42 @@ describe('restored status dead-terminal sweep', () => {
     }
   })
 
-  it('retires a Claude pane held working only by restored subagents and clears its roster', async () => {
+  it('retires a Claude pane held open by restored subagents so a later turn there settles', async () => {
     const server = await restartWith([{ subagents: [WORKING_CHILD] }])
     try {
-      expect(server._getStateForTests().claudeSubagentRosterByPaneKey.has(PANE)).toBe(true)
-
       expect(await sweepWith(server)).toBe(1)
-
       expect(paneState(server)).toBe('missing')
-      // Why: a stranded seed would re-gate the next agent in this pane `working`.
-      expect(server._getStateForTests().claudeSubagentRosterByPaneKey.has(PANE)).toBe(false)
+
+      for (const hook_event_name of ['UserPromptSubmit', 'Stop']) {
+        const response = await postHookEvent(
+          server,
+          buildBody(
+            { hook_event_name, session_id: 'next-session', prompt: 'next task' },
+            { paneKey: PANE }
+          )
+        )
+        expect(response.status).toBe(204)
+      }
+
+      // Why: a stranded restored child would hold the next agent's finished turn `working`.
+      expect(paneState(server)).toBe('done')
+    } finally {
+      server.stop()
+    }
+  })
+
+  it('never treats a hydrated resume remnant as a candidate', async () => {
+    const server = await restartWith([{ agentType: 'codex', providerSessionOnly: true }])
+    const probePtyLiveness = vi.fn(() => false)
+    try {
+      expect(server.getStatusSnapshotForPane(PANE)[0]).toMatchObject({
+        providerSessionOnly: true,
+        state: 'working'
+      })
+
+      expect(await sweepWith(server, { probePtyLiveness })).toBe(0)
+
+      expect(probePtyLiveness).not.toHaveBeenCalled()
     } finally {
       server.stop()
     }

@@ -7,7 +7,7 @@ import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
-import { isWslHookRelayConnectionId } from '../../shared/wsl-hook-relay-contract'
+import { isLocalHookConnectionId } from '../../shared/wsl-hook-relay-contract'
 import type { AgentHookServer } from './server'
 
 type RestoredStatusSweepServer = Pick<
@@ -38,18 +38,15 @@ export async function retireRestoredStatusesWithDeadTerminals(
     let probe = probesByPtyId.get(ptyId)
     if (!probe) {
       // Why: a probe that throws is unverifiable, never evidence the terminal died.
-      probe = Promise.resolve()
-        .then(() => deps.probePtyLiveness(ptyId))
-        .catch(() => null)
+      probe = deps.probePtyLiveness(ptyId).catch(() => null)
       probesByPtyId.set(ptyId, probe)
     }
     return (await probe) === false
   }
   const candidates = deps.server.listUnconfirmedRestoredStatuses().filter(
     (row) =>
-      // Why: only a local or WSL pane's PTY lives in this machine's provider.
-      (row.connectionId === null || isWslHookRelayConnectionId(row.connectionId)) &&
-      deps.isLocalExecutionHost(row.worktreeId)
+      // Why: only a local pane's PTY lives in this machine's provider.
+      isLocalHookConnectionId(row.connectionId) && deps.isLocalExecutionHost(row.worktreeId)
   )
   const probed = await Promise.all(
     candidates.map(async (row) => {

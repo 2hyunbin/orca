@@ -83,7 +83,7 @@ export function handlePtyExit(id: string, exitSequence: number): void {
 }
 
 /** Runs once provider and hook hydration settle, so targeted PTY liveness can answer. */
-export async function retireRestoredAgentStatusesWithDeadTerminals(): Promise<void> {
+async function sweepRestoredStatusesAgainstLocalPtys(): Promise<void> {
   const store = state.store
   const provider = getDaemonProvider()
   if (!store || !provider) {
@@ -193,7 +193,7 @@ export function startTerminalRuntimeStartupServices(): WindowsDesktopStartupServ
   )
   void startupServices.localPtyReady.then(() => {
     logStartupMilestone('local-pty-startup-ready')
-    void retireRestoredAgentStatusesWithDeadTerminals().catch((error) =>
+    void sweepRestoredStatusesAgainstLocalPtys().catch((error) =>
       console.warn('[agent-hooks] restored-status dead-terminal sweep failed:', error)
     )
   })
