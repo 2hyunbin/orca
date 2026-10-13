@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "sourceRevision": "sha256:a8468678f4ed51074208f9370953f67c8e3a7969a3be7ea7fca82fc9a738ac7a",
+  "sourceRevision": "sha256:633ea02926cf76b89b6d627d1b41c92417bfed458db620fabec4d2e55a20cfe3",
   "entries": {
     "accounts.antigravity.changed": {
       "value": "The native account changed. Select a saved account again before launching agy.",
@@ -56366,6 +56366,10 @@
       "value": "Pull request unlinked",
       "sourceHash": "sha256:6a8540e20396c09657af0ebbe1410f174d4d4c96075eaaa39d8a60a8e70cd958"
     },
+    "common.loading": {
+      "value": "Loading…",
+      "sourceHash": "sha256:80e35d9f09c98338ea47133b8a096aa9395bf6a754e8cbfbf376554286552569"
+    },
     "common.retry": {
       "value": "Retry",
       "sourceHash": "sha256:40ba3698f98fa9f0fe49a349529f27dcdb4ffa2ce12d41718d431432f696b8c0"
@@ -60958,9 +60962,29 @@
       "value": "Showing cached listings. Some sources could not be refreshed; installed plugins remain available.",
       "sourceHash": "sha256:6c04f898cba4a6d1674c3e737729c162003b49f7b35d3a2dfb295edc332d8042"
     },
+    "plugins.catalog.declaredData": {
+      "value": "Declared data pack",
+      "sourceHash": "sha256:fbb0384fcefdf3274791ea193e65b07dcc27e5c1774d133eb442d3a7949e5c98"
+    },
     "plugins.catalog.details": {
       "value": "Plugin details",
       "sourceHash": "sha256:f8d2fa784e53c9e3720f762509a5b086bebccbe2c9b317a0d49aed9f200edc40"
+    },
+    "plugins.catalog.minimumOrca": {
+      "value": "Orca {{version}}+",
+      "sourceHash": "sha256:859117c1c529ff286ecdb3d21be3587abd378e4e671c7781e6c4e422d94929e1"
+    },
+    "plugins.catalog.publisherPreview": {
+      "value": "Publisher preview",
+      "sourceHash": "sha256:37f0e6f77d38c76c5828eb22410bd9a9280fb3bf97a31e2c730cc57ccdc17482"
+    },
+    "plugins.catalog.releaseHash": {
+      "value": "Package SHA-256",
+      "sourceHash": "sha256:1e600756d758e622650d2729c864c4fb63e35c4eeb3184a09f331bbd5c4a4cd4"
+    },
+    "plugins.catalog.reviewRequired": {
+      "value": "Review required",
+      "sourceHash": "sha256:9550619c95fe189b453a396c0e0f662cf0212e8a25340a70a506e0217c955f8b"
     },
     "plugins.viewer.alwaysExtension": {
       "value": "Always use for {{extension}} files",

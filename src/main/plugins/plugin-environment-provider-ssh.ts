@@ -30,8 +30,21 @@ export class PluginEnvironmentProviderSsh {
 
   constructor(private readonly options: PluginEnvironmentProviderSshOptions) {
     this.contexts = new PluginEnvironmentProviderContextStore(options.userDataPath)
+    const retireTarget = options.retireTarget
     this.reviews = new PluginEnvironmentProviderSshReviews(
-      options,
+      {
+        ...options,
+        retireTarget: retireTarget
+          ? async (target) => {
+              const owner = target.environmentProvider
+              if (!owner) {
+                throw new Error('The saved target has no environment provider owner')
+              }
+              this.invalidateProvider(owner.binding.providerId, owner.resourceId)
+              await retireTarget(target)
+            }
+          : undefined
+      },
       this.lifetime,
       (review, owner) => this.requireCurrent(review, owner)
     )
@@ -44,6 +57,9 @@ export class PluginEnvironmentProviderSsh {
   }
   revokeOwner(ownerKey: string): void {
     this.reviews.revokeOwner(ownerKey)
+  }
+  discard(ownerKey: string, ticketId: string): boolean {
+    return this.reviews.discard(ownerKey, ticketId)
   }
 
   async authorize(target: SshTarget) {

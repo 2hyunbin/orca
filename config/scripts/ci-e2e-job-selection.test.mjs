@@ -293,3 +293,24 @@ it('runs managed terminal root ownership in the Docker conversion lane', () => {
     expect(selectPrE2eSpecs([source]), source).toContain(spec)
   }
 })
+
+it.each([
+  'tests/e2e/plugin-environment-ssh.spec.ts',
+  'tests/e2e/plugin-environment-endpoint.spec.ts'
+])('runs %s in the managed SSH job that builds its server template', (spec) => {
+  expect(classify([spec])).toEqual({ e2e_run_changed: false, e2e_needs_build: true })
+  const lane = workflow.jobs['orcad-ssh-docker']
+  expect(lane.if).toContain(`contains(inputs.test_files, '${spec}')`)
+  const run = lane.steps.find((step) => step.run?.includes('ORCA_E2E_ORCAD_CONVERT_TEMPLATE='))
+  expect(run.run).toContain(spec)
+  expect(run.env.ORCA_E2E_SSH_DOCKER).toBe('1')
+  for (const source of [
+    'src/main/plugins/plugin-environment-provider-ssh-reviews.ts',
+    'src/main/ssh/ssh-environment-provider-registration.ts',
+    'src/main/ipc/plugin-environment-providers.ts',
+    'src/shared/plugins/plugin-environment-provider-ssh-api.ts',
+    'src/renderer/src/components/settings/PluginEnvironmentConnectionDialog.tsx'
+  ]) {
+    expect(selectPrE2eSpecs([source]), source).toContain(spec)
+  }
+})

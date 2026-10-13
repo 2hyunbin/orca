@@ -66,7 +66,10 @@ describe('provider SSH registrations preserve main-owned identity', () => {
         runtimeSha256: 'a'.repeat(64),
         orcaMajor: 1
       },
-      lastRequiredPassphrase: true
+      lastRequiredPassphrase: true,
+      managedServerUnavailable: { reason: 'old endpoint refused', appVersion: '1.4.0' },
+      managedServerMoveOffered: { appVersion: '1.4.0' },
+      managedServerUpdateFailure: { reason: 'old endpoint failed', appVersion: '1.4.0' }
     })
     const reviewed = structuredClone(store.getTarget(first.id)!)
     const replacement = { ...endpoint, host: 'replacement.internal' }
@@ -88,6 +91,9 @@ describe('provider SSH registrations preserve main-owned identity', () => {
     expect(updated.orcadFence).toEqual({ environmentId: 'server-one' })
     expect(updated.lastRequiredPassphrase).toBe(true)
     expect(updated.remoteRuntimeResolution).toBeUndefined()
+    expect(updated.managedServerUnavailable).toBeUndefined()
+    expect(updated.managedServerMoveOffered).toBeUndefined()
+    expect(updated.managedServerUpdateFailure).toBeUndefined()
     expect(updated.environmentProvider).toEqual(updatedOwner)
     expect(persisted.reassignments).toEqual([])
     expect(store.lastRepoReadoptions).toEqual([])

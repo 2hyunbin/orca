@@ -13,6 +13,7 @@ export const pluginEnvironmentProviderSshPrepareSchema = z.strictObject({
 })
 export const pluginEnvironmentProviderSshSaveSchema = z.strictObject({
   ticketId: z.uuid(),
+  approveEndpointUpdate: z.literal(true).optional(),
   identityFile: z
     .string()
     .min(1)
@@ -20,10 +21,15 @@ export const pluginEnvironmentProviderSshSaveSchema = z.strictObject({
     .refine((value) => !value.includes('\0'))
     .optional()
 })
+export const pluginEnvironmentProviderSshDiscardSchema = z.strictObject({ ticketId: z.uuid() })
 export type EnvironmentProviderSshPreview = {
   ticketId: string
   expiresAt: number
   providerId: string
   contextId: string
   resource: EnvironmentRecipeResource
+  endpointUpdate?: {
+    previousConnection: NonNullable<EnvironmentRecipeResource['connection']>
+    savedIdentityFile: boolean
+  }
 }

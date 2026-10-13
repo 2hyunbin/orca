@@ -227,7 +227,9 @@ export type PluginsApi = {
   saveEnvironmentProviderSsh?: (input: {
     ticketId: string
     identityFile?: string
+    approveEndpointUpdate?: true
   }) => Promise<SshTarget>
+  discardEnvironmentProviderSshReview?: (input: { ticketId: string }) => Promise<boolean>
   listEnvironmentProviders?: () => Promise<PluginEnvironmentProviderEntry[]>
   configureEnvironmentProvider?: (
     review: PluginEnvironmentProviderReview

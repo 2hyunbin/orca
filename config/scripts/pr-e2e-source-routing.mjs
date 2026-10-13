@@ -99,6 +99,21 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
+    id: 'plugins.environment-ssh-connections',
+    specs: [
+      'tests/e2e/plugin-environment-ssh.spec.ts',
+      'tests/e2e/plugin-environment-endpoint.spec.ts'
+    ],
+    matches: (file) =>
+      file === 'tests/e2e/helpers/plugin-environment-package-fixture.ts' ||
+      (isProductSource(file) &&
+        (/^src\/main\/(?:plugins\/plugin-environment-provider-|ssh\/ssh-environment-provider-|ipc\/environment-provider-ssh-|ipc\/plugin-environment-providers\.ts$)/.test(
+          file
+        ) ||
+          file === 'src/shared/plugins/plugin-environment-provider-ssh-api.ts' ||
+          file.startsWith('src/renderer/src/components/settings/PluginEnvironmentConnection')))
+  },
+  {
     id: 'serve.orcad-mode-switch',
     specs: ['tests/e2e/orcad-serve-mode-switch.spec.ts'],
     matches: (file) =>

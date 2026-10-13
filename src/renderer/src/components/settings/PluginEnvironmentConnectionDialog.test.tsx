@@ -26,6 +26,65 @@ const preview: EnvironmentProviderSshPreview = {
     }
   }
 }
+it('reviews old and new endpoints, explains retained ownership and focuses Cancel', async () => {
+  const save = vi.fn(async () => {}),
+    close = vi.fn()
+  render(
+    <PluginEnvironmentConnectionDialog
+      preview={{
+        ...preview,
+        endpointUpdate: {
+          previousConnection: { ...preview.resource.connection!, host: 'old.internal' },
+          savedIdentityFile: true
+        }
+      }}
+      onSave={save}
+      onClose={close}
+    />
+  )
+  const dialog = screen.getByRole('dialog', { name: 'Update saved environment connection' })
+  expect(dialog.textContent).toContain('developer@old.internal:2222')
+  expect(dialog.textContent).toContain('developer@box.internal:2222')
+  expect(dialog.textContent).toContain('Previously saved SSH endpoint')
+  expect(dialog.textContent).toContain('New SSH endpoint')
+  expect(dialog.textContent).toContain('host keeps its workspaces, history and managed server')
+  expect(dialog.textContent).toContain('old connection need a new review')
+  expect(dialog.textContent).toContain('keep this host’s saved identity file')
+  await vi.waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }))
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(close).toHaveBeenCalledOnce()
+  expect(save).not.toHaveBeenCalled()
+})
+it('submits an endpoint update once and keeps a failed update visible for a fresh review', async () => {
+  const held = Promise.withResolvers<void>()
+  const save = vi.fn(() => held.promise)
+  render(
+    <PluginEnvironmentConnectionDialog
+      preview={{
+        ...preview,
+        endpointUpdate: {
+          previousConnection: { ...preview.resource.connection!, host: 'old.internal' },
+          savedIdentityFile: false
+        }
+      }}
+      onSave={save}
+      onClose={vi.fn()}
+    />
+  )
+  const form = screen.getByRole('dialog').querySelector('form')!
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(save).toHaveBeenCalledExactlyOnceWith(undefined)
+  expect(screen.getByRole('button', { name: 'Update & connect' }).hasAttribute('disabled')).toBe(
+    true
+  )
+  await act(async () => held.reject(new Error('The old connection could not be retired')))
+  expect(screen.getByRole('alert').textContent).toContain('refresh')
+})
 it('pins the reviewed machine and endpoint, labels credentials, and prevents duplicate save', async () => {
   const held = Promise.withResolvers<void>()
   const save = vi.fn(() => held.promise),

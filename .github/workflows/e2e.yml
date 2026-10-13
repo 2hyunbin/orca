@@ -306,6 +306,8 @@ jobs:
               . != "tests/e2e/windows-missing-appdata-startup.spec.ts" and
               (startswith("tests/e2e/ssh-orcad-") | not) and
               . != "tests/e2e/plugin-viewer-managed-runtime.spec.ts" and
+              . != "tests/e2e/plugin-environment-ssh.spec.ts" and
+              . != "tests/e2e/plugin-environment-endpoint.spec.ts" and
               . != "tests/e2e/plugin-packaged-cohort.spec.ts" and
               . != "tests/e2e/plugin-packaged-parser-recovery.spec.ts" and
               . != "tests/e2e/plugin-packaged-ssh.spec.ts"
@@ -416,7 +418,7 @@ jobs:
   orcad-ssh-docker:
     name: ssh on managed orcad (Docker ${{ matrix.shard }})
     needs: [build, prepare-native-cache]
-    if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/ssh-orcad-') || contains(inputs.test_files, 'tests/e2e/plugin-viewer-managed-runtime.spec.ts')
+    if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/ssh-orcad-') || contains(inputs.test_files, 'tests/e2e/plugin-viewer-managed-runtime.spec.ts') || contains(inputs.test_files, 'tests/e2e/plugin-environment-ssh.spec.ts') || contains(inputs.test_files, 'tests/e2e/plugin-environment-endpoint.spec.ts')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -460,7 +462,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           export ORCA_E2E_ORCAD_CONVERT_TEMPLATE="$RUNNER_TEMP/orcad-convert-template"
-          xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/ssh-orcad- tests/e2e/plugin-viewer-managed-runtime.spec.ts --project=electron-headless --workers=1 --shard="$SHARD"
+          xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/ssh-orcad- tests/e2e/plugin-viewer-managed-runtime.spec.ts tests/e2e/plugin-environment-ssh.spec.ts tests/e2e/plugin-environment-endpoint.spec.ts --project=electron-headless --workers=1 --shard="$SHARD"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

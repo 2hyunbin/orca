@@ -38,14 +38,22 @@ function fixture() {
         return held.promise
       }
     ),
-    save: vi.fn(async (_owner: string, _ticket: string, _key?: string): Promise<SshTarget> => ({
-      id: 'provider-one',
-      label: 'Devbox',
-      host: 'box.internal',
-      port: 22,
-      username: 'developer'
-    })),
-    revokeOwner: vi.fn()
+    save: vi.fn(
+      async (
+        _owner: string,
+        _ticket: string,
+        _key?: string,
+        _approve?: true
+      ): Promise<SshTarget> => ({
+        id: 'provider-one',
+        label: 'Devbox',
+        host: 'box.internal',
+        port: 22,
+        username: 'developer'
+      })
+    ),
+    revokeOwner: vi.fn(),
+    discard: vi.fn(() => true)
   }
   const controller = new PluginEnvironmentProviderIpcController(
     {
@@ -76,6 +84,35 @@ function fixture() {
   return { ssh, controller, signals, input, finish }
 }
 describe('provider SSH reviews use trusted window ownership', () => {
+  it('confines review discard to a trusted window and strict ticket identity', () => {
+    const f = fixture(),
+      ticketId = randomUUID()
+    expect(() => f.controller.discardSsh(new Sender(3), { ticketId })).toThrow('trusted app')
+    expect(() =>
+      f.controller.discardSsh(new Sender(1), { ticketId, providerId: review.providerId })
+    ).toThrow()
+    expect(f.ssh.discard).not.toHaveBeenCalled()
+    expect(f.controller.discardSsh(new Sender(1), { ticketId })).toBe(true)
+    expect(f.ssh.discard).toHaveBeenCalledExactlyOnceWith(expect.any(String), ticketId)
+  })
+  it('forwards explicit endpoint approval only through the validated trusted-window request', async () => {
+    const f = fixture()
+    const ticketId = randomUUID()
+    expect(() =>
+      f.controller.saveSsh(new Sender(1), { ticketId, approveEndpointUpdate: false })
+    ).toThrow()
+    expect(() =>
+      f.controller.saveSsh(new Sender(3), { ticketId, approveEndpointUpdate: true })
+    ).toThrow('trusted app')
+    expect(f.ssh.save).not.toHaveBeenCalled()
+    await f.controller.saveSsh(new Sender(1), { ticketId, approveEndpointUpdate: true })
+    expect(f.ssh.save).toHaveBeenCalledExactlyOnceWith(
+      expect.any(String),
+      ticketId,
+      undefined,
+      true
+    )
+  })
   it('refuses untrusted and forged prepare/save payloads before touching provider or SSH state', () => {
     const f = fixture()
     expect(() => f.controller.prepareSsh(new Sender(3), f.input)).toThrow('trusted app')

@@ -14,6 +14,10 @@ import { resolveReviewedPluginEnvironmentProvider } from './plugin-environment-p
 import type { PluginService } from './plugin-service'
 import type { JournaledEnvironmentRecipeResult } from '../../shared/plugins/plugin-environment-recipe-result'
 import { getSshTargetRegistryStore } from '../ssh/ssh-target-registry'
+import {
+  assertEnvironmentProviderSshOwner,
+  environmentProviderSshTargetId
+} from '../ssh/ssh-environment-provider-registration'
 
 type Ticket = {
   ownerKey: string
@@ -21,6 +25,7 @@ type Ticket = {
   review: PluginEnvironmentProviderReview
   binding: PluginEnvironmentSshBinding
   preview: EnvironmentProviderSshPreview
+  previousTarget?: SshTarget
 }
 
 export type PluginEnvironmentProviderSshOptions = {
@@ -33,6 +38,7 @@ export type PluginEnvironmentProviderSshOptions = {
   ): Promise<JournaledEnvironmentRecipeResult>
   isMutationPending(providerId: string, resourceId?: string): boolean
   onTargetSaved?(providerId: string): void
+  retireTarget?(target: SshTarget): Promise<void>
 }
 
 export class PluginEnvironmentProviderSshReviews {
@@ -98,24 +104,45 @@ export class PluginEnvironmentProviderSshReviews {
     ) {
       throw new Error('Environment provider connection authority changed during review')
     }
-    const preview = {
+    const previousTarget = getSshTargetRegistryStore()?.getTarget(
+      environmentProviderSshTargetId(binding)
+    )
+    const previousConnection = previousTarget?.environmentProvider?.connection
+    const changedConnection =
+      previousConnection &&
+      JSON.stringify(previousConnection) !== JSON.stringify(binding.connection)
+    const preview: EnvironmentProviderSshPreview = {
       ticketId: randomUUID(),
       expiresAt: Date.now() + 5 * 60 * 1000,
       providerId: review.providerId,
       contextId: review.contextId,
-      resource: structuredClone(resource)
+      resource: structuredClone(resource),
+      ...(changedConnection
+        ? {
+            endpointUpdate: {
+              previousConnection: structuredClone(previousConnection),
+              savedIdentityFile: Boolean(previousTarget?.identityFile)
+            }
+          }
+        : {})
     }
     this.tickets.set(preview.ticketId, {
       ownerKey,
       controller: new AbortController(),
       review,
       binding,
+      ...(previousTarget ? { previousTarget: structuredClone(previousTarget) } : {}),
       preview: structuredClone(preview)
     })
     return preview
   }
 
-  async save(ownerKey: string, ticketId: string, identityFile?: string): Promise<SshTarget> {
+  async save(
+    ownerKey: string,
+    ticketId: string,
+    identityFile?: string,
+    approveEndpointUpdate?: true
+  ): Promise<SshTarget> {
     const ticket = this.tickets.get(ticketId)
     if (
       !ticket ||
@@ -128,6 +155,11 @@ export class PluginEnvironmentProviderSshReviews {
     this.tickets.delete(ticketId)
     this.consuming.add(ticket)
     try {
+      if (Boolean(ticket.preview.endpointUpdate) !== Boolean(approveEndpointUpdate)) {
+        throw new Error(
+          'Provider connection details changed; explicitly review and approve the saved host update'
+        )
+      }
       const store = getSshTargetRegistryStore()
       if (!store) {
         throw new Error('SSH connection management is unavailable on this host')
@@ -140,18 +172,25 @@ export class PluginEnvironmentProviderSshReviews {
         this.options.userDataPath,
         ticket.binding.binding
       ).read()
-      const saved = store
-        .listTargets()
-        .find(
-          (entry) =>
-            entry.environmentProvider?.resourceId === ticket.binding.resourceId &&
-            entry.environmentProvider.binding.providerId === ticket.review.providerId &&
-            entry.environmentProvider.binding.contextId === ticket.review.contextId
-        )
+      const saved = store.getTarget(environmentProviderSshTargetId(ticket.binding))
       const previous = journal.previousBindings?.find(
         (entry) =>
           JSON.stringify(entry.binding) === JSON.stringify(saved?.environmentProvider?.binding)
       )?.binding
+      if (JSON.stringify(saved) !== JSON.stringify(ticket.previousTarget)) {
+        throw new Error('The saved SSH target changed during connection review')
+      }
+      if (ticket.preview.endpointUpdate) {
+        if (!saved || !this.options.retireTarget) {
+          throw new Error('The host cannot safely retire this saved SSH connection')
+        }
+        // Check ownership before retiring contact, then pin the same registration through publication.
+        assertEnvironmentProviderSshOwner(saved, ticket.binding, previous)
+        if (saved.orcadProvisioning) {
+          throw new Error('The saved SSH host is still provisioning its managed server')
+        }
+        await this.options.retireTarget(structuredClone(saved))
+      }
       if (ticket.controller.signal.aborted || !current.isCurrent()) {
         throw new Error('Environment connection review changed')
       }
@@ -166,7 +205,8 @@ export class PluginEnvironmentProviderSshReviews {
           ...(connection.configHost ? { configHost: connection.configHost } : {}),
           ...(identityFile ? { identityFile } : {})
         },
-        previous
+        previous,
+        ticket.preview.endpointUpdate ? ticket.previousTarget : undefined
       )
       await store.getOrcadMigrationSource().flushPendingOrThrowAsync()
       this.options.onTargetSaved?.(ticket.review.providerId)
@@ -220,6 +260,17 @@ export class PluginEnvironmentProviderSshReviews {
         ticket.controller.abort()
       }
     }
+  }
+  discard(ownerKey: string, ticketId: string): boolean {
+    const ticket =
+      this.tickets.get(ticketId) ??
+      [...this.consuming].find((entry) => entry.preview.ticketId === ticketId)
+    if (!ticket || ticket.ownerKey !== ownerKey) {
+      return false
+    }
+    ticket.controller.abort()
+    this.tickets.delete(ticketId)
+    return true
   }
   private prune(): void {
     for (const [id, ticket] of this.tickets) {

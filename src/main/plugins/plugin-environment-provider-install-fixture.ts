@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pluginEnvironmentRecipeSchema } from '../../shared/plugins/plugin-environment-recipe-artifact'
-import { PluginService } from './plugin-service'
+import { PluginService, type PluginServiceOptions } from './plugin-service'
 import { installPluginFromLocalPath } from './plugin-install'
 import { getUserPluginsDir } from './plugin-discovery'
 import {
@@ -23,6 +23,7 @@ export async function createPluginEnvironmentProviderInstallFixture(
   options: {
     pageSize?: number
     retireConnections?: (providerId: string, resourceId?: string) => Promise<void>
+    retireTarget?: NonNullable<PluginServiceOptions['retireEnvironmentProviderSshTarget']>
     recovery?: boolean
     loseCreateResponse?: boolean
     loseResponseAction?: 'sleep' | 'resume' | 'archive' | 'delete'
@@ -137,6 +138,7 @@ process.stdout.write(JSON.stringify({...identity,...response}));`
     userDataPath: join(root, 'user-data'),
     hostVersion: '1.4.0',
     retireEnvironmentProviderConnections: options.retireConnections,
+    retireEnvironmentProviderSshTarget: options.retireTarget,
     getEnvironmentRecipeLaunchEnvironment: async () => ({
       PROVIDER_BACKEND_DIRECTORY: backendDirectory,
       PROVIDER_CONTEXT_ID: backendContext,

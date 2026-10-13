@@ -8,6 +8,7 @@ import { useMountedRef } from '@/hooks/useMountedRef'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { sshTargetConnectFailureText } from '@/ssh/ssh-host-server-status-copy'
+import { compactIpcErrorMessage } from '@/lib/ipc-error'
 import { PluginEnvironmentResources } from './PluginEnvironmentResources'
 import { PluginEnvironmentConnectionDialog } from './PluginEnvironmentConnectionDialog'
 
@@ -22,11 +23,17 @@ export function PluginEnvironmentConnectionResources({
   const [preview, setPreview] = useState<EnvironmentProviderSshPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const pending = useRef<string | null>(null)
+  const reviewTicket = useRef<string | null>(null)
   const mounted = useMountedRef()
   useEffect(
     () => () => {
       if (pending.current) {
         void window.api.plugins.cancelEnvironmentProvider?.({ operationId: pending.current })
+      }
+      if (reviewTicket.current) {
+        void window.api.plugins
+          .discardEnvironmentProviderSshReview?.({ ticketId: reviewTicket.current })
+          .catch(() => {})
       }
     },
     []
@@ -48,7 +55,12 @@ export function PluginEnvironmentConnectionResources({
         expectedRevision: resource.revision
       })
       if (mounted.current) {
+        reviewTicket.current = result.ticketId
         setPreview(result)
+      } else {
+        void window.api.plugins
+          .discardEnvironmentProviderSshReview?.({ ticketId: result.ticketId })
+          .catch(() => {})
       }
     } catch {
       if (mounted.current) {
@@ -73,11 +85,13 @@ export function PluginEnvironmentConnectionResources({
     }
     const target = await api({
       ticketId: preview.ticketId,
+      ...(preview.endpointUpdate ? { approveEndpointUpdate: true as const } : {}),
       ...(identityFile ? { identityFile } : {})
     })
     if (!mounted.current) {
       return
     }
+    reviewTicket.current = null
     setPreview(null)
     try {
       useAppStore.getState().setSshTargetsMetadata(await window.api.ssh.listTargets())
@@ -87,14 +101,18 @@ export function PluginEnvironmentConnectionResources({
       }
     } catch (cause) {
       if (mounted.current) {
+        const fallback = translate(
+          'auto.components.settings.PluginEnvironmentConnectionResources.connectionError',
+          'Could not connect. Check its credentials and host-key trust in SSH Hosts.'
+        )
+        const reason =
+          compactIpcErrorMessage(sshTargetConnectFailureText(target.id, cause, fallback)) ??
+          fallback
         setError(
-          sshTargetConnectFailureText(
-            target.id,
-            cause,
-            translate(
-              'auto.components.settings.PluginEnvironmentConnectionResources.connectionError',
-              'The SSH host is saved, but could not connect. Check its credentials and host-key trust in SSH Hosts.'
-            )
+          translate(
+            'auto.components.settings.PluginEnvironmentConnectionResources.savedConnectionError',
+            'The SSH host is saved. {{reason}}',
+            { reason }
           )
         )
       }
@@ -118,7 +136,13 @@ export function PluginEnvironmentConnectionResources({
       {preview ? (
         <PluginEnvironmentConnectionDialog
           preview={preview}
-          onClose={() => setPreview(null)}
+          onClose={() => {
+            reviewTicket.current = null
+            setPreview(null)
+            void window.api.plugins
+              .discardEnvironmentProviderSshReview?.({ ticketId: preview.ticketId })
+              .catch(() => {})
+          }}
           onSave={save}
         />
       ) : null}

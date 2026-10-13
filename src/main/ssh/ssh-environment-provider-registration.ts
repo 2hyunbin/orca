@@ -86,7 +86,14 @@ export function upsertEnvironmentProviderTarget(
     generation: changedConnection
       ? store.allocateSshTargetGeneration()
       : (existing?.generation ?? store.allocateSshTargetGeneration()),
-    ...(changedConnection ? { remoteRuntimeResolution: undefined } : {})
+    ...(changedConnection
+      ? {
+          remoteRuntimeResolution: undefined,
+          managedServerUnavailable: undefined,
+          managedServerMoveOffered: undefined,
+          managedServerUpdateFailure: undefined
+        }
+      : {})
   }
   if (existing) {
     return store.updateSshTarget(id, next) ?? next

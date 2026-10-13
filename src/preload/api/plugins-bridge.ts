@@ -20,6 +20,8 @@ export const pluginsApi = {
     ipcRenderer.invoke('plugins:prepareEnvironmentProviderSsh', input),
   saveEnvironmentProviderSsh: (input) =>
     ipcRenderer.invoke('plugins:saveEnvironmentProviderSsh', input),
+  discardEnvironmentProviderSshReview: (input) =>
+    ipcRenderer.invoke('plugins:discardEnvironmentProviderSshReview', input),
   recoverEnvironmentProvider: (input) =>
     ipcRenderer.invoke('plugins:recoverEnvironmentProvider', input),
   prepareEnvironmentProviderMigration: (input) =>

@@ -25,6 +25,7 @@ import { resolveLoginShellEnvironment } from './login-shell-environment'
 import { setEnvironmentProviderSshAuthorizer } from '../ssh/environment-provider-ssh-admission'
 import {
   retireEnvironmentProviderConnections,
+  retireEnvironmentProviderSshTarget,
   watchEnvironmentProviderSshLease
 } from '../ipc/environment-provider-ssh-retirement'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
@@ -68,6 +69,7 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
   state.pluginService = new PluginService({
     getEnvironmentRecipeLaunchEnvironment: () => resolveLoginShellEnvironment(),
     retireEnvironmentProviderConnections,
+    retireEnvironmentProviderSshTarget,
     userDataPath: app.getPath('userData'),
     hostVersion: app.getVersion(),
     bundledPluginsRoot: bundledPluginRoot,

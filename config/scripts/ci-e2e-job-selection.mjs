@@ -13,6 +13,10 @@ export const LAYOUT_ORACLE_HEADLESS_E2E_SPEC = 'tests/e2e/workspace-layout-oracl
 export const MANAGED_SSH_E2E_SPEC_PREFIX = 'tests/e2e/ssh-orcad-'
 export const PLUGIN_VIEWER_MANAGED_RUNTIME_E2E_SPEC =
   'tests/e2e/plugin-viewer-managed-runtime.spec.ts'
+export const PLUGIN_ENVIRONMENT_SSH_E2E_SPECS = [
+  'tests/e2e/plugin-environment-ssh.spec.ts',
+  'tests/e2e/plugin-environment-endpoint.spec.ts'
+]
 // These require the actual production app built by the PR package job.
 export const PACKAGED_PLUGIN_E2E_SPECS = [
   'tests/e2e/plugin-packaged-cohort.spec.ts',
@@ -26,6 +30,7 @@ export const DEDICATED_E2E_SPECS = [
   LAYOUT_ORACLE_HEADLESS_E2E_SPEC,
   WINDOWS_MISSING_APPDATA_E2E_SPEC,
   PLUGIN_VIEWER_MANAGED_RUNTIME_E2E_SPEC,
+  ...PLUGIN_ENVIRONMENT_SSH_E2E_SPECS,
   ...PACKAGED_PLUGIN_E2E_SPECS
 ]
 const dedicatedSpecs = new Set(DEDICATED_E2E_SPECS)

@@ -2,44 +2,17 @@ import { randomUUID } from 'node:crypto'
 import { cp, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SshConnectionStore } from '../ssh/ssh-connection-store'
-import { createMockStore } from '../ssh/ssh-connection-store-test-fixture'
 import { pluginEnvironmentRecipeSchema } from '../../shared/plugins/plugin-environment-recipe-artifact'
 import { pluginManifestSchema } from '../../shared/plugins/plugin-manifest'
 import { setSshTargetRegistryStore } from '../ssh/ssh-target-registry'
 import { getPluginsDataDir, getUserPluginsDir } from './plugin-discovery'
 import { installPluginFromLocalPath, removeInstalledPlugin } from './plugin-install'
+import { disposePluginEnvironmentProviderInstallFixtures } from './plugin-environment-provider-install-fixture'
 import {
-  createPluginEnvironmentProviderInstallFixture,
-  disposePluginEnvironmentProviderInstallFixtures
-} from './plugin-environment-provider-install-fixture'
+  createProviderSshFixture as fixture,
+  providerFixtureConnection as connection
+} from './plugin-environment-provider-ssh-fixture'
 
-const connection = {
-  type: 'ssh' as const,
-  host: 'box.internal',
-  port: 22,
-  username: 'developer',
-  projectRoot: '/projects'
-}
-async function fixture(options: { pageSize?: number } = {}) {
-  const f = await createPluginEnvironmentProviderInstallFixture(options)
-  await f.approve()
-  await f.service.environmentProviders.configure(f.review)
-  const resource = {
-    id: 'devbox',
-    name: 'Existing devbox',
-    revision: 'r1',
-    lifetime: 'long-lived' as const,
-    state: 'running' as const,
-    connection
-  }
-  await writeFile(join(f.cwd, 'backend.json'), JSON.stringify({ devbox: resource }))
-  const persisted = { ...createMockStore(), flushPendingOrThrowAsync: vi.fn(async () => {}) }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture implements the persistence operations exercised by SSH target registration and durable flush.
-  const store = new SshConnectionStore(persisted as never)
-  setSshTargetRegistryStore(store)
-  return { ...f, store, persisted, resource, ssh: f.service.environmentProviders.ssh }
-}
 afterEach(async () => {
   setSshTargetRegistryStore(null)
   await disposePluginEnvironmentProviderInstallFixtures()

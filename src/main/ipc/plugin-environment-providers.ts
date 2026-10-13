@@ -14,7 +14,8 @@ import {
 import { PluginEnvironmentProviderWindowOwners } from './plugin-environment-provider-window-owners'
 import {
   pluginEnvironmentProviderSshPrepareSchema,
-  pluginEnvironmentProviderSshSaveSchema
+  pluginEnvironmentProviderSshSaveSchema,
+  pluginEnvironmentProviderSshDiscardSchema
 } from '../../shared/plugins/plugin-environment-provider-ssh-api'
 import type { PluginEnvironmentProviderService } from '../plugins/plugin-environment-provider-service'
 import { isTrustedBrowserRenderer } from './browser-renderer-trust'
@@ -39,7 +40,10 @@ type ProviderOperations = Pick<
   PluginEnvironmentProviderService,
   'list' | 'configure' | 'snapshot' | 'execute'
 > & {
-  ssh?: Pick<PluginEnvironmentProviderService['ssh'], 'prepare' | 'save' | 'revokeOwner'>
+  ssh?: Pick<
+    PluginEnvironmentProviderService['ssh'],
+    'prepare' | 'save' | 'revokeOwner' | 'discard'
+  >
   recover?: PluginEnvironmentProviderService['recover']
   prepareMigration?: PluginEnvironmentProviderService['prepareMigration']
   commitMigration?: PluginEnvironmentProviderService['commitMigration']
@@ -156,12 +160,18 @@ export class PluginEnvironmentProviderIpcController {
   }
   saveSsh(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
-    const { ticketId, identityFile } = pluginEnvironmentProviderSshSaveSchema.parse(input)
+    const { ticketId, identityFile, approveEndpointUpdate } =
+      pluginEnvironmentProviderSshSaveSchema.parse(input)
     const ssh = this.service.ssh
     if (!ssh) {
       throw new Error('Provider SSH management is unavailable')
     }
-    return ssh.save(this.windows.ownerKey(sender), ticketId, identityFile)
+    return ssh.save(this.windows.ownerKey(sender), ticketId, identityFile, approveEndpointUpdate)
+  }
+  discardSsh(sender: PluginEnvironmentProviderSender, input: unknown): boolean {
+    this.requireTrusted(sender)
+    const { ticketId } = pluginEnvironmentProviderSshDiscardSchema.parse(input)
+    return this.service.ssh?.discard(this.windows.ownerKey(sender), ticketId) ?? false
   }
   private async runOwned<T>(
     sender: PluginEnvironmentProviderSender,
@@ -241,6 +251,10 @@ export function registerPluginEnvironmentProviderHandlers(
   )
   registerPluginRendererHandler('plugins:saveEnvironmentProviderSsh', (event, input: unknown) =>
     controller.saveSsh(event.sender, input)
+  )
+  registerPluginRendererHandler(
+    'plugins:discardEnvironmentProviderSshReview',
+    (event, input: unknown) => controller.discardSsh(event.sender, input)
   )
   registerPluginRendererHandler('plugins:listEnvironmentProviders', (event) =>
     controller.list(event.sender)

@@ -149,7 +149,7 @@ test('provider machine review connects to a real SSH server and retires contact 
       exact: true
     })
     if (await usageNotice.isVisible()) {
-      await usageNotice.getByRole('button', { name: 'Got it', exact: true }).click()
+      await usageNotice.getByRole('button', { name: 'Dismiss', exact: true }).click()
     }
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await page.getByRole('button', { name: 'SSH Hosts', exact: true }).click()

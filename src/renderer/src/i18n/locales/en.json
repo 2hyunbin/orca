@@ -11967,7 +11967,11 @@
           "viewerWarning": "The viewer runs parsing code in an isolated worker. It can read only the file you open with it, and cannot save changes or access the network. Orca controls the viewer interface. Any additional panels and permissions are listed separately.",
           "retainCurrent": "Your installed version ({{version}}) stays available while you review. Approving replaces it with this exact release and grants the access listed below. Your enabled or disabled choice is preserved.",
           "keepCurrent": "Keep current version",
-          "approveUpdate": "Approve and update"
+          "approveUpdate": "Approve and update",
+          "environmentOne": "1 environment provider",
+          "environments": "{{count}} environment providers",
+          "providerPreviewMissing": "This host did not provide all provider commands for review. Update Orca and review again; this release cannot be approved here.",
+          "providerWarning": "Environment provider commands run with your account on the selected execution host. They can create, stop and delete machines. Review the program and literal arguments before approving this release."
         },
         "PluginMarketplaceSourceDialog": {
           "addFailed": "Could not add this marketplace. Check the Git URL, ref, and your Git credentials.",
@@ -11996,7 +12000,8 @@
           "title": "Remove plugin?",
           "description": "This removes {{value0}} and its stored plugin data from this computer. You can install it again later.",
           "cancel": "Cancel",
-          "remove": "Remove plugin"
+          "remove": "Remove plugin",
+          "environmentDescription": "This removes {{value0}} from this computer. Saved machine inventory and operation history remain in SSH Hosts. Manage the machines through your company’s tooling or reinstall the provider."
         },
         "PluginRollbackDialog": {
           "title": "Roll back plugin?",
@@ -12844,7 +12849,8 @@
           "search": "Search environment providers",
           "loading": "Loading providers…",
           "empty": "Install and enable an environment provider in Plugins to get started.",
-          "noMatches": "No providers match your search."
+          "noMatches": "No providers match your search.",
+          "savedError": "Could not load saved provider history. The saved files are kept; refresh to try again."
         },
         "PluginEnvironmentProviderCard": {
           "readError": "Could not read saved machine details. Refresh the provider before trying again.",
@@ -12867,7 +12873,10 @@
           "delete": "Delete",
           "stopUnavailable": "This window cannot stop that operation. Refresh inventory or check its receipt; the original change will not be retried.",
           "stopFailed": "Could not stop the provider command. Wait for its result or check the original operation’s receipt.",
-          "savedPending": "A saved operation has no final response"
+          "savedPending": "A saved operation has no final response",
+          "inProgress": "Provider operation in progress",
+          "recoveredInventory": "The provider confirmed an earlier change, but current machine details still need refreshing. Refresh inventory before reconnecting or changing that machine.",
+          "reviewConfiguration": "Review configuration / switch account"
         },
         "PluginEnvironmentActionDialog": {
           "create": "Create environment",
@@ -12895,11 +12904,21 @@
           "keyHint": "Leave blank to use your existing SSH configuration or agent.",
           "saveError": "Could not save this connection. Close this review and refresh the machine’s current details before trying again.",
           "cancel": "Cancel",
-          "save": "Save & connect"
+          "save": "Save & connect",
+          "updateTitle": "Update saved environment connection",
+          "previousEndpoint": "Previously saved SSH endpoint",
+          "newEndpoint": "New SSH endpoint",
+          "updateExplanation": "Automations bound to the old connection need a new review. Orca will check SSH credentials and host trust before reconnecting.",
+          "keepSavedKey": "Leave blank to keep this host’s saved identity file.",
+          "updateSave": "Update & connect",
+          "saving": "Saving connection…",
+          "updateSummary": "Updating will close the old connection. This host keeps its workspaces, history and managed server.",
+          "details": "Connection details"
         },
         "PluginEnvironmentConnectionResources": {
           "reviewError": "Could not confirm this machine’s current connection details. Refresh inventory and check the provider before connecting.",
-          "connectionError": "The SSH host is saved, but could not connect. Check its credentials and host-key trust in SSH Hosts."
+          "connectionError": "Could not connect. Check its credentials and host-key trust in SSH Hosts.",
+          "savedConnectionError": "The SSH host is saved. {{reason}}"
         },
         "PluginEnvironmentResources": {
           "connect": "Connect"
@@ -12939,7 +12958,46 @@
             "resume": "Wake",
             "archive": "Archive",
             "delete": "Delete"
-          }
+          },
+          "inactive": "Enable and review this provider to check the unresolved change. The original operation remains saved."
+        },
+        "PluginEnvironmentMigrationDialog": {
+          "account": "Account / tenant ID",
+          "cancel": "Cancel",
+          "check": "Check account",
+          "checkExplanation": "Check the newly reviewed provider’s List command for this account. Previous machines and operation history remain saved. This check does not create, sleep or delete machines.",
+          "commitError": "The configuration changed during review. Close this dialog and check it again. Previous history remains saved.",
+          "confirm": "Confirm configuration",
+          "confirmExplanation": "Only the machines confirmed under this account become current. Previous configuration history is kept separately. Existing SSH connections will be retired; workspaces and machines are not deleted.",
+          "inventory": "Machines confirmed by the provider",
+          "next": "Reviewed account",
+          "prepareError": "Could not verify this account and configuration. Check the provider’s approval and sign-in, or settle any unresolved change in the original account before switching.",
+          "previous": "Previous account",
+          "provenance": "Configuration fingerprints",
+          "stop": "Stop check",
+          "stopFailed": "Could not stop this account check. Wait for it to finish before closing.",
+          "stopUnavailable": "Could not stop this account check. Wait for it to finish before closing.",
+          "title": "Review provider configuration",
+          "unresolved": "Unresolved changes in this account stay blocked. This configuration update does not confirm or repeat them.",
+          "working": "Checking or saving configuration…"
+        },
+        "PluginEnvironmentMigrationInventory": {
+          "empty": "This account returned no machines. Previous history is kept; absence does not prove deletion."
+        },
+        "PluginEnvironmentPreviousHistory": {
+          "error": "Could not read previous configuration history. The saved record has not been reset.",
+          "newer": "Newer configuration",
+          "older": "Older configuration",
+          "readonly": "Read-only history from a previous account or source. These rows do not grant current machine access; missing machines are not assumed deleted.",
+          "show": "Previous configuration history"
+        },
+        "PluginEnvironmentSavedProviderCard": {
+          "empty": "No machines have been recorded for this configuration.",
+          "failed": "Could not read saved history. Refresh providers and try again; the saved record is kept.",
+          "more": "Show more machines",
+          "observation": "Last recorded inventory and operations. Connection loss or a missing row does not establish machine deletion.",
+          "readonly": "Saved history · provider inactive. Enable and review this provider in Plugins to refresh or manage these machines.",
+          "show": "Show saved inventory"
         }
       },
       "right": {
@@ -19769,7 +19827,8 @@
     }
   },
   "common": {
-    "retry": "Retry"
+    "retry": "Retry",
+    "loading": "Loading…"
   },
   "terminal": {
     "sessionSaveFailure": {
@@ -20130,7 +20189,12 @@
   "plugins": {
     "catalog": {
       "cached": "Showing cached listings. Some sources could not be refreshed; installed plugins remain available.",
-      "details": "Plugin details"
+      "details": "Plugin details",
+      "declaredData": "Declared data pack",
+      "minimumOrca": "Orca {{version}}+",
+      "publisherPreview": "Publisher preview",
+      "releaseHash": "Package SHA-256",
+      "reviewRequired": "Review required"
     },
     "viewer": {
       "loading": "Opening file…",

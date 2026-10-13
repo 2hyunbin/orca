@@ -1,6 +1,7 @@
 import { pluginEnvironmentProviderHistorySchema } from '../../shared/plugins/plugin-environment-provider-history-api'
 import { PluginEnvironmentRecipeJournalFile } from './plugin-environment-recipe-journal-file'
 import { PluginEnvironmentProviderMigration } from './plugin-environment-provider-migration'
+import type { SshTarget } from '../../shared/ssh-types'
 import { createPluginEnvironmentProviderControlContext } from './plugin-environment-provider-control-context'
 import {
   pluginEnvironmentProviderMigrationPrepareSchema,
@@ -49,6 +50,7 @@ export class PluginEnvironmentProviderService {
       launchEnvironment(): Promise<NodeJS.ProcessEnv>
       onChanged?(providerId: string): void
       retireConnections?(providerId: string, resourceId?: string): Promise<void>
+      retireTarget?(target: SshTarget): Promise<void>
     }
   ) {
     this.catalog = new PluginEnvironmentProviderCatalog({
@@ -64,6 +66,7 @@ export class PluginEnvironmentProviderService {
       service: options.service,
       userDataPath: options.userDataPath,
       onTargetSaved: options.onChanged,
+      retireTarget: options.retireTarget,
       isMutationPending: (providerId, resourceId) =>
         [...this.active.values()].some(
           (operation) =>
@@ -128,6 +131,7 @@ export class PluginEnvironmentProviderService {
       service,
       onChanged,
       retireConnections: options.retireEnvironmentProviderConnections,
+      retireTarget: options.retireEnvironmentProviderSshTarget,
       userDataPath: options.userDataPath,
       launchEnvironment:
         options.getEnvironmentRecipeLaunchEnvironment ?? (async () => ({ ...process.env }))
