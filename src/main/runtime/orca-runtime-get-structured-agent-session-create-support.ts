@@ -77,6 +77,15 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
       )
   }
 
+  /** The agent's configured env, with the account a desktop that owns this host's accounts chose
+   *  laid over it, as its own launches here carry. */
+  protected structuredAgentLaunchEnv(agent: StructuredAgentId, settings) {
+    return {
+      ...resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
+      ...this.accounts.hostLaunchEnvFor(agent)
+    }
+  }
+
   /** The definition this runtime registers for `agent`: what its account home pins. Read from the
    *  registration list, so neither create nor a catalog read installs the host to learn it. */
   protected requireRegisteredStructuredAgent(agent: StructuredAgentId) {
@@ -176,10 +185,7 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
         reason: 'hostUnsupported'
       })
     }
-    const launchEnv = resolveTuiAgentLaunchEnv(
-      agent,
-      this.requireStore().getSettings().agentDefaultEnv
-    )
+    const launchEnv = this.structuredAgentLaunchEnv(agent, this.requireStore().getSettings())
     return resolveAccountHome({ launchEnv, location: null })
   }
 
@@ -211,7 +217,7 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
       })
     }
     const settings = this.requireStore().getSettings()
-    const launchEnv = resolveTuiAgentLaunchEnv(input.agent, settings.agentDefaultEnv)
+    const launchEnv = this.structuredAgentLaunchEnv(input.agent, settings)
     const options = this.structuredAgentSessionLaunchSeedOptions(input.agent)
     const location = await this.resolveStructuredAgentSessionLocation(input.worktree)
     const definition = this.requireRegisteredStructuredAgent(input.agent)

@@ -31,7 +31,10 @@ import {
 import { interruptedLocalWorktreeRemovalJob } from './runtime-interrupted-local-worktree-removal'
 import { retryFailedRemovalUnlessRegistered } from '../worktree-removal-table'
 import type { GitWorktreeInfo } from '../../shared/worktree/types'
-import { resolveAgentTerminalCreateOptions } from './runtime-agent-terminal-startup'
+import {
+  resolveAgentTerminalCreateOptions,
+  withHostAccountLaunchEnv
+} from './runtime-agent-terminal-startup'
 
 export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWithRemoveManagedWorktree {
   protected async resolveWorktreeRemovalTarget(
@@ -241,10 +244,15 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
     workspace: TerminalWorkspaceLaunchScope,
     opts: TerminalCreateOptions
   ): Promise<TerminalCreateOptions> {
-    return resolveAgentTerminalCreateOptions(workspace, opts, {
+    const launch = await resolveAgentTerminalCreateOptions(workspace, opts, {
       store: this.store,
       hostIdentity: this.runtimeId,
       toSessionOptions: (preferences) => this.toAgentSessionOptions(preferences)
     })
+    return withHostAccountLaunchEnv(
+      opts,
+      launch,
+      this.accounts.hostLaunchEnvFor(launch.launchAgent)
+    )
   }
 }

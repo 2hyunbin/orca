@@ -19,6 +19,11 @@ import type { CodexRateLimitResetOutcome, RateLimitState } from '../../shared/ra
 import type { CodexResetCreditExpectedScope } from '../../shared/codex-reset-credit-scope'
 import type { CommitMessageAgentEnvironmentResolvers } from '../text-generation/commit-message-agent-environment'
 import type { ClaudeAccountSelectionTarget } from '../claude-accounts/runtime-selection'
+import {
+  hostAccountLaunchEnvFor,
+  hostAccountsManagedByDesktopMessage,
+  type HostAccountLaunchEnv
+} from '../../shared/host-account-launch-env'
 
 export type RuntimeAccountServices = {
   claudeAccounts: ClaudeAccountService
@@ -49,6 +54,8 @@ export type CodexRateLimitResetRpcResult = {
 export class RuntimeAccountController {
   private services: RuntimeAccountServices | null = null
   private commitMessageAgentEnvironment: CommitMessageAgentEnvironmentResolvers | null = null
+  /** Pushed by the desktop that owns this host's accounts; held in memory, re-pushed on connect. */
+  private hostLaunchEnv: HostAccountLaunchEnv | null = null
 
   setServices(services: RuntimeAccountServices): void {
     this.services = services
@@ -59,7 +66,34 @@ export class RuntimeAccountController {
   }
 
   getCommitMessageAgentEnvironment(): CommitMessageAgentEnvironmentResolvers | undefined {
-    return this.commitMessageAgentEnvironment ?? undefined
+    if (this.commitMessageAgentEnvironment) {
+      return this.commitMessageAgentEnvironment
+    }
+    const hostLaunchEnv = this.hostLaunchEnv
+    if (!hostLaunchEnv) {
+      return undefined
+    }
+    return {
+      prepareForCodexLaunch: () => hostLaunchEnv.terminal.CODEX_HOME ?? null,
+      prepareForClaudeLaunch: async () => ({
+        configDir: hostLaunchEnv.claude.CLAUDE_CONFIG_DIR ?? '',
+        envPatch: { ...hostLaunchEnv.claude },
+        provenance: 'desktop-host-launch-env'
+      })
+    }
+  }
+
+  /** Refused where this host has account services of its own: they already decide every launch. */
+  setHostLaunchEnv(launchEnv: HostAccountLaunchEnv): void {
+    if (this.services) {
+      throw new Error('This host manages its own provider accounts.')
+    }
+    this.hostLaunchEnv = launchEnv
+  }
+
+  /** The desktop-selected account env for a process `agent` starts here; empty when none. */
+  hostLaunchEnvFor(agent: string | null | undefined): Readonly<Record<string, string>> {
+    return hostAccountLaunchEnvFor(this.hostLaunchEnv, agent)
   }
 
   getClaudeConfigDirectory(target: ClaudeAccountSelectionTarget): string | null {
@@ -212,7 +246,11 @@ export class RuntimeAccountController {
 
   private requireServices(): RuntimeAccountServices {
     if (!this.services) {
-      throw new Error('Account services are not configured on this runtime')
+      throw new Error(
+        this.hostLaunchEnv
+          ? hostAccountsManagedByDesktopMessage(this.hostLaunchEnv.wslDistro)
+          : 'Account services are not configured on this runtime'
+      )
     }
     return this.services
   }

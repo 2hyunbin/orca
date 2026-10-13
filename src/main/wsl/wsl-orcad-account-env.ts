@@ -46,6 +46,10 @@ export function installWslOrcadAccountEnvDependencies(
   installed = dependencies
 }
 
+export function getWslOrcadAccountEnvDependencies(): WslOrcadAccountEnvDependencies | null {
+  return installed
+}
+
 export class WslOrcadAccountEnvError extends Error {
   constructor(message: string) {
     super(message)
@@ -53,7 +57,7 @@ export class WslOrcadAccountEnvError extends Error {
   }
 }
 
-function distroTarget(distro: string): WslAccountTarget {
+export function distroTarget(distro: string): WslAccountTarget {
   return { runtime: 'wsl', wslDistro: distro }
 }
 
