@@ -158,6 +158,48 @@ it('reads those last words when the agent ends its stdout before its exit is see
 })
 
 describe('ACP structured session adapter: turns', () => {
+  it('applies a sent message’s model and effort before its prompt', async () => {
+    const rig = await openAcpAdapterRig()
+    await rig.acquire()
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'chosen-send',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hello' }] },
+      executionOptions: { model: 'grok-4.6', effort: 'low' }
+    })
+    await rig.frame('session/prompt')
+    const methods = rig.child().agent.frames.map((frame) => frame.method)
+    expect(methods.slice(-3)).toEqual([
+      'session/set_config_option',
+      'session/set_config_option',
+      'session/prompt'
+    ])
+    await expect(rig.adapter.readOptions({ sessionId: SESSION, fence: 1 })).resolves.toMatchObject({
+      current: { model: 'grok-4.6', effort: 'low' }
+    })
+  })
+
+  it('does not send a prompt when the agent refuses a message’s model', async () => {
+    const rig = await openAcpAdapterRig({
+      script: (agent) =>
+        agent.on('session/set_config_option', (frame) =>
+          agent.fail(frame, -32602, 'Model unavailable')
+        )
+    })
+    await rig.acquire()
+    await expect(
+      rig.adapter.dispatch({
+        sessionId: SESSION,
+        fence: 1,
+        clientMessageId: 'refused-model',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hello' }] },
+        executionOptions: { model: 'grok-4.6' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(rig.sent('session/prompt')).toEqual([])
+  })
+
   it("sends Grok's prompt identity only to an agent whose dialect echoes it", async () => {
     const rig = await openAcpAdapterRig({
       deps: { spec: { ...GROK, dialect: GENERIC_ACP_DIALECT } }

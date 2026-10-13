@@ -199,6 +199,40 @@ describe('Pi RPC session ownership and delivery', () => {
     expect(h.connection.sent[0]).toMatchObject({ type: 'prompt', message: 'hello' })
   })
 
+  it('applies each sent model before effort and before prompting Pi', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    const result = await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'choice-send',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'chosen' }] },
+      executionOptions: { model: 'anthropic/model-2', effort: 'low' }
+    })
+    expect(result).toEqual({ state: 'admitted' })
+    expect(h.connection.requests.slice(-2)).toEqual(['set_model', 'set_thinking_level'])
+    expect(h.connection.sent).toMatchObject([{ type: 'prompt', message: 'chosen' }])
+  })
+
+  it('leaves the prompt unsent when Pi refuses a sent model', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_model'
+        ? Promise.reject(new JsonlRpcResponseError(command, 'Model unavailable'))
+        : undefined
+    await expect(
+      h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId: 'refused-choice',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'chosen' }] },
+        executionOptions: { model: 'anthropic/model-2' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(h.connection.sent).toEqual([])
+  })
+
   it('rejects stale fences and a Stop for a different turn before sending abort', async () => {
     const h = await setup()
     await expect(

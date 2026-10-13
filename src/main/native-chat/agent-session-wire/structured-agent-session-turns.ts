@@ -12,7 +12,6 @@ import {
 } from '../../../shared/agent-session-failure'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { captureStructuredExecutionOptions } from './structured-agent-session-execution-options'
-import { applyMessageExecutionOptions } from './structured-agent-session-message-options'
 import { isAgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 import {
   agentSessionFailureWords,
@@ -242,29 +241,6 @@ export async function handOverSubmission(
     await handOverStructuredAgentSessionCommand(ctx, submission, body)
     return
   }
-  const codex = ctx.record()?.provider === 'codex'
-  const applied = codex
-    ? { ok: true as const }
-    : await applyMessageExecutionOptions(
-        ctx.adapter,
-        ctx.sessionId,
-        ctx.fence,
-        submission.executionOptions
-      )
-  if (!applied.ok) {
-    await ctx.journal.resolveDispatch({
-      clientMessageId,
-      state: 'rejected',
-      ...agentSessionFailureWords(
-        agentSessionFailureFact('providerRejected', {
-          detail: providerDiagnosticOf(new Error(applied.reason))
-        }),
-        { surface: 'rejection' }
-      ),
-      fence: ctx.fence
-    })
-    return
-  }
   // The message joins the turn running at handover, a steer, or opens its own.
   await ctx.journal.resolveDispatch({
     clientMessageId,
@@ -279,7 +255,7 @@ export async function handOverSubmission(
     clientMessageId,
     body,
     structuredAgentSessionHandoverOrigin(ctx.journal, submission),
-    codex ? submission.executionOptions : undefined
+    submission.executionOptions
   )
   // An admission needs no dispatch row: the submission is already pending.
   if (outcome.state === 'admitted') {

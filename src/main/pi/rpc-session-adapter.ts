@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
-import { agentSessionFailureFact } from '../../shared/agent-session-failure'
-import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import {
   AgentSessionPreSpawnError,
   AgentSessionAcquisitionRootExitObservedError,
@@ -17,10 +15,9 @@ import { compactPiRpcSession } from './rpc-compaction'
 import { buildPiRpcLaunch } from './rpc-launch'
 import type { PiRpcResolvedLaunch } from './rpc-launch-resolution'
 import { PiRpcSession, type PiRpcSessionDeps, type PiRpcConnection } from './rpc-session'
-import { PiRpcPromptError, preparePiRpcPrompt } from './rpc-prompt'
+import { dispatchPiRpcMessage } from './rpc-message-dispatch'
 import { applyPiRpcSessionOption } from './rpc-options'
 import { supportsSupervisedProviderChildLocation } from '../provider-process/supervised-provider-child-location'
-import { ClaudeDispatchContentError } from '../claude/claude-structured-dispatch-content'
 
 export type PiRpcSessionAdapterDeps = PiRpcSessionDeps & {
   resolveLaunch: (input: {
@@ -137,30 +134,11 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
 
   dispatch: StructuredAgentSessionAdapter['dispatch'] = async (input) => {
     const session = this.session(input.sessionId, input.fence)
-    let prompt
-    try {
-      prompt = await preparePiRpcPrompt(input.body)
-    } catch (error) {
-      this.deps.logger.warn('Pi prompt could not be prepared', {
-        scope: 'pi-prompt',
-        sessionId: input.sessionId,
-        error
-      })
-      return {
-        state: 'rejected',
-        ...agentSessionFailureWords(
-          error instanceof PiRpcPromptError || error instanceof ClaudeDispatchContentError
-            ? error.failure
-            : agentSessionFailureFact('attachmentUnreadable'),
-          { agentName: 'Pi', surface: 'rejection' }
-        )
-      }
-    }
-    return session.turns.submit(
-      input.clientMessageId,
-      input.requestedAt ?? Date.now(),
-      { ...prompt },
-      input.beforeDispatch
+    return dispatchPiRpcMessage(
+      session,
+      input,
+      this.deps.logger,
+      () => this.sessions.get(input.sessionId) === session
     )
   }
 

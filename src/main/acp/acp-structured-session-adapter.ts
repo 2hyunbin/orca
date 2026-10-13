@@ -5,7 +5,6 @@
 import { randomUUID } from 'node:crypto'
 import { agentSessionFailureFact, withProviderDiagnostic } from '../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
-import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import {
   AgentSessionAcquisitionExitProvenError,
@@ -27,6 +26,7 @@ import type { AcpStructuredSession } from './acp-structured-session'
 import type { ProviderStartAttempt } from '../provider-process/provider-acquisition-starts'
 import { waitForAcpExit, type AcpStructuredConnection } from './acp-structured-connection'
 import { AcpConnectionClosedError } from './acp-errors'
+import { applyAcpMessageOptions } from './acp-message-execution-options'
 import { awaitAcpTurnEnd, interruptAcpTurn } from './acp-structured-stop'
 import { acpDispatchPrompt } from './acp-prompt-content'
 import {
@@ -162,14 +162,9 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     }
   }
 
-  async dispatch(input: {
-    sessionId: string
-    clientMessageId: string
-    body: AgentJournalMessageItem
-    fence: number
-    requestedAt?: number
-    beforeDispatch?: () => Promise<void>
-  }): Promise<AgentSessionDispatchOutcome> {
+  async dispatch(
+    input: Parameters<StructuredAgentSessionAdapter['dispatch']>[0]
+  ): Promise<AgentSessionDispatchOutcome> {
     const lost = this.children.sessions.get(input.sessionId)
     if (lost && lost.journalClosed !== null) {
       // The connection broke and the exit is not yet proven: the message never left Orca.
@@ -182,6 +177,17 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     }
     if (this.children.sessions.get(input.sessionId) !== session || session.journalClosed !== null) {
       // The child ended while its attachments were read: nothing left Orca.
+      return this.rejected(session, 'providerExited')
+    }
+    const optionsApplied = await applyAcpMessageOptions(
+      session,
+      input.executionOptions,
+      (key, value) =>
+        this.setOption({ sessionId: input.sessionId, fence: input.fence, key, value }),
+      () =>
+        this.children.sessions.get(input.sessionId) === session && session.journalClosed === null
+    )
+    if (!optionsApplied) {
       return this.rejected(session, 'providerExited')
     }
     await input.beforeDispatch?.()
