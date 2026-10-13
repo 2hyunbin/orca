@@ -262,7 +262,7 @@ async function settle(
   if (!isFresh(getWslWindowsCheckoutState(key)?.sample, now())) {
     await waitUnlessAborted(runStage('sample', key, options, deps), signal)
     // Why: a joined sample may have started before the checkout was replaced at this path.
-    if (getWslWindowsCheckoutState(key)?.sample?.identity !== identity) {
+    if (getWslWindowsCheckoutState(key)?.sample?.identity !== (await identityOf(options.cwd))) {
       forgetLineEndingSample(key)
     }
   }

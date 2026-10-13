@@ -169,6 +169,13 @@ describe('pendingWslWindowsCheckoutGitConfig', () => {
     ])
   })
 
+  it('keeps a sample taken of the checkout that replaced the one the write first saw', async () => {
+    const { deps, run, flagged } = harness({ checkoutIdentity: async () => 'clone-2' })
+    deps.checkoutIdentity.mockResolvedValueOnce('clone-1')
+    await run(WRITE)
+    expect(flagged(WRITE)).toBe(true)
+  })
+
   it('refreshes a stale host answer before a write rather than in the background', async () => {
     const { clock, deps, run, flagged } = harness()
     await run(WRITE)
