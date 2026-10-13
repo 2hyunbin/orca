@@ -36,6 +36,7 @@ let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
 let changeThreadGoal: Mock<NonNullable<StructuredAgentSessionAdapter['changeThreadGoal']>>
 let stopBackgroundTasks: Mock<NonNullable<StructuredAgentSessionAdapter['stopBackgroundTasks']>>
 let cancelTurn: Mock<StructuredAgentSessionAdapter['cancelTurn']>
+let providerEvents: Parameters<StructuredAgentSessionAdapter['acquire']>[0]['events']
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-repeat-press-'))
@@ -47,18 +48,26 @@ beforeEach(async () => {
   store = await openTestAgentSessionRecordStore(root)
   const adapter: StructuredAgentSessionAdapter = startsWhenPublished(
     {
-      acquire: async ({ fence, spawnToken }) => ({
-        providerChildPhase: 'starting' as const,
-        process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
-        acquisitionGeneration: 'generation-1',
-        link: {
-          linkId: `link-${fence}`,
-          handle: codexProviderHandle(THREAD),
-          origin: fence > 1 ? ('resumed' as const) : ('created' as const),
-          mintedAtFence: fence,
-          observedAt: NOW
+      acquire: async ({ fence, spawnToken, events }) => {
+        providerEvents = events
+        return {
+          providerChildPhase: 'starting' as const,
+          process: {
+            hostId: 'local',
+            pid: 4242,
+            processStartTimeMs: 1_700_000_000_000,
+            spawnToken
+          },
+          acquisitionGeneration: 'generation-1',
+          link: {
+            linkId: `link-${fence}`,
+            handle: codexProviderHandle(THREAD),
+            origin: fence > 1 ? ('resumed' as const) : ('created' as const),
+            mintedAtFence: fence,
+            observedAt: NOW
+          }
         }
-      }),
+      },
       dispatch: vi.fn(async () => ({ state: 'admitted' as const })),
       closeSession: vi.fn(async () => true),
       releaseAcquisition: vi.fn(async () => true),
@@ -100,6 +109,16 @@ beforeEach(async () => {
   })
   expect(await host.attach(CALLER, hostTestAttachParams(null))).toMatchObject({ ok: true })
 })
+
+/** The provider's running turn, which a Stop naming it reaches. */
+async function runningTurn(): Promise<void> {
+  providerEvents?.appendItem(
+    { provider: 'codex', threadId: THREAD, turnId: 'turn-1', ordinal: 900 },
+    { kind: 'turn', turnId: 'turn-1', state: 'running' },
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+  )
+  await host.flushStreamedEvents(SESSION)
+}
 
 afterEach(async () => {
   await host.flushAllStreamedEvents()
@@ -196,6 +215,7 @@ describe('a press sent again', () => {
         envelope: envelope('agentSession.cancel', { turnId: 'turn-1' }, id, null),
         turnId: 'turn-1'
       })
+    await runningTurn()
     cancelTurn.mockResolvedValueOnce({ cancelled: false })
     const first = hostTestOperationId()
     await stop(first)
