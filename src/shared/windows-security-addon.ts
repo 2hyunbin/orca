@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { basename, join, relative, isAbsolute, win32 as pathWin32 } from 'node:path'
+import { basename, isAbsolute, join, relative, toNamespacedPath } from 'node:path'
 import type * as WindowsSecurityModule from '@orca/windows-security'
 import { ORCAD_WINDOWS_SECURITY_FILENAME } from './orcad-artifacts'
 
@@ -94,7 +94,7 @@ export function trustedPackagePath(resolved: string, roots: readonly string[]): 
 function prepare(raw: WindowsSecurityAddon): WindowsSecurity {
   const writes = new Map<string, Promise<unknown>>()
   const inPathOrder = (path: string, write: (namespaced: string) => Promise<void>) => {
-    const namespaced = pathWin32.toNamespacedPath(path)
+    const namespaced = toNamespacedPath(path)
     const key = namespaced.toLowerCase()
     const run = () => write(namespaced)
     const next = (writes.get(key) ?? Promise.resolve()).then(run, run)
@@ -107,16 +107,17 @@ function prepare(raw: WindowsSecurityAddon): WindowsSecurity {
     })
     return next
   }
-  const ns = pathWin32.toNamespacedPath
   return {
     userSid: raw.currentUserSid(),
     addon: {
-      getDaclAces: (path) => raw.getDaclAces(ns(path)),
-      setDaclSddl: (path, sddl) => raw.setDaclSddl(ns(path), sddl),
+      getDaclAces: (path) => raw.getDaclAces(toNamespacedPath(path)),
+      setDaclSddl: (path, sddl) => raw.setDaclSddl(toNamespacedPath(path), sddl),
       setDaclSddlAsync: (path, sddl) =>
         inPathOrder(path, (namespaced) => raw.setDaclSddlAsync(namespaced, sddl)),
-      createFileWithDacl: (path, sddl, data) => raw.createFileWithDacl(ns(path), sddl, data),
-      grantAccess: (path, sid, mask, options) => raw.grantAccess(ns(path), sid, mask, options),
+      createFileWithDacl: (path, sddl, data) =>
+        raw.createFileWithDacl(toNamespacedPath(path), sddl, data),
+      grantAccess: (path, sid, mask, options) =>
+        raw.grantAccess(toNamespacedPath(path), sid, mask, options),
       grantAccessAsync: (path, sid, mask, options) =>
         inPathOrder(path, (namespaced) => raw.grantAccessAsync(namespaced, sid, mask, options))
     }

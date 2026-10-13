@@ -369,13 +369,17 @@ describe('Windows secure files through the native ACL addon', () => {
     })
   })
 
-  it('hands the addon extended-length paths past MAX_PATH', () => {
-    const longPath = `C:\\Users\\me\\.orca\\${'d'.repeat(300)}\\secret.json`
-    const loaded = loadWindowsSecurity()
+  // The prefix comes from the host's toNamespacedPath, which is the identity off Windows.
+  it.runIf(process.platform === 'win32')(
+    'hands the addon extended-length paths past MAX_PATH',
+    () => {
+      const longPath = `C:\\Users\\me\\.orca\\${'d'.repeat(300)}\\secret.json`
+      const loaded = loadWindowsSecurity()
 
-    expect('error' in loaded ? null : loaded.addon.getDaclAces(longPath)).toBeTruthy()
-    expect(fake.callsFor('get')[0]?.addonPath).toBe(`\\\\?\\${longPath}`)
-  })
+      expect('error' in loaded ? null : loaded.addon.getDaclAces(longPath)).toBeTruthy()
+      expect(fake.callsFor('get')[0]?.addonPath).toBe(`\\\\?\\${longPath}`)
+    }
+  )
 
   // A grant reads the DACL and writes back a merge; racing a re-lock it could restore the broad one.
   it('runs async DACL writes to the same path one after another', async () => {
