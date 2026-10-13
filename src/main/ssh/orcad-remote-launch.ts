@@ -22,6 +22,7 @@ import {
   type RemoteHostPlatform
 } from './ssh-remote-platform'
 import { RELAY_REMOTE_DIR } from './relay-protocol'
+import { ORCAD_WSL_HOST_ENV } from '../ipc/wsl-guest-windows-drive-path'
 import {
   assertPosixOrcadHost as assertPosixHost,
   ORCAD_LOG_FILENAME,
@@ -155,6 +156,8 @@ function setsidLaunchTail(
   pidFile: string
 ): string[] {
   return [
+    // Only a setsid (WSL host) launch marks itself; SSH keeps its byte-for-byte command.
+    `${ORCAD_WSL_HOST_ENV}=1`,
     'sh -c \'orcad_detach() { if setsid -f true >/dev/null 2>&1; then setsid -f "$@"; ' +
       'else setsid "$@" & fi; }; orcad_detach "$@"\' orcad-detach',
     `sh -c 'echo $$ > "$1" && shift && exec "$@"' orcad-launch ${pidFile}`,

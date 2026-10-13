@@ -8,6 +8,9 @@ import { existsSync, readFileSync } from 'node:fs'
 
 const WINDOWS_DRIVE_MOUNT_TYPES = new Set(['drvfs', '9p', 'virtiofs'])
 
+/** Set only by the WSL-host orcad launch, so SSH remotes and Orca under WSLg keep their PATH. */
+export const ORCAD_WSL_HOST_ENV = 'ORCA_WSL_ORCAD_HOST'
+
 let cachedGuestMounts: readonly string[] | null = null
 
 export function isWslGuestProcess(
@@ -19,6 +22,15 @@ export function isWslGuestProcess(
     return false
   }
   return Boolean(env.WSL_DISTRO_NAME?.trim() || env.WSL_INTEROP?.trim()) || interopRegistered()
+}
+
+/** A WSL guest process that Orca launched as a WSL host's orcad. */
+export function isWslHostOrcadProcess(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  interopRegistered?: () => boolean
+): boolean {
+  return env[ORCAD_WSL_HOST_ENV] === '1' && isWslGuestProcess(env, platform, interopRegistered)
 }
 
 /** `/proc/mounts` escapes whitespace and backslashes in a mount point as octal (`\040`). */
@@ -55,13 +67,13 @@ export function withoutWindowsDriveMountDirs(pathValue: string, mounts: readonly
     .join(':')
 }
 
-/** This process's Windows drive mounts when it runs inside a WSL guest; empty everywhere else. */
+/** This process's Windows drive mounts when it is a WSL host's orcad; empty everywhere else. */
 export function readGuestWindowsDriveMounts(): readonly string[] {
   if (cachedGuestMounts) {
     return cachedGuestMounts
   }
   let mounts: string[] = []
-  if (isWslGuestProcess()) {
+  if (isWslHostOrcadProcess()) {
     try {
       mounts = parseWindowsDriveMountPoints(readFileSync('/proc/mounts', 'utf8'))
     } catch {

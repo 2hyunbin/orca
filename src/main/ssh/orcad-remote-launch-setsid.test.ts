@@ -10,6 +10,7 @@ import {
   type OrcadLaunchSpec
 } from './orcad-remote-launch'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
+import { ORCAD_WSL_HOST_ENV } from '../ipc/wsl-guest-windows-drive-path'
 
 const host = getRemoteHostPlatform('linux-x64')
 
@@ -44,6 +45,7 @@ describe('the WSL launch (setsid)', () => {
     expect(command).toContain('setsid -f "$@"')
     // busybox has no `-f`; a background child of a non-interactive shell can still setsid.
     expect(command).toContain('else setsid "$@" & fi')
+    expect(command).toContain(`${ORCAD_WSL_HOST_ENV}=1 sh -c`)
   })
 
   it('has the child record its own PID, since the setsid -f parent exits at once', () => {
@@ -60,6 +62,7 @@ describe('the WSL launch (setsid)', () => {
     expect(ssh).toBe(orcadLaunchCommand(host, spec('/d/orcad-1'), 'nohup'))
     expect(ssh).toContain('exec nohup "$orcad_runtime"')
     expect(ssh).not.toContain('setsid')
+    expect(ssh).not.toContain(ORCAD_WSL_HOST_ENV)
   })
 
   it.skipIf(process.platform !== 'linux')(
