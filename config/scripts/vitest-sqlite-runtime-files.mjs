@@ -251,6 +251,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/runtime/structured-agent-session-codex-start-deadline.test.ts',
   'src/main/runtime/structured-agent-session-pi-startup.test.ts',
   'src/main/runtime/structured-agent-session-pi-signed-out-start.test.ts',
+  'src/main/runtime/structured-agent-session-adapter-start-failure.test.ts',
   'src/main/runtime/structured-agent-session-provider-operations-while-starting.test.ts',
   'src/main/runtime/structured-agent-session-codex-settlement-order.test.ts',
   'src/main/runtime/structured-agent-session-integration-replay.test.ts',

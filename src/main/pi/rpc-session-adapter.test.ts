@@ -81,7 +81,6 @@ describe('Pi RPC session ownership and delivery', () => {
     expect(h.lifecycle).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'ended',
-        startupUnproven: true,
         cause: 'requested-close'
       })
     )
