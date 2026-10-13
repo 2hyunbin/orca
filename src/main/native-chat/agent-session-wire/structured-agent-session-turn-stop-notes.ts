@@ -9,7 +9,7 @@ import type {
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { structuredAgentSessionStopNoteIdentity } from './structured-agent-session-command-turn'
-import type { AgentSessionTurnContext } from './structured-agent-session-turns'
+import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 
 export const STOP_NOTE_CANCELLATION_REQUESTED = 'Cancellation requested.'
 
@@ -55,7 +55,12 @@ export function structuredAgentSessionStopNoteScope(
 }
 
 export function writeStructuredAgentSessionStopNote(
-  ctx: Pick<AgentSessionTurnContext, 'journal' | 'fence' | 'logger' | 'sessionId'>,
+  ctx: {
+    journal: AgentSessionJournal
+    fence: number
+    logger: StructuredAgentSessionLogger
+    sessionId: string
+  },
   input: {
     identity: ReturnType<typeof structuredAgentSessionStopNoteIdentity>
     body: AgentJournalStatusItem
