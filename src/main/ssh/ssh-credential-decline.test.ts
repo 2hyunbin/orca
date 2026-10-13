@@ -21,7 +21,7 @@ describe('clearSshCredentialDeclinedForEnvironment', () => {
   })
 
   it('lifts the decline for the SSH host a managed server is reached through', () => {
-    clearSshCredentialDeclinedForEnvironment({ orcadDeployment: { kind: 'ssh', ...link } })
+    clearSshCredentialDeclinedForEnvironment({ orcadDeployment: link })
     expect(isSshCredentialDeclined('ssh-1')).toBe(false)
   })
 
