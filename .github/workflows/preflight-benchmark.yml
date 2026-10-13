@@ -664,8 +664,6 @@ jobs:
     timeout-minutes: 15
   candidate-2:
     name: candidate-2
-    needs:
-    - candidate-1
     if: always()
     runs-on: ubuntu-24.04-arm
     steps:
@@ -1322,8 +1320,6 @@ jobs:
     timeout-minutes: 15
   baseline-4:
     name: baseline-4
-    needs:
-    - baseline-3
     if: always()
     runs-on: ubuntu-24.04-arm
     steps:
