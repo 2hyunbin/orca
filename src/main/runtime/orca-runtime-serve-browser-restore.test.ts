@@ -189,15 +189,77 @@ describe('a saved browser tab on a host with no window', () => {
     expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-2' }))
   })
 
-  it('starts no page for a pageless command when the layout shows no browser tab', async () => {
+  it('starts the first saved tab when the layout records none, as a window does', async () => {
     const saved = savedServeTabs()
     const { runtime, createTab } = restartedServe({ ...saved, activeBrowserTabIdByWorktree: {} })
+
+    const current = await runtime.browserTabCurrent({ worktree: `id:${TEST_WORKTREE_ID}` })
+    expect(current.tab.browserPageId).toBe('page-1')
+    await runtime.browserSnapshot({ worktree: `id:${TEST_WORKTREE_ID}` })
+    expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-1' }))
+  })
+
+  it('falls back to the first saved tab once the active one is closed', async () => {
+    const { runtime, createTab, getSession } = restartedServe()
+
+    await runtime.browserTabClose({ worktree: `id:${TEST_WORKTREE_ID}`, page: 'page-2' })
+    expect(getSession().activeBrowserTabIdByWorktree?.[TEST_WORKTREE_ID]).toBe('page-2')
+
+    const current = await runtime.browserTabCurrent({ worktree: `id:${TEST_WORKTREE_ID}` })
+    expect(current.tab.browserPageId).toBe('page-1')
+    await runtime.browserSnapshot({ worktree: `id:${TEST_WORKTREE_ID}` })
+    expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-1' }))
+  })
+
+  it('reports no browser tab only when the worktree saves none', async () => {
+    const { runtime, createTab } = restartedServe(makeWorkspaceSessionWithHeadlessTerminal())
 
     await expect(runtime.browserTabCurrent({ worktree: `id:${TEST_WORKTREE_ID}` })).rejects.toThrow(
       'No browser tab open in this worktree'
     )
-    await runtime.browserSnapshot({ worktree: `id:${TEST_WORKTREE_ID}` }).catch(() => undefined)
     expect(createTab).not.toHaveBeenCalled()
+  })
+
+  it('lists no saved tab as active while a page runs', async () => {
+    const { runtime } = restartedServe()
+    await runtime['serveBrowserTabs'].restore(TEST_WORKTREE_ID, 'page-1')
+
+    const listed = await runtime.browserTabList({ worktree: `id:${TEST_WORKTREE_ID}` })
+
+    expect(listed.tabs.filter((tab) => tab.active).map((tab) => tab.browserPageId)).toEqual([
+      'page-1'
+    ])
+  })
+
+  it('reports and starts the same tab when no worktree is named', async () => {
+    const saved = savedServeTabs()
+    const { runtime, createTab } = restartedServe({
+      ...saved,
+      activeWorktreeId: BROWSER_ONLY_WORKTREE_ID
+    })
+
+    const current = await runtime.browserTabCurrent({})
+    expect(current.tab.browserPageId).toBe('page-3')
+    await runtime.browserSnapshot({})
+    expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-3' }))
+  })
+
+  it('saves a re-created page whose id the layout still records as active', () => {
+    const session = {
+      ...makeWorkspaceSessionWithHeadlessTerminal(),
+      activeBrowserTabIdByWorktree: { [TEST_WORKTREE_ID]: 'page-9' }
+    }
+
+    const next = withOpenedServeBrowserTab('local', session, {
+      worktreeId: TEST_WORKTREE_ID,
+      pageId: 'page-9',
+      url: 'https://example.com/',
+      title: 'Example'
+    })
+
+    expect(next?.browserTabsByWorktree?.[TEST_WORKTREE_ID]?.map((tab) => tab.id)).toEqual([
+      'page-9'
+    ])
   })
 
   it('saves a switched-to tab as the one its worktree shows', async () => {
