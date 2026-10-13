@@ -1,6 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { OrcaRuntimeWithStateFields } from './orca-runtime-state-fields'
 import {
+  expiredClientHostedBrowserPageIds,
   persistClientHostedBrowserPages,
   rehydrateClientHostedBrowserPages
 } from './client-hosted-browser-page-persistence'
@@ -79,6 +80,18 @@ export class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithSta
       for (const page of registry.listPages()) {
         this.persistedClientHostedBrowserWorktreeIds.add(page.workspaceId)
       }
+      // Expired records are written away now, with their saved tabs, not left for a page to come.
+      const now = Date.now()
+      for (const session of this.listWorkspaceSessionPartitions()) {
+        for (const [worktreeId, rows] of Object.entries(
+          session.clientHostedBrowserPagesByWorktree ?? {}
+        )) {
+          if (Array.isArray(rows) && expiredClientHostedBrowserPageIds(rows, now).length > 0) {
+            this.persistedClientHostedBrowserWorktreeIds.add(worktreeId)
+            this.persistClientHostedBrowserPagesForWorktree(worktreeId)
+          }
+        }
+      }
     } catch (error) {
       console.warn('[browser-host-lease] client page rehydration failed:', error)
     }
@@ -111,7 +124,9 @@ export class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithSta
     persistClientHostedBrowserPages(
       {
         getWorkspaceSession: (id) => this.getWorkspaceSessionForWorktree(id),
-        setWorkspaceSession: (id, session) => this.setWorkspaceSessionForWorktree(id, session)
+        setWorkspaceSession: (id, session) => this.setWorkspaceSessionForWorktree(id, session),
+        withoutSavedBrowserTabs: (id, session, pageIds) =>
+          this.serveBrowserTabs.withoutTabs(id, session, pageIds)
       },
       registry,
       worktreeId

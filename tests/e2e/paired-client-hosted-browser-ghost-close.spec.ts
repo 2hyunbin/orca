@@ -1,6 +1,7 @@
 import { readdirSync, existsSync } from 'node:fs'
 import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
 import path from 'node:path'
+import { CLIENT_HOSTED_BROWSER_PAGE_MAX_AGE_MS } from '../../src/shared/client-hosted-browser-page-record'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { readHostBrowserPageIds } from './helpers/host-session-tabs'
@@ -29,13 +30,11 @@ const CLIENT_NAME = 'STA-4150 client-hosted ghost close'
 const RECONNECT_GRACE_OVERSHOOT_MS = 20_000
 
 /**
- * Strips what the runtime persisted, leaving a host that has genuinely forgotten the page.
- *
- * This is what a client meets against a server that predates page persistence, and what it meets
- * when recovery released a record as unrecoverable. Both leave the same shape: a client row that
+ * Ages what the runtime persisted past the 30-day expiry, so the relaunched runtime genuinely forgets
+ * the page: it drops the record and its saved tab in one write. The client is left with a row that
  * nothing on the host answers for.
  */
-function forgetPersistedClientHostedPages(userDataDir: string): number {
+function expirePersistedClientHostedPages(userDataDir: string): number {
   const profilesDir = path.join(userDataDir, 'profiles')
   return readdirSync(profilesDir, { withFileTypes: true })
     .filter(
@@ -50,25 +49,28 @@ function forgetPersistedClientHostedPages(userDataDir: string): number {
           (raw) => {
             // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This test owns the persisted fixture; optional fields are checked at use sites.
             const state = raw as {
-              workspaceSession?: { clientHostedBrowserPagesByWorktree?: Record<string, unknown[]> }
+              workspaceSession?: {
+                clientHostedBrowserPagesByWorktree?: Record<string, { savedAt: number }[]>
+              }
               workspaceSessionsByHostId?: Record<
                 string,
-                { clientHostedBrowserPagesByWorktree?: Record<string, unknown[]> }
+                { clientHostedBrowserPagesByWorktree?: Record<string, { savedAt: number }[]> }
               >
             }
-            let forgotten = 0
+            const expiredAt = Date.now() - CLIENT_HOSTED_BROWSER_PAGE_MAX_AGE_MS - 60_000
+            let expired = 0
             for (const session of [
               state.workspaceSession,
               ...Object.values(state.workspaceSessionsByHostId ?? {})
             ]) {
-              const rows = session?.clientHostedBrowserPagesByWorktree
-              if (!rows) {
-                continue
+              for (const rows of Object.values(session?.clientHostedBrowserPagesByWorktree ?? {})) {
+                for (const row of rows) {
+                  row.savedAt = expiredAt
+                  expired += 1
+                }
               }
-              forgotten += Object.values(rows).reduce((count, list) => count + list.length, 0)
-              delete session.clientHostedBrowserPagesByWorktree
             }
-            return forgotten
+            return expired
           },
           entry.name
         ),
@@ -129,17 +131,17 @@ test('closes a restored client-hosted row whose runtime has no record of it', as
 
     // Between processes, not before the restart: the quitting serve flushes its own state on the
     // way out, so an earlier edit would be written straight back over.
-    let forgotten = 0
+    let expired = 0
     await host.restartServeProcess({
       betweenProcesses: () => {
-        forgotten = forgetPersistedClientHostedPages(host.userDataDir)
+        expired = expirePersistedClientHostedPages(host.userDataDir)
       }
     })
-    // Presence precondition for the strip: an empty edit would leave a passing test that never set
+    // Presence precondition for the expiry: an empty edit would leave a passing test that never set
     // up the case at all.
     expect(
-      forgotten,
-      'the runtime must have persisted the page before this test can take it away'
+      expired,
+      'the runtime must have persisted the page before this test can expire it'
     ).toBeGreaterThan(0)
     await host.client.call('repo.add', { path: testRepoPath, kind: 'git' }).catch(() => undefined)
     expect(

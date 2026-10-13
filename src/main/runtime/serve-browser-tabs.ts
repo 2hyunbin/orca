@@ -64,6 +64,23 @@ export class ServeBrowserTabs {
     )
   }
 
+  /** The partition without the tabs showing these pages; a window's own tabs are left to it. */
+  withoutTabs(
+    worktreeId: string,
+    session: WorkspaceSessionState,
+    pageIds: readonly string[]
+  ): WorkspaceSessionState {
+    if (!this.deps.windowless()) {
+      return session
+    }
+    const hostId = this.deps.hostId(worktreeId)
+    return pageIds.reduce(
+      (current, pageId) =>
+        withClosedServeBrowserTab(hostId, current, worktreeId, pageId) ?? current,
+      session
+    )
+  }
+
   /** Saved tabs whose page has not started, each by the page it shows; every worktree's if none. */
   listRestorable(
     worktreeId: string | undefined
