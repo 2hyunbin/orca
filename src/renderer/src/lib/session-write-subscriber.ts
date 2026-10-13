@@ -139,9 +139,8 @@ export function createSessionWriteSubscriber({
     // builder — without this, such a change would silently start emitting
     // stale values for that field.
     const fresh = store.getState()
-    // Why: a closed gate defers, it never discards. Returning with the pending set intact leaves
-    // the write owed; the next store update re-arms it. Nothing re-arms from here, so a gate that
-    // never reopens costs no timer.
+    // Why: a closed shouldPersistWorkspaceSession defers, never discards. The pending set stays, so
+    // the next store update re-arms the write; nothing re-arms here, so staying closed costs no timer.
     if (!shouldPersistWorkspaceSession(fresh)) {
       return
     }
