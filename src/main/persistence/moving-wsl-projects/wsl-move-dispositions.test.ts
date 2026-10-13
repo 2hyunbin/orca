@@ -10,6 +10,7 @@ import {
 import { OUT_OF_STORE_DISPOSITIONS } from './wsl-move-out-of-store-dispositions'
 import {
   LOCAL_STORAGE_MODULE_DISPOSITIONS,
+  SQLITE_SCHEMA_FILE_DATABASES,
   SQLITE_TABLE_DISPOSITIONS
 } from './wsl-move-storage-dispositions'
 import { SETTINGS_KEYS_NAMING_A_PATH, UI_STATE_DISPOSITIONS } from './wsl-move-ui-dispositions'
@@ -51,15 +52,19 @@ describe('WSL mover dispositions', () => {
     expect(users).toEqual(Object.keys(LOCAL_STORAGE_MODULE_DISPOSITIONS).sort())
   })
 
-  it('lists every SQLite table the app creates', () => {
+  it('lists every SQLite table the app creates, by database', () => {
+    const files = sourceFiles('src/main').filter((path) =>
+      /CREATE\s+(?:VIRTUAL\s+)?TABLE/.test(readFileSync(join(REPO_ROOT, path), 'utf8'))
+    )
+    expect(files.sort()).toEqual(Object.keys(SQLITE_SCHEMA_FILE_DATABASES).sort())
     const tables = new Set<string>()
-    for (const path of sourceFiles('src/main')) {
-      const text = readFileSync(join(REPO_ROOT, path), 'utf8')
-      // An interpolated name is listed as its constant, e.g. `${RUNS_TABLE}`.
-      const pattern =
-        /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\$\{(?:quotedIdentifier\()?([A-Z_]+)|["`']?([a-z_]+))/g
-      for (const match of text.matchAll(pattern)) {
-        tables.add(match[1] ? `\${${match[1]}}` : match[2])
+    // An interpolated name is listed as its constant, e.g. `${RUNS_TABLE}`.
+    const pattern =
+      /CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\$\{(?:quotedIdentifier\()?([A-Z_]+)|["`']?([a-z0-9_]+))/g
+    for (const path of files) {
+      const database = SQLITE_SCHEMA_FILE_DATABASES[path]
+      for (const match of readFileSync(join(REPO_ROOT, path), 'utf8').matchAll(pattern)) {
+        tables.add(`${database}.${match[1] ? `\${${match[1]}}` : match[2]}`)
       }
     }
     expect([...tables].sort()).toEqual(Object.keys(SQLITE_TABLE_DISPOSITIONS).sort())

@@ -61,7 +61,8 @@ export function foldersAndAutomationsWslMoverProfile(paths: WslMoverPaths): WslM
     projectId: 'repo-auto',
     executionTargetType: 'local',
     executionTargetId: 'local',
-    schedulerOwner: 'local_host_service',
+    // The host schedules what it owns, as the existing orcad import does.
+    schedulerOwner: paths.side === 'source' ? 'local_host_service' : 'remote_host_service',
     workspaceMode: 'existing',
     workspaceId: wtAuto,
     baseBranch: null,

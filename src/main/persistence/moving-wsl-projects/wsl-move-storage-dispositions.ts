@@ -91,103 +91,145 @@ export const LOCAL_STORAGE_MODULE_DISPOSITIONS: Record<string, WslMoveFieldDispo
   )
 }
 
-/**
- * SQLite tables in the desktop's databases. Temporary migration tables (`*_new`, `*_v`) are
- * listed with the table they rebuild.
- */
-export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> = {
-  ...Object.fromEntries(
-    [
-      'agent_session_records',
-      'agent_session_operations',
-      'agent_session_tabs',
-      'agent_session_store_meta',
-      'agent_session_retired_claim_keys',
-      'agent_session_command_receipts',
-      'agent_session_attachment_claims',
-      'agent_session_attachment_sweeps',
-      'journal_imports',
-      'journal_repairs',
-      'journal_rows',
-      'journal_sessions',
-      'journal_set_aside',
-      'queued_messages'
-    ].map((table) => [
-      table,
+/** The database each schema file creates tables in; a new schema file fails the census. */
+export const SQLITE_SCHEMA_FILE_DATABASES: Record<string, string> = {
+  'src/main/ai-vault-search/session-search-query-schema.ts': 'ai-vault-search',
+  'src/main/ai-vault-search/session-search-schema.ts': 'ai-vault-search',
+  'src/main/browser/browser-cookie-staged-import.ts': 'browser-cookie-import',
+  'src/main/native-chat/agent-session-attachments/agent-session-attachment-claims.ts':
+    'agent-session-journal',
+  'src/main/native-chat/agent-session-journal/command-receipt-schema.ts': 'agent-session-journal',
+  'src/main/native-chat/agent-session-journal/journal-database-schema.ts': 'agent-session-journal',
+  'src/main/native-chat/agent-session-journal/queued-message-schema.ts': 'agent-session-journal',
+  'src/main/persistence/profile-state/profile-state-database-schema.ts': 'profile-state',
+  'src/main/runtime/orchestration/db/schema/create-core-tables-sql.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/create-graph-tables-sql.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/migrate-legacy-contract-storage.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/migrate-role-mailbox-delivery-v34.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/migrate-v13-v30.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/migrate-v2-v12.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/migrate-v35.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/migrate-v39.ts': 'orchestration',
+  'src/main/runtime/orchestration/db/schema/migrate.ts': 'orchestration',
+  'src/main/runtime/orchestration/mutation-receipt-capacity.ts': 'orchestration',
+  // Test fixtures that mirror third-party agent and browser databases.
+  'src/main/ai-vault/session-scanner-opencode-sqlite-fixture.ts': 'test-fixture',
+  'src/main/ai-vault/session-scanner-test-fixtures.ts': 'test-fixture',
+  'src/main/browser/browser-cookie-import-test-database.ts': 'test-fixture',
+  'src/main/codex/codex-state-db-test-fixture.ts': 'test-fixture',
+  'src/main/opencode-usage/opencode-usage-sqlite-fixture.ts': 'test-fixture'
+}
+
+const tables = (
+  database: string,
+  names: readonly string[],
+  row: WslMoveFieldDisposition
+): [string, WslMoveFieldDisposition][] => names.map((name) => [`${database}.${name}`, row])
+
+/** Tables by `<database>.<table>`. Migration copies (`*_new`, `*_v35`) sit with what they rebuild. */
+export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> =
+  Object.fromEntries([
+    ...tables(
+      'agent-session-journal',
+      [
+        'agent_session_records',
+        'agent_session_operations',
+        'agent_session_tabs',
+        'agent_session_store_meta',
+        'agent_session_retired_claim_keys',
+        'agent_session_command_receipts',
+        'agent_session_attachment_claims',
+        'agent_session_attachment_sweeps',
+        'journal_imports',
+        'journal_repairs',
+        'journal_rows',
+        'journal_sessions',
+        'journal_set_aside',
+        'queued_messages'
+      ],
       moveDisposition(52, {
         newManifestSection: true,
         note: 'Native chat journal: scoped records move to the host, location rewritten.'
       })
-    ])
-  ),
-  ...Object.fromEntries(
-    [
-      'worker_dispatches',
-      'worker_terminal_resources',
-      'worker_terminal_archives',
-      'worker_terminal_archives_v',
-      'remote_dispatch_attachments',
-      'federated_dispatches',
-      'federation_relay_items',
-      'dispatch_contexts',
-      'coordinator_runs',
-      'run_coordinator_handles',
-      'runs',
-      'tasks',
-      'decision_gates',
-      'deliveries',
-      'deliveries_new',
-      'deliveries_v',
-      'messages',
-      'messages_new',
-      'question_threads',
-      'remote_questions',
-      'mutation_receipts',
-      'mutation_receipt_ledger',
-      'mutation_caller_identities',
-      'legacy_adoptions',
-      'legacy_compatibility_principals',
-      'legacy_mail_receipts',
-      'legacy_operation_receipts',
-      'attempt_observation_facts',
-      'structured_pointer_operations',
-      'won',
-      'meta'
-    ].map((table) => [
-      table,
+    ),
+    ...tables(
+      'orchestration',
+      [
+        'worker_dispatches',
+        'worker_terminal_resources',
+        'worker_terminal_archives',
+        'worker_terminal_archives_v39',
+        'remote_dispatch_attachments',
+        'federated_dispatches',
+        'federation_relay_items',
+        'dispatch_contexts',
+        'coordinator_runs',
+        'run_coordinator_handles',
+        'runs',
+        'tasks',
+        'decision_gates',
+        'deliveries',
+        'deliveries_new',
+        'deliveries_v35',
+        'messages',
+        'messages_new',
+        'question_threads',
+        'remote_questions',
+        'mutation_receipts',
+        'mutation_receipt_ledger',
+        'mutation_caller_identities',
+        'legacy_adoptions',
+        'legacy_compatibility_principals',
+        'legacy_mail_receipts',
+        'legacy_operation_receipts',
+        'attempt_observation_facts',
+        'structured_pointer_operations',
+        'won'
+      ],
       {
         disposition: 'rewrite-desktop',
         item: 53,
-        note: 'Orchestration history is rewritten in place; an active run or dispatch in scope blocks.'
-      } as const
-    ])
-  ),
-  profile_state_documents: {
-    disposition: 'per-field',
-    item: 1,
-    note: 'Holds PersistedState itself.'
-  },
-  profile_state_meta: notApplicableDisposition(62),
-  '${PROFILE_STATE_AUTOMATION_RUNS_TABLE}': moveDisposition(19, {
-    note: 'PersistedState.automationRuns.'
-  }),
-  '${PROFILE_STATE_AUTOMATION_RUNS_META_TABLE}': notApplicableDisposition(
-    19,
-    'Bookkeeping for automationRuns.'
-  ),
-  '${IMPORT_SCOPE_TABLE}': notApplicableDisposition(58, 'Browser cookie import staging.'),
-  sessions: notApplicableDisposition(57, 'AI Vault search index; rebuilt from transcripts.'),
-  backfill_state: notApplicableDisposition(57, 'AI Vault search index; rebuilt from transcripts.'),
-  files: notApplicableDisposition(57, 'AI Vault search index; rebuilt from transcripts.'),
-  cookies: notApplicableDisposition(
-    58,
-    'Browser cookie import staging; the partition is bound, not copied.'
-  ),
-  // Read-only mirrors of third-party agent databases (OpenCode, Codex) used by tests and scanners.
-  ...Object.fromEntries(
-    ['message', 'part', 'project', 'session', 'session_message', 'session_v'].map((table) => [
-      table,
+        note: 'History is rewritten in place; an active run or dispatch in scope blocks the move.'
+      }
+    ),
+    ...tables('profile-state', ['profile_state_documents'], {
+      disposition: 'per-field',
+      item: 1,
+      note: 'Holds PersistedState itself.'
+    }),
+    ...tables('profile-state', ['profile_state_meta'], notApplicableDisposition(62)),
+    ...tables(
+      'profile-state',
+      ['${PROFILE_STATE_AUTOMATION_RUNS_TABLE}'],
+      moveDisposition(19, { note: 'PersistedState.automationRuns.' })
+    ),
+    ...tables(
+      'profile-state',
+      ['${PROFILE_STATE_AUTOMATION_RUNS_META_TABLE}'],
+      notApplicableDisposition(19, 'Bookkeeping for automationRuns.')
+    ),
+    ...tables(
+      'ai-vault-search',
+      ['files', 'messages', 'messages_fts', 'messages_vocab', 'meta', 'sessions'],
+      notApplicableDisposition(57, 'AI Vault search index; rebuilt from transcripts.')
+    ),
+    ...tables(
+      'browser-cookie-import',
+      ['${IMPORT_SCOPE_TABLE}'],
+      notApplicableDisposition(58, 'Cookie import staging; the partition is bound, not copied.')
+    ),
+    ...tables(
+      'test-fixture',
+      [
+        'backfill_state',
+        'cookies',
+        'message',
+        'part',
+        'project',
+        'session',
+        'session_message',
+        'session_v2'
+      ],
       notApplicableDisposition(56, "A third-party agent's own database, inside the distro.")
-    ])
-  )
-}
+    )
+  ])

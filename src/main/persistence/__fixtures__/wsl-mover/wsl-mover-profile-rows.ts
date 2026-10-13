@@ -87,7 +87,7 @@ export function unifiedTab(id: string, worktreeId: string, groupId: string): Tab
     groupId,
     worktreeId,
     contentType: id.startsWith('tab-') ? 'terminal' : 'editor',
-    label: id,
+    label: id.split(/[\\/]/).pop() ?? id,
     customLabel: null,
     color: null,
     sortOrder: 0,

@@ -1,8 +1,30 @@
 /**
  * The string and key normalization behind the WSL move projection: a UNC path of the moved distro
- * and its Linux path, or any alias of the owning host, compare equal.
+ * and its Linux path, or any alias of the owning host, compare equal. Only identity-shaped strings
+ * are normalized, and never user text, so a move that rewrites a draft or a comment still shows.
  */
 import type { WslMoveProjectionScope } from './wsl-move-state-projection'
+
+/** Subtrees of user-authored text and terminal output, compared byte for byte. */
+const FREE_TEXT_KEYS: ReadonlySet<string> = new Set([
+  'dirtyDraftContent',
+  'comment',
+  'prompt',
+  'lastAssistantMessage',
+  'buffersByLeafId',
+  'localOnlyScrollbackByTabId',
+  'hookSettings',
+  'outputSnapshot',
+  'body',
+  'text',
+  'title',
+  'customTitle',
+  'generatedTitle',
+  'label',
+  'customLabel',
+  'displayName',
+  'name'
+])
 
 /** `editor:<enc worktreeId>:<enc runtime>:<enc filePath>` → its three decoded parts. */
 export function parseEditorFileId(value: string): [string, string, string] | null {
@@ -25,10 +47,11 @@ export function createWslMoveStringNormalizer(
   scope: Pick<WslMoveProjectionScope, 'distro' | 'hostAliases'>
 ): (value: string) => string {
   const distro = escapeRegExp(scope.distro)
-  // A UNC path of the distro, wherever it sits in the string; stops at `:` (`::workspace:` ids).
-  const unc = new RegExp(
-    `(?:\\\\\\\\|//)(?:wsl\\.localhost|wsl\\$)[\\\\/]${distro}((?:[\\\\/][^\\\\/:]*)*)`,
-    'gi'
+  // A path, a worktree id (`<repo>::<path>[::workspace:<id>]`) or an owner key whose path is a UNC
+  // path of the distro. Path segments stop at `:`, which only the id suffix uses.
+  const uncIdentity = new RegExp(
+    `^((?:worktree:)?(?:[^\\s\\\\/]*::)?)(?:\\\\\\\\|//)(?:wsl\\.localhost|wsl\\$)[\\\\/]${distro}((?:[\\\\/][^\\\\/:]*)*)(::.*)?$`,
+    'i'
   )
   const fileUrl = new RegExp(`^file://(?:wsl\\.localhost|wsl\\$)/${distro}(?:/|$)`, 'i')
   const aliases = new Set(scope.hostAliases)
@@ -47,22 +70,31 @@ export function createWslMoveStringNormalizer(
     if (fileUrl.test(value)) {
       return value.replace(fileUrl, 'file:///')
     }
-    return value.replace(unc, (_match, rest: string) => rest.replace(/\\/g, '/') || '/')
+    const unc = uncIdentity.exec(value)
+    if (!unc) {
+      return value
+    }
+    const [, prefix, rest, suffix = ''] = unc
+    return `${prefix}${rest.replace(/\\/g, '/') || '/'}${suffix}`
   }
   return normalize
 }
 
-/** Normalizes every string and key, drops `droppedKeys`, and sorts keys; throws on a collision. */
+/**
+ * Normalizes identity strings and every key, drops `droppedKeys`, and sorts keys. Throws when two
+ * keys of one record become the same key, i.e. two spellings of one thing.
+ */
 export function canonicalizeWslMoveValue(
   value: unknown,
   normalize: (value: string) => string,
-  droppedKeys: ReadonlySet<string>
+  droppedKeys: ReadonlySet<string>,
+  freeText = false
 ): unknown {
   if (typeof value === 'string') {
-    return normalize(value)
+    return freeText ? value : normalize(value)
   }
   if (Array.isArray(value)) {
-    return value.map((item) => canonicalizeWslMoveValue(item, normalize, droppedKeys))
+    return value.map((item) => canonicalizeWslMoveValue(item, normalize, droppedKeys, freeText))
   }
   if (!isRecord(value)) {
     return value
@@ -73,13 +105,16 @@ export function canonicalizeWslMoveValue(
     if (droppedKeys.has(key) || child === undefined) {
       continue
     }
-    const normalizedKey = normalize(key)
+    const normalizedKey = freeText ? key : normalize(key)
     const earlier = originalByKey.get(normalizedKey)
     if (earlier !== undefined) {
       throw new Error(`Two keys name the same thing after the move: ${earlier} and ${key}`)
     }
     originalByKey.set(normalizedKey, key)
-    entries.push([normalizedKey, canonicalizeWslMoveValue(child, normalize, droppedKeys)])
+    entries.push([
+      normalizedKey,
+      canonicalizeWslMoveValue(child, normalize, droppedKeys, freeText || FREE_TEXT_KEYS.has(key))
+    ])
   }
   entries.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
   return Object.fromEntries(entries)

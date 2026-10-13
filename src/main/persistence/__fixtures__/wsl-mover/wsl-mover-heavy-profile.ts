@@ -8,16 +8,27 @@ import {
   terminalTab,
   unifiedTab,
   worktreeMeta,
-  WSL_MOVER_DISTRO,
+  wslMoverPaths,
   type WslMoverPaths
 } from './wsl-mover-profile-rows'
 
 export function heavyWslMoverProfile(paths: WslMoverPaths): WslMoveProjectionInput {
+  const sourcePaths = wslMoverPaths('source')
   const repoA = repo('repo-a', paths.at('/home/dev/app'))
   const repoB = repo('repo-b', paths.at('/home/dev/lib', 'wsl$'))
   const wtA = `repo-a::${repoA.path}`
   const wtFeature = `repo-a::${paths.at('/home/dev/app-feature')}`
   const wtB = `repo-b::${repoB.path}`
+  // The destination keeps each moved UNC id so stragglers that still name it resolve (item 14).
+  const sourceIds = new Map([
+    [wtA, `repo-a::${sourcePaths.at('/home/dev/app')}`],
+    [wtFeature, `repo-a::${sourcePaths.at('/home/dev/app-feature')}`],
+    [wtB, `repo-b::${sourcePaths.at('/home/dev/lib', 'wsl$')}`]
+  ])
+  const movedFrom = (worktreeId: string): { priorWorktreeIds?: string[] } => {
+    const sourceId = sourceIds.get(worktreeId)
+    return paths.side === 'destination' && sourceId ? { priorWorktreeIds: [sourceId] } : {}
+  }
   const readme = paths.at('/home/dev/app/README.md')
   const editorId = `editor:${encodeURIComponent(wtA)}:local:${encodeURIComponent(readme)}`
   const session: Partial<WorkspaceSessionState> = {
@@ -163,17 +174,9 @@ export function heavyWslMoverProfile(paths: WslMoverPaths): WslMoveProjectionInp
       sparsePresetsByRepo: { 'repo-a': [] },
       retiredWorktreeNamesByRepo: {},
       worktreeMeta: {
-        [wtA]: {
-          ...worktreeMeta('app'),
-          // The destination keeps the UNC id so stragglers that still name it resolve.
-          ...(paths.side === 'destination'
-            ? {
-                priorWorktreeIds: [`repo-a::\\\\wsl.localhost\\${WSL_MOVER_DISTRO}\\home\\dev\\app`]
-              }
-            : {})
-        },
-        [wtFeature]: { ...worktreeMeta('feature'), comment: 'WIP' },
-        [wtB]: worktreeMeta('lib')
+        [wtA]: { ...worktreeMeta('app'), ...movedFrom(wtA) },
+        [wtFeature]: { ...worktreeMeta('feature'), comment: 'WIP', ...movedFrom(wtFeature) },
+        [wtB]: { ...worktreeMeta('lib'), ...movedFrom(wtB) }
       },
       worktreeLineageById: {
         [wtFeature]: {

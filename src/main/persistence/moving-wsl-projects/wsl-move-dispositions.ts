@@ -59,8 +59,14 @@ export const PERSISTED_STATE_DISPOSITIONS = {
   }),
   mobileClientTabSelectionsByDeviceId: moveDisposition(37),
   worktreeMeta: moveDisposition(11),
-  worktreeMetaByIdentity: { disposition: 'rederive', item: 15 },
-  worktreeIdentityAliases: { disposition: 'rederive', item: 15 },
+  worktreeMetaByIdentity: moveDisposition(15, {
+    note: 'Readers prefer the identity row, and some rows exist only there: the effective metadata moves.'
+  }),
+  worktreeIdentityAliases: {
+    disposition: 'rederive',
+    item: 15,
+    note: 'The destination mints its own canonical identities for the moved metadata.'
+  },
   worktreeLineageById: moveDisposition(16),
   workspaceLineageByChildKey: moveDisposition(17),
   settings: notApplicableDisposition(62, 'Desktop-global; see SETTINGS_KEYS_NAMING_A_PATH.'),
