@@ -97,6 +97,9 @@ export type AcpLaunchSpec = {
     folder(dataDirectory: string): string
     materialize(dataDirectory: string, signal?: AbortSignal): Promise<void>
   }
+  /** The session config option through which the agent enforces the Agent Permissions posture
+   *  itself, and its values; Orca then answers none of its permission requests for the person. */
+  permissionModeConfig?: { configId: string; ask: string; full: string }
   /** Images go to the agent when it also advertises them; off sends text prompts only. */
   imagePrompts?: true
   /** The agent compacts its conversation when sent `/compact` as a prompt; off hides `/compact`. */
