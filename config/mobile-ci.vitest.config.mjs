@@ -32,7 +32,7 @@ export default {
     isolate: true,
     ...(process.versions.bun
       ? {
-          maxWorkers: 3,
+          maxWorkers: 4,
           exclude: [...(config.test?.exclude ?? defaultExclude), ...nodeFiles]
         }
       : { maxWorkers: 1, include: nodeFiles })
