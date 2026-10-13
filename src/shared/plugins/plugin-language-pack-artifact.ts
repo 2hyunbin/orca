@@ -1,3 +1,4 @@
+import type { PluginLocaleCoverage } from './plugin-locale-envelope'
 import {
   translatablePluginChrome,
   translatablePluginChromeContainer
@@ -21,6 +22,9 @@ export type PluginLanguagePackRegistration = {
   pluginKey: string
   locale: string
   catalog: Record<string, unknown>
+  displayName?: string
+  coverage?: PluginLocaleCoverage
+  builtInLocale?: 'es'
 }
 
 export function isPluginLanguagePackRegistration(
@@ -37,6 +41,10 @@ export function isPluginLanguagePackRegistration(
     pack.resourceLanguage === pluginLanguageResourceId(pack.id as `plugin:${string}`) &&
     typeof pack.pluginKey === 'string' &&
     typeof pack.locale === 'string' &&
+    (pack.builtInLocale === undefined ||
+      (pack.builtInLocale === 'es' &&
+        pack.locale === 'es' &&
+        pack.pluginKey === 'stablyai.orca-locale-es')) &&
     checkPluginLanguagePackCatalog(pack.catalog).ok
   )
 }
@@ -79,7 +87,7 @@ function isCatalogObject(value: unknown): value is Record<string, unknown> {
   )
 }
 
-function protectedTranslation(path: string): boolean {
+export function isProtectedPluginTranslationPath(path: string): boolean {
   if (!path.startsWith(PROTECTED_TRANSLATION_ROOT)) {
     return false
   }
@@ -164,7 +172,7 @@ function walkPluginLanguagePackCatalog(
       // A protected container stays walkable only when exempt chrome sits below
       // it; every leaf inside is still matched against its own full path.
       if (
-        protectedTranslation(path) &&
+        isProtectedPluginTranslationPath(path) &&
         !(isCatalogObject(value) && translatablePluginChromeContainer(path))
       ) {
         return { ok: false, error: `catalog cannot replace protected security copy at ${path}` }

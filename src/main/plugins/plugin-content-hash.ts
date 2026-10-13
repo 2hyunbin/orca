@@ -3,6 +3,10 @@ import { createReadStream } from 'node:fs'
 import { lstat, readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { pluginPathSegmentError } from '../../shared/plugins/plugin-path-safety'
+import {
+  PLUGIN_TREE_MAX_ENTRIES,
+  PLUGIN_TREE_MAX_BYTES
+} from '../../shared/plugins/plugin-tree-limits'
 
 /**
  * Deterministic hash of a plugin's file tree. The hash names the immutable
@@ -11,9 +15,6 @@ import { pluginPathSegmentError } from '../../shared/plugins/plugin-path-safety'
  * detectable. Hashes relative paths + file bytes in sorted order; symlinks
  * are refused outright (installed trees must be self-contained).
  */
-
-const MAX_PLUGIN_FILES = 2_000
-const MAX_PLUGIN_TOTAL_BYTES = 50 * 1024 * 1024
 
 type PluginFile = { path: string; size: number }
 
@@ -42,8 +43,8 @@ async function collectFiles(
     const full = join(dir, entry.name)
     const stat = await lstat(full)
     counters.entries += 1
-    if (counters.entries > MAX_PLUGIN_FILES) {
-      return `plugin exceeds the ${MAX_PLUGIN_FILES}-entry limit`
+    if (counters.entries > PLUGIN_TREE_MAX_ENTRIES) {
+      return `plugin exceeds the ${PLUGIN_TREE_MAX_ENTRIES}-entry limit`
     }
     if (stat.isSymbolicLink()) {
       return `symlink not allowed in plugin content: ${relative(root, full)}`
@@ -55,8 +56,8 @@ async function collectFiles(
       }
     } else if (stat.isFile()) {
       counters.bytes += stat.size
-      if (counters.bytes > MAX_PLUGIN_TOTAL_BYTES) {
-        return `plugin exceeds the ${MAX_PLUGIN_TOTAL_BYTES}-byte limit`
+      if (counters.bytes > PLUGIN_TREE_MAX_BYTES) {
+        return `plugin exceeds the ${PLUGIN_TREE_MAX_BYTES}-byte limit`
       }
       files.push({ path: full, size: stat.size })
     } else {
@@ -74,7 +75,7 @@ async function hashFileBounded(
   for await (const chunk of createReadStream(file.path)) {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     bytesRead += bytes.byteLength
-    if (bytesRead > file.size || bytesRead > MAX_PLUGIN_TOTAL_BYTES) {
+    if (bytesRead > file.size || bytesRead > PLUGIN_TREE_MAX_BYTES) {
       throw new Error(`plugin file changed while hashing: ${file.path}`)
     }
     hash.update(bytes)
@@ -100,8 +101,8 @@ export async function hashPluginTree(root: string): Promise<PluginTreeHashResult
     let totalBytes = 0
     for (const file of files) {
       totalBytes += file.size
-      if (totalBytes > MAX_PLUGIN_TOTAL_BYTES) {
-        return { ok: false, error: `plugin exceeds the ${MAX_PLUGIN_TOTAL_BYTES}-byte limit` }
+      if (totalBytes > PLUGIN_TREE_MAX_BYTES) {
+        return { ok: false, error: `plugin exceeds the ${PLUGIN_TREE_MAX_BYTES}-byte limit` }
       }
       // Normalize separators so the same tree hashes identically on Windows.
       const rel = relative(root, file.path).replaceAll('\\', '/')

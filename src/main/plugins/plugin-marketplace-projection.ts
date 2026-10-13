@@ -1,3 +1,4 @@
+import type { PluginCatalogRelease } from '../../shared/plugins/plugin-catalog-release'
 import type {
   PluginMarketplaceEntry,
   PluginMarketplaceGitSource
@@ -25,6 +26,8 @@ export type PluginMarketplaceListing = {
   marketplaceCommit: string
   pluginKey: string
   source: PluginMarketplaceEntry['source']
+  name?: string
+  release?: PluginCatalogRelease
   description?: string
   categories: string[]
   official: boolean

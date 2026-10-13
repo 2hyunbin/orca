@@ -1,7 +1,11 @@
 import { readdir } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { join } from 'node:path'
-import { PLUGIN_CONTENT_HASH_PATTERN } from '../../shared/plugins/plugin-install-lockfile'
+import {
+  PLUGIN_CONTENT_HASH_PATTERN,
+  type PluginLockEntry,
+  type PluginInstallSource
+} from '../../shared/plugins/plugin-install-lockfile'
 import {
   PLUGIN_MANIFEST_FILENAME,
   isQualifiedPluginKey,
@@ -10,14 +14,11 @@ import {
   satisfiesOrcaEngineRange,
   type PluginManifest
 } from '../../shared/plugins/plugin-manifest'
-import {
-  fingerprintPluginConsent,
-  hasInstructionalPluginContributions
-} from '../../shared/plugins/plugin-consent-fingerprint'
 import { validateDeclaredPluginArtifacts } from './plugin-artifact-validation'
 import { readPluginManifestText } from './plugin-manifest-file'
 import { readPluginCurrentPointer } from './plugin-current-pointer'
-import { hashPluginTree } from './plugin-content-hash'
+import { discoverPluginConsent } from './plugin-discovery-consent'
+import { readPluginLockfile } from './plugin-install-lockfile-store'
 
 export { PLUGIN_CURRENT_POINTER_FILENAME } from './plugin-current-pointer'
 
@@ -42,6 +43,9 @@ export type ValidDiscoveredPlugin = {
   manifest: PluginManifest
   /** Fingerprint of the capabilities and trusted-worker execution tier. */
   consentFingerprint: string
+  reviewRevision?: string
+  reviewContentHash?: string
+  consentSource?: PluginInstallSource
   /** Immutable tree identity included in consent for instructional packs. */
   consentContentHash?: string | null
   /** Content hash the install dir is named by; null for dev plugins. */
@@ -76,7 +80,8 @@ async function readManifestDir(
   rootDir: string,
   hostVersion: string,
   isDev: boolean,
-  installedContentHash?: string
+  installedContentHash?: string,
+  lockEntry?: PluginLockEntry
 ): Promise<DiscoveredPlugin> {
   let rawText: string
   try {
@@ -124,23 +129,29 @@ async function readManifestDir(
       isDev
     }
   }
-  let consentContentIdentity: string | undefined
-  if (installedContentHash && hasInstructionalPluginContributions(manifest)) {
-    consentContentIdentity = installedContentHash
-  }
-  if (isDev && hasInstructionalPluginContributions(manifest)) {
-    const treeHash = await hashPluginTree(rootDir)
-    if (!treeHash.ok) {
-      return { pluginKey, rootDir, error: treeHash.error, isDev }
+  let consent: Awaited<ReturnType<typeof discoverPluginConsent>>
+  try {
+    consent = await discoverPluginConsent({
+      rootDir,
+      pluginKey,
+      manifest,
+      isDev,
+      installedContentHash,
+      lockEntry
+    })
+  } catch (error) {
+    return {
+      pluginKey,
+      rootDir,
+      error: error instanceof Error ? error.message : String(error),
+      isDev
     }
-    consentContentIdentity = treeHash.hash
   }
   return {
     pluginKey,
     rootDir,
     manifest,
-    consentFingerprint: fingerprintPluginConsent(manifest, consentContentIdentity),
-    consentContentHash: consentContentIdentity ?? null,
+    ...consent,
     contentHash: null,
     isDev
   }
@@ -149,7 +160,8 @@ async function readManifestDir(
 async function readInstalledPlugin(
   pluginDir: string,
   dirName: string,
-  hostVersion: string
+  hostVersion: string,
+  lockEntry?: PluginLockEntry
 ): Promise<DiscoveredPlugin> {
   let contentHash: string
   try {
@@ -173,7 +185,7 @@ async function readInstalledPlugin(
     }
   }
   const versionDir = join(pluginDir, contentHash)
-  const discovered = await readManifestDir(versionDir, hostVersion, false, contentHash)
+  const discovered = await readManifestDir(versionDir, hostVersion, false, contentHash, lockEntry)
   if (isInvalidDiscoveredPlugin(discovered)) {
     return { ...discovered, pluginKey: dirName }
   }
@@ -193,7 +205,8 @@ async function readInstalledPlugin(
 async function readInstalledPlugins(
   pluginsDir: string,
   entries: readonly Dirent[],
-  hostVersion: string
+  hostVersion: string,
+  lockEntries: Readonly<Record<string, PluginLockEntry>>
 ): Promise<DiscoveredPlugin[]> {
   const results = Array.from({ length: entries.length }) as DiscoveredPlugin[]
   let nextIndex = 0
@@ -206,7 +219,8 @@ async function readInstalledPlugins(
         results[index] = await readInstalledPlugin(
           join(pluginsDir, entry.name),
           entry.name,
-          hostVersion
+          hostVersion,
+          lockEntries[entry.name]
         )
       }
     }
@@ -233,7 +247,12 @@ export async function discoverPlugins(options: {
   // Installed manifests are independent immutable trees. Read them in
   // a bounded pool so startup latency stays low without exhausting handles.
   discovered.push(
-    ...(await readInstalledPlugins(options.pluginsDir, installedEntries, options.hostVersion))
+    ...(await readInstalledPlugins(
+      options.pluginsDir,
+      installedEntries,
+      options.hostVersion,
+      installedEntries.length ? (await readPluginLockfile(options.pluginsDir)).plugins : {}
+    ))
   )
   for (const devPath of options.devPluginPaths) {
     const plugin = await readManifestDir(devPath, options.hostVersion, true)

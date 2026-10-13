@@ -279,6 +279,7 @@ export class PluginMarketplaceService {
       marketplaceCommit: snapshot.marketplaceCommit,
       pluginKey: entry.id,
       source: entry.source,
+      ...('release' in entry ? { name: entry.name, release: entry.release } : {}),
       ...(entry.description ? { description: entry.description } : {}),
       categories: entry.categories,
       official,

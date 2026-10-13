@@ -1,3 +1,7 @@
+import {
+  pluginCatalogReleaseError,
+  type PluginCatalogRelease
+} from '../../shared/plugins/plugin-catalog-release'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, rm } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
@@ -23,6 +27,8 @@ import { hashPluginTree } from './plugin-content-hash'
 import { publishPluginInstall } from './plugin-install-publication'
 import { readPluginManifestText } from './plugin-manifest-file'
 import { pluginInstallTrustError } from './plugin-install-trust'
+import { readPluginCurrentPointer } from './plugin-current-pointer'
+import type { PluginReviewedUpdatePublication } from '../../shared/plugins/plugin-reviewed-update'
 
 export type PluginInstallResult =
   | {
@@ -122,6 +128,9 @@ export async function installStagedPluginTree(input: {
   source: PluginInstallSource
   resolvedCommit: string | null
   expectedPluginKey?: string
+  expectedRelease?: PluginCatalogRelease
+  dataAction?: { consentFingerprint: string; currentContentHash: string | null }
+  reviewedUpdate?: PluginReviewedUpdatePublication
   /** Trusted bundled bytes may restore an immutable directory damaged on disk. */
   repairCorruptedVersion?: boolean
   blockedPluginReason?: (pluginKey: string) => string | null
@@ -133,6 +142,17 @@ export async function installStagedPluginTree(input: {
   })
   if (!sourceInspection.ok) {
     return sourceInspection
+  }
+  if (input.expectedRelease) {
+    const releaseError = pluginCatalogReleaseError({
+      release: input.expectedRelease,
+      manifest: sourceInspection.manifest,
+      resolvedCommit: input.resolvedCommit,
+      contentHash: sourceInspection.contentHash
+    })
+    if (releaseError) {
+      return { ok: false, error: releaseError }
+    }
   }
   const trustError = pluginInstallTrustError(sourceInspection.pluginKey, input.source)
   if (trustError) {
@@ -146,6 +166,17 @@ export async function installStagedPluginTree(input: {
   const pluginKey = sourceInspection.pluginKey
   const pluginDir = join(input.pluginsDir, pluginKey)
   const versionDir = join(pluginDir, sourceInspection.contentHash)
+  const previousContentHash = await readPluginCurrentPointer(pluginDir)
+  if (
+    manifest.manifestVersion === 2 &&
+    input.source.kind === 'marketplace' &&
+    previousContentHash &&
+    previousContentHash !== sourceInspection.contentHash &&
+    !input.dataAction &&
+    !input.reviewedUpdate
+  ) {
+    return { ok: false, error: 'review this update before replacing the installed release' }
+  }
   if (existsSync(versionDir) && input.repairCorruptedVersion) {
     const existingHash = await hashPluginTree(versionDir)
     if (!existingHash.ok || existingHash.hash !== sourceInspection.contentHash) {
@@ -227,7 +258,23 @@ export async function installStagedPluginTree(input: {
       }
     }
   }
-  const consentFingerprint = fingerprintPluginConsent(manifest, sourceInspection.contentHash)
+  const consentFingerprint = fingerprintPluginConsent(
+    manifest,
+    sourceInspection.contentHash,
+    input.source
+  )
+  if (input.dataAction) {
+    if (
+      manifest.manifestVersion !== 2 ||
+      manifest.execution !== 'data' ||
+      consentFingerprint !== input.dataAction.consentFingerprint
+    ) {
+      return { ok: false, error: 'plugin authority changed; review this release before installing' }
+    }
+    if ((await readPluginCurrentPointer(pluginDir)) !== input.dataAction.currentContentHash) {
+      return { ok: false, error: 'installed plugin changed; refresh and try again' }
+    }
+  }
   const entry: PluginLockEntry = {
     pluginKey,
     version: manifest.version,
@@ -237,8 +284,25 @@ export async function installStagedPluginTree(input: {
     consentFingerprint,
     installedAt: Date.now()
   }
+  if (input.reviewedUpdate) {
+    if (
+      manifest.manifestVersion !== 2 ||
+      consentFingerprint !== input.reviewedUpdate.consentFingerprint ||
+      sourceInspection.contentHash !== input.reviewedUpdate.contentHash
+    ) {
+      return { ok: false, error: 'plugin release changed; review the update again' }
+    }
+    if ((await readPluginCurrentPointer(pluginDir)) !== input.reviewedUpdate.currentContentHash) {
+      return { ok: false, error: 'installed plugin changed; refresh and try again' }
+    }
+  }
   try {
-    await publishPluginInstall({ pluginsDir: input.pluginsDir, pluginDir, entry })
+    await publishPluginInstall({
+      pluginsDir: input.pluginsDir,
+      pluginDir,
+      entry,
+      approval: input.reviewedUpdate
+    })
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }

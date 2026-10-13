@@ -1,5 +1,6 @@
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { PluginReviewedUpdatePublication } from '../../shared/plugins/plugin-reviewed-update'
 import {
   PLUGIN_CONTENT_HASH_PATTERN,
   upsertPluginLock,
@@ -23,6 +24,7 @@ export async function publishPluginInstall(input: {
   pluginsDir: string
   pluginDir: string
   entry: PluginLockEntry
+  approval?: Pick<PluginReviewedUpdatePublication, 'commitApproval' | 'restoreApproval'>
 }): Promise<void> {
   const previousContentHash = await readPluginCurrentPointer(input.pluginDir)
   const currentLock = await readPluginLockfile(input.pluginsDir)
@@ -44,6 +46,9 @@ export async function publishPluginInstall(input: {
   // is a no-op so a failed or interrupted source change cannot be recovered
   // later as though it had successfully published.
   const publishedEntry = existingProvenance ?? legacyCurrentEntry ?? input.entry
+  if (input.approval && publishedEntry.consentFingerprint !== input.entry.consentFingerprint) {
+    throw new Error('installed source identity differs; publish a new release before reviewing it')
+  }
   const nextLock = upsertPluginLock(currentLock, publishedEntry)
   // Why: after a crash between pointer and global-index publication, startup
   // can reconstruct exact source/commit identity from this immutable record.
@@ -51,15 +56,37 @@ export async function publishPluginInstall(input: {
     await writePluginInstallProvenance(input.pluginDir, publishedEntry)
   }
   await writePluginCurrentPointer(input.pluginDir, input.entry.contentHash)
+  let approvalAttempted = false
+  let lockPublished = false
   try {
     await writePluginLockfile(input.pluginsDir, nextLock)
+    lockPublished = true
+    if (input.approval) {
+      approvalAttempted = true
+      input.approval.commitApproval()
+    }
   } catch (publicationError) {
-    try {
-      await restorePluginCurrentPointer(input.pluginDir, previousContentHash)
-    } catch (rollbackError) {
+    const rollbackFailures: unknown[] = []
+    if (approvalAttempted) {
+      try {
+        input.approval?.restoreApproval()
+      } catch (error) {
+        rollbackFailures.push(error)
+      }
+    }
+    const restoration = await Promise.allSettled([
+      restorePluginCurrentPointer(input.pluginDir, previousContentHash),
+      ...(lockPublished ? [writePluginLockfile(input.pluginsDir, currentLock)] : [])
+    ])
+    for (const result of restoration) {
+      if (result.status === 'rejected') {
+        rollbackFailures.push(result.reason)
+      }
+    }
+    if (rollbackFailures.length) {
       throw new AggregateError(
-        [publicationError, rollbackError],
-        'plugin install publication and pointer rollback both failed'
+        [publicationError, ...rollbackFailures],
+        'plugin install publication and rollback both failed'
       )
     }
     throw publicationError

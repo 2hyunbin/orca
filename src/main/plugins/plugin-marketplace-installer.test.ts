@@ -130,6 +130,7 @@ describe('PluginMarketplaceInstaller', () => {
     expect(lock.plugins['community.notes']?.source).toEqual({
       kind: 'marketplace',
       marketplace: {
+        owner: 'community',
         url: 'https://github.com/community/plugins.git',
         ref: 'main',
         resolvedCommit: 'f'.repeat(40)
@@ -194,5 +195,64 @@ describe('PluginMarketplaceInstaller', () => {
       version: '1.0.0',
       resolvedCommit: 'a'.repeat(40)
     })
+  })
+  it('includes every literal lifecycle and receipt command from the exact provider source being reviewed', async () => {
+    const { installer, sourceId } = await setup()
+    git.checkout.mockImplementation(async ({ destination }: { destination: string }) => {
+      await mkdir(destination, { recursive: true })
+      await writeFile(
+        join(destination, 'orca-plugin.json'),
+        JSON.stringify({
+          manifestVersion: 2,
+          execution: 'instructional',
+          publisher: 'community',
+          id: 'notes',
+          name: 'Company environments',
+          version: '1.0.0',
+          pluginApi: 1,
+          engines: { orca: '>=1.0.0' },
+          contributes: { environmentRecipes: [{ path: 'recipe.json' }] }
+        })
+      )
+      const command = {
+        program: 'company-devpods',
+        args: ['--literal', '$(never-execute)'],
+        timeoutSeconds: 30
+      }
+      await writeFile(
+        join(destination, 'recipe.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          protocolVersion: 2,
+          id: 'pods',
+          name: 'Company pods',
+          description: 'Company machines',
+          lifetime: 'both',
+          commands: Object.fromEntries(
+            ['create', 'list', 'delete', 'sleep', 'resume', 'archive'].map((action) => [
+              action,
+              { ...command, args: [action, ...command.args] }
+            ])
+          ),
+          recovery: { protocolVersion: 1, command: { ...command, args: ['inspect-operation'] } }
+        })
+      )
+      return git.commit
+    })
+    const preview = await installer.preview(sourceId, 'community.notes')
+    expect(preview.environmentRecipes).toHaveLength(1)
+    expect(preview.environmentRecipes?.[0]?.commands).toHaveLength(7)
+    expect(preview.environmentRecipes?.[0]?.commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'list',
+          program: 'company-devpods',
+          args: ['list', '--literal', '$(never-execute)']
+        }),
+        expect.objectContaining({ action: 'inspect-operation', args: ['inspect-operation'] })
+      ])
+    )
+    expect(preview.contentHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(preview.reviewRevision).toBeTruthy()
   })
 })

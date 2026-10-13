@@ -1,3 +1,5 @@
+import { serializePluginMutation } from './plugin-install-mutation-queue'
+import type { PluginCatalogRelease } from '../../shared/plugins/plugin-catalog-release'
 import { mkdtemp, readdir, realpath, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -23,6 +25,7 @@ import { checkoutPluginGitSource } from './plugin-git-repository'
 import { readPluginCurrentPointer } from './plugin-current-pointer'
 import { readPluginInstallProvenance } from './plugin-install-provenance'
 import { publishPluginInstall } from './plugin-install-publication'
+import type { PluginReviewedUpdatePublication } from '../../shared/plugins/plugin-reviewed-update'
 
 export type { PluginInstallResult } from './plugin-install-staging'
 
@@ -42,28 +45,6 @@ export {
  * Installs land in immutable hash-addressed dirs behind an atomic pointer
  * swap; the previous version dir is kept for one-step rollback.
  */
-
-const pluginMutationChains = new Map<string, Promise<void>>()
-
-async function serializePluginMutation<T>(
-  pluginsDir: string,
-  operation: () => Promise<T>
-): Promise<T> {
-  const previous = pluginMutationChains.get(pluginsDir) ?? Promise.resolve()
-  const run = previous.catch(() => undefined).then(operation)
-  const settled = run.then(
-    () => undefined,
-    () => undefined
-  )
-  pluginMutationChains.set(pluginsDir, settled)
-  try {
-    return await run
-  } finally {
-    if (pluginMutationChains.get(pluginsDir) === settled) {
-      pluginMutationChains.delete(pluginsDir)
-    }
-  }
-}
 
 export async function installPluginFromLocalPath(input: {
   pluginsDir: string
@@ -149,7 +130,10 @@ export async function installPluginFromMarketplace(input: {
   hostVersion: string
   expectedPluginKey: string
   expectedResolvedCommit: string
-  marketplace: { url: string; ref: string; resolvedCommit: string }
+  expectedRelease?: PluginCatalogRelease
+  dataAction?: { consentFingerprint: string; currentContentHash: string | null }
+  reviewedUpdate?: PluginReviewedUpdatePublication
+  marketplace: { url: string; ref: string; resolvedCommit: string; owner?: string }
   plugin: { url: string; ref: string }
   blockedPluginReason?: (pluginKey: string) => string | null
 }): Promise<PluginInstallResult> {
@@ -183,6 +167,9 @@ export async function installPluginFromMarketplace(input: {
         source,
         resolvedCommit,
         expectedPluginKey: input.expectedPluginKey,
+        expectedRelease: input.expectedRelease,
+        dataAction: input.dataAction,
+        reviewedUpdate: input.reviewedUpdate,
         blockedPluginReason: input.blockedPluginReason
       })
     } catch (error) {
