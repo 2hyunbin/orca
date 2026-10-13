@@ -109,7 +109,7 @@ export async function assembleOrcadArtifact(args: {
   const targetRoot = join(args.cacheRoot, args.target)
   const nowMs = (args.now ?? Date.now)()
   const record = trust ? await readOrcadArtifactVerificationRecord(targetRoot) : null
-  const identity = await verifiedArtifactIdentity(sources, expected, record, nowMs)
+  const identity = await verifiedArtifactIdentity(sources, expected, record, nowMs, trust)
   await verifyTemplateMarkers(args.templateDir, args.target)
   const { fullVersion, sourceHashes } = identity
   const recordedSlot =
@@ -228,6 +228,10 @@ function expectedTemplateSha256(
     expected.set(filename, { sha256, label: `${target} ${filename}` })
   }
   if (targetManifest.browserName && targetManifest.browserSha256) {
+    // A browser named like a required file would replace that file's manifest digest.
+    if (expected.has(targetManifest.browserName)) {
+      throw new Error(`Packaged orcad template ${target} browser name collides with a slot file`)
+    }
     expected.set(targetManifest.browserName, {
       sha256: targetManifest.browserSha256,
       label: `${target} browser`

@@ -333,6 +333,18 @@ describe('assembleOrcadArtifact', () => {
     )
   })
 
+  // Regression: a browser digest keyed like orcad.js must not replace the common digest.
+  it('rejects a browser named like a required slot file', async () => {
+    const fixture = createTemplate()
+    rewriteManifest(fixture.templateDir, (manifest) => {
+      manifest.targets[TARGET]!.browserName = 'orcad.js'
+    })
+
+    await expect(assembleOrcadArtifact({ ...fixture, target: TARGET })).rejects.toThrow(
+      'browser name collides with a slot file'
+    )
+  })
+
   it('rejects a manifest that omits a required common artifact checksum', async () => {
     const fixture = createTemplate()
     rewriteManifest(fixture.templateDir, (manifest) => {

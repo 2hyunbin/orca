@@ -31,9 +31,13 @@ export async function verifiedArtifactIdentity(
   sources: ArtifactSource[],
   expected: Map<string, ExpectedSha256>,
   record: OrcadArtifactVerificationRecord | null,
-  nowMs: number
+  nowMs: number,
+  /** Off for callers that never keep a record, so they pay no stat calls. */
+  sign = true
 ): Promise<ArtifactIdentity> {
-  const signatures = await Promise.all(sources.map((source) => fileSignature(source.path, nowMs)))
+  const signatures = sign
+    ? await Promise.all(sources.map((source) => fileSignature(source.path, nowMs)))
+    : sources.map(() => null)
   const reusable =
     record !== null &&
     record.sources.length === sources.length &&
