@@ -4,7 +4,6 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import { buildObservedSetupCommand } from './orchestration/setup-completion-signal'
 import { buildSetupRunnerCommand } from '../../shared/setup-runner-command'
 import type { RuntimeStore } from './runtime-store-contract'
-import { translateMain } from '../i18n/main-i18n'
 
 type TerminalResult = { handle: string }
 export type WorktreeProvisionTerminalOptions = {
@@ -167,7 +166,7 @@ export async function provisionWorktreeTerminals(
             ...surfacing
           })
         : host.createTerminal(args.worktreeSelector, {
-            title: translateMain('worktree.setupTabTitle', 'Setup'),
+            title: 'Setup',
             command,
             env,
             ...surfacing

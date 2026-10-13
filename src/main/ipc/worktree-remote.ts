@@ -6,7 +6,6 @@ import { getRepoHostedReviewExecutionHostId } from '../source-control/hosted-rev
 import type { BrowserWindow } from 'electron'
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { translateMain } from '../i18n/main-i18n'
 import type { Store } from '../persistence'
 import type { GitAdmissionTier } from '../../shared/rpc-contract/git-admission-tier-params'
 import type { GlobalSettings } from '../../shared/global-settings-types'
@@ -410,7 +409,7 @@ async function spawnLocalStartupAndSetupTerminals(args: {
         await runtime.createTerminal(
           `id:${worktree.id}`,
           {
-            title: translateMain('worktree.setupTabTitle', 'Setup'),
+            title: 'Setup',
             command: setupCommand,
             env: setup.envVars,
             activate: false,
