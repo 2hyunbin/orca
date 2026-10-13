@@ -184,8 +184,7 @@ describe('performCancel', () => {
         kind: 'status',
         text: 'Agent is working…',
         turnLifecycle: { turnId: 'turn-1', state: 'running' }
-      },
-      { kind: 'status', text: 'Cancellation requested.' }
+      }
     ])
   })
 
