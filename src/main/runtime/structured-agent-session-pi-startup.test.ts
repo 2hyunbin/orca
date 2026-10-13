@@ -110,41 +110,35 @@ it('attaches Pi at spawn and holds the opening send until the provider answers i
   expect(script.closes()).toBe(1)
 })
 
-it('writes a startup model pick once the Pi child is ready', async () => {
-  const { script, host, caller, fence } = await setup()
-  const fields = { key: 'model', value: 'scripted/model-2' }
-  const picked = host.setOption(caller, {
-    envelope: {
-      sessionId: HOST_TEST_SESSION,
-      clientOperationId: operationId(),
-      expectedRuntimeFence: fence,
-      payloadFingerprint: computeAgentSessionPayloadFingerprint({
-        method: 'agentSession.setOption',
-        sessionId: HOST_TEST_SESSION,
-        fields
-      })
-    },
-    ...fields
-  })
+it('writes startup model and effort picks before a message accepted after them', async () => {
+  const { script, host, caller } = await setup()
+  const picked = (
+    [
+      ['model', 'scripted/model-2'],
+      ['effort', 'low']
+    ] as const
+  ).map(([key, value]) =>
+    host.setOption(caller, {
+      envelope: envelope('agentSession.setOption', { key, value }),
+      key,
+      value
+    })
+  )
+  const body = hostTestMessage('first message')
+  const sent = host.send(caller, { envelope: envelope('agentSession.send', { body }), body })
   expect(script.wire()).not.toContain('set_model')
   script.releaseHandshake()
-  expect((await picked).ok).toBe(true)
-  expect(script.prompts()).toEqual([])
-  const body = hostTestMessage('first message')
-  const sent = await host.send(caller, {
-    envelope: envelope('agentSession.send', { body }),
-    body
-  })
-  expect(sent.ok).toBe(true)
+  expect((await Promise.all(picked)).every((result) => result.ok)).toBe(true)
+  expect((await sent).ok).toBe(true)
   await vi.waitFor(() => expect(script.prompts()).toEqual(['first message']))
   const wire = script.wire()
-  expect(wire).toContain('set_model')
-  const { sessions, serialize } = host.collaboratorsForTests()
-  await vi.waitFor(() => expect(sessions.get(HOST_TEST_SESSION)?.child?.phase).toBe('ready'))
-  await serialize(HOST_TEST_SESSION, async () => {})
-  expect(peekOpenedAgentSessionRecordStore()?.getRecord(HOST_TEST_SESSION)?.options?.model).toBe(
-    fields.value
-  )
+  expect(wire.indexOf('set_model')).toBeGreaterThanOrEqual(0)
+  expect(wire.indexOf('set_thinking_level')).toBeGreaterThan(wire.indexOf('set_model'))
+  expect(wire.indexOf('prompt')).toBeGreaterThan(wire.indexOf('set_thinking_level'))
+  expect(peekOpenedAgentSessionRecordStore()?.getRecord(HOST_TEST_SESSION)?.options).toMatchObject({
+    model: 'scripted/model-2',
+    effort: 'low'
+  })
 })
 
 it('ends Pi on Stop and resumes its real session file when the next send starts a child', async () => {
