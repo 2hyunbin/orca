@@ -245,8 +245,6 @@ const VM_REPO = {
   path: '/srv/api',
   executionHostId: 'runtime:vm'
 }
-// A server's SSH-backed repo keeps its connection, which that server holds.
-const VM_SSH_REPO = { ...VM_REPOS[1], executionHostId: 'runtime:vm' }
 
 /** Where each call on the screen's client ran: its `executionHost`, or `desktop`. */
 function ranOn(client: FakeSession, method: string): string[] {
@@ -261,8 +259,9 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     const model = await mount(client, [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY])
     await loadRepos(model)
     await settle()
-    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
-    expect(await loadRepos(model)).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
+    // The server's SSH-backed repo is left out: a server cannot serve it.
+    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO])
+    expect(await loadRepos(model)).toEqual([...MAC_REPOS, VM_REPO])
     // The server needing an update is never asked.
     expect(ranOn(client, 'repo.list').sort()).toEqual(['desktop', 'runtime:vm'])
   })
@@ -288,10 +287,9 @@ describe('Tasks screen repos on the desktop and its servers', () => {
       const loaded = await model().fetchGitHubItemsPage(model().client!, model().repos)
       page.titles = loaded.items.map((item) => item.title).sort()
     })
-    expect(page.titles).toEqual(['from the desktop', 'from the server', 'from the server'])
+    expect(page.titles).toEqual(['from the desktop', 'from the server'])
     expect(ranOn(client, 'github.listWorkItems').slice(earlier).sort()).toEqual([
       'desktop',
-      'runtime:vm',
       'runtime:vm'
     ])
   })
@@ -301,7 +299,7 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     await loadRepos(model)
     await settle()
     const details = model().repos.map((repo) => getTaskRepoDetail(repo, model().repoHostLabels))
-    expect(details).toEqual(['This computer · /mac/app', 'VM · /srv/api', 'VM · /r'])
+    expect(details).toEqual(['This computer · /mac/app', 'VM · /srv/api'])
   })
 
   it('keeps the desktop list alone on a desktop that does not relay', async () => {
@@ -345,14 +343,13 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     // One quiet load of every listed repo.
     expect(ranOn(desktopRef.current!, 'github.listWorkItems').slice(loadedBefore).sort()).toEqual([
       'desktop',
-      'runtime:vm',
       'runtime:vm'
     ])
     expect(
       model()
         .items.map((item) => item.title)
         .sort()
-    ).toEqual(['from the desktop', 'from the server', 'from the server'])
+    ).toEqual(['from the desktop', 'from the server'])
     expect(renders.slice(joinedFrom).filter((seen) => seen.loading || seen.count === 0)).toEqual([])
   })
 
@@ -447,7 +444,7 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     const before = ranOn(desktopRef.current!, 'github.listWorkItems').length
     late.resolve({ repos: VM_REPOS })
     await settle()
-    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
+    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO])
     expect(ranOn(desktopRef.current!, 'github.listWorkItems')).toHaveLength(before)
   })
 
@@ -472,8 +469,10 @@ describe('Tasks screen repos on the desktop and its servers', () => {
   })
 
   it("edits the filter from what's shown, so a gone repo can't turn a tap into All", async () => {
+    // A third repo, so picking two stays a filter rather than becoming All.
+    const vmDocs = { id: 'vm-docs', displayName: 'docs', path: '/srv/docs' }
     const model = await mount(
-      desktop(),
+      desktop(async () => ({ repos: [...VM_REPOS, vmDocs] })),
       [MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY],
       ['vm-repo', 'gone-repo']
     )
@@ -514,7 +513,7 @@ describe('Tasks screen repos on the desktop and its servers', () => {
     expect(before).toBeGreaterThan(0)
     late.resolve({ repos: VM_REPOS })
     await settle()
-    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO, VM_SSH_REPO])
+    expect(model().repos).toEqual([...MAC_REPOS, VM_REPO])
     expect(ranOn(desktopRef.current!, 'linear.listIssues')).toHaveLength(before)
   })
 

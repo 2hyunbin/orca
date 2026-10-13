@@ -15,31 +15,6 @@
         "code": "incompatible_reply"
       }
     },
-    "0a9bf4383712": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "0ba2cee4b538": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -117,21 +92,6 @@
         }
       }
     },
-    "27794616c8de": {
-      "name": "workspaceSshState",
-      "ordinal": 11,
-      "value": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "2bdbcded5f9b": {
       "name": "preflight.detectRemoteAgents#1",
       "ordinal": 4,
@@ -178,6 +138,28 @@
       "name": "ssh.connect#1",
       "ordinal": 10,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ssh.connect\",\"params\":{\"targetId\":\"ssh-1\"}}"
+    },
+    "43ead075ce12": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
+        },
+        "source": "repo"
+      },
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
     },
     "4983c5c25f98": {
       "name": "repo.hooks#1",
@@ -319,26 +301,6 @@
         }
       }
     },
-    "6fa0515d683b": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": {
-        "decision": "inherit",
-        "kind": "decision"
-      },
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "7073ec04e595": {
       "name": "repo.hooks#1",
       "ordinal": 13,
@@ -374,6 +336,23 @@
         }
       }
     },
+    "7e1d82e5b5ed": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": {
+        "decision": "inherit",
+        "kind": "decision"
+      },
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
+    },
     "7f9fca3450c2": {
       "name": "repo.hooks#1",
       "ordinal": 13,
@@ -406,11 +385,49 @@
         }
       }
     },
+    "80ffce5fa2b3": {
+      "name": "workspaceSshState",
+      "ordinal": 11,
+      "value": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
+    },
+    "84149cfb1467": {
+      "name": "workspaceSshState",
+      "ordinal": 8,
+      "value": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connecting",
+        "targetId": "ssh-1"
+      }
+    },
     "9637248df9cb": {
       "name": "workspaceDetectedAgentIds",
       "ordinal": 3,
       "value": {
         "$rpc": "null"
+      }
+    },
+    "a1f755a38636": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": "unresolved",
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
       }
     },
     "a947768bc0ed": {
@@ -436,21 +453,6 @@
         "category": "Error",
         "message": "Unknown method",
         "isRpcDeliveryUnknown": false
-      }
-    },
-    "bdfd96f57e2c": {
-      "name": "workspaceSshState",
-      "ordinal": 8,
-      "value": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connecting",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
       }
     },
     "bf0c0c00caf9": {
@@ -556,23 +558,6 @@
             "source": "repo"
           }
         }
-      }
-    },
-    "e6d3fdebfaa8": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": "unresolved",
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
       }
     },
     "eb79a9b3682a": {
@@ -726,15 +711,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -749,15 +734,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "0a9bf4383712",
+          "state": "43ead075ce12",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -772,15 +757,15 @@
             "connect": "eb79a9b3682a",
             "setup": "06f3dbe600c4"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -795,15 +780,15 @@
             "connect": "eb79a9b3682a",
             "setup": "06f3dbe600c4"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -818,15 +803,15 @@
             "connect": "eb79a9b3682a",
             "setup": "1712c415bebf"
           },
-          "state": "6fa0515d683b",
+          "state": "7e1d82e5b5ed",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -841,15 +826,15 @@
             "connect": "eb79a9b3682a",
             "setup": "1712c415bebf"
           },
-          "state": "6fa0515d683b",
+          "state": "7e1d82e5b5ed",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -864,15 +849,15 @@
             "connect": "eb79a9b3682a",
             "setup": "1712c415bebf"
           },
-          "state": "6fa0515d683b",
+          "state": "7e1d82e5b5ed",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -887,15 +872,15 @@
             "connect": "eb79a9b3682a",
             "setup": "32a7c0ae7918"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -910,15 +895,15 @@
             "connect": "eb79a9b3682a",
             "setup": "f3b516f62081"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -933,15 +918,15 @@
             "connect": "eb79a9b3682a",
             "setup": "b948e8307e81"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -956,15 +941,15 @@
             "connect": "eb79a9b3682a",
             "setup": "a947768bc0ed"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -979,15 +964,15 @@
             "connect": "eb79a9b3682a",
             "setup": "c7584e82c72f"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }

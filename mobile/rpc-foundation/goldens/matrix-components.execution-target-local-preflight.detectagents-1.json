@@ -4,6 +4,21 @@
   "family": "components.execution-target-local",
   "namedDeltas": [],
   "values": {
+    "1e4520fe6576": {
+      "detected": {
+        "$rpc": "null"
+      },
+      "gate": {
+        "connectInProgress": true,
+        "error": {
+          "$rpc": "null"
+        },
+        "requiresConnection": false,
+        "status": {
+          "$rpc": "null"
+        }
+      }
+    },
     "2498f3d3369f": {
       "name": "preflight.detectAgents#1",
       "ordinal": 1,
@@ -36,12 +51,10 @@
         }
       }
     },
-    "305921cd9555": {
-      "detected": {
-        "$rpc": "null"
-      },
+    "365a6864b043": {
+      "detected": [],
       "gate": {
-        "connectInProgress": false,
+        "connectInProgress": true,
         "error": {
           "$rpc": "null"
         },
@@ -120,19 +133,6 @@
             },
             "ok": false
           }
-        }
-      }
-    },
-    "5990695f92a7": {
-      "detected": [],
-      "gate": {
-        "connectInProgress": false,
-        "error": {
-          "$rpc": "null"
-        },
-        "requiresConnection": false,
-        "status": {
-          "$rpc": "null"
         }
       }
     },
@@ -272,6 +272,19 @@
         }
       }
     },
+    "986a776213e8": {
+      "detected": ["claude"],
+      "gate": {
+        "connectInProgress": true,
+        "error": {
+          "$rpc": "null"
+        },
+        "requiresConnection": false,
+        "status": {
+          "$rpc": "null"
+        }
+      }
+    },
     "9b8ae0c8eec5": {
       "name": "preflight.detectAgents#1",
       "ordinal": 2,
@@ -331,19 +344,6 @@
         "value": {
           "id": "frame-1",
           "ok": true
-        }
-      }
-    },
-    "b7f951970a65": {
-      "detected": ["claude"],
-      "gate": {
-        "connectInProgress": false,
-        "error": {
-          "$rpc": "null"
-        },
-        "requiresConnection": false,
-        "status": {
-          "$rpc": "null"
         }
       }
     },
@@ -468,7 +468,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "305921cd9555",
+          "state": "1e4520fe6576",
           "effects": []
         }
       },
@@ -480,7 +480,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "b7f951970a65",
+          "state": "986a776213e8",
           "effects": []
         }
       },
@@ -492,7 +492,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -504,7 +504,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -516,7 +516,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -528,7 +528,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -540,7 +540,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -552,7 +552,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -564,7 +564,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -576,7 +576,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -588,7 +588,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       },
@@ -600,7 +600,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "5990695f92a7",
+          "state": "365a6864b043",
           "effects": []
         }
       }

@@ -9,6 +9,16 @@
       "ordinal": 1,
       "value": "claude"
     },
+    "263b165043b0": {
+      "name": "workspaceSshState",
+      "ordinal": 11,
+      "value": {
+        "error": "",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
+    },
     "2d313c57ddf7": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -25,6 +35,24 @@
       "name": "ssh.connect#1",
       "ordinal": 10,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ssh.connect\",\"params\":{\"targetId\":\"ssh-1\"}}"
+    },
+    "55904d40a00f": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": [],
+      "setup": {
+        "decision": "skip",
+        "kind": "decision",
+        "setupTrust": {
+          "$rpc": "undefined"
+        }
+      },
+      "ssh": {
+        "error": "",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
     },
     "5d9791d21090": {
       "name": "preflight.detectRemoteAgents#1",
@@ -63,19 +91,28 @@
       "ordinal": 6,
       "value": []
     },
-    "7890acb5e903": {
+    "84149cfb1467": {
+      "name": "workspaceSshState",
+      "ordinal": 8,
+      "value": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connecting",
+        "targetId": "ssh-1"
+      }
+    },
+    "8509334ad6ae": {
       "agent": "claude",
       "connecting": false,
       "detected": [],
       "setup": "unresolved",
       "ssh": {
-        "record": {
-          "error": "",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
     "9637248df9cb": {
@@ -123,34 +160,6 @@
           "id": "frame-2",
           "ok": false
         }
-      }
-    },
-    "b631ed286026": {
-      "name": "workspaceSshState",
-      "ordinal": 11,
-      "value": {
-        "record": {
-          "error": "",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
-    "bdfd96f57e2c": {
-      "name": "workspaceSshState",
-      "ordinal": 8,
-      "value": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connecting",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
       }
     },
     "bf0c0c00caf9": {
@@ -219,27 +228,6 @@
       "value": {
         "$rpc": "undefined"
       }
-    },
-    "f004fb493cbb": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": [],
-      "setup": {
-        "decision": "skip",
-        "kind": "decision",
-        "setupTrust": {
-          "$rpc": "undefined"
-        }
-      },
-      "ssh": {
-        "record": {
-          "error": "",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
     }
   },
   "recording": {
@@ -254,15 +242,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "7890acb5e903",
+          "state": "8509334ad6ae",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "b631ed286026",
+            "84149cfb1467",
+            "263b165043b0",
             "e44d3b580ab0"
           ]
         }
@@ -277,15 +265,15 @@
             "connect": "eb79a9b3682a",
             "setup": "2d313c57ddf7"
           },
-          "state": "f004fb493cbb",
+          "state": "55904d40a00f",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "630e2f27face",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "b631ed286026",
+            "84149cfb1467",
+            "263b165043b0",
             "e44d3b580ab0"
           ]
         }

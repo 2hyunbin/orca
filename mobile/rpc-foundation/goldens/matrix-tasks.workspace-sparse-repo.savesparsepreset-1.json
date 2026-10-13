@@ -51,22 +51,6 @@
       "ordinal": 8,
       "value": "Failed to save sparse preset."
     },
-    "14a22ce0f2f8": {
-      "presets": [],
-      "presetsError": "",
-      "saving": true,
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "15870a254b47": {
       "name": "repo.saveSparsePreset#1",
       "ordinal": 6,
@@ -104,21 +88,6 @@
         }
       }
     },
-    "16c82c1c6031": {
-      "name": "workspaceSshState",
-      "ordinal": 3,
-      "value": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "1bc7cf6bcbaf": {
       "name": "workspaceSparsePresets",
       "ordinal": 8,
@@ -129,6 +98,19 @@
           "name": "docs"
         }
       ]
+    },
+    "1f453ea83df7": {
+      "presets": [],
+      "presetsError": "transport failure",
+      "saving": false,
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
     },
     "2902639ee428": {
       "name": "workspaceSparsePresetsError",
@@ -171,22 +153,6 @@
         }
       }
     },
-    "35c522d7c1af": {
-      "presets": [],
-      "presetsError": "Failed to save sparse preset.",
-      "saving": false,
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "37c5cc533ab4": {
       "name": "workspaceSparseSaving",
       "ordinal": 9,
@@ -196,6 +162,25 @@
       "name": "workspaceSparsePresetId",
       "ordinal": 10,
       "value": "p1"
+    },
+    "404305aa2e3a": {
+      "presets": [
+        {
+          "directories": ["docs"],
+          "id": "p1",
+          "name": "docs"
+        }
+      ],
+      "presetsError": "",
+      "saving": false,
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
     },
     "4b7e30ea1543": {
       "name": "repo.saveSparsePreset#1",
@@ -237,22 +222,6 @@
         }
       }
     },
-    "4b91e2fd3d57": {
-      "presets": [],
-      "presetsError": "",
-      "saving": false,
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "530030faa977": {
       "name": "workspaceSparsePresetsError",
       "ordinal": 8,
@@ -263,20 +232,17 @@
       "ordinal": 8,
       "value": "The host sent a reply this app could not read (repo.saveSparsePreset)"
     },
-    "6391b30b46c4": {
+    "6060569496ff": {
       "presets": [],
-      "presetsError": "outer refused",
+      "presetsError": "The host sent a reply this app could not read (repo.saveSparsePreset)",
       "saving": false,
       "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
+        "error": {
+          "$rpc": "null"
         },
-        "target": "[null,\"ssh-1\"]"
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
       }
     },
     "6acbe9247ed7": {
@@ -385,28 +351,6 @@
             "$rpc": "null"
           }
         }
-      }
-    },
-    "8e2076073a5f": {
-      "presets": [
-        {
-          "directories": ["docs"],
-          "id": "p1",
-          "name": "docs"
-        }
-      ],
-      "presetsError": "",
-      "saving": false,
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
       }
     },
     "973f31a4e64b": {
@@ -575,20 +519,30 @@
         }
       }
     },
-    "be8311b8f9b8": {
+    "bcfc7df6e4f2": {
       "presets": [],
-      "presetsError": "The host sent a reply this app could not read (repo.saveSparsePreset)",
+      "presetsError": "",
+      "saving": true,
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
+    },
+    "befb68fa6c76": {
+      "presets": [],
+      "presetsError": "Failed to save sparse preset.",
       "saving": false,
       "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
+        "error": {
+          "$rpc": "null"
         },
-        "target": "[null,\"ssh-1\"]"
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
       }
     },
     "c1ae182c7519": {
@@ -596,41 +550,47 @@
       "ordinal": 12,
       "value": false
     },
+    "c33fee0d8294": {
+      "presets": [],
+      "presetsError": "Unknown method",
+      "saving": false,
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
+    },
     "c88e803973a6": {
       "name": "workspaceSparsePresetsLoaded",
       "ordinal": 9,
       "value": true
     },
-    "ca3d2bdfccbb": {
+    "d74bc3778ca8": {
       "presets": [],
-      "presetsError": "Unknown method",
+      "presetsError": "outer refused",
       "saving": false,
       "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
+        "error": {
+          "$rpc": "null"
         },
-        "target": "[null,\"ssh-1\"]"
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
       }
     },
-    "dd4232c3870b": {
-      "presets": [],
-      "presetsError": "transport failure",
-      "saving": false,
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
+    "de95b19c6158": {
+      "name": "workspaceSshState",
+      "ordinal": 3,
+      "value": {
+        "error": {
+          "$rpc": "null"
         },
-        "target": "[null,\"ssh-1\"]"
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
       }
     },
     "df0ecff41880": {
@@ -722,6 +682,19 @@
         "$rpc": "undefined"
       }
     },
+    "ee3a941d5e9c": {
+      "presets": [],
+      "presetsError": "",
+      "saving": false,
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
+    },
     "f54b3364071f": {
       "name": "workspaceSparseDraft",
       "ordinal": 11,
@@ -741,8 +714,8 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "4b91e2fd3d57",
-          "effects": ["16c82c1c6031"]
+          "state": "ee3a941d5e9c",
+          "effects": ["de95b19c6158"]
         }
       },
       {
@@ -754,9 +727,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "14a22ce0f2f8",
+          "state": "bcfc7df6e4f2",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "530030faa977",
@@ -773,9 +746,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "8e2076073a5f",
+          "state": "404305aa2e3a",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "1bc7cf6bcbaf",
@@ -795,9 +768,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "be8311b8f9b8",
+          "state": "6060569496ff",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "5c6943c3209d",
@@ -814,9 +787,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "be8311b8f9b8",
+          "state": "6060569496ff",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "5c6943c3209d",
@@ -833,9 +806,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "35c522d7c1af",
+          "state": "befb68fa6c76",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "0df082978757",
@@ -852,9 +825,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "35c522d7c1af",
+          "state": "befb68fa6c76",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "0df082978757",
@@ -871,9 +844,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "35c522d7c1af",
+          "state": "befb68fa6c76",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "0df082978757",
@@ -890,9 +863,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "6391b30b46c4",
+          "state": "d74bc3778ca8",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "2902639ee428",
@@ -909,9 +882,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "4b91e2fd3d57",
+          "state": "ee3a941d5e9c",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "ab2dc4474eeb",
@@ -928,9 +901,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "ca3d2bdfccbb",
+          "state": "c33fee0d8294",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "75bb22c39c21",
@@ -947,9 +920,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "dd4232c3870b",
+          "state": "1f453ea83df7",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "9a414627d11a",
@@ -966,9 +939,9 @@
             "mount": "eb79a9b3682a",
             "save": "eb79a9b3682a"
           },
-          "state": "4b91e2fd3d57",
+          "state": "ee3a941d5e9c",
           "effects": [
-            "16c82c1c6031",
+            "de95b19c6158",
             "ea6e5bf810d9",
             "973f31a4e64b",
             "ab2dc4474eeb",

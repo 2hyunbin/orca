@@ -4,54 +4,6 @@
   "family": "tasks.workspace-ssh",
   "namedDeltas": [],
   "values": {
-    "042a66664c98": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
-      "ssh": {
-        "record": {
-          "error": "",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
-    "0a9bf4383712": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "0ba2cee4b538": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -156,47 +108,24 @@
         }
       }
     },
-    "21a7b4113ff2": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": "unresolved",
-      "ssh": {
-        "record": {
-          "error": "",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
-    "27794616c8de": {
+    "1f23852e9723": {
       "name": "workspaceSshState",
       "ordinal": 11,
       "value": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "transport failure",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
-    "2b5f5e0c9b91": {
+    "263b165043b0": {
       "name": "workspaceSshState",
       "ordinal": 11,
       "value": {
-        "record": {
-          "error": "Unknown method",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
     "2bdbcded5f9b": {
@@ -231,52 +160,51 @@
         }
       }
     },
-    "3662552f8a7b": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": "unresolved",
-      "ssh": {
-        "record": {
-          "error": "Unknown method",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "38ce16e16515": {
       "name": "ssh.connect#1",
       "ordinal": 10,
       "json": "{\"id\":\"frame-2\",\"deviceToken\":\"recording-device\",\"method\":\"ssh.connect\",\"params\":{\"targetId\":\"ssh-1\"}}"
     },
-    "45499108f1c2": {
+    "42fb94e15a80": {
       "agent": "claude",
       "connecting": false,
       "detected": ["codex"],
-      "setup": "unresolved",
-      "ssh": {
-        "record": {
-          "error": "transport failure",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
         },
-        "target": "[null,\"ssh-1\"]"
+        "source": "repo"
+      },
+      "ssh": {
+        "error": "transport failure",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
-    "48817cb2ac84": {
-      "name": "workspaceSshState",
-      "ordinal": 11,
-      "value": {
-        "record": {
-          "error": "transport failure",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
+    "43ead075ce12": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
         },
-        "target": "[null,\"ssh-1\"]"
+        "source": "repo"
+      },
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
       }
     },
     "4945d0d7051c": {
@@ -311,19 +239,58 @@
         }
       }
     },
-    "55abd7675ffc": {
+    "4a24b4b276fa": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
+        },
+        "source": "repo"
+      },
+      "ssh": {
+        "error": "outer refused",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
+    },
+    "4ca864d39d04": {
       "agent": "claude",
       "connecting": false,
       "detected": ["codex"],
       "setup": "unresolved",
       "ssh": {
-        "record": {
-          "error": "outer refused",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "outer refused",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
+    },
+    "5313715e0fbb": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": "unresolved",
+      "ssh": {
+        "error": "",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
+    },
+    "578211a7c8d3": {
+      "name": "workspaceSshState",
+      "ordinal": 11,
+      "value": {
+        "error": "outer refused",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
     "598190aae703": {
@@ -395,40 +362,26 @@
         }
       }
     },
-    "6234fe41c756": {
+    "6b6100c1c1e4": {
       "name": "workspaceSshState",
       "ordinal": 11,
       "value": {
-        "record": {
-          "error": "outer refused",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "The host sent a reply this app could not read (ssh.connect)",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
-    "64e3a492dbf3": {
+    "6d2db0d7fee0": {
       "agent": "claude",
       "connecting": false,
       "detected": ["codex"],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
+      "setup": "unresolved",
       "ssh": {
-        "record": {
-          "error": "outer refused",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "transport failure",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
     "6d8de141169c": {
@@ -466,67 +419,52 @@
         }
       }
     },
-    "7b66d041e541": {
+    "7dd30a2d39c7": {
       "agent": "claude",
-      "connecting": true,
+      "connecting": false,
       "detected": ["codex"],
       "setup": "unresolved",
       "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connecting",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "The host sent a reply this app could not read (ssh.connect)",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
-    "89dba858c5b9": {
+    "80ffce5fa2b3": {
+      "name": "workspaceSshState",
+      "ordinal": 11,
+      "value": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
+      }
+    },
+    "84149cfb1467": {
+      "name": "workspaceSshState",
+      "ordinal": 8,
+      "value": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connecting",
+        "targetId": "ssh-1"
+      }
+    },
+    "8dc4620dc1de": {
       "agent": "claude",
       "connecting": false,
       "detected": ["codex"],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
+      "setup": "unresolved",
       "ssh": {
-        "record": {
-          "error": "transport failure",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
-    "8ba5c878e7b3": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": {
-        "command": "pnpm install",
-        "kind": "prompt",
-        "setupTrust": {
-          "contentHash": "hash-1",
-          "scriptContent": "pnpm install"
-        },
-        "source": "repo"
-      },
-      "ssh": {
-        "record": {
-          "error": "Unknown method",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "Unknown method",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
     "9637248df9cb": {
@@ -536,7 +474,7 @@
         "$rpc": "null"
       }
     },
-    "a926f2597e15": {
+    "9eb40e943577": {
       "agent": "claude",
       "connecting": false,
       "detected": ["codex"],
@@ -550,19 +488,50 @@
         "source": "repo"
       },
       "ssh": {
-        "record": {
-          "error": "The host sent a reply this app could not read (ssh.connect)",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
+        "error": "Unknown method",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
+    },
+    "a1f755a38636": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": "unresolved",
+      "ssh": {
+        "error": {
+          "$rpc": "null"
         },
-        "target": "[null,\"ssh-1\"]"
+        "reconnectAttempt": 0,
+        "status": "connected",
+        "targetId": "ssh-1"
       }
     },
     "a9ec92743b9e": {
       "name": "workspaceAgentOverridden",
       "ordinal": 2,
       "value": false
+    },
+    "aa15b77aca73": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
+        },
+        "source": "repo"
+      },
+      "ssh": {
+        "error": "",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
     },
     "ac3916ea6d05": {
       "name": "ssh.connect#1",
@@ -599,34 +568,6 @@
         }
       }
     },
-    "b229e2db4198": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": "unresolved",
-      "ssh": {
-        "record": {
-          "error": "The host sent a reply this app could not read (ssh.connect)",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
-    "b631ed286026": {
-      "name": "workspaceSshState",
-      "ordinal": 11,
-      "value": {
-        "record": {
-          "error": "",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "b8c64c3eae3b": {
       "name": "ssh.connect#1",
       "ordinal": 9,
@@ -659,19 +600,14 @@
         }
       }
     },
-    "bdfd96f57e2c": {
+    "baf0abed92b0": {
       "name": "workspaceSshState",
-      "ordinal": 8,
+      "ordinal": 11,
       "value": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connecting",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "Unknown method",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
     "bf0c0c00caf9": {
@@ -679,17 +615,34 @@
       "ordinal": 14,
       "json": "{\"id\":\"frame-3\",\"deviceToken\":\"recording-device\",\"method\":\"repo.hooks\",\"params\":{\"repo\":\"id:repo-1\"}}"
     },
-    "d28ed1e5e185": {
+    "cf105a6ee444": {
+      "agent": "claude",
+      "connecting": false,
+      "detected": ["codex"],
+      "setup": {
+        "command": "pnpm install",
+        "kind": "prompt",
+        "setupTrust": {
+          "contentHash": "hash-1",
+          "scriptContent": "pnpm install"
+        },
+        "source": "repo"
+      },
+      "ssh": {
+        "error": "The host sent a reply this app could not read (ssh.connect)",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
+      }
+    },
+    "d1fbdfbafc30": {
       "name": "workspaceSshState",
       "ordinal": 11,
       "value": {
-        "record": {
-          "error": "The host sent a reply this app could not read (ssh.connect)",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
+        "error": "Connection closed",
+        "reconnectAttempt": 0,
+        "status": "error",
+        "targetId": "ssh-1"
       }
     },
     "d4ca27d4f91b": {
@@ -768,6 +721,20 @@
       "ordinal": 5,
       "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"preflight.detectRemoteAgents\",\"params\":{\"connectionId\":\"ssh-1\"}}"
     },
+    "d86f0ed68c40": {
+      "agent": "claude",
+      "connecting": true,
+      "detected": ["codex"],
+      "setup": "unresolved",
+      "ssh": {
+        "error": {
+          "$rpc": "null"
+        },
+        "reconnectAttempt": 0,
+        "status": "connecting",
+        "targetId": "ssh-1"
+      }
+    },
     "e44d3b580ab0": {
       "name": "workspaceSshConnecting",
       "ordinal": 12,
@@ -817,23 +784,6 @@
         }
       }
     },
-    "e6d3fdebfaa8": {
-      "agent": "claude",
-      "connecting": false,
-      "detected": ["codex"],
-      "setup": "unresolved",
-      "ssh": {
-        "record": {
-          "error": {
-            "$rpc": "null"
-          },
-          "reconnectAttempt": 0,
-          "status": "connected",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
-      }
-    },
     "eb79a9b3682a": {
       "status": "fulfilled",
       "startedAt": 0,
@@ -881,19 +831,6 @@
             }
           }
         }
-      }
-    },
-    "f1c94f7499fb": {
-      "name": "workspaceSshState",
-      "ordinal": 11,
-      "value": {
-        "record": {
-          "error": "Connection closed",
-          "reconnectAttempt": 0,
-          "status": "error",
-          "targetId": "ssh-1"
-        },
-        "target": "[null,\"ssh-1\"]"
       }
     },
     "f3578583dfdc": {
@@ -953,15 +890,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "7b66d041e541",
+          "state": "d86f0ed68c40",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "f1c94f7499fb",
+            "84149cfb1467",
+            "d1fbdfbafc30",
             "e44d3b580ab0"
           ]
         }
@@ -975,15 +912,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -998,15 +935,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "0a9bf4383712",
+          "state": "43ead075ce12",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -1020,15 +957,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "b229e2db4198",
+          "state": "7dd30a2d39c7",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "d28ed1e5e185",
+            "84149cfb1467",
+            "6b6100c1c1e4",
             "e44d3b580ab0"
           ]
         }
@@ -1043,15 +980,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "a926f2597e15",
+          "state": "cf105a6ee444",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "d28ed1e5e185",
+            "84149cfb1467",
+            "6b6100c1c1e4",
             "e44d3b580ab0"
           ]
         }
@@ -1065,15 +1002,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "b229e2db4198",
+          "state": "7dd30a2d39c7",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "d28ed1e5e185",
+            "84149cfb1467",
+            "6b6100c1c1e4",
             "e44d3b580ab0"
           ]
         }
@@ -1088,15 +1025,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "a926f2597e15",
+          "state": "cf105a6ee444",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "d28ed1e5e185",
+            "84149cfb1467",
+            "6b6100c1c1e4",
             "e44d3b580ab0"
           ]
         }
@@ -1110,15 +1047,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -1133,15 +1070,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "0a9bf4383712",
+          "state": "43ead075ce12",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -1155,15 +1092,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -1178,15 +1115,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "0a9bf4383712",
+          "state": "43ead075ce12",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -1200,15 +1137,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "e6d3fdebfaa8",
+          "state": "a1f755a38636",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -1223,15 +1160,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "0a9bf4383712",
+          "state": "43ead075ce12",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "27794616c8de",
+            "84149cfb1467",
+            "80ffce5fa2b3",
             "e44d3b580ab0"
           ]
         }
@@ -1245,15 +1182,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "55abd7675ffc",
+          "state": "4ca864d39d04",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "6234fe41c756",
+            "84149cfb1467",
+            "578211a7c8d3",
             "e44d3b580ab0"
           ]
         }
@@ -1268,15 +1205,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "64e3a492dbf3",
+          "state": "4a24b4b276fa",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "6234fe41c756",
+            "84149cfb1467",
+            "578211a7c8d3",
             "e44d3b580ab0"
           ]
         }
@@ -1290,15 +1227,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "21a7b4113ff2",
+          "state": "5313715e0fbb",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "b631ed286026",
+            "84149cfb1467",
+            "263b165043b0",
             "e44d3b580ab0"
           ]
         }
@@ -1313,15 +1250,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "042a66664c98",
+          "state": "aa15b77aca73",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "b631ed286026",
+            "84149cfb1467",
+            "263b165043b0",
             "e44d3b580ab0"
           ]
         }
@@ -1335,15 +1272,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "3662552f8a7b",
+          "state": "8dc4620dc1de",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "2b5f5e0c9b91",
+            "84149cfb1467",
+            "baf0abed92b0",
             "e44d3b580ab0"
           ]
         }
@@ -1358,15 +1295,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "8ba5c878e7b3",
+          "state": "9eb40e943577",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "2b5f5e0c9b91",
+            "84149cfb1467",
+            "baf0abed92b0",
             "e44d3b580ab0"
           ]
         }
@@ -1380,15 +1317,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "45499108f1c2",
+          "state": "6d2db0d7fee0",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "48817cb2ac84",
+            "84149cfb1467",
+            "1f23852e9723",
             "e44d3b580ab0"
           ]
         }
@@ -1403,15 +1340,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "89dba858c5b9",
+          "state": "42fb94e15a80",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "48817cb2ac84",
+            "84149cfb1467",
+            "1f23852e9723",
             "e44d3b580ab0"
           ]
         }
@@ -1425,15 +1362,15 @@
             "mount": "eb79a9b3682a",
             "connect": "eb79a9b3682a"
           },
-          "state": "21a7b4113ff2",
+          "state": "5313715e0fbb",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "b631ed286026",
+            "84149cfb1467",
+            "263b165043b0",
             "e44d3b580ab0"
           ]
         }
@@ -1448,15 +1385,15 @@
             "connect": "eb79a9b3682a",
             "setup": "0ba2cee4b538"
           },
-          "state": "042a66664c98",
+          "state": "aa15b77aca73",
           "effects": [
             "11405363c62d",
             "a9ec92743b9e",
             "9637248df9cb",
             "13e6d0c47ca4",
             "d68ba9a6772a",
-            "bdfd96f57e2c",
-            "b631ed286026",
+            "84149cfb1467",
+            "263b165043b0",
             "e44d3b580ab0"
           ]
         }

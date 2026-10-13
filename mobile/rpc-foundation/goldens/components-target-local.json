@@ -4,12 +4,25 @@
   "family": "components.execution-target-local",
   "namedDeltas": [],
   "values": {
-    "305921cd9555": {
+    "1e4520fe6576": {
       "detected": {
         "$rpc": "null"
       },
       "gate": {
-        "connectInProgress": false,
+        "connectInProgress": true,
+        "error": {
+          "$rpc": "null"
+        },
+        "requiresConnection": false,
+        "status": {
+          "$rpc": "null"
+        }
+      }
+    },
+    "986a776213e8": {
+      "detected": ["claude"],
+      "gate": {
+        "connectInProgress": true,
         "error": {
           "$rpc": "null"
         },
@@ -48,19 +61,6 @@
       "settlement": {
         "status": "pending",
         "startedAt": 0
-      }
-    },
-    "b7f951970a65": {
-      "detected": ["claude"],
-      "gate": {
-        "connectInProgress": false,
-        "error": {
-          "$rpc": "null"
-        },
-        "requiresConnection": false,
-        "status": {
-          "$rpc": "null"
-        }
       }
     },
     "eb79a9b3682a": {
@@ -115,7 +115,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "305921cd9555",
+          "state": "1e4520fe6576",
           "effects": []
         }
       },
@@ -127,7 +127,7 @@
           "settlements": {
             "mount": "eb79a9b3682a"
           },
-          "state": "b7f951970a65",
+          "state": "986a776213e8",
           "effects": []
         }
       }

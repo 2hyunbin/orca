@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { Repo } from './repo-types'
 import {
   getNewWorkspaceDialogEligibleRepos,
-  resolveNewWorkspaceDialogActiveRepoId,
   resolveNewWorkspaceDialogGitRepoId,
   resolveNewWorkspaceDialogRepoId
 } from './new-workspace-dialog-repo'
@@ -106,43 +105,5 @@ describe('new workspace dialog repo selection', () => {
     expect(resolveNewWorkspaceDialogRepoId({ eligibleRepos, focusedHostScope: 'all' })).toBe(
       'local-repo'
     )
-  })
-
-  describe('resolveNewWorkspaceDialogActiveRepoId', () => {
-    const localOrca = makeRepo('local-orca', { upstream: { owner: 'stablyai', repo: 'orca' } })
-    const runtimeOrca = makeRepo('runtime-orca', {
-      connectionId: 'runtime-ssh-orca-1',
-      upstream: { owner: 'stablyai', repo: 'orca' }
-    })
-    const otherProject = makeRepo('noqa', { upstream: { owner: 'stablyai', repo: 'noqa' } })
-    const repos = [otherProject, localOrca, runtimeOrca]
-    const eligibleRepos = getNewWorkspaceDialogEligibleRepos(repos)
-
-    it('maps an active runtime-owned SSH repo to its local same-project sibling', () => {
-      expect(resolveNewWorkspaceDialogActiveRepoId(repos, eligibleRepos, 'runtime-orca')).toBe(
-        'local-orca'
-      )
-    })
-
-    it('leaves a normal active repo unchanged', () => {
-      expect(resolveNewWorkspaceDialogActiveRepoId(repos, eligibleRepos, 'local-orca')).toBe(
-        'local-orca'
-      )
-    })
-
-    it('keeps the runtime repo id when no same-project sibling is eligible', () => {
-      const onlyRuntime = [runtimeOrca]
-      expect(
-        resolveNewWorkspaceDialogActiveRepoId(
-          onlyRuntime,
-          getNewWorkspaceDialogEligibleRepos(onlyRuntime),
-          'runtime-orca'
-        )
-      ).toBe('runtime-orca')
-    })
-
-    it('passes through null/undefined active repo', () => {
-      expect(resolveNewWorkspaceDialogActiveRepoId(repos, eligibleRepos, null)).toBeNull()
-    })
   })
 })

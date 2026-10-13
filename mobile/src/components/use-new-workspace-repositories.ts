@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import {
-  getNewWorkspaceDialogEligibleRepos,
-  resolveNewWorkspaceDialogActiveRepoId,
-  resolveNewWorkspaceDialogRepoId
-} from '../../../src/shared/new-workspace-dialog-repo'
 import type { RpcClient } from '../transport/rpc-client'
 import { getCachedRepos, setCachedRepos } from '../cache/repo-cache'
 import { listHostRepos } from '../worktree/server-repos'
 import { useServerRepos } from '../worktree/use-server-repos'
 import { useLastVisitedWorktreeRepoId } from '../worktree/use-last-visited-worktree-repo'
-import { refreshMobileNewWorkspaceDialogSelectedRepo } from '../worktree/new-workspace-dialog-repo-selection'
+import {
+  getMobileNewWorkspaceDialogEligibleRepos,
+  refreshMobileNewWorkspaceDialogSelectedRepo,
+  resolveMobileNewWorkspaceDialogRepoId
+} from '../worktree/new-workspace-dialog-repo-selection'
 import type { MobileWorkspaceRepo } from './new-worktree-modal-types'
 
 const NO_SERVER_CLIENTS: ReadonlyMap<ExecutionHostId, RpcClient> = new Map()
@@ -40,12 +39,13 @@ export function useNewWorkspaceRepositories(args: {
   const [pickedRepo, setSelectedRepo] = useState<MobileWorkspaceRepo | null>(null)
   const [loading, setLoading] = useState(initialRepos == null)
   const lastVisitedRepo = useLastVisitedWorktreeRepoId(hostId, visible)
-  const listedRepos = useMemo(
-    () => [...desktopRepos, ...[...serverRepos.values()].flat()],
+  const repos = useMemo(
+    () =>
+      serverRepos.size === 0
+        ? desktopRepos
+        : [...desktopRepos, ...[...serverRepos.values()].flat()],
     [desktopRepos, serverRepos]
   )
-  // The desktop's rule: a per-workspace-environment SSH repo is plumbing, never a pick.
-  const repos = useMemo(() => getNewWorkspaceDialogEligibleRepos(listedRepos), [listedRepos])
   // Why derived: the pick follows its repo's latest listing, and goes once its host stops listing it.
   const selectedRepo = useMemo(
     () => refreshMobileNewWorkspaceDialogSelectedRepo(repos, pickedRepo),
@@ -56,19 +56,16 @@ export function useNewWorkspaceRepositories(args: {
     if (!visible || !lastVisitedRepo.loaded || selectedRepo || repos.length === 0) {
       return
     }
-    const preferredRepoId = resolveNewWorkspaceDialogRepoId({
-      eligibleRepos: repos,
-      activeRepoId: resolveNewWorkspaceDialogActiveRepoId(
-        listedRepos,
-        repos,
-        lastVisitedRepo.repoId
-      )
+    const eligibleRepos = getMobileNewWorkspaceDialogEligibleRepos(repos)
+    const preferredRepoId = resolveMobileNewWorkspaceDialogRepoId({
+      eligibleRepos,
+      activeRepoId: lastVisitedRepo.repoId
     })
     const preferredRepo = repos.find((repo) => repo.id === preferredRepoId) ?? null
     if (preferredRepo) {
       setSelectedRepo(preferredRepo)
     }
-  }, [lastVisitedRepo.loaded, lastVisitedRepo.repoId, listedRepos, repos, selectedRepo, visible])
+  }, [lastVisitedRepo.loaded, lastVisitedRepo.repoId, repos, selectedRepo, visible])
 
   useEffect(() => {
     if (!visible || !client) {

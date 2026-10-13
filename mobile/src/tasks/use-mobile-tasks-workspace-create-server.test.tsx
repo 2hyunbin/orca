@@ -3,8 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
 import type { RpcResponse } from '../transport/types'
-import { routeTaskRepoCalls, taskRepoServer } from './task-repo-host-routing'
-import { workspaceSshTargetKey, type WorkspaceSshEntry } from './workspace-ssh-gate'
+import { routeTaskRepoCalls } from './task-repo-host-routing'
 import type { ActionableTaskItem, RepoSummary } from './mobile-tasks-legacy-foundation'
 import type { WorkspaceSparseActionsModel } from './use-mobile-tasks-workspace-sparse-actions'
 
@@ -90,10 +89,7 @@ function desktop(): FakeSession {
     if (method === 'worktree.create') {
       return reply({ worktree: { id: 'wt-1', displayName: 'fix-the-thing' } })
     }
-    if (method === 'ssh.getState') {
-      return reply({ state: CONNECTED_SSH })
-    }
-    return reply(method.startsWith('preflight.detect') ? [] : {})
+    return reply(method === 'preflight.detectAgents' ? [] : {})
   })
 }
 
@@ -110,23 +106,13 @@ afterEach(() => {
   }
 })
 
-const CONNECTED_SSH = { targetId: 'ssh-1', status: 'connected', error: null, reconnectAttempt: 0 }
-// The desktop and the server each hold an SSH target named `ssh-1`.
-const SERVER_SSH_REPO: RepoSummary = {
-  id: 'vm-ssh-repo',
-  displayName: 'remote',
-  path: '/r',
-  connectionId: 'ssh-1',
-  executionHostId: 'runtime:vm'
-}
-
-async function createFrom(repo: RepoSummary, workspaceSshState: WorkspaceSshEntry | null = null) {
+async function createFrom(repo: RepoSummary) {
   const client = desktop()
   const pushed: string[] = []
   const item = issueOn(repo)
   const noop = () => {}
   const model = {
-    client: routeTaskRepoCalls(client, () => [DESKTOP_REPO, SERVER_REPO, SERVER_SSH_REPO]),
+    client: routeTaskRepoCalls(client, () => [DESKTOP_REPO, SERVER_REPO]),
     hostId: 'mac',
     router: { push: (href: string) => pushed.push(href) },
     runtimeTaskSettings: {},
@@ -138,15 +124,11 @@ async function createFrom(repo: RepoSummary, workspaceSshState: WorkspaceSshEntr
     workspaceCreateDraft: { item },
     workspaceCreateRequiresSshConnection: false,
     workspaceCreateSshStatus: 'connected',
-    workspaceCreateTargetConnectionId: repo.connectionId ?? null,
+    workspaceCreateTargetConnectionId: null,
     workspaceCreateTargetRepo: repo,
-    workspaceCreateTargetSshKey: workspaceSshTargetKey(
-      taskRepoServer(repo),
-      repo.connectionId ?? null
-    ),
     workspaceDetectedAgentIds: null,
     workspaceLastAutoName: '',
-    workspaceSshState,
+    workspaceSshState: null,
     getWorkspaceTargetRepo: () => repo,
     setActionItem: noop,
     setCreatingKey: noop,
@@ -192,22 +174,5 @@ describe('creating a workspace from a task on a server repo', () => {
     expect(ranOn(client, 'worktree.create')).toEqual(['desktop'])
     expect(ranOn(client, 'preflight.detectAgents')).toEqual(['desktop'])
     expect(new URL(pushed[0]!, 'orca://x').searchParams.get('executionHost')).toBeNull()
-  })
-
-  it("checks a server SSH repo's connection and agents on that server", async () => {
-    const { client } = await createFrom(SERVER_SSH_REPO)
-    expect(ranOn(client, 'ssh.getState')).toEqual(['runtime:vm'])
-    expect(ranOn(client, 'preflight.detectRemoteAgents')).toEqual(['runtime:vm'])
-    expect(ranOn(client, 'worktree.create')).toEqual(['runtime:vm'])
-  })
-
-  it("doesn't take the desktop's connected target for the server's target of the same id", async () => {
-    const desktopConnected = {
-      target: workspaceSshTargetKey(undefined, 'ssh-1'),
-      record: { targetId: 'ssh-1', status: 'connected' as const, error: null, reconnectAttempt: 0 }
-    }
-    const { client } = await createFrom(SERVER_SSH_REPO, desktopConnected)
-    // The desktop's record doesn't count, so the server is asked.
-    expect(ranOn(client, 'ssh.getState')).toEqual(['runtime:vm'])
   })
 })

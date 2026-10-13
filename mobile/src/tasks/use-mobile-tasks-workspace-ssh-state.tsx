@@ -1,7 +1,5 @@
 import type { WorkspaceSparseActionsModel } from './use-mobile-tasks-workspace-sparse-actions'
-import { taskRepoClient, taskRepoServer } from './task-repo-host-routing'
-import { workspaceSshTargetKey } from './workspace-ssh-gate'
-import type { WorkspaceSshRecord } from './workspace-ssh-gate'
+import { taskRepoClient } from './task-repo-host-routing'
 import {
   normalizeSetupHookTrust,
   pickWorkspaceAgent,
@@ -40,64 +38,62 @@ export function useMobileTasksWorkspaceSshState(model: WorkspaceSparseActionsMod
     workspaceCreateSshStatus,
     workspaceCreateTargetConnectionId,
     workspaceCreateTargetRepo,
-    workspaceCreateTargetSshKey,
     workspaceDetectedAgentIds,
     workspaceSshState
   } = model
   const connectWorkspaceSshRepo = useCallback(async (): Promise<void> => {
-    if (
-      !client ||
-      !tasksSupported ||
-      !workspaceCreateTargetRepo ||
-      !workspaceCreateTargetConnectionId
-    ) {
+    if (!client || !tasksSupported || !workspaceCreateTargetConnectionId) {
       return
     }
-    const target = workspaceCreateTargetSshKey
-    const record = (status: WorkspaceSshRecord['status'], error: string | null) => ({
+    setWorkspaceSshConnecting(true)
+    setWorkspaceSshState({
       targetId: workspaceCreateTargetConnectionId,
-      status,
-      error,
+      status: 'connecting',
+      error: null,
       reconnectAttempt: 0
     })
-    // A reply lands only while its target is still the one shown, so it never overwrites another's.
-    const settle = (settled: WorkspaceSshRecord) =>
-      setWorkspaceSshState((current) =>
-        current?.target === target ? { target, record: settled } : current
-      )
-    setWorkspaceSshConnecting(true)
-    setWorkspaceSshState({ target, record: record('connecting', null) })
     try {
       const reply = await sshRepoConnectRun.request(
-        taskRepoClient(client, workspaceCreateTargetRepo),
+        client,
         { targetId: workspaceCreateTargetConnectionId },
         { timeoutMs: 120_000 }
       )
-      settle(sshRepoConnectRun.interpret(reply) ?? record('connected', null))
-    } catch (err) {
-      settle(
-        record('error', err instanceof Error ? err.message : 'Failed to connect to SSH repository.')
+      const state = sshRepoConnectRun.interpret(reply)
+      setWorkspaceSshState(
+        state ?? {
+          targetId: workspaceCreateTargetConnectionId,
+          status: 'connected',
+          error: null,
+          reconnectAttempt: 0
+        }
       )
+    } catch (err) {
+      setWorkspaceSshState({
+        targetId: workspaceCreateTargetConnectionId,
+        status: 'error',
+        error: err instanceof Error ? err.message : 'Failed to connect to SSH repository.',
+        reconnectAttempt: 0
+      })
     } finally {
       setWorkspaceSshConnecting(false)
     }
-  }, [client, tasksSupported, workspaceCreateTargetRepo, workspaceCreateTargetSshKey])
+  }, [client, tasksSupported, workspaceCreateTargetConnectionId])
 
   const ensureWorkspaceSshReady = useCallback(
     async (repo: RepoSummary): Promise<void> => {
       if (!repo.connectionId || !client || !tasksSupported) {
         return
       }
-      const target = workspaceSshTargetKey(taskRepoServer(repo), repo.connectionId)
-      if (workspaceSshState?.target === target && workspaceSshState.record.status === 'connected') {
+      if (
+        workspaceSshState?.targetId === repo.connectionId &&
+        workspaceSshState.status === 'connected'
+      ) {
         return
       }
-      const reply = await sshRepoStateRead.request(taskRepoClient(client, repo), {
-        targetId: repo.connectionId
-      })
+      const reply = await sshRepoStateRead.request(client, { targetId: repo.connectionId })
       const state = sshRepoStateRead.interpret(reply) ?? null
       if (state) {
-        setWorkspaceSshState({ target, record: state })
+        setWorkspaceSshState(state)
       }
       if (state?.status !== 'connected') {
         throw new Error(`Connect ${repo.displayName} before creating a workspace.`)
