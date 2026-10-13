@@ -1,11 +1,11 @@
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { AppState } from './types'
 
-export type FloatingWorkspacePanelVisibilityState = Pick<
-  AppState,
-  'settings' | 'floatingWorkspacePanelOpen'
->
+export type FloatingWorkspacePanelVisibilityState = Pick<AppState, 'floatingWorkspacePanelOpen'> & {
+  settings?: Pick<Partial<GlobalSettings>, 'floatingTerminalEnabled'> | null
+}
 
 type FloatingVisibleTabCountState = Pick<
   AppState,

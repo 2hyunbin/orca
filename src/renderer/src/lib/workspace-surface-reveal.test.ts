@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
+import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 
-const revealFloatingWorkspacePanel = vi.hoisted(() => vi.fn())
-vi.mock('./floating-workspace-panel-reveal', () => ({ revealFloatingWorkspacePanel }))
+const revealFloatingWorkspacePanelFor = vi.hoisted(() =>
+  vi.fn((_state: unknown, worktreeId: string) => isFloatingWorkspaceId(worktreeId))
+)
+vi.mock('./floating-workspace-panel-reveal', () => ({ revealFloatingWorkspacePanelFor }))
 
-const { revealWorkspaceSurface, selectWorkspaceSurfaceOwner } =
+const { revealWorkspaceSurface, selectWorkspaceSurface } =
   await import('./workspace-surface-reveal')
 
 function revealState(isNavigatingHistory = false) {
@@ -29,7 +32,7 @@ describe('revealWorkspaceSurface', () => {
 
     revealWorkspaceSurface(state, FLOATING_TERMINAL_WORKTREE_ID, { createdTabIds: ['tab-1'] })
 
-    expect(revealFloatingWorkspacePanel).toHaveBeenCalledWith(state)
+    expect(revealFloatingWorkspacePanelFor).toHaveReturnedWith(true)
     expect(state.setActiveView).not.toHaveBeenCalled()
     expect(state.setActiveWorktree).not.toHaveBeenCalled()
     expect(state.markWorktreeVisited).not.toHaveBeenCalled()
@@ -42,7 +45,7 @@ describe('revealWorkspaceSurface', () => {
 
     revealWorkspaceSurface(state, id)
 
-    expect(revealFloatingWorkspacePanel).not.toHaveBeenCalled()
+    expect(revealFloatingWorkspacePanelFor).toHaveReturnedWith(false)
     expect(state.setActiveView).toHaveBeenCalledWith('terminal')
     expect(state.setActiveWorktree).toHaveBeenCalledWith(id)
     expect(state.markWorktreeVisited).toHaveBeenCalledWith(id)
@@ -63,20 +66,23 @@ describe('revealWorkspaceSurface', () => {
   })
 })
 
-describe('selectWorkspaceSurfaceOwner', () => {
+describe('selectWorkspaceSurface', () => {
   it('opens the floating panel instead of selecting the floating workspace', () => {
     const state = revealState()
 
-    selectWorkspaceSurfaceOwner(state, FLOATING_TERMINAL_WORKTREE_ID)
+    selectWorkspaceSurface(state, FLOATING_TERMINAL_WORKTREE_ID)
 
-    expect(revealFloatingWorkspacePanel).toHaveBeenCalledWith(state)
+    expect(revealFloatingWorkspacePanelFor).toHaveBeenCalledWith(
+      state,
+      FLOATING_TERMINAL_WORKTREE_ID
+    )
     expect(state.setActiveWorktree).not.toHaveBeenCalled()
   })
 
   it('selects any other workspace without navigating to it', () => {
     const state = revealState()
 
-    selectWorkspaceSurfaceOwner(state, 'repo::/wt')
+    selectWorkspaceSurface(state, 'repo::/wt')
 
     expect(state.setActiveWorktree).toHaveBeenCalledWith('repo::/wt')
     expect(state.setActiveView).not.toHaveBeenCalled()

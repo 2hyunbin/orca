@@ -13,11 +13,14 @@ import {
 } from './terminal-handle-links'
 import type { TerminalLinkActionContext } from './terminal-link-action-request'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 
 const mocks = vi.hoisted(() => ({
   activateTabAndFocusPane: vi.fn(),
   focusTerminalTabSurface: vi.fn(),
-  revealFloatingWorkspacePanel: vi.fn(),
+  revealFloatingWorkspacePanelFor: vi.fn((_state: unknown, worktreeId: string) =>
+    isFloatingWorkspaceId(worktreeId)
+  ),
   storeState: {
     tabsByWorktree: {},
     ptyIdsByTabId: {},
@@ -47,7 +50,7 @@ vi.mock('@/lib/activate-tab-and-focus-pane', () => ({
 }))
 
 vi.mock('@/lib/floating-workspace-panel-reveal', () => ({
-  revealFloatingWorkspacePanel: mocks.revealFloatingWorkspacePanel
+  revealFloatingWorkspacePanelFor: mocks.revealFloatingWorkspacePanelFor
 }))
 
 vi.mock('@/lib/focus-terminal-tab-surface', () => ({
@@ -272,7 +275,7 @@ describe('focusRendererTerminalHandle', () => {
 
     expect(focusRendererTerminalHandle('term_direct')).toBe(true)
 
-    expect(mocks.revealFloatingWorkspacePanel).toHaveBeenCalledOnce()
+    expect(mocks.revealFloatingWorkspacePanelFor).toHaveReturnedWith(true)
     expect(mocks.storeState.setActiveWorktree).not.toHaveBeenCalled()
     expect(mocks.storeState.setActiveView).not.toHaveBeenCalled()
     expect(mocks.storeState.recordWorktreeVisit).not.toHaveBeenCalled()

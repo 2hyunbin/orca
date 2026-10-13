@@ -1,11 +1,13 @@
 import type { AppState } from '@/store/types'
-import type { GlobalSettings } from '../../../shared/global-settings-types'
+import {
+  selectFloatingWorkspacePanelVisible,
+  type FloatingWorkspacePanelVisibilityState
+} from '@/store/floating-workspace-panel-selector'
+import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import { TOGGLE_FLOATING_TERMINAL_EVENT } from './floating-terminal'
 
-export type FloatingWorkspacePanelRevealState = Pick<
-  AppState,
-  'updateSettings' | 'floatingWorkspacePanelOpen'
-> & { settings?: Pick<Partial<GlobalSettings>, 'floatingTerminalEnabled'> | null }
+export type FloatingWorkspacePanelRevealState = FloatingWorkspacePanelVisibilityState &
+  Pick<AppState, 'updateSettings'>
 
 function toggleFloatingWorkspacePanel(): void {
   window.dispatchEvent(new Event(TOGGLE_FLOATING_TERMINAL_EVENT))
@@ -16,7 +18,7 @@ function toggleFloatingWorkspacePanel(): void {
 // while disabled, so a live floating agent row would otherwise be a silent no-op.
 export function revealFloatingWorkspacePanel(state: FloatingWorkspacePanelRevealState): void {
   if (state.settings?.floatingTerminalEnabled === true) {
-    if (!state.floatingWorkspacePanelOpen) {
+    if (!selectFloatingWorkspacePanelVisible(state)) {
       toggleFloatingWorkspacePanel()
     }
     return
@@ -29,4 +31,16 @@ export function revealFloatingWorkspacePanel(state: FloatingWorkspacePanelReveal
       requestAnimationFrame(toggleFloatingWorkspacePanel)
     }
   })
+}
+
+/** Opens the floating panel when it owns the workspace; false means the main window owns it. */
+export function revealFloatingWorkspacePanelFor(
+  state: FloatingWorkspacePanelRevealState,
+  worktreeId: string
+): boolean {
+  if (!isFloatingWorkspaceId(worktreeId)) {
+    return false
+  }
+  revealFloatingWorkspacePanel(state)
+  return true
 }

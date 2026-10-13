@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { useAppStore } from '../store'
 import { appendUniqueOpenFileIds } from './terminal/unsaved-close-queue'
 import { isPinnedActiveEditorTab } from './terminal-workspace-model'
-import { selectWorkspaceSurfaceOwner } from '@/lib/workspace-surface-reveal'
+import { selectWorkspaceSurface } from '@/lib/workspace-surface-reveal'
 import type { TerminalEditorCloseFoundation } from './use-terminal-editor-close-foundation'
 
 export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFoundation) {
@@ -82,7 +82,7 @@ export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFound
       const file = state.openFiles.find((candidate) => candidate.id === nextFileId)
       // Why: the prompt names the file, so show it where it lives.
       if (file && file.worktreeId !== state.activeWorktreeId) {
-        selectWorkspaceSurfaceOwner(state, file.worktreeId)
+        selectWorkspaceSurface(state, file.worktreeId)
       }
       setActiveFile(nextFileId)
       setActiveTabType('editor', file?.worktreeId ?? state.activeWorktreeId)

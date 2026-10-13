@@ -18,16 +18,21 @@ const setActiveWorktreeMock = vi.fn()
 const createBrowserTabMock = vi.fn()
 const openRuntimeBrowserTabMock = vi.fn(() => Promise.resolve())
 
+type TestLinkSettings = {
+  openLinksInApp?: boolean
+  openLinksInAppModifierInverts?: boolean
+  openLinksInAppPreferencePrompted?: boolean
+  activeRuntimeEnvironmentId?: string | null
+  localhostWorktreeLabelsEnabled?: boolean
+  floatingTerminalEnabled?: boolean
+}
+
+function unhydratedSettings(): TestLinkSettings | undefined {
+  return undefined
+}
+
 const storeState = {
-  settings: undefined as
-    | {
-        openLinksInApp?: boolean
-        openLinksInAppModifierInverts?: boolean
-        openLinksInAppPreferencePrompted?: boolean
-        activeRuntimeEnvironmentId?: string | null
-        localhostWorktreeLabelsEnabled?: boolean
-      }
-    | undefined,
+  settings: unhydratedSettings(),
   floatingWorkspacePanelOpen: false,
   updateSettings: vi.fn(),
   setActiveWorktree: setActiveWorktreeMock,
@@ -93,7 +98,7 @@ describe('openHttpLink', () => {
 
   it('routes floating workspace links into Orca without changing the active repo worktree', () => {
     // The link was clicked inside the floating panel, so the panel is on screen.
-    storeState.settings = Object.assign({ openLinksInApp: true }, { floatingTerminalEnabled: true })
+    storeState.settings = { openLinksInApp: true, floatingTerminalEnabled: true }
     storeState.floatingWorkspacePanelOpen = true
 
     openHttpLink('https://example.com/', { worktreeId: FLOATING_TERMINAL_WORKTREE_ID })

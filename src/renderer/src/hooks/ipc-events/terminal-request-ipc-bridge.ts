@@ -80,12 +80,10 @@ export function registerTerminalRequestIpcBridge(unsubs: (() => void)[]): void {
           revealWorkspaceSurface(store, worktreeId, { createdTabIds: [tab.id] })
           store.setActiveTabType('terminal', worktreeId)
           store.setActiveTab(tab.id)
+        } else if (shouldSurfaceOwner) {
+          store.revealWorktreeInSidebar(worktreeId)
         }
         if (shouldSurfaceOwner) {
-          // An activated owner was already revealed where it lives.
-          if (!shouldActivate) {
-            store.revealWorktreeInSidebar(worktreeId)
-          }
           focusTerminalInitiatedTab(tab.id, undefined, worktreeId)
         }
         if (data.title) {

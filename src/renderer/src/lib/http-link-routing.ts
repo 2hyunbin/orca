@@ -7,8 +7,8 @@ import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { WorkspacePort, WorkspacePortScanResult } from '../../../shared/workspace-ports'
 import { toast } from 'sonner'
 import {
-  selectWorkspaceSurfaceOwner,
-  type WorkspaceSurfaceRevealState
+  selectWorkspaceSurface,
+  type WorkspaceSurfaceSelectState
 } from './workspace-surface-reveal'
 
 export type OpenHttpLinkOptions = {
@@ -30,10 +30,7 @@ export type HttpLinkSourceOwner =
   | { kind: 'ssh'; connectionId: string }
   | { kind: 'unknown' }
 
-type StoreAccessor = () => Pick<
-  WorkspaceSurfaceRevealState,
-  'floatingWorkspacePanelOpen' | 'updateSettings'
-> & {
+type StoreAccessor = () => WorkspaceSurfaceSelectState & {
   settings?: Partial<
     Pick<
       GlobalSettings,
@@ -41,10 +38,8 @@ type StoreAccessor = () => Pick<
       | 'openLinksInAppModifierInverts'
       | 'activeRuntimeEnvironmentId'
       | 'localhostWorktreeLabelsEnabled'
-      | 'floatingTerminalEnabled'
     >
   > | null
-  setActiveWorktree: (worktreeId: string) => void
   createBrowserTab: (worktreeId: string, url: string, opts: { activate: boolean }) => unknown
   repos?: readonly LocalhostLinkRepo[]
   projects?: readonly LocalhostLinkProject[]
@@ -184,7 +179,7 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
     // history entry — the user isn't changing worktrees, they're opening a tab
     // in the one they're already in. activateAndRevealWorktree is reserved for
     // file-link jumps that genuinely switch worktrees.
-    selectWorkspaceSurfaceOwner(state, worktreeId)
+    selectWorkspaceSurface(state, worktreeId)
     const localhostRoute = localhostLabelRouteForHttpLink(url, state, sourceOwner)
     if (!localhostRoute) {
       state.createBrowserTab(worktreeId, url, { activate: true })

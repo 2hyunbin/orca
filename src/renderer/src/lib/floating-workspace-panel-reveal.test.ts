@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getDefaultSettings } from '../../../shared/constants'
+import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../shared/constants'
 import type { AppState } from '@/store/types'
 import { TOGGLE_FLOATING_TERMINAL_EVENT } from './floating-terminal'
-import { revealFloatingWorkspacePanel } from './floating-workspace-panel-reveal'
+import {
+  revealFloatingWorkspacePanel,
+  revealFloatingWorkspacePanelFor
+} from './floating-workspace-panel-reveal'
 
 function panelState({ enabled, open }: { enabled: boolean; open: boolean }) {
   return {
@@ -53,6 +56,19 @@ describe('revealFloatingWorkspacePanel', () => {
     expect(dispatchEvent).not.toHaveBeenCalled()
 
     runFrames()
+    expect(dispatchEvent).toHaveBeenCalledOnce()
+  })
+})
+
+describe('revealFloatingWorkspacePanelFor', () => {
+  it('opens the panel only for the floating workspace', () => {
+    const { dispatchEvent } = stubWindow()
+    const state = panelState({ enabled: true, open: false })
+
+    expect(revealFloatingWorkspacePanelFor(state, 'repo::/wt')).toBe(false)
+    expect(dispatchEvent).not.toHaveBeenCalled()
+
+    expect(revealFloatingWorkspacePanelFor(state, FLOATING_TERMINAL_WORKTREE_ID)).toBe(true)
     expect(dispatchEvent).toHaveBeenCalledOnce()
   })
 })
