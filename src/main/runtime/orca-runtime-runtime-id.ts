@@ -1,6 +1,7 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
 import { randomUUID } from 'node:crypto'
 import { preserveTerminalRetirementProofs } from './mobile-session-terminal-retirement-proof'
+import { StartingTerminalTabs } from './starting-terminal-tabs'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import type { RuntimeStore } from './runtime-store-contract'
@@ -99,6 +100,13 @@ export class OrcaRuntimeWithRuntimeId {
   protected tabs = new Map<string, RuntimeSyncedTab>()
 
   protected mobileSessionTabsByWorktree = new Map<string, RuntimeMobileSessionTabsSnapshot>()
+
+  /** Terminal tabs whose start is in flight; a windowless list shows each once its start ends. */
+  protected startingTerminalTabs = new StartingTerminalTabs((worktreeId) => {
+    if (this.isWindowlessSessionTabs()) {
+      this.republishWindowlessSessionTabs(worktreeId)
+    }
+  })
 
   /** Single host writer for mobile session snapshots; versions are total-order stamps. */
   protected storeMobileSessionSnapshot(

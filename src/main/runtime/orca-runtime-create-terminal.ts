@@ -42,7 +42,7 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
-      const claimedStablePaneCreate = this.ptyController.claimStablePaneCreate?.({
+      const claimedStablePaneCreate = this.startingTerminalTabs.claim(this.ptyController, {
         worktreeId: workspace.id,
         connectionId: workspace.connectionId,
         tabId,

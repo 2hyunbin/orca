@@ -297,7 +297,9 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
       worktreeId,
       generatedTitlesEnabled: this.store?.getSettings?.()?.tabAutoGenerateTitle === true,
       hostPages: new Map(hostTabs.map((tab) => [tab.browserPageId, tab])),
-      clientPages: new Map(clientRows.map((row) => [row.browserPageId, row]))
+      clientPages: new Map(clientRows.map((row) => [row.browserPageId, row])),
+      startingTabIds: this.startingTerminalTabs.tabIds(worktreeId),
+      launchAgentOf: (ptyId) => this.ptysById.get(ptyId)?.launchAgent
     })
     const next = nextWindowlessSnapshot(
       worktreeId,

@@ -21,8 +21,10 @@ import { randomUUID } from 'node:crypto'
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
+import type { WorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-model'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { AgentType } from '../../shared/agent-status-types'
+import type { TuiAgent } from '../../shared/tui-agent'
 
 export type WindowlessSessionTabsInput = {
   hostId: ExecutionHostId
@@ -33,6 +35,10 @@ export type WindowlessSessionTabsInput = {
   hostPages: ReadonlyMap<string, BrowserTabInfo>
   /** Pages paired clients run for this host, by page id, as their rows publish them. */
   clientPages: ReadonlyMap<string, RuntimeMobileSessionBrowserTab>
+  /** Terminal tabs whose start is in flight, listed once their process is bound. */
+  startingTabIds?: ReadonlySet<string>
+  /** The agent a live terminal was launched with, by PTY id. */
+  launchAgentOf?: (ptyId: string) => TuiAgent | null | undefined
 }
 
 /** Null when the worktree has no saved layout. */
@@ -47,14 +53,36 @@ export function projectWindowlessSessionTabs(
   }
   const projected = projectSessionTabs(
     worktreeId,
-    workspace,
+    withoutStartingTabs(workspace, input.startingTabIds),
     loaded.desktopView,
     loaded.facts,
     input.generatedTitlesEnabled
   )
   return {
     ...projected,
-    tabs: projected.tabs.map((tab) => withTabTerminal(withLivePage(tab, input), input))
+    tabs: projected.tabs.map((tab) =>
+      withLaunchAgent(withTabTerminal(withLivePage(tab, input), input), input)
+    )
+  }
+}
+
+function withoutStartingTabs(
+  workspace: WorkspaceLayout,
+  starting: ReadonlySet<string> | undefined
+): WorkspaceLayout {
+  const hidden = new Set(
+    workspace.tabs.filter((tab) => starting?.has(tab.entityId)).map((tab) => tab.id)
+  )
+  if (hidden.size === 0) {
+    return workspace
+  }
+  return {
+    ...workspace,
+    tabs: workspace.tabs.filter((tab) => !hidden.has(tab.id)),
+    groups: workspace.groups.map((group) => ({
+      ...group,
+      tabOrder: group.tabOrder.filter((id) => !hidden.has(id))
+    }))
   }
 }
 
@@ -68,6 +96,18 @@ function withTabTerminal(
   }
   const ptyId = session.tabsByWorktree[worktreeId]?.find((row) => row.id === tab.parentTabId)?.ptyId
   return ptyId ? { ...tab, ptyId } : tab
+}
+
+/** A live terminal names the agent it was launched with, as its process record says. */
+function withLaunchAgent(
+  tab: RuntimeMobileSessionSnapshotTab,
+  { launchAgentOf }: WindowlessSessionTabsInput
+): RuntimeMobileSessionSnapshotTab {
+  if (tab.type !== 'terminal' || tab.launchAgent || !tab.ptyId) {
+    return tab
+  }
+  const launchAgent = launchAgentOf?.(tab.ptyId)
+  return launchAgent ? { ...tab, launchAgent } : tab
 }
 
 function withLivePage(

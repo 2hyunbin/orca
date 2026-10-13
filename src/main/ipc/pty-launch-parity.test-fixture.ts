@@ -7,6 +7,9 @@ import { registerPtyHandlers } from './pty/register-handlers'
 import { existsSyncMock, statSyncMock } from './pty-ipc-mock-registry'
 import type { PtyIpcSuiteFixtures } from './pty-ipc-test-harness'
 import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { withRuntimePaneAdmission } from '../runtime/runtime-durable-store-fixture'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { TerminalWorkspaceLaunchScope } from '../runtime/runtime-legacy-worker-terminal-recovery-types'
 import {
   IDENTITY_ENV_KEYS,
@@ -145,9 +148,33 @@ export function startParityLanes(
   }
 ): ParityLanes {
   const settings = parityMainSettings(args.settings)
-  const persistPtyBinding = vi.fn(async () => true)
+  // The host's saved session, as the Store keeps it: panes it admits, bindings, and a write signal.
+  let session = getDefaultWorkspaceSession()
+  const written = new Set<() => void>()
+  const setWorkspaceSession = (next: WorkspaceSessionState): void => {
+    session = next
+    written.forEach((listener) => listener())
+  }
+  const persistPtyBinding = vi.fn(
+    async (binding: { tabId: string; leafId: string; ptyId: string }) => {
+      const layout = session.terminalLayoutsByTabId[binding.tabId]
+      if (layout) {
+        setWorkspaceSession({
+          ...session,
+          terminalLayoutsByTabId: {
+            ...session.terminalLayoutsByTabId,
+            [binding.tabId]: {
+              ...layout,
+              ptyIdsByLeafId: { ...layout.ptyIdsByLeafId, [binding.leafId]: binding.ptyId }
+            }
+          }
+        })
+      }
+      return true
+    }
+  )
   const { repo, folderWorkspace } = launchScope(args.workspace)
-  const store = {
+  const store = withRuntimePaneAdmission({
     getSettings: () => settings,
     getProjects: () => [
       {
@@ -162,12 +189,17 @@ export function startParityLanes(
     getRepos: () => (repo ? [repo] : []),
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,
-    getWorkspaceSession: () => ({ tabsByWorktree: {}, terminalLayoutsByTabId: {} }),
+    getWorkspaceSession: () => session,
+    setWorkspaceSession,
+    onWorkspaceSessionWritten: (listener: () => void) => {
+      written.add(listener)
+      return () => written.delete(listener)
+    },
     getFolderWorkspace: () => folderWorkspace ?? undefined,
     getFolderWorkspaces: () => (folderWorkspace ? [folderWorkspace] : []),
     getProjectGroups: () => [{ id: 'pg-1', name: 'group', parentPath: null, connectionId: null }],
     persistPtyBinding
-  }
+  })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: launches read only the store members defined above; the rest of the persistence store is unreachable here.
   const runtime = new OrcaRuntimeService(store as never)
   const provider = vi.fn(async (options: { sessionId?: string }) => {
