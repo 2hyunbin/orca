@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { HostAccountLaunchEnvParams } from '../../shared/host-account-launch-env'
 import { prepareLocalCommitMessageAgentEnv } from '../text-generation/commit-message-agent-environment'
 import { RuntimeAccountController, type RuntimeAccountServices } from './runtime-account-controller'
@@ -115,6 +115,19 @@ describe('launches a WSL host starts on its own', () => {
     expect(launch.env).toEqual(LAUNCH_ENV.terminal)
   })
 
+  it("leaves an SSH workspace's terminal alone: its shell runs on another machine", async () => {
+    const runtime = runtimeWithHostAccounts()
+    const workspace = {
+      id: 'wt-ssh',
+      path: '/srv/repo',
+      connectionId: 'ssh-1',
+      repo: null,
+      folderWorkspace: null
+    }
+    const launch = await runtime['resolveAgentTerminalCreateOptions'](workspace, {})
+    expect(launch.env).toBeUndefined()
+  })
+
   it("pins a structured chat to the selected account's home", () => {
     const runtime = runtimeWithHostAccounts()
     const settings = {
@@ -124,5 +137,28 @@ describe('launches a WSL host starts on its own', () => {
       KEEP: '1',
       ...LAUNCH_ENV.claude
     })
+  })
+})
+
+describe('restoreHostLaunchEnv', () => {
+  it('starts from the saved env and saves every later push', () => {
+    const accounts = new RuntimeAccountController()
+    const saved: unknown[] = []
+    accounts.restoreHostLaunchEnv(LAUNCH_ENV, (launchEnv) => saved.push(launchEnv))
+    expect(accounts.hostLaunchEnvFor('codex')).toEqual(LAUNCH_ENV.terminal)
+    const next = { ...LAUNCH_ENV, terminal: {} }
+    accounts.setHostLaunchEnv(next)
+    expect(saved).toEqual([next])
+  })
+
+  it('keeps applying a push whose save failed', () => {
+    const accounts = new RuntimeAccountController()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    accounts.restoreHostLaunchEnv(null, () => {
+      throw new Error('disk full')
+    })
+    accounts.setHostLaunchEnv(LAUNCH_ENV)
+    expect(accounts.hostLaunchEnvFor('claude')).toEqual(LAUNCH_ENV.claude)
+    vi.restoreAllMocks()
   })
 })

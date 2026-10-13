@@ -9,7 +9,6 @@ import {
 import { isNativeLocalLocation, LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { getLocalProjectWorktreeGitOptions } from '../project-runtime-git-options'
 import type { AgentSessionAttachParams } from '../native-chat/agent-session-wire/structured-agent-session-attach'
-import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults'
 import { resolveHostAgentBaseEnvironment } from './structured-agent-shell-environment'
 import { resolveHostStructuredAgentCreateSupport } from './structured-agent-launch-support'
 import { structuredAgentRuntimeRegistration } from './structured-agent-runtime-registrations'
@@ -75,15 +74,6 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
         },
         services
       )
-  }
-
-  /** The agent's configured env, with the account a desktop that owns this host's accounts chose
-   *  laid over it, as its own launches here carry. */
-  protected structuredAgentLaunchEnv(agent: StructuredAgentId, settings) {
-    return {
-      ...resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv),
-      ...this.accounts.hostLaunchEnvFor(agent)
-    }
   }
 
   /** The definition this runtime registers for `agent`: what its account home pins. Read from the

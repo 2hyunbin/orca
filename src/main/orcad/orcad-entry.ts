@@ -283,6 +283,14 @@ async function startOrcadRuntime(
     }
   })
 
+  // Why before any launch: a desktop that owns this host's accounts pushed them on an earlier run.
+  const { readOrcadHostAccountLaunchEnv, writeOrcadHostAccountLaunchEnv } =
+    await import('./orcad-host-account-launch-env-store')
+  runtime.restoreHostAccountLaunchEnv(
+    readOrcadHostAccountLaunchEnv(runtimeUserDataPath),
+    (launchEnv) => writeOrcadHostAccountLaunchEnv(runtimeUserDataPath, launchEnv)
+  )
+
   const { installOrcadSessionSearchService } = await import('./orcad-session-search')
   sessionSearch = await installOrcadSessionSearchService({
     userDataPath: runtimeUserDataPath,

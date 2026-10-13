@@ -249,10 +249,9 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
       hostIdentity: this.runtimeId,
       toSessionOptions: (preferences) => this.toAgentSessionOptions(preferences)
     })
-    return withHostAccountLaunchEnv(
-      opts,
-      launch,
-      this.accounts.hostLaunchEnvFor(launch.launchAgent)
-    )
+    // An SSH workspace's shell runs on that machine, where this distro's account paths mean nothing.
+    return workspace.connectionId
+      ? launch
+      : withHostAccountLaunchEnv(opts, launch, this.accounts.hostLaunchEnvFor(launch.launchAgent))
   }
 }

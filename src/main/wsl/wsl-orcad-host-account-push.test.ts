@@ -129,3 +129,39 @@ describe('changesWslHostAccounts', () => {
     expect(changesWslHostAccounts({ experimentalWslHosts: true })).toBe(false)
   })
 })
+
+describe('pushWslOrcadHostAccountEnv retries', () => {
+  it('retries a failed push, and stops once a newer push supersedes it', async () => {
+    vi.useFakeTimers()
+    try {
+      const call = vi
+        .fn<WslOrcadHostAccountPush['call']>()
+        .mockResolvedValueOnce({
+          id: 'm',
+          ok: false,
+          error: { code: 'unavailable', message: 'down' },
+          _meta: { runtimeId: 'r' }
+        })
+        .mockResolvedValue({ id: 'm', ok: true, result: {}, _meta: { runtimeId: 'r' } })
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      await pushWslOrcadHostAccountEnv(push('supported', call), dependencies(), [1_000])
+      expect(call).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(call).toHaveBeenCalledTimes(2)
+
+      const failing = vi.fn<WslOrcadHostAccountPush['call']>().mockResolvedValue({
+        id: 'm',
+        ok: false,
+        error: { code: 'unavailable', message: 'down' },
+        _meta: { runtimeId: 'r' }
+      })
+      await pushWslOrcadHostAccountEnv(push('supported', failing), dependencies(), [1_000])
+      await pushWslOrcadHostAccountEnv(push('supported', call), dependencies(), [1_000])
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(failing).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+    }
+  })
+})

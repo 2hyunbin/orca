@@ -70,20 +70,47 @@ async function pushOnce(
 }
 
 const pending = new Map<string, Promise<void>>()
+const generations = new Map<string, number>()
+/** A failed push is retried, since the host otherwise keeps the old account until it reconnects. */
+const RETRY_DELAYS_MS = [5_000, 30_000, 120_000] as const
 
 /** Serialized per host, so an older selection can never land after a newer one. */
 export function pushWslOrcadHostAccountEnv(
   push: WslOrcadHostAccountPush,
-  dependencies: WslOrcadAccountEnvDependencies | null = getWslOrcadAccountEnvDependencies()
+  dependencies: WslOrcadAccountEnvDependencies | null = getWslOrcadAccountEnvDependencies(),
+  retryDelaysMs: readonly number[] = RETRY_DELAYS_MS
 ): Promise<void> {
   if (!dependencies) {
     return Promise.resolve()
   }
+  const generation = (generations.get(push.environmentId) ?? 0) + 1
+  generations.set(push.environmentId, generation)
+  return enqueue(push, dependencies, retryDelaysMs, generation, 0)
+}
+
+function enqueue(
+  push: WslOrcadHostAccountPush,
+  dependencies: WslOrcadAccountEnvDependencies,
+  retryDelaysMs: readonly number[],
+  generation: number,
+  attempt: number
+): Promise<void> {
   const next = (pending.get(push.environmentId) ?? Promise.resolve())
     .then(() => pushOnce(push, dependencies))
     .catch((error: unknown) => {
       // Why keep the host's last env: clearing it would start the next launch on another account.
       console.warn(`[wsl-hosts] Could not give ${push.distro} its selected accounts:`, error)
+      const delay = retryDelaysMs[attempt]
+      if (delay === undefined) {
+        return
+      }
+      const timer = setTimeout(() => {
+        // A newer push already carries the current selection.
+        if (generations.get(push.environmentId) === generation) {
+          void enqueue(push, dependencies, retryDelaysMs, generation, attempt + 1)
+        }
+      }, delay)
+      timer.unref?.()
     })
   pending.set(push.environmentId, next)
   void next.finally(() => {

@@ -56,6 +56,7 @@ export class RuntimeAccountController {
   private commitMessageAgentEnvironment: CommitMessageAgentEnvironmentResolvers | null = null
   /** Pushed by the desktop that owns this host's accounts; held in memory, re-pushed on connect. */
   private hostLaunchEnv: HostAccountLaunchEnv | null = null
+  private persistHostLaunchEnv: ((launchEnv: HostAccountLaunchEnv) => void) | null = null
 
   setServices(services: RuntimeAccountServices): void {
     this.services = services
@@ -89,6 +90,23 @@ export class RuntimeAccountController {
       throw new Error('This host manages its own provider accounts.')
     }
     this.hostLaunchEnv = launchEnv
+    try {
+      this.persistHostLaunchEnv?.(launchEnv)
+    } catch (error) {
+      // Why not refuse: the env already applies; only a restart before the next push loses it.
+      console.warn('[accounts] Could not save the host account env:', error)
+    }
+  }
+
+  /** orcad's store: starts from the last pushed env, so launches before a reconnect keep it. */
+  restoreHostLaunchEnv(
+    saved: HostAccountLaunchEnv | null,
+    persist: (launchEnv: HostAccountLaunchEnv) => void
+  ): void {
+    this.persistHostLaunchEnv = persist
+    if (saved && !this.services) {
+      this.hostLaunchEnv = saved
+    }
   }
 
   /** The desktop-selected account env for a process `agent` starts here; empty when none. */
