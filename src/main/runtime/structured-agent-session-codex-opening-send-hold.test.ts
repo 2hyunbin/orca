@@ -241,7 +241,10 @@ beforeEach(async () => {
     resolveEnvironment: async () => ({ PATH: process.env.PATH }),
     ...scriptedCodexTransport(openConnection)
   })
-  const attachParams = hostTestAttachParams(null, { providerHandle: undefined })
+  const attachParams = hostTestAttachParams(null, {
+    providerHandle: undefined,
+    options: { model: MODEL.model }
+  })
   attachParams.envelope.clientOperationId = operationId()
   const attached = await host.attach(CALLER, attachParams)
   if (!attached.ok) {
@@ -350,9 +353,10 @@ describe("a message queued behind a send whose turn hasn't opened", () => {
     expect(openWaits.turnIds).toEqual([])
 
     turns.start()
+    expect((await submission(second))?.handedOverAt).toBeUndefined()
+    turns.echo(first)
     await vi.waitFor(async () => expect((await submission(second))?.handedOverAt).toBeDefined())
     await vi.waitFor(() => expect(steers).toBe(1))
-    turns.echo(first)
     says('working on the first', 'reply-1')
     says('more on both', 'reply-2')
 
@@ -386,8 +390,8 @@ describe("a message queued behind a send whose turn hasn't opened", () => {
     expect((await submission(b))?.handedOverAt).toBeUndefined()
 
     turns.start()
-    await vi.waitFor(() => expect(steers).toBe(2))
     turns.echo(zero)
+    await vi.waitFor(() => expect(steers).toBe(2))
     says('working on zero', 'reply-0')
 
     expect(await rowScope(a)).toMatchObject({ kind: 'turn' })
@@ -497,17 +501,19 @@ describe('a send whose turn Codex answered and never opened', () => {
     expect(verdictOf((await settled()).submissions, first)).toBe('pending')
     expect((await submission(second))?.handedOverAt).toBeUndefined()
     turns.start()
-    await vi.waitFor(() => expect(steers).toBe(1))
     turns.echo(first)
+    await vi.waitFor(() => expect(steers).toBe(1))
     await vi.waitFor(async () =>
       expect(verdictOf((await settled()).submissions, first)).toBe('accepted')
     )
   })
 
-  // Steered in the moment the turn opens, it can be echoed before the send that opened the turn.
-  it('keeps the turn, and its live status, on the send that opened it when the steer echoes first', async () => {
+  // The opener's echo identifies the choices a matching follow-up may steer into.
+  it('keeps the turn and its live status on the opener when a later steer echoes', async () => {
     const { first, second } = await heldBehindAnAnsweredSend()
     turns.start()
+    expect((await submission(second))?.handedOverAt).toBeUndefined()
+    turns.echo(first)
     await vi.waitFor(() => expect(steers).toBe(1))
 
     turns.echo(second)
@@ -515,7 +521,7 @@ describe('a send whose turn Codex answered and never opened', () => {
       expect(verdictOf((await settled()).submissions, second)).toBe('accepted')
     )
 
-    expect(verdictOf((await settled()).submissions, first)).toBe('pending')
+    expect(verdictOf((await settled()).submissions, first)).toBe('accepted')
     const rows = await drawn()
     expect(rows.map((row) => row.text)).toEqual(['look around', 'and check the tests'])
     expect(new Set(rows.map((row) => row.turn))).toEqual(
