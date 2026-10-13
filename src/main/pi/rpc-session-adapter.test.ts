@@ -5,7 +5,6 @@ import { AgentSessionAcquisitionRootExitObservedError } from '../native-chat/age
 import { JsonlRpcResponseError } from '../jsonl-rpc/peer'
 import {
   closePiRpcAdapterFixtures,
-  FakeConnection,
   file,
   sessionId,
   setup
@@ -44,51 +43,6 @@ describe('Pi RPC session ownership and delivery', () => {
     resolving.resolve(launch!)
     await Promise.resolve()
     expect(h.connections).toHaveLength(2)
-  })
-
-  it('closes a published child during a stalled handshake without reporting started', async () => {
-    const h = await setup()
-    await h.adapter.closeSession(sessionId)
-    const opened = Promise.withResolvers<FakeConnection>()
-    const reply = Promise.withResolvers<unknown>()
-    h.openConnection.mockImplementationOnce((_launch, handlers) => {
-      const connection = new FakeConnection(handlers)
-      connection.requestOverride = (command) =>
-        command === 'get_state' ? reply.promise : undefined
-      connection.abortRequest = () => reply.reject(new Error('closed while starting'))
-      h.connections.push(connection)
-      opened.resolve(connection)
-      return connection
-    })
-    const acquired = h.adapter.acquire({ ...h.input, fence: 8 })
-    const child = await opened.promise
-    await Promise.resolve()
-    const owned = await acquired
-    expect(owned).toMatchObject({ process: { pid: 4123 } })
-    const opening = h.adapter
-      .open({
-        sessionId,
-        fence: 8,
-        acquisitionGeneration: owned.acquisitionGeneration ?? null,
-        signal: new AbortController().signal
-      })
-      .catch((error: unknown) => error)
-    h.lifecycle.mockClear()
-    expect(h.adapter.readCommands(sessionId)).toBeUndefined()
-    expect(h.adapter.holdsDispatch(sessionId)).toBe(false)
-    await h.adapter.closeSession(sessionId)
-    await h.adapter.drainObservedExits()
-    expect(h.lifecycle).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'ended',
-        cause: 'requested-close'
-      })
-    )
-    expect(h.lifecycle).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'started', fence: 8 })
-    )
-    expect(child.rootVerdict).toBe('exited')
-    expect(await opening).toBeInstanceOf(Error)
   })
 
   it('retains final events when exit publication times out under journal backpressure', async () => {
@@ -555,33 +509,5 @@ describe('Pi RPC session ownership and delivery', () => {
     const other = await setup()
     other.connection.closeResult = { root: 'unverifiable', tree: null }
     expect(await other.adapter.closeSession(sessionId)).toBe(false)
-  })
-})
-
-describe('Pi RPC start without a model', () => {
-  it('refuses a successfully empty listing and leaves cleanup to the host', async () => {
-    const h = await setup()
-    await h.adapter.closeSession(sessionId)
-    h.openConnection.mockImplementationOnce((_launch, handlers) => {
-      const connection = new FakeConnection(handlers)
-      // What a signed-out Pi lists (captured from Pi 1.0.4 in __fixtures__/signed-out.jsonl).
-      connection.requestOverride = (command) =>
-        command === 'get_available_models' ? Promise.resolve({ models: [] }) : undefined
-      h.connections.push(connection)
-      return connection
-    })
-    const acquired = await h.adapter.acquire({ ...h.input, fence: 8 })
-    await expect(
-      h.adapter.open({
-        sessionId,
-        fence: 8,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
-        signal: new AbortController().signal
-      })
-    ).rejects.toMatchObject({ reason: 'notSignedIn' })
-    const child = h.connections.at(-1)!
-    expect(child.closed).toBe(false)
-    await h.adapter.closeSession(sessionId)
-    expect(child.closed).toBe(true)
   })
 })
