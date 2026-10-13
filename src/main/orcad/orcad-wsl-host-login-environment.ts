@@ -71,9 +71,13 @@ export function wslHostLoginEnvironmentOverlay(
  */
 export async function adoptWslHostLoginEnvironment(
   env: NodeJS.ProcessEnv = process.env,
-  // The PATH probe's marker, so an rc that skips `exec tmux` for that probe skips it here too.
+  // The PATH probe's marker and budget: an rc that skips `exec tmux` for it skips it here too,
+  // and a profile measured at 6-7 s under load still lands.
   resolveShellEnv: () => Promise<NodeJS.ProcessEnv> = () =>
-    resolveLoginShellEnvironment({ env: { ...env, [PROBE_MARKER_ENV_VAR]: '1' } }),
+    resolveLoginShellEnvironment({
+      env: { ...env, [PROBE_MARKER_ENV_VAR]: '1' },
+      timeoutMs: 10_000
+    }),
   isWslHost: () => boolean = () => isWslHostOrcadProcess(env)
 ): Promise<string[]> {
   if (!isWslHost()) {

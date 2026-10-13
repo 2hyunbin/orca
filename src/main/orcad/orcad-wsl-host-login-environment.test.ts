@@ -59,7 +59,8 @@ describe('adoptWslHostLoginEnvironment', () => {
   it('probes with the PATH probe marker, so an rc that skips `exec tmux` for it still exports', async () => {
     await adoptWslHostLoginEnvironment({ HOME: '/home/u' }, undefined, () => true)
     expect(loginShell.resolveLoginShellEnvironment).toHaveBeenCalledWith({
-      env: { HOME: '/home/u', ORCA_SHELL_PATH_PROBE: '1' }
+      env: { HOME: '/home/u', ORCA_SHELL_PATH_PROBE: '1' },
+      timeoutMs: 10_000
     })
   })
 
