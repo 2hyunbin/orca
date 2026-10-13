@@ -1,7 +1,6 @@
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import type { CodexSession } from './codex-structured-session-state'
-import type { AgentSessionExecutionOptions } from '../../shared/agent-session-execution-options'
 import { isCodexTurnOptionKey } from './codex-structured-turn-start'
 import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
@@ -186,24 +185,6 @@ export async function applyCodexStructuredSessionOption(
   } catch (error) {
     throw new AgentSessionOptionRejectedError(error)
   }
-}
-
-/** Validate one message against a separate option map, leaving the pick for the next send alone. */
-export async function resolvedCodexMessageOptions(
-  session: CodexSession,
-  choices: AgentSessionExecutionOptions | undefined
-): Promise<Readonly<Record<string, string>> | undefined> {
-  if (!choices) {
-    return undefined
-  }
-  const selected = { ...session, options: new Map(session.options) }
-  for (const key of ['model', 'effort', 'personality', 'fastMode', 'serviceTier'] as const) {
-    const value = choices[key]
-    if (value !== undefined) {
-      await applyCodexStructuredSessionOption(selected, key, value)
-    }
-  }
-  return Object.fromEntries(selected.options)
 }
 
 /**

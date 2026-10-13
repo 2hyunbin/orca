@@ -20,9 +20,9 @@ import {
   applyCodexStructuredSessionOption,
   prepareLiveCodexSessionOptions,
   readLiveCodexSessionOptions,
-  readCodexAcquisitionOptions,
-  resolvedCodexMessageOptions
+  readCodexAcquisitionOptions
 } from './codex-structured-session-options'
+import { resolvedCodexMessageOptions } from './codex-structured-message-options'
 import {
   CodexAcquisitionRegistry,
   requireLiveCodexSession,

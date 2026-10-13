@@ -9,6 +9,9 @@ function sameOptions(
   a: AgentSessionExecutionOptions | undefined,
   b: AgentSessionExecutionOptions | undefined
 ): boolean {
+  if ((a === undefined) !== (b === undefined)) {
+    return false
+  }
   return OPTION_ORDER.every((key) => a?.[key] === b?.[key])
 }
 

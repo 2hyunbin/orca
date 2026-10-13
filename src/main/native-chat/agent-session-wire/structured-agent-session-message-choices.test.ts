@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { providerDiagnostic, withProviderDiagnostic } from '../../../shared/agent-session-failure'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import {
   createQueuedMessageTestRig,
   eventually,
@@ -8,7 +9,8 @@ import {
 } from './structured-agent-session-queued-message-rig.test-fixture'
 import {
   HOST_TEST_SESSION as SESSION,
-  hostTestOperationId
+  hostTestOperationId,
+  HOST_TEST_THREAD as THREAD
 } from './structured-agent-session-host-test-data'
 import { AgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 
@@ -120,4 +122,43 @@ it('keeps a draft’s accepted choices through a host restart and Send now', asy
   await rig.settleAccepted(working, 'a')
   expect(await rig.sendNow(draftId)).toMatchObject({ ok: true })
   expect((await rig.handoff(draftId))?.executionOptions).toEqual(choices)
+})
+
+it('steers a matching choice but holds an empty default choice for a new turn', async () => {
+  const choices = { model: 'model-a', effort: 'high' }
+  const first = rig.send('first', undefined, { executionOptions: choices })
+  await first.result
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(1))
+  await rig.settleAccepted(first.id, 'a')
+  rig
+    .providerEvents()
+    .appendItem(
+      { provider: 'codex', threadId: THREAD, turnId: 'turn-a', ordinal: 0 },
+      { kind: 'turn', turnId: 'turn-a', state: 'running' },
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )
+  await rig.host.flushStreamedEvents(SESSION)
+
+  const matching = rig.send('same choices', undefined, { executionOptions: choices })
+  await matching.result
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
+  await rig.host.settleLateDispatch({
+    sessionId: SESSION,
+    clientMessageId: matching.id,
+    providerIdentity: { provider: 'codex', threadId: THREAD, turnId: 'turn-a', ordinal: 1 }
+  })
+  const defaults = rig.send('default choices', undefined, { executionOptions: {} })
+  await defaults.result
+  expect(rig.dispatch).toHaveBeenCalledTimes(2)
+
+  rig
+    .providerEvents()
+    .appendItem(
+      { provider: 'codex', threadId: THREAD, turnId: 'turn-a', ordinal: 0 },
+      { kind: 'turn', turnId: 'turn-a', state: 'completed' },
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )
+  await rig.host.flushStreamedEvents(SESSION)
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(3))
+  expect(rig.dispatch.mock.calls[2]?.[0].executionOptions).toEqual({})
 })
