@@ -108,8 +108,20 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     activate: boolean
     notify?: boolean
   }): void {
-    const existing = this.mobileSessionTabsByWorktree.get(input.workspaceId)
     const id = `agent-session:${input.sessionId}`
+    if (this.isWindowlessSessionTabs()) {
+      this.saveWindowlessAgentSessionTab(input.workspaceId, input, input.activate ? id : null)
+      if (input.notify === false) {
+        const session = this.getWorkspaceSessionForWorktree(input.workspaceId)
+        if (session) {
+          this.publishWindowlessSessionTabs(input.workspaceId, session)
+        }
+      } else {
+        this.republishWindowlessSessionTabs(input.workspaceId)
+      }
+      return
+    }
+    const existing = this.mobileSessionTabsByWorktree.get(input.workspaceId)
     if (existing?.tabs.some((tab) => tab.id === id)) {
       // A background re-publish is a no-op — no store write, no emit — so it cannot re-surface a
       // client whose mirror lost the tab; healing one needs `activate` or an explicit republish.

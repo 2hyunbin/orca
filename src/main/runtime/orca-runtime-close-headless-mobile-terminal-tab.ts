@@ -1,4 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { withMovedSessionTab } from './windowless-session-tabs'
 import { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './orca-runtime-close-structured-agent-session-tab'
 import type {
   RuntimeMobileSessionTabMove,
@@ -138,6 +139,20 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
     if (!snapshot) {
       throw new Error('tab_not_found')
+    }
+    if (this.isWindowlessSessionTabs()) {
+      this.setWorkspaceSessionForWorktree(
+        worktreeId,
+        withMovedSessionTab(
+          this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+          this.getWorkspaceSessionForWorktree(worktreeId),
+          worktreeId,
+          this.toMobileSessionTabsResult(snapshot),
+          move
+        )
+      )
+      this.republishWindowlessSessionTabs(worktreeId)
+      return { moved: true }
     }
     if (!this.notifier?.moveSessionTab) {
       return this.moveHeadlessMobileSessionTab(worktreeId, snapshot, move)

@@ -1,87 +1,110 @@
 import { describe, expect, it } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime'
-import type {
-  RuntimeMobileSessionTabMove,
-  RuntimeMobileSessionTabsSnapshot
-} from '../../shared/runtime-types'
+import type { RuntimeMobileSessionTabMove } from '../../shared/runtime-types'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import {
+  TEST_WORKTREE_ID,
+  makeHeadlessTerminalLayout,
+  makeRuntimeStoreWithWorkspaceSession,
+  makeWorkspaceSessionWithHeadlessTerminal
+} from './orca-runtime-test-fixtures.spec'
 
-function terminalTab(parentTabId: string, isActive: boolean) {
+const LEAVES = {
+  'tab-a': '11111111-1111-4111-8111-1111111111aa',
+  'tab-b': '11111111-1111-4111-8111-1111111111bb',
+  'tab-c': '11111111-1111-4111-8111-1111111111cc'
+} as const
+
+function terminalTab(id: keyof typeof LEAVES, sortOrder: number) {
   return {
-    type: 'terminal' as const,
-    id: `${parentTabId}::leaf-1`,
-    parentTabId,
-    leafId: 'leaf-1',
+    id,
+    ptyId: `pty-${id}`,
+    worktreeId: TEST_WORKTREE_ID,
     title: 'Terminal',
-    isActive
+    customTitle: null,
+    color: null,
+    sortOrder,
+    createdAt: sortOrder + 1
   }
 }
 
-// No notifier, so moves take the headless (serve) path.
+/** A host with no window whose saved layout holds tabs a and b in one group, c in another. */
 function headlessRuntime(): {
   runtime: OrcaRuntimeService
-  snapshots: Map<string, RuntimeMobileSessionTabsSnapshot>
+  getSession: () => WorkspaceSessionState
 } {
-  const runtime = new OrcaRuntimeService()
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the published snapshot map is protected; seeding it stands in for a prior publication.
-  const internals = runtime as unknown as {
-    mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-  }
-  const snapshots = internals.mobileSessionTabsByWorktree
-  snapshots.set('wt-1', {
-    worktree: 'wt-1',
-    publicationEpoch: 'epoch-1',
-    snapshotVersion: 1,
-    activeGroupId: 'group-a',
-    activeTabId: 'tab-a::leaf-1',
-    activeTabType: 'terminal',
-    tabGroups: [
-      { id: 'group-a', activeTabId: 'tab-a', tabOrder: ['tab-a', 'tab-b'] },
-      { id: 'group-c', activeTabId: 'tab-c', tabOrder: ['tab-c'] }
-    ],
-    tabGroupLayout: {
-      type: 'split',
-      direction: 'horizontal',
-      first: { type: 'leaf', groupId: 'group-a' },
-      second: { type: 'leaf', groupId: 'group-c' }
-    },
-    tabs: [terminalTab('tab-a', true), terminalTab('tab-b', false), terminalTab('tab-c', false)]
-  })
-  return { runtime, snapshots }
+  const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
+    makeWorkspaceSessionWithHeadlessTerminal({
+      activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-a' },
+      activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-a' },
+      tabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          terminalTab('tab-a', 0),
+          terminalTab('tab-b', 1),
+          terminalTab('tab-c', 2)
+        ]
+      },
+      terminalLayoutsByTabId: Object.fromEntries(
+        Object.entries(LEAVES).map(([tabId, leafId]) => [
+          tabId,
+          makeHeadlessTerminalLayout({ [leafId]: `pty-${tabId}` })
+        ])
+      ),
+      tabGroups: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: 'group-a',
+            worktreeId: TEST_WORKTREE_ID,
+            activeTabId: 'tab-a',
+            tabOrder: ['tab-a', 'tab-b']
+          },
+          { id: 'group-c', worktreeId: TEST_WORKTREE_ID, activeTabId: 'tab-c', tabOrder: ['tab-c'] }
+        ]
+      },
+      tabGroupLayouts: {
+        [TEST_WORKTREE_ID]: {
+          type: 'split',
+          direction: 'horizontal',
+          first: { type: 'leaf', groupId: 'group-a' },
+          second: { type: 'leaf', groupId: 'group-c' }
+        }
+      }
+    })
+  )
+  return { runtime: new OrcaRuntimeService(runtimeStore as never), getSession }
 }
 
 async function expectNoOp(move: RuntimeMobileSessionTabMove): Promise<void> {
-  const { runtime, snapshots } = headlessRuntime()
-  const before = snapshots.get('wt-1')
-  await expect(runtime.moveMobileSessionTab('id:wt-1', move)).resolves.toEqual({ moved: true })
-  expect(snapshots.get('wt-1')).toBe(before)
+  const { runtime, getSession } = headlessRuntime()
+  await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+  const before = getSession().tabGroups
+  await expect(runtime.moveMobileSessionTab(`id:${TEST_WORKTREE_ID}`, move)).resolves.toEqual({
+    moved: true
+  })
+  expect(getSession().tabGroups).toEqual(before)
+}
+
+async function expectRefused(move: RuntimeMobileSessionTabMove, code: string): Promise<void> {
+  const { runtime, getSession } = headlessRuntime()
+  await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+  const before = getSession()
+  await expect(runtime.moveMobileSessionTab(`id:${TEST_WORKTREE_ID}`, move)).rejects.toThrow(code)
+  expect(getSession()).toBe(before)
 }
 
 describe('headless session tab moves', () => {
   it('refuses a split onto a group the host does not have', async () => {
-    const { runtime, snapshots } = headlessRuntime()
-    const before = snapshots.get('wt-1')
-    await expect(
-      runtime.moveMobileSessionTab('id:wt-1', {
-        kind: 'split',
-        tabId: 'tab-b',
-        targetGroupId: 'group-missing',
-        splitDirection: 'right'
-      })
-    ).rejects.toThrow('target_group_not_found')
-    expect(snapshots.get('wt-1')).toBe(before)
+    await expectRefused(
+      { kind: 'split', tabId: 'tab-b', targetGroupId: 'group-missing', splitDirection: 'right' },
+      'target_group_not_found'
+    )
   })
 
   it('refuses a move into a group the host does not have', async () => {
-    const { runtime, snapshots } = headlessRuntime()
-    const before = snapshots.get('wt-1')
-    await expect(
-      runtime.moveMobileSessionTab('id:wt-1', {
-        kind: 'move-to-group',
-        tabId: 'tab-b',
-        targetGroupId: 'group-missing'
-      })
-    ).rejects.toThrow('target_group_not_found')
-    expect(snapshots.get('wt-1')).toBe(before)
+    await expectRefused(
+      { kind: 'move-to-group', tabId: 'tab-b', targetGroupId: 'group-missing' },
+      'target_group_not_found'
+    )
   })
 
   it('keeps a same-group drop a successful no-op', async () => {
@@ -95,5 +118,27 @@ describe('headless session tab moves', () => {
       targetGroupId: 'group-c',
       splitDirection: 'right'
     })
+  })
+
+  it('saves a move into another group with the moved tab shown there', async () => {
+    const { runtime, getSession } = headlessRuntime()
+    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+
+    await runtime.moveMobileSessionTab(`id:${TEST_WORKTREE_ID}`, {
+      kind: 'move-to-group',
+      tabId: 'tab-b',
+      targetGroupId: 'group-c',
+      index: 0
+    })
+
+    expect(getSession().tabGroups?.[TEST_WORKTREE_ID]).toEqual([
+      expect.objectContaining({ id: 'group-a', activeTabId: 'tab-a', tabOrder: ['tab-a'] }),
+      expect.objectContaining({ id: 'group-c', activeTabId: 'tab-b', tabOrder: ['tab-b', 'tab-c'] })
+    ])
+    const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(listed.tabGroups?.map(({ id, activeTabId }) => [id, activeTabId])).toEqual([
+      ['group-a', 'tab-a'],
+      ['group-c', 'tab-b']
+    ])
   })
 })

@@ -1,4 +1,6 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
+import { withClosedAgentSessionTab, withOpenedAgentSessionTab } from './windowless-session-tabs'
+import type { AgentType } from '../../shared/agent-status-types'
 import { OrcaRuntimeWithCloseMobileSessionTab } from './orca-runtime-close-mobile-session-tab'
 import type {
   RuntimeMobileSessionAgentTab,
@@ -55,6 +57,9 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
    * the startup release reconciler where no renderer exists.
    */
   retireStructuredAgentSessionTabFromSnapshot(sessionId: string): boolean {
+    if (this.isWindowlessSessionTabs()) {
+      return this.closeWindowlessAgentSessionTab(sessionId)
+    }
     for (const [worktreeId, snapshot] of this.mobileSessionTabsByWorktree) {
       const nextSnapshot = retireStructuredAgentSessionTabFrom(snapshot, sessionId)
       if (!nextSnapshot) {
@@ -267,5 +272,54 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
         options.caller.clientNavigationId
       )
     }
+  }
+
+  /** Saves a chat's tab in a windowless worktree's layout, and its selection when `rowId` is set. */
+  protected saveWindowlessAgentSessionTab(
+    worktreeId: string,
+    chat: { sessionId: string; agent: AgentType },
+    rowId: string | null
+  ): void {
+    const session = this.getWorkspaceSessionForWorktree(worktreeId)
+    const next = session
+      ? withOpenedAgentSessionTab(
+          this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+          session,
+          worktreeId,
+          { sessionId: chat.sessionId, agent: chat.agent }
+        )
+      : null
+    if (next) {
+      this.setWorkspaceSessionForWorktree(worktreeId, next)
+    }
+    if (rowId) {
+      this.saveWindowlessTabSelection(worktreeId, rowId)
+    }
+  }
+
+  /** Closes a chat's saved tab in whichever windowless worktree lists it. */
+  protected closeWindowlessAgentSessionTab(sessionId: string): boolean {
+    for (const [worktreeId, snapshot] of this.mobileSessionTabsByWorktree) {
+      if (
+        !snapshot.tabs.some((tab) => tab.type === 'agent-session' && tab.sessionId === sessionId)
+      ) {
+        continue
+      }
+      const session = this.getWorkspaceSessionForWorktree(worktreeId)
+      const next = session
+        ? withClosedAgentSessionTab(
+            this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+            session,
+            worktreeId,
+            sessionId
+          )
+        : null
+      if (next) {
+        this.setWorkspaceSessionForWorktree(worktreeId, next)
+      }
+      this.republishWindowlessSessionTabs(worktreeId)
+      return true
+    }
+    return false
   }
 }

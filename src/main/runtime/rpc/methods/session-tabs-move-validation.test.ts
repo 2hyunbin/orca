@@ -157,6 +157,8 @@ describe('session tab move validation', () => {
     const runtime = new OrcaRuntimeService()
     const moveSessionTab = vi.fn()
     runtime.setNotifier({ moveSessionTab } as never)
+    // A renderer is attached and routes the move.
+    runtime.attachWindow(1)
     setMobileSessionSnapshot(runtime, {
       worktree: 'wt-1',
       publicationEpoch: 'epoch-1',
@@ -213,6 +215,8 @@ describe('session tab move validation', () => {
     const runtime = new OrcaRuntimeService()
     const moveSessionTab = vi.fn()
     runtime.setNotifier({ moveSessionTab } as never)
+    // A renderer is attached and routes the move.
+    runtime.attachWindow(1)
     runtime.setAgentBrowserBridge({
       tabList: vi.fn(() => ({
         tabs: [
@@ -276,6 +280,8 @@ describe('session tab move validation', () => {
     const runtime = new OrcaRuntimeService()
     const moveSessionTab = vi.fn()
     runtime.setNotifier({ moveSessionTab } as never)
+    // A renderer is attached and routes the move.
+    runtime.attachWindow(1)
     runtime.setAgentBrowserBridge({
       tabList: vi.fn(() => ({ tabs: [] }))
     } as never)
@@ -316,6 +322,8 @@ describe('session tab move validation', () => {
     const runtime = new OrcaRuntimeService()
     const moveSessionTab = vi.fn()
     runtime.setNotifier({ moveSessionTab } as never)
+    // A renderer is attached and routes the move.
+    runtime.attachWindow(1)
     runtime.setAgentBrowserBridge({
       tabList: vi.fn(() => ({
         tabs: [{ browserPageId: 'page-live', title: 'Live Browser', url: 'https://example.test' }]
