@@ -3,7 +3,8 @@ import {
   adapterAtPublishFor,
   fakeClaude,
   identityFor,
-  claudeOpened
+  claudeOpened,
+  USER_MESSAGE
 } from './claude-structured-session-test-support'
 import type { ClaudeStructuredSessionEvent } from './claude-structured-session-state'
 
@@ -58,6 +59,47 @@ describe('Claude host-awaited open', () => {
         reportedOptions: { model: 'claude-haiku-4-5' }
       })
     )
+    await adapter.closeAll()
+  })
+
+  it('applies a Fast choice at message input when launch settings cannot carry it', async () => {
+    let fastMode = false
+    const claude = fakeClaude({
+      initModels: [{ value: 'claude-sonnet-5', displayName: 'Sonnet', supportsFastMode: true }],
+      routes: {
+        apply_flag_settings: () => {
+          fastMode = true
+        }
+      }
+    })
+    const events: ClaudeStructuredSessionEvent[] = []
+    const adapter = adapterAtPublishFor(
+      claude,
+      { options: { extraArgs: { settings: '/repo/claude.json' } } },
+      events
+    )
+    await adapter.acquire({ ...ACQUIRE, options: { fastMode: 'true' } })
+    await claudeOpened(adapter, 'session-1')
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.type === 'options-reported')).toBe(true)
+    )
+    const connection = claude.connections[0]!
+    expect(connection.calls.filter((call) => call.subtype === 'apply_flag_settings')).toEqual([])
+    connection.getSettings = async () => ({ effective: { fastMode } })
+    await expect(
+      adapter.dispatch({
+        sessionId: 'session-1',
+        clientMessageId: 'fast-choice',
+        body: USER_MESSAGE,
+        executionOptions: { fastMode: 'true' },
+        fence: 7
+      })
+    ).resolves.toEqual({ state: 'admitted' })
+    expect(connection.calls.filter((call) => call.subtype === 'apply_flag_settings')).toEqual([
+      { subtype: 'apply_flag_settings', params: { settings: { effortLevel: 'high' } } },
+      { subtype: 'apply_flag_settings', params: { settings: { fastMode: true } } }
+    ])
+    expect(connection.sent).toHaveLength(1)
     await adapter.closeAll()
   })
 

@@ -30,7 +30,7 @@ import {
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { recordingStructuredAgentSessionLogger } from './structured-agent-session-logger-test-support'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
-import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
 import {
   THREAD_ID,
   adapterFor,
@@ -76,7 +76,7 @@ beforeEach(async () => {
   log = recordingStructuredAgentSessionLogger()
   store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
-    agents: NO_STRUCTURED_AGENTS,
+    agents: claudeAndCodexDeclared(),
     logger: log.logger,
     store,
     adapter: {
@@ -222,7 +222,7 @@ describe('a Stop that names no turn', () => {
     )
     expect(await pickOption('model', 'gpt-next')).toMatchObject({
       ok: true,
-      value: { options: { model: 'gpt-next', serviceTier: 'priority' } }
+      value: { options: { model: 'gpt-next' } }
     })
     expect(codex.connections[0].calls.filter((call) => call.method === 'model/list')).toHaveLength(
       1
@@ -230,9 +230,7 @@ describe('a Stop that names no turn', () => {
 
     const followUp = send('follow-up')
     await followUp.result
-    await eventually(() =>
-      expect(codex.connections[0].calls.some((call) => call.method === 'turn/steer')).toBe(true)
-    )
+    expect(codex.connections[0].calls.some((call) => call.method === 'turn/steer')).toBe(false)
     expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
     codex.connections[0].handlers.onNotification?.('turn/completed', {
       threadId: THREAD_ID,

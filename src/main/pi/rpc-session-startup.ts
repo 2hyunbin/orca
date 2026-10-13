@@ -5,7 +5,6 @@ import type {
   AgentSessionOptionsResult,
   AgentSessionSlashCommand
 } from '../../shared/agent-session-wire'
-import { JsonlRpcResponseError } from '../jsonl-rpc/peer'
 import {
   AgentSessionAcquisitionRefusal,
   type StructuredAgentSessionAcquireInput
@@ -17,12 +16,7 @@ import {
   type AgentModelCatalogLiveListing
 } from '../native-chat/agent-model-catalog/agent-model-catalog-entry'
 import { piRpcProviderLink, type PiRpcResolvedLaunch } from './rpc-launch-resolution'
-import {
-  applyPiRpcSessionOption,
-  piModelOptionId,
-  readPiRpcCommands,
-  readPiRpcSessionOptions
-} from './rpc-options'
+import { piModelOptionId, readPiRpcCommands, readPiRpcSessionOptions } from './rpc-options'
 import { piRpcStateSchema, type PiRpcState } from './rpc-protocol'
 import type { PiRpcConnection, PiRpcSessionDeps } from './rpc-session'
 import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
@@ -40,7 +34,6 @@ export class PiRpcSessionStartup {
   constructor(
     private readonly input: StructuredAgentSessionAcquireInput,
     private readonly connection: PiRpcConnection,
-    private readonly selected: Map<string, string>,
     private readonly deps: PiRpcSessionDeps,
     /** A new Pi session starts on its config's model; a resumed or forked one keeps its own. */
     private readonly resolvesConfig: boolean,
@@ -70,31 +63,7 @@ export class PiRpcSessionStartup {
       model: state.model ? piModelOptionId(state.model.provider, state.model.id) : '',
       ...(state.thinkingLevel ? { effort: state.thinkingLevel } : {})
     }
-    const saved = this.input.options ?? {}
-    const skipped = Object.keys(saved).filter((key) => key !== 'model' && key !== 'effort')
-    // Keys a restore sent, whether or not Pi took them.
-    const picked = new Set<string>()
-    for (const key of ['model', 'effort'] as const) {
-      const value = saved[key]
-      if (value === undefined) {
-        continue
-      }
-      picked.add(key)
-      try {
-        this.assertLive(signal)
-        await this.wait(
-          applyPiRpcSessionOption(this.connection, this.selected, key, value, START_REQUEST),
-          signal
-        )
-        current[key] = value
-      } catch (error) {
-        if (!(error instanceof JsonlRpcResponseError)) {
-          throw error
-        }
-        skipped.push(key)
-        this.warn('Pi rejected a saved option', 'pi-option-restore', error, { key })
-      }
-    }
+    const skipped: string[] = []
     this.assertLive(signal)
     current.confirmed = [...(current.model ? ['model'] : []), ...(current.effort ? ['effort'] : [])]
     // Part of the start, as other agents' handshakes answer with theirs: a Pi that lists no model
@@ -110,7 +79,11 @@ export class PiRpcSessionStartup {
       this.options = options
       catalogListing = withLiveCatalogListing(
         options,
-        unpickedSessionConfiguredChoice({ resolvesConfig: this.resolvesConfig, picked, ...options })
+        unpickedSessionConfiguredChoice({
+          resolvesConfig: this.resolvesConfig,
+          picked: new Set(),
+          ...options
+        })
       ).catalogListing
     }
     this.skipped = skipped

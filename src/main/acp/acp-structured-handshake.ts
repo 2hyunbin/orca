@@ -17,7 +17,7 @@ import { probeAcpChildStops } from './acp-structured-child-stop'
 import type { AcpStructuredConnection } from './acp-structured-connection'
 import type { AcpStructuredLane } from './acp-structured-lane'
 import type { AcpStructuredLaunch } from './acp-structured-launch-resolution'
-import { restoreAcpSessionOptions, type AcpStructuredOptions } from './acp-structured-options'
+import type { AcpStructuredOptions } from './acp-structured-options'
 import type { AcpStructuredPrompts } from './acp-structured-prompts'
 import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-adapter-deps'
 import { AcpStructuredTurns, type AcpStructuredTurnsDeps } from './acp-structured-turns'
@@ -103,8 +103,7 @@ export async function initializeAcpStructuredSession(
   assertStarting()
   options.adoptSession(started.response, started.kind === 'new' ? 'new' : 'loaded')
   liveLane.apply(liveLane.translator.contextModels(started.response.models, now()))
-  const restoreSkipped = await restoreAcpSessionOptions(connection, options, acquire.options)
-  assertStarting()
+  const restoreSkipped: string[] = []
   const link: AgentSessionProviderHandleLink = {
     linkId:
       deps.mintLinkId?.() ?? `${spec.agent}-${acquire.fence}-${started.sessionId}`.slice(0, 128),
@@ -158,7 +157,6 @@ export async function initializeAcpStructuredSession(
     reportedOptions: options.read().current,
     restoreSkippedOptions: restoreSkipped,
     optionRevision,
-    // Its saved picks restored: what it runs now is what its start resolved.
     catalogListing: options.startListing()
   }
 }

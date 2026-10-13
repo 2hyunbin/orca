@@ -16,7 +16,7 @@ afterEach(closeProviderTimelineRigs)
 const configParams = z.object({ configId: z.string(), value: z.string() })
 
 describe('ACP child published before its handshake', () => {
-  it('returns at spawn, then reports its real session and restored picks in model-before-effort order', async () => {
+  it('opens without writing saved message choices to the provider', async () => {
     let answer: (() => void) | undefined
     const writes: string[] = []
     let configOptions = GROK_CONFIG_OPTIONS
@@ -59,11 +59,11 @@ describe('ACP child published before its handshake', () => {
     answer?.()
     expect(await opening).toMatchObject({
       link: { handle: { nativeId: PROVIDER_SESSION }, origin: 'created' },
-      reportedOptions: { model: 'grok-4.6', effort: 'low' },
+      reportedOptions: { model: 'grok-4.7', effort: 'high' },
       restoreSkippedOptions: [],
       optionRevision: 7
     })
-    expect(writes).toEqual(['model', 'reasoning_effort'])
+    expect(writes).toEqual([])
     rig.child().agent.notify('session/update', {
       sessionId: PROVIDER_SESSION,
       update: { sessionUpdate: 'config_option_update', configOptions: GROK_CONFIG_OPTIONS }
@@ -158,7 +158,7 @@ describe('ACP child published before its handshake', () => {
     expect(rig.child().exited).toBe(true)
   })
 
-  it('reports saved picks the provider refused without delaying readiness for another read', async () => {
+  it('waits until message input to try a saved choice the provider will refuse', async () => {
     const rig = await openAcpAdapterRig({
       script: (agent) =>
         agent.on('session/set_config_option', (frame) =>
@@ -167,9 +167,21 @@ describe('ACP child published before its handshake', () => {
     })
     await rig.acquire({ options: { model: 'retired-model' } })
     expect(rig.started()).toMatchObject({
-      restoreSkippedOptions: ['model'],
+      restoreSkippedOptions: [],
       reportedOptions: { model: 'grok-4.7', effort: 'high' }
     })
+    expect(rig.sent('session/set_config_option')).toEqual([])
+    await expect(
+      rig.adapter.dispatch({
+        sessionId: SESSION,
+        fence: 1,
+        clientMessageId: 'refused-choice',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hello' }] },
+        executionOptions: { model: 'retired-model' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(rig.sent('session/set_config_option')).toHaveLength(1)
+    expect(rig.sent('session/prompt')).toEqual([])
     expect(rig.child().exited).toBe(false)
   })
 

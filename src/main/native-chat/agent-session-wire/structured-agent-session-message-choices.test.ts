@@ -1,10 +1,16 @@
 import { afterEach, beforeEach, expect, it } from 'vitest'
+import { providerDiagnostic, withProviderDiagnostic } from '../../../shared/agent-session-failure'
 import {
   createQueuedMessageTestRig,
   eventually,
+  QUEUED_RIG_CALLER,
   type QueuedMessageTestRig
 } from './structured-agent-session-queued-message-rig.test-fixture'
-import { HOST_TEST_SESSION as SESSION } from './structured-agent-session-host-test-data'
+import {
+  HOST_TEST_SESSION as SESSION,
+  hostTestOperationId
+} from './structured-agent-session-host-test-data'
+import { AgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 
 let rig: QueuedMessageTestRig
 
@@ -13,6 +19,68 @@ beforeEach(async () => {
 })
 
 afterEach(() => rig.dispose())
+
+async function pickModel(model: string): Promise<void> {
+  const fields = { key: 'model', value: model }
+  const result = await rig.host.setOption(QUEUED_RIG_CALLER, {
+    envelope: rig.envelope(fields, 'agentSession.setOption', hostTestOperationId()),
+    ...fields
+  })
+  expect(result).toMatchObject({ ok: true })
+}
+
+it('keeps the first accepted choice through opening and saves a later pick for the next send', async () => {
+  await rig.dispose()
+  rig = await createQueuedMessageTestRig({ starting: true, restartable: true })
+  const first = rig.send('first', undefined, { executionOptions: { model: 'model-a' } })
+  expect(await first.result).toMatchObject({ ok: true })
+  await pickModel('model-b')
+  const second = rig.send('second')
+  expect(await second.result).toMatchObject({ ok: true })
+  expect(rig.setOption).not.toHaveBeenCalled()
+  await rig.proveStart()
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(1))
+  expect(rig.dispatch.mock.calls[0]?.[0].executionOptions).toEqual({ model: 'model-a' })
+  await rig.settleAccepted(first.id, 'a')
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
+  expect(rig.dispatch.mock.calls[1]?.[0].executionOptions).toEqual({ model: 'model-b' })
+  expect(rig.store.getRecord(SESSION)?.options?.model).toBe('model-b')
+})
+
+it('queues a different choice during a running Codex turn', async () => {
+  await pickModel('model-a')
+  const first = await rig.workingSend()
+  await pickModel('model-b')
+  const second = rig.send('second')
+  expect(await second.result).toMatchObject({ ok: true })
+  expect(rig.dispatch).toHaveBeenCalledTimes(1)
+  await rig.settleAccepted(first, 'a')
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
+  expect(rig.dispatch.mock.calls.map(([input]) => input.executionOptions?.model)).toEqual([
+    'model-a',
+    'model-b'
+  ])
+})
+
+it('rejects a refused choice before prompt input and leaves the next pick saved', async () => {
+  await pickModel('model-b')
+  rig.dispatch.mockRejectedValueOnce(
+    withProviderDiagnostic(
+      new AgentSessionOptionRejectedError('model-a is unavailable'),
+      providerDiagnostic('model-a is unavailable', 'person')
+    )
+  )
+  const first = rig.send('first', undefined, { executionOptions: { model: 'model-a' } })
+  expect(await first.result).toMatchObject({ ok: true })
+  await eventually(async () =>
+    expect(await rig.submission(first.id)).toMatchObject({
+      dispatchState: 'rejected',
+      reason: expect.stringContaining('model-a is unavailable')
+    })
+  )
+  expect(rig.dispatch).toHaveBeenCalledOnce()
+  expect(rig.store.getRecord(SESSION)?.options?.model).toBe('model-b')
+})
 
 it('uses each send’s captured choices when two messages arrive during startup', async () => {
   const releaseStart = rig.holdNextStart()

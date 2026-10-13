@@ -32,10 +32,6 @@ import type {
   ClaudeSession,
   ClaudeStructuredSessionEvent
 } from './claude-structured-session-state'
-import {
-  admitClaudeStartFastMode,
-  applyClaudeStartFastMode
-} from './claude-structured-start-fast-mode'
 
 export type ClaudeOpenFacts = Pick<
   StructuredAgentSessionProviderOpenResult,
@@ -267,7 +263,6 @@ async function settleClaudeStartupSettings(
   input.diagnose(claudeAuthDiagnostic(facts.initialization, facts.init, settings))
   const writtenSinceRead = sequence !== session.optionMutationSequence
   applyClaudeSettingsFacts(session, facts, writtenSinceRead)
-  const startFastMode = writtenSinceRead ? null : admitClaudeStartFastMode(session, facts)
   input.report({
     type: 'options-reported',
     // Open already returned the initialize listing to the host.
@@ -279,11 +274,4 @@ async function settleClaudeStartupSettings(
     ...claudeRetiredOptions(session),
     optionRevision
   })
-  if (startFastMode !== null) {
-    void applyClaudeStartFastMode(session, facts, startFastMode, (event) => {
-      if (input.isCurrent()) {
-        input.report(event)
-      }
-    })
-  }
 }

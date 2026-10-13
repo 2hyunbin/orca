@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from 'node:util'
-import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 import type {
   AgentSessionProcessIdentity,
   AgentSessionRecord
@@ -12,8 +11,6 @@ import {
 import { rethrowAfterAgentSessionAcquisitionCleanup } from './structured-agent-session-provider-exit-proof'
 import { journalIdentityFor } from './structured-agent-session-attach'
 import type { AttachFlowInput } from './structured-agent-session-attach-flow'
-import { readNativeSessionOptions } from './structured-agent-session-option-restoration'
-import { withAgentSessionCreatePhase } from '../../observability/agent-session-instrumentation'
 import { mintStructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt'
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
 
@@ -77,7 +74,8 @@ export async function acquireOwner(
       ...(permissionMode ? { permissionMode } : {}),
       ...(input.eventSink ? { events: input.eventSink } : {}),
       ...(input.acquireSignal ? { signal: input.acquireSignal } : {}),
-      optionRevision: input.optionRevision
+      optionRevision: input.optionRevision,
+      ...(input.startupOptions ? { startupOptions: input.startupOptions } : {})
     })
     const progress = input.onStartupAttempt?.(attempt)
     const acquired = await input.adapter.acquire({
@@ -95,27 +93,6 @@ export async function acquireOwner(
       }
     })
     const providerChildPhase = acquired.providerChildPhase ?? 'ready'
-    // A starting child has proven nothing: the record keeps the reservation's saved options as
-    // intent, never a catalog guess, and the `started` event persists what the child reports.
-    const options =
-      providerChildPhase === 'starting'
-        ? undefined
-        : await withAgentSessionCreatePhase('restore_options', input.recordPhase, async () => {
-            const read = {
-              sessionId: record.sessionId,
-              fence,
-              ...(record.options ? { priorOptions: record.options } : {})
-            }
-            // Still inside the start, so the limit or a Stop ends a read the provider never answers.
-            return waitForPromiseWithSignal(
-              Promise.resolve(
-                input.adapter.readAcquisitionOptions
-                  ? input.adapter.readAcquisitionOptions(read)
-                  : readNativeSessionOptions({ adapter: input.adapter, ...read })
-              ),
-              input.acquireSignal
-            )
-          })
     if (record.lease.ownerProcess === null) {
       await input.store.commitProcessIdentity({
         sessionId: record.sessionId,
@@ -130,8 +107,7 @@ export async function acquireOwner(
       sessionId: record.sessionId,
       fence,
       ...(acquired.link ? { link: acquired.link } : {}),
-      now: input.now(),
-      ...(options ? { options } : {})
+      now: input.now()
     })
     if (providerChildPhase === 'ready' && acquired.catalogListing) {
       handOverStartCatalogListing(input, record.sessionId, acquired.catalogListing)

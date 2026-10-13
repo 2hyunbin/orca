@@ -52,9 +52,18 @@ export async function dispatchPiRpcMessage(
       )
     }
   }
+  const model = input.executionOptions?.model ?? session.initialOptions.model
   for (const key of ['model', 'effort'] as const) {
-    const value = input.executionOptions?.[key]
-    if (value === undefined) {
+    const value =
+      input.executionOptions?.[key] ??
+      (key === 'model' || model === session.initialOptions.model
+        ? session.initialOptions[key]
+        : undefined)
+    if (
+      value === undefined ||
+      session.selected.get(key) === value ||
+      (!session.selected.has(key) && session.initialOptions[key] === value)
+    ) {
       continue
     }
     try {

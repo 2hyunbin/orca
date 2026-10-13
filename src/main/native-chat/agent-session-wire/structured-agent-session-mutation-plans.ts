@@ -36,7 +36,6 @@ import {
   performCancel,
   performPrompt,
   performSend,
-  performSetOption,
   type AgentSessionTurnContext,
   type TurnOutcome
 } from './structured-agent-session-turns'
@@ -344,7 +343,12 @@ export function setOptionPlan(params: {
   return {
     method: 'agentSession.setOption',
     fields: { key: params.key, value: params.value },
-    run: (ctx) => performSetOption(ctx, params),
+    run: async (ctx) => {
+      const options = { ...ctx.persistedOptions, [params.key]: params.value }
+      await ctx.persistOptions(options)
+      ctx.publish()
+      return { ok: true, value: { ...params, options } }
+    },
     // Reapply unsettled picks; only a settled success can be replayed directly.
     replay: (ctx, outcome) =>
       outcome.status === 'succeeded'

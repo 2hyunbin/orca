@@ -134,7 +134,7 @@ function lastPhase(): string | undefined {
 }
 
 describe('a publish-first Claude create whose init is slow', () => {
-  it('never persists the catalog default, and persists the reported model once started', async () => {
+  it('keeps provider defaults out of saved picks after starting', async () => {
     await expect(host.attach(CALLER, claudeParams())).resolves.toMatchObject({ ok: true })
 
     // Published, not yet answering: the record holds no model rather than a guessed one.
@@ -146,7 +146,7 @@ describe('a publish-first Claude create whose init is slow', () => {
     )
     await Promise.all(lifecycle)
 
-    expect(store.getRecord(SESSION)?.options?.model).toBe('claude-opus-9')
+    expect(store.getRecord(SESSION)?.options?.model).toBeUndefined()
     expect(lastPhase()).toBe('ready')
   })
 
@@ -232,7 +232,7 @@ describe('a publish-first Claude create whose init is slow', () => {
       expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
     )
     await Promise.all(lifecycle)
-    expect(store.getRecord(SESSION)?.options?.model).toBe('claude-opus-9')
+    expect(store.getRecord(SESSION)?.options?.model).toBeUndefined()
     expect(savedListings.at(-1)).toEqual({
       sessionId: SESSION,
       listing: expect.objectContaining({

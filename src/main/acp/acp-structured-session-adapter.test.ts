@@ -180,6 +180,31 @@ describe('ACP structured session adapter: turns', () => {
     })
   })
 
+  it('restores the opened model and effort when the next message omits both choices', async () => {
+    const rig = await openAcpAdapterRig()
+    await rig.acquire()
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'override',
+      body: hello,
+      executionOptions: { model: 'grok-4.6', effort: 'low' }
+    })
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'default',
+      body: hello,
+      executionOptions: {}
+    })
+    expect(rig.sent('session/set_config_option')).toMatchObject([
+      { params: { configId: 'model', value: 'grok-4.6' } },
+      { params: { configId: 'reasoning_effort', value: 'low' } },
+      { params: { configId: 'model', value: 'grok-4.7' } },
+      { params: { configId: 'reasoning_effort', value: 'high' } }
+    ])
+  })
+
   it('does not send a prompt when the agent refuses a message’s model', async () => {
     const rig = await openAcpAdapterRig({
       script: (agent) =>

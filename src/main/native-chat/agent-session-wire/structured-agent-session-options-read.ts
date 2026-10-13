@@ -240,9 +240,32 @@ export async function readStructuredAgentSessionOptions(
   const permissionMode = record
     ? await structuredAgentSessionLaunchPermission(context.deps, record)
     : null
+  const selected = live
+    ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
+    : options
+  const confirmed = options.current.confirmed?.filter((key) => {
+    if (key === 'model') {
+      return selected.current.model === options.current.model
+    }
+    if (key === 'effort') {
+      return selected.current.effort === options.current.effort
+    }
+    if (key === 'fastMode') {
+      return selected.current.fastMode === options.current.fastMode
+    }
+    if (key === 'serviceTier') {
+      return selected.current.serviceTier === options.current.serviceTier
+    }
+    return false
+  })
   return {
     ...options,
-    ...(permissionMode ? { current: { ...options.current, permissionMode } } : {}),
+    current: {
+      ...selected.current,
+      ...(options.current.fastModeState ? { fastModeState: options.current.fastModeState } : {}),
+      ...(confirmed?.length ? { confirmed } : {}),
+      ...(permissionMode ? { permissionMode } : {})
+    },
     rewind:
       phase === 'prepared' || phase === 'provider-succeeded'
         ? { supported: false, reason: 'outcome-unknown' }

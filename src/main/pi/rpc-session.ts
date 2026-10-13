@@ -64,6 +64,7 @@ export class PiRpcSession {
   readonly dialogs: PiRpcDialogCallbacks
   readonly selected = new Map<string, string>()
   readonly startup: PiRpcSessionStartup
+  initialOptions: Readonly<Record<string, string>> = {}
   openedLink: AgentSessionProviderHandleLink | null = null
   requestedClose = false
   private publishedExit = false
@@ -148,7 +149,6 @@ export class PiRpcSession {
     this.startup = new PiRpcSessionStartup(
       input,
       this.connection,
-      this.selected,
       deps,
       resolvesConfig,
       (state) => {
@@ -159,6 +159,10 @@ export class PiRpcSession {
 
   async open(signal: AbortSignal): Promise<StructuredAgentSessionProviderOpenResult> {
     const result = await this.startup.run(this.resolvedLaunch, signal)
+    this.initialOptions = {
+      ...(result.reportedOptions.model ? { model: result.reportedOptions.model } : {}),
+      ...(result.reportedOptions.effort ? { effort: result.reportedOptions.effort } : {})
+    }
     this.openedLink = result.link ?? null
     return result
   }

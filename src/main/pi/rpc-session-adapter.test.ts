@@ -172,7 +172,8 @@ describe('Pi RPC session ownership and delivery', () => {
       origin: 'created',
       mintedAtFence: 7
     })
-    expect(h.started.restoreSkippedOptions).toEqual(['unknown', 'effort'])
+    expect(h.started.restoreSkippedOptions).toEqual([])
+    expect(h.connection.requests).not.toContain('set_thinking_level')
     expect(h.connection.requests).toContain('get_commands')
   })
 
@@ -213,6 +214,57 @@ describe('Pi RPC session ownership and delivery', () => {
     expect(result).toEqual({ state: 'admitted' })
     expect(h.connection.requests.slice(-2)).toEqual(['set_model', 'set_thinking_level'])
     expect(h.connection.sent).toMatchObject([{ type: 'prompt', message: 'chosen' }])
+  })
+
+  it('restores the opened model when a later snapshot omits its override', async () => {
+    const h = await setup()
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'override',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'first' }] },
+      executionOptions: { model: 'anthropic/model-2' }
+    })
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'default',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'second' }] },
+      executionOptions: {}
+    })
+    expect(h.connection.requests.filter((command) => command === 'set_model')).toEqual([
+      'set_model',
+      'set_model'
+    ])
+    expect(h.connection.sent).toMatchObject([
+      { type: 'prompt', message: 'first' },
+      { type: 'prompt', message: 'second' }
+    ])
+  })
+
+  it('applies the displayed default model and effort after different message choices', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    for (const [clientMessageId, model, effort] of [
+      ['override', 'anthropic/model-2', 'low'],
+      ['default', 'anthropic/model-1', 'high']
+    ]) {
+      await h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: clientMessageId }] },
+        executionOptions: { model, effort }
+      })
+    }
+    expect(h.connection.requests.slice(-4)).toEqual([
+      'set_model',
+      'set_thinking_level',
+      'set_model',
+      'set_thinking_level'
+    ])
+    expect(h.connection.sent).toHaveLength(2)
   })
 
   it('leaves the prompt unsent when Pi refuses a sent model', async () => {

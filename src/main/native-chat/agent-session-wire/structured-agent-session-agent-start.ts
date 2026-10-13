@@ -171,9 +171,16 @@ async function startStructuredAgentSessionAgent(
   let acquisitionError: unknown
   let aborted = false
   let expired = false
+  const startupOptions = startedFor
+    ? context.sessions
+        .get(sessionId)
+        ?.journal.submissions()
+        .find((submission) => submission.clientMessageId === startedFor)?.executionOptions
+    : undefined
   try {
     attached = await attachStructuredAgentSessionUnderSerialize(context, callerKey, params, {
       ...(startedFor === undefined ? {} : { startedFor }),
+      ...(startupOptions ? { startupOptions } : {}),
       onAcquisitionFailed: (error) => {
         acquisitionError = error
       },

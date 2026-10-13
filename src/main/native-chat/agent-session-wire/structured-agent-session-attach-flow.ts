@@ -78,6 +78,7 @@ export type AttachFlowInput = {
   onStartCatalogListing?: (listing: AgentModelCatalogLiveListing) => void
   /** The conversation's option revision, which the child's reports are stamped with. */
   optionRevision: () => number
+  startupOptions?: Readonly<Record<string, string>>
   /** The permission mode a start of this record launches with; absent or undefined for none. */
   launchPermissionMode?: (
     record: AgentSessionRecord

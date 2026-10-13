@@ -10,7 +10,6 @@ import type {
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
-import { AgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
   HOST_TEST_NOW as NOW,
@@ -27,7 +26,6 @@ import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-
 
 const CALLER = { callerKey: 'client-1' }
 const DEFAULT_MODEL = 'gpt-default'
-const PICKED_MODEL = 'gpt-picked'
 
 let root: string
 let store: AgentSessionRecordStore
@@ -164,7 +162,7 @@ afterEach(async () => {
 })
 
 describe('structured session options and close', () => {
-  it('publishes an acknowledged model without waiting for journal traffic', async () => {
+  it('keeps provider readback out of the saved next-message choice', async () => {
     const body = {
       kind: 'message' as const,
       role: 'user' as const,
@@ -184,47 +182,10 @@ describe('structured session options and close', () => {
     expect(events).toEqual([
       {
         type: 'snapshot',
-        sessions: [expect.objectContaining({ status: 'idle', model: DEFAULT_MODEL })]
+        sessions: [expect.objectContaining({ status: 'idle', optionSelection: {} })]
       }
     ])
-    const fields = { key: 'model', value: PICKED_MODEL }
-
-    await host.setOption(CALLER, {
-      envelope: envelope('agentSession.setOption', fields),
-      ...fields
-    })
-
-    expect(events.slice(1)).toEqual([
-      {
-        type: 'status',
-        session: expect.objectContaining({ sessionId: SESSION, model: PICKED_MODEL })
-      }
-    ])
-  })
-
-  it('settles a pre-mutation rejection so a fresh retry can succeed', async () => {
-    optionFailure = new AgentSessionOptionRejectedError('model list unavailable')
-    const fields = { key: 'model', value: PICKED_MODEL }
-    const rejected = {
-      envelope: envelope('agentSession.setOption', fields),
-      ...fields
-    }
-
-    expect(await host.setOption(CALLER, rejected)).toMatchObject({
-      ok: false,
-      refusal: { code: 'agent_session_operation_invalid', message: 'model list unavailable' }
-    })
-    expect(await host.setOption(CALLER, rejected)).toMatchObject({
-      ok: false,
-      refusal: { code: 'agent_session_operation_invalid' }
-    })
-    expect(
-      await host.setOption(CALLER, {
-        envelope: envelope('agentSession.setOption', fields),
-        ...fields
-      })
-    ).toMatchObject({ ok: true, value: { options: { model: PICKED_MODEL } } })
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: PICKED_MODEL })
+    expect(store.getRecord(SESSION)?.options).toBeUndefined()
   })
 
   // Closing a chat used to leave its provider child resident for the whole app session: the host's
@@ -234,7 +195,7 @@ describe('structured session options and close', () => {
 
     await host.close(SESSION, 'evict')
 
-    expect(closeNativeSession).toHaveBeenCalledWith(SESSION)
+    expect(closeNativeSession).toHaveBeenCalledWith(SESSION, 'evict')
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
       ownerProcess: null,

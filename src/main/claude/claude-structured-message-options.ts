@@ -38,7 +38,8 @@ export async function applyClaudeMessageOptions(
 
   const fastMode = options.fastMode ?? 'false'
   if (
-    session.options.get('fastMode') !== fastMode &&
+    (session.options.get('fastMode') !== fastMode ||
+      (session.fastModeAtStart && !session.confirmedOptions.has('fastMode'))) &&
     (options.fastMode || session.options.has('fastMode'))
   ) {
     await setClaudeStructuredOption(session, { key: 'fastMode', value: fastMode }, timeoutMs)

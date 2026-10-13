@@ -11,8 +11,14 @@ export async function applyAcpMessageOptions(
   setOption: (key: 'model' | 'effort', value: string) => Promise<unknown>,
   isCurrent: () => boolean
 ): Promise<boolean> {
+  const initial = session.options.messageDefault()
+  const model = options?.model ?? initial.model
+  const defaultEffort =
+    model === initial.model
+      ? initial.effort
+      : session.options.read().models.find((entry) => entry.id === model)?.defaultEffort
   for (const key of ['model', 'effort'] as const) {
-    const value = options?.[key]
+    const value = options?.[key] ?? (key === 'model' ? initial.model : defaultEffort)
     if (value === undefined || session.options.reported()[key] === value) {
       continue
     }
