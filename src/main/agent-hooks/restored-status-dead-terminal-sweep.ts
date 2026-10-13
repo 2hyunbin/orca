@@ -7,56 +7,67 @@ import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../shared/project-group-types'
 import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../shared/workspace-scope'
+import { isWslHookRelayConnectionId } from '../../shared/wsl-hook-relay-contract'
+import type { AgentHookServer } from './server'
 
-export type RestoredSubagentLivenessSweepDeps = {
-  /** Targeted provider liveness, or null when the provider cannot prove either state. */
-  probeLiveLocalPty: (ptyId: string) => Promise<boolean | null>
+type RestoredStatusSweepServer = Pick<
+  AgentHookServer,
+  'listUnconfirmedRestoredStatuses' | 'reconcileEndedProcessForPaneKeys'
+>
+
+export type RestoredStatusDeadTerminalSweepDeps = {
+  server: RestoredStatusSweepServer
+  /** Targeted provider liveness: true live, false absent, null when it cannot prove either. */
+  probePtyLiveness: (ptyId: string) => Promise<boolean | null>
   isLocalExecutionHost: (worktreeId: string | undefined) => boolean
   /** PTY bound to this pane in the current session, if it has one. */
   getBoundPtyIdForPaneKey: (paneKey: string) => string | undefined
   /** PTY this pane was bound to when the session was last persisted; covers panes
    *  whose surviving daemon session has not been reattached yet. */
   getPersistedPtyIdForPaneKey: (paneKey: string) => string | undefined
-  reap: (
-    isLocalExecutionHost: (worktreeId: string | undefined) => boolean,
-    isLocalPaneAgentLive: (paneKey: string) => Promise<boolean>,
-    isLocalPaneLivenessEvidenceCurrent: (paneKey: string) => boolean
-  ) => Promise<number>
 }
 
-/** Drop restored rows only when the owning host is local and its provider proves
- *  the exact PTY absent. */
-export async function sweepRestoredSubagentsWithoutLiveAgent(
-  deps: RestoredSubagentLivenessSweepDeps
+/** A terminal that dies while Orca is down never reaches the PTY-exit teardown, so its restored
+ *  row would claim work forever. Stand in for that exit: retire restored rows whose local PTY
+ *  the provider proves absent, through the same path an observed exit takes. */
+export async function retireRestoredStatusesWithDeadTerminals(
+  deps: RestoredStatusDeadTerminalSweepDeps
 ): Promise<number> {
   const probesByPtyId = new Map<string, Promise<boolean | null>>()
-  const boundPtyIdAtProbeByPaneKey = new Map<string, string | undefined>()
-  return await deps.reap(
-    (worktreeId) => deps.isLocalExecutionHost(worktreeId),
-    async (paneKey) => {
-      const boundPtyId = deps.getBoundPtyIdForPaneKey(paneKey)
-      boundPtyIdAtProbeByPaneKey.set(paneKey, boundPtyId)
-      const ptyId = boundPtyId ?? deps.getPersistedPtyIdForPaneKey(paneKey)
-      if (!ptyId) {
-        return true
-      }
-      try {
-        let probe = probesByPtyId.get(ptyId)
-        if (!probe) {
-          probe = deps.probeLiveLocalPty(ptyId)
-          probesByPtyId.set(ptyId, probe)
-        }
-        const live = await probe
-        const currentBoundPtyId = deps.getBoundPtyIdForPaneKey(paneKey)
-        // Why: cold restore can rebind the persisted id while its absence probe is in flight.
-        return currentBoundPtyId !== boundPtyId || live !== false
-      } catch {
-        return true
-      }
-    },
-    (paneKey) =>
-      !boundPtyIdAtProbeByPaneKey.has(paneKey) ||
-      deps.getBoundPtyIdForPaneKey(paneKey) === boundPtyIdAtProbeByPaneKey.get(paneKey)
+  const isProvenAbsent = async (ptyId: string): Promise<boolean> => {
+    let probe = probesByPtyId.get(ptyId)
+    if (!probe) {
+      // Why: a probe that throws is unverifiable, never evidence the terminal died.
+      probe = Promise.resolve()
+        .then(() => deps.probePtyLiveness(ptyId))
+        .catch(() => null)
+      probesByPtyId.set(ptyId, probe)
+    }
+    return (await probe) === false
+  }
+  const candidates = deps.server.listUnconfirmedRestoredStatuses().filter(
+    (row) =>
+      // Why: only a local or WSL pane's PTY lives in this machine's provider.
+      (row.connectionId === null || isWslHookRelayConnectionId(row.connectionId)) &&
+      deps.isLocalExecutionHost(row.worktreeId)
+  )
+  const probed = await Promise.all(
+    candidates.map(async (row) => {
+      const boundPtyId = deps.getBoundPtyIdForPaneKey(row.paneKey)
+      const ptyId = boundPtyId ?? deps.getPersistedPtyIdForPaneKey(row.paneKey)
+      return { row, boundPtyId, absent: ptyId !== undefined && (await isProvenAbsent(ptyId)) }
+    })
+  )
+  // Why: a pane can report, or cold restore can rebind its PTY, while the probes are in flight.
+  const stillRestored = new Set(deps.server.listUnconfirmedRestoredStatuses())
+  const ended = probed.filter(
+    ({ row, boundPtyId, absent }) =>
+      absent && stillRestored.has(row) && deps.getBoundPtyIdForPaneKey(row.paneKey) === boundPtyId
+  )
+  // Why: the conversation outlived its terminal, so keep it resumable.
+  return deps.server.reconcileEndedProcessForPaneKeys(
+    ended.map(({ row }) => row.paneKey),
+    { preserveResumeIdentity: true }
   )
 }
 
