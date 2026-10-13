@@ -284,7 +284,10 @@ beforeEach(async () => {
     resolveEnvironment: async () => ({ PATH: process.env.PATH }),
     ...scriptedCodexTransport(openConnection)
   })
-  const attachParams = hostTestAttachParams(null, { providerHandle: undefined })
+  const attachParams = hostTestAttachParams(null, {
+    providerHandle: undefined,
+    options: { model: MODEL.model }
+  })
   attachParams.envelope.clientOperationId = operationId()
   const attached = await host.attach(CALLER, attachParams)
   if (!attached.ok) {
@@ -364,10 +367,11 @@ describe('the turn a withdrawn Codex send was answered into', () => {
     }
   }
 
-  it("is that turn's record, started by the send that opened it and steered by a later one", async () => {
+  it('keeps the turn identity of a steering send after the opening message is identified', async () => {
     const opening = await send('look around')
     await vi.waitFor(() => expect(answers).toBe(1))
     turns.start()
+    turns.echo(opening)
     const steered = await send('and check the tests')
     await vi.waitFor(() => expect(steers).toBe(1))
 
@@ -378,9 +382,7 @@ describe('the turn a withdrawn Codex send was answered into', () => {
 
     const { turnRecords } = await answeredInto(opening)
     expect(turnRecords).toHaveLength(1)
-    const started = { turnItemId: turnRecords[0], via: 'start' }
     const steeredIn = { turnItemId: turnRecords[0], via: 'steer' }
-    expect(await answeredInto(opening)).toEqual({ turnRecords, named: started, onPage: started })
     expect(await answeredInto(steered)).toEqual({
       turnRecords,
       named: steeredIn,
@@ -559,12 +561,7 @@ describe("a queued card's Send-now while a Codex turn runs", () => {
 })
 
 describe('a second send made after Codex answered the first, before it opened that turn', () => {
-  it('joins that turn once it opens, on a Codex that names a steered start falsely, so a Stop withdraws both', async () => {
-    turns = codexTurnLifecycleFake(
-      THREAD,
-      () => (method, params) => handlers?.onNotification?.(method, params),
-      { legacyStartAnswers: true }
-    )
+  it('waits for the opener before steering the later send, which Stop then withdraws', async () => {
     const opening = await send('look around')
     await vi.waitFor(() => expect(answers).toBe(1))
     const followUp = await send('and check the tests')
@@ -574,6 +571,14 @@ describe('a second send made after Codex answered the first, before it opened th
     await vi.waitFor(() => expect(loop.isRunning(SESSION)).toBe(false))
     expect(openWaits.turnIds).toEqual([])
     turns.start()
+    await host.flushStreamedEvents(SESSION)
+    expect(host.collaboratorsForTests().sessions.get(SESSION)?.journal.newestTurn()?.state).toBe(
+      'running'
+    )
+    await vi.waitFor(() => expect(loop.isRunning(SESSION)).toBe(false))
+    expect(steers).toBe(0)
+    expect(verdictOf((await settled()).submissions, followUp)).toBe('pending')
+    turns.echo(opening)
     await vi.waitFor(() => expect(steers).toBe(1))
     expect(answers).toBe(1)
 
@@ -583,7 +588,7 @@ describe('a second send made after Codex answered the first, before it opened th
       expect(verdictOf((await settled()).submissions, followUp)).not.toBe('pending')
     )
     const after = await settled()
-    expect(verdictOf(after.submissions, opening)).toBe('withdrawn')
+    expect(verdictOf(after.submissions, opening)).toBe('accepted')
     expect(verdictOf(after.submissions, followUp)).toBe('withdrawn')
     expect(after.owesWork).toBe(false)
   })
