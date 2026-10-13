@@ -215,7 +215,7 @@ it.each(['user-close', 'evict'] as const)(
 // doubt, as for any running child.
 it('leaves a message in doubt when the start answered and the chat closes before the echo', async () => {
   answerInitialize()
-  await adapter['sessions'].get(SESSION)?.startup.settled
+  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
   const id = await sendHello(true)
 
   await host.close(SESSION, 'user-close')
