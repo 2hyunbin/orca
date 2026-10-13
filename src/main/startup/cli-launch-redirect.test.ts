@@ -354,7 +354,8 @@ describe('CLI launch redirect: spawning', () => {
         'serve',
         '--supervise',
         '--port',
-        '6792'
+        '6792',
+        '--no-sandbox'
       ],
       env: { NODE_OPTIONS: '--inspect', APPIMAGE: '/home/u/Orca.AppImage' },
       platform: 'linux',

@@ -118,7 +118,8 @@ export function getDirectServeLaunch(
   }
   const rest = [...leading, ...args.slice(commandIndex)]
   return {
-    args: stripDesktopFlags(rest, leading.length),
+    // Why everywhere: serve has no such flags, and in-process serve tolerated them after the command.
+    args: stripDesktopFlags(rest, rest.length),
     userDataPath: userDataPath ? resolve(userDataPath) : null
   }
 }
