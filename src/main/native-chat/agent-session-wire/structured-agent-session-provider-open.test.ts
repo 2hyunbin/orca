@@ -309,6 +309,18 @@ it.each([false, true])(
       expectedEpoch
     })
     await host.collaboratorsForTests().serialize(SESSION, async () => {})
+    for (const [key, value] of [
+      ['model', 'gpt-after-rewind'],
+      ['effort', 'high']
+    ]) {
+      expect(
+        await host.setOption(CALLER, {
+          envelope: envelope('agentSession.setOption', { key, value }),
+          key,
+          value
+        })
+      ).toMatchObject({ ok: true })
+    }
     const later = send('later message')
     let accepted = false
     void later.then(() => {
@@ -331,6 +343,10 @@ it.each([false, true])(
     expect(await later).toMatchObject({ ok: true })
     await vi.waitFor(() => expect(order).toHaveLength(2))
     expect(order).toEqual(['rewind', 'send'])
+    expect(dispatch.mock.calls.at(-1)?.[0].executionOptions).toEqual({
+      model: 'gpt-after-rewind',
+      effort: 'high'
+    })
   }
 )
 

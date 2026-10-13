@@ -182,13 +182,14 @@ it('applies model and effort picks on a running Claude chat to the next message'
     ).toMatchObject({ ok: true })
   }
   const body = hostTestMessage('with the new choices')
-  dispatch.mockImplementationOnce(async () => {
-    expect(setOption).not.toHaveBeenCalled()
-    return { state: 'admitted' as const }
-  })
   expect(
     await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
   ).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
-  expect(order).toEqual([])
+  expect(order).toEqual(['dispatch'])
+  expect(setOption).not.toHaveBeenCalled()
+  expect(dispatch.mock.calls[0]?.[0].executionOptions).toEqual({
+    model: PICKED_MODEL,
+    effort: 'high'
+  })
 })
