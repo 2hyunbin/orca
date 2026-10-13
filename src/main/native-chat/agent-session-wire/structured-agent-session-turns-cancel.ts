@@ -339,6 +339,8 @@ async function cancelAndNote(
   }
   await (!noteWritten || note.text !== STOP_NOTE_CANCELLATION_REQUESTED
     ? writeNote(note)
-    : requestNoteWrite)
+    : binding.closedByWindDown
+      ? undefined
+      : requestNoteWrite)
   return { ok: true, value }
 }
