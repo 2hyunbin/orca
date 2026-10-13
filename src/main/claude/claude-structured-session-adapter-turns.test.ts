@@ -16,13 +16,7 @@ describe('ClaudeStructuredSessionAdapter turns and controls', () => {
     const claude = fakeClaude({ replayUuid: 'chosen-uuid' })
     const adapter = await acquired(claude)
     const connection = claude.connections[0]!
-    const send = connection.send
-    connection.send = async (...args) => {
-      const controls = connection.calls.map((call) => call.subtype)
-      expect(controls.indexOf('set_model')).toBeGreaterThan(-1)
-      expect(controls.indexOf('set_model')).toBeLessThan(controls.indexOf('apply_flag_settings'))
-      return send(...args)
-    }
+    const before = connection.calls.length
     await expect(
       adapter.dispatch({
         sessionId: 'session-1',
@@ -32,6 +26,9 @@ describe('ClaudeStructuredSessionAdapter turns and controls', () => {
         executionOptions: { model: 'sonnet', effort: 'high' }
       })
     ).resolves.toEqual({ state: 'admitted' })
+    const controls = connection.calls.slice(before).map((call) => call.subtype)
+    expect(controls.indexOf('set_model')).toBeGreaterThan(-1)
+    expect(controls.indexOf('apply_flag_settings')).toBeGreaterThan(controls.indexOf('set_model'))
   })
 
   it("admits a dispatch on the write and names it from Claude's replay", async () => {
