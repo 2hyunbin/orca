@@ -133,7 +133,7 @@ async function replayCapture(
     onDispatchSettledLate: (settlement) => settlements.push(settlement),
     onSessionIdle: ({ sessionId }) => idles.push(sessionId)
   })
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-9',

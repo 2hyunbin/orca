@@ -15,11 +15,11 @@ import {
 // A retry is a new action with a new message, not a replay of the rejected one, and it is
 // delivered with the same body.
 it("delivers a retry as a new continuation after the first one's start failed", async () => {
-  const { host, spawn, dispatch, marker } = await interruptedRestart('children')
+  const { host, acquire, dispatch, marker } = await interruptedRestart('children')
   if (!marker) {
     throw new Error('missing interrupted restart marker')
   }
-  spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
   const first = await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(first.failed).toMatchObject([{ sessionId: SESSION, outcome: 'refused', retryable: true }])
   const [rejected] = (await host.journalSnapshot(SESSION)).submissions

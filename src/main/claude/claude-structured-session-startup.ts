@@ -2,7 +2,6 @@
 // independently; the host owns a failed open and its single close.
 
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
-import type { StructuredAgentSessionOptionsSkippedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import type { ClaudeStreamJsonConnection } from './claude-stream-json-connection'
 import { ClaudeSlashCommandCatalog } from './claude-slash-command-catalog'
@@ -18,7 +17,6 @@ import {
   claudeStructuredSessionPublicationOptions,
   prepareClaudeStructuredSessionAcquisitionOptions
 } from './claude-structured-session-acquisition-options'
-import { claudeRetiredOptions } from './claude-structured-retired-model'
 import {
   claudeResolvedCatalogListing,
   claudeStructuredSessionOptionsFrom,
@@ -35,19 +33,13 @@ import type {
 
 export type ClaudeOpenFacts = Pick<
   StructuredAgentSessionProviderOpenResult,
-  | 'reportedOptions'
-  | 'restoreSkippedOptions'
-  | 'retiredOptions'
-  | 'optionRevision'
-  | 'catalogListing'
+  'reportedOptions' | 'catalogListing'
 >
 
 /** A lifecycle event the start reports, before the session's identity is stamped on it. */
-export type ClaudeStartupReport =
-  | ({
-      type: 'options-reported'
-    } & ClaudeOpenFacts)
-  | Pick<StructuredAgentSessionOptionsSkippedEvent, 'type' | 'options'>
+export type ClaudeStartupReport = {
+  type: 'options-reported'
+} & ClaudeOpenFacts
 
 /** What the initialize answer proved: enough to start. */
 export type ClaudeInitializeFacts = {
@@ -203,7 +195,6 @@ export async function openClaudeSession(input: {
   readSettings: () => Promise<unknown>
   isCurrent: () => boolean
   diagnose: (diagnostic: ClaudeAuthDiagnostic) => void
-  optionRevision: () => number
   onLateRefusal: (error: Error) => void
   report: (event: ClaudeStartupReport) => void
 }): Promise<ClaudeOpenFacts> {
@@ -223,10 +214,7 @@ export async function openClaudeSession(input: {
       session,
       readClaudeModels(initialized.initialization),
       session.fastModeAtStart ? session.optionMutationSequence - 1 : undefined
-    ),
-    restoreSkippedOptions: [...session.restoreSkippedOptions],
-    ...claudeRetiredOptions(session),
-    optionRevision: input.optionRevision()
+    )
   }
   void settleClaudeStartupSettings(input, initialized)
   return result
@@ -238,8 +226,6 @@ async function settleClaudeStartupSettings(
 ): Promise<void> {
   const { session } = input
   const sequence = session.optionMutationSequence
-  // Only a pick moves this stamp; a later report cannot replace a newer choice.
-  const optionRevision = input.optionRevision()
   const settings = await input.readSettings()
   if (!input.isCurrent()) {
     return
@@ -269,9 +255,6 @@ async function settleClaudeStartupSettings(
     reportedOptions: claudeStartedReportedOptions(session, readClaudeModels(facts.initialization))
       .reportedOptions,
     // The one report of what the config resolved: the readback just applied it.
-    ...claudeResolvedCatalogListing(session, readClaudeModels(facts.initialization)),
-    restoreSkippedOptions: [...session.restoreSkippedOptions],
-    ...claudeRetiredOptions(session),
-    optionRevision
+    ...claudeResolvedCatalogListing(session, readClaudeModels(facts.initialization))
   })
 }

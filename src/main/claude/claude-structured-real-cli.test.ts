@@ -69,9 +69,9 @@ function realAdapter(
     return adapter
   }
   // These proofs read startup facts, which land after the session is published.
-  const spawn = adapter.spawn
-  adapter.spawn = async (input) => {
-    const acquisition = await spawn(input)
+  const acquire = adapter.acquire
+  adapter.acquire = async (input) => {
+    const acquisition = await acquire(input)
     await claudeStartupSettled(adapter, input.identity.sessionId)
     return acquisition
   }
@@ -130,7 +130,7 @@ describe('real CLI fixture authentication isolation', () => {
       )
       try {
         await expect(
-          adapter.spawn({
+          adapter.acquire({
             identity: identity(providerSessionId),
             fence: 1,
             spawnToken: 'fixture'
@@ -167,7 +167,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       const adapter = realAdapter(providerSessionId, claudeConfigDir, events, cwd)
 
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli'
@@ -214,7 +214,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       const adapter = realAdapter(providerSessionId, claudeConfigDir, events)
 
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-effort'
@@ -259,7 +259,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
 
       let transcriptPath: string | null = null
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-transcript'
@@ -303,7 +303,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       const adapter = realAdapter(providerSessionId, claudeConfigDir, events)
 
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-model'
@@ -382,7 +382,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       }
       try {
         const acquireAt = Date.now()
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-started-timing'
@@ -404,7 +404,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
         const firstOutputAt = Date.now()
         // Reported for tuning; the assertions above are the contract.
         console.info(
-          `[real-cli startup timing] spawn->published ${publishedAt - acquireAt} ms, ` +
+          `[real-cli startup timing] acquire->published ${publishedAt - acquireAt} ms, ` +
             `published->open ${startedAt - publishedAt} ms, ` +
             `dispatch->first output ${firstOutputAt - startedAt} ms`
         )
@@ -439,7 +439,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
         events.flatMap((event) => (event.type === 'message' ? [event.message] : []))
 
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-saved-options',
@@ -518,7 +518,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
         })
 
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-stop'
@@ -590,7 +590,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       }
 
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-queued-stop'
@@ -654,7 +654,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       const frames = (): Record<string, unknown>[] =>
         events.flatMap((event) => (event.type === 'message' ? [event.message] : []))
       try {
-        await adapter.spawn({
+        await adapter.acquire({
           identity: identity(providerSessionId),
           fence: 1,
           spawnToken: 'real-cli-no-hooks'
@@ -700,7 +700,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
     )
 
     try {
-      await adapter.spawn({
+      await adapter.acquire({
         identity: identity(providerSessionId),
         fence: 1,
         spawnToken: 'real-cli-no-auth'

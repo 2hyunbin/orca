@@ -4,7 +4,7 @@ import {
   providerDiagnosticOf
 } from '../../shared/agent-session-failure'
 import type {
-  StructuredAgentSessionSpawnInput,
+  StructuredAgentSessionAcquireInput,
   StructuredAgentSessionLifecycleEvent,
   AgentSessionDispatchOutcome
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
@@ -73,7 +73,7 @@ export class PiRpcSession {
   private releaseAfterExit?: () => void
 
   constructor(
-    readonly input: StructuredAgentSessionSpawnInput,
+    readonly input: StructuredAgentSessionAcquireInput,
     readonly generation: string,
     launch: ProviderProcessLaunch,
     private readonly deps: PiRpcSessionDeps,
@@ -153,7 +153,8 @@ export class PiRpcSession {
       resolvesConfig,
       (state) => {
         this.lane.apply(this.turns.context.setModel(state.model ?? undefined, Date.now()))
-      }
+      },
+      () => this.failedCause
     )
   }
 
@@ -265,15 +266,14 @@ export class PiRpcSession {
       observedAt: Date.now(),
       cause: this.requestedClose ? 'requested-close' : 'unexpected-exit',
       reason: cause.message,
-      failure: agentSessionFailureFact(this.openedLink ? 'providerExited' : 'providerStartFailed', {
+      failure: agentSessionFailureFact('providerExited', {
         detail:
           providerDiagnosticOf(cause) ??
           providerDiagnosticOf(error) ??
           (cause instanceof JsonlRpcResponseError
             ? providerDiagnostic(cause.message, 'person')
             : undefined)
-      }),
-      ...(this.openedLink ? {} : { startupUnproven: true })
+      })
     })
   }
 

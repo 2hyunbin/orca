@@ -62,7 +62,7 @@ async function streamBeforeCrash(
     throw new Error(`send refused: ${sent.refusal.code}`)
   }
   await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-  const events = rig.adapter.spawn.mock.calls[0]?.[0].events
+  const events = rig.adapter.acquire.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('the provider has no event sink')
   }
@@ -125,7 +125,7 @@ async function expectSettledStream(): Promise<void> {
       (item) => item.body.kind === 'status' && item.body.text !== 'host notice'
     )
   ).toHaveLength(1)
-  expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+  expect(rig.adapter.acquire).toHaveBeenCalledOnce()
 }
 
 describe('a provider stream cut short before its next lease renewal', () => {
@@ -209,7 +209,7 @@ describe('a provider stream cut short before its next lease renewal', () => {
     const turn = snapshot.items.map((item) => readAgentJournalTurn(item.body)).find(Boolean)
     expect(turn?.state).toBe('unverifiable')
     expect(turn?.completedAt).toBeUndefined()
-    expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+    expect(rig.adapter.acquire).toHaveBeenCalledOnce()
   })
 
   it('ignores later client actions, recovery revisions, and another owner generation', async () => {

@@ -197,7 +197,7 @@ async function piHost() {
       logger: { warn: vi.fn(), error: vi.fn() }
     })
     adapters.push(adapter)
-    const spawned = await adapter.spawn({
+    const spawned = await adapter.acquire({
       identity: {
         sessionId,
         workspaceId: 'ws-1',

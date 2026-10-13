@@ -10,7 +10,7 @@ describe('Claude adapter liveness for lease renewal', () => {
   it('holds its acquisition until the root exit is seen', async () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
-    const { acquisitionGeneration } = await adapter.spawn({
+    const { acquisitionGeneration } = await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',

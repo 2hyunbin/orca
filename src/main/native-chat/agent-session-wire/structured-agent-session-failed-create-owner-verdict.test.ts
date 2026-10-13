@@ -37,12 +37,12 @@ const PROVIDER_STOPPED =
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-failed-create-verdict-'))
   resetHostTestOperationIds()
-  spawn = vi.fn(async ({ fence, spawnToken }) => ({
+  acquire = vi.fn(async ({ fence, spawnToken }) => ({
     acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
@@ -60,11 +60,9 @@ beforeEach(async () => {
     store,
     adapter: {
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       }),
-      spawn,
+      acquire,
       releaseAcquisition: vi.fn(async () => true),
       dispatch: vi.fn(async () => ({ state: 'admitted' as const })),
       cancelTurn: vi.fn(async () => ({ cancelled: true })),
@@ -97,7 +95,7 @@ describe('failed create owner verdict', () => {
   ])(
     'answers %s as exited on the first call and its replay, and a new operation starts fresh',
     async (_case, failure, situation, message) => {
-      spawn.mockRejectedValueOnce(failure())
+      acquire.mockRejectedValueOnce(failure())
       const first = hostTestAttachParams(null)
       // The replay names the same details as the first answer: the ledger kept them beside the code,
       // and the verdict reaches released clients at the top level exactly as before.
@@ -110,12 +108,12 @@ describe('failed create owner verdict', () => {
 
       await expect(host.attach(CALLER, first)).resolves.toEqual({ ok: false, refusal })
       await expect(host.attach(CALLER, first)).resolves.toEqual({ ok: false, refusal })
-      expect(spawn).toHaveBeenCalledOnce()
+      expect(acquire).toHaveBeenCalledOnce()
 
       const retry = hostTestAttachParams(null)
       expect(retry.envelope.clientOperationId).not.toBe(first.envelope.clientOperationId)
       await expect(host.attach(CALLER, retry)).resolves.toMatchObject({ ok: true })
-      expect(spawn).toHaveBeenCalledTimes(2)
+      expect(acquire).toHaveBeenCalledTimes(2)
       expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
     }
   )
@@ -132,7 +130,7 @@ describe('failed create owner verdict', () => {
   ])(
     'answers %s as exited on the first call, in the shape its replay takes',
     async (_case, cause, situation, message) => {
-      spawn.mockRejectedValueOnce(new AgentSessionAcquisitionRootExitObservedError(cause()))
+      acquire.mockRejectedValueOnce(new AgentSessionAcquisitionRootExitObservedError(cause()))
       const first = hostTestAttachParams(null)
       // The replay names the same details as the first answer: the ledger kept them beside the code,
       // and the verdict reaches released clients at the top level exactly as before.
@@ -145,17 +143,17 @@ describe('failed create owner verdict', () => {
 
       await expect(host.attach(CALLER, first)).resolves.toEqual({ ok: false, refusal })
       await expect(host.attach(CALLER, first)).resolves.toEqual({ ok: false, refusal })
-      expect(spawn).toHaveBeenCalledOnce()
+      expect(acquire).toHaveBeenCalledOnce()
 
       await expect(host.attach(CALLER, hostTestAttachParams(null))).resolves.toMatchObject({
         ok: true
       })
-      expect(spawn).toHaveBeenCalledTimes(2)
+      expect(acquire).toHaveBeenCalledTimes(2)
     }
   )
 
   it('answers an acquisition refusal with its verdict directly', async () => {
-    spawn.mockRejectedValueOnce(new AgentSessionAcquisitionRefusal('not signed in'))
+    acquire.mockRejectedValueOnce(new AgentSessionAcquisitionRefusal('not signed in'))
 
     await expect(host.attach(CALLER, hostTestAttachParams(null))).resolves.toEqual({
       ok: false,
@@ -169,7 +167,7 @@ describe('failed create owner verdict', () => {
   })
 
   it('never claims exited when the failed attempt could not prove its process gone', async () => {
-    spawn.mockRejectedValueOnce(new AgentSessionAcquisitionExitUnprovenError(new Error('hung')))
+    acquire.mockRejectedValueOnce(new AgentSessionAcquisitionExitUnprovenError(new Error('hung')))
     const first = hostTestAttachParams(null)
 
     await expect(host.attach(CALLER, first)).rejects.toThrow()

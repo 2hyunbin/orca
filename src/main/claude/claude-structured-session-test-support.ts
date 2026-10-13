@@ -248,9 +248,9 @@ export function adapterFor(
   ...args: Parameters<typeof adapterAtPublishFor>
 ): ClaudeStructuredSessionAdapter {
   const adapter = adapterAtPublishFor(...args)
-  const spawn = adapter.spawn
-  adapter.spawn = async (input) => {
-    const acquisition = await spawn(input)
+  const acquire = adapter.acquire
+  adapter.acquire = async (input) => {
+    const acquisition = await acquire(input)
     await claudeStartupSettled(adapter, input.identity.sessionId)
     return acquisition
   }
@@ -312,7 +312,7 @@ export async function acquired(
     undefined,
     onDispatchSettledLate
   )
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-9',

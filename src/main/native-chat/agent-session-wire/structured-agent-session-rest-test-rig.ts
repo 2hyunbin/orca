@@ -44,7 +44,7 @@ export const SWEEP_INTERVAL_MS = 5
 
 export type RestTestAdapter = {
   open: StructuredAgentSessionAdapter['open']
-  spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+  acquire: Mock<StructuredAgentSessionAdapter['acquire']>
   closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
   dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
   acknowledgeSessionRelease: Mock<
@@ -70,8 +70,8 @@ export type RestTestRig = {
   /** Wraps a spawn so its child stays `starting`: every other child proves its start once
    *  published. */
   heldStart: (
-    spawn: StructuredAgentSessionAdapter['spawn']
-  ) => StructuredAgentSessionAdapter['spawn']
+    acquire: StructuredAgentSessionAdapter['acquire']
+  ) => StructuredAgentSessionAdapter['acquire']
   proveStart: (child: {
     sessionId: string
     fence: number
@@ -155,11 +155,9 @@ export async function createRestTestRig(
   let store = await openTestAgentSessionRecordStore(root)
   const adapter: RestTestAdapter = {
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi.fn(async ({ fence, spawnToken }) => ({
+    acquire: vi.fn(async ({ fence, spawnToken }) => ({
       acquisitionGeneration: `generation-${++generations}`,
       process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
       link: {

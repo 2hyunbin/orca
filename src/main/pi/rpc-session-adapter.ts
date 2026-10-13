@@ -6,7 +6,7 @@ import {
   AgentSessionAcquisitionExitUnprovenError,
   AgentSessionAcquisitionExitProvenError,
   type AgentSessionAcquisition,
-  type StructuredAgentSessionSpawnInput,
+  type StructuredAgentSessionAcquireInput,
   type StructuredAgentSessionAdapter
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { providerSpawnedProcessIdentity } from '../provider-process/provider-spawned-process-identity'
@@ -21,7 +21,7 @@ import { supportsSupervisedProviderChildLocation } from '../provider-process/sup
 
 export type PiRpcSessionAdapterDeps = PiRpcSessionDeps & {
   resolveLaunch: (input: {
-    identity: StructuredAgentSessionSpawnInput['identity']
+    identity: StructuredAgentSessionAcquireInput['identity']
     spawnToken: string
   }) => Promise<PiRpcResolvedLaunch>
   readProcessStartTime?: (pid: number) => Promise<number | null>
@@ -40,7 +40,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
     agent
   ) => agent === 'pi' && this.supportsLocation(location)
 
-  async spawn(input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition> {
+  async acquire(input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> {
     const id = input.identity.sessionId
     if (this.acquiring.has(id)) {
       throw new AgentSessionPreSpawnError(new Error('Pi session already owns a child'))
@@ -220,10 +220,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
     return session?.generation === generation && !session.connection.closed
   }
 
-  closeSession(id: string): Promise<boolean> {
-    return this.closeProviderSession(id, true)
-  }
-  private async closeProviderSession(id: string, requested: boolean): Promise<boolean> {
+  async closeSession(id: string, requested = true): Promise<boolean> {
     const session = this.sessions.get(id)
     if (!session) {
       return true
@@ -242,7 +239,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
   }
   forceCloseSession(id: string): Promise<boolean> {
     this.sessions.get(id)?.fail(new Error('Pi event sink failed'))
-    return this.closeProviderSession(id, false)
+    return this.closeSession(id, false)
   }
   disposeSession(id: string): Promise<boolean> {
     return this.closeSession(id)

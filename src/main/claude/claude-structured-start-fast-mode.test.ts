@@ -26,7 +26,7 @@ it("applies a resumed conversation's saved Fast off before message input beside 
     options: { extraArgs: { settings: '/repo/claude.json' } }
   })
 
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-9',

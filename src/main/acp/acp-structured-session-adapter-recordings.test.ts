@@ -29,7 +29,7 @@ const ask: AgentJournalMessageItem = {
 async function replaying(name: string): Promise<{ rig: AcpAdapterRig; replay: GrokFixtureReplay }> {
   const replay = new GrokFixtureReplay(await readAcpFixture(name))
   const rig = await openAcpAdapterRig({ script: (agent) => replay.attach(agent) })
-  await rig.spawn()
+  await rig.acquire()
   return { rig, replay }
 }
 

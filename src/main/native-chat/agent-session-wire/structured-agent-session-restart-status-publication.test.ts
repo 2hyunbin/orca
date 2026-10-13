@@ -40,11 +40,9 @@ let root = ''
 function adapter(): StructuredAgentSessionAdapter {
   return {
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: async ({ fence, spawnToken }) => ({
+    acquire: async ({ fence, spawnToken }) => ({
       acquisitionGeneration: globalThis.crypto.randomUUID(),
       process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
       link: {

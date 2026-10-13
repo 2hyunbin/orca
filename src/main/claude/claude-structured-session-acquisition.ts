@@ -1,6 +1,6 @@
 import type {
   AgentSessionAcquisition,
-  StructuredAgentSessionSpawnInput
+  StructuredAgentSessionAcquireInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { openClaudeStreamJsonConnection } from './claude-stream-json-connection'
 import { buildClaudePermissionCallbacks } from './claude-structured-inbound-control'
@@ -38,7 +38,7 @@ import {
   createClaudeSessionJournalTranslator
 } from './claude-structured-session-journal-control'
 
-export async function spawnClaudeSession({
+export async function acquireClaudeSession({
   input,
   deps,
   sessions,
@@ -46,7 +46,7 @@ export async function spawnClaudeSession({
   exits,
   callbacks
 }: {
-  input: StructuredAgentSessionSpawnInput
+  input: StructuredAgentSessionAcquireInput
   deps: ClaudeStructuredSessionAdapterDeps
   sessions: Map<string, ClaudeSession>
   acquisitions: ClaudeAcquisitionRegistry
@@ -242,7 +242,6 @@ export async function spawnClaudeSession({
         proof: initProof,
         account: launch.account,
         resumesTranscript: launch.resumesTranscript,
-        optionRevision: () => input.optionRevision?.() ?? 0,
         onLateRefusal: (error) => callbacks.handleExit(sessionId, attempt, error)
       },
       ...(deps.mintLinkId ? { linkId: deps.mintLinkId() } : {}),

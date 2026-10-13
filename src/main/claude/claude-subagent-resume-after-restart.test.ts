@@ -139,7 +139,7 @@ async function openJournal(): Promise<AgentSessionJournal> {
 }
 
 /** One provider process: a fresh sink and translator over the session's journal. */
-function spawn(journal: AgentSessionJournal) {
+function acquire(journal: AgentSessionJournal) {
   const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
   const translator = createClaudeJournalTranslator({ sink: deferred.sink, coalesceMs: 0 })
   deferred.bind({ journal, fence: 1, publish: () => {} })
@@ -232,7 +232,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
   it('keeps the canonical id its first run was given, so one child stays one child', async () => {
     const journal = await openJournal()
 
-    const first = spawn(journal)
+    const first = acquire(journal)
     first.translator.handle(userTurn('turn-a'))
     first.translator.handle(
       toolCall('spawn-a', 'toolu_spawn_a', 'Agent', {
@@ -258,7 +258,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
     await first.exit()
     expect(proseRow(journal, 'A reads the rig recipes')).toMatchObject({ agentId: 'agent-a' })
 
-    const second = spawn(journal)
+    const second = acquire(journal)
     second.translator.handle(userTurn('turn-b'))
     second.translator.handle(
       toolCall('resume-a', 'toolu_message_a', 'SendMessage', { to: 'agent-a', message: 'go on' })
@@ -310,7 +310,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
     // A backgrounded child spawns its own child after the parent's turn has ended, so the
     // grandchild is rostered outside any turn; the next provider run does the same again.
     const journal = await openJournal()
-    const first = spawn(journal)
+    const first = acquire(journal)
     first.translator.handle(userTurn('turn-a'))
     first.translator.handle(
       toolCall('spawn-c', 'toolu_spawn_c', 'Agent', {
@@ -333,7 +333,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
       expect.objectContaining({ groupId: 'outside-turn' })
     ])
 
-    const second = spawn(journal)
+    const second = acquire(journal)
     second.translator.handle(userTurn('turn-b'))
     second.translator.handle(
       toolCall('spawn-d', 'toolu_spawn_d', 'Agent', {
@@ -370,7 +370,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(1_000_000)
     const journal = await openJournal()
-    const first = spawn(journal)
+    const first = acquire(journal)
     first.translator.handle(userTurn('turn-a'))
     first.translator.handle(
       toolCall('spawn-a', 'toolu_spawn_a', 'Agent', {
@@ -392,7 +392,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
 
     // The restart comes much later: that is not when the child stopped.
     vi.setSystemTime(5_000_000)
-    const second = spawn(journal)
+    const second = acquire(journal)
     second.translator.handle(userTurn('turn-b'))
     second.translator.handle(
       frame({
@@ -442,7 +442,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(1_000_000)
     const crashed = await openJournal()
-    const first = spawn(crashed)
+    const first = acquire(crashed)
     first.translator.handle(userTurn('turn-a'))
     first.translator.handle(
       toolCall('spawn-a', 'toolu_spawn_a', 'Agent', {
@@ -461,7 +461,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
     expect(lost?.settledAt).toBeUndefined()
 
     vi.setSystemTime(5_000_000)
-    const second = spawn(journal)
+    const second = acquire(journal)
     second.translator.handle(userTurn('turn-b'))
     second.translator.handle(
       frame({
@@ -481,7 +481,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
 
   it('keeps one live entry for a child an older build listed in two rows', async () => {
     const journal = await journalAnOlderBuildListedTwice()
-    const run = spawn(journal)
+    const run = acquire(journal)
     run.translator.handle(userTurn('turn-c'))
     run.translator.handle(taskStarted('agent-a', 'toolu_message_a', 'Child agent-a'))
     // A frame for a sibling only the other row lists brings that row in too.
@@ -499,7 +499,7 @@ describe('a Claude subagent resumed after its provider restarted', () => {
 
   it('resumes a twice-listed child in its later row even when a sibling reaches the older row first', async () => {
     const journal = await journalAnOlderBuildListedTwice()
-    const run = spawn(journal)
+    const run = acquire(journal)
     run.translator.handle(userTurn('turn-c'))
     run.translator.handle(taskCompleted('agent-b', 'toolu_spawn_b'))
     run.translator.handle(taskStarted('agent-a', 'toolu_message_a', 'Child agent-a'))
@@ -514,12 +514,12 @@ describe('a Claude subagent resumed after its provider restarted', () => {
 
   it('still files a child no journaled row resolved under its own reference, never the parent', async () => {
     const journal = await openJournal()
-    const first = spawn(journal)
+    const first = acquire(journal)
     first.translator.handle(userTurn('turn-a'))
     first.translator.handle(result('result-a'))
     await first.exit()
 
-    const second = spawn(journal)
+    const second = acquire(journal)
     second.translator.handle(userTurn('turn-b'))
     second.translator.handle(taskStarted('agent-other', 'toolu_other', 'Other'))
     second.translator.handle(childSays('c-1', 'toolu_unknown', 'nobody named me'))

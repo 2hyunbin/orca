@@ -113,7 +113,7 @@ async function openJournal(): Promise<AgentSessionJournal> {
 }
 
 /** One acquisition: a fresh sink and translator over the session's journal. */
-function spawn(journal: AgentSessionJournal) {
+function acquire(journal: AgentSessionJournal) {
   const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
   const translator = createClaudeJournalTranslator({ sink: deferred.sink, coalesceMs: 0 })
   deferred.bind({ journal, fence: 1, publish: () => {} })
@@ -147,7 +147,7 @@ const ring = (journal: AgentSessionJournal) =>
 describe('context usage across a restart', () => {
   it('resets the ring at a /compact that is the first thing after a restart, then reads the fresh report', async () => {
     const journal = await openJournal()
-    const before = spawn(journal)
+    const before = acquire(journal)
     before.translator.handle(initFrame(900))
     before.translator.handle(userFrame('turn-a', 1_000))
     before.translator.handle(assistantFrame('reply-a', 2_000, 150_000))
@@ -157,7 +157,7 @@ describe('context usage across a restart', () => {
     before.release()
 
     // A new acquisition builds a new translator; it holds no turn of its own.
-    const after = spawn(journal)
+    const after = acquire(journal)
     after.translator.handle(compactBoundary(10_000))
     await after.settle()
     expect(ring(journal)).toBeNull()
@@ -178,7 +178,7 @@ describe('context usage across a restart', () => {
 
   it('reads the ring from the journal after a restart, and adopts the first response model', async () => {
     const journal = await openJournal()
-    const before = spawn(journal)
+    const before = acquire(journal)
     before.translator.handle(initFrame(900))
     before.translator.handle(userFrame('turn-a', 1_000))
     before.translator.handle(assistantFrame('reply-a', 2_000, 150_000))
@@ -186,7 +186,7 @@ describe('context usage across a restart', () => {
     await before.settle()
     before.release()
 
-    const after = spawn(journal)
+    const after = acquire(journal)
     expect(ring(journal)).toMatchObject({ usedTokens: 150_000, windowTokens: 1_000_000 })
     after.translator.handle(initFrame(9_900))
     after.translator.handle(userFrame('turn-b', 10_000))
@@ -202,7 +202,7 @@ describe('context usage across a restart', () => {
 
   it('keeps the last known size of a turn the child crashed in', async () => {
     const journal = await openJournal()
-    const crashed = spawn(journal)
+    const crashed = acquire(journal)
     crashed.translator.handle(initFrame(900))
     crashed.translator.handle(userFrame('turn-a', 1_000))
     crashed.translator.handle(assistantFrame('reply-a', 2_000, 20_000))
@@ -228,7 +228,7 @@ describe('context usage across a restart', () => {
 
   it('never brings a settled turn back to running with a context write that ran late', async () => {
     const journal = await openJournal()
-    const live = spawn(journal)
+    const live = acquire(journal)
     live.translator.handle(initFrame(900))
     live.translator.handle(userFrame('turn-a', 1_000))
     live.translator.handle(assistantFrame('reply-a', 2_000, 20_000))
@@ -258,7 +258,7 @@ describe('context usage across a restart', () => {
 
   it("reads a new session's implied window the same from its loaded rows and from the host", async () => {
     const journal = await openJournal()
-    const live = spawn(journal)
+    const live = acquire(journal)
     live.translator.modelWritten('opus[1m]')
     live.translator.handle(initFrame(900))
     live.translator.handle(userFrame('turn-a', 1_000))
@@ -274,7 +274,7 @@ describe('context usage across a restart', () => {
 
   it('keeps the window a restarted journal holds over the one the model name implies', async () => {
     const journal = await openJournal()
-    const before = spawn(journal)
+    const before = acquire(journal)
     before.translator.handle(initFrame(900))
     before.translator.handle(userFrame('turn-a', 1_000))
     before.translator.handle(assistantFrame('reply-a', 2_000, 150_000))
@@ -282,7 +282,7 @@ describe('context usage across a restart', () => {
     await before.settle()
     before.release()
 
-    const after = spawn(journal)
+    const after = acquire(journal)
     after.translator.modelWritten('fable[1m]')
     after.translator.handle(initFrame(9_900))
     after.translator.handle(userFrame('turn-b', 10_000))

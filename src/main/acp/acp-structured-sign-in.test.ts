@@ -39,7 +39,7 @@ describe('ACP sign-out at the first prompt', () => {
             )
           })
       })
-      await rig.spawn()
+      await rig.acquire()
       await sendHello(rig, 'first')
       await rig.settle()
       if (midTurn || spec.dialect.injectedPromptIdentity !== true) {
@@ -83,7 +83,7 @@ it.each(ACP_LAUNCH_SPECS)(
       script: (agent) => agent.on('session/new', (frame) => agent.fail(frame, -32000, detail))
     })
     // The host receives the refusal from open and then closes the child.
-    await rig.spawn()
+    await rig.acquire()
     expect(rig.openFailure()).toMatchObject({ reason: 'notSignedIn' })
     expect(providerDiagnosticOf(rig.openFailure())).toEqual({ text: detail, audience: 'person' })
     const fact = agentSessionFailureFact('notSignedIn', {
@@ -105,7 +105,7 @@ it.each(ACP_LAUNCH_SPECS)(
           agent.fail(frame, -32000, detail)
         })
     })
-    await rig.spawn()
+    await rig.acquire()
     expect(rig.openFailure()).toMatchObject({ reason: 'notSignedIn' })
     expect(providerDiagnosticOf(rig.openFailure())).toEqual({ text: detail, audience: 'person' })
   }
@@ -136,7 +136,7 @@ it.each([
         agent.fail(frame, -32603, 'Internal error', { details: detail })
       )
   })
-  await rig.spawn()
+  await rig.acquire()
   await sendHello(rig, 'first')
   await rig.settle()
   const row = (await rig.rig.rows()).find(

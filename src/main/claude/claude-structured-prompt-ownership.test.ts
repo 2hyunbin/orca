@@ -140,7 +140,7 @@ describe('Claude live prompt ownership', () => {
     const claude = fakeClaude({ replayUuid: 'turn-1' })
     const recorded = lifecycleRecorder()
     const adapter = adapterFor(claude)
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -177,7 +177,7 @@ describe('Claude live prompt ownership', () => {
     const claude = fakeClaude({ replayUuid: 'turn-1' })
     const recorded = lifecycleRecorder()
     const adapter = adapterFor(claude)
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',

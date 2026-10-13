@@ -49,11 +49,9 @@ function fakeAdapter(
   return {
     supportsLocation: () => true,
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi.fn(async ({ fence, spawnToken }) => acquisition(fence, spawnToken)),
+    acquire: vi.fn(async ({ fence, spawnToken }) => acquisition(fence, spawnToken)),
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
     answerPrompt: vi.fn(),
@@ -115,10 +113,10 @@ describe('StructuredAgentSessionAdapterRouter registry', () => {
 
     expect(router.supportsCreate(LOCAL, 'grok')).toBe(true)
     expect(router.supportsCreate(LOCAL, 'claude')).toBe(false)
-    await router.spawn({ identity: identity('session-1', 'grok'), fence: 1, spawnToken: 's-1' })
-    expect(pilot.spawn).toHaveBeenCalledOnce()
+    await router.acquire({ identity: identity('session-1', 'grok'), fence: 1, spawnToken: 's-1' })
+    expect(pilot.acquire).toHaveBeenCalledOnce()
     await expect(
-      router.spawn({ identity: identity('session-2', 'claude'), fence: 1, spawnToken: 's-2' })
+      router.acquire({ identity: identity('session-2', 'claude'), fence: 1, spawnToken: 's-2' })
     ).rejects.toThrow('structured sessions do not support claude')
   })
 
@@ -177,7 +175,7 @@ describe('StructuredAgentSessionAdapterRouter registry', () => {
     })
     // Claude declares no rewind; its adapter's answer cannot claim one, at rest or live.
     expect(router.rewindSupport('session-1', 'claude')).toEqual(unsupported)
-    await router.spawn({ identity: identity('session-1', 'claude'), fence: 1, spawnToken: 's' })
+    await router.acquire({ identity: identity('session-1', 'claude'), fence: 1, spawnToken: 's' })
     expect(router.rewindSupport('session-1')).toEqual(unsupported)
     expect(router.rewindSupport('session-2', 'grok')).toEqual(unsupported)
   })

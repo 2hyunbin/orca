@@ -1,18 +1,10 @@
 import { mkdtemp, rm } from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { nativeSessionOptionsFromReport } from '../native-chat/agent-session-wire/structured-agent-session-option-restoration'
 import { recordAgentSessionProviderHandle } from './agent-session-provider-handle-transition'
-import {
-  openTestAgentSessionRecordStore,
-  seedTestAgentSessionRecordStore
-} from './agent-session-record-store-test-harness'
+import { openTestAgentSessionRecordStore } from './agent-session-record-store-test-harness'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
-import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
-import { AcpStructuredOptions } from '../acp/acp-structured-options'
-import { NewSessionResponseSchema } from '../acp/generated/acp-protocol.generated'
 
 const NOW = 1_800_000_000_000
 const SESSION = 'session-options'
@@ -24,81 +16,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(directory, { recursive: true, force: true })
-})
-
-it('drops provider-rejected persisted options from what a started child reports', () => {
-  expect(
-    nativeSessionOptionsFromReport({
-      reported: { model: 'provider-model' },
-      restoreSkipped: ['permissionMode'],
-      priorOptions: { permissionMode: 'retired-mode', other: 'keep' }
-    })
-  ).toEqual({ model: 'provider-model', other: 'keep' })
-})
-
-it('omits empty model values from other option producers', () => {
-  expect(
-    nativeSessionOptionsFromReport({
-      reported: { model: '', effort: 'off' },
-      restoreSkipped: [],
-      priorOptions: { model: 'old-model', other: 'keep' }
-    })
-  ).toEqual({ effort: 'off', other: 'keep' })
-})
-
-it('durably replaces model-less ACP options when a later report reaches the option writer', async () => {
-  const response = NewSessionResponseSchema.parse(
-    JSON.parse(
-      readFileSync(
-        new URL('../acp/fixtures/omp-v17-windows-new-no-model.json', import.meta.url),
-        'utf8'
-      )
-    )
-  )
-  const reader = new AcpStructuredOptions()
-  reader.adoptSession(response)
-  const fixture = agentSessionRecordFixture()
-  const record = {
-    ...fixture,
-    provider: 'omp',
-    options: reader.reported(),
-    providerHandleChain: fixture.providerHandleChain.map((link) => ({
-      ...link,
-      handle: { transport: 'acp', agent: 'omp', nativeId: response.sessionId }
-    }))
-  }
-  await seedTestAgentSessionRecordStore(directory, { records: [record] })
-  const store = await openTestAgentSessionRecordStore(directory)
-  expect(store.getRecord(record.sessionId)?.options).toEqual({ effort: 'off' })
-
-  reader.adoptConfigOptions([
-    ...(response.configOptions ?? []),
-    {
-      id: 'model',
-      name: 'Model',
-      category: 'model',
-      type: 'select',
-      currentValue: 'reported-model',
-      options: [{ value: 'reported-model', name: 'Reported Model' }]
-    }
-  ])
-  const prior = store.getRecord(record.sessionId)?.options
-  const options = nativeSessionOptionsFromReport({
-    reported: reader.read().current,
-    restoreSkipped: [],
-    ...(prior ? { priorOptions: prior } : {})
-  })
-  await store.replaceSessionOptions({
-    sessionId: record.sessionId,
-    fence: record.lease.runtimeFence,
-    options,
-    now: NOW
-  })
-  const reopened = await openTestAgentSessionRecordStore(directory)
-  expect(reopened.getRecord(record.sessionId)?.options).toEqual({
-    model: 'reported-model',
-    effort: 'off'
-  })
 })
 
 it('makes the process the owner before its provider answers with a handle, and records it after', async () => {

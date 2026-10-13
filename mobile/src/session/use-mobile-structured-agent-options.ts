@@ -34,6 +34,7 @@ import {
   mobileCreatedStructuredSession
 } from './mobile-created-structured-sessions'
 import { encodeStructuredAgentSessionOptionValue } from '../../../src/shared/structured-agent-session-option-codec'
+import { mobileStructuredOptionSnapshot } from './mobile-structured-option-snapshot'
 
 type StructuredOptionsController = {
   optionPickerRequest: { id: string; sequence: number } | null
@@ -56,8 +57,9 @@ export function useMobileStructuredAgentOptions(args: {
   mutate: StructuredAgentSessionMutate
   /** Moves when the host's status says a session option changed; each move re-reads them. */
   optionStamp?: string
+  hostSelection?: Readonly<Record<string, string>>
 }): StructuredOptionsController {
-  const { agent, client, enabled, fence, mutate, optionStamp, sessionId } = args
+  const { agent, client, enabled, fence, mutate, optionStamp, hostSelection, sessionId } = args
   // Every agent's seed, as on the desktop: a built-in list or the provider-default pill.
   const optionCatalog = useMemo(
     () => (agent ? structuredAgentSessionSeedCatalog(agent) : null),
@@ -171,8 +173,8 @@ export function useMobileStructuredAgentOptions(args: {
   ])
 
   const optionSnapshot = useMemo(
-    () => structuredAgentSessionOptionSnapshot(optionState),
-    [optionState]
+    () => mobileStructuredOptionSnapshot(agent ?? 'codex', optionState, hostSelection),
+    [agent, hostSelection, optionState]
   )
 
   const setStructuredOption = useCallback(

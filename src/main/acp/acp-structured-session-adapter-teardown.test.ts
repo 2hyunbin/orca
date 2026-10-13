@@ -48,7 +48,7 @@ function answerCancel(child: FakeAcpChild, prompt: FakeFrame, turn: { ended: boo
 }
 
 async function runningPrompt(rig: AcpAdapterRig): Promise<FakeFrame> {
-  await rig.spawn()
+  await rig.acquire()
   await sendHello(rig, 'send-1')
   return rig.frame('session/prompt')
 }
@@ -119,7 +119,7 @@ describe('ACP teardown of a running turn', () => {
 describe('ACP teardown with nothing to cancel', () => {
   it('an idle close writes no cancel and ends the child at once', async () => {
     const rig = await openAcpAdapterRig({ deps: { stopGraceMs: 60_000 } })
-    await rig.spawn()
+    await rig.acquire()
     await expect(rig.adapter.closeSession(SESSION)).resolves.toBe(true)
     expect(framesOf(rig.child(), 'session/cancel')).toHaveLength(0)
     expect(rig.child().closes).toBe(1)

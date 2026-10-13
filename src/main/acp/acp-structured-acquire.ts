@@ -9,7 +9,7 @@ import { initializeAcpStructuredSession } from './acp-structured-handshake'
 import {
   AgentSessionPreSpawnError,
   type AgentSessionAcquisition,
-  type StructuredAgentSessionSpawnInput
+  type StructuredAgentSessionAcquireInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { providerTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { providerSpawnedProcessIdentity } from '../provider-process/provider-spawned-process-identity'
@@ -35,13 +35,13 @@ import { createStructuredAgentSessionLogger } from '../native-chat/agent-session
 /** Frames an agent may send before its session exists; past this they are dropped. */
 const MAX_EARLY_FRAMES = 2_048
 
-export async function spawnAcpStructuredSession(input: {
-  spawn: StructuredAgentSessionSpawnInput
+export async function acquireAcpStructuredSession(input: {
+  acquire: StructuredAgentSessionAcquireInput
   deps: AcpStructuredSessionAdapterDeps
   generation: string
   /** The spawn was aborted; checked until the spawn, after which `track` hands it the connection. */
   abandoned: () => boolean
-  /** Registers the connection so a close during the spawn can stop it. */
+  /** Registers the connection so a close during the acquire can stop it. */
   track: (connection: AcpStructuredConnection) => void
   /** The process's exit, observed while or after the session exists. */
   onExit: (session: AcpStructuredChild | null) => void
@@ -54,11 +54,11 @@ export async function spawnAcpStructuredSession(input: {
   acquisition: AgentSessionAcquisition
   session: AcpStructuredChild
 }> {
-  const { spawn, deps, generation } = input
+  const { acquire, deps, generation } = input
   const { spec } = deps
-  const sessionId = spawn.identity.sessionId
+  const sessionId = acquire.identity.sessionId
   const now = deps.now ?? Date.now
-  const events = spawn.events
+  const events = acquire.events
   const sink = events ? providerTimelineSink(events) : null
   if (!sink) {
     throw new AgentSessionPreSpawnError(new Error(`${spec.agent} chats need a journal sink`))
@@ -72,7 +72,7 @@ export async function spawnAcpStructuredSession(input: {
   }
   closedBeforeSpawn()
   const launch: AcpStructuredLaunch = await deps
-    .resolveLaunch({ identity: spawn.identity, spawnToken: spawn.spawnToken })
+    .resolveLaunch({ identity: acquire.identity, spawnToken: acquire.spawnToken })
     .catch((error: unknown) => {
       throw new AgentSessionPreSpawnError(error)
     })
@@ -112,7 +112,7 @@ export async function spawnAcpStructuredSession(input: {
     },
     {
       clientInfo: { name: 'orca', version: '1' },
-      ...(spawn.onOutput ? { onOutput: spawn.onOutput } : {}),
+      ...(acquire.onOutput ? { onOutput: acquire.onOutput } : {}),
       onPermission: (request, context) => {
         if (!isAcpReadySession(session) || !session.turns?.acceptsRequests) {
           // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
@@ -160,7 +160,6 @@ export async function spawnAcpStructuredSession(input: {
   input.track(connection)
   connection.subscribe((event: AcpSessionEvent) =>
     whenLane(() => {
-      const optionRevision = spawn.optionRevision?.() ?? 0
       if (slot.lane) {
         routeAcpSessionEvent({ lane: slot.lane, options }, event, now(), slot.reattaching)
       }
@@ -173,17 +172,15 @@ export async function spawnAcpStructuredSession(input: {
         deps.onEvent?.({
           type: 'options-reported',
           sessionId,
-          fence: spawn.fence,
+          fence: acquire.fence,
           acquisitionGeneration: generation,
-          reportedOptions: options.read().current,
-          restoreSkippedOptions: [],
-          optionRevision
+          reportedOptions: options.read().current
         })
       }
     })
   )
   const identity = providerSpawnedProcessIdentity(
-    spawn,
+    acquire,
     `${spec.agent} ACP agent`,
     deps.readProcessStartTime
   )
@@ -229,7 +226,7 @@ export async function spawnAcpStructuredSession(input: {
   const process = await identity.read(pid)
   const child: AcpStructuredChild = {
     sessionId,
-    fence: spawn.fence,
+    fence: acquire.fence,
     acquisitionGeneration: generation,
     spec,
     connection,
@@ -238,14 +235,13 @@ export async function spawnAcpStructuredSession(input: {
     options,
     prompts,
     childStops: undefined,
-    restoreSkipped: [],
     closeRequested: false,
     journalClosed: null,
     ended: false,
     exitObservedAt: null,
     open: (signal) =>
       initializeAcpStructuredSession({
-        spawn,
+        acquire,
         deps,
         generation,
         launch,

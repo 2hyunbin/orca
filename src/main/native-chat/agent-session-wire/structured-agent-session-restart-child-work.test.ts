@@ -29,11 +29,11 @@ it('continues a chat whose subagent the restart stopped', async () => {
 
 // The user opens the chat before choosing Resume: reading it starts nothing, so the offer stands.
 it('still offers and continues a chat the user opened before resuming', async () => {
-  const { host, spawn, dispatch } = await interruptedRestart('children')
+  const { host, acquire, dispatch } = await interruptedRestart('children')
   const unsubscribe = await host.subscribe({ id: 'pane', sessionId: SESSION, emit: vi.fn() })
   await host.history({ sessionId: SESSION, direction: 'tail' })
   unsubscribe()
-  expect(spawn).not.toHaveBeenCalled()
+  expect(acquire).not.toHaveBeenCalled()
   expect(await host.restartResume.list()).toMatchObject([
     { sessionId: SESSION, activity: { tasks: [{ kind: 'agent', label: 'Review loop 4' }] } }
   ])

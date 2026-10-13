@@ -36,7 +36,8 @@ import { isMainAgentWorking, performCancel } from './structured-agent-session-tu
 import { structuredAgentSessionStopNoteIdentity } from './structured-agent-session-command-turn'
 import {
   STOP_NOTE_CANCELLATION_REQUESTED,
-  structuredAgentSessionStopNoteScope
+  structuredAgentSessionStoppedTurnId,
+  writeStructuredAgentSessionStopNote
 } from './structured-agent-session-turn-stop-notes'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 
@@ -91,19 +92,15 @@ export function mutateWithChatStop<TValue>(
         )
         const child = context.sessions.get(ctx.sessionId)?.child
         const recordRequest = () => {
-          const stoppedTurn = turnId ?? ctx.journal.activeTurnId()
-          return ctx.journal.appendItem(
-            structuredAgentSessionStopNoteIdentity(stoppedTurn ?? envelope.clientOperationId),
-            { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED },
-            {
-              fence: ctx.fence,
-              turnScope: structuredAgentSessionStopNoteScope(
-                ctx.journal,
-                stoppedTurn ?? undefined,
-                ctx.journal.liveTurnScope()
-              )
-            }
-          )
+          const stoppedTurn = structuredAgentSessionStoppedTurnId(ctx.journal, turnId)
+          return writeStructuredAgentSessionStopNote(ctx, {
+            identity: structuredAgentSessionStopNoteIdentity(
+              stoppedTurn ?? envelope.clientOperationId
+            ),
+            body: { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED },
+            stoppedTurn: stoppedTurn ?? undefined,
+            fallbackScope: ctx.journal.liveTurnScope()
+          })
         }
         if (child?.close) {
           // A close an earlier stop began: this Stop joins it, retrying the exit's proof, rather
@@ -125,13 +122,7 @@ export function mutateWithChatStop<TValue>(
           // settles what the child was handed as stopped (`unrunRejection`). The event is
           // issued first and lands behind the withdrawal, in the journal's queue order.
           const effect = tookEffect()
-          const noteWrite = recordRequest().catch((error: unknown) =>
-            context.deps.logger.warn('writing the Stop note failed', {
-              scope: 'chat-stop-note',
-              sessionId,
-              error
-            })
-          )
+          const noteWrite = recordRequest()
           try {
             await stopChild()
           } finally {
@@ -147,15 +138,7 @@ export function mutateWithChatStop<TValue>(
         if (!child || !inFlight) {
           // Nothing to interrupt, so the answer may wait for the withdrawal.
           const noteWrite =
-            hadQueued || params.stoppedPrePrompt
-              ? recordRequest().catch((error: unknown) =>
-                  context.deps.logger.warn('writing the Stop note failed', {
-                    scope: 'chat-stop-note',
-                    sessionId,
-                    error
-                  })
-                )
-              : Promise.resolve()
+            hadQueued || params.stoppedPrePrompt ? recordRequest() : Promise.resolve()
           const withdrewAny = await withdrew
           if (withdrewAny || params.stoppedPrePrompt) {
             await tookEffect()

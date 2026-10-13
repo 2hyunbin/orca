@@ -27,7 +27,7 @@ describe('Pi execution host support', () => {
       vi.mocked(isWindowsProcessStartTimeAvailable).mockReturnValue(proof)
       const adapter = new PiRpcSessionAdapter({
         resolveLaunch: async () => {
-          throw new Error('A location check must not spawn a process')
+          throw new Error('A location check must not acquire a process')
         },
         onLifecycle: vi.fn(),
         onSettled: vi.fn(),

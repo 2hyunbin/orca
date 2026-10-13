@@ -32,7 +32,7 @@ const permission = (toolCallId: string) => ({
 
 async function runningPrompt() {
   const rig = await openAcpAdapterRig()
-  await rig.spawn()
+  await rig.acquire()
   await sendHello(rig, 'first')
   await rig.frame('session/prompt')
   rig.child().agent.notify('session/update', replyChunk('prompt:first', 'working'))
@@ -87,7 +87,7 @@ describe('Grok requests and the turn they belong to', () => {
 
   it('refuses a question during a turn Grok began itself, opening no card, yet shows its plan', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     const { agent } = rig.child()
     agent.notify('session/update', replyChunk('task-completed-background-1', 'Build finished; now'))
     await rig.settle()
@@ -111,7 +111,7 @@ describe('Grok requests and the turn they belong to', () => {
 
   it('refuses a question when no turn is open', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     const { agent } = rig.child()
     expect(await agent.request(5, 'x.ai/ask_user_question', question('call-5'))).toMatchObject({
       result: { outcome: 'cancelled' }

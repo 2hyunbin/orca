@@ -17,7 +17,7 @@ import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-rec
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import type {
   AgentSessionAcquisition,
-  StructuredAgentSessionSpawnInput,
+  StructuredAgentSessionAcquireInput,
   StructuredAgentSessionAdapter
 } from './structured-agent-session-adapter'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
@@ -42,7 +42,7 @@ const eventually = (assertion: () => void | Promise<void>): Promise<void> =>
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
 let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
@@ -51,13 +51,13 @@ const providerStarted = vi.fn()
 const openGates = new Map<string, (model: string) => void>()
 
 async function proveOpen(model = 'default'): Promise<void> {
-  const generation = `generation-${spawn.mock.calls.length}`
+  const generation = `generation-${acquire.mock.calls.length}`
   await eventually(() => expect(openGates.has(generation)).toBe(true))
   openGates.get(generation)!(model)
   openGates.delete(generation)
 }
 
-function acquisition(input: StructuredAgentSessionSpawnInput): AgentSessionAcquisition {
+function acquisition(input: StructuredAgentSessionAcquireInput): AgentSessionAcquisition {
   return {
     process: {
       hostId: 'local',
@@ -65,7 +65,7 @@ function acquisition(input: StructuredAgentSessionSpawnInput): AgentSessionAcqui
       processStartTimeMs: 1_700_000_000_000,
       spawnToken: input.spawnToken
     },
-    acquisitionGeneration: `generation-${spawn.mock.calls.length}`,
+    acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
     link: {
       linkId: `link-${input.fence}`,
       handle: codexProviderHandle(THREAD),
@@ -77,7 +77,7 @@ function acquisition(input: StructuredAgentSessionSpawnInput): AgentSessionAcqui
 }
 
 /** A spawn that publishes its child before open proves readiness. */
-const publishFirst: StructuredAgentSessionAdapter['spawn'] = async (input) => acquisition(input)
+const publishFirst: StructuredAgentSessionAdapter['acquire'] = async (input) => acquisition(input)
 
 async function startHost(): Promise<void> {
   host = new StructuredAgentSessionHost({
@@ -89,13 +89,11 @@ async function startHost(): Promise<void> {
         new Promise((resolve) => {
           openGates.set(acquisitionGeneration!, (model) =>
             resolve({
-              reportedOptions: { model },
-              restoreSkippedOptions: [],
-              optionRevision: optionRevisionNow()
+              reportedOptions: { model }
             })
           )
         }),
-      spawn,
+      acquire,
       dispatch,
       closeSession,
       releaseAcquisition: vi.fn(async () => true),
@@ -112,18 +110,18 @@ async function startHost(): Promise<void> {
     },
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
-    mintSpawnToken: () => `spawn-${spawn.mock.calls.length}`,
+    mintSpawnToken: () => `spawn-${acquire.mock.calls.length}`,
     idleSweep: { intervalMs: 60 * 60_000, idleMs: 60 * 60_000 },
     ...(startupLimits === undefined ? {} : { startupLimits }),
     now: () => NOW
   })
 }
 
-/** A fresh host with no child, so the next send starts one through `spawn`. */
-async function restartWith(next: StructuredAgentSessionAdapter['spawn']): Promise<void> {
+/** A fresh host with no child, so the next send starts one through `acquire`. */
+async function restartWith(next: StructuredAgentSessionAdapter['acquire']): Promise<void> {
   await host.close(SESSION, 'evict')
   await host.flushAllStreamedEvents()
-  spawn.mockImplementation(next)
+  acquire.mockImplementation(next)
   closeSession.mockClear()
   await startHost()
 }
@@ -134,7 +132,7 @@ beforeEach(async () => {
   startupLimits = undefined
   providerStarted.mockReset()
   openGates.clear()
-  spawn = vi.fn(async (input) => acquisition(input))
+  acquire = vi.fn(async (input) => acquisition(input))
   dispatch = vi.fn(async () => ({
     state: 'accepted' as const,
     providerIdentity: {
@@ -186,12 +184,6 @@ async function submission(id: string): Promise<AgentJournalSubmission | undefine
   return (await host.journalSnapshot(SESSION)).submissions.find(
     (entry) => entry.clientMessageId === id
   )
-}
-
-/** The revision the attempt's `optionRevision()` answers now, as a report's read would stamp. */
-function optionRevisionNow(): number {
-  const [input] = spawn.mock.calls.at(-1)!
-  return input.optionRevision!()
 }
 
 /** The send's start has published its child, still starting; the host holds the send. */
@@ -274,10 +266,9 @@ describe('a start that ends before it proves itself', () => {
       type: 'ended',
       sessionId: SESSION,
       fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: `generation-${spawn.mock.calls.length}`,
+      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
       reason: 'exited with code 1',
-      cause: 'unexpected-exit',
-      startupUnproven: true
+      cause: 'unexpected-exit'
     })
 
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
@@ -353,7 +344,7 @@ describe('a start that ends before it proves itself', () => {
     }
   })
 
-  it('aborts an spawn still in its handshake once it goes silent and fails what it held', async () => {
+  it('aborts an acquire still in its handshake once it goes silent and fails what it held', async () => {
     startupLimits = { silenceMs: 50 }
     await restartWith(
       (input) =>
@@ -370,7 +361,7 @@ describe('a start that ends before it proves itself', () => {
     await eventually(() => expect(startupAttemptOpen()).toBe(false))
   })
 
-  it('ends a start whose spawn is still running when the chat closes', async () => {
+  it('ends a start whose acquire is still running when the chat closes', async () => {
     let land = (): void => {}
     const landed = new Promise<void>((resolve) => {
       land = resolve
@@ -380,7 +371,7 @@ describe('a start that ends before it proves itself', () => {
       return acquisition(input)
     })
     const id = await accept('hello')
-    await eventually(() => expect(spawn).toHaveBeenCalled())
+    await eventually(() => expect(acquire).toHaveBeenCalled())
 
     const closing = host.close(SESSION, 'evict')
     land()
@@ -416,10 +407,8 @@ describe('what a started child reports', () => {
       type: 'options-reported',
       sessionId: SESSION,
       fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: `generation-${spawn.mock.calls.length}`,
-      reportedOptions: { model: 'from-settings' },
-      restoreSkippedOptions: [],
-      optionRevision: optionRevisionNow()
+      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
+      reportedOptions: { model: 'from-settings' }
     })
     await host.flushStreamedEvents(SESSION)
     expect(store.getRecord(SESSION)?.options).toBeUndefined()
@@ -440,10 +429,8 @@ describe('what a started child reports', () => {
       type: 'options-reported',
       sessionId: SESSION,
       fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: `generation-${spawn.mock.calls.length}`,
-      reportedOptions: { model: 'from-settings' },
-      restoreSkippedOptions: [],
-      optionRevision: optionRevisionNow()
+      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
+      reportedOptions: { model: 'from-settings' }
     })
     await host.flushStreamedEvents(SESSION)
     expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' })
@@ -454,13 +441,13 @@ function startupAttemptOpen(): boolean {
   return host.collaboratorsForTests().runtimeState.startupAttempts.isOpen(SESSION)
 }
 
-describe('the attempt an spawn runs under', () => {
+describe('the attempt an acquire runs under', () => {
   it('is minted by the host with the lease, the pinned launch and its progress report', async () => {
     await restartWith(publishFirst)
     await heldBehindStart('hello')
 
     const record = store.getRecord(SESSION)!
-    const [input] = spawn.mock.calls.at(-1)!
+    const [input] = acquire.mock.calls.at(-1)!
     expect(input).toMatchObject({
       fence: record.lease.runtimeFence,
       launch: { location: record.location, accountHome: record.accountHome }
@@ -468,8 +455,5 @@ describe('the attempt an spawn runs under', () => {
     expect(input.onOutput).toEqual(expect.any(Function))
     expect(input.attemptId).toEqual(expect.any(String))
     expect(input.signal).toBeInstanceOf(AbortSignal)
-    expect(input.optionRevision!()).toBe(
-      host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
-    )
   })
 })

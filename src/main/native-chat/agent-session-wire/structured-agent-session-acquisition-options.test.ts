@@ -81,12 +81,10 @@ function adapter(input: {
 }): StructuredAgentSessionAdapter {
   return {
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi
-      .fn<StructuredAgentSessionAdapter['spawn']>()
+    acquire: vi
+      .fn<StructuredAgentSessionAdapter['acquire']>()
       .mockImplementation(async ({ fence, spawnToken }) => ({
         acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
@@ -121,7 +119,7 @@ function expectSettledAttachLease(record: AgentSessionRecord | null): void {
 
 describe('structured session acquisition options', () => {
   it('samples provider history before acquiring a replacement child', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-history-before-spawn-'))
+    root = await mkdtemp(join(tmpdir(), 'orca-history-before-acquire-'))
     const initialStore = await openTestAgentSessionRecordStore(root)
     let childAcquired = false
     const historyWindow = (): ProviderHistoryWindow => ({
@@ -131,8 +129,8 @@ describe('structured session acquisition options', () => {
     })
     const withHistory = (origin: 'created' | 'resumed'): StructuredAgentSessionAdapter => {
       const sessionAdapter = adapter({ origin })
-      const spawn = vi.mocked(sessionAdapter.spawn)
-      spawn.mockImplementation(async (input) => {
+      const acquire = vi.mocked(sessionAdapter.acquire)
+      acquire.mockImplementation(async (input) => {
         childAcquired = true
         return {
           acquisitionGeneration: globalThis.crypto.randomUUID(),
@@ -169,7 +167,6 @@ describe('structured session acquisition options', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       params: attachParams(CREATE_OPERATION, null),
       now: () => NOW,
       onAttached: (attached) => {
@@ -209,7 +206,6 @@ describe('structured session acquisition options', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       params: attachParams(RESUME_OPERATION, releasedFence),
       now: () => NOW + 1,
       onAttached: () => {}
@@ -243,7 +239,6 @@ describe('structured session acquisition options', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       params: attachParams(CREATE_OPERATION, null, options),
       now: () => NOW,
       recordPhase,
@@ -251,7 +246,7 @@ describe('structured session acquisition options', () => {
     })
 
     expect(created).toMatchObject({ ok: true })
-    expect(sessionAdapter.spawn).toHaveBeenCalledWith(
+    expect(sessionAdapter.acquire).toHaveBeenCalledWith(
       expect.objectContaining({ options, recordPhase })
     )
     expect(store.getRecord(SESSION)?.options).toEqual(options)
@@ -275,7 +270,6 @@ describe('structured session acquisition options', () => {
           probe: { outcome: 'reservation-unused' }
         },
         callerKey: 'client-1',
-        optionRevision: () => 0,
         params: attachParams(CREATE_OPERATION, null, options),
         now: () => NOW,
         onAttached: () => {}
@@ -308,7 +302,6 @@ describe('structured session acquisition options', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       params: attachParams(CREATE_OPERATION, null),
       now: () => NOW,
       onAttached: () => {}
@@ -347,7 +340,6 @@ describe('structured session acquisition options', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       params: attachParams(RESUME_OPERATION, releasedFence),
       now: () => NOW + 1,
       onAttached: () => {}
@@ -360,6 +352,39 @@ describe('structured session acquisition options', () => {
       personality: 'concise',
       fastMode: 'true'
     })
+  })
+
+  it('keeps a saved Fast choice without an acquisition report', async () => {
+    root = await mkdtemp(join(tmpdir(), 'orca-acquisition-fast-restore-'))
+    const store = await openTestAgentSessionRecordStore(root)
+    const sessionAdapter = adapter({
+      origin: 'created',
+      options: { current: { model: 'gpt-standard' }, models: [] }
+    })
+
+    const created = await performAttach({
+      agents: NO_STRUCTURED_AGENTS,
+      logger: createStructuredAgentSessionLogger(),
+      store,
+      adapter: sessionAdapter,
+      openConversation: openTestAttachConversation(openTestJournalHostDatabase(root!)),
+      authority: {
+        spawnToken: 'spawn-a',
+        claimKeyId: 'key-1',
+        handoffOperationId: CREATE_OPERATION,
+        probe: { outcome: 'reservation-unused' }
+      },
+      callerKey: 'client-1',
+      params: attachParams(CREATE_OPERATION, null, {
+        model: 'gpt-standard',
+        fastMode: 'true'
+      }),
+      now: () => NOW,
+      onAttached: () => {}
+    })
+
+    expect(created).toMatchObject({ ok: true })
+    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'gpt-standard', fastMode: 'true' })
   })
 
   it('proves an opened Codex owner without replacing saved choices from readback', async () => {
@@ -385,7 +410,6 @@ describe('structured session acquisition options', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       params: attachParams(CREATE_OPERATION, null, { model: 'gpt-saved', effort: 'medium' }),
       now: () => NOW,
       onAttached: () => {}
@@ -421,7 +445,6 @@ describe('structured session acquisition options', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       params: attachParams(CREATE_OPERATION, null, options),
       now: () => NOW,
       onAttached: () => {}
@@ -433,7 +456,7 @@ describe('structured session acquisition options', () => {
   })
 
   describe.each([
-    ['adapter spawn', 'spawn'],
+    ['adapter acquire', 'acquire'],
     ['identity commit', 'identity'],
     ['owner proof', 'proof'],
     ['journal attach', 'journal']
@@ -451,15 +474,15 @@ describe('structured session acquisition options', () => {
         options: { current: { model: 'gpt-5.6-terra' }, models: [] }
       })
       const injected = new Error(`${failurePoint} failed`)
-      const spawn = vi.mocked(base.spawn)
-      if (failurePoint === 'spawn') {
-        spawn.mockRejectedValueOnce(injected)
+      const acquire = vi.mocked(base.acquire)
+      if (failurePoint === 'acquire') {
+        acquire.mockRejectedValueOnce(injected)
       } else if (failurePoint === 'identity') {
         vi.spyOn(store, 'commitProcessIdentity').mockRejectedValueOnce(injected)
       } else if (failurePoint === 'proof') {
         vi.spyOn(store, 'proveOwner').mockRejectedValueOnce(injected)
       } else if (failurePoint === 'journal') {
-        spawn.mockImplementation(async ({ fence, spawnToken }) => ({
+        acquire.mockImplementation(async ({ fence, spawnToken }) => ({
           acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',
@@ -482,7 +505,7 @@ describe('structured session acquisition options', () => {
         }
         return cleanup
       })
-      const failingAdapter = { ...base, spawn, releaseAcquisition }
+      const failingAdapter = { ...base, acquire, releaseAcquisition }
       let journalFailure = failurePoint === 'journal' ? injected : null
       const perform = (
         target: AgentSessionRecordStore,
@@ -509,7 +532,6 @@ describe('structured session acquisition options', () => {
             probe: { outcome: 'reservation-unused' }
           },
           callerKey: 'client-1',
-          optionRevision: () => 0,
           params: attachParams(operationId, fence),
           now: () => NOW,
           onAttached: () => {}
@@ -610,7 +632,6 @@ describe('the tab a create reserves', () => {
         probe: { outcome: 'reservation-unused' }
       },
       callerKey: 'client-1',
-      optionRevision: () => 0,
       // Beside the fingerprinted fields, like `options`: which tab shows the chat is not which
       // conversation this attaches to.
       params: {

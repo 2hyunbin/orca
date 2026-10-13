@@ -1,6 +1,6 @@
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
-import type { StructuredAgentSessionSpawnInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { AgentSessionAcquisitionRefusal } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type {
   StructuredAgentSessionProviderOpenInput,
@@ -35,7 +35,7 @@ import type { CodexStructuredSessionTeardown } from './codex-structured-session-
 import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
 
 type CodexOpenContext = {
-  input: StructuredAgentSessionSpawnInput
+  input: StructuredAgentSessionAcquireInput
   deps: CodexStructuredSessionAdapterDeps
   launch: CodexStructuredLaunch
   account: AgentSessionAccountKind | undefined
@@ -89,7 +89,6 @@ export async function openCodexStructuredSession(
     openInput.signal
   )
   current()
-  const optionRevision = input.optionRevision?.() ?? 0
   const opened = await waitForPromiseWithSignal(
     openCodexThread(
       connection,
@@ -163,8 +162,6 @@ export async function openCodexStructuredSession(
       linkId: deps.mintLinkId?.(),
       observedAt: deps.now?.() ?? Date.now()
     }),
-    reportedOptions: reportedCodexSessionOptions(session),
-    restoreSkippedOptions: [],
-    optionRevision
+    reportedOptions: reportedCodexSessionOptions(session)
   }
 }

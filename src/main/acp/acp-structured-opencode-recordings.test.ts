@@ -33,7 +33,7 @@ async function replaying(name: string) {
     spec: acpLaunchSpecFor('opencode')!,
     script: (scripted) => replay.attach(scripted)
   })
-  await rig.spawn()
+  await rig.acquire()
   await rig.adapter.dispatch({ sessionId: SESSION, clientMessageId: 'send-1', body: ask, fence: 1 })
   return { rig, replay }
 }

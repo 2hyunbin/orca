@@ -14,7 +14,7 @@ import type { AgentSessionExecutionOptions } from '../../../shared/agent-session
 import { captureStructuredExecutionOptions } from './structured-agent-session-execution-options'
 import { isAgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 import { abortSignalReason } from '../../../shared/abort-signal-reason'
-import type { StructuredAgentSessionProviderWaits } from './structured-agent-session-provider-waits'
+import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import {
   agentSessionFailureWords,
   type AgentSessionFailureWordsContext
@@ -234,7 +234,7 @@ export async function performSend(
 }
 
 export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
-  providerWaits?: Pick<StructuredAgentSessionProviderWaits, 'begin'>
+  acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
 }
 
 /**
@@ -269,7 +269,7 @@ export async function handOverSubmission(
   })
   // The handover row's instant on the host clock; the turn this dispatch opens records it so the
   // live counter never re-anchors at turn-open.
-  const attempt = ctx.providerWaits?.begin(ctx.sessionId, true)
+  const attempt = ctx.acquireAborts?.begin(ctx.sessionId, true)
   let outcome: AgentSessionDispatchOutcome
   try {
     outcome = await dispatchSafely(

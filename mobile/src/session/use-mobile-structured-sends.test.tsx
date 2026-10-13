@@ -22,6 +22,8 @@ import {
 } from './use-mobile-structured-agent-session-queued.test-fixture'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 import { useMobileStructuredSends } from './use-mobile-structured-sends'
+import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
+import { AGENT_SESSION_MESSAGE_CHOICES_RUNTIME_CAPABILITY } from '../../../src/shared/protocol-version'
 
 const asyncStorage = vi.hoisted(() => ({ getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }))
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: asyncStorage }))
@@ -81,7 +83,7 @@ describe('a structured send in the open chat', () => {
     close: () => {}
   }
 
-  function Harness(): null {
+  function Harness(props: { messageChoices?: boolean }): null {
     hook = useMobileStructuredAgentSession({
       client,
       sessionId: 'session-1',
@@ -89,15 +91,17 @@ describe('a structured send in the open chat', () => {
       enabled: true,
       connected: true,
       agent: 'codex',
-      hostSupport: null,
+      hostSupport: props.messageChoices
+        ? structuredAgentSessionHostSupport([AGENT_SESSION_MESSAGE_CHOICES_RUNTIME_CAPABILITY])
+        : null,
       onSendError
     })
     return null
   }
 
-  async function mount(): Promise<void> {
+  async function mount(messageChoices = false): Promise<void> {
     act(() => {
-      renderer = create(createElement(Harness))
+      renderer = create(createElement(Harness, { messageChoices }))
     })
     await vi.waitFor(() => expect(listener).toEqual(expect.any(Function)))
     act(() => listener?.(snapshotEvent()))
@@ -166,6 +170,13 @@ describe('a structured send in the open chat', () => {
     expect(shown()).toEqual([[row, 'hello']])
     expect(hook!.session.messages[0]?.timestamp).toBe(1)
     expect(onSendError).not.toHaveBeenCalled()
+  })
+
+  it('omits choices when Send precedes the picker’s model answer', async () => {
+    await mount(true)
+    await send('before picker answer')
+    const call = sendRequest.mock.calls.find(([method]) => method === 'agentSession.send')
+    expect(call?.[1]).not.toHaveProperty('executionOptions')
   })
 
   // Same words as a not-sent row: once recorded, the resend is one bubble and hides the earlier copy.

@@ -20,7 +20,7 @@ export async function openStructuredAgentSessionProviderChild(
   if (!context.runtimeState.startupAttempts.onClock(sessionId, child)) {
     return
   }
-  const attempt = context.runtimeState.providerWaits.begin(sessionId)
+  const attempt = context.runtimeState.acquireAborts.begin(sessionId)
   try {
     attempt.signal.throwIfAborted()
     const acquisitionGeneration = child.generation
@@ -39,12 +39,11 @@ export async function openStructuredAgentSessionProviderChild(
     if (attempt.signal.aborted) {
       return
     }
-    await settleStructuredAgentSessionProviderStarted(context, {
-      ...result,
-      sessionId,
-      fence: child.fence,
-      acquisitionGeneration
-    })
+    await settleStructuredAgentSessionProviderStarted(
+      context,
+      { ...result, sessionId, fence: child.fence, acquisitionGeneration },
+      attempt.signal
+    )
   } catch (error) {
     // Stop, close, quit and expiry already own the child's end.
     if (!attempt.signal.aborted) {

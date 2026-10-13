@@ -217,9 +217,9 @@ describe('a Codex Stop request note', () => {
   it('exists once while child close remains unresolved, including a repeated Stop', async () => {
     await runningTurn()
     const held = Promise.withResolvers<void>()
-    disposeSession.mockImplementationOnce(async (sessionId, cause) => {
+    disposeSession.mockImplementationOnce(async (sessionId) => {
       await held.promise
-      return closeProviderSession(sessionId, cause)
+      return closeProviderSession(sessionId)
     })
 
     expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
@@ -275,7 +275,7 @@ describe('a Codex Stop whose interrupt failed', () => {
       await stopSettled()
 
       expect(stopped).toMatchObject({ ok: true, value: { cancelled: true } })
-      expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+      expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
       expect(codex.connections.at(-1)?.closed).toBe(true)
       const rows = await journalRows()
       expect(rows.turns).toEqual(['interrupted'])
@@ -296,7 +296,7 @@ describe('a Codex Stop whose interrupt failed', () => {
     await stopSettled()
 
     expect(stopped).toMatchObject({ ok: true, value: { cancelled: true } })
-    expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     const rows = await journalRows()
     expect(rows.turns).toEqual(['running'])
     expect(rows.statuses).toEqual(['Cancellation was not confirmed.'])
@@ -494,7 +494,7 @@ describe('a Codex Stop whose interrupt failed', () => {
     await stopSettled()
 
     expect(stopped).toMatchObject({ ok: true, value: { cancelled: true } })
-    expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     await vi.waitFor(() => expect(host['sessions'].get(SESSION)?.child).toBeNull())
     expect(host['sessions'].get(SESSION)?.lastEndedChild).toMatchObject({
       cause: 'user-stop',

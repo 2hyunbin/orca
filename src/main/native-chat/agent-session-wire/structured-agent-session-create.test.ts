@@ -42,7 +42,7 @@ function firstMessage() {
 
 function abortableAcquisition() {
   const entered = Promise.withResolvers<void>()
-  rig.adapter.spawn.mockImplementationOnce(
+  rig.adapter.acquire.mockImplementationOnce(
     ({ signal }) =>
       new Promise((_resolve, reject) => {
         entered.resolve()
@@ -57,7 +57,7 @@ function abortableAcquisition() {
   return entered.promise
 }
 
-it('commits the record, tab, operation and first message together and returns while spawn is unresolved', async () => {
+it('commits the record, tab, operation and first message together and returns while acquire is unresolved', async () => {
   const first = firstMessage()
   const params = createTestParams(first, { surfaceTabId: 'chat-create-tab' })
   const entered = abortableAcquisition()
@@ -71,7 +71,7 @@ it('commits the record, tab, operation and first message together and returns wh
     })
   )
   const publishTab = vi.fn(async () => {
-    expect(rig.adapter.spawn).not.toHaveBeenCalled()
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
     expect(rig.store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
       ownerProcess: null,
@@ -100,7 +100,7 @@ it('commits the record, tab, operation and first message together and returns wh
     }
   ])
   expect(publishTab).toHaveBeenCalledOnce()
-  await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
   await entered
   expect(rig.adapter.dispatch).not.toHaveBeenCalled()
   expect(await stopCreatedChat(rig.host)).toMatchObject({ ok: true, value: { cancelled: true } })
@@ -129,7 +129,7 @@ it('creates a blank chat at rest without acquiring and persists its launch argum
     }
   })
   expect(resolveLaunchEnv).toHaveBeenCalledOnce()
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
 })
 
 it('keeps delivery behind runtime tab publication even after the message is committed', async () => {
@@ -153,7 +153,7 @@ it('keeps delivery behind runtime tab publication even after the message is comm
   await held.promise
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(rig.store.getRecord(SESSION)).not.toBeNull()
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect(answered).toBe(false)
   release.resolve()
   expect(await creating).toMatchObject({ ok: true })
@@ -161,7 +161,7 @@ it('keeps delivery behind runtime tab publication even after the message is comm
   await stopCreatedChat(rig.host)
 })
 
-it('an immediate Stop cancels the queued first message before spawn and replay never redelivers it', async () => {
+it('an immediate Stop cancels the queued first message before acquire and replay never redelivers it', async () => {
   const first = firstMessage()
   const params = createTestParams(first)
   let stopping: ReturnType<typeof stopCreatedChat> | undefined
@@ -174,7 +174,7 @@ it('an immediate Stop cancels the queued first message before spawn and replay n
     })
   ).toMatchObject({ ok: true })
   expect(await stopping).toMatchObject({ ok: true, value: { cancelled: true } })
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect(await rig.host.create(CALLER, params, { firstMessage: first })).toMatchObject({
     ok: true,
     replayed: true,
@@ -192,10 +192,10 @@ it('an immediate Stop cancels the queued first message before spawn and replay n
 
 it('holds the created first message until the child proves its start, then hands it over once', async () => {
   const first = firstMessage()
-  const spawn = rig.adapter.spawn.getMockImplementation()!
+  const acquire = rig.adapter.acquire.getMockImplementation()!
   let generation = ''
-  const holdStart = rig.heldStart(spawn)
-  rig.adapter.spawn.mockImplementationOnce(async (input) => {
+  const holdStart = rig.heldStart(acquire)
+  rig.adapter.acquire.mockImplementationOnce(async (input) => {
     const child = await holdStart(input)
     generation = child.acquisitionGeneration
     return child
@@ -203,7 +203,7 @@ it('holds the created first message until the child proves its start, then hands
   expect(
     await rig.host.create(CALLER, createTestParams(first), { firstMessage: first })
   ).toMatchObject({ ok: true })
-  await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(rig.adapter.dispatch).not.toHaveBeenCalled()
   const held = (await rig.host.journalSnapshot(SESSION)).submissions
@@ -225,12 +225,12 @@ it('holds the created first message until the child proves its start, then hands
 
 it('Stop while the child proves its start withdraws the created first message once, unsent', async () => {
   const first = firstMessage()
-  const spawn = rig.adapter.spawn.getMockImplementation()!
-  rig.adapter.spawn.mockImplementationOnce(rig.heldStart(spawn))
+  const acquire = rig.adapter.acquire.getMockImplementation()!
+  rig.adapter.acquire.mockImplementationOnce(rig.heldStart(acquire))
   expect(
     await rig.host.create(CALLER, createTestParams(first), { firstMessage: first })
   ).toMatchObject({ ok: true })
-  await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
 
   expect(await stopCreatedChat(rig.host)).toMatchObject({ ok: true, value: { cancelled: true } })
 
@@ -310,7 +310,7 @@ it('replays the stopped first message even after its row falls outside the hydra
     rejection: { kind: 'cancelled' }
   })
   expect(append).not.toHaveBeenCalled()
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect(rig.adapter.dispatch).not.toHaveBeenCalled()
 })
 
@@ -351,7 +351,7 @@ it('admits Stop with the create-returned fence after acquisition advances it and
     ).toMatchObject({ event: { reason: 'user-stop' } })
     expect(rig.adapter.dispatch).not.toHaveBeenCalled()
   } finally {
-    rig.host.collaboratorsForTests().runtimeState.providerWaits.abort(SESSION, 'test cleanup')
+    rig.host.collaboratorsForTests().runtimeState.acquireAborts.abort(SESSION, 'test cleanup')
     await stopping
   }
 })
@@ -376,7 +376,7 @@ it.each(['journal_rows', 'agent_session_operations'])(
     expect((await readPersistedTestAgentSessionStore(rig.root)).records).toEqual({})
     expect(loadTestJournal(rig.root, SESSION)?.state.submissions.size).toBe(0)
     expect(rig.host.hasSession(SESSION)).toBe(false)
-    expect(rig.adapter.spawn).not.toHaveBeenCalled()
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
     expect(publishTab).not.toHaveBeenCalled()
     db.exec('DROP TRIGGER refuse_create')
     const entered = abortableAcquisition()
@@ -399,7 +399,7 @@ it('answers a journal founding failure as a refusal before publishing any create
   ).toMatchObject({ ok: false, refusal: { code: 'agent_session_journal_unreadable' } })
   expect(rig.store.listRecords()).toEqual([])
   expect(rig.store.listOperationRows()).toEqual([])
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
 })
 
 it('retries tab publication from the committed message without acquiring early or appending again', async () => {
@@ -413,7 +413,7 @@ it('retries tab publication from the committed message without acquiring early o
       }
     })
   ).toMatchObject({ ok: false, refusal: { details: { reason: 'tabUnconfirmed' } } })
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
   const append = vi.spyOn(AgentSessionJournal.prototype, 'appendSubmission')
   const entered = abortableAcquisition()
   expect(await rig.host.create(CALLER, params, { firstMessage: first })).toMatchObject({

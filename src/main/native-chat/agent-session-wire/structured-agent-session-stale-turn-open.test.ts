@@ -35,7 +35,7 @@ async function exitWithUnwrittenSettlement(refusedWrites = 2): Promise<void> {
   await foundRestTestChat(rig)
   const open = rig.host.collaboratorsForTests().sessions.get(SESSION)!
   const running = open.child!
-  rig.adapter.spawn.mock.calls
+  rig.adapter.acquire.mock.calls
     .at(-1)?.[0]
     .events?.appendItem(
       { provider: 'codex', threadId: REST_TEST_THREAD, turnId: 'working', ordinal: 50 },
@@ -81,7 +81,7 @@ describe('a turn its gone agent left running', () => {
     expect(JSON.stringify(items)).toContain(
       'Codex stopped while this response was in progress. You can continue in this conversation.'
     )
-    expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+    expect(rig.adapter.acquire).toHaveBeenCalledOnce()
   })
 
   it('is settled when the idle-closed conversation is opened again, and its reader sees it', async () => {
@@ -99,7 +99,7 @@ describe('a turn its gone agent left running', () => {
     expect(JSON.stringify(reader.events)).toContain(
       'Codex stopped while this response was in progress. You can continue in this conversation.'
     )
-    expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+    expect(rig.adapter.acquire).toHaveBeenCalledOnce()
   })
 
   it('is settled by a read after a restart that reaches the chat before the restore does', async () => {
@@ -111,6 +111,6 @@ describe('a turn its gone agent left running', () => {
     expect(await workingTurnState()).toBe('interrupted')
     await rig.host.restoreReadableSessions([SESSION])
     expect(await workingTurnState()).toBe('interrupted')
-    expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+    expect(rig.adapter.acquire).toHaveBeenCalledOnce()
   })
 })

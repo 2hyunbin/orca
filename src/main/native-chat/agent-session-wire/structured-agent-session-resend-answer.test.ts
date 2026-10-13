@@ -27,10 +27,10 @@ let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 
 beforeEach(() => {
-  ;({ root, store, host, dispatch, spawn } = hostTestState())
+  ;({ root, store, host, dispatch, acquire } = hostTestState())
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -178,7 +178,7 @@ describe('a resent send id', () => {
       phase: 'prepared',
       retained: []
     })
-    spawn.mockClear()
+    acquire.mockClear()
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     await expect(host.send(CALLER, params)).resolves.toMatchObject({
@@ -186,7 +186,7 @@ describe('a resent send id', () => {
       replayed: true,
       value: { submission: { clientMessageId: params.envelope.clientOperationId } }
     })
-    expect(spawn).not.toHaveBeenCalled()
+    expect(acquire).not.toHaveBeenCalled()
     expect(store.getRecord(SESSION)?.rewind?.phase).toBe('prepared')
   })
 

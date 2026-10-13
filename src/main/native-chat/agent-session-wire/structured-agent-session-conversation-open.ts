@@ -177,7 +177,7 @@ async function settleGoneGeneration(
       failureTextContext: structuredAgentSessionFailureWordsContext(record)
     })
   } catch (error) {
-    // Best effort: the next open or spawn re-derives it.
+    // Best effort: the next open or acquire re-derives it.
     deps.logger.warn("settling a gone agent's work on open failed", {
       scope: 'open-dead-generation',
       sessionId: record.sessionId,

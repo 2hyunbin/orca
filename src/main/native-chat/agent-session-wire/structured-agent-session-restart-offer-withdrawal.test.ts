@@ -36,7 +36,7 @@ afterEach(() => vi.restoreAllMocks())
 
 const SUPERSEDED = 'agent_session_restart_work_superseded'
 
-/** A start under a loaded machine: reconcile, spawn, hand over. */
+/** A start under a loaded machine: reconcile, acquire, hand over. */
 const COLD_START = { timeout: 10_000 }
 
 async function offered(work: 'turn' | 'submission' = 'turn') {
@@ -68,18 +68,18 @@ function sentTexts(dispatch: Awaited<ReturnType<typeof offered>>['dispatch']): s
 }
 
 it('withdraws the offer when /compact starts the agent at rest (R-01)', async () => {
-  const { host, root, spawn } = await offered()
+  const { host, root, acquire } = await offered()
   Object.assign(host.deps.adapter, { compact: vi.fn(async () => ({})) })
 
   expect(await host.conversationCommand(CALLER, compactParams())).toMatchObject({ ok: true })
 
-  expect(spawn).toHaveBeenCalledOnce()
+  expect(acquire).toHaveBeenCalledOnce()
   await vi.waitFor(async () => expect(await offersIn(root)).toEqual([]), COLD_START)
   expect(await host.restartResume.list()).toEqual([])
 })
 
 it('keeps the offer through every way of looking at the chat (R-02)', async () => {
-  const { host, root, spawn } = await offered()
+  const { host, root, acquire } = await offered()
   const unsubscribe = await host.subscribe({ id: 'pane', sessionId: SESSION, emit: vi.fn() })
   await host.history({ sessionId: SESSION, direction: 'tail' })
   await host.readOptions(SESSION)
@@ -88,7 +88,7 @@ it('keeps the offer through every way of looking at the chat (R-02)', async () =
   await host.revealSession(SESSION)
   unsubscribe()
 
-  expect(spawn).not.toHaveBeenCalled()
+  expect(acquire).not.toHaveBeenCalled()
   expect(await host.restartResume.list()).toHaveLength(1)
   expect(await offersIn(root)).toHaveLength(1)
 })
@@ -128,12 +128,12 @@ it('refuses the continuation when another start lands inside its action (R-03b)'
 })
 
 it('keeps the offer when a tabbed chat is restored at boot (R-05)', async () => {
-  const { host, store, root, spawn } = await offered()
+  const { host, store, root, acquire } = await offered()
   await store.setSessionTabVisibility(SESSION, true)
 
   await host.restoreReadableSessions([SESSION])
 
-  expect(spawn).not.toHaveBeenCalled()
+  expect(acquire).not.toHaveBeenCalled()
   expect(await host.restartResume.list()).toHaveLength(1)
   expect(await offersIn(root)).toHaveLength(1)
 })
@@ -168,7 +168,7 @@ it('still writes the message id the previous build requires on every marker', as
 
 /** Sends a message whose start fails, and waits for it to be rejected. */
 async function sendWhoseStartFails(state: Awaited<ReturnType<typeof offered>>) {
-  state.spawn.mockRejectedValueOnce(new Error('Not signed in'))
+  state.acquire.mockRejectedValueOnce(new Error('Not signed in'))
   const params = userSend('while signed out')
   await state.host.send(CALLER, params)
   await vi.waitFor(async () =>
@@ -218,7 +218,7 @@ it('keeps the offer withdrawn after the idle sweep closes the chat and it is rea
 it('keeps a failure not retryable after the user moved on and the sweep closed the chat', async () => {
   const state = await offered()
   const { host, clock } = state
-  state.spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  state.acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
   const resumed = await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(resumed.failed).toMatchObject([{ sessionId: SESSION, retryable: true }])
   await sendWhoseStartFails(state)
@@ -250,7 +250,7 @@ it('resumes more than a day after the quit', async () => {
 it('keeps a failed resume retryable more than a day later, after the ledger pruned its row', async () => {
   const state = await offered()
   const { host, clock, store } = state
-  state.spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  state.acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
   const first = await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(first.failed).toMatchObject([{ sessionId: SESSION, retryable: true }])
   clock.now += DAY_AND_AN_HOUR
@@ -273,12 +273,12 @@ it('keeps a failed resume retryable more than a day later, after the ledger prun
 it('keeps a resume retryable when its agent started but refused the continuation', async () => {
   const state = await offered()
   const { host, store } = state
-  const spawn = state.spawn.getMockImplementation()
-  if (!spawn) {
-    throw new Error('the harness spawn has no implementation')
+  const acquire = state.acquire.getMockImplementation()
+  if (!acquire) {
+    throw new Error('the harness acquire has no implementation')
   }
-  state.spawn.mockImplementationOnce(async (input) => ({
-    ...(await spawn(input)),
+  state.acquire.mockImplementationOnce(async (input) => ({
+    ...(await acquire(input)),
     acquisitionGeneration: 'generation-continuation'
   }))
   state.dispatch.mockResolvedValueOnce({
@@ -293,7 +293,7 @@ it('keeps a resume retryable when its agent started but refused the continuation
 
   const first = await host.restartResume.continueAfterRestart([SESSION], 'modal')
 
-  expect(state.spawn).toHaveBeenCalledOnce()
+  expect(state.acquire).toHaveBeenCalledOnce()
   expect(first.failed).toMatchObject([{ sessionId: SESSION, retryable: true }])
   expect(await host.restartResume.listFailures()).toMatchObject([
     { sessionId: SESSION, retryable: true }
@@ -342,11 +342,11 @@ it('keeps an unanswered continuation the agent was handed from being sent again'
 it("names the user's prompt on a failed retry, not the rejected continuation", async () => {
   const state = await offered('submission')
   const { host } = state
-  state.spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  state.acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
   const first = await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(first.failed).toMatchObject([{ latestPrompt: 'Perform the original task' }])
 
-  state.spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  state.acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
   const retried = await host.restartResume.continueAfterRestart([SESSION], 'retry')
 
   expect(retried.failed).toMatchObject([

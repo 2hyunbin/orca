@@ -62,7 +62,7 @@ describe('Claude structured processless acquisition', () => {
     })
 
     const error = await adapter
-      .spawn({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
+      .acquire({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
       .catch((cause: unknown) => cause)
 
     expect(error).toBeInstanceOf(AgentSessionPreSpawnError)

@@ -10,10 +10,7 @@ import type {
   StructuredAgentSessionProviderChildIdentity
 } from './structured-agent-session-host-types'
 import type { StructuredAgentSessionSinkBarrier } from './structured-agent-session-event-sink'
-import {
-  settleStructuredAgentSessionOptionsReported,
-  settleStructuredAgentSessionOptionsSkipped
-} from './structured-agent-session-provider-started'
+import { settleStructuredAgentSessionOptionsReported } from './structured-agent-session-provider-started'
 import {
   endExitedStructuredAgentSessionChildUnderSerialize,
   settleStructuredAgentSessionChildExit,
@@ -82,7 +79,7 @@ export class StructuredAgentSessionEventRecovery {
         acknowledgeRelease: (sessionId) => deps.adapter.acknowledgeSessionRelease?.(sessionId)
       },
       abortOpen: (sessionId) =>
-        runtimeState.providerWaits.abort(sessionId, 'provider exited while opening')
+        runtimeState.acquireAborts.abort(sessionId, 'provider exited while opening')
     }
   }
 
@@ -134,9 +131,6 @@ export class StructuredAgentSessionEventRecovery {
   async handle(event: StructuredAgentSessionLifecycleEvent): Promise<void> {
     if (event.type === 'options-reported') {
       return settleStructuredAgentSessionOptionsReported(this.context, event)
-    }
-    if (event.type === 'options-skipped') {
-      return settleStructuredAgentSessionOptionsSkipped(this.context, event)
     }
     await settleStructuredAgentSessionChildExit(this.exitContext, event)
   }

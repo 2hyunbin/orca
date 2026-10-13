@@ -15,7 +15,7 @@ async function startedClaude(sink: StructuredAgentSessionEventSink) {
   const claude = fakeClaude()
   const events: ClaudeStructuredSessionEvent[] = []
   const adapter = adapterFor(claude, {}, events)
-  await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
+  await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
   const ended = async () => {
     await vi.waitFor(() => expect(events.some((event) => event.type === 'ended')).toBe(true))
     return events.find((event) => event.type === 'ended')

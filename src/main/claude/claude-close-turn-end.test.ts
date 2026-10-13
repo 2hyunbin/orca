@@ -39,7 +39,7 @@ async function childInsideTurn() {
   const events: ClaudeStructuredSessionEvent[] = []
   const adapter = adapterFor(claude, {}, events)
   const { sink, turns } = turnSink()
-  await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
+  await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9', events: sink })
   const connection = claude.connections[0]!
   connection.handlers.onMessage?.({
     session_id: PROVIDER_SESSION_ID,
@@ -56,13 +56,12 @@ async function childInsideTurn() {
 describe('a Claude close settles the open turn with no verdict of its own', () => {
   // Whose end it was is the journal's Stop event to say (`turnEndAfterStop`), never the close's.
   it('ends it interrupted, with no outcome', async () => {
-    const { adapter, events, turns } = await childInsideTurn()
+    const { adapter, turns } = await childInsideTurn()
 
     await expect(adapter.closeSession('session-1')).resolves.toBe(true)
 
     expect(turns.at(-1)).toMatchObject({ state: 'interrupted' })
     expect(turns.at(-1)).not.toHaveProperty('outcome')
-    expect(events.find((event) => event.type === 'ended')).not.toHaveProperty('stopCause')
   })
 
   it('settles a crash it saw before the close once, as that exit', async () => {

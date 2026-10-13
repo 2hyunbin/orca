@@ -140,11 +140,8 @@ it('keeps a model picked during startup when the optional state read predates ap
   const wire = script.wire()
   expect(wire.indexOf('set_model')).toBeGreaterThan(-1)
   expect(wire.indexOf('set_model')).toBeLessThan(wire.indexOf('prompt:first message'))
-  const { runtimeState, sessions, serialize } = host.collaboratorsForTests()
+  const { sessions, serialize } = host.collaboratorsForTests()
   await vi.waitFor(() => expect(sessions.get(HOST_TEST_SESSION)?.child?.phase).toBe('ready'))
-  await vi.waitFor(() =>
-    expect(runtimeState.optionRevisions.current(HOST_TEST_SESSION)).toBeGreaterThan(1)
-  )
   await serialize(HOST_TEST_SESSION, async () => {})
   expect(peekOpenedAgentSessionRecordStore()?.getRecord(HOST_TEST_SESSION)?.options?.model).toBe(
     fields.value

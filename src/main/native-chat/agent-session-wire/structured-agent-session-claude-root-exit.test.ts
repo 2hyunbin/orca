@@ -63,7 +63,7 @@ describe('Claude root-exit stop', () => {
       now: NOW
     })
     const fence = reservation.record.lease.runtimeFence
-    const acquisition = await adapter.spawn({
+    const acquisition = await adapter.acquire({
       identity: { ...identityFor(), hostId: 'local', workspaceId: 'folder-1' },
       fence,
       spawnToken: 'spawn-1'

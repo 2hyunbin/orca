@@ -104,11 +104,9 @@ beforeEach(async () => {
     supportsLocation: (location) =>
       location.executionHostId === 'local' && location.wslDistro === null,
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi.fn(async (input) => {
+    acquire: vi.fn(async (input) => {
       acquisitions++
       const acquisitionGeneration = `acquisition-${acquisitions}`
       return {
@@ -214,7 +212,7 @@ describe('same-conversation clear', () => {
     expect(after.cursor.epoch).toBe(before.cursor.epoch)
     expect(after.items.slice(0, before.items.length)).toEqual(before.items)
     expect(await clearRows()).toHaveLength(1)
-    expect(adapter.spawn).toHaveBeenCalledTimes(1)
+    expect(adapter.acquire).toHaveBeenCalledTimes(1)
     expect(
       host.collaboratorsForTests().sessions.get(HOST_TEST_SESSION)?.lastEndedChild?.cause
     ).toBe('context-clear')
@@ -227,7 +225,7 @@ describe('same-conversation clear', () => {
     params.envelope.expectedRuntimeFence = done.fence
     expect(await host.send(caller, params)).toMatchObject({ ok: true })
     await vi.waitFor(() => expect(adapter.dispatch).toHaveBeenCalledTimes(1))
-    const last = vi.mocked(adapter.spawn).mock.calls.at(-1)![0]
+    const last = vi.mocked(adapter.acquire).mock.calls.at(-1)![0]
     expect(last.identity.providerHandle).toBeNull()
     const head = store.getRecord(HOST_TEST_SESSION)!.providerHandleChain.at(-1)!
     expect(head.handle.nativeId).not.toBe(previous)
@@ -249,7 +247,7 @@ describe('same-conversation clear', () => {
     expect(store.getRecord(HOST_TEST_SESSION)!.providerContextBoundary).not.toEqual(first)
     expect(await clearRows()).toHaveLength(2)
     expect(store.listRecords()).toHaveLength(1)
-    expect(adapter.spawn).toHaveBeenCalledTimes(1)
+    expect(adapter.acquire).toHaveBeenCalledTimes(1)
   })
 
   it('gives different callers distinct boundaries even when their operation IDs match', async () => {
@@ -307,7 +305,7 @@ describe('same-conversation clear', () => {
     await expect(host.conversationCommand(caller, commandParams('clear'))).rejects.toThrow()
     expect(store.getRecord(HOST_TEST_SESSION)!.providerContextBoundary).toBeUndefined()
     expect(await clearRows()).toHaveLength(0)
-    expect(adapter.spawn).toHaveBeenCalledTimes(1)
+    expect(adapter.acquire).toHaveBeenCalledTimes(1)
   })
 
   it('starts fresh after a restart between clear and first send', async () => {
@@ -316,7 +314,7 @@ describe('same-conversation clear', () => {
     await host.restoreReadableSessions(store.listVisibleSessionIds())
     expect(await host.send(caller, sendParams('after restart'))).toMatchObject({ ok: true })
     await vi.waitFor(() => expect(adapter.dispatch).toHaveBeenCalledTimes(1))
-    expect(vi.mocked(adapter.spawn).mock.calls.at(-1)![0].identity.providerHandle).toBeNull()
+    expect(vi.mocked(adapter.acquire).mock.calls.at(-1)![0].identity.providerHandle).toBeNull()
     expect(store.getRecord(HOST_TEST_SESSION)!.providerHandleChain).toHaveLength(1)
   })
 
@@ -324,7 +322,7 @@ describe('same-conversation clear', () => {
     clock += STRUCTURED_AGENT_SESSION_IDLE_MS + 1
     await host.collaboratorsForTests().lifetime.idleSweep.tick()
     await clearCommits()
-    expect(adapter.spawn).toHaveBeenCalledTimes(1)
+    expect(adapter.acquire).toHaveBeenCalledTimes(1)
   })
 
   it('refuses another clear while the first is in flight', async () => {

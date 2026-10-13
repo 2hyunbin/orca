@@ -53,7 +53,7 @@ beforeEach(() => {
     adapter: {
       ...adapter(),
       closeSession: async () => {
-        const events = state.spawn.mock.calls.at(-1)?.[0]?.events
+        const events = state.acquire.mock.calls.at(-1)?.[0]?.events
         if (!events) {
           throw new Error('missing provider event sink')
         }
@@ -82,7 +82,7 @@ beforeEach(() => {
 
 async function runningTurn(): Promise<void> {
   await attach()
-  const events = hostTestState().spawn.mock.calls[0]?.[0].events
+  const events = hostTestState().acquire.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('missing provider event sink')
   }

@@ -14,7 +14,7 @@ import {
 it.each(['send', 'compact'] as const)(
   'answers an accepted %s receipt during an unconfirmed rewind without starting an agent',
   async (command) => {
-    const { host, store, spawn, dispatch } = hostTestState()
+    const { host, store, acquire, dispatch } = hostTestState()
     const compact = vi.fn(async () => ({ state: 'admitted' as const }))
     host.deps.adapter.compact = compact
     const providerWrites = command === 'send' ? dispatch : compact
@@ -46,13 +46,13 @@ it.each(['send', 'compact'] as const)(
         retained: []
       }
     }))
-    spawn.mockRejectedValueOnce(new Error('restart failed'))
+    acquire.mockRejectedValueOnce(new Error('restart failed'))
 
     expect(await run({ callerKey: 'reconnecting-phone' })).toMatchObject({
       ok: true,
       replayed: true
     })
-    expect(spawn).toHaveBeenCalledTimes(1)
+    expect(acquire).toHaveBeenCalledTimes(1)
     expect(providerWrites).toHaveBeenCalledTimes(1)
   }
 )

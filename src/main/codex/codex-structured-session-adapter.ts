@@ -5,7 +5,7 @@ import { isCodexAppServerRequestError } from './codex-app-server-connection'
 import type {
   AgentSessionAcquisition,
   AgentSessionDispatchOutcome,
-  StructuredAgentSessionSpawnInput,
+  StructuredAgentSessionAcquireInput,
   StructuredAgentSessionAdapter,
   StructuredAgentSessionSetOptionInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
@@ -40,7 +40,7 @@ import {
   settleCodexSendsInEndedTurn
 } from './codex-structured-turn-end-settlement'
 import { createCodexStructuredNotificationRetry } from './codex-structured-notification-retry'
-import { spawnCodexStructuredSession } from './codex-structured-session-spawn'
+import { acquireCodexStructuredSession } from './codex-structured-session-acquire'
 import { codexStoppedRequestEndWait, settleCodexRequestEndWaiters } from './codex-request-end-wait'
 import { changeCodexThreadGoal } from './codex-structured-thread-goal'
 import { startCodexTerminalStopProbe } from './codex-background-terminals'
@@ -87,8 +87,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
 
   supportsLocation = supportsCodexStructuredLocation
 
-  spawn = (input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition> =>
-    spawnCodexStructuredSession({
+  acquire = (input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> =>
+    acquireCodexStructuredSession({
       input,
       deps: this.deps,
       sessions: this.sessions,
@@ -318,13 +318,11 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   prepareReadOptions = (input: { sessionId: string; fence: number }) =>
     prepareLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
 
-  closeSession: NonNullable<StructuredAgentSessionAdapter['closeSession']> = (sessionId, cause) =>
-    this.teardown.close(sessionId, { cause })
+  closeSession: NonNullable<StructuredAgentSessionAdapter['closeSession']> = (sessionId) =>
+    this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)
-  disposeSession: NonNullable<StructuredAgentSessionAdapter['disposeSession']> = (
-    sessionId,
-    cause
-  ) => this.teardown.close(sessionId, { cause })
+  disposeSession: NonNullable<StructuredAgentSessionAdapter['disposeSession']> = (sessionId) =>
+    this.teardown.close(sessionId)
   closeAll = (): Promise<void> => this.teardown.closeAll()
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.teardown.close(input.sessionId)

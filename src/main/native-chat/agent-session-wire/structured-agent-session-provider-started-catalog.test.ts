@@ -31,7 +31,7 @@ const providerStarted = vi.fn()
 const starts = structuredAgentSessionHeldStarts(() => host)
 
 function startHost(): void {
-  const spawn: StructuredAgentSessionAdapter['spawn'] = async ({ fence, spawnToken }) => ({
+  const acquire: StructuredAgentSessionAdapter['acquire'] = async ({ fence, spawnToken }) => ({
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -47,7 +47,7 @@ function startHost(): void {
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: starts.wrap({
-      spawn: starts.held(spawn),
+      acquire: starts.held(acquire),
       releaseAcquisition: vi.fn(async () => true),
       closeSession: vi.fn(async () => true),
       dispatch: vi.fn(async () => ({ state: 'admitted' as const })),
@@ -55,9 +55,7 @@ function startHost(): void {
       answerPrompt: vi.fn(async () => undefined),
       setOption: vi.fn(async () => undefined),
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       })
     }),
     modelCatalog: {

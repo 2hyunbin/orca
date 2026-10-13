@@ -19,7 +19,7 @@ describe('Pi RPC session ownership and delivery', () => {
     const h = await setup()
     await h.adapter.closeSession(sessionId)
     h.resolveLaunch.mockRejectedValueOnce(agentSessionLaunchFolderMissing('/gone/floating'))
-    await expect(h.adapter.spawn({ ...h.input, fence: 8 })).rejects.toMatchObject({
+    await expect(h.adapter.acquire({ ...h.input, fence: 8 })).rejects.toMatchObject({
       name: 'AgentSessionPreSpawnError',
       reason: 'launchFolderMissing'
     })
@@ -33,12 +33,12 @@ describe('Pi RPC session ownership and delivery', () => {
     const resolving = Promise.withResolvers<NonNullable<typeof launch>>()
     h.resolveLaunch.mockImplementationOnce(() => resolving.promise)
     const controller = new AbortController()
-    const started = h.adapter.spawn({ ...h.input, fence: 8, signal: controller.signal })
+    const started = h.adapter.acquire({ ...h.input, fence: 8, signal: controller.signal })
     await Promise.resolve()
     controller.abort(new Error('Pi closed while starting'))
     await expect(started).rejects.toThrow('closed while starting')
     expect(h.connections).toHaveLength(1)
-    await expect(h.adapter.spawn({ ...h.input, fence: 9 })).resolves.toMatchObject({
+    await expect(h.adapter.acquire({ ...h.input, fence: 9 })).resolves.toMatchObject({
       process: { pid: 4123 }
     })
     resolving.resolve(launch!)
@@ -60,7 +60,7 @@ describe('Pi RPC session ownership and delivery', () => {
       opened.resolve(connection)
       return connection
     })
-    const acquired = h.adapter.spawn({ ...h.input, fence: 8 })
+    const acquired = h.adapter.acquire({ ...h.input, fence: 8 })
     const child = await opened.promise
     await Promise.resolve()
     const owned = await acquired
@@ -81,7 +81,6 @@ describe('Pi RPC session ownership and delivery', () => {
     expect(h.lifecycle).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'ended',
-        startupUnproven: true,
         cause: 'requested-close'
       })
     )
@@ -130,7 +129,7 @@ describe('Pi RPC session ownership and delivery', () => {
     h.connection.deferExit = true
     await h.adapter.closeSession(sessionId)
     h.adapter.acknowledgeSessionRelease(sessionId)
-    await expect(h.adapter.spawn({ ...h.input, fence: 8 })).resolves.toMatchObject({
+    await expect(h.adapter.acquire({ ...h.input, fence: 8 })).resolves.toMatchObject({
       process: { pid: 4123 }
     })
     let drained = false
@@ -169,7 +168,6 @@ describe('Pi RPC session ownership and delivery', () => {
       origin: 'created',
       mintedAtFence: 7
     })
-    expect(h.started.restoreSkippedOptions).toEqual([])
     expect(h.connection.requests).not.toContain('set_thinking_level')
     expect(h.connection.requests).toContain('get_commands')
   })
@@ -569,7 +567,7 @@ describe('Pi RPC start without a model', () => {
       h.connections.push(connection)
       return connection
     })
-    const acquired = await h.adapter.spawn({ ...h.input, fence: 8 })
+    const acquired = await h.adapter.acquire({ ...h.input, fence: 8 })
     await expect(
       h.adapter.open({
         sessionId,

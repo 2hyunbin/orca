@@ -30,11 +30,11 @@ import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-
 const REQUESTED = 'Cancellation requested.'
 
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let cancelTurn: Mock<StructuredAgentSessionAdapter['cancelTurn']>
 
 beforeEach(() => {
-  ;({ host, spawn, cancelTurn } = hostTestState())
+  ;({ host, acquire, cancelTurn } = hostTestState())
 })
 
 function stopTurn(turnId = 'turn-1') {
@@ -43,7 +43,7 @@ function stopTurn(turnId = 'turn-1') {
 
 /** The provider's record of turn-1, as its translator writes it. */
 async function turn(state: AgentJournalTurnLifecycleState): Promise<void> {
-  const events = spawn.mock.calls.at(-1)?.[0].events
+  const events = acquire.mock.calls.at(-1)?.[0].events
   if (!events) {
     throw new Error('turn requires an acquired session')
   }

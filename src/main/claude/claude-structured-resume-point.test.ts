@@ -24,7 +24,7 @@ async function ownerMidSecondTurn(persisted: unknown[]) {
     [],
     persisted
   )
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-7',
@@ -83,7 +83,7 @@ describe('Claude resume point is the last completed turn on every exit path', ()
       [],
       persisted
     )
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-7',
@@ -127,7 +127,7 @@ describe('Claude resume point is the last completed turn on every exit path', ()
         throw new Error('record write failed')
       }
     )
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-7',

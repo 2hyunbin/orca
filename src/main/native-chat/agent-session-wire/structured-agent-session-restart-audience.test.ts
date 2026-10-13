@@ -35,7 +35,7 @@ it('neither lists nor dismisses an offer the caller cannot show', async () => {
 })
 
 it('neither continues nor reserves an offer the caller cannot show, named or not', async () => {
-  const { host, root, spawn, dispatch } = await interruptedRestart()
+  const { host, root, acquire, dispatch } = await interruptedRestart()
 
   for (const named of [undefined, [SESSION]]) {
     expect(await host.restartResume.continueAfterRestart(named, 'modal', cannotShowCodex)).toEqual({
@@ -46,7 +46,7 @@ it('neither continues nor reserves an offer the caller cannot show, named or not
       failed: []
     })
   }
-  expect(spawn).not.toHaveBeenCalled()
+  expect(acquire).not.toHaveBeenCalled()
   expect(dispatch).not.toHaveBeenCalled()
   expect(await offersIn(root)).toHaveLength(1)
 
@@ -55,9 +55,9 @@ it('neither continues nor reserves an offer the caller cannot show, named or not
 })
 
 it('keeps a failure the caller cannot show, and leaves it out of an action reply', async () => {
-  const { host, spawn } = await interruptedRestart()
+  const { host, acquire } = await interruptedRestart()
   await host.restartResume.list()
-  spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
   await host.restartResume.continueAfterRestart([SESSION], 'modal')
   expect(await host.restartResume.listFailures()).toHaveLength(1)
 

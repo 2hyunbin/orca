@@ -42,10 +42,10 @@ function chunk(promptId: string, text: string) {
   }
 }
 
-describe('ACP structured session adapter: spawn', () => {
+describe('ACP structured session adapter: acquire', () => {
   it('records the child before the handshake and starts a new session with client fs and terminals off', async () => {
     const rig = await openAcpAdapterRig()
-    const acquired = await rig.spawn()
+    const acquired = await rig.acquire()
     expect(rig.spawned).toEqual(['spawn', 'onSpawned', 'initialize'])
     expect(acquired.process).toMatchObject({ pid: PID, spawnToken: 'spawn-1', hostId: 'local' })
     expect(rig.started().link).toMatchObject({
@@ -84,7 +84,7 @@ describe('ACP structured session adapter: spawn', () => {
         })
       }
     })
-    await rig.spawn()
+    await rig.acquire()
     const launch = rig.child().launch
     expect(launch.envToDelete).toEqual(expect.arrayContaining([...STRUCTURED_CHILD_ENV_TO_DELETE]))
     expect(launch.envToDelete).toEqual(
@@ -109,7 +109,7 @@ describe('ACP structured session adapter: spawn', () => {
       script: (agent) =>
         agent.on('session/load', (frame) => agent.fail(frame, -32002, 'Session not found'))
     })
-    await rig.spawn({ fence: 2 })
+    await rig.acquire({ fence: 2 })
     expect(rig.started().link).toMatchObject({ origin: 'created', supersedesKey: 'old-key' })
   })
 
@@ -118,7 +118,7 @@ describe('ACP structured session adapter: spawn', () => {
       script: (agent) =>
         agent.on('session/new', (frame) => agent.fail(frame, -32000, 'Authentication required'))
     })
-    await rig.spawn()
+    await rig.acquire()
     expect(rig.openFailure()).toMatchObject({ reason: 'notSignedIn' })
     expect(rig.ended).toMatchObject([{ cause: 'requested-close' }])
     expect(rig.child().closes).toBe(1)
@@ -134,9 +134,9 @@ it('reports an agent that exits while starting with its own last words', async (
         child.exit()
       })
   })
-  await rig.spawn()
+  await rig.acquire()
   expect(rig.ended).toMatchObject([
-    { startupUnproven: true, failure: { detail: { text: 'grok: config.toml is invalid' } } }
+    { failure: { detail: { text: 'grok: config.toml is invalid' } } }
   ])
 })
 
@@ -151,16 +151,16 @@ it('reads those last words when the agent ends its stdout before its exit is see
         setTimeout(() => child.exit(), 5)
       })
   })
-  await rig.spawn()
+  await rig.acquire()
   expect(rig.ended).toMatchObject([
-    { startupUnproven: true, failure: { detail: { text: 'grok: config.toml is invalid' } } }
+    { failure: { detail: { text: 'grok: config.toml is invalid' } } }
   ])
 })
 
 describe('ACP structured session adapter: turns', () => {
   it('applies a sent message’s model and effort before its prompt', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await rig.adapter.dispatch({
       sessionId: SESSION,
       fence: 1,
@@ -182,7 +182,7 @@ describe('ACP structured session adapter: turns', () => {
 
   it('restores the opened model and effort when the next message omits both choices', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await rig.adapter.dispatch({
       sessionId: SESSION,
       fence: 1,
@@ -207,7 +207,7 @@ describe('ACP structured session adapter: turns', () => {
 
   it('keeps legacy sends on the current selection when execution options are absent', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await rig.adapter.dispatch({
       sessionId: SESSION,
       fence: 1,
@@ -227,7 +227,7 @@ describe('ACP structured session adapter: turns', () => {
 
   it('refuses an omitted effort whose new model default cannot be confirmed', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await rig.adapter.dispatch({
       sessionId: SESSION,
       fence: 1,
@@ -254,7 +254,7 @@ describe('ACP structured session adapter: turns', () => {
           agent.fail(frame, -32602, 'Model unavailable')
         )
     })
-    await rig.spawn()
+    await rig.acquire()
     await expect(
       rig.adapter.dispatch({
         sessionId: SESSION,
@@ -271,7 +271,7 @@ describe('ACP structured session adapter: turns', () => {
     const rig = await openAcpAdapterRig({
       deps: { spec: { ...GROK, dialect: GENERIC_ACP_DIALECT } }
     })
-    await rig.spawn()
+    await rig.acquire()
     await send(rig, 'send-1')
     const prompt = await rig.frame('session/prompt')
     expect(prompt.params).not.toHaveProperty('_meta')
@@ -279,7 +279,7 @@ describe('ACP structured session adapter: turns', () => {
 
   it('sends a prompt under an injected id and settles it on the agent first event', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     expect(await send(rig, 'send-1')).toEqual({ state: 'admitted' })
     const prompt = await rig.frame('session/prompt')
     expect(prompt.params).toMatchObject({
@@ -305,7 +305,7 @@ describe('ACP structured session adapter: turns', () => {
 
   it('stops a running turn: open permissions answer cancelled, session/cancel goes out', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await send(rig, 'send-1')
     const prompt = await rig.frame('session/prompt')
     const { agent } = rig.child()
@@ -329,7 +329,7 @@ describe('ACP structured session adapter: turns', () => {
 
   it('answers a Stop with no turn running as one the agent was not running', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await expect(rig.adapter.cancelTurn({ sessionId: SESSION, fence: 1 })).resolves.toEqual({
       cancelled: false,
       refusal: { turnNotRunning: true }
@@ -340,7 +340,7 @@ describe('ACP structured session adapter: turns', () => {
 describe('ACP structured session adapter: approvals', () => {
   it('commits the journal answer before replying with the option the person chose', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await send(rig, 'send-1')
     await rig.frame('session/prompt')
     const { agent } = rig.child()
@@ -392,7 +392,7 @@ describe('ACP structured session adapter: approvals', () => {
 
   it('answers cancelled a permission Grok asks during a turn it began itself, with no card', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     const { agent } = rig.child()
     agent.notify('session/update', chunk('task-completed-background-1', 'Build finished; now'))
     await rig.settle()
@@ -409,7 +409,7 @@ describe('ACP structured session adapter: approvals', () => {
 describe('ACP structured session adapter: requests a Stop cancels', () => {
   it("answers an open question with Grok's own cancelled reply once a Stop cancels it", async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await send(rig, 'send-1')
     const prompt = await rig.frame('session/prompt')
     const { agent } = rig.child()
@@ -431,7 +431,7 @@ describe('ACP structured session adapter: requests a Stop cancels', () => {
 
   it("shows Grok's plan in the plan row and answers its plan-mode exit at once, with no card", async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await send(rig, 'send-1')
     await rig.frame('session/prompt')
     const { agent } = rig.child()
@@ -455,7 +455,7 @@ describe('ACP structured session adapter: requests a Stop cancels', () => {
 
   it('sends a permission answer whose save was under way when the Stop landed', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await send(rig, 'send-1')
     const prompt = await rig.frame('session/prompt')
     const { agent } = rig.child()
@@ -494,7 +494,7 @@ describe('ACP structured session adapter: options and commands', () => {
       script: (agent) =>
         agent.on('session/set_config_option', (frame) => agent.reply(frame, { configOptions: [] }))
     })
-    await rig.spawn()
+    await rig.acquire()
     const options = await rig.adapter.readOptions({ sessionId: SESSION, fence: 1 })
     expect(options.current).toMatchObject({ model: 'grok-4.7', effort: 'high' })
     expect(options.models.map((model) => model.id)).toEqual(['grok-4.7', 'grok-4.6'])
@@ -511,7 +511,7 @@ describe('ACP structured session adapter: options and commands', () => {
 
   it('reports the agent own slash commands', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     expect(rig.adapter.readCommands(SESSION)).toBeUndefined()
     rig.child().agent.notify('session/update', {
       sessionId: PROVIDER_SESSION,
@@ -535,7 +535,7 @@ describe('ACP structured session adapter: options and commands', () => {
 describe('ACP structured session adapter: close and exit', () => {
   it('reports a close whose root exited but whose process tree was not proven gone', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     rig.child().processTreeUnproven = true
     await expect(rig.adapter.closeSession(SESSION)).rejects.toBeInstanceOf(
       AgentSessionAcquisitionRootExitObservedError
@@ -545,7 +545,7 @@ describe('ACP structured session adapter: close and exit', () => {
 
   it('closes with proof and reports a requested close', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await expect(rig.adapter.closeSession(SESSION)).resolves.toBe(true)
     expect(rig.ended).toMatchObject([
       { type: 'ended', sessionId: SESSION, cause: 'requested-close', fence: 1 }
@@ -556,7 +556,7 @@ describe('ACP structured session adapter: close and exit', () => {
 
   it('ends the session on an unexpected exit: held sends rejected, the running one unknown', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await send(rig, 'send-1')
     await rig.frame('session/prompt')
     await send(rig, 'send-2')

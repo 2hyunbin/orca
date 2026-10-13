@@ -6,12 +6,20 @@ export function startsWhenPublished<A extends StructuredAgentSessionAdapter>(
   adapter: A,
   _host: () => unknown
 ): A & StructuredAgentSessionAdapter {
-  const spawn: StructuredAgentSessionAdapter['spawn'] = async (input) => {
-    const acquired = await adapter.spawn(input)
+  const acquire: StructuredAgentSessionAdapter['acquire'] = async (input) => {
+    const acquired = await adapter.acquire(input)
     if (!acquired.acquisitionGeneration) {
       throw new Error('test provider did not publish its generation')
     }
     return acquired
   }
-  return { ...adapter, spawn }
+  return {
+    ...adapter,
+    acquire,
+    open:
+      adapter.open ??
+      (async () => ({
+        reportedOptions: { model: '' }
+      }))
+  }
 }

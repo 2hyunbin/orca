@@ -217,7 +217,7 @@ async function pipeline() {
     onChildWorkEvidence: (sessionId, evidence) => feed.publishChildWork(sessionId, evidence),
     onEvent: (event) => hooks.onEvent?.(event)
   })
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(SESSION),
     fence: FENCE,
     spawnToken: 'spawn-9',

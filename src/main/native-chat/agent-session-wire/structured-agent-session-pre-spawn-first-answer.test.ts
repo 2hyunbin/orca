@@ -79,11 +79,9 @@ async function firstAnswerAndReplay(thrown: AgentSessionPreSpawnError) {
   }
   const adapter: StructuredAgentSessionAdapter = {
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: async () => {
+    acquire: async () => {
       throw thrown
     },
     dispatch: unused,
@@ -105,7 +103,6 @@ async function firstAnswerAndReplay(thrown: AgentSessionPreSpawnError) {
       probe: { outcome: 'reservation-unused' as const }
     },
     callerKey: 'client-1',
-    optionRevision: () => 0,
     params: createParams(),
     now: () => NOW,
     onAttached: () => {}

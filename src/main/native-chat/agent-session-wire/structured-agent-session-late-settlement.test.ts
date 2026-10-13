@@ -105,11 +105,9 @@ beforeEach(async () => {
     adapter: startsWhenPublished(
       {
         open: async () => ({
-          reportedOptions: { model: '' },
-          restoreSkippedOptions: [],
-          optionRevision: -1
+          reportedOptions: { model: '' }
         }),
-        spawn: vi.fn(async ({ fence }) => ({
+        acquire: vi.fn(async ({ fence }) => ({
           acquisitionGeneration: globalThis.crypto.randomUUID(),
           process: {
             hostId: 'local',

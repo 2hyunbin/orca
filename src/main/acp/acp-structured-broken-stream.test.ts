@@ -101,7 +101,7 @@ describe('ACP agent that closes its stdout but keeps running', () => {
     onTestFinished(async () => {
       await rig.adapter.closeAll().catch(() => {})
     })
-    await rig.spawn()
+    await rig.acquire()
     await sendHello(rig, 'broken')
     const turns = async () =>
       (await rig.rig.rows()).flatMap((row) => readAgentJournalTurn(row.body) ?? [])
@@ -151,7 +151,7 @@ describe('ACP agent that exits while a process it started holds its stdout open'
         process.kill(held)
       }
     })
-    await rig.spawn()
+    await rig.acquire()
     await sendHello(rig, 'held')
     await vi.waitFor(() => expect(rig.ended).toHaveLength(1), { timeout: 10_000, interval: 20 })
     expect(rig.ended[0]).toMatchObject({ type: 'ended', cause: 'unexpected-exit' })

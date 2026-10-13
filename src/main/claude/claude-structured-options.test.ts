@@ -38,7 +38,6 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
     reportedOptions: {},
     reportedModelMutation: 0,
     confirmedOptions: new Set(),
-    restoreSkippedOptions: new Set(),
     launchedModel: null,
     fastModeAtStart: false,
     capabilities: [],
@@ -55,7 +54,6 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
       proof: createClaudeInitProof(),
       account: undefined,
       resumesTranscript: false,
-      optionRevision: () => 0,
       onLateRefusal: () => {}
     }
   }

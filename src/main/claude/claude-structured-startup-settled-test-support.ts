@@ -6,7 +6,7 @@ const opened = new WeakMap<
   Map<string, Promise<StructuredAgentSessionProviderOpenResult>>
 >()
 
-/** Direct adapter fixtures explicitly join the host-owned open after spawn. */
+/** Direct adapter fixtures explicitly join the host-owned open after acquire. */
 export function claudeOpened(
   adapter: ClaudeStructuredSessionAdapter,
   sessionId: string

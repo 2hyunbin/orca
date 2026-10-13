@@ -87,7 +87,7 @@ async function liveOwner(
         })
       })
   })
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(),
     fence: FENCE,
     spawnToken: 'spawn-7',

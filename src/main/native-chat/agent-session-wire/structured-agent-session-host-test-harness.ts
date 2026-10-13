@@ -67,7 +67,7 @@ let recoveryCapsule: TrackedTestRecoveryCapsule
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let log: ReturnType<typeof recordingProductionStructuredAgentSessionLogger>
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let releaseAcquisition: Mock<NonNullable<StructuredAgentSessionAdapter['releaseAcquisition']>>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let cancelTurn: Mock<StructuredAgentSessionAdapter['cancelTurn']>
@@ -86,11 +86,9 @@ function accepted(): AgentSessionDispatchOutcome {
 function adapter(): StructuredAgentSessionAdapter {
   return startsWhenPublished(
     {
-      spawn,
+      acquire,
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       }),
       releaseAcquisition,
       dispatch: async (input) => {
@@ -114,7 +112,7 @@ async function attach(): Promise<AgentSessionRecord | null> {
 /** Emits a pending approval through the acquired provider sink. */
 async function seedApproval(optionId = 'allow'): Promise<{ itemId: string; revision: number }> {
   const identity = { provider: 'codex' as const, threadId: THREAD, turnId: 'turn-1', ordinal: 99 }
-  const events = spawn.mock.calls.at(-1)?.[0].events
+  const events = acquire.mock.calls.at(-1)?.[0].events
   if (!events) {
     throw new Error('seedApproval requires an acquired session')
   }
@@ -143,7 +141,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-wire-host-'))
   resetHostTestOperationIds()
   ordinal = 0
-  spawn = vi.fn(async ({ fence }) => ({
+  acquire = vi.fn(async ({ fence }) => ({
     acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: {
       hostId: 'local',
@@ -219,7 +217,7 @@ export function hostTestState() {
     host,
     /** Every entry the beforeEach host logged; a host a test builds itself logs elsewhere. */
     log,
-    spawn,
+    acquire,
     releaseAcquisition,
     dispatch,
     cancelTurn,

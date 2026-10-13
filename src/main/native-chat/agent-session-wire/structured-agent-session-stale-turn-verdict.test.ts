@@ -304,7 +304,7 @@ const PROVEN: AgentSessionDeathEvidence = {
   lastProvenAliveAt: 100
 }
 
-describe('stale session state on a cold spawn', () => {
+describe('stale session state on a cold acquire', () => {
   function journalWith(items: AgentJournalRenderItem[]) {
     const appendLifecycleBatch = vi.fn(async () => ({ epoch: 'epoch-1', sequence: 9 }))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the settle reads only these journal members.

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ call: vi.fn() }))
@@ -11,11 +11,44 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
 
 import { resetStructuredAgentSessionSendsForTests } from './structured-agent-session-message-sender'
 import { useStructuredAgentSessionSends } from './use-structured-agent-session-sends'
+import {
+  createStructuredAgentSessionOptionState,
+  structuredAgentSessionOptionSnapshot
+} from '../../../../shared/structured-agent-session-options'
+import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured-agent-session-seed-catalog'
 
 const QUEUEING = { capability: 'supported', enabled: true } as const
 
 afterEach(() => {
   resetStructuredAgentSessionSendsForTests()
+  mocks.call.mockReset()
+})
+
+it('omits choices when Send precedes the picker’s model answer', async () => {
+  mocks.call.mockImplementation(() => new Promise(() => {}))
+  const snapshot = structuredAgentSessionOptionSnapshot(
+    createStructuredAgentSessionOptionState('codex', structuredAgentSessionSeedCatalog('codex'))
+  )
+  const { result } = renderHook(() =>
+    useStructuredAgentSessionSends({
+      sessionId: 'session-1',
+      target: { kind: 'local' },
+      fence: 1,
+      submissions: [],
+      queuedMessageIds: [],
+      queue: QUEUEING,
+      historyLoaded: false,
+      executionOptionSnapshot: snapshot
+    })
+  )
+  act(() => {
+    result.current.send('before picker answer')
+  })
+  await waitFor(() =>
+    expect(mocks.call.mock.calls.some(([, method]) => method === 'agentSession.send')).toBe(true)
+  )
+  const call = mocks.call.mock.calls.find(([, method]) => method === 'agentSession.send')
+  expect(call?.[2]).not.toHaveProperty('executionOptions')
 })
 
 // The composer moves the reader only for a message the transcript draws as a bubble.

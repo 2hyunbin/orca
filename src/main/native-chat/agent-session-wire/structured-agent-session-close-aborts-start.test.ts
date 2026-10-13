@@ -39,8 +39,8 @@ function openHost(state: ReturnType<typeof hostTestState>): StructuredAgentSessi
 it('a close stops a start the provider never answers instead of queueing behind it', async () => {
   const state = hostTestState()
   let signal: AbortSignal | undefined
-  // A start the provider never answers ends only when its spawn is aborted.
-  state.spawn.mockImplementation(
+  // A start the provider never answers ends only when its acquire is aborted.
+  state.acquire.mockImplementation(
     (input) =>
       new Promise((_resolve, reject) => {
         signal = input.signal
@@ -49,7 +49,7 @@ it('a close stops a start the provider never answers instead of queueing behind 
   )
   const host = openHost(state)
   const attaching = host.attach(CALLER, attachParams())
-  await vi.waitFor(() => expect(state.spawn).toHaveBeenCalled())
+  await vi.waitFor(() => expect(state.acquire).toHaveBeenCalled())
   await host.close(SESSION, 'user-close')
   expect(signal?.aborted).toBe(true)
   expect((await attaching).ok).toBe(false)
@@ -70,5 +70,5 @@ it('a close while the attach still probes the previous owner asks no adapter to 
     name: 'AgentSessionPreSpawnError'
   })
   await closing
-  expect(state.spawn).not.toHaveBeenCalled()
+  expect(state.acquire).not.toHaveBeenCalled()
 })

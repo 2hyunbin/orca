@@ -72,11 +72,9 @@ beforeEach(async () => {
     adapter: startsWhenPublished(
       {
         open: async () => ({
-          reportedOptions: { model: '' },
-          restoreSkippedOptions: [],
-          optionRevision: -1
+          reportedOptions: { model: '' }
         }),
-        spawn: async (input) => {
+        acquire: async (input) => {
           events = input.events
           return {
             process: {

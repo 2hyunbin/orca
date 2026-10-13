@@ -56,11 +56,9 @@ function providerAdapter(): StructuredAgentSessionAdapter {
     supportsLocation: (location) =>
       location.executionHostId === 'local' && location.wslDistro === null,
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi.fn(async (input) => {
+    acquire: vi.fn(async (input) => {
       if (acquireFails) {
         throw new Error('provider failed to start')
       }

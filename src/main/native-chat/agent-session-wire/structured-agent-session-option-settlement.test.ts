@@ -31,7 +31,7 @@ let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let router: StructuredAgentSessionAdapter
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let closeNativeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
 let activeModel: string
 let activeEffort: string | null
@@ -54,22 +54,22 @@ function envelope(method: string, fields: Record<string, unknown>): AgentSession
 }
 
 function adapter(): StructuredAgentSessionAdapter {
-  spawn = vi.fn(async ({ fence, spawnToken, options }) => {
+  acquire = vi.fn(async ({ fence, spawnToken, options }) => {
     activeModel = options?.model ?? DEFAULT_MODEL
     activeEffort = options?.effort ?? null
-    const acquisitionGeneration = `generation-${spawn.mock.calls.length}`
+    const acquisitionGeneration = `generation-${acquire.mock.calls.length}`
     return {
       acquisitionGeneration,
       process: {
         hostId: 'local',
-        pid: 4200 + spawn.mock.calls.length,
+        pid: 4200 + acquire.mock.calls.length,
         processStartTimeMs: NOW,
         spawnToken
       },
       link: {
         linkId: `native-link-${fence}`,
         handle: codexProviderHandle(THREAD),
-        origin: spawn.mock.calls.length === 1 ? 'created' : 'resumed',
+        origin: acquire.mock.calls.length === 1 ? 'created' : 'resumed',
         mintedAtFence: fence,
         observedAt: NOW
       }
@@ -82,11 +82,9 @@ function adapter(): StructuredAgentSessionAdapter {
   return {
     supportsLocation: () => true,
     open: async () => ({
-      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) },
-      restoreSkippedOptions: [],
-      optionRevision: 0
+      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) }
     }),
-    spawn,
+    acquire,
     dispatch: vi.fn<StructuredAgentSessionAdapter['dispatch']>(async () => {
       dispatchedModels.push(activeModel)
       return {
@@ -177,6 +175,7 @@ describe('structured session options and close', () => {
         sessions: [expect.objectContaining({ status: 'idle', optionSelection: {} })]
       }
     ])
+    expect(events[0]).not.toHaveProperty('sessions.0.model')
     expect(store.getRecord(SESSION)?.options).toBeUndefined()
   })
 
@@ -187,7 +186,7 @@ describe('structured session options and close', () => {
 
     await host.close(SESSION, 'evict')
 
-    expect(closeNativeSession).toHaveBeenCalledWith(SESSION, 'evict')
+    expect(closeNativeSession).toHaveBeenCalledWith(SESSION)
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       claimStatus: 'released',
       ownerProcess: null,

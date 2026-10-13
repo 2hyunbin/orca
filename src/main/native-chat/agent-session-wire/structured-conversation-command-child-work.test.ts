@@ -48,7 +48,7 @@ function devServer(overrides: Partial<AgentChildWorkView> = {}): AgentChildWorkV
 /** The provider ends the command's turn, as the child's journal translator does. */
 function finish(): void {
   const { command } = compact.mock.calls.at(-1)![0]
-  const events = state.spawn.mock.calls.at(-1)![0].events!
+  const events = state.acquire.mock.calls.at(-1)![0].events!
   events.appendLifecycleBatch!(
     `turn-completed:${command.clientMessageId}`,
     [
@@ -141,9 +141,9 @@ describe('conversation command admission reads the strip’s child records', () 
   })
 
   it('refuses a queued command at handover once the strip lists live work', async () => {
-    const acquireChild = state.spawn.getMockImplementation()!
+    const acquireChild = state.acquire.getMockImplementation()!
     // Each child names its generation, so the exit below ends exactly the one it names.
-    state.spawn.mockImplementation(async (input) => ({
+    state.acquire.mockImplementation(async (input) => ({
       ...(await acquireChild(input)),
       acquisitionGeneration: `generation-${input.fence}`
     }))
@@ -160,8 +160,8 @@ describe('conversation command admission reads the strip’s child records', () 
     })
     await vi.waitFor(() => expect(state.host['sessions'].get(HOST_TEST_SESSION)?.child).toBeNull())
     // The records gain live work while that start runs, after the command was accepted.
-    const start = state.spawn.getMockImplementation()!
-    state.spawn.mockImplementationOnce(async (input) => {
+    const start = state.acquire.getMockImplementation()!
+    state.acquire.mockImplementationOnce(async (input) => {
       records = [devServer()]
       return start(input)
     })
@@ -174,7 +174,7 @@ describe('conversation command admission reads the strip’s child records', () 
       )
       expect(submission?.dispatchState).toBe('rejected')
     })
-    expect(state.spawn).toHaveBeenCalledTimes(2)
+    expect(state.acquire).toHaveBeenCalledTimes(2)
     expect(compact).not.toHaveBeenCalled()
   })
 })

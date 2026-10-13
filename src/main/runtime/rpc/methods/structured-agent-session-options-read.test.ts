@@ -3,13 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
-import type { AgentSessionModelCatalogResult } from '../../../../shared/agent-session-wire'
 import { agentSessionRecordFixture } from '../../../../shared/agent-session-record.test-fixture'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import {
-  PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY,
-  STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
-} from '../../../../shared/protocol-version'
 import {
   call,
   clearStructuredHostStub,
@@ -163,56 +158,5 @@ describe('agentSession.modelCatalog before anything built the host', () => {
     )
     expect(installHost).not.toHaveBeenCalled()
     expect(reply).toMatchObject({ ok: false })
-  })
-})
-
-const PI_CLIENT = {
-  ...STRUCTURED_CLIENT,
-  clientCapabilities: [
-    ...STRUCTURED_CLIENT.clientCapabilities,
-    STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,
-    PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY
-  ]
-}
-
-describe('agentSession.modelCatalog with a running Pi chat', () => {
-  const read = vi.fn(async (): Promise<AgentSessionModelCatalogResult> => ({ origin: 'unknown' }))
-  const record: AgentSessionRecord = { ...agentSessionRecordFixture(), provider: 'pi' }
-  const readFor = (agent: string) =>
-    call('agentSession.modelCatalog', { agent, sessionId: record.sessionId }, PI_CLIENT)
-
-  beforeEach(() => {
-    read.mockReset()
-    read.mockResolvedValue({ origin: 'unknown' })
-    setStructuredAgentSessionHost(
-      Object.assign(hostStub(), {
-        deps: {
-          modelCatalog: { read },
-          store: { getRecord: () => record }
-        }
-      })
-    )
-  })
-
-  it('uses the catalog sign-in result without a retained child failure', async () => {
-    read.mockResolvedValue({ origin: 'unknown', unavailable: { reason: 'notSignedIn' } })
-    expect(await readFor('pi')).toMatchObject({
-      ok: true,
-      result: { origin: 'unknown', unavailable: { reason: 'notSignedIn' } }
-    })
-  })
-
-  it('keeps the reason the catalog itself found', async () => {
-    read.mockResolvedValue({ origin: 'unknown', unavailable: { reason: 'cliMissing' } })
-    expect(await readFor('pi')).toMatchObject({
-      ok: true,
-      result: { unavailable: { reason: 'cliMissing' } }
-    })
-  })
-
-  it('returns unknown when the catalog has no availability evidence', async () => {
-    const reply = await readFor('pi')
-    expect(reply).toMatchObject({ ok: true, result: { origin: 'unknown' } })
-    expect(reply).not.toMatchObject({ result: { unavailable: expect.anything() } })
   })
 })

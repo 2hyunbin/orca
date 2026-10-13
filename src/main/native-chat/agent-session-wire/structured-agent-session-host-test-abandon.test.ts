@@ -39,11 +39,9 @@ describe('abandoning a structured agent-session host', () => {
     })
     const adapter: StructuredAgentSessionAdapter = {
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       }),
-      spawn: async ({ fence }) => {
+      acquire: async ({ fence }) => {
         if (gate) {
           reportEntered()
           await gate

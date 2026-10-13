@@ -67,11 +67,9 @@ async function createHarness(options: { attached?: boolean } = {}) {
   const adapter: StructuredAgentSessionAdapter = startsWhenPublished(
     {
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       }),
-      spawn: async ({ fence }) => ({
+      acquire: async ({ fence }) => ({
         acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
           hostId: 'local',

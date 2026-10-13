@@ -13,7 +13,6 @@
 // settles it first (`journal-unsent-send-hold.ts`).
 
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
-import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
@@ -43,7 +42,7 @@ import type { StructuredAgentSessionStartReadiness } from './structured-agent-se
 import { holdRestartedStructuredAgentSessionSends } from './structured-agent-session-host-lifetime'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import { waitsForCodexTurnOptions } from './structured-agent-session-message-options'
-import type { StructuredAgentSessionProviderWaits } from './structured-agent-session-provider-waits'
+import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
@@ -77,7 +76,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   /** A person's Stop is still ending the session's work: the status feed's own reading. */
   stopping: (sessionId: string) => boolean
   now: () => number
-  providerWaits: Pick<StructuredAgentSessionProviderWaits, 'begin'>
+  acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
 }
 
 type RefusedStart = Extract<StructuredAgentSessionResumeOutcome, { ok: false }>
@@ -150,9 +149,8 @@ export class StructuredAgentSessionDeliveryLoop {
           )
           return
         }
-        if (prepared.readiness) {
-          await prepared.readiness.wait()
-        }
+        await prepared.readiness?.wait()
+        await prepared.readiness?.waitForOperations?.()
         const handed = await this.deps.serialize(sessionId, () =>
           this.handOver(sessionId, prepared.awaited, prepared.readiness !== null)
         )
@@ -282,11 +280,8 @@ export class StructuredAgentSessionDeliveryLoop {
         return 'continue'
       }
     }
-    const nextBody = session.journal.itemBody(agentJournalSubmissionKey(next.clientMessageId))
     if (
       this.deps.record(sessionId)?.provider === 'codex' &&
-      nextBody?.kind === 'message' &&
-      !nextBody.command &&
       waitsForCodexTurnOptions(session.journal, next)
     ) {
       return this.stop(sessionId)
@@ -302,7 +297,7 @@ export class StructuredAgentSessionDeliveryLoop {
         record: () => this.deps.record(sessionId),
         childWork: () => this.deps.readChildWork(sessionId),
         now: this.deps.now,
-        providerWaits: this.deps.providerWaits
+        acquireAborts: this.deps.acquireAborts
       },
       next
     )

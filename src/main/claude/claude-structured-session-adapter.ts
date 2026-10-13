@@ -2,13 +2,13 @@ import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session
 import { dispatchClaudeCommand } from './claude-structured-command-dispatch'
 import type {
   AgentSessionAcquisition,
-  StructuredAgentSessionSpawnInput,
+  StructuredAgentSessionAcquireInput,
   StructuredAgentSessionAdapter
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { stopCurrentClaudeBackgroundTasks } from './claude-structured-control-actions'
 import { claudeHoldsDispatch } from './claude-command-lifecycle'
 import { releaseClaudeAcquisition } from './claude-structured-acquisition-release'
-import { spawnClaudeSession } from './claude-structured-session-acquisition'
+import { acquireClaudeSession } from './claude-structured-session-acquisition'
 import { supportsClaudeStructuredLocation } from './claude-structured-location-support'
 import { setClaudeStructuredSessionOption } from './claude-structured-options'
 import { dispatchClaudeMessage } from './claude-structured-message-options'
@@ -78,9 +78,9 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
 
   supportsLocation = supportsClaudeStructuredLocation
 
-  spawn = (input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition> => {
+  acquire = (input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> => {
     this.settledExitErrors.delete(input.identity.sessionId)
-    return spawnClaudeSession({
+    return acquireClaudeSession({
       input,
       deps: this.deps,
       sessions: this.sessions,
@@ -240,6 +240,7 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
     })
   readOptions = (input: { sessionId: string; fence: number }) =>
     readClaudeStructuredSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
+
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.afterClose(input.sessionId, () => this.releaseProviderSession(input.sessionId))
 

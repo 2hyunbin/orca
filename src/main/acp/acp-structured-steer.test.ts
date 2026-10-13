@@ -61,7 +61,7 @@ function answersCancels(agent: AcpScriptedAgent): void {
 describe('a send while a Grok prompt runs', () => {
   it('cancels the running prompt, then sends as the next one', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await sendHello(rig, 'first')
     const first = await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:first', 'working'))
@@ -84,7 +84,7 @@ describe('a send while a Grok prompt runs', () => {
 
   it('runs the last of two quick steers; the one between is sent and cancelled', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await sendHello(rig, 'first')
     await rig.frame('session/prompt')
     await rig.settle()
@@ -108,7 +108,7 @@ describe('a send while a Grok prompt runs', () => {
 
   it('asks again on the next steer when the first cancel was never written', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await sendHello(rig, 'first')
     await rig.frame('session/prompt')
     await rig.settle()
@@ -134,7 +134,7 @@ describe('a send while a Grok prompt runs', () => {
 
   it('withdraws a steer a Stop reaches before its cancel lands', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await sendHello(rig, 'first')
     const first = await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:first', 'working'))
@@ -157,7 +157,7 @@ describe('a send while a Grok prompt runs', () => {
 
   it('waits as long as Grok takes to answer a steer cancel, and a Stop then still ends it', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     await sendHello(rig, 'first')
     await rig.frame('session/prompt')
     rig.child().agent.notify('session/update', replyChunk('prompt:first', 'working'))
@@ -183,7 +183,7 @@ describe('a send while a Grok prompt runs', () => {
 describe('a send while a turn Grok began itself runs', () => {
   it('goes to Grok at once, with no cancel of that turn', async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     const { agent } = rig.child()
     agent.notify('session/update', replyChunk(GROK_TURN, 'Build finished; now'))
     await rig.settle()
@@ -206,7 +206,7 @@ describe('a send while a turn Grok began itself runs', () => {
 
   it("cuts Grok's turn on a second send and runs both messages, never ending Grok", async () => {
     const rig = await openAcpAdapterRig()
-    await rig.spawn()
+    await rig.acquire()
     const { agent } = rig.child()
     agent.notify('session/update', replyChunk(GROK_TURN, 'Build finished; now'))
     await rig.settle()

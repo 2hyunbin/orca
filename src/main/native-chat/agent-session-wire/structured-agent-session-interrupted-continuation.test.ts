@@ -146,18 +146,18 @@ it('continues when the restart offer cannot be read', async () => {
 })
 
 it('answers once Orca accepted it, while the agent is still starting', async () => {
-  const { host, spawn, dispatch } = await interruptedRestart()
+  const { host, acquire, dispatch } = await interruptedRestart()
   const turnItemId = await cutTurn(host)
-  const start = spawn.getMockImplementation()
+  const start = acquire.getMockImplementation()
   if (!start) {
-    throw new Error('the harness spawn has no implementation')
+    throw new Error('the harness acquire has no implementation')
   }
   let finishStarting!: () => void
   const starting = new Promise<void>((resolve) => {
     finishStarting = resolve
   })
   // An agent start slower than a paired client's wait for the answer.
-  spawn.mockImplementationOnce(async (input) => {
+  acquire.mockImplementationOnce(async (input) => {
     await starting
     return start(input)
   })
@@ -171,9 +171,9 @@ it('answers once Orca accepted it, while the agent is still starting', async () 
 })
 
 it('says in the chat when the agent cannot start after the click was answered', async () => {
-  const { host, spawn } = await interruptedRestart()
+  const { host, acquire } = await interruptedRestart()
   const turnItemId = await cutTurn(host)
-  spawn.mockRejectedValueOnce(new Error('the agent could not start'))
+  acquire.mockRejectedValueOnce(new Error('the agent could not start'))
 
   const answer = await host.restartResume.continueInterrupted(SESSION, turnItemId)
 

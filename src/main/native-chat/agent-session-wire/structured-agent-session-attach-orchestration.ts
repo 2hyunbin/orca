@@ -52,7 +52,7 @@ export type StructuredAgentSessionAttachOptions = {
   startupOptions?: Readonly<Record<string, string>>
   /** A close, an admitted Stop or quit aborted this attach: its refusal is that abort's. */
   onAborted?: () => void
-  /** The startup limit aborted this attach's spawn: it failed, nobody stopped it. */
+  /** The startup limit aborted this attach's acquire: it failed, nobody stopped it. */
   onStartupExpired?: () => void
 }
 
@@ -112,14 +112,14 @@ async function runAttach(
   options: StructuredAgentSessionAttachOptions
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   // Begun first, so a close or Stop during any phase below still stops the start.
-  const startup = context.runtimeState.providerWaits.begin(params.envelope.sessionId)
+  const acquire = context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
   try {
-    return await runAttachUnderAbort(context, callerKey, params, options, startup.signal)
+    return await runAttachUnderAbort(context, callerKey, params, options, acquire.signal)
   } finally {
-    startup.end()
-    if (isStructuredAgentSessionStartupExpired(startup.signal.reason)) {
+    acquire.end()
+    if (isStructuredAgentSessionStartupExpired(acquire.signal.reason)) {
       options.onStartupExpired?.()
-    } else if (startup.signal.aborted) {
+    } else if (acquire.signal.aborted) {
       options.onAborted?.()
     }
   }
@@ -130,7 +130,7 @@ async function runAttachUnderAbort(
   callerKey: string,
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionAttachOptions,
-  startupSignal: AbortSignal
+  acquireSignal: AbortSignal
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   const sessionId = params.envelope.sessionId
   const recordPhase = options.recordPhase
@@ -180,7 +180,7 @@ async function runAttachUnderAbort(
       logger: context.deps.logger,
       eventSink: attemptSink.sink,
       // The superseded child's writes settle into its own journal before a new child starts.
-      beforeSpawn: async () => {
+      onAcquiring: async () => {
         const barrier = await context.runtimeState.currentEventSink(sessionId)?.drained()
         if (barrier && !barrier.ok) {
           throw barrier.error
@@ -199,12 +199,11 @@ async function runAttachUnderAbort(
       params,
       now: () => context.now(),
       recordPhase,
-      startupSignal,
+      acquireSignal,
       onStartupAttempt: (startup) => {
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
       },
-      optionRevision: () => context.runtimeState.optionRevisions.current(sessionId),
       ...(options.startupOptions ? { startupOptions: options.startupOptions } : {}),
       launchPermissionMode: async (record) =>
         (await structuredAgentSessionLaunchPermission(context.deps, record)) ?? undefined,

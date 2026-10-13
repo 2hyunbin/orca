@@ -39,7 +39,7 @@ afterEach(async () => {
 })
 
 function providerEvents() {
-  const events = hostTestState().spawn.mock.calls.at(-1)?.[0].events
+  const events = hostTestState().acquire.mock.calls.at(-1)?.[0].events
   if (!events) {
     throw new Error('no acquired provider')
   }
@@ -181,11 +181,11 @@ it('ends a turn whose provider output would not read back as failed, and the nex
   const closeSession = vi.fn(async () => true)
   Object.assign(hostTestState().host.deps.adapter, { closeSession })
   // A provider that names its generation, as the real adapters do, so its stop settles the turn.
-  const { spawn } = hostTestState()
-  const acquired = spawn.getMockImplementation()!
-  spawn.mockImplementation(async (input) => ({
+  const { acquire } = hostTestState()
+  const acquired = acquire.getMockImplementation()!
+  acquire.mockImplementation(async (input) => ({
     ...(await acquired(input)),
-    acquisitionGeneration: `generation-${spawn.mock.calls.length}`
+    acquisitionGeneration: `generation-${acquire.mock.calls.length}`
   }))
   await attach()
   emit(1, {
@@ -214,7 +214,7 @@ it('ends a turn whose provider output would not read back as failed, and the nex
     ])
   )
   expect(await send(host, 'the next message')).toMatchObject({ ok: true })
-  await vi.waitFor(() => expect(hostTestState().spawn).toHaveBeenCalledTimes(2))
+  await vi.waitFor(() => expect(hostTestState().acquire).toHaveBeenCalledTimes(2))
 
   const reopened = await relaunch()
   expect(await historyBodies(reopened)).toContainEqual(

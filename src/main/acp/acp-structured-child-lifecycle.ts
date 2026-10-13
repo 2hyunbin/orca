@@ -101,8 +101,7 @@ export class AcpStructuredChildren {
           {
             detail: providerDiagnostic(session.connection.stderrTail(), 'person')
           }
-        ),
-        ...(!session.closeRequested ? { startupUnproven: true } : {})
+        )
       })
     }
     if (this.sessions.get(session.sessionId) === session) {

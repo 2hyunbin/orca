@@ -57,7 +57,7 @@ beforeEach(() => {
  *  one result row and its turn's end, in one batch. */
 function finish(result: StructuredConversationCommandOutcome): void {
   const { command } = compact.mock.calls.at(-1)![0]
-  const events = state.spawn.mock.calls.at(-1)![0].events!
+  const events = state.acquire.mock.calls.at(-1)![0].events!
   const turnScope = { kind: 'turn' as const, turnItemId: agentJournalItemKey(command.identity) }
   const row: AgentJournalItemBody | null =
     result.outcome === 'success'
@@ -370,7 +370,7 @@ it('refuses the command for an agent that does not declare compaction, whatever 
 
 it('refuses the command at handover when the provider opened a turn meanwhile (B3)', async () => {
   await attach()
-  const events = state.spawn.mock.calls.at(-1)?.[0].events
+  const events = state.acquire.mock.calls.at(-1)?.[0].events
   const params = compactParams()
   // Held, the command is accepted, then the provider starts a turn of its own, both ahead of the
   // handover the acceptance asks for.
@@ -415,7 +415,7 @@ it('refuses the command at handover when the provider opened a turn meanwhile (B
 it('leaves a command whose start failed not sent, beside one start-failure row (B3)', async () => {
   await attach()
   await state.host.close(SESSION, 'evict')
-  state.spawn.mockRejectedValue(new Error('not signed in'))
+  state.acquire.mockRejectedValue(new Error('not signed in'))
   const params = compactParams()
 
   // The next step is the command again, not a message.
@@ -524,7 +524,7 @@ it('ends the command by stopping the child when the provider cannot take the Sto
   // The next message starts a child of its own.
   await state.host.send(CALLER, sendParams('after the stop'))
   await vi.waitFor(() => expect(state.dispatch).toHaveBeenCalledOnce(), { interval: 1 })
-  expect(state.spawn).toHaveBeenCalledTimes(2)
+  expect(state.acquire).toHaveBeenCalledTimes(2)
 })
 
 it('does not stop the child for a Stop naming a command that already ended (B4)', async () => {
@@ -626,7 +626,7 @@ it('settles a command whose adapter call threw after the start as unknown (B4)',
 })
 
 it('writes one exit row when the child dies mid-command, and the loop writes nothing but moves on (B4)', async () => {
-  state.spawn.mockImplementation(async ({ fence, spawnToken }) => ({
+  state.acquire.mockImplementation(async ({ fence, spawnToken }) => ({
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     acquisitionGeneration: `generation-${fence}`,
     link: {
@@ -663,7 +663,7 @@ it('writes one exit row when the child dies mid-command, and the loop writes not
   )
   // Released from the command, the loop starts a child and delivers what waited behind it.
   await vi.waitFor(() => expect(state.dispatch).toHaveBeenCalledOnce(), { interval: 1 })
-  expect(state.spawn).toHaveBeenCalledTimes(2)
+  expect(state.acquire).toHaveBeenCalledTimes(2)
   const snapshot = await journal()
   expect(
     snapshot.items.filter((item) => item.body.kind === 'status' && item.body.tone === 'error')
@@ -676,7 +676,7 @@ it('writes one exit row when the child dies mid-command, and the loop writes not
 })
 
 it('delivers the next message after a command whose child died and whose settlement could not be written', async () => {
-  state.spawn.mockImplementation(async ({ fence, spawnToken }) => ({
+  state.acquire.mockImplementation(async ({ fence, spawnToken }) => ({
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     acquisitionGeneration: `generation-${fence}`,
     link: {
@@ -719,7 +719,7 @@ it('delivers the next message after a command whose child died and whose settlem
     ok: true
   })
   await vi.waitFor(() => expect(state.dispatch).toHaveBeenCalledOnce(), { interval: 1 })
-  expect(state.spawn).toHaveBeenCalledTimes(2)
+  expect(state.acquire).toHaveBeenCalledTimes(2)
   expect(readAgentJournalTurn((await commandTurn(cmid))?.body)?.state).not.toBe('running')
 })
 
@@ -776,7 +776,7 @@ it('never lets a provider echo alias the command entry', async () => {
   await state.host.conversationCommand(CALLER, params)
   await vi.waitFor(() => expect(compact).toHaveBeenCalledOnce(), { interval: 1 })
   finish({ outcome: 'success' })
-  const events = state.spawn.mock.calls.at(-1)?.[0].events
+  const events = state.acquire.mock.calls.at(-1)?.[0].events
   const echo = { provider: 'codex' as const, threadId: THREAD, turnId: 'later', ordinal: 0 }
   events?.appendItem(
     echo,

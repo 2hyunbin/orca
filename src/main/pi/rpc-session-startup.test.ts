@@ -60,7 +60,7 @@ describe('Pi host awaited open', () => {
     expect(child.closed).toBe(false)
     expect(child.sent).toEqual([])
     await h.adapter.closeSession(sessionId)
-    const again = await h.adapter.spawn({ ...h.input, fence: 9 })
+    const again = await h.adapter.acquire({ ...h.input, fence: 9 })
     await expect(
       h.adapter.open({
         sessionId,
@@ -131,5 +131,23 @@ describe('Pi host awaited open', () => {
     await h.adapter.closeSession(sessionId)
     expect(await opening).toBeInstanceOf(Error)
     expect(child.rootVerdict).toBe('exited')
+  })
+
+  it('fails an open if its lane fails while the state request is pending', async () => {
+    const h = await setup()
+    const stateReply = Promise.withResolvers<unknown>()
+    const { acquired, child } = await restart(h, (connection) => {
+      connection.requestOverride = (command) =>
+        command === 'get_state' ? stateReply.promise : undefined
+    })
+    const opening = h.adapter.open({
+      sessionId,
+      fence: 8,
+      acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+      signal: new AbortController().signal
+    })
+    child.handlers.onClose?.(new Error('lane failed during startup'))
+    stateReply.resolve(state)
+    await expect(opening).rejects.toThrow('lane failed during startup')
   })
 })

@@ -58,11 +58,11 @@ describe('CodexStructuredSessionAdapter shutdown', () => {
       openConnection,
       readProcessStartTime: async () => 1_700_000_000_000
     })
-    const first = adapter.spawn({ identity: identity(), fence: 7, spawnToken: 'spawn-1' })
+    const first = adapter.acquire({ identity: identity(), fence: 7, spawnToken: 'spawn-1' })
     await vi.waitFor(() => expect(launchCount).toBe(1))
 
     const closing = adapter.closeAll()
-    const second = adapter.spawn({ identity: identity(), fence: 8, spawnToken: 'spawn-2' })
+    const second = adapter.acquire({ identity: identity(), fence: 8, spawnToken: 'spawn-2' })
     const acquisitions = Promise.allSettled([first, second])
     firstLaunch.resolve(LAUNCH)
 

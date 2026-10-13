@@ -71,11 +71,9 @@ function adapterFixture() {
 function claudeAdapterStub(): StructuredAgentSessionAdapter {
   return {
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi.fn<StructuredAgentSessionAdapter['spawn']>(),
+    acquire: vi.fn<StructuredAgentSessionAdapter['acquire']>(),
     dispatch: vi.fn(),
     cancelTurn: vi.fn(),
     answerPrompt: vi.fn(),
@@ -164,10 +162,7 @@ describe('Codex structured session close lifecycle', () => {
   })
 
   it('carries separate root and workload exit evidence into a requested end', () => {
-    const { connection, translator, sessions, session } = backpressuredSession(true)
-    if (session.orcaClose) {
-      session.orcaClose.stopCause = 'user-stop'
-    }
+    const { connection, translator, sessions } = backpressuredSession(true)
     Object.defineProperty(connection, 'closeResult', {
       value: { root: 'exited', tree: 'unverifiable' }
     })
@@ -181,7 +176,6 @@ describe('Codex structured session close lifecycle', () => {
     expect(translator.handle).toHaveBeenCalledWith(
       expect.objectContaining({
         cause: 'requested-close',
-        stopCause: 'user-stop',
         processExit: { root: 'exited', workload: 'unverifiable' }
       })
     )
@@ -228,19 +222,6 @@ describe('Codex structured session close lifecycle', () => {
     ])
   })
 
-  it('preserves the host Stop cause through the adapter close', async () => {
-    const { adapter, events } = adapterFixture()
-    await acquireReadyCodexForTest(adapter, {
-      identity: identity('session-1'),
-      fence: 7,
-      spawnToken: 'spawn-1'
-    })
-    await expect(adapter.disposeSession('session-1', 'user-stop')).resolves.toBe(true)
-    expect(events.filter((event) => event.type === 'ended')).toMatchObject([
-      { cause: 'requested-close', stopCause: 'user-stop' }
-    ])
-  })
-
   it('force-close preserves unexpected-exit evidence when the adapter reports exit during close', async () => {
     const { adapter, connections, events } = adapterFixture()
     await acquireReadyCodexForTest(adapter, {
@@ -269,7 +250,7 @@ describe('Codex structured session close lifecycle', () => {
       { claude: claudeAdapterStub(), codex: adapter },
       async () => {}
     )
-    await router.spawn({ identity: identity('session-1'), fence: 7, spawnToken: 'spawn-1' })
+    await router.acquire({ identity: identity('session-1'), fence: 7, spawnToken: 'spawn-1' })
     const current = connections[0]
     if (!current) {
       throw new Error('missing connection')

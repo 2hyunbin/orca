@@ -36,7 +36,7 @@ const EXIT_REASON = 'Claude Code is not signed in. Sign in with the Claude CLI'
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let generation = 0
 
 /** Everything a live subscriber was sent after its opening snapshot. */
@@ -100,13 +100,12 @@ function exitBeforeProof(): Promise<void> {
     acquisitionGeneration: `generation-${generation}`,
     reason: EXIT_REASON,
     failure: { kind: 'providerExited', detail: { text: EXIT_REASON, audience: 'log' } },
-    cause: 'unexpected-exit',
-    startupUnproven: true
+    cause: 'unexpected-exit'
   })
 }
 
 function providerSink() {
-  const events = spawn.mock.calls.at(-1)?.[0].events
+  const events = acquire.mock.calls.at(-1)?.[0].events
   if (!events) {
     throw new Error('no acquired provider sink')
   }
@@ -117,7 +116,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-append-delivery-'))
   resetHostTestOperationIds()
   generation = 0
-  spawn = vi.fn(async ({ fence, spawnToken }) => ({
+  acquire = vi.fn(async ({ fence, spawnToken }) => ({
     process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
     link: {
       linkId: `link-${fence}`,
@@ -135,11 +134,9 @@ beforeEach(async () => {
     store,
     adapter: {
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       }),
-      spawn,
+      acquire,
       releaseAcquisition: vi.fn(async () => true),
       closeSession: vi.fn(async () => true),
       dispatch: vi.fn(async () => ({ state: 'admitted' as const })),

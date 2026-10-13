@@ -39,7 +39,7 @@ function eventually(assertion: () => void | Promise<void>): Promise<void> {
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let probe: Mock<() => Promise<AgentSessionOwnerProbe>>
 let stopOwnerProcess: Mock<(pid: number, signal: 'SIGTERM' | 'SIGKILL') => void>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
@@ -52,11 +52,9 @@ function openHost(): void {
     adapter: startsWhenPublished(
       {
         open: async () => ({
-          reportedOptions: { model: '' },
-          restoreSkippedOptions: [],
-          optionRevision: -1
+          reportedOptions: { model: '' }
         }),
-        spawn,
+        acquire,
         closeSession: vi.fn(async () => true),
         releaseAcquisition: vi.fn(async () => true),
         dispatch,
@@ -68,7 +66,7 @@ function openHost(): void {
     ),
     journalDatabase: openTestJournalHostDatabase(root),
     claimKeyId: 'key-1',
-    mintSpawnToken: () => `spawn-${spawn.mock.calls.length}`,
+    mintSpawnToken: () => `spawn-${acquire.mock.calls.length}`,
     now: () => NOW,
     probeOwner: probe,
     stopOwnerProcess
@@ -89,7 +87,7 @@ async function persistFromOlderBuild(lease: OlderBuildLease): Promise<void> {
   // Over the attached owner: the older build's stage or terminal owner kept it from releasing.
   await writeOlderBuildLease(root, SESSION, { ...attached, ...lease })
   store = await openTestAgentSessionRecordStore(root)
-  spawn.mockClear()
+  acquire.mockClear()
   openHost()
 }
 
@@ -133,7 +131,7 @@ beforeEach(async () => {
   probe = vi.fn(async () => ({ outcome: 'pid-absent' as const }))
   stopOwnerProcess = vi.fn()
   dispatch = vi.fn(async () => ({ state: 'admitted' as const }))
-  spawn = vi.fn(async ({ fence, spawnToken }) => ({
+  acquire = vi.fn(async ({ fence, spawnToken }) => ({
     acquisitionGeneration: globalThis.crypto.randomUUID(),
     process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW - 1_000, spawnToken },
     link: {
@@ -186,7 +184,7 @@ describe('a record an older build left mid terminal handoff', () => {
     expect(store.getRecord(SESSION)?.lease).not.toHaveProperty('settlementRetryRequired')
     expect(await delivered('after the upgrade')).toMatchObject({ dispatchState: 'pending' })
     expect(dispatch).toHaveBeenCalledOnce()
-    expect(spawn).toHaveBeenCalledOnce()
+    expect(acquire).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       runtimeKind: 'native',
       claimStatus: 'live',
@@ -282,7 +280,7 @@ describe('a record an older build left mid terminal handoff', () => {
     })
     expect(dispatch).not.toHaveBeenCalled()
     expect(stopOwnerProcess).not.toHaveBeenCalled()
-    expect(spawn).not.toHaveBeenCalled()
+    expect(acquire).not.toHaveBeenCalled()
 
     // The user closes the terminal; the next send's start proves it gone and the chat takes over.
     probe.mockResolvedValue({ outcome: 'pid-absent' })

@@ -58,13 +58,13 @@ function params(options?: Readonly<Record<string, string>>, withMessage = false)
   })
 }
 
-it('a capable client creates a blank chat without spawn', async () => {
+it('a capable client creates a blank chat without acquire', async () => {
   expect(await call('agentSession.create', params(), capable)).toMatchObject({
     ok: true,
     result: { ok: true, value: { page: { submissions: [] } } }
   })
   expect(rig.store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect(runtimeCalls.publishStructuredAgentSessionTab).toHaveBeenCalledOnce()
 })
 
@@ -76,7 +76,7 @@ it.each([
   async ({ client }) => {
     const input = params(undefined, true)
     const entered = Promise.withResolvers<void>()
-    rig.adapter.spawn.mockImplementationOnce(
+    rig.adapter.acquire.mockImplementationOnce(
       ({ signal }) =>
         new Promise((_resolve, reject) => {
           entered.resolve()
@@ -121,13 +121,13 @@ it.each([
 )
 
 it('the old client retains acquired create and waits for acquisition before publishing', async () => {
-  const acquired = rig.adapter.spawn.getMockImplementation()
+  const acquired = rig.adapter.acquire.getMockImplementation()
   if (!acquired) {
-    throw new Error('test spawn missing')
+    throw new Error('test acquire missing')
   }
   const entered = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
-  rig.adapter.spawn.mockImplementationOnce(async (input) => {
+  rig.adapter.acquire.mockImplementationOnce(async (input) => {
     entered.resolve()
     await release.promise
     return acquired(input)
@@ -137,13 +137,13 @@ it('the old client retains acquired create and waits for acquisition before publ
     answered = true
     return result
   })
-  await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledOnce())
+  await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
   await entered.promise
   expect(answered).toBe(false)
   expect(runtimeCalls.publishStructuredAgentSessionTab).not.toHaveBeenCalled()
   release.resolve()
   expect(await creating).toMatchObject({ ok: true, result: { ok: true } })
-  expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+  expect(rig.adapter.acquire).toHaveBeenCalledOnce()
 })
 
 it('replays an acquired create after the client negotiates create-message support', async () => {
@@ -156,7 +156,7 @@ it('replays an acquired create after the client negotiates create-message suppor
     ok: true,
     result: { ok: true, replayed: true, value: { sessionId: SESSION } }
   })
-  expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+  expect(rig.adapter.acquire).toHaveBeenCalledOnce()
 })
 
 it('keeps an at-rest replay at rest when the client capability list changes', async () => {
@@ -169,7 +169,7 @@ it('keeps an at-rest replay at rest when the client capability list changes', as
     ok: true,
     result: { ok: true, replayed: true }
   })
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect(rig.store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
 })
 
@@ -187,7 +187,7 @@ it.each(['firstMessage', 'options'] as const)(
       result: { ok: false, refusal: { code: 'agent_session_operation_conflict' } }
     })
     expect((await rig.host.journalSnapshot(SESSION)).submissions).toEqual([])
-    expect(rig.adapter.spawn).toHaveBeenCalledOnce()
+    expect(rig.adapter.acquire).toHaveBeenCalledOnce()
   }
 )
 
@@ -198,12 +198,12 @@ it('merges held option overrides with host seeds before the first acquisition', 
     result: { ok: true }
   })
   expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'held-model', effort: 'medium' })
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
   expect(await rig.host.send({ callerKey: 'client-1' }, restTestSend('first work'))).toMatchObject({
     ok: true
   })
-  await vi.waitFor(() => expect(rig.adapter.spawn).toHaveBeenCalledOnce())
-  expect(rig.adapter.spawn).toHaveBeenCalledWith(
+  await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
+  expect(rig.adapter.acquire).toHaveBeenCalledWith(
     expect.objectContaining({ options: { model: 'held-model', effort: 'medium' } })
   )
 })
@@ -229,7 +229,7 @@ it('keeps the seeded permission mode beside explicit picks on an acquired create
       resolveStructuredAgentSessionCreateIntent
     })
   ).toMatchObject({ ok: true, result: { ok: true } })
-  expect(rig.adapter.spawn).toHaveBeenCalledWith(
+  expect(rig.adapter.acquire).toHaveBeenCalledWith(
     expect.objectContaining({ options: { model: 'held-model', permissionMode: 'full-access' } })
   )
 })
@@ -243,7 +243,7 @@ it('rejects an explicit option the resting agent would reject before founding', 
   })
   expect(rig.store.getRecord(SESSION)).toBeNull()
   expect(rig.store.listOperationRows()).toEqual([])
-  expect(rig.adapter.spawn).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
 })
 
 it.each(['options', 'firstMessage'] as const)(
@@ -280,6 +280,6 @@ it.each(['options', 'firstMessage'] as const)(
       ok: true,
       result: { ok: false, refusal: { code: 'agent_session_operation_conflict' } }
     })
-    expect(rig.adapter.spawn).not.toHaveBeenCalled()
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
   }
 )

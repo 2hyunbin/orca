@@ -1,7 +1,7 @@
 // How a durable session record becomes an ACP agent launch, on the machine this runtime runs on.
 //
 // Every input is read back from the record the store made durable, never from the call that
-// triggered the spawn: the working directory, the account home, and the provider session a
+// triggered the acquire: the working directory, the account home, and the provider session a
 // resume names are the ones this session proved.
 
 import { delimiter } from 'node:path'

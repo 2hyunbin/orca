@@ -67,17 +67,13 @@ export function createQueuedRigProvider(
         ? new Promise((resolve) => {
             proveOpen = () =>
               resolve({
-                reportedOptions: { model: 'default' },
-                restoreSkippedOptions: [],
-                optionRevision: -1
+                reportedOptions: { model: 'default' }
               })
           })
         : Promise.resolve({
-            reportedOptions: { model: 'default' },
-            restoreSkippedOptions: [],
-            optionRevision: -1
+            reportedOptions: { model: 'default' }
           }),
-    spawn: async ({ identity, fence, spawnToken, events: sink }) => {
+    acquire: async ({ identity, fence, spawnToken, events: sink }) => {
       starts()
       const hold = startHold
       startHold = null

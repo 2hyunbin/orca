@@ -76,7 +76,7 @@ async function beginTurn() {
     throw new Error('send refused')
   }
   await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-  const events = rig.adapter.spawn.mock.calls[0]?.[0].events
+  const events = rig.adapter.acquire.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('event sink absent')
   }

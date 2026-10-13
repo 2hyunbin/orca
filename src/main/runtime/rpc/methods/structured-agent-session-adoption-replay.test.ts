@@ -35,12 +35,10 @@ function adapter(): StructuredAgentSessionAdapter {
   return {
     supportsCreate: () => true,
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi
-      .fn<StructuredAgentSessionAdapter['spawn']>()
+    acquire: vi
+      .fn<StructuredAgentSessionAdapter['acquire']>()
       .mockImplementation(async ({ fence, spawnToken }) => ({
         acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
@@ -239,7 +237,7 @@ describe('committed adopting create RPC replay', () => {
         }
       }
     })
-    expect(sessionAdapter.spawn).toHaveBeenCalledTimes(1)
+    expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
     expect(internal.publishStructuredAgentSessionTab).toHaveBeenCalledTimes(2)
     expect(selectAccountHome).toHaveBeenCalledTimes(1)
 
@@ -252,7 +250,7 @@ describe('committed adopting create RPC replay', () => {
       ok: true,
       result: { ok: false, refusal: { code: 'agent_session_identity_required' } }
     })
-    expect(sessionAdapter.spawn).toHaveBeenCalledTimes(1)
+    expect(sessionAdapter.acquire).toHaveBeenCalledTimes(1)
     expect(internal.publishStructuredAgentSessionTab).toHaveBeenCalledTimes(2)
   })
 })

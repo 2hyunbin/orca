@@ -95,15 +95,16 @@ export function useStructuredAgentSessionSends(args: {
         return false
       }
       const delivery = structuredAgentSessionQueueRequest(queue, attachments)
+      const executionOptions = executionOptionSnapshot
+        ? agentSessionExecutionOptionsFromSnapshot(executionOptionSnapshot)
+        : undefined
       const sent = sendStructuredAgentSessionMessage({
         sessionId,
         target,
         text,
         attachments,
         ...(delivery ? { delivery } : {}),
-        ...(executionOptionSnapshot
-          ? { executionOptions: agentSessionExecutionOptionsFromSnapshot(executionOptionSnapshot) }
-          : {}),
+        ...(executionOptions ? { executionOptions } : {}),
         ...(stopping ? { sentWhileStopping: true as const } : {})
       })
       // Refused while the chat's send is out: the text stays in the box.

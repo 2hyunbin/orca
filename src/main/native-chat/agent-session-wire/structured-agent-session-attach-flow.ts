@@ -34,7 +34,7 @@ import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
-import { spawnOwner } from './structured-agent-session-acquisition'
+import { acquireOwner } from './structured-agent-session-acquisition'
 import {
   importAdoptedTranscript,
   prepareAdoptedTranscript
@@ -63,15 +63,13 @@ export type AttachFlowInput = {
   params: AgentSessionAttachParams
   now: () => number
   recordPhase?: AgentSessionCreatePhaseRecorder
-  /** Aborted when a close, or a Stop admitted now, must not wait behind this attach's spawn. */
-  startupSignal?: AbortSignal
-  /** The attempt this attach's spawn runs under, minted before the adapter is called; what it
+  /** Aborted when a close, or a Stop admitted now, must not wait behind this attach's acquire. */
+  acquireSignal?: AbortSignal
+  /** The attempt this attach's acquire runs under, minted before the adapter is called; what it
    *  answers learns of the child's spawn and output. */
   onStartupAttempt?: (
     attempt: StructuredAgentSessionStartupAttempt
   ) => StructuredAgentSessionStartupProgress
-  /** The conversation's option revision, which the child's reports are stamped with. */
-  optionRevision: () => number
   startupOptions?: Readonly<Record<string, string>>
   /** The permission mode a start of this record launches with; absent or undefined for none. */
   launchPermissionMode?: (
@@ -87,7 +85,7 @@ export type AttachFlowInput = {
   /** Host-owned provider sink, bound to the journal inside `onAttached`. */
   eventSink?: StructuredAgentSessionEventSink
   /** Stops acquisition-window events targeting the superseded journal. */
-  beforeSpawn?: () => Promise<void> | void
+  onAcquiring?: () => Promise<void> | void
   /** Settles writes already captured by the superseded journal before opening another. */
   beforeJournalOpen?: () => Promise<void> | void
   /** The conversation's own open journal, which the attach adopts: it never opens one itself. */
@@ -186,7 +184,7 @@ export async function performAttach(
         return { ok: false, refusal: replay.refusal }
       }
     }
-    // Sample provider history before a new child is acquired. Once spawnOwner
+    // Sample provider history before a new child is acquired. Once acquireOwner
     // starts the child, the adapter's liveness signal intentionally becomes
     // conservative and an absent prompt can no longer prove non-delivery.
     providerHistoryWindow = await readProviderHistoryWindow({
@@ -203,7 +201,7 @@ export async function performAttach(
       owner = 'none'
     } else {
       const acquired = await withAgentSessionCreatePhase('acquire_owner', input.recordPhase, () =>
-        spawnOwner(input, record)
+        acquireOwner(input, record)
       )
       record = acquired.record
       acquisitionGeneration = acquired.acquisitionGeneration

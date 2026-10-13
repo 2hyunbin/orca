@@ -39,7 +39,6 @@ import type {
   AgentSessionCancelOutcome,
   StructuredAgentSessionAdapterStop
 } from './structured-agent-session-adapter-stop'
-import type { StructuredAgentSessionStopCause } from './structured-agent-session-stop-cause'
 export type { AgentSessionCancelOutcome } from './structured-agent-session-adapter-stop'
 export type {
   StructuredAgentSessionChildEndCause,
@@ -192,8 +191,6 @@ export type StructuredAgentSessionEndedEvent = {
    *  Orca fault. Absent reads as a provider exit with nothing to add. */
   failure?: SubmissionRejectionFact
   cause: 'unexpected-exit' | 'requested-close'
-  /** The host's stop cause, when this end came from a requested close. */
-  stopCause?: StructuredAgentSessionStopCause
   /** Execution-host observations from a requested provider close, when available. */
   processExit?: {
     root: 'live' | 'unverifiable' | 'exited'
@@ -203,21 +200,8 @@ export type StructuredAgentSessionEndedEvent = {
   acquisitionGeneration: string
   /** Host receipt of the child exit: the end time of a turn it interrupted. */
   observedAt?: number
-  /** The provider ended before it finished starting, so resuming it would repeat the failure. */
-  startupUnproven?: true
   /** The provider ended before it answered its start, so it ran nothing it was handed. */
   startupUnanswered?: true
-}
-
-/** A running child showed saved options it cannot run, as a model the provider reports missing.
- *  The record drops them, so the next start uses the provider's own. */
-export type StructuredAgentSessionOptionsSkippedEvent = {
-  type: 'options-skipped'
-  sessionId: string
-  fence: number
-  acquisitionGeneration: string
-  /** Each saved value the child showed it cannot run; a record holding another value keeps it. */
-  options: Readonly<Record<string, string>>
 }
 
 /** An optional report after open; it never delays readiness. */
@@ -232,14 +216,13 @@ export type StructuredAgentSessionOptionsReportedEvent =
 export type StructuredAgentSessionLifecycleEvent =
   | StructuredAgentSessionEndedEvent
   | StructuredAgentSessionOptionsReportedEvent
-  | StructuredAgentSessionOptionsSkippedEvent
 
 /** Whether the host's open has proven the child ready for input. */
 export type StructuredAgentSessionProviderChildPhase = 'starting' | 'ready'
 
 /** The host's startup attempt (`structured-agent-session-startup-attempt`), which the host always
  *  passes whole. Only the fields every caller has are required, so an adapter test may pass less. */
-export type StructuredAgentSessionSpawnInput = Pick<
+export type StructuredAgentSessionAcquireInput = Pick<
   StructuredAgentSessionStartupAttempt,
   'identity' | 'fence' | 'spawnToken'
 > &
@@ -270,7 +253,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** Makes the reservation real. Called once per reservation, with the spawn
    *  token the lease was reserved under and the fence the handle must be minted
    *  at — the store rejects a link minted at any other fence. */
-  spawn(input: StructuredAgentSessionSpawnInput): Promise<AgentSessionAcquisition>
+  acquire(input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition>
   /** Reaps an acquired provider when the host cannot commit or prove its lease.
    *  Returns true only after provider child exit is proven. Throws
    *  `AgentSessionAcquisitionRootExitObservedError` when the provider root's own
@@ -297,6 +280,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   recoverRewind?(input: {
     sessionId: string
     fence: number
+    signal?: AbortSignal
     beforeTurnId: string
   }): Promise<
     | { ok: true; items: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] }
@@ -403,11 +387,11 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** Gracefully stops the structured owner after its event stream is drained. */
   /** Returns true only after the provider child exit is proven. A root-exit or processless verdict
    *  is thrown only once the session is finalized; read it through `stopAgentSessionProviderRoot`. */
-  closeSession?(sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean>
+  closeSession?(sessionId: string): Promise<boolean>
   /** Stops a provider after a sink failure; the resulting exit is recovered as unexpected. */
   forceCloseSession?(sessionId: string): Promise<boolean>
   /** Stops a provider child for teardown without requiring a future-resume cursor. */
-  disposeSession?(sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean>
+  disposeSession?(sessionId: string): Promise<boolean>
   /** Host acknowledgement that the proven-dead child, lease and journal owner are released. */
   acknowledgeSessionRelease?(sessionId: string): void
 }

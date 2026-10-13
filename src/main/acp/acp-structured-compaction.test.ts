@@ -46,7 +46,7 @@ async function commandRun(rig: AcpAdapterRig): Promise<StructuredAgentSessionCom
 /** Starts the agent, sends `/compact`, and returns its prompt frame. */
 async function compact(spec: AcpLaunchSpec, frames?: AcpFixtureFrame[]) {
   const rig = await openAcpAdapterRig({ spec })
-  await rig.spawn()
+  await rig.acquire()
   if (frames) {
     new GrokFixtureReplay(frames).attach(rig.child().agent)
   }

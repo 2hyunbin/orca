@@ -42,7 +42,7 @@ describe('Codex host-awaited open', () => {
     })
     const committed = Promise.withResolvers<void>()
     const onSpawned = vi.fn(async () => committed.promise)
-    const acquiring = adapter.spawn({ ...INPUT, onSpawned, options: { model: 'gpt-saved' } })
+    const acquiring = adapter.acquire({ ...INPUT, onSpawned, options: { model: 'gpt-saved' } })
     await vi.waitFor(() => expect(onSpawned).toHaveBeenCalledOnce())
     expect(codex.connections[0].calls).toEqual([])
     committed.resolve()
@@ -59,9 +59,7 @@ describe('Codex host-awaited open', () => {
     threaded.resolve({ thread: { id: THREAD_ID }, model: 'gpt-live' })
     expect(await opening).toMatchObject({
       link: { handle: { nativeId: THREAD_ID } },
-      reportedOptions: { model: 'gpt-saved' },
-      restoreSkippedOptions: [],
-      optionRevision: 0
+      reportedOptions: { model: 'gpt-saved' }
     })
     expect(events).toEqual([])
     await adapter.closeAll()
@@ -72,7 +70,7 @@ describe('Codex host-awaited open', () => {
     async (method) => {
       const gate = Promise.withResolvers<unknown>()
       const { adapter, codex, events } = startup({ [method]: () => gate.promise })
-      const acquired = await adapter.spawn(INPUT)
+      const acquired = await adapter.acquire(INPUT)
       const opening = open(adapter, acquired.acquisitionGeneration)
       await vi.waitFor(() => expect(codex.connections[0].calls.at(-1)?.method).toBe(method))
       gate.reject(new CodexAppServerRequestError(method, -32603, 'not signed in', 'not signed in'))
@@ -90,7 +88,7 @@ describe('Codex host-awaited open', () => {
     async (method) => {
       const gate = Promise.withResolvers<unknown>()
       const { adapter, codex } = startup({ [method]: () => gate.promise })
-      const acquired = await adapter.spawn(INPUT)
+      const acquired = await adapter.acquire(INPUT)
       const controller = new AbortController()
       const opening = open(adapter, acquired.acquisitionGeneration, controller.signal)
       await vi.waitFor(() => expect(codex.connections[0].calls.at(-1)?.method).toBe(method))
@@ -108,7 +106,7 @@ describe('Codex host-awaited open', () => {
     const gate = Promise.withResolvers<unknown>()
     const codex = fakeCodex({ 'thread/resume': () => gate.promise })
     const adapter = adapterFor(codex, { resumeThreadId: THREAD_ID })
-    const acquired = await adapter.spawn(INPUT)
+    const acquired = await adapter.acquire(INPUT)
     const opening = open(adapter, acquired.acquisitionGeneration)
     await vi.waitFor(() => expect(codex.connections[0].calls.at(-1)?.method).toBe('thread/resume'))
     gate.resolve({ thread: { id: THREAD_ID } })
@@ -123,7 +121,7 @@ describe('Codex host-awaited open', () => {
       resumeThreadId: THREAD_ID,
       supersedeIfUnsaved: true
     })
-    const acquired = await adapter.spawn(INPUT)
+    const acquired = await adapter.acquire(INPUT)
     const controller = new AbortController()
     const opening = open(adapter, acquired.acquisitionGeneration, controller.signal)
     await vi.waitFor(() => expect(codex.connections[0].calls.at(-1)?.method).toBe('thread/resume'))
@@ -164,7 +162,7 @@ describe('Codex host-awaited open', () => {
       appendTombstone: vi.fn(),
       publish: vi.fn()
     }
-    const acquired = await adapter.spawn({ ...INPUT, events: sink })
+    const acquired = await adapter.acquire({ ...INPUT, events: sink })
     await expect(open(adapter, acquired.acquisitionGeneration)).rejects.toMatchObject({
       name: AgentSessionAcquisitionRefusal.name,
       reason: 'historyTooLarge'
@@ -178,7 +176,7 @@ describe('Codex host-awaited open', () => {
   it('retains natural exit evidence during thread open', async () => {
     const gate = Promise.withResolvers<unknown>()
     const { adapter, codex, events } = startup({ 'thread/start': () => gate.promise })
-    const acquired = await adapter.spawn(INPUT)
+    const acquired = await adapter.acquire(INPUT)
     const opening = open(adapter, acquired.acquisitionGeneration)
     await vi.waitFor(() => expect(codex.connections[0].calls.at(-1)?.method).toBe('thread/start'))
     codex.connections[0].closed = true
@@ -188,8 +186,7 @@ describe('Codex host-awaited open', () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'ended',
-        cause: 'unexpected-exit',
-        startupUnproven: true
+        cause: 'unexpected-exit'
       })
     )
     expect(codex.connections[0].closeCount).toBe(0)

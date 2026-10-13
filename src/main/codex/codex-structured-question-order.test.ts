@@ -71,11 +71,9 @@ beforeEach(async () => {
   clock = HOST_TEST_NOW
   const adapter: StructuredAgentSessionAdapter = {
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi.fn<StructuredAgentSessionAdapter['spawn']>(async ({ fence, events }) => {
+    acquire: vi.fn<StructuredAgentSessionAdapter['acquire']>(async ({ fence, events }) => {
       sink = events ?? null
       return {
         acquisitionGeneration: globalThis.crypto.randomUUID(),

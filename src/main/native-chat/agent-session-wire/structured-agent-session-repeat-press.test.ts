@@ -48,11 +48,9 @@ beforeEach(async () => {
   const adapter: StructuredAgentSessionAdapter = startsWhenPublished(
     {
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       }),
-      spawn: async ({ fence, spawnToken }) => ({
+      acquire: async ({ fence, spawnToken }) => ({
         process: { hostId: 'local', pid: 4242, processStartTimeMs: 1_700_000_000_000, spawnToken },
         acquisitionGeneration: 'generation-1',
         link: {

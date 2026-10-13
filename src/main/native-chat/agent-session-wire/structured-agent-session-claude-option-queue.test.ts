@@ -29,7 +29,7 @@ const PICKED_MODEL = 'opus'
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let activeModel: string
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let order: string[]
@@ -61,7 +61,7 @@ function adapter(): StructuredAgentSessionAdapter {
     order.push('dispatch')
     return { state: 'admitted' as const }
   })
-  spawn = vi.fn(async ({ fence, spawnToken, options }) => {
+  acquire = vi.fn(async ({ fence, spawnToken, options }) => {
     activeModel = options?.model ?? DEFAULT_MODEL
     return {
       process: { hostId: 'local', pid: 4200, processStartTimeMs: NOW, spawnToken },
@@ -69,7 +69,7 @@ function adapter(): StructuredAgentSessionAdapter {
       link: {
         linkId: `claude-native-${fence}`,
         handle: claudeProviderHandle(CLAUDE_SESSION, 'native-leaf'),
-        origin: spawn.mock.calls.length === 1 ? 'created' : 'resumed',
+        origin: acquire.mock.calls.length === 1 ? 'created' : 'resumed',
         mintedAtFence: fence,
         observedAt: NOW
       }
@@ -80,12 +80,10 @@ function adapter(): StructuredAgentSessionAdapter {
       new Promise((resolve) => {
         releaseOpen = () =>
           resolve({
-            reportedOptions: { model: DEFAULT_MODEL },
-            restoreSkippedOptions: [],
-            optionRevision: 0
+            reportedOptions: { model: DEFAULT_MODEL }
           })
       }),
-    spawn,
+    acquire,
     dispatch,
     cancelTurn: vi.fn(async () => ({ cancelled: true })),
     answerPrompt: vi.fn(async () => undefined),

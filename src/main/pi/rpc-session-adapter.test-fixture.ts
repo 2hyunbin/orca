@@ -1,6 +1,6 @@
 import { expect, vi, type Mock } from 'vitest'
 import type { AgentSessionProcessIdentity } from '../../shared/agent-session-record'
-import type { StructuredAgentSessionSpawnInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import {
   closeProviderTimelineRigs,
   openProviderTimelineRig
@@ -131,7 +131,7 @@ export async function setup(
   const onSpawned = vi.fn(async (_process: AgentSessionProcessIdentity) => {
     expect(connections.at(-1)?.requests).toEqual([])
   })
-  const input: StructuredAgentSessionSpawnInput = {
+  const input: StructuredAgentSessionAcquireInput = {
     identity: {
       sessionId,
       workspaceId: 'folder-1',
@@ -167,7 +167,7 @@ export async function setup(
     onIdle: idle,
     logger: { warn: vi.fn(), error: vi.fn() }
   })
-  const acquired = await adapter.spawn(input)
+  const acquired = await adapter.acquire(input)
   const started = await adapter.open({
     sessionId,
     fence: 7,
@@ -204,7 +204,7 @@ export async function setup(
 export async function restart(
   h: Awaited<ReturnType<typeof setup>>,
   configure: (connection: FakeConnection) => void,
-  input: Partial<StructuredAgentSessionSpawnInput> = {}
+  input: Partial<StructuredAgentSessionAcquireInput> = {}
 ) {
   await h.adapter.closeSession(sessionId)
   await h.adapter.drainObservedExits()
@@ -215,7 +215,7 @@ export async function restart(
     h.connections.push(connection)
     return connection
   })
-  const acquired = await h.adapter.spawn({ ...h.input, fence: 8, ...input })
+  const acquired = await h.adapter.acquire({ ...h.input, fence: 8, ...input })
   const child = h.connections.at(-1)
   if (!child) {
     throw new Error('child missing')

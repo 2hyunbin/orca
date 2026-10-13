@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
+import { agentSessionExecutionOptionsFromSnapshot } from '../../shared/agent-session-execution-option-snapshot'
+import {
+  createStructuredAgentSessionOptionState,
+  structuredAgentSessionOptionSnapshot
+} from '../../shared/structured-agent-session-options'
+import { structuredAgentSessionSeedCatalog } from '../../shared/structured-agent-session-seed-catalog'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { agentModelCatalogSessionAccess } from '../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
 import { CODEX_STRUCTURED_AGENT } from './codex-structured-agent-definition'
@@ -302,6 +308,34 @@ describe('Codex captured message choices', () => {
       turnOptions
     })
     expect(request.mock.calls[0]?.[1]).toMatchObject({ model: 'saved-next', effort: 'high' })
+  })
+
+  it('uses a saved Codex choice when the picker has not loaded', async () => {
+    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
+      turn: { id: 'saved-turn' }
+    }))
+    const session = optionSession(request)
+    session.options.set('model', 'gpt-saved-unlisted')
+    session.options.set('effort', 'high')
+    session.reportedOptions = { model: 'gpt-saved-unlisted', effort: 'high' }
+    delete session.catalogAccess
+    delete session.nativeDefaults
+    const seed = structuredAgentSessionSeedCatalog('codex')
+    const snapshot = structuredAgentSessionOptionSnapshot(
+      createStructuredAgentSessionOptionState('codex', seed)
+    )
+    const captured = agentSessionExecutionOptionsFromSnapshot(snapshot)
+    expect(captured).toBeUndefined()
+    const turnOptions = await resolvedCodexMessageOptions(session, captured)
+    await startCodexTurn(session, {
+      clientMessageId: 'saved',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'go' }] },
+      turnOptions
+    })
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      model: 'gpt-saved-unlisted',
+      effort: 'high'
+    })
   })
 
   it('sends a fresh default while model discovery is held', async () => {

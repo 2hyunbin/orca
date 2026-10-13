@@ -65,8 +65,8 @@ it.each(['approval', 'question', 'completed'])(
   'offers only unfinished work when an accepted %s event is queued at quit',
   async (event) => {
     await attach()
-    const { host, root, spawn } = hostTestState()
-    const events = spawn.mock.calls[0]?.[0].events
+    const { host, root, acquire } = hostTestState()
+    const events = acquire.mock.calls[0]?.[0].events
     if (!events) {
       throw new Error('missing provider event sink')
     }
@@ -108,8 +108,8 @@ it.each(['approval', 'question', 'completed'] as const)(
   'offers work that was running at the stop even when a provider %s arrives during close',
   async (event) => {
     await attach()
-    const { host, root, spawn } = hostTestState()
-    const events = spawn.mock.calls[0]?.[0].events
+    const { host, root, acquire } = hostTestState()
+    const events = acquire.mock.calls[0]?.[0].events
     if (!events) {
       throw new Error('missing provider event sink')
     }
@@ -145,8 +145,8 @@ it('marks a settled chat whose subagent was still running', async () => {
   let children: AgentChildWorkView[] = []
   serveHostTestChildWork(() => children)
   await attach()
-  const { host, root, spawn } = hostTestState()
-  const events = spawn.mock.calls[0]?.[0].events
+  const { host, root, acquire } = hostTestState()
+  const events = acquire.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('missing provider event sink')
   }
@@ -173,8 +173,8 @@ it('marks a settled chat whose subagent was still running', async () => {
 // off, and its lease is left for the next launch to adjudicate.
 it('offers nothing for a chat whose child was not proven stopped', async () => {
   await attach()
-  const { host, root, spawn } = hostTestState()
-  const events = spawn.mock.calls[0]?.[0].events
+  const { host, root, acquire } = hostTestState()
+  const events = acquire.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('missing provider event sink')
   }

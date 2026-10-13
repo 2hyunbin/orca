@@ -47,11 +47,9 @@ function adapter(catalog: ClaudeAtRestCommandCatalog): StructuredAgentSessionAda
     supportsLocation: () => true,
     supportsCreate: () => true,
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: vi.fn(async (input) => ({
+    acquire: vi.fn(async (input) => ({
       acquisitionGeneration: globalThis.crypto.randomUUID(),
       process: {
         hostId: 'local',

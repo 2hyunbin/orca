@@ -47,7 +47,7 @@ describe('Codex failed-acquisition exit proof', () => {
     })
 
     await expect(
-      adapter.spawn({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
+      adapter.acquire({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
     ).rejects.toThrow('agent_session_acquisition_exit_unproven')
     await expect(adapter.releaseAcquisition({ sessionId: 'session-1' })).resolves.toBe(true)
     expect(close).toHaveBeenCalledTimes(2)
@@ -86,7 +86,7 @@ describe('Codex failed-acquisition exit proof', () => {
     })
 
     await expect(
-      adapter.spawn({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
+      adapter.acquire({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
     ).rejects.toThrow('agent_session_acquisition_exit_unproven')
     await expect(adapter.releaseAcquisition({ sessionId: 'session-1' })).resolves.toBe(true)
     expect(close).toHaveBeenCalledTimes(2)
@@ -119,7 +119,7 @@ describe('Codex failed-acquisition exit proof', () => {
         return processStart.promise
       }
     })
-    const acquiring = adapter.spawn({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
+    const acquiring = adapter.acquire({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
     await readStarted.promise
 
     await expect(adapter.closeAll()).rejects.toThrow(
@@ -158,7 +158,7 @@ describe('Codex failed-acquisition exit proof', () => {
       },
       readProcessStartTime: async () => 1_700_000_000_000
     })
-    const acquiring = adapter.spawn({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
+    const acquiring = adapter.acquire({ identity: IDENTITY, fence: 7, spawnToken: 'spawn-9' })
     await openStarted.promise
 
     const closing = adapter.closeAll()

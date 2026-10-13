@@ -36,7 +36,7 @@ import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-
 let root: string
 let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let releaseAcquisition: Mock<NonNullable<StructuredAgentSessionAdapter['releaseAcquisition']>>
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let cancelTurn: Mock<StructuredAgentSessionAdapter['cancelTurn']>
@@ -48,7 +48,7 @@ beforeEach(() => {
     root,
     store,
     host,
-    spawn,
+    acquire,
     releaseAcquisition,
     dispatch,
     cancelTurn,
@@ -124,8 +124,8 @@ describe('attach', () => {
   })
 
   it('retires a failed proved acquisition before admitting a fresh operation', async () => {
-    const spawn = vi
-      .fn<StructuredAgentSessionAdapter['spawn']>()
+    const acquire = vi
+      .fn<StructuredAgentSessionAdapter['acquire']>()
       .mockImplementationOnce(async ({ fence, spawnToken }) => ({
         acquisitionGeneration: globalThis.crypto.randomUUID(),
         process: {
@@ -162,7 +162,7 @@ describe('attach', () => {
       agents: NO_STRUCTURED_AGENTS,
       logger: createStructuredAgentSessionLogger(),
       store,
-      adapter: { ...adapter(), spawn },
+      adapter: { ...adapter(), acquire },
       journalDatabase: openTestJournalHostDatabase(root),
       claimKeyId: 'key-1',
       mintSpawnToken: () => 'spawn-a',
@@ -184,7 +184,7 @@ describe('attach', () => {
     expect(await host.attach(CALLER, params)).toEqual(refused)
     const releasedFence = store.getRecord(SESSION)?.lease.runtimeFence ?? 0
     expect(await host.attach(CALLER, ensureParams(releasedFence))).toMatchObject({ ok: true })
-    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(acquire).toHaveBeenCalledTimes(2)
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
     expect(releaseAcquisition).toHaveBeenCalledWith({ sessionId: SESSION })
   })
@@ -205,7 +205,7 @@ describe('attach', () => {
 
   it('drains writes captured by the old journal before acquiring its replacement', async () => {
     const record = await attach()
-    const events = spawn.mock.calls[0]?.[0].events
+    const events = acquire.mock.calls[0]?.[0].events
     const oldJournal = (
       host as unknown as { sessions: Map<string, { journal: AgentSessionJournal }> }
     ).sessions.get(SESSION)!.journal
@@ -230,11 +230,11 @@ describe('attach', () => {
 
     const replacement = host.attach(CALLER, ensureParams(released.lease.runtimeFence))
     await new Promise<void>((resolve) => setImmediate(resolve))
-    expect(spawn).toHaveBeenCalledTimes(1)
+    expect(acquire).toHaveBeenCalledTimes(1)
 
     appendGate.resolve()
     await expect(replacement).resolves.toMatchObject({ ok: true })
-    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(acquire).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -396,7 +396,7 @@ describe('respondToPrompt', () => {
       turnId: 'c',
       ordinal: 1
     }
-    spawn.mock.calls.at(-1)?.[0].events?.appendItem(
+    acquire.mock.calls.at(-1)?.[0].events?.appendItem(
       identity,
       {
         kind: 'approval',
@@ -620,7 +620,7 @@ describe('restart', () => {
     const body = hostTestMessage('persisted conversation')
     await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
     await reboot(async () => ({ outcome: 'indeterminate', reason: 'read does not need ownership' }))
-    spawn.mockClear()
+    acquire.mockClear()
     const listRecords = vi.spyOn(store, 'listRecords')
 
     await host.restoreReadableSessions()
@@ -632,7 +632,7 @@ describe('restart', () => {
     ])
     const history = await host.history({ sessionId: SESSION, direction: 'tail' })
     expect(history.ok && history.page.items).not.toHaveLength(0)
-    expect(spawn).not.toHaveBeenCalled()
+    expect(acquire).not.toHaveBeenCalled()
     expect(listRecords).toHaveBeenCalledTimes(restoreReads)
   })
 
@@ -648,7 +648,7 @@ describe('restart', () => {
       }
     }))
     await reboot(async () => ({ outcome: 'pid-absent' }))
-    spawn.mockClear()
+    acquire.mockClear()
 
     await host.restoreReadableSessions()
     // The recovery stage clears on evidence at startup; the child comes back only once work
@@ -656,7 +656,7 @@ describe('restart', () => {
     const fence = store.getRecord(SESSION)?.lease.runtimeFence ?? 0
     expect(await host.attach(CALLER, ensureParams(fence))).toMatchObject({ ok: true })
 
-    expect(spawn).toHaveBeenCalledOnce()
+    expect(acquire).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({
       runtimeKind: 'native',
       claimStatus: 'live',
@@ -676,11 +676,11 @@ describe('restart', () => {
     await host.restoreReadableSessions()
     const started = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
-    const settled = spawn.getMockImplementation()
+    const settled = acquire.getMockImplementation()
     if (!settled) {
-      throw new Error('missing spawn implementation')
+      throw new Error('missing acquire implementation')
     }
-    spawn.mockImplementationOnce(async (input) => {
+    acquire.mockImplementationOnce(async (input) => {
       started.resolve()
       await release.promise
       return settled(input)
@@ -717,12 +717,12 @@ describe('restart', () => {
       {},
       stopOwnerProcess
     )
-    spawn.mockClear()
+    acquire.mockClear()
 
     expect(await host.attach(CALLER, ensureParams(await staleFenceFrom(held)))).toMatchObject({
       ok: true
     })
-    expect(spawn).toHaveBeenCalledOnce()
+    expect(acquire).toHaveBeenCalledOnce()
     // An unverifiable pid may already belong to an unrelated process.
     expect(stopOwnerProcess).not.toHaveBeenCalled()
   })

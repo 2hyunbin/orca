@@ -52,11 +52,9 @@ async function stopWhileTheTurnOpens(
     agent: 'codex',
     adapter: {
       open: async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: -1
+        reportedOptions: { model: '' }
       }),
-      spawn: vi.fn(),
+      acquire: vi.fn(),
       dispatch: vi.fn(),
       closeSession: vi.fn(),
       cancelTurn: vi.fn(async () => {
@@ -75,7 +73,7 @@ async function stopWhileTheTurnOpens(
     publish: vi.fn(),
     now: () => 1
   }
-  await performCancel(ctx, { clientOperationId: 'stop-1' })
+  await performCancel(ctx, { clientOperationId: 'stop-1', endSession: () => {} })
   return journal
     .snapshot()
     .items.flatMap((item) =>

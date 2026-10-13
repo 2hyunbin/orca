@@ -6,7 +6,7 @@ import {
 import {
   AgentSessionPreSpawnError,
   type AgentSessionAcquisition,
-  type StructuredAgentSessionSpawnInput
+  type StructuredAgentSessionAcquireInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import {
   closeFailedCodexAcquisition,
@@ -36,8 +36,8 @@ import type { CodexStructuredNotificationRetry } from './codex-structured-notifi
 import type { deliverCodexServerRequest } from './codex-structured-provider-events'
 import { codexAcquisitionNotificationHandler } from './codex-structured-acquisition-notification'
 
-export async function spawnCodexStructuredSession(input: {
-  input: StructuredAgentSessionSpawnInput
+export async function acquireCodexStructuredSession(input: {
+  input: StructuredAgentSessionAcquireInput
   deps: CodexStructuredSessionAdapterDeps
   sessions: Map<string, CodexSession>
   acquisitions: CodexAcquisitionRegistry
@@ -55,12 +55,12 @@ export async function spawnCodexStructuredSession(input: {
   handleUnhandledFrame: (sessionId: string, kind: string, payload: unknown) => void
   forceCloseUnexpected: CodexStructuredSessionTeardown['forceCloseUnexpected']
 }): Promise<AgentSessionAcquisition> {
-  const { input: spawnInput, deps, sessions, acquisitions, notificationRetries } = input
-  const sessionId = spawnInput.identity.sessionId
+  const { input: acquireInput, deps, sessions, acquisitions, notificationRetries } = input
+  const sessionId = acquireInput.identity.sessionId
   const { previousAttempt, attempt } = acquisitions.start(sessionId)
   const acquisition = attempt.window
   let unbindReadingControl: (() => void) | undefined
-  const provenHandle = spawnInput.identity.providerHandle
+  const provenHandle = acquireInput.identity.providerHandle
   let primaryThreadId =
     provenHandle &&
     isAgentSessionProviderHandleInNamespace(provenHandle, CODEX_STRUCTURED_HANDLE_NAMESPACE)
@@ -72,7 +72,7 @@ export async function spawnCodexStructuredSession(input: {
   // Minted before the translator, which names this connection's frame rows with it.
   const acquisitionGeneration = mintCodexAcquisitionGeneration(deps)
   const translator = createCodexSessionJournalTranslator({
-    sink: spawnInput.events,
+    sink: acquireInput.events,
     account: () => account,
     sessionId,
     acquisitionId: acquisitionGeneration,
@@ -83,7 +83,7 @@ export async function spawnCodexStructuredSession(input: {
     prompts: acquisition.prompts
   })
   const open = deps.openConnection ?? spawnCodexAppServerConnection
-  const spawnIdentity = codexSpawnedProcessIdentity(spawnInput, deps.readProcessStartTime)
+  const spawnIdentity = codexSpawnedProcessIdentity(acquireInput, deps.readProcessStartTime)
   try {
     await stopSupersededCodexAcquisition({
       sessionId,
@@ -105,20 +105,20 @@ export async function spawnCodexStructuredSession(input: {
     acquisitions.assertCurrent(sessionId, attempt)
     const resolvedLaunch = await deps
       .resolveLaunch({
-        identity: spawnInput.identity,
-        spawnToken: spawnInput.spawnToken,
-        ...(spawnInput.permissionMode ? { permissionMode: spawnInput.permissionMode } : {})
+        identity: acquireInput.identity,
+        spawnToken: acquireInput.spawnToken,
+        ...(acquireInput.permissionMode ? { permissionMode: acquireInput.permissionMode } : {})
       })
       .catch((error: unknown) => {
         throw new AgentSessionPreSpawnError(error)
       })
     const { model: _savedNextModel, ...launchSettings } = resolvedLaunch
     const launch =
-      spawnInput.options === undefined
+      acquireInput.options === undefined
         ? resolvedLaunch
         : {
             ...launchSettings,
-            ...(spawnInput.options.model ? { model: spawnInput.options.model } : {})
+            ...(acquireInput.options.model ? { model: acquireInput.options.model } : {})
           }
     acquisitions.assertCurrent(sessionId, attempt)
     account = launch.codexHome ? deps.resolveAccountKind?.(launch.codexHome) : undefined
@@ -154,7 +154,7 @@ export async function spawnCodexStructuredSession(input: {
             Buffer.byteLength(JSON.stringify(payload ?? null), 'utf8')
           ),
         onSpawned: spawnIdentity.onSpawned,
-        ...(spawnInput.onOutput ? { onOutput: spawnInput.onOutput } : {}),
+        ...(acquireInput.onOutput ? { onOutput: acquireInput.onOutput } : {}),
         onExit: (error, exit) => {
           try {
             if (attempt.acquisitionGeneration && !sessions.has(sessionId)) {
@@ -165,7 +165,7 @@ export async function spawnCodexStructuredSession(input: {
               deps.onEvent?.({
                 type: 'ended',
                 sessionId,
-                fence: spawnInput.fence,
+                fence: acquireInput.fence,
                 acquisitionGeneration,
                 reason: error.message,
                 cause:
@@ -177,8 +177,7 @@ export async function spawnCodexStructuredSession(input: {
                   : agentSessionFailureFact('providerExited', {
                       detail: providerDiagnosticOf(error)
                     }),
-                observedAt: deps.now?.() ?? Date.now(),
-                startupUnproven: true
+                observedAt: deps.now?.() ?? Date.now()
               })
             }
             if (sessions.get(sessionId)?.connection === acquisition.connection) {
@@ -204,7 +203,7 @@ export async function spawnCodexStructuredSession(input: {
     )
     acquisition.connection = connection
     if (connection.pauseReading && connection.resumeReading) {
-      unbindReadingControl = spawnInput.events?.bindReadingControl?.({
+      unbindReadingControl = acquireInput.events?.bindReadingControl?.({
         pauseReading: connection.pauseReading,
         resumeReading: () => {
           connection.resumeReading?.()
@@ -231,7 +230,7 @@ export async function spawnCodexStructuredSession(input: {
     attempt.open = (openInput) =>
       openCodexStructuredSession(
         {
-          input: spawnInput,
+          input: acquireInput,
           deps,
           launch,
           account,

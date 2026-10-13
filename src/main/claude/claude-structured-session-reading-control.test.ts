@@ -79,7 +79,7 @@ describe('Claude structured reading control', () => {
     const adapter = adapterFor(claude)
     const events = controlledSink()
 
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -111,7 +111,7 @@ describe('Claude structured reading control', () => {
     const events = controlledSink()
 
     await expect(
-      adapter.spawn({
+      adapter.acquire({
         identity: identityFor(),
         fence: 7,
         spawnToken: 'spawn-9',
@@ -125,7 +125,7 @@ describe('Claude structured reading control', () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
     const events = controlledSink()
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -142,7 +142,7 @@ describe('Claude structured reading control', () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
     const events = controlledSink()
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -187,7 +187,7 @@ describe('Claude structured reading control', () => {
       .fn()
       .mockReturnValueOnce({ accepted: false, reason: 'backpressure' })
       .mockReturnValueOnce({ accepted: false, reason: 'failed' })
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',
@@ -225,7 +225,7 @@ describe('Claude structured reading control', () => {
     deferred.bind(target)
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',

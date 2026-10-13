@@ -86,7 +86,7 @@ async function startedChat(
     persistHandle: async () => {},
     onEvent: (event) => events.push(event)
   })
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(SESSION),
     fence: 7,
     spawnToken: 'spawn-9',

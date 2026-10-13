@@ -53,9 +53,9 @@ it('files nothing for a chat the user moved on in before its attempt, and spends
 // The continuation is accepted and its agent then fails to start: the message is rejected with the
 // cause, the failure is filed, and the chat says the agent did not carry on.
 it('says so in the chat when the agent cannot start for the continuation', async () => {
-  const { host, spawn } = await interruptedRestart()
+  const { host, acquire } = await interruptedRestart()
   await host.restartResume.list()
-  spawn.mockRejectedValueOnce(new Error('provider could not reconnect'))
+  acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
   // Before the action, the quit's cut reads with its one notice.
   expect(await readerNotes(host)).toEqual([QUIT_CUT_NOTICE])
 

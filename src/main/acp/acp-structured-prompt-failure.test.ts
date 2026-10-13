@@ -42,7 +42,7 @@ async function failFirstPrompt(
         agent.fail(frame, error.code, error.message, error.data)
       })
   })
-  await rig.spawn()
+  await rig.acquire()
   await sendHello(rig, 'first')
   await rig.settle()
   const failures = (await rig.rig.rows()).flatMap(({ body }) =>

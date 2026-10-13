@@ -20,7 +20,7 @@ describe('Claude published session close lifecycle', () => {
   it('never reads a failed spawn as an observed root exit, whatever checks it first', async () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
-    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const connection = claude.connections[0]!
     connection.exitVerdict = { root: 'exited', tree: 'exited', processless: true }
     expect(claudeRootExitObserved(connection)).toBe(false)
@@ -31,7 +31,7 @@ describe('Claude published session close lifecycle', () => {
   it('reports a proven root exit when published-session close cannot prove descendants', async () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
-    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const connection = claude.connections[0]!
     connection.exitVerdict = { root: 'exited', tree: 'unverifiable' }
     connection.close = vi.fn<() => Promise<boolean>>().mockResolvedValue(false)
@@ -44,7 +44,7 @@ describe('Claude published session close lifecycle', () => {
   it('lets the chat start again after a close that saw the root exit', async () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
-    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const first = claude.connections[0]!
     first.exitVerdict = { root: 'exited', tree: 'unverifiable' }
     first.close = vi.fn<() => Promise<boolean>>().mockResolvedValue(false)
@@ -53,7 +53,7 @@ describe('Claude published session close lifecycle', () => {
       AgentSessionAcquisitionRootExitObservedError
     )
 
-    await adapter.spawn({ identity: identityFor(), fence: 8, spawnToken: 'spawn-10' })
+    await adapter.acquire({ identity: identityFor(), fence: 8, spawnToken: 'spawn-10' })
 
     expect(claude.connections).toHaveLength(2)
     expect(first.close).toHaveBeenCalledTimes(1)
@@ -63,12 +63,12 @@ describe('Claude published session close lifecycle', () => {
     const claude = fakeClaude()
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, {}, events)
-    await adapter.spawn({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
     const first = claude.connections[0]!
     first.exitVerdict = { root: 'exited', tree: 'unverifiable' }
     first.close = vi.fn<() => Promise<boolean>>().mockResolvedValue(false)
 
-    await adapter.spawn({ identity: identityFor(), fence: 8, spawnToken: 'spawn-10' })
+    await adapter.acquire({ identity: identityFor(), fence: 8, spawnToken: 'spawn-10' })
 
     expect(claude.connections).toHaveLength(2)
     expect(events.filter((event) => event.type === 'ended')).toHaveLength(1)
@@ -114,7 +114,7 @@ describe('Claude published session close lifecycle', () => {
       appendTombstone: () => {},
       publish: () => {}
     }
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',

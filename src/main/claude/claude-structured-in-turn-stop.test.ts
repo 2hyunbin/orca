@@ -39,7 +39,7 @@ async function runningChat(claude: ReturnType<typeof fakeClaude>): Promise<{
   const bodies = new Map<string, AgentJournalItemBody>()
   const journal = createJournalReducerState('session-1', 'epoch-1')
   const adapter = adapterFor(claude)
-  await adapter.spawn({
+  await adapter.acquire({
     identity: identityFor(),
     fence: 7,
     spawnToken: 'spawn-9',

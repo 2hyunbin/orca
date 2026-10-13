@@ -155,7 +155,7 @@ function createCodexAdapter(context: StructuredAgentAdapterContext): StructuredA
     onPrimaryThreadStoppedRunning: followUps.releaseUnansweredDispatches,
     logger: deps.logger,
     onEvent: (event) => {
-      if (event.type === 'options-reported' || (event.type === 'ended' && 'cause' in event)) {
+      if (event.type === 'ended' && 'cause' in event) {
         context.deliverLifecycle(event)
       }
     }

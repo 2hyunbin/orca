@@ -57,11 +57,9 @@ beforeEach(async () => {
   const store = await openTestAgentSessionRecordStore(root)
   const adapter: StructuredAgentSessionAdapter = {
     open: async () => ({
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: -1
+      reportedOptions: { model: '' }
     }),
-    spawn: async ({ fence, spawnToken, events }) => {
+    acquire: async ({ fence, spawnToken, events }) => {
       sink = events ?? null
       return {
         process: { hostId: 'local', pid: 4242, processStartTimeMs: NOW - 1_000, spawnToken },
@@ -142,7 +140,7 @@ describe('a Codex reconnecting a dropped stream', () => {
     // Once the frames stop, the same clock does let the sweep close it.
     clock += STRUCTURED_AGENT_SESSION_IDLE_MS
     await vi.waitFor(() => {
-      expect(closeSession).toHaveBeenCalledWith(SESSION, 'evict')
+      expect(closeSession).toHaveBeenCalledWith(SESSION)
       expect(host.hasSession(SESSION)).toBe(false)
     })
   })

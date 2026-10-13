@@ -2,11 +2,11 @@
 
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 
-type Spawn = StructuredAgentSessionAdapter['spawn']
+type Acquire = StructuredAgentSessionAdapter['acquire']
 type Open = StructuredAgentSessionAdapter['open']
 
 export type StructuredAgentSessionHeldStarts = {
-  held(spawn: Spawn): Spawn
+  held(acquire: Acquire): Acquire
   wrap<A extends StructuredAgentSessionAdapter>(adapter: A): A & StructuredAgentSessionAdapter
   prove(child: { sessionId: string; fence: number; acquisitionGeneration: string }): Promise<void>
   clear(): void
@@ -22,8 +22,8 @@ export function structuredAgentSessionHeldStarts(
     await Promise.resolve()
   }
   return {
-    held: (spawn) => async (input) => {
-      const acquired = await spawn(input)
+    held: (acquire) => async (input) => {
+      const acquired = await acquire(input)
       const generation = acquired.acquisitionGeneration
       waiting.set(generation, new Promise<void>((resolve) => held.set(generation, resolve)))
       return acquired

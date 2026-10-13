@@ -165,7 +165,7 @@ describe('Claude model before the first turn', () => {
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = adapterFor(claude, { resumesTranscript: true, continuesChain: true }, events)
 
-    await adapter.spawn({
+    await adapter.acquire({
       identity: identityFor(),
       fence: 7,
       spawnToken: 'spawn-9',

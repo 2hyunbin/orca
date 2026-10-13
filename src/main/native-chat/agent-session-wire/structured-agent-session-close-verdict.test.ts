@@ -57,7 +57,7 @@ beforeEach(() => {
       ...adapter(),
       closeSession: async () => {
         closeCalls += 1
-        const events = state.spawn.mock.calls.at(-1)?.[0].events
+        const events = state.acquire.mock.calls.at(-1)?.[0].events
         if (providerEnd === null) {
           return true
         }
@@ -92,7 +92,7 @@ beforeEach(() => {
 /** A running turn, anchored to its user row, with a status list watching the session. */
 async function runningTurn(): Promise<AgentSessionStatusEvent[]> {
   await attach()
-  const events = hostTestState().spawn.mock.calls[0]?.[0].events
+  const events = hostTestState().acquire.mock.calls[0]?.[0].events
   if (!events) {
     throw new Error('missing provider event sink')
   }
@@ -187,7 +187,7 @@ describe('a turn cut short by closing its provider', () => {
     // arrives: the journal has no turn yet.
     await attach()
     await host.flushStreamedEvents(SESSION)
-    const events = hostTestState().spawn.mock.calls[0]?.[0].events
+    const events = hostTestState().acquire.mock.calls[0]?.[0].events
     events?.appendItem(
       { provider: 'codex', threadId: THREAD, turnId: 'cut-turn', ordinal: 0 },
       { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'long job' }] },
@@ -208,7 +208,7 @@ describe('a turn cut short by closing its provider', () => {
   it('leaves a turn cut off before the close as news', async () => {
     providerEnd = null
     await attach()
-    const events = hostTestState().spawn.mock.calls[0]?.[0].events
+    const events = hostTestState().acquire.mock.calls[0]?.[0].events
     // An earlier death the user already saw as Interrupted, then closed.
     events?.appendItem(
       CUT_TURN,

@@ -116,7 +116,7 @@ export class StructuredAgentSessionHost {
     })
     this.conversationDelivery = conversation.createStructuredAgentSessionConversationDelivery({
       deps,
-      providerWaits: this.runtimeState.providerWaits,
+      acquireAborts: this.runtimeState.acquireAborts,
       sessions: this.sessions,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       // Quit drains a delivery start before it evicts, so the child it produces is stopped.
@@ -292,8 +292,7 @@ export class StructuredAgentSessionHost {
       wakeDelivery: (sessionId) => this.conversationDelivery.loop.wake(sessionId),
       stopAgent: (sessionId, ending) => this.lifetime.stopAgent(sessionId, ending),
       wakeQueuedDrain: (sessionId) => this.queued.drain.schedule(sessionId),
-      providerWaits: this.runtimeState.providerWaits,
-      optionRevisions: this.runtimeState.optionRevisions,
+      acquireAborts: this.runtimeState.acquireAborts,
       now: () => this.now()
     }
   }

@@ -25,7 +25,7 @@ function sameOwnerProcess(
 
 /** A reservation with no process behind it is only a promise to spawn; the
  * adapter makes it real and the store then grants the writer. */
-export async function spawnOwner(
+export async function acquireOwner(
   input: AttachFlowInput,
   record: AgentSessionRecord
 ): Promise<{
@@ -39,9 +39,9 @@ export async function spawnOwner(
   }
   try {
     try {
-      await input.beforeSpawn?.()
+      await input.onAcquiring?.()
       // A close or Stop that landed while the attach was still reconciling launches nothing.
-      input.startupSignal?.throwIfAborted()
+      input.acquireSignal?.throwIfAborted()
     } catch (error) {
       throw new AgentSessionPreSpawnError(error)
     }
@@ -53,12 +53,11 @@ export async function spawnOwner(
       spawnToken,
       ...(permissionMode ? { permissionMode } : {}),
       ...(input.eventSink ? { events: input.eventSink } : {}),
-      ...(input.startupSignal ? { signal: input.startupSignal } : {}),
-      optionRevision: input.optionRevision,
+      ...(input.acquireSignal ? { signal: input.acquireSignal } : {}),
       ...(input.startupOptions ? { startupOptions: input.startupOptions } : {})
     })
     const progress = input.onStartupAttempt?.(attempt)
-    const acquired = await input.adapter.spawn({
+    const acquired = await input.adapter.acquire({
       ...attempt,
       ...(progress ? { onOutput: progress.output } : {}),
       ...(input.recordPhase ? { recordPhase: input.recordPhase } : {}),

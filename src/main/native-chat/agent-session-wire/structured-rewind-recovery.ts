@@ -1,3 +1,4 @@
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 import {
   mergeRetainedHostLifecycleRows,
   retainedRowReplacement
@@ -78,8 +79,10 @@ export async function recoverStructuredRewind(
     rewind: AgentSessionRewindRecord,
     fence: number,
     cursor: AgentJournalCursor
-  ) => JournalOperationReceipt
+  ) => JournalOperationReceipt,
+  signal?: AbortSignal
 ): Promise<void> {
+  signal?.throwIfAborted()
   const { store } = deps
   let rewind = store.getRecord(sessionId)?.rewind
   if (rewind?.phase !== 'provider-succeeded' && rewind?.phase !== 'prepared') {
@@ -91,11 +94,16 @@ export async function recoverStructuredRewind(
     return
   }
   if (target?.provider === 'codex' && !rewind.hydrationVerified) {
-    const recovered = await adapter?.recoverRewind?.({
+    const read = adapter?.recoverRewind?.({
       sessionId,
       fence,
-      beforeTurnId: target.turnId
+      beforeTurnId: target.turnId,
+      ...(signal ? { signal } : {})
     })
+    const recovered = signal
+      ? await waitForPromiseWithSignal(Promise.resolve(read), signal)
+      : await read
+    signal?.throwIfAborted()
     if (!recovered?.ok) {
       // The target is still in the provider's history, and the journal is replaced only once the
       // revert is proven, so both still hold it even when the provider acknowledged the revert.

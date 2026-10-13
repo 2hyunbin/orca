@@ -57,14 +57,13 @@ export type AcpAdapterRig = {
   started(): StructuredAgentSessionProviderOpenResult
   openFailure(): unknown
   settled: Parameters<NonNullable<AcpStructuredSessionAdapterDeps['onDispatchSettledLate']>>[0][]
-  spawn(options?: {
+  acquire(options?: {
     fence?: number
     onSpawned?: () => Promise<void>
     signal?: AbortSignal
     waitForStart?: boolean
     options?: Readonly<Record<string, string>>
-    optionRevision?: () => number
-  }): ReturnType<AcpStructuredSessionAdapter['spawn']>
+  }): ReturnType<AcpStructuredSessionAdapter['acquire']>
   /** Frames Orca wrote to the agent with this method. */
   sent(method: string): FakeFrame[]
   /** Waits for the `index`th frame Orca writes with this method. */
@@ -180,10 +179,10 @@ export async function openAcpAdapterRig(
     },
     openFailure: () => openFailure,
     settled,
-    spawn: async (acquireOptions = {}) => {
+    acquire: async (acquireOptions = {}) => {
       openFailure = undefined
       opened = null
-      const acquisition = await adapter.spawn({
+      const acquisition = await adapter.acquire({
         identity: {
           sessionId: SESSION,
           workspaceId: 'workspace-1',
@@ -195,7 +194,6 @@ export async function openAcpAdapterRig(
         spawnToken: 'spawn-1',
         events: rig.eventSink,
         ...(acquireOptions.options ? { options: acquireOptions.options } : {}),
-        ...(acquireOptions.optionRevision ? { optionRevision: acquireOptions.optionRevision } : {}),
         ...(acquireOptions.signal ? { signal: acquireOptions.signal } : {}),
         onSpawned: async () => {
           spawned.push('onSpawned')

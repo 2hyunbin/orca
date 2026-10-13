@@ -32,7 +32,6 @@ import {
   sendPreparation,
   structuredAgentSessionSendBlock
 } from './structured-agent-session-send-preparation'
-import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import {
   cancelPlan,
   promptPlan,
@@ -165,7 +164,7 @@ function abortProviderWaitForStop(
   ) {
     return false
   }
-  return context.providerWaits.abort(envelope.sessionId, 'stopped while starting')
+  return context.acquireAborts.abort(envelope.sessionId, 'stopped while starting')
 }
 
 export function respondToStructuredAgentSessionPrompt(
@@ -195,12 +194,7 @@ export async function setStructuredAgentSessionOption(
     {
       ...plan,
       conversationWrite: true,
-      run: async (ctx) => {
-        if (params.key !== AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
-          context.optionRevisions.advance(params.envelope.sessionId)
-        }
-        return recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
-      }
+      run: (ctx) => recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
     },
     openForWrite(context, params.envelope)
   )

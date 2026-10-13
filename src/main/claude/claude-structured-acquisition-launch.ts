@@ -2,7 +2,7 @@ import { claudeProviderHandle } from '../../shared/agent-session-provider-handle
 import {
   AgentSessionAcquisitionExitUnprovenError,
   AgentSessionPreSpawnError,
-  type StructuredAgentSessionSpawnInput
+  type StructuredAgentSessionAcquireInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { stopAgentSessionProviderRoot } from '../native-chat/agent-session-wire/structured-agent-session-provider-exit-proof'
 import { withAgentSessionCreatePhase } from '../observability/agent-session-instrumentation'
@@ -31,7 +31,7 @@ export type ClaudeAcquisitionLaunch = ClaudeStructuredLaunch & {
 }
 
 export async function resolveClaudeAcquisitionLaunch(args: {
-  input: StructuredAgentSessionSpawnInput
+  input: StructuredAgentSessionAcquireInput
   deps: ClaudeStructuredSessionAdapterDeps
   sessions: Map<string, ClaudeSession>
   acquisitions: ClaudeAcquisitionRegistry
@@ -106,7 +106,6 @@ export async function resolveClaudeAcquisitionLaunch(args: {
       options: spawn.sdkOptions,
       savedOptions: {
         options: spawn.options,
-        skipped: spawn.skipped,
         fastModeAtStart: spawn.fastModeAtStart
       }
     }

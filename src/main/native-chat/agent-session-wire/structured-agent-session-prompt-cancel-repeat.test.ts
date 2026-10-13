@@ -12,11 +12,11 @@ import {
 import { HOST_TEST_THREAD as THREAD } from './structured-agent-session-host-test-data'
 
 let host: StructuredAgentSessionHost
-let spawn: Mock<StructuredAgentSessionAdapter['spawn']>
+let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let cancelTurn: Mock<StructuredAgentSessionAdapter['cancelTurn']>
 
 beforeEach(() => {
-  ;({ host, spawn, cancelTurn } = hostTestState())
+  ;({ host, acquire, cancelTurn } = hostTestState())
 })
 
 describe('a prompt Cancel pressed again', () => {
@@ -28,7 +28,7 @@ describe('a prompt Cancel pressed again', () => {
     cancelTurn.mockImplementationOnce(async () => {
       await first.promise
       // As a provider does: interrupting the turn cancels the prompt it was waiting on.
-      spawn.mock.calls.at(-1)?.[0].events?.appendItem(
+      acquire.mock.calls.at(-1)?.[0].events?.appendItem(
         identity,
         {
           kind: 'approval',
