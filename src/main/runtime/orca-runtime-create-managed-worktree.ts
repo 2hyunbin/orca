@@ -106,7 +106,14 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
           notifyWorktreesChanged: (repoId) => this.notifyWorktreesChanged(repoId),
           emitCreated: (event) => this.emitWorktreeLifecycle(event),
           activate: (repoId, worktreeId, setup, startup) =>
-            this.notifyActivateWorktree(repoId, worktreeId, setup, startup, args.navigation)
+            this.notifyActivateWorktree(
+              repoId,
+              worktreeId,
+              setup,
+              startup,
+              undefined,
+              args.navigation
+            )
         }
       })
     }
@@ -209,8 +216,15 @@ export class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWork
         pasteDraft: (handle, draft) => this.pasteStartupDraftWhenReady(handle, draft),
         sendFollowup: (handle, followup) => this.sendStartupFollowupWhenReady(handle, followup),
         provision: (options) => this.provisionManagedWorktreeTerminals(options, worktree),
-        activate: (repoId, worktreeId, startup, failedSetup) =>
-          this.notifyActivateWorktree(repoId, worktreeId, failedSetup, startup, args.navigation)
+        activate: (repoId, worktreeId, startup, failedSetup, failedDefaultTabs) =>
+          this.notifyActivateWorktree(
+            repoId,
+            worktreeId,
+            failedSetup,
+            startup,
+            failedDefaultTabs,
+            args.navigation
+          )
       }
     })
     warning = terminalWarning

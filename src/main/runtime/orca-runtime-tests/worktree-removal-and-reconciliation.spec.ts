@@ -252,6 +252,7 @@ describe('OrcaRuntimeService', () => {
       'repo-1',
       expect.any(String),
       undefined,
+      undefined,
       undefined
     )
   })

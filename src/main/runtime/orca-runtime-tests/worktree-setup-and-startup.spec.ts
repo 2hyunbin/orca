@@ -100,6 +100,7 @@ describe('OrcaRuntimeService', () => {
       'repo-1',
       expect.any(String),
       undefined,
+      undefined,
       undefined
     )
   })
@@ -158,6 +159,7 @@ describe('OrcaRuntimeService', () => {
     expect(activateWorktree).toHaveBeenCalledWith(
       'repo-1',
       expect.any(String),
+      undefined,
       undefined,
       undefined
     )
@@ -238,6 +240,7 @@ describe('OrcaRuntimeService', () => {
     expect(activateWorktree).toHaveBeenCalledWith(
       'repo-1',
       expect.any(String),
+      undefined,
       undefined,
       undefined
     )

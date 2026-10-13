@@ -454,6 +454,7 @@ describe('OrcaRuntimeService', () => {
         runnerScriptPath: 'C:\\tmp\\repo\\.git\\orca\\setup-runner.sh',
         command: expect.stringContaining('bash /mnt/c/tmp/repo/.git/orca/setup-runner.sh')
       }),
+      undefined,
       undefined
     )
     expect(activateWorktree).toHaveBeenCalledOnce()
@@ -620,6 +621,7 @@ describe('OrcaRuntimeService', () => {
     expect(activateWorktree).toHaveBeenCalledWith(
       'repo-1',
       result.worktree.id,
+      undefined,
       undefined,
       undefined
     )

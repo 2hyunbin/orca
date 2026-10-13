@@ -34,8 +34,9 @@ type Ports = {
     repoId: string,
     worktreeId: string,
     startup?: WorktreeStartupLaunch,
-    // Only a setup main tried to start and failed; the host window retries it where the user sees it.
-    failedSetup?: CreateWorktreeResult['setup']
+    // Only work main tried to start and failed; the host window retries it where the user sees it.
+    failedSetup?: CreateWorktreeResult['setup'],
+    failedDefaultTabs?: CreateWorktreeResult['defaultTabs']
   ) => void
 }
 
@@ -125,33 +126,40 @@ export async function startRuntimeLocalWorktreeTerminals(args: {
 
   if (shouldActivate) {
     const provisionInBackground = ports.provisionInBackground?.() === true
-    let failedSetup: CreateWorktreeResult['setup']
-    // Why: main alone creates the setup and default tabs; the window draws them from the reveals.
-    if (ports.canSpawn && (provisionInBackground || setup || defaultTabs)) {
-      const provisioned = await ports.provision({
-        ...provisionArgs(
-          args,
-          startupTerminalHandle,
-          didSpawnStartup,
-          didSpawnStartup ? wrappedSetupCommand : undefined
-        ),
-        ...(provisionInBackground ? { surfaceOwner: false as const } : {})
-      })
-      didSpawnSetup = provisioned.setupSpawned
-      setupTerminalHandle = provisioned.setupTerminalHandle
-      if (setup && !didSpawnSetup) {
-        failedSetup = {
-          ...setup,
-          ...(didSpawnStartup && wrappedSetupCommand ? { command: wrappedSetupCommand } : {})
+    // Why: a failed agent start hands the whole create to the window, which seeds the agent's tab
+    // first and lays setup and default tabs around it; main provisioning first would leave it no tab.
+    const agentStartFailed = Boolean(sequencedStartup && ports.canSpawn && !didSpawnStartup)
+    if (agentStartFailed && !provisionInBackground) {
+      ports.activate(repo.id, worktree.id, startup, setup, defaultTabs)
+    } else {
+      let failedSetup: CreateWorktreeResult['setup']
+      // Why: main alone creates the setup and default tabs; the window draws them from the reveals.
+      if (ports.canSpawn && (provisionInBackground || setup || defaultTabs)) {
+        const provisioned = await ports.provision({
+          ...provisionArgs(
+            args,
+            startupTerminalHandle,
+            didSpawnStartup,
+            didSpawnStartup ? wrappedSetupCommand : undefined
+          ),
+          ...(provisionInBackground ? { surfaceOwner: false as const } : {})
+        })
+        didSpawnSetup = provisioned.setupSpawned
+        setupTerminalHandle = provisioned.setupTerminalHandle
+        if (setup && !didSpawnSetup) {
+          failedSetup = {
+            ...setup,
+            ...(didSpawnStartup && wrappedSetupCommand ? { command: wrappedSetupCommand } : {})
+          }
         }
       }
+      ports.activate(
+        repo.id,
+        worktree.id,
+        startup && !didSpawnStartup ? startup : undefined,
+        failedSetup
+      )
     }
-    ports.activate(
-      repo.id,
-      worktree.id,
-      startup && !didSpawnStartup ? startup : undefined,
-      failedSetup
-    )
   } else if (ports.canSpawn && (setup || defaultTabs || didSpawnStartup)) {
     const provisioning = ports.provision({
       ...provisionArgs(args, startupTerminalHandle, didSpawnStartup, wrappedSetupCommand),
