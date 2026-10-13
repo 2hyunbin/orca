@@ -56,7 +56,8 @@ export function SshStatusSegment({
 
   const hostLabelOverrides = useMemo(() => getHostDisplayLabelOverrides(settings), [settings])
   const userManagedEnvironments = runtimeEnvironments.filter(isUserManagedRuntimeEnvironment)
-  const visibleHostIds = new Set(
+  // Why the registry: a managed server and its SSH host are one machine, shown on its active route.
+  const visibleHostLabels = new Map(
     pickerExecutionHosts(
       buildExecutionHostRegistry({
         repos: [],
@@ -65,32 +66,35 @@ export function SshStatusSegment({
         sshTargetLabels,
         sshConnectionStates,
         runtimeEnvironments: userManagedEnvironments,
-        runtimeStatusByEnvironmentId
+        runtimeStatusByEnvironmentId,
+        hostLabelOverrides
       })
-    ).map((host) => host.id)
+    ).map((host) => [host.id, host.label])
   )
   const targets = Array.from(sshTargetLabels.entries())
     // Why: runtime-owned (per-workspace-env) SSH targets are hidden — never list them
     // as a user-facing SSH host in the status bar.
     .filter(
-      ([id]) => !isRuntimeOwnedSshTargetId(id) && visibleHostIds.has(toSshExecutionHostId(id))
+      ([id]) => !isRuntimeOwnedSshTargetId(id) && visibleHostLabels.has(toSshExecutionHostId(id))
     )
     .map(([id, label]) => {
       const state = sshConnectionStates.get(id)
       return {
         id,
-        label,
+        label: visibleHostLabels.get(toSshExecutionHostId(id)) || label,
         status: state?.status ?? ('disconnected' satisfies SshConnectionStatus)
       }
     })
   const runtimeHosts = userManagedEnvironments
-    .filter((environment) => visibleHostIds.has(toRuntimeExecutionHostId(environment.id)))
+    .filter((environment) => visibleHostLabels.has(toRuntimeExecutionHostId(environment.id)))
     .map((environment) => {
       const statusEntry = runtimeStatusByEnvironmentId.get(environment.id)
-      const override = hostLabelOverrides.get(toRuntimeExecutionHostId(environment.id))
       return {
         id: environment.id,
-        label: override || environment.name || environment.id,
+        label:
+          visibleHostLabels.get(toRuntimeExecutionHostId(environment.id)) ||
+          environment.name ||
+          environment.id,
         snapshot: statusEntry?.snapshot,
         status: statusEntry?.status ?? null,
         active: settings?.activeRuntimeEnvironmentId === environment.id,

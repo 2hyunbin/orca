@@ -2,6 +2,8 @@
 import type { PropsWithChildren } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getDefaultSettings } from '../../../../shared/constants'
+import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
 import type { SshConnectionState } from '../../../../shared/ssh-types'
@@ -14,12 +16,16 @@ const mocks = vi.hoisted(() => ({
   readSnapshots: vi.fn(async () => undefined)
 }))
 
+function noSettings(): GlobalSettings | null {
+  return null
+}
+
 let state = {
   sshTargetLabels: new Map<string, string>(),
   sshConnectionStates: new Map<string, SshConnectionState>(),
   runtimeEnvironments: new Array<PublicKnownRuntimeEnvironment>(),
   runtimeStatusByEnvironmentId: new Map<string, RuntimeEnvironmentStatus>(),
-  settings: null,
+  settings: noSettings(),
   readRuntimeHostStatusSnapshots: mocks.readSnapshots,
   hydrateRuntimeEnvironmentStatuses: vi.fn(),
   recordFeatureInteraction: vi.fn(),
@@ -119,7 +125,8 @@ beforeEach(() => {
     runtimeStatusByEnvironmentId: new Map([
       ['server-openclaw', readyStatus()],
       ['server-windows', readyStatus()]
-    ])
+    ]),
+    settings: noSettings()
   }
   Object.assign(window, {
     api: {
@@ -206,5 +213,19 @@ describe('the status menu for a managed SSH host', () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.getByText('SSH Host')).toBeTruthy()
+  })
+
+  it('names the managed row after its SSH host, honouring a rename saved on the SSH id', () => {
+    state.runtimeEnvironments[0] = { ...state.runtimeEnvironments[0], name: 'orcad-ssh-openclaw' }
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    expect(screen.getAllByText('openclaw')).toHaveLength(1)
+    expect(screen.queryByText('orcad-ssh-openclaw')).toBeNull()
+    cleanup()
+    state.settings = {
+      ...getDefaultSettings('/home/test'),
+      hostSettingOverrides: { 'ssh:ssh-openclaw': { displayLabel: 'Claw box' } }
+    }
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    expect(screen.getAllByText('Claw box')).toHaveLength(1)
   })
 })
