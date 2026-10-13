@@ -18,9 +18,14 @@ export async function readTerminalKittyFile(
 ): Promise<TerminalKittyFileResult> {
   signal?.throwIfAborted()
   const path = resolveKittyFilePath(request.path, owner.wslDistro)
+  // DrvFS cannot resolve Windows short-name aliases such as RUNNER~1.
+  const workspaceSource =
+    owner.wslDistro && /^[a-z]:[/\\]/i.test(owner.workspacePath)
+      ? await realpath(owner.workspacePath)
+      : owner.workspacePath
   const workspacePath = owner.wslDistro
-    ? toWindowsWslUncPath(toLinuxPath(owner.workspacePath), owner.wslDistro)
-    : owner.workspacePath
+    ? toWindowsWslUncPath(toLinuxPath(workspaceSource), owner.wslDistro)
+    : workspaceSource
   const [canonical, workspaceRoot, tempRoots] = await Promise.all([
     realpath(path),
     realpath(workspacePath),

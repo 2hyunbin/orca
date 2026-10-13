@@ -92,18 +92,26 @@ export async function proveWindowsKittyFileImage(
   const marker = 'WINDOWS_KITTY_FILE_IMAGE_DONE'
   const expression = `require('node:path').join(require('node:os').tmpdir(), ${JSON.stringify(name)})`
   const linuxPath = `/tmp/${name}`
-  const payload = Buffer.from(`${fixture.payload}${marker}\r\n`).toString('base64')
+  const payload = Buffer.from(fixture.payload).toString('base64')
   const command =
     runtime === 'native'
       ? nodeTerminalCommand([
           '-e',
           `const {writeFileSync} = require('node:fs'); ${kittyFileImageProducer(expression)} console.log('${marker}');`
         ])
-      : `printf '%s' '${fixture.png}' | base64 -d > ${quotePosixShell(linuxPath)}; orca_image_path=$(printf '%s' ${quotePosixShell(linuxPath)} | base64 -w0); orca_image_payload=$(printf '%s' '${payload}' | base64 -d); printf '%s' "\${orca_image_payload/FILE_PATH_BASE64/$orca_image_path}"`
+      : `printf '%s' '${fixture.png}' | base64 -d > ${quotePosixShell(linuxPath)}; orca_image_path=$(printf '%s' ${quotePosixShell(linuxPath)} | base64 -w0); orca_image_payload=$(printf '%s' '${payload}' | base64 -d); printf '%s' "\${orca_image_payload/FILE_PATH_BASE64/$orca_image_path}"; printf '\\r\\n%s\\r\\n' '${marker}'`
   try {
     await execInTerminal(page, ptyId, command)
     await waitForTerminalOutput(page, marker, 30_000)
     await assertKittyFileImagePixels(page, screenshotPath)
+  } catch (error) {
+    if (runtime === 'wsl') {
+      const diagnostic = await diagnoseWslKittyFileRead(page, ptyId, linuxPath).catch(() => ({
+        stage: 'diagnostic-unavailable'
+      }))
+      console.log('WSL Kitty file read diagnostic:', JSON.stringify(diagnostic))
+    }
+    throw error
   } finally {
     await execInTerminal(
       page,
@@ -113,4 +121,76 @@ export async function proveWindowsKittyFileImage(
         : `rm -f -- ${quotePosixShell(linuxPath)}`
     )
   }
+}
+
+async function diagnoseWslKittyFileRead(page: Page, ptyId: string, path: string) {
+  return page.evaluate(
+    async ({ ptyId, path }) => {
+      function failure(stage: string, error: { code: string; message: string }) {
+        const reasons = [
+          'ENOENT',
+          'EACCES',
+          'absolute local file path',
+          'terminal WSL distro',
+          'outside this terminal',
+          'terminal_handle_stale',
+          'no_connected_pty'
+        ]
+        return {
+          stage,
+          code: /^[a-z_]+$/i.test(error.code) ? error.code : 'unknown',
+          reason: reasons.find((reason) => error.message.includes(reason)) ?? 'unclassified'
+        }
+      }
+      const state = window.__store!.getState()
+      const tabId = state.activeTabId
+      const pane = tabId && window.__paneManagers?.get(tabId)?.getActivePane()
+      if (!pane || pane.container.dataset.ptyId !== ptyId) {
+        return { stage: 'binding-changed' }
+      }
+      const resolved = await window.api.runtime.call({
+        method: 'terminal.resolvePane',
+        params: { paneKey: `${tabId}:${pane.leafId}`, worktreeId: state.activeWorktreeId }
+      })
+      if (!resolved.ok) {
+        return failure('resolve-pane', resolved.error)
+      }
+      const result = resolved.result
+      if (typeof result !== 'object' || result === null || !('terminal' in result)) {
+        return { stage: 'invalid-resolution' }
+      }
+      const terminal = result.terminal
+      if (
+        typeof terminal !== 'object' ||
+        terminal === null ||
+        !('handle' in terminal) ||
+        !('ptyId' in terminal) ||
+        terminal.ptyId !== ptyId
+      ) {
+        return { stage: 'binding-changed' }
+      }
+      const read = await window.api.runtime.call({
+        method: 'terminal.readKittyFile',
+        params: {
+          terminal: terminal.handle,
+          path,
+          ...('incarnationId' in terminal ? { expectedIncarnationId: terminal.incarnationId } : {})
+        }
+      })
+      if (!read.ok) {
+        return failure('read-file', read.error)
+      }
+      const bytes = read.result
+      return {
+        stage: 'read-file',
+        png:
+          typeof bytes === 'object' &&
+          bytes !== null &&
+          'base64' in bytes &&
+          typeof bytes.base64 === 'string' &&
+          bytes.base64.startsWith('iVBORw0KGgo')
+      }
+    },
+    { ptyId, path }
+  )
 }

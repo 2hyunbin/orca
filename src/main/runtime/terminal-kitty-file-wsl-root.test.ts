@@ -59,12 +59,34 @@ describe('authoritative WSL Kitty file roots', () => {
     expect(open).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\repo\\image`, expect.any(Number))
   })
 
+  it('resolves Windows short names before mapping a native workspace into WSL', async () => {
+    const workspacePath = 'C:\\Users\\RUNNER~1\\repo'
+    realpath.mockImplementation(async (path: string) => {
+      if (path === workspacePath) {
+        return 'C:\\Users\\runneradmin\\repo'
+      }
+      if (path.includes('RUNNER~1')) {
+        throw new Error('ENOENT')
+      }
+      return path
+    })
+    const owner = { workspacePath, wslDistro: 'Ubuntu' }
+    for (const path of ['/tmp/claude-image', '/mnt/c/Users/runneradmin/repo/image']) {
+      await expect(readTerminalKittyFile({ path }, owner)).resolves.toEqual({
+        base64: 'SU1BR0U='
+      })
+    }
+    expect(realpath).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\Users\\runneradmin\\repo`)
+    expect(realpath).not.toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\Users\\RUNNER~1\\repo`)
+  })
+
   it('uses the PTY distro rather than an old workspace UNC distro', async () => {
     const owner = { workspacePath: '\\\\wsl.localhost\\Debian\\repo', wslDistro: 'Ubuntu' }
     await expect(readTerminalKittyFile({ path: '/tmp/claude-image' }, owner)).resolves.toEqual({
       base64: 'SU1BR0U='
     })
     expect(realpath).toHaveBeenCalledWith(`${ROOT}\\repo`)
+    expect(realpath).not.toHaveBeenCalledWith(owner.workspacePath)
     expect(open).toHaveBeenCalledWith(`${ROOT}\\tmp\\claude-image`, expect.any(Number))
   })
 
