@@ -8,17 +8,23 @@ import {
  * connects again, no automatic connect may prompt for them: background status checks, managed
  * server tunnels and reconnect ladders would otherwise reopen the modal every few seconds.
  */
-const declinedTargets = new Set<string>()
+// The value is the declining attempt's credential signal: that attempt may still offer its other
+// methods (a password after a cancelled passphrase), only later attempts are barred.
+const declinedTargets = new Map<string, AbortSignal | undefined>()
 
-export function recordSshCredentialDeclined(targetId: string): void {
-  declinedTargets.add(targetId)
+export function recordSshCredentialDeclined(targetId: string, attempt?: AbortSignal): void {
+  declinedTargets.set(targetId, attempt)
 }
 
-export function isSshCredentialDeclined(targetId: string): boolean {
-  return declinedTargets.has(targetId)
+/** Omit `attempt` to ask whether a new connect may be started at all. */
+export function isSshCredentialDeclined(targetId: string, attempt?: AbortSignal): boolean {
+  if (!declinedTargets.has(targetId)) {
+    return false
+  }
+  return attempt === undefined || declinedTargets.get(targetId) !== attempt
 }
 
-/** Only an explicit user connect may lift a decline. */
+/** Only an explicit user connect, or a sign-in that succeeded anyway, may lift a decline. */
 export function clearSshCredentialDeclined(targetId: string): void {
   declinedTargets.delete(targetId)
 }

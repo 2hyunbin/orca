@@ -43,9 +43,16 @@ describe('a cancelled SSH sign-in', () => {
   function requestCredential(
     targetId: string,
     kind: SshCredentialKind,
-    detail: string
+    detail: string,
+    attempt?: AbortSignal
   ): Promise<string | null> | undefined {
-    return createSshConnectionCallbacks().onCredentialRequest?.(targetId, kind, detail)
+    return createSshConnectionCallbacks().onCredentialRequest?.(
+      targetId,
+      kind,
+      detail,
+      undefined,
+      attempt
+    )
   }
 
   async function submitCredential(value: string | null): Promise<void> {
@@ -63,8 +70,8 @@ describe('a cancelled SSH sign-in', () => {
   }
 
   /** What any connect does when its key or password is needed: ask, and the user cancels. */
-  async function promptAndCancel(): Promise<void> {
-    const pending = requestCredential(target.id, 'password', target.host)
+  async function promptAndCancel(attempt?: AbortSignal): Promise<void> {
+    const pending = requestCredential(target.id, 'passphrase', '~/.ssh/id_ed25519', attempt)
     await submitCredential(null)
     await expect(pending).resolves.toBeNull()
   }
@@ -87,6 +94,35 @@ describe('a cancelled SSH sign-in', () => {
     ).resolves.toBeNull()
 
     expect(credentialRequests()).toHaveLength(0)
+  })
+
+  it('lets the cancelled attempt still offer its other method, but not a later attempt', async () => {
+    const cancelledAttempt = new AbortController().signal
+    await promptAndCancel(cancelledAttempt)
+    mockWindow.webContents.send.mockClear()
+
+    // Same attempt: a password after the cancelled passphrase.
+    void requestCredential(target.id, 'password', target.host, cancelledAttempt)
+    expect(credentialRequests()).toHaveLength(1)
+
+    // A later automatic attempt.
+    await expect(
+      requestCredential(target.id, 'password', target.host, new AbortController().signal)
+    ).resolves.toBeNull()
+    expect(credentialRequests()).toHaveLength(1)
+  })
+
+  it('is lifted when the host signs in anyway, e.g. through a newly loaded agent key', async () => {
+    await promptAndCancel()
+
+    createSshConnectionCallbacks().onStateChange(target.id, {
+      targetId: target.id,
+      status: 'connected',
+      error: null,
+      reconnectAttempt: 0
+    })
+
+    expect(isSshCredentialDeclined(target.id)).toBe(false)
   })
 
   it('still prompts for a different host', async () => {

@@ -1,7 +1,7 @@
 import type { SshConnectionCallbacks } from '../ssh/ssh-connection'
 import type { SshConnectionState } from '../../shared/ssh-types'
 import { isSshHostCensusInFlight } from '../ssh/ssh-connection-attribution'
-import { isSshCredentialDeclined } from '../ssh/ssh-credential-decline'
+import { clearSshCredentialDeclined, isSshCredentialDeclined } from '../ssh/ssh-credential-decline'
 import {
   connectInFlight,
   credentialRequestedForTarget,
@@ -13,6 +13,9 @@ import { requestCredential } from './ssh-passphrase'
 import { broadcastSshState } from './ssh-renderer-broadcast'
 
 export function handleSshConnectionStateChange(targetId: string, state: SshConnectionState): void {
+  if (state.status === 'connected') {
+    clearSshCredentialDeclined(targetId)
+  }
   if (testingTargets.has(targetId)) {
     return
   }
@@ -41,7 +44,7 @@ export function createSshConnectionCallbacks(): SshConnectionCallbacks {
   return {
     onCredentialRequest: (targetId, kind, detail, echo, signal) => {
       // Why: after a Cancel only an explicit connect may prompt; answer the rest as cancelled.
-      if (isSshCredentialDeclined(targetId)) {
+      if (isSshCredentialDeclined(targetId, signal)) {
         return Promise.resolve(null)
       }
       credentialRequestedForTarget.add(targetId)

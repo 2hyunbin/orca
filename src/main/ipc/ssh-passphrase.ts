@@ -38,7 +38,7 @@ export function requestCredential(
   // Why: an abort is the connection's own teardown; only the user's Cancel (or silence) declines.
   const decline = (): void => {
     if (pendingRequests.has(requestId)) {
-      recordSshCredentialDeclined(targetId)
+      recordSshCredentialDeclined(targetId, signal)
     }
     finish(null)
   }
