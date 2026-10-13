@@ -213,7 +213,7 @@ export function canSetStructuredAgentSessionOption(
   const descriptor = structuredAgentSessionOptionSnapshot(state).find((entry) => entry.id === id)
   return Boolean(
     state.catalog &&
-    state.pendingId === null &&
+    state.pendingId !== id &&
     ((typeof value === 'string' &&
       descriptor?.kind.type === 'select' &&
       descriptor.kind.choices.some((choice) => choice.value === value)) ||
