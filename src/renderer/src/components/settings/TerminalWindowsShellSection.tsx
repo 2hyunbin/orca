@@ -64,7 +64,7 @@ export function TerminalWindowsShellSection({
           ]}
         >
           <SettingsRow
-            className="flex-col items-start @lg:flex-row @lg:items-center"
+            className="flex-col items-stretch @lg:flex-row @lg:items-center"
             label={translate('auto.components.settings.TerminalPane.27e301f22c', 'Default Shell')}
             description={translate(
               'auto.components.settings.TerminalPane.09bf02de9a',
@@ -73,6 +73,8 @@ export function TerminalWindowsShellSection({
             control={
               <SettingsSegmentedControl
                 size="sm"
+                equalWidth
+                wrap
                 ariaLabel={translate(
                   'auto.components.settings.TerminalPane.27e301f22c',
                   'Default Shell'

@@ -55,8 +55,8 @@ export function TerminalWindowsAdministratorSection(): React.JSX.Element {
           : translate('settings.terminal.windows.standardStatus', 'Standard user')
 
   const helpLabel = administrator
-    ? translate('settings.terminal.windows.returnStandardHelp', 'How to return to standard mode')
-    : translate('settings.terminal.windows.runAdministratorHelp', 'How to run as administrator')
+    ? translate('settings.terminal.windows.returnStandardHelp', 'Standard mode guide')
+    : translate('settings.terminal.windows.runAdministratorHelp', 'Administrator guide')
   const restartLabel = translate(
     'settings.terminal.windows.restartAdministrator',
     'Restart as administrator'
