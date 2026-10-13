@@ -66,6 +66,13 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
       this.saveWindowlessAgentSessionTab(session.workspaceId, session)
       this.projectStructuredAgentSessionTab({ ...session, activate: false, notify: false })
     }
+    // A chat whose record went missing between runs leaves the index with no hidden notice; its saved
+    // tab goes the same way. One a newer Orca wrote is only unreadable here, so it keeps its tab.
+    for (const sessionId of this.savedAgentSessionTabs().keys()) {
+      if (!host?.deps?.store?.isSessionUnreadable?.(sessionId)) {
+        this.removeWindowlessAgentSessionTab(sessionId)
+      }
+    }
     const wasUnverifiable = this.structuredAgentSessionInventoryUnverifiable
     // No host means no one can say which chats exist; with none on disk, empty is the answer.
     this.structuredAgentSessionInventoryUnverifiable =

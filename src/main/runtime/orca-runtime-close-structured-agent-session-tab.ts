@@ -18,7 +18,7 @@ import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-
 import { withClosedAgentSessionTab, withOpenedAgentSessionTab } from './agent-session-tab-layout'
 import { structuredSessionTabRetired } from './structured-worker-custody'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import type { ExecutionHostId } from '../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
@@ -269,20 +269,28 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     if (!host || !structuredSessionTabRetired(host, sessionId)) {
       return
     }
-    const worktreeIds = new Set(
-      this.listWorkspaceSessionPartitions().flatMap((session) =>
-        Object.entries(session.unifiedTabs ?? {})
-          .filter(([, tabs]) =>
-            tabs.some((tab) => tab.contentType === 'agent-session' && tab.entityId === sessionId)
-          )
-          .map(([worktreeId]) => worktreeId)
-      )
-    )
-    for (const worktreeId of worktreeIds) {
+    for (const worktreeId of this.savedAgentSessionTabs().get(sessionId) ?? []) {
       this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
         withClosedAgentSessionTab(hostId, session, worktreeId, sessionId)
       )
     }
+  }
+
+  /** Each of this host's chats with a saved tab, and the worktrees that save one. */
+  protected savedAgentSessionTabs(): Map<string, Set<string>> {
+    const saved = new Map<string, Set<string>>()
+    for (const session of this.listWorkspaceSessionPartitions()) {
+      for (const [worktreeId, tabs] of Object.entries(session.unifiedTabs ?? {})) {
+        for (const tab of tabs) {
+          // Another execution host's chat is in that host's index, not this one's.
+          const ownHost = !tab.executionHostId || tab.executionHostId === LOCAL_EXECUTION_HOST_ID
+          if (tab.contentType === 'agent-session' && ownHost) {
+            saved.set(tab.entityId, (saved.get(tab.entityId) ?? new Set()).add(worktreeId))
+          }
+        }
+      }
+    }
+    return saved
   }
 
   // A window saves its own layout whole, chat tabs included; only a host with none saves them here.
