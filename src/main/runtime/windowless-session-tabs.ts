@@ -35,8 +35,8 @@ export type WindowlessSessionTabsInput = {
   hostPages: ReadonlyMap<string, BrowserTabInfo>
   /** Pages paired clients run for this host, by page id, as their rows publish them. */
   clientPages: ReadonlyMap<string, RuntimeMobileSessionBrowserTab>
-  /** Terminal tabs whose start is in flight, listed once their process is bound. */
-  startingTabIds?: ReadonlySet<string>
+  /** Terminal tabs written to the layout whose process is not yet bound; listed once bound. */
+  unboundTabIds?: ReadonlySet<string>
   /** The agent a live terminal was launched with, by PTY id. */
   launchAgentOf?: (ptyId: string) => TuiAgent | null | undefined
 }
@@ -53,7 +53,7 @@ export function projectWindowlessSessionTabs(
   }
   const projected = projectSessionTabs(
     worktreeId,
-    withoutStartingTabs(workspace, input.startingTabIds),
+    withoutUnboundTabs(workspace, input.unboundTabIds),
     loaded.desktopView,
     loaded.facts,
     input.generatedTitlesEnabled
@@ -66,12 +66,12 @@ export function projectWindowlessSessionTabs(
   }
 }
 
-function withoutStartingTabs(
+function withoutUnboundTabs(
   workspace: WorkspaceLayout,
-  starting: ReadonlySet<string> | undefined
+  unbound: ReadonlySet<string> | undefined
 ): WorkspaceLayout {
   const hidden = new Set(
-    workspace.tabs.filter((tab) => starting?.has(tab.entityId)).map((tab) => tab.id)
+    workspace.tabs.filter((tab) => unbound?.has(tab.entityId)).map((tab) => tab.id)
   )
   if (hidden.size === 0) {
     return workspace

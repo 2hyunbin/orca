@@ -42,7 +42,8 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)
-      const claimedStablePaneCreate = this.startingTerminalTabs.claim(this.ptyController, {
+      // Marked on the create claim, not deferMobileSessionPublish: CLI creates leave that unset.
+      const claimedStablePaneCreate = this.unboundTerminalTabs.claimPaneCreate(this.ptyController, {
         worktreeId: workspace.id,
         connectionId: workspace.connectionId,
         tabId,
