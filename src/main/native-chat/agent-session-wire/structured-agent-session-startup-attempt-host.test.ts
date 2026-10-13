@@ -36,8 +36,8 @@ import type { StructuredAgentSessionStartupLimits } from './structured-agent-ses
 
 const CALLER = { callerKey: 'client-1' }
 
-const eventually = (assertion: () => void | Promise<void>): Promise<void> =>
-  vi.waitFor(assertion, { timeout: 10_000 })
+const eventually = (assertion: () => void | Promise<void>, interval = 0): Promise<void> =>
+  vi.waitFor(assertion, { timeout: 10_000, interval })
 
 let root: string
 let store: AgentSessionRecordStore
@@ -112,6 +112,9 @@ async function restartWith(next: StructuredAgentSessionAdapter['acquire']): Prom
 }
 
 beforeEach(async () => {
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+  })
   root = await mkdtemp(join(tmpdir(), 'orca-startup-attempt-'))
   resetHostTestOperationIds()
   startupLimits = undefined
@@ -134,8 +137,12 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await host.flushAllStreamedEvents()
-  await rm(root, { recursive: true, force: true })
+  try {
+    await host.flushAllStreamedEvents()
+    await rm(root, { recursive: true, force: true })
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 function sendParams(text: string, clientOperationId = hostTestOperationId()) {
@@ -181,10 +188,12 @@ function startedEvent(generation = `generation-${acquire.mock.calls.length}`) {
 }
 
 /** The send's start has published its child, still starting; the host holds the send. */
-async function heldBehindStart(text: string): Promise<string> {
+async function heldBehindStart(text: string, interval = 0): Promise<string> {
   const id = await accept(text)
-  await eventually(async () =>
-    expect((await host.readStatusSummary(SESSION))?.hostExecutionPhase).toBe('starting')
+  await eventually(
+    async () =>
+      expect((await host.readStatusSummary(SESSION))?.hostExecutionPhase).toBe('starting'),
+    interval
   )
   return id
 }
@@ -327,7 +336,7 @@ describe('a start that ends before it proves itself', () => {
     await restartWith(publishFirst)
     const id = await heldBehindStart('hello')
 
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'), 50)
     expect(await submission(id)).toMatchObject(HOST_STOPPED)
     expect((await submission(id))?.handedOverAt).toBeUndefined()
     expect(closeSession).toHaveBeenCalled()
@@ -345,11 +354,14 @@ describe('a start that ends before it proves itself', () => {
     })
     try {
       const id = await heldBehindStart('hello')
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      await vi.advanceTimersByTimeAsync(200)
       expect(closeSession).not.toHaveBeenCalled()
       expect(startupAttemptOpen()).toBe(true)
 
-      await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+      await eventually(
+        async () => expect((await submission(id))?.dispatchState).toBe('rejected'),
+        50
+      )
       expect(await submission(id)).toMatchObject(HOST_STOPPED)
       expect(dispatch).not.toHaveBeenCalled()
     } finally {
@@ -368,7 +380,7 @@ describe('a start that ends before it proves itself', () => {
     )
     const id = await accept('hello')
 
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'), 50)
     expect(await submission(id)).toMatchObject(HOST_STOPPED)
     expect(dispatch).not.toHaveBeenCalled()
     await eventually(() => expect(startupAttemptOpen()).toBe(false))
@@ -398,11 +410,11 @@ describe('a start that ends before it proves itself', () => {
   it('is not ended by the limit once it proved itself', async () => {
     startupLimits = { silenceMs: 50 }
     await restartWith(publishFirst)
-    const id = await heldBehindStart('hello')
+    const id = await heldBehindStart('hello', 0)
     await host.handleAdapterEvent(startedEvent())
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
+    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'), 0)
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await vi.advanceTimersByTimeAsync(100)
 
     expect(closeSession).not.toHaveBeenCalled()
     expect((await host.readStatusSummary(SESSION))?.hostExecutionPhase).toBe('ready')
