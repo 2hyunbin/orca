@@ -14,13 +14,15 @@ export function pluginDisplayNameFromKey(pluginKey: string): string {
 export function pluginMonogram(name: string): string {
   const parts = name
     .trim()
-    .split(/[\s._-]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean)
-  if (parts.length === 0) {
+  const first = parts[0]
+  const second = parts[1]
+  if (!first) {
     return '?'
   }
-  if (parts.length === 1) {
-    return parts[0]!.slice(0, 2).toUpperCase()
+  if (!second) {
+    return Array.from(first).slice(0, 2).join('').toUpperCase()
   }
-  return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase()
+  return `${Array.from(first)[0] ?? ''}${Array.from(second)[0] ?? ''}`.toUpperCase()
 }

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": ["vite/client", "node"],
+    "paths": {
+      "@/i18n/i18n": ["../src/plugin-directory/public-ui-copy.ts"],
+      "@/*": ["../src/renderer/src/*"]
+    }
+  },
+  "include": ["../src/plugin-directory/**/*.ts", "../src/plugin-directory/**/*.tsx"]
+}

@@ -1,6 +1,7 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-test'
+import { retryTransientMainEvaluate } from './electron-main-evaluate-retry'
 
 export function getPluginEvidenceDirectory(): string {
   return resolve(
@@ -28,12 +29,14 @@ export async function capturePluginEvidence(
       await Promise.all(animations.map((animation) => animation.finished.catch(() => {})))
     })
     // Native capture preserves the guest compositor's actual embedded bounds.
-    const window = await app.browserWindow(page)
+    const window = await retryTransientMainEvaluate(() => app.browserWindow(page))
     try {
-      const png = await window.evaluate(async (window) =>
-        (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }))
-          .toPNG({ scaleFactor: 1 })
-          .toString('base64')
+      const png = await retryTransientMainEvaluate(() =>
+        window.evaluate(async (window) =>
+          (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }))
+            .toPNG({ scaleFactor: 1 })
+            .toString('base64')
+        )
       )
       await writeFile(path, Buffer.from(png, 'base64'))
     } finally {

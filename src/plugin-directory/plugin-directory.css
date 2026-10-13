@@ -1,0 +1,47 @@
+@import 'tailwindcss' source(none);
+@import 'tw-animate-css';
+@source './';
+@source '../renderer/src/components/ui/button.tsx';
+@source '../renderer/src/components/ui/input.tsx';
+@source '../renderer/src/components/ui/badge.tsx';
+@source '../renderer/src/components/ui/dialog.tsx';
+@source '../renderer/src/components/ui/label.tsx';
+@source '../renderer/src/components/ui/tabs.tsx';
+@source '../renderer/src/components/ui/card.tsx';
+@source '../renderer/src/components/plugin-catalog/PluginCatalogAvatar.tsx';
+@source '../renderer/src/components/plugin-catalog/PluginCatalogPreview.tsx';
+@custom-variant dark (&:is(.dark *));
+
+/* ORCA_CANONICAL_DESIGN_TOKENS */
+
+@font-face {
+  font-family: 'Geist';
+  src: url('../renderer/src/assets/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    margin: 0;
+    font-family: var(--app-font-family);
+    font-size: 14px;
+    letter-spacing: 0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    @apply bg-background text-foreground;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
