@@ -30,6 +30,14 @@ afterEach(() => {
 })
 
 describe('relaunchApp', () => {
+  it('passes the native restart target to Electron after recording the reason', () => {
+    const options = { execPath: 'C:\\Orca\\resources\\bin\\orca.exe', args: ['restart'] }
+    relaunchApp('windows-administrator', undefined, options)
+    expect(appRelaunchMock).toHaveBeenCalledWith(options)
+    expect(recordDurableCrashBreadcrumbMock.mock.invocationCallOrder[0]).toBeLessThan(
+      appRelaunchMock.mock.invocationCallOrder[0]
+    )
+  })
   it('durably records the reason before scheduling the replacement process', () => {
     relaunchApp('gpu-fallback', { processReason: 'crashed', exitCode: 5 })
 

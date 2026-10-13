@@ -21,6 +21,8 @@ export type AppApi = {
   getIdentity: () => Promise<AppIdentity>
   /** Local Windows desktop elevation; null when unavailable. Does not describe remote hosts. */
   getWindowsAdministratorStatus: () => Promise<boolean | null>
+  /** Restarts the installed Windows desktop with administrator approval and replaces its local terminal host. */
+  restartAsAdministrator: () => Promise<void>
   /** Returns a URL base for feature-wall assets. In dev this is Vite /@fs;
    *  in packaged builds this is file:// resources. Renderer appends filenames. */
   getFeatureWallAssetBaseUrl: () => Promise<string>

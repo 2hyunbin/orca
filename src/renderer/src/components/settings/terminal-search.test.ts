@@ -15,9 +15,9 @@ describe('getTerminalPaneSearchEntries', () => {
       isWindowsTerminalHost: true,
       isMac: true
     })
-    expect(windows.some((entry) => entry.title === 'Windows administrator mode')).toBe(true)
+    expect(windows.some((entry) => entry.title === 'Administrator mode')).toBe(true)
     expect(matchesSettingsSearch('uac', windows)).toBe(true)
-    expect(remoteWindows.some((entry) => entry.title === 'Windows administrator mode')).toBe(false)
+    expect(remoteWindows.some((entry) => entry.title === 'Administrator mode')).toBe(false)
   })
   it('includes the Windows right-click setting on Windows', () => {
     const entries = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })

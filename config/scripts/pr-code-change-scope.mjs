@@ -412,6 +412,7 @@ const WINDOWS_PACKAGE_TESTS = [
   'src/main/windows/windows-process-table-native-addon.win32.test.ts',
   'src/main/daemon/daemon-pid-identity-native.win32.test.ts',
   'src/main/windows/windows-administrator-status.win32.test.ts',
+  'src/main/windows/windows-administrator-restart.win32.test.ts',
   'src/main/persistence/profile-state/profile-state-access-windows-native.win32.test.ts',
   'src/main/windows-live-tree-kill.win32.test.ts',
   'src/main/wsl/wsl-runner.test.ts',
@@ -626,10 +627,7 @@ function isProductBundlePath(file, extraPrefixes) {
   if (isTestFile(file)) {
     return false
   }
-  if (file.startsWith('src/')) {
-    return true
-  }
-  return matchesPrefix(file, extraPrefixes)
+  return file.startsWith('src/') || matchesPrefix(file, extraPrefixes)
 }
 
 // These shared fixtures are consumed only by unit tests.

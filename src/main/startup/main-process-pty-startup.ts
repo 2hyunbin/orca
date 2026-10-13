@@ -4,6 +4,7 @@ import { track } from '../telemetry/client'
 import { getPtyIdForPaneKey } from '../ipc/pty/pane/key-state'
 import { getDaemonProvider, listLiveDaemonPtyIds } from '../daemon/daemon-provider-state'
 import { initDaemonPtyProvider } from '../daemon/daemon-provider-init'
+import { restartLocalTerminalsAfterElevation } from '../windows/windows-administrator-restart'
 import {
   getCodexPaneAccount,
   hasAnyRecordedLegacyWslCodexPane,
@@ -139,6 +140,7 @@ export function startTerminalRuntimeStartupServices(): WindowsDesktopStartupServ
         // Why: desktop observes for one release; headless hosts pace automatic restores now.
         spawnAdmission: state.isServeMode ? 'enforce' : 'observe'
       })
+      await restartLocalTerminalsAfterElevation(signal)
       // Why: a retained shell keeps its launch-time Codex home even when the current routing lane changes.
       const hasRetainedManagedHostPane = hasRecordedManagedHostCodexPane()
       if (

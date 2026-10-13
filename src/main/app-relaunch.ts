@@ -9,12 +9,17 @@ export type AppRelaunchReason =
   | 'profile-switch'
   | 'profile-transfer'
   | 'renderer-request'
+  | 'windows-administrator'
 
-export function relaunchApp(reason: AppRelaunchReason, data?: CrashReportBreadcrumbData): void {
+export function relaunchApp(
+  reason: AppRelaunchReason,
+  data?: CrashReportBreadcrumbData,
+  options?: Electron.RelaunchOptions
+): void {
   // Why: the current process can exit immediately after app.relaunch(), so
   // persist the cause before Electron schedules the replacement process.
   recordDurableCrashBreadcrumb('app_relaunch_requested', { ...data, reason })
-  runWithLaunchPath(() => app.relaunch())
+  runWithLaunchPath(() => app.relaunch(options))
 }
 
 export async function runBeforeRelaunchCleanup(

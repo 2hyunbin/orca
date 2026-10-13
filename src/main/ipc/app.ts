@@ -7,6 +7,7 @@ import type { AppIdentity } from '../../shared/app-identity'
 import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
 import type { FloatingTerminalCwdRequest } from '../../shared/ui-chrome-types'
 import { relaunchApp, runBeforeRelaunchCleanup } from '../app-relaunch'
+import { prepareWindowsAdministratorRestart } from '../windows/windows-administrator-restart'
 import { quitProcess } from '../startup/process-quit-request'
 import type { Store } from '../persistence'
 import { getDevInstanceIdentity } from '../startup/dev-instance-identity'
@@ -169,6 +170,15 @@ export function registerAppHandlers(store: Store, options: RegisterAppHandlersOp
     await runBeforeRelaunchCleanup(options.onBeforeRelaunch)
     setTimeout(() => {
       relaunchApp('admin-restart')
+      quitProcess()
+    }, 150)
+  })
+
+  ipcMain.handle('app:restartAsAdministrator', async () => {
+    const relaunchOptions = prepareWindowsAdministratorRestart()
+    await runBeforeRelaunchCleanup(options.onBeforeRelaunch)
+    setTimeout(() => {
+      relaunchApp('windows-administrator', undefined, relaunchOptions)
       quitProcess()
     }, 150)
   })

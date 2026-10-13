@@ -4,10 +4,10 @@ import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 
 export const getTerminalWindowsAdministratorSearchEntry = createLocalizedCatalog(() => [
   {
-    title: translate('settings.terminal.windows.administratorMode', 'Windows administrator mode'),
+    title: translate('settings.terminal.windows.administratorLabel', 'Administrator mode'),
     description: translate(
-      'settings.terminal.windows.administratorModeDescription',
-      'Administrator mode applies to the whole Orca desktop. Existing terminal hosts keep their original permissions.'
+      'settings.terminal.windows.administratorSearchDescription',
+      'See Orca’s Windows permissions or restart with administrator approval.'
     ),
     keywords: [
       ...getTerminalWindowsShellSearchEntry()[0].keywords,

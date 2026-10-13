@@ -20,6 +20,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     label: 'Windows CLI launcher',
     fingerprintInputs: [
       join(crateRoot, 'src', 'administrator_status.rs'),
+      join(crateRoot, 'src', 'administrator_restart.rs'),
       iconPath,
       join(repoRoot, 'config/scripts/build-windows-cli-launcher.mjs')
     ],
