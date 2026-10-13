@@ -75,8 +75,13 @@ export function getSelectedAccountRuntime(
   wslSupportedPlatform: boolean,
   wslAvailable: boolean,
   wslDistros: string[],
-  wslCapabilitiesLoading: boolean
+  wslCapabilitiesLoading: boolean,
+  /** A WSL host's distro: its accounts are this desktop's for that distro, with no location to pick. */
+  wslHostDistro: string | null = null
 ): LocalAccountRuntime {
+  if (wslHostDistro) {
+    return { runtime: 'wsl', wslDistro: wslHostDistro, label: `WSL ${wslHostDistro}` }
+  }
   // Why: the two-option control displays the concrete target behind the persisted auto policy.
   const resolvedRuntime = resolveLocalAccountRuntimeTarget(settings, getRendererAppPlatform())
   if (wslSupportedPlatform && resolvedRuntime.runtime === 'wsl') {
@@ -100,6 +105,13 @@ export function getSelectedAccountRuntime(
     }
   }
   return { runtime: 'host', label: getHostRuntimeLabel() }
+}
+
+// Why: host runtime labels are standalone UI labels; interpolated prose needs sentence casing.
+export function getRuntimeSentenceLabel(runtime: LocalAccountRuntime): string {
+  return runtime.runtime === 'host' && !navigator.userAgent.includes('Windows')
+    ? `${runtime.label.charAt(0).toLocaleLowerCase()}${runtime.label.slice(1)}`
+    : runtime.label
 }
 
 export function formatAccountTimestamp(timestamp: number): string {
