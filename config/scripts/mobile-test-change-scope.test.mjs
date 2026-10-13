@@ -118,6 +118,7 @@ it('requires both runtime jobs and rejects failed, skipped or cancelled dependen
     readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8')
   )
   expect(workflow.jobs.verify.needs).toEqual(['checks', 'native-tests'])
+  expect(workflow.jobs.verify['runs-on']).toBe('ubuntu-slim')
   expect(workflow.jobs.verify.if).toContain('!cancelled()')
   const [gate] = workflow.jobs.verify.steps
   expect(gate.env.CHECKS_RESULT).toBe('${{ needs.checks.result }}')
