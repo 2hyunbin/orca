@@ -280,7 +280,7 @@ describe('a send a Stop took back, then a send made while it read Stopping', () 
     turns.end('completed')
     await vi.waitFor(async () => expect(verdictOf(await submissions(), second)).toBe('accepted'))
     const live = await drawn()
-    expect(live).toEqual([
+    expect(live.filter((text) => text !== 'Cancellation requested.')).toEqual([
       'look around',
       NATIVE_CHAT_STOPPED_BEFORE_START_TEXT,
       'sent while stopping'
@@ -359,6 +359,12 @@ describe('a send a Stop took back before Codex echoed it', () => {
       ['user', [{ type: 'text', text: 'look around' }]],
       ['system', [expect.objectContaining({ text: NATIVE_CHAT_STOPPED_BEFORE_START_TEXT })]]
     ])
-    expect(await drawn()).toEqual(['warm up', 'look around', NATIVE_CHAT_STOPPED_BEFORE_START_TEXT])
+    const rows = await drawn()
+    expect(rows.filter((text) => text === 'Cancellation requested.')).toHaveLength(1)
+    expect(rows.filter((text) => text !== 'Cancellation requested.')).toEqual([
+      'warm up',
+      'look around',
+      NATIVE_CHAT_STOPPED_BEFORE_START_TEXT
+    ])
   })
 })
