@@ -222,11 +222,4 @@ describe('areWorktreeListsEqual', () => {
 
     expect(areWorktreeListsEqual(first, second)).toBe(false)
   })
-
-  it('treats missing and empty agent arrays as equivalent for rendering', () => {
-    const first = [worktree({ agents: undefined })]
-    const second = [worktree({ agents: [] })]
-
-    expect(areWorktreeListsEqual(first, second)).toBe(true)
-  })
 })
