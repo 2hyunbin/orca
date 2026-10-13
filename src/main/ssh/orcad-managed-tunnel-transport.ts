@@ -62,11 +62,23 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
     if (!forward) {
       throw new Error('SSH connection is not established')
     }
-    const started = await forward.start(conn, options)
+    // Why: the manager only hears an exit once it holds the forward, which it does not mid-check.
+    const exits: string[] = []
+    const started = await forward.start(conn, {
+      ...options,
+      onUnexpectedClose: (entry, reason) => {
+        exits.push(reason.kind === 'unexpected-exit' ? (reason.detail ?? 'exited') : 'closed')
+        options.onUnexpectedClose?.(entry, reason)
+      }
+    })
     // Why: system SSH's listener is up before sshd is asked for a channel, so it proves nothing.
-    if ((await checkForward(started)) === 'refused') {
+    const verdict = await checkForward(started)
+    if (verdict === 'refused') {
       await started.close()
       return this.startBridge(conn, options)
+    }
+    if (exits.length > 0) {
+      throw new Error(`The managed Orca server tunnel closed while it was checked: ${exits[0]}`)
     }
     rememberOrcadTunnelTransport(options.connectionId, 'tcp_forward')
     return started

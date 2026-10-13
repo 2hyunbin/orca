@@ -27,7 +27,7 @@ function provider(name: string, canHandle = true) {
     name,
     close,
     canHandle: () => canHandle,
-    start: vi.fn(async () => {
+    start: vi.fn(async (_conn: SshConnection, _options: PortForwardStartOptions) => {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the test reads only which provider answered.
       return { entry: { id: name }, close } as unknown as StartedPortForward
     })
@@ -122,5 +122,18 @@ describe('the managed tunnel’s transport', () => {
     generation = 2
     await chosen.transport.start(conn, options)
     expect(chosen.forward.start).toHaveBeenCalledTimes(2)
+  })
+
+  it('fails, rather than hand back a dead forward, when the forward exits during its check', async () => {
+    const chosen = select('unverifiable')
+    chosen.checkForward.mockImplementation(async () => {
+      const entry = { ...options, localPort: options.localPort }
+      chosen.forward.start.mock.calls[0]?.[1].onUnexpectedClose?.(entry, {
+        kind: 'unexpected-exit',
+        detail: 'System SSH port forward failed (exit 255)'
+      })
+      return 'unverifiable'
+    })
+    await expect(chosen.transport.start(conn, options)).rejects.toThrow(/exit 255/)
   })
 })

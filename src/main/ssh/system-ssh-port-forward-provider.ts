@@ -22,7 +22,8 @@ export class SystemSshPortForwardProvider implements SshPortForwardProvider {
       options.localPort,
       options.remoteHost,
       options.remotePort,
-      conn.getSystemSshBuildArgsOptions()
+      // The managed tunnel reads the channel answer from stderr (lastChannelOpenFailure).
+      { ...conn.getSystemSshBuildArgsOptions(), logChannelFailures: true }
     )
 
     await forward.waitForStartup()
