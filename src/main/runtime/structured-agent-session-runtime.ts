@@ -243,9 +243,7 @@ export async function stopStructuredAgentSessionRuntime(options?: {
 }
 
 async function install(deps: StructuredAgentSessionRuntimeDeps): Promise<InstalledRuntime> {
-  // Why thrown rather than defaulted: the caller is `@ts-nocheck`, so a dropped
-  // field arrives here as `undefined`. Refusing to install is loud; guessing a
-  // policy is the silent under-strip this assertion exists to prevent.
+  // A default policy could attribute sign-in failures to the wrong account.
   if (typeof deps.resolveClaudeAuthPolicy !== 'function') {
     throw new Error(CLAUDE_STRUCTURED_AUTH_POLICY_REQUIRED)
   }
