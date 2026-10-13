@@ -62,6 +62,12 @@ const GATED_FAMILIES = [
   { modules: ['src/main/win32-utils'], advice: { grantDirAcl: 'use grantDirAclAsync' } }
 ]
 const ADVICE = new Map(GATED_FAMILIES.flatMap((family) => Object.entries(family.advice)))
+const GATED_MARKERS = [
+  ...ADVICE.keys(),
+  ...new Set(
+    GATED_FAMILIES.flatMap((family) => family.modules.map((module) => path.posix.basename(module)))
+  )
+]
 const FALLBACK_OPERATORS = new Set([ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.BarBarToken])
 const BASELINE_HEADER = [
   '# Synchronous child-process launches in production src/main and src/shared, per file: uses of',
@@ -132,9 +138,16 @@ function isValueReference(node) {
  * Counted by reference only: not traced through non-const holders or the file's own wrappers.
  */
 export function collectSyncLaunchUses(file, contents) {
-  const source = ts.createSourceFile(file, contents, ts.ScriptTarget.Latest, true)
+  // Escaped spellings and relative imports inside gated modules still need the full analysis.
+  const analyze =
+    contents.includes('\\') ||
+    GATED_MARKERS.some((marker) => contents.includes(marker) || file.includes(marker))
+  const source = ts.createSourceFile(file, contents, ts.ScriptTarget.Latest, analyze)
   if (source.parseDiagnostics.length > 0) {
     throw new Error(`Cannot parse ${file}; the sync-spawn ratchet must not skip it.`)
+  }
+  if (!analyze) {
+    return { count: 0, symbols: [] }
   }
   const used = new Set()
   let count = 0
