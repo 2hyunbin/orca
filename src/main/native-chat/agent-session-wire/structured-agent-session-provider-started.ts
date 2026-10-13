@@ -55,7 +55,7 @@ export type StructuredAgentSessionProviderStartedContext = {
   now: () => number
   publishStatus?: (sessionId: string) => void
   runtimeState: {
-    startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'ready' | 'onClock'>
+    startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'ready' | 'onClock' | 'readiness'>
     acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
     optionRevisions: Pick<
       StructuredAgentSessionOptionRevisions,
@@ -226,10 +226,20 @@ export function noteStructuredAgentSessionProviderStarted(
 
 /** What a ready child reports later, such as a read that came after its start: persisted as the
  *  start's report is, never ahead of a send. */
-export function settleStructuredAgentSessionOptionsReported(
+export async function settleStructuredAgentSessionOptionsReported(
   context: StructuredAgentSessionProviderStartedContext,
   event: StructuredAgentSessionOptionsReportedEvent
 ): Promise<void> {
+  const child = context.sessions.get(event.sessionId)?.child
+  if (child?.phase === 'starting') {
+    const readiness = context.runtimeState.startupAttempts.readiness(event.sessionId, {
+      generation: event.acquisitionGeneration,
+      fence: event.fence
+    })
+    if (!readiness || (await readiness.wait()) !== 'ready') {
+      return
+    }
+  }
   const admitted = admitReportedOptions(context, event)
   if (event.catalogListing) {
     void saveStructuredAgentSessionStartReadbackListing(context, event, event.catalogListing)

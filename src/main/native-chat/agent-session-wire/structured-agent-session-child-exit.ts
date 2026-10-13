@@ -126,7 +126,7 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
   const startClose = expected && exitedDuringStartup ? close?.cause : undefined
   const startFailure = expected
     ? startClose === 'host-stop'
-      ? agentSessionFailureFact('hostStopped')
+      ? (exit.failure ?? close?.failure ?? agentSessionFailureFact('hostStopped'))
       : undefined
     : exit.failure
   // A send the child was handed and never echoed cannot have run when a person's Stop ended its
@@ -153,7 +153,7 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
       // A close keeps the cause of the stop that asked for it, and ends where it was asked.
       cause: expected ? (close?.cause ?? 'evict') : 'exit',
       reason: expected ? (close?.reason ?? null) : exit.reason,
-      ...(!expected && exit.failure ? { failure: exit.failure } : {}),
+      ...(startFailure ? { failure: startFailure } : {}),
       duringStartup: exitedDuringStartup,
       // The adapter publishes an exit only once it saw the root go, first-hand or proven.
       rootGone: true,
