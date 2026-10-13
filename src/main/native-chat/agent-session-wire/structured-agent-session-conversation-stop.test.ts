@@ -466,7 +466,7 @@ describe('a Stop that names no turn', () => {
 
     expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     expect(await submission(first.id)).toMatchObject({
       dispatchState: 'rejected',
       reason: DISPATCH_REJECTED_CANCELLED
@@ -522,7 +522,7 @@ describe('a Stop that names no turn', () => {
     await laneDrained()
     await host.flushStreamedEvents(SESSION)
 
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     expect((await submission(first.id))?.dispatchState).not.toBe('rejected')
     const turn = (await host.journalSnapshot(SESSION)).items.find(
       (item) => item.body.kind === 'turn'
@@ -547,7 +547,7 @@ describe('a Stop that names no turn', () => {
     expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     expect(log.entries).toContainEqual(
       expect.objectContaining({
         fields: expect.objectContaining({ scope: 'exit-settlement', sessionId: SESSION })
@@ -592,7 +592,7 @@ describe('a Stop that names no turn', () => {
     expect(cancelTurn.mock.calls[0]![0]).toMatchObject({ sessionId: SESSION, fence: 1 })
     await laneDrained()
     // The child's end took the unopened send back; its own row says so.
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     expect(await submission(id)).toMatchObject({
       dispatchState: 'rejected',
       reason: DISPATCH_REJECTED_CANCELLED
@@ -646,7 +646,7 @@ describe('a Stop that names no turn', () => {
     expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     // The send says it never started; the Stop still records the request.
     expect((await submission(id))?.dispatchState).toBe('rejected')
     expect(await statusRows()).toEqual(['Cancellation requested.'])
@@ -662,7 +662,7 @@ describe('a Stop that names no turn', () => {
     expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     expect((await submission(id))?.dispatchState).toBe('rejected')
     expect(await statusRows()).toEqual(['Cancellation requested.'])
   })
@@ -687,7 +687,7 @@ describe('a Stop that names no turn', () => {
       expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
       await laneDrained()
 
-      expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+      expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
       expect(log.entries).toContainEqual(
         expect.objectContaining({
           fields: expect.objectContaining({ scope: 'chat-stop', sessionId: SESSION })
@@ -709,7 +709,7 @@ describe('a Stop that names no turn', () => {
     expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     // Bookkeeping after the proven exit: reported, never the Stop's failure.
     expect(log.entries).toContainEqual(
       expect.objectContaining({
@@ -860,7 +860,7 @@ describe('a Stop ends the agent session', () => {
     // The Stop answers first; its next step on the session's lane ends the child.
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledExactlyOnceWith(SESSION)
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
   })
 
@@ -881,7 +881,7 @@ describe('a Stop ends the agent session', () => {
       expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
       await laneDrained()
 
-      expect(closeSession).toHaveBeenCalledWith(SESSION, 'user-stop')
+      expect(closeSession).toHaveBeenCalledWith(SESSION)
       expect(await statusRows()).toEqual(['Cancellation requested.'])
     }
   )
@@ -894,7 +894,7 @@ describe('a Stop ends the agent session', () => {
     expect(await stop('turn-1')).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledWith(SESSION)
     expect(await statusRows()).toEqual(['Cancellation requested.'])
   })
 
@@ -917,7 +917,7 @@ describe('a Stop ends the agent session', () => {
     expect(await stop('turn-1')).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledWith(SESSION)
     expect(await statusRows()).toEqual(['Cancellation requested.'])
   })
 
@@ -929,7 +929,7 @@ describe('a Stop ends the agent session', () => {
     expect(await stop('turn-1')).toMatchObject({ ok: true, value: { cancelled: true } })
     await laneDrained()
 
-    expect(closeSession).toHaveBeenCalledWith(SESSION, 'user-stop')
+    expect(closeSession).toHaveBeenCalledWith(SESSION)
     expect(await statusRows()).toEqual(['Cancellation requested.'])
   })
 })
