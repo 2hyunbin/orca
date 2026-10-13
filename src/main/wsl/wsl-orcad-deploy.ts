@@ -32,7 +32,7 @@ import { createWslDistroHolder, type WslDistroHolder } from './wsl-distro-holder
 import { wslDistroHolderKey } from './wsl-distro-holder-record'
 import { readWslDistroRegistryId } from './wsl-distro-registry-id'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
-import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
+import { createWslOrcadHostTransport, type WslOrcadHostTransport } from './wsl-orcad-host-transport'
 import { adoptUnrecordedWslOrcad } from './wsl-orcad-instance-adoption'
 
 export type WslOrcadLaunch =
@@ -67,8 +67,13 @@ export type WslOrcadDeployOptions = {
   signal?: AbortSignal
   /** Defaults to one created over `userData`; the app should pass its shared instance. */
   holder?: WslDistroHolder
-  createTransport?: (target: WslOrcadHostTarget) => OrcadHostTransport
+  createTransport?: (target: WslOrcadHostTarget) => OrcadHostTransport & { dispose?(): void }
   readRegistryId?: (distro: string) => Promise<string | null>
+}
+
+/** Until the persisted deployment record (C7) assigns one, the environment is keyed per distro. */
+export function defaultWslOrcadEnvironmentId(distro: string): string {
+  return `wsl:${wslDistroHolderKey(distro)}`
 }
 
 /** WSL 1 runs no Linux kernel, so the pinned Node and its pty cannot run there. */
@@ -86,11 +91,24 @@ export async function deployAndLaunchWslOrcad(
   }
   const target: WslOrcadHostTarget = {
     kind: 'wsl',
-    id: options.environmentId ?? `wsl:${wslDistroHolderKey(name)}`,
+    id: options.environmentId ?? defaultWslOrcadEnvironmentId(name),
     distro: name,
     label: options.label ?? name
   }
   const conn = (options.createTransport ?? defaultTransport)(target)
+  try {
+    return await launchOverTransport(name, target, conn, options)
+  } finally {
+    conn.dispose?.()
+  }
+}
+
+async function launchOverTransport(
+  name: string,
+  target: WslOrcadHostTarget,
+  conn: OrcadHostTransport,
+  options: WslOrcadDeployOptions
+): Promise<WslOrcadLaunch> {
   const { signal } = options
   const kernel = await execCommand(conn, 'uname -r', { signal })
   if (isWsl1KernelRelease(kernel)) {
@@ -118,7 +136,10 @@ export async function deployAndLaunchWslOrcad(
   if (adoption.outcome === 'adopted') {
     context = { ...context, activationRecord: adoption.record }
   }
-  const localOrcadDir = await materializeOrcadArtifact(context.serverTarget, { signal })
+  const localOrcadDir = await materializeOrcadArtifact(context.serverTarget, {
+    signal,
+    trustVerificationRecord: true
+  })
   const appVersion = getAppEnvironment().getVersion()
   const deployed = await deployOrcad({
     ...slot,
@@ -127,7 +148,8 @@ export async function deployAndLaunchWslOrcad(
     target: context.serverTarget,
     ...managedOrcadDeployPolicy(context, appVersion, options.force),
     force: options.force,
-    appVersion
+    appVersion,
+    recordedNodeRuntimeProbe: true
   })
   if (deployed.outcome === 'installed-not-activated') {
     return {
@@ -184,7 +206,7 @@ export async function deployAndLaunchWslOrcad(
   }
 }
 
-function defaultTransport(target: WslOrcadHostTarget): OrcadHostTransport {
+function defaultTransport(target: WslOrcadHostTarget): WslOrcadHostTransport {
   return createWslOrcadHostTransport({ target })
 }
 

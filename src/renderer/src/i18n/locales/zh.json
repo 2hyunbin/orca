@@ -2377,8 +2377,8 @@
         "34c8fbb46e": "SSH远程",
         "63c2be1914": "SSH 已断开连接",
         "95be6587d3": "创建工作树“{{value0}}”",
-        "worktreesHeader": "工作树",
-        "recentWorktreesHeader": "最近的工作树",
+        "worktreesHeader": "工作空间",
+        "recentWorktreesHeader": "最近的工作空间",
         "settingsBadge": "设置",
         "actionBadge": "操作",
         "paletteHostBadge": "主机：{{value0}}",
@@ -2387,8 +2387,8 @@
         "projectBadge": "项目",
         "repoGroupBadge": "仓库组",
         "pluginCommandFailed": "无法运行插件命令。",
-        "27f10cca63": "搜索聊天、终端、工作树、设置和操作...",
-        "2770f02910": "搜索聊天、终端、工作树、设置和操作",
+        "27f10cca63": "搜索聊天、终端、工作空间、设置和操作...",
+        "2770f02910": "搜索聊天、终端、工作空间、设置和操作",
         "recentChatsTerminalsHeader": "最近的聊天和终端",
         "lastActiveTime": "最后活跃时间 {{value0}} 前"
       },
@@ -15396,8 +15396,16 @@
           "7b458e0b7f": "选择 Markdown 模板。",
           "1829437fce": "新 Markdown"
         },
+        "DiagramViewerModal": {
+          "title": "图表",
+          "zoomOut": "缩小",
+          "zoomIn": "放大",
+          "fit": "适应屏幕",
+          "close": "关闭"
+        },
         "MermaidBlock": {
-          "dcc132e691": "图表错误："
+          "dcc132e691": "图表错误：",
+          "expand": "展开图表"
         },
         "MonacoEditor": {
           "68cb83f4a7": "在选定的文本上添加注释",
@@ -19354,6 +19362,10 @@
     "removePath": "Remove {{name}}"
   },
   "accounts": {
+    "wslAccountNotApplied": {
+      "title": "未在 {{distro}} 中应用账户选择",
+      "description": "在 WSL 中的 Orca 更新之前，那里的智能体将使用该发行版默认的 Claude 和 Codex 账户。"
+    },
     "managedData": {
       "description": "在 Orca 主机的终端中运行此命令以添加账户。选择适用于该主机上新启动的智能体；直接 SSH 连接和 Windows 托管的 WSL 使用各自的凭据。",
       "copied": "已复制",

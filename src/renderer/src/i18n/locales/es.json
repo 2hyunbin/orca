@@ -2377,8 +2377,8 @@
         "34c8fbb46e": "SSH remoto",
         "63c2be1914": "SSH desconectado",
         "95be6587d3": "Crear worktree \"{{value0}}\"",
-        "worktreesHeader": "Worktrees",
-        "recentWorktreesHeader": "Worktrees recientes",
+        "worktreesHeader": "Espacios de trabajo",
+        "recentWorktreesHeader": "Espacios de trabajo recientes",
         "settingsBadge": "Ajustes",
         "actionBadge": "Acción",
         "paletteHostBadge": "Host: {{value0}}",
@@ -2387,8 +2387,8 @@
         "projectBadge": "Proyecto",
         "repoGroupBadge": "Grupo de repositorios",
         "pluginCommandFailed": "No se pudo ejecutar el comando del plugin.",
-        "27f10cca63": "Busca chats, terminales, worktrees, ajustes y acciones...",
-        "2770f02910": "Busca chats, terminales, worktrees, ajustes y acciones",
+        "27f10cca63": "Busca chats, terminales, espacios de trabajo, ajustes y acciones...",
+        "2770f02910": "Busca chats, terminales, espacios de trabajo, ajustes y acciones",
         "recentChatsTerminalsHeader": "Chats y terminales recientes",
         "lastActiveTime": "Última actividad hace {{value0}}"
       },
@@ -15382,8 +15382,16 @@
           "7b458e0b7f": "Elija una plantilla de Markdown.",
           "1829437fce": "Nuevo Markdown"
         },
+        "DiagramViewerModal": {
+          "title": "Diagrama",
+          "zoomOut": "Alejar",
+          "zoomIn": "Acercar",
+          "fit": "Ajustar a la pantalla",
+          "close": "Cerrar"
+        },
         "MermaidBlock": {
-          "dcc132e691": "Error de diagrama:"
+          "dcc132e691": "Error de diagrama:",
+          "expand": "Ampliar diagrama"
         },
         "MonacoEditor": {
           "68cb83f4a7": "Agregar nota sobre el texto seleccionado",
@@ -19200,6 +19208,10 @@
     }
   },
   "accounts": {
+    "wslAccountNotApplied": {
+      "title": "No se aplicó la selección de cuenta en {{distro}}",
+      "description": "Los agentes allí usan las cuentas predeterminadas de Claude y Codex de la distribución hasta que se actualice Orca en WSL."
+    },
     "managedData": {
       "description": "Añade cuentas ejecutando este comando en una terminal del host de Orca. La selección se aplica a nuevos inicios del agente en ese host; las conexiones SSH directas y WSL alojado en Windows usan sus propias credenciales.",
       "copied": "Copiado",
