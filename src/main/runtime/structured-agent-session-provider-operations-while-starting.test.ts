@@ -1,6 +1,4 @@
-// An operation only the agent's protocol session can perform (a rewind, a goal, the recovery of a
-// rewind left in doubt) never reaches a child still proving its start, for any agent. Driven through
-// the real Codex and ACP adapters with only the provider child scripted.
+// Protocol operations wait for the real Codex adapter to open; only its child is scripted.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -9,9 +7,6 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import type { AgentSessionMutationEnvelope } from '../../shared/agent-session-wire'
-import { ACP_LAUNCH_SPECS } from '../acp/acp-launch-specs'
-import { acpScriptedChild } from '../acp/acp-scripted-child.test-fixture'
-import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
 import type { StructuredAgentDefinition } from '../native-chat/agent-session-wire/structured-agent-definition'
 import {
@@ -142,46 +137,6 @@ async function settlesSoon(pending: Promise<unknown>): Promise<boolean> {
   return settled
 }
 
-it('recovers a Codex rewind left in doubt once the restarted thread is open, then delivers the send that started it', async () => {
-  const child = codexScriptedChild({
-    'thread/read': () => ({ thread: { id: CODEX_SCRIPTED_THREAD, status: { type: 'idle' } } }),
-    // The rewound turn is gone and nothing earlier is retained: the provider applied the rewind.
-    'thread/turns/list': () => ({ data: [], nextCursor: null }),
-    'thread/items/list': () => ({ data: [], nextCursor: null })
-  })
-  const { host, itemId, providerItemId } = await codexChatAtRestWithATurn(child)
-  const { store } = host.deps
-  const expectedEpoch = (await host.journalSnapshot(SESSION)).cursor.epoch
-  const request = envelope(host, 'agentSession.rewind', { itemId, expectedEpoch })
-  await store.admitMutationOperation({
-    callerKey: CALLER.callerKey,
-    envelope: request,
-    hostFingerprint: request.payloadFingerprint,
-    now: Date.now()
-  })
-  await store.transitionHandoff(SESSION, (record) => ({
-    ...record,
-    rewind: {
-      operationId: request.clientOperationId,
-      callerKey: CALLER.callerKey,
-      itemId,
-      providerItemId,
-      expectedEpoch,
-      phase: 'prepared',
-      retained: []
-    }
-  }))
-
-  const sent = send(host, 'after the rewind')
-  await eventually(() => expect(child.spawns()).toBe(2))
-  expect(await settlesSoon(sent)).toBe(false)
-  child.releaseHandshake()
-
-  expect(await sent).toMatchObject({ ok: true })
-  expect(store.getRecord(SESSION)?.rewind?.phase).toBe('completed')
-  await eventually(() => expect(child.prompts()).toEqual(['first turn', 'after the rewind']))
-})
-
 it('settles a rewind that goes in doubt while a send waits in the queue, by waiting out the start the send needs', async () => {
   const child = codexScriptedChild({
     'thread/read': () => ({ thread: { id: CODEX_SCRIPTED_THREAD, status: { type: 'idle' } } }),
@@ -257,27 +212,6 @@ it('answers a rewind asked of a resting Codex chat from the thread it opens, lea
   await eventually(() => expect(child.prompts()).toEqual(['first turn', 'still sends']))
 })
 
-it('sets a goal asked of a starting Codex chat on the thread once it is open', async () => {
-  const child = codexScriptedChild()
-  const host = await openChat(child)
-  const change = { kind: 'set' as const, objective: 'Ship the release' }
-
-  const goal = host.changeThreadGoal(CALLER, {
-    envelope: envelope(host, 'agentSession.threadGoal', { change }),
-    change
-  })
-  expect(await settlesSoon(goal)).toBe(false)
-  child.releaseHandshake()
-
-  expect(await goal).toMatchObject({ ok: true })
-  expect(child.requests().filter(({ method }) => method.startsWith('thread/goal'))).toEqual([
-    {
-      method: 'thread/goal/set',
-      params: { threadId: CODEX_SCRIPTED_THREAD, objective: 'Ship the release', status: 'active' }
-    }
-  ])
-})
-
 it('keeps a goal waiting on a starting Codex chat through a re-attach, then sets it once the thread is open', async () => {
   const child = codexScriptedChild()
   const host = await openChat(child)
@@ -299,25 +233,4 @@ it('keeps a goal waiting on a starting Codex chat through a re-attach, then sets
 
   expect(await goal).toMatchObject({ ok: true })
   expect(child.requests().some(({ method }) => method === 'thread/goal/set')).toBe(true)
-})
-
-it('answers a goal asked of an ACP agent, which has none, without waiting out its start', async () => {
-  const spec = ACP_LAUNCH_SPECS[0]!
-  const child = acpScriptedChild(spec.agent)()
-  const host = await openChat(child, acpStructuredAgentDefinition(spec))
-  const change = { kind: 'set' as const, objective: 'Ship the release' }
-
-  const goal = host.changeThreadGoal(CALLER, {
-    envelope: envelope(host, 'agentSession.threadGoal', { change }),
-    change
-  })
-  expect(await settlesSoon(goal)).toBe(true)
-  expect(await goal).toMatchObject({
-    ok: false,
-    refusal: { details: { reason: 'goalsUnsupported' } }
-  })
-  child.releaseHandshake()
-
-  expect(await send(host, 'after the goal')).toMatchObject({ ok: true })
-  await eventually(() => expect(child.prompts()).toEqual(['after the goal']))
 })

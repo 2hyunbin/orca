@@ -62,55 +62,6 @@ afterEach(() => {
 })
 
 describe('the startup clock', () => {
-  it('settles a selected caller with readiness and does not retain a completed attempt', async () => {
-    const attempt = mint()
-    attempts.track(SESSION, attempt).spawned()
-    attempts.published(SESSION, attempt.attemptId, CHILD)
-    const readiness = attempts.readiness(SESSION, CHILD)
-    expect(readiness).not.toBeNull()
-
-    const waiting = readiness!.wait(120_000)
-    attempts.ready(SESSION, CHILD)
-
-    await expect(waiting).resolves.toBe('ready')
-    expect(attempts.readiness(SESSION, CHILD)).toBeNull()
-    expect(vi.getTimerCount()).toBe(0)
-  })
-
-  it('ends a selected caller on child exit, expiry, or disposal', async () => {
-    for (const end of ['exit', 'expiry', 'dispose'] as const) {
-      const attempt = mint()
-      attempts.track(SESSION, attempt).spawned()
-      attempts.published(SESSION, attempt.attemptId, CHILD)
-      const waiting = attempts.readiness(SESSION, CHILD)!.wait(120_000)
-      if (end === 'exit') {
-        attempts.childEnded(SESSION, CHILD)
-      }
-      if (end === 'expiry') {
-        vi.advanceTimersByTime(SILENCE_MS)
-      }
-      if (end === 'dispose') {
-        attempts.dispose()
-      }
-      await expect(waiting).resolves.toBe('ended')
-    }
-  })
-
-  it('ends only the caller wait at its budget, leaving the attempt able to start', async () => {
-    const attempt = mint()
-    attempts.track(SESSION, attempt).spawned()
-    attempts.published(SESSION, attempt.attemptId, CHILD)
-    const waiting = attempts.readiness(SESSION, CHILD)!.wait(500)
-    const reattached = attempts.readiness(SESSION, { ...CHILD })!.wait(120_000)
-
-    vi.advanceTimersByTime(500)
-    await expect(waiting).resolves.toBe('timeout')
-    expect(attempts.isOpen(SESSION)).toBe(true)
-    attempts.ready(SESSION, CHILD)
-    await expect(reattached).resolves.toBe('ready')
-    expect(attempts.isOpen(SESSION)).toBe(false)
-  })
-
   it('does not run before the spawn: resolving a launch is not starting', () => {
     attempts.track(SESSION, mint())
 

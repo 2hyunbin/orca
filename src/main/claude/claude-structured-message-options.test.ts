@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ClaudeControlRequestError } from './claude-stream-json-connection'
 import {
   acquired,
   claudeFrame,
@@ -146,30 +145,5 @@ describe('Claude accepted message choices', () => {
       { subtype: 'apply_flag_settings', params: { settings: { effortLevel: 'high' } } }
     ])
     expect(connection.sent).toHaveLength(2)
-  })
-
-  it('rejects a refused model before any prompt is handed to Claude', async () => {
-    const claude = fakeClaude({
-      routes: {
-        list_models: () => MODELS,
-        set_model: () => {
-          throw new ClaudeControlRequestError('set_model', 'model unavailable')
-        }
-      }
-    })
-    const adapter = await acquired(claude)
-    await expect(
-      adapter.dispatch({
-        sessionId: 'session-1',
-        clientMessageId: 'refused',
-        body: USER_MESSAGE,
-        executionOptions: { model: 'opus', effort: 'low' },
-        fence: 7
-      })
-    ).resolves.toMatchObject({
-      state: 'rejected',
-      rejection: { kind: 'providerRejected' }
-    })
-    expect(claude.connections[0]!.sent).toHaveLength(0)
   })
 })

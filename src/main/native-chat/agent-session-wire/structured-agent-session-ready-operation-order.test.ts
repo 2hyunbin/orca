@@ -56,7 +56,6 @@ it.each(['send', 'compact'] as const)(
     expect(providerWrites).toHaveBeenCalledTimes(1)
   }
 )
-
 it.each(['goal', 'rewind'] as const)(
   'runs a %s on a ready child before a later send is accepted',
   async (operation) => {

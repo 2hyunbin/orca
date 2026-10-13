@@ -70,6 +70,10 @@ it('attaches at spawn and holds sends until the scripted Codex handshake answers
   })
   expect(sent.ok).toBe(true)
   expect(child.spawns()).toBe(1)
+  expect(host.deps.store.getRecord(HOST_TEST_SESSION)?.lease.ownerProcess).toMatchObject({
+    pid: expect.any(Number),
+    spawnToken: expect.any(String)
+  })
   expect(child.prompts()).toEqual([])
   child.releaseHandshake()
   await vi.waitFor(() => expect(child.prompts()).toEqual(['held until Codex is ready']))
@@ -142,15 +146,14 @@ it('hands Codex a model and effort picked while it started before the first mess
       ...fields
     })
   })
+  const body = hostTestMessage('first message')
+  const sent = host.send(caller, { envelope: envelope('agentSession.send', fence, { body }), body })
   child.releaseHandshake()
   expect(await Promise.all(picks)).toEqual([
     expect.objectContaining({ ok: true }),
     expect.objectContaining({ ok: true })
   ])
-  const body = hostTestMessage('first message')
-  expect(
-    (await host.send(caller, { envelope: envelope('agentSession.send', fence, { body }), body })).ok
-  ).toBe(true)
+  expect((await sent).ok).toBe(true)
 
   await vi.waitFor(() => expect(child.prompts()).toEqual(['first message']))
   const turn = child.requests().find(({ method }) => method === 'turn/start')
