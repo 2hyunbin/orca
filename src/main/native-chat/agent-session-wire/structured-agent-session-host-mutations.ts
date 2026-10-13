@@ -192,7 +192,7 @@ export async function setStructuredAgentSessionOption(
   if (!recordOnly && child?.phase === 'starting' && !child.close) {
     const readiness = context.startupAttempts.readiness(params.envelope.sessionId, child)
     const outcome = await readiness?.wait(STRUCTURED_AGENT_SESSION_START_WAIT_MS)
-    if (outcome !== 'ready') {
+    if (outcome !== 'ready' && outcome !== 'ended') {
       return operationDidNotRun(outcome === 'timeout')
     }
   }
