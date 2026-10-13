@@ -532,6 +532,45 @@ describe('OrcaRuntimeService', () => {
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining(expected))
   })
 
+  it("prefers the window's latest published active group over the saved one", async () => {
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
+      ...getDefaultWorkspaceSession(),
+      activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-saved' }
+    })
+    const runtime = new OrcaRuntimeService(runtimeStore)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      mobileSessionTabs: [
+        {
+          worktree: TEST_WORKTREE_ID,
+          publicationEpoch: 'renderer:epoch-1',
+          snapshotVersion: 1,
+          activeGroupId: 'group-live',
+          activeTabId: null,
+          activeTabType: null,
+          tabs: []
+        }
+      ],
+      terminalGroupGridSizes: {
+        'group-saved': { cols: 63, rows: 60 },
+        'group-live': { cols: 70, rows: 50 }
+      }
+    })
+
+    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { command: 'codex' })
+
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ cols: 70, rows: 50 }))
+  })
+
   it('starts a host terminal at 120x40 when no window measured its group', async () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({

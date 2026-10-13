@@ -33,8 +33,10 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       const reportPtySpawnCommitted = createPtySpawnCommitReporter(launchOpts.onPtySpawnCommitted)
       const cwd =
         this.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd) ?? workspace.path
+      // The window's latest published active group is where its reveal places the tab.
       const groupId =
         launchOpts.targetGroupId ??
+        this.mobileSessionTabsByWorktree.get(workspace.id)?.activeGroupId ??
         this.getWorkspaceSessionForWorktree(workspace.id)?.activeGroupIdByWorktree?.[workspace.id]
       // Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), the
       // worktree never shown, or no pane at the default font mounted yet. #1707's original size.

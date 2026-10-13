@@ -6,26 +6,27 @@ import { mountedTerminalTabEntries } from '../mounted-terminal-tab-registry'
 
 type GridSize = { cols: number; rows: number }
 
-/** Metrics a new tab's pane will have: any mounted pane still at the default font size (a zoomed
- *  pane has its own cells), plus how far its xterm host sits inside the pane. */
+/** Metrics a new tab's pane will have, read from a mounted pane shaped like one: default font size
+ *  (a zoomed pane has its own cells) and no title or banner (either pushes its xterm host down). */
 function readDefaultPaneFit(
   defaultFontSize: number
 ): { metrics: TerminalFitMetrics; inset: { width: number; height: number } } | null {
   for (const [, registered] of mountedTerminalTabEntries()) {
     for (const { terminal, container } of registered.getManager()?.getPanes() ?? []) {
-      const host = terminal.element?.parentElement
       const cell = terminal.dimensions?.css.cell
-      const hostRect = host?.getBoundingClientRect()
       if (
+        terminal.options.fontSize !== defaultFontSize ||
+        container.hasAttribute('data-has-title') ||
+        container.querySelector(':scope > .pane-top-banner') ||
         !terminal.element ||
         !cell ||
-        !hostRect ||
         cell.width <= 0 ||
-        cell.height <= 0 ||
-        hostRect.width <= 0 ||
-        hostRect.height <= 0 ||
-        terminal.options.fontSize !== defaultFontSize
+        cell.height <= 0
       ) {
+        continue
+      }
+      const hostRect = terminal.element.parentElement?.getBoundingClientRect()
+      if (!hostRect || hostRect.width <= 0 || hostRect.height <= 0) {
         continue
       }
       const paneRect = container.getBoundingClientRect()
