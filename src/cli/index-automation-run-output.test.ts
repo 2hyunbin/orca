@@ -43,7 +43,7 @@ vi.mock('child_process', async () => {
 
 import { main } from './index'
 import { okFixture, queueFixtures } from './test-fixtures'
-import { useWorktreeAwarenessEnvironment } from './index-test-harness'
+import { pairRuntimeEnvironment, useWorktreeAwarenessEnvironment } from './index-test-harness'
 
 const AUTOMATION_ID = '497bafa9-5a97-4f85-9e48-2b211b8f31fa'
 const RUN_ID = 'd99b909f-c4a1-4b56-9979-abf57e94be11'
@@ -284,6 +284,119 @@ describe('automation run command output', () => {
       expectedOwner: owner
     })
     expect(JSON.parse(String(log.mock.calls[0]?.[0])).result.runId).toBe(RUN_ID)
+  })
+
+  it.each(['explicit', 'ambient'] as const)(
+    'preserves the %s environment in the follow-up command',
+    async (selection) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+      pairRuntimeEnvironment(listEnvironmentsMock, 'env-build', 'Build server')
+      const flags = selection === 'explicit' ? ['--environment', 'Build server'] : []
+      process.env.ORCA_ENVIRONMENT = selection === 'explicit' ? 'wrong-host' : 'Build server'
+      queueRun(run())
+      await main(['automations', 'run', AUTOMATION_ID, ...flags], '/tmp/repo')
+      const quotedEnvironment = process.platform === 'win32' ? '"Build server"' : "'Build server'"
+      const output = String(log.mock.calls[0]?.[0])
+      expect(output.split('\n').at(-1)).toBe(
+        `Follow up: orca automations runs --id ${AUTOMATION_ID} --environment ${quotedEnvironment}`
+      )
+      expect(output).not.toContain('wrong-host')
+      expect(callMock).toHaveBeenNthCalledWith(2, 'automation.runNow', { id: AUTOMATION_ID })
+    }
+  )
+
+  it.each(['$box', '%box%', 'a`b', 'a"b', 'has!bang', 'back\\slash'])(
+    'requires same-target guidance for the Windows shell-sensitive label %s',
+    async (environment) => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+      pairRuntimeEnvironment(listEnvironmentsMock, 'env-build', environment)
+      queueRun(run())
+      await main(['automations', 'run', AUTOMATION_ID, '--environment', environment], '/tmp/repo')
+      expect(String(log.mock.calls[0]?.[0]).split('\n').at(-1)).toBe(
+        `Follow up on the same host and profile (preserve your connection/profile settings): orca automations runs --id ${AUTOMATION_ID}`
+      )
+    }
+  )
+
+  it('requires same-target guidance for a label that would parse as another flag', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    pairRuntimeEnvironment(listEnvironmentsMock, 'env-build', '--build')
+    queueRun(run())
+    await main(['automations', 'run', AUTOMATION_ID, '--environment=--build'], '/tmp/repo')
+    expect(String(log.mock.calls[0]?.[0]).split('\n').at(-1)).toBe(
+      `Follow up on the same host and profile (preserve your connection/profile settings): orca automations runs --id ${AUTOMATION_ID}`
+    )
+  })
+
+  it('quotes an expansion-sensitive environment literally for POSIX shells', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    pairRuntimeEnvironment(listEnvironmentsMock, 'env-build', '$box')
+    queueRun(run())
+    await main(['automations', 'run', AUTOMATION_ID, '--environment', '$box'], '/tmp/repo')
+    expect(String(log.mock.calls[0]?.[0]).split('\n').at(-1)).toBe(
+      `Follow up: orca automations runs --id ${AUTOMATION_ID} --environment '$box'`
+    )
+  })
+
+  it.each(['explicit', 'ORCA_PAIRING_CODE', 'ORCA_REMOTE_PAIRING'] as const)(
+    'requires the same target without exposing %s pairing credentials',
+    async (selection) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const pairingCode = 'test-only-pairing-value'
+      const flags = selection === 'explicit' ? ['--pairing-code', pairingCode] : []
+      if (selection !== 'explicit') {
+        process.env[selection] = pairingCode
+      }
+      queueRun(run())
+      await main(['automations', 'run', AUTOMATION_ID, ...flags], '/tmp/repo')
+      expect(String(log.mock.calls[0]?.[0]).split('\n').at(-1)).toBe(
+        `Follow up on the same host and profile (preserve your connection/profile settings): orca automations runs --id ${AUTOMATION_ID}`
+      )
+      queueRun(run())
+      await main(['automations', 'run', AUTOMATION_ID, ...flags, '--json'], '/tmp/repo')
+      expect(JSON.parse(String(log.mock.calls[1]?.[0]))).toEqual(
+        okFixture('req_run', { run: run(), runId: RUN_ID })
+      )
+      await main(['automations', 'run', ...flags, '--help'], '/tmp/repo')
+      expect(log.mock.calls.flat().join('\n')).not.toContain(pairingCode)
+    }
+  )
+
+  it.each([false, true])(
+    'requires the same custom profile with environment selection %s',
+    async (withEnvironment) => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+      process.env.ORCA_USER_DATA_PATH = '/tmp/nondefault profile'
+      const flags = withEnvironment ? ['--environment', 'build'] : []
+      pairRuntimeEnvironment(listEnvironmentsMock, 'env-build', 'build')
+      queueRun(run())
+      await main(['automations', 'run', AUTOMATION_ID, ...flags], '/tmp/repo')
+      const output = String(log.mock.calls[0]?.[0])
+      expect(output.split('\n').at(-1)).toBe(
+        `Follow up on the same host and profile (preserve your connection/profile settings): orca automations runs --id ${AUTOMATION_ID}${withEnvironment ? ' --environment build' : ''}`
+      )
+      expect(output).not.toContain('/tmp/nondefault profile')
+      expect(callMock).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it('rejects the unsupported --user-data-dir flag before selecting a runtime', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const previousExitCode = process.exitCode
+    try {
+      await main(
+        ['automations', 'run', AUTOMATION_ID, '--user-data-dir', '/tmp/other-profile', '--json'],
+        '/tmp/repo'
+      )
+      const output = JSON.parse(String(log.mock.calls[0]?.[0]))
+      expect(output).toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+      expect(output.error.message).toContain('--user-data-dir')
+      expect(callMock).not.toHaveBeenCalled()
+    } finally {
+      process.exitCode = previousExitCode
+    }
   })
 
   it('explains full UUIDs and pending launch behavior in run help', async () => {
