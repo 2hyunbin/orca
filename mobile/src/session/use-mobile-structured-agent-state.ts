@@ -45,7 +45,7 @@ const OLDER_PAGES_PER_LOAD = 8
  */
 function openTranscriptAfterHold(
   client: RpcClient,
-  sessionId: string,
+  params: { sessionId: string; boundedFrames?: true },
   held: Promise<unknown>,
   onFrame: (raw: unknown) => void
 ): () => void {
@@ -55,7 +55,7 @@ function openTranscriptAfterHold(
     .catch(() => undefined)
     .then(() => {
       if (!ended) {
-        close = client.subscribe('agentSession.subscribe', { sessionId }, onFrame)
+        close = client.subscribe('agentSession.subscribe', params, onFrame)
       }
     })
   return () => {
@@ -80,6 +80,9 @@ export function useMobileStructuredAgentState(args: {
   /** Live transport only. The hold dies with the connection and has to be retaken,
    *  but the transcript must survive the outage rather than blank out with it. */
   connected: boolean
+  /** The host fits every frame to this app's bridge; asked for only where advertised, since an
+   *  older host refuses the param. */
+  boundedFrames: boolean
 }): {
   state: StructuredAgentSessionState
   stateRef: { readonly current: StructuredAgentSessionState }
@@ -90,7 +93,7 @@ export function useMobileStructuredAgentState(args: {
   loadingOlder: boolean
   loadEarlier: () => void
 } {
-  const { client, connected, enabled, sessionId, sessionKey } = args
+  const { boundedFrames, client, connected, enabled, sessionId, sessionKey } = args
   // Keep a bounded cache so offline tab switches select the right transcript
   // synchronously without growing for the lifetime of the app.
   const [sessionStates, setSessionStates] = useState<Map<string, StructuredAgentSessionState>>(
@@ -198,7 +201,8 @@ export function useMobileStructuredAgentState(args: {
       sessionId,
       holderId
     })
-    const endStream = openTranscriptAfterHold(client, sessionId, held, (raw) => {
+    const params = { sessionId, ...(boundedFrames ? { boundedFrames: true as const } : {}) }
+    const endStream = openTranscriptAfterHold(client, params, held, (raw) => {
       if (typeof raw === 'object' && raw !== null && 'type' in raw && raw.type === 'error') {
         applyReadFailure(raw)
         return
@@ -225,7 +229,17 @@ export function useMobileStructuredAgentState(args: {
         )
         .catch(() => undefined)
     }
-  }, [apply, applyQueued, applyReadFailure, client, connected, enabled, sessionId, sessionKey])
+  }, [
+    apply,
+    applyQueued,
+    applyReadFailure,
+    boundedFrames,
+    client,
+    connected,
+    enabled,
+    sessionId,
+    sessionKey
+  ])
 
   const loadEarlier = useCallback(() => {
     const current = stateRef.current

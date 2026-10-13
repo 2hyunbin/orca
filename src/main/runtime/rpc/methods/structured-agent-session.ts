@@ -181,7 +181,8 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
               host.sessionAgent(params.sessionId)
             )
           ),
-        ...(params.cursor ? { cursor: params.cursor } : {})
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.boundedFrames ? { boundedFrames: true } : {})
       })
       if (stream.isClosed()) {
         dispose()

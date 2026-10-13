@@ -13,6 +13,7 @@ import { sameJournalCursor } from '../agent-session-journal/journal-cursor'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
 import { createAgentSessionCatchUpReader } from './agent-session-history-page'
+import { subscriberItemForm } from './agent-session-bounded-frames'
 import {
   subscriberQueuedMessagesChanged,
   type SubscriberFieldHooks
@@ -54,7 +55,7 @@ export function deliverToSubscriber(
     emitCaughtUp(port, subscriber, emitCheckpoint, shared)
     return
   }
-  const readPage = createAgentSessionCatchUpReader(journal)
+  const readPage = createAgentSessionCatchUpReader(journal, subscriberItemForm(subscriber))
   while (true) {
     const result = readPage({
       sessionId: subscriber.sessionId,

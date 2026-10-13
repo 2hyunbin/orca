@@ -6,6 +6,7 @@ import {
   oversizedHistoryItem
 } from './agent-session-history-page-bounds'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
+import { subscriberItemForm } from './agent-session-bounded-frames'
 import type { SubscriberDeliveryPort } from './agent-session-subscriber-catch-up'
 import type { Subscriber } from './structured-agent-session-subscribers'
 import { isStructuredAgentSessionStopNote } from './structured-agent-session-command-turn'
@@ -31,6 +32,7 @@ export function refreshDerivedStopNotes(
     return
   }
   const snapshot = journal.snapshot()
+  const form = subscriberItemForm(subscriber) ?? ((item: AgentJournalRenderItem) => item)
   let pending: AgentJournalRenderItem[] = []
   let bytes = 0
   const emit = (): void => {
@@ -57,9 +59,10 @@ export function refreshDerivedStopNotes(
     ) {
       continue
     }
-    const projectedBytes = Buffer.byteLength(JSON.stringify(item), 'utf8')
+    const formed = form(item)
+    const projectedBytes = Buffer.byteLength(JSON.stringify(formed), 'utf8')
     const bounded =
-      projectedBytes > HISTORY_PAGE_CONTENT_BUDGET_BYTES ? oversizedHistoryItem(item) : item
+      projectedBytes > HISTORY_PAGE_CONTENT_BUDGET_BYTES ? oversizedHistoryItem(formed) : formed
     const itemBytes = Buffer.byteLength(JSON.stringify(bounded), 'utf8') + 1
     if (
       pending.length > 0 &&

@@ -7,7 +7,8 @@ export type NativeChatDiffLine = {
 
 /** Tools whose call carries the edit itself, so its row is a file change. */
 export const EDIT_TOOL_NAMES = new Set(['Edit', 'MultiEdit', 'Write', 'str_replace', 'apply_patch'])
-const MAX_DIFF_CHARS = 32_000
+/** Characters of one side a diff reads; past it the view ends in a truncation line. */
+export const MAX_DIFF_CHARS = 32_000
 const DEFAULT_MAX_DIFF_LINES = 120
 const DIFF_TRUNCATED_LINE: NativeChatDiffLine = {
   kind: 'meta',
@@ -194,4 +195,9 @@ export function diffFromText(
     return null
   }
   return bounded.truncated ? [...lines.slice(0, maxLines - 1), DIFF_TRUNCATED_LINE] : lines
+}
+
+/** Whether a tool result's text draws as a diff rather than as plain output. */
+export function rendersAsDiff(text: string): boolean {
+  return diffFromText(text, MAX_DIFF_CHARS) !== null
 }

@@ -443,6 +443,9 @@ export type AgentJournalRenderItem = AgentJournalProducerLinkage & {
   recoveredAt?: number
   /** Absent only from a host that predates it. */
   turnScope?: AgentJournalTurnScope
+  /** Only to a bounded-frame reader: this revision was shortened to fit its frame, and `byteLength`
+   *  is the whole item's serialized size. Shortened text ends in `…`; a payload says so itself. */
+  truncated?: { byteLength: number }
 }
 
 // ─── Submissions ────────────────────────────────────────────────────────────

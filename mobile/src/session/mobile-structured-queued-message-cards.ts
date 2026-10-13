@@ -39,6 +39,8 @@ export type MobileQueuedMessageCard = {
   command?: true
   /** A command card while the agent works: it offers no send until the agent is idle. */
   waitsForAgent?: true
+  /** The host sent a preview: Edit would replace the whole draft with part of it. */
+  truncated?: true
 }
 
 function queuedMessageBodyText(body: AgentSessionQueuedMessage['body']): string {
@@ -161,7 +163,8 @@ export function mobileQueuedMessageCards(
             command: true as const,
             ...(facts.agentWorking ? { waitsForAgent: true as const } : {})
           }
-        : {})
+        : {}),
+      ...(draft.truncated ? { truncated: true as const } : {})
     })
     if (draft.state === 'returned') {
       behindReturned = true

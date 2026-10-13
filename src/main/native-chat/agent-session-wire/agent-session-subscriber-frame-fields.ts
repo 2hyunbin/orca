@@ -10,9 +10,12 @@ import type {
   AgentSessionSubscribeEvent
 } from '../../../shared/agent-session-wire'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
+import { boundedFrames } from './agent-session-bounded-frames'
 
 export type SubscriberFieldState = {
   sessionId: string
+  /** Every frame to fit a phone's bridge frame; see `boundedFrames`. */
+  boundedFrames: boolean
   commands?: AgentSessionSlashCommand[] | null
   /** The last queue publication actually SENT. */
   queuePublication?: QueuePublication
@@ -28,7 +31,8 @@ export type SubscriberFieldHooks = {
 }
 
 export type SubscriberFrame = {
-  frame: AgentSessionSubscribeEvent
+  /** In order: one for most subscribers; for a bounded-frame one, its side lists follow. */
+  frames: AgentSessionSubscribeEvent[]
   commands: AgentSessionSlashCommand[] | null
   attachedQueued: boolean
   queued: QueuePublication | undefined
@@ -61,19 +65,24 @@ export function buildSubscriberFrame(
     event.type !== 'end' &&
     (event.type !== 'batch' || queued !== subscriber.queuePublication)
   const backgroundTasks = subscriberBackgroundTasks(hooks, subscriber, event)
+  const sideQueued = attachedQueued ? queued : undefined
   return {
-    frame: {
-      ...event,
-      ...(includeCommands ? { commands: commands ?? null } : {}),
-      ...(attachedQueued && queued
-        ? {
-            queuedMessages: queued.queuedMessages,
-            queuePause: queued.queuePause,
-            nextQueuedMessageId: queued.nextQueuedMessageId
+    frames: subscriber.boundedFrames
+      ? boundedFrames(event, { queued: sideQueued, backgroundTasks })
+      : [
+          {
+            ...event,
+            ...(includeCommands ? { commands: commands ?? null } : {}),
+            ...(sideQueued
+              ? {
+                  queuedMessages: sideQueued.queuedMessages,
+                  queuePause: sideQueued.queuePause,
+                  nextQueuedMessageId: sideQueued.nextQueuedMessageId
+                }
+              : {}),
+            ...(backgroundTasks !== undefined ? { backgroundTasks } : {})
           }
-        : {}),
-      ...(backgroundTasks !== undefined ? { backgroundTasks } : {})
-    },
+        ],
     commands,
     attachedQueued,
     queued,

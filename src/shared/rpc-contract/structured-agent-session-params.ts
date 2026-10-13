@@ -346,8 +346,14 @@ export const HistoryParams = z
   })
   .strict()
 
+// Strict, so a client sends `boundedFrames` only to a host advertising
+// AGENT_SESSION_BOUNDED_FRAMES_RUNTIME_CAPABILITY.
 export const SubscribeParams = z
-  .object({ sessionId: SessionId, cursor: JournalCursor.optional() })
+  .object({
+    sessionId: SessionId,
+    cursor: JournalCursor.optional(),
+    boundedFrames: z.literal(true).optional()
+  })
   .strict()
 
 // Not strict: an older host ignores these params entirely, and this host must ignore a newer client's.

@@ -14,12 +14,15 @@ import { subagentFoldKey, subagentItemBlock } from '../../../shared/native-chat-
 /** A page's share of one relay frame; page content keeps to the tighter budget below. */
 export const AGENT_SESSION_HISTORY_MAX_PAGE_BYTES = REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES / 2
 
-const HISTORY_PAGE_ENVELOPE_RESERVE_BYTES = 64 * 1024
+/** Everything a history frame carries beside its rows: the bridge envelope, ids and cursors, the
+ *  subagent roster, the latest turn and the activity line. A bounded-frame reader's frame keeps
+ *  each of those to its own bound, and their sum to this. */
+export const FRAME_METADATA_CEILING_BYTES = 64 * 1024
 
 // Pages ride subscribe frames, which a phone's app ends whole when one outgrows its bridge frame;
 // a smaller page only means one more Load-earlier read.
 export const HISTORY_PAGE_CONTENT_BUDGET_BYTES =
-  MOBILE_BRIDGE_MAX_FRAME_BYTES - HISTORY_PAGE_ENVELOPE_RESERVE_BYTES
+  MOBILE_BRIDGE_MAX_FRAME_BYTES - FRAME_METADATA_CEILING_BYTES
 
 export function historyEntryBytes(
   item: AgentJournalRenderItem,

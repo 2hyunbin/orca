@@ -6,6 +6,7 @@
 
 import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type {
+  AgentSessionHistoryPage,
   AgentSessionSlashCommand,
   AgentSessionSubscribeEvent,
   AgentSessionTurnActivity
@@ -20,6 +21,7 @@ import { deliverToSubscriber } from './agent-session-subscriber-catch-up'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
+import { subscriberItemForm } from './agent-session-bounded-frames'
 import { rememberSessionActivity } from './structured-agent-session-activity-retention'
 import { refreshDerivedStopNotes } from './agent-session-stop-note-refresh'
 
@@ -29,6 +31,8 @@ export type AgentSessionSubscribeInput = {
   sessionId: string
   emit: AgentSessionSubscriberEmit
   cursor?: AgentJournalCursor
+  /** Every frame to fit a phone's bridge frame (`agentSession.subscribe`'s `boundedFrames`). */
+  boundedFrames?: boolean
 }
 
 export type Subscriber = {
@@ -37,6 +41,7 @@ export type Subscriber = {
   emit: AgentSessionSubscriberEmit
   cursor: AgentJournalCursor
   fence: number
+  boundedFrames: boolean
   commands?: AgentSessionSlashCommand[] | null
   /** The last draft list actually SENT — never advanced on a page that withheld
    *  it, or the final replacement would be suppressed by the identity dedup. */
@@ -77,6 +82,7 @@ export class AgentSessionSubscribers {
     fence: number
     emit: AgentSessionSubscriberEmit
     cursor?: AgentJournalCursor
+    boundedFrames?: boolean
   }): () => void {
     const liveCursor = input.journal.cursor()
     const subscriber: Subscriber = {
@@ -84,7 +90,8 @@ export class AgentSessionSubscribers {
       sessionId: input.sessionId,
       emit: input.emit,
       cursor: input.cursor ?? { epoch: liveCursor.epoch, sequence: 0 },
-      fence: input.fence
+      fence: input.fence,
+      boundedFrames: input.boundedFrames === true
     }
     const session = this.bySession.get(input.sessionId) ?? new Map<string, Subscriber>()
     session.set(input.id, subscriber)
@@ -103,7 +110,11 @@ export class AgentSessionSubscribers {
         hostNow
       )
     } else {
-      const page = readAgentSessionHydrationPage(input.journal, input.fence)
+      const page = readAgentSessionHydrationPage(
+        input.journal,
+        input.fence,
+        subscriberItemForm(subscriber)
+      )
       this.emit(subscriber, {
         type: 'snapshot',
         sessionId: input.sessionId,
@@ -155,9 +166,19 @@ export class AgentSessionSubscribers {
 
   /** Every subscriber back to a bounded tail page. */
   snapshot(sessionId: string, journal: AgentSessionJournal, fence: number): void {
-    const page = readAgentSessionHydrationPage(journal, fence)
+    // Read once per item form, since bounded-frame subscribers size their page by theirs.
+    const pages = new Map<boolean, AgentSessionHistoryPage>()
+    const pageFor = (subscriber: Subscriber): AgentSessionHistoryPage => {
+      let page = pages.get(subscriber.boundedFrames)
+      if (page === undefined) {
+        page = readAgentSessionHydrationPage(journal, fence, subscriberItemForm(subscriber))
+        pages.set(subscriber.boundedFrames, page)
+      }
+      return page
+    }
     const hostNow = this.now()
     for (const subscriber of this.subscribers(sessionId)) {
+      const page = pageFor(subscriber)
       this.emit(subscriber, {
         type: 'snapshot',
         sessionId,
@@ -256,7 +277,9 @@ export class AgentSessionSubscribers {
         event,
         options?.withholdQueued === true
       )
-      subscriber.emit(built.frame)
+      for (const frame of built.frames) {
+        subscriber.emit(frame)
+      }
       subscriber.commands = built.commands
       if (built.attachedQueued) {
         subscriber.queuePublication = built.queued

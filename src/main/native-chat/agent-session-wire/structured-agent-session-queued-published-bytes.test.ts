@@ -1,5 +1,5 @@
-// The queue has no card count limit; only the bytes its cards publish are bounded, because every
-// card rides each opening frame a remote client reads. Past that bound a send is refused in words
+// The queue has no card count limit; only the bytes its published cards weigh are bounded, because
+// every card rides each opening frame a remote client reads. Past that bound a send is refused in words
 // that say what to do, deleting a card makes room again, and other agents' cards always leave room
 // for the person's largest message.
 
@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { agentSessionRefusalNotice } from '../../../shared/agent-session-refusal-notice'
 import { MAX_PROMPT_BYTES } from '../../../shared/rpc-contract/structured-agent-session-params'
 import {
+  newQueuedCardBytes,
   QUEUED_MESSAGES_PERSON_RESERVE_BYTES,
   QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
 } from './structured-agent-session-queued-published-bytes'
@@ -14,7 +15,11 @@ import {
   createQueuedMessageTestRig,
   type QueuedMessageTestRig
 } from './structured-agent-session-queued-message-rig.test-fixture'
-import { hostTestMessage } from './structured-agent-session-host-test-data'
+import {
+  HOST_TEST_SESSION,
+  hostTestMessage,
+  hostTestOperationId
+} from './structured-agent-session-host-test-data'
 
 let rig: QueuedMessageTestRig
 
@@ -23,6 +28,12 @@ beforeEach(async () => {
 })
 
 afterEach(() => rig.dispose())
+
+/** Text whose new card adds exactly `bytes` to the published list; rig ids share one length. */
+function textOfCard(bytes: number): string {
+  const card = { messageId: hostTestOperationId(), body: hostTestMessage('') }
+  return 'x'.repeat(bytes - newQueuedCardBytes(card))
+}
 
 /** Text whose message body (or, with `blocksOnly`, whose blocks) serializes to exactly `bytes`. */
 function textOfBytes(bytes: number, blocksOnly = false): string {
@@ -58,7 +69,7 @@ it("leaves room for the person's largest message however much other agents queue
   await rig.workingSend()
   const agentRoom = QUEUED_MESSAGES_PUBLISHED_MAX_BYTES - QUEUED_MESSAGES_PERSON_RESERVE_BYTES
   expect(
-    await rig.send(textOfBytes(agentRoom), 'queue-if-active', { internal: true }).result
+    await rig.send(textOfCard(agentRoom), 'queue-if-active', { internal: true }).result
   ).toMatchObject({ ok: true, value: { queued: { state: 'waiting' } } })
   const agentRefused = await rig.send('one more task', 'queue-if-active', { internal: true }).result
   expect(agentRefused).toMatchObject({
@@ -68,4 +79,19 @@ it("leaves room for the person's largest message however much other agents queue
   expect(
     await rig.send(textOfBytes(MAX_PROMPT_BYTES, true), 'queue-if-active').result
   ).toMatchObject({ ok: true, value: { queued: { state: 'waiting' } } })
+})
+
+it('counts whole cards, so the published queue always fits one bounded frame', async () => {
+  await rig.workingSend()
+  const text = 'x'.repeat(2_000)
+  let accepted = 0
+  while ((await rig.send(text, 'queue-if-active').result).ok) {
+    accepted += 1
+  }
+  const page = await rig.host.history({ sessionId: HOST_TEST_SESSION, direction: 'tail' })
+  const cards = page.page.queuedMessages ?? []
+  expect(cards).toHaveLength(accepted)
+  expect(Buffer.byteLength(JSON.stringify(cards))).toBeLessThanOrEqual(
+    QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
+  )
 })
