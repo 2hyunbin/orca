@@ -3,6 +3,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { OrcaRuntimeService } from './orca-runtime'
 import {
   TEST_WORKTREE_ID,
+  makeHeadlessTerminalLayout,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } from './orca-runtime-test-fixtures.spec'
@@ -151,5 +152,20 @@ describe('the session-tabs list of a host with no window', () => {
 
     const listed = await restarted.listMobileSessionTabs(WT)
     expect(listed.tabs.some((tab) => tab.id === 'agent-session:session-a')).toBe(true)
+  })
+
+  it('keeps the tab terminal of a one-pane tab whose pane lost its binding', async () => {
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({
+        terminalLayoutsByTabId: { 'host-tab': makeHeadlessTerminalLayout({}) }
+      })
+    )
+    const runtime = new OrcaRuntimeService(runtimeStore as never)
+
+    const listed = await runtime.listMobileSessionTabs(WT)
+
+    expect(listed.tabs).toEqual([
+      expect.objectContaining({ parentTabId: 'host-tab', ptyId: 'persisted-pty' })
+    ])
   })
 })

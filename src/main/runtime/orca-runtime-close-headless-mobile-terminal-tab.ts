@@ -1,5 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { withMovedSessionTab } from './windowless-session-tabs'
+import { withMovedSessionTab } from './windowless-session-tab-move'
 import { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './orca-runtime-close-structured-agent-session-tab'
 import type {
   RuntimeMobileSessionTabMove,

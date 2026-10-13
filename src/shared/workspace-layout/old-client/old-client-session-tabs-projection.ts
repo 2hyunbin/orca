@@ -204,12 +204,13 @@ function terminalRows(tab: LayoutTerminalTab, scope: Scope): RuntimeMobileSessio
   return leafIds.map((leafId) => {
     const leaf = leaves[leafId]
     const paneTitle = leaf?.title?.trim() || undefined
-    // Today's order: a custom title beats the pane's own title (#19582); other panes show theirs.
+    // A sole pane's row names its tab: clients drop a pane title equal to its row's title, so a
+    // row named by its pane title would hide that title. Other panes show theirs.
     const title = tabWide
       ? resolveTerminalTabTitle(
-          { ...tab, title: paneTitle ?? liveTitle },
+          { ...tab, title: liveTitle },
           scope.generatedTitlesEnabled,
-          paneTitle ?? liveTitle
+          liveTitle
         )
       : (paneTitle ?? 'Terminal')
     return {

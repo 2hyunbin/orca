@@ -10,7 +10,10 @@ import { isTestOnlySourcePath } from './test-only-source-path.mjs'
 export const COMPAT_FOLDERS = [
   {
     folder: 'src/shared/workspace-layout/old-client',
-    importers: ['src/main/runtime/windowless-session-tabs.ts']
+    importers: [
+      'src/main/runtime/windowless-session-tabs.ts',
+      'src/main/runtime/windowless-session-tab-move.ts'
+    ]
   },
   {
     folder: 'src/main/remote-layout-snapshot',

@@ -1346,7 +1346,7 @@
                 "tab": "tab1",
                 "leaf": "leaf1",
                 "pty": "ptyServe1",
-                "title": "Terminal",
+                "title": "Terminal <position>",
                 "tree": "leaf1",
                 "paneTitles": []
               },
@@ -1364,7 +1364,7 @@
                 "tab": "tab3",
                 "leaf": "leaf3",
                 "pty": "ptyServe2",
-                "title": "Terminal",
+                "title": "Terminal <position>",
                 "tree": "leaf3",
                 "paneTitles": []
               }

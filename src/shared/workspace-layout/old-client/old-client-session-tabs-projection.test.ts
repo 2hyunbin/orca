@@ -285,7 +285,7 @@ describe('projectSessionTabs', () => {
       const facts = fields.live
         ? { ...noFacts, terminalRows: { [tabId!]: { title: fields.live } } }
         : noFacts
-      return { model, tabId: tabId!, facts }
+      return { model, tabId: tabId!, leafId: leafId!, facts }
     }
     const titleOf = (
       { model, facts }: ReturnType<typeof soleTab>,
@@ -298,8 +298,12 @@ describe('projectSessionTabs', () => {
       expect(titleOf(soleTab({ title: 'deploy', paneTitle: 'logs', live: 'zsh' }))).toBe('deploy')
     })
 
-    it('a pane title beats the live title when there is no custom title', () => {
-      expect(titleOf(soleTab({ paneTitle: 'logs', live: 'zsh' }))).toBe('logs')
+    // Clients drop a sole pane's title that equals its row's title.
+    it("a sole pane's row names its tab; its pane title stays in the layout", () => {
+      const tab = soleTab({ paneTitle: 'logs', live: 'zsh' })
+      expect(
+        projectSessionTabs(WS, tab.model.workspaces[WS]!, views(), tab.facts, false).tabs[0]
+      ).toMatchObject({ title: 'zsh', parentLayout: { titlesByLeafId: { [tab.leafId]: 'logs' } } })
     })
 
     it('reads generated titles only with the setting on', () => {

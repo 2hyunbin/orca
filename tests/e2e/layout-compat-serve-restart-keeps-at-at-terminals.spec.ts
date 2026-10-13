@@ -92,7 +92,17 @@ test('serve-restart-keeps-@@-terminals: desktop, CLI and serve terminals survive
       await expect
         .poll(async () => (await readSessionTabs(host.client, worktree)).tabs.length)
         .toBe(3)
-      const before = await readSettled(read)
+      const settledBefore = await readSettled(read)
+      const before = {
+        ...settledBefore,
+        server: {
+          ...settledBefore.server,
+          rows: settledBefore.server.rows.map((row, index) => ({
+            ...row,
+            title: positionalTitle(row.title, index)
+          }))
+        }
+      }
 
       await host.restartServeProcess()
       await expect(page.locator(TAB)).not.toHaveCount(0, { timeout: 60_000 })
