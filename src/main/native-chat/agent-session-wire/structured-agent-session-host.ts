@@ -24,7 +24,7 @@ import {
   type StructuredAgentSessionConversationLifetime
 } from './structured-agent-session-conversation-lifetime'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
-import * as sessionTabs from './structured-agent-session-host-tabs'
+import { createStructuredAgentSessionTabSurface as createTabs } from './structured-agent-session-host-tabs'
 import {
   structuredAgentSessionMutationDelegates,
   type StructuredAgentSessionMutationContext
@@ -101,7 +101,8 @@ export class StructuredAgentSessionHost {
       this.sessions,
       this.subscribers,
       (sessionId) => this.lifetime.conversation(sessionId),
-      this.clientDelivery.readChildWork
+      this.clientDelivery.readChildWork,
+      this.clientDelivery.childWorkIncomplete
     )
     this.runtimeState = new StructuredAgentSessionHostRuntimeState(
       deps,
@@ -224,11 +225,7 @@ export class StructuredAgentSessionHost {
 
   knownAgentIds = (): readonly string[] => providerSupport.knownAgentIds(this.deps)
 
-  private readonly tabs = sessionTabs.createStructuredAgentSessionTabSurface(
-    this,
-    this.sessions,
-    (sessionId) => this.clientDelivery.forgetStatus(sessionId)
-  )
+  private readonly tabs = createTabs(this, this.sessions, this.clientDelivery.forgetStatus)
   listSessionTabs = this.tabs.listSessionTabs
   getPersistedVisibleSessionTabIndex = this.tabs.getPersistedVisibleSessionTabIndex
   getSessionTabId = this.tabs.getSessionTabId
@@ -282,6 +279,8 @@ export class StructuredAgentSessionHost {
       publish: (sessionId, journal) => this.subscribers.publish(sessionId, journal),
       conversation: this.lifetime.conversation,
       readChildWork: this.clientDelivery.readChildWork,
+      publishChildWork: this.clientDelivery.publishChildWork,
+      childWorkIncomplete: this.clientDelivery.childWorkIncomplete,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       openConversation: this.conversationDelivery.open,
       ensureAgent: (sessionId) =>

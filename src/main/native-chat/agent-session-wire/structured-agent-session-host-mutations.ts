@@ -116,11 +116,25 @@ export function cancelStructuredAgentSessionTurn(
   }
 ): Promise<AgentSessionMutationResult<AgentSessionCancelResult>> {
   if (params.scope) {
+    const { sessionId } = params.envelope
     return mutateStructuredAgentSession(
       context,
       caller,
       params.envelope,
-      cancelPlan({ ...params, childWork: () => context.readChildWork(params.envelope.sessionId) }),
+      cancelPlan({
+        ...params,
+        childWork: () => context.readChildWork(sessionId),
+        acknowledgeStops: (evidence) => context.publishChildWork(sessionId, evidence),
+        // Untargeted, with work no record lists: the idle sweep's stop ends it with the agent.
+        ...(params.taskId === undefined
+          ? {
+              unlisted: {
+                present: () => context.childWorkIncomplete(sessionId),
+                stop: () => context.stopAgent(sessionId, { cause: 'evict', resting: true })
+              }
+            }
+          : {})
+      }),
       openForProviderWrite(context, params.envelope)
     )
   }
@@ -191,7 +205,7 @@ export async function setStructuredAgentSessionOption(
   const child = context.sessions.get(params.envelope.sessionId)?.child
   if (!recordOnly && child?.phase === 'starting' && !child.close) {
     const readiness = context.startupAttempts.readiness(params.envelope.sessionId, child)
-    const outcome = await readiness?.wait(STRUCTURED_AGENT_SESSION_START_WAIT_MS)
+    const outcome = (await readiness?.wait(STRUCTURED_AGENT_SESSION_START_WAIT_MS)) ?? 'ended'
     if (outcome !== 'ready' && outcome !== 'ended') {
       return operationDidNotRun(outcome === 'timeout')
     }
@@ -199,7 +213,7 @@ export async function setStructuredAgentSessionOption(
   const plan = setOptionPlan(params)
   const atRest = () => {
     const child = context.sessions.get(params.envelope.sessionId)?.child
-    return recordOnly || !child || child.close !== undefined
+    return recordOnly || !child || child.phase === 'starting' || child.close !== undefined
   }
   return mutateStructuredAgentSession(
     context,
