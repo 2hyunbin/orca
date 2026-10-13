@@ -8,6 +8,7 @@ import type { ExecutionHostId } from '../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
   findSavedBrowserPage,
+  withActiveServeBrowserTab,
   withClosedServeBrowserTab,
   withOpenedServeBrowserTab,
   withServeBrowserPageState,
@@ -21,6 +22,8 @@ export type RestorableBrowserPage = {
   url: string
   title: string
   profileId: string | null
+  /** The tab the layout shows for its worktree, as a window mounts it. */
+  active: boolean
 }
 
 export class ServeBrowserTabs {
@@ -105,22 +108,37 @@ export class ServeBrowserTabs {
           pageId: page.id,
           url: page.url,
           title: page.title,
-          profileId: tab.sessionProfileId ?? null
+          profileId: tab.sessionProfileId ?? null,
+          active: session.activeBrowserTabIdByWorktree?.[worktreeId] === tab.id
         }
       ]
     })
   }
 
+  /** A switched-to page's tab is the one its worktree shows, as a window records it. */
+  selected(worktreeId: string, pageId: string): void {
+    const tabId = this.savedTabId(worktreeId, pageId)
+    if (tabId) {
+      this.write(worktreeId, (_hostId, session) =>
+        withActiveServeBrowserTab(session, worktreeId, tabId)
+      )
+    }
+  }
+
   /**
-   * A command that names no page acts on the worktree's active page; with none running, that is
-   * the first saved tab, as the tab list reports it. False when nothing is saved to start.
+   * A command that names no page acts on the active page; with none running, that is the tab the
+   * layout shows, as a window mounts it. False when nothing runs and the layout shows none.
    */
-  async restoreFirst(worktreeId: string | undefined): Promise<boolean> {
+  async restoreActive(worktreeId: string | undefined): Promise<boolean> {
     if (this.deps.livePageIds(worktreeId).size > 0) {
       return false
     }
-    const first = this.listRestorable(worktreeId)[0]
-    return first ? this.restore(first.worktreeId, first.pageId) : false
+    // With no worktree named, the one the saved session shows, as a window opens on it.
+    const scope =
+      worktreeId ??
+      [...this.deps.savedWorktreeIds()].find((id) => this.deps.session(id)?.activeWorktreeId === id)
+    const active = scope && this.listRestorable(scope).find((page) => page.active)
+    return active ? this.restore(scope, active.pageId) : false
   }
 
   /** The worktree of a saved tab whose page has not started, or null when none shows it. */

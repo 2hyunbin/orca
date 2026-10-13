@@ -48,7 +48,8 @@ export class RuntimeBrowserCommandsWithListLogicalBrowserTabs extends RuntimeBro
       return { ...tab, profileId: profile.id, profileLabel: profile.label }
     })
     const tabs = [...serverTabs, ...clientTabs, ...savedTabs]
-    if (tabs.length > 0 && !tabs.some((tab) => tab.active)) {
+    // Saved tabs alone report the one the layout shows, or none, as a pageless command starts it.
+    if (serverTabs.length + clientTabs.length > 0 && !tabs.some((tab) => tab.active)) {
       tabs[0] = { ...tabs[0]!, active: true }
     }
     return tabs.map((tab, index) => ({ ...tab, index }))
