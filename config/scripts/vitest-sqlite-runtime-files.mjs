@@ -58,6 +58,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/ipc/ssh-host-server-on-connect-wiring.test.ts',
   'src/main/native-chat/agent-session-attachments/agent-session-attachment-claims.test.ts',
   'src/main/native-chat/agent-session-attachments/agent-session-attachment-sweep.test.ts',
+  'src/main/native-chat/agent-session-wire/agent-session-bounded-frames.test.ts',
   'src/main/native-chat/agent-session-wire/agent-session-history-byte-accounting.test.ts',
   'src/main/native-chat/agent-session-wire/agent-session-history-conversation-window.test.ts',
   'src/main/native-chat/agent-session-wire/agent-session-history-forward-read-budget.test.ts',
