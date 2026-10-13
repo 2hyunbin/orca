@@ -3,6 +3,8 @@ import { getAgentSessionOptionCatalog } from './agent-session-option-catalog'
 import { OMP_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-omp'
 import { resolveAgentSessionOptionLaunch } from './agent-session-option-launch'
 import { parseBuiltSessionOptionCommand } from './native-chat-session-option-commands'
+import { checkAgentLaunchModelPreferences } from './agent-launch-model-preferences'
+import { resolveAgentLaunchCommand } from './tui-agent-launch-command'
 import { OMP_MODEL_LIST_ARGS, parseOmpModelList } from './omp-model-list-probe'
 
 const LISTING = JSON.stringify({
@@ -165,5 +167,51 @@ describe('omp session option catalog', () => {
     expect(command).toBe('/orca-model minimax-cn/MiniMax-M3')
     expect(parseBuiltSessionOptionCommand(midSession.build, command)).toBe('minimax-cn/MiniMax-M3')
     expect(parseBuiltSessionOptionCommand(midSession.build, '/orca-model ')).toBeNull()
+  })
+
+  it('launches a requested effort as --thinking for any discovered model', () => {
+    expect(
+      resolveAgentSessionOptionLaunch('omp', {
+        model: 'openai-codex/gpt-5.6-sol',
+        effort: 'high'
+      })
+    ).toEqual({
+      args: ['--model', 'openai-codex/gpt-5.6-sol', '--thinking', 'high'],
+      appliedValues: { model: 'openai-codex/gpt-5.6-sol', effort: 'high' }
+    })
+    // An unrequested effort leaves OMP's own default in charge.
+    expect(resolveAgentSessionOptionLaunch('omp', { model: 'openai/gpt-5.5' }).args).toEqual([
+      '--model',
+      'openai/gpt-5.5'
+    ])
+  })
+
+  it('accepts OMP thinking levels as --effort and refuses modes that are not levels', () => {
+    for (const effort of ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']) {
+      expect(
+        checkAgentLaunchModelPreferences({ agent: 'omp', model: 'openai/gpt-5.5', effort })
+      ).toEqual({ preferences: { model: 'openai/gpt-5.5', effort } })
+    }
+    for (const effort of ['off', 'auto', 'ultra']) {
+      expect(
+        checkAgentLaunchModelPreferences({ agent: 'omp', model: 'openai/gpt-5.5', effort })
+      ).toMatchObject({ refusal: { code: 'invalid_argument' } })
+    }
+  })
+
+  it('replaces a saved --thinking default instead of passing the flag twice', () => {
+    const resolved = resolveAgentLaunchCommand({
+      agent: 'omp',
+      cmdOverrides: {},
+      platform: 'darwin',
+      shell: 'posix',
+      agentArgs: '--thinking=low --no-extensions --thinking minimal',
+      sessionOptions: { model: 'openai/gpt-5.5', effort: 'xhigh' },
+      sessionOptionsOverrideAgentArgs: true
+    })
+    expect(resolved).toMatchObject({
+      ok: true,
+      command: "omp '--no-extensions' '--model' 'openai/gpt-5.5' '--thinking' 'xhigh'"
+    })
   })
 })

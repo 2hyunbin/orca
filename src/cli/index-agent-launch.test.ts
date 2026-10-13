@@ -45,6 +45,10 @@ import { RuntimeClientError, RuntimeRpcFailureError } from './runtime-client'
 import { buildWorktree, okFixture, queueFixtures, worktreeListFixture } from './test-fixtures'
 import { pairRuntimeEnvironment, useWorktreeAwarenessEnvironment } from './index-test-harness'
 import { agentLaunchFixture, agentLaunchHostFixture } from './agent-launch-test-fixtures'
+import {
+  AGENT_LAUNCH_OMP_EFFORT_RUNTIME_CAPABILITY,
+  AGENT_LAUNCH_RUNTIME_CAPABILITIES
+} from '../shared/agent-launch-runtime-capability'
 
 const WORKTREE_ID = 'repo-1::/tmp/repo'
 
@@ -112,6 +116,57 @@ describe('orca cli agent launch', () => {
       operationId: expect.any(String)
     })
     expect(JSON.parse(String(logSpy.mock.calls[0]?.[0])).result.receipt.reason).toBe('user_default')
+  })
+
+  it('starts OMP on a chosen thinking level through --effort', async () => {
+    queueFixtures(callMock, agentLaunchHostFixture(), agentLaunchFixture(WORKTREE_ID))
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await main(
+      [
+        'agent',
+        'launch',
+        '--agent',
+        'omp',
+        '--model',
+        'openai-codex/gpt-5.6-sol',
+        '--effort',
+        'high',
+        '--worktree',
+        `id:${WORKTREE_ID}`,
+        '--json'
+      ],
+      '/tmp/repo'
+    )
+
+    expect(launchCalls()[0]?.[1]).toMatchObject({
+      agent: 'omp',
+      sessionOptions: { model: 'openai-codex/gpt-5.6-sol', effort: 'high' }
+    })
+  })
+
+  it('refuses OMP effort on a host that would drop it', async () => {
+    const capabilities = [...AGENT_LAUNCH_RUNTIME_CAPABILITIES].filter(
+      (capability) => capability !== AGENT_LAUNCH_OMP_EFFORT_RUNTIME_CAPABILITY
+    )
+    queueFixtures(callMock, okFixture('req_status', { capabilities }))
+
+    const output = await runRefused([
+      'agent',
+      'launch',
+      '--agent',
+      'omp',
+      '--model',
+      'openai-codex/gpt-5.6-sol',
+      '--effort',
+      'high',
+      '--worktree',
+      `id:${WORKTREE_ID}`,
+      '--json'
+    ])
+
+    expect(output).toContain('cannot start OMP on a chosen effort')
+    expect(launchCalls()).toEqual([])
   })
 
   it('switches to the new tab only with --focus', async () => {
@@ -332,7 +387,8 @@ describe('orca cli agent launch', () => {
   it.each([
     [['--agent', 'codex', '--effort', 'high'], '--effort requires --model'],
     [['--model', 'gpt-5.5'], '--model requires --agent'],
-    [['--agent', 'codex', '--model', 'gpt-5.5', '--effort', 'turbo'], 'does not support effort']
+    [['--agent', 'codex', '--model', 'gpt-5.5', '--effort', 'turbo'], 'does not support effort'],
+    [['--agent', 'omp', '--model', 'openai/gpt-5.5', '--effort', 'auto'], 'does not support effort']
   ])('refuses %j before creating anything', async (flags, message) => {
     const output = await runRefused([
       'worktree',
