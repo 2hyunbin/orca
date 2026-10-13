@@ -42,7 +42,7 @@ function headOf(text: string, length: number): string {
  * string is cut only when that removes more units than its mark adds bytes, so a smaller `length`
  * never yields a larger value: every unit is at least one byte, and the mark is three.
  */
-export function cutLongStrings<T>(value: T, length: number): T {
+function cutLongStrings<T>(value: T, length: number): T {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `cutTo` keeps every key and shape and only shortens strings.
   return cutTo(value, length, '') as T
 }

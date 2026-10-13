@@ -104,7 +104,7 @@ function withoutOlderRows(state: AgentSessionBackgroundTaskState): AgentSessionB
 }
 
 /** The roster fitted to a frame: its text shortened, then older rows left out. */
-export function boundedBackgroundTasks(
+function boundedBackgroundTasks(
   state: AgentSessionBackgroundTaskState | null
 ): AgentSessionBackgroundTaskState | null {
   if (state === null) {
@@ -119,7 +119,7 @@ export function boundedBackgroundTasks(
   )
 }
 
-export type BoundedSideLists = {
+type BoundedSideLists = {
   queued: QueuePublication | undefined
   backgroundTasks: AgentSessionBackgroundTaskState | null | undefined
 }

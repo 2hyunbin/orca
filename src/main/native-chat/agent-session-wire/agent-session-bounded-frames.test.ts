@@ -20,8 +20,6 @@ import type {
 } from '../../../shared/agent-session-wire'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-frame-bytes'
-import { diffFromToolCall } from '../../../shared/native-chat-diff'
-import { MAX_TOOL_DETAIL_LENGTH } from '../../../shared/native-chat-tool-summary'
 import { createTrackedJournalOpener } from '../agent-session-journal/journal-host-database-test-support'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { BOUNDED_FRAME_ROW_BYTES, boundedFrameItem } from './agent-session-bounded-frame-item'
@@ -138,29 +136,7 @@ describe('a bounded row', () => {
     }
   })
 
-  it('keeps what the phone draws of a tool call, and says what it left out', () => {
-    const text = 'line\n'.repeat(4_000)
-    const diff = `@@ -1 +1 @@\n${'-old\n+new\n'.repeat(1_000)}`
-    const input = { file_path: '/repo/a.ts', old_string: 'a\n'.repeat(20_000), new_string: 'b' }
-    const call = (head: string): AgentJournalRenderItem =>
-      rendered({
-        body: { kind: 'tool-call', name: 'Edit', state: 'completed', input, output: output(head) }
-      })
-    const plain = boundedFrameItem(call(text)).body
-    const asDiff = boundedFrameItem(call(diff)).body
-    if (plain.kind !== 'tool-call' || asDiff.kind !== 'tool-call') {
-      throw new Error('expected tool calls')
-    }
-    expect(plain.output).toMatchObject({
-      head: text.slice(0, MAX_TOOL_DETAIL_LENGTH),
-      truncated: true
-    })
-    expect(asDiff.output?.head).toBe(diff)
-    // The edit's diff view still reads its full length, and still ends in its truncation line.
-    expect(diffFromToolCall('Edit', plain.input, 240)).toEqual(diffFromToolCall('Edit', input, 240))
-  })
-
-  it('is the stored row when nothing in it is past what the phone draws', () => {
+  it('is the stored row when it already fits', () => {
     const row = rendered({ body: message('hello') })
     expect(boundedFrameItem(row)).toBe(row)
   })

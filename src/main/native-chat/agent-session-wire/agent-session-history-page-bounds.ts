@@ -20,7 +20,7 @@ export const HISTORY_PAGE_CONTENT_BUDGET_BYTES =
 
 /** Everything a bounded frame carries beside its rows: the bridge envelope, ids and cursors, the
  *  subagent roster, the latest turn and the activity line, each held to its own bound. */
-export const FRAME_METADATA_CEILING_BYTES = 64 * 1024
+const FRAME_METADATA_CEILING_BYTES = 64 * 1024
 
 /** The rows' share of a phone's bridge frame, which its app ends a stream over. */
 export const BOUNDED_FRAME_CONTENT_BUDGET_BYTES =

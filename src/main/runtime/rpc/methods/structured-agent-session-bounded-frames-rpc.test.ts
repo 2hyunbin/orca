@@ -17,7 +17,7 @@ beforeEach(installStructuredHostStub)
 afterEach(clearStructuredHostStub)
 
 it.each([
-  // A released shell advertises none of this build's capabilities and sends no new param.
+  // Being a phone is enough: no capability or param is asked of it.
   ['a phone of any version', STRUCTURED_MOBILE_CLIENT, true],
   ['a paired desktop', STRUCTURED_CLIENT, false],
   ['an in-process reader', undefined, false]
