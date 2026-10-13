@@ -1,30 +1,42 @@
-name: Prepare baseline Git compatibility binary
+name: Prepare pinned Git compatibility binary
 description: Restore or build the pinned Linux Git binary for the compatibility contract.
+
+inputs:
+  version:
+    description: Supported compatibility version (2.25.5 baseline or 2.29.0 SHA-256 boundary).
+    default: '2.25.5'
 
 runs:
   using: composite
   steps:
     # The default-branch warmer shares this key across PRs; a PR save is private to its merge ref.
     # Cache eviction remains possible, so keep the checksum-verified cold build below.
-    - name: Cache baseline Git build
+    - name: Cache pinned Git build
       uses: actions/cache@v5
       with:
-        path: ~/.cache/orca-git-compat/git-2.25.5
-        key: git-compat-baseline-${{ runner.os }}-${{ runner.arch }}-2.25.5-submodule
+        path: ~/.cache/orca-git-compat/git-${{ inputs.version }}
+        key: git-compat-baseline-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}-submodule
 
     # Finish the CPU-heavy build before any timed compatibility lanes start.
-    - name: Build the baseline Git binary
+    - name: Build the pinned Git binary
       shell: bash
+      env:
+        GIT_COMPAT_VERSION: ${{ inputs.version }}
       run: |
-        archive="$RUNNER_TEMP/git-2.25.5.tar.gz"
-        source="$HOME/.cache/orca-git-compat/git-2.25.5"
+        case "$GIT_COMPAT_VERSION" in
+          2.25.5) checksum=41662c52fc16fec4963bfc41075e71f8ead6b5e386797eb6f9a1111ff95a8ddf ;;
+          2.29.0) checksum=fa08dc8424ef80c0f9bf307877f9e2e49f1a6049e873530d6747c2be770742ff ;;
+          *) echo 'Unsupported Git compatibility version' >&2; exit 1 ;;
+        esac
+        archive="$RUNNER_TEMP/git-$GIT_COMPAT_VERSION.tar.gz"
+        source="$HOME/.cache/orca-git-compat/git-$GIT_COMPAT_VERSION"
         if [ -x "$source/git" ] && [ -x "$source/git-submodule" ] \
           && [ -f "$source/git-sh-setup" ] && [ -f "$source/git-sh-i18n" ] \
           && [ -f "$source/git-parse-remote" ] && [ -x "$source/git-sh-i18n--envsubst" ]; then
           exit 0
         fi
-        curl -fsSL https://www.kernel.org/pub/software/scm/git/git-2.25.5.tar.gz -o "$archive"
-        echo "41662c52fc16fec4963bfc41075e71f8ead6b5e386797eb6f9a1111ff95a8ddf  $archive" \
+        curl -fsSL "https://www.kernel.org/pub/software/scm/git/git-$GIT_COMPAT_VERSION.tar.gz" -o "$archive"
+        echo "$checksum  $archive" \
           | sha256sum --check
         mkdir -p "$source"
         tar -xzf "$archive" -C "$source" --strip-components=1

@@ -194,6 +194,7 @@ export async function gitExecFileAsyncBuffer(
     timeout?: number
     timeoutMsForTest?: number
     env?: NodeJS.ProcessEnv
+    stdin?: string
     wslDistro?: string
     preferWslDirectGit?: boolean
     admissionTier?: GitAdmissionTier
@@ -236,6 +237,7 @@ export async function gitExecFileAsyncBuffer(
       const { stdout } = await execFileCapture(resolved.binary, resolved.args, {
         cwd: resolved.cwd,
         encoding: 'buffer',
+        stdin: options.stdin,
         signal: options.signal,
         maxBuffer: options.maxBuffer,
         timeout: timeoutMs,

@@ -50,6 +50,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/plugins/plugin-environment-recipe-journal-store.integration.test.ts',
   'src/main/plugins/plugin-environment-recipe-operation.test.ts',
   'src/main/plugins/plugin-environment-recipe-context.integration.test.ts',
+  'src/main/plugins/plugin-git-repository.integration.test.ts',
   'src/main/plugins/plugin-artifact-file-reader.test.ts',
   'src/main/plugins/plugin-environment-recipe-execution.test.ts',
   'src/main/usage/usage-scan-worker-event-loop.test.ts',

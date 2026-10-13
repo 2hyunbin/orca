@@ -536,6 +536,10 @@ jobs:
 
       - uses: ./.github/actions/prepare-git-compatibility
 
+      - uses: ./.github/actions/prepare-git-compatibility
+        with:
+          version: '2.29.0'
+
       - name: Verify Git binary compatibility matrix
         env:
           ORCA_BACKGROUND_LAUNCH: '1'
@@ -551,16 +555,18 @@ jobs:
           done
 
           pids=()
-          (
-            ORCA_GIT_COMPAT_BINARY="$HOME/.cache/orca-git-compat/git-2.25.5/git" \
-              GIT_EXEC_PATH="$HOME/.cache/orca-git-compat/git-2.25.5" \
-              ORCA_GIT_COMPAT_VERSION="2.25.5" \
-              pnpm exec vitest run --config config/vitest.config.ts \
-              src/shared/git-binary-compatibility.test.ts \
-              src/main/git/worktree-safety-real-git.test.ts \
-              src/main/git/worktree-rebase-update-refs-real-git.test.ts
-          ) &
-          pids+=("$!")
+          for version in 2.25.5 2.29.0; do
+            (
+              ORCA_GIT_COMPAT_BINARY="$HOME/.cache/orca-git-compat/git-$version/git" \
+                GIT_EXEC_PATH="$HOME/.cache/orca-git-compat/git-$version" \
+                ORCA_GIT_COMPAT_VERSION="$version" \
+                pnpm exec vitest run --config config/vitest.config.ts \
+                src/shared/git-binary-compatibility.test.ts \
+                src/main/git/worktree-safety-real-git.test.ts \
+                src/main/git/worktree-rebase-update-refs-real-git.test.ts
+            ) &
+            pids+=("$!")
+          done
 
           for spec in "${specs[@]}"; do
             (

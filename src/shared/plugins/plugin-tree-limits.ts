@@ -1,0 +1,2 @@
+export const PLUGIN_TREE_MAX_ENTRIES = 2_000
+export const PLUGIN_TREE_MAX_BYTES = 50 * 1024 * 1024

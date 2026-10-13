@@ -32,6 +32,7 @@ import { encodeGitPathspecs } from './git-pathspec-stdin'
 import { endSubprocessStdin } from './subprocess-stdin-write'
 import { registerGitRepositoryRegistrationBinaryCompatibilityCase } from './git-repository-registration-binary-compatibility.test-cases'
 import { registerGitResolutionBinaryCompatibilityCases } from './git-resolution-binary-compatibility.test-cases'
+import { registerGitPluginTreeBinaryCompatibilityCases } from './git-plugin-tree-binary-compatibility.test-cases'
 
 const execFileAsync = promisify(execFile)
 const image = process.env.ORCA_GIT_COMPAT_IMAGE
@@ -140,6 +141,14 @@ describeBinaryCompatibility('real Git binary compatibility', () => {
   })
 
   registerGitRepositoryRegistrationBinaryCompatibilityCase(runGit, () => repoPath, Boolean(image))
+
+  registerGitPluginTreeBinaryCompatibilityCases(runGit, supports, async (directories) => {
+    await Promise.all(
+      directories.map((directory) =>
+        rm(join(repoPath, directory), { recursive: true, force: true })
+      )
+    )
+  })
 
   it('stages, unstages and restores NUL-delimited literal pathspecs from stdin', async () => {
     const fixturePath = join(repoPath, 'stdin-pathspec')
