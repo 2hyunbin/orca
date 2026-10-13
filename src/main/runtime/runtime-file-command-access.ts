@@ -1,3 +1,4 @@
+import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
 import { RuntimeFileSearch } from './runtime-file-search'
 import { listFilesystemMarkdownDocuments } from '../providers/filesystem-markdown-listing'
 import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
@@ -58,7 +59,8 @@ export class RuntimeFileCommandAccess {
   async openMobileFile(
     worktreeSelector: string,
     relativePath: string,
-    navigation?: RuntimeNavigationTarget
+    navigation?: RuntimeNavigationTarget,
+    position?: RuntimeFileOpenPosition
   ): Promise<RuntimeFileOpenResult> {
     const target = await this.host.resolveRuntimeFileTarget(worktreeSelector)
     const { worktree } = target
@@ -81,7 +83,8 @@ export class RuntimeFileCommandAccess {
       filePath,
       relativePath,
       runtimeOwnerForTarget(target),
-      navigation
+      navigation,
+      ...(position ? [position] : [])
     )
     return { worktree: worktree.id, relativePath, kind, opened: true }
   }
