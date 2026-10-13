@@ -2,7 +2,10 @@ import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { captureRuntimeEnvironmentRequestRevision } from '@/runtime/runtime-environment-revision'
 import { bindTerminalKittyFileReader } from '@/lib/pane-manager/terminal-kitty-file-reader'
 import { waitForPromiseWithSignal } from '../../../../../shared/abort-signal-reason'
-import { toHostSessionTabId } from '../../../../../shared/terminal-surface-id'
+import {
+  HOST_TERMINAL_SURFACE_SEPARATOR,
+  toHostSessionTabId
+} from '../../../../../shared/terminal-surface-id'
 import { toRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import type { RuntimeTerminalResolvePane } from '../../../../../shared/runtime-types'
 import type { RuntimeClientTarget } from '../../../../../shared/runtime-client-target'
@@ -36,7 +39,7 @@ export function installPtyKittyFileReader(session: ConnectPanePtySession): void 
         {
           paneKey:
             target.kind === 'environment'
-              ? `${toHostSessionTabId(session.deps.tabId)}:${session.pane.leafId}`
+              ? `${toHostSessionTabId(session.deps.tabId).split(HOST_TERMINAL_SURFACE_SEPARATOR)[0]}:${session.pane.leafId}`
               : session.cacheKey,
           worktreeId: session.deps.worktreeId
         },

@@ -59,6 +59,21 @@ describe('authoritative WSL Kitty file roots', () => {
     expect(open).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\repo\\image`, expect.any(Number))
   })
 
+  it('maps a POSIX workspace directly without resolving it on native Windows', async () => {
+    const owner = { workspacePath: '/mnt/c/repo', wslDistro: 'Ubuntu' }
+    realpath.mockImplementation(async (path: string) => {
+      if (path === owner.workspacePath) {
+        throw new Error('Native Windows cannot resolve this Linux path')
+      }
+      return path
+    })
+    await expect(readTerminalKittyFile({ path: '/tmp/claude-image' }, owner)).resolves.toEqual({
+      base64: 'SU1BR0U='
+    })
+    expect(realpath).toHaveBeenCalledWith(`${ROOT}\\mnt\\c\\repo`)
+    expect(realpath).not.toHaveBeenCalledWith(owner.workspacePath)
+  })
+
   it('resolves Windows short names before mapping a native workspace into WSL', async () => {
     const workspacePath = 'C:\\Users\\RUNNER~1\\repo'
     realpath.mockImplementation(async (path: string) => {

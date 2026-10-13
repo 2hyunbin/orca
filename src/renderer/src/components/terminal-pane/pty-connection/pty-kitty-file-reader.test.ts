@@ -74,6 +74,16 @@ beforeEach(() => {
 })
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()))
 describe('PTY Kitty file execution-host routing', () => {
+  it('resolves an encoded split surface using its parent tab and active leaf', async () => {
+    const value = fixture('ssh-host')
+    value.session.deps.tabId = 'web-terminal-tab-1%3A%3Aleaf-1'
+    value.session.cacheKey = `${value.session.deps.tabId}:leaf-1`
+    mocks.rpc.mockResolvedValueOnce(resolved()).mockResolvedValueOnce({ base64: 'AQID' })
+    await readTerminalKittyFile(value.terminal, request())
+    expect(mocks.rpc.mock.calls[0][2]).toEqual({ paneKey: 'tab-1:leaf-1', worktreeId: 'folder-1' })
+    expect(mocks.rpc.mock.calls[1][2].terminal).toBe(resolved().terminal.handle)
+  })
+
   it.each([null, 'ssh-host', 'wsl-environment'])(
     'uses owning runtime %s and host-normalized pane keys for both RPCs',
     async (environmentId) => {

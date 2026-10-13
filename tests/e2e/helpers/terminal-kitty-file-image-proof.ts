@@ -127,19 +127,17 @@ async function diagnoseWslKittyFileRead(page: Page, ptyId: string, path: string)
   return page.evaluate(
     async ({ ptyId, path }) => {
       function failure(stage: string, error: { code: string; message: string }) {
-        const reasons = [
-          'ENOENT',
-          'EACCES',
-          'absolute local file path',
-          'terminal WSL distro',
-          'outside this terminal',
-          'terminal_handle_stale',
-          'no_connected_pty'
-        ]
+        const message = error.message
+          .replace(/(['"])[\s\S]*?\1/g, '<redacted>')
+          .replace(/\S*(?:[/\\]|[a-z]:)\S*/gi, '<path>')
+          .slice(0, 400)
+        const filesystem = error.message.match(/^([A-Z][A-Z_]+):[^,]*, ([a-z]+)\b/)
         return {
           stage,
           code: /^[a-z_]+$/i.test(error.code) ? error.code : 'unknown',
-          reason: reasons.find((reason) => error.message.includes(reason)) ?? 'unclassified'
+          errno: filesystem?.[1],
+          syscall: filesystem?.[2],
+          message
         }
       }
       const state = window.__store!.getState()
