@@ -39,8 +39,13 @@ export function enableManagedOrcadCompileCache(
  */
 export function orcadCompileCacheEnv(
   slotDirectory: string,
-  api: CompileCacheModule = module
+  api: CompileCacheModule = module,
+  env: NodeJS.ProcessEnv = process.env
 ): Record<string, string> {
-  const enabled = typeof api.getCompileCacheDir === 'function' && Boolean(api.getCompileCacheDir())
+  // An unmanaged orcad may have an operator's NODE_COMPILE_CACHE; never redirect it into the slot.
+  const enabled =
+    Boolean(env[ORCAD_MANAGED_ACTIVATION_ROOT_ENV]) &&
+    typeof api.getCompileCacheDir === 'function' &&
+    Boolean(api.getCompileCacheDir())
   return enabled ? { NODE_COMPILE_CACHE: join(slotDirectory, ORCAD_COMPILE_CACHE_DIRNAME) } : {}
 }

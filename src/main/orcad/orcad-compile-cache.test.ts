@@ -39,14 +39,15 @@ describe('managed orcad compile cache', () => {
   })
 
   it('hands the preflight child the slot cache only when this process enabled one', () => {
-    expect(
-      orcadCompileCacheEnv('/slot', {
-        getCompileCacheDir: () => '/slot/x/v24'
-      })
-    ).toEqual({
+    const enabled = { getCompileCacheDir: () => '/slot/x/v24' }
+    expect(orcadCompileCacheEnv('/slot', enabled, managed)).toEqual({
       NODE_COMPILE_CACHE: join('/slot', ORCAD_COMPILE_CACHE_DIRNAME)
     })
-    expect(orcadCompileCacheEnv('/slot', { getCompileCacheDir: () => undefined })).toEqual({})
-    expect(orcadCompileCacheEnv('/slot', {})).toEqual({})
+    expect(orcadCompileCacheEnv('/slot', { getCompileCacheDir: () => undefined }, managed)).toEqual(
+      {}
+    )
+    expect(orcadCompileCacheEnv('/slot', {}, managed)).toEqual({})
+    // Regression: an unmanaged orcad's own NODE_COMPILE_CACHE stays where the operator put it.
+    expect(orcadCompileCacheEnv('/slot', enabled, {})).toEqual({})
   })
 })
