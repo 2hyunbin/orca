@@ -169,8 +169,7 @@ describe.each(
       expect(dispatch).not.toHaveBeenCalled()
 
       opened.resolve({
-        reportedOptions: { model: 'default' },
-        restoreSkippedOptions: []
+        reportedOptions: { model: 'default' }
       })
 
       await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())

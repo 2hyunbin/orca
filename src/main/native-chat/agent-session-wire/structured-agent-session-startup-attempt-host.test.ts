@@ -176,8 +176,7 @@ function startedEvent(generation = `generation-${acquire.mock.calls.length}`) {
     sessionId: SESSION,
     fence: store.getRecord(SESSION)!.lease.runtimeFence,
     acquisitionGeneration: generation,
-    reportedOptions: { model: 'default' },
-    restoreSkippedOptions: []
+    reportedOptions: { model: 'default' }
   }
 }
 
