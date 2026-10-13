@@ -48,6 +48,7 @@ export type {
   StructuredAgentSessionStopCause
 } from './structured-agent-session-stop-cause'
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type { AgentSessionPromptResponse } from '../../../shared/agent-session-question-answer'
 import type { ProviderHistoryWindow } from '../agent-session-journal/journal-submission-reconciler'
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
@@ -303,6 +304,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     sessionId: string
     clientMessageId: string
     body: AgentJournalMessageItem
+    /** Immutable choices of this submission; adapters apply them only to this dispatch. */
+    executionOptions?: AgentSessionExecutionOptions
     fence: number
     /** Host clock on the submission row this send came from; the origin the turn
      *  it opens records as `requestedAt`. */

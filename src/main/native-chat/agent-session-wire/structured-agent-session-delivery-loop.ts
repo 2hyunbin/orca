@@ -41,6 +41,7 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 import { holdRestartedStructuredAgentSessionSends } from './structured-agent-session-host-lifetime'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
+import { waitsForCodexTurnOptions } from './structured-agent-session-message-options'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
@@ -279,6 +280,12 @@ export class StructuredAgentSessionDeliveryLoop {
       if (session.child !== awaitedChild) {
         return 'continue'
       }
+    }
+    if (
+      this.deps.record(sessionId)?.provider === 'codex' &&
+      waitsForCodexTurnOptions(session.journal, next)
+    ) {
+      return this.stop(sessionId)
     }
     await handOverSubmission(
       {

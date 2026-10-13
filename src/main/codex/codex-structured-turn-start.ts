@@ -112,6 +112,7 @@ export async function startCodexTurn(
     body: AgentJournalMessageItem
     requestedAt?: number
     timeoutMs?: number
+    turnOptions?: Readonly<Record<string, string>>
   }
 ): Promise<{ turnId: string | null; via: AgentJournalTurnJoin } | false> {
   // Armed before the write: the echo and `turn/started` can both land while the
@@ -140,7 +141,7 @@ export async function startCodexTurn(
       clientUserMessageId: input.clientMessageId,
       input: turnInputFor(input.body),
       // Codex omits a tier the model does not list.
-      ...Object.fromEntries(host.options)
+      ...(input.turnOptions ?? Object.fromEntries(host.options))
     },
     { timeoutMs: input.timeoutMs }
   )
@@ -160,6 +161,7 @@ export async function dispatchCodexTurn(
     clientMessageId: string
     body: AgentJournalMessageItem
     requestedAt?: number
+    turnOptions?: Readonly<Record<string, string>>
   },
   timeoutMs: number | undefined
 ): Promise<AgentSessionDispatchOutcome> {

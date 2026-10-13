@@ -6,7 +6,14 @@
 // row the next attach settles as `unknown`, whereas the reverse would lose a
 // turn the provider already accepted.
 
-import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import {
+  agentSessionFailureFact,
+  providerDiagnosticOf
+} from '../../../shared/agent-session-failure'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
+import { captureStructuredExecutionOptions } from './structured-agent-session-execution-options'
+import { applyMessageExecutionOptions } from './structured-agent-session-message-options'
+import { isAgentSessionOptionRejectedError } from './structured-agent-session-option-error'
 import {
   agentSessionFailureWords,
   type AgentSessionFailureWordsContext
@@ -103,17 +110,28 @@ async function dispatchSafely(
   ctx: AgentSessionHandoverContext,
   clientMessageId: string,
   body: AgentJournalMessageItem,
-  requestedAt: number
+  requestedAt: number,
+  executionOptions: AgentSessionExecutionOptions | undefined
 ): Promise<AgentSessionDispatchOutcome> {
   try {
     return await ctx.adapter.dispatch({
       sessionId: ctx.sessionId,
       clientMessageId,
       body,
+      ...(executionOptions ? { executionOptions } : {}),
       fence: ctx.fence,
       requestedAt
     })
   } catch (error) {
+    if (isAgentSessionOptionRejectedError(error)) {
+      return {
+        state: 'rejected',
+        ...agentSessionFailureWords(
+          agentSessionFailureFact('providerRejected', { detail: providerDiagnosticOf(error) }),
+          { surface: 'rejection' }
+        )
+      }
+    }
     return { state: 'unknown', reason: error instanceof Error ? error.message : String(error) }
   }
 }
@@ -133,6 +151,7 @@ export async function performSend(
   input: {
     clientMessageId: string
     payloadFingerprint: string
+    executionOptions?: AgentSessionExecutionOptions
     body: AgentJournalMessageItem
     /** Who asked for the turn; absent on callers that predate it. */
     origin?: 'client' | 'host'
@@ -155,9 +174,13 @@ export async function performSend(
       value: { clientMessageId: input.clientMessageId, submission: { ...existing } }
     }
   }
+  const captured = captureStructuredExecutionOptions(ctx, input.executionOptions)
+  if ('refusal' in captured) {
+    return { ok: false, refusal: captured.refusal }
+  }
   try {
     await ctx.journal.appendSubmission(
-      { ...input, fence: ctx.fence, handoverRecorded: true },
+      { ...input, executionOptions: captured.options, fence: ctx.fence, handoverRecorded: true },
       undefined,
       ctx.operationReceipt
     )
@@ -219,6 +242,29 @@ export async function handOverSubmission(
     await handOverStructuredAgentSessionCommand(ctx, submission, body)
     return
   }
+  const codex = ctx.record()?.provider === 'codex'
+  const applied = codex
+    ? { ok: true as const }
+    : await applyMessageExecutionOptions(
+        ctx.adapter,
+        ctx.sessionId,
+        ctx.fence,
+        submission.executionOptions
+      )
+  if (!applied.ok) {
+    await ctx.journal.resolveDispatch({
+      clientMessageId,
+      state: 'rejected',
+      ...agentSessionFailureWords(
+        agentSessionFailureFact('providerRejected', {
+          detail: providerDiagnosticOf(new Error(applied.reason))
+        }),
+        { surface: 'rejection' }
+      ),
+      fence: ctx.fence
+    })
+    return
+  }
   // The message joins the turn running at handover, a steer, or opens its own.
   await ctx.journal.resolveDispatch({
     clientMessageId,
@@ -232,7 +278,8 @@ export async function handOverSubmission(
     ctx,
     clientMessageId,
     body,
-    structuredAgentSessionHandoverOrigin(ctx.journal, submission)
+    structuredAgentSessionHandoverOrigin(ctx.journal, submission),
+    codex ? submission.executionOptions : undefined
   )
   // An admission needs no dispatch row: the submission is already pending.
   if (outcome.state === 'admitted') {

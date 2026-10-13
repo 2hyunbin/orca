@@ -3,6 +3,7 @@
 
 import type { AgentSessionSendResult } from '../../../shared/agent-session-wire'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 import { maybeQueueStructuredAgentSessionSend } from './structured-agent-session-queued-messages'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
@@ -14,6 +15,7 @@ export async function runQueueableStructuredAgentSessionSend(
     envelope: { clientOperationId: string }
     body: AgentJournalMessageItem
     delivery?: 'queue-if-active'
+    executionOptions?: AgentSessionExecutionOptions
     userSend?: true
     personsMessage?: true
   },

@@ -6,6 +6,7 @@
 // others' current answer.
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   AGENT_MESSAGE_SOURCE,
   USER_MESSAGE_SOURCE,
@@ -138,6 +139,7 @@ export function sendPlan(params: {
   body: AgentJournalMessageItem
   retryUnknown?: true
   delivery?: 'queue-if-active'
+  executionOptions?: AgentSessionExecutionOptions
   userSend?: true
   /** A person's message the host sends for them; `userSend` is always one. */
   personsMessage?: true
@@ -160,7 +162,7 @@ export function sendPlan(params: {
     recoverUnknownFromDurableState: true,
     // `retryUnknown` is a compatibility-only client signal. A recorded send
     // always replays and never reaches the provider twice.
-    run: (ctx) => {
+    run: async (ctx) => {
       // Asked at acceptance: a send accepted after this one is queued behind it.
       params.beforeRun?.()
       const source = sendSource(params)
@@ -170,7 +172,8 @@ export function sendPlan(params: {
         clientMessageId,
         // Body-only, so the reducer's echo aliasing never sees control fields or the sender.
         payloadFingerprint: agentSessionSendBodyFingerprint(params.envelope.sessionId, params.body),
-        body: params.body
+        body: params.body,
+        executionOptions: params.executionOptions
       })
     },
     replay: (ctx, outcome) => {
@@ -342,8 +345,7 @@ export function setOptionPlan(params: {
     method: 'agentSession.setOption',
     fields: { key: params.key, value: params.value },
     run: (ctx) => performSetOption(ctx, params),
-    // A pending row may have crashed before the adapter call. Reapplying the
-    // same assignment is safe; only a settled success can be answered directly.
+    // Reapply unsettled picks; only a settled success can be replayed directly.
     replay: (ctx, outcome) =>
       outcome.status === 'succeeded'
         ? {

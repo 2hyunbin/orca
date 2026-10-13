@@ -15,7 +15,8 @@ import {
   applyCodexStructuredSessionOption,
   readCodexStructuredSessionOptions,
   readLiveCodexSessionOptions,
-  restoredCodexSessionOptions
+  restoredCodexSessionOptions,
+  resolvedCodexMessageOptions
 } from './codex-structured-session-options'
 import { reportedCodexThreadOptions } from './codex-structured-service-tier'
 import { CodexBackgroundTaskTracker } from './codex-background-task-tracker'
@@ -58,6 +59,47 @@ async function primePicker(session: CodexSession): Promise<void> {
 }
 
 describe('structured Codex session options', () => {
+  it('uses each message’s choices on turn/start without changing the saved next pick', async () => {
+    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
+      turn: { id: 'turn-1' }
+    }))
+    const session = optionSession(request)
+    session.options.set('model', 'saved-next')
+    session.options.set('effort', 'medium')
+    const body = {
+      kind: 'message' as const,
+      role: 'user' as const,
+      blocks: [{ type: 'text' as const, text: 'go' }]
+    }
+    for (const [id, model, effort] of [
+      ['first', 'model-a', 'high'],
+      ['second', 'model-b', 'low']
+    ]) {
+      const turnOptions = await resolvedCodexMessageOptions(session, { model, effort })
+      await startCodexTurn(session, { clientMessageId: id, body, turnOptions })
+    }
+    expect(
+      request.mock.calls
+        .filter(([method]) => method === 'turn/start')
+        .map(([, params]) => [params?.model, params?.effort])
+    ).toEqual([
+      ['model-a', 'high'],
+      ['model-b', 'low']
+    ])
+    expect(Object.fromEntries(session.options)).toEqual({ model: 'saved-next', effort: 'medium' })
+  })
+
+  it('refuses an unavailable message option before a protocol prompt', async () => {
+    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
+      turn: { id: 'turn-1' }
+    }))
+    const session = optionSession(request)
+    await expect(resolvedCodexMessageOptions(session, { fastMode: 'true' })).rejects.toThrow(
+      'does not support Fast mode'
+    )
+    expect(request).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['model', 'gpt-next'],
     ['effort', 'high'],

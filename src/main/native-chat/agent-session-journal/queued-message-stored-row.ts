@@ -5,6 +5,7 @@ import type { UnreadAgentSessionFailureFact } from '../../../shared/agent-sessio
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import { readStoredRejectionFact } from './journal-dispatch-reducer'
 import type { QueuedMessageRow } from './queued-message-table'
+import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 
 /** A `queued_messages` row as this file's SELECTs return it; null when it cannot be read back. */
 export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | null {
@@ -27,6 +28,7 @@ export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | nul
     carried_from: string | null
     queued_epoch: string | null
     queued_sequence: number | null
+    execution_options_json: string | null
   }
   let body: AgentJournalMessageItem
   try {
@@ -46,8 +48,10 @@ export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | nul
   ) {
     return null
   }
+  const executionOptions = storedExecutionOptions(record.execution_options_json)
   return {
     sessionId: record.session_id,
+    ...(executionOptions ? { executionOptions } : {}),
     messageId: record.message_id,
     position: record.position,
     body,
@@ -66,6 +70,17 @@ export function readStoredQueuedMessageRow(row: unknown): QueuedMessageRow | nul
       record.queued_epoch !== null && typeof record.queued_sequence === 'number'
         ? { epoch: record.queued_epoch, sequence: record.queued_sequence }
         : null
+  }
+}
+
+function storedExecutionOptions(json: string | null): QueuedMessageRow['executionOptions'] | null {
+  if (json === null) {
+    return null
+  }
+  try {
+    return readAgentSessionExecutionOptions(JSON.parse(json))
+  } catch {
+    return null
   }
 }
 

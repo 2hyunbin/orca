@@ -52,6 +52,7 @@ function computePublishedQueuedMessages(journal: AgentSessionJournal): AgentSess
     const held = row.state === 'waiting' && row.holdReason !== null
     published.push({
       messageId: row.messageId,
+      ...(row.executionOptions ? { executionOptions: row.executionOptions } : {}),
       position: row.position,
       body: row.body,
       state: row.state,

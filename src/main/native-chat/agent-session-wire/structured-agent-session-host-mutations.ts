@@ -8,6 +8,7 @@
 // an operation only the provider can perform starts it before admission.
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type {
   AgentSessionCancelResult,
   AgentSessionMutationEnvelope,
@@ -65,6 +66,7 @@ export function sendStructuredAgentSessionTurn(
     body: AgentJournalMessageItem
     retryUnknown?: true
     delivery?: 'queue-if-active'
+    executionOptions?: AgentSessionExecutionOptions
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`
      *  origin, so a restart or a close keeps it as a card if it never reached the

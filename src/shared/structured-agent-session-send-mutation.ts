@@ -1,5 +1,6 @@
 import type { AgentJournalItemBody, AgentJournalMessageItem } from './agent-session-journal-types'
 import type { AgentSessionMutationEnvelope } from './agent-session-wire'
+import type { AgentSessionExecutionOptions } from './agent-session-execution-options'
 import type { z } from 'zod'
 import type { SendBody } from './rpc-contract/structured-agent-session-message-params'
 import { structuredAgentSessionPayloadFingerprint } from './structured-agent-session-mutation'
@@ -8,6 +9,7 @@ export type StructuredAgentSessionSendMutation = {
   envelope: AgentSessionMutationEnvelope
   body: AgentJournalMessageItem
   delivery?: 'queue-if-active'
+  executionOptions?: AgentSessionExecutionOptions
 }
 
 /** What every send fingerprint covers: the message without its sender, which never reaches the
@@ -37,6 +39,7 @@ export function structuredAgentSessionMessageSendMutation(message: {
   expectedRuntimeFence: number
   body: AgentJournalMessageItem
   delivery?: 'queue-if-active'
+  executionOptions?: AgentSessionExecutionOptions
 }): StructuredAgentSessionSendMutation {
   // `delivery` joins the OPERATION fingerprint exactly as the host digests it; never the body's.
   const delivery = message.delivery ? { delivery: message.delivery } : {}
@@ -52,7 +55,8 @@ export function structuredAgentSessionMessageSendMutation(message: {
       })
     },
     body: message.body,
-    ...delivery
+    ...delivery,
+    ...(message.executionOptions ? { executionOptions: message.executionOptions } : {})
   }
 }
 

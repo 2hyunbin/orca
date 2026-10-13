@@ -1,5 +1,6 @@
 import * as codexRewind from './codex-structured-rewind'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
+import type { AgentSessionExecutionOptions } from '../../shared/agent-session-execution-options'
 import type { AgentSessionBackgroundTaskState } from '../../shared/agent-session-wire'
 import { isCodexAppServerRequestError } from './codex-app-server-connection'
 import type {
@@ -19,7 +20,8 @@ import {
   applyCodexStructuredSessionOption,
   prepareLiveCodexSessionOptions,
   readLiveCodexSessionOptions,
-  readCodexAcquisitionOptions
+  readCodexAcquisitionOptions,
+  resolvedCodexMessageOptions
 } from './codex-structured-session-options'
 import {
   CodexAcquisitionRegistry,
@@ -227,6 +229,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     sessionId: string
     clientMessageId: string
     body: AgentJournalMessageItem
+    executionOptions?: AgentSessionExecutionOptions
     fence: number
     requestedAt?: number
     beforeDispatch?: () => Promise<void>
@@ -235,7 +238,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     session.dispatchPending = true
     try {
       await input.beforeDispatch?.()
-      return await dispatchCodexTurn(session, input, this.deps.requestTimeoutMs)
+      const turnOptions = await resolvedCodexMessageOptions(session, input.executionOptions)
+      return await dispatchCodexTurn(session, { ...input, turnOptions }, this.deps.requestTimeoutMs)
     } finally {
       session.dispatchPending = false
     }
