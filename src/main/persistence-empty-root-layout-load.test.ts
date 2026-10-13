@@ -96,6 +96,15 @@ describe('a saved layout with an empty root', () => {
     expect(layout?.root).toEqual({ type: 'leaf', leafId })
   })
 
+  it('names the same pane on every load until something saves', async () => {
+    const emptyRoot = { root: null, activeLeafId: null, expandedLeafId: null }
+    const first = loadOldSession(emptyRoot).getWorkspaceSession().terminalLayoutsByTabId['tab-1']
+    await closeTestStores()
+    const second = loadOldSession(emptyRoot).getWorkspaceSession().terminalLayoutsByTabId['tab-1']
+
+    expect(second?.root).toEqual(first?.root)
+  })
+
   it('names the pane the old layout was already bound to', () => {
     const store = loadOldSession({
       root: null,

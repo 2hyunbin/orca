@@ -1,15 +1,19 @@
-import { randomUUID } from 'node:crypto'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { resolveRootlessTerminalLayoutLeafId } from '../../../shared/workspace-layout/terminal-pane-tree'
+import { deriveHeadlessLegacyTerminalLeafId } from '../../runtime/mobile-session-layout-projection'
 
-function nameEmptyLayoutRoot(layout: TerminalLayoutSnapshot): TerminalLayoutSnapshot {
+function nameEmptyLayoutRoot(
+  tabId: string,
+  layout: TerminalLayoutSnapshot
+): TerminalLayoutSnapshot {
   if (layout.root) {
     return layout
   }
-  // Same pane the window would mount for this layout, so an existing binding keeps its leaf.
-  const leafId = resolveRootlessTerminalLayoutLeafId(layout) ?? randomUUID()
+  // Same pane the window would mount, so a binding keeps its leaf; else the id phones already use.
+  const leafId =
+    resolveRootlessTerminalLayoutLeafId(layout) ?? deriveHeadlessLegacyTerminalLeafId(tabId)
   return { ...layout, root: { type: 'leaf', leafId }, activeLeafId: leafId, expandedLeafId: null }
 }
 
@@ -21,7 +25,7 @@ function nameEmptyLayoutRootsInSession(session: WorkspaceSessionState): Workspac
   return {
     ...session,
     terminalLayoutsByTabId: Object.fromEntries(
-      Object.entries(layouts).map(([tabId, layout]) => [tabId, nameEmptyLayoutRoot(layout)])
+      Object.entries(layouts).map(([tabId, layout]) => [tabId, nameEmptyLayoutRoot(tabId, layout)])
     )
   }
 }
@@ -34,14 +38,22 @@ function nameEmptyLayoutRootsInSession(session: WorkspaceSessionState): Workspac
 export function nameEmptyPersistedTerminalLayoutRoots(state: PersistedState): PersistedState {
   const workspaceSession = nameEmptyLayoutRootsInSession(state.workspaceSession)
   const hostSessions = state.workspaceSessionsByHostId
-  if (!hostSessions) {
-    return { ...state, workspaceSession }
+  let hostSessionsChanged = false
+  const workspaceSessionsByHostId = hostSessions
+    ? Object.fromEntries(
+        Object.entries(hostSessions).map(([hostId, session]) => {
+          const repaired = session ? nameEmptyLayoutRootsInSession(session) : session
+          hostSessionsChanged ||= repaired !== session
+          return [hostId, repaired]
+        })
+      )
+    : hostSessions
+  if (workspaceSession === state.workspaceSession && !hostSessionsChanged) {
+    return state
   }
-  const workspaceSessionsByHostId = Object.fromEntries(
-    Object.entries(hostSessions).map(([hostId, session]) => [
-      hostId,
-      session ? nameEmptyLayoutRootsInSession(session) : session
-    ])
-  )
-  return { ...state, workspaceSession, workspaceSessionsByHostId }
+  return {
+    ...state,
+    workspaceSession,
+    ...(hostSessionsChanged ? { workspaceSessionsByHostId } : {})
+  }
 }

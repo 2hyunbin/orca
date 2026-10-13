@@ -80,8 +80,6 @@ function hasLeafPtyBinding(
   return ptyIdsByLeafId ? Object.hasOwn(ptyIdsByLeafId, leafId) : false
 }
 
-export { resolveRootlessTerminalLayoutLeafId }
-
 export function resolveTerminalLayoutActiveLeafId(opts: {
   root: TerminalPaneLayoutNode | null | undefined
   activeLeafId: string | null | undefined
