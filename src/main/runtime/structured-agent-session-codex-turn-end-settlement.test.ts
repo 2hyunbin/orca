@@ -301,6 +301,14 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
+async function runningTurn(): Promise<string> {
+  const opening = await send('look around')
+  await vi.waitFor(() => expect(answers).toBe(1))
+  turns.start()
+  turns.echo(opening)
+  return opening
+}
+
 describe('a Codex send its turn ended without taking it', () => {
   it('is withdrawn by a Stop before any echo, and nothing reads as working after', async () => {
     const sent = await send('look around')
@@ -326,10 +334,7 @@ describe('a Codex send its turn ended without taking it', () => {
   })
 
   it('withdraws a follow-up Codex steered into the turn a Stop ends, with no working latch', async () => {
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
+    const opening = await runningTurn()
     const followUp = await send('and check the tests')
     // Steered into the running turn by name, which fires no second turn/started.
     await vi.waitFor(() => expect(steers).toBe(1))
@@ -366,10 +371,7 @@ describe('the turn a withdrawn Codex send was answered into', () => {
   }
 
   it('keeps the turn identity of a steering send after the opening message is identified', async () => {
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
+    const opening = await runningTurn()
     const steered = await send('and check the tests')
     await vi.waitFor(() => expect(steers).toBe(1))
 
@@ -389,10 +391,7 @@ describe('the turn a withdrawn Codex send was answered into', () => {
   })
 
   it('is not named on a send the turn took', async () => {
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
+    const opening = await runningTurn()
 
     await stop('turn-1')
     await vi.waitFor(async () =>
@@ -443,10 +442,7 @@ describe('a queued card sent now into the turn a Stop ends', () => {
   }
 
   it('comes back as a paused waiting card, and nothing sends it again', async () => {
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
+    await runningTurn()
     const { messageId: cardId } = await queueThenSendNow('and check the tests')
     // Steered into the running turn, with no echo yet.
     await vi.waitFor(() => expect(steers).toBe(1))
@@ -490,10 +486,7 @@ describe('a Codex before 0.148, which names a steered start falsely', () => {
       () => (method, params) => handlers?.onNotification?.(method, params),
       { legacyStartAnswers: true }
     )
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
+    await runningTurn()
     const followUp = await send('and check the tests')
     await vi.waitFor(() => expect(steers + answers).toBe(2))
 
@@ -511,13 +504,6 @@ describe('a Codex before 0.148, which names a steered start falsely', () => {
 })
 
 describe("a queued card's Send-now while a Codex turn runs", () => {
-  async function runningTurn(): Promise<void> {
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
-  }
-
   it('goes into that turn as turn/steer, and the turn settles it when Codex echoes it', async () => {
     await runningTurn()
 
@@ -862,10 +848,7 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
   // Handed over once the stopped turn read ended, it started its own turn, however late that
   // turn's own end then arrives; a second Stop finds its turn never opened.
   it('withdraws a send made after a Stop that started its own turn, which never opened', async () => {
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
+    await runningTurn()
     interruptEndHeld = true
     await stop()
     interruptEndHeld = false
@@ -882,10 +865,7 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
 
   // Codex drains a steer into the running turn, so it may hold one it never echoed.
   it('leaves a send steered into the open turn in doubt when the child end follows', async () => {
-    const opening = await send('look around')
-    await vi.waitFor(() => expect(answers).toBe(1))
-    turns.start()
-    turns.echo(opening)
+    await runningTurn()
     const steered = await send('and check the tests')
     await vi.waitFor(() => expect(steers).toBe(1))
     interruptsFail = true
