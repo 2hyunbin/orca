@@ -299,6 +299,30 @@ test('@headful paired runtime paints inline images and resumes the same PTY afte
         .filter((line) => line.startsWith('READY:'))
     ).toEqual(readyLines)
     expect(await viewer.getDirectSshAttemptTargetIds()).toEqual([])
+  } catch (error) {
+    if (client) {
+      const state = await client.page.evaluate(() => ({
+        activeTabId: window.__store?.getState().activeTabId,
+        activeWorktreeId: window.__store?.getState().activeWorktreeId,
+        panes: Array.from(window.__paneManagers?.entries() ?? []).map(([tabId, manager]) => {
+          const pane = manager.getActivePane()
+          return {
+            tabId,
+            ptyId: pane?.container.dataset.ptyId,
+            connected: pane?.container.isConnected,
+            tail: pane?.serializeAddon.serialize().slice(-400)
+          }
+        }),
+        renderedTabs: Array.from(document.querySelectorAll('[data-testid="sortable-tab"]')).map(
+          (tab) => tab.getAttribute('data-tab-id')
+        )
+      }))
+      await testInfo.attach('paired-terminal-failure-state', {
+        body: JSON.stringify(state, null, 2),
+        contentType: 'application/json'
+      })
+    }
+    throw error
   } finally {
     if (client && liveHandle) {
       await callRuntime(client, 'terminal.closeTab', { terminal: liveHandle }).catch(

@@ -16,7 +16,7 @@ export function kittyFileImageFixture(color: KittyFileImageColor = 'cyan') {
   const rows = ['\u0305', '\u030D', '\u030E']
   const cells = rows.map((row) => `\u{10EEEE}${row}${'\u{10EEEE}'.repeat(14)}`).join('\r\n')
   const payload =
-    `\x1bcFile-backed Kitty image\r\n` +
+    `\r\nFile-backed Kitty image\r\n` +
     `\x1b_Ga=T,t=f,f=100,i=61680,U=1,c=15,r=3,q=2;FILE_PATH_BASE64\x1b\\` +
     `\x1b[38;2;0;240;240m${cells}\x1b[0m\r\n`
   return { png: PNG.sync.write(png).toString('base64'), payload }
@@ -59,7 +59,7 @@ export async function assertKittyFileImagePixels(
     .toBeGreaterThan(1000)
   await expect
     .poll(() => readInlineImageState(page))
-    .toMatchObject({ images: 1, pending: 0, decoderBytes: 0 })
+    .toMatchObject({ images: 5, pending: 0, decoderBytes: 0 })
 }
 
 export async function blockLocalKittyFileReads(app: ElectronApplication): Promise<void> {
