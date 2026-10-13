@@ -38,7 +38,9 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
   })
 
   protected readonly serveBrowserTabs = new ServeBrowserTabs({
+    windowless: () => !this.getAvailableAuthoritativeWindow(),
     backend: () => (this.getAvailableAuthoritativeWindow() ? null : this.offscreenBrowserBackend),
+    isClientHosted: (pageId) => getRuntimeBrowserPageRegistry(this).getPage(pageId) !== undefined,
     livePageIds: (worktreeId) =>
       new Set(
         (this.agentBrowserBridge?.tabList?.(worktreeId).tabs ?? []).map((tab) => tab.browserPageId)

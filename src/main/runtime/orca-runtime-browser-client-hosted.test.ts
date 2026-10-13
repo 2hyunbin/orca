@@ -199,7 +199,9 @@ describe('RuntimeBrowserCommands client-hosted routing', () => {
   it('moves a user-created client page into the clicked split group', async () => {
     const { RuntimeBrowserCommands } = await import('./orca-runtime-browser')
     const markHeadlessBrowserSessionTabActive = vi.fn()
+    const saveServeBrowserTab = vi.fn()
     const host = createHost({
+      saveServeBrowserTab,
       resolveBrowserNetworkExecutionHost: vi.fn(async () => ({
         kind: 'native' as const,
         runtimeId: 'runtime-a',
@@ -233,6 +235,14 @@ describe('RuntimeBrowserCommands client-hosted routing', () => {
         placement: { kind: 'client', browserHostClientId: 'host-a' }
       },
       { pairedDeviceId: 'device-a' }
+    )
+    // Saved in the clicked group, where the window's saved layout would hold it.
+    expect(saveServeBrowserTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktreeId: 'wt-1',
+        pageId: 'page-grouped',
+        groupId: 'group-right'
+      })
     )
     expect(markHeadlessBrowserSessionTabActive).toHaveBeenCalledWith('wt-1', 'page-grouped', {
       targetGroupId: 'group-right',

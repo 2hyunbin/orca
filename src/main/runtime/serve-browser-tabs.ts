@@ -1,6 +1,7 @@
 // Browser tabs on a host with no window: saved as a window saves its own, and restored as a window
 // restores them, lazily. A saved tab is listed at once; its page starts when something first uses
-// it (a tap, a command, a stream), so a restart opens no pages by itself.
+// it (a tap, a command, a stream), so a restart opens no pages by itself. A page a paired client
+// runs for this host is saved the same way, but only that client ever starts it.
 
 import type { BrowserBackend } from '../browser/browser-backend'
 import type { ExecutionHostId } from '../../shared/execution-host'
@@ -27,8 +28,12 @@ export class ServeBrowserTabs {
 
   constructor(
     private readonly deps: {
+      /** True while no window saves this host's browser tabs. */
+      windowless: () => boolean
       /** The page backend while no window hosts the browser tabs, else null. */
       backend: () => BrowserBackend | null
+      /** A page a paired client runs for this host, live or waiting for that client. */
+      isClientHosted: (pageId: string) => boolean
       /** Live pages in a worktree, or in every worktree when none is named. */
       livePageIds: (worktreeId: string | undefined) => ReadonlySet<string>
       /** Every workspace that holds a saved browser tab, whatever else it holds. */
@@ -85,7 +90,13 @@ export class ServeBrowserTabs {
       const pageId = tab.activePageId ?? tab.pageIds?.[0]
       const page = pageId ? findSavedBrowserPage(session, worktreeId, pageId)?.page : undefined
       // A document page is one desktop's; a remote page belongs to the host that ran it.
-      if (!page || live.has(page.id) || page.docLocation || page.remoteBrowserPageId) {
+      if (
+        !page ||
+        live.has(page.id) ||
+        page.docLocation ||
+        page.remoteBrowserPageId ||
+        this.deps.isClientHosted(page.id)
+      ) {
         return []
       }
       return [
@@ -155,7 +166,7 @@ export class ServeBrowserTabs {
       session: WorkspaceSessionState
     ) => WorkspaceSessionState | null
   ): void {
-    const session = this.deps.backend() ? this.deps.session(worktreeId) : null
+    const session = this.deps.windowless() ? this.deps.session(worktreeId) : null
     const next = session ? change(this.deps.hostId(worktreeId), session) : null
     if (!next) {
       return

@@ -76,6 +76,15 @@ export class RuntimeBrowserCommandsWithBrowserTabCreate extends RuntimeBrowserCo
         executionHost,
         workspaceId: worktree.id
       })
+      // Saved before it is published, so the tab lands in the group the caller targeted.
+      this.host.saveServeBrowserTab?.({
+        worktreeId: worktree.id,
+        pageId: browserPageId,
+        url,
+        title: '',
+        profileId: browserProfileId,
+        ...(params.targetGroupId ? { groupId: params.targetGroupId } : {})
+      })
       const pages = this.host.getRuntimeBrowserPageRegistry()
       pages.publishClientPage({
         browserPageId,

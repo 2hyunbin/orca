@@ -102,6 +102,12 @@ export class OrcaRuntimeWithPtyForegroundProcessReads extends OrcaRuntimeWithSta
     } else {
       this.persistedClientHostedBrowserWorktreeIds.delete(worktreeId)
     }
+    for (const page of registry.listPages(worktreeId)) {
+      const state = { worktreeId, pageId: page.browserPageId, url: page.url, title: page.title }
+      // A page saved before its tab was (an older build's) gets its tab once; then it navigates.
+      this.serveBrowserTabs.opened({ ...state, profileId: page.browserProfileId })
+      this.serveBrowserTabs.navigated(state)
+    }
     persistClientHostedBrowserPages(
       {
         getWorkspaceSession: (id) => this.getWorkspaceSessionForWorktree(id),
