@@ -152,6 +152,9 @@ export function NewWorkspaceComposerAdvancedSection({
       <CollapsibleContent
         animation="height"
         className={cn(advancedOpen && sparseEditing && '!overflow-visible')}
+        // Why: content stays mounted through the close animation; keep it out of Tab order meanwhile.
+        inert={!advancedOpen}
+        aria-hidden={!advancedOpen}
       >
         <div className="space-y-4 px-1 pt-1 pb-3">
           {smartNameSelection ? (
