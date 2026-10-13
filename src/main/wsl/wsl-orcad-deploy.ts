@@ -131,7 +131,10 @@ async function launchOverTransport(
   if (adoption.outcome === 'adopted') {
     context = { ...context, activationRecord: adoption.record }
   }
-  const localOrcadDir = await materializeOrcadArtifact(context.serverTarget, { signal })
+  const localOrcadDir = await materializeOrcadArtifact(context.serverTarget, {
+    signal,
+    trustVerificationRecord: true
+  })
   const appVersion = getAppEnvironment().getVersion()
   const deployed = await deployOrcad({
     ...slot,

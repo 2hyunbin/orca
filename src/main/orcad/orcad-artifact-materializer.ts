@@ -53,6 +53,8 @@ const TemplateManifestSchema = z.object({
 type MaterializeOptions = PinnedRuntimeMaterializeOptions & {
   templateDir?: string
   cacheRoot?: string
+  /** WSL wake path only: reuse digests recorded by stat signature instead of re-hashing. */
+  trustVerificationRecord?: boolean
 }
 
 const materializations = new Map<string, Promise<string>>()
@@ -72,7 +74,9 @@ export async function materializeOrcadArtifact(
   const templateDir = options.templateDir ?? resolveOrcadTemplateDir()
   const cacheRoot =
     options.cacheRoot ?? join(getAppEnvironment().getPath('userData'), 'orcad-artifacts')
-  const key = `${templateDir}\0${cacheRoot}\0${target}`
+  const trustVerificationRecord = options.trustVerificationRecord === true
+  // Why the trust bit is keyed: an SSH or local caller must never join a record-trusting fill.
+  const key = `${templateDir}\0${cacheRoot}\0${target}\0${trustVerificationRecord}`
   const existing = materializations.get(key)
   if (existing) {
     return waitForPromiseWithSignal(existing, options.signal)
@@ -81,7 +85,8 @@ export async function materializeOrcadArtifact(
   const pending = assembleOrcadArtifact({
     templateDir,
     cacheRoot,
-    target
+    target,
+    trustVerificationRecord
   }).finally(() => materializations.delete(key))
   materializations.set(key, pending)
   return waitForPromiseWithSignal(pending, options.signal)
@@ -94,13 +99,16 @@ export async function assembleOrcadArtifact(args: {
   manifest?: z.infer<typeof TemplateManifestSchema>
   /** Test seam for deciding when a file's stat signature is old enough to trust. */
   now?: () => number
+  /** Off (SSH, local serve): every launch hashes, and no record is read or written. */
+  trustVerificationRecord?: boolean
 }): Promise<string> {
+  const trust = args.trustVerificationRecord === true
   const manifest = args.manifest ?? (await readTemplateManifest(args.templateDir))
   const sources = artifactSources(args.templateDir, args.target, manifest)
   const expected = expectedTemplateSha256(args.target, manifest)
   const targetRoot = join(args.cacheRoot, args.target)
   const nowMs = (args.now ?? Date.now)()
-  const record = await readOrcadArtifactVerificationRecord(targetRoot)
+  const record = trust ? await readOrcadArtifactVerificationRecord(targetRoot) : null
   const identity = await verifiedArtifactIdentity(sources, expected, record, nowMs)
   await verifyTemplateMarkers(args.templateDir, args.target)
   const { fullVersion, sourceHashes } = identity
@@ -122,8 +130,10 @@ export async function assembleOrcadArtifact(args: {
     // Retention evicts by recency, so a reused slot counts as recently used.
     const now = new Date()
     await utimes(targetDir, now, now).catch(() => undefined)
-    const slot = slotFromRecord ? recordedSlot : await signSlot(targetDir, sources, nowMs)
-    await rememberVerification(targetRoot, record, identity, slot)
+    if (trust) {
+      const slot = slotFromRecord ? recordedSlot : await signSlot(targetDir, sources, nowMs)
+      await rememberVerification(targetRoot, record, identity, slot)
+    }
     return targetDir
   }
   await mkdir(targetRoot, { recursive: true })
@@ -150,8 +160,10 @@ export async function assembleOrcadArtifact(args: {
         })
       }
     }
-    // Fresh copies are not settled yet, so the next launch hashes this slot once more.
-    await rememberVerification(targetRoot, record, identity, null)
+    if (trust) {
+      // Fresh copies are not settled yet, so the next launch hashes this slot once more.
+      await rememberVerification(targetRoot, record, identity, null)
+    }
     return targetDir
   } finally {
     await rm(stagingDir, { recursive: true, force: true })
