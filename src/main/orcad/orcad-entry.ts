@@ -244,7 +244,14 @@ async function startOrcadRuntime(
   // constructed, and the deps hook is only ever called later, from an RPC.
   let sessionSearch: { apply(settings: AiVaultSearchSettings): void; dispose(): void } | null = null
 
+  const { orcadCodexAccountHomes } = await import('./orcad-codex-account-homes')
+  const codexAccountHomes = orcadCodexAccountHomes(
+    () => profileStore.getSettings(),
+    registerCleanup
+  )
+
   const runtime = new OrcaRuntimeService(profileStore, undefined, {
+    getAdditionalAiVaultCodexHomePaths: codexAccountHomes.listSessionHomes,
     // Why here too: orcad serves `worktree.ps` and `agentSession.*`; unwired it lists no agents.
     ...agentHookRuntimeDeps(agentHookServer, observedPaneIdentities, () =>
       profileStore.getSettings()
@@ -296,12 +303,11 @@ async function startOrcadRuntime(
   // same call `--serve` makes, and it threads the store through. Without the store the
   // handlers install fine and every terminal.create then fails at persistence time.
   //
-  // Codex-home and Claude-auth preparation are left unset: both are desktop account
-  // flows. A launch that needs one fails with its own message rather than silently
-  // spawning an unauthenticated agent.
+  // Claude-auth preparation is left unset: account selection is the client's, which sends the
+  // prepared account env. Codex only needs this host's hook put into that env's home.
   await registerHeadlessPtyRuntime(
     runtime,
-    undefined,
+    codexAccountHomes.selectLaunchHome,
     () => profileStore.getSettings(),
     undefined,
     profileStore
