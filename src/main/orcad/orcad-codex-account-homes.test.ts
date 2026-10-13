@@ -2,15 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { getDefaultSettings } from '../../shared/constants'
 
-const { prepareHooks, resolveHome, listHomes, holdsOwnHooks } = vi.hoisted(() => ({
-  holdsOwnHooks: vi.fn((_home: string) => false),
+const { prepareHooks, resolveHome, listHomes } = vi.hoisted(() => ({
   prepareHooks: vi.fn(
-    async (
-      _home: string | null,
-      _target: unknown,
-      _isHooksEnabled: () => boolean,
-      _launchesCodex: boolean
-    ) => {}
+    async (_home: string, _isHooksEnabled: () => boolean, _launchesCodex: boolean) => {}
   ),
   resolveHome: vi.fn((candidate: string | undefined): string | null =>
     candidate === '/home/u/.local/share/orca/codex-accounts/a1/home' ? candidate : null
@@ -18,14 +12,11 @@ const { prepareHooks, resolveHome, listHomes, holdsOwnHooks } = vi.hoisted(() =>
   listHomes: vi.fn(() => ['/home/u/.local/share/orca/codex-accounts/a1/home'])
 }))
 
-vi.mock('../codex/codex-launch-home-hooks', () => ({
-  prepareCodexLaunchHomeHooks: prepareHooks
+vi.mock('../codex/codex-account-home-hook', () => ({
+  reconcileCodexAccountHomeHook: prepareHooks
 }))
 vi.mock('../codex/codex-state-db-backfill-recovery', () => ({
   stopCodexStateDbBackfillRecoveries: vi.fn(async () => {})
-}))
-vi.mock('../codex/codex-runtime-home-user-hook-loss', () => ({
-  runtimeHomeHasUnmirroredUserHooks: holdsOwnHooks
 }))
 vi.mock('../codex-accounts/guest-codex-account-homes', () => ({
   resolveGuestCodexAccountHome: resolveHome,
@@ -48,7 +39,6 @@ function settings(overrides: Partial<GlobalSettings>): GlobalSettings {
 describe('orcadCodexAccountHomes', () => {
   beforeEach(() => {
     prepareHooks.mockClear()
-    holdsOwnHooks.mockReturnValue(false)
   })
 
   it('puts the hook into a client-sent account home and launches on it', async () => {
@@ -60,18 +50,18 @@ describe('orcadCodexAccountHomes', () => {
         { launchesCodex: true }
       )
     ).resolves.toBe(ACCOUNT_HOME)
-    expect(prepareHooks).toHaveBeenCalledWith(ACCOUNT_HOME, undefined, expect.any(Function), true)
+    expect(prepareHooks).toHaveBeenCalledWith(ACCOUNT_HOME, expect.any(Function), true)
   })
 
   it('reads the hook switch live, so turning hooks off takes the entry out', async () => {
     let current = settings({})
     const homes = orcadCodexAccountHomes(() => current, noCleanup)
     await homes.selectLaunchHome(undefined, { CODEX_HOME: ACCOUNT_HOME })
-    const isEnabled = prepareHooks.mock.calls[0]?.[2]
+    const isEnabled = prepareHooks.mock.calls[0]?.[1]
     expect(isEnabled?.()).toBe(true)
     current = settings({ agentStatusHooksEnabled: false })
     expect(isEnabled?.()).toBe(false)
-    expect(prepareHooks.mock.calls[0]?.[3]).toBe(false)
+    expect(prepareHooks.mock.calls[0]?.[2]).toBe(false)
   })
 
   it('leaves a launch without an Orca account home alone', async () => {
@@ -88,18 +78,5 @@ describe('orcadCodexAccountHomes', () => {
     expect(orcadCodexAccountHomes(() => settings({}), noCleanup).listSessionHomes()).toEqual([
       ACCOUNT_HOME
     ])
-  })
-
-  it('leaves a home that holds its own hooks untouched rather than drop one', async () => {
-    holdsOwnHooks.mockReturnValue(true)
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const homes = orcadCodexAccountHomes(() => settings({}), noCleanup)
-    await expect(
-      homes.selectLaunchHome(undefined, { CODEX_HOME: ACCOUNT_HOME }, { launchesCodex: true })
-    ).resolves.toBe(ACCOUNT_HOME)
-    await homes.selectLaunchHome(undefined, { CODEX_HOME: ACCOUNT_HOME })
-    expect(prepareHooks).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledTimes(1)
-    warn.mockRestore()
   })
 })
