@@ -1,5 +1,5 @@
 // @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithResolveWorktreeSelector } from './orca-runtime-resolve-worktree-selector'
+import { OrcaRuntimeWithReadKittyFile } from './orca-runtime-read-kitty-file'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import { splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
 import { isPathInsideOrEqual } from '../../shared/cross-platform-path'
@@ -28,7 +28,7 @@ import { withUnregisteredRemovalCheckouts } from '../worktree-removal-listing'
 import type { RuntimeWorktreeScanCache } from './orca-runtime-core'
 import { resolveWorktreeScanCacheTtlMs } from './runtime-worktree-scan-cache'
 
-export class OrcaRuntimeWithListKnownResolvedWorktreesForExplicitTarget extends OrcaRuntimeWithResolveWorktreeSelector {
+export class OrcaRuntimeWithListKnownResolvedWorktreesForExplicitTarget extends OrcaRuntimeWithReadKittyFile {
   protected listKnownResolvedWorktreesForExplicitTarget(
     targetWorktreeId: string,
     targetWorktree: ResolvedWorktree | null
