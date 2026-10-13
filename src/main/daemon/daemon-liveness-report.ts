@@ -9,7 +9,10 @@ import { checkDaemonHealthWithCoverage, type DaemonHealthCheck } from './daemon-
 import { inspectProcessLiveness, readLinuxStat } from './daemon-process-inspection'
 import type { ParsedDaemonPid } from './daemon-pid-file-parse'
 import { getDaemonEndpointFacts, readDaemonPidRecord } from './daemon-provider-state'
-import { confirmPtyProcessCeiling, type PtyProcessCeilingState } from './pty-process-ceiling-state'
+import {
+  confirmPtyProcessCeiling,
+  type PtyProcessCeilingState
+} from '../../shared/pty-process-ceiling-state'
 
 export type TerminalDaemonLivenessReport = {
   verdict: 'live' | 'unverifiable' | 'exited'
