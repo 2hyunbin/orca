@@ -31,6 +31,7 @@ import {
   requestWholeTranscriptRead,
   type TranscriptReadStats
 } from './session-transcript-reader'
+import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 
 export {
   invalidateSessionParseCacheEntry,
@@ -191,7 +192,13 @@ async function parseCachedInLane(
     // Only the sibling moved. For an agent whose sibling just adds metadata,
     // re-merge it onto the stored fold result; the transcript is not re-read.
     if (sidecarEnrichesWithoutReparse(candidate) && entry.foldSession !== undefined) {
-      const enriched = await enrichSessionFromSidecar(candidate, entry.foldSession, platform)
+      const enriched = await enrichSessionFromSidecar(
+        candidate,
+        entry.foldSession,
+        platform,
+        signal
+      )
+      throwIfAiVaultScanCancelled(signal)
       entry.session = enriched.session
       entry.sidecar = enriched.refused ? 'unknown' : file.sidecar
       storeSessionParseCacheEntry(file.path, entry)
@@ -209,9 +216,12 @@ async function parseCachedInLane(
       platform,
       resume: entry?.platform === platform ? entry.resume : null,
       stateFactory,
-      stats
+      stats,
+      signal
     })
-    const enriched = await enrichSessionFromSidecar(candidate, read.session, platform)
+    const enriched = await enrichSessionFromSidecar(candidate, read.session, platform, signal)
+    // A sibling read that degraded an abort to "no metadata" must not be cached as complete.
+    throwIfAiVaultScanCancelled(signal)
     storeSessionParseCacheEntry(file.path, {
       mtimeMs: file.mtimeMs,
       sizeBytes: file.sizeBytes ?? null,
@@ -231,7 +241,8 @@ async function parseCachedInLane(
   // Whole-file agents merge the sibling here just like the resumable branch
   // does post-read; the raw fold stays in foldSession so a sibling-only change
   // re-merges without re-reading the transcript.
-  const enriched = await enrichSessionFromSidecar(candidate, session, platform)
+  const enriched = await enrichSessionFromSidecar(candidate, session, platform, signal)
+  throwIfAiVaultScanCancelled(signal)
   storeSessionParseCacheEntry(file.path, {
     mtimeMs: file.mtimeMs,
     sizeBytes: file.sizeBytes ?? null,

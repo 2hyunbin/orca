@@ -68,6 +68,11 @@ export type TranscriptReadOutcome = {
    * not record a cursor for an incomplete read.
    */
   incomplete: boolean
+  /**
+   * The read stopped because its scan was cancelled. That says nothing about the
+   * file, so a consumer records nothing and leaves its cursor where it was.
+   */
+  cancelled?: boolean
 }
 
 /** One consumer's view of one file read. */

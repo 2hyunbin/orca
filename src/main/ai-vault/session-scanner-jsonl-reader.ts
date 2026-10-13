@@ -1,4 +1,5 @@
 import { openTranscriptReadStream } from '../native-chat/wsl-transcript-fs-access'
+import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import {
   MAX_SESSION_TRANSCRIPT_RECORD_BYTES,
   type SkippedTranscriptRecord
@@ -28,6 +29,7 @@ export async function consumeCompleteJsonlLines(args: {
   onLine: (line: string) => void
   onLineBytes?: (line: Buffer) => void
   shouldStop?: () => boolean
+  signal?: AbortSignal
 }): Promise<JsonlReadResult> {
   if (args.shouldStop?.()) {
     return {
@@ -48,9 +50,11 @@ export async function consumeCompleteJsonlLines(args: {
   let discarding = false
   const skippedRecords: SkippedTranscriptRecord[] = []
 
-  const stream = openTranscriptReadStream(args.path, { start: args.start }, 'scan')
+  const stream = openTranscriptReadStream(args.path, { start: args.start }, 'scan', args.signal)
   let chunkStart = args.start
   for await (const chunk of stream as AsyncIterable<Buffer>) {
+    // Why: an SSH-backed stream ignores the signal, and a buffered chunk can land after the abort.
+    throwIfAiVaultScanCancelled(args.signal)
     bytesRead += chunk.length
     const chunkEnd = chunkStart + chunk.length
     let lineStart = 0

@@ -58,11 +58,12 @@ function jcodeMessageTokens(message: Record<string, unknown>): number {
 export async function parseJcodeSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
   return parseJcodeSessionContent(
     file,
-    await wslGatedReadFile(file.path, 'utf-8', 'scan'),
+    await wslGatedReadFile(file.path, 'utf-8', 'scan', signal),
     platform,
     messages ? { messages } : undefined
   )

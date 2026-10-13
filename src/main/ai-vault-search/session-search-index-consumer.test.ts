@@ -1,5 +1,15 @@
+import { statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { resetTranscriptConsumersForTests } from '../ai-vault/session-transcript-consumers'
+import { getSessionParseCacheEntry } from '../ai-vault/session-parse-cache-store'
+import {
+  parseAgentSessionFileCached,
+  resetSessionParseCacheForTests
+} from '../ai-vault/session-scanner-parse-cache'
+import {
+  registerTranscriptConsumer,
+  resetTranscriptConsumersForTests
+} from '../ai-vault/session-transcript-consumers'
 import { registerSessionSearchIndexConsumer } from './session-search-index-consumer'
 import {
   openSessionSearchIndexFile,
@@ -25,6 +35,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   resetTranscriptConsumersForTests()
+  resetSessionParseCacheForTests()
   store.close()
   await index.close()
 })
@@ -179,6 +190,40 @@ it('indexes nothing at all from a read that was incomplete from the start', asyn
   // is exactly the one that has no row of its own to count on.
   expect(cursor()).toBe(0)
   expect(owed()).toMatchObject({ state: 'failed', fail_count: 1 })
+})
+
+it('records nothing for a read its scan cancelled, so the next scan reads it whole', async () => {
+  const path = join(dirname(index.path), 'session.jsonl')
+  const line = (text: string): string =>
+    JSON.stringify({
+      type: 'user',
+      sessionId: 'cancelled-read',
+      timestamp: '2026-05-01T10:00:00.000Z',
+      cwd: '/repo',
+      message: { role: 'user', content: text }
+    })
+  writeFileSync(path, `${line('first')}\n${line('second')}\n`)
+  const { mtimeMs, size } = statSync(path)
+  const candidate = syntheticCandidate({ path, mtimeMs, sizeBytes: size })
+  const controller = new AbortController()
+  const unregister = registerTranscriptConsumer({
+    beginRead: () => ({ message: () => controller.abort(), finish: () => undefined })
+  })
+
+  await expect(
+    parseAgentSessionFileCached(candidate, 'linux', undefined, undefined, controller.signal)
+  ).rejects.toMatchObject({ name: 'AbortError' })
+  unregister()
+
+  // Neither a failure on the index row nor a cached fold the list would reuse.
+  expect(index.db.prepare('SELECT state FROM files WHERE path = ?').get(path)).toBeUndefined()
+  expect(getSessionParseCacheEntry(path)).toBeUndefined()
+
+  const session = await parseAgentSessionFileCached(candidate, 'linux')
+  expect(session?.messageCount).toBe(2)
+  expect(index.db.prepare('SELECT state FROM files WHERE path = ?').get(path)).toEqual({
+    state: 'current'
+  })
 })
 
 it('drops a file whose parser returned no session', async () => {

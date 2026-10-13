@@ -36,9 +36,11 @@ const GROK_USER_QUERY_PREVIEW_SCAN_LIMIT = 4096
 export async function parseGrokSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
-  const record = asRecord(JSON.parse(await wslGatedReadFile(file.path, 'utf-8', 'scan')) as unknown)
+  const parsed: unknown = JSON.parse(await wslGatedReadFile(file.path, 'utf-8', 'scan', signal))
+  const record = asRecord(parsed)
   if (!record) {
     return null
   }
@@ -56,18 +58,20 @@ export async function parseGrokSessionFile(
   updateTimeline(accumulator, extractString(record.created_at))
   updateTimeline(accumulator, extractString(record.updated_at))
   updateTimeline(accumulator, extractString(record.last_active_at))
-  await consumeGrokChatHistory(accumulator, dirname(file.path))
+  await consumeGrokChatHistory(accumulator, dirname(file.path), signal)
   return finalizeSession(accumulator, platform)
 }
 
 async function consumeGrokChatHistory(
   accumulator: SessionAccumulator,
-  sessionDir: string
+  sessionDir: string,
+  signal: AbortSignal | undefined
 ): Promise<void> {
   const input = openTranscriptReadStream(
     join(sessionDir, 'chat_history.jsonl'),
     { encoding: 'utf-8' },
-    'scan'
+    'scan',
+    signal
   )
   const lines = createInterface({ input, crlfDelay: Infinity })
   try {

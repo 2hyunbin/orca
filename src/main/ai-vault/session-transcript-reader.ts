@@ -9,6 +9,7 @@ import {
 } from './session-parse-cache-store'
 import { TranscriptMessageChannel } from './session-transcript-channel'
 import { mergeSkippedTranscriptRecords } from './session-transcript-record-budget'
+import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 
 const NEWLINE_BYTE = 0x0a
 
@@ -62,6 +63,7 @@ export async function readResumableTranscript(args: {
   resume: SessionParseResumePoint | null
   stateFactory: (messages: TranscriptMessageChannel) => ResumableSessionParseState
   stats?: TranscriptReadStats
+  signal?: AbortSignal
 }): Promise<ResumableTranscriptRead> {
   const { file } = args.candidate
   const resume = args.resume
@@ -72,7 +74,8 @@ export async function readResumableTranscript(args: {
     file.mtimeMs >= resume.mtimeMs &&
     // A changed timestamp without growth signals a rewrite, even at a valid line boundary.
     (file.mtimeMs === resume.mtimeMs || file.sizeBytes > (resume.sizeBytes ?? resume.byteOffset)) &&
-    (resume.byteOffset === 0 || (await endsWithNewlineAt(file.path, resume.byteOffset)))
+    (resume.byteOffset === 0 ||
+      (await endsWithNewlineAt(file.path, resume.byteOffset, args.signal)))
 
   // Clone before consuming: a failed read must not corrupt the cached state,
   // or the next resume would double-count the lines applied before the error.
@@ -108,7 +111,8 @@ export async function readResumableTranscript(args: {
       // Bound: the optional hooks are declared as methods, so a parser written
       // with method syntax must not lose `this` on the way into the reader.
       onLineBytes: state.consumeLineBytes?.bind(state),
-      shouldStop: state.shouldStop?.bind(state)
+      shouldStop: state.shouldStop?.bind(state),
+      signal: args.signal
     })
     if (args.stats) {
       args.stats.bytesRead += readResult.bytesRead
@@ -128,6 +132,8 @@ export async function readResumableTranscript(args: {
     }
 
     const session = await displayState.finalize(args.platform)
+    // A finalize lookup that swallowed the abort must not report this read complete.
+    throwIfAiVaultScanCancelled(args.signal)
     channel.finishRead({ session, byteOffset: readResult.consumedThrough, incomplete: false })
     return {
       session,
@@ -146,7 +152,12 @@ export async function readResumableTranscript(args: {
       }
     }
   } catch (error) {
-    channel.finishRead({ session: null, byteOffset: startOffset, incomplete: true })
+    channel.finishRead({
+      session: null,
+      byteOffset: startOffset,
+      incomplete: true,
+      cancelled: args.signal?.aborted === true
+    })
     throw error
   }
 }
@@ -171,10 +182,17 @@ export async function readWholeTranscript(args: {
   channel.beginRead({ candidate: args.candidate, mode: 'replace', previousByteOffset: 0 })
   try {
     const session = await parseAgentSessionFile(args.candidate, args.platform, channel, args.signal)
+    // Parsers that treat an unreadable file as "no session" would otherwise turn an abort into one.
+    throwIfAiVaultScanCancelled(args.signal)
     channel.finishRead({ session, byteOffset: file.sizeBytes ?? 0, incomplete: false })
     return session
   } catch (error) {
-    channel.finishRead({ session: null, byteOffset: 0, incomplete: true })
+    channel.finishRead({
+      session: null,
+      byteOffset: 0,
+      incomplete: true,
+      cancelled: args.signal?.aborted === true
+    })
     throw error
   }
 }
@@ -184,7 +202,11 @@ export async function readWholeTranscript(args: {
 // grown rewrite keeping '\n' at exactly this byte would slip through, but
 // agent transcripts are append-only so that trade is accepted (worst case is
 // a stale vault row until the file is next truncated or the app restarts).
-async function endsWithNewlineAt(path: string, offset: number): Promise<boolean> {
-  const slice = await readTranscriptSlice(path, offset - 1, 1, 'scan')
+async function endsWithNewlineAt(
+  path: string,
+  offset: number,
+  signal: AbortSignal | undefined
+): Promise<boolean> {
+  const slice = await readTranscriptSlice(path, offset - 1, 1, 'scan', signal)
   return slice.length === 1 && slice[0] === NEWLINE_BYTE
 }

@@ -28,11 +28,7 @@ import { getSessionParseCacheEntry } from './session-parse-cache-store'
 import { describeSkippedTranscriptRecords } from './session-transcript-record-budget'
 import { canStopParsingSessions } from './session-scan-cutoff'
 import { discoverInScopeCwdBucketFiles } from './session-scanner-scope-discovery'
-import {
-  CLAUDE_CWD_BUCKET_LAYOUT,
-  PI_CWD_BUCKET_LAYOUT,
-  CODEBUDDY_CWD_BUCKET_LAYOUT
-} from './session-cwd-bucket-layouts'
+import { CWD_BUCKET_LAYOUTS } from './session-cwd-bucket-layouts'
 import { discoverAiVaultSessionSources } from './session-scanner-source-discovery'
 import { cursorChatMetaRefusals, withCursorChatMetaScan } from './session-scanner-cursor-chat-meta'
 import type {
@@ -174,14 +170,6 @@ function mergeSessions(
   return [...byId.values()].sort((left, right) => sessionSortTime(right) - sessionSortTime(left))
 }
 
-// Agents whose on-disk layout names a directory per cwd, so a scope's older
-// sessions can be found without reading every transcript's header.
-const CWD_BUCKET_LAYOUTS = [
-  CLAUDE_CWD_BUCKET_LAYOUT,
-  PI_CWD_BUCKET_LAYOUT,
-  CODEBUDDY_CWD_BUCKET_LAYOUT
-]
-
 async function scanInScopeSessions(args: {
   discoveries: SessionFileDiscovery[]
   scopePaths: readonly string[]
@@ -205,7 +193,8 @@ async function scanInScopeSessions(args: {
       scopePaths: args.scopePaths,
       limit: args.limit,
       excludedFilePaths: args.alreadyParsedFilePaths,
-      issues: args.issues
+      issues: args.issues,
+      signal: args.signal
     })
     candidates.push(...files.map((file) => ({ agent: layout.agent, file, codexHome: null })))
   }

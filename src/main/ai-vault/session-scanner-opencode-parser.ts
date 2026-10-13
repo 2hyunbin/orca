@@ -13,6 +13,7 @@ import {
   updateTimeline
 } from './session-scanner-accumulator'
 import { extractFullFirstUserPromptText } from './session-scanner-first-user-prompt'
+import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import {
   asRecord,
   extractPreviewContentText,
@@ -27,9 +28,11 @@ import {
 export async function parseOpenCodeSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
-  const record = asRecord(JSON.parse(await wslGatedReadFile(file.path, 'utf-8', 'scan')) as unknown)
+  const parsed: unknown = JSON.parse(await wslGatedReadFile(file.path, 'utf-8', 'scan', signal))
+  const record = asRecord(parsed)
   if (!record) {
     return null
   }
@@ -39,7 +42,7 @@ export async function parseOpenCodeSessionFile(
   accumulator.cwd = extractString(record.directory)
   updateTimeline(accumulator, timeObjectValue(record.time, 'created'))
   updateTimeline(accumulator, timeObjectValue(record.time, 'updated'))
-  await consumeOpenCodeMessages(accumulator, findOpenCodeStorageRoot(file.path), sessionId)
+  await consumeOpenCodeMessages(accumulator, findOpenCodeStorageRoot(file.path), sessionId, signal)
   return finalizeSession(accumulator, platform)
 }
 
@@ -47,10 +50,13 @@ export async function parseOpenCodeSessionFile(
 // so the transcript has to be rebuilt by creation time before anything reads
 // "the first user prompt". Undated messages sort last, by file name, so a
 // missing timestamp can never displace a real first turn.
-async function readOpenCodeMessagesInOrder(messageDir: string): Promise<Record<string, unknown>[]> {
+async function readOpenCodeMessagesInOrder(
+  messageDir: string,
+  signal: AbortSignal | undefined
+): Promise<Record<string, unknown>[]> {
   let entries
   try {
-    entries = await wslGatedReaddir(messageDir, 'scan')
+    entries = await wslGatedReaddir(messageDir, 'scan', signal)
   } catch (error) {
     // A session with no message dir yet is empty; a gate refusal is not — an
     // empty transcript would otherwise be cached under the session's mtime.
@@ -61,14 +67,16 @@ async function readOpenCodeMessagesInOrder(messageDir: string): Promise<Record<s
   }
   const messages: { name: string; createdMs: number; message: Record<string, unknown> }[] = []
   for (const entry of entries) {
+    throwIfAiVaultScanCancelled(signal)
     if (!entry.isFile() || !entry.name.endsWith('.json')) {
       continue
     }
     let message: Record<string, unknown> | null = null
     try {
-      message = asRecord(
-        JSON.parse(await wslGatedReadFile(join(messageDir, entry.name), 'utf-8', 'scan')) as unknown
+      const parsed: unknown = JSON.parse(
+        await wslGatedReadFile(join(messageDir, entry.name), 'utf-8', 'scan', signal)
       )
+      message = asRecord(parsed)
     } catch (error) {
       // A live OpenCode process can leave a half-written file; skip it rather
       // than discard the whole session. A refused read is not a bad file — the
@@ -96,13 +104,15 @@ async function readOpenCodeMessagesInOrder(messageDir: string): Promise<Record<s
 export async function consumeOpenCodeMessages(
   accumulator: SessionAccumulator,
   storageRoot: string | null,
-  sessionId: string
+  sessionId: string,
+  signal?: AbortSignal
 ): Promise<void> {
   if (!storageRoot) {
     return
   }
   for (const message of await readOpenCodeMessagesInOrder(
-    join(storageRoot, 'message', sessionId)
+    join(storageRoot, 'message', sessionId),
+    signal
   )) {
     const role = extractString(message.role)
     if (role === 'user' || role === 'assistant') {

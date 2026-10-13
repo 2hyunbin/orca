@@ -106,7 +106,7 @@ export async function parseAgentSessionFile(
         messages
       )
     case 'gemini':
-      return parseGeminiSessionFile(candidate.file, platform, messages)
+      return parseGeminiSessionFile(candidate.file, platform, messages, signal)
     case 'antigravity':
       return parseAntigravitySessionFile(candidate.file, platform, messages)
     case 'copilot':
@@ -121,7 +121,7 @@ export async function parseAgentSessionFile(
       if (sqliteCandidate) {
         return readOpenCodeSqliteCandidate(sqliteCandidate, platform, messages, signal)
       }
-      return parseOpenCodeSessionFile(candidate.file, platform, messages)
+      return parseOpenCodeSessionFile(candidate.file, platform, messages, signal)
     }
     case 'opencode2': {
       // Why: opencode2 (beta) sessions are read from the channel-scoped SQLite
@@ -140,11 +140,11 @@ export async function parseAgentSessionFile(
         : null
     }
     case 'grok':
-      return parseGrokSessionFile(candidate.file, platform, messages)
+      return parseGrokSessionFile(candidate.file, platform, messages, signal)
     case 'hermes':
-      return parseHermesSessionFile(candidate.file, platform, messages)
+      return parseHermesSessionFile(candidate.file, platform, messages, signal)
     case 'rovo':
-      return parseRovoSessionFile(candidate.file, platform, messages)
+      return parseRovoSessionFile(candidate.file, platform, messages, signal)
     case 'openclaw':
       return parseMessageGraphSessionFile('openclaw', candidate.file, platform, messages)
     case 'pi':
@@ -156,16 +156,16 @@ export async function parseAgentSessionFile(
     case 'droid':
       return parseDroidSessionFile(candidate.file, platform, messages)
     case 'cline':
-      return parseClineSessionFile(candidate.file, platform, messages)
+      return parseClineSessionFile(candidate.file, platform, messages, signal)
     case 'devin':
-      return parseDevinSessionFile(candidate.file, platform, messages)
+      return parseDevinSessionFile(candidate.file, platform, messages, signal)
     case 'kimi':
-      return parseKimiSessionFile(candidate.file, platform, messages)
+      return parseKimiSessionFile(candidate.file, platform, messages, signal)
     case 'muse':
-      return parseMuseSessionFile(candidate.file, platform, messages)
+      return parseMuseSessionFile(candidate.file, platform, messages, signal)
     case 'jcode':
-      return parseJcodeSessionFile(candidate.file, platform, messages)
+      return parseJcodeSessionFile(candidate.file, platform, messages, signal)
     case 'kiro':
-      return parseKiroSessionFile(candidate.file, platform, messages)
+      return parseKiroSessionFile(candidate.file, platform, messages, signal)
   }
 }

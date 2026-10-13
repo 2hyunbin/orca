@@ -30,7 +30,8 @@ import {
 export async function parseGeminiSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
   if (file.path.endsWith('.jsonl')) {
     return parseGeminiJsonlSessionFile(file, platform, messages)
@@ -38,7 +39,7 @@ export async function parseGeminiSessionFile(
 
   return parseGeminiJsonSessionContent(
     file,
-    await wslGatedReadFile(file.path, 'utf-8', 'scan'),
+    await wslGatedReadFile(file.path, 'utf-8', 'scan', signal),
     platform,
     {},
     messages

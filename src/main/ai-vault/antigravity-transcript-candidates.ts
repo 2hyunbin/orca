@@ -3,6 +3,7 @@ import { wslGatedLstat } from '../native-chat/wsl-transcript-fs-access'
 import { WslTranscriptFsError } from '../native-chat/wsl-transcript-fs-gate'
 import type { AiVaultScanIssue } from '../../shared/ai-vault-types'
 import { recordSessionScanIssue } from './session-scan-issues'
+import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import type { FileWithMtime, SessionFileDiscovery } from './session-scanner-types'
 
 function transcriptDirectory(file: FileWithMtime): string {
@@ -62,7 +63,8 @@ export function candidateFileTime(file: FileWithMtime | undefined): number | und
 /** The recency cap may retain a newer compact file but omit its older full sibling. */
 export async function completeAntigravityTranscriptPairs(
   discovery: SessionFileDiscovery,
-  issues: AiVaultScanIssue[]
+  issues: AiVaultScanIssue[],
+  signal?: AbortSignal
 ): Promise<SessionFileDiscovery> {
   const files = new Map(discovery.files.map((file) => [file.path, file]))
   for (const file of discovery.files) {
@@ -73,8 +75,9 @@ export async function completeAntigravityTranscriptPairs(
     if (files.has(sibling)) {
       continue
     }
+    throwIfAiVaultScanCancelled(signal)
     try {
-      const observed = await wslGatedLstat(sibling, 'scan')
+      const observed = await wslGatedLstat(sibling, 'scan', signal)
       if (observed.isFile()) {
         files.set(sibling, {
           path: sibling,
@@ -87,6 +90,7 @@ export async function completeAntigravityTranscriptPairs(
         })
       }
     } catch (error) {
+      throwIfAiVaultScanCancelled(signal)
       if (error instanceof WslTranscriptFsError) {
         recordSessionScanIssue(issues, {
           agent: 'antigravity',

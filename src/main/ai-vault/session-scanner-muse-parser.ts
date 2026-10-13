@@ -228,11 +228,12 @@ function foldMuseLines(
 export async function parseMuseSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
   return parseMuseSessionContent(
     file,
-    await wslGatedReadFile(file.path, 'utf-8', 'scan'),
+    await wslGatedReadFile(file.path, 'utf-8', 'scan', signal),
     platform,
     {},
     messages

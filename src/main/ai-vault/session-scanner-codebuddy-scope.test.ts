@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { scanAiVaultSessions } from './session-scanner'
-import { resetProjectDirCwdCacheForTests } from './session-scanner-scope-discovery'
+import { resetProjectDirCwdCacheForTests } from './session-scanner-project-dir-cwd'
 import { isolatedScanRoots, jsonLines } from './session-scanner-test-fixtures'
 
 let tempRoots: string[] = []

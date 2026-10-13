@@ -129,11 +129,12 @@ function createKiroAccumulator(
 export async function parseKiroSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
   const accumulator = createKiroAccumulator(
     file,
-    await wslGatedReadFile(file.path, 'utf-8', 'scan'),
+    await wslGatedReadFile(file.path, 'utf-8', 'scan', signal),
     messages
   )
   if (!accumulator) {
@@ -144,7 +145,8 @@ export async function parseKiroSessionFile(
     const { trailingPartialLine } = await consumeCompleteJsonlLines({
       path: kiroTranscriptPathForMetadata(file.path),
       start: 0,
-      onLine: (line) => consumeKiroTranscriptLine(accumulator, line)
+      onLine: (line) => consumeKiroTranscriptLine(accumulator, line),
+      signal
     })
     // A torn final write fails JSON parsing and is dropped; a complete one still counts.
     if (trailingPartialLine) {

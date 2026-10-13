@@ -40,15 +40,17 @@ export function clineMessagesPathForMetadata(filePath: string): string {
 export async function parseClineSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messageSink?: TranscriptMessageSink
+  messageSink?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
-  const metadataContent = await wslGatedReadFile(file.path, 'utf-8', 'scan')
+  const metadataContent = await wslGatedReadFile(file.path, 'utf-8', 'scan', signal)
   let messagesContent: string | null = null
   try {
     messagesContent = await wslGatedReadFile(
       clineMessagesPathForMetadata(file.path),
       'utf-8',
-      'scan'
+      'scan',
+      signal
     )
   } catch (error) {
     // The manifest is written before the first turn; a missing messages file is

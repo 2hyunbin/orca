@@ -11,6 +11,7 @@ import { WslTranscriptFsError } from '../native-chat/wsl-transcript-fs-gate'
 import { recordSessionScanIssue } from './session-scan-issues'
 import type { FileWithMtime, SessionFileDiscovery } from './session-scanner-types'
 import { errorMessage } from './session-scanner-values'
+import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 
 const NATIVE_DISCOVERY_CONCURRENCY = 4
 const NATIVE_DISCOVERY_BATCH_SIZE = 16
@@ -20,8 +21,11 @@ type SessionFileObservation =
   | { file: Omit<FileWithMtime, 'modifiedAt'>; sidecarPath?: string }
   | { issue: { path: string; message: string } }
 
-async function withNativeDiscoverySlot<T>(read: () => Promise<T>): Promise<T> {
-  const release = await nativeDiscoverySlots.acquire(0)
+async function withNativeDiscoverySlot<T>(
+  read: () => Promise<T>,
+  signal: AbortSignal | undefined
+): Promise<T> {
+  const release = await nativeDiscoverySlots.acquire(0, signal)
   try {
     return await read()
   } finally {
@@ -38,6 +42,7 @@ export async function discoverFiles(args: {
   filePredicate?: (path: string) => boolean
   contentDependencyPath?: (path: string) => string | undefined | Promise<string | undefined>
   directoryPredicate?: (name: string, depth: number) => boolean
+  signal?: AbortSignal
 }): Promise<SessionFileDiscovery> {
   const files = new SessionNewestFiles(args.limit)
   let refusedSidecar = false
@@ -102,10 +107,12 @@ export async function discoverFiles(args: {
       withNativeDiscoverySlot(async () => {
         const files: SessionFileObservation[] = []
         for (const path of group) {
-          files.push(await observeSessionFile(path, args.contentDependencyPath))
+          // Why: a native stat ignores the signal once issued, so stop before the next one.
+          throwIfAiVaultScanCancelled(args.signal)
+          files.push(await observeSessionFile(path, args.contentDependencyPath, args.signal))
         }
         return files
-      })
+      }, args.signal)
     )
     return observations.flat()
   }
@@ -120,16 +127,21 @@ export async function discoverFiles(args: {
           extensions: new Set(args.extensions),
           filePredicate: args.filePredicate,
           directoryPredicate: args.directoryPredicate,
+          signal: args.signal,
           ...(native
             ? {
                 readDirectory: (path: string) =>
-                  withNativeDiscoverySlot(() => wslGatedReaddir(path, 'scan'))
+                  withNativeDiscoverySlot(
+                    () => wslGatedReaddir(path, 'scan', args.signal),
+                    args.signal
+                  )
               }
             : {})
         },
         native
           ? queueNativeFile
-          : async (path) => consume([await observeSessionFile(path, args.contentDependencyPath)])
+          : async (path) =>
+              consume([await observeSessionFile(path, args.contentDependencyPath, args.signal)])
       )
     } finally {
       // One read batch overlaps directory traversal; commit in traversal order.
@@ -139,6 +151,7 @@ export async function discoverFiles(args: {
       }
     }
   } catch (err) {
+    throwIfAiVaultScanCancelled(args.signal)
     // Why: discoverAiVaultSessionSources fans out with Promise.all, so one
     // stalled distro would otherwise reject the whole vault scan — including
     // every healthy local agent. Contain it to this root.
@@ -157,12 +170,15 @@ export async function discoverFiles(args: {
 
 async function observeSessionFile(
   path: string,
-  contentDependencyPath?: (path: string) => string | undefined | Promise<string | undefined>
+  contentDependencyPath:
+    | ((path: string) => string | undefined | Promise<string | undefined>)
+    | undefined,
+  signal: AbortSignal | undefined
 ): Promise<SessionFileObservation> {
   try {
-    const fileStat = await wslGatedStat(path, 'scan')
+    const fileStat = await wslGatedStat(path, 'scan', signal)
     const sidecarPath = contentDependencyPath ? await contentDependencyPath(path) : undefined
-    const sidecar = sidecarPath ? await observeSessionSidecar(sidecarPath) : 'none'
+    const sidecar = sidecarPath ? await observeSessionSidecar(sidecarPath, signal) : 'none'
     return {
       file: {
         path,
@@ -176,6 +192,7 @@ async function observeSessionFile(
       sidecarPath
     }
   } catch (err) {
+    throwIfAiVaultScanCancelled(signal)
     return { issue: { path, message: errorMessage(err) } }
   }
 }
@@ -188,13 +205,14 @@ async function observeSessionFile(
  * a stalled WSL distro, EACCES, EIO — is `'unknown'`.
  */
 async function observeSessionSidecar(
-  filePath: string | undefined
+  filePath: string | undefined,
+  signal: AbortSignal | undefined
 ): Promise<SessionSidecarObservation> {
   if (!filePath) {
     return 'none'
   }
   try {
-    const fileStat = await wslGatedStat(filePath, 'scan')
+    const fileStat = await wslGatedStat(filePath, 'scan', signal)
     return { path: filePath, mtimeMs: fileStat.mtimeMs, sizeBytes: fileStat.size }
   } catch (error) {
     return isMissingSidecarError(error) ? 'none' : 'unknown'

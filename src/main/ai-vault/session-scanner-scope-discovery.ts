@@ -1,70 +1,19 @@
-import { createInterface } from 'node:readline'
 import { extname, join } from 'node:path'
-import {
-  openTranscriptReadStream,
-  wslGatedReaddir,
-  wslGatedStat
-} from '../native-chat/wsl-transcript-fs-access'
-import { WslTranscriptFsError } from '../native-chat/wsl-transcript-fs-gate'
+import { wslGatedReaddir, wslGatedStat } from '../native-chat/wsl-transcript-fs-access'
 import { isPathInsideOrEqual } from '../../shared/cross-platform-path'
 import type { CwdBucketLayout } from './session-cwd-bucket-layouts'
 import type { AiVaultAgent, AiVaultScanIssue } from '../../shared/ai-vault-types'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { recordSessionScanIssue } from './session-scan-issues'
 import type { FileWithMtime } from './session-scanner-types'
-import { errorMessage, extractString, parseJsonObject } from './session-scanner-values'
-
-// Reading a few lines of one transcript per project dir is enough to learn that
-// dir's cwd; cap both so a giant or cwd-less transcript can't stall the scan.
-const REPRESENTATIVE_CWD_LINE_LIMIT = 200
-const REPRESENTATIVE_FILE_LIMIT = 3
-const TRANSCRIPT_EXTENSIONS = new Set(['.jsonl'])
-
-// Bucket encodings are lossy; retain Claude’s cache and verify other transcripts individually.
-const PROJECT_DIR_CWD_CACHE_MAX = 2048
-const projectDirCwdCache = new Map<string, string>()
-
-export function resetProjectDirCwdCacheForTests(): void {
-  projectDirCwdCache.clear()
-}
-
-// A gate refusal is a stalled WSL root, not an empty one: keep the existing
-// degrade-to-empty containment but make the gap visible in the scan issues.
-function recordRefusal(
-  issues: AiVaultScanIssue[],
-  path: string,
-  error: unknown,
-  agent: AiVaultAgent
-): void {
-  if (error instanceof WslTranscriptFsError) {
-    recordSessionScanIssue(issues, { agent, path, message: error.message })
-  }
-}
-
-async function cachedProjectDirCwd(
-  projectDir: string,
-  issues: AiVaultScanIssue[],
-  agent: AiVaultAgent
-): Promise<string | null> {
-  const cached = projectDirCwdCache.get(projectDir)
-  if (cached !== undefined) {
-    // Refresh recency so hot in-scope dirs outlive one-off ones at the cap.
-    projectDirCwdCache.delete(projectDir)
-    projectDirCwdCache.set(projectDir, cached)
-    return cached
-  }
-  const cwd = await readProjectDirCwd(projectDir, issues, agent)
-  if (cwd) {
-    if (projectDirCwdCache.size >= PROJECT_DIR_CWD_CACHE_MAX) {
-      const oldest = projectDirCwdCache.keys().next()
-      if (!oldest.done) {
-        projectDirCwdCache.delete(oldest.value)
-      }
-    }
-    projectDirCwdCache.set(projectDir, cwd)
-  }
-  return cwd
-}
+import { errorMessage } from './session-scanner-values'
+import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
+import {
+  cachedProjectDirCwd,
+  readFirstCwd,
+  recordRefusal,
+  TRANSCRIPT_EXTENSIONS
+} from './session-scanner-project-dir-cwd'
 
 type InScopeDiscoveryArgs = {
   rootDirs: readonly string[]
@@ -72,6 +21,7 @@ type InScopeDiscoveryArgs = {
   limit: number
   excludedFilePaths: ReadonlySet<string>
   issues: AiVaultScanIssue[]
+  signal?: AbortSignal
 }
 
 /**
@@ -98,10 +48,12 @@ export async function discoverInScopeCwdBucketFiles(
       layout,
       rootDir,
       scopeProjectPrefixes,
-      args.issues
+      args.issues,
+      args.signal
     )) {
+      throwIfAiVaultScanCancelled(args.signal)
       if (layout.agent === 'claude') {
-        const cwd = await cachedProjectDirCwd(projectDir, args.issues, layout.agent)
+        const cwd = await cachedProjectDirCwd(projectDir, args.issues, layout.agent, args.signal)
         if (!cwd || !args.scopePaths.some((scopePath) => isCwdInsideScopePath(scopePath, cwd))) {
           continue
         }
@@ -113,7 +65,8 @@ export async function discoverInScopeCwdBucketFiles(
         issues: args.issues,
         collected,
         limit: args.limit,
-        excludedFilePaths: args.excludedFilePaths
+        excludedFilePaths: args.excludedFilePaths,
+        signal: args.signal
       })
     }
   }
@@ -159,95 +112,19 @@ async function listProjectDirs(
   layout: CwdBucketLayout,
   rootDir: string,
   scopeProjectPrefixes: ReadonlySet<string>,
-  issues: AiVaultScanIssue[]
+  issues: AiVaultScanIssue[],
+  signal: AbortSignal | undefined
 ): Promise<string[]> {
   let entries
   try {
-    entries = await wslGatedReaddir(rootDir, 'scan')
+    entries = await wslGatedReaddir(rootDir, 'scan', signal)
   } catch (err) {
-    recordRefusal(issues, rootDir, err, layout.agent)
+    recordRefusal(issues, rootDir, err, layout.agent, signal)
     return []
   }
   return entries
     .filter((entry) => entry.isDirectory() && layout.isDirInScope(entry.name, scopeProjectPrefixes))
     .map((entry) => join(rootDir, entry.name))
-}
-
-async function readProjectDirCwd(
-  projectDir: string,
-  issues: AiVaultScanIssue[],
-  agent: AiVaultAgent
-): Promise<string | null> {
-  const files = await newestTranscriptsInDir(projectDir, issues, agent)
-  for (const file of files.slice(0, REPRESENTATIVE_FILE_LIMIT)) {
-    const cwd = await readFirstCwd(file, issues, agent)
-    if (cwd) {
-      return cwd
-    }
-  }
-  return null
-}
-
-async function newestTranscriptsInDir(
-  projectDir: string,
-  issues: AiVaultScanIssue[],
-  agent: AiVaultAgent
-): Promise<string[]> {
-  let entries
-  try {
-    entries = await wslGatedReaddir(projectDir, 'scan')
-  } catch (err) {
-    recordRefusal(issues, projectDir, err, agent)
-    return []
-  }
-  const newest: { path: string; mtimeMs: number }[] = []
-  for (const entry of entries) {
-    if (!entry.isFile() || !TRANSCRIPT_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
-      continue
-    }
-    const path = join(projectDir, entry.name)
-    try {
-      addBoundedPath(newest, REPRESENTATIVE_FILE_LIMIT, {
-        path,
-        mtimeMs: (await wslGatedStat(path, 'scan')).mtimeMs
-      })
-    } catch (err) {
-      // Best effort: unreadable candidates are ignored here and reported during
-      // full collection if the project directory proves in-scope.
-      recordRefusal(issues, path, err, agent)
-    }
-  }
-  return newest.sort((left, right) => right.mtimeMs - left.mtimeMs).map((value) => value.path)
-}
-
-async function readFirstCwd(
-  filePath: string,
-  issues: AiVaultScanIssue[],
-  agent: AiVaultAgent
-): Promise<string | null> {
-  const input = openTranscriptReadStream(filePath, { encoding: 'utf-8' }, 'scan')
-  const lines = createInterface({ input, crlfDelay: Infinity })
-  let read = 0
-  try {
-    for await (const line of lines) {
-      if (read++ >= REPRESENTATIVE_CWD_LINE_LIMIT) {
-        break
-      }
-      const cwd = extractString(parseJsonObject(line)?.cwd)
-      if (cwd) {
-        return cwd
-      }
-    }
-  } catch (err) {
-    recordRefusal(issues, filePath, err, agent)
-    return null
-  } finally {
-    // readline.close() leaves the underlying stream open; destroy it so the early
-    // break/catch paths don't leak a file descriptor (this runs per project dir).
-    lines.close()
-    input.destroy()
-  }
-  return null
 }
 
 async function collectBucketFiles(args: {
@@ -258,15 +135,17 @@ async function collectBucketFiles(args: {
   collected: Map<string, FileWithMtime>
   limit: number
   excludedFilePaths: ReadonlySet<string>
+  signal: AbortSignal | undefined
 }): Promise<void> {
   let entries
   try {
-    entries = await wslGatedReaddir(args.projectDir, 'scan')
+    entries = await wslGatedReaddir(args.projectDir, 'scan', args.signal)
   } catch (err) {
-    recordRefusal(args.issues, args.projectDir, err, args.agent)
+    recordRefusal(args.issues, args.projectDir, err, args.agent, args.signal)
     return
   }
   for (const entry of entries) {
+    throwIfAiVaultScanCancelled(args.signal)
     if (!entry.isFile() || !TRANSCRIPT_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
       continue
     }
@@ -276,12 +155,12 @@ async function collectBucketFiles(args: {
     }
     try {
       if (args.scopePaths) {
-        const cwd = await readFirstCwd(path, args.issues, args.agent)
+        const cwd = await readFirstCwd(path, args.issues, args.agent, args.signal)
         if (!cwd || !args.scopePaths.some((scope) => isCwdInsideScopePath(scope, cwd))) {
           continue
         }
       }
-      const fileStat = await wslGatedStat(path, 'scan')
+      const fileStat = await wslGatedStat(path, 'scan', args.signal)
       addBoundedFile(args.collected, args.limit, {
         path,
         mtimeMs: fileStat.mtimeMs,
@@ -289,6 +168,7 @@ async function collectBucketFiles(args: {
         sizeBytes: fileStat.size
       })
     } catch (err) {
+      throwIfAiVaultScanCancelled(args.signal)
       recordSessionScanIssue(args.issues, { agent: args.agent, path, message: errorMessage(err) })
     }
   }
@@ -313,22 +193,5 @@ function addBoundedFile(
   if (oldest && file.mtimeMs > oldest.mtimeMs) {
     collected.delete(oldest.path)
     collected.set(file.path, file)
-  }
-}
-
-function addBoundedPath<T extends { mtimeMs: number }>(items: T[], limit: number, item: T): void {
-  if (items.length < limit) {
-    items.push(item)
-    return
-  }
-
-  let oldestIndex = 0
-  for (let index = 1; index < items.length; index++) {
-    if (items[index].mtimeMs < items[oldestIndex].mtimeMs) {
-      oldestIndex = index
-    }
-  }
-  if (item.mtimeMs > items[oldestIndex].mtimeMs) {
-    items[oldestIndex] = item
   }
 }

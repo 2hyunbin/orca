@@ -45,11 +45,11 @@ type ParserSessionOptions = {
 export async function parseRovoSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
-  messages?: TranscriptMessageSink
+  messages?: TranscriptMessageSink,
+  signal?: AbortSignal
 ): Promise<AiVaultSession | null> {
-  const metadata = asRecord(
-    JSON.parse(await wslGatedReadFile(file.path, 'utf-8', 'scan')) as unknown
-  )
+  const parsed: unknown = JSON.parse(await wslGatedReadFile(file.path, 'utf-8', 'scan', signal))
+  const metadata = asRecord(parsed)
   if (!metadata) {
     return null
   }
@@ -80,7 +80,7 @@ export async function parseRovoSessionFile(
   )
 
   const contextPath = join(dirname(file.path), 'session_context.json')
-  const context = await readJsonObjectIfExists(contextPath)
+  const context = await readJsonObjectIfExists(contextPath, signal)
   if (context) {
     consumeRovoSessionContext(accumulator, context)
   }
