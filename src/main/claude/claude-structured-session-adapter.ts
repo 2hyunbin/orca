@@ -1,4 +1,5 @@
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { dispatchClaudeCommand } from './claude-structured-command-dispatch'
 import type {
   AgentSessionAcquisition,
@@ -232,14 +233,27 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
       input,
       this.deps.requestTimeoutMs
     )
-  open: NonNullable<StructuredAgentSessionAdapter['open']> = (request) =>
-    openClaudeStructuredSession({
-      request,
-      session: this.session(request.sessionId),
-      sessions: this.sessions,
-      deps: this.deps,
-      emit: (session, event) => this.emit(session, event)
-    })
+  open: NonNullable<StructuredAgentSessionAdapter['open']> = async (request) => {
+    try {
+      return await openClaudeStructuredSession({
+        request,
+        session: this.session(request.sessionId),
+        sessions: this.sessions,
+        deps: this.deps,
+        emit: (session, event) => this.emit(session, event)
+      })
+    } catch (error) {
+      const exit = this.exits.get(request.sessionId)
+      // Publish an already-observed exit before the host treats this rejection as its own fault.
+      if (
+        exit?.session.acquisitionGeneration === request.acquisitionGeneration &&
+        exit.publication
+      ) {
+        await waitForPromiseWithSignal(exit.publication, request.signal)
+      }
+      throw error
+    }
+  }
   readOptions = (input: { sessionId: string; fence: number }) =>
     readClaudeStructuredSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
 
