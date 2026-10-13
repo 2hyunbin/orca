@@ -402,9 +402,7 @@ describe('Claude effort default at rest', () => {
     const reported = (await claudeOpened(adapter, SESSION)).reportedOptions
     expect(reported).not.toHaveProperty('effort')
     // The record the start persists names the listed row the catalog learned under.
-    const record = restingRecord(
-      nativeSessionOptionsFromReport({ reported: reported, restoreSkipped: [] })
-    )
+    const record = restingRecord(nativeSessionOptionsFromReport({ reported: reported }))
     expect(record.options).toEqual({ model: 'opus[1m]' })
     expect((await readAtRest(store, record)).current.effort).toBe('medium')
     expect(record.options).toEqual({ model: 'opus[1m]' })
