@@ -298,7 +298,8 @@ it('uses model and effort picked during startup in the first reply to a later me
     }
   }
   child.connection.getSettings = async () => ({ effective: { effortLevel: effort } })
-  child.connection.send = async () => {
+  child.connection.send = async (_message, beforeDispatch) => {
+    await beforeDispatch?.()
     child.calls.push('send')
     child.handlers.onMessage?.({
       type: 'assistant',
