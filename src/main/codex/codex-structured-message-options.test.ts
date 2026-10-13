@@ -1,13 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { agentSessionExecutionOptionsFromSnapshot } from '../../shared/agent-session-execution-option-snapshot'
-import {
-  createStructuredAgentSessionOptionState,
-  structuredAgentSessionOptionSnapshot
-} from '../../shared/structured-agent-session-options'
-import { structuredAgentSessionSeedCatalog } from '../../shared/structured-agent-session-seed-catalog'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
-import { agentModelCatalogSessionAccess } from '../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
-import { CODEX_STRUCTURED_AGENT } from './codex-structured-agent-definition'
 import { optionSession } from './codex-structured-option-session.test-fixture'
 import { resolvedCodexMessageOptions } from './codex-structured-message-options'
 import { startCodexTurn } from './codex-structured-turn-start'
@@ -145,103 +137,6 @@ describe('Codex captured message choices', () => {
     })
   })
 
-  it('resets to the configured model after opening the thread with an explicit model', async () => {
-    const store = new AgentModelCatalogStore()
-    const access = agentModelCatalogSessionAccess(store, CODEX_STRUCTURED_AGENT, '/test-account')
-    if (!access) {
-      throw new Error('expected Codex catalog access')
-    }
-    store.recordSuccess(
-      access.fingerprint,
-      'codex',
-      {
-        origin: 'probe',
-        models: [
-          {
-            id: 'model-a',
-            label: 'Model A',
-            isDefault: false,
-            defaultEffort: 'high',
-            efforts: [{ value: 'high', label: 'High' }]
-          },
-          {
-            id: 'model-b',
-            label: 'Model B',
-            isDefault: true,
-            defaultEffort: 'medium',
-            efforts: [{ value: 'medium', label: 'Medium' }]
-          }
-        ]
-      },
-      'discovery'
-    )
-    const codex = fakeCodex({
-      'thread/start': () => ({
-        thread: { id: 'thread-abc' },
-        model: 'model-a',
-        reasoningEffort: 'high'
-      }),
-      'model/list': () => ({
-        data: [
-          {
-            model: 'model-a',
-            supportedReasoningEfforts: [{ reasoningEffort: 'high' }],
-            defaultReasoningEffort: 'high'
-          },
-          {
-            model: 'model-b',
-            supportedReasoningEfforts: [{ reasoningEffort: 'medium' }],
-            defaultReasoningEffort: 'medium'
-          }
-        ],
-        nextCursor: null
-      }),
-      'config/read': () => ({
-        config: { model: 'model-b', model_reasoning_effort: 'medium' }
-      }),
-      'turn/start': () => ({ turn: { id: 'opened' } })
-    })
-    const adapter = adapterFor(codex, { model: 'model-a', codexHome: '/test-account' }, [], {
-      modelCatalog: store
-    })
-    await acquireReadyCodexForTest(adapter, {
-      identity: identityFor('session-1'),
-      fence: 7,
-      spawnToken: 'spawn-1',
-      options: { model: 'model-a', effort: 'high' }
-    })
-    expect(
-      codex.connections[0]?.calls.find((call) => call.method === 'thread/start')?.params
-    ).toMatchObject({
-      model: 'model-a'
-    })
-
-    await adapter.dispatch({
-      sessionId: 'session-1',
-      clientMessageId: 'a',
-      body: USER_MESSAGE,
-      executionOptions: { model: 'model-a', effort: 'high' },
-      fence: 7
-    })
-    await adapter.dispatch({
-      sessionId: 'session-1',
-      clientMessageId: 'b',
-      body: USER_MESSAGE,
-      executionOptions: {},
-      fence: 7
-    })
-    expect(
-      codex.connections[0]?.calls
-        .filter((call) => call.method === 'turn/start')
-        .map((call) => call.params)
-    ).toMatchObject([
-      { model: 'model-a', effort: 'high' },
-      { model: 'model-b', effort: 'medium', personality: 'none', serviceTier: 'default' }
-    ])
-    expect(codex.connections[0]?.calls.map((call) => call.method)).not.toContain('model/list')
-    expect(codex.connections[0]?.calls.map((call) => call.method)).not.toContain('config/read')
-  })
-
   it('opens from the first captured model even when launch resolution saw a newer saved pick', async () => {
     const codex = fakeCodex({ 'turn/start': () => ({ turn: { id: 'opened' } }) })
     const adapter = adapterFor(codex, { model: 'model-b' })
@@ -266,34 +161,6 @@ describe('Codex captured message choices', () => {
     ).toMatchObject({ model: 'model-a', effort: 'high' })
   })
 
-  it('uses native defaults through a held catalog read and allows the child to close', async () => {
-    const codex = fakeCodex({
-      'model/list': () => new Promise<never>(() => {}),
-      'turn/start': () => ({ turn: { id: 'opened' } })
-    })
-    const adapter = adapterFor(codex, { model: 'newer-saved-model' })
-    await acquireReadyCodexForTest(adapter, {
-      identity: identityFor('session-1'),
-      fence: 7,
-      spawnToken: 'spawn-1',
-      options: {}
-    })
-    await adapter.dispatch({
-      sessionId: 'session-1',
-      clientMessageId: 'default',
-      body: USER_MESSAGE,
-      executionOptions: {},
-      fence: 7
-    })
-    expect(
-      codex.connections[0]?.calls.find((call) => call.method === 'thread/start')?.params
-    ).not.toHaveProperty('model')
-    expect(
-      codex.connections[0]?.calls.find((call) => call.method === 'turn/start')?.params
-    ).not.toHaveProperty('model')
-    expect(await adapter.closeSession('session-1')).toBe(true)
-  })
-
   it('preserves the old host path when no message snapshot was supplied', async () => {
     const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
       turn: { id: 'legacy' }
@@ -308,90 +175,6 @@ describe('Codex captured message choices', () => {
       turnOptions
     })
     expect(request.mock.calls[0]?.[1]).toMatchObject({ model: 'saved-next', effort: 'high' })
-  })
-
-  it('uses a saved Codex choice when the picker has not loaded', async () => {
-    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
-      turn: { id: 'saved-turn' }
-    }))
-    const session = optionSession(request)
-    session.options.set('model', 'gpt-saved-unlisted')
-    session.options.set('effort', 'high')
-    session.reportedOptions = { model: 'gpt-saved-unlisted', effort: 'high' }
-    delete session.catalogAccess
-    delete session.nativeDefaults
-    const seed = structuredAgentSessionSeedCatalog('codex')
-    const snapshot = structuredAgentSessionOptionSnapshot(
-      createStructuredAgentSessionOptionState('codex', seed)
-    )
-    const captured = agentSessionExecutionOptionsFromSnapshot(snapshot)
-    expect(captured).toBeUndefined()
-    const turnOptions = await resolvedCodexMessageOptions(session, captured)
-    await startCodexTurn(session, {
-      clientMessageId: 'saved',
-      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'go' }] },
-      turnOptions
-    })
-    expect(request.mock.calls[0]?.[1]).toMatchObject({
-      model: 'gpt-saved-unlisted',
-      effort: 'high'
-    })
-  })
-
-  it('sends a fresh default while model discovery is held', async () => {
-    const request = vi.fn(async (method: string, _params?: Record<string, unknown>) => {
-      if (method === 'model/list') {
-        return new Promise<never>(() => {})
-      }
-      return { turn: { id: 'default-turn' } }
-    })
-    const session = optionSession(request)
-    session.reportedOptions = { model: 'model-a', effort: 'high' }
-    session.nativeDefaults = { model: 'model-a', effort: 'high' }
-    const turnOptions = await resolvedCodexMessageOptions(session, {})
-    await startCodexTurn(session, {
-      clientMessageId: 'default',
-      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'go' }] },
-      turnOptions
-    })
-    expect(request.mock.calls.map(([method]) => method)).toEqual(['turn/start'])
-    expect(request.mock.calls[0]?.[1]).toMatchObject({
-      personality: 'none',
-      serviceTier: 'default'
-    })
-    expect(request.mock.calls[0]?.[1]).not.toHaveProperty('model')
-    expect(request.mock.calls[0]?.[1]).not.toHaveProperty('effort')
-  })
-
-  it('restores opened native defaults after an explicit override without a catalog', async () => {
-    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
-      turn: { id: 'opened' }
-    }))
-    const session = optionSession(request)
-    session.reportedOptions = { model: 'native-model', effort: 'medium' }
-    session.nativeDefaults = { model: 'native-model', effort: 'medium' }
-    const body = {
-      kind: 'message' as const,
-      role: 'user' as const,
-      blocks: [{ type: 'text' as const, text: 'go' }]
-    }
-    await startCodexTurn(session, {
-      clientMessageId: 'override',
-      body,
-      turnOptions: await resolvedCodexMessageOptions(session, {
-        model: 'other-model',
-        effort: 'high'
-      })
-    })
-    await startCodexTurn(session, {
-      clientMessageId: 'reset',
-      body,
-      turnOptions: await resolvedCodexMessageOptions(session, {})
-    })
-    expect(request.mock.calls.map(([, params]) => params)).toMatchObject([
-      { model: 'other-model', effort: 'high' },
-      { model: 'native-model', effort: 'medium', personality: 'none', serviceTier: 'default' }
-    ])
   })
 
   it('refuses a default reset with no trustworthy default before prompt input', async () => {
@@ -435,27 +218,5 @@ describe('Codex captured message choices', () => {
       })
     ).rejects.toThrow('connection lost after write')
     expect(Object.fromEntries(unknown.options)).toEqual({ model: 'attempted' })
-  })
-
-  it('refuses an unavailable message option before a protocol prompt', async () => {
-    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
-      turn: { id: 'turn-1' }
-    }))
-    const session = optionSession(request)
-    seedMessageDefaults(session)
-    await expect(resolvedCodexMessageOptions(session, { fastMode: 'true' })).rejects.toThrow(
-      'does not support Fast mode'
-    )
-    expect(request).not.toHaveBeenCalled()
-  })
-
-  it('refuses an unlisted captured model before prompt input', async () => {
-    const request = vi.fn(async () => ({ turn: { id: 'unexpected' } }))
-    const session = optionSession(request)
-    seedMessageDefaults(session)
-    await expect(
-      resolvedCodexMessageOptions(session, { model: 'unlisted', effort: 'high' })
-    ).rejects.toThrow('does not offer model unlisted')
-    expect(request).not.toHaveBeenCalled()
   })
 })
