@@ -111,6 +111,38 @@ describe('projectWslMoveState scope', () => {
     expect(project('mixed-windows-wsl', 'destination')).toEqual(source)
   })
 
+  it("ignores other hosts' sidebar order and devices with no moved selection", () => {
+    const source = project('heavy-wsl', 'source', (input) => {
+      input.ui?.manualRepoOrder?.push({ hostId: 'ssh:target', repoId: 'repo-a' })
+      input.state.mobileClientTabSelectionsByDeviceId = {
+        phone: {
+          'repo-win::C:\\src\\win': {
+            activeTabId: 'tab-w',
+            activeGroupId: null,
+            activeTabIdByGroupId: {}
+          }
+        }
+      }
+    })
+    expect(project('heavy-wsl', 'destination')).toEqual(source)
+  })
+
+  it('compares terminal pane titles byte for byte', () => {
+    const renamed = project('heavy-wsl', 'destination', (input) => {
+      const layout = input.session.terminalLayoutsByTabId?.['tab-1']
+      if (layout?.titlesByLeafId) {
+        layout.titlesByLeafId['leaf-1'] = '/home/dev/app'
+      }
+    })
+    const source = project('heavy-wsl', 'source', (input) => {
+      const layout = input.session.terminalLayoutsByTabId?.['tab-1']
+      if (layout?.titlesByLeafId) {
+        layout.titlesByLeafId['leaf-1'] = `\\\\wsl.localhost\\${WSL_MOVER_DISTRO}\\home\\dev\\app`
+      }
+    })
+    expect(renamed).not.toEqual(source)
+  })
+
   it('compares metadata that exists only as an identity row', () => {
     const canonicalOnly = (input: WslMoveProjectionInput) => {
       const [worktreeId, meta] = Object.entries(input.state.worktreeMeta)[0]

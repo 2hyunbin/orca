@@ -164,29 +164,32 @@ export function projectWslMoveState(
     ownerInScope
   )
   const projection = {
-    repos: withoutKeys(repos, HOST_BINDINGS.repos),
-    projects: withoutKeys(
-      state.projects.flatMap((project) => {
-        // A Windows sibling stays on the desktop, so only the moved members compare.
-        const sourceRepoIds = project.sourceRepoIds.filter((repoId) => scope.repoIds.has(repoId))
-        return sourceRepoIds.length > 0 ? [{ ...project, sourceRepoIds }] : []
-      }),
-      HOST_BINDINGS.projects
+    repos: byId(withoutKeys(repos, HOST_BINDINGS.repos)),
+    projects: byId(
+      withoutKeys(
+        state.projects.flatMap((project) => {
+          // A Windows sibling stays on the desktop, so only the moved members compare.
+          const sourceRepoIds = project.sourceRepoIds.filter((repoId) => scope.repoIds.has(repoId))
+          return sourceRepoIds.length > 0 ? [{ ...project, sourceRepoIds }] : []
+        }),
+        HOST_BINDINGS.projects
+      )
     ),
-    folderWorkspaces: withoutKeys(folderWorkspaces, HOST_BINDINGS.folderWorkspaces),
-    projectGroups: withoutKeys(
-      collectProjectGroups(state.projectGroups, groupIds),
-      HOST_BINDINGS.projectGroups
+    folderWorkspaces: byId(withoutKeys(folderWorkspaces, HOST_BINDINGS.folderWorkspaces)),
+    projectGroups: byId(
+      withoutKeys(collectProjectGroups(state.projectGroups, groupIds), HOST_BINDINGS.projectGroups)
     ),
     sparsePresetsByRepo: pickKeys(state.sparsePresetsByRepo, (key) => scope.repoIds.has(key)),
     retiredWorktreeNamesByRepo: pickKeys(state.retiredWorktreeNamesByRepo ?? {}, (key) =>
       scope.repoIds.has(key)
     ),
     mobileClientTabSelectionsByDeviceId: Object.fromEntries(
-      Object.entries(state.mobileClientTabSelectionsByDeviceId ?? {}).map(([device, byOwner]) => [
-        device,
-        pickKeys(byOwner, ownerInScope)
-      ])
+      Object.entries(state.mobileClientTabSelectionsByDeviceId ?? {}).flatMap(
+        ([device, byOwner]) => {
+          const owned = pickKeys(byOwner, ownerInScope)
+          return Object.keys(owned).length > 0 ? [[device, owned]] : []
+        }
+      )
     ),
     worktreeMeta: Object.fromEntries(
       Object.entries(worktreeMeta).map(([id, meta]) => [
@@ -196,12 +199,20 @@ export function projectWslMoveState(
     ),
     worktreeLineageById: pickKeys(state.worktreeLineageById, ownerInScope),
     workspaceLineageByChildKey: pickKeys(state.workspaceLineageByChildKey, ownerInScope),
-    automations: withoutKeys(automations, HOST_BINDINGS.automations).map(withoutSetupId),
-    automationRuns: state.automationRuns
-      .filter((run) => automationIds.has(run.automationId))
-      .map(withoutSetupId),
+    automations: byId(withoutKeys(automations, HOST_BINDINGS.automations).map(withoutSetupId)),
+    automationRuns: byId(
+      state.automationRuns.filter((run) => automationIds.has(run.automationId)).map(withoutSetupId)
+    ),
     session: projectWslMoveSession(input.session, ownerInScope),
-    ui: projectWslMoveUi(input.ui ?? {}, input.session, ownerInScope, scope.repoIds)
+    ui: projectWslMoveUi(
+      input.ui ?? {},
+      input.session,
+      ownerInScope,
+      (repoId, hostId) =>
+        typeof repoId === 'string' &&
+        scope.repoIds.has(repoId) &&
+        (hostId === undefined || (typeof hostId === 'string' && aliases.has(hostId)))
+    )
   }
   const canonical = canonicalizeWslMoveValue(
     projection,
@@ -210,6 +221,11 @@ export function projectWslMoveState(
   )
   dropSelfPriorIds(canonical)
   return canonical
+}
+
+/** Catalog rows are sets: their order carries no meaning, and an import may reorder them. */
+function byId<T extends { id: string }>(rows: T[]): T[] {
+  return rows.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
 }
 
 function withoutKeys<T extends object>(rows: readonly T[], keys: readonly string[]): T[] {

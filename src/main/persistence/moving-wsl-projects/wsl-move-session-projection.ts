@@ -90,7 +90,7 @@ export function projectWslMoveUi(
   ui: Partial<PersistedUIState>,
   session: Partial<WorkspaceSessionState>,
   ownerInScope: OwnerInScope,
-  repoIds: ReadonlySet<string>
+  repoEntryInScope: (repoId: unknown, hostId: unknown) => boolean
 ): Record<string, unknown> {
   const byTab = buildWorktreeIdByTabId(session)
   const out: Record<string, unknown> = {}
@@ -103,7 +103,9 @@ export function projectWslMoveUi(
     if (Array.isArray(value)) {
       // Repo-id lists, and the manual repo order's `{hostId, repoId}` rows.
       out[field] = value.filter((entry: unknown) =>
-        repoIds.has(typeof entry === 'string' ? entry : String(fieldOf(entry, 'repoId')))
+        typeof entry === 'string'
+          ? repoEntryInScope(entry, undefined)
+          : repoEntryInScope(fieldOf(entry, 'repoId'), fieldOf(entry, 'hostId'))
       )
     } else if (field.endsWith('ByPaneKey') && isRecord(value)) {
       out[field] = pickKeys(value, (paneKey) => ownerInScope(worktreeIdForPaneKey(byTab, paneKey)))

@@ -110,14 +110,25 @@ describe('projectWslMoveState', () => {
     })
   })
 
-  it('refuses two spellings of one worktree', () => {
+  it('refuses two spellings of one worktree that disagree', () => {
     expect(() =>
       project('heavy-wsl', 'source', (input) => {
         input.state.worktreeMeta['repo-a::\\\\wsl$\\Ubuntu\\home\\dev\\app'] = {
-          ...input.state.worktreeMeta['repo-a::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app']
+          ...input.state.worktreeMeta['repo-a::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'],
+          comment: 'a different row'
         }
       })
     ).toThrow(/same thing/)
+  })
+
+  it('reads a host-qualified key and the bare key the import writes as one row', () => {
+    const qualified = project('heavy-wsl', 'source', (input) => {
+      const visits = input.session.lastVisitedAtByWorktreeId ?? {}
+      input.session.lastVisitedAtByWorktreeId = Object.fromEntries(
+        Object.entries(visits).map(([key, at]) => [`local|${key}`, at])
+      )
+    })
+    expect(project('heavy-wsl', 'destination')).toEqual(qualified)
   })
 })
 
@@ -133,7 +144,7 @@ describe('createWslMoveStringNormalizer', () => {
     ['\\\\wsl.localhost\\Ubuntu', '/'],
     ['repo::\\\\wsl.localhost\\Ubuntu\\srv\\x::workspace:abc', 'repo::/srv/x::workspace:abc'],
     ['file://wsl.localhost/Ubuntu/home/a.html', 'file:///home/a.html'],
-    ['runtime:wsl:Ubuntu|repo::/home/dev/app', '<H>|repo::/home/dev/app'],
+    ['runtime:wsl:Ubuntu|repo::/home/dev/app', 'repo::/home/dev/app'],
     ['local', '<H>']
   ])('%s → %s', (input, output) => {
     expect(normalize(input)).toBe(output)

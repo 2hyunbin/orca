@@ -23,7 +23,9 @@ const FREE_TEXT_KEYS: ReadonlySet<string> = new Set([
   'label',
   'customLabel',
   'displayName',
-  'name'
+  'name',
+  'titlesByLeafId',
+  'selectedText'
 ])
 
 /** `editor:<enc worktreeId>:<enc runtime>:<enc filePath>` → its three decoded parts. */
@@ -60,8 +62,9 @@ export function createWslMoveStringNormalizer(
       return '<H>'
     }
     const separator = value.indexOf('|')
+    // A key qualified by the owning host names the same row as the bare key the import writes.
     if (separator > 0 && aliases.has(value.slice(0, separator))) {
-      return `<H>|${normalize(value.slice(separator + 1))}`
+      return normalize(value.slice(separator + 1))
     }
     const editor = parseEditorFileId(value)
     if (editor) {
@@ -106,15 +109,23 @@ export function canonicalizeWslMoveValue(
       continue
     }
     const normalizedKey = freeText ? key : normalize(key)
+    const canonical = canonicalizeWslMoveValue(
+      child,
+      normalize,
+      droppedKeys,
+      freeText || FREE_TEXT_KEYS.has(key)
+    )
     const earlier = originalByKey.get(normalizedKey)
     if (earlier !== undefined) {
-      throw new Error(`Two keys name the same thing after the move: ${earlier} and ${key}`)
+      // The same row under a qualified and a bare key is one row; two different rows are a refusal.
+      const kept = entries.find(([existing]) => existing === normalizedKey)?.[1]
+      if (JSON.stringify(kept) !== JSON.stringify(canonical)) {
+        throw new Error(`Two keys name the same thing after the move: ${earlier} and ${key}`)
+      }
+      continue
     }
     originalByKey.set(normalizedKey, key)
-    entries.push([
-      normalizedKey,
-      canonicalizeWslMoveValue(child, normalize, droppedKeys, freeText || FREE_TEXT_KEYS.has(key))
-    ])
+    entries.push([normalizedKey, canonical])
   }
   entries.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
   return Object.fromEntries(entries)
