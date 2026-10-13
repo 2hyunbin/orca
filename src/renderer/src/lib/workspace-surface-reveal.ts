@@ -30,7 +30,11 @@ export function revealWorkspaceSurface(
     return
   }
   state.setActiveView('terminal')
-  state.setActiveWorktree(worktreeId, undefined, { createdTabIds })
+  if (createdTabIds) {
+    state.setActiveWorktree(worktreeId, undefined, { createdTabIds })
+  } else {
+    state.setActiveWorktree(worktreeId)
+  }
   state.markWorktreeVisited(worktreeId)
   if (!state.isNavigatingHistory) {
     state.recordWorktreeVisit(worktreeId)

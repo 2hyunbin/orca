@@ -49,9 +49,7 @@ describe('revealWorkspaceSurface', () => {
 
     expect(dispatchEvent).not.toHaveBeenCalled()
     expect(state.setActiveView).toHaveBeenCalledWith('terminal')
-    expect(state.setActiveWorktree).toHaveBeenCalledWith(id, undefined, {
-      createdTabIds: undefined
-    })
+    expect(state.setActiveWorktree).toHaveBeenCalledWith(id)
     expect(state.markWorktreeVisited).toHaveBeenCalledWith(id)
     expect(state.recordWorktreeVisit).toHaveBeenCalledWith(id)
     expect(state.revealWorktreeInSidebar).toHaveBeenCalledWith(id)

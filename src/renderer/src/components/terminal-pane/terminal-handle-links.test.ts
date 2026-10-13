@@ -247,9 +247,7 @@ describe('focusRendererTerminalHandle', () => {
   it('activates a local renderer target without runtime lookup', () => {
     expect(focusRendererTerminalHandle('term_direct')).toBe(true)
 
-    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1', undefined, {
-      createdTabIds: undefined
-    })
+    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1')
     expect(mocks.storeState.setActiveView).toHaveBeenCalledWith('terminal')
     expect(mocks.storeState.setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-1')
     expect(mocks.storeState.setActiveTab).toHaveBeenCalledWith('tab-1')
@@ -509,9 +507,7 @@ describe('createTerminalHandleLinkProvider', () => {
       method: 'orchestration.dispatchShow',
       params: { task: 'task_worker' }
     })
-    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1', undefined, {
-      createdTabIds: undefined
-    })
+    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1')
     expect(mocks.storeState.markWorktreeVisited).toHaveBeenCalledWith('wt-1')
     expect(mocks.storeState.setActiveView).toHaveBeenCalledWith('terminal')
     expect(mocks.storeState.setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-1')
@@ -564,9 +560,7 @@ describe('createTerminalHandleLinkProvider', () => {
       params: { task: 'task_remote' },
       timeoutMs: undefined
     })
-    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-remote', undefined, {
-      createdTabIds: undefined
-    })
+    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-remote')
     expect(mocks.storeState.setActiveTab).toHaveBeenCalledWith('tab-remote')
   })
 
