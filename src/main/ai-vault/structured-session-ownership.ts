@@ -19,8 +19,11 @@ import {
 } from '../native-chat/structured-agent-cli-conversations'
 import {
   STRUCTURED_AGENT_RUNTIME_REGISTRATIONS,
+  structuredAgentRuntimeRegistration,
   type StructuredAgentRuntimeRegistration
 } from '../runtime/structured-agent-runtime-registrations'
+import type { AgentSessionRecord } from '../../shared/agent-session-record'
+import type { AgentProviderSessionMetadata } from '../../shared/agent-session-resume'
 import { commandName, commandProgramIndex, shellCommands } from './shell-command-words'
 
 /** Whether the client a projection answers opens a chat of this agent from its history row. A row
@@ -173,6 +176,30 @@ export async function assertLegacyAiVaultResumeCommandAllowed(
       refuseLegacyWriter(ownership)
     }
   }
+}
+
+/** The same rule for a resume a terminal launches from its saved state rather than a typed command:
+ *  `agent` resuming `providerSession` would write a conversation one of `records` owns. */
+export function nativeChatOwnsTerminalResume(
+  records: readonly AgentSessionRecord[],
+  agent: string,
+  providerSession: AgentProviderSessionMetadata
+): boolean {
+  const owner = historyRowOwner(agent)
+  const history = owner ? structuredAgentRuntimeRegistration(owner)?.sessionHistory : null
+  if (!owner || !history) {
+    return false
+  }
+  const matches = history.resumeTargetMatches ?? sameIdInAnyCase
+  // A session-file agent resumes by the file the hook reported, the rest by id.
+  const targets = [providerSession.id, providerSession.transcriptPath].flatMap((target) =>
+    target?.trim() ? [target.trim()] : []
+  )
+  return listStructuredProviderSessionOwnership(records).some(
+    (ownership) =>
+      ownership.provider === owner &&
+      targets.some((target) => matches(target, ownership.providerSessionId))
+  )
 }
 
 function findResumeOwnership(
