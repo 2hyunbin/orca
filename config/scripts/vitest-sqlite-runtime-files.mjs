@@ -2,6 +2,9 @@ import { SQLITE_DATABASE_RUNTIME_INCLUDE } from './vitest-sqlite-database-runtim
 
 // Real SQLite fixtures keep Node publication and close semantics.
 export const SQLITE_RUNTIME_INCLUDE = [
+  'src/main/pi/rpc-session-adapter.test.ts',
+  'src/main/pi/rpc-session-startup.test.ts',
+  'src/main/acp/acp-structured-publish-at-spawn.test.ts',
   ...SQLITE_DATABASE_RUNTIME_INCLUDE,
   'src/main/acp/acp-structured-host-live-listing.test.ts',
   'src/main/acp/acp-structured-host-configured-default.test.ts',
@@ -253,6 +256,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/runtime/structured-agent-session-codex-start-deadline.test.ts',
   'src/main/runtime/structured-agent-session-pi-startup.test.ts',
   'src/main/runtime/structured-agent-session-pi-signed-out-start.test.ts',
+  'src/main/runtime/structured-agent-session-adapter-start-failure.test.ts',
   'src/main/runtime/structured-agent-session-provider-operations-while-starting.test.ts',
   'src/main/runtime/structured-agent-session-codex-settlement-order.test.ts',
   'src/main/runtime/structured-agent-session-integration-replay.test.ts',

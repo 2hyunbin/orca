@@ -113,8 +113,7 @@ function exitBeforeProof(): Promise<void> {
     ...currentChild(),
     reason: EXIT_REASON,
     failure: { kind: 'providerExited', detail: { text: EXIT_REASON, audience: 'log' } },
-    cause: 'unexpected-exit',
-    startupUnproven: true
+    cause: 'unexpected-exit'
   })
 }
 

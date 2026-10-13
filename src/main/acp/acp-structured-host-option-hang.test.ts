@@ -9,7 +9,7 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-host-test-harness'
 import { HOST_TEST_SESSION as SESSION } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import { GROK_CONFIG_OPTIONS, waitFor } from './acp-structured-adapter.test-support'
-import { framesOf, openAttachedHostRig, send } from './acp-structured-host.test-support'
+import { framesOf, openAttachedHostRig, send, stop } from './acp-structured-host.test-support'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { STOP_NOTE_CANCELLATION_REQUESTED } from '../native-chat/agent-session-wire/structured-agent-session-turn-stop-notes'
 
@@ -107,4 +107,24 @@ describe('a Grok model pick Grok never answers during send', () => {
     )
     await host.close(SESSION, 'user-close')
   })
+})
+
+describe('a saved Grok pick', () => {
+  it.each(['Stop', 'Close'] as const)(
+    'never contacts Grok or holds %s behind a setter',
+    async (ending) => {
+      const { rig, host, store } = await openAttachedHostRig({
+        script: (agent) => agent.on('session/set_config_option', () => {})
+      })
+      expect(await within(pick(host, 'grok-4.6'), 1_000)).toMatchObject({
+        settled: 'resolved',
+        value: { ok: true }
+      })
+      expect(store.getRecord(SESSION)?.options?.model).toBe('grok-4.6')
+      expect(framesOf(rig.child(), 'session/set_config_option')).toEqual([])
+      const ended = ending === 'Stop' ? stop(host) : host.close(SESSION, 'user-close')
+      expect(await within(ended, 2_000)).toMatchObject({ settled: 'resolved' })
+      await host.close(SESSION, 'user-close')
+    }
+  )
 })

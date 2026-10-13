@@ -288,8 +288,7 @@ describe('a start that ends before it proves itself', () => {
       fence: store.getRecord(SESSION)!.lease.runtimeFence,
       acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
       reason: 'exited with code 1',
-      cause: 'unexpected-exit',
-      startupUnproven: true
+      cause: 'unexpected-exit'
     })
 
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))

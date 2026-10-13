@@ -1,7 +1,4 @@
-import type {
-  AgentSessionAccountKind,
-  AgentSessionUnavailable
-} from '../../../shared/agent-session-availability'
+import type { AgentSessionAccountKind } from '../../../shared/agent-session-availability'
 import type {
   AgentSessionRewindReason,
   AgentSessionRewindSupport
@@ -203,8 +200,6 @@ export type StructuredAgentSessionEndedEvent = {
   acquisitionGeneration: string
   /** Host receipt of the child exit: the end time of a turn it interrupted. */
   observedAt?: number
-  /** The provider ended before it finished starting, so resuming it would repeat the failure. */
-  startupUnproven?: true
   /** The provider ended before it answered its start, so it ran nothing it was handed. */
   startupUnanswered?: true
 }
@@ -321,6 +316,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   recoverRewind?(input: {
     sessionId: string
     fence: number
+    signal?: AbortSignal
     beforeTurnId: string
   }): Promise<
     | { ok: true; items: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] }
@@ -387,9 +383,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** The adapter's own child for this exact acquisition has a pid and its root exit has not been
    *  seen: first-hand proof of life for lease renewal. Absent or false falls back to a PID probe. */
   holdsLiveProviderProcess?(sessionId: string, acquisitionGeneration: string): boolean
-  /** Why the session's running child can take no turn, as its own start found; undefined when
-   *  unknown or no child runs. Lives and dies with that child. */
-  startUnavailable?(sessionId: string): AgentSessionUnavailable | undefined
   /** The `/` surface the running provider reports for itself. Undefined when the
    *  provider never reports one, which is what keeps the client on its catalog. */
   readCommands?(sessionId: string): AgentSessionSlashCommand[] | undefined

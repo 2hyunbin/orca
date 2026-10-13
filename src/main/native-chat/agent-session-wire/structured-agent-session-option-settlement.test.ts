@@ -185,6 +185,7 @@ describe('structured session options and close', () => {
         sessions: [expect.objectContaining({ status: 'idle', optionSelection: {} })]
       }
     ])
+    expect(events[0]).not.toHaveProperty('sessions.0.model')
     expect(store.getRecord(SESSION)?.options).toBeUndefined()
   })
 

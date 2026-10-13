@@ -57,8 +57,7 @@ function exitBeforeProof(): Promise<void> {
     fence: store.getRecord(SESSION)?.lease.runtimeFence ?? 0,
     acquisitionGeneration: `generation-${generation}`,
     reason: EXIT_REASON,
-    cause: 'unexpected-exit',
-    startupUnproven: true
+    cause: 'unexpected-exit'
   })
 }
 
@@ -144,8 +143,7 @@ beforeEach(async () => {
             fence,
             acquisitionGeneration: child.acquisitionGeneration,
             reason: EXIT_REASON,
-            cause: 'unexpected-exit',
-            startupUnproven: true
+            cause: 'unexpected-exit'
           })
         }
         return child

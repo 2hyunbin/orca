@@ -1,3 +1,4 @@
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { expect, it, vi } from 'vitest'
 import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapter'
 import type {
@@ -7,6 +8,7 @@ import type {
 import {
   CALLER,
   attach,
+  attachParams,
   envelope,
   hostTestState
 } from './structured-agent-session-host-test-harness'
@@ -137,4 +139,170 @@ it('ends the host open wait when the matching child exits without answering', as
     expect(snapshot.submissions[0]?.dispatchState).toBe('rejected')
   })
   expect(dispatch).not.toHaveBeenCalled()
+})
+
+it.each(['close', 'quit'] as const)(
+  'cancels the open on %s after a second client attach is refused',
+  async (ending) => {
+    const { host, open, close, dispatch, pending, send } = awaitOpen()
+    await attach()
+    await send('held')
+    expect(await host.attach({ callerKey: 'second-client' }, attachParams())).toMatchObject({
+      ok: false
+    })
+    const ended =
+      ending === 'quit'
+        ? host.flushAllStreamedEvents({ trigger: 'quit' })
+        : host.close(SESSION, 'user-close')
+    try {
+      await vi.waitFor(() => expect(open.mock.calls[0]?.[0].signal.aborted).toBe(true))
+      await ended
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(dispatch).not.toHaveBeenCalled()
+    } finally {
+      pending.resolve(OPENED)
+      await ended
+    }
+  }
+)
+
+it('runs a goal requested during opening before a message sent later', async () => {
+  const { host, pending, dispatch, send } = awaitOpen()
+  await attach()
+  const order: string[] = []
+  host.deps.adapter.changeThreadGoal = vi.fn(async () => {
+    order.push('goal')
+    return { ok: true as const }
+  })
+  const originalDispatch = dispatch.getMockImplementation()
+  dispatch.mockImplementation(async (input) => {
+    order.push('send')
+    if (!originalDispatch) {
+      throw new Error('Missing dispatch implementation')
+    }
+    return originalDispatch(input)
+  })
+  const change = { kind: 'set' as const, objective: 'Requested before the message' }
+  const goal = host.changeThreadGoal(CALLER, {
+    envelope: envelope('agentSession.threadGoal', { change }),
+    change
+  })
+  await host.collaboratorsForTests().serialize(SESSION, async () => {})
+  const later = send('later message')
+  pending.resolve(OPENED)
+  expect(await goal).toMatchObject({ ok: true })
+  expect(await later).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(order).toHaveLength(2))
+  expect(order).toEqual(['goal', 'send'])
+})
+
+it.each(['stop', 'close'] as const)(
+  'cancels a startup rewind history read on %s and ignores its late result',
+  async (ending) => {
+    const { host, store, pending, close, dispatch } = awaitOpen()
+    await attach()
+    const expectedEpoch = (await host.journalSnapshot(SESSION)).cursor.epoch
+    await store.transitionHandoff(SESSION, (record) => ({
+      ...record,
+      rewind: {
+        operationId: envelope('agentSession.rewind', {}).clientOperationId,
+        callerKey: CALLER.callerKey,
+        itemId: 'codex:thread-1:turn-1:1',
+        providerItemId: 'codex:thread-1:turn-1:1',
+        expectedEpoch,
+        phase: 'prepared',
+        retained: []
+      }
+    }))
+    const recovery = Promise.withResolvers<{ ok: true; items: [] }>()
+    const recover = vi.fn(() => recovery.promise)
+    host.deps.adapter.recoverRewind = recover
+    pending.resolve(OPENED)
+    await vi.waitFor(() => expect(recover).toHaveBeenCalledOnce())
+    const ended =
+      ending === 'close'
+        ? host.close(SESSION, 'user-close')
+        : host.cancel(CALLER, { envelope: envelope('agentSession.cancel', {}) })
+    try {
+      await vi.waitFor(() => expect(close).toHaveBeenCalledOnce())
+      await ended
+      expect(store.getRecord(SESSION)?.rewind?.phase).toBe('prepared')
+    } finally {
+      recovery.resolve({ ok: true, items: [] })
+      await ended
+      await host.flushAllStreamedEvents()
+    }
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(store.getRecord(SESSION)?.rewind?.phase).toBe('prepared')
+  }
+)
+
+it('saves picks during and after opening without writing them to the live child', async () => {
+  const { host, store, pending, setOption } = awaitOpen()
+  await attach()
+  for (const model of ['model-before-ready', 'model-after-ready']) {
+    expect(
+      await host.setOption(CALLER, {
+        envelope: envelope('agentSession.setOption', { key: 'model', value: model }),
+        key: 'model',
+        value: model
+      })
+    ).toMatchObject({ ok: true })
+    expect(store.getRecord(SESSION)?.options?.model).toBe(model)
+    expect(setOption).not.toHaveBeenCalled()
+    pending.resolve(OPENED)
+    await vi.waitFor(() =>
+      expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
+    )
+  }
+  expect(store.getRecord(SESSION)?.options?.model).toBe('model-after-ready')
+})
+
+it('runs a rewind requested during opening before a later message reaches the provider', async () => {
+  const { host, open, dispatch, pending, send } = awaitOpen()
+  await attach()
+  pending.resolve(OPENED)
+  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
+  await send('previous turn')
+  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+  await host.flushStreamedEvents(SESSION)
+  const previous = (await host.journalSnapshot(SESSION)).submissions[0]
+  if (!previous) {
+    throw new Error('Missing previous turn')
+  }
+  await host.close(SESSION, 'evict')
+  const reopened = Promise.withResolvers<StructuredAgentSessionProviderOpenResult>()
+  open.mockImplementationOnce(() => reopened.promise)
+  await host.attach(CALLER, attachParams())
+  const order: string[] = []
+  const originalDispatch = dispatch.getMockImplementation()
+  dispatch.mockImplementation(async (input) => {
+    order.push('send')
+    if (!originalDispatch) {
+      throw new Error('Missing dispatch implementation')
+    }
+    return originalDispatch(input)
+  })
+  host.deps.adapter.rewindSupport = () => ({ supported: true })
+  host.deps.adapter.rewind = vi.fn(async () => {
+    order.push('rewind')
+    return { ok: false as const, reason: 'history-not-paginated' as const }
+  })
+  const itemId = agentJournalSubmissionKey(previous.clientMessageId)
+  const expectedEpoch = (await host.journalSnapshot(SESSION)).cursor.epoch
+  const rewind = host.rewind(CALLER, {
+    envelope: envelope('agentSession.rewind', { itemId, expectedEpoch }),
+    itemId,
+    expectedEpoch
+  })
+  await host.collaboratorsForTests().serialize(SESSION, async () => {})
+  const later = send('later message')
+  reopened.resolve(OPENED)
+  expect(await rewind).toMatchObject({
+    ok: false,
+    refusal: { rewindReason: 'history-not-paginated' }
+  })
+  expect(await later).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(order).toHaveLength(2))
+  expect(order).toEqual(['rewind', 'send'])
 })

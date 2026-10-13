@@ -1,16 +1,4 @@
-// The host's half of a provider child proving its start.
-//
-// A starting acquisition hands the host an unproven child, so the record keeps only the
-// saved options the reservation carried, and the delivery loop hands it nothing. This is where the
-// host learns the start landed: the provider handle the child answered with is recorded (a resume
-// needs it), a rewind left in doubt is settled, the child turns
-// `ready`, its startup attempt ends, and the loop wakes to hand over what was queued. A handle that
-// cannot be recorded, or a rewind that stays in doubt, fails the start; a start whose limit passed
-// first is never accepted.
-// Provider reports enrich the catalog and live facts; they never replace saved picks.
-//
-// These run under the session's own serialized steps, which its close and sends wait on, so the
-// only provider call here is rewind recovery, bounded by the startup limit.
+// Opening records the provider handle and recovers history before delivery; reports never replace picks.
 
 import type {
   StructuredAgentSessionOptionsReportedEvent,
@@ -55,10 +43,12 @@ export type StructuredAgentSessionProviderStartedContext = {
 
 export async function settleStructuredAgentSessionProviderStarted(
   context: StructuredAgentSessionProviderStartedContext,
-  event: StructuredAgentSessionStartedEvent
+  event: StructuredAgentSessionStartedEvent,
+  signal?: AbortSignal
 ): Promise<void> {
   // Serialized behind the attach that published this child, so the lease it proved is committed.
   await context.serialize(event.sessionId, async () => {
+    signal?.throwIfAborted()
     const session = context.sessions.get(event.sessionId)
     const child = { generation: event.acquisitionGeneration, fence: event.fence }
     // A stale child's proof starts nothing: the barrier stays on the child the host holds. Nor
@@ -75,7 +65,7 @@ export async function settleStructuredAgentSessionProviderStarted(
       context.stopStartingChild(event.sessionId, child)
       return null
     }
-    if (!(await recoverRewindAtStart(context, event.sessionId, session))) {
+    if (!(await recoverRewindAtStart(context, event.sessionId, session, signal))) {
       context.stopStartingChild(event.sessionId, child)
       return null
     }
@@ -103,7 +93,8 @@ export async function settleStructuredAgentSessionProviderStarted(
 async function recoverRewindAtStart(
   context: StructuredAgentSessionProviderStartedContext,
   sessionId: string,
-  session: StructuredAgentSessionHostSession
+  session: StructuredAgentSessionHostSession,
+  signal?: AbortSignal
 ): Promise<boolean> {
   try {
     await recoverStructuredRewind(
@@ -112,10 +103,15 @@ async function recoverRewindAtStart(
       session.journal,
       structuredAgentSessionConversationFence(context.deps.store, sessionId),
       context.deps.adapter,
-      context.now
+      context.now,
+      undefined,
+      signal
     )
     return true
   } catch (error) {
+    if (signal?.aborted) {
+      return false
+    }
     context.deps.logger.warn('settling a rewind in doubt at the start failed', {
       scope: 'rewind-recovery',
       sessionId,

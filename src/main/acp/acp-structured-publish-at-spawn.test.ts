@@ -133,7 +133,7 @@ describe('ACP child published before its handshake', () => {
       rig.child().exit()
       expect(await opening).toBeInstanceOf(Error)
       expect(rig.ended).toMatchObject([
-        { startupUnproven: true, failure: { detail: { text: 'provider config is invalid' } } }
+        { failure: { detail: { text: 'provider config is invalid' } } }
       ])
       expect(rig.ended[0]?.startupUnanswered).toBeUndefined()
     }

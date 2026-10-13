@@ -37,7 +37,8 @@ export class PiRpcSessionStartup {
     private readonly deps: PiRpcSessionDeps,
     /** A new Pi session starts on its config's model; a resumed or forked one keeps its own. */
     private readonly resolvesConfig: boolean,
-    private readonly setState: (state: PiRpcState) => void
+    private readonly setState: (state: PiRpcState) => void,
+    private readonly failedCause: () => Error | undefined
   ) {}
 
   async run(
@@ -121,6 +122,10 @@ export class PiRpcSessionStartup {
   }
 
   private assertLive(signal: AbortSignal): void {
+    const failure = this.failedCause()
+    if (failure) {
+      throw failure
+    }
     if (signal.aborted || this.connection.closed) {
       throw new Error('Pi closed while starting')
     }

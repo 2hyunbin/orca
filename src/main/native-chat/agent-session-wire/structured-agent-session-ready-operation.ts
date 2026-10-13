@@ -31,9 +31,11 @@ type ReadyOperationPlan<T> = Pick<
 >
 type QueuedReadyOperation<T> =
   | { result: AgentSessionMutationResult<T> }
+  | { earlierOperations: Promise<void> }
   | {
       child: StructuredAgentSessionProviderChildIdentity
       readiness: StructuredAgentSessionStartReadiness
+      release?: () => void
     }
 
 export type ReadyOperationChild = StructuredAgentSessionProviderChildIdentity | null
@@ -103,6 +105,12 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
   const selected = await context.serialize<QueuedReadyOperation<T>>(
     envelope.sessionId,
     async () => {
+      const earlierOperations = options.needsAgent
+        ? context.startupAttempts.pendingOperations(envelope.sessionId)
+        : null
+      if (earlierOperations) {
+        return { earlierOperations }
+      }
       const record = context.deps.store.getRecord(envelope.sessionId)
       if (options.needsAgent && !options.needsAgent(record)) {
         return { result: await run({ ok: true, child: null }) }
@@ -190,24 +198,43 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
         return { result: child }
       }
       if ('readiness' in child && child.readiness) {
-        return { child: child.child, readiness: child.readiness }
+        return {
+          child: child.child,
+          readiness: child.readiness,
+          release: child.readiness.reserveOperation?.()
+        }
       }
       return { result: await run(child) }
     }
   )
+  if ('earlierOperations' in selected) {
+    await selected.earlierOperations
+    return runWithReadyStructuredAgentSessionOperation(
+      context,
+      callerKey,
+      envelope,
+      plan,
+      run,
+      options
+    )
+  }
   if ('result' in selected) {
     return selected.result
   }
-  const outcome = await selected.readiness.wait(deadline - Date.now())
-  if (outcome !== 'ready') {
-    return operationDidNotRun(outcome === 'timeout')
+  try {
+    const outcome = await selected.readiness.wait(deadline - Date.now())
+    if (outcome !== 'ready') {
+      return operationDidNotRun(outcome === 'timeout')
+    }
+    if (Date.now() >= deadline) {
+      return operationDidNotRun(true)
+    }
+    return await context.serialize(envelope.sessionId, () =>
+      run({ ok: true, child: selected.child, deadline })
+    )
+  } finally {
+    selected.release?.()
   }
-  if (Date.now() >= deadline) {
-    return operationDidNotRun(true)
-  }
-  return context.serialize(envelope.sessionId, () =>
-    run({ ok: true, child: selected.child, deadline })
-  )
 }
 
 /** Replay uses the ledger answer; a new operation uses only its selected ready child. */

@@ -152,7 +152,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
       return await child.open(input.signal)
     } catch (error) {
       const failure = acpStartupFailure(child, error)
-      if (failure.kind === 'notSignedIn') {
+      if (failure) {
         const refusal = new AgentSessionAcquisitionRefusal(
           `${acpAgentName(child.spec.agent)} requires sign-in`,
           'notSignedIn'
@@ -224,6 +224,8 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     return { cancelled: true }
   }
 
+  // Stop is a session boundary: a cancel ends only the running turn, and background work could
+  // begin another turn. The next send reloads the session.
   stopEndsSession = (): boolean => true
 
   awaitStoppedRequestEnd = async (sessionId: string, stoppedAt: number): Promise<void> => {

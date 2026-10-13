@@ -1,5 +1,9 @@
-// An idle child launched with another permission mode is replaced before the next send.
+// A child the chat outgrew (signed out, or launched with another permission mode) is replaced before
+// the next send: agents read their login and permission mode only when they start.
 
+import { readWholeAgentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
+import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
@@ -12,7 +16,48 @@ import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permiss
 
 /** What the check reads of a conversation; every read skips building a snapshot. */
 type OutgrownChildReading = Pick<StructuredAgentSessionHostSession, 'child'> & {
-  journal: Pick<AgentSessionJournal, 'visitItems' | 'activeTurnId' | 'newestTurn'>
+  journal: Pick<
+    AgentSessionJournal,
+    'visitItems' | 'visitItemsWithLinkage' | 'itemFence' | 'activeTurnId' | 'newestTurn'
+  > & {
+    submissions(): readonly Pick<AgentJournalSubmission, 'dispatchState' | 'fence' | 'rejection'>[]
+  }
+}
+
+const signedOut = (failure: unknown): boolean =>
+  readWholeAgentSessionFailureFact(failure)?.kind === 'notSignedIn'
+
+/** The running child itself said it is not signed in through a rejected send or a row it wrote.
+ *  Its fence scopes both to this child, so a new one has nothing. */
+export function structuredAgentSessionChildReportedSignedOut(
+  session: OutgrownChildReading
+): boolean {
+  const { child, journal } = session
+  if (!child || child.phase === 'starting' || child.close) {
+    return false
+  }
+  if (
+    journal
+      .submissions()
+      .some(
+        (submission) =>
+          submission.dispatchState === 'rejected' &&
+          submission.fence === child.fence &&
+          signedOut(submission.rejection)
+      )
+  ) {
+    return true
+  }
+  // The session's own agent only: a subagent's sign-in failure says nothing about its parent.
+  let found = false
+  journal.visitItemsWithLinkage((itemId, _sequence, body, attribution) => {
+    found ||=
+      body.kind === 'status' &&
+      isRootAgentJournalItem(attribution) &&
+      signedOut(body.failure) &&
+      journal.itemFence(itemId) === child.fence
+  })
+  return found
 }
 
 /** Child work that settled after the lead's newest turn ended: the lead may still owe the turn
@@ -40,9 +85,9 @@ async function launchedWithOtherPermissionMode(
   return mode !== null && mode !== child.permissionMode
 }
 
-/** For a caller inside the session's serialize, before it hands the next send to
- *  the child. Work the child still owes keeps it, as it keeps an idle one from the sweep. A stop that fails
- *  leaves the close begun, which the start joins. */
+/** For a caller inside the session's serialize, before it hands the next send to the child. Work
+ *  the child still owes keeps it, as it keeps an idle one from the sweep. A stop that fails leaves
+ *  the close begun, which the start joins. */
 export async function retireOutgrownStructuredAgentSessionChild(
   sessionId: string,
   session: OutgrownChildReading | undefined,
@@ -56,7 +101,10 @@ export async function retireOutgrownStructuredAgentSessionChild(
 ): Promise<void> {
   if (
     !session ||
-    !(await launchedWithOtherPermissionMode(session.child, deps.launchPermission)) ||
+    !(
+      structuredAgentSessionChildReportedSignedOut(session) ||
+      (await launchedWithOtherPermissionMode(session.child, deps.launchPermission))
+    ) ||
     structuredAgentSessionChildHasOpenWork(session.journal, deps.work) ||
     owesWakeUp(session.journal, deps.work.childWork())
   ) {

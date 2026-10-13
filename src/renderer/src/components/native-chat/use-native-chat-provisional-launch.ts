@@ -23,65 +23,27 @@ export type StructuredAgentSessionLaunchView = {
 
 const NO_HELD_OPTIONS: Readonly<Record<string, string>> = {}
 
-type LatchedLaunch = {
-  kind: StructuredAgentSessionLaunchView['kind']
-  seed: Readonly<Record<string, string>> | undefined
-}
-
-function sameOptions(
-  left: Readonly<Record<string, string>> | undefined,
-  right: Readonly<Record<string, string>> | undefined
-): boolean {
-  const leftKeys = Object.keys(left ?? {})
-  return (
-    leftKeys.length === Object.keys(right ?? {}).length &&
-    leftKeys.every((key) => left?.[key] === right?.[key])
-  )
-}
-
-/** What the launch says the host will run: its seed under the picks it holds. Publication settles
- *  held picks into the seed and retires the launch in one step, so the view may never see that
- *  seed; latching the picks keeps them shown while the agent starts. */
-function launchPicks(selection: {
-  seed?: Readonly<Record<string, string>>
-  held: Readonly<Record<string, string>>
-}): Readonly<Record<string, string>> | undefined {
-  return Object.keys(selection.held).length > 0
-    ? { ...selection.seed, ...selection.held }
-    : selection.seed
-}
-
-/** The launch this view started, latched: its record is deleted on publish, and a reopened chat
- *  runs its own options. The seed follows the launch while it lives (a retry or accepted pick). */
-function useLatchedLaunchView(
+function useLaunchView(
   sessionId: string,
   worktreeId: string | null | undefined,
   launching: boolean
 ): StructuredAgentSessionLaunchView | undefined {
   const selection = useStructuredAgentSessionLaunchSelection(sessionId)
-  const [latched, setLatched] = useState<LatchedLaunch | null>(() =>
-    launching
-      ? {
-          kind: getStructuredAgentSessionLaunchResumes(sessionId) ? 'resume' : 'new',
-          seed: selection ? launchPicks(selection) : undefined
-        }
-      : null
+  const [kind] = useState<StructuredAgentSessionLaunchView['kind'] | null>(() =>
+    launching ? (getStructuredAgentSessionLaunchResumes(sessionId) ? 'resume' : 'new') : null
   )
-  if (latched && selection && !sameOptions(launchPicks(selection), latched.seed)) {
-    setLatched({ kind: latched.kind, seed: launchPicks(selection) })
-  }
   const held = selection?.held ?? NO_HELD_OPTIONS
   return useMemo(
     () =>
-      latched
+      kind
         ? {
-            kind: latched.kind,
-            ...(latched.seed ? { seedOptions: latched.seed } : {}),
+            kind,
+            ...(selection?.seed ? { seedOptions: selection.seed } : {}),
             heldOptions: held,
             ...(worktreeId ? { worktree: toRuntimeWorktreeSelector(worktreeId) } : {})
           }
         : undefined,
-    [held, latched, worktreeId]
+    [held, kind, selection?.seed, worktreeId]
   )
 }
 
@@ -91,7 +53,7 @@ export function useNativeChatProvisionalLaunch(
 ) {
   const lifecycle = useStructuredAgentSessionLaunchLifecycle(worktreeId ?? '', sessionId)
   const failure = useStructuredAgentSessionLaunchFailure(worktreeId ?? '', sessionId)
-  const launch = useLatchedLaunchView(sessionId, worktreeId, lifecycle !== null)
+  const launch = useLaunchView(sessionId, worktreeId, lifecycle !== null)
   const retry = useCallback(() => {
     if (worktreeId) {
       retryStructuredAgentSessionLaunch(worktreeId, sessionId)
