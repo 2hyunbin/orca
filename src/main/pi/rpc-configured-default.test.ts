@@ -297,15 +297,25 @@ describe('Pi’s default comes from what a chat with no pick runs', () => {
     ).toEqual(NOTHING)
   })
 
-  it('learns nothing from a chat that restored a pick or resumed a conversation', async () => {
+  it('learns its configured default despite a saved next-message pick, but not from a resumed conversation', async () => {
     const { catalog, chat } = await piHost()
     await catalog.read({ agent: 'pi', waitForListing: true })
     const clean = workspace('clean')
-    expect((await chat(clean, { saved: { model: 'openai/gpt-6' } })).listing).not.toHaveProperty(
-      'configuredDefault'
-    )
-    expect((await chat(clean, { resumed: true })).listing).not.toHaveProperty('configuredDefault')
-    expect(firstFrame(await catalog.read({ agent: 'pi', workspacePath: clean }))).toEqual(NOTHING)
+    expect(
+      (await chat(clean, { saved: { model: 'openai/gpt-6' } })).listing.configuredDefault
+    ).toEqual({
+      modelId: 'openai/gpt-6',
+      effort: 'high'
+    })
+    expect(firstFrame(await catalog.read({ agent: 'pi', workspacePath: clean }))).toEqual({
+      model: 'openai/gpt-6',
+      effort: 'high'
+    })
+    const resumed = await piHost()
+    await resumed.catalog.read({ agent: 'pi', waitForListing: true })
+    expect(
+      (await resumed.chat(workspace('resumed'), { resumed: true })).listing
+    ).not.toHaveProperty('configuredDefault')
   })
 
   it('saves no default from a signed-out Pi, which lists no model', async () => {
@@ -399,10 +409,10 @@ describe('Pi’s default comes from what a chat with no pick runs', () => {
     })
   })
 
-  it('learns the model, but not the thinking level, from a chat that restored only its thinking level', async () => {
+  it('learns the configured model and thinking level despite a saved next-message thinking pick', async () => {
     const { chat } = await piHost()
     const { listing } = await chat(workspace('clean'), { saved: { effort: 'low' } })
-    expect(listing.configuredDefault).toEqual({ modelId: 'openai/gpt-6' })
+    expect(listing.configuredDefault).toEqual({ modelId: 'openai/gpt-6', effort: 'high' })
   })
 
   it('learns from a new Pi session standing in for a conversation whose file was gone', async () => {
