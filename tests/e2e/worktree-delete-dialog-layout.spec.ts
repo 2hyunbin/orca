@@ -120,7 +120,8 @@ for (const scenario of ['single', 'children', 'batch', 'known-dirty'] as const) 
         confirmFocused: boolean
       }[] = []
       const started = performance.now()
-      while (performance.now() - started < 2400) {
+      // Why a frame floor too: a loaded runner paints fewer than 21 frames in 2.4 s.
+      while (performance.now() - started < 2400 || samples.length <= 20) {
         const dialog = document.querySelector('[data-slot="dialog-content"]')
         // Why not the last button: force delete is a split button whose menu chevron comes last.
         const button = Array.from(
