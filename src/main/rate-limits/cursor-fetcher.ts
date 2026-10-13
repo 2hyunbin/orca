@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { net } from 'electron'
 import type { ProviderRateLimits, UsageRateLimitSource } from '../../shared/rate-limit-types'
+import { abortSignalWithTimeout } from '../lib/abort-signal-with-timeout'
 import {
   readCursorAuthSession,
   type CursorAuthReadResult,
@@ -78,16 +79,13 @@ async function fetchDashboardJson(
   // previous account's figures when the fresh result names an account, and a
   // switch whose first refresh 401s or 5xxs is exactly when it must.
   const provenance = accountFingerprint(session)
-  const requestSignal = signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(API_TIMEOUT_MS)])
-    : AbortSignal.timeout(API_TIMEOUT_MS)
   const res = await net.fetch(url, {
     // Keep dashboard redirects visible without forwarding session credentials.
     redirect: 'manual',
     // The selected account's Cookie must not be replaced by Electron's session jar.
     credentials: 'omit',
     headers: requestHeaders(session),
-    signal: requestSignal
+    signal: abortSignalWithTimeout(signal, API_TIMEOUT_MS)
   })
   if (res.status === 401) {
     return {

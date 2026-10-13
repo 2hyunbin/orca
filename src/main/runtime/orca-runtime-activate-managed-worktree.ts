@@ -17,7 +17,8 @@ import type {
 } from './runtime-worktree-agent-startup'
 import {
   buildWorktreeStartupForAgent,
-  buildWorktreeStartupForDraft
+  buildWorktreeStartupForDraft,
+  resolveWorktreeStartupDraftAgent
 } from './runtime-worktree-agent-startup'
 import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
 import type { Worktree } from '../../shared/worktree/types'
@@ -29,6 +30,7 @@ import type {
 } from '../../shared/worktree/lineage-types'
 import { recordCreatedWorktreeLineage as recordCreatedWorktreeLineageState } from './runtime-worktree-lineage-recording'
 import {
+  deliverWorktreeStartupFollowup,
   pasteWorktreeStartupDraftWhenReady,
   sendWorktreeStartupFollowupWhenReady,
   waitForWorktreeStartupDraft
@@ -85,14 +87,7 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
         this.notifyHostActivateWorktree(repo.id, worktree.id)
       }
       if (targetsClients) {
-        this.notifyClientsActivateWorktree(
-          repo.id,
-          worktree.id,
-          undefined,
-          undefined,
-          undefined,
-          navigation
-        )
+        this.notifyClientsActivateWorktree(repo.id, worktree.id, undefined, navigation)
       }
     }
     if (!targetsHost) {
@@ -129,6 +124,19 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
       }
     }
     return { repoId: repo.id, worktreeId: worktree.id, activated: true, sleepingAgentWake }
+  }
+
+  /** The agent a create's linked draft starts, chosen as `buildStartupForDraft` chooses it, so a
+   *  launch can name the agent before the create runs. */
+  async resolveStartupDraftAgent(repo: Repo, requestedAgent?: TuiAgent): Promise<TuiAgent | null> {
+    if (!this.store) {
+      return null
+    }
+    return resolveWorktreeStartupDraftAgent({
+      repo,
+      settings: this.store.getSettings(),
+      ...(requestedAgent ? { requestedAgent } : {})
+    })
   }
 
   protected async buildStartupForDraft(
@@ -292,7 +300,12 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
     sendWorktreeStartupFollowupWhenReady(this.getWorktreeStartupReadinessHost(), handle, followup)
   }
 
-  protected async provisionManagedWorktreeTerminals(
+  /** The same follow-up write, awaited: true once the prompt was typed into the agent. */
+  deliverStartupFollowup(handle: string, followup: WorktreeStartupFollowup): Promise<boolean> {
+    return deliverWorktreeStartupFollowup(this.getWorktreeStartupReadinessHost(), handle, followup)
+  }
+
+  async provisionManagedWorktreeTerminals(
     args: {
       worktreeSelector: string
       worktreeId: string
