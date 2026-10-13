@@ -60,8 +60,7 @@ describe('Codex host-awaited open', () => {
     expect(await opening).toMatchObject({
       link: { handle: { nativeId: THREAD_ID } },
       reportedOptions: { model: 'gpt-saved' },
-      restoreSkippedOptions: [],
-      optionRevision: 0
+      restoreSkippedOptions: []
     })
     expect(events.some((event) => event.type === 'started')).toBe(false)
     await adapter.closeAll()
