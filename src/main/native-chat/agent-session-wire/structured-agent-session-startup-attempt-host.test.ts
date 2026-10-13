@@ -36,7 +36,7 @@ import type { StructuredAgentSessionStartupLimits } from './structured-agent-ses
 
 const CALLER = { callerKey: 'client-1' }
 
-const eventually = (assertion: () => void | Promise<void>, interval = 50): Promise<void> =>
+const eventually = (assertion: () => void | Promise<void>, interval = 0): Promise<void> =>
   vi.waitFor(assertion, { timeout: 10_000, interval })
 
 let root: string
@@ -218,7 +218,7 @@ function pick(value: string) {
 }
 
 /** The send's start has published its child, still starting; the host holds the send. */
-async function heldBehindStart(text: string, interval = 50): Promise<string> {
+async function heldBehindStart(text: string, interval = 0): Promise<string> {
   const id = await accept(text)
   await eventually(
     async () =>
@@ -366,7 +366,7 @@ describe('a start that ends before it proves itself', () => {
     await restartWith(publishFirst)
     const id = await heldBehindStart('hello')
 
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'), 50)
     expect(await submission(id)).toMatchObject(HOST_STOPPED)
     expect((await submission(id))?.handedOverAt).toBeUndefined()
     expect(closeSession).toHaveBeenCalled()
@@ -388,7 +388,10 @@ describe('a start that ends before it proves itself', () => {
       expect(closeSession).not.toHaveBeenCalled()
       expect(startupAttemptOpen()).toBe(true)
 
-      await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+      await eventually(
+        async () => expect((await submission(id))?.dispatchState).toBe('rejected'),
+        50
+      )
       expect(await submission(id)).toMatchObject(HOST_STOPPED)
       expect(dispatch).not.toHaveBeenCalled()
     } finally {
@@ -407,7 +410,7 @@ describe('a start that ends before it proves itself', () => {
     )
     const id = await accept('hello')
 
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'), 50)
     expect(await submission(id)).toMatchObject(HOST_STOPPED)
     expect(dispatch).not.toHaveBeenCalled()
     await eventually(() => expect(startupAttemptOpen()).toBe(false))
@@ -422,7 +425,7 @@ describe('a start that ends before it proves itself', () => {
     })
     const id = await accept('hello')
 
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'), 50)
     expect(await submission(id)).toMatchObject(HOST_STOPPED)
     expect(dispatch).not.toHaveBeenCalled()
     await eventually(() => expect(startupAttemptOpen()).toBe(false))
