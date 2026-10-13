@@ -41,9 +41,9 @@ jobs:
         let findings\nfor(const [pair,order] of buildCounterbalancedSchedule(4,'baseline','candidate').entries())\
         \ {\n  for(const arm of order) {\n    const result=await measurePreflightCommand({program:arm==='baseline'?'pnpm':'bun',args:arm==='baseline'?['run','check:layout-writer-ratchets']:['config/scripts/check-layout-writer-ratchets.mjs'],label:`layout-${pair}-${arm}`,root,output,env:{...process.env,ORCA_BACKGROUND_LAUNCH:'1'}})\n\
         \    if(result.code!==0||result.signal||result.timedOut)throw new Error(JSON.stringify(result))\n    const\
-        \ outcome=result.stdout.split('\\n').filter(l=>l.includes('ratchet OK')).join('\\n')\n    if(!outcome)throw\
-        \ new Error('No ratchet outcome')\n    if(findings!==undefined&&findings!==outcome)throw new Error('CLI\
-        \ findings differ')\n    findings=outcome\n    report.measurements.push({pair,arm,...result});save();console.log(JSON.stringify({pair,arm,durationMs:result.durationMs,peakRssKiB:result.peakRssKiB}))\n\
+        \ outcome=result.stdout.split('\\n').filter(l=>l.includes('Layout-writer ratchet')&&l.includes(' OK ')).join('\\\
+        n')\n    if(!outcome)throw new Error('No ratchet outcome')\n    if(findings!==undefined&&findings!==outcome)throw\
+        \ new Error('CLI findings differ')\n    findings=outcome\n    report.measurements.push({pair,arm,...result});save();console.log(JSON.stringify({pair,arm,durationMs:result.durationMs,peakRssKiB:result.peakRssKiB}))\n\
         \  }\n}\nconst probes=['src/main/preflight-layout-negative-probe.ts','src/renderer/src/preflight-layout-negative-probe.ts']\n\
         try {\n  writeFileSync(probes[0],'store.setWorkspaceSession(next, hostId)\\n')\n  writeFileSync(probes[1],'set({\
         \ tabsByWorktree: next })\\n')\n  const staged=runProcessSync({program:'git',args:['add','--',...probes],cwd:root})\n\
