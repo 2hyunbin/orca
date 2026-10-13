@@ -201,8 +201,10 @@ export async function setStructuredAgentSessionOption(
       },
       run: async (ctx) => {
         if (recordsIntent()) {
-          // A report the starting child read before this pick is out of date.
-          context.optionRevisions.advance(params.envelope.sessionId)
+          if (params.key !== AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
+            // A report the starting child read before this pick is out of date.
+            context.optionRevisions.advance(params.envelope.sessionId)
+          }
           return recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
         }
         // Held where a start is, so a close, a Stop admitted now or quit ends the wait from outside.

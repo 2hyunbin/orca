@@ -52,7 +52,6 @@ import type { StructuredAgentSessionStartupAttempt } from './structured-agent-se
 import type { StructuredAgentSessionStartupProgress } from './structured-agent-session-startup-attempt'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
-
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
 
 export type AttachedOwner = 'acquired' | 'kept'
@@ -84,7 +83,7 @@ export type AttachFlowInput = {
     record: AgentSessionRecord
   ) => Promise<AgentChatPermissionMode | undefined>
   /** Publishes the journal before clients can send against the new owner. `owner` says whether
-   *  this attach spawned the child, kept a live one, or left the chat at rest. */
+   *  this attach spawned the child or kept a live one. */
   onAttached: (
     attached: AttachedJournal,
     acquisitionGeneration: string | null,
@@ -203,9 +202,7 @@ export async function performAttach(
       accountHome: record.accountHome,
       ownerAlreadyAdmitted: agentSessionLeaseAdmitsWriter(record.lease)
     })
-    if (agentSessionLeaseAdmitsWriter(record.lease)) {
-      // Kept: re-attached to the live child.
-    } else {
+    if (!agentSessionLeaseAdmitsWriter(record.lease)) {
       const acquired = await withAgentSessionCreatePhase('acquire_owner', input.recordPhase, () =>
         acquireOwner(input, record)
       )
