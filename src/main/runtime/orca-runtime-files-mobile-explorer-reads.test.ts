@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import type * as FileSystem from 'node:fs/promises'
@@ -302,7 +303,7 @@ describe('RuntimeFileCommands', () => {
       { name: 'linked-docs', isDirectory: false, isSymlink: true },
       { name: 'README.md', isDirectory: false, isSymlink: false }
     ])
-    expect(statMock).not.toHaveBeenCalledWith('/repo/linked-docs')
+    expect(statMock).not.toHaveBeenCalledWith(join('/repo', 'linked-docs'))
   })
   it.each([
     { setting: true, override: undefined, expected: true },
@@ -322,7 +323,7 @@ describe('RuntimeFileCommands', () => {
       ).resolves.toEqual([{ name: 'linked-docs', isDirectory: expected, isSymlink: true }])
       expect(store.getSettings).toHaveBeenCalledTimes(override === undefined ? 1 : 0)
       if (expected) {
-        expect(statMock).toHaveBeenCalledWith('/repo/linked-docs')
+        expect(statMock).toHaveBeenCalledWith(join('/repo', 'linked-docs'))
       } else {
         expect(statMock).not.toHaveBeenCalled()
       }
