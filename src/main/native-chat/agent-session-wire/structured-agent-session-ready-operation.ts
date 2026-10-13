@@ -35,7 +35,7 @@ type QueuedReadyOperation<T> =
   | { result: AgentSessionMutationResult<T> }
   | {
       child: StructuredAgentSessionProviderChildIdentity
-      readiness?: StructuredAgentSessionStartReadiness
+      readiness: StructuredAgentSessionStartReadiness
       place: StructuredAgentSessionDeliveryPlace
     }
 
@@ -192,21 +192,17 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       if (!child.ok) {
         return { result: child }
       }
+      if (!child.readiness) {
+        return { result: await run(child) }
+      }
       context.deliveryOrder.reconcile(
         envelope.sessionId,
         context.sessions.get(envelope.sessionId)?.journal.submissions() ?? []
       )
       const place = context.deliveryOrder.reserve(envelope.sessionId)
-      if (!('readiness' in child) && !place.pending) {
-        try {
-          return { result: await run(child) }
-        } finally {
-          place.release()
-        }
-      }
       return {
         child: child.child,
-        ...('readiness' in child ? { readiness: child.readiness } : {}),
+        readiness: child.readiness,
         place
       }
     }
@@ -215,7 +211,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
     return selected.result
   }
   try {
-    const ready = selected.readiness?.wait() ?? Promise.resolve('ready' as const)
+    const ready = selected.readiness.wait()
     const outcome = await waitForStructuredAgentSessionStart(
       Promise.all([ready, selected.place.before]).then(([outcome]) =>
         outcome === 'ready' ? 'ready' : 'ended'
