@@ -79,6 +79,8 @@ const KNOWN_PREEXISTING_I2_FAILURES: Record<string, number> = {
   'codex-fullscreen-early-input': 4,
   'codex-fullscreen-multiline-early-input': 10,
   'codex-fullscreen-startup': 14,
+  // Capacity capture: identical attribute leaks with the pre-capture 4559c250b3e serializer.
+  'codex-model-capacity-fullscreen': 12,
   'claude-dialog-trust-workspace-answered': 13,
   // DSH-TUI's whale intro paints whole rows of 24-bit background, and every one of this
   // transcript's divergences is the same shape: `visible-grid row=0`, a true-colour
