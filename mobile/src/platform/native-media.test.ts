@@ -1,5 +1,6 @@
 /** The device half of the media verbs: the picker it runs, the bytes it moves, the file it deletes. */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Buffer } from 'node:buffer'
 import { splitBridgeReply } from '../mobile-web-shell/bridge/bridge-reply-chunking'
 import {
   BRIDGE_MAX_MESSAGE_BYTES,
@@ -365,7 +366,7 @@ describe('reading chunks', () => {
     const total = 1_000_000
     const { probe, handle } = await staged(total)
     const source = bytesOf(total)
-    const collected: number[] = []
+    const collected = Buffer.alloc(total)
     let offset = 0
     let reads = 0
     for (;;) {
@@ -377,17 +378,16 @@ describe('reading chunks', () => {
         })
       )
       reads += 1
-      const bytes = atob(chunk.base64)
-      for (let index = 0; index < bytes.length; index += 1) {
-        collected.push(bytes.codePointAt(index) ?? 0)
-      }
+      const bytes = Buffer.from(chunk.base64, 'base64')
+      collected.set(bytes, offset)
       offset += bytes.length
       if (chunk.eof) {
         break
       }
     }
     expect(reads).toBe(Math.ceil(total / BRIDGE_MEDIA_READ_MAX_BYTES))
-    expect(collected).toEqual([...source])
+    expect(offset).toBe(total)
+    expect(collected.equals(Buffer.from(source))).toBe(true)
   })
 
   it('answers exactly the bytes a short read asked for, at the offset it asked for', async () => {
