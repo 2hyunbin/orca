@@ -207,7 +207,7 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     ) {
       return
     }
-    if (!this.getAvailableAuthoritativeWindow()) {
+    if (this.isWindowlessSessionTabs()) {
       // The saved layout already places the tab; a host-focusing create also selects it there.
       this.republishWindowlessSessionTabs(worktreeId)
       const row = this.mobileSessionTabsByWorktree

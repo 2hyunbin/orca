@@ -577,12 +577,21 @@ function makeRuntimeStoreWithWorkspaceSession(
   setSession: (next: WorkspaceSessionState) => void
 } {
   let session = initialSession
+  // Like the Store, every in-memory session write is announced.
+  const written = new Set<() => void>()
   const setSession = (next: WorkspaceSessionState): void => {
     session = next
+    for (const listener of written) {
+      listener()
+    }
   }
   const runtimeStore = withRuntimePaneAdmission(
     withDurableRuntimeStore({
       ...store,
+      onWorkspaceSessionWritten: (listener: () => void) => {
+        written.add(listener)
+        return () => written.delete(listener)
+      },
       getWorkspaceSession: (hostId?: string) =>
         hostId === undefined || hostId === ownerHostId ? session : getDefaultWorkspaceSession(),
       setWorkspaceSession: vi.fn(setSession),
@@ -595,7 +604,7 @@ function makeRuntimeStoreWithWorkspaceSession(
           return false
         }
         const tabs = session.tabsByWorktree[args.worktreeId] ?? []
-        session = {
+        setSession({
           ...session,
           tabsByWorktree: {
             ...session.tabsByWorktree,
@@ -617,7 +626,7 @@ function makeRuntimeStoreWithWorkspaceSession(
               }
             }
           }
-        }
+        })
         return true
       })
     })

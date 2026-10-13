@@ -103,6 +103,23 @@ describe('OrcaRuntimeService', () => {
 
   it('lists persisted editor tabs beside the terminals after a cold restart', async () => {
     const runtime = makeRestartedServeRuntime({
+      // A saved editor has its tab-bar entry beside its file, as a window or a migration saves it.
+      unifiedTabs: {
+        [TEST_WORKTREE_ID]: [
+          {
+            id: '/repo/README.md',
+            entityId: '/repo/README.md',
+            groupId: 'group-editor',
+            worktreeId: TEST_WORKTREE_ID,
+            contentType: 'editor',
+            label: 'README.md',
+            customLabel: null,
+            color: null,
+            sortOrder: 2,
+            createdAt: 3
+          }
+        ]
+      },
       openFilesByWorktree: {
         [TEST_WORKTREE_ID]: [
           {
@@ -153,7 +170,7 @@ describe('OrcaRuntimeService', () => {
     expect(listed.activeGroupId).toBe('group-right')
   })
 
-  it('falls back to the active tab group when the saved active group was not restored', async () => {
+  it('falls back to the first group when the saved active group was not restored, as a window does', async () => {
     const runtime = makeRestartedServeRuntime({
       activeTabId: 'daemon-tab',
       activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'daemon-tab' },
@@ -163,7 +180,7 @@ describe('OrcaRuntimeService', () => {
 
     await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
-    expect(storedActiveGroupId(runtime)).toBe('group-right')
+    expect(storedActiveGroupId(runtime)).toBe('group-left')
   })
 
   it('keeps the headless group active when there is no persisted split', async () => {

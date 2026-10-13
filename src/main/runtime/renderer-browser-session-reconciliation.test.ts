@@ -138,6 +138,7 @@ it('keeps the renderer publication epoch when selecting a client-hosted browser 
   runtime.markHeadlessBrowserSessionTabActive.call(
     {
       offscreenBrowserBackend: {},
+      isWindowlessSessionTabs: () => false,
       hydrateHeadlessMobileSessionTabsFromWorkspaceSession: () => undefined,
       mobileSessionTabsByWorktree: new Map([['wt', snapshot]]),
       storeMobileSessionSnapshot,

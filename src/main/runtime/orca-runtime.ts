@@ -1,4 +1,5 @@
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
+import { WindowlessSessionTabsRepublisher } from './windowless-session-tabs'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
 import type {
@@ -87,6 +88,12 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     // module registers the generation bump at load; a headless host never loads it.
     registerDetectedWorktreeScanInvalidation()
     registerWorktreeChangeInvalidator((repoId) => this.invalidateWorktreeCatalog(repoId))
+    const republisher = new WindowlessSessionTabsRepublisher({
+      isWindowless: () => this.isWindowlessSessionTabs(),
+      listedWorktreeIds: () => [...this.mobileSessionTabsByWorktree.keys()],
+      republish: (worktreeId) => this.republishWindowlessSessionTabs(worktreeId)
+    })
+    this.store?.onWorkspaceSessionWritten?.(() => republisher.written())
   }
 
   /** Whether a window owns the layout and can show a launch's tab ahead of its process. */

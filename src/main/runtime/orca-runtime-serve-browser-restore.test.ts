@@ -223,9 +223,10 @@ describe('a saved browser tab on a host with no window', () => {
       (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs.find(
         (tab) => tab.type === 'browser'
       )
-    expect(await browserRow()).toMatchObject({ color: '#3b82f6', isPinned: true })
+    const listed = await browserRow()
+    expect(listed).toMatchObject({ color: '#3b82f6', isPinned: true })
 
-    await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'page-desk')
+    await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, listed!.id)
 
     expect(await browserRow()).toMatchObject({
       browserPageId: 'page-desk',

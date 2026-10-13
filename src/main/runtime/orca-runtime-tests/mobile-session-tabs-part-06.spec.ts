@@ -330,8 +330,39 @@ describe('OrcaRuntimeService', () => {
       isPreview: false,
       isPinned: false
     }
+    const page = {
+      url: 'https://example.com/',
+      title: 'Live Browser',
+      loading: false,
+      faviconUrl: null,
+      canGoBack: false,
+      canGoForward: false,
+      loadError: null,
+      createdAt: 2
+    }
     const session = makeWorkspaceSessionWithHeadlessTerminal({
       unifiedTabs: { [TEST_WORKTREE_ID]: [browserTab] },
+      // The browser tab and page as a serve host saves them.
+      browserTabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          {
+            ...page,
+            id: 'browser-page-1',
+            worktreeId: TEST_WORKTREE_ID,
+            pageIds: ['browser-page-1']
+          }
+        ]
+      },
+      browserPagesByWorkspace: {
+        'browser-page-1': [
+          {
+            ...page,
+            id: 'browser-page-1',
+            workspaceId: 'browser-page-1',
+            worktreeId: TEST_WORKTREE_ID
+          }
+        ]
+      },
       tabGroups: {
         [TEST_WORKTREE_ID]: [
           {

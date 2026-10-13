@@ -27,8 +27,11 @@ import {
   collectBrowserGroupAssignment
 } from './mobile-session-browser-group-projection'
 import { headlessMobileSnapshotContentUnchanged } from './mobile-session-snapshot-equality'
-import { projectWindowlessSessionTabs, withSavedTabSelection } from './windowless-session-tabs'
-import { preserveTerminalRetirementProofs } from './mobile-session-terminal-retirement-proof'
+import {
+  nextWindowlessSnapshot,
+  projectWindowlessSessionTabs,
+  withSavedTabSelection
+} from './windowless-session-tabs'
 
 export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession extends OrcaRuntimeWithWaitForSessionTabsInventoryPublication {
   protected hydrateHeadlessMobileSessionTabsFromWorkspaceSession(
@@ -107,7 +110,7 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
         }
       }
       const existing = this.mobileSessionTabsByWorktree.get(entryWorktreeId)
-      if (!hasAuthoritativeWindow) {
+      if (this.isWindowlessSessionTabs()) {
         this.publishWindowlessSessionTabs(
           entryWorktreeId,
           options.workspaceSession ??
@@ -284,7 +287,6 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
         ? this.agentBrowserBridge.tabList(worktreeId).tabs
         : []
     const clientRows = this.buildClientHostedSessionBrowserTabs(worktreeId)
-    const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
     const projected = projectWindowlessSessionTabs({
       hostId: this.getWorkspaceSessionHostIdForWorktree(worktreeId),
       session,
@@ -292,26 +294,13 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
       generatedTitlesEnabled: this.store?.getSettings?.()?.tabAutoGenerateTitle === true,
       hostPages: new Map(hostTabs.map((tab) => [tab.browserPageId, tab])),
       clientPages: new Map(clientRows.map((row) => [row.browserPageId, row]))
-    }) ?? {
-      worktree: worktreeId,
-      activeGroupId: null,
-      activeTabId: null,
-      activeTabType: null,
-      tabs: []
-    }
-    if (!existing && projected.tabs.length === 0) {
-      return
-    }
-    const next = preserveTerminalRetirementProofs(
-      {
-        ...projected,
-        worktree: existing?.worktree ?? worktreeId,
-        publicationEpoch: `headless-hydrated:${Date.now().toString(36)}`,
-        snapshotVersion: (existing?.snapshotVersion ?? 0) + 1
-      },
-      existing
+    })
+    const next = nextWindowlessSnapshot(
+      worktreeId,
+      projected,
+      this.mobileSessionTabsByWorktree.get(worktreeId)
     )
-    if (existing && headlessMobileSnapshotContentUnchanged(existing, next)) {
+    if (!next) {
       return
     }
     this.storeMobileSessionSnapshot(worktreeId, next)
@@ -344,5 +333,10 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
     if (next) {
       this.setWorkspaceSessionForWorktree(worktreeId, next)
     }
+  }
+
+  /** No renderer is attached to publish its own list, so the saved layout is listed. */
+  protected isWindowlessSessionTabs(): boolean {
+    return this.authoritativeWindowId === null
   }
 }

@@ -453,8 +453,19 @@ describe('OrcaRuntimeService', () => {
   it('keeps the activated headless tab active across PTY republishes (serve focus-jump regression)', async () => {
     // Why: in `orca serve`, focusTerminal has no renderer to persist the remote client's tab choice before PTY republishes.
     let nextPty = 0
-    const spawn = vi.fn().mockImplementation(async () => ({ id: `headless-pty-${++nextPty}` }))
-    const runtime = new OrcaRuntimeService(store)
+    // A serve host saves its tabs, so the list it publishes comes from its saved layout.
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
+      makeWorkspaceSessionWithHeadlessTerminal({ tabsByWorktree: {}, terminalLayoutsByTabId: {} })
+    )
+    // As a host's spawn does, it saves the pane's new process before answering.
+    const spawn = vi
+      .fn()
+      .mockImplementation(async (args: { worktreeId: string; tabId: string; leafId: string }) => {
+        const id = `headless-pty-${++nextPty}`
+        await runtimeStore.persistPtyBinding({ ...args, ptyId: id })
+        return { id }
+      })
+    const runtime = new OrcaRuntimeService(runtimeStore as never)
     runtime.setPtyController({
       spawn,
       write: () => true,
