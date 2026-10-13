@@ -91,8 +91,8 @@ function adapter(): StructuredAgentSessionAdapter {
   return {
     supportsLocation: () => true,
     acquire,
-    dispatch: vi.fn<StructuredAgentSessionAdapter['dispatch']>(async () => {
-      dispatchedModels.push(activeModel)
+    dispatch: vi.fn<StructuredAgentSessionAdapter['dispatch']>(async ({ executionOptions }) => {
+      dispatchedModels.push(executionOptions?.model ?? activeModel)
       return {
         state: 'accepted',
         providerIdentity: { provider: 'codex', threadId: THREAD, turnId: 'turn-1', ordinal: 1 }
@@ -211,4 +211,31 @@ describe('structured session options and close', () => {
     await expect(host.close(SESSION, 'evict')).resolves.toBeUndefined()
     expect(closeNativeSession).not.toHaveBeenCalled()
   })
+})
+
+it('applies running Codex model and effort picks to the next message', async () => {
+  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
+  for (const [key, value] of [
+    ['model', 'gpt-picked'],
+    ['effort', 'high']
+  ]) {
+    expect(
+      await host.setOption(CALLER, {
+        envelope: envelope('agentSession.setOption', { key, value }),
+        key,
+        value
+      })
+    ).toMatchObject({ ok: true })
+  }
+  const body = {
+    kind: 'message' as const,
+    role: 'user' as const,
+    blocks: [{ type: 'text' as const, text: 'with the new choices' }]
+  }
+  expect(
+    await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+  ).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(dispatchedModels).toEqual(['gpt-picked']))
+  expect(vi.mocked(router.dispatch).mock.calls.at(-1)?.[0].executionOptions?.effort).toBe('high')
+  expect(router.setOption).not.toHaveBeenCalled()
 })

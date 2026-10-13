@@ -187,7 +187,16 @@ it('runs a goal requested during opening before a message sent later', async () 
   })
   await host.collaboratorsForTests().serialize(SESSION, async () => {})
   const later = send('later message')
-  pending.resolve(OPENED)
+  let accepted = false
+  void later.then(() => {
+    accepted = true
+  })
+  try {
+    await vi.waitFor(() => expect(accepted).toBe(true))
+    expect(dispatch).not.toHaveBeenCalled()
+  } finally {
+    pending.resolve(OPENED)
+  }
   expect(await goal).toMatchObject({ ok: true })
   expect(await later).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(order).toHaveLength(2))
@@ -235,7 +244,7 @@ it.each(['stop', 'close'] as const)(
   }
 )
 
-it('saves picks during and after opening without writing them to the live child', async () => {
+it('saves picks during and after opening without writing to the live child', async () => {
   const { host, store, pending, setOption } = awaitOpen()
   await attach()
   for (const model of ['model-before-ready', 'model-after-ready']) {
@@ -256,51 +265,104 @@ it('saves picks during and after opening without writing them to the live child'
   expect(store.getRecord(SESSION)?.options?.model).toBe('model-after-ready')
 })
 
-it('runs a rewind requested during opening before a later message reaches the provider', async () => {
-  const { host, open, dispatch, pending, send } = awaitOpen()
-  await attach()
-  pending.resolve(OPENED)
-  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
-  await send('previous turn')
-  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
-  await host.flushStreamedEvents(SESSION)
-  const previous = (await host.journalSnapshot(SESSION)).submissions[0]
-  if (!previous) {
-    throw new Error('Missing previous turn')
+it.each([false, true])(
+  'delivers a later message after a startup rewind (success: %s)',
+  async (succeeds) => {
+    const { host, open, dispatch, pending, send } = awaitOpen()
+    await attach()
+    pending.resolve(OPENED)
+    await vi.waitFor(() =>
+      expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
+    )
+    await send('previous turn')
+    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+    await host.flushStreamedEvents(SESSION)
+    const previous = (await host.journalSnapshot(SESSION)).submissions[0]
+    if (!previous) {
+      throw new Error('Missing previous turn')
+    }
+    await host.close(SESSION, 'evict')
+    const reopened = Promise.withResolvers<StructuredAgentSessionProviderOpenResult>()
+    open.mockImplementationOnce(() => reopened.promise)
+    await host.attach(CALLER, attachParams())
+    const order: string[] = []
+    const originalDispatch = dispatch.getMockImplementation()
+    dispatch.mockImplementation(async (input) => {
+      order.push('send')
+      if (!originalDispatch) {
+        throw new Error('Missing dispatch implementation')
+      }
+      return originalDispatch(input)
+    })
+    host.deps.adapter.rewindSupport = () => ({ supported: true })
+    host.deps.adapter.rewind = vi.fn(async () => {
+      order.push('rewind')
+      return succeeds
+        ? { ok: true as const, items: [] }
+        : { ok: false as const, reason: 'history-not-paginated' as const }
+    })
+    const itemId = agentJournalSubmissionKey(previous.clientMessageId)
+    const expectedEpoch = (await host.journalSnapshot(SESSION)).cursor.epoch
+    const rewind = host.rewind(CALLER, {
+      envelope: envelope('agentSession.rewind', { itemId, expectedEpoch }),
+      itemId,
+      expectedEpoch
+    })
+    await host.collaboratorsForTests().serialize(SESSION, async () => {})
+    const later = send('later message')
+    let accepted = false
+    void later.then(() => {
+      accepted = true
+    })
+    try {
+      await vi.waitFor(() => expect(accepted).toBe(true))
+      expect(order).toEqual([])
+    } finally {
+      reopened.resolve(OPENED)
+    }
+    expect(await rewind).toMatchObject(
+      succeeds
+        ? { ok: true }
+        : {
+            ok: false,
+            refusal: { rewindReason: 'history-not-paginated' }
+          }
+    )
+    expect(await later).toMatchObject({ ok: true })
+    await vi.waitFor(() => expect(order).toHaveLength(2))
+    expect(order).toEqual(['rewind', 'send'])
   }
-  await host.close(SESSION, 'evict')
-  const reopened = Promise.withResolvers<StructuredAgentSessionProviderOpenResult>()
-  open.mockImplementationOnce(() => reopened.promise)
-  await host.attach(CALLER, attachParams())
+)
+
+it('delivers two earlier sends before a later goal, then the send after that goal', async () => {
+  const { host, pending, dispatch, send } = awaitOpen()
+  await attach()
   const order: string[] = []
   const originalDispatch = dispatch.getMockImplementation()
+  if (!originalDispatch) {
+    throw new Error('Missing dispatch implementation')
+  }
   dispatch.mockImplementation(async (input) => {
-    order.push('send')
-    if (!originalDispatch) {
-      throw new Error('Missing dispatch implementation')
-    }
+    const { body } = input
+    order.push(body.blocks[0]?.type === 'text' ? body.blocks[0].text : 'send')
     return originalDispatch(input)
   })
-  host.deps.adapter.rewindSupport = () => ({ supported: true })
-  host.deps.adapter.rewind = vi.fn(async () => {
-    order.push('rewind')
-    return { ok: false as const, reason: 'history-not-paginated' as const }
+  host.deps.adapter.changeThreadGoal = vi.fn(async () => {
+    order.push('goal')
+    return { ok: true as const }
   })
-  const itemId = agentJournalSubmissionKey(previous.clientMessageId)
-  const expectedEpoch = (await host.journalSnapshot(SESSION)).cursor.epoch
-  const rewind = host.rewind(CALLER, {
-    envelope: envelope('agentSession.rewind', { itemId, expectedEpoch }),
-    itemId,
-    expectedEpoch
+  await send('first')
+  await send('second')
+  const change = { kind: 'set' as const, objective: 'After the first two messages' }
+  const goal = host.changeThreadGoal(CALLER, {
+    envelope: envelope('agentSession.threadGoal', { change }),
+    change
   })
   await host.collaboratorsForTests().serialize(SESSION, async () => {})
-  const later = send('later message')
-  reopened.resolve(OPENED)
-  expect(await rewind).toMatchObject({
-    ok: false,
-    refusal: { rewindReason: 'history-not-paginated' }
-  })
+  const later = send('third')
+  pending.resolve(OPENED)
+  expect(await goal).toMatchObject({ ok: true })
   expect(await later).toMatchObject({ ok: true })
-  await vi.waitFor(() => expect(order).toHaveLength(2))
-  expect(order).toEqual(['rewind', 'send'])
+  await vi.waitFor(() => expect(order).toHaveLength(4))
+  expect(order).toEqual(['first', 'second', 'goal', 'third'])
 })
