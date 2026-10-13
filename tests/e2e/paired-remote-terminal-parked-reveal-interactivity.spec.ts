@@ -439,20 +439,23 @@ test('paired client keeps revealed remote terminals interactive', async ({
       await openClientTab(client.page, worktreeId, decoys[0].webTabId)
       const originalGrid = await readActivePaneGrid(client.page, target.webTabId)
       await client.page.setViewportSize({ width: 960, height: 800 })
-      // Why two fitted reads: a late reveal replay parses at the host's old grid, then refits (#7279, #18132).
-      const fitted: { previous: string | null; settled: { cols: number; rows: number } | null } = {
-        previous: null,
+      // Why fitted: a late reveal replay briefly parses at the host's old grid before refitting (#7279, #18132).
+      const fitted: { lastKey: string | null; settled: { cols: number; rows: number } | null } = {
+        lastKey: null,
         settled: null
       }
       await expect
-        .poll(async () => {
-          const grid = await readFittedPaneGrid(client.page, decoys[0].webTabId)
-          const key = grid && JSON.stringify(grid)
-          const isNewFit = key !== null && key !== JSON.stringify(originalGrid)
-          fitted.settled = isNewFit && key === fitted.previous ? grid : null
-          fitted.previous = isNewFit ? key : null
-          return fitted.settled !== null
-        })
+        .poll(
+          async () => {
+            const grid = await readFittedPaneGrid(client.page, decoys[0].webTabId)
+            const key = grid && JSON.stringify(grid)
+            const isNewFit = key !== null && key !== JSON.stringify(originalGrid)
+            fitted.settled = isNewFit && key === fitted.lastKey ? grid : null
+            fitted.lastKey = isNewFit ? key : null
+            return fitted.settled !== null
+          },
+          { timeout: 60_000, message: 'decoy never settled at the new viewport fit' }
+        )
         .toBe(true)
       const revealGrid = fitted.settled
       if (!revealGrid) {
