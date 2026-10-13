@@ -40,7 +40,6 @@ export type StructuredAgentSessionChildExit = {
   failure?: SubmissionRejectionFact
   /** Host receipt of the exit: the end time of a turn it interrupted. */
   observedAt?: number
-  startupUnproven?: true
   startupUnanswered?: true
 }
 
@@ -96,7 +95,6 @@ export function settleStructuredAgentSessionChildExit<
       reason: event.reason,
       ...(event.failure ? { failure: event.failure } : {}),
       ...(event.observedAt === undefined ? {} : { observedAt: event.observedAt }),
-      ...(event.startupUnproven ? { startupUnproven: event.startupUnproven } : {}),
       ...(event.startupUnanswered ? { startupUnanswered: event.startupUnanswered } : {})
     })
   })
@@ -119,9 +117,7 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
   const close = child.close
   // Receipt of the exit is the one end time the host may record for a running turn.
   const observedAt = exit.observedAt ?? context.now()
-  // The host's own phase decides, so a provider that omits the flag still gets a start that
-  // failed told as one: the row says so.
-  const exitedDuringStartup = exit.startupUnproven === true || child.phase === 'starting'
+  const exitedDuringStartup = child.phase === 'starting'
   if (child.phase === 'starting') {
     context.abortOpen?.(sessionId)
   }

@@ -202,8 +202,6 @@ export type StructuredAgentSessionEndedEvent = {
   acquisitionGeneration: string
   /** Host receipt of the child exit: the end time of a turn it interrupted. */
   observedAt?: number
-  /** The provider ended before it finished starting, so resuming it would repeat the failure. */
-  startupUnproven?: true
   /** The provider ended before it answered its start, so it ran nothing it was handed. */
   startupUnanswered?: true
 }

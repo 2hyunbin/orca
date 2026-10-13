@@ -230,15 +230,14 @@ function prove(): Promise<void> {
   })
 }
 
-function exit(child: ReturnType<typeof currentChild>, reason: string, startupUnproven?: true) {
+function exit(child: ReturnType<typeof currentChild>, reason: string) {
   return host.handleAdapterEvent({
     type: 'ended',
     ...child,
     reason,
     // As an adapter reports it: the exit's stderr as a log detail.
     failure: { kind: 'providerExited', detail: { text: reason, audience: 'log' } },
-    cause: 'unexpected-exit',
-    ...(startupUnproven ? { startupUnproven } : {})
+    cause: 'unexpected-exit'
   })
 }
 
@@ -407,7 +406,7 @@ describe('a published child that dies while it proves its start', () => {
     await eventually(() => expect(conversation()?.child?.phase).toBe('starting'))
     const child = currentChild()
 
-    await exit(child, EXIT, true)
+    await exit(child, EXIT)
 
     await eventually(async () => expect((await submission(second))?.dispatchState).toBe('rejected'))
     expect(await statusRows()).toEqual([
@@ -453,7 +452,7 @@ describe('a start another operation made that dies while a sent message waits on
 
     // Accepted first; that child's exit is settled before the loop's first step.
     const sent = host.send(CALLER, params)
-    const exited = exit(operationChild, EXIT, true)
+    const exited = exit(operationChild, EXIT)
     expect(await sent).toMatchObject({
       ok: true,
       value: { submission: { dispatchState: 'pending' } }
@@ -482,7 +481,7 @@ describe('a start another operation made that dies while a sent message waits on
     await restartHost()
     acquire.mockImplementationOnce(spawnStartingChild)
     await startForOperation()
-    await exit(currentChild(), EXIT, true)
+    await exit(currentChild(), EXIT)
     expect(await statusRows()).toHaveLength(1)
 
     const id = await accept('after the failure')
@@ -515,7 +514,7 @@ describe('a start another operation made that dies while a sent message waits on
 
     // A second operation's start lands after the first child's exit, before the loop's first step.
     const sent = host.send(CALLER, params)
-    const exited = exit(currentChild(), EXIT, true)
+    const exited = exit(currentChild(), EXIT)
     const held = startForOperation()
     await sent
     await exited

@@ -656,8 +656,7 @@ describe('a start that fails while messages wait on it', () => {
       failure: agentSessionFailureFact('providerStartFailed', {
         detail: { text: 'codex: config.toml is invalid', audience: 'person' }
       }),
-      cause: 'unexpected-exit',
-      startupUnproven: true
+      cause: 'unexpected-exit'
     })
     await host.flushStreamedEvents(SESSION)
 
