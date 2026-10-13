@@ -91,6 +91,22 @@ describe('Claude child operation output retention', () => {
     }
   })
 
+  it('does not read child activity for a missing or invalid message envelope', () => {
+    const activityOf = vi.fn(() => ({ agentId: 'child', openTool: null }))
+    const message = frame([{ type: 'tool_result', tool_use_id: 'child' }], 'parent')
+
+    expect(claudeChildOperation({}, activityOf, 1_000)).toEqual([])
+    expect(claudeChildOperation({ ...message, type: 'system' }, activityOf, 1_000)).toEqual([])
+    expect(claudeChildOperation({ ...message, uuid: '' }, activityOf, 1_000)).toEqual([])
+    expect(activityOf).not.toHaveBeenCalled()
+  })
+
+  it('emits no child operation without an activity reader', () => {
+    const message = frame([{ type: 'tool_result', tool_use_id: 'child' }], 'parent')
+
+    expect(claudeChildOperation(message, undefined, 1_000)).toEqual([])
+  })
+
   it('keeps canonical result admission and metadata ownership on explicit expected IDs', () => {
     const cases: { part: unknown; expectedId: string | null }[] = [
       { part: null, expectedId: null },
