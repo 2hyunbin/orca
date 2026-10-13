@@ -59,12 +59,12 @@ export class WslOrcadLivenessSupervisor {
   }
 
   /** User-initiated, so it may boot the distro. Resolves once the watch is armed. */
-  async connect(distro: string): Promise<WslOrcadConnection> {
+  async connect(distro: string, options: { force?: boolean } = {}): Promise<WslOrcadConnection> {
     const entry = this.entryFor(distro)
     // Supersedes a recovery or deferred re-check: this connect relaunches and re-arms itself.
     const generation = (entry.generation += 1)
     this.disarm(entry)
-    const connection = await this.deps.manager.ensure(entry.distro)
+    const connection = await this.deps.manager.ensure(entry.distro, options)
     if (entry.generation === generation) {
       entry.backoff.reset()
       await this.arm(entry, connection)

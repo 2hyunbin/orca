@@ -58,6 +58,7 @@ function harness(options: { visible?: boolean } = {}) {
         fullVersion: '1',
         pid: pid++,
         pairingOffer: 'offer',
+        deferredUpdate: null,
         close: async () => {}
       }
       if (opts?.status) {
