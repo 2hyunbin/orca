@@ -199,9 +199,15 @@ describe('desktop restore admission', () => {
       await expect(restore('visible', 'user-resume')).resolves.toMatchObject({ isNew: true })
       await expect(shell('manual')).resolves.toMatchObject({ isNew: true })
 
+      // A visible split of six agents spends the user allowance of 4; the rest are paced, not slept.
+      const split = Array.from({ length: 5 }, (_, i) => restore(`split-${i}`, 'user-resume'))
+      await vi.advanceTimersByTimeAsync(12_000)
+      await expect(Promise.all(split)).resolves.toHaveLength(5)
+
       guard.resume()
       await expect(restore('hidden', 'automatic-restore')).resolves.toMatchObject({ isNew: true })
-      expect(spawned).toEqual(['visible', 'manual', 'hidden'])
+      expect(spawned.at(-1)).toBe('hidden')
+      expect(spawned).toHaveLength(8)
     }
   )
 })
