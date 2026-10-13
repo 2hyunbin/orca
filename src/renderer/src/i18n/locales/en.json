@@ -19229,8 +19229,7 @@
     "nativeChatUpgrade": {
       "eyebrow": "New",
       "title": "Native chat got an upgrade",
-      "chatModeNote": "New agent tabs still open in the terminal, as before.",
-      "okay": "Okay",
+      "leaveOff": "Leave Off",
       "enableNow": "Enable Now",
       "enableError": "Could not enable chat mode.",
       "intro": "New chats with supported agents now open in the upgraded chat view. To move between chat and CLI, open {{panel}} in the right sidebar:",
