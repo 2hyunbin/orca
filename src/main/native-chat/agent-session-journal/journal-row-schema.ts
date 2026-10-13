@@ -22,6 +22,7 @@
 // sent-message kind.
 
 import type { AgentSessionFailureFact } from '../../../shared/agent-session-failure'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   AGENT_SESSION_JOURNAL_SCHEMA_VERSION,
   type AgentJournalDispatchState,
@@ -147,6 +148,7 @@ export function isJournalStopOrResumeRow(row: JournalRow): row is JournalStopOrR
  *  reconcile into instead of appending a second copy. */
 export type JournalSubmissionRow = JournalRowBase & {
   kind: 'submission'
+  executionOptions?: AgentSessionExecutionOptions
   clientMessageId: string
   payloadFingerprint: string
   providerHandle: AgentSessionJournalProviderHandle

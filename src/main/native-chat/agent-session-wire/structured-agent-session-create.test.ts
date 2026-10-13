@@ -347,7 +347,8 @@ it('admits Stop with the create-returned fence after acquisition advances it and
       projectStructuredAgentSessionMessages(snapshot.items, [], snapshot.submissions)
     ).toMatchObject([
       { role: 'user', blocks: first.body.blocks },
-      { blocks: [{ type: 'text', text: NATIVE_CHAT_STOPPED_BEFORE_START_TEXT }] }
+      { blocks: [{ type: 'text', text: NATIVE_CHAT_STOPPED_BEFORE_START_TEXT }] },
+      { role: 'system', blocks: [{ type: 'text', text: 'Cancellation requested.' }] }
     ])
     expect(
       rig.host.collaboratorsForTests().sessions.get(SESSION)?.journal.stopMarks.latest()

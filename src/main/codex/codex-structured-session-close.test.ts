@@ -230,7 +230,7 @@ describe('Codex structured session close lifecycle', () => {
       fence: 7,
       spawnToken: 'spawn-1'
     })
-    await expect(adapter.stopSessionWithCause('session-1', 'user-stop')).resolves.toBe(true)
+    await expect(adapter.disposeSession('session-1', 'user-stop')).resolves.toBe(true)
     expect(events.filter((event) => event.type === 'ended')).toMatchObject([
       { cause: 'requested-close', stopCause: 'user-stop' }
     ])

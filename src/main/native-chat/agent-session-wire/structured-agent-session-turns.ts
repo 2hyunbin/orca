@@ -6,7 +6,15 @@
 // row the next attach settles as `unknown`, whereas the reverse would lose a
 // turn the provider already accepted.
 
-import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import {
+  agentSessionFailureFact,
+  providerDiagnosticOf
+} from '../../../shared/agent-session-failure'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
+import { captureStructuredExecutionOptions } from './structured-agent-session-execution-options'
+import { isAgentSessionOptionRejectedError } from './structured-agent-session-option-error'
+import { abortSignalReason } from '../../../shared/abort-signal-reason'
+import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import {
   agentSessionFailureWords,
   type AgentSessionFailureWordsContext
@@ -45,7 +53,6 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import { isAgentSessionAttachmentExpiredError } from '../agent-session-attachments/agent-session-attachment-claims'
 import { CommandReceiptExistsError } from '../agent-session-journal/command-receipt-transaction'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
-export { performSetOption } from './structured-agent-session-turns-options'
 export { performPrompt } from './structured-agent-session-turns-prompt'
 export { performCancel } from './structured-agent-session-turns-cancel'
 
@@ -103,17 +110,44 @@ async function dispatchSafely(
   ctx: AgentSessionHandoverContext,
   clientMessageId: string,
   body: AgentJournalMessageItem,
-  requestedAt: number
+  requestedAt: number,
+  executionOptions: AgentSessionExecutionOptions | undefined,
+  signal?: AbortSignal
 ): Promise<AgentSessionDispatchOutcome> {
   try {
-    return await ctx.adapter.dispatch({
+    const outcome = await ctx.adapter.dispatch({
       sessionId: ctx.sessionId,
       clientMessageId,
       body,
+      ...(executionOptions ? { executionOptions } : {}),
+      ...(signal ? { signal } : {}),
       fence: ctx.fence,
       requestedAt
     })
+    return signal?.aborted && outcome.state === 'rejected'
+      ? {
+          state: 'rejected',
+          ...agentSessionFailureWords(agentSessionFailureFact('cancelled'), {
+            surface: 'rejection'
+          })
+        }
+      : outcome
   } catch (error) {
+    if (signal?.aborted && error === abortSignalReason(signal)) {
+      return {
+        state: 'rejected',
+        ...agentSessionFailureWords(agentSessionFailureFact('cancelled'), { surface: 'rejection' })
+      }
+    }
+    if (isAgentSessionOptionRejectedError(error)) {
+      return {
+        state: 'rejected',
+        ...agentSessionFailureWords(
+          agentSessionFailureFact('providerRejected', { detail: providerDiagnosticOf(error) }),
+          { surface: 'rejection' }
+        )
+      }
+    }
     return { state: 'unknown', reason: error instanceof Error ? error.message : String(error) }
   }
 }
@@ -133,6 +167,7 @@ export async function performSend(
   input: {
     clientMessageId: string
     payloadFingerprint: string
+    executionOptions?: AgentSessionExecutionOptions
     body: AgentJournalMessageItem
     /** Who asked for the turn; absent on callers that predate it. */
     origin?: 'client' | 'host'
@@ -155,9 +190,13 @@ export async function performSend(
       value: { clientMessageId: input.clientMessageId, submission: { ...existing } }
     }
   }
+  const captured = captureStructuredExecutionOptions(ctx, input.executionOptions)
+  if ('refusal' in captured) {
+    return { ok: false, refusal: captured.refusal }
+  }
   try {
     await ctx.journal.appendSubmission(
-      { ...input, fence: ctx.fence, handoverRecorded: true },
+      { ...input, executionOptions: captured.options, fence: ctx.fence, handoverRecorded: true },
       undefined,
       ctx.operationReceipt
     )
@@ -194,7 +233,9 @@ export async function performSend(
   }
 }
 
-export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext
+export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
+  acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
+}
 
 /**
  * Hands one queued submission to the provider. The `dispatch{pending}` row goes first: a crash
@@ -228,12 +269,20 @@ export async function handOverSubmission(
   })
   // The handover row's instant on the host clock; the turn this dispatch opens records it so the
   // live counter never re-anchors at turn-open.
-  const outcome = await dispatchSafely(
-    ctx,
-    clientMessageId,
-    body,
-    structuredAgentSessionHandoverOrigin(ctx.journal, submission)
-  )
+  const attempt = ctx.acquireAborts?.begin(ctx.sessionId, true)
+  let outcome: AgentSessionDispatchOutcome
+  try {
+    outcome = await dispatchSafely(
+      ctx,
+      clientMessageId,
+      body,
+      structuredAgentSessionHandoverOrigin(ctx.journal, submission),
+      submission.executionOptions,
+      attempt?.signal
+    )
+  } finally {
+    attempt?.end()
+  }
   // An admission needs no dispatch row: the submission is already pending.
   if (outcome.state === 'admitted') {
     return

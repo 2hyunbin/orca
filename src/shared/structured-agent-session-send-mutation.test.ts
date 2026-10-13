@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentJournalMessageItem } from './agent-session-journal-types'
 import type { AgentMessageSource } from './agent-session-message-source'
+import { AgentJournalSubmissionSchema } from './agent-session-journal-submission-schema'
 import { SendParams } from './rpc-contract/structured-agent-session-params'
 import { structuredAgentSessionPayloadFingerprint } from './structured-agent-session-mutation'
 import {
@@ -26,6 +27,44 @@ const FROM: AgentMessageSource = {
 }
 
 describe('send fingerprints never cover the sender', () => {
+  it('keeps message choices outside the operation and body fingerprints', () => {
+    const send = (executionOptions?: { model: string; effort: string }) =>
+      structuredAgentSessionMessageSendMutation({
+        sessionId: 'session-1',
+        clientOperationId: 'op-1',
+        expectedRuntimeFence: 1,
+        body: BODY,
+        ...(executionOptions ? { executionOptions } : {})
+      })
+    const legacy = send()
+    const chosen = send({ model: 'model-a', effort: 'high' })
+    expect(chosen.envelope.payloadFingerprint).toBe(legacy.envelope.payloadFingerprint)
+    expect(chosen.executionOptions).toEqual({ model: 'model-a', effort: 'high' })
+    expect(SendParams.safeParse(legacy).success).toBe(true)
+    expect(SendParams.safeParse(chosen).success).toBe(true)
+    expect(SendParams.omit({ executionOptions: true }).safeParse(chosen).success).toBe(false)
+  })
+
+  it('lets an older submission reader drop the new optional choices', () => {
+    const submission = {
+      clientMessageId: 'message-1',
+      executionOptions: { model: 'model-a' },
+      fence: 1,
+      payloadFingerprint: 'a'.repeat(64),
+      dispatchState: 'accepted',
+      providerItemId: null,
+      reason: null,
+      submittedAt: 1,
+      resolvedAt: 2
+    }
+    expect(AgentJournalSubmissionSchema.parse(submission).executionOptions).toEqual({
+      model: 'model-a'
+    })
+    expect(
+      AgentJournalSubmissionSchema.omit({ executionOptions: true }).parse(submission)
+    ).not.toHaveProperty('executionOptions')
+  })
+
   it('keeps the digest every stored submission and draft already holds', () => {
     // Pinned bytes: a stored fingerprint that changed would stop matching its provider echo.
     expect(agentSessionSendBodyFingerprint('session-1', BODY)).toBe(

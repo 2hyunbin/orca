@@ -72,15 +72,18 @@ it('refuses a send as corrupt when SQLite reports damage, and still stops the ag
       details: { reason: 'journalCorrupt' }
     }
   })
-  // Stop reaches the agent without its ledger row; the note it then cannot record is the error
-  // the caller sees, after the fact.
-  await expect(stop()).rejects.toBe(damaged)
+  // Stop reaches the agent without its ledger row; note failure is reported without losing Stop.
+  await expect(stop()).resolves.toMatchObject({ ok: true, value: { cancelled: true } })
   expect(cancelTurn).toHaveBeenCalledTimes(1)
   expect(warn).toHaveBeenCalledWith(STOP_LEDGER_ROW_FAILED, {
     scope: 'stop-ledger-row',
     sessionId: expect.any(String),
     error: expect.objectContaining({ message: 'database disk image is malformed' })
   })
+  expect(warn).toHaveBeenCalledWith(
+    '[agent-session] chat-stop-note: writing the Stop note failed',
+    expect.objectContaining({ error: damaged })
+  )
   await hostTestRecoveryCapsuleSettled()
   expect((await readdir(root, { recursive: true })).toSorted()).toEqual(files)
 })

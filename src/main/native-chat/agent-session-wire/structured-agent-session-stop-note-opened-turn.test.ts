@@ -1,5 +1,4 @@
-// A Stop found with no turn running can wait for one to open and interrupt it. Taken, its note is
-// the turn the provider says it took; refused, the row stays with the conversation, as before.
+// A Stop request stays where it was made, even when the provider opens a turn before replying.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -80,11 +79,11 @@ async function stopWhileTheTurnOpens(
 }
 
 describe('a Stop that waited for a turn to open', () => {
-  it('keeps its note with that turn when the interrupt took it', async () => {
+  it('keeps the request before the turn that opens during interruption', async () => {
     expect(await stopWhileTheTurnOpens({ cancelled: true, turnId: 'turn-1' })).toEqual([
       {
-        itemId: agentJournalItemKey(structuredAgentSessionStopNoteIdentity('turn-1')),
-        turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(TURN) }
+        itemId: agentJournalItemKey(structuredAgentSessionStopNoteIdentity('stop-1')),
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
       }
     ])
   })

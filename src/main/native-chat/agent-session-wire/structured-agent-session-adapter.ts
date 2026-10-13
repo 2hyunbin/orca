@@ -49,11 +49,13 @@ export type {
   StructuredAgentSessionStopCause
 } from './structured-agent-session-stop-cause'
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type { AgentSessionPromptResponse } from '../../../shared/agent-session-question-answer'
 import type { ProviderHistoryWindow } from '../agent-session-journal/journal-submission-reconciler'
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
 import type { AgentSessionCreatePhaseRecorder } from '../../observability/agent-session-instrumentation'
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
+import type { StructuredAgentSessionProviderOpen } from './structured-agent-session-provider-open-contract'
 
 /** A live options read, plus what the child listed for its account's saved catalog. The host
  *  saves that listing and strips it before answering; an adapter whose listing reaches the
@@ -286,6 +288,8 @@ export type StructuredAgentSessionSetOptionInput = {
 }
 
 export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & {
+  /** Opens the published process under the host's startup signal. */
+  open?: StructuredAgentSessionProviderOpen
   /** Provider-aware capability check for hosts that route more than one adapter. */
   supportsCreate?(location: AgentSessionExecutionLocation, agent: string): boolean
   /** Provider/runtime support, kept here so remote enablement changes adapter data, not UI logic. */
@@ -303,6 +307,10 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     sessionId: string
     clientMessageId: string
     body: AgentJournalMessageItem
+    /** Immutable choices of this submission; adapters apply them only to this dispatch. */
+    executionOptions?: AgentSessionExecutionOptions
+    /** Host-local cancellation while choices are applied before prompt admission. */
+    signal?: AbortSignal
     fence: number
     /** Host clock on the submission row this send came from; the origin the turn
      *  it opens records as `requestedAt`. */
@@ -425,16 +433,11 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** Gracefully stops the structured owner after its event stream is drained. */
   /** Returns true only after the provider child exit is proven. A root-exit or processless verdict
    *  is thrown only once the session is finalized; read it through `stopAgentSessionProviderRoot`. */
-  closeSession?(sessionId: string): Promise<boolean>
+  closeSession?(sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean>
   /** Stops a provider after a sink failure; the resulting exit is recovered as unexpected. */
   forceCloseSession?(sessionId: string): Promise<boolean>
   /** Stops a provider child for teardown without requiring a future-resume cursor. */
-  disposeSession?(sessionId: string): Promise<boolean>
-  /** Host stop cause for adapters that classify child work at exit. */
-  stopSessionWithCause?(
-    sessionId: string,
-    cause?: StructuredAgentSessionStopCause
-  ): Promise<boolean>
+  disposeSession?(sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean>
   /** Host acknowledgement that the proven-dead child, lease and journal owner are released. */
   acknowledgeSessionRelease?(sessionId: string): void
 }

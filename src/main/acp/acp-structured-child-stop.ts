@@ -1,5 +1,5 @@
+import { isAcpReadySession, type AcpStructuredChild } from './acp-structured-child'
 import type { AcpStructuredSession } from './acp-structured-session'
-import type { AcpStructuredChild } from './acp-structured-child'
 import type { AcpStructuredConnection } from './acp-structured-connection'
 import type { AcpChildStops, AcpDialect } from './acp-dialects/acp-dialect'
 import { AcpAgentError } from './acp-errors'
@@ -18,7 +18,7 @@ export function acpChildStopCapabilities(
   return session?.journalClosed === null
     ? {
         supportsTaskStop:
-          session.phase === 'ready' &&
+          isAcpReadySession(session) &&
           (session.childStops?.subagents === true || session.childStops?.backgroundTasks === true),
         supportsStopAll: false
       }

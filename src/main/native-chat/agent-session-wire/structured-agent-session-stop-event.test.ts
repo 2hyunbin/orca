@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import type { JournalStopEvent } from '../agent-session-journal/journal-row-schema'
 import { HOST_TEST_SESSION, hostTestOperationId } from './structured-agent-session-host-test-data'
 import { holdLane } from './structured-agent-session-delivery-hold.test-fixture'
@@ -48,10 +49,16 @@ async function queuedDraft(text: string): Promise<string> {
 }
 
 /** The provider's turn row for the working send, which may land after a Stop. */
-async function turnRow(turnId: string, state: 'running' | 'interrupted') {
+async function turnRow(turnId: string, state: 'running' | 'interrupted', userId?: string) {
   return journal().appendItem(
     { provider: 'codex', threadId: 'thread-1', turnId, ordinal: 999 },
-    { kind: 'turn', turnId, state, startedAt: 1 },
+    {
+      kind: 'turn',
+      turnId,
+      state,
+      startedAt: 1,
+      ...(userId ? { userItemId: agentJournalSubmissionKey(userId) } : {})
+    },
     {
       fence: rig.store.getRecord(HOST_TEST_SESSION)!.lease.runtimeFence,
       turnScope: AGENT_JOURNAL_THREAD_SCOPE
@@ -74,6 +81,36 @@ function withdraw(clientMessageId: string) {
 }
 
 describe("a Stop's event", () => {
+  it('publishes the request note while the native interrupt is still unanswered', async () => {
+    rig = await createQueuedMessageTestRig()
+    await rig.workingSend()
+    const interrupt = Promise.withResolvers<{ cancelled: boolean }>()
+    rig.cancelTurn.mockImplementationOnce(() => interrupt.promise)
+    const stopped = rig.stop()
+    try {
+      await eventually(() =>
+        expect(
+          journal()
+            .snapshot()
+            .items.filter(
+              (item) => item.body.kind === 'status' && item.body.text === 'Cancellation requested.'
+            )
+        ).toHaveLength(1)
+      )
+      expect(rig.cancelTurn).toHaveBeenCalledOnce()
+    } finally {
+      interrupt.resolve({ cancelled: true })
+      await stopped
+    }
+    expect(
+      journal()
+        .snapshot()
+        .items.filter(
+          (item) => item.body.kind === 'status' && item.body.text === 'Cancellation requested.'
+        )
+    ).toHaveLength(1)
+  })
+
   it('reaches the journal before the interrupt, naming the turn it stopped and who asked', async () => {
     rig = await createQueuedMessageTestRig()
     await rig.workingSend()
@@ -226,14 +263,17 @@ describe("a Stop's event", () => {
     await laneDrained()
     expect(rig.closeSession).toHaveBeenCalledTimes(1)
     const working = await rig.workingSend()
-    await turnRow('turn-2', 'running')
+    await turnRow('turn-2', 'running', working)
     return working
   }
 
   it('a second press after a card sent into the next turn settled unknown writes again', async () => {
     await turnAfterAnEndedChat()
     const steered = await queuedDraft('sent into the turn between the presses')
-    await rig.sendNow(steered)
+    expect(await rig.sendNow(steered)).toMatchObject({
+      ok: true,
+      value: { submission: expect.anything() }
+    })
     await eventually(async () => expect((await rig.handoff(steered))?.handedOverAt).toBeDefined())
     await rig.host.settleLateDispatch({
       sessionId: HOST_TEST_SESSION,
@@ -248,7 +288,10 @@ describe("a Stop's event", () => {
   it('a second press after a card was sent into the next turn writes again, and holds that card', async () => {
     const working = await turnAfterAnEndedChat({ windsDown: true })
     const steered = await queuedDraft('sent into the turn between the presses')
-    await rig.sendNow(steered)
+    expect(await rig.sendNow(steered)).toMatchObject({
+      ok: true,
+      value: { submission: expect.anything() }
+    })
     await eventually(async () => expect((await rig.handoff(steered))?.handedOverAt).toBeDefined())
     await rig.stop()
     expect(stopEvents()).toHaveLength(2)

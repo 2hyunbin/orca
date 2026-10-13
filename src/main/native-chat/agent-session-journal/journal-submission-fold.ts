@@ -6,6 +6,7 @@ import {
   type AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
+import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { journalRenderItem } from './journal-render-item'
 import { statedOrDerivedTurnScope, upsertJournalItem } from './journal-item-fold'
 import type { JournalReducerState } from './journal-reducer'
@@ -16,8 +17,10 @@ export function applyJournalSubmission(
   state: JournalReducerState,
   row: Extract<JournalRow, { kind: 'submission' }>
 ): void {
+  const executionOptions = readAgentSessionExecutionOptions(row.executionOptions)
   state.submissions.set(row.clientMessageId, {
     clientMessageId: row.clientMessageId,
+    ...(executionOptions ? { executionOptions } : {}),
     fence: row.fence,
     payloadFingerprint: row.payloadFingerprint,
     dispatchState: 'pending',

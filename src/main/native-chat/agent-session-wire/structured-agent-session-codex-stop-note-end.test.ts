@@ -50,7 +50,12 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   events = []
   unconfirmedNote = undefined
-  codex = fakeCodex()
+  codex = fakeCodex({
+    'model/list': () => ({
+      data: [{ model: 'gpt-live', isDefault: true, defaultReasoningEffort: 'medium' }],
+      nextCursor: null
+    })
+  })
   notify = (method, params) => codex.connections.at(-1)?.handlers.onNotification?.(method, params)
   turns = codexTurnLifecycleFake(THREAD, () => notify)
   codex.routes['turn/start'] = turns.routes['turn/start']

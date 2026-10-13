@@ -70,6 +70,14 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     return released
   }
 
+  open: NonNullable<StructuredAgentSessionAdapter['open']> = (input) => {
+    const adapter = this.owner(input.sessionId)
+    if (!adapter.open) {
+      return Promise.reject(new Error('The provider cannot open a published child.'))
+    }
+    return adapter.open(input)
+  }
+
   dispatch: StructuredAgentSessionAdapter['dispatch'] = (input) =>
     this.owner(input.sessionId).dispatch(input)
 
@@ -180,27 +188,23 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     this.requireAgent(input.identity).adapter.providerHistoryWindow?.(input) ??
     Promise.resolve(null)
 
-  closeSession = (sessionId: string): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.closeSession?.(sessionId))
+  closeSession = (sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean> =>
+    this.stopSession(sessionId, (adapter) =>
+      cause === undefined
+        ? adapter.closeSession?.(sessionId)
+        : adapter.closeSession?.(sessionId, cause)
+    )
 
   forceCloseSession = (sessionId: string): Promise<boolean> =>
     this.stopSession(sessionId, (adapter) =>
       (adapter.forceCloseSession ?? adapter.closeSession)?.call(adapter, sessionId)
     )
 
-  disposeSession = (sessionId: string): Promise<boolean> =>
+  disposeSession = (sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean> =>
     this.stopSession(sessionId, (adapter) =>
-      (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
-    )
-
-  stopSessionWithCause = (
-    sessionId: string,
-    cause?: StructuredAgentSessionStopCause
-  ): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) =>
-      adapter.stopSessionWithCause
-        ? adapter.stopSessionWithCause(sessionId, cause)
-        : (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
+      cause === undefined
+        ? (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
+        : (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId, cause)
     )
 
   private async stopSession(

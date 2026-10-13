@@ -11,6 +11,7 @@ import { supportsStructuredAgentSessionPromptCancel } from '@/runtime/structured
 import {
   useStructuredAgentSessionHostQueuesCommands,
   useStructuredAgentSessionHostEditsQueuedMessages,
+  useStructuredAgentSessionHostMessageChoices,
   useStructuredAgentSessionHostQueuesMessagesState
 } from '@/runtime/structured-agent-session-host-capability'
 import { structuredAgentSessionStopControl } from './structured-agent-session-stop-control'
@@ -55,6 +56,8 @@ export function useStructuredAgentSession(args: {
   providerStarting?: boolean
   /** The host runs the session's provider and its start is proven. */
   providerRunning?: boolean
+  /** The current selection in a capable host's status, including an empty selection. */
+  optionSelection?: Readonly<Record<string, string>>
   /** This view started the session; only then does the stored selection name what it runs. */
   launch?: StructuredAgentSessionLaunchView
   /** The composer Edit copies a card's text into. */
@@ -116,6 +119,7 @@ export function useStructuredAgentSession(args: {
     isVisible,
     providerVisible,
     providerStarting,
+    optionSelection: args.optionSelection,
     ...(args.providerRunning ? { providerRunning: true } : {}),
     ...(args.hostOptionStamp ? { hostOptionStamp: args.hostOptionStamp } : {}),
     fence: state.fence,
@@ -126,6 +130,7 @@ export function useStructuredAgentSession(args: {
   })
   // Only a capable host may see `delivery`; a card any host publishes shows, with its actions.
   const queueCapability = useStructuredAgentSessionHostQueuesMessagesState(target)
+  const messageChoices = useStructuredAgentSessionHostMessageChoices(target)
   const queuedMessageIds = useMemo(
     () => (transportState.queuedMessages ?? []).map((message) => message.messageId),
     [transportState.queuedMessages]
@@ -158,7 +163,8 @@ export function useStructuredAgentSession(args: {
     queue,
     historyLoaded: transportEnabled && state.status === 'ready',
     isWorking: transportState.isWorking,
-    stopping: stopControl.stopping
+    stopping: stopControl.stopping,
+    executionOptionSnapshot: messageChoices ? optionSnapshot : undefined
   })
 
   const threadGoal = useStructuredAgentSessionThreadGoal({

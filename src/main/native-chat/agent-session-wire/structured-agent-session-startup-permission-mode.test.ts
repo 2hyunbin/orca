@@ -51,11 +51,7 @@ it('keeps a permission pick while accepting the startup model report', async () 
       optionRevision: 0
     })
     await vi.waitFor(() =>
-      expect(rig.store.getRecord(SESSION)?.options).toEqual({
-        model: 'provider-model',
-        effort: 'medium',
-        permissionMode: 'full-access'
-      })
+      expect(rig.store.getRecord(SESSION)?.options).toEqual({ permissionMode: 'full-access' })
     )
   } finally {
     await rig.dispose()
@@ -121,16 +117,19 @@ it.each([false, true])(
         optionRevision: -1
       })
       await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-      expect(writes.mock.calls.map(([input]) => [input.key, input.value])).toEqual([
-        ['model', 'picked-model'],
-        ['effort', 'high']
-      ])
+      expect(writes).not.toHaveBeenCalled()
+      expect(rig.adapter.dispatch.mock.calls[0]?.[0].executionOptions).toEqual({
+        model: 'launched-model',
+        effort: 'low'
+      })
       const options = { model: 'picked-model', effort: 'high', permissionMode: 'full-access' }
       expect(rig.adapter.closeSession).toHaveBeenCalledTimes(hasOpenDispatch ? 0 : 1)
       expect(rig.adapter.acquire).toHaveBeenCalledTimes(hasOpenDispatch ? 1 : 2)
       expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
         expect.objectContaining(
-          hasOpenDispatch ? { permissionMode: 'ask' } : { permissionMode: 'full-access', options }
+          hasOpenDispatch
+            ? { permissionMode: 'ask' }
+            : { permissionMode: 'full-access', options: { model: 'launched-model', effort: 'low' } }
         )
       )
       expect(rig.adapter.acquire.mock.invocationCallOrder[hasOpenDispatch ? 0 : 1]).toBeLessThan(
@@ -144,7 +143,10 @@ it.each([false, true])(
       expect((await rig.host.send(CALLER, restTestSend('after restart', nextFence))).ok).toBe(true)
       await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
       expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
-        expect.objectContaining({ permissionMode: 'full-access', options })
+        expect.objectContaining({
+          permissionMode: 'full-access',
+          options: { model: 'picked-model', effort: 'high' }
+        })
       )
     } finally {
       await rig.dispose()

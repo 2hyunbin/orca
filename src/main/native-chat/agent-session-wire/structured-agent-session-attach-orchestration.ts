@@ -14,11 +14,7 @@ import type {
   AgentSessionTurnActivity
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionAttachParams } from './structured-agent-session-attach'
-import {
-  performAttach,
-  type AttachedOwner,
-  type AttachFlowInput
-} from './structured-agent-session-attach-flow'
+import { performAttach, type AttachFlowInput } from './structured-agent-session-attach-flow'
 import { endStructuredAgentSessionReleasedChild } from './structured-agent-session-attach-failure'
 import { stampFailedCreateOwnerVerdict } from './structured-agent-session-failed-create-refusal'
 import {
@@ -35,6 +31,7 @@ import {
   structuredAgentSessionConversationFence
 } from './structured-agent-session-provider-child'
 import type { DeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import { noteStructuredAgentSessionProviderStarted } from './structured-agent-session-provider-started'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { isStructuredAgentSessionStartupExpired } from './structured-agent-session-startup-attempt'
@@ -52,6 +49,7 @@ export type StructuredAgentSessionAttachOptions = {
   onAcquisitionFailed?: AttachFlowInput['onAcquisitionFailed']
   /** The queued message a start is for; see `StructuredAgentSessionProviderChild.startedFor`. */
   startedFor?: string
+  startupOptions?: Readonly<Record<string, string>>
   /** A close, an admitted Stop or quit aborted this attach: its refusal is that abort's. */
   onAborted?: () => void
   /** The startup limit aborted this attach's acquire: it failed, nobody stopped it. */
@@ -202,11 +200,14 @@ async function runAttachUnderAbort(
       now: () => context.now(),
       recordPhase,
       acquireSignal,
+      onStartCatalogListing: (listing) =>
+        context.deps.modelCatalog?.recordLiveListing(sessionId, listing),
       onStartupAttempt: (startup) => {
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
       },
       optionRevision: () => context.runtimeState.optionRevisions.current(sessionId),
+      ...(options.startupOptions ? { startupOptions: options.startupOptions } : {}),
       launchPermissionMode: async (record) =>
         (await structuredAgentSessionLaunchPermission(context.deps, record)) ?? undefined,
       ...(options.onAcquisitionFailed ? { onAcquisitionFailed: options.onAcquisitionFailed } : {}),
@@ -220,7 +221,7 @@ async function runAttachUnderAbort(
       // The cleanup released the acquisition, which for a re-attach is the live child itself.
       onAcquisitionReleased: (cause, verdict) =>
         endStructuredAgentSessionReleasedChild(context, sessionId, cause, verdict),
-      onAttached: async (attached, acquisitionGeneration, owner) => {
+      onAttached: async (attached, acquisitionGeneration, owner, providerChildPhase) => {
         const fence = structuredAgentSessionConversationFence(context.deps.store, sessionId)
         const current = context.sessions.get(sessionId)?.child ?? null
         const startedFor = owner === 'acquired' ? options.startedFor : current?.startedFor
@@ -254,10 +255,9 @@ async function runAttachUnderAbort(
             child: {
               generation: acquisitionGeneration ?? current?.generation ?? null,
               fence,
-              // Every acquired child starts unproven; a re-attach keeps what its child already proved.
-              phase: owner === 'acquired' ? 'starting' : (current?.phase ?? 'ready'),
+              // An acquire reports its phase; a re-attach keeps what its child already proved.
+              phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
               ...(startedFor === undefined ? {} : { startedFor }),
-              ...launchedOptionsOf(owner, attempt.startup, current),
               ...(permissionMode === undefined ? {} : { permissionMode })
             }
           }
@@ -289,6 +289,11 @@ async function runAttachUnderAbort(
       indexProviderChild(conversation, candidate.child)
       if (attempt.startup) {
         startupAttempts.published(sessionId, attempt.startup.attemptId, candidate.child)
+        if (candidate.child.phase === 'ready') {
+          noteStructuredAgentSessionProviderStarted(context.deps, sessionId)
+        } else {
+          context.openProviderChild?.(sessionId, candidate.child)
+        }
       }
       context.publishStatus?.(sessionId)
     }
@@ -301,15 +306,6 @@ async function runAttachUnderAbort(
       }
     }
   }
-}
-
-function launchedOptionsOf(
-  owner: AttachedOwner,
-  startup: StructuredAgentSessionStartupAttempt | null,
-  current: StructuredAgentSessionProviderChild | null
-): Pick<StructuredAgentSessionProviderChild, 'launchedOptions'> {
-  const launchedOptions = owner === 'acquired' ? (startup?.options ?? {}) : current?.launchedOptions
-  return launchedOptions ? { launchedOptions } : {}
 }
 
 type AttachCandidate = {

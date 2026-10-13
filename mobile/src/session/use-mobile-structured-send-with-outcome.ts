@@ -4,6 +4,7 @@
 // host advertises the queue and no pending prompt is one this build cannot answer.
 
 import { useCallback } from 'react'
+import { agentSessionExecutionOptionsFromSnapshot } from '../../../src/shared/agent-session-execution-option-snapshot'
 import { runningStructuredAgentSessionTurnId } from '../../../src/shared/structured-agent-session-live-turn'
 import { pendingPromptsAllUnanswerableHere } from '../../../src/shared/agent-session-approval-subject'
 import {
@@ -44,6 +45,7 @@ export function useMobileStructuredSendWithOutcome(args: {
   sessionId: string | null
   enabled: boolean
   queueCapable: boolean
+  messageChoices: boolean
   /** The host holds a /compact sent while the agent works as a card. */
   commandsWait: boolean
   stateRef: { readonly current: StructuredAgentSessionState }
@@ -74,6 +76,7 @@ export function useMobileStructuredSendWithOutcome(args: {
     hold,
     onSendError,
     queueCapable,
+    messageChoices,
     sessionId,
     stateRef,
     stopping
@@ -147,6 +150,9 @@ export function useMobileStructuredSendWithOutcome(args: {
         ...(mobileStructuredSendQueues(queueCapable, stateRef.current.items)
           ? { delivery: 'queue-if-active' as const }
           : {}),
+        ...(messageChoices
+          ? { executionOptions: agentSessionExecutionOptionsFromSnapshot(controller.snapshot) }
+          : {}),
         deadline,
         clientMessageId: send.clientMessageId,
         onError: onSendError
@@ -169,6 +175,7 @@ export function useMobileStructuredSendWithOutcome(args: {
       hold,
       onSendError,
       queueCapable,
+      messageChoices,
       sessionId,
       stateRef,
       stopping

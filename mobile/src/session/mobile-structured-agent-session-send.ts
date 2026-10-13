@@ -1,4 +1,5 @@
 import type { AgentSessionSendResult } from '../../../src/shared/agent-session-wire'
+import type { AgentSessionExecutionOptions } from '../../../src/shared/agent-session-execution-options'
 import {
   structuredAgentSessionSendBody,
   type StructuredAgentSessionAttachment
@@ -20,6 +21,7 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
   attachments: readonly StructuredAgentSessionAttachment[]
   /** Sent only when the host advertises `agent-session.queued-messages.v1`. */
   delivery?: 'queue-if-active'
+  executionOptions?: AgentSessionExecutionOptions
   deadline?: number
   /** The id the host records the message under. */
   clientMessageId: string
@@ -41,6 +43,9 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
       body: structuredAgentSessionSendBody(input.text, input.attachments),
       ...(input.delivery ? { delivery: input.delivery } : {})
     },
+    ...(input.executionOptions
+      ? { unfingerprintedFields: { executionOptions: input.executionOptions } }
+      : {}),
     clientOperationId: input.clientMessageId,
     timeoutMs
   })

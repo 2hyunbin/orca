@@ -1,6 +1,4 @@
-// Picks made while an agent starts are applied before its start is accepted, under its startup
-// clock. A pick the agent refuses is shown as what it runs; one cut short by the limit or a Stop
-// leaves the start unproven, so no child ever runs a model the chat does not show.
+// A pick made during startup belongs to the next message; the held message keeps its choice.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -155,48 +153,35 @@ function started(reportedModel = 'launched-model'): Promise<void> {
   })
 }
 
-/** A write that never answers on its own: only its abort ends it. */
-function writeHeldUntilAborted(): void {
-  setOption.mockImplementation(
-    ({ signal }) =>
-      new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
-      })
-  )
-}
-
 async function dispatchState(clientMessageId: string) {
   return (await host.journalSnapshot(SESSION)).submissions.find(
     (entry) => entry.clientMessageId === clientMessageId
   )?.dispatchState
 }
 
-it('shows what the agent runs when it refuses a pick made while it started', async () => {
+it('saves a startup pick without writing it to the opening child', async () => {
   await pick('picked-model')
   expect(store.getRecord(SESSION)?.options?.model).toBe('picked-model')
-  setOption.mockRejectedValueOnce(new Error('model not available'))
+  expect(setOption).not.toHaveBeenCalled()
 
   await started()
 
-  expect(setOption).toHaveBeenCalledWith(expect.objectContaining({ value: 'picked-model' }))
-  expect(store.getRecord(SESSION)?.options?.model).toBe('launched-model')
+  expect(setOption).not.toHaveBeenCalled()
+  expect(store.getRecord(SESSION)?.options?.model).toBe('picked-model')
   expect(phases.at(-1)).toBe('ready')
 })
 
-it('never accepts a start whose limit passes while a pick is applying; the pick stays for the next start', async () => {
+it('hands a held message over with its accepted choice after a later startup pick', async () => {
   const held = await sendHeld('held while starting')
   await pick('picked-model')
-  writeHeldUntilAborted()
+  expect(setOption).not.toHaveBeenCalled()
 
-  const proving = started()
-  await vi.waitFor(() => expect(setOption).toHaveBeenCalledOnce())
-  await vi.advanceTimersByTimeAsync(SILENCE_MS)
-  await proving
+  await started()
 
-  await vi.waitFor(async () => expect(await dispatchState(held)).toBe('rejected'))
-  expect(closeSession).toHaveBeenCalled()
-  expect(phases).not.toContain('ready')
-  expect(dispatch).not.toHaveBeenCalled()
+  await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
+  expect(setOption).not.toHaveBeenCalled()
+  expect(dispatch.mock.calls[0]?.[0].executionOptions).toEqual({ model: 'launched-model' })
+  expect(await dispatchState(held)).toBe('unknown')
   expect(store.getRecord(SESSION)?.options?.model).toBe('picked-model')
 })
 
@@ -217,20 +202,4 @@ it('never accepts a start whose limit passed before its proof was settled', asyn
   expect(setOption).not.toHaveBeenCalled()
   expect(phases).not.toContain('ready')
   expect(dispatch).not.toHaveBeenCalled()
-})
-
-it('ends a start a Stop cuts short while it applies a pick, never showing it ready', async () => {
-  await pick('picked-model')
-  writeHeldUntilAborted()
-
-  const proving = started()
-  await vi.waitFor(() => expect(setOption).toHaveBeenCalledOnce())
-  expect(
-    await host.cancel(CALLER, { envelope: envelope('agentSession.cancel', {}) })
-  ).toMatchObject({ ok: true })
-  await proving
-
-  await vi.waitFor(() => expect(closeSession).toHaveBeenCalled())
-  expect(phases).not.toContain('ready')
-  expect(store.getRecord(SESSION)?.options?.model).toBe('picked-model')
 })

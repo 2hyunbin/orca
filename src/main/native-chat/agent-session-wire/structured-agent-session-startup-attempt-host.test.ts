@@ -187,23 +187,6 @@ function startedEvent(generation = `generation-${acquire.mock.calls.length}`) {
   }
 }
 
-function pick(value: string) {
-  const fields = { key: 'model', value }
-  return host.setOption(CALLER, {
-    envelope: {
-      sessionId: SESSION,
-      clientOperationId: hostTestOperationId(),
-      expectedRuntimeFence: store.getRecord(SESSION)!.lease.runtimeFence,
-      payloadFingerprint: computeAgentSessionPayloadFingerprint({
-        method: 'agentSession.setOption',
-        sessionId: SESSION,
-        fields
-      })
-    },
-    ...fields
-  })
-}
-
 /** The send's start has published its child, still starting; the host holds the send. */
 async function heldBehindStart(text: string): Promise<string> {
   const id = await accept(text)
@@ -435,149 +418,38 @@ describe('a start that ends before it proves itself', () => {
 })
 
 describe('what a started child reports', () => {
-  it('is persisted only after what was held is handed over', async () => {
+  it('keeps provider reports out of the saved next-message choice', async () => {
     await restartWith(publishFirst)
-    await heldBehindStart('hello')
-    const order: string[] = []
-    dispatch.mockImplementationOnce(async (input) => {
-      order.push('dispatch')
-      return {
-        state: 'accepted' as const,
-        providerIdentity: {
-          provider: 'codex' as const,
-          threadId: THREAD,
-          turnId: `turn-${input.clientMessageId}`,
-          ordinal: 1
-        }
-      }
-    })
-    const replace = store.replaceSessionOptions.bind(store)
-    vi.spyOn(store, 'replaceSessionOptions').mockImplementation(async (args) => {
-      order.push('persist')
-      return replace(args)
-    })
-
+    const id = await heldBehindStart('hello')
     await host.handleAdapterEvent({ ...startedEvent(), reportedOptions: { model: 'reported' } })
-
-    await eventually(() => expect(order).toEqual(['dispatch', 'persist']))
-    expect(store.getRecord(SESSION)?.options).toMatchObject({ model: 'reported' })
-  })
-
-  it('never overwrites a pick made after the child reported', async () => {
-    await restartWith(publishFirst)
-    await heldBehindStart('hello')
-    const report = { ...startedEvent(), reportedOptions: { model: 'reported' } }
-    dispatch.mockImplementationOnce(async () => {
-      // A pick lands while the first handover is still running.
-      void pick('picked')
-      return { state: 'admitted' as const }
-    })
-
-    await host.handleAdapterEvent(report)
-    await eventually(() => expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' }))
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await host.flushStreamedEvents(SESSION)
-
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' })
-  })
-
-  it('never lets a settings read made before a pick undo it, even queued behind the pick', async () => {
-    await restartWith(publishFirst)
-    const id = await heldBehindStart('hello')
-    await host.handleAdapterEvent(startedEvent())
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
-    await eventually(() => expect(store.getRecord(SESSION)?.options).toEqual({ model: 'default' }))
-    // The settings read starts, then the user picks while it is out.
-    const readAt = optionRevisionNow()
-    let landPick = (): void => {}
-    setOption.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          landPick = () => resolve(undefined)
-        })
-    )
-    const picked = pick('picked')
-    await eventually(() => expect(setOption).toHaveBeenCalled())
-
-    // The read answers with what the child ran before the pick, while the pick is still in flight.
-    const reported = host.handleAdapterEvent({
-      ...startedEvent(),
-      type: 'options-reported',
-      reportedOptions: { model: 'default' },
-      optionRevision: readAt
-    })
-    landPick()
-    expect(await picked).toMatchObject({ ok: true })
-    await reported
-    await host.flushStreamedEvents(SESSION)
-
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' })
-  })
-
-  it('never lands the start’s report after a newer settings report', async () => {
-    await restartWith(publishFirst)
-    await heldBehindStart('hello')
-    let landHandover = (): void => {}
-    dispatch.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          landHandover = () => resolve({ state: 'admitted' as const })
-        })
-    )
-    // The start's report waits on the handover; the settings report that follows it does not.
-    await host.handleAdapterEvent({ ...startedEvent(), reportedOptions: { model: 'at-start' } })
-    await eventually(() => expect(dispatch).toHaveBeenCalled())
-    const reported = host.handleAdapterEvent({
-      ...startedEvent(),
-      type: 'options-reported',
-      reportedOptions: { model: 'from-settings' }
-    })
-
-    landHandover()
-    await reported
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await host.flushStreamedEvents(SESSION)
-
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'from-settings' })
-  })
-
-  it('keeps a settings read stamped before the host took the start’s report', async () => {
-    await restartWith(publishFirst)
-    await heldBehindStart('hello')
-    // Both reads are stamped before the host takes either report, as a delivery that lags would.
-    const started = { ...startedEvent(), reportedOptions: { model: 'at-start' } }
-    const settings = {
-      ...started,
-      type: 'options-reported' as const,
-      reportedOptions: { model: 'from-settings' }
-    }
-
-    await host.handleAdapterEvent(started)
-    await host.handleAdapterEvent(settings)
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await host.flushStreamedEvents(SESSION)
-
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'from-settings' })
-  })
-
-  it('takes a report read after a pick that failed', async () => {
-    await restartWith(publishFirst)
-    const id = await heldBehindStart('hello')
-    await host.handleAdapterEvent(startedEvent())
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
-    await eventually(() => expect(store.getRecord(SESSION)?.options).toEqual({ model: 'default' }))
-    setOption.mockRejectedValueOnce(new Error('the provider refused the model'))
-    await expect(pick('refused')).rejects.toThrow('the provider refused the model')
-
     await host.handleAdapterEvent({
       ...startedEvent(),
       type: 'options-reported',
       reportedOptions: { model: 'from-settings' }
     })
+    await host.flushStreamedEvents(SESSION)
+    expect(store.getRecord(SESSION)?.options).toBeUndefined()
+  })
 
-    await eventually(() =>
-      expect(store.getRecord(SESSION)?.options).toEqual({ model: 'from-settings' })
-    )
+  it('preserves a later accepted pick when an older child reports options', async () => {
+    await restartWith(publishFirst)
+    const id = await heldBehindStart('hello')
+    await store.replaceSessionOptions({
+      sessionId: SESSION,
+      fence: store.getRecord(SESSION)!.lease.runtimeFence,
+      options: { model: 'picked' },
+      now: NOW
+    })
+    await host.handleAdapterEvent({ ...startedEvent(), reportedOptions: { model: 'reported' } })
+    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('accepted'))
+    await host.handleAdapterEvent({
+      ...startedEvent(),
+      type: 'options-reported',
+      reportedOptions: { model: 'from-settings' }
+    })
+    await host.flushStreamedEvents(SESSION)
+    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'picked' })
   })
 })
 

@@ -120,10 +120,12 @@ describe('a press sent again', () => {
     await pick('B')
 
     expect(await pick('A', first)).toMatchObject({ ok: true, replayed: true })
-    expect(setOption.mock.calls.map(([input]) => input.value)).toEqual(['A', 'B'])
+    expect(setOption).not.toHaveBeenCalled()
+    expect(store.getRecord(SESSION)?.options?.model).toBe('B')
 
     expect(await pick('A')).toMatchObject({ ok: true, replayed: false })
-    expect(setOption.mock.calls.map(([input]) => input.value)).toEqual(['A', 'B', 'A'])
+    expect(setOption).not.toHaveBeenCalled()
+    expect(store.getRecord(SESSION)?.options?.model).toBe('A')
   })
 
   it('leaves a cleared goal cleared under the first id, and sets it under a new one', async () => {

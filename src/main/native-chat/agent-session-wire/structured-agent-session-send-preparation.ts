@@ -19,19 +19,25 @@ import {
 } from './structured-agent-session-command-turn'
 import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
 import {
+  operationDidNotRun,
+  type ReadyOperationSelection
+} from './structured-agent-session-ready-operation'
+import {
   AGENT_SESSION_NOT_ATTACHED,
   type AgentSessionMutationSessionPreparation
 } from './structured-agent-session-mutation-admission'
 import { agentSessionOperationOutcomeUnknown } from './structured-agent-session-replay-outcome'
 import { rewindRefusal } from './structured-rewind-refusal'
 import { recoverStructuredRewind } from './structured-rewind-recovery'
-import { refuseWhileProviderStarting } from './structured-agent-session-provider-start-hold'
-import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
+import {
+  sameProviderChild,
+  structuredAgentSessionConversationFence
+} from './structured-agent-session-provider-child'
 import { conversationCommandInFlight } from './structured-conversation-command-admission'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 
-function rewindInDoubt(record: AgentSessionRecord | null | undefined): boolean {
+export function rewindInDoubt(record: AgentSessionRecord | null | undefined): boolean {
   const phase = record?.rewind?.phase
   return phase === 'prepared' || phase === 'provider-succeeded'
 }
@@ -97,37 +103,6 @@ export function openForProviderWrite(
   }
 }
 
-/** For an operation only the provider can perform: the conversation, then its agent, proven
- *  started; the caller waits out a start under way (`runAfterProviderStart`). `beforeAgent`
- *  answers what needs no agent before one is started for it. */
-export function openWithAgent(
-  context: Pick<
-    StructuredAgentSessionMutationContext,
-    'openConversation' | 'ensureAgent' | 'deps' | 'sessions'
-  >,
-  envelope: AgentSessionMutationEnvelope,
-  beforeAgent?: (record: AgentSessionRecord | null) => AgentSessionMutationSessionPreparation | null
-): (ledger: 'admit' | 'replay') => Promise<AgentSessionMutationSessionPreparation> {
-  return async (ledger) => {
-    const opened = await openConversationForWrite(
-      context.openConversation,
-      envelope,
-      context.deps.logger
-    )
-    if (!opened.ok || ledger === 'replay') {
-      return opened
-    }
-    const checked = beforeAgent?.(context.deps.store.getRecord(envelope.sessionId))
-    if (checked && !checked.ok) {
-      return checked
-    }
-    const ensured = await context.ensureAgent(envelope.sessionId)
-    return ensured.ok
-      ? (refuseWhileProviderStarting(context.sessions.get(envelope.sessionId)) ?? ensured)
-      : ensured
-  }
-}
-
 /** The recovery a proven start runs, for a child already running: no start comes for it. A
  *  recovery that stays unknown leaves the record as it was. */
 async function recoverRewindOnLiveChild(
@@ -160,7 +135,7 @@ async function recoverRewindOnLiveChild(
 
 /** A rewind still in doubt once the conversation is open is one only its provider can settle —
  *  the open settles every other — so a send settles it first: an agent at rest is started, whose
- *  proven start recovers it while the send waits that start out (`runAfterProviderStart`), and a
+ *  proven start recovers it before the send is accepted, and a
  *  running one is asked as that start would. One still in doubt refuses the send here, before the
  *  ledger records it, so a Retry of the same id is decided afresh. A
  *  resend of a recorded id needs only the conversation, its answer's source: it starts nothing,
@@ -171,10 +146,11 @@ async function recoverRewindOnLiveChild(
 export function sendPreparation(
   context: Pick<
     StructuredAgentSessionMutationContext,
-    'openConversation' | 'ensureAgent' | 'deps' | 'sessions' | 'publish' | 'now'
+    'openConversation' | 'deps' | 'sessions' | 'publish' | 'now'
   >,
   envelope: AgentSessionMutationEnvelope,
-  arrival: { clearInFlight?: boolean; refusesInRun?: boolean } = {}
+  arrival: { clearInFlight?: boolean; refusesInRun?: boolean } = {},
+  selection?: ReadyOperationSelection
 ): (ledger: 'admit' | 'replay') => Promise<AgentSessionMutationSessionPreparation> {
   return async (ledger) => {
     if (ledger === 'admit' && arrival.clearInFlight) {
@@ -190,22 +166,27 @@ export function sendPreparation(
         ? opened
         : { ok: false, refusal: agentSessionOperationOutcomeUnknown(envelope.clientOperationId) }
     }
+    if (selection?.deadline !== undefined && Date.now() >= selection.deadline) {
+      return operationDidNotRun(true)
+    }
     const { sessionId } = envelope
     if (!opened.ok || !rewindInDoubt(context.deps.store.getRecord(sessionId))) {
       return opened
     }
-    const ensured = await context.ensureAgent(sessionId)
-    if (!ensured.ok) {
-      return ensured
-    }
-    const starting = refuseWhileProviderStarting(context.sessions.get(sessionId))
-    if (starting) {
-      return starting
+    const child = context.sessions.get(sessionId)?.child
+    if (
+      !selection?.child ||
+      !child ||
+      child.phase !== 'ready' ||
+      child.close ||
+      !sameProviderChild(child, selection.child)
+    ) {
+      return rewindRefusal('outcome-unknown')
     }
     await recoverRewindOnLiveChild(context, sessionId)
     return !arrival.refusesInRun && rewindInDoubt(context.deps.store.getRecord(sessionId))
       ? rewindRefusal('outcome-unknown')
-      : ensured
+      : opened
   }
 }
 

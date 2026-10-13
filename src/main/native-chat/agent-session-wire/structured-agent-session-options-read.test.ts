@@ -164,6 +164,7 @@ describe('live Codex option reads', () => {
   it('leaves the session lane free while a cold listing waits, then applies it under the child fence', async () => {
     const listing = Promise.withResolvers<void>()
     const queue = new StructuredAgentSessionTaskQueue()
+    const record = { ...restingRecord(), options: { model: 'gpt-picked', effort: 'high' } }
     const child = { fence: 7 }
     const apply = vi.fn(() => ({
       models: [{ id: 'gpt-live', label: 'GPT Live', efforts: [] }],
@@ -183,7 +184,7 @@ describe('live Codex option reads', () => {
       deps: {
         adapter: { prepareReadOptions },
         agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => restingRecord() }
+        store: { getRecord: () => record }
       },
       serialize: (sessionId: string, task: () => Promise<unknown>) =>
         queue.serialize(sessionId, task),
@@ -191,7 +192,9 @@ describe('live Codex option reads', () => {
       conversation: async () => live
     } as unknown as StructuredAgentSessionMutationContext
 
-    const reading = readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+    const reading = readStructuredAgentSessionOptions(context, SESSION, {
+      readsWithoutModel: false
+    })
     await vi.waitFor(() =>
       expect(prepareReadOptions).toHaveBeenCalledWith({ sessionId: SESSION, fence: 7 })
     )
@@ -200,7 +203,10 @@ describe('live Codex option reads', () => {
     )
     expect(apply).not.toHaveBeenCalled()
     listing.resolve()
-    await expect(reading).resolves.toMatchObject({ current: { model: 'gpt-live' } })
+    await expect(reading).resolves.toMatchObject({
+      models: [{ id: 'gpt-live' }],
+      current: { model: 'gpt-picked', effort: 'high' }
+    })
     expect(apply).toHaveBeenCalledOnce()
   })
 

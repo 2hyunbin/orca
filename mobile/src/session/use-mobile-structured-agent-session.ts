@@ -185,6 +185,7 @@ export function useMobileStructuredAgentSession(args: {
     sessionId,
     enabled,
     queueCapable,
+    messageChoices: hostSupport?.messageChoices === true,
     commandsWait,
     stateRef,
     stopping,

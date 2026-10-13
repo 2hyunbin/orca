@@ -76,19 +76,17 @@ function closeProviderRoot(
 ): Promise<boolean> {
   const { adapter, logger } = context.deps
   // An adapter with no close has nothing to stop; anything else must PROVE the exit.
-  if (!adapter.stopSessionWithCause && !adapter.disposeSession && !adapter.closeSession) {
+  if (!adapter.disposeSession && !adapter.closeSession) {
     return Promise.resolve(true)
   }
   return stopAgentSessionProviderRoot(
     async () => {
-      if (adapter.stopSessionWithCause) {
-        return adapter.stopSessionWithCause(
-          sessionId,
-          context.sessions.get(sessionId)?.child?.close?.cause
-        )
-      }
+      const close = adapter.disposeSession ?? adapter.closeSession
+      const cause = context.sessions.get(sessionId)?.child?.close?.cause
       return (
-        (await (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)) === true
+        (await (cause === undefined
+          ? close?.call(adapter, sessionId)
+          : close?.call(adapter, sessionId, cause))) === true
       )
     },
     // The exit is proven; a child process left behind, or a write after it, is reported only.

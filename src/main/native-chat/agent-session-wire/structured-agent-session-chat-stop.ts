@@ -33,6 +33,11 @@ import {
   type StructuredAgentSessionStopWindDown
 } from './structured-agent-session-stop-wind-down'
 import { isMainAgentWorking, performCancel } from './structured-agent-session-turns-cancel'
+import { structuredAgentSessionStopNoteIdentity } from './structured-agent-session-command-turn'
+import {
+  STOP_NOTE_CANCELLATION_REQUESTED,
+  structuredAgentSessionStopNoteScope
+} from './structured-agent-session-turn-stop-notes'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 
 type ChatStopOutcome = TurnOutcome<AgentSessionCancelResult>
@@ -44,7 +49,7 @@ export type StructuredAgentSessionChatStopRun = { outcome: ChatStopOutcome; ends
 export function mutateWithChatStop<TValue>(
   context: StructuredAgentSessionMutationContext,
   caller: StructuredAgentSessionCaller,
-  params: { envelope: AgentSessionMutationEnvelope; turnId?: string },
+  params: { envelope: AgentSessionMutationEnvelope; turnId?: string; stoppedPrePrompt?: boolean },
   plan: MutationPlan<TValue>,
   run: (
     ctx: AgentSessionTurnContext,
@@ -85,6 +90,21 @@ export function mutateWithChatStop<TValue>(
           )
         )
         const child = context.sessions.get(ctx.sessionId)?.child
+        const recordRequest = () => {
+          const stoppedTurn = turnId ?? ctx.journal.activeTurnId()
+          return ctx.journal.appendItem(
+            structuredAgentSessionStopNoteIdentity(stoppedTurn ?? envelope.clientOperationId),
+            { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED },
+            {
+              fence: ctx.fence,
+              turnScope: structuredAgentSessionStopNoteScope(
+                ctx.journal,
+                stoppedTurn ?? undefined,
+                ctx.journal.liveTurnScope()
+              )
+            }
+          )
+        }
         if (child?.close) {
           // A close an earlier stop began: this Stop joins it, retrying the exit's proof, rather
           // than asking a child that takes no input to stop again. Its event, issued ahead of that
@@ -105,11 +125,18 @@ export function mutateWithChatStop<TValue>(
           // settles what the child was handed as stopped (`unrunRejection`). The event is
           // issued first and lands behind the withdrawal, in the journal's queue order.
           const effect = tookEffect()
+          const noteWrite = recordRequest().catch((error: unknown) =>
+            context.deps.logger.warn('writing the Stop note failed', {
+              scope: 'chat-stop-note',
+              sessionId,
+              error
+            })
+          )
           try {
             await stopChild()
           } finally {
             // Even a failed Stop holds the lane until its event lands: the drain shares the lane.
-            await effect
+            await Promise.all([effect, noteWrite])
           }
           return { ok: true, value: { ...named, cancelled: true } }
         }
@@ -119,11 +146,25 @@ export function mutateWithChatStop<TValue>(
         const record = context.deps.store.getRecord(ctx.sessionId)
         if (!child || !inFlight) {
           // Nothing to interrupt, so the answer may wait for the withdrawal.
+          const noteWrite =
+            hadQueued || params.stoppedPrePrompt
+              ? recordRequest().catch((error: unknown) =>
+                  context.deps.logger.warn('writing the Stop note failed', {
+                    scope: 'chat-stop-note',
+                    sessionId,
+                    error
+                  })
+                )
+              : Promise.resolve()
           const withdrewAny = await withdrew
-          if (withdrewAny) {
+          if (withdrewAny || params.stoppedPrePrompt) {
             await tookEffect()
           }
-          return { ok: true, value: { ...named, cancelled: withdrewAny } }
+          await noteWrite
+          return {
+            ok: true,
+            value: { ...named, cancelled: withdrewAny || params.stoppedPrePrompt === true }
+          }
         }
         const reach = hadQueued ? 'unrecorded' : stopReachesUnrecordedWork(ctx, turnId)
         const priorStop = ctx.journal.stopMarks.latest()

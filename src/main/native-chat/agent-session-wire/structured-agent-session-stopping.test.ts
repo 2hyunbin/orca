@@ -395,8 +395,7 @@ describe('a Stop pressed before its send opened a turn', () => {
     expect(turnOne()).not.toHaveProperty('outcome')
   })
 
-  // Declined, the Stop still ends the child, whose end takes the send back: the send's own row says
-  // it never started, so the Stop writes none.
+  // Declined, the Stop still ends the child; the withdrawn send and Stop have separate rows.
   it('reads Stopping while the Stop settles, and at rest once a declined Stop ended the child', async () => {
     rig = await createQueuedMessageTestRig()
     const sent = await rig.workingSend()
@@ -412,7 +411,7 @@ describe('a Stop pressed before its send opened a turn', () => {
 
     expect(rig.closeSession).toHaveBeenCalledOnce()
     expect(await rig.submission(sent)).toMatchObject({ dispatchState: 'rejected' })
-    expect(stopAnswers()).toEqual([])
+    expect(stopAnswers()).toEqual(['took'])
     await eventually(() => expect(status()?.status).not.toBe('working'))
     expect(status()).not.toHaveProperty('stopping')
   })

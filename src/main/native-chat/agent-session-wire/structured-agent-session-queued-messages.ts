@@ -8,6 +8,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   QUEUED_MESSAGE_PAUSED_SEND_FAILED,
   type AgentSessionSendResult,
@@ -33,6 +34,7 @@ import { nextSendableQueuedCard } from '../agent-session-journal/queued-message-
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { agentSessionAttachmentExpiredRefusal } from './structured-agent-session-turns'
 import { isAgentSessionAttachmentExpiredError } from '../agent-session-attachments/agent-session-attachment-claims'
+import { captureStructuredExecutionOptions } from './structured-agent-session-execution-options'
 
 /** Text-only v1: any image block routes to the immediate path. */
 export function queuedMessageBodyIsTextOnly(body: AgentJournalMessageItem): boolean {
@@ -176,11 +178,15 @@ export async function maybeQueueStructuredAgentSessionSend(
   context: {
     deps: { store: { getRecord: (sessionId: string) => AgentSessionRecord | null } }
   },
-  ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'journal' | 'fence' | 'operationReceipt'>,
+  ctx: Pick<
+    AgentSessionTurnContext,
+    'sessionId' | 'journal' | 'fence' | 'operationReceipt' | 'agents' | 'agent' | 'persistedOptions'
+  >,
   params: {
     envelope: { clientOperationId: string }
     body: AgentJournalMessageItem
     delivery?: 'queue-if-active'
+    executionOptions?: AgentSessionExecutionOptions
     /** A person's send at a chat surface: every attachment it names must still be stored. */
     userSend?: true
     /** A person's message the host sends for them. */
@@ -222,6 +228,10 @@ export async function maybeQueueStructuredAgentSessionSend(
   if (refusal) {
     return { ok: false, refusal }
   }
+  const captured = captureStructuredExecutionOptions(ctx, params.executionOptions)
+  if ('refusal' in captured) {
+    return { ok: false, refusal: captured.refusal }
+  }
   // The insert notifies through the journal's commit listener: publication and
   // the drain re-derive with no call here to forget.
   let row: QueuedMessageRow
@@ -230,6 +240,7 @@ export async function maybeQueueStructuredAgentSessionSend(
       {
         messageId: clientMessageId,
         body: params.body,
+        executionOptions: captured.options,
         // In the session that will send it: the reducer aliases the provider's echo by exactly this.
         fingerprint: agentSessionSendBodyFingerprint(ctx.sessionId, params.body),
         hostInstance: structuredAgentSessionHostInstance(),
@@ -357,6 +368,7 @@ export class StructuredAgentSessionQueuedMessageDrain {
           origin: 'host',
           payloadFingerprint: next.fingerprint,
           body: next.body,
+          ...(next.executionOptions ? { executionOptions: next.executionOptions } : {}),
           fence,
           handoverRecorded: true
         },
