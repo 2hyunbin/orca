@@ -88,6 +88,9 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
             })
           }
         })
+        .catch((error) => {
+          console.error('web runtime terminal after wake failed', worktreeId, error)
+        })
       return
     }
 
