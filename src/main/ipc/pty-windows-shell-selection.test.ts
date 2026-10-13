@@ -296,13 +296,15 @@ describe('registerPtyHandlers', () => {
             repair: {
               projectId: 'repo-1',
               reason: 'wsl-distro-missing',
-              requestedDistro: 'Ubuntu',
-              fallbackRuntime: null,
+              preferredRuntime: { kind: 'wsl', distro: 'Ubuntu' },
+              source: 'project-override',
               cacheKey: 'repo-1:repair:wsl-distro-missing:Ubuntu'
             }
           }
         })
-      ).rejects.toThrow('Project runtime requires repair before terminal spawn')
+      ).rejects.toThrow(
+        'Ubuntu is not installed in WSL. Choose an installed distro or switch this project to Windows.'
+      )
       expect(spawnMock).not.toHaveBeenCalled()
     })
     it('spawns powershell.exe when PowerShell family keeps the inbox implementation', async () => {

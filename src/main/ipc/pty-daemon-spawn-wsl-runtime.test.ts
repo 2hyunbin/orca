@@ -425,7 +425,7 @@ describe('registerPtyHandlers', () => {
               env: {}
             })
           ).rejects.toThrow(
-            'Project runtime requires repair before terminal spawn: wsl-distro-missing'
+            'Ubuntu is not installed in WSL. Choose an installed distro or switch this project to Windows.'
           )
           expect(daemonSpawn).not.toHaveBeenCalled()
         })
