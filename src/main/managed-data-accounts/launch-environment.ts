@@ -1,11 +1,8 @@
-import {
-  getCommandTokenPathBasename,
-  getFirstCommandToken
-} from '../../shared/command-token-scanner'
+import { getCommandTokenPathBasename } from '../../shared/command-token-scanner'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { getManagedDataAccountService } from './service'
 import { MANAGED_DATA_ACCOUNT_BASELINE_ENV_KEYS } from '../../shared/managed-data-account-environment'
-import { getLaunchCommandAfterDelay } from '../../shared/delayed-launch-command'
+import { getAgentLaunchCommandToken } from '../../shared/agent-launch-command'
 
 export function applyManagedDataAccountEnvironment(
   environment: Record<string, string>,
@@ -26,9 +23,10 @@ export function applyManagedDataAccountEnvironment(
   }
   const agent =
     options.launchAgent ??
-    getCommandTokenPathBasename(
-      getFirstCommandToken(getLaunchCommandAfterDelay(options.launchCommand ?? ''))
-    ).replace(/\.(?:exe|cmd|sh)$/i, '')
+    getCommandTokenPathBasename(getAgentLaunchCommandToken(options.launchCommand)).replace(
+      /\.(?:exe|cmd|sh)$/i,
+      ''
+    )
   const provider =
     agent === 'opencode' || agent === 'opencode2' ? 'opencode' : agent === 'devin' ? 'devin' : null
   if (!provider) {

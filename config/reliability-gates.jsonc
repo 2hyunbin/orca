@@ -49,10 +49,10 @@
       "invariant": "A literal sleep followed by && must not cause the later harness to lose hook/account preparation or hidden renderer query delivery. Preparation and typed-command hints are not live process evidence. Fresh agent startup output may request one bounded host confirmation after the initial command read window has expired.",
       "oracle": "All 45 configured harnesses keep hidden startup query eligibility. Delayed OpenCode 2 installs v2 hooks rather than v1, disabled harnesses do not fall back, selected managed accounts survive, and Pi/OMP/Prime preparation targets the requested harness. A captured Claude startup title at 30 seconds yields process-confirmed routing, never title-authorized routing. A title storm causes at most three additional reads; close and untrackable providers cause none.",
       "commands": [
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/shared/delayed-launch-command.test.ts src/shared/delayed-agent-launch.test.ts src/main/ipc/pty/host-env/opencode-hook-installation.test.ts src/main/ipc/pty-spawn-env-terminal-basics.test.ts src/main/managed-data-accounts/launch-environment.test.ts src/renderer/src/components/terminal-pane/terminal-startup-command-classifier.test.ts src/renderer/src/components/terminal-pane/pane-delayed-agent-startup.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent-routing.test.ts src/renderer/src/components/terminal-pane/pty-connection-hidden-codex-queries.test.ts --maxWorkers=2"
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/shared/agent-launch-command.test.ts src/shared/delayed-agent-launch.test.ts src/main/ipc/pty/host-env/opencode-hook-installation.test.ts src/main/ipc/pty-spawn-env-terminal-basics.test.ts src/main/managed-data-accounts/launch-environment.test.ts src/renderer/src/components/terminal-pane/terminal-startup-command-classifier.test.ts src/renderer/src/components/terminal-pane/pane-delayed-agent-startup.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent-routing.test.ts src/renderer/src/components/terminal-pane/pty-connection-hidden-codex-queries.test.ts --maxWorkers=2"
       ],
       "testFiles": [
-        "src/shared/delayed-launch-command.test.ts",
+        "src/shared/agent-launch-command.test.ts",
         "src/shared/delayed-agent-launch.test.ts",
         "src/main/ipc/pty/host-env/opencode-hook-installation.test.ts",
         "src/main/ipc/pty-spawn-env-terminal-basics.test.ts",
@@ -91,13 +91,13 @@
       ],
       "evidenceRuns": [
         {
-          "date": "2026-10-12",
+          "date": "2026-10-13",
           "runner": "local",
           "platform": "macos",
-          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/shared/delayed-launch-command.test.ts src/shared/delayed-agent-launch.test.ts src/main/ipc/pty/host-env/opencode-hook-installation.test.ts src/main/ipc/pty-spawn-env-terminal-basics.test.ts src/main/managed-data-accounts/launch-environment.test.ts src/renderer/src/components/terminal-pane/terminal-startup-command-classifier.test.ts src/renderer/src/components/terminal-pane/pane-delayed-agent-startup.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent-routing.test.ts src/renderer/src/components/terminal-pane/pty-connection-hidden-codex-queries.test.ts --maxWorkers=2",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/shared/agent-launch-command.test.ts src/shared/delayed-agent-launch.test.ts src/main/ipc/pty/host-env/opencode-hook-installation.test.ts src/main/ipc/pty-spawn-env-terminal-basics.test.ts src/main/managed-data-accounts/launch-environment.test.ts src/renderer/src/components/terminal-pane/terminal-startup-command-classifier.test.ts src/renderer/src/components/terminal-pane/pane-delayed-agent-startup.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent-routing.test.ts src/renderer/src/components/terminal-pane/pty-connection-hidden-codex-queries.test.ts --maxWorkers=2",
           "result": "passed",
-          "durationSeconds": 1.66,
-          "summary": "211 assertions pass across nine files, including all 45 harness classifications, actual hook files, delayed account preparation, late process routing, hidden query delivery and bounded recovery."
+          "durationSeconds": 1.86,
+          "summary": "214 assertions pass across nine files, including all 45 harness classifications, actual hook files, delayed account preparation, late process routing, hidden query delivery and bounded recovery."
         }
       ],
       "runtimeBudget": {

@@ -46,6 +46,11 @@ explicit harness choices, disabled integrations and account ownership retain
 precedence. Process-table command recognition still treats the waiting shell
 as a shell.
 
+Callers use shared launch-token and launch-recognition APIs. Prefix handling is
+contained in `src/shared/agent-launch-command.ts`; the setup-sequence resolver
+continues to return its supplied command. Launch recognition reuses the existing
+agent registry and headless filters without changing strict process recognition.
+
 Fresh agent startup titles request one additional bounded confirmation sequence
 when initial discovery has finished. A title never supplies process identity or
 input-routing authority. An active read is preserved; title storms, cancellation

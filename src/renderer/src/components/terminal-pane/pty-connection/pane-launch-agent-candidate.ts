@@ -1,7 +1,6 @@
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
-import { recognizeAgentProcessFromCommandLine } from '../../../../../shared/agent-process-recognition'
-import { getLaunchCommandAfterDelay } from '../../../../../shared/delayed-launch-command'
+import { recognizeAgentLaunchCommand } from '../../../../../shared/agent-process-recognition'
 import { COMMAND_TOKEN_SCAN_MAX_CHARS } from '../../../../../shared/command-token-scanner'
 
 /** The store slice the launch-agent ladder reads. */
@@ -38,7 +37,7 @@ export function resolvePaneLaunchAgentCandidate(
     pane.startup?.initialAgentStatus?.agent ??
     (isTuiAgent(registered) ? registered : undefined) ??
     (command && command.length <= COMMAND_TOKEN_SCAN_MAX_CHARS
-      ? recognizeAgentProcessFromCommandLine(getLaunchCommandAfterDelay(command))?.agent
+      ? recognizeAgentLaunchCommand(command)?.agent
       : undefined)
   )
 }

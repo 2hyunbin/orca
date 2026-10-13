@@ -10,7 +10,6 @@ import {
 } from './setup-runner-command'
 import { createNonSecureContextUuid } from './non-secure-context-uuid'
 import { quotePowerShellLiteral } from './powershell-native-argument'
-import { getLaunchCommandAfterDelay } from './delayed-launch-command'
 
 const DEFAULT_WAIT_TIMEOUT_SECONDS = 2 * 60 * 60
 // Exported so the gate and its tests share one definition.
@@ -29,8 +28,7 @@ export function resolveSetupAgentSequenceLaunchCommand(
   fallbackCommand: string | undefined
 ): string | undefined {
   const sequencedStartup = env[SETUP_AGENT_SEQUENCE_STARTUP_COMMAND_ENV]?.trim()
-  const command = sequencedStartup || fallbackCommand
-  return command === undefined ? undefined : getLaunchCommandAfterDelay(command)
+  return sequencedStartup || fallbackCommand
 }
 
 export function createSetupAgentSequenceNonce(): string {

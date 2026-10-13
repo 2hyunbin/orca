@@ -1,10 +1,10 @@
-import { COMMAND_TOKEN_SCAN_MAX_CHARS } from './command-token-scanner'
+import { COMMAND_TOKEN_SCAN_MAX_CHARS, getFirstCommandToken } from './command-token-scanner'
 
 const SLEEP_PREFIX =
   /^[ \t]*(?:sleep|\/bin\/sleep|\/usr\/bin\/sleep)[ \t]+(?:\d+(?:\.\d+)?|\.\d+)[smhd]?[ \t]*&&[ \t]*/
 
 /** Launch preparation hint only; the shell still receives the complete command. */
-export function getLaunchCommandAfterDelay(command: string): string {
+export function extractAgentLaunchCommand(command: string): string {
   const prefix = command.slice(0, COMMAND_TOKEN_SCAN_MAX_CHARS)
   let offset = 0
   while (offset < prefix.length) {
@@ -15,4 +15,8 @@ export function getLaunchCommandAfterDelay(command: string): string {
     offset += match[0].length
   }
   return command.slice(offset)
+}
+
+export function getAgentLaunchCommandToken(command: string | null | undefined): string {
+  return getFirstCommandToken(extractAgentLaunchCommand(command ?? ''))
 }

@@ -1,10 +1,9 @@
 import { getTuiAgentDetectCommands, TUI_AGENT_CONFIG } from '../../../../shared/tui-agent-config'
 import {
   COMMAND_TOKEN_SCAN_MAX_CHARS,
-  getFirstCommandToken,
   getCommandTokenPathBasename
 } from '../../../../shared/command-token-scanner'
-import { getLaunchCommandAfterDelay } from '../../../../shared/delayed-launch-command'
+import { getAgentLaunchCommandToken } from '../../../../shared/agent-launch-command'
 
 const TERMINAL_STARTUP_COMMAND_EXTENSION_RE = /\.(?:exe|cmd|bat|ps1)$/i
 // Why: startup commands can carry pasted scripts; classifier work should stay bounded.
@@ -36,7 +35,7 @@ export function isKnownTuiAgentTerminalStartupCommand(command: string): boolean 
 }
 
 function getTerminalStartupCommandExecutableName(command: string): string {
-  const token = getFirstCommandToken(getLaunchCommandAfterDelay(command))
+  const token = getAgentLaunchCommandToken(command)
   return normalizeTerminalStartupCommandExecutableName(getCommandTokenPathBasename(token))
 }
 
