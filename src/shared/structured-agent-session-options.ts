@@ -9,6 +9,7 @@ import {
   applyNativeChatReportedSessionOptions,
   clearTrackedSessionOption,
   createNativeChatSessionOptionRecord,
+  getTrackedSessionOption,
   setTrackedSessionOption,
   type NativeChatSessionOptionRecord
 } from './native-chat-session-option-state'
@@ -241,7 +242,13 @@ export function commitStructuredAgentSessionOption(
   if (decoded === null) {
     return { ...state, pendingId: null }
   }
+  const effort =
+    id === 'model' ? getTrackedSessionOption(state.record, effectiveModel, 'effort') : undefined
   setTrackedSessionOption(state.record, id, decoded, 'dispatched', effectiveModel)
+  // The host saves effort for the conversation, including across model picks.
+  if (effort) {
+    setTrackedSessionOption(state.record, 'effort', effort.value, 'dispatched')
+  }
   return { ...state, pendingId: null }
 }
 

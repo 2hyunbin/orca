@@ -41,20 +41,13 @@ it('picks model then effort through the menus during startup and uses both in th
     let replyModel = 'opus'
     let replyEffort = 'high'
     let firstReply: { model: string; effort: string } | undefined
-    child.connection.supportedModels = async () => [
-      {
-        value: 'sonnet',
-        displayName: 'Sonnet',
+    child.connection.supportedModels = async () =>
+      ['sonnet', 'opus'].map((value) => ({
+        value,
+        displayName: value,
         supportsEffort: true,
         supportedEffortLevels: ['low', 'high']
-      },
-      {
-        value: 'opus',
-        displayName: 'Opus',
-        supportsEffort: true,
-        supportedEffortLevels: ['low', 'high']
-      }
-    ]
+      }))
     child.connection.setModel = async (value) => {
       replyModel = value ?? 'opus'
     }
