@@ -13,7 +13,7 @@ const BUILD_SCRIPTS = [
   'config/scripts/build-orcad-prebuilds.mjs',
   'config/scripts/orcad-windows-prebuild-cache.mjs',
   'config/scripts/orcad-prebuild-smoke-child.cjs',
-  'config/scripts/build-windows-process-tree-relay-addon.mjs',
+  'config/scripts/build-windows-process-tree-addon.mjs',
   'config/scripts/build-windows-cli-launcher.mjs',
   'config/scripts/build-windows-security-addon.mjs',
   'config/scripts/run-node-server-tests.mjs',
@@ -53,6 +53,8 @@ const ALWAYS_PREFIXES = [
   'src/main/persistence/',
   'src/main/sqlite/',
   'src/main/orcad/',
+  'src/main/runtime/',
+  'src/main/claude/',
   'src/main/daemon/pty-subprocess/',
   'src/main/providers/',
   'config/patches/',
@@ -62,7 +64,7 @@ const ALWAYS_PREFIXES = [
 ]
 
 export function discoverNodeServerTests(root = ROOT) {
-  const selectors = nodeServerTestPaths({ artifact: true, crossRuntime: true })
+  const selectors = nodeServerTestPaths({ artifact: true, crossRuntime: true, template: true })
   return globSync(
     ['src/**/*.test.{ts,tsx}', 'config/scripts/**/*.test.{ts,mjs}', 'tests/e2e/**/*.unit.test.ts'],
     { cwd: root }
@@ -151,11 +153,12 @@ export async function classifyNodeServerChanges(
   if (changedFiles.length === 0) {
     return { shouldRun: true, reason: 'No complete changed-file evidence' }
   }
-  const selectors = nodeServerTestPaths({ artifact: true, crossRuntime: true })
+  const selectors = nodeServerTestPaths({ artifact: true, crossRuntime: true, template: true })
   const forced = changedFiles.find(
     (file) =>
       ALWAYS_FILES.has(file) ||
       (ALWAYS_PREFIXES.some((prefix) => file.startsWith(prefix)) && !isSourceUnitTest(file)) ||
+      /^config\/scripts\/[^/]*orcad[^/]*$/.test(file) ||
       selectors.some((selector) => file.includes(selector))
   )
   if (forced) {
