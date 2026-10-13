@@ -84,7 +84,9 @@ const TRIGGERS = [
   'network outage',
   'silent network outage',
   'desktop reload',
-  'serve restart'
+  'serve restart',
+  'workspace switch',
+  'sleep and wake'
 ] as const
 
 for (const trigger of TRIGGERS) {
