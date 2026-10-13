@@ -93,6 +93,18 @@ describe('handleReattachResult with a resume a native chat owns', () => {
     expect(mocks.capturedContexts[0]?.coldRestoreStartup).toBeNull()
   })
 
+  it('still forgets the plan when the replacement shell exited before attaching', async () => {
+    const session = localSession()
+
+    await session.handleReattachResult(
+      { id: 'pty-1', exitedBeforeAttach: true, agentResumeOwnedByChat: true },
+      null,
+      CHAT_OWNED_PLAN
+    )
+
+    expect(session.retireChatOwnedColdRestore).toHaveBeenCalledExactlyOnceWith(CHAT_OWNED_PLAN)
+  })
+
   it('leaves an unowned resume plan to the pane', async () => {
     const session = localSession()
 

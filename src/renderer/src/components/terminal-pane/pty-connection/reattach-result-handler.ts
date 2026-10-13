@@ -95,6 +95,11 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       session.remotePtyIncarnationId = null
     }
 
+    // Why first: nothing of a chat-owned resume plan may be registered for the plain shell, and a
+    // shell that already exited must still forget it.
+    const startup = connectResult?.agentResumeOwnedByChat
+      ? session.retireChatOwnedColdRestore(coldRestoreStartup)
+      : coldRestoreStartup
     if (connectResult?.exitedBeforeAttach) {
       // Why: the transport already delivered the dead session's final frame + exit; treat as terminal state, not a failed reattach.
       return true
@@ -125,10 +130,6 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       })
       return false
     }
-    // Why first: nothing of a chat-owned resume plan may be registered for the plain shell.
-    const startup = connectResult?.agentResumeOwnedByChat
-      ? session.retireChatOwnedColdRestore(coldRestoreStartup)
-      : coldRestoreStartup
     session.registerEffectiveLaunchConfig(connectResult?.launchConfig, {
       ...(startup ? { launchToken: startup.launchToken } : {}),
       ...(connectResult?.launchAgent
