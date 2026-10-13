@@ -7,6 +7,8 @@
 // admitted without the writer lease; the delivery loop starts the provider child a send needs, and
 // an operation only the provider can perform starts it before admission.
 
+import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
+import { performSetOption } from './structured-agent-session-turns-options'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionCancelResult,
@@ -184,16 +186,37 @@ export async function setStructuredAgentSessionOption(
   params: { envelope: AgentSessionMutationEnvelope; key: string; value: string }
 ): Promise<AgentSessionMutationResult<AgentSessionOptionResult>> {
   const plan = setOptionPlan(params)
+  const recordsIntent = () => {
+    const child = context.sessions.get(params.envelope.sessionId)?.child
+    return (
+      params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID ||
+      !child ||
+      child.phase === 'starting' ||
+      child.close !== undefined
+    )
+  }
   return mutateStructuredAgentSession(
     context,
     caller,
     params.envelope,
     {
       ...plan,
-      conversationWrite: true,
-      run: (ctx) => recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
+      get conversationWrite() {
+        return recordsIntent() ? (true as const) : undefined
+      },
+      run: async (ctx) => {
+        if (recordsIntent()) {
+          return recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
+        }
+        const wait = context.acquireAborts.begin(params.envelope.sessionId)
+        try {
+          return await performSetOption(ctx, params, wait.signal)
+        } finally {
+          wait.end()
+        }
+      }
     },
-    openForWrite(context, params.envelope)
+    () => (recordsIntent() ? openForWrite : openForProviderWrite)(context, params.envelope)()
   )
 }
 

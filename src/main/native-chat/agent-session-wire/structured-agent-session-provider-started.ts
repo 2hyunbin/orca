@@ -2,7 +2,6 @@
 
 import type {
   StructuredAgentSessionOptionsReportedEvent,
-  StructuredAgentSessionOptionsSkippedEvent,
   StructuredAgentSessionStartedEvent
 } from './structured-agent-session-adapter'
 import type {
@@ -180,12 +179,4 @@ export async function settleStructuredAgentSessionOptionsReported(
     void saveStructuredAgentSessionStartReadbackListing(context, event, event.catalogListing)
   }
   return undefined
-}
-
-/** A rejected provider value is live protocol evidence; it does not change a later pick. */
-export function settleStructuredAgentSessionOptionsSkipped(
-  _context: StructuredAgentSessionProviderStartedContext,
-  _event: StructuredAgentSessionOptionsSkippedEvent
-): Promise<void> {
-  return Promise.resolve()
 }

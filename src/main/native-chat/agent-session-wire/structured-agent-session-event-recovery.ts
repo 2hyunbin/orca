@@ -12,7 +12,6 @@ import type {
 import type { StructuredAgentSessionSinkBarrier } from './structured-agent-session-event-sink'
 import {
   settleStructuredAgentSessionOptionsReported,
-  settleStructuredAgentSessionOptionsSkipped,
   settleStructuredAgentSessionProviderStarted
 } from './structured-agent-session-provider-started'
 import {
@@ -138,9 +137,6 @@ export class StructuredAgentSessionEventRecovery {
     }
     if (event.type === 'options-reported') {
       return settleStructuredAgentSessionOptionsReported(this.context, event)
-    }
-    if (event.type === 'options-skipped') {
-      return settleStructuredAgentSessionOptionsSkipped(this.context, event)
     }
     await settleStructuredAgentSessionChildExit(this.exitContext, event)
   }

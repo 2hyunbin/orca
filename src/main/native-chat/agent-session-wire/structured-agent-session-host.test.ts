@@ -517,7 +517,7 @@ describe('respondToPrompt', () => {
 })
 
 describe('setOption', () => {
-  it('saves a next-message pick without changing the provider', async () => {
+  it('goes to the provider and writes nothing to the journal', async () => {
     await attach()
     setOption.mockResolvedValueOnce({ model: 'gpt-5', effort: 'high' })
     const fields = { key: 'model', value: 'gpt-5' }
@@ -528,20 +528,20 @@ describe('setOption', () => {
     const result = await host.setOption(CALLER, params)
     expect(result).toMatchObject({
       ok: true,
-      value: { ...fields, options: { model: 'gpt-5' } }
+      value: { ...fields, options: { model: 'gpt-5', effort: 'high' } }
     })
     expect(await host.setOption(CALLER, params)).toMatchObject({
       ok: true,
       replayed: true,
-      value: { ...fields, options: { model: 'gpt-5' } }
+      value: { ...fields, options: { model: 'gpt-5', effort: 'high' } }
     })
-    expect(setOption).not.toHaveBeenCalled()
-    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'gpt-5' })
+    expect(setOption).toHaveBeenCalledTimes(1)
+    expect(store.getRecord(SESSION)?.options).toEqual({ model: 'gpt-5', effort: 'high' })
     const page = await host.history({ sessionId: SESSION, direction: 'tail' })
     expect(page.ok && page.page.items).toHaveLength(0)
   })
 
-  it('replays the accepted pick without contacting the provider', async () => {
+  it('does not turn an unknown provider outcome into a successful replay', async () => {
     await attach()
     setOption.mockRejectedValueOnce(new Error('reply lost'))
     const fields = { key: 'model', value: 'gpt-5' }
@@ -550,12 +550,12 @@ describe('setOption', () => {
       ...fields
     }
 
-    expect(await host.setOption(CALLER, params)).toMatchObject({ ok: true })
+    await expect(host.setOption(CALLER, params)).rejects.toThrow('reply lost')
     expect(await host.setOption(CALLER, params)).toMatchObject({
-      ok: true,
-      replayed: true
+      ok: false,
+      refusal: { code: 'agent_session_operation_unknown' }
     })
-    expect(setOption).not.toHaveBeenCalled()
+    expect(setOption).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -102,8 +102,7 @@ function proveStarted(): Promise<void> {
     type: 'started',
     ...currentChild(),
     reportedOptions: { model: 'sonnet' },
-    restoreSkippedOptions: [],
-    optionRevision: host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
+    restoreSkippedOptions: []
   })
 }
 

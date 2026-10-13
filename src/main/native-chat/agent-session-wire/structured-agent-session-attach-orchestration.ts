@@ -205,7 +205,6 @@ async function runAttachUnderAbort(
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
       },
-      optionRevision: () => context.runtimeState.optionRevisions.current(sessionId),
       launchPermissionMode: async (record) =>
         (await structuredAgentSessionLaunchPermission(context.deps, record)) ?? undefined,
       ...(options.onAcquisitionFailed ? { onAcquisitionFailed: options.onAcquisitionFailed } : {}),

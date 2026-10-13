@@ -24,6 +24,7 @@ import type { StructuredAgentSessionAttachContext } from './structured-agent-ses
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import { admitAndRunAgentSessionMutation } from './structured-agent-session-mutation-admission'
 import { conversationCommandBlocked } from './structured-conversation-command-admission'
+import { completedStructuredRewind } from './structured-rewind-replay'
 import { rewindRefusal, rewindRefusalBehindClear } from './structured-rewind-refusal'
 import { renameRewindTurnOpener } from './structured-rewind-journal-body'
 import { persistRewindRecord, recoverStructuredRewind } from './structured-rewind-recovery'
@@ -37,7 +38,10 @@ export async function rewindStructuredAgentSession(
   params: AgentSessionRewindParams
 ): Promise<AgentSessionMutationResult<AgentSessionRewindResult>> {
   const { sessionId, clientOperationId } = params.envelope
-  const store = context.deps.store
+  const {
+    readChildWork,
+    deps: { store }
+  } = context
   const fields = { itemId: params.itemId, expectedEpoch: params.expectedEpoch }
   const operation = { method: 'agentSession.rewind', fields }
   const run = async (selection: ReadyOperationSelection) => {
@@ -71,17 +75,11 @@ export async function rewindStructuredAgentSession(
           if (outcome.status === 'succeeded' && outcome.rewind) {
             return outcome.rewind
           }
-          const prior = store.getRecord(sessionId)?.rewind
-          return prior?.operationId === clientOperationId &&
-            prior.callerKey === caller.callerKey &&
-            prior.phase === 'completed' &&
-            prior.epoch
-            ? {
-                itemId: prior.itemId,
-                epoch: prior.epoch,
-                ...(prior.sequence !== undefined ? { sequence: prior.sequence } : {})
-              }
-            : null
+          return completedStructuredRewind(
+            store.getRecord(sessionId)?.rewind,
+            caller.callerKey,
+            clientOperationId
+          )
         },
         run: async (ctx) => {
           await attachContext.runtimeState.flushEventSink(sessionId)
@@ -93,7 +91,7 @@ export async function rewindStructuredAgentSession(
           if (rewindInDoubt(record)) {
             return rewindRefusal('outcome-unknown')
           }
-          if (conversationCommandBlocked(ctx, record, context.readChildWork(sessionId))) {
+          if (conversationCommandBlocked(ctx, record, readChildWork(sessionId), 'handover')) {
             return rewindRefusal('busy')
           }
           const snapshot = ctx.journal.snapshot()
