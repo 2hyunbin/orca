@@ -91,6 +91,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       record: AgentSessionRecord | null
     ) => AgentSessionMutationSessionPreparation | null
     needsAgent?: (record: AgentSessionRecord | null) => boolean
+    runAfterAgentEnds?: true
   } = {}
 ): Promise<AgentSessionMutationResult<T>> {
   const hostFingerprint = computeAgentSessionPayloadFingerprint({
@@ -179,7 +180,11 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
           return { ok: true as const, child: identity, deadline }
         }
         const readiness = context.startupAttempts.readiness(envelope.sessionId, identity)
-        return readiness ? { ok: true as const, child: identity, readiness } : operationDidNotRun()
+        return readiness
+          ? { ok: true as const, child: identity, readiness }
+          : options.runAfterAgentEnds
+            ? { ok: true as const, child: identity }
+            : operationDidNotRun()
       }
       const child = await select().catch((error: unknown) => {
         context.deps.logger.warn('selecting an agent for an operation failed', {
@@ -218,7 +223,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
       ),
       deadline - Date.now()
     )
-    if (outcome !== 'ready') {
+    if (outcome !== 'ready' && !(outcome === 'ended' && options.runAfterAgentEnds)) {
       return operationDidNotRun(outcome === 'timeout')
     }
     if (Date.now() >= deadline) {

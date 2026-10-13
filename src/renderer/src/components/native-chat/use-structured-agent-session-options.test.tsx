@@ -76,7 +76,7 @@ type RenderProps = {
   launchSeedOptions?: Record<string, string>
   heldOptions?: Record<string, string>
   worktree?: string
-  agent?: 'claude' | 'codex'
+  agent?: 'claude' | 'codex' | 'pi' | 'grok'
   providerStarting?: boolean
   paired?: boolean
 }
@@ -630,3 +630,46 @@ describe('useStructuredAgentSessionOptions', () => {
     }
   )
 })
+
+it.each(['claude', 'codex', 'pi', 'grok'] as const)(
+  'accepts both startup picks in a %s chat and keeps showing them across a new fence',
+  async (agent) => {
+    const models = ['opus', 'sonnet'].map((id) => ({
+      id,
+      label: id,
+      efforts: [
+        { value: 'low', label: 'Low' },
+        { value: 'high', label: 'High' }
+      ]
+    }))
+    let saved = { model: 'opus', effort: 'high' }
+    answer({
+      modelCatalog: async () => ({ origin: 'live-session', models, fetchedAt: 1_000 }),
+      options: async () => ({ models, current: saved })
+    })
+    const pending = Promise.withResolvers<unknown>()
+    const { mutate, calls } = mutateWith(() => pending.promise)
+    const starting = { ...ATTACHED, agent, providerStarting: true, launchSeedOptions: saved }
+    const { result, rerender, unmount } = renderOptions(starting, mutate)
+    await waitFor(() => expect(modelChoiceCount(result.current.optionSnapshot)).toBe(2))
+    act(() => {
+      void result.current.setStructuredOption('model', 'sonnet')
+      void result.current.setStructuredOption('effort', 'low')
+    })
+    expect(setOptionCalls(calls)).toEqual([
+      { key: 'model', value: 'sonnet' },
+      { key: 'effort', value: 'low' }
+    ])
+    expect(currentValue(result.current.optionSnapshot, 'model')).toBe('sonnet')
+    expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
+    rerender({ ...starting, fence: 2 })
+    expect(currentValue(result.current.optionSnapshot, 'model')).toBe('sonnet')
+    expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
+    saved = { model: 'sonnet', effort: 'low' }
+    await act(async () => pending.resolve({ key: 'effort', value: 'low', options: saved }))
+    rerender({ ...starting, fence: 2, providerStarting: false })
+    await waitFor(() => expect(currentValue(result.current.optionSnapshot, 'model')).toBe('sonnet'))
+    expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
+    unmount()
+  }
+)
