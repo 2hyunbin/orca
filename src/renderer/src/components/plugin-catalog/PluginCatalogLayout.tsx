@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { Input } from '../ui/input'
-import { Tabs, TabsList, TabsTrigger } from '../ui/tabs'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs'
 
 export type PluginCatalogFilter = 'all' | 'installed'
 
@@ -32,11 +32,15 @@ export function PluginCatalogLayout({
       aria-label={translate('auto.components.pluginCatalog.PluginCatalogLayout.title', 'Plugins')}
       className="space-y-4"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Tabs
-          value={filter}
-          onValueChange={(value) => onFilterChange(value as PluginCatalogFilter)}
-        >
+      <Tabs
+        value={filter}
+        onValueChange={(value) => {
+          if (value === 'all' || value === 'installed') {
+            onFilterChange(value)
+          }
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-2">
           <TabsList
             aria-label={translate(
               'auto.components.pluginCatalog.PluginCatalogLayout.filter',
@@ -59,27 +63,27 @@ export function PluginCatalogLayout({
               </span>
             </TabsTrigger>
           </TabsList>
-        </Tabs>
-        <div className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            className="pl-9"
-            aria-label={translate(
-              'auto.components.pluginCatalog.PluginCatalogLayout.searchLabel',
-              'Search plugins'
-            )}
-            placeholder={translate(
-              'auto.components.pluginCatalog.PluginCatalogLayout.searchPlaceholder',
-              'Search plugins, categories, or publishers'
-            )}
-            onChange={(event) => onSearchChange(event.target.value)}
-          />
+          <div className="relative min-w-56 flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              className="pl-9"
+              aria-label={translate(
+                'auto.components.pluginCatalog.PluginCatalogLayout.searchLabel',
+                'Search plugins'
+              )}
+              placeholder={translate(
+                'auto.components.pluginCatalog.PluginCatalogLayout.searchPlaceholder',
+                'Search plugins, categories, or publishers'
+              )}
+              onChange={(event) => onSearchChange(event.target.value)}
+            />
+          </div>
+          {toolbar ? <div className="flex items-center gap-1">{toolbar}</div> : null}
         </div>
-        {toolbar ? <div className="flex items-center gap-1">{toolbar}</div> : null}
-      </div>
 
-      {children}
+        <TabsContent value={filter}>{children}</TabsContent>
+      </Tabs>
     </section>
   )
 }

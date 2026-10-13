@@ -1,8 +1,11 @@
+import type { PluginTerminalThemeRegistration } from '../../../../shared/plugins/plugin-terminal-theme-artifact'
 import { useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import type { PluginHostInstallSource, PluginHostListEntry } from '../../../../preload/api-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { translate } from '@/i18n/i18n'
+import { getSystemPrefersDark } from '@/lib/terminal-theme'
+import { usePluginTerminalThemeStore } from '@/store/plugin-terminal-themes'
 import { Button } from '../ui/button'
 import { PluginConsentDialog } from './PluginConsentDialog'
 import { PluginInstallDialog } from './PluginInstallDialog'
@@ -13,6 +16,11 @@ import { getPluginsSectionPresentation } from './plugins-search'
 import { SettingsSection } from './SettingsSection'
 import { usePluginLogs } from './use-plugin-logs'
 import { usePluginMarketplaceLifecycle } from './use-plugin-marketplace-lifecycle'
+import { useBundledDataState } from './use-bundled-data-state'
+import {
+  activeTerminalThemeSelection,
+  terminalThemeActivationUpdate
+} from './plugin-terminal-theme-activation'
 
 type PluginsSettingsSectionProps = {
   mounted: boolean
@@ -42,6 +50,8 @@ export function PluginsSettingsSection({
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const mountedRef = useRef(false)
   const listRequestRef = useRef(0)
+  const terminalThemes = usePluginTerminalThemeStore((state) => state.themes)
+  const bundledData = useBundledDataState(mounted)
 
   const applyPluginList = (nextPlugins: PluginHostListEntry[]): void => {
     const installedPluginKeys = new Set(nextPlugins.map((plugin) => plugin.pluginKey))
@@ -118,7 +128,7 @@ export function PluginsSettingsSection({
   }, [mounted])
 
   useEffect(() => {
-    if (!mounted || !settings.pluginSystemEnabled) {
+    if (!mounted) {
       return
     }
     setLoading(true)
@@ -159,6 +169,31 @@ export function PluginsSettingsSection({
     plugins.find((plugin) => plugin.pluginKey === consentPluginId) ?? null
   const consentPlugin = selectedConsentPlugin?.consentFingerprint ? selectedConsentPlugin : null
   const removePlugin = plugins.find((plugin) => plugin.pluginKey === removePluginId) ?? null
+  const systemPrefersDark = getSystemPrefersDark()
+
+  const applyTerminalTheme = async (theme: PluginTerminalThemeRegistration): Promise<void> => {
+    setSettingsError(null)
+    try {
+      await updateSettings(terminalThemeActivationUpdate(settings, theme.id, systemPrefersDark))
+    } catch {
+      if (mountedRef.current) {
+        setSettingsError(
+          translate(
+            'auto.components.settings.PluginsSettingsSection.themeApplyFailed',
+            'The plugin was enabled, but Orca could not apply its terminal theme.'
+          )
+        )
+      }
+    }
+  }
+
+  const applySoleTerminalTheme = async (pluginKey: string): Promise<void> => {
+    const registeredThemes = (await window.api.plugins.listTerminalThemes?.()) ?? []
+    const contributedThemes = registeredThemes.filter((theme) => theme.pluginKey === pluginKey)
+    if (contributedThemes.length === 1) {
+      await applyTerminalTheme(contributedThemes[0]!)
+    }
+  }
 
   const toggleFeature = async (): Promise<void> => {
     setFeatureBusy(true)
@@ -197,16 +232,21 @@ export function PluginsSettingsSection({
   const decideConsent = async (
     pluginKey: string,
     reviewedFingerprint: string,
-    decision: 'approve' | 'keep-disabled'
+    decision: 'approve' | 'keep-disabled',
+    reviewedRevision?: string
   ): Promise<void> => {
     setBusyPluginKeys((current) => new Set(current).add(pluginKey))
     try {
       const nextPlugins = await window.api.plugins.consent({
         pluginKey,
         reviewedFingerprint,
+        ...(reviewedRevision ? { reviewedRevision } : {}),
         decision
       })
       applyCompletedMutation(nextPlugins)
+      if (decision === 'approve') {
+        await applySoleTerminalTheme(pluginKey)
+      }
       if (mountedRef.current) {
         setConsentPluginId(null)
       }
@@ -235,6 +275,9 @@ export function PluginsSettingsSection({
         enabled: nextEnabled
       })
       applyCompletedMutation(nextPlugins)
+      if (nextEnabled) {
+        await applySoleTerminalTheme(plugin.pluginKey)
+      }
     } catch (cause) {
       if (mountedRef.current) {
         setPluginListError(cause)
@@ -317,12 +360,15 @@ export function PluginsSettingsSection({
       }
     >
       <PluginSettingsOverview
+        bundledData={bundledData}
         featureEnabled={featureEnabled}
         featureBusy={featureBusy}
         settingsError={settingsError}
         loading={loading}
         error={error}
         plugins={plugins}
+        terminalThemes={terminalThemes}
+        activeTerminalThemeId={activeTerminalThemeSelection(settings, systemPrefersDark)}
         busyPluginKeys={busyPluginKeys}
         openLogs={pluginLogs.openLogs}
         logsByPlugin={pluginLogs.logsByPlugin}
@@ -336,6 +382,7 @@ export function PluginsSettingsSection({
         onMarketplaceInstalled={marketplaceLifecycle.reloadAfterMutation}
         onRollbackRequest={marketplaceLifecycle.requestRollback}
         onRemoveRequest={setRemovePluginId}
+        onApplyTerminalTheme={(theme) => void applyTerminalTheme(theme)}
         onUpdateDevPaths={updateDevPaths}
       />
       <PluginInstallDialog open={installOpen} onOpenChange={setInstallOpen} onInstall={install} />

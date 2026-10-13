@@ -2,6 +2,9 @@ import type { ElectronApplication } from '@stablyai/playwright-test'
 
 /** Per-launch options for `createRestartSession().launch`. */
 export type LaunchOptions = {
+  /** A real packaged executable uses its own entry point and renderer. */
+  executablePath?: string
+  waitForStore?: boolean
   extraArgs?: string[]
   /**
    * Called for each chunk the relaunched main process writes to stderr. The

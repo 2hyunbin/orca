@@ -1,19 +1,25 @@
 import { Blocks, Loader2, SearchX } from 'lucide-react'
 import type { PluginHostListEntry } from '../../../../preload/api-types'
+import type { PluginTerminalThemeRegistration } from '../../../../shared/plugins/plugin-terminal-theme-artifact'
 import { translate } from '@/i18n/i18n'
 import { PluginCatalogEmptyState } from '../plugin-catalog/PluginCatalogEmptyState'
 import { PluginDevelopmentSection } from './PluginDevelopmentSection'
 import { PluginMarketplaceBrowser } from './PluginMarketplaceBrowser'
 import { PluginSettingsRow, type PluginLogsState } from './PluginSettingsRow'
 import { SettingsRow, SettingsSwitch } from './SettingsFormControls'
+import { PluginIncludedDataSection } from './PluginIncludedDataSection'
+import type { useBundledDataState } from './use-bundled-data-state'
 
 type PluginSettingsOverviewProps = {
+  bundledData: ReturnType<typeof useBundledDataState>
   featureEnabled: boolean
   featureBusy: boolean
   settingsError: string | null
   loading: boolean
   error: string | null
   plugins: PluginHostListEntry[]
+  terminalThemes: readonly PluginTerminalThemeRegistration[]
+  activeTerminalThemeId: string
   busyPluginKeys: ReadonlySet<string>
   openLogs: ReadonlySet<string>
   logsByPlugin: Readonly<Record<string, PluginLogsState>>
@@ -27,6 +33,7 @@ type PluginSettingsOverviewProps = {
   onMarketplaceInstalled: (pluginKey: string) => Promise<void>
   onRollbackRequest: (pluginKey: string) => void
   onRemoveRequest: (pluginKey: string) => void
+  onApplyTerminalTheme: (theme: PluginTerminalThemeRegistration) => void
   onUpdateDevPaths: (paths: string[]) => Promise<void>
 }
 
@@ -41,12 +48,15 @@ function matchesInstalledPlugin(plugin: PluginHostListEntry, search: string): bo
 }
 
 export function PluginSettingsOverview({
+  bundledData,
   featureEnabled,
   featureBusy,
   settingsError,
   loading,
   error,
   plugins,
+  terminalThemes,
+  activeTerminalThemeId,
   busyPluginKeys,
   openLogs,
   logsByPlugin,
@@ -60,6 +70,7 @@ export function PluginSettingsOverview({
   onMarketplaceInstalled,
   onRollbackRequest,
   onRemoveRequest,
+  onApplyTerminalTheme,
   onUpdateDevPaths
 }: PluginSettingsOverviewProps): React.JSX.Element {
   return (
@@ -72,7 +83,7 @@ export function PluginSettingsOverview({
         labelId="plugin-system-label"
         description={translate(
           'auto.components.settings.PluginsSettingsSection.systemDescription',
-          'Discovers installed plugins and lets you enable them individually. Nothing runs until you review and enable it. Workers always run on this computer; SSH workspace actions route through Orca.'
+          'Data packs become available when you install them. Plugins that run code or add instructions need your approval. Workers run on this computer; SSH workspace actions route through Orca.'
         )}
         alignTop
         control={
@@ -86,11 +97,12 @@ export function PluginSettingsOverview({
       />
       {settingsError ? <p className="text-xs text-destructive">{settingsError}</p> : null}
       <div className="my-4 border-t border-border/60" />
+      <PluginIncludedDataSection state={bundledData} />
       {!featureEnabled ? (
         <div className="rounded-lg border border-dashed border-border px-5 py-6 text-center text-[13px] leading-6 text-muted-foreground">
           {translate(
-            'auto.components.settings.PluginsSettingsSection.featureOff',
-            'Turn on the plugin system to see and manage installed plugins. Anything already installed stays on disk and stays disabled while the system is off.'
+            'auto.components.settings.PluginsSettingsSection.optionalFeatureOff',
+            'Turn on the plugin system to browse and manage optional plugins. Installed optional packages stay on disk and stay disabled while the system is off.'
           )}
         </div>
       ) : loading ? (
@@ -105,8 +117,8 @@ export function PluginSettingsOverview({
             onInstalled={onMarketplaceInstalled}
             onRefreshInstalled={onRefresh}
             renderInstalledContent={(search) => {
-              const filteredPlugins = plugins.filter((plugin) =>
-                matchesInstalledPlugin(plugin, search)
+              const filteredPlugins = plugins.filter(
+                (plugin) => !plugin.bundledData && matchesInstalledPlugin(plugin, search)
               )
               if (error) {
                 return (
@@ -144,20 +156,32 @@ export function PluginSettingsOverview({
               }
               return (
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {filteredPlugins.map((plugin) => (
-                    <PluginSettingsRow
-                      key={plugin.pluginKey}
-                      plugin={plugin}
-                      busy={busyPluginKeys.has(plugin.pluginKey)}
-                      logsOpen={openLogs.has(plugin.pluginKey)}
-                      logsState={logsByPlugin[plugin.pluginKey]}
-                      onReview={onReview}
-                      onToggleEnabled={onToggleEnabled}
-                      onToggleLogs={onToggleLogs}
-                      onRollbackRequest={onRollbackRequest}
-                      onRemoveRequest={onRemoveRequest}
-                    />
-                  ))}
+                  {filteredPlugins.map((plugin) => {
+                    const contributedTerminalThemes = terminalThemes.filter(
+                      (theme) => theme.pluginKey === plugin.pluginKey
+                    )
+                    const terminalTheme =
+                      contributedTerminalThemes.length === 1
+                        ? contributedTerminalThemes[0]
+                        : undefined
+                    return (
+                      <PluginSettingsRow
+                        key={plugin.pluginKey}
+                        plugin={plugin}
+                        busy={busyPluginKeys.has(plugin.pluginKey)}
+                        logsOpen={openLogs.has(plugin.pluginKey)}
+                        logsState={logsByPlugin[plugin.pluginKey]}
+                        terminalTheme={terminalTheme}
+                        terminalThemeActive={terminalTheme?.id === activeTerminalThemeId}
+                        onReview={onReview}
+                        onToggleEnabled={onToggleEnabled}
+                        onToggleLogs={onToggleLogs}
+                        onRollbackRequest={onRollbackRequest}
+                        onRemoveRequest={onRemoveRequest}
+                        onApplyTerminalTheme={onApplyTerminalTheme}
+                      />
+                    )
+                  })}
                 </div>
               )
             }}

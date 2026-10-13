@@ -10,7 +10,7 @@ export type PluginConsentSource = {
   kind: 'local-path' | 'git' | 'marketplace' | 'bundled'
   reference: string
   resolvedCommit: string | null
-  marketplace?: { reference: string; resolvedCommit: string }
+  marketplace?: { reference: string; resolvedCommit: string; owner?: string }
 }
 
 type PluginConsentProvenanceProps = {
@@ -112,14 +112,32 @@ export function PluginConsentProvenance(props: PluginConsentProvenanceProps): Re
               fullValue={source.resolvedCommit ?? undefined}
             />
             {source.marketplace ? (
-              <ProvenanceDetail
-                label={translate(
-                  'auto.components.settings.PluginConsentProvenance.indexCommit',
-                  'Index commit'
-                )}
-                value={shortCommit(source.marketplace.resolvedCommit) ?? ''}
-                fullValue={source.marketplace.resolvedCommit}
-              />
+              <>
+                <ProvenanceDetail
+                  label={translate(
+                    'auto.components.settings.PluginConsentProvenance.catalogSource',
+                    'Catalog source'
+                  )}
+                  value={source.marketplace.reference}
+                />
+                {source.marketplace.owner ? (
+                  <ProvenanceDetail
+                    label={translate(
+                      'auto.components.settings.PluginConsentProvenance.catalogOwner',
+                      'Catalog owner'
+                    )}
+                    value={source.marketplace.owner}
+                  />
+                ) : null}
+                <ProvenanceDetail
+                  label={translate(
+                    'auto.components.settings.PluginConsentProvenance.indexCommit',
+                    'Index commit'
+                  )}
+                  value={shortCommit(source.marketplace.resolvedCommit) ?? ''}
+                  fullValue={source.marketplace.resolvedCommit}
+                />
+              </>
             ) : null}
           </PopoverContent>
         </Popover>

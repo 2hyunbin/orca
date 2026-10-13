@@ -1,13 +1,17 @@
+import { pluginStatusPresentation } from './plugin-status-presentation'
+import { PluginLanguageAction } from './PluginLanguageAction'
 import {
   AlertTriangle,
   BadgeCheck,
   FileText,
   Loader2,
   MoreHorizontal,
+  Palette,
   RotateCcw,
   Trash2
 } from 'lucide-react'
 import type { PluginHostListEntry, PluginHostLogLine } from '../../../../preload/api-types'
+import type { PluginTerminalThemeRegistration } from '../../../../shared/plugins/plugin-terminal-theme-artifact'
 import { translate } from '@/i18n/i18n'
 import { PluginCatalogAvatar } from '../plugin-catalog/PluginCatalogAvatar'
 import { invalidPluginErrorMessage } from './plugin-error-presentation'
@@ -38,49 +42,9 @@ type PluginSettingsRowProps = {
   onToggleLogs: (pluginKey: string) => void
   onRollbackRequest: (pluginKey: string) => void
   onRemoveRequest: (pluginKey: string) => void
-}
-
-function statusPresentation(plugin: PluginHostListEntry): { label: string; className: string } {
-  if (plugin.blockedByKillList) {
-    return {
-      label: translate('auto.components.settings.PluginSettingsRow.blocked', 'Blocked'),
-      className: 'border-destructive/25 bg-destructive/8 text-destructive'
-    }
-  }
-  if (plugin.needsReconsent || plugin.status === 'pending') {
-    return {
-      label: translate('auto.components.settings.PluginSettingsRow.needsReview', 'Needs review'),
-      className: 'border-foreground/20 bg-foreground/8 text-foreground'
-    }
-  }
-  if (plugin.status === 'restarting') {
-    return {
-      label: translate('auto.components.settings.PluginSettingsRow.restarting', 'Restarting'),
-      className: 'border-foreground/20 bg-foreground/8 text-foreground'
-    }
-  }
-  if (plugin.status === 'errored' || plugin.status === 'invalid') {
-    return {
-      label:
-        plugin.status === 'invalid'
-          ? translate('auto.components.settings.PluginSettingsRow.invalid', 'Invalid')
-          : translate('auto.components.settings.PluginSettingsRow.error', 'Error'),
-      className: 'border-destructive/25 bg-destructive/8 text-destructive'
-    }
-  }
-  if (plugin.status === 'disabled') {
-    return {
-      label: translate('auto.components.settings.PluginSettingsRow.disabled', 'Disabled'),
-      className: 'border-border bg-muted/40 text-muted-foreground'
-    }
-  }
-  return {
-    label:
-      plugin.status === 'running'
-        ? translate('auto.components.settings.PluginSettingsRow.running', 'Running')
-        : translate('auto.components.settings.PluginSettingsRow.enabled', 'Enabled'),
-    className: 'border-status-success-border bg-status-success-background text-status-success'
-  }
+  terminalTheme?: PluginTerminalThemeRegistration
+  terminalThemeActive?: boolean
+  onApplyTerminalTheme?: (theme: PluginTerminalThemeRegistration) => void
 }
 
 function PluginLogs({ pluginKey, state }: { pluginKey: string; state?: PluginLogsState }) {
@@ -136,9 +100,12 @@ export function PluginSettingsRow({
   onToggleEnabled,
   onToggleLogs,
   onRollbackRequest,
-  onRemoveRequest
+  onRemoveRequest,
+  terminalTheme,
+  terminalThemeActive = false,
+  onApplyTerminalTheme
 }: PluginSettingsRowProps): React.JSX.Element {
-  const status = statusPresentation(plugin)
+  const status = pluginStatusPresentation(plugin)
   const needsReview = plugin.needsReconsent || plugin.status === 'pending'
   const enabled =
     plugin.status === 'running' ||
@@ -148,9 +115,27 @@ export function PluginSettingsRow({
   const switchDisabled =
     busy || needsReview || plugin.status === 'invalid' || Boolean(plugin.blockedByKillList)
 
-  // Why: the wide primary action ("Review & enable") renders on its own footer
-  // row so it never wraps the compact toggle + overflow cluster to an
-  // inconsistent position between card types.
+  // Why: the wide primary action ("Review & enable" / "Use theme" / "In use")
+  // renders on its own footer row so it never wraps the compact toggle +
+  // overflow cluster to an inconsistent position between card types.
+  const themeAction =
+    !needsReview && enabled && terminalTheme && onApplyTerminalTheme ? (
+      terminalThemeActive ? (
+        <Badge variant="secondary">
+          {translate('auto.components.settings.PluginSettingsRow.inUse', 'In use')}
+        </Badge>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => onApplyTerminalTheme(terminalTheme)}
+        >
+          <Palette />
+          {translate('auto.components.settings.PluginSettingsRow.useTheme', 'Use theme')}
+        </Button>
+      )
+    ) : null
   const reviewAction = needsReview ? (
     <Button
       variant="secondary"
@@ -161,7 +146,12 @@ export function PluginSettingsRow({
       {translate('auto.components.settings.PluginSettingsRow.reviewAndEnable', 'Review & enable')}
     </Button>
   ) : null
-  const footerAction = reviewAction
+  const footerAction =
+    reviewAction ??
+    themeAction ??
+    (enabled && !plugin.blockedByKillList ? (
+      <PluginLanguageAction pluginKey={plugin.pluginKey} disabled={busy} />
+    ) : null)
 
   return (
     <article
@@ -263,65 +253,67 @@ export function PluginSettingsRow({
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                disabled={busy}
-                aria-label={translate(
-                  'auto.components.settings.PluginSettingsRow.moreActions',
-                  'More actions for {{value0}}',
-                  { value0: plugin.name }
-                )}
-              >
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => onToggleLogs(plugin.pluginKey)}>
-                <FileText />
-                {logsOpen
-                  ? translate('auto.components.settings.PluginSettingsRow.hideLogs', 'Hide logs')
-                  : translate('auto.components.settings.PluginSettingsRow.viewLogs', 'View logs')}
-              </DropdownMenuItem>
-              {plugin.source?.kind === 'marketplace' ? (
-                <DropdownMenuItem onSelect={() => onRollbackRequest(plugin.pluginKey)}>
-                  <RotateCcw />
-                  {translate('auto.components.settings.PluginSettingsRow.rollback', 'Roll back')}
-                </DropdownMenuItem>
-              ) : null}
-              {!plugin.isDev && !plugin.bundled ? (
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => onRemoveRequest(plugin.pluginKey)}
+        {!plugin.bundledData ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={busy}
+                  aria-label={translate(
+                    'auto.components.settings.PluginSettingsRow.moreActions',
+                    'More actions for {{value0}}',
+                    { value0: plugin.name }
+                  )}
                 >
-                  <Trash2 />
-                  {translate('auto.components.settings.PluginSettingsRow.remove', 'Remove')}
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => onToggleLogs(plugin.pluginKey)}>
+                  <FileText />
+                  {logsOpen
+                    ? translate('auto.components.settings.PluginSettingsRow.hideLogs', 'Hide logs')
+                    : translate('auto.components.settings.PluginSettingsRow.viewLogs', 'View logs')}
                 </DropdownMenuItem>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <SettingsSwitch
-            checked={enabled && !needsReview}
-            disabled={switchDisabled}
-            onChange={() => onToggleEnabled(plugin)}
-            ariaLabel={
-              enabled && !needsReview
-                ? translate(
-                    'auto.components.settings.PluginSettingsRow.disableLabel',
-                    'Disable {{value0}}',
-                    { value0: plugin.name }
-                  )
-                : translate(
-                    'auto.components.settings.PluginSettingsRow.enableLabel',
-                    'Enable {{value0}}',
-                    { value0: plugin.name }
-                  )
-            }
-          />
-        </div>
+                {plugin.source?.kind === 'marketplace' ? (
+                  <DropdownMenuItem onSelect={() => onRollbackRequest(plugin.pluginKey)}>
+                    <RotateCcw />
+                    {translate('auto.components.settings.PluginSettingsRow.rollback', 'Roll back')}
+                  </DropdownMenuItem>
+                ) : null}
+                {!plugin.isDev && !plugin.bundled ? (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => onRemoveRequest(plugin.pluginKey)}
+                  >
+                    <Trash2 />
+                    {translate('auto.components.settings.PluginSettingsRow.remove', 'Remove')}
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <SettingsSwitch
+              checked={enabled && !needsReview}
+              disabled={switchDisabled}
+              onChange={() => onToggleEnabled(plugin)}
+              ariaLabel={
+                enabled && !needsReview
+                  ? translate(
+                      'auto.components.settings.PluginSettingsRow.disableLabel',
+                      'Disable {{value0}}',
+                      { value0: plugin.name }
+                    )
+                  : translate(
+                      'auto.components.settings.PluginSettingsRow.enableLabel',
+                      'Enable {{value0}}',
+                      { value0: plugin.name }
+                    )
+              }
+            />
+          </div>
+        ) : null}
       </div>
       {footerAction ? (
         <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-3">

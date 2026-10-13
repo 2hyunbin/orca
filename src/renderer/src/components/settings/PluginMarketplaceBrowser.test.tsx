@@ -9,6 +9,7 @@ import type {
   PluginMarketplaceHostListing,
   PluginMarketplaceHostSourceState
 } from '../../../../preload/api-types'
+import { useAppStore } from '@/store'
 import { PluginMarketplaceBrowser } from './PluginMarketplaceBrowser'
 
 function deferred<T>(): {
@@ -166,7 +167,10 @@ function button(label: string): HTMLButtonElement {
   return match
 }
 
-beforeEach(() => installApi())
+beforeEach(() => {
+  useAppStore.setState({ pluginCatalogTypeFilter: 'all' })
+  installApi()
+})
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -174,6 +178,18 @@ afterEach(() => {
 })
 
 describe('PluginMarketplaceBrowser', () => {
+  it('honors the file-viewer category before catalog metadata loads', async () => {
+    useAppStore.getState().setPluginCatalogTypeFilter('file-viewer')
+    const { root, container } = await renderBrowser()
+    expect(container.querySelector('[role="combobox"]')?.textContent).toContain('File viewers')
+    expect(container.textContent).toContain('No matching plugins')
+    expect(container.textContent).not.toContain('Notes for active worktrees.')
+    await act(async () => button('Clear filters').click())
+    expect(container.textContent).toContain('Notes for active worktrees.')
+    expect(useAppStore.getState().pluginCatalogTypeFilter).toBe('all')
+    await act(async () => root.unmount())
+  })
+
   it('reviews exact bytes and hands a successful install to the consent flow', async () => {
     const { root, container, onInstalled } = await renderBrowser()
 
@@ -232,7 +248,8 @@ describe('PluginMarketplaceBrowser', () => {
 
     await act(async () => button('Check for update').click())
 
-    expect(window.api.plugins.previewMarketplaceUpdate).toHaveBeenCalledWith({
+    expect(window.api.plugins.previewMarketplacePlugin).toHaveBeenCalledWith({
+      marketplaceSourceId: SOURCE_ID,
       pluginKey: listing.pluginKey
     })
     expect(document.body.textContent).toContain('This exact plugin content is already installed.')
@@ -306,5 +323,67 @@ describe('PluginMarketplaceBrowser', () => {
     expect(document.body.textContent).toContain('Worktree Tasks')
     expect(document.body.textContent).not.toContain('Worktree Notes')
     act(() => root.unmount())
+  })
+
+  it('reviews the clicked catalog when another source lists an installed identity', async () => {
+    const otherListing: PluginMarketplaceHostListing = {
+      ...listing,
+      marketplaceSourceId: 'd'.repeat(32),
+      marketplaceName: 'Another community',
+      source: { kind: 'git', url: 'https://example.org/notes.git', ref: 'v2' }
+    }
+    installApi({
+      listMarketplacePlugins: vi.fn().mockResolvedValue([listing, otherListing]),
+      previewMarketplacePlugin: vi
+        .fn()
+        .mockImplementation(async ({ marketplaceSourceId }) =>
+          marketplaceSourceId === otherListing.marketplaceSourceId
+            ? {
+                ...preview,
+                ...otherListing,
+                manifest: { ...preview.manifest, name: 'Other notes' }
+              }
+            : preview
+        )
+    })
+    const { root } = await renderBrowser([installedPlugin()])
+    const otherCard = document.querySelectorAll('[data-marketplace-plugin-key]')[1]
+    await act(async () => {
+      Array.from(otherCard?.querySelectorAll('button') ?? [])
+        .find((candidate) => candidate.textContent?.trim() === 'Check for update')
+        ?.click()
+    })
+    expect(window.api.plugins.previewMarketplacePlugin).toHaveBeenCalledWith({
+      marketplaceSourceId: otherListing.marketplaceSourceId,
+      pluginKey: listing.pluginKey
+    })
+    expect(window.api.plugins.previewMarketplaceUpdate).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Other notes')
+    await act(async () => root.unmount())
+  })
+
+  it('shows inert publisher previews and declared execution before opening full release details', async () => {
+    const release = {
+      version: '1.0.0',
+      commit: 'a'.repeat(40),
+      contentHash: 'b'.repeat(64),
+      execution: 'data' as const,
+      minimumOrca: '1.4.214',
+      types: ['interface-language' as const],
+      license: 'MIT',
+      preview: { title: 'Example translation', text: '<img src="https://example.org/track"> Hola' }
+    }
+    installApi({ listMarketplacePlugins: vi.fn().mockResolvedValue([{ ...listing, release }]) })
+    const { root, container } = await renderBrowser()
+    expect(container.textContent).toContain('Declared data pack')
+    expect(container.textContent).toContain('Orca 1.4.214+')
+    const sample = container.querySelector('[aria-label="Publisher preview"]')
+    expect(sample?.textContent).toContain(release.preview.text)
+    expect(sample?.querySelector('img')).toBeNull()
+    await act(async () => button('Plugin details').click())
+    expect(document.body.textContent).toContain(release.commit)
+    expect(document.body.textContent).toContain(release.contentHash)
+    expect(window.api.plugins.previewMarketplacePlugin).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
   })
 })

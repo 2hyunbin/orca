@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Blocks, Loader2, RefreshCw, SearchX, Settings2, Store } from 'lucide-react'
+import { Blocks, Loader2, RefreshCw, Settings2, Store } from 'lucide-react'
 import type {
   PluginHostListEntry,
   PluginMarketplaceHostInstallPreview,
@@ -7,13 +7,14 @@ import type {
   PluginMarketplaceHostSourceState
 } from '../../../../preload/api-types'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 import { PluginCatalogEmptyState } from '../plugin-catalog/PluginCatalogEmptyState'
 import {
   PluginCatalogLayout,
   type PluginCatalogFilter
 } from '../plugin-catalog/PluginCatalogLayout'
 import { Button } from '../ui/button'
-import { PluginMarketplaceListingRow } from './PluginMarketplaceListingRow'
+import { PluginCatalogResults } from '../plugin-catalog/PluginCatalogResults'
 import {
   PluginMarketplacePreviewDialog,
   type PluginMarketplacePreviewMode
@@ -38,6 +39,8 @@ export function PluginMarketplaceBrowser({
   onRefreshInstalled,
   renderInstalledContent
 }: PluginMarketplaceBrowserProps): React.JSX.Element {
+  const type = useAppStore((state) => state.pluginCatalogTypeFilter)
+  const onTypeChange = useAppStore((state) => state.setPluginCatalogTypeFilter)
   const [sources, setSources] = useState<PluginMarketplaceHostSourceState[]>([])
   const [listings, setListings] = useState<PluginMarketplaceHostListing[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,24 +100,14 @@ export function PluginMarketplaceBrowser({
   }, [loadMarketplaceData])
 
   const installedByKey = useMemo(
-    () => new Map(installedPlugins.map((plugin) => [plugin.pluginKey, plugin])),
+    () =>
+      new Map(
+        installedPlugins
+          .filter((plugin) => !plugin.bundledData)
+          .map((plugin) => [plugin.pluginKey, plugin])
+      ),
     [installedPlugins]
   )
-  const visibleListings = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase()
-    if (!query) {
-      return listings
-    }
-    return listings.filter((listing) =>
-      [
-        listing.pluginKey,
-        listing.description ?? '',
-        listing.marketplaceName,
-        listing.marketplaceOwner,
-        ...listing.categories
-      ].some((value) => value.toLocaleLowerCase().includes(query))
-    )
-  }, [listings, search])
 
   const refresh = async (): Promise<void> => {
     setRefreshBusy(true)
@@ -150,12 +143,33 @@ export function PluginMarketplaceBrowser({
     setActionError(null)
     setError(null)
     try {
-      const nextPreview = update
-        ? await window.api.plugins.previewMarketplaceUpdate({ pluginKey: listing.pluginKey })
-        : await window.api.plugins.previewMarketplacePlugin({
-            marketplaceSourceId: listing.marketplaceSourceId,
-            pluginKey: listing.pluginKey
-          })
+      if (
+        listing.release?.execution === 'data' &&
+        window.api.plugins.installMarketplaceDataPlugin
+      ) {
+        const result = await window.api.plugins.installMarketplaceDataPlugin({
+          marketplaceSourceId: listing.marketplaceSourceId,
+          marketplaceCommit: listing.marketplaceCommit,
+          pluginKey: listing.pluginKey
+        })
+        if (!mountedRef.current || requestId !== previewRequestRef.current) {
+          return
+        }
+        if (result.kind === 'error') {
+          throw new Error(result.error)
+        }
+        if (result.kind === 'installed') {
+          await onInstalled(result.pluginKey)
+          return
+        }
+        setPreviewMode(update ? 'update' : 'install')
+        setPreview(result.preview)
+        return
+      }
+      const nextPreview = await window.api.plugins.previewMarketplacePlugin({
+        marketplaceSourceId: listing.marketplaceSourceId,
+        pluginKey: listing.pluginKey
+      })
       if (mountedRef.current && requestId === previewRequestRef.current) {
         setPreviewMode(update ? 'update' : 'install')
         setPreview(nextPreview)
@@ -186,12 +200,43 @@ export function PluginMarketplaceBrowser({
     setInstallBusy(true)
     setActionError(null)
     try {
-      const result = await window.api.plugins.installMarketplacePlugin({
+      const identity = {
         marketplaceSourceId: preview.marketplaceSourceId,
         marketplaceCommit: preview.marketplaceCommit,
         pluginKey: preview.pluginKey,
         resolvedCommit: preview.resolvedCommit
-      })
+      }
+      const currentContentHash = installedByKey.get(preview.pluginKey)?.source?.contentHash
+      const reviewedUpdate = previewMode === 'update' && preview.manifest.manifestVersion === 2
+      if (
+        reviewedUpdate &&
+        (!window.api.plugins.approveMarketplaceUpdate ||
+          !currentContentHash ||
+          !preview.reviewRevision)
+      ) {
+        throw new Error(
+          translate(
+            'auto.components.settings.PluginMarketplaceBrowser.updateUnsupported',
+            'This host cannot approve an update safely. Update Orca and try again; your installed plugin is unchanged.'
+          )
+        )
+      }
+      const result =
+        reviewedUpdate &&
+        window.api.plugins.approveMarketplaceUpdate &&
+        currentContentHash &&
+        preview.reviewRevision
+          ? await window.api.plugins.approveMarketplaceUpdate({
+              ...identity,
+              contentHash: preview.contentHash,
+              reviewedFingerprint: preview.consentFingerprint,
+              reviewedRevision: preview.reviewRevision,
+              ...(preview.environmentRecipeReviewDigest
+                ? { reviewedEnvironmentRecipeDigest: preview.environmentRecipeReviewDigest }
+                : {}),
+              currentContentHash
+            })
+          : await window.api.plugins.installMarketplacePlugin(identity)
       if (!result.ok) {
         throw new Error(result.error)
       }
@@ -217,7 +262,9 @@ export function PluginMarketplaceBrowser({
   }
 
   const currentVersion = Boolean(
-    preview && installedByKey.get(preview.pluginKey)?.source?.contentHash === preview.contentHash
+    preview &&
+    installedByKey.get(preview.pluginKey)?.source?.contentHash === preview.contentHash &&
+    installedByKey.get(preview.pluginKey)?.consentFingerprint === preview.consentFingerprint
   )
 
   return (
@@ -228,7 +275,7 @@ export function PluginMarketplaceBrowser({
         search={search}
         onSearchChange={setSearch}
         allCount={listings.length}
-        installedCount={installedPlugins.length}
+        installedCount={installedPlugins.filter((plugin) => !plugin.bundledData).length}
         toolbar={
           <>
             <Button variant="ghost" size="xs" onClick={() => setSourcesOpen(true)}>
@@ -287,6 +334,14 @@ export function PluginMarketplaceBrowser({
                 </Button>
               </div>
             ) : null}
+            {sources.some((source) => source.stale) ? (
+              <p role="status" className="mb-3 text-xs leading-5 text-muted-foreground">
+                {translate(
+                  'auto.components.settings.PluginCatalogDetail.cached',
+                  'Showing cached listings. Some sources could not be refreshed; installed plugins remain available.'
+                )}
+              </p>
+            ) : null}
             {sources.length === 0 ? (
               <PluginCatalogEmptyState
                 icon={Store}
@@ -307,52 +362,29 @@ export function PluginMarketplaceBrowser({
                   </Button>
                 }
               />
-            ) : visibleListings.length === 0 ? (
-              search ? (
-                <PluginCatalogEmptyState
-                  icon={SearchX}
-                  title={translate(
-                    'auto.components.settings.PluginMarketplaceBrowser.noResultsTitle',
-                    'No matching plugins'
-                  )}
-                  description={translate(
-                    'auto.components.settings.PluginMarketplaceBrowser.noResults',
-                    'No marketplace plugins match this search.'
-                  )}
-                  action={
-                    <Button variant="outline" size="sm" onClick={() => setSearch('')}>
-                      {translate(
-                        'auto.components.settings.PluginMarketplaceBrowser.clearSearch',
-                        'Clear search'
-                      )}
-                    </Button>
-                  }
-                />
-              ) : (
-                <PluginCatalogEmptyState
-                  icon={Blocks}
-                  title={translate(
-                    'auto.components.settings.PluginMarketplaceBrowser.emptyTitle',
-                    'Nothing listed yet'
-                  )}
-                  description={translate(
-                    'auto.components.settings.PluginMarketplaceBrowser.empty',
-                    'The configured marketplaces do not list any plugins.'
-                  )}
-                />
-              )
+            ) : listings.length === 0 ? (
+              <PluginCatalogEmptyState
+                icon={Blocks}
+                title={translate(
+                  'auto.components.settings.PluginMarketplaceBrowser.emptyTitle',
+                  'Nothing listed yet'
+                )}
+                description={translate(
+                  'auto.components.settings.PluginMarketplaceBrowser.empty',
+                  'The configured marketplaces do not list any plugins.'
+                )}
+              />
             ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {visibleListings.map((listing) => (
-                  <PluginMarketplaceListingRow
-                    key={`${listing.marketplaceSourceId}:${listing.pluginKey}`}
-                    listing={listing}
-                    installed={installedByKey.get(listing.pluginKey) ?? null}
-                    busy={previewBusyKey === listing.pluginKey}
-                    onPreview={(entry, update) => void openPreview(entry, update)}
-                  />
-                ))}
-              </div>
+              <PluginCatalogResults
+                listings={listings}
+                installedByKey={installedByKey}
+                search={search}
+                type={type}
+                onTypeChange={onTypeChange}
+                busyKey={previewBusyKey}
+                onClearSearch={() => setSearch('')}
+                onPreview={(entry, update) => void openPreview(entry, update)}
+              />
             )}
           </>
         )}
@@ -367,6 +399,7 @@ export function PluginMarketplaceBrowser({
         key={preview ? `${preview.pluginKey}:${preview.contentHash}` : 'closed'}
         preview={preview}
         mode={previewMode}
+        installedVersion={preview ? installedByKey.get(preview.pluginKey)?.version : undefined}
         busy={installBusy}
         currentVersion={currentVersion}
         error={actionError}

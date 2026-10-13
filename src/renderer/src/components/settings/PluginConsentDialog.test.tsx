@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PluginHostListEntry } from '../../../../preload/api-types'
 import { PluginConsentDialog } from './PluginConsentDialog'
+import type { PluginEnvironmentRecipePreview } from '../../../../shared/plugins/plugin-environment-recipe-preview'
 
 const plugin: PluginHostListEntry = {
   pluginKey: 'acme.worker',
@@ -70,6 +71,23 @@ async function renderConsent(
 }
 
 describe('PluginConsentDialog', () => {
+  it('discloses browser parsing and opened-file authority even without host capabilities', async () => {
+    await renderConsent(
+      {
+        ...plugin,
+        name: 'Workbook',
+        hasWorker: false,
+        capabilities: [],
+        fileViewers: [{ id: 'workbook', displayName: 'Workbook', mode: 'readonly' }]
+      },
+      vi.fn().mockResolvedValue(undefined)
+    )
+    expect(document.body.textContent).toContain('Viewer')
+    expect(document.body.textContent).toContain('runs parsing code in an isolated worker')
+    expect(document.body.textContent).toContain('only the file you open with it')
+    expect(document.body.textContent).not.toContain('validated content only')
+    expect(document.body.textContent).not.toContain('full access to your files')
+  })
   it('keeps the displayed fingerprint immutable during a same-key update', async () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -98,6 +116,40 @@ describe('PluginConsentDialog', () => {
     await act(async () => enable?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 
     expect(onDecision).toHaveBeenCalledWith(plugin.pluginKey, plugin.consentFingerprint, 'approve')
+  })
+
+  it('keeps the displayed release receipt when an update preserves its authority', async () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onDecision = vi.fn().mockResolvedValue(undefined)
+    await act(async () => {
+      root.render(
+        <PluginConsentDialog
+          plugin={{ ...plugin, reviewRevision: 'reviewed-release' }}
+          onDecision={onDecision}
+        />
+      )
+    })
+    await act(async () => {
+      root.render(
+        <PluginConsentDialog
+          plugin={{ ...plugin, version: '2.0.0', reviewRevision: 'unreviewed-release' }}
+          onDecision={onDecision}
+        />
+      )
+    })
+    const enable = Array.from(document.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Enable plugin'
+    )
+    await act(async () => enable?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(document.body.textContent).toContain('v1.2.3')
+    expect(onDecision).toHaveBeenCalledWith(
+      plugin.pluginKey,
+      plugin.consentFingerprint,
+      'approve',
+      'reviewed-release'
+    )
   })
 
   it('shows provenance, capabilities, worker warning, and focuses the safe default', async () => {
@@ -240,7 +292,7 @@ describe('PluginConsentDialog', () => {
     const onDecision = vi.fn().mockResolvedValue(undefined)
     await renderConsent({ ...plugin, needsReconsent: true }, onDecision)
     expect(document.body.textContent).toContain(
-      'Permissions, the worker trust tier, or instructional content changed'
+      'The source, permissions, executable content, or instructions changed'
     )
     const enable = Array.from(document.querySelectorAll('button')).find(
       (button) => button.textContent?.trim() === 'Enable plugin'
@@ -268,5 +320,98 @@ describe('PluginConsentDialog', () => {
     expect(document.body.textContent).toContain(
       'The plugin changed while you were reviewing it. Close this dialog and review the updated permissions.'
     )
+  })
+  it('shows provider CLI actions, literal arguments and host authority before approval', async () => {
+    const preview: PluginEnvironmentRecipePreview = {
+      providerId: 'company.platform/pods',
+      id: 'pods',
+      name: 'Development pods',
+      description: 'Company development machines',
+      lifetime: 'both',
+      commands: [
+        {
+          action: 'list',
+          program: 'company-dev',
+          args: ['orca', 'list', ';literal'],
+          timeoutSeconds: 120
+        },
+        { action: 'delete', program: 'company-dev', args: ['orca', 'delete'], timeoutSeconds: 60 }
+      ]
+    }
+    const entry = {
+      ...plugin,
+      pluginKey: 'company.platform',
+      name: 'Company platform',
+      consentFingerprint: 'sha256-env-reviewed',
+      hasWorker: false,
+      capabilities: [],
+      environmentRecipes: [preview]
+    }
+    const onDecision = vi.fn(async () => {})
+    await renderConsent(entry, onDecision)
+    expect(document.body.textContent).toContain('Review environment provider')
+    expect(document.body.textContent).toContain(
+      'commands run with your account on the selected host'
+    )
+    expect(document.body.textContent).toContain('Environment provider commands')
+    expect(document.body.textContent).toContain('company-dev')
+    expect(document.body.textContent).toContain('["orca","list",";literal"]')
+    expect(document.body.textContent).not.toContain('Declarative content')
+    expect(document.body.textContent).not.toContain('validated content only')
+    const commands = Array.from(document.querySelectorAll('pre'))
+    expect(commands.map((command) => command.getAttribute('aria-label'))).toContain(
+      'Development pods · Delete command'
+    )
+    expect(commands.every((command) => command.tabIndex === 0)).toBe(true)
+    const enable = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Enable plugin'
+    )
+    await act(async () => enable?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    expect(onDecision).toHaveBeenCalledWith('company.platform', 'sha256-env-reviewed', 'approve')
+  })
+
+  it('preserves the full-trust worker warning for mixed worker/provider plugins', async () => {
+    await renderConsent(
+      {
+        ...plugin,
+        environmentRecipes: [
+          {
+            providerId: 'acme.worker/pods',
+            id: 'pods',
+            name: 'Pods',
+            description: 'Machines',
+            lifetime: 'ephemeral',
+            commands: []
+          }
+        ]
+      },
+      vi.fn(async () => {})
+    )
+    expect(document.body.textContent).toContain(
+      'full access to your files, network, and other processes'
+    )
+    expect(document.body.textContent).not.toContain('This plugin has no worker process')
+  })
+  it('does not downgrade an unavailable provider review into data-only approval', async () => {
+    const onDecision = vi.fn(async () => {})
+    await renderConsent(
+      {
+        ...plugin,
+        hasWorker: false,
+        capabilities: [],
+        execution: 'instructional',
+        environmentRecipeCount: 1,
+        environmentRecipes: []
+      },
+      onDecision
+    )
+    expect(document.body.textContent).toContain('Review environment provider')
+    expect(document.body.textContent).toContain('Provider commands could not be verified')
+    expect(document.body.textContent).not.toContain('validated content only')
+    const enable = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Enable plugin'
+    )
+    expect(enable?.disabled).toBe(true)
+    expect(onDecision).not.toHaveBeenCalled()
   })
 })

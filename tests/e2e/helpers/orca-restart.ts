@@ -23,7 +23,7 @@ import path from 'node:path'
 import { runProcess } from '@orca/process-host'
 import type { ProcessResult } from '@orca/process-host/process-spec'
 import { getE2ECompletedOnboardingProfile } from './e2e-completed-onboarding-profile'
-import { getOrcaElectronLaunchArgs } from './electron-launch-args'
+import { getElectronIsolatedKeychainArgs, getOrcaElectronLaunchArgs } from './electron-launch-args'
 import { retryTransientMainEvaluate } from './electron-main-evaluate-retry'
 import { cleanupE2EDaemons, closeElectronAppForE2E } from './electron-process-shutdown'
 import {
@@ -161,7 +161,13 @@ export function createRestartSession(
   const launch = async (options?: LaunchOptions): Promise<LaunchedOrca> => {
     runtimeWsPort ??= await reserveRestartRuntimeWsPort()
     const app = await electron.launch({
-      args: [...getOrcaElectronLaunchArgs(mainPath, headful), ...(options?.extraArgs ?? [])],
+      executablePath: options?.executablePath,
+      args: [
+        ...(options?.executablePath
+          ? getElectronIsolatedKeychainArgs()
+          : getOrcaElectronLaunchArgs(mainPath, headful)),
+        ...(options?.extraArgs ?? [])
+      ],
       env: {
         ...homeIsolation.env,
         ...options?.extraEnv,
@@ -186,7 +192,9 @@ export function createRestartSession(
       await options?.beforeFirstWindow?.(app)
       const page = await app.firstWindow({ timeout: 120_000 })
       await page.waitForLoadState('domcontentloaded')
-      await page.waitForFunction(() => Boolean(window.__store), null, { timeout: 30_000 })
+      if (options?.waitForStore !== false) {
+        await page.waitForFunction(() => Boolean(window.__store), null, { timeout: 30_000 })
+      }
       return { app, page }
     } catch (error) {
       await closeElectronAppForE2E(app)

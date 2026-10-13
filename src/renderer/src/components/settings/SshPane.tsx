@@ -90,6 +90,19 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
     return () => abortController.abort()
   }, [loadTargets])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    const stop = window.api.plugins?.onChanged?.((event) => {
+      if (event.environmentProviderId) {
+        void loadTargets({ signal: controller.signal })
+      }
+    })
+    return () => {
+      controller.abort()
+      stop?.()
+    }
+  }, [loadTargets])
+
   const openAddTargetForm = useCallback((): void => {
     // Why: composer deep-links should land on the existing add form, not just
     // the host management pane.

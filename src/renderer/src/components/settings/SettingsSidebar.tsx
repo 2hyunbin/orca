@@ -1,4 +1,6 @@
-import type { CSSProperties, RefObject } from 'react'
+import { usePluginTerminalThemes } from '@/store/plugin-terminal-themes'
+import { PluginIconSlot } from '@/components/PluginIconSlot'
+import type { RefObject } from 'react'
 import { useMemo } from 'react'
 import { ArrowLeft, Search, Server } from 'lucide-react'
 import type { RepoIcon } from '../../../../shared/repo-icon'
@@ -161,10 +163,11 @@ export function SettingsSidebar({
 }: SettingsSidebarProps): React.JSX.Element {
   const setupGuideProgress = useSettingsSetupGuideProgress(true)
   const systemPrefersDark = useSystemPrefersDark()
+  const pluginTerminalThemes = usePluginTerminalThemes()
   const leftSidebarStyle = useMemo(
-    () => resolveLeftSidebarStyleVariables(settings, systemPrefersDark),
-    [settings, systemPrefersDark]
-  ) as CSSProperties | undefined
+    () => resolveLeftSidebarStyleVariables(settings, systemPrefersDark, pluginTerminalThemes),
+    [settings, systemPrefersDark, pluginTerminalThemes]
+  )
   const setupActive = activeSectionId === 'setup-guide'
   // Why: "Hide from sidebar" only hides the top-left app sidebar prompt;
   // Settings should remain a stable place to reopen the checklist.
@@ -245,7 +248,15 @@ export function SettingsSidebar({
                         onClick={() => onSelectSection(section.id)}
                         className={navItemClassName(isActive)}
                       >
-                        <Icon className="size-4 shrink-0" />
+                        {section.id === 'plugins' ? (
+                          <PluginIconSlot
+                            slot="sidebar.plugins"
+                            className="size-4 shrink-0"
+                            fallback={<Icon className="size-4 shrink-0" />}
+                          />
+                        ) : (
+                          <Icon className="size-4 shrink-0" />
+                        )}
                         <span className="truncate">{section.title}</span>
                         {isVisibleInstallStatus(section.installStatus) ? (
                           <span className={installStatusClassName}>
