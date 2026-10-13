@@ -7,7 +7,7 @@
 import type { Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
-import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'
+import { cleanupE2EDaemons, closeElectronAppForE2E } from './helpers/electron-process-shutdown'
 import {
   launchPairedElectronClient,
   type PairedElectronClient
@@ -105,6 +105,18 @@ test('a paired desktop keeps a mixed terminal and browser tab order', async ({
     await waitForRelaunchedRuntime(client, runtimeIdBeforeRestart!)
     await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
     await expectOrder('serve restart', [first!, browser, second])
+
+    // The desktop quits and reopens on its profile, so it adopts the server's strip afresh.
+    const profile = client.userDataDir
+    const quitting = client.app
+    client = null
+    await closeElectronAppForE2E(quitting)
+    client = await launchPairedElectronClient(host.offer, testInfo, 'mixed tab order', {
+      reuseUserDataDir: profile
+    })
+    await waitForPairedWorktreeId(client.page, testRepoPath)
+    await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
+    await expectOrder('desktop relaunch', [first!, browser, second])
 
     expect(findings).toEqual([])
   } finally {
