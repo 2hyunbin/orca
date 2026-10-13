@@ -32,9 +32,8 @@ function terminalTab(id: keyof typeof LEAVES, sortOrder: number) {
 function headlessRuntime(): {
   runtime: OrcaRuntimeService
   getSession: () => WorkspaceSessionState
-  setSession: (next: WorkspaceSessionState) => void
 } {
-  const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
+  const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal({
       activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-a' },
       activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-a' },
@@ -72,7 +71,7 @@ function headlessRuntime(): {
       }
     })
   )
-  return { runtime: new OrcaRuntimeService(runtimeStore as never), getSession, setSession }
+  return { runtime: new OrcaRuntimeService(runtimeStore as never), getSession }
 }
 
 async function expectNoOp(move: RuntimeMobileSessionTabMove): Promise<void> {
@@ -172,30 +171,19 @@ describe('headless session tab moves', () => {
     ])
   })
 
-  it("keeps the mover's own pick when it reorders a group", async () => {
-    const { runtime, getSession, setSession } = headlessRuntime()
+  it('shows the mover a tab it reordered, as a drag selects it', async () => {
+    const { runtime } = headlessRuntime()
     await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`, 'phone')
-    // Another device's tap: the host now shows tab-b, while the phone still shows tab-a.
-    const session = getSession()
-    setSession({
-      ...session,
-      activeTabIdByWorktree: { [TEST_WORKTREE_ID]: 'tab-b' },
-      tabGroups: {
-        [TEST_WORKTREE_ID]: session.tabGroups![TEST_WORKTREE_ID]!.map((group) =>
-          group.id === 'group-a' ? { ...group, activeTabId: 'tab-b' } : group
-        )
-      }
-    })
 
     await runtime.moveMobileSessionTab(
       `id:${TEST_WORKTREE_ID}`,
-      { kind: 'reorder', tabId: 'tab-a', targetGroupId: 'group-a', tabOrder: ['tab-b', 'tab-a'] },
+      { kind: 'reorder', tabId: 'tab-b', targetGroupId: 'group-a', tabOrder: ['tab-b', 'tab-a'] },
       'phone'
     )
 
     const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`, 'phone')
     expect(listed.tabGroups?.[0]).toMatchObject({
-      activeTabId: 'tab-a',
+      activeTabId: 'tab-b',
       tabOrder: ['tab-b', 'tab-a']
     })
   })

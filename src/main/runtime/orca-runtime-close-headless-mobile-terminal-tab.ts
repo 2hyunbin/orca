@@ -4,7 +4,6 @@ import { OrcaRuntimeWithCloseStructuredAgentSessionTab } from './orca-runtime-cl
 import type {
   RuntimeMobileSessionTabMove,
   RuntimeMobileSessionTabMoveResult,
-  RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../shared/runtime-types'
@@ -145,26 +144,28 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
       throw new Error('tab_not_found')
     }
     if (this.isWindowlessSessionTabs()) {
-      const before = this.toMobileSessionTabsResult(snapshot)
       this.setWorkspaceSessionForWorktree(
         worktreeId,
         withMovedSessionTab(
           this.getWorkspaceSessionHostIdForWorktree(worktreeId),
           this.getWorkspaceSessionForWorktree(worktreeId),
           worktreeId,
-          before,
+          this.toMobileSessionTabsResult(snapshot),
           move
         )
       )
       this.republishWindowlessSessionTabs(worktreeId)
-      const hostTabId = this.resolveMobileSessionHostTabId(snapshot, move.tabId)
-      const groupOf = (tabs: RuntimeMobileSessionTabsResult) =>
-        tabs.tabGroups?.find((group) => hostTabId && group.tabOrder.includes(hostTabId))?.id
       const after = this.toMobileSessionTabsResult(this.mobileSessionTabsByWorktree.get(worktreeId))
-      // A device keeps its own pick per group, so the mover's view follows a tab it moved into
-      // another group, as a window does; the save made that tab the shown one.
-      if (clientNavigationId && after.activeTabId && groupOf(after) !== groupOf(before)) {
-        this.applyMobileSessionTabNavigation(after, after.activeTabId, 'caller', clientNavigationId)
+      const shown = after.tabs.find((tab) => tab.id === after.activeTabId)
+      const shownTabId = shown?.type === 'terminal' ? shown.parentTabId : shown?.id
+      // A device keeps its own pick per group, so the mover's view follows the tab it moved, as a
+      // window's drag selects it; the save made that tab the shown one.
+      if (
+        clientNavigationId &&
+        shown &&
+        shownTabId === this.resolveMobileSessionHostTabId(snapshot, move.tabId)
+      ) {
+        this.applyMobileSessionTabNavigation(after, shown.id, 'caller', clientNavigationId)
       }
       return { moved: true }
     }

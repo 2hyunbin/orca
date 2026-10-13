@@ -201,13 +201,15 @@ export function withMovedSessionTab(
     }
     model = applied.model
   }
+  const orders = (layout: typeof model) =>
+    JSON.stringify(layout.workspaces[worktreeId]?.groups.map(({ id, tabOrder }) => [id, tabOrder]))
+  // A drop that changes no order (onto its own place) changes nothing, selection included.
+  if (orders(model) === orders(loaded.layout)) {
+    return session
+  }
   const landed = model.workspaces[worktreeId]?.groups.find((group) =>
     group.tabOrder.includes(movedTabId)
   )
-  if (landed?.id === from?.id) {
-    // A reorder within a group keeps every selection.
-    return saveWorkspaceLayout({ ...loaded, layout: model })
-  }
   const groups = loaded.desktopView.groups[worktreeId] ?? {}
   const nextGroups: typeof groups = {}
   for (const group of model.workspaces[worktreeId]?.groups ?? []) {
