@@ -103,15 +103,14 @@ it('attaches Pi at spawn and holds the opening send until the provider answers i
   await vi.waitFor(() => expect(script.prompts()).toEqual(['hello while Pi is starting']))
   await vi.waitFor(() =>
     expect(peekOpenedAgentSessionRecordStore()?.getRecord(HOST_TEST_SESSION)?.options).toEqual({
-      model: 'scripted/model-1',
-      effort: 'medium'
+      unknown: 'unavailable-saved-option'
     })
   )
   await stopStructuredAgentSessionRuntime()
   expect(script.closes()).toBe(1)
 })
 
-it('keeps a model picked during startup when the optional state read predates applying the pick', async () => {
+it('saves a startup model pick without writing it to the starting Pi child', async () => {
   const { script, host, caller, fence } = await setup()
   const fields = { key: 'model', value: 'scripted/model-2' }
   const picked = await host.setOption(caller, {
@@ -135,16 +134,12 @@ it('keeps a model picked during startup when the optional state read predates ap
   })
   expect(sent.ok).toBe(true)
   script.releaseHandshake()
-  // The pick reaches Pi before the message held for its start.
+  // A startup pick is saved for a later start at this piece.
   await vi.waitFor(() => expect(script.prompts()).toEqual(['first message']))
   const wire = script.wire()
-  expect(wire.indexOf('set_model')).toBeGreaterThan(-1)
-  expect(wire.indexOf('set_model')).toBeLessThan(wire.indexOf('prompt:first message'))
-  const { runtimeState, sessions, serialize } = host.collaboratorsForTests()
+  expect(wire).not.toContain('set_model')
+  const { sessions, serialize } = host.collaboratorsForTests()
   await vi.waitFor(() => expect(sessions.get(HOST_TEST_SESSION)?.child?.phase).toBe('ready'))
-  await vi.waitFor(() =>
-    expect(runtimeState.optionRevisions.current(HOST_TEST_SESSION)).toBeGreaterThan(1)
-  )
   await serialize(HOST_TEST_SESSION, async () => {})
   expect(peekOpenedAgentSessionRecordStore()?.getRecord(HOST_TEST_SESSION)?.options?.model).toBe(
     fields.value

@@ -52,7 +52,6 @@ export class PiRpcSessionStartup {
     launch: PiRpcResolvedLaunch,
     signal: AbortSignal
   ): Promise<StructuredAgentSessionProviderOpenResult> {
-    const optionRevision = this.input.optionRevision?.() ?? 0
     const answer = await this.wait(this.connection.request('get_state', {}, START_REQUEST), signal)
     this.assertLive(signal)
     const state = piRpcStateSchema.parse(answer)
@@ -121,7 +120,6 @@ export class PiRpcSessionStartup {
       link,
       reportedOptions: options?.current ?? current,
       restoreSkippedOptions: skipped,
-      optionRevision,
       ...(catalogListing ? { catalogListing } : {})
     }
   }
