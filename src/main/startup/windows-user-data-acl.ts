@@ -124,12 +124,15 @@ export function ensureWindowsUserDataAclGrant(
     // (Chromium replaces the root DACL on every BrowserWindow construction,
     // but never strips explicit ACEs from children). Root second so writes
     // directly under userData succeed before Chromium's first reset.
-    let failures: string[]
+    const failures: string[] = []
+    let children: string[] = []
     try {
-      failures = await grantEach([...childDirectories(userDataPath), userDataPath])
+      children = childDirectories(userDataPath)
     } catch (error) {
-      failures = [error instanceof Error ? error.message : String(error)]
+      // Still grant the root: a listing the broken DACL refuses is what that grant repairs.
+      failures.push(`${userDataPath}: ${error instanceof Error ? error.message : String(error)}`)
     }
+    failures.push(...(await grantEach([...children, userDataPath])))
     if (failures.length === 0) {
       try {
         writeMarker(userDataPath, identity)

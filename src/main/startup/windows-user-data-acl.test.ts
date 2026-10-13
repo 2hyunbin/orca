@@ -111,6 +111,17 @@ describe('ensureWindowsUserDataAclGrant', () => {
     expect(() => readFileSync(join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE))).toThrow()
   })
 
+  it('still grants the root when its children cannot be listed, and reports the failure', async () => {
+    // A file stands in for a userData whose listing is refused: readdir throws, the grant does not.
+    const unlistable = join(userDataPath, 'unlistable')
+    writeFileSync(unlistable, '')
+
+    const result = await awaitResult(unlistable)
+
+    expect(result).toMatchObject({ mode: 'failed', reason: expect.stringContaining('ENOTDIR') })
+    expect(granted()).toEqual([unlistable])
+  })
+
   it('no-ops when the addon cannot load', async () => {
     setWindowsSecurityForTests(null)
 
