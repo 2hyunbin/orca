@@ -282,7 +282,7 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
     return reconciledWorktreeIds
   }
 
-  /** Stores the saved layout's list for a worktree when it changed. */
+  /** Stores and publishes the saved layout's list for a worktree when it changed. */
   protected publishWindowlessSessionTabs(worktreeId: string, session: WorkspaceSessionState): void {
     const hostTabs =
       this.offscreenBrowserBackend && this.agentBrowserBridge?.tabList
@@ -307,19 +307,15 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
     if (!next) {
       return
     }
-    this.storeMobileSessionSnapshot(worktreeId, next)
+    // Every caller stores through here, so subscribers hear a change whichever caller saw it first.
+    this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(worktreeId, next))
   }
 
-  /** Republishes a windowless worktree's list and tells clients when it changed. */
+  /** Republishes a windowless worktree's list from its saved layout. */
   protected republishWindowlessSessionTabs(worktreeId: string): void {
     const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    const before = this.mobileSessionTabsByWorktree.get(worktreeId)
     if (session) {
       this.publishWindowlessSessionTabs(worktreeId, session)
-    }
-    const after = this.mobileSessionTabsByWorktree.get(worktreeId)
-    if (after && after !== before) {
-      this.emitMobileSessionTabsSnapshot(after)
     }
   }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { OrcaRuntimeService } from './orca-runtime'
 import { nextWindowlessSnapshot } from './windowless-session-tabs'
@@ -23,7 +23,7 @@ function twoGroupHost(overrides: Partial<WorkspaceSessionState> = {}) {
     loadError: null,
     createdAt: 2
   }
-  const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
+  const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal({
       activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-right' },
       unifiedTabs: {
@@ -77,7 +77,7 @@ function twoGroupHost(overrides: Partial<WorkspaceSessionState> = {}) {
     }),
     closeTab: async () => {}
   } as never)
-  return { runtime, getSession }
+  return { runtime, getSession, setSession }
 }
 
 describe('the session-tabs list of a host with no window', () => {
@@ -182,5 +182,27 @@ describe('the session-tabs list of a host with no window', () => {
     )
 
     expect(next).toMatchObject({ publicationEpoch: 'earlier-publication', snapshotVersion: 5 })
+  })
+
+  it('tells subscribers about a saved change that a list read first', async () => {
+    const { runtime, getSession, setSession } = twoGroupHost({
+      activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-left' }
+    })
+    await runtime.listMobileSessionTabs(WT)
+    const published = vi.fn()
+    runtime.onMobileSessionTabsChanged(published)
+
+    setSession({
+      ...getSession(),
+      activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-right' }
+    })
+    // A list before the write's own republish stores the change first.
+    await runtime.listMobileSessionTabs(WT)
+    await Promise.resolve()
+
+    expect(published).toHaveBeenCalledWith(
+      expect.objectContaining({ activeGroupId: 'group-right' }),
+      expect.any(Number)
+    )
   })
 })
