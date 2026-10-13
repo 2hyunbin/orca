@@ -36,13 +36,17 @@ export async function openStructuredAgentSessionProviderChild(
     if (attempt.signal.aborted) {
       return
     }
-    await settleStructuredAgentSessionProviderStarted(context, {
-      ...result,
-      type: 'started',
-      sessionId,
-      fence: child.fence,
-      acquisitionGeneration: child.generation ?? ''
-    })
+    await settleStructuredAgentSessionProviderStarted(
+      context,
+      {
+        ...result,
+        type: 'started',
+        sessionId,
+        fence: child.fence,
+        acquisitionGeneration: child.generation ?? ''
+      },
+      attempt.signal
+    )
   } catch (error) {
     // Stop, close, quit and expiry already own the child's end.
     if (!attempt.signal.aborted) {

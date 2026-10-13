@@ -1,3 +1,4 @@
+import { saveStructuredAgentSessionStartListing } from './structured-agent-session-start-listing'
 // A chat's options, live or at rest.
 //
 // At rest nothing here needs a child. The pick is the record's own `options` — what the next start replays —
@@ -218,7 +219,7 @@ export async function readStructuredAgentSessionOptions(
     const { catalogListing, ...answer } = live
     if (catalogListing) {
       // What a running child listed is its account's catalog too, so the next chat opens warm.
-      context.deps.modelCatalog?.recordLiveListing(sessionId, catalogListing)
+      saveStructuredAgentSessionStartListing(context, sessionId, catalogListing)
     }
     options = answer
   } else {

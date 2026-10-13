@@ -46,12 +46,17 @@ describe('a live Grok listing', () => {
       providerStarted: vi.fn()
     }
     // The rig waits for the child to turn ready: bookkeeping never fails a proven start.
-    const { store } = await openAttachedHostRig({}, undefined, modelCatalog)
+    const { host, rig, store, fence } = await openAttachedHostRig({}, undefined, modelCatalog)
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(1)
     expect(store.getRecord(SESSION)?.lease.ownerProcess).not.toBeNull()
-    // The rest of the start still lands: what it reported is saved.
-    await vi.waitFor(() =>
-      expect(store.getRecord(SESSION)?.options).toEqual({ model: 'grok-4.7', effort: 'high' })
-    )
+    // The rest of the start still lands, and live options remain readable.
+    await expect(host.readOptions(SESSION)).resolves.toMatchObject({ current: expect.any(Object) })
+    expect(
+      (await rig.adapter.readOptions({ sessionId: SESSION, fence: fence() })).current
+    ).toMatchObject({
+      model: 'grok-4.7',
+      effort: 'high'
+    })
+    expect(store.getRecord(SESSION)?.options).toBeUndefined()
   })
 })

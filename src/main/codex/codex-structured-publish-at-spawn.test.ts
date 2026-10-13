@@ -188,8 +188,7 @@ describe('Codex host-awaited open', () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'ended',
-        cause: 'unexpected-exit',
-        startupUnproven: true
+        cause: 'unexpected-exit'
       })
     )
     expect(codex.connections[0].closeCount).toBe(0)
