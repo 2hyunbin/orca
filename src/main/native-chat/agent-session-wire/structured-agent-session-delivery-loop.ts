@@ -12,6 +12,7 @@
 // earlier host process left queued is never handed over: the open, or this loop's first step,
 // settles it first (`journal-unsent-send-hold.ts`).
 
+import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
@@ -30,6 +31,7 @@ import type {
 } from './structured-agent-session-host-types'
 import {
   oldestQueuedSubmission,
+  startThatFailedWhileQueued,
   recordStructuredAgentSessionStartFailure,
   refusedStructuredAgentSessionStart,
   startThatFailedWhileQueued
@@ -45,6 +47,7 @@ import { waitsForCodexTurnOptions } from './structured-agent-session-message-opt
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
+  deliveryOrder: StructuredAgentSessionDeliveryOrder
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
   adapter: StructuredAgentSessionAdapter
   agents: StructuredAgentRegistry
@@ -88,6 +91,7 @@ type Prepared =
       ok: true
       awaited: StructuredAgentSessionProviderChildIdentity | null
       readiness: StructuredAgentSessionStartReadiness | null
+      before: Promise<void>
     }
 
 /** A failed start before it is worded; `fail` words it once, through the one wording point. */
@@ -107,6 +111,7 @@ export class StructuredAgentSessionDeliveryLoop {
   /** Quit: no step after this one starts a child or hands a message over. */
   dispose(): void {
     this.disposed = true
+    this.deps.deliveryOrder.dispose()
   }
 
   /** From inside the session's serialize, after a message was accepted or the conversation
@@ -116,6 +121,10 @@ export class StructuredAgentSessionDeliveryLoop {
     if (this.disposed) {
       return Promise.resolve()
     }
+    this.deps.deliveryOrder.reconcile(
+      sessionId,
+      this.deps.sessions.get(sessionId)?.journal.submissions() ?? []
+    )
     if (this.running.has(sessionId)) {
       return this.runs.get(sessionId) ?? Promise.resolve()
     }
@@ -149,8 +158,10 @@ export class StructuredAgentSessionDeliveryLoop {
           )
           return
         }
-        await prepared.readiness?.wait()
-        await prepared.readiness?.waitForOperations?.()
+        if (prepared.readiness) {
+          await prepared.readiness.wait()
+        }
+        await prepared.before
         const handed = await this.deps.serialize(sessionId, () =>
           this.handOver(sessionId, prepared.awaited, prepared.readiness !== null)
         )
@@ -223,7 +234,8 @@ export class StructuredAgentSessionDeliveryLoop {
     return {
       ok: true,
       awaited: child ? { generation: child.generation, fence: child.fence } : null,
-      readiness: child?.phase === 'starting' ? this.deps.readiness(sessionId, child) : null
+      readiness: child?.phase === 'starting' ? this.deps.readiness(sessionId, child) : null,
+      before: this.deps.deliveryOrder.beforeSend(sessionId, oldest.clientMessageId)
     }
   }
 

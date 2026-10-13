@@ -12,6 +12,7 @@ import {
   type StructuredAgentSessionConversationOpenOptions
 } from './structured-agent-session-conversation-open'
 import type { StructuredAgentSessionClientDelivery } from './structured-agent-session-client-delivery'
+import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import { StructuredAgentSessionDeliveryLoop } from './structured-agent-session-delivery-loop'
 import { structuredAgentSessionCommandRunning } from './structured-agent-session-command-turn'
 import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
@@ -62,6 +63,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     sessionId: string,
     startedFor: string
   ) => Promise<StructuredAgentSessionResumeOutcome>
+  deliveryOrder: StructuredAgentSessionDeliveryOrder
   readiness: (
     sessionId: string,
     child: StructuredAgentSessionProviderChildIdentity
@@ -104,6 +106,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
       return input.ensureProviderChild(sessionId, startedFor)
     },
     readiness: input.readiness,
+    deliveryOrder: input.deliveryOrder,
     conversationFence: (sessionId) =>
       structuredAgentSessionConversationFence(deps.store, sessionId),
     holdClosed: async (sessionId, which) => {
@@ -141,6 +144,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   }
   const wakesQueued = new Set<string>()
   const afterCommit = (sessionId: string, journal: AgentSessionJournal): void => {
+    input.deliveryOrder.reconcile(sessionId, journal.submissions())
     if (
       wakesQueued.has(sessionId) ||
       structuredAgentSessionCommandRunning(journal) ||

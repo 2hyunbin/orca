@@ -22,7 +22,7 @@ import {
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
-import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
 
 const CALLER = { callerKey: 'client-1' }
 const DEFAULT_MODEL = 'gpt-default'
@@ -85,8 +85,8 @@ function adapter(): StructuredAgentSessionAdapter {
       reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) }
     }),
     acquire,
-    dispatch: vi.fn<StructuredAgentSessionAdapter['dispatch']>(async () => {
-      dispatchedModels.push(activeModel)
+    dispatch: vi.fn<StructuredAgentSessionAdapter['dispatch']>(async ({ executionOptions }) => {
+      dispatchedModels.push(executionOptions?.model ?? activeModel)
       return {
         state: 'accepted',
         providerIdentity: { provider: 'codex', threadId: THREAD, turnId: 'turn-1', ordinal: 1 }
@@ -130,7 +130,7 @@ beforeEach(async () => {
   store = await openTestAgentSessionRecordStore(root)
   router = adapter()
   host = new StructuredAgentSessionHost({
-    agents: NO_STRUCTURED_AGENTS,
+    agents: claudeAndCodexDeclared(),
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: router,
@@ -205,4 +205,31 @@ describe('structured session options and close', () => {
     await expect(host.close(SESSION, 'evict')).resolves.toBeUndefined()
     expect(closeNativeSession).not.toHaveBeenCalled()
   })
+})
+
+it('applies running Codex model and effort picks to the next message', async () => {
+  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
+  for (const [key, value] of [
+    ['model', 'gpt-picked'],
+    ['effort', 'high']
+  ]) {
+    expect(
+      await host.setOption(CALLER, {
+        envelope: envelope('agentSession.setOption', { key, value }),
+        key,
+        value
+      })
+    ).toMatchObject({ ok: true })
+  }
+  const body = {
+    kind: 'message' as const,
+    role: 'user' as const,
+    blocks: [{ type: 'text' as const, text: 'with the new choices' }]
+  }
+  expect(
+    await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+  ).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(dispatchedModels).toEqual(['gpt-picked']))
+  expect(vi.mocked(router.dispatch).mock.calls.at(-1)?.[0].executionOptions?.effort).toBe('high')
+  expect(router.setOption).not.toHaveBeenCalled()
 })

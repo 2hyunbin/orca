@@ -2,7 +2,6 @@
 
 import { randomUUID } from 'node:crypto'
 import {
-  StructuredAgentSessionOperationOrder,
   waitForStructuredAgentSessionStart,
   type StructuredAgentSessionStartReadiness
 } from './structured-agent-session-start-readiness'
@@ -100,7 +99,6 @@ type Tracked = {
  *  new attempt replaces any older one. */
 export class StructuredAgentSessionStartupAttempts {
   private readonly open = new Map<string, Tracked>()
-  private readonly operationOrder = new StructuredAgentSessionOperationOrder()
   private disposed = false
   private readonly limits: StructuredAgentSessionStartupLimits
   private readonly now: () => number
@@ -167,14 +165,8 @@ export class StructuredAgentSessionStartupAttempts {
       return null
     }
     return {
-      reserveOperation: () => this.operationOrder.reserve(sessionId),
-      waitForOperations: () => this.operationOrder.pending(sessionId) ?? Promise.resolve(),
       wait: (budgetMs) => waitForStructuredAgentSessionStart(tracked.readiness.promise, budgetMs)
     }
-  }
-
-  pendingOperations(sessionId: string): Promise<void> | null {
-    return this.operationOrder.pending(sessionId)
   }
 
   /** The acquire returned: its `starting` child stays on the clock until it proves its start, and

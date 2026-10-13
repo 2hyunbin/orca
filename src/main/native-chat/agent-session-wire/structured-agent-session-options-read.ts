@@ -1,9 +1,9 @@
-import { saveStructuredAgentSessionStartListing } from './structured-agent-session-start-listing'
 // A chat's options, live or at rest.
 //
 // The record keeps the next message's choices; the catalog names known defaults. A provider's
 // reports remain execution facts and never replace the saved selection.
 
+import { saveStructuredAgentSessionListing } from './structured-agent-session-start-listing'
 import {
   refuse,
   type AgentSessionModelCatalogResult,
@@ -221,7 +221,7 @@ export async function readStructuredAgentSessionOptions(
     const { catalogListing, ...answer } = live
     if (catalogListing) {
       // What a running child listed is its account's catalog too, so the next chat opens warm.
-      saveStructuredAgentSessionStartListing(context, sessionId, catalogListing)
+      saveStructuredAgentSessionListing(context, sessionId, catalogListing)
     }
     options = answer
   } else {

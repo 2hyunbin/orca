@@ -103,15 +103,14 @@ it('attaches Pi at spawn and holds the opening send until the provider answers i
   await vi.waitFor(() => expect(script.prompts()).toEqual(['hello while Pi is starting']))
   await vi.waitFor(() =>
     expect(peekOpenedAgentSessionRecordStore()?.getRecord(HOST_TEST_SESSION)?.options).toEqual({
-      model: 'scripted/model-1',
-      effort: 'medium'
+      unknown: 'unavailable-saved-option'
     })
   )
   await stopStructuredAgentSessionRuntime()
   expect(script.closes()).toBe(1)
 })
 
-it('keeps a model picked during startup when the optional state read predates applying the pick', async () => {
+it('uses a startup model pick when delivering the message', async () => {
   const { script, host, caller, fence } = await setup()
   const fields = { key: 'model', value: 'scripted/model-2' }
   const picked = await host.setOption(caller, {
@@ -135,7 +134,7 @@ it('keeps a model picked during startup when the optional state read predates ap
   })
   expect(sent.ok).toBe(true)
   script.releaseHandshake()
-  // The pick reaches Pi before the message held for its start.
+  // The pick is captured by the send and applied immediately before its prompt.
   await vi.waitFor(() => expect(script.prompts()).toEqual(['first message']))
   const wire = script.wire()
   expect(wire.indexOf('set_model')).toBeGreaterThan(-1)

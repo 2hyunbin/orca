@@ -229,11 +229,14 @@ async function connectCodexAppServer(
       return closing || managed.rootVerdict === 'exited' || terminalError !== null
     },
     get processTreeUnproven() {
-      const tree = managed.lastCloseResult?.tree
-      return managed.lastCloseResult?.root === 'exited' && tree !== 'exited'
+      const result = connection.closeResult
+      return result?.root === 'exited' && result.tree !== 'exited'
     },
     get closeResult() {
-      return managed.lastCloseResult
+      const result = managed.lastCloseResult
+      return result && managed.rootVerdict === 'exited'
+        ? { ...result, root: 'exited' as const }
+        : result
     },
     request,
     notify,

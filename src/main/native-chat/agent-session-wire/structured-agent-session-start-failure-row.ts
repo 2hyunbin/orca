@@ -1,3 +1,5 @@
+import { failedProviderChildStart } from './structured-agent-session-provider-child'
+import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
@@ -126,4 +128,23 @@ export function oldestQueuedSubmission(
     }
   }
   return oldest
+}
+
+/** A start that died while this message waited on it — a view's, say — is the message's failed
+ *  start: settled with it, under its key, rather than started again into the same failure. */
+export function startThatFailedWhileQueued(
+  session: StructuredAgentSessionHostSession,
+  oldest: NonNullable<ReturnType<typeof oldestQueuedSubmission>>
+): { startKey: string | null; cause: StructuredAgentSessionStartFailureCause } | null {
+  const ended = failedProviderChildStart(session)
+  if (
+    !ended ||
+    oldest.acceptedSequence === undefined ||
+    ended.endedAt.epoch !== session.journal.cursor().epoch ||
+    ended.endedAt.sequence < oldest.acceptedSequence
+  ) {
+    return null
+  }
+  const cause = structuredAgentSessionEndedChildFailure(ended)
+  return cause ? { startKey: ended.generation, cause } : null
 }
