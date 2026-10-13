@@ -10,6 +10,7 @@ let resolvedPaneHandle = 'terminal-1'
 
 const {
   emitSnapshot,
+  runtimeCall,
   latestSubscribePayload,
   subscribeFrameCount,
   subscribedTerminalHandles,
@@ -66,6 +67,27 @@ describe('remote runtime PTY whose host pane is not mounted yet', () => {
     await vi.waitFor(() => expect(transport.getRecoveryState?.().phase).toBe('connected'))
     expect(transport.getPtyId()).toBe('remote:env-1@@terminal-1')
     expect(onPtyExit).not.toHaveBeenCalled()
+    transport.destroy?.()
+  })
+
+  it('retires the pane as lost, not exited, when the host stops listing it', async () => {
+    const onPtyExit = vi.fn()
+    const { transport, onExit } = await connectPane(onPtyExit)
+    const defaultCall = runtimeCall.getMockImplementation()
+    runtimeCall.mockImplementation(async (args: { method: string }) => {
+      if (args.method === 'terminal.resolvePane') {
+        return { ok: false, error: { code: 'runtime_error', message: 'terminal_not_found' } }
+      }
+      return defaultCall?.(args)
+    })
+
+    answerUnmountedHostPane(latestSubscribePayload().streamId)
+
+    // Why -1: the host-loss sentinel; a pane the host stopped listing is not proof of exit.
+    await vi.waitFor(() => expect(onPtyExit).toHaveBeenCalledWith('remote:env-1@@terminal-1', -1))
+    expect(onPtyExit).toHaveBeenCalledOnce()
+    expect(onExit).not.toHaveBeenCalled()
+    expect(subscribeFrameCount()).toBe(1)
     transport.destroy?.()
   })
 
