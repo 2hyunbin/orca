@@ -11,12 +11,13 @@ import type { TuiAgent } from '../../shared/tui-agent'
 import { resolveCommandOnLocalPath } from '../ipc/command-path-resolver'
 import { runWslProcess } from '../wsl/wsl-runner'
 import { probeOpenCodeCliVersion } from './opencode-cli-version'
+import { getLaunchCommandAfterDelay } from '../../shared/delayed-launch-command'
 
 export function getOpenCodeLaunchExecutable(
   command: string | undefined,
   agent?: TuiAgent
 ): string | null {
-  const executable = getFirstCommandToken(command ?? '')
+  const executable = getFirstCommandToken(getLaunchCommandAfterDelay(command ?? ''))
   const name = getCommandTokenPathBasename(executable)
     .toLowerCase()
     .replace(/\.(?:exe|cmd|sh)$/, '')

@@ -1,8 +1,11 @@
 import { getCommandTokenPathBasename, getFirstCommandToken } from './command-token-scanner'
 import type { TuiAgent } from './tui-agent'
+import { getLaunchCommandAfterDelay } from './delayed-launch-command'
 
 function openCodeCommandAgent(launchCommand: string | undefined): 'opencode' | 'opencode2' | null {
-  const binary = getCommandTokenPathBasename(getFirstCommandToken(launchCommand ?? ''))
+  const binary = getCommandTokenPathBasename(
+    getFirstCommandToken(getLaunchCommandAfterDelay(launchCommand ?? ''))
+  )
     .toLowerCase()
     .replace(/\.(?:cmd|exe|sh)$/, '')
   return binary === 'opencode' || binary === 'opencode2' ? binary : null

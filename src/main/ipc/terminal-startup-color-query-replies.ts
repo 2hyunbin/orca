@@ -4,6 +4,7 @@ import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import { agentKindSchema } from '../../shared/telemetry-events'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
+import { getLaunchCommandAfterDelay } from '../../shared/delayed-launch-command'
 
 function isAgentLaunch(args: {
   launchAgent?: unknown
@@ -22,7 +23,7 @@ function isAgentLaunch(args: {
     return true
   }
   const command = args.launchConfig?.agentCommand?.trim() || args.command?.trim() || ''
-  return recognizeAgentProcessFromCommandLine(command) !== null
+  return recognizeAgentProcessFromCommandLine(getLaunchCommandAfterDelay(command)) !== null
 }
 
 // Why: jcode paints its own theme and fires its OSC 10/11 burst before its TUI
@@ -42,7 +43,10 @@ export function agentSkipsStartupOscColorQueryReplies(args: {
     return true
   }
   const command = args.launchConfig?.agentCommand?.trim() || args.command?.trim() || ''
-  return command.length > 0 && recognizeAgentProcessFromCommandLine(command)?.agent === 'jcode'
+  return (
+    command.length > 0 &&
+    recognizeAgentProcessFromCommandLine(getLaunchCommandAfterDelay(command))?.agent === 'jcode'
+  )
 }
 
 export function getStartupTerminalIngressIntent(args: {

@@ -12,6 +12,7 @@ import { resolveCommittedTitleAgentType } from '@/lib/pane-agent-evidence'
 import { recognizeAgentProcessFromCommandLine } from '../../../../../shared/agent-process-recognition'
 import type { TerminalAgent } from '../../../../../shared/terminal-agent'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
+import { getLaunchCommandAfterDelay } from '../../../../../shared/delayed-launch-command'
 
 import { MANUAL_AGENT_COMMAND_MAX_CHARS } from './pty-connect-limits'
 
@@ -36,7 +37,8 @@ export function installCommandInferredPaneAgent(session: ConnectPanePtySession):
     const commandLine = session.pendingShellCommandLine.trim()
     session.resetPendingShellCommandLine()
     const candidateAgent = commandLine
-      ? (recognizeAgentProcessFromCommandLine(commandLine)?.agent ?? null)
+      ? (recognizeAgentProcessFromCommandLine(getLaunchCommandAfterDelay(commandLine))?.agent ??
+        null)
       : null
     const state = useAppStore.getState()
     const registeredLaunchAgent =
