@@ -510,10 +510,15 @@ describe('OrcaRuntimeService', () => {
       })
     )
     const flushOrThrow = vi.fn()
+    const ids = ['headless-left', 'headless-right']
+    // As a host's spawn does, it saves the pane's new process before answering.
     const spawn = vi
       .fn()
-      .mockResolvedValueOnce({ id: 'headless-left' })
-      .mockResolvedValueOnce({ id: 'headless-right' })
+      .mockImplementation(async (args: { worktreeId: string; tabId: string; leafId: string }) => {
+        const id = ids.shift()!
+        await runtimeStore.persistPtyBinding({ ...args, ptyId: id })
+        return { id }
+      })
     const kill = vi.fn(() => true)
     const runtime = new OrcaRuntimeService(
       withDurableRuntimeStore({ ...runtimeStore, flushOrThrow })

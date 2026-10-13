@@ -525,7 +525,7 @@ describe('OrcaRuntimeService', () => {
   it('creates a new headless terminal in the targeted split group, not the active one', async () => {
     // Regression: a per-group "+" passes targetGroupId, but the headless create ignored it and funneled every new tab into the active group.
     let ptyCounter = 0
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: `target-group-pty-${++ptyCounter}` })),
       write: () => true,

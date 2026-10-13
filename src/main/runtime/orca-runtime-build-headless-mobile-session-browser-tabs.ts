@@ -8,6 +8,7 @@ import type {
 } from '../../shared/runtime-types'
 import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
+import { clientHostedSessionBrowserTabs } from './client-hosted-session-browser-tabs'
 import { holdAgentSessionInventory } from './structured-agent-session-inventory-hold'
 import type { Tab } from '../../shared/tab-types'
 import {
@@ -65,7 +66,9 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
         isActive: tab.active === true
       }
     })
-    const publishedClientTabs = this.buildClientHostedSessionBrowserTabs(worktreeId)
+    const publishedClientTabs = clientHostedSessionBrowserTabs(
+      getRuntimeBrowserPageRegistry(this).listPages(worktreeId)
+    )
     const publishedSavedTabs = this.serveBrowserTabs.listRestorable(worktreeId).map((page) => {
       const persistedProps = this.getPersistedUnifiedSessionTabProps(worktreeId, page.tabId)
       return {
@@ -84,29 +87,6 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
       }
     })
     return [...publishedServerTabs, ...publishedClientTabs, ...publishedSavedTabs]
-  }
-
-  /** Pages paired clients run for this host's worktree. */
-  protected buildClientHostedSessionBrowserTabs(
-    worktreeId: string
-  ): RuntimeMobileSessionBrowserTab[] {
-    return getRuntimeBrowserPageRegistry(this)
-      .listPages(worktreeId)
-      .map((page) => ({
-        type: 'browser' as const,
-        id: page.browserPageId,
-        title: page.title || page.url || 'Browser',
-        browserWorkspaceId: page.browserPageId,
-        browserPageId: page.browserPageId,
-        browserProfileId: page.browserProfileId,
-        executionHostKey: page.executionHostKey,
-        placement: page.placement,
-        url: page.url,
-        loading: page.loading,
-        canGoBack: page.canGoBack,
-        canGoForward: page.canGoForward,
-        isActive: page.active
-      }))
   }
 
   protected getPersistedUnifiedSessionTabProps(

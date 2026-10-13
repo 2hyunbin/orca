@@ -2,9 +2,11 @@
 import { OrcaRuntimeWithWaitForSessionTabsInventoryPublication } from './orca-runtime-wait-for-session-tabs-inventory-publication'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
+import { clientHostedSessionBrowserTabs } from './client-hosted-session-browser-tabs'
 import { splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
 import { buildHeadlessMobileSessionTerminalTabs } from './mobile-session-terminal-projection'
 import { buildHeadlessMobileSessionEditorTabs } from './mobile-session-editor-projection'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
 import type {
   RuntimeMobileSessionSnapshotTab,
   RuntimeMobileSessionTabGroup,
@@ -286,7 +288,9 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
       this.offscreenBrowserBackend && this.agentBrowserBridge?.tabList
         ? this.agentBrowserBridge.tabList(worktreeId).tabs
         : []
-    const clientRows = this.buildClientHostedSessionBrowserTabs(worktreeId)
+    const clientRows = clientHostedSessionBrowserTabs(
+      getRuntimeBrowserPageRegistry(this).listPages(worktreeId)
+    )
     const projected = projectWindowlessSessionTabs({
       hostId: this.getWorkspaceSessionHostIdForWorktree(worktreeId),
       session,
@@ -335,8 +339,11 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
     }
   }
 
-  /** No renderer is attached to publish its own list, so the saved layout is listed. */
+  /** No renderer is attached to publish its own list (a headless host's graph is not one). */
   protected isWindowlessSessionTabs(): boolean {
-    return this.authoritativeWindowId === null
+    return (
+      this.authoritativeWindowId === null ||
+      this.authoritativeWindowId === HEADLESS_RUNTIME_WINDOW_ID
+    )
   }
 }

@@ -109,9 +109,10 @@ describe('OrcaRuntimeService', () => {
     expect(await terminalLeafIds()).toEqual([HEADLESS_LEAF_ID])
   })
 
-  // Why: the process is gone whether or not the profile admits the write (quit, maintenance).
-  it('retires the pane and ends the stream when the profile refuses the staging write', async () => {
-    const { runtime, runtimeStore, activate, terminalLeafIds } = await startSplitHost()
+  // Why: the saved layout is the list; a refused write (quit, maintenance) keeps the pane, but the
+  // exited process still ends its stream.
+  it('keeps the pane and ends the stream when the profile refuses the staging write', async () => {
+    const { runtime, runtimeStore, terminalLeafIds } = await startSplitHost()
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     runtimeStore.setWorkspaceSession.mockImplementation(() => {
       throw new Error('Profile maintenance or finalization is blocking new terminal snapshot work')
@@ -122,8 +123,7 @@ describe('OrcaRuntimeService', () => {
     await runtime.onPtyExit('pty-b', 0, undefined, { providerExitObserved: true })
 
     expect(streamEnd).toHaveBeenCalledOnce()
-    expect(await terminalLeafIds()).toEqual([HEADLESS_LEAF_ID])
-    await expect(activate(HEADLESS_SECOND_LEAF_ID, 'automatic')).rejects.toThrow('tab_not_found')
+    expect(await terminalLeafIds()).toEqual([HEADLESS_LEAF_ID, HEADLESS_SECOND_LEAF_ID])
     expect(errorSpy).toHaveBeenCalledWith(
       '[runtime] could not stage terminal retirement:',
       expect.any(Error)

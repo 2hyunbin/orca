@@ -39,6 +39,11 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
       )
       return proof ? [proof] : []
     })
+    // The rows this close takes down; the list may already omit them once the close is saved.
+    const closingRows = snapshot.tabs.filter(
+      (candidate): candidate is RuntimeMobileSessionTerminalTab =>
+        candidate.type === 'terminal' && candidate.parentTabId === closedParentTabId
+    )
     const acknowledgeRetirement = this.captureTerminalTabRetirement(worktreeId, closedParentTabId)
     const projectedPtyIds = await this.closeTerminalSurface(
       worktreeId,
@@ -63,10 +68,7 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
     // persisted id is not kill authority. SSH relay ids remain durable exact
     // identities even before pane metadata reconnects.
     const ptyIdsToKill = new Set(projectedPtyIds.filter((ptyId) => parseAppSshPtyId(ptyId)))
-    for (const candidate of snapshot.tabs) {
-      if (candidate.type !== 'terminal' || candidate.parentTabId !== closedParentTabId) {
-        continue
-      }
+    for (const candidate of closingRows) {
       const authorizedPty =
         options.authorizedPty &&
         this.getMobileTerminalLeafPtyIds(candidate).includes(options.authorizedPty.ptyId)
