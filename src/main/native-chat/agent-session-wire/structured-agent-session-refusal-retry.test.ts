@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { AGENT_SESSION_MAX_NEW_OPERATION_AGE_MS } from '../../../shared/agent-session-host-authority'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
   AGENT_SESSION_WIRE_REFUSAL_CODES,
   type AgentSessionMutationEnvelope,
@@ -198,6 +199,13 @@ async function assertHostAgreement(
   return `${spec.method}:${code}`
 }
 
+async function setLease(
+  harness: Harness,
+  update: (record: AgentSessionRecord) => AgentSessionRecord
+): Promise<void> {
+  await harness.store.transitionHandoff(SESSION, update)
+}
+
 // sendPlan and setOptionPlan have no unsupported branch.
 const UNREACHABLE = new Set<Pair>([
   'agentSession.send:structured_agent_session_unsupported',
@@ -214,10 +222,6 @@ const UNREACHABLE = new Set<Pair>([
   'agentSession.setOption:agent_session_journal_unreadable',
   // Only a send restarts a lost owner.
   'agentSession.setOption:agent_session_owner_restart_failed',
-  // Saving a next-message pick is a conversation write, independent of its child owner.
-  'agentSession.setOption:agent_session_conflict',
-  'agentSession.setOption:execution_owner_reconciling',
-  'agentSession.setOption:agent_session_operation_unknown',
   // A write names its target, not an owner generation; only an attach compares fences.
   'agentSession.setOption:agent_session_checkpoint_stale',
   'agentSession.send:agent_session_checkpoint_stale',
@@ -244,7 +248,25 @@ describe('agentSessionRefusalOperationState host oracle', () => {
       const spec = { method, operationId: operationId(), expectedRuntimeFence: 99 }
       await expect(invoke(stale, spec), method).resolves.toMatchObject({ ok: true })
     }
-    expect(stale.setOption).not.toHaveBeenCalled()
+    expect(stale.setOption).toHaveBeenCalledTimes(1)
+
+    const conflict = await createHarness()
+    for (const method of ['agentSession.setOption'] as const) {
+      await setLease(conflict, (current) => ({
+        ...current,
+        lease: { ...current.lease, handoffStage: 'new-owner-proving' }
+      }))
+      const spec = { method, operationId: operationId() }
+      record(
+        await assertHostAgreement(conflict, spec, 'agent_session_conflict', async () => {
+          await setLease(conflict, (current) => ({
+            ...current,
+            lease: { ...current.lease, handoffStage: null }
+          }))
+          return { harness: conflict, spec }
+        })
+      )
+    }
 
     const absent = await createHarness({ attached: false })
     for (const method of METHODS) {
@@ -295,6 +317,10 @@ describe('agentSessionRefusalOperationState host oracle', () => {
     }
 
     const unknown = await createHarness()
+    unknown.setOption.mockRejectedValueOnce(new Error('reply lost'))
+    const optionUnknown = { method: 'agentSession.setOption' as const, operationId: operationId() }
+    await expect(invoke(unknown, optionUnknown)).rejects.toThrow('reply lost')
+    record(await assertHostAgreement(unknown, optionUnknown, 'agent_session_operation_unknown'))
     const sendUnknown = { method: 'agentSession.send' as const, operationId: operationId() }
     await expect(invoke(unknown, sendUnknown)).resolves.toMatchObject({ ok: true })
     openTestJournalHostDatabase(unknown.root)
@@ -303,6 +329,24 @@ describe('agentSessionRefusalOperationState host oracle', () => {
       )
       .run(sendUnknown.operationId)
     record(await assertHostAgreement(unknown, sendUnknown, 'agent_session_operation_unknown'))
+
+    const reconciling = await createHarness()
+    for (const method of ['agentSession.setOption'] as const) {
+      await setLease(reconciling, (current) => ({
+        ...current,
+        lease: { ...current.lease, unreconciled: true }
+      }))
+      const spec = { method, operationId: operationId() }
+      record(
+        await assertHostAgreement(reconciling, spec, 'execution_owner_reconciling', async () => {
+          await setLease(reconciling, (current) => ({
+            ...current,
+            lease: { ...current.lease, unreconciled: false }
+          }))
+          return { harness: reconciling, spec }
+        })
+      )
+    }
 
     const unreadable = await createHarness()
     await unreadable.host.close(SESSION, 'evict')

@@ -12,7 +12,6 @@
 
 import { randomUUID } from 'node:crypto'
 import {
-  StructuredAgentSessionOperationOrder,
   waitForStructuredAgentSessionStart,
   type StructuredAgentSessionStartReadiness
 } from './structured-agent-session-start-readiness'
@@ -36,7 +35,6 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
   permissionMode?: AgentChatPermissionMode
   events?: StructuredAgentSessionEventSink
   signal?: AbortSignal
-  optionRevision: () => number
 }): StructuredAgentSessionStartupAttempt {
   const { record } = input
   return {
@@ -52,8 +50,7 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
     ...(record.options ? { options: record.options } : {}),
     ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
     ...(input.events ? { events: input.events } : {}),
-    ...(input.signal ? { signal: input.signal } : {}),
-    optionRevision: input.optionRevision
+    ...(input.signal ? { signal: input.signal } : {})
   }
 }
 
@@ -110,7 +107,6 @@ type Tracked = {
  *  new attempt replaces any older one. */
 export class StructuredAgentSessionStartupAttempts {
   private readonly open = new Map<string, Tracked>()
-  private readonly operationOrder = new StructuredAgentSessionOperationOrder()
   private disposed = false
   private readonly limits: StructuredAgentSessionStartupLimits
   private readonly now: () => number
@@ -177,14 +173,8 @@ export class StructuredAgentSessionStartupAttempts {
       return null
     }
     return {
-      reserveOperation: () => this.operationOrder.reserve(sessionId),
-      waitForOperations: () => this.operationOrder.pending(sessionId) ?? Promise.resolve(),
       wait: (budgetMs) => waitForStructuredAgentSessionStart(tracked.readiness.promise, budgetMs)
     }
-  }
-
-  pendingOperations(sessionId: string): Promise<void> | null {
-    return this.operationOrder.pending(sessionId)
   }
 
   /** The acquire returned: its `starting` child stays on the clock until it proves its start, and

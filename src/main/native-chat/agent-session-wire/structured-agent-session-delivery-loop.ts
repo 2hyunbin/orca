@@ -12,6 +12,7 @@
 // earlier host process left queued is never handed over: the open, or this loop's first step,
 // settles it first (`journal-unsent-send-hold.ts`).
 
+import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
@@ -30,10 +31,10 @@ import type {
 } from './structured-agent-session-host-types'
 import {
   oldestQueuedSubmission,
+  startThatFailedWhileQueued,
   recordStructuredAgentSessionStartFailure,
   refusedStructuredAgentSessionStart
 } from './structured-agent-session-start-failure-row'
-import { failedProviderChildStart } from './structured-agent-session-provider-child'
 import { handOverSubmission } from './structured-agent-session-turns'
 import { structuredAgentSessionNextHandover } from './structured-agent-session-opening-send'
 import { structuredAgentSessionCommandRunning } from './structured-agent-session-command-turn'
@@ -43,6 +44,7 @@ import { holdRestartedStructuredAgentSessionSends } from './structured-agent-ses
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
+  deliveryOrder: StructuredAgentSessionDeliveryOrder
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
   adapter: StructuredAgentSessionAdapter
   agents: StructuredAgentRegistry
@@ -87,6 +89,7 @@ type Prepared =
       ok: true
       awaited: StructuredAgentSessionProviderChildIdentity | null
       readiness: StructuredAgentSessionStartReadiness | null
+      before: Promise<void>
     }
 
 /** A failed start before it is worded; `fail` words it once, through the one wording point. */
@@ -106,6 +109,7 @@ export class StructuredAgentSessionDeliveryLoop {
   /** Quit: no step after this one starts a child or hands a message over. */
   dispose(): void {
     this.disposed = true
+    this.deps.deliveryOrder.dispose()
   }
 
   /** From inside the session's serialize, after a message was accepted or the conversation
@@ -115,6 +119,10 @@ export class StructuredAgentSessionDeliveryLoop {
     if (this.disposed) {
       return Promise.resolve()
     }
+    this.deps.deliveryOrder.reconcile(
+      sessionId,
+      this.deps.sessions.get(sessionId)?.journal.submissions() ?? []
+    )
     if (this.running.has(sessionId)) {
       return this.runs.get(sessionId) ?? Promise.resolve()
     }
@@ -150,8 +158,8 @@ export class StructuredAgentSessionDeliveryLoop {
         }
         if (prepared.readiness) {
           await prepared.readiness.wait()
-          await prepared.readiness.waitForOperations?.()
         }
+        await prepared.before
         const handed = await this.deps.serialize(sessionId, () =>
           this.handOver(sessionId, prepared.awaited, prepared.readiness !== null)
         )
@@ -224,7 +232,8 @@ export class StructuredAgentSessionDeliveryLoop {
     return {
       ok: true,
       awaited: child ? { generation: child.generation, fence: child.fence } : null,
-      readiness: child?.phase === 'starting' ? this.deps.readiness(sessionId, child) : null
+      readiness: child?.phase === 'starting' ? this.deps.readiness(sessionId, child) : null,
+      before: this.deps.deliveryOrder.beforeSend(sessionId, oldest.clientMessageId)
     }
   }
 
@@ -346,23 +355,4 @@ export class StructuredAgentSessionDeliveryLoop {
     this.running.delete(sessionId)
     return 'stop'
   }
-}
-
-/** A start that died while this message waited on it — a view's, say — is the message's failed
- *  start: settled with it, under its key, rather than started again into the same failure. */
-function startThatFailedWhileQueued(
-  session: StructuredAgentSessionHostSession,
-  oldest: NonNullable<ReturnType<typeof oldestQueuedSubmission>>
-): StartFailure | null {
-  const ended = failedProviderChildStart(session)
-  if (
-    !ended ||
-    oldest.acceptedSequence === undefined ||
-    ended.endedAt.epoch !== session.journal.cursor().epoch ||
-    ended.endedAt.sequence < oldest.acceptedSequence
-  ) {
-    return null
-  }
-  const cause = structuredAgentSessionEndedChildFailure(ended)
-  return cause ? { startKey: ended.generation, cause } : null
 }

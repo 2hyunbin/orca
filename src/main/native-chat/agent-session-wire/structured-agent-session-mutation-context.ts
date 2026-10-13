@@ -14,7 +14,7 @@ import {
 import type { MutationPlan } from './structured-agent-session-mutation-plans'
 import type { StructuredAgentSessionStopEnding } from './structured-agent-session-host-lifetime'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
-import type { StructuredAgentSessionOptionRevisions } from './structured-agent-session-option-revisions'
+import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
 import type { StructuredAgentSessionStartupAttempts } from './structured-agent-session-startup-attempt'
 import type {
   StructuredAgentSessionCaller,
@@ -35,7 +35,8 @@ export type StructuredAgentSessionMutationContext = {
   openConversation: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
   /** Gives the session a provider child; inside the caller's serialize. */
   ensureAgent: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
-  startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'readiness' | 'pendingOperations'>
+  startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'readiness'>
+  deliveryOrder: StructuredAgentSessionDeliveryOrder
   /** Joins a close a stop began on the session's child, for an operation that starts no child;
    *  inside the caller's serialize. */
   joinChildClose: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
@@ -52,7 +53,6 @@ export type StructuredAgentSessionMutationContext = {
    *  outside that serialize aborts. */
   acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'abort' | 'begin'>
   /** Moved by every pick a running child takes, so a report it read before is never persisted. */
-  optionRevisions: Pick<StructuredAgentSessionOptionRevisions, 'advance'>
   now: () => number
 }
 

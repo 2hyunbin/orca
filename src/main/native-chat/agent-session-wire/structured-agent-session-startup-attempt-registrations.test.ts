@@ -170,8 +170,7 @@ describe.each(
 
       opened.resolve({
         reportedOptions: { model: 'default' },
-        restoreSkippedOptions: [],
-        optionRevision: host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
+        restoreSkippedOptions: []
       })
 
       await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())

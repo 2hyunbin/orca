@@ -114,9 +114,8 @@ beforeEach(async () => {
         fence: input.fence,
         acquisitionGeneration,
         reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
+        restoreSkippedOptions: []
         // Never admitted, so the empty report persists nothing.
-        optionRevision: -1
       })
       return {
         providerChildPhase: 'starting' as const,

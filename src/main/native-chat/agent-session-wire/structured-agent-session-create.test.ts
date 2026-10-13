@@ -216,8 +216,7 @@ it('holds the created first message until the child proves its start, then hands
     fence: rig.store.getRecord(SESSION)?.lease.runtimeFence ?? 0,
     acquisitionGeneration: generation,
     reportedOptions: { model: 'gpt-live' },
-    restoreSkippedOptions: [],
-    optionRevision: rig.host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
+    restoreSkippedOptions: []
   })
 
   await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
