@@ -24,7 +24,8 @@ export type SuspectWatchRoot = { readonly rootPath: string }
 
 export type SuspectWatchEvent = { readonly type: string; readonly path: string }
 
-type Suspect = { seq: number; root: SuspectWatchRoot }
+// Why `confirmed`: a recheck proved the file dirty, which no lost watcher event can undo.
+type Suspect = { seq: number; root: SuspectWatchRoot | null; confirmed: boolean }
 
 function splitSegments(value: string, windows: boolean): string[] {
   return value.split(windows ? /[\\/]+/ : /\/+/).filter((segment) => segment.length > 0)
@@ -106,9 +107,17 @@ export class DriveCheckoutSuspectPaths {
       }
       if (!this.suspects.has(relativePath) && this.suspects.size >= this.limit) {
         this.degrade('over-limit')
+        if (this.suspects.size >= this.limit) {
+          // Why skip rather than clear: confirmed paths are rechecked every poll, so the set drains.
+          continue
+        }
       }
       this.seq += 1
-      this.suspects.set(relativePath, { seq: this.seq, root })
+      this.suspects.set(relativePath, {
+        seq: this.seq,
+        root,
+        confirmed: this.suspects.get(relativePath)?.confirmed ?? false
+      })
     }
   }
 
@@ -120,7 +129,8 @@ export class DriveCheckoutSuspectPaths {
 
   /**
    * Suspects (path → event sequence) for this poll, or null when it stays
-   * minimal-only. `currentRoot` is the live watcher covering the repo now.
+   * minimal-only. `currentRoot` is the live watcher covering the repo now;
+   * confirmed-dirty paths are rechecked even without one.
    */
   beginPoll(currentRoot: SuspectWatchRoot | null): Map<string, number> | null {
     if (currentRoot === null) {
@@ -128,16 +138,14 @@ export class DriveCheckoutSuspectPaths {
         this.degrade('no-watcher')
       }
       this.boundRoot = null
-      return null
-    }
-    if (currentRoot !== this.boundRoot) {
+    } else if (currentRoot !== this.boundRoot) {
       if (this.boundRoot !== null) {
         this.markDegraded('watcher-restart')
       }
       this.boundRoot = currentRoot
       // Why keep the new root's own events: they arrived after it was live, so nothing was missed for them.
       for (const [relativePath, suspect] of this.suspects) {
-        if (suspect.root !== currentRoot) {
+        if (suspect.root !== currentRoot && !suspect.confirmed) {
           this.suspects.delete(relativePath)
         }
       }
@@ -155,8 +163,25 @@ export class DriveCheckoutSuspectPaths {
     }
   }
 
+  /** Keeps a rechecked-dirty path until a later recheck proves it clean. */
+  confirmDirty(relativePath: string, seq: number): void {
+    const suspect = this.suspects.get(relativePath)
+    if (suspect) {
+      suspect.confirmed = true
+      return
+    }
+    // Why re-add: a degrade during the recheck removed it, but the recheck's proof still holds.
+    if (this.suspects.size < this.limit) {
+      this.suspects.set(relativePath, { seq, root: null, confirmed: true })
+    }
+  }
+
   private degrade(reason: SuspectDegradeReason): void {
-    this.suspects.clear()
+    for (const [relativePath, suspect] of this.suspects) {
+      if (!suspect.confirmed) {
+        this.suspects.delete(relativePath)
+      }
+    }
     this.markDegraded(reason)
   }
 

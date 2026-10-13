@@ -99,6 +99,38 @@ describe('DriveCheckoutSuspectPaths', () => {
     expect([...(tracker.beginPoll(root)?.keys() ?? [])]).toEqual(['d', 'e'])
   })
 
+  it('keeps rechecked-dirty paths through overflow, interruption, restart, and a lost watcher', () => {
+    const tracker = new DriveCheckoutSuspectPaths(REPO, 3)
+    tracker.recordEvents(root, [event('hidden.ts')])
+    tracker.confirmDirty('hidden.ts', tracker.beginPoll(root)?.get('hidden.ts') ?? 0)
+    tracker.recordEvents(root, [event('a'), event('b'), event('c')])
+    expect(tracker.lastDegradeReason).toBe('over-limit')
+    tracker.recordInterruption(root)
+    const reinstalled = { rootPath: REPO }
+    expect([...(tracker.beginPoll(reinstalled)?.keys() ?? [])]).toEqual(['hidden.ts'])
+    expect([...(tracker.beginPoll(null)?.keys() ?? [])]).toEqual(['hidden.ts'])
+  })
+
+  it('stays bounded when rechecked-dirty paths alone fill the limit', () => {
+    const tracker = new DriveCheckoutSuspectPaths(REPO, 2)
+    tracker.recordEvents(root, [event('a'), event('b')])
+    const snapshot = tracker.beginPoll(root)
+    tracker.confirmDirty('a', snapshot?.get('a') ?? 0)
+    tracker.confirmDirty('b', snapshot?.get('b') ?? 0)
+    tracker.recordEvents(root, [event('c')])
+    expect([...(tracker.beginPoll(root)?.keys() ?? [])]).toEqual(['a', 'b'])
+    expect(tracker.lastDegradeReason).toBe('over-limit')
+  })
+
+  it('keeps a dirty proof when the watcher was interrupted during the recheck', () => {
+    const tracker = new DriveCheckoutSuspectPaths(REPO)
+    tracker.recordEvents(root, [event('a.ts')])
+    const snapshot = tracker.beginPoll(root)
+    tracker.recordInterruption(root)
+    tracker.confirmDirty('a.ts', snapshot?.get('a.ts') ?? 0)
+    expect([...(tracker.beginPoll(root)?.keys() ?? [])]).toEqual(['a.ts'])
+  })
+
   it('drops only when no newer event re-armed the path', () => {
     const tracker = new DriveCheckoutSuspectPaths(REPO)
     tracker.recordEvents(root, [event('a.ts'), event('b.ts')])

@@ -223,7 +223,9 @@ export async function reconcileDriveCheckoutSuspects(
     targeted.filter((entry) => entry.area === 'unstaged').map((entry) => entry.path)
   )
   for (const [relativePath, seq] of checked) {
-    if (!dirty.has(relativePath)) {
+    if (dirty.has(relativePath)) {
+      tracker.confirmDirty(relativePath, seq)
+    } else {
       tracker.drop(relativePath, seq)
     }
   }
