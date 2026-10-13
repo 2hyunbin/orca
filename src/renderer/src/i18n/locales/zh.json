@@ -916,6 +916,7 @@
               "undecryptableUnknown": "{{value0}} cookie 无法解密并被跳过。完全关闭源浏览器并再次尝试导入。",
               "unrecognizedWarning": "cookie 导入结束时出现此版本的 Orca 无法识别的警告。更新 Orca 以查看详细信息，然后在依赖其 cookie 之前检查此配置文件。",
               "undecryptableUnrecognizedReason": "{{value0}} cookies 无法解密并被跳过，原因是此版本的 Orca 无法识别。更新 Orca 以查看详细信息，然后再次尝试导入。",
+              "partitionSkippedBreakdown": "无法读取网站分区的 Cookie：{{value0}}。为保护现有会话而未导入的相关 Cookie：{{value1}}。这些网站现有的 Cookie 保持不变。再次登录前，请在此配置文件中检查这些网站。",
               "partitionSkipped": "{{value0}} cookie 未导入，因为无法读取其站点分区。在 Orca 中再次登录这些网站。",
               "locationClientHosted": "从此设备读取并存储在此处以供 {{value0}} 工作区使用。",
               "locationRemoteHost": "从 {{value0}} 上的浏览​​器读取并存储在那里。",

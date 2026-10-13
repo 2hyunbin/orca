@@ -916,6 +916,7 @@
               "undecryptableUnknown": "{{value0}} Cookie を復号化できなかったため、スキップされました。ソースブラウザを完全に閉じて、インポートを再試行してください。",
               "unrecognizedWarning": "Cookie のインポートは、このバージョンの Orca が認識しない警告とともに終了しました。 Orca を更新して詳細を確認し、Cookie に依存する前にこのプロファイルを確認してください。",
               "undecryptableUnrecognizedReason": "{{value0}} Cookie は復号化できず、このバージョンの Orca が認識しない理由でスキップされました。 Orca を更新して詳細を確認し、インポートを再試行してください。",
+              "partitionSkippedBreakdown": "サイト パーティションを読み取れない Cookie: {{value0}}。既存のセッションを保護するためにインポートしなかった関連 Cookie: {{value1}}。これらのサイトの既存の Cookie は変更されていません。再度ログインする前に、このプロファイルでこれらのサイトを確認してください。",
               "partitionSkipped": "{{value0}} Cookie は、サイトパーティションを読み取れなかったため、インポートされませんでした。 Orca でこれらのサイトに再度サインインします。",
               "locationClientHosted": "このデバイスから読み取り、{{value0}} ワークスペース用にここに保存されます。",
               "locationRemoteHost": "{{value0}} 上のブラウザから読み取り、そこに保存されます。",
