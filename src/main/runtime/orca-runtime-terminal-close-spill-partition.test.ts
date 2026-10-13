@@ -3,9 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import { hasClosedTerminalTabRecord } from '../../shared/closed-terminal-tab-tombstones'
-import type { RuntimeMobileSessionTabsSnapshot } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { buildHeadlessMobileSessionTerminalTabs } from './mobile-session-terminal-projection'
 import { OrcaRuntimeService } from './orca-runtime'
 import { terminalSurfaceCloseMutation } from './terminal-surface-close'
 import { capturePersistedTerminalTabCopy } from './workspace-session-terminal-tab-retirement-identity'
@@ -72,32 +70,24 @@ function harness(sessions: Map<ExecutionHostId, WorkspaceSessionState>) {
     getForegroundProcess: async () => null,
     listProcesses: async () => [{ id: 'target-pty', cwd: REPO.path, title: 'Terminal' }]
   })
-  // The published snapshot lists both partitions' tabs, as the Web UI sees them.
-  const tabs = [...sessions.values()].flatMap((session) =>
-    buildHeadlessMobileSessionTerminalTabs(
-      WORKTREE_ID,
-      session.tabsByWorktree[WORKTREE_ID] ?? [],
-      session
-    )
-  )
-  const snapshot: RuntimeMobileSessionTabsSnapshot = {
-    worktree: WORKTREE_ID,
-    publicationEpoch: 'headless',
-    snapshotVersion: 1,
-    activeGroupId: null,
-    activeTabId: tabs[0]?.id ?? null,
-    activeTabType: 'terminal',
-    tabs: tabs.filter((tab, index) => tabs.findIndex((other) => other.id === tab.id) === index)
-  }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the published snapshot map is protected; seeding it stands in for a prior publication.
-  const internals = runtime as unknown as {
-    mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-  }
-  internals.mobileSessionTabsByWorktree.set(WORKTREE_ID, snapshot)
   return { runtime, kill }
 }
 
+// No published list is seeded: the windowless list shows the owner partition only, as a window's
+// does, so a close finds a spill partition's tab in the partition that holds it.
 describe('terminal close across local and runtime session partitions (#18202)', () => {
+  it('lists only the owner partition, as a window does', async () => {
+    const sessions = new Map<ExecutionHostId, WorkspaceSessionState>([
+      [LOCAL_EXECUTION_HOST_ID, sessionWithTab('unrelated', 'unrelated-pty')],
+      [SPILL_HOST_ID, sessionWithTab('target', 'target-pty')]
+    ])
+    const { runtime } = harness(sessions)
+
+    const listed = await runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
+
+    expect(listed.tabs.map((tab) => tab.id)).toEqual([`unrelated::${LEAF}`])
+  })
+
   it('closes a tab persisted only in a runtime spill partition', async () => {
     const local = sessionWithTab('unrelated', 'unrelated-pty')
     const sessions = new Map<ExecutionHostId, WorkspaceSessionState>([
@@ -206,10 +196,16 @@ describe('terminal close across local and runtime session partitions (#18202)', 
       [SPILL_HOST_ID, spill]
     ])
     const { runtime, kill } = harness(sessions)
+    runtime.registerPty('target-pty', WORKTREE_ID, null, {
+      tabId: 'target',
+      leafId: LEAF,
+      incarnationId: 'target-incarnation'
+    })
+    const terminal = (await runtime.listTerminals()).terminals.find(
+      (candidate) => candidate.tabId === 'target'
+    )!
 
-    await expect(runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, 'target')).rejects.toThrow(
-      'terminal_tab_pinned'
-    )
+    await expect(runtime.closeTerminalTab(terminal.handle)).rejects.toThrow('terminal_tab_pinned')
     expect(sessions.get(SPILL_HOST_ID)).toBe(spill)
     expect(kill).not.toHaveBeenCalled()
   })

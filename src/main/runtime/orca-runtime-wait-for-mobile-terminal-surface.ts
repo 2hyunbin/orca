@@ -91,9 +91,11 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
 
   protected findMobileTerminalSurfaceForPty(
     worktreeId: string,
-    ptyId: string
+    ptyId: string,
+    /** A close's tab, found in another partition when the list lacks it. */
+    closingTabId?: string | null
   ): RuntimeMobileSessionCreateTerminalResult | null {
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.closeSnapshotFor(worktreeId, closingTabId)
     if (!snapshot) {
       return null
     }
@@ -127,7 +129,11 @@ export class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRuntimeWith
     ) {
       return null
     }
-    const surface = this.findMobileTerminalSurfaceForPty(authority.worktreeId, authority.ptyId)
+    const surface = this.findMobileTerminalSurfaceForPty(
+      authority.worktreeId,
+      authority.ptyId,
+      live.pty.tabId
+    )
     if (!surface) {
       return null
     }

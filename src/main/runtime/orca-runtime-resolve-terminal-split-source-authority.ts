@@ -37,7 +37,9 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
         liveIncarnationId: string | null
       }
     | null {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
+    // The partition holding the tab, routed one first: a spill partition's tab is persisted there (#18202).
+    const [hostId] = this.getWorkspaceSessionHostIdsForTab(worktreeId, tabId)
+    const session = hostId ? (this.store?.getWorkspaceSession?.(hostId) ?? null) : null
     const sessionWorktreeId = session ? resolveTerminalSessionWorktreeId(session, worktreeId) : null
     const persistedTab = sessionWorktreeId
       ? session?.tabsByWorktree[sessionWorktreeId]?.find(

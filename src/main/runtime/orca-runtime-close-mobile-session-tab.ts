@@ -47,7 +47,7 @@ export class OrcaRuntimeWithCloseMobileSessionTab extends OrcaRuntimeWithRefuseU
       this.assertStableReadyGraph(graphEpoch)
     }
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktreeId)
-    const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const snapshot = this.closeSnapshotFor(worktreeId, tabId)
     if (options.reason !== undefined && options.reason !== 'user' && observedPtyIds === null) {
       // Why: keep-on-unknown must also restore the mirror the caller already pruned.
       this.republishMobileSessionTabsSnapshot(worktreeId)
