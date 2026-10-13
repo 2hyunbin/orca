@@ -80,12 +80,22 @@ describe('pushWslOrcadHostAccountEnv', () => {
     expect(deps.accountNotApplied).toHaveBeenCalledWith('Ubuntu')
   })
 
-  it('neither sends nor warns while the host cannot be asked', async () => {
-    const deps = dependencies()
-    const target = push('unknown')
-    await pushWslOrcadHostAccountEnv(target, deps)
-    expect(target.call).not.toHaveBeenCalled()
-    expect(deps.accountNotApplied).not.toHaveBeenCalled()
+  it('neither sends nor warns while the host cannot be asked, and retries', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const deps = dependencies()
+      const target = push('unknown')
+      await pushWslOrcadHostAccountEnv(target, deps, [1_000])
+      expect(target.call).not.toHaveBeenCalled()
+      expect(deps.accountNotApplied).not.toHaveBeenCalled()
+      vi.mocked(target.hostSupports).mockResolvedValue('supported')
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(target.call).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+    }
   })
 
   it('lands pushes in order, so an older selection never overwrites a newer one', async () => {

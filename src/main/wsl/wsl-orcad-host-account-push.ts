@@ -52,12 +52,12 @@ async function pushOnce(
   dependencies: WslOrcadAccountEnvDependencies
 ): Promise<void> {
   const verdict = await push.hostSupports(HOST_ACCOUNT_LAUNCH_ENV_RUNTIME_CAPABILITY)
-  if (verdict !== 'supported') {
-    // Why only when known older: an unreachable host is retried on its next connect.
-    if (
-      verdict === 'unsupported' &&
-      dependencies.managedAccountSelected(distroTarget(push.distro))
-    ) {
+  if (verdict === 'unknown') {
+    // Why throw: an unanswered probe is not an older host, so the push is retried.
+    throw new Error('The host did not report its capabilities.')
+  }
+  if (verdict === 'unsupported') {
+    if (dependencies.managedAccountSelected(distroTarget(push.distro))) {
       dependencies.accountNotApplied(push.distro)
     }
     return
