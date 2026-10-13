@@ -306,7 +306,7 @@ export function recordWorkspaceLineageForCreatedWorktree(
 }
 
 async function spawnLocalStartupAndSetupTerminals(args: {
-  runtime: OrcaRuntimeService | undefined
+  runtime: OrcaRuntimeService
   worktree: Worktree
   startup: CreateWorktreeArgs['startup']
   setup: CreateWorktreeResult['setup']
@@ -315,7 +315,7 @@ async function spawnLocalStartupAndSetupTerminals(args: {
   createdWithAgent: CreateWorktreeArgs['createdWithAgent']
 }): Promise<StagedStartupResult> {
   const { runtime, worktree, startup, setup, defaultTabs, settings, createdWithAgent } = args
-  if (!runtime || !startup || defaultTabs?.tabs.length) {
+  if (!startup || defaultTabs?.tabs.length) {
     return { didSpawnSetup: false }
   }
 
