@@ -7,6 +7,17 @@ import { getWindowsAdministratorStatus } from './windows-administrator-status'
 
 const RESTART_LOCAL_TERMINALS_ARG = '--orca-restart-local-terminals-as-administrator'
 
+export function getWindowsAdministratorRelaunchOptions(): Electron.RelaunchOptions | undefined {
+  if (
+    process.platform !== 'win32' ||
+    !app.commandLine.hasSwitch(RESTART_LOCAL_TERMINALS_ARG.slice(2))
+  ) {
+    return undefined
+  }
+  // Electron's default relaunch retains native startup arguments after JS consumes the request.
+  return { args: process.argv.slice(1).filter((arg) => arg !== RESTART_LOCAL_TERMINALS_ARG) }
+}
+
 export function prepareWindowsAdministratorRestart(): Electron.RelaunchOptions {
   if (process.platform !== 'win32' || !app.isPackaged) {
     throw new Error('Administrator restart requires the installed Windows app.')

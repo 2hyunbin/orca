@@ -2,6 +2,7 @@ import { app } from 'electron'
 import type { CrashReportBreadcrumbData } from '../shared/crash-reporting'
 import { recordDurableCrashBreadcrumb } from './crash-reporting/durable-crash-breadcrumb'
 import { runWithLaunchPath } from './startup/hydrate-shell-path'
+import { getWindowsAdministratorRelaunchOptions } from './windows/windows-administrator-restart'
 
 export type AppRelaunchReason =
   | 'admin-restart'
@@ -19,7 +20,7 @@ export function relaunchApp(
   // Why: the current process can exit immediately after app.relaunch(), so
   // persist the cause before Electron schedules the replacement process.
   recordDurableCrashBreadcrumb('app_relaunch_requested', { ...data, reason })
-  runWithLaunchPath(() => app.relaunch(options))
+  runWithLaunchPath(() => app.relaunch(options ?? getWindowsAdministratorRelaunchOptions()))
 }
 
 export async function runBeforeRelaunchCleanup(
