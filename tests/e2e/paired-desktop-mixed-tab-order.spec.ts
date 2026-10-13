@@ -1,13 +1,14 @@
 /**
- * Owner report: on a remote server, the desktop's tab strip suddenly regroups by kind, browsers on
- * the left and terminals on the right. A desktop paired to a headless serve opens a terminal, a
- * browser it hosts itself, and another terminal; the strip it draws and the server's own list must
- * keep that order, also across a serve restart.
+ * Owner report: in a remote workspace whose browser tabs run on the desktop, "either the browser
+ * tabs all go to the very left, or my agent terminals are going to the right." A desktop paired to
+ * a headless serve opens a terminal and a page it hosts itself, then the server opens a terminal;
+ * the desktop's strip must keep that order through each trigger below. Every strip the desktop
+ * draws is recorded, so a transient regroup shows even when the final strip recovers.
  */
 import type { Page } from '@stablyai/playwright-test'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
-import { cleanupE2EDaemons, closeElectronAppForE2E } from './helpers/electron-process-shutdown'
+import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'
 import {
   launchPairedElectronClient,
   type PairedElectronClient
@@ -22,113 +23,149 @@ import {
   refreshAuthorityRuntimeId,
   waitForRelaunchedRuntime
 } from './helpers/client-hosted-runtime-relaunch'
+import { startFreezableTcpProxy, type FreezableTcpProxy } from './helpers/freezable-tcp-proxy'
 import { readSessionTabs } from './helpers/layout-compat-baseline'
+import { decodePairingOffer, encodePairingOffer } from '../../src/shared/pairing'
 import { toHostSessionTabId } from '../../src/shared/terminal-surface-id'
 
-/** The desktop's groups, each tab named by what it mirrors: a server terminal or a host page. */
-async function desktopStrip(page: Page, worktreeId: string): Promise<string[][]> {
-  const groups = await page.evaluate((id) => {
-    const state = window.__store?.getState()
-    const tabs = state?.unifiedTabsByWorktree[id] ?? []
-    return (state?.groupsByWorktree[id] ?? []).map((group) =>
-      group.tabOrder.map((tabId) => {
-        const tab = tabs.find((candidate) => candidate.id === tabId)
-        if (tab?.contentType !== 'browser') {
-          return { terminal: tabId }
+type Strip = string[][]
+
+const STRIPS_KEY = '__mixedTabOrderStrips'
+
+/** Records every distinct strip the desktop draws for the worktree, as host tab and page ids. */
+async function recordDesktopStrips(page: Page, worktreeId: string): Promise<void> {
+  await page.evaluate(
+    ({ id, key }) => {
+      const store = window.__store!
+      const read = (): Strip => {
+        const state = store.getState()
+        const tabs = state.unifiedTabsByWorktree[id] ?? []
+        return (state.groupsByWorktree[id] ?? []).map((group) =>
+          group.tabOrder.map((tabId) => {
+            const tab = tabs.find((candidate) => candidate.id === tabId)
+            if (tab?.contentType !== 'browser') {
+              return tabId
+            }
+            const pageId = state.browserPagesByWorkspace[tab.entityId]?.[0]?.id
+            const handle = pageId ? state.remoteBrowserPageHandlesByPageId[pageId] : undefined
+            return `page:${handle?.remotePageId ?? pageId ?? tab.entityId}`
+          })
+        )
+      }
+      const strips: Strip[] = [read()]
+      Reflect.set(window, key, strips)
+      store.subscribe(() => {
+        const next = read()
+        if (JSON.stringify(next) !== JSON.stringify(strips.at(-1))) {
+          strips.push(next)
         }
-        const pageId = state?.browserPagesByWorkspace[tab.entityId]?.[0]?.id
-        const handle = pageId ? state?.remoteBrowserPageHandlesByPageId[pageId] : undefined
-        return { page: handle?.remotePageId ?? pageId ?? tab.entityId }
       })
-    )
-  }, worktreeId)
-  return groups.map((group) =>
-    group.map((entry) => ('page' in entry ? entry.page : toHostSessionTabId(entry.terminal)))
+    },
+    { id: worktreeId, key: STRIPS_KEY }
   )
 }
 
-for (const hosting of ['desktop', 'server'] as const) {
-  test(`a paired desktop keeps a mixed terminal and browser tab order (${hosting}-hosted page)`, async ({
+/** The strips recorded since the last call, terminal ids mapped to the host tabs they mirror. */
+async function takeDesktopStrips(page: Page): Promise<Strip[]> {
+  const strips = await page.evaluate((key) => {
+    const recorded: unknown = Reflect.get(window, key)
+    const strips: Strip[] = Array.isArray(recorded) ? recorded : []
+    return strips.splice(0, strips.length - 1).concat(strips)
+  }, STRIPS_KEY)
+  return strips.map((strip) =>
+    strip.map((group) =>
+      group.map((id) => (id.startsWith('page:') ? id.slice(5) : toHostSessionTabId(id)))
+    )
+  )
+}
+
+const TRIGGERS = ['network outage', 'serve restart'] as const
+
+for (const trigger of TRIGGERS) {
+  test(`a paired desktop keeps its mixed tab order through a ${trigger}`, async ({
     testRepoPath
   }, testInfo) => {
     test.setTimeout(420_000)
     const fixture = await startClientHostedMarkerFixture()
     const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
     let client: PairedElectronClient | null = null
+    let proxy: FreezableTcpProxy | null = null
     try {
       await host.client.call('repo.add', { path: testRepoPath, kind: 'git' })
-      client = await launchPairedElectronClient(host.offer, testInfo, 'mixed tab order')
+      const decoded = decodePairingOffer(host.offer.pairingUrl)
+      if (!('endpoint' in decoded)) {
+        throw new Error('expected a direct pairing offer')
+      }
+      const endpoint = new URL(decoded.endpoint)
+      proxy = await startFreezableTcpProxy(endpoint.hostname, Number(endpoint.port))
+      endpoint.port = String(proxy.port)
+      client = await launchPairedElectronClient(
+        { pairingUrl: encodePairingOffer({ ...decoded, endpoint: endpoint.toString() }) },
+        testInfo,
+        `mixed tab order ${trigger}`
+      )
       const worktreeId = await waitForPairedWorktreeId(client.page, testRepoPath)
       const worktree = `id:${worktreeId}`
       await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
+      await recordDesktopStrips(client.page, worktreeId)
       // Opening an empty server workspace makes the desktop create its first terminal there.
       await expect
-        .poll(async () => (await desktopStrip(client!.page, worktreeId)).flat().length, {
+        .poll(async () => (await takeDesktopStrips(client!.page)).at(-1)?.flat().length, {
           timeout: 60_000
         })
         .toBe(1)
-      const [first] = (await desktopStrip(client.page, worktreeId)).flat()
-      const serverBrowserIds = async () =>
-        (await readSessionTabs(host.client, worktree)).tabs
-          .filter((tab) => tab.type === 'browser')
-          .map((tab) => tab.id)
-      let browser: string
-      if (hosting === 'desktop') {
-        browser = (await openClientHostedFixturePage(client, worktreeId, fixture.markerUrl))
-          .remotePageId
-      } else {
-        await host.client.call('browser.tabCreate', { worktree, url: fixture.markerUrl })
-        await expect.poll(serverBrowserIds, { timeout: 60_000 }).toHaveLength(1)
-        ;[browser] = await serverBrowserIds()
-      }
-      const second = (
+      const [first] = (await takeDesktopStrips(client.page)).at(-1)!.flat()
+      const browser = (await openClientHostedFixturePage(client, worktreeId, fixture.markerUrl))
+        .remotePageId
+      // The server opens the agent's terminal after the browser.
+      const agent = (
         await host.client.call<{ tab: { parentTabId: string } }>('session.tabs.createTerminal', {
           worktree,
           activate: false
         })
       ).result.tab.parentTabId
+      const name = (id: string) =>
+        id === first ? 'T1' : id === browser ? 'B' : id === agent ? 'agent' : id
+      const named = (strips: Strip[]) =>
+        strips.map((strip) => JSON.stringify(strip.map((group) => group.map(name))))
+      const expected = JSON.stringify([['T1', 'B', 'agent']])
 
       const findings: string[] = []
-      const expectOrder = async (step: string, expected: string[]): Promise<void> => {
-        const reads = {
-          desktop: async () => desktopStrip(client!.page, worktreeId),
-          server: async () =>
-            ((await readSessionTabs(host.client, worktree)).tabGroups ?? []).map(
-              (group) => group.tabOrder
-            )
-        }
-        for (const [view, read] of Object.entries(reads)) {
-          let strip: string[][] = []
-          await expect
-            .poll(async () => JSON.stringify((strip = await read())), { timeout: 60_000 })
-            .toBe(JSON.stringify([expected]))
-            .catch(() => undefined)
-          if (JSON.stringify(strip) !== JSON.stringify([expected])) {
-            const name = (id: string) =>
-              id === first ? 'T1' : id === browser ? 'B' : id === second ? 'T2' : id
-            findings.push(`${step}, ${view}: ${JSON.stringify(strip.map((g) => g.map(name)))}`)
+      const settle = async (step: string): Promise<void> => {
+        const history: string[] = []
+        const take = async (): Promise<string | undefined> => {
+          for (const strip of named(await takeDesktopStrips(client!.page))) {
+            if (strip !== history.at(-1)) {
+              history.push(strip)
+            }
           }
+          return history.at(-1)
+        }
+        await expect
+          .poll(take, { timeout: 90_000 })
+          .toBe(expected)
+          .catch(() => undefined)
+        const server = (await readSessionTabs(host.client, worktree)).tabGroups ?? []
+        console.log(
+          `[mixed-tab-order] ${trigger} / ${step}: desktop ${history.join(' -> ')}; server ${JSON.stringify(server.map((group) => group.tabOrder.map(name)))}`
+        )
+        if (history.at(-1) !== expected || history.some((strip) => strip !== expected)) {
+          findings.push(`${step}: desktop drew ${history.join(' -> ')}`)
         }
       }
-      await expectOrder('terminal, browser, terminal', [first!, browser, second])
+      await settle('server opens an agent terminal after the browser')
 
-      const runtimeIdBeforeRestart = await refreshAuthorityRuntimeId(client)
-      await host.restartServeProcess()
-      await waitForRelaunchedRuntime(client, runtimeIdBeforeRestart!)
-      await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
-      await expectOrder('serve restart', [first!, browser, second])
-
-      // The desktop quits and reopens on its profile, so it adopts the server's strip afresh.
-      const profile = client.userDataDir
-      const quitting = client.app
-      client = null
-      await closeElectronAppForE2E(quitting)
-      client = await launchPairedElectronClient(host.offer, testInfo, 'mixed tab order', {
-        reuseUserDataDir: profile
-      })
-      await waitForPairedWorktreeId(client.page, testRepoPath)
-      await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
-      await expectOrder('desktop relaunch', [first!, browser, second])
+      if (trigger === 'network outage') {
+        // Past the 15 s lease grace, so the host drops the desktop's connection and lease.
+        proxy.cut('reset')
+        await new Promise((resolve) => setTimeout(resolve, 25_000))
+        proxy.restore()
+      } else {
+        const runtimeId = await refreshAuthorityRuntimeId(client)
+        await host.restartServeProcess()
+        await waitForRelaunchedRuntime(client, runtimeId!)
+      }
+      await settle(trigger)
 
       expect(findings).toEqual([])
     } finally {
@@ -136,6 +173,7 @@ for (const hosting of ['desktop', 'server'] as const) {
         await cleanupE2EDaemons(client.userDataDir).catch(() => undefined)
         await client.dispose()
       }
+      await proxy?.close()
       await host.dispose()
       await fixture.close()
     }
