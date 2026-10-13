@@ -91,6 +91,136 @@ async function plugin(
 }
 
 describe('registered environment recipes use current reviewed bytes', () => {
+  it('retains held authority across identical rediscovery and unrelated provider changes', async () => {
+    const p = await plugin()
+    const other = await plugin('community')
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p, other], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    const neighbor = await registry.resolveAuthority('community.platform/pods')
+    await registry.reconcile([structuredClone(p)], () => true)
+    expect(held?.signal.aborted).toBe(false)
+    expect(held?.isCurrent()).toBe(true)
+    expect((await registry.resolveAuthority('company.platform/pods'))?.signal).toBe(held?.signal)
+    expect(neighbor?.signal.aborted).toBe(true)
+    expect(neighbor?.isCurrent()).toBe(false)
+  })
+  it('revokes only the selected owner while an unrelated provider remains usable', async () => {
+    const p = await plugin()
+    const other = await plugin('community')
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p, other], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    const neighbor = await registry.resolveAuthority('community.platform/pods')
+    registry.invalidate(other.pluginKey)
+    expect(held?.signal.aborted).toBe(false)
+    expect(held?.isCurrent()).toBe(true)
+    expect(neighbor?.signal.aborted).toBe(true)
+    registry.invalidate()
+    expect(held?.signal.aborted).toBe(true)
+  })
+  it('keeps unchanged authority current while verification waits, but observes live withdrawal', async () => {
+    const p = await plugin()
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let approved = true
+    hooks.beforeVerify.mockImplementationOnce(async () => {
+      entered.resolve()
+      await release.promise
+    })
+    const refresh = registry.reconcile([structuredClone(p)], () => approved)
+    await entered.promise
+    expect(held?.isCurrent()).toBe(true)
+    expect(held?.signal.aborted).toBe(false)
+    approved = false
+    registry.invalidateUnavailable()
+    expect(held?.signal.aborted).toBe(true)
+    release.resolve()
+    await refresh
+    expect(registry.list()).toEqual([])
+  })
+  it('does not preserve an edited then restored artifact behind identical metadata', async () => {
+    const p = await plugin()
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    const artifact = join(p.rootDir, 'recipes/0.json')
+    const reviewed = await readFile(artifact, 'utf8')
+    await writeFile(artifact, JSON.stringify(recipe('pods', 'Changed')))
+    hooks.beforeVerify.mockImplementationOnce(async () => writeFile(artifact, reviewed))
+    await registry.reconcile([structuredClone(p)], () => true)
+    expect(held?.signal.aborted).toBe(true)
+    expect(registry.list()).toEqual([])
+    expect(registry.error(p.pluginKey)).toContain('changed since metadata admission')
+  })
+  it('cannot revive an authority after scoped withdrawal cancels an in-flight admission', async () => {
+    const p = await plugin()
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    hooks.beforeVerify.mockImplementationOnce(async () => {
+      entered.resolve()
+      await release.promise
+    })
+    const refresh = registry.reconcile([structuredClone(p)], () => true)
+    await entered.promise
+    registry.invalidate(p.pluginKey)
+    release.resolve()
+    await refresh
+    expect(held?.signal.aborted).toBe(true)
+    expect(registry.list()).toEqual([])
+  })
+  it('retires corrupt provider authority without waiting for an unrelated slow admission', async () => {
+    const p = await plugin()
+    const other = await plugin('community')
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p, other], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    const neighbor = await registry.resolveAuthority('community.platform/pods')
+    await writeFile(join(p.rootDir, 'recipes/0.json'), JSON.stringify(recipe('pods', 'Tampered')))
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    hooks.beforeVerify.mockImplementation(async (candidate) => {
+      if (candidate.pluginKey === other.pluginKey) {
+        entered.resolve()
+        await release.promise
+      }
+    })
+    const refresh = registry.reconcile([p, other], () => true)
+    await entered.promise
+    await vi.waitFor(() => expect(held?.signal.aborted).toBe(true))
+    expect(neighbor?.isCurrent()).toBe(true)
+    release.resolve()
+    await refresh
+    expect(neighbor?.signal.aborted).toBe(false)
+    expect(registry.list()).toHaveLength(1)
+  })
+  it('ignores a late failed admission once a newer verified generation has won', async () => {
+    const p = await plugin()
+    const registry = new PluginEnvironmentRecipeRegistry()
+    await registry.reconcile([p], () => true)
+    const held = await registry.resolveAuthority('company.platform/pods')
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    hooks.beforeVerify.mockImplementationOnce(async () => {
+      entered.resolve()
+      await release.promise
+      throw new Error('Old verification failed')
+    })
+    const stale = registry.reconcile([structuredClone(p)], () => true)
+    await entered.promise
+    await registry.reconcile([structuredClone(p)], () => true)
+    release.resolve()
+    await stale
+    expect(held?.isCurrent()).toBe(true)
+    expect(held?.signal.aborted).toBe(false)
+    expect(registry.error(p.pluginKey)).toBeNull()
+  })
   it('loads declared CLI metadata without running code; previews remain pending', async () => {
     const p = await plugin()
     const registry = new PluginEnvironmentRecipeRegistry()

@@ -85,7 +85,11 @@ export class PluginService {
       {
         locale: (plugin, locale) => this.bundledData.localeAlias(plugin, locale),
         syntax: (plugin, language) => this.bundledData.syntaxAlias(plugin, language)
-      }
+      },
+      (plugin) =>
+        !this.disposed &&
+        this.isRuntimeApproved(plugin, false) &&
+        JSON.stringify(this.findValidPlugin(plugin.pluginKey)) === JSON.stringify(plugin)
     )
     this.environmentProviders = PluginEnvironmentProviderService.forService(
       this,
@@ -145,10 +149,14 @@ export class PluginService {
   }
 
   refresh(): Promise<void> {
-    this.contentPacks.environmentRecipes.invalidate()
     // Snapshot settings at request time so a quick off→on sequence still
     // processes the off transition and revokes old workers/panel sessions.
     const enabled = this.options.isPluginSystemEnabled()
+    if (enabled) {
+      this.contentPacks.environmentRecipes.invalidateUnavailable()
+    } else {
+      this.contentPacks.environmentRecipes.invalidate()
+    }
     const devPaths = this.options.getDevPluginPaths()
     const consentLists = snapshotPluginConsentLists(this.options)
     const refresh = this.refreshChain.then(() =>
@@ -213,10 +221,10 @@ export class PluginService {
     )
   }
 
-  private isRuntimeApproved(plugin: ValidDiscoveredPlugin): boolean {
+  private isRuntimeApproved(plugin: ValidDiscoveredPlugin, requireReady = true): boolean {
     return (
       !this.installed.isRemoving(plugin) &&
-      this.contentPacksReady &&
+      (!requireReady || this.contentPacksReady) &&
       this.activationState(plugin) === 'approved' &&
       !this.contentPacks.error(plugin.pluginKey) &&
       !this.options.getPluginKillListEntry?.(plugin.pluginKey)
@@ -303,7 +311,7 @@ export class PluginService {
     if (plugin && this.bundledData.owns(plugin)) {
       return Promise.reject(new Error('app-owned language data cannot be removed'))
     }
-    this.contentPacks.environmentRecipes.invalidate()
+    this.contentPacks.environmentRecipes.invalidate(pluginKey)
     const removal = this.refreshChain.then(() => this.installed.remove(pluginKey, remove))
     this.refreshChain = removal.catch(() => undefined)
     return removal
@@ -317,7 +325,7 @@ export class PluginService {
   /** Reconciles live workers and client projections after consent or
    * enablement changes without re-reading plugin files or starting workers. */
   async reconcileActivationState(): Promise<void> {
-    this.contentPacks.environmentRecipes.invalidate()
+    this.contentPacks.environmentRecipes.invalidateUnavailable()
     const reconcile = this.refreshChain.then(() =>
       reconcilePluginServiceContent(this.contentLifecycleHost())
     )

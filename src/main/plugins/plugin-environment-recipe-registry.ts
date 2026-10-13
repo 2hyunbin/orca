@@ -21,6 +21,7 @@ export class PluginEnvironmentRecipeRegistry extends PluginRecipeArtifactRegistr
         manifest.manifestVersion === 2 ? manifest.contributes.environmentRecipes : [],
       parse: parsePluginEnvironmentRecipe,
       identity: environmentRecipeProviderId,
+      preserveUnchangedAuthority: true,
       canReadCurrentPlugin
     })
   }

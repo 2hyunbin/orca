@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto'
-import { readFile, writeFile } from 'node:fs/promises'
+import { cp, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SshConnectionStore } from '../ssh/ssh-connection-store'
 import { createMockStore } from '../ssh/ssh-connection-store-test-fixture'
 import { pluginEnvironmentRecipeSchema } from '../../shared/plugins/plugin-environment-recipe-artifact'
+import { pluginManifestSchema } from '../../shared/plugins/plugin-manifest'
 import { setSshTargetRegistryStore } from '../ssh/ssh-target-registry'
+import { getPluginsDataDir, getUserPluginsDir } from './plugin-discovery'
+import { installPluginFromLocalPath, removeInstalledPlugin } from './plugin-install'
 import {
   createPluginEnvironmentProviderInstallFixture,
   disposePluginEnvironmentProviderInstallFixtures
@@ -43,6 +46,89 @@ afterEach(async () => {
 })
 
 describe('provider connection handoff reuses reviewed host ownership', () => {
+  it('issues a fresh lease after re-enabling the same reviewed provider without reviving the old one', async () => {
+    const f = await fixture()
+    const preview = await f.ssh.prepare('window-one', f.review, 'devbox', 'r1')
+    const target = await f.ssh.save('window-one', preview.ticketId)
+    const old = await f.ssh.authorize(target)
+    const marker = await readFile(join(f.cwd, 'started'), 'utf8')
+    await f.disableProvider()
+    expect(old.signal.aborted).toBe(true)
+    await f.enable()
+    const restored = await f.ssh.authorize(target)
+    expect(restored.signal).not.toBe(old.signal)
+    expect(restored.signal.aborted).toBe(false)
+    expect(restored.isCurrent()).toBe(true)
+    expect(old.isCurrent()).toBe(false)
+    expect(await readFile(join(f.cwd, 'started'), 'utf8')).toBe(marker)
+  })
+  it('preserves a reviewed SSH lease through repeated no-op refresh and activation reconciliation', async () => {
+    const f = await fixture()
+    const preview = await f.ssh.prepare('window-one', f.review, 'devbox', 'r1')
+    const target = await f.ssh.save('window-one', preview.ticketId)
+    const lease = await f.ssh.authorize(target)
+    const marker = await readFile(join(f.cwd, 'started'), 'utf8')
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const reconcile = f.service.contentPacks.reconcile.bind(f.service.contentPacks)
+    const heldRefresh = vi
+      .spyOn(f.service.contentPacks, 'reconcile')
+      .mockImplementationOnce(async (...args) => {
+        entered.resolve()
+        await release.promise
+        return reconcile(...args)
+      })
+    const pending = f.service.refresh()
+    await entered.promise
+    expect(lease.isCurrent()).toBe(true)
+    expect(lease.signal.aborted).toBe(false)
+    release.resolve()
+    await pending
+    heldRefresh.mockRestore()
+    for (let i = 0; i < 3; i++) {
+      const refreshed = f.service.refresh()
+      expect(lease.isCurrent()).toBe(true)
+      await refreshed
+      await f.service.reconcileActivationState()
+      expect(lease.isCurrent()).toBe(true)
+      expect(lease.signal.aborted).toBe(false)
+    }
+    expect((await f.ssh.authorize(target)).signal).toBe(lease.signal)
+    expect(f.store.getTarget(target.id)).toEqual(target)
+    expect(await readFile(join(f.cwd, 'started'), 'utf8')).toBe(marker)
+  })
+  it('does not retire another provider when an unrelated installed package is removed', async () => {
+    const f = await fixture()
+    const preview = await f.ssh.prepare('window-one', f.review, 'devbox', 'r1')
+    const target = await f.ssh.save('window-one', preview.ticketId)
+    const lease = await f.ssh.authorize(target)
+    const neighborPath = join(f.root, 'neighbor-source')
+    await cp(f.sourceDir, neighborPath, { recursive: true })
+    const manifestPath = join(neighborPath, 'orca-plugin.json')
+    const manifest = pluginManifestSchema.parse(JSON.parse(await readFile(manifestPath, 'utf8')))
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, publisher: 'community' }))
+    const pluginsDir = getUserPluginsDir(f.service.options.userDataPath)
+    const installed = await installPluginFromLocalPath({
+      pluginsDir,
+      sourcePath: neighborPath,
+      hostVersion: f.service.options.hostVersion
+    })
+    expect(installed.ok).toBe(true)
+    await f.service.refresh()
+    await f.service.removePlugin('community.platform', () =>
+      removeInstalledPlugin({
+        pluginsDir,
+        pluginsDataDir: getPluginsDataDir(f.service.options.userDataPath),
+        pluginKey: 'community.platform'
+      })
+    )
+    await f.service.refresh()
+    expect(lease.signal.aborted).toBe(false)
+    expect(lease.isCurrent()).toBe(true)
+    await f.disableProvider()
+    expect(lease.signal.aborted).toBe(true)
+    expect(lease.isCurrent()).toBe(false)
+  })
   it('refreshes through the actual provider CLI and binds a durable visible target to the private review', async () => {
     const f = await fixture()
     const preview = await f.ssh.prepare('window-one', f.review, 'devbox', 'r1')

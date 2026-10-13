@@ -42,6 +42,7 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
       parse(text: string): Recipe
       identity(pluginKey: string, recipe: Recipe): string
       canReadCurrentPlugin?: (plugin: ValidDiscoveredPlugin) => boolean
+      preserveUnchangedAuthority?: boolean
     }
   ) {}
 
@@ -59,12 +60,25 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
     return this.errors.get(pluginKey) ?? null
   }
 
-  invalidate(): void {
+  invalidate(pluginKey?: string): void {
     this.generation += 1
     for (const entry of this.active) {
-      entry.controller.abort()
+      if (pluginKey === undefined || entry.registration.pluginKey === pluginKey) {
+        entry.controller.abort()
+      }
     }
-    this.active = []
+    this.active = this.active.filter((entry) => !entry.controller.signal.aborted)
+  }
+
+  invalidateUnavailable(): void {
+    this.generation += 1
+    this.active = this.active.filter((entry) => {
+      if (entry.canRead()) {
+        return true
+      }
+      entry.controller.abort()
+      return false
+    })
   }
 
   async resolve(identity: string): Promise<PluginRecipeRegistration<Recipe> | null> {
@@ -114,7 +128,26 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
     discovered: readonly DiscoveredPlugin[],
     isApproved: (plugin: ValidDiscoveredPlugin) => boolean
   ): Promise<void> {
-    this.invalidate()
+    if (this.definition.preserveUnchangedAuthority) {
+      this.generation += 1
+      this.active = this.active.filter((entry) => {
+        const candidate = discovered.find(
+          (plugin) => JSON.stringify(plugin) === JSON.stringify(entry.plugin)
+        )
+        if (!candidate || isInvalidDiscoveredPlugin(candidate) || !isApproved(candidate)) {
+          entry.controller.abort()
+          return false
+        }
+        const identity = JSON.stringify(candidate)
+        entry.isCurrent = () =>
+          !entry.controller.signal.aborted &&
+          identity === JSON.stringify(candidate) &&
+          isApproved(candidate)
+        return true
+      })
+    } else {
+      this.invalidate()
+    }
     const generation = this.generation
     this.previews.clear()
     this.errors.clear()
@@ -145,29 +178,43 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
             const controller = new AbortController()
             const isCurrent = () =>
               !controller.signal.aborted &&
-              generation === this.generation &&
               approvedAtStart &&
               identity === JSON.stringify(plugin) &&
               isApproved(plugin)
-            entries.push({
+            const entry: RecipeAdmission<Recipe> = {
               controller,
               registration: { pluginKey: subject.pluginKey, recipe },
               snapshot,
               artifactPath: contribution.path,
               plugin: subject,
               isCurrent,
-              canRead: () => isCurrent() && (this.definition.canReadCurrentPlugin?.(plugin) ?? true)
-            })
+              canRead: () =>
+                entry.isCurrent() && (this.definition.canReadCurrentPlugin?.(plugin) ?? true)
+            }
+            entries.push(entry)
           }
           await verifyInstructionalPluginContent(subject)
           for (const entry of entries) {
             await snapshot.read(entry.artifactPath, this.definition.maxBytes)
+          }
+          for (const entry of this.active.filter(
+            (entry) => entry.registration.pluginKey === subject.pluginKey
+          )) {
+            await entry.snapshot.read(entry.artifactPath, this.definition.maxBytes)
           }
           if (identity !== JSON.stringify(plugin)) {
             throw new Error(`${this.definition.label} owner changed during admission`)
           }
           return { pluginKey: subject.pluginKey, entries }
         } catch (error) {
+          if (generation === this.generation) {
+            for (const entry of this.active) {
+              if (entry.registration.pluginKey === subject.pluginKey) {
+                entry.controller.abort()
+              }
+            }
+            this.active = this.active.filter((entry) => !entry.controller.signal.aborted)
+          }
           return {
             pluginKey: subject.pluginKey,
             error: error instanceof Error ? error.message : String(error)
@@ -209,6 +256,27 @@ export class PluginRecipeArtifactRegistry<Recipe extends { id: string }> {
         }
       }
     }
-    this.active = approved.filter((entry) => !conflicted.has(entry.registration.pluginKey))
+    const next = approved
+      .filter((entry) => !conflicted.has(entry.registration.pluginKey))
+      .map((entry) => {
+        const retained = this.active.find(
+          (previous) =>
+            previous.isCurrent() &&
+            previous.artifactPath === entry.artifactPath &&
+            JSON.stringify(previous.plugin) === JSON.stringify(entry.plugin) &&
+            JSON.stringify(previous.registration) === JSON.stringify(entry.registration)
+        )
+        if (!retained) {
+          return entry
+        }
+        retained.isCurrent = () => !retained.controller.signal.aborted && entry.isCurrent()
+        return retained
+      })
+    for (const entry of this.active) {
+      if (!next.includes(entry)) {
+        entry.controller.abort()
+      }
+    }
+    this.active = next
   }
 }

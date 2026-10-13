@@ -37,14 +37,15 @@ export class PluginContentPackRegistry {
     aliases?: {
       locale: (plugin: ValidDiscoveredPlugin, locale: string) => 'es' | undefined
       syntax: (plugin: ValidDiscoveredPlugin, language: string) => 'typst' | undefined
-    }
+    },
+    canReadCurrentEnvironmentPlugin = canReadCurrentPlugin
   ) {
     this.themes = new PluginThemeRegistry(contentVerifier)
     this.languagePacks = new PluginLanguagePackRegistry(contentVerifier, aliases?.locale)
     this.iconThemes = new PluginIconThemeRegistry(contentVerifier)
     this.terminalThemes = new PluginTerminalThemeRegistry(contentVerifier)
     this.vmRecipes = new PluginVmRecipeRegistry()
-    this.environmentRecipes = new PluginEnvironmentRecipeRegistry(canReadCurrentPlugin)
+    this.environmentRecipes = new PluginEnvironmentRecipeRegistry(canReadCurrentEnvironmentPlugin)
     this.commands = new PluginCommandRegistry()
     this.syntaxPacks = new PluginSyntaxPackRegistry(
       contentVerifier,

@@ -93,7 +93,8 @@ export class PluginEnvironmentProviderSsh {
     }
     const key = JSON.stringify(owner)
     let lease = this.leases.get(key)
-    if (!lease || lease.controller.signal.aborted) {
+    if (!lease || lease.signal.aborted) {
+      lease?.controller.abort()
       const controller = new AbortController()
       lease = {
         owner,
