@@ -34,7 +34,7 @@ function fakeCodex(
   openConnection: typeof openCodexAppServerConnection
 } {
   let live: CodexAppServerConnectionHandlers = {}
-  const openConnection = (async (_launch, handlers = {}) => {
+  const openConnection: typeof openCodexAppServerConnection = async (_launch, handlers = {}) => {
     live = handlers
     const connection: CodexAppServerConnection = {
       pid: 4321,
@@ -45,14 +45,14 @@ function fakeCodex(
       respond: () => {},
       respondWithError: () => {},
       close
-    } as unknown as CodexAppServerConnection
+    }
     if (proof) {
       Object.defineProperty(connection, 'closeResult', {
         value: { root: proof.root, tree: proof.workload }
       })
     }
     return connection
-  }) as typeof openCodexAppServerConnection
+  }
   return { handlers: () => live, openConnection }
 }
 
