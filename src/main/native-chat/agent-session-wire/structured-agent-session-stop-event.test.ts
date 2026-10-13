@@ -239,7 +239,7 @@ describe("a Stop's event", () => {
 
   it('naming no turn, names the turn running when it takes effect', async () => {
     rig = await createQueuedMessageTestRig()
-    await rig.workingSend()
+    const working = await rig.workingSend()
     await turnRow('turn-1', 'running', working)
     await rig.stop()
     expect(stopEvents()).toMatchObject([{ reason: 'user-stop', turnId: 'turn-1' }])

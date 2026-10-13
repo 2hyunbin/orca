@@ -11,7 +11,7 @@ import {
 afterEach(closePiRpcAdapterFixtures)
 
 describe('Pi host awaited open', () => {
-  it('owns the process before RPC and restores model before effort during open', async () => {
+  it('owns the process before RPC and leaves message choices for input', async () => {
     const h = await setup()
     const stateReply = Promise.withResolvers<unknown>()
     const { acquired, child } = await restart(
@@ -39,9 +39,8 @@ describe('Pi host awaited open', () => {
     await expect(opening).resolves.toMatchObject({
       reportedOptions: { model: 'anthropic/model-1' }
     })
-    expect(child.requests.indexOf('set_model')).toBeLessThan(
-      child.requests.indexOf('set_thinking_level')
-    )
+    expect(child.requests).not.toContain('set_model')
+    expect(child.requests).not.toContain('set_thinking_level')
     expect(h.lifecycle).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'started' }))
   })
 

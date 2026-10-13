@@ -34,10 +34,7 @@ import {
 } from './structured-agent-session-stop-wind-down'
 import { isMainAgentWorking, performCancel } from './structured-agent-session-turns-cancel'
 import { structuredAgentSessionStopNoteIdentity } from './structured-agent-session-command-turn'
-import {
-  STOP_NOTE_CANCELLATION_REQUESTED,
-  structuredAgentSessionStopNoteScope
-} from './structured-agent-session-turn-stop-notes'
+import { STOP_NOTE_CANCELLATION_REQUESTED } from './structured-agent-session-turn-stop-notes'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 
 type ChatStopOutcome = TurnOutcome<AgentSessionCancelResult>
@@ -98,11 +95,7 @@ export function mutateWithChatStop<TValue>(
             { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED },
             {
               fence: ctx.fence,
-              turnScope: structuredAgentSessionStopNoteScope(
-                ctx.journal,
-                stoppedTurn ?? undefined,
-                ctx.journal.liveTurnScope()
-              )
+              turnScope: ctx.journal.liveTurnScope()
             }
           )
         }

@@ -1,9 +1,8 @@
+import { saveStructuredAgentSessionStartListing } from './structured-agent-session-start-listing'
 // A chat's options, live or at rest.
 //
-// At rest nothing here needs a child. The pick is the record's own `options` — what the next start replays —
-// and the list is the host's model catalog, the same one the picker already reads before a chat
-// exists. A pick made at rest is written to the record as intent, through the same transition a live
-// pick takes, so the next start applies it.
+// The record keeps the next message's choices; the catalog names known defaults. A provider's
+// reports remain execution facts and never replace the saved selection.
 
 import {
   refuse,
@@ -222,7 +221,7 @@ export async function readStructuredAgentSessionOptions(
     const { catalogListing, ...answer } = live
     if (catalogListing) {
       // What a running child listed is its account's catalog too, so the next chat opens warm.
-      context.deps.modelCatalog?.recordLiveListing(sessionId, catalogListing)
+      saveStructuredAgentSessionStartListing(context, sessionId, catalogListing)
     }
     options = answer
   } else {
