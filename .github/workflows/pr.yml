@@ -355,7 +355,7 @@ jobs:
 
       - name: Enforce layout-writer ratchets
         if: needs.code_paths.outputs.static_analysis == 'true'
-        run: pnpm run check:layout-writer-ratchets
+        run: bun config/scripts/check-layout-writer-ratchets.mjs
 
       - name: Check compatibility-folder imports
         if: needs.code_paths.outputs.static_analysis == 'true'
