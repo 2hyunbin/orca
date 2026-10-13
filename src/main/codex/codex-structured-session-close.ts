@@ -1,4 +1,3 @@
-import { codexStartupFailureFact } from './codex-structured-starting-child'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import type { CodexAppServerConnection } from './codex-app-server-connection-types'
 import { closeProcessRegistry } from '@orca/process-host/close-process-registry'
@@ -36,25 +35,13 @@ export function handleCodexSessionExit(input: {
     // The connection reports the exit inside the close it ends; the close's own reason is the why.
     reason: ((input.closedByOrca && session.orcaClose?.reason) || input.error).message,
     // Only the child's own exit blames Codex; a close Orca made, for any reason, is Orca's.
-    failure: session.startingChild
-      ? codexStartupFailureFact(
-          session.startingChild.failure ?? input.error,
-          session.orcaClose?.requested ?? false,
-          input.error
-        )
-      : input.closedByOrca
-        ? agentSessionFailureFact('hostFault')
-        : agentSessionFailureFact('providerExited', { detail: providerDiagnosticOf(input.error) }),
+    failure: input.closedByOrca
+      ? agentSessionFailureFact('hostFault')
+      : agentSessionFailureFact('providerExited', { detail: providerDiagnosticOf(input.error) }),
     cause: session.orcaClose?.requested ? 'requested-close' : 'unexpected-exit',
     fence: session.fence,
     acquisitionGeneration: session.acquisitionGeneration,
-    observedAt: session.exitObservedAt,
-    ...(session.startingChild
-      ? {
-          startupUnproven: true,
-          ...(!session.startingChild.initializeAnswered ? { startupUnanswered: true } : {})
-        }
-      : {})
+    observedAt: session.exitObservedAt
   } as const
   // A synchronous sink rejection (usually backpressure) leaves the terminal rows to the host's
   // exit settlement, which writes its own bounded fallback. The exit itself is observed, so the
@@ -66,9 +53,6 @@ export function handleCodexSessionExit(input: {
       sessionId: input.sessionId,
       reason: admission.reason
     })
-  }
-  if (session.startingChild) {
-    session.startingChild.ended = true
   }
   session.ended = true
   // Nothing can echo for this child any more; the journal's pending-submission
@@ -107,6 +91,10 @@ export async function closeCodexPublishedSession(
   ) {
     return false
   }
+  if (session.ended && session.connection.closed) {
+    sessions.delete(sessionId)
+    return true
+  }
   // Sink-failure recovery force-closes the child but must preserve the
   // observed-exit cause so host lease settlement runs as an unexpected death.
   session.orcaClose ??= {
@@ -144,6 +132,19 @@ export async function closeCodexSession(
   requestedClose = true
 ): Promise<boolean> {
   const attempt = acquisitions.get(sessionId)
+  const published = sessions.get(sessionId)
+  if (attempt && published?.connection === attempt.window.connection) {
+    attempt.cancelled = true
+    attempt.requestedClose = requestedClose
+    const closed = await closeCodexPublishedSession(sessions, sessionId, onEvent, {
+      requestedClose,
+      ...(logger ? { logger } : {})
+    })
+    if (closed) {
+      acquisitions.deleteIfCurrent(sessionId, attempt)
+    }
+    return closed
+  }
   if (!(await cancelCodexAcquisitionAttempt(attempt, requestedClose))) {
     return false
   }

@@ -30,6 +30,12 @@ import { AGENT_SESSION_NOT_ATTACHED } from './structured-agent-session-mutation-
 import { deferredStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { StructuredAgentSessionExpiredStartup } from './structured-agent-session-startup-attempt'
+import {
+  providerStartupFailureFact,
+  structuredAgentSessionStartFailure
+} from './structured-agent-session-failure-text'
+import { recordStructuredAgentSessionStartFailure } from './structured-agent-session-start-failure-row'
+import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
 
 export type StructuredAgentSessionConversationLifetime = ReturnType<
   typeof createStructuredAgentSessionConversationLifetime
@@ -135,6 +141,44 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       stopStartingChild(sessionId, child),
     /** A start that cannot finish ends as one past its limit does, outside the caller's step. */
     stopStartingChild,
+    failStartingChild: (
+      sessionId: string,
+      failed: StructuredAgentSessionProviderChildIdentity,
+      error: unknown
+    ): Promise<void> =>
+      serialize(sessionId, async () => {
+        const session = sessions.get(sessionId)
+        const child = session?.child
+        if (!session || !child || child.close || !sameProviderChild(child, failed)) {
+          return
+        }
+        const failure = providerStartupFailureFact(error)
+        try {
+          await recordStructuredAgentSessionStartFailure(
+            { journal: session.journal, fence: child.fence },
+            {
+              startKey: child.generation,
+              ...structuredAgentSessionStartFailure(
+                { failure },
+                structuredAgentSessionFailureWordsContext(deps().store.getRecord(sessionId))
+              )
+            }
+          ).catch((writeError: unknown) =>
+            deps().logger.warn('recording a failed provider open failed', {
+              scope: 'provider-open-failure',
+              sessionId,
+              error: writeError
+            })
+          )
+          await stopAgent(sessionId, {
+            cause: 'host-stop',
+            reason: error instanceof Error ? error.message : String(error),
+            failure
+          })
+        } finally {
+          host.context().runtimeState.startupAttempts.childEnded(sessionId, child)
+        }
+      }),
     /** Quit has begun: nothing opens a conversation or sweeps one after this. */
     dispose: (): void => {
       disposed = true

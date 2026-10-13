@@ -43,7 +43,7 @@ export function admitClaudeStartFastMode(
   return fastMode
 }
 
-/** Applies a saved Fast the launch left out after `started`, so nothing waits on it. A refusal
+/** Applies a saved Fast the launch left out after open, so nothing waits on it. A refusal
  *  drops it as main's refused restore did, from the record too; silence keeps it wanted and
  *  unconfirmed. A write the user made meanwhile owns the option. */
 export async function applyClaudeStartFastMode(

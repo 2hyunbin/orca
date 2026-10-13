@@ -127,3 +127,54 @@ it('hands Codex a model and effort picked while it started before the first mess
     effort: 'high'
   })
 })
+
+it('rejects a held send once when Codex initialization refuses and closes the child once', async () => {
+  const child = codexScriptedChild()
+  const { host, fence } = await attachedHost(child)
+  const body = hostTestMessage('never delivered')
+  const sent = await host.send(caller, {
+    envelope: envelope('agentSession.send', fence, { body }),
+    body
+  })
+  if (!sent.ok) {
+    throw new Error(JSON.stringify(sent.refusal))
+  }
+  await vi.waitFor(() =>
+    expect(child.requests().some((request) => request.method === 'initialize')).toBe(true)
+  )
+  child.failHandshake('Please sign in to Codex')
+  await vi.waitFor(async () => {
+    const { submissions } = await host.journalSnapshot(HOST_TEST_SESSION)
+    const rejected = submissions.filter(
+      (entry) => entry.clientMessageId === sent.value.clientMessageId
+    )
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.dispatchState).toBe('rejected')
+  })
+  expect(child.closes()).toBe(1)
+  expect(child.spawns()).toBe(1)
+  expect(child.prompts()).toEqual([])
+})
+
+it('stops while thread/start is held and never hands over the accepted send', async () => {
+  const thread = Promise.withResolvers<unknown>()
+  const child = codexScriptedChild({ 'thread/start': () => thread.promise })
+  child.holdHandshakes = false
+  const { host, fence } = await attachedHost(child)
+  const body = hostTestMessage('never delivered')
+  const sent = await host.send(caller, {
+    envelope: envelope('agentSession.send', fence, { body }),
+    body
+  })
+  expect(sent.ok).toBe(true)
+  await vi.waitFor(() =>
+    expect(child.requests().some((request) => request.method === 'thread/start')).toBe(true)
+  )
+  expect(
+    (await host.cancel(caller, { envelope: envelope('agentSession.cancel', fence, {}) })).ok
+  ).toBe(true)
+  thread.resolve({ thread: { id: 'scripted-codex-thread' } })
+  await host.collaboratorsForTests().serialize(HOST_TEST_SESSION, async () => {})
+  expect(child.closes()).toBe(1)
+  expect(child.prompts()).toEqual([])
+})

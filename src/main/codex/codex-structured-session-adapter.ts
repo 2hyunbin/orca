@@ -9,6 +9,7 @@ import type {
   StructuredAgentSessionAdapter,
   StructuredAgentSessionSetOptionInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenInput } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import type { CodexJournalTranslationAdmission } from './codex-structured-journal-translation'
 import { dispatchCodexTurn, isCodexTurnOptionKey } from './codex-structured-turn-start'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
@@ -101,6 +102,14 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
         this.teardown.forceCloseUnexpected(sessionId, fence, acquisitionGeneration, reason)
     })
 
+  open = (input: StructuredAgentSessionProviderOpenInput) => {
+    const attempt = this.acquisitions.get(input.sessionId)
+    if (!attempt?.open) {
+      return Promise.reject(new Error(`no spawned codex child for session ${input.sessionId}`))
+    }
+    return attempt.open(input)
+  }
+
   /** Buffers pre-publication events and drops events from superseded children. */
   private deliver(
     acquisition: CodexAcquisitionAttempt['window'],
@@ -179,12 +188,8 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
     const session = this.sessions.get(sessionId)
     const starting = this.acquisitions.get(sessionId)
-    if (starting?.startingChild?.acquisitionGeneration === acquisitionGeneration) {
-      return (
-        !starting.startingChild.ended &&
-        !starting.exitProven &&
-        starting.window.connection?.pid !== undefined
-      )
+    if (starting?.acquisitionGeneration === acquisitionGeneration) {
+      return !starting.exitProven && starting.window.connection?.pid !== undefined
     }
     return (
       session?.acquisitionGeneration === acquisitionGeneration &&

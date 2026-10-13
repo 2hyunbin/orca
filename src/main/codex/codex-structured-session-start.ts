@@ -1,6 +1,11 @@
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
+import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { AgentSessionAcquisitionRefusal } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type {
+  StructuredAgentSessionProviderOpenInput,
+  StructuredAgentSessionProviderOpenResult
+} from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import { initializeCodexAppServerConnection } from './codex-app-server-handshake'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import { CodexBackgroundTaskTracker, codexChildWorkSink } from './codex-background-task-tracker'
@@ -10,7 +15,6 @@ import type { CodexJournalTranslator } from './codex-structured-journal-translat
 import { codexProviderHandleLink } from './codex-structured-owner-identity'
 import { openCodexThread } from './codex-structured-thread-open'
 import { withCodexVisualsThreadConfig } from './codex-structured-visuals'
-import { closeCodexPublishedSession } from './codex-structured-session-close'
 import {
   restoredCodexSessionOptions,
   reportedCodexSessionOptions
@@ -30,7 +34,7 @@ import {
 import type { CodexStructuredSessionTeardown } from './codex-structured-session-teardown'
 import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
 
-type CodexStartInput = {
+type CodexOpenContext = {
   input: StructuredAgentSessionAcquireInput
   deps: CodexStructuredSessionAdapterDeps
   launch: CodexStructuredLaunch
@@ -47,144 +51,112 @@ type CodexStartInput = {
   unbindReadingControl?: () => void
 }
 
-/** Runs after acquisition publishes the child; optional discovery never holds readiness. */
-export async function startCodexStructuredSession(start: CodexStartInput): Promise<void> {
+/** The host owns the open promise and closes the spawned child if this rejects. */
+export async function openCodexStructuredSession(
+  start: CodexOpenContext,
+  openInput: StructuredAgentSessionProviderOpenInput
+): Promise<StructuredAgentSessionProviderOpenResult> {
   const { input, deps, launch, sessions, acquisitions, attempt, connection, translator } = start
   const sessionId = input.identity.sessionId
-  const child = attempt.startingChild
-  if (!child) {
-    return
+  const generation = attempt.acquisitionGeneration
+  if (
+    generation === undefined ||
+    openInput.sessionId !== sessionId ||
+    openInput.fence !== input.fence ||
+    openInput.acquisitionGeneration !== generation
+  ) {
+    throw new Error('codex open does not match the spawned child')
   }
   const current = (): void => {
+    throwIfSignalAborted(openInput.signal)
+    if (attempt.exitError) {
+      throw attempt.exitError
+    }
     acquisitions.assertCurrent(sessionId, attempt)
     assertCodexConnectionOpen(connection, sessionId)
-    if (child.ended) {
-      throw new Error('codex child ended during startup')
-    }
   }
-  try {
-    // The host's startup attempt is this start's only deadline (60 s silent, 10 min at most); a
-    // request the start cannot go on without waits as long as that attempt does.
-    await initializeCodexAppServerConnection(
-      connection,
-      STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS
-    )
-    child.initializeAnswered = true
-    current()
-    const threadLaunch = await withCodexVisualsThreadConfig(connection, launch, {
+  current()
+  await waitForPromiseWithSignal(
+    initializeCodexAppServerConnection(connection, STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS),
+    openInput.signal
+  )
+  current()
+  const threadLaunch = await waitForPromiseWithSignal(
+    withCodexVisualsThreadConfig(connection, launch, {
       sessionId,
       ...(deps.logger ? { logger: deps.logger } : {})
-    })
-    current()
-    const optionRevision = input.optionRevision?.() ?? 0
-    const opened = await openCodexThread(
+    }),
+    openInput.signal
+  )
+  current()
+  const optionRevision = input.optionRevision?.() ?? 0
+  const opened = await waitForPromiseWithSignal(
+    openCodexThread(
       connection,
       threadLaunch,
-      STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS
+      STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS,
+      openInput.signal
+    ),
+    openInput.signal
+  )
+  current()
+  start.setPrimaryThreadId(opened.threadId)
+  const restored = translator?.restoreThread(opened.threadId, opened.thread ?? {})
+  if (restored && !restored.accepted) {
+    throw AgentSessionAcquisitionRefusal.historyTooLarge(
+      'Codex thread history exceeds the bounded restore queue; history was not partially imported.'
     )
-    current()
-    start.setPrimaryThreadId(opened.threadId)
-    const restored = translator?.restoreThread(opened.threadId, opened.thread ?? {})
-    if (restored && !restored.accepted) {
-      throw AgentSessionAcquisitionRefusal.historyTooLarge(
-        'Codex thread history exceeds the bounded restore queue; history was not partially imported.'
-      )
-    }
-    const options = restoredCodexSessionOptions(input.options)
-    const catalogAccess = codexAcquireCatalogAccess(deps, launch)
-    const session: CodexSession = {
-      account: start.account,
-      connection,
-      startingChild: child,
-      ...codexSessionLifecycle(input.fence, child.acquisitionGeneration),
+  }
+  const catalogAccess = codexAcquireCatalogAccess(deps, launch)
+  const session: CodexSession = {
+    account: start.account,
+    connection,
+    ...codexSessionLifecycle(input.fence, generation),
+    threadId: opened.threadId,
+    historyMode: opened.historyMode,
+    activeTurnIds: new Set(),
+    abortedTurnIds: new Set(),
+    prompts: attempt.window.prompts,
+    options: restoredCodexSessionOptions(input.options),
+    reportedOptions: reportedCodexThreadOptions(opened),
+    ...(catalogAccess ? { catalogAccess } : {}),
+    dispatchEchoes: start.dispatchEchoes,
+    translator,
+    backgroundTasks: new CodexBackgroundTaskTracker(
+      opened.threadId,
+      start.subagentExecutions,
+      codexChildWorkSink(sessionId, deps)
+    ),
+    forceCloseUnexpected: (reason) =>
+      start.forceCloseUnexpected(sessionId, input.fence, generation, reason),
+    ...(start.unbindReadingControl ? { unbindReadingControl: start.unbindReadingControl } : {})
+  }
+  current()
+  sessions.set(sessionId, session)
+  for (const event of attempt.window.drain()) {
+    event()
+  }
+  current()
+  acquisitions.deleteIfCurrent(sessionId, attempt)
+  startBackgroundCodexCatalogRefresh({
+    session,
+    sessionId,
+    sessions,
+    timeoutMs: deps.requestTimeoutMs,
+    logger: deps.logger
+  })
+  return {
+    link: codexProviderHandleLink({
       threadId: opened.threadId,
-      historyMode: opened.historyMode,
-      activeTurnIds: new Set(),
-      abortedTurnIds: new Set(),
-      prompts: attempt.window.prompts,
-      options,
-      reportedOptions: reportedCodexThreadOptions(opened),
-      ...(catalogAccess ? { catalogAccess } : {}),
-      dispatchEchoes: start.dispatchEchoes,
-      translator,
-      backgroundTasks: new CodexBackgroundTaskTracker(
-        opened.threadId,
-        start.subagentExecutions,
-        codexChildWorkSink(sessionId, deps)
-      ),
-      forceCloseUnexpected: (reason) =>
-        start.forceCloseUnexpected(sessionId, input.fence, child.acquisitionGeneration, reason),
-      ...(start.unbindReadingControl ? { unbindReadingControl: start.unbindReadingControl } : {})
-    }
-    current()
-    sessions.set(sessionId, session)
-    for (const event of attempt.window.drain()) {
-      event()
-    }
-    current()
-    deps.onEvent?.({
-      type: 'started',
-      sessionId,
+      ...(opened.supersededThreadId
+        ? { resumed: false, supersedesThreadId: opened.supersededThreadId }
+        : { resumed: launch.resumeThreadId !== null }),
       fence: input.fence,
-      acquisitionGeneration: child.acquisitionGeneration,
-      link: codexProviderHandleLink({
-        threadId: opened.threadId,
-        ...(opened.supersededThreadId
-          ? { resumed: false, supersedesThreadId: opened.supersededThreadId }
-          : { resumed: launch.resumeThreadId !== null }),
-        fence: input.fence,
-        linkId: deps.mintLinkId?.(),
-        observedAt: deps.now?.() ?? Date.now()
-      }),
-      reportedOptions: reportedCodexSessionOptions(session),
-      restoreSkippedOptions: [],
-      optionRevision
-    })
-    delete session.startingChild
-    acquisitions.deleteIfCurrent(sessionId, attempt)
-    startBackgroundCodexCatalogRefresh({
-      session,
-      sessionId,
-      sessions,
-      timeoutMs: deps.requestTimeoutMs,
-      logger: deps.logger
-    })
-  } catch (error) {
-    if (child.ended || attempt.cancelled) {
-      return
-    }
-    child.failure = error instanceof Error ? error : new Error(String(error))
-    try {
-      let exited: boolean
-      if (sessions.get(sessionId)?.connection === connection) {
-        exited = await closeCodexPublishedSession(sessions, sessionId, deps.onEvent, {
-          requestedClose: false,
-          unexpectedReason: child.failure,
-          ...(deps.logger ? { logger: deps.logger } : {})
-        })
-      } else {
-        exited = await connection.close()
-        if (exited) {
-          attempt.exitProven = true
-          child.end(child.failure)
-          acquisitions.deleteIfCurrent(sessionId, attempt)
-        }
-      }
-      if (!exited) {
-        throw new Error('codex startup cleanup could not prove child exit')
-      }
-      attempt.exitProven = true
-      acquisitions.deleteIfCurrent(sessionId, attempt)
-    } catch (cleanupError) {
-      try {
-        deps.logger?.warn('Codex startup cleanup could not prove exit', {
-          scope: 'codex-startup',
-          sessionId,
-          error: cleanupError
-        })
-      } catch {
-        // Reporting cannot reject startup's background task.
-      }
-    }
+      linkId: deps.mintLinkId?.(),
+      observedAt: deps.now?.() ?? Date.now()
+    }),
+    reportedOptions: reportedCodexSessionOptions(session),
+    restoreSkippedOptions: [],
+    optionRevision
   }
 }
