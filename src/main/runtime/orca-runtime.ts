@@ -191,7 +191,8 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
     this.emitWorktreeLifecycle({
       kind: 'created',
       worktreeId: result.worktree.id,
-      path: result.worktree.path
+      path: result.worktree.path,
+      branch: result.worktree.branch
     })
     if (params.activate === true) {
       this.notifyActivateWorktree(result.worktree.repoId, result.worktree.id)
