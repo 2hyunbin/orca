@@ -161,6 +161,9 @@ export type RuntimeSyncWindowGraph = {
   leaves: RuntimeSyncedLeaf[]
   mobileSessionTabs?: RuntimeMobileSessionTabsSnapshot[]
   unchangedMobileSessionWorktrees?: string[]
+  /** Terminal grid that fills each shown tab group, by group id, so main starts a new tab's
+   *  terminal at its group's size. Window-to-main only: never copied into session tabs. */
+  terminalGroupGridSizes?: Record<string, { cols: number; rows: number }>
 }
 
 export type RuntimeRendererSyncWindowGraph = RuntimeSyncWindowGraph & {

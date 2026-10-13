@@ -70,6 +70,13 @@ export class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow 
       this.rendererGeneration = null
     }
 
+    if (graph.terminalGroupGridSizes) {
+      // Merged, not replaced: a group in a worktree the window is not showing keeps its last size.
+      this.terminalGroupGridSizes = {
+        ...this.terminalGroupGridSizes,
+        ...graph.terminalGroupGridSizes
+      }
+    }
     const graphWasReady = this.graphStatus === 'ready'
     const previousTabs = this.tabs
     const previousLeaves = this.leaves

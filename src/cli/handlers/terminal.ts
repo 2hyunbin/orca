@@ -197,7 +197,7 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
       ...(focus ? { presentation: 'focused' } : {}),
       // Compat: hosts before v1.4.211 (#22384) leave a background-started agent's startup queries
       // unanswered, so they need this to start it in the window; newer hosts ignore it. Delete
-      // once those hosts can no longer run alongside this CLI.
+      // once the minimum supported host version is v1.4.211 or later.
       ...(useRendererBackedInteractiveTerminal ? { rendererBacked: true, activate: focus } : {})
     })
     printResult(result, json, formatTerminalCreate)

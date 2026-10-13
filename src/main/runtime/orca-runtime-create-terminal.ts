@@ -5,7 +5,6 @@ import { createDesktopTerminal } from './orca-runtime-create-terminal-desktop'
 import { buildRuntimeAgentTeamsLaunchPlan } from './orca-runtime-agent-teams-launch-plan'
 import { createPtySpawnCommitReporter } from './orca-runtime-report-pty-spawn-commit'
 import { recordPtySurface, spawnSurfaceClaimSequence } from './pty-recorded-surface-topology'
-import { resolveNewTerminalTabSize } from './new-terminal-tab-initial-size'
 
 export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreateDeduplication {
   async createTerminal(
@@ -34,10 +33,15 @@ export class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTerminalCreate
       const reportPtySpawnCommitted = createPtySpawnCommitReporter(launchOpts.onPtySpawnCommitted)
       const cwd =
         this.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd) ?? workspace.path
-      const initialSize = resolveNewTerminalTabSize(
-        this.mobileSessionTabsByWorktree.get(workspace.id),
-        (ptyId) => this.ptyController.getSize?.(ptyId) ?? null
-      )
+      const groupId =
+        launchOpts.targetGroupId ??
+        this.getWorkspaceSessionForWorktree(workspace.id)?.activeGroupIdByWorktree?.[workspace.id]
+      // Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), the
+      // worktree never shown, or no pane at the default font mounted yet. #1707's original size.
+      const initialSize = (groupId && this.terminalGroupGridSizes?.[groupId]) || {
+        cols: 120,
+        rows: 40
+      }
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()
       let { tabId, leafId, paneKey } = dependencies.allocateTerminalPaneIdentity(launchOpts)

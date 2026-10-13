@@ -7,10 +7,16 @@ import {
   RpcDispatcher,
   TERMINAL_METHODS,
   electronMocks,
+  getDefaultWorkspaceSession,
   ipcMain,
   setPlatform
 } from '../orca-runtime-test-mocks.spec'
-import { TEST_WORKTREE_ID, TEST_WORKTREE_PATH, store } from '../orca-runtime-test-fixtures.spec'
+import {
+  TEST_WORKTREE_ID,
+  TEST_WORKTREE_PATH,
+  makeRuntimeStoreWithWorkspaceSession,
+  store
+} from '../orca-runtime-test-fixtures.spec'
 import { wireHeadlessServeRuntime } from '../orca-runtime-test-scenario-builders.spec'
 
 describe('OrcaRuntimeService', () => {
@@ -495,46 +501,60 @@ describe('OrcaRuntimeService', () => {
     }
   )
 
-  it('starts a CLI terminal at the size of the pane active in its worktree', async () => {
+  it.each([
+    ['the named group', { targetGroupId: 'group-named' }, { cols: 90, rows: 30 }],
+    ['the active group when none is named', {}, { cols: 63, rows: 60 }]
+  ])('starts a host terminal at the measured size of %s', async (_case, opts, expected) => {
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
-    const runtime = new OrcaRuntimeService(store)
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
+      ...getDefaultWorkspaceSession(),
+      activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-active' }
+    })
+    const runtime = new OrcaRuntimeService(runtimeStore)
     runtime.setPtyController({
       spawn,
       write: () => true,
       kill: () => true,
-      getForegroundProcess: async () => null,
-      getSize: (ptyId) => (ptyId === 'pty-visible' ? { cols: 211, rows: 57 } : null)
+      getForegroundProcess: async () => null
     })
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [],
       leaves: [],
-      mobileSessionTabs: [
-        {
-          worktree: TEST_WORKTREE_ID,
-          publicationEpoch: 'epoch-1',
-          snapshotVersion: 1,
-          activeGroupId: 'group-1',
-          activeTabId: 'tab-visible::pane:1',
-          activeTabType: 'terminal',
-          tabs: [
-            {
-              type: 'terminal',
-              id: 'tab-visible::pane:1',
-              parentTabId: 'tab-visible',
-              leafId: 'pane:1',
-              ptyId: 'pty-visible',
-              title: 'Visible',
-              isActive: true
-            }
-          ]
-        }
-      ]
+      terminalGroupGridSizes: {
+        'group-active': { cols: 63, rows: 60 },
+        'group-named': { cols: 90, rows: 30 }
+      }
+    })
+
+    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { command: 'codex', ...opts })
+
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining(expected))
+  })
+
+  it('starts a host terminal at 120x40 when no window measured its group', async () => {
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-cli' })
+    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
+      ...getDefaultWorkspaceSession(),
+      activeGroupIdByWorktree: { [TEST_WORKTREE_ID]: 'group-unmeasured' }
+    })
+    const runtime = new OrcaRuntimeService(runtimeStore)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      terminalGroupGridSizes: { 'group-other': { cols: 63, rows: 60 } }
     })
 
     await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, { command: 'codex' })
 
-    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ cols: 211, rows: 57 }))
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ cols: 120, rows: 40 }))
   })
 
   it('accepts workspace-less terminal create replies only from the target renderer', async () => {
