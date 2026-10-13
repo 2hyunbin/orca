@@ -293,7 +293,7 @@ it('uses model and effort picked during startup in the first reply to a later me
   const setModel = child.connection.setModel
   child.connection.setModel = async (value, options) => {
     await setModel(value, options)
-    model = value
+    model = value ?? 'opus'
   }
   const applyFlags = child.connection.applyFlagSettings
   child.connection.applyFlagSettings = async (settings, options) => {
@@ -316,7 +316,11 @@ it('uses model and effort picked during startup in the first reply to a later me
   const readiness = StructuredAgentSessionStartupAttempts.prototype.readiness
   const delayed = vi
     .spyOn(StructuredAgentSessionStartupAttempts.prototype, 'readiness')
-    .mockImplementation(function (sessionId, identity) {
+    .mockImplementation(function (
+      this: StructuredAgentSessionStartupAttempts,
+      sessionId,
+      identity
+    ) {
       const selected = readiness.call(this, sessionId, identity)
       return selected
         ? {
