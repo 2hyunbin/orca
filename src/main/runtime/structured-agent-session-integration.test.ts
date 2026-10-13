@@ -93,7 +93,7 @@ type FakeConnection = Omit<CodexAppServerConnection, 'closed'> & {
 
 function fakeCodex(): CodexScript {
   const connections: FakeConnection[] = []
-  const openConnection = (async (launch, handlers = {}) => {
+  const openConnection: typeof openCodexAppServerConnection = async (launch, handlers = {}) => {
     const connection: FakeConnection = {
       launch,
       handlers,
@@ -105,19 +105,11 @@ function fakeCodex(): CodexScript {
       request: async (method, params) => {
         connection.calls.push({ method, params })
         if (method === 'thread/start') {
-          return {
-            thread: { id: THREAD, path: '/rollouts/integration.jsonl' },
-            model: 'gpt-live',
-            reasoningEffort: 'medium'
-          }
+          return { thread: { id: THREAD, path: '/rollouts/integration.jsonl' } }
         }
         if (method === 'thread/resume') {
           connection.resumedThreadId = (params as { threadId: string }).threadId
-          return {
-            thread: { id: connection.resumedThreadId },
-            model: 'gpt-live',
-            reasoningEffort: 'medium'
-          }
+          return { thread: { id: connection.resumedThreadId } }
         }
         if (method === 'turn/start') {
           return { turn: { id: TURN } }
@@ -152,7 +144,7 @@ function fakeCodex(): CodexScript {
     }
     connections.push(connection)
     return connection
-  }) as typeof openCodexAppServerConnection
+  }
   const live = (): FakeConnection => {
     const connection = connections.at(-1)
     if (!connection) {
@@ -323,6 +315,20 @@ async function historyPage(
   return (response as { result: AgentSessionHistoryResult }).result
 }
 
+async function readKnownOptions(): Promise<RpcResponse> {
+  return vi.waitFor(async () => {
+    const result = await call('agentSession.options', { sessionId: SESSION })
+    expect(result).toMatchObject({
+      ok: true,
+      result: {
+        models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
+        current: { model: 'gpt-live' }
+      }
+    })
+    return result
+  })
+}
+
 beforeEach(async () => {
   operations = 0
   root = await mkdtemp(join(tmpdir(), 'orca-structured-integration-'))
@@ -447,15 +453,7 @@ describe('a structured codex session over agentSession.*', () => {
       createIntentParams()
     )
     expect(created.page.items.map(textOf)).toContain('legacy question')
-    await vi.waitFor(async () =>
-      expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-        ok: true,
-        result: {
-          models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
-          current: { model: 'gpt-live' }
-        }
-      })
-    )
+    await readKnownOptions()
   })
 
   it('dispatches and streams a plain first send from a fresh session', async () => {
@@ -541,18 +539,7 @@ describe('a structured codex session over agentSession.*', () => {
     expect(stream[0]).toMatchObject({ type: 'snapshot', sessionId: SESSION })
 
     // ── options ─────────────────────────────────────────────────────────────
-    const options = await vi.waitFor(async () => {
-      const result = await call('agentSession.options', { sessionId: SESSION })
-      expect(result).toMatchObject({ ok: true, result: { current: { model: 'gpt-live' } } })
-      return result
-    })
-    expect(options).toMatchObject({
-      ok: true,
-      result: {
-        models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
-        current: { model: 'gpt-live' }
-      }
-    })
+    await readKnownOptions()
     await ok('agentSession.setOption', {
       envelope: envelope('agentSession.setOption', { key: 'model', value: 'gpt-live' }, fence),
       key: 'model',
@@ -710,15 +697,10 @@ describe('a structured codex session over agentSession.*', () => {
     expect(resumed.fence).toBe(fence + 1)
     expect(reaped.closed).toBe(true)
     expect(codex.live().resumedThreadId).toBe(THREAD)
-    await vi.waitFor(async () =>
-      expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-        ok: true,
-        result: {
-          models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
-          current: { model: 'gpt-live', effort: 'high' }
-        }
-      })
-    )
+    expect(await readKnownOptions()).toMatchObject({
+      ok: true,
+      result: { current: { effort: 'high' } }
+    })
     // The journal belongs to the session, not to the process that just died.
     expect(resumed.page.items.map(textOf)).toContain('Two files.')
 
