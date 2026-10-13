@@ -132,6 +132,7 @@ import {
   ORCA_AGENT_SESSION_CALLER_ENV_KEYS
 } from '../ipc/pty/host-env/spawn-env-keys'
 import { NATIVE_CHAT_VISUALS_DIR_ENV } from '../native-chat/native-chat-visuals-delivery'
+import { dropInheritedLaunchIdentityEnv } from '../startup/inherited-launch-identity-env'
 import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { JournalHostDatabase } from '../native-chat/agent-session-journal/journal-host-database'
@@ -291,6 +292,14 @@ function settingsFor(launch: LaunchCase): Partial<GlobalSettings> {
     ...(launch.configured ? configuredSettings() : {}),
     nativeChatInlineVisuals: !launch.worker
   }
+}
+
+/** This Orca's environment when it was started from a parent Orca pane, after startup dropped
+ *  that pane's identity as every host entry does. */
+function hostEnvironment(): Record<string, string> {
+  const env = inheritedEnvironment()
+  dropInheritedLaunchIdentityEnv(env)
+  return env
 }
 
 /** Every pane, hook, caller, handle, visuals and auth key a parent Orca pane could hand down. */
@@ -552,7 +561,7 @@ beforeAll(async () => {
   for (const directory of ['worktree', 'floating', 'floating-pinned', 'home', 'state']) {
     await mkdir(join(root, directory), { recursive: true })
   }
-  process.env = inheritedEnvironment()
+  process.env = hostEnvironment()
   installAppEnvironment()
   settings = defaultSettings()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the host wiring reads only the store's getSettings method.
@@ -593,7 +602,7 @@ beforeAll(async () => {
 // and each case inherits the same environment whatever ran before it.
 beforeEach(() => {
   installAppEnvironment()
-  process.env = inheritedEnvironment()
+  process.env = hostEnvironment()
 })
 
 afterAll(async () => {

@@ -394,23 +394,28 @@ describe('configureOrcaUserDataPathEnv', () => {
     expect(configuredUserDataPath).toBe('/tmp/current-orca-user-data')
   })
 
-  it('drops a runtime source inherited from the Orca terminal that started this Orca', async () => {
+  it('drops a runtime source and pane inherited from the Orca terminal that started this Orca', async () => {
     const { app } = await import('electron')
     const { configureOrcaUserDataPathEnv } = await import('./configure-process')
     const saved = { ...process.env }
     process.env.ORCA_RUNTIME_SOURCE_ID = 'parent-source'
     process.env.ORCA_RUNTIME_SOURCE_INCARNATION = 'parent-runtime'
+    process.env.ORCA_PANE_KEY = 'tab-parent:leaf-parent'
     app.setPath('userData', '/tmp/current-orca-user-data')
     let inherited: (string | undefined)[] = []
 
     try {
       configureOrcaUserDataPathEnv()
-      inherited = [process.env.ORCA_RUNTIME_SOURCE_ID, process.env.ORCA_RUNTIME_SOURCE_INCARNATION]
+      inherited = [
+        process.env.ORCA_RUNTIME_SOURCE_ID,
+        process.env.ORCA_RUNTIME_SOURCE_INCARNATION,
+        process.env.ORCA_PANE_KEY
+      ]
     } finally {
       process.env = saved
     }
 
-    expect(inherited).toEqual([undefined, undefined])
+    expect(inherited).toEqual([undefined, undefined, undefined])
   })
 })
 
