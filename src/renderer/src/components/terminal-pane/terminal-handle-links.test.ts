@@ -13,14 +13,11 @@ import {
 } from './terminal-handle-links'
 import type { TerminalLinkActionContext } from './terminal-link-action-request'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 
 const mocks = vi.hoisted(() => ({
   activateTabAndFocusPane: vi.fn(),
   focusTerminalTabSurface: vi.fn(),
-  revealFloatingWorkspacePanelFor: vi.fn((_state: unknown, worktreeId: string) =>
-    isFloatingWorkspaceId(worktreeId)
-  ),
+  revealFloatingWorkspacePanel: vi.fn(),
   storeState: {
     tabsByWorktree: {},
     ptyIdsByTabId: {},
@@ -50,7 +47,7 @@ vi.mock('@/lib/activate-tab-and-focus-pane', () => ({
 }))
 
 vi.mock('@/lib/floating-workspace-panel-reveal', () => ({
-  revealFloatingWorkspacePanelFor: mocks.revealFloatingWorkspacePanelFor
+  revealFloatingWorkspacePanel: mocks.revealFloatingWorkspacePanel
 }))
 
 vi.mock('@/lib/focus-terminal-tab-surface', () => ({
@@ -250,7 +247,9 @@ describe('focusRendererTerminalHandle', () => {
   it('activates a local renderer target without runtime lookup', () => {
     expect(focusRendererTerminalHandle('term_direct')).toBe(true)
 
-    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1')
+    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1', undefined, {
+      createdTabIds: undefined
+    })
     expect(mocks.storeState.setActiveView).toHaveBeenCalledWith('terminal')
     expect(mocks.storeState.setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-1')
     expect(mocks.storeState.setActiveTab).toHaveBeenCalledWith('tab-1')
@@ -275,7 +274,7 @@ describe('focusRendererTerminalHandle', () => {
 
     expect(focusRendererTerminalHandle('term_direct')).toBe(true)
 
-    expect(mocks.revealFloatingWorkspacePanelFor).toHaveReturnedWith(true)
+    expect(mocks.revealFloatingWorkspacePanel).toHaveBeenCalledOnce()
     expect(mocks.storeState.setActiveWorktree).not.toHaveBeenCalled()
     expect(mocks.storeState.setActiveView).not.toHaveBeenCalled()
     expect(mocks.storeState.recordWorktreeVisit).not.toHaveBeenCalled()
@@ -510,7 +509,9 @@ describe('createTerminalHandleLinkProvider', () => {
       method: 'orchestration.dispatchShow',
       params: { task: 'task_worker' }
     })
-    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1')
+    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-1', undefined, {
+      createdTabIds: undefined
+    })
     expect(mocks.storeState.markWorktreeVisited).toHaveBeenCalledWith('wt-1')
     expect(mocks.storeState.setActiveView).toHaveBeenCalledWith('terminal')
     expect(mocks.storeState.setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-1')
@@ -563,7 +564,9 @@ describe('createTerminalHandleLinkProvider', () => {
       params: { task: 'task_remote' },
       timeoutMs: undefined
     })
-    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-remote')
+    expect(mocks.storeState.setActiveWorktree).toHaveBeenCalledWith('wt-remote', undefined, {
+      createdTabIds: undefined
+    })
     expect(mocks.storeState.setActiveTab).toHaveBeenCalledWith('tab-remote')
   })
 

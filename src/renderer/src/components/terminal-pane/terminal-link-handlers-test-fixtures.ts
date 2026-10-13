@@ -9,8 +9,6 @@ export type TerminalLinkStoreSettings = {
 
 export type TerminalLinkStoreState = {
   settings: TerminalLinkStoreSettings | undefined
-  floatingWorkspacePanelOpen: boolean
-  updateSettings: Mock
   setActiveWorktree: Mock
   createBrowserTab: Mock
   openFile: Mock
@@ -66,8 +64,6 @@ export function createTerminalLinkTestDoubles(): TerminalLinkTestDoubles {
   const deps = { worktreeId: 'wt-1', worktreePath: '/tmp' }
   const storeState: TerminalLinkStoreState = {
     settings: undefined as TerminalLinkStoreSettings | undefined,
-    floatingWorkspacePanelOpen: false,
-    updateSettings: vi.fn(),
     setActiveWorktree: setActiveWorktreeMock,
     createBrowserTab: createBrowserTabMock,
     openFile: openFileMock,

@@ -1,20 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
-import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../shared/constants'
+import type { AppState } from '@/store/types'
+import { TOGGLE_FLOATING_TERMINAL_EVENT } from './floating-terminal'
+import { revealWorkspaceSurface, selectWorkspaceSurface } from './workspace-surface-reveal'
 
-const revealFloatingWorkspacePanelFor = vi.hoisted(() =>
-  vi.fn((_state: unknown, worktreeId: string) => isFloatingWorkspaceId(worktreeId))
-)
-vi.mock('./floating-workspace-panel-reveal', () => ({ revealFloatingWorkspacePanelFor }))
-
-const { revealWorkspaceSurface, selectWorkspaceSurface } =
-  await import('./workspace-surface-reveal')
+const dispatchEvent = vi.fn()
 
 function revealState(isNavigatingHistory = false) {
   return {
-    settings: { floatingTerminalEnabled: true },
+    settings: { ...getDefaultSettings('/home/test'), floatingTerminalEnabled: true },
     floatingWorkspacePanelOpen: false,
-    updateSettings: vi.fn(async () => {}),
+    updateSettings: vi.fn<AppState['updateSettings']>(async () => {}),
     setActiveView: vi.fn(),
     setActiveWorktree: vi.fn(() => true),
     markWorktreeVisited: vi.fn(),
@@ -24,15 +20,21 @@ function revealState(isNavigatingHistory = false) {
   }
 }
 
-beforeEach(() => vi.clearAllMocks())
+const panelToggled = expect.objectContaining({ type: TOGGLE_FLOATING_TERMINAL_EVENT })
+
+beforeEach(() => vi.stubGlobal('window', { dispatchEvent }))
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.clearAllMocks()
+})
 
 describe('revealWorkspaceSurface', () => {
   it('opens the floating panel and leaves the main window as it is', () => {
     const state = revealState()
 
-    revealWorkspaceSurface(state, FLOATING_TERMINAL_WORKTREE_ID, { createdTabIds: ['tab-1'] })
+    revealWorkspaceSurface(state, FLOATING_TERMINAL_WORKTREE_ID, ['tab-1'])
 
-    expect(revealFloatingWorkspacePanelFor).toHaveReturnedWith(true)
+    expect(dispatchEvent).toHaveBeenCalledWith(panelToggled)
     expect(state.setActiveView).not.toHaveBeenCalled()
     expect(state.setActiveWorktree).not.toHaveBeenCalled()
     expect(state.markWorktreeVisited).not.toHaveBeenCalled()
@@ -45,9 +47,11 @@ describe('revealWorkspaceSurface', () => {
 
     revealWorkspaceSurface(state, id)
 
-    expect(revealFloatingWorkspacePanelFor).toHaveReturnedWith(false)
+    expect(dispatchEvent).not.toHaveBeenCalled()
     expect(state.setActiveView).toHaveBeenCalledWith('terminal')
-    expect(state.setActiveWorktree).toHaveBeenCalledWith(id)
+    expect(state.setActiveWorktree).toHaveBeenCalledWith(id, undefined, {
+      createdTabIds: undefined
+    })
     expect(state.markWorktreeVisited).toHaveBeenCalledWith(id)
     expect(state.recordWorktreeVisit).toHaveBeenCalledWith(id)
     expect(state.revealWorktreeInSidebar).toHaveBeenCalledWith(id)
@@ -56,7 +60,7 @@ describe('revealWorkspaceSurface', () => {
   it('passes created tabs through and skips the history entry while navigating history', () => {
     const state = revealState(true)
 
-    revealWorkspaceSurface(state, 'repo::/wt', { createdTabIds: ['tab-1'] })
+    revealWorkspaceSurface(state, 'repo::/wt', ['tab-1'])
 
     expect(state.setActiveWorktree).toHaveBeenCalledWith('repo::/wt', undefined, {
       createdTabIds: ['tab-1']
@@ -72,10 +76,7 @@ describe('selectWorkspaceSurface', () => {
 
     selectWorkspaceSurface(state, FLOATING_TERMINAL_WORKTREE_ID)
 
-    expect(revealFloatingWorkspacePanelFor).toHaveBeenCalledWith(
-      state,
-      FLOATING_TERMINAL_WORKTREE_ID
-    )
+    expect(dispatchEvent).toHaveBeenCalledWith(panelToggled)
     expect(state.setActiveWorktree).not.toHaveBeenCalled()
   })
 
@@ -84,6 +85,7 @@ describe('selectWorkspaceSurface', () => {
 
     selectWorkspaceSurface(state, 'repo::/wt')
 
+    expect(dispatchEvent).not.toHaveBeenCalled()
     expect(state.setActiveWorktree).toHaveBeenCalledWith('repo::/wt')
     expect(state.setActiveView).not.toHaveBeenCalled()
     expect(state.markWorktreeVisited).not.toHaveBeenCalled()

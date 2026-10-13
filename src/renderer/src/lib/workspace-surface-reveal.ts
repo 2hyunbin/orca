@@ -1,44 +1,36 @@
 import type { AppState } from '@/store/types'
-import {
-  revealFloatingWorkspacePanelFor,
-  type FloatingWorkspacePanelRevealState
-} from './floating-workspace-panel-reveal'
+import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
+import { revealFloatingWorkspacePanel } from './floating-workspace-panel-reveal'
 
-export type WorkspaceSurfaceRevealState = FloatingWorkspacePanelRevealState &
-  Pick<
-    AppState,
-    | 'setActiveView'
-    | 'setActiveWorktree'
-    | 'markWorktreeVisited'
-    | 'recordWorktreeVisit'
-    | 'isNavigatingHistory'
-    | 'revealWorktreeInSidebar'
-  >
+type FloatingPanelState = Pick<
+  AppState,
+  'settings' | 'updateSettings' | 'floatingWorkspacePanelOpen'
+>
 
-export type WorkspaceSurfaceSelectState = FloatingWorkspacePanelRevealState & {
-  setActiveWorktree: (worktreeId: string) => unknown
-}
-
-export type WorkspaceSurfaceRevealOptions = {
-  /** Tabs the caller just created into a requested group; activation would otherwise prune its empty groups. */
-  createdTabIds?: readonly string[]
-}
-
-/** Shows a workspace where it lives: the floating one in its panel (selecting it blanks the main window), others as the main selection and a visit. */
+/**
+ * Shows a workspace where it lives: the floating one in its panel (selecting it blanks the main window), others as the main selection and a visit.
+ * @param createdTabIds tabs the caller just created into a requested group; activation would otherwise prune its empty groups.
+ */
 export function revealWorkspaceSurface(
-  state: WorkspaceSurfaceRevealState,
+  state: FloatingPanelState &
+    Pick<
+      AppState,
+      | 'setActiveView'
+      | 'setActiveWorktree'
+      | 'markWorktreeVisited'
+      | 'recordWorktreeVisit'
+      | 'isNavigatingHistory'
+      | 'revealWorktreeInSidebar'
+    >,
   worktreeId: string,
-  opts?: WorkspaceSurfaceRevealOptions
+  createdTabIds?: readonly string[]
 ): void {
-  if (revealFloatingWorkspacePanelFor(state, worktreeId)) {
+  if (isFloatingWorkspaceId(worktreeId)) {
+    revealFloatingWorkspacePanel(state)
     return
   }
   state.setActiveView('terminal')
-  if (opts?.createdTabIds) {
-    state.setActiveWorktree(worktreeId, undefined, { createdTabIds: opts.createdTabIds })
-  } else {
-    state.setActiveWorktree(worktreeId)
-  }
+  state.setActiveWorktree(worktreeId, undefined, { createdTabIds })
   state.markWorktreeVisited(worktreeId)
   if (!state.isNavigatingHistory) {
     state.recordWorktreeVisit(worktreeId)
@@ -46,12 +38,14 @@ export function revealWorkspaceSurface(
   state.revealWorktreeInSidebar(worktreeId)
 }
 
-/** Makes a workspace's surface current for a tab opening beside the user: no view switch, visit, history or sidebar scroll. */
+/** Makes a workspace's surface current without a view switch, visit, history entry or sidebar scroll. */
 export function selectWorkspaceSurface(
-  state: WorkspaceSurfaceSelectState,
+  state: FloatingPanelState & Pick<AppState, 'setActiveWorktree'>,
   worktreeId: string
 ): void {
-  if (!revealFloatingWorkspacePanelFor(state, worktreeId)) {
-    state.setActiveWorktree(worktreeId)
+  if (isFloatingWorkspaceId(worktreeId)) {
+    revealFloatingWorkspacePanel(state)
+    return
   }
+  state.setActiveWorktree(worktreeId)
 }

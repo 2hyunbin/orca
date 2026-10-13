@@ -18,23 +18,16 @@ const setActiveWorktreeMock = vi.fn()
 const createBrowserTabMock = vi.fn()
 const openRuntimeBrowserTabMock = vi.fn(() => Promise.resolve())
 
-type TestLinkSettings = {
-  openLinksInApp?: boolean
-  openLinksInAppModifierInverts?: boolean
-  openLinksInAppPreferencePrompted?: boolean
-  activeRuntimeEnvironmentId?: string | null
-  localhostWorktreeLabelsEnabled?: boolean
-  floatingTerminalEnabled?: boolean
-}
-
-function unhydratedSettings(): TestLinkSettings | undefined {
-  return undefined
-}
-
 const storeState = {
-  settings: unhydratedSettings(),
-  floatingWorkspacePanelOpen: false,
-  updateSettings: vi.fn(),
+  settings: undefined as
+    | {
+        openLinksInApp?: boolean
+        openLinksInAppModifierInverts?: boolean
+        openLinksInAppPreferencePrompted?: boolean
+        activeRuntimeEnvironmentId?: string | null
+        localhostWorktreeLabelsEnabled?: boolean
+      }
+    | undefined,
   setActiveWorktree: setActiveWorktreeMock,
   createBrowserTab: createBrowserTabMock,
   repos: [] as { id: string; displayName: string; repoIcon?: null; badgeColor?: string }[],
@@ -53,7 +46,6 @@ const storeState = {
 beforeEach(() => {
   vi.clearAllMocks()
   storeState.settings = undefined
-  storeState.floatingWorkspacePanelOpen = false
   storeState.workspacePortScansByKey = {}
   registerHttpLinkStoreAccessor(() => storeState)
   registerWorkspaceHttpLinkBrowserOpener(openRuntimeBrowserTabMock)
@@ -97,14 +89,11 @@ describe('openHttpLink', () => {
   })
 
   it('routes floating workspace links into Orca without changing the active repo worktree', () => {
-    // The link was clicked inside the floating panel, so the panel is on screen.
-    storeState.settings = { openLinksInApp: true, floatingTerminalEnabled: true }
-    storeState.floatingWorkspacePanelOpen = true
+    storeState.settings = { openLinksInApp: true }
 
     openHttpLink('https://example.com/', { worktreeId: FLOATING_TERMINAL_WORKTREE_ID })
 
     expect(setActiveWorktreeMock).not.toHaveBeenCalled()
-    expect(storeState.updateSettings).not.toHaveBeenCalled()
     expect(createBrowserTabMock).toHaveBeenCalledWith(
       FLOATING_TERMINAL_WORKTREE_ID,
       'https://example.com/',

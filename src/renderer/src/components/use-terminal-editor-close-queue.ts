@@ -80,7 +80,6 @@ export function useTerminalEditorCloseQueue(controller: TerminalEditorCloseFound
     if (nextFileId) {
       const state = useAppStore.getState()
       const file = state.openFiles.find((candidate) => candidate.id === nextFileId)
-      // Why: the prompt names the file, so show it where it lives.
       if (file && file.worktreeId !== state.activeWorktreeId) {
         selectWorkspaceSurface(state, file.worktreeId)
       }

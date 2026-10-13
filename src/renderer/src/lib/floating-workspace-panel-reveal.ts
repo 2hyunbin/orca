@@ -1,13 +1,6 @@
 import type { AppState } from '@/store/types'
-import {
-  selectFloatingWorkspacePanelVisible,
-  type FloatingWorkspacePanelVisibilityState
-} from '@/store/floating-workspace-panel-selector'
-import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
+import { selectFloatingWorkspacePanelVisible } from '@/store/floating-workspace-panel-selector'
 import { TOGGLE_FLOATING_TERMINAL_EVENT } from './floating-terminal'
-
-export type FloatingWorkspacePanelRevealState = FloatingWorkspacePanelVisibilityState &
-  Pick<AppState, 'updateSettings'>
 
 function toggleFloatingWorkspacePanel(): void {
   window.dispatchEvent(new Event(TOGGLE_FLOATING_TERMINAL_EVENT))
@@ -16,7 +9,9 @@ function toggleFloatingWorkspacePanel(): void {
 /** Opens the floating panel unless it is already on screen. */
 // Why enable first: floating tabs outlive a feature disable, and the panel ignores the toggle
 // while disabled, so a live floating agent row would otherwise be a silent no-op.
-export function revealFloatingWorkspacePanel(state: FloatingWorkspacePanelRevealState): void {
+export function revealFloatingWorkspacePanel(
+  state: Pick<AppState, 'settings' | 'updateSettings' | 'floatingWorkspacePanelOpen'>
+): void {
   // Why: host reveals can beat settings hydration; enabling then would overwrite a saved `false`.
   if (!state.settings) {
     return
@@ -35,16 +30,4 @@ export function revealFloatingWorkspacePanel(state: FloatingWorkspacePanelReveal
       requestAnimationFrame(toggleFloatingWorkspacePanel)
     }
   })
-}
-
-/** Opens the floating panel when it owns the workspace; false means the main window owns it. */
-export function revealFloatingWorkspacePanelFor(
-  state: FloatingWorkspacePanelRevealState,
-  worktreeId: string
-): boolean {
-  if (!isFloatingWorkspaceId(worktreeId)) {
-    return false
-  }
-  revealFloatingWorkspacePanel(state)
-  return true
 }

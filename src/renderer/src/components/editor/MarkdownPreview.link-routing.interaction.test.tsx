@@ -122,8 +122,6 @@ describe('MarkdownPreview http link routing (Cmd vs Cmd+Shift click)', () => {
     // openHttpLink reads the store through this injected accessor, not @/store.
     registerHttpLinkStoreAccessor(() => ({
       settings: { openLinksInApp: true, activeRuntimeEnvironmentId: null },
-      floatingWorkspacePanelOpen: false,
-      updateSettings: vi.fn(),
       setActiveWorktree: setActiveWorktreeMock,
       createBrowserTab: createBrowserTabMock
     }))

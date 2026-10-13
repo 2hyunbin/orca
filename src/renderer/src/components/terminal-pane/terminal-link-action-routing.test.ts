@@ -51,8 +51,6 @@ beforeEach(() => {
   vi.stubGlobal('window', { api: { shell: { openUrl } } })
   registerHttpLinkStoreAccessor(() => ({
     settings: { openLinksInApp: false },
-    floatingWorkspacePanelOpen: false,
-    updateSettings: vi.fn(),
     setActiveWorktree,
     createBrowserTab
   }))

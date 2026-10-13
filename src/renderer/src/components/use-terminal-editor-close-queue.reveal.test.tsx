@@ -3,7 +3,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
-import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import type * as EditorAutosaveModule from './editor/editor-autosave'
 
 type FakeOpenFile = { id: string; worktreeId: string; isDirty: boolean; relativePath: string }
@@ -11,9 +10,7 @@ const store = vi.hoisted((): { openFiles: FakeOpenFile[]; activeWorktreeId: stri
   openFiles: [],
   activeWorktreeId: 'wt-main'
 }))
-const revealFloatingWorkspacePanelFor = vi.hoisted(() =>
-  vi.fn((_state: unknown, worktreeId: string) => isFloatingWorkspaceId(worktreeId))
-)
+const revealFloatingWorkspacePanel = vi.hoisted(() => vi.fn())
 
 vi.mock('../store', () => ({
   useAppStore: {
@@ -28,7 +25,7 @@ vi.mock('../store', () => ({
     subscribe: () => () => {}
   }
 }))
-vi.mock('@/lib/floating-workspace-panel-reveal', () => ({ revealFloatingWorkspacePanelFor }))
+vi.mock('@/lib/floating-workspace-panel-reveal', () => ({ revealFloatingWorkspacePanel }))
 vi.mock('./terminal/window-close-running-work', () => ({ assessWindowCloseRunningWork: vi.fn() }))
 vi.mock('./window-close-request-coordinator', () => ({
   runWithWindowCloseCheckpointScope: (fn: () => unknown) => fn()
@@ -94,7 +91,7 @@ describe('unsaved-changes prompt for a closing file', () => {
     act(() => requestEditorFileClose('note'))
 
     expect(result.current.saveDialogFileId).toBe('note')
-    expect(revealFloatingWorkspacePanelFor).toHaveReturnedWith(true)
+    expect(revealFloatingWorkspacePanel).toHaveBeenCalledOnce()
     expect(setActiveWorktree).not.toHaveBeenCalled()
     expect(setActiveTabType).toHaveBeenCalledWith('editor', FLOATING_TERMINAL_WORKTREE_ID)
   })
@@ -106,7 +103,7 @@ describe('unsaved-changes prompt for a closing file', () => {
     act(() => requestEditorFileClose('readme'))
 
     expect(setActiveWorktree).toHaveBeenCalledWith('wt-other')
-    expect(revealFloatingWorkspacePanelFor).not.toHaveReturnedWith(true)
+    expect(revealFloatingWorkspacePanel).not.toHaveBeenCalled()
   })
 
   it('runs the close reaction once the file is discarded', async () => {

@@ -77,7 +77,7 @@ export function registerTerminalRequestIpcBridge(unsubs: (() => void)[]): void {
         }
         if (shouldActivate) {
           // After the tab lands: activating prunes the workspace's empty groups, the requested one too.
-          revealWorkspaceSurface(store, worktreeId, { createdTabIds: [tab.id] })
+          revealWorkspaceSurface(store, worktreeId, [tab.id])
           store.setActiveTabType('terminal', worktreeId)
           store.setActiveTab(tab.id)
         } else if (shouldSurfaceOwner) {

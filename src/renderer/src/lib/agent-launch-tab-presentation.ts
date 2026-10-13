@@ -11,7 +11,7 @@ export function presentAgentLaunchTab(
   leafId?: string
 ): void {
   if (viewer === 'focus-window') {
-    revealWorkspaceSurface(useAppStore.getState(), worktreeId, { createdTabIds: [tabId] })
+    revealWorkspaceSurface(useAppStore.getState(), worktreeId, [tabId])
   }
   const current = useAppStore.getState()
   const windowShowsTab =

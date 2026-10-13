@@ -48,9 +48,11 @@ const MAIN = 'repo1::/repo1/main'
 const FLOATING = FLOATING_TERMINAL_WORKTREE_ID
 
 type Listener = (payload: never) => void
+/** The fields a test sends; each named bridge listener declares the full shape. */
+type BridgeEventPayload = Record<string, unknown>
 
 function setup(): {
-  emit: (name: string, payload: object) => void
+  emit: (name: string, payload: BridgeEventPayload) => void
   dispatchEvent: ReturnType<typeof vi.fn>
   floatingTabId: string
 } {

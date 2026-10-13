@@ -1,10 +1,10 @@
 import { activateTabAndFocusPane } from '@/lib/activate-tab-and-focus-pane'
+import { revealFloatingWorkspacePanel } from '@/lib/floating-workspace-panel-reveal'
 import { activateStructuredAgentSessionTab } from '@/lib/structured-agent-session-tab-activation'
 import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { jumpToWorktreeFromSidebar } from '@/lib/worktree-jump-navigation'
-import { revealFloatingWorkspacePanelFor } from '@/lib/floating-workspace-panel-reveal'
 import { useAppStore } from '@/store'
-import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import {
   getSettingsFocusedExecutionHostId,
   getWorktreeExecutionHostId,
@@ -87,8 +87,7 @@ export function createActivityThreadActions({
   const markThreadUnread = (thread: AgentPaneThread): void => markThreadsUnread([thread])
 
   const activateThreadTarget = (thread: AgentPaneThread): void => {
-    // Floating tabs have nothing to revive, so their panel opens only once the tab is known live.
-    const isFloating = isFloatingWorkspaceId(thread.worktree.id)
+    const isFloatingTerminal = thread.worktree.id === FLOATING_TERMINAL_WORKTREE_ID
     const executionHostId = getActivityThreadExecutionHostId(
       thread,
       getSettingsFocusedExecutionHostId(useAppStore.getState().settings)
@@ -98,7 +97,7 @@ export function createActivityThreadActions({
     // resumeSleepingAgentSessionsForWorktree/ensureWorktreeHasInitialTerminal run inside here.
     // Probing tab residency first is what made a remote row click a silent no-op (#16731).
     if (
-      !isFloating &&
+      !isFloatingTerminal &&
       activateAndRevealWorkspace(thread.worktree.id, {
         executionHostId,
         revealInSidebar: false,
@@ -110,7 +109,9 @@ export function createActivityThreadActions({
     if (
       activateStructuredAgentSessionTab({ worktreeId: thread.worktree.id, tabId: thread.tab.id })
     ) {
-      revealFloatingWorkspacePanelFor(useAppStore.getState(), thread.worktree.id)
+      if (isFloatingTerminal) {
+        revealFloatingWorkspacePanel(useAppStore.getState())
+      }
       return
     }
     // Read post-activation: the tab this thread points at may have only just been revived.
@@ -121,7 +122,10 @@ export function createActivityThreadActions({
       // no pane to focus and focusing a sibling would be worse than focusing nothing.
       return
     }
-    revealFloatingWorkspacePanelFor(activated, thread.worktree.id)
+    // Floating tabs have no catalog workspace; reveal their panel without changing the main workspace.
+    if (isFloatingTerminal) {
+      revealFloatingWorkspacePanel(activated)
+    }
     activated.setActiveTabType('terminal', thread.worktree.id)
     const parsed = parsePaneKey(thread.paneKey)
     activateTabAndFocusPane(
