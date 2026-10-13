@@ -41,7 +41,7 @@ describe('Windows administrator restart', () => {
   it('preserves quoted arguments and keeps cancellation free of terminal restart requests', () => {
     process.argv.push(restartFlag)
     const plan = prepareWindowsAdministratorRestart()
-    expect(plan.execPath).toContain('orca.exe')
+    expect(plan.execPath).toBe('C:\\Orca\\resources\\bin\\orca-administrator-restart.exe')
     expect(plan.args?.slice(0, 2)).toEqual(['--orca-restart-as-administrator', process.execPath])
     expect(plan.args?.[2]).toBe(
       `"--remote-debugging-port=9333" "C:\\repo with spaces\\\\" "${restartFlag}"`

@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { win32 } from 'node:path'
 import { app } from 'electron'
 import { quoteWindowsArgument } from '@orca/process-host/windows-command-line'
 import { getBundledLauncherPath } from '../cli/bundled-cli-launcher-path'
@@ -10,7 +11,9 @@ export function prepareWindowsAdministratorRestart(): Electron.RelaunchOptions {
   if (process.platform !== 'win32' || !app.isPackaged) {
     throw new Error('Administrator restart requires the installed Windows app.')
   }
-  const launcher = getBundledLauncherPath('win32', process.resourcesPath)
+  const cliLauncher = getBundledLauncherPath('win32', process.resourcesPath)
+  const launcher =
+    cliLauncher && win32.join(win32.dirname(cliLauncher), 'orca-administrator-restart.exe')
   if (!launcher || !existsSync(launcher)) {
     throw new Error('The Windows administrator launcher is unavailable.')
   }

@@ -254,6 +254,10 @@ describe('electron-builder config', () => {
         expect.objectContaining({
           from: 'native/windows-cli-launcher/.build/orca.exe',
           to: 'bin/orca.exe'
+        }),
+        expect.objectContaining({
+          from: 'native/windows-cli-launcher/.build/orca-administrator-restart.exe',
+          to: 'bin/orca-administrator-restart.exe'
         })
       ])
     )
