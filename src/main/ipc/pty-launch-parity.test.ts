@@ -27,6 +27,7 @@ import {
 } from '../../shared/launch-parity-automation-cases.test-fixture'
 import {
   expectedHostProvider,
+  HOST_LEAF_ID,
   HOST_LAUNCH_CASES,
   type HostLaunchCase
 } from './pty-launch-parity-host.test-cases'
@@ -43,6 +44,12 @@ import {
   resolveOpenCodeDirectModelExecutable
 } from '../opencode/opencode-model-availability'
 import { probeOpenCodeLaunchModelContext } from '../opencode/opencode-launch-model-context'
+import type { TerminalWorkspaceLaunchScope } from '../runtime/runtime-legacy-worker-terminal-recovery-types'
+import {
+  setRuntimeDesktopSurface,
+  type RuntimeDesktopSurface
+} from '../runtime/runtime-desktop-surface'
+import type { BrowserWindow, IpcMainEvent } from 'electron'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -259,6 +266,446 @@ describe('host lane: producer call -> runtime controller -> provider', () => {
     })
     const phone = await lanes.runtime.listMobileSessionTabs(`id:${launchWorkspaceId(c.workspace)}`)
     expect(pick({ ...phone.tabs[0] }, ['title', 'launchAgent', 'isActive'])).toEqual(c.phone)
+  })
+})
+
+describe('project runtime in a folder workspace', () => {
+  const suite = setupPtyIpcSuite()
+  afterEach(() => {
+    restoreMainPlatform()
+    setRuntimeDesktopSurface(null)
+  })
+  const workspace: LaunchWorkspace = {
+    kind: 'folder',
+    path: 'C:\\work',
+    repoPath: 'C:\\work\\repo',
+    projectRuntime: { kind: 'windows-host' }
+  }
+  const settings = {
+    terminalWindowsShell: 'wsl.exe',
+    terminalWindowsWslDistro: 'Debian',
+    localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' },
+    agentDefaultArgs: { claude: `--name "Bob's box"` }
+  }
+  const windowsCommand = 'claude "--name" "Bob\'s box"'
+  it.each([
+    { kind: 'windows-host' },
+    { kind: 'wsl', distro: 'Ubuntu' },
+    { kind: 'inherit-global' }
+  ] as const)(
+    'resumes project-owned $kind folders through the existing fallback before claims',
+    async (projectRuntime) => {
+      setMainPlatform('win32')
+      const lanes = startParityLanes(suite, {
+        workspace: { ...workspace, projectRuntime },
+        settings
+      })
+      const createTerminal = vi.spyOn(lanes.runtime, 'createTerminal')
+      await expect(
+        lanes.runtime.ensureAgentSession({
+          kind: 'explicit',
+          worktree: 'id:folder:fw-1',
+          agent: 'claude',
+          providerSession: { key: 'session_id', id: 'resume-session' },
+          placement: { tabId: 'resume-tab', leafId: HOST_LEAF_ID }
+        })
+      ).rejects.toThrow('agent_session_legacy_required')
+      expect(createTerminal).not.toHaveBeenCalled()
+      expect(lanes.provider).not.toHaveBeenCalled()
+      const runsOnWindows = projectRuntime.kind === 'windows-host'
+      const command = runsOnWindows
+        ? 'claude "--resume" "resume-session"'
+        : "claude '--resume' 'resume-session'"
+      await lanes.runtime.createTerminal('id:folder:fw-1', {
+        command,
+        launchAgent: 'claude',
+        resumeProviderSession: { key: 'session_id', id: 'resume-session' },
+        launchConfig: { agentArgs: '', agentEnv: {} },
+        tabId: 'resume-tab',
+        leafId: HOST_LEAF_ID,
+        presentation: 'background'
+      })
+      expect(await providerFacts(lanes.provider)).toMatchObject({
+        command,
+        shellOverride: runsOnWindows ? 'C:\\Windows\\system32\\cmd.exe' : 'wsl.exe',
+        terminalWindowsWslDistro: runsOnWindows ? null : 'Ubuntu'
+      })
+      expect(recordOf(lanes.provider.mock.calls.at(-1)?.[0])).not.toHaveProperty(
+        'agentSessionEnsure'
+      )
+      expect(lanes.persistPtyBinding).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worktreeId: 'folder:fw-1',
+          tabId: 'resume-tab',
+          leafId: HOST_LEAF_ID
+        })
+      )
+    }
+  )
+
+  it.each(['inherited-windows', 'repo-less', 'multi-repo', 'wsl-share'] as const)(
+    'keeps the existing resume claim for an unchanged %s folder',
+    async (boundary) => {
+      setMainPlatform('win32')
+      const lanes = startParityLanes(suite, {
+        workspace: {
+          ...workspace,
+          ...(boundary === 'repo-less' ? { repoPath: undefined } : {}),
+          ...(boundary === 'inherited-windows'
+            ? { projectRuntime: { kind: 'inherit-global' } as const }
+            : {}),
+          ...(boundary === 'wsl-share' ? { path: '\\\\wsl$\\Ubuntu\\work' } : {})
+        },
+        settings: { ...settings, localWindowsRuntimeDefault: { kind: 'windows-host' } },
+        ...(boundary === 'multi-repo'
+          ? {
+              additionalRepos: [
+                {
+                  id: 'repo-2',
+                  path: 'C:\\work\\other',
+                  displayName: 'Other',
+                  badgeColor: 'blue',
+                  addedAt: 0,
+                  projectGroupId: 'pg-1'
+                }
+              ]
+            }
+          : {})
+      })
+      const createTerminal = vi
+        .spyOn(lanes.runtime, 'createTerminal')
+        .mockResolvedValue({ handle: 'unchanged-resume', worktreeId: 'folder:fw-1', title: null })
+      await expect(
+        lanes.runtime.ensureAgentSession({
+          kind: 'explicit',
+          worktree: 'id:folder:fw-1',
+          agent: 'claude',
+          providerSession: { key: 'session_id', id: 'resume-session' },
+          placement: { tabId: 'resume-tab', leafId: HOST_LEAF_ID }
+        })
+      ).resolves.toMatchObject({ terminal: { handle: 'unchanged-resume' } })
+      expect(createTerminal).toHaveBeenCalledWith(
+        'id:folder:fw-1',
+        expect.objectContaining({
+          tabId: 'resume-tab',
+          leafId: HOST_LEAF_ID,
+          agentSessionClaim: expect.any(Object)
+        })
+      )
+    }
+  )
+  const calls: [string, HostLaunchCase['call'], string][] = [
+    [
+      'AI button',
+      { kind: 'create', options: { startupAgent: 'claude', launchSource: 'notes_send' } },
+      windowsCommand
+    ],
+    [
+      'CLI agent launch',
+      { kind: 'create', options: { startupAgent: 'claude', launchSource: 'cli' } },
+      windowsCommand
+    ],
+    [
+      'orchestration worker',
+      {
+        kind: 'create',
+        options: { startupAgent: 'claude', launchSource: 'orchestration', surfaceOwner: false }
+      },
+      windowsCommand
+    ],
+    [
+      'typed-prompt host tab',
+      {
+        kind: 'rpc',
+        method: 'terminal.createAgentSession',
+        params: {
+          worktree: 'id:folder:fw-1',
+          agent: 'claude',
+          presentation: 'background'
+        }
+      },
+      windowsCommand
+    ],
+    [
+      'headless terminal create --command',
+      {
+        kind: 'rpc',
+        method: 'terminal.create',
+        params: { worktree: 'id:folder:fw-1', command: 'claude' }
+      },
+      'claude'
+    ]
+  ]
+
+  it.each(calls)(
+    '%s uses the project Windows host and quotes for its shell',
+    async (name, call, command) => {
+      setMainPlatform('win32')
+      const lanes = startParityLanes(suite, { workspace, settings })
+      await runHostCall(lanes, {
+        name,
+        row: '10',
+        os: 'win32',
+        workspace,
+        call,
+        provider: { command },
+        telemetry: null,
+        phone: { title: 'Terminal', isActive: false }
+      })
+      expect(await providerFacts(lanes.provider)).toMatchObject({
+        command,
+        shellOverride: 'C:\\Windows\\system32\\cmd.exe',
+        terminalWindowsWslDistro: null
+      })
+    }
+  )
+
+  it('quotes a phone compatibility launch for the Windows shell selected for its project', async () => {
+    setMainPlatform('win32')
+    const lanes = startParityLanes(suite, { workspace, settings })
+    lanes.runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+    await lanes.runtime.createMobileSessionTerminal('id:folder:fw-1', { agent: 'claude' })
+    expect(await providerFacts(lanes.provider)).toMatchObject({
+      command: windowsCommand,
+      shellOverride: 'C:\\Windows\\system32\\cmd.exe',
+      terminalWindowsWslDistro: null
+    })
+  })
+
+  it('preserves the existing folder shell for the inherited Windows default', async () => {
+    setMainPlatform('win32')
+    const lanes = startParityLanes(suite, {
+      workspace: { ...workspace, projectRuntime: { kind: 'inherit-global' } },
+      settings: { ...settings, localWindowsRuntimeDefault: { kind: 'windows-host' } }
+    })
+    await lanes.runtime.createTerminal('id:folder:fw-1', { startupAgent: 'claude' })
+    expect(await providerFacts(lanes.provider)).toMatchObject({
+      command: `claude '--name' 'Bob'"'"'s box'`,
+      shellOverride: 'wsl.exe',
+      terminalWindowsWslDistro: 'Debian'
+    })
+  })
+
+  it.each(calls)(
+    '%s uses the folder project WSL distro and quotes for Linux',
+    async (name, call) => {
+      setMainPlatform('win32')
+      const lanes = startParityLanes(suite, {
+        workspace: { ...workspace, projectRuntime: { kind: 'wsl', distro: 'Ubuntu' } },
+        settings: { ...settings, terminalWindowsShell: 'powershell.exe' }
+      })
+      await runHostCall(lanes, {
+        name,
+        row: '10',
+        os: 'win32',
+        workspace,
+        call,
+        provider: { command: 'unused' },
+        telemetry: null,
+        phone: { title: 'Terminal', isActive: false }
+      })
+      expect(await providerFacts(lanes.provider)).toMatchObject({
+        command:
+          call.kind === 'rpc' && call.method === 'terminal.create'
+            ? 'claude'
+            : `claude '--name' 'Bob'"'"'s box'`,
+        shellOverride: 'wsl.exe',
+        terminalWindowsWslDistro: 'Ubuntu'
+      })
+    }
+  )
+
+  it.each(['wsl.exe', 'powershell.exe'])(
+    'inherits the global WSL distro over %s',
+    async (terminalWindowsShell) => {
+      setMainPlatform('win32')
+      const lanes = startParityLanes(suite, {
+        workspace: { ...workspace, projectRuntime: { kind: 'inherit-global' } },
+        settings: { ...settings, terminalWindowsShell }
+      })
+      await lanes.runtime.createTerminal('id:folder:fw-1', { startupAgent: 'claude' })
+      expect(await providerFacts(lanes.provider)).toMatchObject({
+        command: `claude '--name' 'Bob'"'"'s box'`,
+        shellOverride: 'wsl.exe',
+        terminalWindowsWslDistro: 'Ubuntu'
+      })
+    }
+  )
+
+  it('uses the project WSL distro for a headless phone compatibility launch', async () => {
+    setMainPlatform('win32')
+    const lanes = startParityLanes(suite, {
+      workspace: { ...workspace, projectRuntime: { kind: 'wsl', distro: 'Ubuntu' } },
+      settings: { ...settings, terminalWindowsShell: 'powershell.exe' }
+    })
+    lanes.runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+    await lanes.runtime.createMobileSessionTerminal('id:folder:fw-1', { agent: 'claude' })
+    expect(await providerFacts(lanes.provider)).toMatchObject({
+      command: `claude '--name' 'Bob'"'"'s box'`,
+      shellOverride: 'wsl.exe',
+      terminalWindowsWslDistro: 'Ubuntu'
+    })
+  })
+
+  it('refuses an unverified OpenCode model in the chosen WSL runtime before spawning', async () => {
+    setMainPlatform('win32')
+    stubOpenCodeV2()
+    const lanes = startParityLanes(suite, {
+      workspace: { ...workspace, projectRuntime: { kind: 'wsl', distro: 'Ubuntu' } },
+      settings: { ...settings, terminalWindowsShell: 'powershell.exe', agentDefaultArgs: {} }
+    })
+    await expect(
+      runHostCall(lanes, {
+        name: 'OpenCode WSL model',
+        row: '4',
+        os: 'win32',
+        workspace,
+        call: {
+          kind: 'rpc',
+          method: 'terminal.createAgentSession',
+          params: {
+            worktree: 'id:folder:fw-1',
+            agent: 'opencode',
+            launchPreferences: { model: OPENCODE_MODEL },
+            presentation: 'background'
+          }
+        },
+        provider: { command: 'unused' },
+        telemetry: null,
+        phone: { title: 'Terminal', isActive: false }
+      })
+    ).rejects.toThrow('cannot verify this OpenCode model launch')
+    expect(lanes.provider).not.toHaveBeenCalled()
+  })
+
+  it('quotes the phone renderer handoff for PowerShell instead of the headless cmd fallback', async () => {
+    setMainPlatform('win32')
+    const lanes = startParityLanes(suite, { workspace, settings })
+    lanes.runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+    Object.defineProperty(lanes.runtime, 'getAvailableAuthoritativeWindow', {
+      value: () => suite.mainWindow
+    })
+    type MobileCommandResolver = {
+      resolveMobileSessionTerminalCommand: (
+        workspace: TerminalWorkspaceLaunchScope,
+        options: { agent?: 'claude' },
+        fallbackHostShell?: string
+      ) => Promise<{ command?: string }>
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this protected method is the real mobile command builder; only its visibility is narrowed for interception.
+    const internal = lanes.runtime as unknown as MobileCommandResolver
+    const resolveCommand = internal.resolveMobileSessionTerminalCommand.bind(lanes.runtime)
+    let command: string | undefined
+    vi.spyOn(internal, 'resolveMobileSessionTerminalCommand').mockImplementation(
+      async (...args) => {
+        command = (await resolveCommand(...args)).command
+        throw new Error('captured-before-tab-create')
+      }
+    )
+    await expect(
+      lanes.runtime.createMobileSessionTerminal('id:folder:fw-1', { agent: 'claude' })
+    ).rejects.toThrow('captured-before-tab-create')
+    expect(command).toBe("claude '--name' 'Bob''s box'")
+    expect(lanes.provider).not.toHaveBeenCalled()
+  })
+
+  it('keeps the phone command and shell together when a renderer tab needs host rescue', async () => {
+    setMainPlatform('win32')
+    const lanes = startParityLanes(suite, { workspace, settings })
+    let reply: Parameters<RuntimeDesktopSurface['onIpc']>[1] | undefined
+    setRuntimeDesktopSurface({
+      showNotification: () => false,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: mobile creation reads only the mocked window's destruction state and webContents.
+      findWindowById: () => suite.mainWindow as unknown as BrowserWindow,
+      onIpc: (_channel, listener) => {
+        reply = listener
+      },
+      removeIpcListener: () => {}
+    })
+    suite.mainWindow.webContents.send.mockImplementation((channel, data) => {
+      if (channel !== 'terminal:requestTabCreate') {
+        return
+      }
+      const request = recordOf(data)
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this reply handler authenticates only the sender, supplied by the same fake window.
+      const event = { sender: suite.mainWindow.webContents } as unknown as IpcMainEvent
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the desktop port has a variadic never[] boundary; this is its documented tab-create reply shape.
+      reply?.(event, { requestId: request.requestId, tabId: 'rescued-tab' } as never)
+    })
+    const pending = { tab: { parentTabId: 'rescued-tab', leafId: HOST_LEAF_ID }, terminal: null }
+    Object.assign(lanes.runtime, {
+      waitForMobileTerminalSurface: vi
+        .fn()
+        .mockResolvedValueOnce(pending)
+        .mockResolvedValueOnce(null),
+      findMobileTerminalSurface: () => pending
+    })
+    lanes.runtime.attachWindow(1)
+    lanes.runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    await lanes.runtime.createMobileSessionTerminal('id:folder:fw-1', {
+      agent: 'claude',
+      activate: false
+    })
+    expect(await providerFacts(lanes.provider)).toMatchObject({
+      command: "claude '--name' 'Bob''s box'",
+      shellOverride: 'powershell.exe',
+      terminalWindowsWslDistro: null
+    })
+  })
+
+  it.each(['generic', 'agent-session'] as const)(
+    'preserves Linux quoting for a UNC startup cwd on the %s path',
+    async (route) => {
+      setMainPlatform('win32')
+      const cwd = '\\\\wsl$\\Ubuntu\\home\\test\\work'
+      const lanes = startParityLanes(suite, {
+        workspace,
+        settings: { ...settings, agentDefaultArgs: { claude: '--name "cost $HOME"' } }
+      })
+      await runHostCall(lanes, {
+        name: 'UNC startup cwd',
+        row: '10',
+        os: 'win32',
+        workspace,
+        call:
+          route === 'generic'
+            ? { kind: 'create', options: { startupAgent: 'claude', cwd } }
+            : {
+                kind: 'rpc',
+                method: 'terminal.createAgentSession',
+                params: {
+                  worktree: 'id:folder:fw-1',
+                  agent: 'claude',
+                  startupCwd: cwd,
+                  presentation: 'background'
+                }
+              },
+        provider: { command: 'unused' },
+        telemetry: null,
+        phone: { title: 'Terminal', isActive: false }
+      })
+      expect(await providerFacts(lanes.provider)).toMatchObject({
+        command: "claude '--name' 'cost $HOME'",
+        shellOverride: 'wsl.exe',
+        cwd: cwd.replaceAll('\\', '/')
+      })
+    }
+  )
+
+  it('preserves Linux quoting for a phone launch with a UNC startup cwd', async () => {
+    setMainPlatform('win32')
+    const cwd = '\\\\wsl$\\Ubuntu\\home\\test\\work'
+    const lanes = startParityLanes(suite, {
+      workspace,
+      settings: { ...settings, agentDefaultArgs: { claude: '--name "cost $HOME"' } }
+    })
+    lanes.runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
+    await lanes.runtime.createMobileSessionTerminal('id:folder:fw-1', { agent: 'claude', cwd })
+    expect(await providerFacts(lanes.provider)).toMatchObject({
+      command: "claude '--name' 'cost $HOME'",
+      shellOverride: 'wsl.exe',
+      cwd: cwd.replaceAll('\\', '/')
+    })
   })
 })
 

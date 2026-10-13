@@ -7,12 +7,14 @@ import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resum
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
 import { buildAgentStartupPlan } from '../../shared/tui-agent-startup'
 import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
+import { resolveLocalWorkspaceStartupShell } from '../local-project-runtime-resolution'
 
 export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRuntimeWithRunCreateMobileSessionTerminal {
   protected async resolveMobileSessionTerminalCommand(
     workspace: TerminalWorkspaceLaunchScope,
     opts: {
       command?: string
+      cwd?: string
       env?: Record<string, string>
       envToDelete?: string[]
       startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
@@ -20,9 +22,11 @@ export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRunt
       agentPrompt?: string
       launchConfig?: SleepingAgentLaunchConfig
       launchAgent?: TuiAgent
-    }
+    },
+    fallbackHostShell?: string
   ): Promise<{
     command?: string
+    shellOverride?: string
     env?: Record<string, string>
     envToDelete?: string[]
     startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
@@ -46,12 +50,18 @@ export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRunt
     if (!isTuiAgentEnabled(opts.agent, settings.disabledTuiAgents)) {
       throw new Error('Selected agent is disabled. Choose an enabled agent before creating.')
     }
+    const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
+    const shellOverride = resolveLocalWorkspaceStartupShell(this.store, workspace.id, {
+      cwd,
+      fallbackHostShell
+    })
     const startupPlan = buildAgentStartupPlan({
       ...resolveAgentStartupPlanInputs({
         agent: opts.agent,
         settings,
         // Why: mobile may be iOS while the shell host is Windows/macOS/Linux or SSH Linux; quote for the host shell.
-        platform: this.getAgentLaunchPlatformForWorkspace(workspace),
+        platform: this.getAgentLaunchPlatformForWorkspace(workspace, cwd),
+        windowsShellOverride: shellOverride,
         // Why: SSH runs the CLI through the relay shim (plain `orca`), so the Linux-only `orca-ide` rename must not apply.
         isRemote: Boolean(workspace.connectionId)
       }),
@@ -66,6 +76,7 @@ export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRunt
     }
     return {
       command: startupPlan.launchCommand,
+      ...(shellOverride ? { shellOverride } : {}),
       env: startupPlan.env,
       // Why: a real-home Codex resume strips inherited CODEX_HOME via
       // envToDelete; dropping it here would resume against the wrong home.

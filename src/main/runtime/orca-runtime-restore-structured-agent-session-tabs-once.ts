@@ -20,6 +20,7 @@ import {
   type LocalProjectGhExecOptions
 } from '../project-runtime-git-options'
 import { getAgentLaunchPlatformForRepo } from './runtime-agent-launch-resolution'
+import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
 import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
 import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 import { isWslUncPath } from '../../shared/wsl-paths'
@@ -272,13 +273,22 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
   }
 
   protected getAgentLaunchPlatformForWorkspace(
-    scope: TerminalWorkspaceLaunchScope
+    scope: TerminalWorkspaceLaunchScope,
+    startupCwd?: string
   ): NodeJS.Platform {
     if (scope.repo) {
       return this.getAgentLaunchPlatformForRepo(scope.repo)
     }
     if (scope.connectionId) {
       return isWindowsAbsolutePathLike(scope.path) ? 'win32' : 'linux'
+    }
+    const projectRuntime = resolveLocalProjectRuntimeForWorktreeId(this.store, scope.id)
+    if (
+      (projectRuntime && isWslUncPath(startupCwd ?? '')) ||
+      projectRuntime?.status === 'repair-required' ||
+      (projectRuntime?.status === 'resolved' && projectRuntime.runtime.kind === 'wsl')
+    ) {
+      return 'linux'
     }
     return isWslUncPath(scope.path) ? 'linux' : process.platform
   }

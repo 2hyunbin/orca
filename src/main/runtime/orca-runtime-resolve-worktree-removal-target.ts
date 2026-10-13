@@ -22,7 +22,10 @@ import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-termi
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 import { terminalShellOverrideRefusal } from './terminal-shell-override-host-support'
 import { resolveTerminalStartupCwd } from '../../shared/terminal-startup-cwd'
-import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
+import {
+  resolveLocalProjectRuntimeForWorktreeId,
+  resolveLocalWorkspaceStartupShell
+} from '../local-project-runtime-resolution'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../shared/execution-host'
 import { invalidateAuthorizedRootsCacheForRepo } from '../ipc/filesystem-auth'
 import {
@@ -264,7 +267,11 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
       platform: process.platform,
       projectRuntime:
         opts.shellOverride && this.store
-          ? resolveLocalProjectRuntimeForWorktreeId(this.store, workspace.id)
+          ? resolveLocalProjectRuntimeForWorktreeId(
+              this.store,
+              workspace.id,
+              resolveTerminalStartupCwd(workspace.path, opts.cwd)
+            )
           : undefined,
       // Same resolution as the spawn lanes below, so the refusal judges the cwd the PTY gets.
       cwd: resolveTerminalStartupCwd(workspace.path, opts.cwd) ?? workspace.path,
@@ -299,11 +306,14 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
       return opts
     }
 
+    const cwd = resolveTerminalStartupCwd(workspace.path, opts.cwd)
+    const shellOverride =
+      opts.shellOverride ?? resolveLocalWorkspaceStartupShell(store, workspace.id, { cwd })
     return buildRuntimeAgentTerminalStartupOptions(
       workspace,
-      opts,
+      { ...opts, ...(shellOverride ? { shellOverride } : {}) },
       store.getSettings(),
-      this.getAgentLaunchPlatformForWorkspace(workspace),
+      this.getAgentLaunchPlatformForWorkspace(workspace, cwd),
       this.toAgentSessionOptions(opts.launchPreferences),
       this.runtimeId
     )

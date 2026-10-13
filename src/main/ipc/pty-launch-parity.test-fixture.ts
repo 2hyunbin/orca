@@ -14,6 +14,7 @@ import {
 } from '../../shared/launch-parity-window-request.test-fixture'
 import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
 import { HOST_TAB_ID } from './pty-launch-parity-host.test-cases'
+import type { Repo } from '../../shared/repo-types'
 
 const WINDOWS_ENV = {
   COMSPEC: 'C:\\Windows\\system32\\cmd.exe',
@@ -142,11 +143,24 @@ export function startParityLanes(
     workspace: LaunchWorkspace
     settings?: Record<string, unknown>
     spawnError?: Error
+    additionalRepos?: Repo[]
   }
 ): ParityLanes {
   const settings = parityMainSettings(args.settings)
   const persistPtyBinding = vi.fn(async () => true)
-  const { repo, folderWorkspace } = launchScope(args.workspace)
+  const { repo: scopeRepo, folderWorkspace } = launchScope(args.workspace)
+  const repo =
+    scopeRepo ??
+    (args.workspace.repoPath
+      ? {
+          id: 'repo-1',
+          path: args.workspace.repoPath,
+          displayName: 'repo',
+          badgeColor: '#000000',
+          addedAt: 0,
+          projectGroupId: folderWorkspace?.projectGroupId
+        }
+      : null)
   const store = {
     getSettings: () => settings,
     getProjects: () => [
@@ -159,7 +173,7 @@ export function startParityLanes(
       }
     ],
     getRepo: (id: string) => (repo && id === repo.id ? repo : undefined),
-    getRepos: () => (repo ? [repo] : []),
+    getRepos: () => [...(repo ? [repo] : []), ...(args.additionalRepos ?? [])],
     getAllWorktreeMeta: () => ({}),
     getWorktreeMeta: () => undefined,
     getWorkspaceSession: () => ({ tabsByWorktree: {}, terminalLayoutsByTabId: {} }),

@@ -62,7 +62,13 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         afterDesktopTabId = anchor.type === 'terminal' ? anchor.parentTabId : anchor.id
       }
     }
-    const startupCommand = await this.resolveMobileSessionTerminalCommand(workspace, opts)
+    const rendererOwnsShell =
+      this.getAvailableAuthoritativeWindow() && !(opts.clientMutationId && opts.agent === 'qoder')
+    const startupCommand = await this.resolveMobileSessionTerminalCommand(
+      workspace,
+      opts,
+      rendererOwnsShell ? 'powershell.exe' : undefined
+    )
     this.assertStableReadyGraph(graphEpoch)
     if (opts.signal?.aborted) {
       throw new Error('client_disconnected')
@@ -98,6 +104,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
         afterTabId,
         {
           command: startupCommand.command,
+          ...(startupCommand.shellOverride ? { shellOverride: startupCommand.shellOverride } : {}),
           cwd,
           env: startupCommand.env,
           envToDelete: startupCommand.envToDelete,
@@ -157,6 +164,7 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
           afterTabId: afterDesktopTabId,
           targetGroupId: opts.targetGroupId,
           command: startupCommand.command,
+          ...(startupCommand.shellOverride ? { shellOverride: startupCommand.shellOverride } : {}),
           cwd,
           ...(startupCommand.env ? { env: startupCommand.env } : {}),
           ...(startupCommand.envToDelete ? { envToDelete: startupCommand.envToDelete } : {}),
@@ -223,6 +231,9 @@ export class OrcaRuntimeWithRunCreateMobileSessionTerminal extends OrcaRuntimeWi
           afterTabId,
           {
             command: startupCommand.command,
+            ...(startupCommand.shellOverride
+              ? { shellOverride: startupCommand.shellOverride }
+              : {}),
             cwd,
             env: startupCommand.env,
             envToDelete: startupCommand.envToDelete,

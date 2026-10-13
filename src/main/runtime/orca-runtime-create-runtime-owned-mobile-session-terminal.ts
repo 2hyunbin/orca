@@ -47,6 +47,7 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
     afterTabId?: string,
     opts: {
       command?: string
+      shellOverride?: string
       cwd?: string
       env?: Record<string, string>
       envToDelete?: string[]
@@ -105,6 +106,7 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
           : {}),
         ...(preAllocatedHandle ? { preAllocatedHandle } : {}),
         command: opts.command,
+        ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
         cwd,
         env: opts.env,
         envToDelete: opts.envToDelete,

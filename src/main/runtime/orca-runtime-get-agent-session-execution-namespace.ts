@@ -12,6 +12,8 @@ import type {
 import { canonicalizeAgentSessionIdentity } from './agent-session-claim-identity'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
 import { resolveLocalWindowsAgentStartupShell } from '../../shared/windows-terminal-shell'
+import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
+import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { buildAgentResumeStartupPlan } from '../../shared/tui-agent-startup'
 import { OrchestrationError } from './orchestration/orchestration-error'
 import {
@@ -27,6 +29,13 @@ export class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntim
     if (workspace.connectionId) {
       // Why: SSH target ids are not execution-namespace proof. Preserve the
       // legacy launch until an attested route can safely participate in claims.
+      return null
+    }
+    if (
+      parseWorkspaceKey(workspace.id)?.type === 'folder' &&
+      resolveLocalProjectRuntimeForWorktreeId(this.store, workspace.id)
+    ) {
+      // Path-only claims cannot prove a project-selected folder execution namespace.
       return null
     }
     const wsl = parseWslUncPath(workspace.path)

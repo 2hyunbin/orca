@@ -13,6 +13,7 @@ import {
 import { createHash } from 'node:crypto'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
 import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
+import { resolveLocalWorkspaceStartupShell } from '../local-project-runtime-resolution'
 import { buildExecutionHostAgentStartupPlan } from '../opencode/opencode-model-startup-plan'
 import type { RuntimeTerminalCreate } from '../../shared/runtime-types'
 import type {
@@ -130,10 +131,14 @@ export class OrcaRuntimeWithCreateAgentSession extends OrcaRuntimeWithGetAgentSe
       if (!isTuiAgentEnabled(request.agent, settings.disabledTuiAgents)) {
         throw new Error('Selected agent is disabled. Choose an enabled agent before creating.')
       }
+      const shellOverride = resolveLocalWorkspaceStartupShell(this.store, workspace.id, {
+        cwd: startupCwd
+      })
       const startupArgs = resolveAgentStartupPlanInputs({
         agent: request.agent,
         settings,
-        platform: this.getAgentLaunchPlatformForWorkspace(workspace),
+        platform: this.getAgentLaunchPlatformForWorkspace(workspace, startupCwd),
+        windowsShellOverride: shellOverride,
         // Why: `workspace.repo` is display metadata and may be a row from another host; the launch
         // shape must match the PTY route this scope already resolved.
         isRemote: Boolean(workspace.connectionId),
@@ -177,6 +182,7 @@ export class OrcaRuntimeWithCreateAgentSession extends OrcaRuntimeWithGetAgentSe
       try {
         terminal = await this.createTerminal(`id:${workspace.id}`, {
           command: startup.launchCommand,
+          ...(shellOverride ? { shellOverride } : {}),
           env: startup.env,
           launchConfig: startup.launchConfig,
           launchAgent: request.agent,

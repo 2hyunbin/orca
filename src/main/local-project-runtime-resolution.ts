@@ -15,6 +15,15 @@ import {
 } from './wsl'
 import { getRepoIdFromWorktreeId } from '../shared/worktree/id'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../shared/execution-host'
+import {
+  findFolderWorkspaceCandidateRepos,
+  resolveFolderWorkspaceHost,
+  type FolderWorkspaceHostState
+} from '../shared/folder-workspace-execution-host'
+import { parseWorkspaceKey } from '../shared/workspace-scope'
+import { isWslUncPath } from '../shared/wsl-paths'
+import { resolveLocalWindowsTerminalRuntimeOptions } from '../shared/local-windows-terminal-runtime'
+import { resolveManagedSshHostLoginShell } from './pty/managed-ssh-host-login-shell'
 
 /**
  * The slice of the store runtime resolution actually reads. Structural rather
@@ -28,7 +37,12 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../shared/execu
 export type ProjectRuntimeResolutionStore = {
   getProjects?: Store['getProjects']
   getRepo?: Store['getRepo']
-  getSettings?: () => Partial<Pick<GlobalSettings, 'localWindowsRuntimeDefault'>>
+  getRepos?: Store['getRepos']
+  getFolderWorkspaces?: Store['getFolderWorkspaces']
+  getProjectGroups?: Store['getProjectGroups']
+  getSettings?: () => Partial<
+    Pick<GlobalSettings, 'localWindowsRuntimeDefault' | 'terminalWindowsShell'>
+  >
 }
 
 type ResolvableStore = ProjectRuntimeResolutionStore & {
@@ -143,7 +157,8 @@ export function resolveLocalProjectRuntimesForRepos(
 
 export function resolveLocalProjectRuntimeForWorktreeId(
   store: ProjectRuntimeResolutionStore | undefined,
-  worktreeId: string | undefined
+  worktreeId: string | undefined,
+  startupCwd?: string
 ): ProjectExecutionRuntimeResolution | undefined {
   if (!store || !worktreeId) {
     return undefined
@@ -151,6 +166,74 @@ export function resolveLocalProjectRuntimeForWorktreeId(
   if (!canResolveProjectRuntimeForWorktreeId(store)) {
     return undefined
   }
+  const scope = parseWorkspaceKey(worktreeId)
+  if (scope?.type === 'folder') {
+    if (process.platform !== 'win32') {
+      return undefined
+    }
+    const state = {
+      folderWorkspaces: store.getFolderWorkspaces?.() ?? [],
+      projectGroups: store.getProjectGroups?.() ?? [],
+      repos: store.getRepos?.() ?? []
+    }
+    const folder = state.folderWorkspaces.find((entry) => entry.id === scope.folderWorkspaceId)
+    const repo = findLocalFolderWorkspaceRuntimeRepo(state, scope.folderWorkspaceId)
+    if (!folder || !repo || isWslUncPath(folder.folderPath) || isWslUncPath(startupCwd ?? '')) {
+      return undefined
+    }
+    const runtime = resolveLocalWorkspaceRuntime(store, repo, folder.folderPath)
+    // The inherited Windows default still needs a decision about untouched profiles.
+    return runtime?.status === 'resolved' &&
+      runtime.runtime.kind === 'windows-host' &&
+      runtime.runtime.reason === 'global-default'
+      ? undefined
+      : runtime
+  }
   const repo = store.getRepo(getRepoIdFromWorktreeId(worktreeId))
   return repo ? resolveLocalProjectRuntimeForRepo(store, repo) : undefined
+}
+
+export function findLocalFolderWorkspaceRuntimeRepo(
+  state: FolderWorkspaceHostState,
+  folderWorkspaceId: string
+): Repo | undefined {
+  const folder = state.folderWorkspaces.find((entry) => entry.id === folderWorkspaceId)
+  if (!folder || resolveFolderWorkspaceHost(state, folder.id).kind !== 'local') {
+    return undefined
+  }
+  const group = state.projectGroups.find((entry) => entry.id === folder.projectGroupId)
+  if (
+    (folder.executionHostId ?? group?.executionHostId ?? LOCAL_EXECUTION_HOST_ID) !==
+    LOCAL_EXECUTION_HOST_ID
+  ) {
+    return undefined
+  }
+  const candidates = findFolderWorkspaceCandidateRepos(state, folder.id)
+  const repo = candidates.length === 1 ? candidates[0] : undefined
+  return repo && getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID ? repo : undefined
+}
+
+/** Quotes project-owned folder launches for the same shell their PTY selects. */
+export function resolveLocalWorkspaceStartupShell(
+  store: ProjectRuntimeResolutionStore | undefined,
+  worktreeId: string,
+  options: { cwd?: string; fallbackHostShell?: string } = {}
+): string | undefined {
+  if (parseWorkspaceKey(worktreeId)?.type !== 'folder') {
+    return undefined
+  }
+  const projectRuntime = resolveLocalProjectRuntimeForWorktreeId(store, worktreeId)
+  if (!projectRuntime) {
+    return undefined
+  }
+  if (isWslUncPath(options.cwd ?? '')) {
+    return 'wsl.exe'
+  }
+  return resolveLocalWindowsTerminalRuntimeOptions({
+    requestedShellOverride: undefined,
+    settings: store?.getSettings?.(),
+    projectRuntime,
+    fallbackHostShell: options.fallbackHostShell ?? (process.env.COMSPEC || 'powershell.exe'),
+    sshLoginShell: resolveManagedSshHostLoginShell()
+  }).shellOverride
 }
