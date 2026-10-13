@@ -1,7 +1,8 @@
 // The host's conversation outline read: derived from the reduced journal on every
 // request rather than stored, so it can never disagree with the journal it lists.
 //
-// One reply must fit the same budget a history page does. Past it the reply
+// One reply must fit a page's share of the relay frame; a phone's bridge chunks replies, so
+// the tighter streamed-page budget does not bind it. Past it the reply
 // degrades in order of what the rail can best spare: the agent's replies, then
 // shorter previews, then no previews (a tick still marks the message), and only
 // then the oldest entries.
@@ -14,7 +15,7 @@ import {
   type AgentSessionConversationOutlineEntry
 } from '../../../shared/agent-session-conversation-outline'
 import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
-import { HISTORY_PAGE_CONTENT_BUDGET_BYTES } from './agent-session-history-page-bounds'
+import { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES } from './agent-session-history-page-bounds'
 
 const DEGRADED_PREVIEW_MAX_CHARS = 60
 
@@ -45,7 +46,7 @@ function totalBytes(entries: readonly AgentSessionConversationOutlineEntry[]): n
 
 export function readAgentSessionConversationOutline(
   snapshot: AgentJournalSnapshot,
-  budgetBytes: number = HISTORY_PAGE_CONTENT_BUDGET_BYTES
+  budgetBytes: number = AGENT_SESSION_HISTORY_MAX_PAGE_BYTES
 ): AgentSessionConversationOutline {
   const projected = projectAgentSessionConversationOutline(snapshot.items, snapshot.submissions)
   let entries = withPreviewCap(projected, AGENT_SESSION_OUTLINE_PREVIEW_MAX_CHARS)

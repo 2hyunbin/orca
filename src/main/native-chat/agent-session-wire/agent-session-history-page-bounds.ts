@@ -11,6 +11,7 @@ import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-fra
 import { agentSessionHostStatusBody } from '../../../shared/agent-session-host-status-rows'
 import { subagentFoldKey, subagentItemBlock } from '../../../shared/native-chat-subagent-items'
 
+/** A page's share of one relay frame; page content keeps to the tighter budget below. */
 export const AGENT_SESSION_HISTORY_MAX_PAGE_BYTES = REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES / 2
 
 const HISTORY_PAGE_ENVELOPE_RESERVE_BYTES = 64 * 1024

@@ -30,7 +30,7 @@ function describeStreamFailure(error: unknown): string {
 /** What a reader shows when the app ends its stream; the reason itself goes to diagnostics. */
 const STREAM_END_TEXT: Record<Extract<BridgeHostMessage, { type: 'end' }>['reason'], string> = {
   overflow: 'This was too large for the app to receive at once.',
-  closed: 'The app could not read what your computer sent.',
+  closed: 'The app stopped receiving this.',
   unsubscribed: 'The app stopped receiving updates.'
 }
 

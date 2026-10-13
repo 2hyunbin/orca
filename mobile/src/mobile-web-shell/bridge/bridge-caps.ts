@@ -18,7 +18,8 @@ export const BRIDGE_DIRECTIONS = ['page-to-shell', 'shell-to-page'] as const
 
 export type BridgeDirection = (typeof BRIDGE_DIRECTIONS)[number]
 
-/** Frame ceiling, in UTF-8 bytes of the raw string, checked before `JSON.parse` sees it. */
+/** Frame ceiling, in UTF-8 bytes of the raw string, checked before `JSON.parse` sees it. Never
+ *  raise it alone: hosts size frames to what released shells accept. */
 export const BRIDGE_MAX_MESSAGE_BYTES = MOBILE_BRIDGE_MAX_FRAME_BYTES
 
 /** Nesting levels a page-to-shell frame may carry, counting the frame object itself as one. */
