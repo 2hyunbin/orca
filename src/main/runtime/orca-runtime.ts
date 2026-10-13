@@ -1,9 +1,3 @@
-import type { Repo } from '../../shared/repo-types'
-import type {
-  RecipeWorkspaceCreateParams,
-  RecipeWorkspaceCreation
-} from '../ephemeral-vm-recipe-workspace-create'
-import { buildManagedWorktreeCreateArgs } from './rpc/methods/worktree-create-args'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import type { RuntimeCommandSurfaceHost } from './orca-runtime-core'
@@ -31,55 +25,14 @@ import { findWorkspaceReferences } from './runtime-reference-find'
 import { createReferenceAgentIndex, referenceConnectionHosts } from './runtime-reference-agents'
 import type { RuntimeReferenceFindParams } from '../../shared/runtime-reference-contracts'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
+import type { Repo } from '../../shared/repo-types'
+import type {
+  RecipeWorkspaceCreateParams,
+  RecipeWorkspaceCreation
+} from '../ephemeral-vm-recipe-workspace-create'
+import { buildManagedWorktreeCreateArgs } from './rpc/methods/worktree-create-args'
 
 class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
-  private recipeWorkspaceCreator:
-    | ((params: RecipeWorkspaceCreateParams, repo: Repo) => Promise<RecipeWorkspaceCreation>)
-    | null = null
-
-  setRecipeWorkspaceCreator(
-    creator: NonNullable<OrcaRuntimeService['recipeWorkspaceCreator']>
-  ): void {
-    this.recipeWorkspaceCreator = creator
-  }
-
-  supportsRecipeWorkspaceCreation(): boolean {
-    return this.recipeWorkspaceCreator !== null
-  }
-
-  async createManagedRecipeWorkspace(
-    params: RecipeWorkspaceCreateParams
-  ): Promise<RecipeWorkspaceCreation> {
-    if (!this.recipeWorkspaceCreator) {
-      throw new Error('Environment recipes are not supported by this Orca host.')
-    }
-    const repo = await this.resolveRepoSelector(params.repo)
-    const args = buildManagedWorktreeCreateArgs(params, {})
-    const lineage = await this.resolveLineageForWorktreeCreate(args.lineage, repo)
-    const result = await this.recipeWorkspaceCreator(params, repo)
-    const recorded = this.recordCreatedWorktreeLineage(result.worktree, lineage)
-    this.notifyReposChanged()
-    this.notifyWorktreesChanged(result.worktree.repoId)
-    this.emitWorktreeLifecycle({
-      kind: 'created',
-      worktreeId: result.worktree.id,
-      path: result.worktree.path
-    })
-    if (params.activate === true) {
-      this.notifyActivateWorktree(result.worktree.repoId, result.worktree.id)
-    }
-    return {
-      ...result,
-      ...recorded,
-      worktree: {
-        ...result.worktree,
-        parentWorktreeId: recorded.lineage?.parentWorktreeId ?? null,
-        lineage: recorded.lineage,
-        workspaceLineage: recorded.workspaceLineage
-      }
-    }
-  }
-
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
       this.requireStore(),
@@ -207,6 +160,52 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   /** The launch record when it is already open, for a reader that must not wait for it. */
   openedAgentSessionRecordStore(): AgentSessionRecordStore | null {
     return peekOpenedAgentSessionRecordStore()
+  }
+  private recipeWorkspaceCreator:
+    | ((params: RecipeWorkspaceCreateParams, repo: Repo) => Promise<RecipeWorkspaceCreation>)
+    | null = null
+
+  setRecipeWorkspaceCreator(
+    creator: NonNullable<OrcaRuntimeService['recipeWorkspaceCreator']>
+  ): void {
+    this.recipeWorkspaceCreator = creator
+  }
+
+  supportsRecipeWorkspaceCreation(): boolean {
+    return this.recipeWorkspaceCreator !== null
+  }
+
+  async createManagedRecipeWorkspace(
+    params: RecipeWorkspaceCreateParams
+  ): Promise<RecipeWorkspaceCreation> {
+    if (!this.recipeWorkspaceCreator) {
+      throw new Error('Environment recipes are not supported by this Orca host.')
+    }
+    const repo = await this.resolveRepoSelector(params.repo)
+    const args = buildManagedWorktreeCreateArgs(params, {})
+    const lineage = await this.resolveLineageForWorktreeCreate(args.lineage, repo)
+    const result = await this.recipeWorkspaceCreator(params, repo)
+    const recorded = this.recordCreatedWorktreeLineage(result.worktree, lineage)
+    this.notifyReposChanged()
+    this.notifyWorktreesChanged(result.worktree.repoId)
+    this.emitWorktreeLifecycle({
+      kind: 'created',
+      worktreeId: result.worktree.id,
+      path: result.worktree.path
+    })
+    if (params.activate === true) {
+      this.notifyActivateWorktree(result.worktree.repoId, result.worktree.id)
+    }
+    return {
+      ...result,
+      ...recorded,
+      worktree: {
+        ...result.worktree,
+        parentWorktreeId: recorded.lineage?.parentWorktreeId ?? null,
+        lineage: recorded.lineage,
+        workspaceLineage: recorded.workspaceLineage
+      }
+    }
   }
 }
 type OrcaRuntimeServiceExport = RuntimeCommandSurfaceHost<OrcaRuntimeService>

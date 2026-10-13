@@ -24,15 +24,6 @@ export function classifyRuntimeLongPoll(request: RpcRequest): RuntimeLongPollCla
   // Worker start waits for readiness and then verifies the submitted prompt;
   // the complete operation can run for 90–110s. Keep every local transport
   // (Unix sockets and Windows named pipes) alive for that long poll.
-  if (
-    request.method === 'worktree.create' &&
-    typeof request.params === 'object' &&
-    request.params !== null &&
-    'recipeId' in request.params &&
-    typeof request.params.recipeId === 'string'
-  ) {
-    return 'wait'
-  }
   if (request.method === 'orchestration.workerStart') {
     return 'wait'
   }
@@ -92,6 +83,15 @@ export function classifyRuntimeLongPoll(request: RpcRequest): RuntimeLongPollCla
   if (request.method === 'orchestration.check') {
     const params = request.params as { wait?: unknown } | undefined
     return params?.wait === true ? 'wait' : null
+  }
+  if (
+    request.method === 'worktree.create' &&
+    typeof request.params === 'object' &&
+    request.params !== null &&
+    'recipeId' in request.params &&
+    typeof request.params.recipeId === 'string'
+  ) {
+    return 'wait'
   }
   return null
 }
