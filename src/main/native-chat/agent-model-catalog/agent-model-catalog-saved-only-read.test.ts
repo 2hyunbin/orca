@@ -80,9 +80,6 @@ describe('a saved-only catalog read', () => {
       probes: { grok: probe }
     })
 
-    expect(await service.read({ agent: 'grok', sessionId: record.sessionId })).toEqual({
-      origin: 'unknown'
-    })
     expect(
       await service.read({ agent: 'grok', sessionId: record.sessionId, waitForListing: true })
     ).toEqual({

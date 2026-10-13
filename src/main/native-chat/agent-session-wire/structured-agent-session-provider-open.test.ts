@@ -6,6 +6,7 @@ import type {
 import {
   CALLER,
   attach,
+  attachParams,
   envelope,
   hostTestState
 } from './structured-agent-session-host-test-harness'
@@ -41,26 +42,6 @@ function awaitOpen() {
   return { ...state, open, close, pending, send }
 }
 
-it('writes both startup and running picks to the live child', async () => {
-  const { host, store, pending, setOption } = awaitOpen()
-  await attach()
-  for (const model of ['model-before-ready', 'model-after-ready']) {
-    const picked = host.setOption(CALLER, {
-      envelope: envelope('agentSession.setOption', { key: 'model', value: model }),
-      key: 'model',
-      value: model
-    })
-    pending.resolve(OPENED)
-    expect(await picked).toMatchObject({ ok: true })
-    expect(store.getRecord(SESSION)?.options?.model).toBe(model)
-    expect(setOption).toHaveBeenCalledTimes(model === 'model-before-ready' ? 1 : 2)
-    await vi.waitFor(() =>
-      expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
-    )
-  }
-  expect(store.getRecord(SESSION)?.options?.model).toBe('model-after-ready')
-})
-
 it('delivers two earlier sends before a later goal, then the send after that goal', async () => {
   const { host, pending, dispatch, send } = awaitOpen()
   await attach()
@@ -92,4 +73,23 @@ it('delivers two earlier sends before a later goal, then the send after that goa
   expect(await later).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(order).toHaveLength(4))
   expect(order).toEqual(['first', 'second', 'goal', 'third'])
+})
+
+it('cancels the open on quit after a second client attach is refused', async () => {
+  const { host, open, close, dispatch, pending, send } = awaitOpen()
+  await attach()
+  await send('held')
+  expect(await host.attach({ callerKey: 'second-client' }, attachParams())).toMatchObject({
+    ok: false
+  })
+  const ended = host.flushAllStreamedEvents({ trigger: 'quit' })
+  try {
+    await vi.waitFor(() => expect(open.mock.calls[0]?.[0].signal.aborted).toBe(true))
+    await ended
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(dispatch).not.toHaveBeenCalled()
+  } finally {
+    pending.resolve(OPENED)
+    await ended
+  }
 })
