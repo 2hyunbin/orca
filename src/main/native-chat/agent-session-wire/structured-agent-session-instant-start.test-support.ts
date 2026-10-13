@@ -21,8 +21,7 @@ export function startsWhenPublished<A extends StructuredAgentSessionAdapter>(
     open:
       adapter.open ??
       (async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: []
+        reportedOptions: { model: '' }
       }))
   }
 }

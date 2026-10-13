@@ -164,8 +164,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
       params: { settings: { fastMode: true } }
     })
     expect(await claudeOpened(adapter, 'session-1')).toMatchObject({
-      reportedOptions: { fastMode: true },
-      restoreSkippedOptions: []
+      reportedOptions: { fastMode: true }
     })
   })
 
@@ -196,8 +195,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
       // Started, with the pick, while the apply is still unanswered: nothing waits on it.
       expect(claude.connections[0].calls.at(-1)?.subtype).toBe('apply_flag_settings')
       expect(await claudeOpened(adapter, 'session-1')).toMatchObject({
-        reportedOptions: { fastMode: true },
-        restoreSkippedOptions: []
+        reportedOptions: { fastMode: true }
       })
       answerApply(failure)
       await tick()

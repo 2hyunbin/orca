@@ -101,8 +101,7 @@ function proveStarted(): Promise<void> {
   return host.handleAdapterEvent({
     type: 'started',
     ...currentChild(),
-    reportedOptions: { model: 'sonnet' },
-    restoreSkippedOptions: []
+    reportedOptions: { model: 'sonnet' }
   })
 }
 

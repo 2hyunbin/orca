@@ -31,6 +31,7 @@ let store: AgentSessionRecordStore
 let host: StructuredAgentSessionHost
 let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 let activeModel: string
+let activeEffort: string | null
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let order: string[]
 let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
@@ -54,8 +55,10 @@ function adapter(): StructuredAgentSessionAdapter {
     order.push(`${key}=${value}`)
     if (key === 'model') {
       activeModel = value
+    } else if (key === 'effort') {
+      activeEffort = value
     }
-    return { [key]: value }
+    return { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) }
   })
   dispatch = vi.fn(async () => {
     order.push('dispatch')
@@ -81,8 +84,7 @@ function adapter(): StructuredAgentSessionAdapter {
       new Promise((resolve) => {
         releaseOpen = () =>
           resolve({
-            reportedOptions: { model: DEFAULT_MODEL },
-            restoreSkippedOptions: []
+            reportedOptions: { model: DEFAULT_MODEL }
           })
       }),
     acquire,
@@ -102,6 +104,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-claude-options-'))
   resetHostTestOperationIds()
   activeModel = DEFAULT_MODEL
+  activeEffort = null
   order = []
   releaseOpen = () => {}
   store = await openTestAgentSessionRecordStore(root)
@@ -135,29 +138,37 @@ afterEach(async () => {
 })
 
 describe('Claude structured session options', () => {
-  it('saves picks made while opening without changing the child', async () => {
+  it('writes picks made while opening once the child is ready', async () => {
     const pick = (key: string, value: string) =>
       host.setOption(CALLER, {
         envelope: envelope('agentSession.setOption', { key, value }),
         key,
         value
       })
-    // Answered at once: nothing waits on a provider still starting.
-    expect(await pick('effort', 'high')).toMatchObject({ ok: true })
-    expect(await pick('model', PICKED_MODEL)).toMatchObject({ ok: true })
-    expect(setOption).not.toHaveBeenCalled()
-    expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
+    const effort = pick('effort', 'high')
+    const model = pick('model', PICKED_MODEL)
+    let settled = false
+    void Promise.all([effort, model]).then(() => {
+      settled = true
+    })
+    try {
+      await host.collaboratorsForTests().serialize(SESSION, async () => {})
+      expect(settled).toBe(false)
+      expect(setOption).not.toHaveBeenCalled()
+    } finally {
+      releaseOpen()
+    }
+    expect(await effort).toMatchObject({ ok: true })
+    expect(await model).toMatchObject({ ok: true })
+    expect(order).toEqual(['effort=high', 'model=opus'])
 
     const body = hostTestMessage('hello')
     expect(
       await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
     ).toMatchObject({ ok: true })
-    expect(dispatch).not.toHaveBeenCalled()
-
-    releaseOpen()
     await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
-    expect(order).toEqual(['dispatch'])
-    expect(activeModel).toBe(DEFAULT_MODEL)
+    expect(order).toEqual(['effort=high', 'model=opus', 'dispatch'])
+    expect(activeModel).toBe(PICKED_MODEL)
     await host.flushAllStreamedEvents()
     expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
   })

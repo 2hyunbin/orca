@@ -47,8 +47,10 @@ import { mutateWithChatStop } from './structured-agent-session-chat-stop'
 import {
   runWithReadyStructuredAgentSessionOperation,
   openWithReadyStructuredAgentSessionChild,
-  runAfterRewindStart
+  runAfterRewindStart,
+  operationDidNotRun
 } from './structured-agent-session-ready-operation'
+import { STRUCTURED_AGENT_SESSION_START_WAIT_MS } from './structured-agent-session-send-settlement'
 export type { StructuredAgentSessionMutationContext } from './structured-agent-session-mutation-context'
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import {
@@ -185,15 +187,19 @@ export async function setStructuredAgentSessionOption(
   caller: StructuredAgentSessionCaller,
   params: { envelope: AgentSessionMutationEnvelope; key: string; value: string }
 ): Promise<AgentSessionMutationResult<AgentSessionOptionResult>> {
+  const recordOnly = params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
+  const child = context.sessions.get(params.envelope.sessionId)?.child
+  if (!recordOnly && child?.phase === 'starting' && !child.close) {
+    const readiness = context.startupAttempts.readiness(params.envelope.sessionId, child)
+    const outcome = await readiness?.wait(STRUCTURED_AGENT_SESSION_START_WAIT_MS)
+    if (outcome !== 'ready') {
+      return operationDidNotRun(outcome === 'timeout')
+    }
+  }
   const plan = setOptionPlan(params)
-  const recordsIntent = () => {
+  const atRest = () => {
     const child = context.sessions.get(params.envelope.sessionId)?.child
-    return (
-      params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID ||
-      !child ||
-      child.phase === 'starting' ||
-      child.close !== undefined
-    )
+    return recordOnly || !child || child.close !== undefined
   }
   return mutateStructuredAgentSession(
     context,
@@ -202,10 +208,10 @@ export async function setStructuredAgentSessionOption(
     {
       ...plan,
       get conversationWrite() {
-        return recordsIntent() ? (true as const) : undefined
+        return atRest() ? (true as const) : undefined
       },
       run: async (ctx) => {
-        if (recordsIntent()) {
+        if (atRest()) {
           return recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
         }
         const wait = context.acquireAborts.begin(params.envelope.sessionId)
@@ -216,7 +222,7 @@ export async function setStructuredAgentSessionOption(
         }
       }
     },
-    () => (recordsIntent() ? openForWrite : openForProviderWrite)(context, params.envelope)()
+    () => (atRest() ? openForWrite : openForProviderWrite)(context, params.envelope)()
   )
 }
 

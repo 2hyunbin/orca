@@ -113,8 +113,7 @@ beforeEach(async () => {
         sessionId: input.identity.sessionId,
         fence: input.fence,
         acquisitionGeneration,
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: []
+        reportedOptions: { model: '' }
         // Never admitted, so the empty report persists nothing.
       })
       return {
