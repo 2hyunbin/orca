@@ -52,6 +52,12 @@ describe('plugin environment recipe artifacts', () => {
   ])('fails closed for unknown or unsafe declarations', (value) => {
     expect(() => parse(value)).toThrow()
   })
+  it('opts into context-aware protocol 2 without changing legacy artifacts', () => {
+    expect(parse(raw).protocolVersion).toBeUndefined()
+    expect(parse({ ...raw, protocolVersion: 2 }).protocolVersion).toBe(2)
+    expect(() => parse({ ...raw, protocolVersion: 3 })).toThrow()
+    expect(() => parse({ ...raw, contextId: 'author-selected-account' })).toThrow()
+  })
   it('requires declared create values and leaves author strings literal', () => {
     const recipe = parse(raw)
     expect(() =>

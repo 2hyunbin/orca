@@ -2,6 +2,7 @@ import { environmentRecipeRequestSchema } from '../../shared/environment-recipe-
 import {
   environmentRecipeProviderId,
   pluginEnvironmentRecipeSchema,
+  validateEnvironmentRecipeProtocol,
   validateEnvironmentRecipeCreateParameters
 } from '../../shared/plugins/plugin-environment-recipe-artifact'
 import type { EnvironmentRecipeJournalOperation } from '../../shared/plugins/plugin-environment-recipe-journal'
@@ -29,6 +30,7 @@ export async function executeJournaledPluginEnvironmentRecipe(
 ): Promise<JournaledEnvironmentRecipeResult> {
   const recipe = pluginEnvironmentRecipeSchema.parse(structuredClone(input.recipe))
   const request = environmentRecipeRequestSchema.parse(structuredClone(input.request))
+  validateEnvironmentRecipeProtocol(recipe, request)
   const execution = { ...input, recipe, request, env: { ...input.env } }
   const providerId = environmentRecipeProviderId(input.pluginKey, recipe)
   if (providerId !== request.providerId) {
@@ -40,6 +42,7 @@ export async function executeJournaledPluginEnvironmentRecipe(
   const journal = new PluginEnvironmentRecipeJournalStore(input.userDataPath, {
     executionHostId: input.executionHostId,
     providerId,
+    ...(request.contextId !== undefined ? { contextId: request.contextId } : {}),
     sourceDigest: input.sourceDigest,
     recipeDigest: environmentRecipeDigest(recipe)
   })

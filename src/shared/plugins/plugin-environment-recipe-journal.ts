@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { parseExecutionHostId } from '../execution-host'
 import {
   ENVIRONMENT_RECIPE_ACTIONS,
+  environmentRecipeContextIdSchema,
   environmentRecipeRequestSchema,
   environmentRecipeResourceSchema
 } from '../environment-recipe-protocol'
@@ -14,6 +15,7 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/)
 export const environmentRecipeJournalBindingSchema = z.strictObject({
   executionHostId: z.string().refine((value) => parseExecutionHostId(value)?.id === value),
   providerId: environmentRecipeRequestSchema.options[0].shape.providerId,
+  contextId: environmentRecipeContextIdSchema.optional(),
   sourceDigest: digest,
   recipeDigest: digest
 })

@@ -39,6 +39,40 @@ const response = {
 }
 
 describe('environment recipe lifecycle protocol', () => {
+  it('requires a bounded explicit context in protocol 2 and preserves strict legacy requests', () => {
+    const current = { ...request, protocolVersion: 2, contextId: 'company/account/region' }
+    expect(environmentRecipeRequestSchema.parse(current)).toEqual(current)
+    for (const contextId of [undefined, '', 'x'.repeat(257), 'bad\ncontext']) {
+      expect(environmentRecipeRequestSchema.safeParse({ ...current, contextId }).success).toBe(
+        false
+      )
+    }
+    expect(
+      environmentRecipeRequestSchema.safeParse({ ...request, contextId: 'company' }).success
+    ).toBe(false)
+    expect(environmentRecipeRequestSchema.parse(request)).toEqual(request)
+  })
+  it('rejects another account context or a response protocol downgrade', () => {
+    const current = environmentRecipeRequestSchema.parse({
+      ...request,
+      protocolVersion: 2,
+      contextId: 'company/account/region'
+    })
+    const confirmed = { ...response, protocolVersion: 2, contextId: current.contextId }
+    expect(parseEnvironmentRecipeResponse(JSON.stringify(confirmed), current)).toEqual(confirmed)
+    expect(() =>
+      parseEnvironmentRecipeResponse(
+        JSON.stringify({
+          ...confirmed,
+          contextId: 'another-company/account/region'
+        }),
+        current
+      )
+    ).toThrow('this operation')
+    expect(() => parseEnvironmentRecipeResponse(JSON.stringify(response), current)).toThrow(
+      'this operation'
+    )
+  })
   it('accepts a revision-bound long-lived SSH wake response', () => {
     expect(parseEnvironmentRecipeResponse(JSON.stringify(response), request)).toEqual(response)
   })

@@ -36,6 +36,7 @@ const field = z.strictObject({
 export const pluginEnvironmentRecipeSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
+    protocolVersion: z.literal(2).optional(),
     id: literal(128).refine(isPluginManifestId),
     name: literal(128),
     description: literal(1024),
@@ -119,5 +120,14 @@ export function validateEnvironmentRecipeCreateParameters(
     if (definition.required && !parameters[definition.id]?.trim()) {
       throw new Error('A required environment create parameter is missing')
     }
+  }
+}
+
+export function validateEnvironmentRecipeProtocol(
+  recipe: PluginEnvironmentRecipe,
+  request: { protocolVersion: 1 | 2 }
+): void {
+  if ((recipe.protocolVersion ?? 1) !== request.protocolVersion) {
+    throw new Error('Environment recipe protocol does not match its declared version')
   }
 }

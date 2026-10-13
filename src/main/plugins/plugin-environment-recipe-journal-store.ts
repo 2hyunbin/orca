@@ -154,8 +154,11 @@ export class PluginEnvironmentRecipeJournalStore {
   }
 
   private requireProvider(request: EnvironmentRecipeRequest): void {
-    if (request.providerId !== this.binding.providerId) {
-      throw new Error('Environment request names another journal owner')
+    if (
+      request.providerId !== this.binding.providerId ||
+      request.contextId !== this.binding.contextId
+    ) {
+      throw new Error('Environment request names another journal owner or provider context')
     }
   }
 
@@ -185,7 +188,9 @@ export class PluginEnvironmentRecipeJournalStore {
     assertJsonTextStructureWithinLimits(raw, { nestingDepth: 16, structuralTokens: 512 * 1024 })
     const journal = environmentRecipeJournalSchema.parse(JSON.parse(raw))
     if (JSON.stringify(journal.binding) !== JSON.stringify(this.binding)) {
-      throw new Error('Environment journal belongs to different source, recipe or execution host')
+      throw new Error(
+        'Environment journal belongs to different source, recipe, execution host or provider context'
+      )
     }
     return journal
   }

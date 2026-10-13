@@ -46,6 +46,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/plugins/plugin-environment-recipe-journal-store.test.ts',
   'src/main/plugins/plugin-environment-recipe-journal-store.integration.test.ts',
   'src/main/plugins/plugin-environment-recipe-operation.test.ts',
+  'src/main/plugins/plugin-environment-recipe-context.integration.test.ts',
   'src/main/plugins/plugin-environment-recipe-execution.test.ts',
   'src/main/usage/usage-scan-worker-event-loop.test.ts',
   // Asserts Node's spawn-failure close signal and that a dead worker closes its children's pipes.

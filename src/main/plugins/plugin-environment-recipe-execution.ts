@@ -11,6 +11,7 @@ import {
 import {
   environmentRecipeProviderId,
   pluginEnvironmentRecipeSchema,
+  validateEnvironmentRecipeProtocol,
   validateEnvironmentRecipeCreateParameters,
   type EnvironmentRecipeCommand,
   type PluginEnvironmentRecipe
@@ -59,6 +60,7 @@ export async function executePluginEnvironmentRecipe(input: {
 }): Promise<EnvironmentRecipeExecutionResult> {
   const recipe = pluginEnvironmentRecipeSchema.parse(structuredClone(input.recipe))
   const request = environmentRecipeRequestSchema.parse(structuredClone(input.request))
+  validateEnvironmentRecipeProtocol(recipe, request)
   const cwd = input.cwd
   const env = { ...input.env }
   const providerId = environmentRecipeProviderId(input.pluginKey, recipe)

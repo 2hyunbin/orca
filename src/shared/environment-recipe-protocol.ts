@@ -41,21 +41,40 @@ const resourceId = text(256)
 const parameters = z
   .record(text(64), text(2048))
   .refine((value) => Object.keys(value).length <= 32, 'too many parameters')
+export const environmentRecipeContextIdSchema = text(256)
+
 const requestIdentity = z.strictObject({
-  protocolVersion: z.literal(1),
+  protocolVersion: z.union([z.literal(1), z.literal(2)]),
+  contextId: environmentRecipeContextIdSchema.optional(),
   operationId: z.uuid(),
   providerId
 })
 
-export const environmentRecipeRequestSchema = z.discriminatedUnion('action', [
-  requestIdentity.extend({ action: z.literal('create'), parameters }),
-  requestIdentity.extend({ action: z.literal('list'), cursor: text(2048).optional() }),
-  requestIdentity.extend({
-    action: z.enum(['delete', 'sleep', 'resume', 'archive']),
-    resourceId,
-    expectedRevision: text(256)
-  })
-])
+function validateContextIdentity(
+  value: { protocolVersion: 1 | 2; contextId?: string },
+  context: z.RefinementCtx
+): void {
+  if ((value.protocolVersion === 2) !== (value.contextId !== undefined)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['contextId'],
+      message:
+        'protocol 2 requires an explicit provider account and tenant context; protocol 1 has none'
+    })
+  }
+}
+
+export const environmentRecipeRequestSchema = z
+  .discriminatedUnion('action', [
+    requestIdentity.extend({ action: z.literal('create'), parameters }),
+    requestIdentity.extend({ action: z.literal('list'), cursor: text(2048).optional() }),
+    requestIdentity.extend({
+      action: z.enum(['delete', 'sleep', 'resume', 'archive']),
+      resourceId,
+      expectedRevision: text(256)
+    })
+  ])
+  .superRefine(validateContextIdentity)
 
 const sshConnection = z.strictObject({
   type: z.literal('ssh'),
@@ -118,6 +137,7 @@ export const environmentRecipeResponseSchema = z
     })
   ])
   .superRefine((response, context) => {
+    validateContextIdentity(response, context)
     if (response.kind === 'inventory') {
       if (response.action !== 'list') {
         context.addIssue({
@@ -155,6 +175,8 @@ export function parseEnvironmentRecipeResponse(
   assertJsonTextStructureWithinLimits(stdout, { nestingDepth: 16, structuralTokens: 32 * 1024 })
   const result = environmentRecipeResponseSchema.parse(JSON.parse(stdout))
   if (
+    result.protocolVersion !== request.protocolVersion ||
+    result.contextId !== request.contextId ||
     result.operationId !== request.operationId ||
     result.providerId !== request.providerId ||
     result.action !== request.action
