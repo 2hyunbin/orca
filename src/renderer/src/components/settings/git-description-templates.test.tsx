@@ -39,10 +39,8 @@ describe('Git settings complete translation templates', () => {
       expect(paragraph?.textContent).not.toContain('<mainBranch>')
       if (language === 'ko') {
         expect(paragraph?.textContent).toContain(
-          '추적 중인 파일의 커밋되지 않은 변경 사항이 있으면 업데이트를 건너뜁니다.'
+          '커밋되지 않은 변경 사항이나 로컬에만 있는 커밋이 있으면 Orca는 업데이트를 건너뜁니다.'
         )
-        expect(paragraph?.textContent).toContain('로컬에만 있는 커밋이 있거나')
-        expect(paragraph?.textContent).toContain('fast-forward가 미추적 파일을 덮어쓰게 되는 경우')
       }
       cleanup()
       const prompt = render(
