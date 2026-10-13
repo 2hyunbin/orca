@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
@@ -13,12 +12,14 @@ afterEach(() => closeProviderTimelineRigs())
 
 it('installs the managed runtime only when no copy is found, and never for a Command setting', async () => {
   const dataDirectory = await mkdtemp(join(tmpdir(), 'orca-acp-managed-'))
+  const homePath = join(dataDirectory, 'home')
+  const command = `orca-managed-${basename(dataDirectory)}`
   const folder = () => join(dataDirectory, 'runtimes', 'grok')
   const materialize = vi.fn(async () => {
     await mkdir(folder(), { recursive: true })
-    await writeFile(join(folder(), 'grok'), '')
+    await writeFile(join(folder(), command), '', { mode: 0o755 })
   })
-  const spec = { ...GROK, managedRuntime: { folder, materialize } }
+  const spec = { ...GROK, command, managedRuntime: { folder, materialize } }
   const signal = new AbortController().signal
   const spawn = async (commandSettings: StructuredAgentCommandSettings) => {
     const resolve = createAcpStructuredLaunchResolver(spec, {
@@ -32,15 +33,9 @@ it('installs the managed runtime only when no copy is found, and never for a Com
         pinLaunchDirectory: vi.fn()
       },
       readJournal: () => null,
-      resolveEnvironment: async () => ({ PATH: '' }),
+      resolveEnvironment: async () => ({ PATH: '', HOME: homePath }),
       resolveCommandSettings: () => commandSettings,
-      dataDirectory,
-      // Only the composed PATH, so a copy installed on this machine cannot answer.
-      resolveCommand: (command, options) =>
-        (options?.pathEnv ?? '')
-          .split(delimiter)
-          .map((dir) => join(dir, command))
-          .find((path) => existsSync(path)) ?? command
+      dataDirectory
     })
     const rig = await openAcpAdapterRig({ spec, deps: { resolveLaunch: resolve, dataDirectory } })
     await rig.acquire({ signal })
@@ -50,7 +45,12 @@ it('installs the managed runtime only when no copy is found, and never for a Com
   await writeFile(custom, '', { mode: 0o755 })
   expect(await spawn({ agentCmdOverrides: { grok: custom } })).toBe(custom)
   expect(materialize).not.toHaveBeenCalled()
-  expect(await spawn({})).toBe(join(folder(), 'grok'))
+  expect(await spawn({})).toBe(join(folder(), command))
   expect(materialize).toHaveBeenCalledExactlyOnceWith(dataDirectory, signal)
+  const localBin = join(homePath, '.local', 'bin')
+  await mkdir(localBin, { recursive: true })
+  await writeFile(join(localBin, command), '', { mode: 0o755 })
+  expect(await spawn({})).toBe(join(localBin, command))
+  expect(materialize).toHaveBeenCalledTimes(1)
   await rm(dataDirectory, { recursive: true, force: true })
 })

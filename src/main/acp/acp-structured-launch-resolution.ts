@@ -108,23 +108,24 @@ export function resolveAcpLaunchCommand(
   } = {}
 ): string {
   const homePath = env.HOME ?? env.USERPROFILE ?? options.homePath ?? homedir()
-  const { dataDirectory } = options
-  const pathEnv = [
-    env.PATH ?? env.Path,
-    ...spec.installDirectories({ env, homePath }),
-    dataDirectory && spec.managedRuntime?.folder(dataDirectory)
-  ]
+  const pathEnv = [env.PATH ?? env.Path, ...spec.installDirectories({ env, homePath })]
     .filter((entry): entry is string => Boolean(entry))
     .join(delimiter)
-  return resolveStructuredAgentCommand(
-    spec.agent,
-    options.commandSettings ?? {},
-    { pathEnv, homePath },
-    {
-      command: spec.command,
-      ...(options.resolveCommand ? { resolve: options.resolveCommand } : {})
-    }
-  )
+  const resolve = (searchPath: string) =>
+    resolveStructuredAgentCommand(
+      spec.agent,
+      options.commandSettings ?? {},
+      { pathEnv: searchPath, homePath },
+      {
+        command: spec.command,
+        ...(options.resolveCommand ? { resolve: options.resolveCommand } : {})
+      }
+    )
+  const command = resolve(pathEnv)
+  if (command !== spec.command || !options.dataDirectory || !spec.managedRuntime) {
+    return command
+  }
+  return resolve(spec.managedRuntime.folder(options.dataDirectory))
 }
 
 /** Whether `command` is a release the spec runs a structured chat on (true when it names none),
