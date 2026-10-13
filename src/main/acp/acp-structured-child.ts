@@ -3,12 +3,12 @@ import {
   providerDiagnostic,
   type SubmissionRejectionFact
 } from '../../shared/agent-session-failure'
-import type { StructuredAgentSessionLifecycleEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import { AcpAgentError } from './acp-errors'
 import { acpAuthenticationRequired, acpSignInRequiredFailure } from './acp-turn-failures'
 import type { AcpStructuredSession } from './acp-structured-session'
 
-export type AcpStartingSession = Pick<
+export type AcpStructuredChild = Pick<
   AcpStructuredSession,
   | 'sessionId'
   | 'fence'
@@ -20,17 +20,27 @@ export type AcpStartingSession = Pick<
   | 'ended'
   | 'exitObservedAt'
 > & {
-  phase: 'starting'
-  startupAnswered: boolean
-  failure?: SubmissionRejectionFact
+  phase: 'starting' | 'ready'
+  lane: AcpStructuredSession['lane'] | null
+  turns: AcpStructuredSession['turns'] | null
+  options: AcpStructuredSession['options']
+  prompts: AcpStructuredSession['prompts']
+  childStops?: AcpStructuredSession['childStops']
+  restoreSkipped: readonly string[]
+  unbindReadingControl?: () => void
+  open: (signal: AbortSignal) => Promise<StructuredAgentSessionProviderOpenResult>
   closing?: Promise<boolean>
   dispose: () => void
 }
 
-export type AcpStructuredChild = AcpStartingSession | AcpStructuredSession
+export function isAcpReadySession(
+  session: AcpStructuredChild
+): session is AcpStructuredSession & AcpStructuredChild {
+  return session.phase === 'ready' && session.lane !== null && session.turns !== null
+}
 
 export function acpStartupFailure(
-  session: AcpStartingSession,
+  session: AcpStructuredChild,
   error: unknown
 ): SubmissionRejectionFact {
   if (error instanceof AcpAgentError && acpAuthenticationRequired(session.spec.dialect, error)) {
@@ -43,43 +53,8 @@ export function acpStartupFailure(
   return agentSessionFailureFact('providerStartFailed', detail ? { detail } : {})
 }
 
-export function endAcpStartingSession(
-  session: AcpStartingSession,
-  observedAt: number,
-  onEvent: ((event: StructuredAgentSessionLifecycleEvent) => void) | undefined
-): void {
-  if (session.ended) {
-    return
-  }
-  session.ended = true
-  session.exitObservedAt = observedAt
-  session.dispose()
-  const requested = session.closeRequested
-  const failure = session.failure ?? acpStartupFailure(session, null)
-  const detail = providerDiagnostic(session.connection.stderrTail(), 'person')
-  onEvent?.({
-    type: 'ended',
-    sessionId: session.sessionId,
-    reason:
-      session.journalClosed ??
-      (session.connection.stderrTail() || `${session.spec.agent} ACP agent ended while starting`),
-    failure: requested
-      ? agentSessionFailureFact('hostStopped')
-      : detail && failure.kind !== 'notSignedIn'
-        ? { ...failure, detail }
-        : failure,
-    cause: requested ? 'requested-close' : 'unexpected-exit',
-    fence: session.fence,
-    acquisitionGeneration: session.acquisitionGeneration,
-    observedAt,
-    ...(!requested
-      ? { startupUnproven: true, ...(!session.startupAnswered ? { startupUnanswered: true } : {}) }
-      : {})
-  })
-}
-
 export function assertAcpStartingSession(
-  session: AcpStartingSession,
+  session: AcpStructuredChild,
   abandoned: () => boolean
 ): void {
   if (

@@ -4,6 +4,7 @@ export { FakeAcpChild, PID } from './acp-scripted-connection.test-fixture'
 // protocol runtime, translator and assembler, and a real on-disk journal to read back.
 
 import { vi } from 'vitest'
+import { z } from 'zod'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type {
   StructuredAgentSessionLifecycleEvent,
@@ -56,6 +57,7 @@ export type AcpAdapterRig = {
   lifecycle: StructuredAgentSessionLifecycleEvent[]
   readonly ended: Extract<StructuredAgentSessionLifecycleEvent, { type: 'ended' }>[]
   started(): StructuredAgentSessionStartedEvent
+  openFailure(): unknown
   settled: Parameters<NonNullable<AcpStructuredSessionAdapterDeps['onDispatchSettledLate']>>[0][]
   acquire(options?: {
     fence?: number
@@ -87,6 +89,7 @@ export async function openAcpAdapterRig(
   const spawned: string[] = []
   const lifecycle: StructuredAgentSessionLifecycleEvent[] = []
   const settled: AcpAdapterRig['settled'] = []
+  let openFailure: unknown
   const startListeners = new Set<() => void>()
   const spec = options.spec ?? GROK
   const resolveLaunch: AcpStructuredSessionAdapterDeps['resolveLaunch'] =
@@ -127,10 +130,18 @@ export async function openAcpAdapterRig(
         })
       })
       const opened = { sessionId: PROVIDER_SESSION, configOptions: GROK_CONFIG_OPTIONS }
+      let configOptions = GROK_CONFIG_OPTIONS
       agent.on('session/new', (frame) => agent.reply(frame, opened))
       agent.on('session/load', (frame) =>
         agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
       )
+      agent.on('session/set_config_option', (frame) => {
+        const parsed = z.object({ configId: z.string(), value: z.string() }).parse(frame.params)
+        configOptions = configOptions.map((option) =>
+          option.id === parsed.configId ? { ...option, currentValue: parsed.value } : option
+        )
+        agent.reply(frame, { configOptions })
+      })
       options.script?.(agent)
       return child
     },
@@ -169,9 +180,10 @@ export async function openAcpAdapterRig(
       }
       return event
     },
+    openFailure: () => openFailure,
     settled,
     acquire: async (acquireOptions = {}) => {
-      const beginning = lifecycle.length
+      openFailure = undefined
       const acquisition = await adapter.acquire({
         identity: {
           sessionId: SESSION,
@@ -192,24 +204,24 @@ export async function openAcpAdapterRig(
         }
       })
       if (acquireOptions.waitForStart !== false) {
-        await new Promise<void>((resolve) => {
-          const inspect = () => {
-            if (
-              lifecycle
-                .slice(beginning)
-                .some(
-                  (event) =>
-                    event.type !== 'options-reported' &&
-                    event.acquisitionGeneration === acquisition.acquisitionGeneration
-                )
-            ) {
-              startListeners.delete(inspect)
-              resolve()
-            }
-          }
-          startListeners.add(inspect)
-          inspect()
-        })
+        try {
+          const opened = await adapter.open({
+            sessionId: SESSION,
+            fence: acquireOptions.fence ?? 1,
+            acquisitionGeneration: acquisition.acquisitionGeneration ?? null,
+            signal: acquireOptions.signal ?? new AbortController().signal
+          })
+          lifecycle.push({
+            ...opened,
+            type: 'started',
+            sessionId: SESSION,
+            fence: acquireOptions.fence ?? 1,
+            acquisitionGeneration: acquisition.acquisitionGeneration ?? ''
+          })
+        } catch (error) {
+          openFailure = error
+          await adapter.closeSession(SESSION)
+        }
       }
       return acquisition
     },

@@ -48,24 +48,28 @@ describe('ACP child published before its handshake', () => {
     expect(rig.adapter.holdsLiveProviderProcess(SESSION, acquired.acquisitionGeneration)).toBe(true)
     expect(rig.adapter.holdsDispatch(SESSION)).toBe(false)
     expect(rig.adapter.readCommands(SESSION)).toBeUndefined()
+    const opening = rig.adapter.open({
+      sessionId: SESSION,
+      fence: 1,
+      acquisitionGeneration: acquired.acquisitionGeneration,
+      signal: new AbortController().signal
+    })
     await rig.frame('session/new')
     expect(rig.lifecycle).toEqual([])
     answer?.()
-    await waitFor(() =>
-      expect(rig.started()).toMatchObject({
-        link: { handle: { nativeId: PROVIDER_SESSION }, origin: 'created' },
-        reportedOptions: { model: 'grok-4.6', effort: 'low' },
-        restoreSkippedOptions: [],
-        optionRevision: 7
-      })
-    )
+    expect(await opening).toMatchObject({
+      link: { handle: { nativeId: PROVIDER_SESSION }, origin: 'created' },
+      reportedOptions: { model: 'grok-4.6', effort: 'low' },
+      restoreSkippedOptions: [],
+      optionRevision: 7
+    })
     expect(writes).toEqual(['model', 'reasoning_effort'])
     rig.child().agent.notify('session/update', {
       sessionId: PROVIDER_SESSION,
       update: { sessionUpdate: 'config_option_update', configOptions: GROK_CONFIG_OPTIONS }
     })
     await waitFor(() =>
-      expect(rig.lifecycle.map((event) => event.type)).toEqual(['started', 'options-reported'])
+      expect(rig.lifecycle.map((event) => event.type)).toEqual(['options-reported'])
     )
   })
 
@@ -80,6 +84,14 @@ describe('ACP child published before its handshake', () => {
           })
       })
       const acquired = await rig.acquire({ waitForStart: false })
+      const opening = rig.adapter
+        .open({
+          sessionId: SESSION,
+          fence: 1,
+          acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+          signal: new AbortController().signal
+        })
+        .catch((error: unknown) => error)
       await rig.frame('session/new')
       if (!acquired.acquisitionGeneration) {
         throw new Error('missing acquisition generation')
@@ -89,6 +101,7 @@ describe('ACP child published before its handshake', () => {
           ? rig.adapter[method]({ sessionId: SESSION })
           : rig.adapter[method](SESSION)
       expect(await closed).toBe(true)
+      expect(await opening).toBeInstanceOf(Error)
       if (frame) {
         rig.child().agent.reply(frame, { sessionId: PROVIDER_SESSION })
       }
@@ -107,13 +120,22 @@ describe('ACP child published before its handshake', () => {
         script: (agent) => agent.on(answered ? 'session/new' : 'initialize', () => {})
       })
       await rig.acquire({ waitForStart: false })
+      const opening = rig.adapter
+        .open({
+          sessionId: SESSION,
+          fence: 1,
+          acquisitionGeneration: 'gen-acp',
+          signal: new AbortController().signal
+        })
+        .catch((error: unknown) => error)
       await rig.frame(answered ? 'session/new' : 'initialize')
       rig.child().stderr = 'provider config is invalid'
       rig.child().exit()
+      expect(await opening).toBeInstanceOf(Error)
       expect(rig.ended).toMatchObject([
         { startupUnproven: true, failure: { detail: { text: 'provider config is invalid' } } }
       ])
-      expect(rig.ended[0]?.startupUnanswered).toBe(answered ? undefined : true)
+      expect(rig.ended[0]?.startupUnanswered).toBeUndefined()
     }
   )
 
@@ -122,14 +144,17 @@ describe('ACP child published before its handshake', () => {
       script: (agent) =>
         agent.on('session/new', (frame) => agent.fail(frame, -32000, 'Authentication required'))
     })
-    await rig.acquire()
-    expect(rig.ended).toMatchObject([
-      {
-        startupUnproven: true,
-        cause: 'unexpected-exit',
-        failure: { kind: 'notSignedIn', detail: { text: 'Authentication required' } }
-      }
-    ])
+    const acquired = await rig.acquire({ waitForStart: false })
+    await expect(
+      rig.adapter.open({
+        sessionId: SESSION,
+        fence: 1,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+    ).rejects.toMatchObject({ reason: 'notSignedIn' })
+    expect(rig.ended).toEqual([])
+    await rig.adapter.closeSession(SESSION)
     expect(rig.child().exited).toBe(true)
   })
 

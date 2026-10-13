@@ -334,9 +334,18 @@ describe('ACP refusals', () => {
 describe('ACP startup that never answers', () => {
   it('lets a close stop the published child while initialize is unanswered', async () => {
     const rig = await openAcpAdapterRig({ script: (agent) => agent.on('initialize', () => {}) })
-    await rig.acquire({ waitForStart: false })
+    const acquired = await rig.acquire({ waitForStart: false })
+    const opening = rig.adapter
+      .open({
+        sessionId: SESSION,
+        fence: 1,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+      .catch((error: unknown) => error)
     await rig.frame('initialize')
     expect(await rig.adapter.closeSession(SESSION)).toBe(true)
+    expect(await opening).toBeInstanceOf(Error)
     expect(rig.child().exited).toBe(true)
     expect(rig.ended).toMatchObject([{ cause: 'requested-close' }])
     expect(rig.lifecycle.some((event) => event.type === 'started')).toBe(false)
@@ -354,7 +363,15 @@ describe('ACP startup that never answers', () => {
 
   it('does not time out a published handshake, and closes it through the session', async () => {
     const rig = await openAcpAdapterRig({ script: (agent) => agent.on('session/new', () => {}) })
-    await rig.acquire({ waitForStart: false })
+    const acquired = await rig.acquire({ waitForStart: false })
+    const opening = rig.adapter
+      .open({
+        sessionId: SESSION,
+        fence: 1,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+      .catch((error: unknown) => error)
     await rig.frame('session/new')
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
@@ -362,6 +379,7 @@ describe('ACP startup that never answers', () => {
       expect(rig.ended).toEqual([])
       expect(rig.child().closes).toBe(0)
       expect(await rig.adapter.closeSession(SESSION)).toBe(true)
+      expect(await opening).toBeInstanceOf(Error)
     } finally {
       vi.useRealTimers()
     }
@@ -369,12 +387,21 @@ describe('ACP startup that never answers', () => {
 
   it('keeps a failed startup child until its exit is proven, and spawns no other meanwhile', async () => {
     const rig = await openAcpAdapterRig({ script: (agent) => agent.on('initialize', () => {}) })
-    await rig.acquire({ waitForStart: false })
+    const acquired = await rig.acquire({ waitForStart: false })
+    const opening = rig.adapter
+      .open({
+        sessionId: SESSION,
+        fence: 1,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+      .catch((error: unknown) => error)
     const frame = await rig.frame('initialize')
     const child = rig.child()
     child.proveClose = vi.fn(async () => false)
     child.agent.fail(frame, -32603, 'provider failed to initialize')
-    await waitFor(() => expect(child.closes).toBe(1))
+    expect(await opening).toBeInstanceOf(Error)
+    expect(child.closes).toBe(0)
     expect(rig.ended).toEqual([])
     expect(await rig.adapter.closeSession(SESSION)).toBe(false)
     await expect(rig.adapter.closeAll()).rejects.toThrow('could not be proven stopped')
@@ -383,7 +410,7 @@ describe('ACP startup that never answers', () => {
     })
     expect(rig.spawned.filter((step) => step === 'spawn')).toHaveLength(1)
     child.exit()
-    expect(rig.ended).toMatchObject([{ startupUnproven: true, startupUnanswered: true }])
+    expect(rig.ended).toMatchObject([{ cause: 'requested-close' }])
     expect(await rig.adapter.closeSession(SESSION)).toBe(true)
   })
 

@@ -5,10 +5,8 @@
 // it sends is written except context usage.
 
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
-import type {
-  StructuredAgentSessionAcquireInput,
-  StructuredAgentSessionStartedEvent
-} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import {
   ACP_REOPEN_FAILED,
   acpReopenTakeover,
@@ -21,10 +19,13 @@ import type { AcpStructuredLane } from './acp-structured-lane'
 import type { AcpStructuredLaunch } from './acp-structured-launch-resolution'
 import { restoreAcpSessionOptions, type AcpStructuredOptions } from './acp-structured-options'
 import type { AcpStructuredPrompts } from './acp-structured-prompts'
-import type { AcpStructuredSession } from './acp-structured-session'
 import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-adapter-deps'
 import { AcpStructuredTurns, type AcpStructuredTurnsDeps } from './acp-structured-turns'
-import { assertAcpStartingSession, type AcpStartingSession } from './acp-structured-child'
+import {
+  assertAcpStartingSession,
+  isAcpReadySession,
+  type AcpStructuredChild
+} from './acp-structured-child'
 
 type AcpHandshakeInput = {
   acquire: StructuredAgentSessionAcquireInput
@@ -34,7 +35,7 @@ type AcpHandshakeInput = {
   connection: AcpStructuredConnection
   options: AcpStructuredOptions
   prompts: AcpStructuredPrompts
-  starting: AcpStartingSession
+  child: AcpStructuredChild
   abandoned: () => boolean
   lanes: {
     create: (providerSessionId: string, attaching?: boolean) => AcpStructuredLane
@@ -42,21 +43,20 @@ type AcpHandshakeInput = {
     finishLoad: () => void
   }
   onSettled: AcpStructuredTurnsDeps['settle']
-  onReady: (session: AcpStructuredSession, event: StructuredAgentSessionStartedEvent) => void
 }
 
-export async function initializeAcpStructuredSession(input: AcpHandshakeInput): Promise<void> {
-  const { acquire, deps, generation, launch, connection, options, prompts, starting, onSettled } =
-    input
+export async function initializeAcpStructuredSession(
+  input: AcpHandshakeInput
+): Promise<StructuredAgentSessionProviderOpenResult> {
+  const { acquire, deps, launch, connection, options, prompts, child, onSettled } = input
   const { spec } = deps
   const sessionId = acquire.identity.sessionId
   const now = deps.now ?? Date.now
-  const assertStarting = () => assertAcpStartingSession(starting, input.abandoned)
+  const assertStarting = () => assertAcpStartingSession(child, input.abandoned)
   const agentName = acpAgentName(spec.agent)
   const optionRevision = acquire.optionRevision?.() ?? 0
   assertStarting()
   const initialized = await connection.initialize()
-  starting.startupAnswered = true
   assertStarting()
   // Chosen here, on the machine Grok runs on, from the environment it was launched with.
   const authMethodId = spec.authMethod?.({
@@ -84,7 +84,7 @@ export async function initializeAcpStructuredSession(input: AcpHandshakeInput): 
     } catch (error) {
       assertStarting()
       takeover = acpReopenTakeover(error, resume, {
-        over: connection.closed || acquire.signal?.aborted === true,
+        over: connection.closed || input.abandoned(),
         now: now(),
         warn: (fields) => deps.logger?.warn(ACP_REOPEN_FAILED, { ...fields, sessionId })
       })
@@ -114,17 +114,9 @@ export async function initializeAcpStructuredSession(input: AcpHandshakeInput): 
     observedAt: now(),
     ...takeover
   }
-  const ready: AcpStructuredSession = {
-    phase: 'ready',
-    sessionId,
-    fence: acquire.fence,
-    acquisitionGeneration: generation,
-    spec,
+  Object.assign(child, {
     childStops,
-    connection,
     lane: liveLane,
-    prompts,
-    options,
     turns: new AcpStructuredTurns({
       connection,
       withdrawRequests: () => prompts.withdrawAll(),
@@ -133,12 +125,8 @@ export async function initializeAcpStructuredSession(input: AcpHandshakeInput): 
       now,
       settle: onSettled
     }),
-    restoreSkipped,
-    closeRequested: false,
-    journalClosed: null,
-    ended: false,
-    exitObservedAt: null
-  }
+    restoreSkipped
+  })
   const reading = liveLane
   const unbind = acquire.events?.bindReadingControl?.({
     pauseReading: () => connection.pauseReading(),
@@ -148,7 +136,7 @@ export async function initializeAcpStructuredSession(input: AcpHandshakeInput): 
     }
   })
   if (unbind) {
-    ready.unbindReadingControl = unbind
+    child.unbindReadingControl = unbind
   }
   if (connection.exited || connection.closed) {
     throw new Error(connection.stderrTail() || `${spec.command} exited while starting`)
@@ -162,16 +150,16 @@ export async function initializeAcpStructuredSession(input: AcpHandshakeInput): 
     liveLane.apply(acpSessionNotRestoredRow(key, started.sessionId, agentName))
   }
   assertStarting()
-  input.onReady(ready, {
-    type: 'started',
-    sessionId,
-    fence: acquire.fence,
-    acquisitionGeneration: generation,
+  child.phase = 'ready'
+  if (!isAcpReadySession(child)) {
+    throw new Error('ACP session did not open')
+  }
+  return {
     link,
     reportedOptions: options.read().current,
     restoreSkippedOptions: restoreSkipped,
     optionRevision,
     // Its saved picks restored: what it runs now is what its start resolved.
     catalogListing: options.startListing()
-  })
+  }
 }

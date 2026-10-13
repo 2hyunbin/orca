@@ -2,23 +2,18 @@
 // process) and record it before any handshake, so the host publishes the child at spawn. The
 // handshake (`acp-structured-handshake`) runs after: initialize, then reattach the session this chat
 // proved with `session/load` (`session/resume` for an agent that cannot load) or start a new one,
-// and the child reports `started` once that session answers. The handshake has no time bound of
+// and the host receives protocol facts once that session answers. The handshake has no time bound of
 // its own: the host's startup limit, or a close, Stop or quit, stops it at any point.
 
 import { initializeAcpStructuredSession } from './acp-structured-handshake'
 import {
   AgentSessionPreSpawnError,
   type AgentSessionAcquisition,
-  type StructuredAgentSessionAcquireInput,
-  type StructuredAgentSessionStartedEvent
+  type StructuredAgentSessionAcquireInput
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { providerTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { providerSpawnedProcessIdentity } from '../provider-process/provider-spawned-process-identity'
-import {
-  assertAcpStartingSession,
-  type AcpStructuredChild,
-  type AcpStartingSession
-} from './acp-structured-child'
+import { assertAcpStartingSession, type AcpStructuredChild } from './acp-structured-child'
 import type { AcpSessionEvent } from './acp-session-runtime'
 import type { AcpStructuredConnection } from './acp-structured-connection'
 import { acpAgentName } from './acp-structured-agent-definitions'
@@ -27,11 +22,7 @@ import { NO_ACP_CHILD_STOPS } from './acp-structured-child-stop'
 import type { AcpStructuredLaunch } from './acp-structured-launch-resolution'
 import { AcpStructuredOptions } from './acp-structured-options'
 import { AcpStructuredPrompts } from './acp-structured-prompts'
-import {
-  asReattachHistory,
-  routeAcpSessionEvent,
-  type AcpStructuredSession
-} from './acp-structured-session'
+import { asReattachHistory, routeAcpSessionEvent } from './acp-structured-session'
 import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-adapter-deps'
 import type { AcpStructuredTurnsDeps } from './acp-structured-turns'
 import { RequestPermissionResponseSchema } from './generated/acp-protocol.generated'
@@ -53,13 +44,11 @@ export async function acquireAcpStructuredSession(input: {
   /** The protocol broke with the process perhaps still running. Null while starting: then the
    *  start itself fails. */
   onConnectionLost: (session: AcpStructuredChild | null, error: Error) => void
-  onReady: (session: AcpStructuredSession, event: StructuredAgentSessionStartedEvent) => void
   onSettled: AcpStructuredTurnsDeps['settle']
   forceClose: (sessionId: string) => void
 }): Promise<{
   acquisition: AgentSessionAcquisition
-  session: AcpStartingSession
-  initialize: () => Promise<void>
+  session: AcpStructuredChild
 }> {
   const { acquire, deps, generation } = input
   const { spec } = deps
@@ -95,9 +84,11 @@ export async function acquireAcpStructuredSession(input: {
   // has nobody waiting on it. What a settled request carries still shows in that turn.
   const prompts = new AcpStructuredPrompts(
     () => slot.lane,
-    () => session?.phase === 'ready' && session.turns.acceptsRequests,
+    () => session?.phase === 'ready' && session.turns?.acceptsRequests === true,
     () =>
       session?.phase === 'ready' &&
+      session.turns !== null &&
+      session.lane !== null &&
       (session.turns.acceptsRequests ||
         (!session.turns.running && !session.turns.stopped && session.lane.openTurnId !== null))
   )
@@ -121,7 +112,7 @@ export async function acquireAcpStructuredSession(input: {
       clientInfo: { name: 'orca', version: '1' },
       ...(acquire.onOutput ? { onOutput: acquire.onOutput } : {}),
       onPermission: (request, context) => {
-        if (session?.phase !== 'ready' || !session.turns.acceptsRequests) {
+        if (session?.phase !== 'ready' || !session.turns?.acceptsRequests) {
           // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
           // is cutting it short: nobody is there to ask.
           return { outcome: { outcome: 'cancelled' } }
@@ -205,13 +196,12 @@ export async function acquireAcpStructuredSession(input: {
       providerSessionId,
       dialect: spec.dialect,
       now,
-      childStops: () =>
-        (session?.phase === 'ready' ? session.childStops : undefined) ?? NO_ACP_CHILD_STOPS,
+      childStops: () => session?.childStops ?? NO_ACP_CHILD_STOPS,
       ...acpLaneChildWorkDelivery(deps, sessionId),
       logger: deps.logger ?? createStructuredAgentSessionLogger(),
       onInputAccepted: (clientMessageId) => {
         if (session?.phase === 'ready') {
-          session.turns.accept(clientMessageId)
+          session.turns?.accept(clientMessageId)
         }
       },
       onFailed: () => input.forceClose(sessionId)
@@ -235,54 +225,54 @@ export async function acquireAcpStructuredSession(input: {
   }
   await identity.onSpawned(pid)
   const process = await identity.read(pid)
-  const starting: AcpStartingSession = {
+  const child: AcpStructuredChild = {
     phase: 'starting',
     sessionId,
     fence: acquire.fence,
     acquisitionGeneration: generation,
     spec,
     connection,
+    lane: null,
+    turns: null,
+    options,
+    prompts,
+    childStops: undefined,
+    restoreSkipped: [],
     closeRequested: false,
     journalClosed: null,
     ended: false,
     exitObservedAt: null,
-    startupAnswered: false,
+    open: (signal) =>
+      initializeAcpStructuredSession({
+        acquire,
+        deps,
+        generation,
+        launch,
+        connection,
+        options,
+        prompts,
+        child,
+        abandoned: () => signal.aborted,
+        lanes: {
+          create: makeLane,
+          clear: () => {
+            slot.lane = null
+          },
+          finishLoad: () => {
+            slot.reattaching = false
+          }
+        },
+        onSettled: input.onSettled
+      }),
     dispose: () => {
       slot.lane?.dispose()
       early.length = 0
     }
   }
-  session = starting
-  assertAcpStartingSession(starting, input.abandoned)
-  const initialize = () =>
-    initializeAcpStructuredSession({
-      acquire,
-      deps,
-      generation,
-      launch,
-      connection,
-      options,
-      prompts,
-      starting,
-      abandoned: input.abandoned,
-      lanes: {
-        create: makeLane,
-        clear: () => {
-          slot.lane = null
-        },
-        finishLoad: () => {
-          slot.reattaching = false
-        }
-      },
-      onSettled: input.onSettled,
-      onReady: (ready, event) => {
-        session = ready
-        input.onReady(ready, event)
-      }
-    })
+  session = child
+  assertAcpStartingSession(child, input.abandoned)
   return {
     acquisition: { process, acquisitionGeneration: generation, providerChildPhase: 'starting' },
-    session: starting,
-    initialize
+    session: child
   }
 }
