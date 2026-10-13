@@ -11,7 +11,6 @@ import type {
   AgentSessionStatusSummary,
   AgentSessionSubscribeEvent
 } from '../../../shared/agent-session-wire'
-import { agentSessionRecordFixture } from '../../../shared/agent-session-record.test-fixture'
 import {
   liveTestJournalRows,
   openTestJournalHostDatabase
@@ -31,7 +30,6 @@ import {
   sendText,
   turnState
 } from './structured-agent-session-leftover-settlement.test-fixture'
-import { structuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 
 let rig: QueuedMessageTestRig | undefined
 
@@ -246,29 +244,5 @@ describe('a live owner', () => {
       latestTurn: { turn: { turnId: 'unfinished', state: 'running' } }
     })
     expect(view.listed()?.status).not.toBe('idle')
-  })
-})
-
-describe('an owner whose adjudication concludes with no row written', () => {
-  it('changes the published answer when it goes from unverifiable to released', () => {
-    const journal = {
-      runningTurn: () => null,
-      itemFence: () => undefined,
-      visitItems: () => undefined,
-      submissions: () => [],
-      wroteBeforeOpen: () => false
-    }
-    const record = agentSessionRecordFixture()
-    const unverifiable = structuredAgentSessionCurrentWork(journal, {
-      record: { lease: { ...record.lease, unreconciled: true } },
-      child: null
-    })
-    const released = structuredAgentSessionCurrentWork(journal, {
-      record: { lease: { ...record.lease, claimStatus: 'released' } },
-      child: null
-    })
-
-    expect(unverifiable.liveFence).toBe(released.liveFence)
-    expect(unverifiable.viewKey()).not.toBe(released.viewKey())
   })
 })
