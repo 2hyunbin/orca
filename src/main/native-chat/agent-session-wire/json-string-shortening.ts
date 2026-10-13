@@ -5,6 +5,8 @@
 // by them. A bounded payload's `head` is cut and flagged through its own `truncated` field; any
 // other string ends in `…`, the mark the chat already draws for text it did not show in full.
 
+import type { AgentJournalBoundedPayload } from '../../../shared/agent-session-journal-types'
+
 const ELLIPSIS = '…'
 const ELLIPSIS_BYTES = Buffer.byteLength(ELLIPSIS, 'utf8')
 /** Strings this short are left alone: cutting them saves little and reads as noise. */
@@ -18,8 +20,15 @@ function isIdentifierKey(key: string): boolean {
   return key === 'id' || key.endsWith('Id')
 }
 
-function isBoundedPayload(value: object): value is { head: string; truncated: boolean } {
-  return 'head' in value && 'byteLength' in value && 'truncated' in value
+function isBoundedPayload(value: unknown): value is AgentJournalBoundedPayload {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'head' in value &&
+    typeof value.head === 'string' &&
+    'byteLength' in value &&
+    'truncated' in value
+  )
 }
 
 /** The first `length` UTF-16 units of `text`, never splitting a surrogate pair. */

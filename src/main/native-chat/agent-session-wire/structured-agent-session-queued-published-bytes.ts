@@ -52,6 +52,8 @@ export function queuedMessagesPublishedBytesRefusal(
 type QueuedCardDraft = { messageId: string; body: AgentJournalMessageItem }
 
 /** A new card at its widest: waiting, at the last position. */
-export function newQueuedCard(card: QueuedCardDraft): object {
+export function newQueuedCard(
+  card: QueuedCardDraft
+): QueuedCardDraft & { position: number; state: 'waiting' } {
   return { ...card, position: Number.MAX_SAFE_INTEGER, state: 'waiting' }
 }
