@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { CrashReportBreadcrumbData } from '../../shared/crash-reporting'
+import { readDaclOf } from '../../shared/windows-dacl.test-fixture'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import {
   loadWindowsSecurity,
@@ -121,7 +122,10 @@ describeOnWindows('install-dir package ACL repair against real DACLs', () => {
       // Additive: SYSTEM, Administrators, the user and the orphan all survive.
       expect(sddl).toContain('(A;;FA;;;SY)')
       expect(sddl).toContain('(A;;FA;;;BA)')
-      expect(sddl).toContain(`(A;;FA;;;${userSid})`)
+      // Parsed, not matched: a RID-500 user (the CI runner's Administrator) reads back as `LA`.
+      expect(readDaclOf(addon, file, userSid)?.aces).toContainEqual(
+        expect.objectContaining({ type: 'A', flags: [], rights: 'FA', sid: userSid })
+      )
       expect(sddl).toContain(`(A;;0x1200a9;;;${ORPHAN_SID})`)
     }
     // And the inheritable root grant exists so files a later update writes inherit it.

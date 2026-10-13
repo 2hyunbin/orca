@@ -75,5 +75,16 @@ describe('findSecureDaclViolation', () => {
   it('resolves the machine-relative alias of a RID-500 user', () => {
     const builtinAdmin = 'S-1-5-21-432636774-4279371817-3971399515-500'
     expect(findSecureDaclViolation('D:P(A;;FA;;;SY)(A;;FA;;;LA)', builtinAdmin, false)).toBeNull()
+    expect(
+      findSecureDaclViolation(
+        'D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;LA)',
+        builtinAdmin,
+        true
+      )
+    ).toBeNull()
+    // `LA` names the RID-500 account, so it is a stranger to any other user.
+    expect(findSecureDaclViolation(`D:P(A;;FA;;;LA)(A;;FA;;;${USER})`, USER, false)).toBe(
+      'unexpected rule for S-1-5-21-432636774-4279371817-3971399515-500'
+    )
   })
 })

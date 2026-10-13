@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { parseSddlDacl } from './windows-security-descriptor'
+import { readDaclOf } from './windows-dacl.test-fixture'
 import {
   loadWindowsSecurity,
   WINDOWS_FILE_ALL_ACCESS,
@@ -48,7 +48,7 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
     addon.createFileWithDacl(path, `D:P(A;;FA;;;SY)(A;;FA;;;${sid})`, Buffer.from('{"k":1}'))
 
     expect(readFileSync(path, 'utf-8')).toBe('{"k":1}')
-    const dacl = parseSddlDacl(addon.getDaclSddl(path))
+    const dacl = readDaclOf(addon, path, sid)
     expect(dacl?.isProtected).toBe(true)
     expect(dacl?.aces.map((ace) => [ace.sid, ace.flags])).toEqual([
       ['S-1-5-18', []],
@@ -87,7 +87,7 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
     mkdirSync(child)
     addon.setDaclSddl(child, `D:(A;OICI;FA;;;${sid})(A;OICIID;FA;;;WD)`)
 
-    const dacl = parseSddlDacl(addon.getDaclSddl(child))
+    const dacl = readDaclOf(addon, child, sid)
     expect(dacl?.aces.some((ace) => ace.sid === 'S-1-1-0')).toBe(false)
     expect(dacl?.aces.some((ace) => ace.sid === sid && !ace.flags.includes('ID'))).toBe(true)
   })
@@ -99,7 +99,7 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
 
     addon.grantAccess(path, sid, WINDOWS_FILE_ALL_ACCESS, { inheritable: false, replace: true })
 
-    const aces = parseSddlDacl(addon.getDaclSddl(path))?.aces ?? []
+    const aces = readDaclOf(addon, path, sid)?.aces ?? []
     const kinds = aces.map((ace) =>
       ace.flags.includes('ID') ? 'inherited' : ace.type === 'D' ? 'deny' : 'allow'
     )
@@ -116,7 +116,7 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
 
     addon.grantAccess(path, 'S-1-15-2-2', 0x1200a9, { inheritable: false, replace: false })
 
-    const dacl = parseSddlDacl(addon.getDaclSddl(path))
+    const dacl = readDaclOf(addon, path, sid)
     expect(dacl?.isProtected).toBe(true)
     expect(dacl?.aces.map((ace) => ace.sid).sort()).toEqual([sid, 'S-1-15-2-2', 'S-1-5-18'].sort())
   })
@@ -147,7 +147,7 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
     })
 
     expect(
-      parseSddlDacl(addon.getDaclSddl(path))
+      readDaclOf(addon, path, sid)
         ?.aces.map((ace) => ace.sid)
         .sort()
     ).toEqual(['S-1-5-18', sid].sort())
@@ -157,7 +157,7 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
     const dir = join(root, 'async')
     mkdirSync(dir)
     await addon.setDaclSddlAsync(dir, `D:P(A;OICI;FA;;;${sid})`)
-    expect(parseSddlDacl(addon.getDaclSddl(dir))?.isProtected).toBe(true)
+    expect(readDaclOf(addon, dir, sid)?.isProtected).toBe(true)
 
     await addon.grantAccessAsync(dir, 'S-1-5-18', WINDOWS_FILE_ALL_ACCESS, {
       inheritable: true,

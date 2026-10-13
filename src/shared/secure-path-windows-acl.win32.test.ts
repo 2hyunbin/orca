@@ -24,7 +24,7 @@ import {
   type WindowsSecurityAddon
 } from './windows-security-addon'
 import { findSecureDaclViolation } from './windows-secure-dacl'
-import { parseSddlDacl } from './windows-security-descriptor'
+import { readDaclOf } from './windows-dacl.test-fixture'
 import { removeTreeSync } from './windows-transient-lock-removal'
 
 /**
@@ -43,7 +43,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
   /** A relocated data root: `C:\orca-…` inherits BUILTIN\Users and Authenticated Users from C:\. */
   let relocatedRoot: string
 
-  const daclOf = (path: string) => parseSddlDacl(addon.getDaclSddl(path))
+  const daclOf = (path: string) => readDaclOf(addon, path, sid)
   const sidsOf = (path: string) => (daclOf(path)?.aces ?? []).map((ace) => ace.sid).sort()
   const ORCA_PRINCIPALS = () => ['S-1-5-18', 'S-1-5-32-544', sid].sort()
 
@@ -60,7 +60,6 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
   })
 
   afterEach(() => {
-    resetWindowsSecurityLoadForTests()
     resetWindowsSecurityLoadForTests()
     __resetSecureFileHardenedPathsForTests()
     setSecurePathHardeningReporter(null)

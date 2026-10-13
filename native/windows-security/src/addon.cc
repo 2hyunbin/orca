@@ -149,7 +149,10 @@ Win32Result CreateFileWithDacl(const std::u16string& path, const std::u16string&
   } else if (written != length) {
     result = Fail("WriteFile", ERROR_WRITE_FAULT);
   }
-  CloseHandle(file);
+  // A failed close can mean lost data on a network volume, so it tears the file like a failed write.
+  if (!CloseHandle(file) && result.ok()) {
+    result = Fail("CloseHandle", GetLastError());
+  }
   if (!result.ok()) {
     // A torn temp file is useless to the caller and must not linger beside the real one.
     DeleteFileW(reinterpret_cast<LPCWSTR>(path.c_str()));

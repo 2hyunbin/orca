@@ -58,8 +58,8 @@ export type WindowsInstallDirAclRepairOptions = {
   /**
    * A DACL reading found this tree poisoned and nothing has read it clean since — this
    * launch's probe, or a persisted poison marker from an earlier one. A marker claiming a
-   * completed repair therefore describes a tree that has since been re-poisoned, or an
-   * a repair that silently no-opped: it stops outranking the reading. The attempt
+   * completed repair therefore describes a tree that has since been re-poisoned, or a
+   * repair that silently no-opped: it stops outranking the reading. The attempt
    * budget still bounds retries.
    */
   poisonEvidenceOutstanding?: boolean
