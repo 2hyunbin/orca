@@ -6,7 +6,8 @@
  */
 import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
+import { APPIMAGE_NODE_RUNTIME_SEGMENTS } from './appimage-node-runtime'
 
 const CACHE_KEY_PATTERN = /^[0-9a-f]{24}$/u
 const LINUX_EXECUTABLE_NAME = 'orca-ide'
@@ -54,18 +55,27 @@ export type AppImageGenerationLocation = {
   rootPath: string
 }
 
+/** The generation root an executable runs from: its `orca-ide`, or its bundled Node (the daemon). */
+function generationRootOfExecutable(execPath: string): string | null {
+  const resolved = resolve(execPath)
+  if (basename(resolved) === LINUX_EXECUTABLE_NAME) {
+    return dirname(resolved)
+  }
+  const nodeSuffix = join('resources', ...APPIMAGE_NODE_RUNTIME_SEGMENTS)
+  return resolved.endsWith(`${sep}${nodeSuffix}`) ? resolved.slice(0, -nodeSuffix.length - 1) : null
+}
+
 export function resolveAppImageGenerationOfExecutable(
   execPath: string
 ): AppImageGenerationLocation | null {
-  const rootPath = dirname(resolve(execPath))
+  const rootPath = generationRootOfExecutable(execPath)
+  if (!rootPath) {
+    return null
+  }
   const namespacePath = dirname(rootPath)
   const generationKey = basename(rootPath)
   const namespaceKey = basename(namespacePath)
-  if (
-    basename(execPath) !== LINUX_EXECUTABLE_NAME ||
-    !isAppImageCacheKey(generationKey) ||
-    !isAppImageCacheKey(namespaceKey)
-  ) {
+  if (!isAppImageCacheKey(generationKey) || !isAppImageCacheKey(namespaceKey)) {
     return null
   }
   return { cacheRootPath: dirname(namespacePath), namespaceKey, generationKey, rootPath }

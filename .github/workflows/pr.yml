@@ -1187,6 +1187,14 @@ jobs:
           rm -rf "$appimage_root"
           ls -l dist/orca-linux.AppImage "$deb" "$rpm"
 
+      # Kept briefly so a reviewer can run this exact AppImage on a real Linux desktop.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: orca-linux-appimage-${{ github.event.pull_request.head.sha }}
+          path: dist/orca-linux.AppImage
+          retention-days: 3
+          compression-level: 0
+
       - wait: shutdown-fixture-cache
 
       - name: Verify headless serve signal shutdown
