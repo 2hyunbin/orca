@@ -90,6 +90,13 @@ describe('the managed tunnel’s transport', () => {
       chosen.stdio.start.mock.invocationCallOrder[0]
     )
     expect(chosen.stdio.start).toHaveBeenCalledWith(conn, options)
+    // The closed forward's ssh must have released the persisted port before the bridge binds it.
+    expect(chosen.reserveLocalPort.mock.invocationCallOrder[0]).toBeGreaterThan(
+      chosen.forward.close.mock.invocationCallOrder[0]
+    )
+    expect(chosen.reserveLocalPort.mock.invocationCallOrder[0]).toBeLessThan(
+      chosen.stdio.start.mock.invocationCallOrder[0]
+    )
     expect(knownOrcadTunnelTransport('ssh-1')).toBe('stdio_bridge')
   })
 

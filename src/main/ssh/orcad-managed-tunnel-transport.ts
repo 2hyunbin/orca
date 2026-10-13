@@ -49,9 +49,6 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
   async start(conn: SshConnection, options: PortForwardStartOptions): Promise<StartedPortForward> {
     const { forwards, probe, checkForward } = this.dependencies
     if (this.refusedGenerations.get(conn) === conn.getConnectGeneration()) {
-      if (options.localPort !== 0) {
-        await this.dependencies.reserveLocalPort(options.localPort)
-      }
       return this.startBridge(conn, options)
     }
     // Why only on refusal: an unverifiable answer keeps the forward, as before this transport.
@@ -93,6 +90,10 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
       throw new Error(
         'This SSH host refuses TCP forwarding, and the managed Orca server tunnel has no other route.'
       )
+    }
+    // Why: a closed `ssh -L` (ours, or one an earlier Orca orphaned) may still hold the port.
+    if (options.localPort !== 0) {
+      await this.dependencies.reserveLocalPort(options.localPort)
     }
     const started = await this.dependencies.stdio.start(conn, options)
     rememberOrcadTunnelTransport(options.connectionId, 'stdio_bridge')
