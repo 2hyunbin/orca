@@ -77,4 +77,17 @@ describe('codex sessions roots', () => {
     expect(scanned.dirs).toEqual(['/pinned/sessions'])
     expect(getAdditionalCodexHomePaths).not.toHaveBeenCalled()
   })
+
+  it('still answers when the account homes cannot be listed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    configureHostReadableTranscriptPathSources({
+      getAdditionalCodexHomePaths: () => {
+        throw new Error('EACCES')
+      }
+    })
+
+    await expect(resolveSessionFilePath('codex', 'sess-1')).resolves.toBe(null)
+    expect(scanned.dirs).toContain(join(MANAGED_HOME, 'sessions'))
+    warn.mockRestore()
+  })
 })

@@ -49,7 +49,13 @@ function codexSessionsDirs(): string[] {
 // Why a tier after a miss: per-account homes (and, on a WSL host, the ones the desktop made)
 // are listed by a lookup that touches the disk, which the common hit should not pay.
 function codexAccountSessionsDirs(): string[] {
-  return hostAdditionalCodexHomePaths().map((home) => join(home, 'sessions'))
+  try {
+    return hostAdditionalCodexHomePaths().map((home) => join(home, 'sessions'))
+  } catch (error) {
+    // Why: a lookup that cannot list them still owes the caller its WSL tier.
+    console.warn('[session-file-resolver] could not list Codex account homes:', error)
+    return []
+  }
 }
 
 function grokSessionsDir(): string {
