@@ -12,7 +12,6 @@ import {
   tokenizeCommandLine
 } from './agent-command-line-entrypoint'
 import { isFreshOmpLaunchCommand } from './omp-fresh-launch'
-import { extractAgentLaunchCommand } from './agent-launch-command'
 
 export type RecognizedAgentProcess = { agent: TerminalAgent; processName: string }
 
@@ -229,14 +228,6 @@ export function recognizeAgentProcessFromCommandLine(
   }
   return keep ? viaEntrypoint : filterHeadlessOneShotAgentCommand(viaEntrypoint, tokens)
 }
-/** Launch intent may include shell prefixes; process-table readers use the strict matcher. */
-export function recognizeAgentLaunchCommand(
-  commandLine: string | null | undefined,
-  options?: Parameters<typeof recognizeAgentProcessFromCommandLine>[1]
-): RecognizedAgentProcess | null {
-  return recognizeAgentProcessFromCommandLine(extractAgentLaunchCommand(commandLine ?? ''), options)
-}
-
 export function isAgentForegroundWrapperProcess(processName: string | null | undefined): boolean {
   const normalized = normalizeProcessName(processName)
   return (

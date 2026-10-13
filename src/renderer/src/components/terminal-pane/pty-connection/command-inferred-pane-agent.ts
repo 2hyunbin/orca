@@ -9,7 +9,7 @@ import { registerAgentHookTerminalLifecycleHandler } from '../agent-hook-termina
 import type { AgentCompletionStatusSnapshot } from '../agent-completion-coordinator-types'
 import { resolveCompatibleAgentTypeForOwner } from '../../../../../shared/agent-title-owner'
 import { resolveCommittedTitleAgentType } from '@/lib/pane-agent-evidence'
-import { recognizeAgentLaunchCommand } from '../../../../../shared/agent-process-recognition'
+import { recognizeAgentLaunchCommand } from '../../../../../shared/agent-command-line-intent'
 import type { TerminalAgent } from '../../../../../shared/terminal-agent'
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 

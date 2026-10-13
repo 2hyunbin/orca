@@ -1,6 +1,6 @@
 import { parsePtyStartupIngressIntent } from '../../shared/pty-startup-ingress-intent'
 import { normalizeColorQueryReplyColors } from '../../shared/pty-owner-color-query-colors'
-import { recognizeAgentLaunchCommand } from '../../shared/agent-process-recognition'
+import { recognizeAgentLaunchCommand } from '../../shared/agent-command-line-intent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
 import { agentKindSchema } from '../../shared/telemetry-events'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'

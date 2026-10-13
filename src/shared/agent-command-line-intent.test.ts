@@ -1,9 +1,11 @@
 import { expect, it } from 'vitest'
-import { extractAgentLaunchCommand, getAgentLaunchCommandToken } from './agent-launch-command'
 import {
-  recognizeAgentLaunchCommand,
-  recognizeAgentProcessFromCommandLine
-} from './agent-process-recognition'
+  extractAgentLaunchCommand,
+  getAgentLaunchCommandToken,
+  getAgentLaunchExecutableName,
+  recognizeAgentLaunchCommand
+} from './agent-command-line-intent'
+import { recognizeAgentProcessFromCommandLine } from './agent-process-recognition'
 import { COMMAND_TOKEN_SCAN_MAX_CHARS } from './command-token-scanner'
 
 it.each([
@@ -52,11 +54,21 @@ it('extracts executable tokens through the shared launch boundary', () => {
   expect(getAgentLaunchCommandToken('echo "sleep 30 && claude"')).toBe('echo')
 })
 
+it.each([
+  ['sleep 30 && "C:\\Program Files\\Orca\\Codex.EXE" --resume', 'codex'],
+  ['/usr/local/bin/mimo.sh', 'mimo'],
+  ['sleep 1 && opencode2.cmd', 'opencode2'],
+  [undefined, '']
+])('normalizes the launch executable name of %s', (command, expected) => {
+  expect(getAgentLaunchExecutableName(command)).toBe(expected)
+})
+
 it('preserves headless filtering and interpreter recognition for launch intent', () => {
   expect(recognizeAgentLaunchCommand('sleep 30 && claude -p task')).toBeNull()
   expect(
-    recognizeAgentLaunchCommand('sleep 30 && claude -p task', { includeHeadlessOneShot: true })
-      ?.agent
+    recognizeAgentLaunchCommand('sleep 30 && claude -p task', {
+      includeHeadlessOneShot: true
+    })?.agent
   ).toBe('claude')
   expect(recognizeAgentLaunchCommand('sleep 30 && node /usr/local/bin/codex')?.agent).toBe('codex')
 })

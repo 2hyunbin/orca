@@ -1,6 +1,6 @@
 import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
-import { recognizeAgentLaunchCommand } from '../../../../../shared/agent-process-recognition'
+import { recognizeAgentLaunchCommand } from '../../../../../shared/agent-command-line-intent'
 import { COMMAND_TOKEN_SCAN_MAX_CHARS } from '../../../../../shared/command-token-scanner'
 
 /** The store slice the launch-agent ladder reads. */

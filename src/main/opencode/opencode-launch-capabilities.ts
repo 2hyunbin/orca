@@ -1,5 +1,4 @@
 import { parseWslUncPath, toLinuxPath } from '../../shared/wsl-paths'
-import { getCommandTokenPathBasename } from '../../shared/command-token-scanner'
 import {
   getOpenCodeCliCapabilities,
   type OpenCodeCliCapabilities
@@ -8,16 +7,17 @@ import type { TuiAgent } from '../../shared/tui-agent'
 import { resolveCommandOnLocalPath } from '../ipc/command-path-resolver'
 import { runWslProcess } from '../wsl/wsl-runner'
 import { probeOpenCodeCliVersion } from './opencode-cli-version'
-import { getAgentLaunchCommandToken } from '../../shared/agent-launch-command'
+import {
+  getAgentLaunchCommandToken,
+  getAgentLaunchExecutableName
+} from '../../shared/agent-command-line-intent'
 
 export function getOpenCodeLaunchExecutable(
   command: string | undefined,
   agent?: TuiAgent
 ): string | null {
   const executable = getAgentLaunchCommandToken(command)
-  const name = getCommandTokenPathBasename(executable)
-    .toLowerCase()
-    .replace(/\.(?:exe|cmd|sh)$/, '')
+  const name = getAgentLaunchExecutableName(command)
   return agent === 'opencode' ||
     agent === 'opencode2' ||
     (!agent && (name === 'opencode' || name === 'opencode2'))
@@ -85,7 +85,10 @@ export async function probeOpenCodeLaunchCapabilities(options: {
   }
   const executablePath = options.resolveExecutable
     ? await options.resolveExecutable(executable)
-    : await resolveCommandOnLocalPath(executable, { env: options.env, cwd: options.cwd })
+    : await resolveCommandOnLocalPath(executable, {
+        env: options.env,
+        cwd: options.cwd
+      })
   return executablePath
     ? probeOpenCodeCliVersion({
         executablePath,

@@ -3,7 +3,7 @@ import {
   COMMAND_TOKEN_SCAN_MAX_CHARS,
   getCommandTokenPathBasename
 } from '../../../../shared/command-token-scanner'
-import { getAgentLaunchCommandToken } from '../../../../shared/agent-launch-command'
+import { getAgentLaunchCommandToken } from '../../../../shared/agent-command-line-intent'
 
 const TERMINAL_STARTUP_COMMAND_EXTENSION_RE = /\.(?:exe|cmd|bat|ps1)$/i
 // Why: startup commands can carry pasted scripts; classifier work should stay bounded.
