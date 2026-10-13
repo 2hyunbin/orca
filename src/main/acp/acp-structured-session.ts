@@ -29,7 +29,6 @@ export type AcpStructuredSession = {
   prompts: AcpStructuredPrompts
   options: AcpStructuredOptions
   turns: AcpStructuredTurns
-  restoreSkipped: readonly string[]
   /** Orca asked this child to stop; its exit is then a requested close. */
   closeRequested: boolean
   /** Why nothing this child says reaches the journal any more; null while it does. */

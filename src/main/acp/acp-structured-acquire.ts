@@ -235,7 +235,6 @@ export async function acquireAcpStructuredSession(input: {
     options,
     prompts,
     childStops: undefined,
-    restoreSkipped: [],
     closeRequested: false,
     journalClosed: null,
     ended: false,

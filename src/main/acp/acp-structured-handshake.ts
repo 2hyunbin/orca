@@ -102,7 +102,6 @@ export async function initializeAcpStructuredSession(
   assertStarting()
   options.adoptSession(started.response, started.kind === 'new' ? 'new' : 'loaded')
   liveLane.apply(liveLane.translator.contextModels(started.response.models, now()))
-  const restoreSkipped: string[] = []
   const link: AgentSessionProviderHandleLink = {
     linkId:
       deps.mintLinkId?.() ?? `${spec.agent}-${acquire.fence}-${started.sessionId}`.slice(0, 128),
@@ -145,8 +144,7 @@ export async function initializeAcpStructuredSession(
       agentName,
       now,
       settle: onSettled
-    }),
-    restoreSkipped
+    })
   })
   if (!isAcpReadySession(child)) {
     throw new Error('ACP session did not open')

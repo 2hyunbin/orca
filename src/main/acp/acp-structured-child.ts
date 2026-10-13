@@ -21,7 +21,6 @@ export type AcpStructuredChild = Pick<
   options: AcpStructuredSession['options']
   prompts: AcpStructuredSession['prompts']
   childStops?: AcpStructuredSession['childStops']
-  restoreSkipped: readonly string[]
   unbindReadingControl?: () => void
   open: (signal: AbortSignal) => Promise<StructuredAgentSessionProviderOpenResult>
   closing?: Promise<boolean>

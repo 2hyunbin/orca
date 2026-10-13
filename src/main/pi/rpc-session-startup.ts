@@ -26,7 +26,6 @@ import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agen
 const START_REQUEST = { timeoutMs: STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS }
 
 export class PiRpcSessionStartup {
-  skipped: readonly string[] = []
   commands?: AgentSessionSlashCommand[]
   /** What the start listed; a signed-out Pi lists no model. */
   options?: AgentSessionOptionsResult
@@ -63,7 +62,6 @@ export class PiRpcSessionStartup {
       model: state.model ? piModelOptionId(state.model.provider, state.model.id) : '',
       ...(state.thinkingLevel ? { effort: state.thinkingLevel } : {})
     }
-    const skipped: string[] = []
     this.assertLive(signal)
     current.confirmed = [...(current.model ? ['model'] : []), ...(current.effort ? ['effort'] : [])]
     // Part of the start, as other agents' handshakes answer with theirs: a Pi that lists no model
@@ -85,7 +83,6 @@ export class PiRpcSessionStartup {
         })
       ).catalogListing
     }
-    this.skipped = skipped
     await this.readCommands(signal)
     this.assertLive(signal)
     return {
