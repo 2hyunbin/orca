@@ -9,7 +9,6 @@ import { stampRuntimeSourceEnv } from '../../../../shared/runtime-source-env'
 import { getRuntimeSourceStamp } from '../../../runtime/host-descriptor'
 import { ensureCodexStateDbBackfillRecoveryStarted } from '../../../codex/codex-state-db-backfill-recovery'
 import { buildPtyHostEnv } from '../host-env/assembly'
-import { nativeChatOwnedResumeLaunch } from '../host-env/native-chat-owned-resume'
 import {
   getCompatibleSelectedCodexHomePath,
   getCodexSelectionTargetForPty,
@@ -35,26 +34,19 @@ export async function assemblePtyIpcSpawnCodexEnv(ctx: PtyIpcSpawnState): Promis
     ctx.cwd,
     ctx.expectedWslDistro
   )
-  const ownedResume = ctx.preAdoptedStablePane
+  const codexResumePreparation = ctx.preAdoptedStablePane
     ? null
-    : nativeChatOwnedResumeLaunch(ctx.deps.runtime, args)
-  const refusedResume = ownedResume ? await ownedResume : null
-  const codexResumePreparation =
-    ctx.preAdoptedStablePane || refusedResume
-      ? null
-      : ctx.deps.prepareCodexResumeHome({
-          connectionId: args.connectionId,
-          launchAgent: args.launchAgent,
-          providerSession: args.resumeProviderSession,
-          target: ctx.codexSelectionTarget,
-          launchEnv: ctx.baseEnv,
-          ...(args.replacesPtyId ? { useSelectedAccount: true } : {})
-        })
-  ctx.codexResumeLaunch =
-    refusedResume ??
-    (codexResumePreparation
-      ? await ctx.deps.resolveCodexResumeLaunch(args.command, codexResumePreparation)
-      : ctx.deps.noCodexResumeLaunch(ctx.preAdoptedStablePane ? undefined : args.command))
+    : ctx.deps.prepareCodexResumeHome({
+        connectionId: args.connectionId,
+        launchAgent: args.launchAgent,
+        providerSession: args.resumeProviderSession,
+        target: ctx.codexSelectionTarget,
+        launchEnv: ctx.baseEnv,
+        ...(args.replacesPtyId ? { useSelectedAccount: true } : {})
+      })
+  ctx.codexResumeLaunch = codexResumePreparation
+    ? await ctx.deps.resolveCodexResumeLaunch(args.command, codexResumePreparation)
+    : ctx.deps.noCodexResumeLaunch(ctx.preAdoptedStablePane ? undefined : args.command)
   // Why: these three phases have unrelated costs (session provenance + hook
   // repair, account/auth resolution, then the synchronous env build). One
   // `host_env` label hid all of them behind the name of the cheapest.

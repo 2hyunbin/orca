@@ -10,6 +10,7 @@ import { LocalPtyProvider } from '../../../providers/local-pty-provider'
 import { normalizeWindowsTerminalCwd } from '../../../providers/windows-shell-args'
 import { wslUncDirectoryExistsAsync } from '../../../wsl'
 import { getCodexSelectionTargetForPty } from '../host-env/codex-home'
+import { dropAgentLaunch, nativeChatOwnsSpawnResume } from '../host-env/native-chat-owned-resume'
 import {
   isClaudeLaunchCommand,
   recoverFreshSpawnProviderRouting,
@@ -199,6 +200,14 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
       shellOverride: ctx.terminalRuntimeOptions.shellOverride,
       terminalWindowsWslDistro: ctx.terminalRuntimeOptions.terminalWindowsWslDistro
     })?.distro ?? null
+  const chatOwnsResume = ctx.preAdoptedStablePane
+    ? null
+    : nativeChatOwnsSpawnResume(ctx.deps.runtime, args, ctx.expectedWslDistro)
+  if (chatOwnsResume && (await chatOwnsResume)) {
+    dropAgentLaunch(args)
+    ctx.isClaudeLaunch = false
+    ctx.agentResumeOwnedByChat = true
+  }
   const initialSelectionTarget = getCodexSelectionTargetForPty(
     initialShellOverride,
     ctx.cwd,

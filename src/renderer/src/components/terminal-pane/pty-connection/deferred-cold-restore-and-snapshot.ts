@@ -44,6 +44,15 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
       )
     }
   }
+  session.retireChatOwnedColdRestore = (startup: ColdRestoreAgentResumeStartup | null): void => {
+    // Why: a native chat owns this conversation, so no status row or saved record here may name it.
+    const state = useAppStore.getState()
+    state.dropAgentStatus(session.cacheKey)
+    const saved = startup?.sleepingRecordEntry ?? session.getSleepingRecordForPane(state)
+    if (saved) {
+      session.clearSleepingRecordProviderDuplicates(state, saved)
+    }
+  }
   session.mergeStartupEnvWithPaneIdentity = (
     env: Record<string, string> | undefined
   ): Record<string, string> | undefined =>

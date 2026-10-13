@@ -86,38 +86,39 @@ describe('registerPtyHandlers', () => {
       registerPtyHandlers(mainWindow, runtime)
     }
 
-    /** Whether the spawn reported that it dropped the resume. */
-    async function spawnClaudeResume(providerSessionId: string): Promise<boolean> {
-      const result = await handlers.get('pty:spawn')!(null, {
-        cols: 80,
-        rows: 24,
-        cwd: '/tmp',
-        command: `claude --resume '${providerSessionId}'`,
-        launchAgent: 'claude',
-        resumeProviderSession: { key: 'session_id', id: providerSessionId }
-      })
-      return typeof result === 'object' && result !== null && 'agentResumeUnavailable' in result
+    type SpawnedShell = {
+      ownedByChat: boolean
+      resumeUnavailable: boolean
+      /** Everything the shell is told to run: its startup variable and what is typed in. */
+      input: string
+      env: Record<string, string>
     }
 
-    /** Everything the spawned shell is told to run: its startup variable and what is typed in. */
-    async function spawnedShellInput(providerSessionId: string): Promise<{
-      resumeUnavailable: boolean
-      input: string
-    }> {
+    async function spawnClaudeResume(providerSessionId: string): Promise<SpawnedShell> {
       const mockProc = createMockProc()
       spawnMock.mockReturnValue(mockProc.proc)
       vi.useFakeTimers()
       try {
-        const resumeUnavailable = await spawnClaudeResume(providerSessionId)
+        const result = await handlers.get('pty:spawn')!(null, {
+          cols: 80,
+          rows: 24,
+          cwd: '/tmp',
+          command: `claude --resume '${providerSessionId}'`,
+          launchAgent: 'claude',
+          resumeProviderSession: { key: 'session_id', id: providerSessionId }
+        })
         for (let flush = 0; flush < 3; flush += 1) {
           await Promise.resolve()
           vi.runAllTimers()
         }
         const env: Record<string, string> = spawnMock.mock.calls.at(-1)![2].env
         const typed = mockProc.proc.write.mock.calls.map((call) => String(call[0]))
+        const reported = typeof result === 'object' && result !== null ? result : {}
         return {
-          resumeUnavailable,
-          input: [env[POSIX_SHELL_STARTUP_COMMAND_ENV] ?? '', ...typed].join('\n')
+          ownedByChat: 'agentResumeOwnedByChat' in reported,
+          resumeUnavailable: 'agentResumeUnavailable' in reported,
+          input: [env[POSIX_SHELL_STARTUP_COMMAND_ENV] ?? '', ...typed].join('\n'),
+          env
         }
       } finally {
         vi.useRealTimers()
@@ -127,19 +128,24 @@ describe('registerPtyHandlers', () => {
     posixOnlyIt('starts the plain shell and says the old session is unavailable', async () => {
       registerWithChats(() => [chatOwning(CHAT_SESSION_ID)])
 
-      const spawned = await spawnedShellInput(CHAT_SESSION_ID)
+      const spawned = await spawnClaudeResume(CHAT_SESSION_ID)
 
       expect(spawned.resumeUnavailable).toBe(true)
+      expect(spawned.ownedByChat).toBe(true)
       expect(spawned.input).not.toContain(CHAT_SESSION_ID)
+      // A plain shell, not an unattended agent's: Git may prompt for credentials again.
+      expect(spawned.env.GIT_TERMINAL_PROMPT).toBeUndefined()
     })
 
     posixOnlyIt('resumes a conversation no chat owns', async () => {
       registerWithChats(() => [chatOwning(CHAT_SESSION_ID)])
 
-      const spawned = await spawnedShellInput(PANE_SESSION_ID)
+      const spawned = await spawnClaudeResume(PANE_SESSION_ID)
 
       expect(spawned.resumeUnavailable).toBe(false)
+      expect(spawned.ownedByChat).toBe(false)
       expect(spawned.input).toContain(`--resume '${PANE_SESSION_ID}'`)
+      expect(spawned.env.GIT_TERMINAL_PROMPT).toBe('0')
     })
 
     posixOnlyIt('resumes when the chat journal cannot be read', async () => {
@@ -148,7 +154,7 @@ describe('registerPtyHandlers', () => {
         throw new Error('journal unavailable')
       })
 
-      const spawned = await spawnedShellInput(CHAT_SESSION_ID)
+      const spawned = await spawnClaudeResume(CHAT_SESSION_ID)
 
       expect(spawned.resumeUnavailable).toBe(false)
       expect(spawned.input).toContain(`--resume '${CHAT_SESSION_ID}'`)

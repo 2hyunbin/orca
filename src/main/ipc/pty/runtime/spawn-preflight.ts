@@ -7,7 +7,6 @@ import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
 import { getProvider } from '../provider/registry'
 import { buildPtyHostEnv } from '../host-env/assembly'
-import { nativeChatOwnedResumeLaunch } from '../host-env/native-chat-owned-resume'
 import {
   getCompatibleSelectedCodexHomePath,
   getCodexSelectionTargetForPty,
@@ -112,25 +111,18 @@ export async function prepareRuntimePtySpawn(
     ctx.cwd,
     ctx.expectedWslDistro
   )
-  const ownedResume = ctx.preAdoptedStablePane
+  const codexResumePreparation = ctx.preAdoptedStablePane
     ? null
-    : nativeChatOwnedResumeLaunch(ctx.deps.runtime, args)
-  const refusedResume = ownedResume ? await ownedResume : null
-  const codexResumePreparation =
-    ctx.preAdoptedStablePane || refusedResume
-      ? null
-      : ctx.deps.prepareCodexResumeHome({
-          connectionId: args.connectionId,
-          launchAgent: args.launchAgent,
-          providerSession: args.resumeProviderSession,
-          target: ctx.codexSelectionTarget,
-          launchEnv: args.env
-        })
-  const codexResumeLaunch =
-    refusedResume ??
-    (codexResumePreparation
-      ? await ctx.deps.resolveCodexResumeLaunch(args.command, codexResumePreparation)
-      : ctx.deps.noCodexResumeLaunch(ctx.preAdoptedStablePane ? undefined : args.command))
+    : ctx.deps.prepareCodexResumeHome({
+        connectionId: args.connectionId,
+        launchAgent: args.launchAgent,
+        providerSession: args.resumeProviderSession,
+        target: ctx.codexSelectionTarget,
+        launchEnv: args.env
+      })
+  const codexResumeLaunch = codexResumePreparation
+    ? await ctx.deps.resolveCodexResumeLaunch(args.command, codexResumePreparation)
+    : ctx.deps.noCodexResumeLaunch(ctx.preAdoptedStablePane ? undefined : args.command)
   const codexResumeHome = codexResumeLaunch.codexResumeHome
   // Why: the drop still applies here, but this controller's result has no field for
   // notifyResumeUnavailable — runtime/relay panes start fresh without the notice.

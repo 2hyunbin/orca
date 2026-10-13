@@ -108,4 +108,44 @@ describe('reattach payload context', () => {
     expect(schedulePendingStartupCommandDelivery).not.toHaveBeenCalled()
     expect(context.reattachPayloadApplied).toBe(true)
   })
+
+  it('retires every recovery source when a native chat owns the saved conversation', async () => {
+    const startup: ColdRestoreAgentResumeStartup = {
+      command: "claude --resume 'chat-session'",
+      agent: 'claude',
+      resumeProviderSession: { key: 'session_id', id: 'chat-session' },
+      launchConfig: { agentCommand: 'claude', agentArgs: '', agentEnv: {} },
+      launchToken: 'transport-launch-token',
+      useLiveEntry: true,
+      hasSleepingRecord: true,
+      sleepingRecordEntry: null
+    }
+    const retireChatOwnedColdRestore = vi.fn()
+    const clearSleepingRecordAfterColdRestoreSpawn = vi.fn()
+    const showSessionRestoredBanner = vi.fn()
+    const session = createSession({
+      applyColdRestoreAgentResumeStartup: vi.fn(() => true),
+      showSessionRestoredBanner,
+      retireChatOwnedColdRestore,
+      clearSleepingRecordAfterColdRestoreSpawn,
+      consumeRestoredViewportBlankingMarker: vi.fn(),
+      writeFreshShellViewportBlanking: vi.fn()
+    })
+    const context: ReattachPayloadContext = {
+      ...createContext('', 1),
+      connectResult: {
+        id: 'pty-1',
+        coldRestore: { scrollback: 'restored scrollback', cwd: '/workspace' },
+        agentResumeUnavailable: true,
+        agentResumeOwnedByChat: true
+      },
+      coldRestoreStartup: startup
+    }
+
+    await createReattachPayloadHandlers(session, context).applyReattachPayload()
+
+    expect(showSessionRestoredBanner).toHaveBeenCalledWith('resume-unavailable')
+    expect(retireChatOwnedColdRestore).toHaveBeenCalledWith(startup)
+    expect(clearSleepingRecordAfterColdRestoreSpawn).not.toHaveBeenCalled()
+  })
 })

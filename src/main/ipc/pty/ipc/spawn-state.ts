@@ -75,6 +75,8 @@ export type PtyIpcSpawnState = {
   nativeWindowsConptySpawn: boolean
   codexSelectionTarget: CodexAccountSelectionTarget
   codexResumeLaunch: CodexResumeLaunch
+  /** The pane's saved resume named a conversation a native chat owns; it starts its plain shell. */
+  agentResumeOwnedByChat: boolean
   launchCommand: string | undefined
   env: Record<string, string> | undefined
   selectedCodexHomePath: string | null
@@ -149,6 +151,7 @@ export function createPtyIpcSpawnState(
     nativeWindowsConptySpawn: false,
     codexSelectionTarget: { runtime: 'host' },
     codexResumeLaunch: noCodexResumeLaunch(undefined),
+    agentResumeOwnedByChat: false,
     launchCommand: undefined,
     env: undefined,
     selectedCodexHomePath: null,

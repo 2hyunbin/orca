@@ -202,7 +202,15 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           } else if (coldRestoreOverride?.hasSleepingRecord) {
             session.showSessionRestoredBanner()
           }
-          session.clearSleepingRecordAfterColdRestoreSpawn(coldRestoreOverride)
+          if (
+            spawnedPtyId &&
+            typeof spawnedPtyId === 'object' &&
+            spawnedPtyId.agentResumeOwnedByChat
+          ) {
+            session.retireChatOwnedColdRestore(coldRestoreOverride)
+          } else {
+            session.clearSleepingRecordAfterColdRestoreSpawn(coldRestoreOverride)
+          }
         } else if (
           session.paneStartup?.launchConfig ||
           (startupOverride && 'launchConfig' in startupOverride)

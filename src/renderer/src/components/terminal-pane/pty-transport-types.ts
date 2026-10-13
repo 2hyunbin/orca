@@ -119,6 +119,8 @@ export type PtyConnectResult = {
   startupCwdFallback?: { kind: 'worktree'; cwd: string }
   /** Main declined an unverifiable provider-session resume and launched fresh. */
   agentResumeUnavailable?: true
+  /** Main refused to resume a conversation a native chat owns and started the plain shell. */
+  agentResumeOwnedByChat?: true
   /** Trailing partial escape the daemon emulator held mid-parse; the reattach
    *  replay writes it LAST (after the reset) so a racing live continuation
    *  completes it instead of rendering literally (#7329). */
