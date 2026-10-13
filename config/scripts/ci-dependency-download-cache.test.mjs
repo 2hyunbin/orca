@@ -23,13 +23,16 @@ describe('CI dependency download caches', () => {
     expect(install.run).toContain(
       'diff --exit-code -- package.json pnpm-lock.yaml pnpm-workspace.yaml'
     )
-    const mobile = workflow('mobile').jobs.verify.steps.find((step) =>
-      step.uses?.includes('install-node-dependencies')
-    )
-    expect(mobile.with['cache-dependency-path'].trim().split('\n')).toEqual([
-      'pnpm-lock.yaml',
-      'mobile/pnpm-lock.yaml'
-    ])
+    for (const name of ['checks', 'test-shard', 'main-tests']) {
+      const mobile = workflow('mobile').jobs[name].steps.find((step) =>
+        step.uses?.includes('install-node-dependencies')
+      )
+      expect(mobile.with['cache-dependency-path'].trim().split('\n')).toEqual([
+        'pnpm-lock.yaml',
+        'mobile/pnpm-lock.yaml'
+      ])
+      expect(mobile.with['cache-pnpm-store']).toBe(name === 'main-tests' ? undefined : 'false')
+    }
   })
 
   it('builds internal packages before native preparation after a script-free install', () => {

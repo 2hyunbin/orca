@@ -117,19 +117,19 @@ it('requires both runtime jobs and rejects failed, skipped or cancelled dependen
   const workflow = parse(
     readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8')
   )
-  expect(workflow.jobs.verify.needs).toEqual(['checks', 'native-tests'])
+  expect(workflow.jobs.verify.needs).toEqual(['checks', 'test-shard'])
   expect(workflow.jobs.verify['runs-on']).toBe('ubuntu-slim')
   expect(workflow.jobs.verify.if).toContain('!cancelled()')
   const [gate] = workflow.jobs.verify.steps
   expect(gate.env.CHECKS_RESULT).toBe('${{ needs.checks.result }}')
-  expect(gate.env.NATIVE_RESULT).toBe('${{ needs.native-tests.result }}')
+  expect(gate.env.SHARD_RESULT).toBe('${{ needs.test-shard.result }}')
   const code = gate.run.slice('node -e "'.length, -1)
   for (const checks of ['success', 'failure', 'skipped', 'cancelled']) {
     for (const native of ['success', 'failure', 'skipped', 'cancelled']) {
       let exitCode = 0
       runInNewContext(code, {
         process: {
-          env: { CHECKS_RESULT: checks, NATIVE_RESULT: native },
+          env: { CHECKS_RESULT: checks, SHARD_RESULT: native },
           exit: (code) => {
             exitCode = code
           }
@@ -138,12 +138,12 @@ it('requires both runtime jobs and rejects failed, skipped or cancelled dependen
       expect(exitCode).toBe(checks === 'success' && native === 'success' ? 0 : 1)
     }
   }
-  for (const [job, runtime] of [
-    [workflow.jobs.checks, 'bun'],
-    [workflow.jobs['native-tests'], 'node']
+  for (const [job, args] of [
+    [workflow.jobs.checks, '--runtime=bun --bun-shard=1/2'],
+    [workflow.jobs['test-shard'], '--bun-shard=2/2']
   ]) {
     const test = job.steps.find((step) => step.name === 'Test')
-    expect(test.run).toBe(`node ../config/scripts/run-mobile-ci-tests.mjs --runtime=${runtime}`)
+    expect(test.run).toBe(`node ../config/scripts/run-mobile-ci-tests.mjs ${args}`)
     expect(test.if).toBe("steps.test-scope.outputs.should_run != 'false'")
     expect(test['continue-on-error']).toBeUndefined()
   }

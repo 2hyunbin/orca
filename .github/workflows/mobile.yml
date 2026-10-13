@@ -169,7 +169,7 @@ jobs:
         if: steps.test-scope.outputs.should_run != 'false'
         env:
           ORCA_BACKGROUND_LAUNCH: '1'
-        run: node ../config/scripts/run-mobile-ci-tests.mjs --runtime=bun
+        run: node ../config/scripts/run-mobile-ci-tests.mjs --runtime=bun --bun-shard=1/2
 
       # All checks read the completed install; compilers need not hold up test workers.
       - wait: [production-types, test-types, ruby-tools]
@@ -208,8 +208,8 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
-  native-tests:
-    name: Mobile Node tests
+  test-shard:
+    name: Mobile Node and Bun tests
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04-arm
 
@@ -245,23 +245,29 @@ jobs:
         if: steps.test-scope.outputs.should_run != 'false'
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Bun for tests
+        if: steps.test-scope.outputs.should_run != 'false'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: config/.bun-version
+
       - name: Test
         if: steps.test-scope.outputs.should_run != 'false'
         env:
           ORCA_BACKGROUND_LAUNCH: '1'
-        run: node ../config/scripts/run-mobile-ci-tests.mjs --runtime=node
+        run: node ../config/scripts/run-mobile-ci-tests.mjs --bun-shard=2/2
 
   verify:
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-    needs: [checks, native-tests]
+    needs: [checks, test-shard]
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
       - name: Require successful mobile checks
         env:
           CHECKS_RESULT: ${{ needs.checks.result }}
-          NATIVE_RESULT: ${{ needs.native-tests.result }}
-        run: node -e "if (process.env.CHECKS_RESULT !== 'success' || process.env.NATIVE_RESULT !== 'success') process.exit(1)"
+          SHARD_RESULT: ${{ needs.test-shard.result }}
+        run: node -e "if (process.env.CHECKS_RESULT !== 'success' || process.env.SHARD_RESULT !== 'success') process.exit(1)"
 
   main-tests:
     name: Mobile tests on main

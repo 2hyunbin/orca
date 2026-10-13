@@ -17,7 +17,17 @@ if (selections.length > 1 || !['all', 'node', 'bun'].includes(runtime)) {
 if (process.versions.bun) {
   throw new Error('Launch mobile CI tests with Node.js')
 }
-const reporters = args.filter((argument) => !argument.startsWith('--runtime='))
+const shards = args.filter((argument) => argument.startsWith('--bun-shard='))
+const bunShard = shards[0]?.slice('--bun-shard='.length)
+if (
+  shards.length > 1 ||
+  (shards.length > 0 && (!['1/2', '2/2'].includes(bunShard) || runtime === 'node'))
+) {
+  throw new Error('Choose one Bun shard: 1/2 or 2/2, with a Bun runtime')
+}
+const reporters = args.filter(
+  (argument) => !argument.startsWith('--runtime=') && !argument.startsWith('--bun-shard=')
+)
 if (reporters.some((argument) => !argument.startsWith('--reporter='))) {
   throw new Error('Only additional Vitest reporters are accepted')
 }
@@ -54,6 +64,7 @@ async function runRole(role, program, runtimeArgs) {
         '--reporter=default',
         '--reporter=json',
         `--outputFile=${join(owned, 'results.json')}`,
+        ...(role === 'bun' && bunShard ? [`--shard=${bunShard}`] : []),
         ...reporters
       ],
       cwd: join(root, 'mobile'),

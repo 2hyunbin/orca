@@ -102,6 +102,17 @@ it('keeps both runtimes as the default for main and existing callers', () => {
   const result = fixture().run()
   expect(result.code, result.stderr).toBe(0)
   expect(result.calls.map((call) => call.role)).toEqual(['node', 'bun'])
+  expect(result.calls.every((call) => call.args.every((arg) => !arg.startsWith('--shard=')))).toBe(
+    true
+  )
+})
+
+it.each(['1/2', '2/2'])('shards only Bun and keeps every Node file in shard %s', (shard) => {
+  const result = fixture().run([`--bun-shard=${shard}`])
+  expect(result.code, result.stderr).toBe(0)
+  expect(result.calls.map((call) => call.role)).toEqual(['node', 'bun'])
+  expect(result.calls[0].args.some((arg) => arg.startsWith('--shard='))).toBe(false)
+  expect(result.calls[1].args).toContain(`--shard=${shard}`)
 })
 
 it.each(['node', 'bun'])('propagates a %s failure while collecting both runtimes', (role) => {
@@ -117,11 +128,16 @@ it('retains scratch data when a selected runtime has no confirmed closure', () =
   expect(existsSync(result.calls[0].temp)).toBe(true)
 })
 
-it.each([['--runtime=other'], ['--runtime=node', '--runtime=bun'], ['--config=other']])(
-  'rejects invalid selections or unapproved arguments: %s',
-  (...args) => {
-    const result = fixture().run(args)
-    expect(result.code).not.toBe(0)
-    expect(result.calls).toEqual([])
-  }
-)
+it.each([
+  ['--runtime=other'],
+  ['--runtime=node', '--runtime=bun'],
+  ['--config=other'],
+  ['--bun-shard='],
+  ['--bun-shard=3/2'],
+  ['--bun-shard=1/2', '--bun-shard=2/2'],
+  ['--runtime=node', '--bun-shard=1/2']
+])('rejects invalid selections or unapproved arguments: %s', (...args) => {
+  const result = fixture().run(args)
+  expect(result.code).not.toBe(0)
+  expect(result.calls).toEqual([])
+})
