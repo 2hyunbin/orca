@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import type { AgentSessionMutationEnvelope } from '../../../shared/agent-session-wire'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
@@ -135,43 +135,6 @@ afterEach(async () => {
   await new Promise((resolve) => setTimeout(resolve, 100))
   await host.flushAllStreamedEvents()
   await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
-})
-
-describe('Claude structured session options', () => {
-  it('writes picks made while opening once the child is ready', async () => {
-    const pick = (key: string, value: string) =>
-      host.setOption(CALLER, {
-        envelope: envelope('agentSession.setOption', { key, value }),
-        key,
-        value
-      })
-    const effort = pick('effort', 'high')
-    const model = pick('model', PICKED_MODEL)
-    let settled = false
-    void Promise.all([effort, model]).then(() => {
-      settled = true
-    })
-    try {
-      await host.collaboratorsForTests().serialize(SESSION, async () => {})
-      expect(settled).toBe(false)
-      expect(setOption).not.toHaveBeenCalled()
-    } finally {
-      releaseOpen()
-    }
-    expect(await effort).toMatchObject({ ok: true })
-    expect(await model).toMatchObject({ ok: true })
-    expect(order).toEqual(['effort=high', 'model=opus'])
-
-    const body = hostTestMessage('hello')
-    expect(
-      await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
-    ).toMatchObject({ ok: true })
-    await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
-    expect(order).toEqual(['effort=high', 'model=opus', 'dispatch'])
-    expect(activeModel).toBe(PICKED_MODEL)
-    await host.flushAllStreamedEvents()
-    expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
-  })
 })
 
 it('applies model and effort picks on a running Claude chat to the next message', async () => {

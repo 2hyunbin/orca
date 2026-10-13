@@ -62,6 +62,7 @@ export function useStructuredAgentSessionOptions(args: {
     transportEnabled,
     turnId
   } = args
+  const providerStarting = args.providerStarting ?? false
   const launchSeedOptions = launch?.seedOptions
   const held = launch?.heldOptions ?? NO_HELD_OPTIONS
   // Published but not attached: the launch no longer holds picks and there is no fence to send one.
@@ -88,7 +89,7 @@ export function useStructuredAgentSessionOptions(args: {
     ...(launch?.worktree ? { worktree: launch.worktree } : {}),
     seedsModel: launchSeedOptions?.model !== undefined,
     providerVisible,
-    providerStarting: args.providerStarting ?? false,
+    providerStarting,
     hostOptionStamp: args.hostOptionStamp ?? '',
     // A new chat's host knows nothing of its model before the provider starts; a resumed one's
     // holds the model it ran, so only the former waits rather than show the host's guess.
@@ -137,7 +138,7 @@ export function useStructuredAgentSessionOptions(args: {
         activeOptionRecordRef.current === targetRecord &&
         optionMutationGeneration.current === mutationGeneration
       // Record-only: shown at once, so the picker stays usable while the write waits behind a start.
-      const shownAtOnce = id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
+      const shownAtOnce = providerStarting || id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
       if (shownAtOnce) {
         updateOptionState((current) =>
           current.record === targetRecord
@@ -206,6 +207,7 @@ export function useStructuredAgentSessionOptions(args: {
       optionMutationGeneration,
       optionStateRef,
       pendingOptionRef,
+      providerStarting,
       rememberOptionPicks,
       sessionId,
       target,
@@ -238,11 +240,12 @@ export function useStructuredAgentSessionOptions(args: {
   const setStructuredOption = useCallback(
     async (id: string, value: string | boolean): Promise<boolean> => {
       const view = structuredAgentSessionOptionView(optionStateRef.current, launchSeedOptions, held)
+      const pickState = { ...view, pendingId: providerStarting ? null : pendingOptionRef.current }
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
         !optionCatalog ||
         encoded === null ||
-        !canSetStructuredAgentSessionOption(view, id, value)
+        !canSetStructuredAgentSessionOption(pickState, id, value)
       ) {
         return false
       }
@@ -251,9 +254,6 @@ export function useStructuredAgentSessionOptions(args: {
         const applied = holdStructuredAgentSessionLaunchOption(sessionId, id, encoded)
         void applied?.then(settleLaunchOptionPick)
         return applied !== null
-      }
-      if (pendingOptionRef.current !== null) {
-        return false
       }
       return sendStructuredOption(id, encoded)
     },
@@ -264,6 +264,7 @@ export function useStructuredAgentSessionOptions(args: {
       optionCatalog,
       optionStateRef,
       pendingOptionRef,
+      providerStarting,
       sendStructuredOption,
       sessionId,
       settleLaunchOptionPick,

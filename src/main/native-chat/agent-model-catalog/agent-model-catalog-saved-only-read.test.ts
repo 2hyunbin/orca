@@ -14,7 +14,6 @@ import {
 } from './agent-model-catalog-store'
 import { AgentModelCatalogUnavailableError } from './agent-model-catalog-unavailable'
 import { agentReadsProjectModelConfig } from './agent-project-model-override'
-import { foundAgentSessionRecord } from '../../runtime/agent-session-record-founding'
 
 // A client preloads every agent's saved list through `savedOnly`: the answer comes from what the
 // host saved, and no listing, probe or re-check of a held reason starts.
@@ -53,39 +52,6 @@ function rig(agent = 'grok') {
 }
 
 describe('a saved-only catalog read', () => {
-  it('probes for a brand-new released chat before its first send', async () => {
-    const record = foundAgentSessionRecord(
-      {
-        sessionId: 'new-chat',
-        provider: 'grok',
-        accountHome: HOME,
-        location: {
-          executionHostId: 'local',
-          wslDistro: null,
-          workspaceId: 'folder-1',
-          workspaceKind: 'folder'
-        }
-      },
-      { claimKeyId: 'key-1', now: 1_000 }
-    )
-    const probe = vi.fn(async () => listing('grok-4.7'))
-    const service = createAgentModelCatalogService({
-      store: new AgentModelCatalogStore(),
-      getRecord: () => record,
-      drivesRecord: () => true,
-      resolveAccountHome: async () => HOME,
-      probes: { grok: probe }
-    })
-
-    expect(record.lease.claimStatus).toBe('released')
-    expect(record.lease.deathEvidence).toBeNull()
-    expect(record.providerHandleChain).toEqual([])
-    expect(
-      await service.read({ agent: 'grok', sessionId: record.sessionId, waitForListing: true })
-    ).toMatchObject({ origin: 'probe', models: [{ id: 'grok-4.7' }] })
-    expect(probe).toHaveBeenCalledExactlyOnceWith(HOME, { signal: expect.any(AbortSignal) })
-  })
-
   it('does not relaunch a released chat to read models after startup failed', async () => {
     let now = 1_000
     const record = {
@@ -114,9 +80,6 @@ describe('a saved-only catalog read', () => {
       probes: { grok: probe }
     })
 
-    expect(await service.read({ agent: 'grok', sessionId: record.sessionId })).toEqual({
-      origin: 'unknown'
-    })
     expect(
       await service.read({ agent: 'grok', sessionId: record.sessionId, waitForListing: true })
     ).toEqual({

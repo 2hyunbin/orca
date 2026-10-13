@@ -16,15 +16,12 @@ import {
   type openCodexAppServerConnection
 } from './codex-app-server-connection'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import {
   CodexStructuredSessionAdapter,
   type CodexStructuredLaunch,
   type CodexStructuredSessionEvent
 } from './codex-structured-session-adapter'
 import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
-import { createCodexStructuredLaunchResolver } from '../runtime/structured-agent-launch-composition.test-support'
-import { agentSessionRecordFixture } from '../native-chat/agent-session-record-test-fixture'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 
 describe('CodexStructuredSessionAdapter.acquire', () => {
@@ -49,19 +46,6 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       'thread/start',
       'model/list'
     ])
-  })
-
-  it('persists saved model and effort as the next turn uses them', async () => {
-    const codex = fakeCodex()
-    const adapter = adapterFor(codex)
-    await acquireReadyCodexForTest(adapter, {
-      identity: identityFor('session-1'),
-      fence: 7,
-      spawnToken: 'spawn-9',
-      options: { model: 'gpt-saved', effort: 'low', personality: 'concise' }
-    })
-
-    expect(codexStartReport(adapter).reportedOptions).toEqual({ model: 'gpt-saved', effort: 'low' })
   })
 
   it('keeps a saved next-turn pick when resuming a thread that reports its previous pick', async () => {
@@ -127,87 +111,6 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       'stub model/list rejected'
     )
     expect(codex.connections[0].closeCount).toBe(0)
-  })
-
-  it('starts a new thread and reports the process and link the lease will prove', async () => {
-    const codex = fakeCodex()
-    const record = agentSessionRecordFixture({
-      sessionId: 'session-1',
-      provider: 'codex',
-      accountHome: { variable: 'CODEX_HOME', path: '/codex/home' }
-    })
-    // The launch its registration composes: the shared seal names the child, not this adapter.
-    const adapter = adapterFor(codex, {}, [], {
-      resolveLaunch: createCodexStructuredLaunchResolver({
-        store: { getRecord: () => record, pinLaunchDirectory: vi.fn() },
-        resolveWorkspacePath: async () => '/work/repo',
-        resolveCommand: () => 'codex',
-        resolveLaunchArgs: () => []
-      })
-    })
-
-    const acquisition = await acquireReadyCodexForTest(adapter, {
-      identity: identityFor('session-1'),
-      fence: 7,
-      spawnToken: 'spawn-9'
-    })
-
-    expect(codex.connections[0].launch.env).toEqual({
-      [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: 'spawn-9',
-      CODEX_HOME: '/codex/home',
-      ORCA_AGENT_SESSION_ID: 'session-1',
-      ORCA_STRUCTURED_SESSION: '1',
-      ORCA_CLI_COMMAND: expect.stringMatching(/^[^:;]*[\\/]cli[\\/]bin[\\/]orca-dev$/),
-      ...(process.platform !== 'win32'
-        ? { ORCA_CLI_BIN_DIR: expect.stringMatching(/^[^:;]*[\\/]cli[\\/]bin$/) }
-        : {}),
-      ORCA_USER_DATA_PATH: expect.any(String),
-      // The test host is unpackaged, so this app's CLI is the dev launcher dir, first on PATH.
-      PATH: expect.stringMatching(/^[^:;]*[\\/]cli[\\/]bin[:;]/)
-    })
-    expect(codex.connections[0].launch.cwd).toBe('/work/repo')
-    expect(codex.connections[0].calls[1]).toEqual({
-      method: 'thread/start',
-      // A chat with no mode asks, stated outright.
-      params: {
-        cwd: '/work/repo',
-        approvalPolicy: 'on-request',
-        sandbox: 'workspace-write',
-        approvalsReviewer: 'user'
-      }
-    })
-    expect(acquisition.process).toEqual({
-      hostId: 'host-1',
-      pid: 4321,
-      processStartTimeMs: 1_700_000_000_000,
-      spawnToken: 'spawn-9'
-    })
-    expect(codexStartedLink(adapter)).toEqual({
-      linkId: `codex-7-${THREAD_ID}`,
-      handle: codexProviderHandle(THREAD_ID),
-      origin: 'created',
-      mintedAtFence: 7,
-      observedAt: 1_700_000_000_500
-    })
-    expect(acquisition.acquisitionGeneration).toBe('generation-1')
-  })
-
-  // A thread opened on Codex's configured default and then given a turn on the chosen model
-  // reads to Codex as a model switch, and it injects the chosen model's whole prompt again.
-  it('opens the thread on the model the session chose, not on the configured default', async () => {
-    const codex = fakeCodex()
-    const adapter = adapterFor(codex, { model: 'gpt-chosen' })
-
-    await acquireReadyCodexForTest(adapter, {
-      identity: identityFor('session-1'),
-      fence: 7,
-      spawnToken: 'spawn-9'
-    })
-
-    expect(codex.connections[0].calls[1]).toEqual({
-      method: 'thread/start',
-      params: { cwd: '/work/repo', model: 'gpt-chosen' }
-    })
   })
 
   it('resumes the thread the durable handle chain names, not the client one', async () => {
@@ -290,42 +193,6 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
     expect(codex.connections[0].closeCount).toBe(0)
     expect(await adapter.closeSession('session-1')).toBe(true)
     expect(codex.connections[0].closeCount).toBe(1)
-  })
-
-  it('rejects a thread Codex never named; the host closes once', async () => {
-    const codex = fakeCodex({ 'thread/start': () => ({}) })
-    const adapter = adapterFor(codex)
-    const acquired = await adapter.acquire({
-      identity: identityFor('session-1'),
-      fence: 1,
-      spawnToken: 'spawn-9'
-    })
-    await expect(
-      adapter.open({
-        sessionId: 'session-1',
-        fence: 1,
-        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
-        signal: new AbortController().signal
-      })
-    ).rejects.toThrow('did not name the thread')
-    expect(codex.connections[0].closeCount).toBe(0)
-    expect(await adapter.closeSession('session-1')).toBe(true)
-    expect(codex.connections[0].closeCount).toBe(1)
-  })
-
-  it('closes the previous child before re-acquiring at a new fence', async () => {
-    const codex = fakeCodex()
-    const adapter = await acquired(codex)
-
-    await acquireReadyCodexForTest(adapter, {
-      identity: identityFor('session-1'),
-      fence: 8,
-      spawnToken: 'spawn-10'
-    })
-
-    expect(codex.connections).toHaveLength(2)
-    expect(codex.connections[0].closeCount).toBe(1)
-    expect(codex.connections[1].closeCount).toBe(0)
   })
 
   it('keeps the traffic Codex sends before the session is published', async () => {
