@@ -221,10 +221,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
     return session?.generation === generation && !session.connection.closed
   }
 
-  closeSession(id: string): Promise<boolean> {
-    return this.closeProviderSession(id, true)
-  }
-  private async closeProviderSession(id: string, requested: boolean): Promise<boolean> {
+  async closeSession(id: string, requested = true): Promise<boolean> {
     const session = this.sessions.get(id)
     if (!session) {
       return true
@@ -243,7 +240,7 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
   }
   forceCloseSession(id: string): Promise<boolean> {
     this.sessions.get(id)?.fail(new Error('Pi event sink failed'))
-    return this.closeProviderSession(id, false)
+    return this.closeSession(id, false)
   }
   disposeSession(id: string): Promise<boolean> {
     return this.closeSession(id)
