@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveAppImageExtractedRoot } from './appimage-extracted-root'
 import { resolveAppImageLauncherEndpointPath } from './appimage-stable-launcher'
@@ -72,6 +72,39 @@ describe('startAppImageCopyPreExtraction', () => {
     ).toBeNull()
     expect(await preExtraction.waitForAppImageCopyPreExtraction(10)).toBe(false)
     expect(runExtract).not.toHaveBeenCalled()
+  })
+
+  it('drops idle copies of earlier releases once this one has its copy', async () => {
+    const { appImagePath, cacheRootPath } = await makeFixture()
+    const copy = resolveAppImageExtractedRoot({ appImagePath, cacheRootPath })!
+    const earlier = join(dirname(copy.rootPath), 'a'.repeat(24))
+    await mkdir(join(earlier, 'resources', 'bin'), { recursive: true })
+    await writeFile(join(earlier, 'resources', 'bin', 'orca-ide'), '', { mode: 0o755 })
+
+    const started = preExtraction.startAppImageCopyPreExtraction({
+      appImagePath,
+      cacheRootPath,
+      probeCache: acceptCache,
+      runExtract: async (_path, cwd) => writePayload(cwd),
+      log: () => {}
+    })
+
+    expect(await started).toBe(true)
+    await vi.waitFor(() => expect(existsSync(earlier)).toBe(false))
+    expect(existsSync(copy.payloadLauncherPath)).toBe(true)
+  })
+
+  it('drops idle earlier copies at a launch that already has its copy', async () => {
+    const { appImagePath, cacheRootPath } = await makeFixture()
+    const copy = resolveAppImageExtractedRoot({ appImagePath, cacheRootPath })!
+    await mkdir(join(copy.rootPath, 'resources', 'bin'), { recursive: true })
+    await writeFile(copy.payloadLauncherPath, '', { mode: 0o755 })
+    const earlier = join(dirname(copy.rootPath), 'b'.repeat(24))
+    await mkdir(join(earlier, 'resources', 'bin'), { recursive: true })
+
+    expect(preExtraction.startAppImageCopyPreExtraction({ appImagePath, cacheRootPath })).toBeNull()
+    await vi.waitFor(() => expect(existsSync(earlier)).toBe(false))
+    expect(existsSync(copy.payloadLauncherPath)).toBe(true)
   })
 
   it('logs a cache it cannot use and never extracts into it', async () => {

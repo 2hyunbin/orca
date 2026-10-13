@@ -17,6 +17,7 @@ import {
   stageAppImageExtractedRoot,
   type AppImageExtractRunner
 } from './appimage-extracted-root'
+import { pruneAppImageExtractedRoots } from './appimage-extraction-pruning'
 import { leaseAppImageGenerationForCurrentProcess } from './appimage-generation-lease'
 import { withAppImageRegistrationLock } from './appimage-registration-lock'
 import { probeAppImageCache } from './appimage-serve-preparation'
@@ -52,10 +53,20 @@ export function startAppImageCopyPreExtraction(
     return currentCopy
   }
   const root = resolveAppImageExtractedRoot({ ...options, appImagePath })
-  if (!root || isAppImageExtractionComplete(root)) {
+  if (!root) {
+    return null
+  }
+  if (isAppImageExtractionComplete(root)) {
+    void pruneIdleGenerations(root.rootPath, { ...options, appImagePath })
     return null
   }
   currentCopy = preExtract({ ...options, appImagePath }, 'this AppImage')
+  // Why after, not inside: a daemon may be waiting on the copy, and must not wait on the prune too.
+  void currentCopy.then(async (ready) => {
+    if (ready) {
+      await pruneIdleGenerations(root.rootPath, { ...options, appImagePath })
+    }
+  })
   return currentCopy
 }
 
@@ -161,6 +172,21 @@ async function preExtract(
   } catch (error) {
     log(`[appimage-copy] Could not unpack ${subject}: ${describe(error)}`)
     return false
+  }
+}
+
+/** Without this, a desktop that never registers the CLI keeps every release's copy it unpacked. */
+async function pruneIdleGenerations(
+  keepRootPath: string,
+  options: AppImageCopyPreExtractionOptions & { appImagePath: string }
+): Promise<void> {
+  const log = options.log ?? ((line: string) => console.log(line))
+  try {
+    await withAppImageRegistrationLock(resolveAppImageCacheRootPath(options), () =>
+      pruneAppImageExtractedRoots(keepRootPath)
+    )
+  } catch (error) {
+    log(`[appimage-copy] Could not prune older AppImage copies: ${describe(error)}`)
   }
 }
 
