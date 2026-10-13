@@ -203,6 +203,26 @@ export class OrcaRuntimeWithGetRuntimeId extends OrcaRuntimeWithHasExactPersiste
     this.workspaceSessions.setForWorktree(worktreeId, session)
   }
 
+  /**
+   * Applies a change to a worktree's saved partition, or to the partition named. The one main-side
+   * writer of a windowless host's layout; it moves onto the runtime's layout command channel (C1).
+   */
+  protected applyWorkspaceSessionChange(
+    worktreeId: string,
+    change: (
+      hostId: ExecutionHostId,
+      session: WorkspaceSessionState
+    ) => WorkspaceSessionState | null,
+    partitionHostId?: ExecutionHostId
+  ): void {
+    const hostId = partitionHostId ?? this.workspaceSessions.tryGetHostId(worktreeId)
+    const session = hostId ? this.store?.getWorkspaceSession?.(hostId) : null
+    const next = session ? change(hostId, session) : null
+    if (next && hostId) {
+      this.store?.setWorkspaceSession?.(next, hostId)
+    }
+  }
+
   protected getKnownWorkspaceSessionWorktreeIds(): Set<string> {
     return this.workspaceSessions.getKnownWorktreeIds()
   }

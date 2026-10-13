@@ -144,11 +144,10 @@ export class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWi
       throw new Error('tab_not_found')
     }
     if (this.isWindowlessSessionTabs()) {
-      this.setWorkspaceSessionForWorktree(
-        worktreeId,
+      this.applyWorkspaceSessionChange(worktreeId, (hostId, session) =>
         withMovedSessionTab(
-          this.getWorkspaceSessionHostIdForWorktree(worktreeId),
-          this.getWorkspaceSessionForWorktree(worktreeId),
+          hostId,
+          session,
           worktreeId,
           this.toMobileSessionTabsResult(snapshot),
           move

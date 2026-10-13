@@ -22,8 +22,6 @@ import {
   type SavedAgentSessionTab
 } from './agent-session-tab-layout'
 import { structuredSessionTabRetired } from './structured-worker-custody'
-import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import type { ExecutionHostId } from '../../shared/execution-host'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
@@ -326,24 +324,15 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
 
   // A window saves its own layout whole, chat tabs included; only a host with none saves them here.
   private saveWindowlessAgentSessionTabLayout(
-    worktreeId: string,
-    change: (
-      hostId: ExecutionHostId,
-      session: WorkspaceSessionState
-    ) => WorkspaceSessionState | null,
-    /** The partition to edit; the worktree's own when unnamed. */
-    partitionHostId?: ExecutionHostId
+    ...args: Parameters<
+      OrcaRuntimeWithCloseStructuredAgentSessionTab['applyWorkspaceSessionChange']
+    >
   ): void {
     if (this.getAvailableAuthoritativeWindow()) {
       return
     }
     try {
-      const hostId = partitionHostId ?? this.getWorkspaceSessionHostIdForWorktree(worktreeId)
-      const session = this.store?.getWorkspaceSession?.(hostId)
-      const next = session ? change(hostId, session) : null
-      if (next) {
-        this.store.setWorkspaceSession(next, hostId)
-      }
+      this.applyWorkspaceSessionChange(...args)
     } catch (error) {
       // The chat itself opened or closed; a layout that cannot be written must not undo that.
       console.warn('[structured-agent-session] could not save a chat tab in the layout:', error)

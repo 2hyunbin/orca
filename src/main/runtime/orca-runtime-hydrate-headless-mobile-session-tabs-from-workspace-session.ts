@@ -323,18 +323,9 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
 
   /** Saves a listed row's tab as the one shown, as a window saves a user's selection. */
   protected saveWindowlessTabSelection(worktreeId: string, rowId: string): void {
-    const session = this.getWorkspaceSessionForWorktree(worktreeId)
-    const next = session
-      ? withSavedTabSelection(
-          this.getWorkspaceSessionHostIdForWorktree(worktreeId),
-          session,
-          worktreeId,
-          rowId
-        )
-      : null
-    if (next) {
-      this.setWorkspaceSessionForWorktree(worktreeId, next)
-    }
+    this.applyWorkspaceSessionChange(worktreeId, (hostId, session) =>
+      withSavedTabSelection(hostId, session, worktreeId, rowId)
+    )
   }
 
   /** No renderer is attached to publish its own list (a headless host's graph is not one). */
