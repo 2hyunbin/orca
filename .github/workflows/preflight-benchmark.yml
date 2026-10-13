@@ -1,105 +1,2024 @@
-name: Preflight comparison
-on:
-  pull_request:
-    paths:
-      - .github/workflows/preflight-benchmark.yml
-      - config/scripts/benchmark-preflight-*.mjs
-      - config/scripts/preflight-benchmark-command.mjs
-  workflow_dispatch:
+name: Frozen preflight tail performance replay
+'on':
+  workflow_dispatch: null
 permissions:
   contents: read
-concurrency:
-  group: preflight-comparison-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 env:
   ORCA_BACKGROUND_LAUNCH: '1'
 jobs:
-  compilers:
+  baseline-0:
+    name: baseline-0
+    if: always()
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/install-node-dependencies
-        with:
-          native-runtime: none
-          node-version: '24'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.3
-      - name: Compare native and Bun typechecking
-        run: node config/scripts/benchmark-preflight-compilers.mjs
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: preflight-compilers
-          path: .build/preflight-benchmark/
-          retention-days: 30
-  static-analysis:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 50
+        persist-credentials: false
+        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' != ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' == ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-dependency-path: 'pnpm-lock.yaml
+
+          mobile/pnpm-lock.yaml
+
+          '
+    - name: Set up Bun for preflight checks
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.4.3
+    - name: Select the measured downloader
+      run: 'node --input-type=module - <<''JS''
+
+        import { writeFileSync } from ''node:fs''
+
+        writeFileSync("config/scripts/pinned-node-downloads.mjs", "// Hash-verified downloads of the pinned Node''s
+        build inputs (headers, node.lib) and executable.\nimport { chmodSync, copyFileSync, existsSync, mkdirSync,
+        rmSync } from ''node:fs''\nimport { dirname, join, resolve } from ''node:path''\nimport {\n  NODE_RUNTIME_PIN,\n  isWindowsServerTarget,\n  nodeRuntimeAsset,\n  nodeRuntimeExecutablePath,\n  nodeRuntimeHeadersUrl,\n  nodeRuntimeReleaseUrl\n}
+        from ''../../src/shared/node-runtime-pin.ts''\nimport { isDirectInvocation } from ''./script-entry-detection.mjs''\nimport
+        { download, extract, sha256File } from ''./update-node-runtime-pin.mjs''\n\nconst ROOT = resolve(import.meta.dirname,
+        ''..'', ''..'')\n\nexport function pinnedNodeCacheDir(env = process.env) {\n  return env.ORCA_NODE_RUNTIME_CACHE_DIR
+        || join(ROOT, ''out'', ''node-runtime-cache'')\n}\n\n/** Reuses a cached file only when it still hashes
+        to the pin; anything else is re-fetched. */\nexport async function fetchPinnedFile({ url, destination, sha256
+        }) {\n  if (existsSync(destination) && (await sha256File(destination)) === sha256) {\n    return destination\n  }\n  mkdirSync(join(destination,
+        ''..''), { recursive: true })\n  const partial = `${destination}.partial-${process.pid}`\n  await download(url,
+        partial)\n  const actual = await sha256File(partial)\n  if (actual !== sha256) {\n    rmSync(partial, {
+        force: true })\n    throw new Error(`${url} hashed ${actual}, but the Node runtime pin expects ${sha256}`)\n  }\n  rmSync(destination,
+        { force: true })\n  copyFileSync(partial, destination)\n  rmSync(partial, { force: true })\n  return destination\n}\n\n/**\n
+        * A node-gyp `--nodedir` for `target`, built from the pinned headers tarball.\n *\n * Why per target: on
+        Windows node-gyp links `<nodedir>/Release/node.lib`, which differs by\n * arch and is not in the headers
+        tarball.\n */\nexport async function preparePinnedNodeDir({ target, workDir, cacheDir = pinnedNodeCacheDir()
+        }) {\n  const { version, headers } = NODE_RUNTIME_PIN\n  const tarball = await fetchPinnedFile({\n    url:
+        nodeRuntimeHeadersUrl(),\n    destination: join(cacheDir, headers.file),\n    sha256: headers.sha256\n  })\n  rmSync(workDir,
+        { recursive: true, force: true })\n  extract(tarball, workDir, `node-v${version}/include`)\n  const nodeDir
+        = join(workDir, `node-v${version}`)\n  if (isWindowsServerTarget(target)) {\n    const lib = NODE_RUNTIME_PIN.windowsImportLibs[target]\n    const
+        cached = await fetchPinnedFile({\n      url: nodeRuntimeReleaseUrl(''official'', lib.file, version),\n      destination:
+        join(cacheDir, `node-v${version}-${lib.file.replace(''/'', ''-'')}`),\n      sha256: lib.sha256\n    })\n    mkdirSync(join(nodeDir,
+        ''Release''), { recursive: true })\n    copyFileSync(cached, join(nodeDir, ''Release'', ''node.lib''))\n  }\n  return
+        nodeDir\n}\n\n/** The pinned `node` for a default or compat `target`, verified against both hashes. */\nexport
+        async function ensurePinnedNodeExecutable({ target, cacheDir = pinnedNodeCacheDir() }) {\n  const asset
+        = nodeRuntimeAsset(target)\n  if (!asset) {\n    throw new Error(`The Node runtime pin has no asset for
+        ${target}`)\n  }\n  const member = nodeRuntimeExecutablePath(target, asset.archive)\n  const executable
+        = join(cacheDir, member)\n  if (existsSync(executable) && (await sha256File(executable)) === asset.executableSha256)
+        {\n    return executable\n  }\n  const archive = await fetchPinnedFile({\n    url: nodeRuntimeReleaseUrl(asset.source,
+        asset.archive),\n    destination: join(cacheDir, asset.archive),\n    sha256: asset.archiveSha256\n  })\n  extract(archive,
+        cacheDir, member)\n  const actual = await sha256File(executable)\n  if (actual !== asset.executableSha256)
+        {\n    throw new Error(`${member} hashed ${actual}, but the pin expects ${asset.executableSha256}`)\n  }\n  if
+        (process.platform !== ''win32'') {\n    chmodSync(executable, 0o755)\n  }\n  return executable\n}\n\n//
+        Usage: node config/scripts/pinned-node-downloads.mjs <target>... \u2014 warms the cache before packaging.\nif
+        (isDirectInvocation(import.meta.url, process.argv[1])) {\n  for (const target of process.argv.slice(2))
+        {\n    console.log(await ensurePinnedNodeExecutable({ target }))\n  }\n}\n\nexport async function copyPinnedNodeExecutable(source,
+        destination, sha256) {\n  if (!existsSync(source) || (await sha256File(source)) !== sha256) {\n    return
+        false\n  }\n  mkdirSync(dirname(destination), { recursive: true })\n  copyFileSync(source, destination)\n  if
+        ((await sha256File(destination)) !== sha256) {\n    rmSync(destination, { force: true })\n    throw new
+        Error(`Node executable changed while copying ${source}`)\n  }\n  if (process.platform !== ''win32'') {\n    chmodSync(destination,
+        0o755)\n  }\n  return true\n}\n")
+
+        JS'
+    - name: Check process-host imports
+      if: '!cancelled()'
+      id: process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:process-host-imports
+
+        '
+    - name: Check main-process sync launches
+      if: '!cancelled()'
+      id: main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: Lint
+      if: '!cancelled()'
+      id: root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: Reject low-evidence patterns
+      if: '''true'' == ''true'''
+      run: 'node config/scripts/sync-anti-slop-plugin.mjs
+
+        bun --smol node_modules/oxlint/bin/oxlint --config config/oxlint-anti-slop.json src config tests mobile
+        --deny-warnings
+
+        '
+    - wait: root-lint
+    - name: Enforce focused code-quality plugins
+      if: '!cancelled()'
+      id: native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: Enforce type-aware code-quality baseline
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: Enforce changed-code quality
+      if: '!cancelled()'
+      id: changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+
+        '
+    - name: Enforce React Doctor on changed lines
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+    - wait: changed-code-quality
+    - name: Typecheck
+      if: '!cancelled()'
+      id: typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: Check Zustand selector fan-out budget
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: Check reliability gate manifest
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: Enforce dead design-system classes
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: Check VM runtime rollback compatibility
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: Enforce max-lines ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: Enforce ts-nocheck ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: Enforce runtime Electron-import ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: Enforce focus-read ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: Enforce layout-writer ratchets
+      if: '''true'' == ''true'''
+      run: pnpm run check:layout-writer-ratchets
+    - name: Check compatibility-folder imports
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: Check Node runtime pin
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: Verify localization extraction
+      if: '!cancelled()'
+      id: localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
+        \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Boot orcad and round-trip a terminal
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\n\
+        else\n  pnpm run smoke:orcad-terminal\nfi\n"
+    - name: Verify the generated RPC params catalog
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: Verify the generated ACP protocol schema
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: Verify bundled skill guides
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: Verify skill freshness manifest
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: Verify localization catalogs
+      if: '!cancelled()'
+      id: localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: Verify localization coverage
+      if: '''true'' == ''true'''
+      run: pnpm run verify:localization-coverage
+    - wait:
+      - localization-catalogs
+      - localization-extraction
+    - name: Guard against project-owned .d.ts in preload/shared
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: Check feature wall asset budget
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: Verify macOS entitlements
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: Plan unit selection
+      if: '!cancelled()'
+      id: unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        cat > "$RUNNER_TEMP/tail-replay-event.json" <<''EVENT''
+
+        {"pull_request": {"number": 28218, "draft": false, "base": {"sha": "099bb76501f82184820a1f236409e2eacbebb8ef"},
+        "head": {"sha": "3625e2d070f145aba4cbe6b5f818a44b189b55cf"}}}
+
+        EVENT
+
+        GITHUB_EVENT_PATH="$RUNNER_TEMP/tail-replay-event.json" GITHUB_EVENT_NAME=pull_request node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: typecheck
+    - wait: process-host-imports
+    - wait: main-sync-spawn-ratchet
+    - wait: unit-plan
+    - uses: actions/upload-artifact@v7
+      if: '''true'' == ''true'''
+      with:
+        name: tail-replay-baseline-0
+        path: ci-shards/unit-selection.json
+        retention-days: 14
+    - name: Set up Bun for Mobile CI tool tests
+      if: '''false'' == ''true'''
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version-file: config/.bun-version
+    - name: Test Mobile CI tools and runtime routing
+      if: '''false'' == ''true'''
+      env:
+        ORCA_BACKGROUND_LAUNCH: '1'
+        ORCA_BALANCE_UNIT_SHARDS: '1'
+      run: node config/scripts/run-vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 --isolate --retry=0
+        --bail=0 config/scripts/mobile-release-check-scope.test.mjs config/scripts/mobile-test-change-scope.test.mjs
+        config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
+        config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
+    timeout-minutes: 15
+  candidate-1:
+    name: candidate-1
+    needs:
+    - baseline-0
+    if: always()
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/install-node-dependencies
-        with:
-          native-runtime: none
-          node-version: '24'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.3
-      - name: Compare anti-slop patch and script runtimes
-        run: node config/scripts/benchmark-preflight-static-analysis.mjs
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: preflight-static-analysis
-          path: .build/preflight-benchmark/
-          retention-days: 30
-  compatibility-imports:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 50
+        persist-credentials: false
+        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' != ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' == ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-dependency-path: 'pnpm-lock.yaml
+
+          mobile/pnpm-lock.yaml
+
+          '
+    - name: Set up Bun for preflight checks
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.4.3
+    - name: Select the measured downloader
+      run: 'node --input-type=module - <<''JS''
+
+        import { writeFileSync } from ''node:fs''
+
+        writeFileSync("config/scripts/pinned-node-downloads.mjs", "// Hash-verified downloads of the pinned Node''s
+        build inputs (headers, node.lib) and executable.\nimport { chmodSync, copyFileSync, existsSync, mkdirSync,
+        rmSync } from ''node:fs''\nimport { dirname, join, resolve } from ''node:path''\nimport {\n  NODE_RUNTIME_PIN,\n  isWindowsServerTarget,\n  nodeRuntimeAsset,\n  nodeRuntimeExecutablePath,\n  nodeRuntimeHeadersUrl,\n  nodeRuntimeReleaseUrl\n}
+        from ''../../src/shared/node-runtime-pin.ts''\nimport { isDirectInvocation } from ''./script-entry-detection.mjs''\nimport
+        { download, extract, sha256File } from ''./update-node-runtime-pin.mjs''\n\nconst ROOT = resolve(import.meta.dirname,
+        ''..'', ''..'')\n\nexport function pinnedNodeCacheDir(env = process.env) {\n  return env.ORCA_NODE_RUNTIME_CACHE_DIR
+        || join(ROOT, ''out'', ''node-runtime-cache'')\n}\n\nexport async function copyPinnedNodeExecutable(source,
+        destination, sha256) {\n  if (!existsSync(source) || (await sha256File(source)) !== sha256) {\n    return
+        false\n  }\n  mkdirSync(dirname(destination), { recursive: true })\n  copyFileSync(source, destination)\n  if
+        ((await sha256File(destination)) !== sha256) {\n    rmSync(destination, { force: true })\n    throw new
+        Error(`Node executable changed while copying ${source}`)\n  }\n  if (process.platform !== ''win32'') {\n    chmodSync(destination,
+        0o755)\n  }\n  return true\n}\n\n/** Reuses a cached file only when it still hashes to the pin; anything
+        else is re-fetched. */\nexport async function fetchPinnedFile({ url, destination, sha256 }) {\n  if (existsSync(destination)
+        && (await sha256File(destination)) === sha256) {\n    return destination\n  }\n  mkdirSync(join(destination,
+        ''..''), { recursive: true })\n  const partial = `${destination}.partial-${process.pid}`\n  await download(url,
+        partial)\n  const actual = await sha256File(partial)\n  if (actual !== sha256) {\n    rmSync(partial, {
+        force: true })\n    throw new Error(`${url} hashed ${actual}, but the Node runtime pin expects ${sha256}`)\n  }\n  rmSync(destination,
+        { force: true })\n  copyFileSync(partial, destination)\n  rmSync(partial, { force: true })\n  return destination\n}\n\n/**\n
+        * A node-gyp `--nodedir` for `target`, built from the pinned headers tarball.\n *\n * Why per target: on
+        Windows node-gyp links `<nodedir>/Release/node.lib`, which differs by\n * arch and is not in the headers
+        tarball.\n */\nexport async function preparePinnedNodeDir({ target, workDir, cacheDir = pinnedNodeCacheDir()
+        }) {\n  const { version, headers } = NODE_RUNTIME_PIN\n  const tarball = await fetchPinnedFile({\n    url:
+        nodeRuntimeHeadersUrl(),\n    destination: join(cacheDir, headers.file),\n    sha256: headers.sha256\n  })\n  rmSync(workDir,
+        { recursive: true, force: true })\n  extract(tarball, workDir, `node-v${version}/include`)\n  const nodeDir
+        = join(workDir, `node-v${version}`)\n  if (isWindowsServerTarget(target)) {\n    const lib = NODE_RUNTIME_PIN.windowsImportLibs[target]\n    const
+        cached = await fetchPinnedFile({\n      url: nodeRuntimeReleaseUrl(''official'', lib.file, version),\n      destination:
+        join(cacheDir, `node-v${version}-${lib.file.replace(''/'', ''-'')}`),\n      sha256: lib.sha256\n    })\n    mkdirSync(join(nodeDir,
+        ''Release''), { recursive: true })\n    copyFileSync(cached, join(nodeDir, ''Release'', ''node.lib''))\n  }\n  return
+        nodeDir\n}\n\n/** The pinned `node` for a default or compat `target`, verified against both hashes. */\nexport
+        async function ensurePinnedNodeExecutable({ target, cacheDir = pinnedNodeCacheDir() }) {\n  const asset
+        = nodeRuntimeAsset(target)\n  if (!asset) {\n    throw new Error(`The Node runtime pin has no asset for
+        ${target}`)\n  }\n  const member = nodeRuntimeExecutablePath(target, asset.archive)\n  const executable
+        = join(cacheDir, member)\n  if (existsSync(executable) && (await sha256File(executable)) === asset.executableSha256)
+        {\n    return executable\n  }\n  // setup-node often already supplies these exact bytes; version equality
+        alone is insufficient.\n  if (await copyPinnedNodeExecutable(process.execPath, executable, asset.executableSha256))
+        {\n    return executable\n  }\n  const archive = await fetchPinnedFile({\n    url: nodeRuntimeReleaseUrl(asset.source,
+        asset.archive),\n    destination: join(cacheDir, asset.archive),\n    sha256: asset.archiveSha256\n  })\n  extract(archive,
+        cacheDir, member)\n  const actual = await sha256File(executable)\n  if (actual !== asset.executableSha256)
+        {\n    throw new Error(`${member} hashed ${actual}, but the pin expects ${asset.executableSha256}`)\n  }\n  if
+        (process.platform !== ''win32'') {\n    chmodSync(executable, 0o755)\n  }\n  return executable\n}\n\n//
+        Usage: node config/scripts/pinned-node-downloads.mjs <target>... \u2014 warms the cache before packaging.\nif
+        (isDirectInvocation(import.meta.url, process.argv[1])) {\n  for (const target of process.argv.slice(2))
+        {\n    console.log(await ensurePinnedNodeExecutable({ target }))\n  }\n}\n")
+
+        JS'
+    - name: Check process-host imports
+      if: '!cancelled()'
+      id: process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:process-host-imports
+
+        '
+    - name: Check main-process sync launches
+      if: '!cancelled()'
+      id: main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: Lint
+      if: '!cancelled()'
+      id: root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: Reject low-evidence patterns
+      if: '''true'' == ''true'''
+      run: 'node config/scripts/sync-anti-slop-plugin.mjs
+
+        bun --smol node_modules/oxlint/bin/oxlint --config config/oxlint-anti-slop.json src config tests mobile
+        --deny-warnings
+
+        '
+    - wait: root-lint
+    - name: Enforce focused code-quality plugins
+      if: '!cancelled()'
+      id: native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: Enforce type-aware code-quality baseline
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: Enforce changed-code quality
+      if: '!cancelled()'
+      id: changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+
+        '
+    - name: Enforce React Doctor on changed lines
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+    - wait: changed-code-quality
+    - name: Typecheck
+      if: '!cancelled()'
+      id: typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/run-typecheck-projects-in-parallel.mjs --compiler=bun --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: Boot orcad and round-trip a terminal
+      if: '!cancelled()'
+      id: orcad-terminal-smoke
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
+        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
+        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
+        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
+        \ orcad\nfi\n"
+    - name: Check Zustand selector fan-out budget
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: Check reliability gate manifest
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: Enforce dead design-system classes
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: Check VM runtime rollback compatibility
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: Enforce max-lines ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: Enforce ts-nocheck ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: Enforce runtime Electron-import ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: Enforce focus-read ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: Enforce layout-writer ratchets
+      if: '''true'' == ''true'''
+      run: pnpm run check:layout-writer-ratchets
+    - name: Check compatibility-folder imports
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: Check Node runtime pin
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: Verify localization extraction
+      if: '!cancelled()'
+      id: localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
+        \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Verify the generated RPC params catalog
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: Verify the generated ACP protocol schema
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: Verify bundled skill guides
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: Verify skill freshness manifest
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: Verify localization catalogs
+      if: '!cancelled()'
+      id: localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: Verify localization coverage
+      if: '''true'' == ''true'''
+      run: pnpm run verify:localization-coverage
+    - wait:
+      - localization-catalogs
+      - localization-extraction
+      - orcad-terminal-smoke
+    - name: Guard against project-owned .d.ts in preload/shared
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: Check feature wall asset budget
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: Verify macOS entitlements
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: Plan unit selection
+      if: '!cancelled()'
+      id: unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        cat > "$RUNNER_TEMP/tail-replay-event.json" <<''EVENT''
+
+        {"pull_request": {"number": 28218, "draft": false, "base": {"sha": "099bb76501f82184820a1f236409e2eacbebb8ef"},
+        "head": {"sha": "3625e2d070f145aba4cbe6b5f818a44b189b55cf"}}}
+
+        EVENT
+
+        GITHUB_EVENT_PATH="$RUNNER_TEMP/tail-replay-event.json" GITHUB_EVENT_NAME=pull_request node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: typecheck
+    - wait: process-host-imports
+    - wait: main-sync-spawn-ratchet
+    - wait: unit-plan
+    - uses: actions/upload-artifact@v7
+      if: '''true'' == ''true'''
+      with:
+        name: tail-replay-candidate-1
+        path: ci-shards/unit-selection.json
+        retention-days: 14
+    - name: Set up Bun for Mobile CI tool tests
+      if: '''false'' == ''true'''
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version-file: config/.bun-version
+    - name: Test Mobile CI tools and runtime routing
+      if: '''false'' == ''true'''
+      env:
+        ORCA_BACKGROUND_LAUNCH: '1'
+        ORCA_BALANCE_UNIT_SHARDS: '1'
+      run: node config/scripts/run-vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 --isolate --retry=0
+        --bail=0 config/scripts/mobile-release-check-scope.test.mjs config/scripts/mobile-test-change-scope.test.mjs
+        config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
+        config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
+    timeout-minutes: 15
+  candidate-2:
+    name: candidate-2
+    needs:
+    - candidate-1
+    if: always()
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-      - uses: ./.github/actions/install-node-dependencies
-        with:
-          native-runtime: none
-          node-version: '24'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.3
-      - name: Compare compatibility-import scan and runtimes
-        run: node config/scripts/benchmark-preflight-compat-boundary.mjs
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: preflight-compat-boundary
-          path: .build/preflight-benchmark/
-          retention-days: 30
-  localization-extraction:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 50
+        persist-credentials: false
+        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' != ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' == ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-dependency-path: 'pnpm-lock.yaml
+
+          mobile/pnpm-lock.yaml
+
+          '
+    - name: Set up Bun for preflight checks
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.4.3
+    - name: Select the measured downloader
+      run: 'node --input-type=module - <<''JS''
+
+        import { writeFileSync } from ''node:fs''
+
+        writeFileSync("config/scripts/pinned-node-downloads.mjs", "// Hash-verified downloads of the pinned Node''s
+        build inputs (headers, node.lib) and executable.\nimport { chmodSync, copyFileSync, existsSync, mkdirSync,
+        rmSync } from ''node:fs''\nimport { dirname, join, resolve } from ''node:path''\nimport {\n  NODE_RUNTIME_PIN,\n  isWindowsServerTarget,\n  nodeRuntimeAsset,\n  nodeRuntimeExecutablePath,\n  nodeRuntimeHeadersUrl,\n  nodeRuntimeReleaseUrl\n}
+        from ''../../src/shared/node-runtime-pin.ts''\nimport { isDirectInvocation } from ''./script-entry-detection.mjs''\nimport
+        { download, extract, sha256File } from ''./update-node-runtime-pin.mjs''\n\nconst ROOT = resolve(import.meta.dirname,
+        ''..'', ''..'')\n\nexport function pinnedNodeCacheDir(env = process.env) {\n  return env.ORCA_NODE_RUNTIME_CACHE_DIR
+        || join(ROOT, ''out'', ''node-runtime-cache'')\n}\n\nexport async function copyPinnedNodeExecutable(source,
+        destination, sha256) {\n  if (!existsSync(source) || (await sha256File(source)) !== sha256) {\n    return
+        false\n  }\n  mkdirSync(dirname(destination), { recursive: true })\n  copyFileSync(source, destination)\n  if
+        ((await sha256File(destination)) !== sha256) {\n    rmSync(destination, { force: true })\n    throw new
+        Error(`Node executable changed while copying ${source}`)\n  }\n  if (process.platform !== ''win32'') {\n    chmodSync(destination,
+        0o755)\n  }\n  return true\n}\n\n/** Reuses a cached file only when it still hashes to the pin; anything
+        else is re-fetched. */\nexport async function fetchPinnedFile({ url, destination, sha256 }) {\n  if (existsSync(destination)
+        && (await sha256File(destination)) === sha256) {\n    return destination\n  }\n  mkdirSync(join(destination,
+        ''..''), { recursive: true })\n  const partial = `${destination}.partial-${process.pid}`\n  await download(url,
+        partial)\n  const actual = await sha256File(partial)\n  if (actual !== sha256) {\n    rmSync(partial, {
+        force: true })\n    throw new Error(`${url} hashed ${actual}, but the Node runtime pin expects ${sha256}`)\n  }\n  rmSync(destination,
+        { force: true })\n  copyFileSync(partial, destination)\n  rmSync(partial, { force: true })\n  return destination\n}\n\n/**\n
+        * A node-gyp `--nodedir` for `target`, built from the pinned headers tarball.\n *\n * Why per target: on
+        Windows node-gyp links `<nodedir>/Release/node.lib`, which differs by\n * arch and is not in the headers
+        tarball.\n */\nexport async function preparePinnedNodeDir({ target, workDir, cacheDir = pinnedNodeCacheDir()
+        }) {\n  const { version, headers } = NODE_RUNTIME_PIN\n  const tarball = await fetchPinnedFile({\n    url:
+        nodeRuntimeHeadersUrl(),\n    destination: join(cacheDir, headers.file),\n    sha256: headers.sha256\n  })\n  rmSync(workDir,
+        { recursive: true, force: true })\n  extract(tarball, workDir, `node-v${version}/include`)\n  const nodeDir
+        = join(workDir, `node-v${version}`)\n  if (isWindowsServerTarget(target)) {\n    const lib = NODE_RUNTIME_PIN.windowsImportLibs[target]\n    const
+        cached = await fetchPinnedFile({\n      url: nodeRuntimeReleaseUrl(''official'', lib.file, version),\n      destination:
+        join(cacheDir, `node-v${version}-${lib.file.replace(''/'', ''-'')}`),\n      sha256: lib.sha256\n    })\n    mkdirSync(join(nodeDir,
+        ''Release''), { recursive: true })\n    copyFileSync(cached, join(nodeDir, ''Release'', ''node.lib''))\n  }\n  return
+        nodeDir\n}\n\n/** The pinned `node` for a default or compat `target`, verified against both hashes. */\nexport
+        async function ensurePinnedNodeExecutable({ target, cacheDir = pinnedNodeCacheDir() }) {\n  const asset
+        = nodeRuntimeAsset(target)\n  if (!asset) {\n    throw new Error(`The Node runtime pin has no asset for
+        ${target}`)\n  }\n  const member = nodeRuntimeExecutablePath(target, asset.archive)\n  const executable
+        = join(cacheDir, member)\n  if (existsSync(executable) && (await sha256File(executable)) === asset.executableSha256)
+        {\n    return executable\n  }\n  // setup-node often already supplies these exact bytes; version equality
+        alone is insufficient.\n  if (await copyPinnedNodeExecutable(process.execPath, executable, asset.executableSha256))
+        {\n    return executable\n  }\n  const archive = await fetchPinnedFile({\n    url: nodeRuntimeReleaseUrl(asset.source,
+        asset.archive),\n    destination: join(cacheDir, asset.archive),\n    sha256: asset.archiveSha256\n  })\n  extract(archive,
+        cacheDir, member)\n  const actual = await sha256File(executable)\n  if (actual !== asset.executableSha256)
+        {\n    throw new Error(`${member} hashed ${actual}, but the pin expects ${asset.executableSha256}`)\n  }\n  if
+        (process.platform !== ''win32'') {\n    chmodSync(executable, 0o755)\n  }\n  return executable\n}\n\n//
+        Usage: node config/scripts/pinned-node-downloads.mjs <target>... \u2014 warms the cache before packaging.\nif
+        (isDirectInvocation(import.meta.url, process.argv[1])) {\n  for (const target of process.argv.slice(2))
+        {\n    console.log(await ensurePinnedNodeExecutable({ target }))\n  }\n}\n")
+
+        JS'
+    - name: Check process-host imports
+      if: '!cancelled()'
+      id: process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:process-host-imports
+
+        '
+    - name: Check main-process sync launches
+      if: '!cancelled()'
+      id: main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: Lint
+      if: '!cancelled()'
+      id: root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: Reject low-evidence patterns
+      if: '''true'' == ''true'''
+      run: 'node config/scripts/sync-anti-slop-plugin.mjs
+
+        bun --smol node_modules/oxlint/bin/oxlint --config config/oxlint-anti-slop.json src config tests mobile
+        --deny-warnings
+
+        '
+    - wait: root-lint
+    - name: Enforce focused code-quality plugins
+      if: '!cancelled()'
+      id: native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: Enforce type-aware code-quality baseline
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: Enforce changed-code quality
+      if: '!cancelled()'
+      id: changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+
+        '
+    - name: Enforce React Doctor on changed lines
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+    - wait: changed-code-quality
+    - name: Typecheck
+      if: '!cancelled()'
+      id: typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/run-typecheck-projects-in-parallel.mjs --compiler=bun --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: Boot orcad and round-trip a terminal
+      if: '!cancelled()'
+      id: orcad-terminal-smoke
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
+        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
+        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
+        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
+        \ orcad\nfi\n"
+    - name: Check Zustand selector fan-out budget
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: Check reliability gate manifest
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: Enforce dead design-system classes
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: Check VM runtime rollback compatibility
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: Enforce max-lines ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: Enforce ts-nocheck ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: Enforce runtime Electron-import ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: Enforce focus-read ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: Enforce layout-writer ratchets
+      if: '''true'' == ''true'''
+      run: pnpm run check:layout-writer-ratchets
+    - name: Check compatibility-folder imports
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: Check Node runtime pin
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: Verify localization extraction
+      if: '!cancelled()'
+      id: localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
+        \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Verify the generated RPC params catalog
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: Verify the generated ACP protocol schema
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: Verify bundled skill guides
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: Verify skill freshness manifest
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: Verify localization catalogs
+      if: '!cancelled()'
+      id: localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: Verify localization coverage
+      if: '''true'' == ''true'''
+      run: pnpm run verify:localization-coverage
+    - wait:
+      - localization-catalogs
+      - localization-extraction
+      - orcad-terminal-smoke
+    - name: Guard against project-owned .d.ts in preload/shared
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: Check feature wall asset budget
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: Verify macOS entitlements
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: Plan unit selection
+      if: '!cancelled()'
+      id: unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        cat > "$RUNNER_TEMP/tail-replay-event.json" <<''EVENT''
+
+        {"pull_request": {"number": 28218, "draft": false, "base": {"sha": "099bb76501f82184820a1f236409e2eacbebb8ef"},
+        "head": {"sha": "3625e2d070f145aba4cbe6b5f818a44b189b55cf"}}}
+
+        EVENT
+
+        GITHUB_EVENT_PATH="$RUNNER_TEMP/tail-replay-event.json" GITHUB_EVENT_NAME=pull_request node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: typecheck
+    - wait: process-host-imports
+    - wait: main-sync-spawn-ratchet
+    - wait: unit-plan
+    - uses: actions/upload-artifact@v7
+      if: '''true'' == ''true'''
+      with:
+        name: tail-replay-candidate-2
+        path: ci-shards/unit-selection.json
+        retention-days: 14
+    - name: Set up Bun for Mobile CI tool tests
+      if: '''false'' == ''true'''
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version-file: config/.bun-version
+    - name: Test Mobile CI tools and runtime routing
+      if: '''false'' == ''true'''
+      env:
+        ORCA_BACKGROUND_LAUNCH: '1'
+        ORCA_BALANCE_UNIT_SHARDS: '1'
+      run: node config/scripts/run-vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 --isolate --retry=0
+        --bail=0 config/scripts/mobile-release-check-scope.test.mjs config/scripts/mobile-test-change-scope.test.mjs
+        config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
+        config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
+    timeout-minutes: 15
+  baseline-3:
+    name: baseline-3
+    needs:
+    - candidate-2
+    if: always()
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/install-node-dependencies
-        with:
-          native-runtime: none
-          node-version: '24'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.3
-      - name: Compare localization extraction runtimes and complete catalogs
-        run: node config/scripts/benchmark-preflight-localization-extraction.mjs
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: preflight-localization-extraction
-          path: .build/preflight-benchmark/
-          retention-days: 30
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 50
+        persist-credentials: false
+        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' != ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' == ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-dependency-path: 'pnpm-lock.yaml
+
+          mobile/pnpm-lock.yaml
+
+          '
+    - name: Set up Bun for preflight checks
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.4.3
+    - name: Select the measured downloader
+      run: 'node --input-type=module - <<''JS''
+
+        import { writeFileSync } from ''node:fs''
+
+        writeFileSync("config/scripts/pinned-node-downloads.mjs", "// Hash-verified downloads of the pinned Node''s
+        build inputs (headers, node.lib) and executable.\nimport { chmodSync, copyFileSync, existsSync, mkdirSync,
+        rmSync } from ''node:fs''\nimport { dirname, join, resolve } from ''node:path''\nimport {\n  NODE_RUNTIME_PIN,\n  isWindowsServerTarget,\n  nodeRuntimeAsset,\n  nodeRuntimeExecutablePath,\n  nodeRuntimeHeadersUrl,\n  nodeRuntimeReleaseUrl\n}
+        from ''../../src/shared/node-runtime-pin.ts''\nimport { isDirectInvocation } from ''./script-entry-detection.mjs''\nimport
+        { download, extract, sha256File } from ''./update-node-runtime-pin.mjs''\n\nconst ROOT = resolve(import.meta.dirname,
+        ''..'', ''..'')\n\nexport function pinnedNodeCacheDir(env = process.env) {\n  return env.ORCA_NODE_RUNTIME_CACHE_DIR
+        || join(ROOT, ''out'', ''node-runtime-cache'')\n}\n\n/** Reuses a cached file only when it still hashes
+        to the pin; anything else is re-fetched. */\nexport async function fetchPinnedFile({ url, destination, sha256
+        }) {\n  if (existsSync(destination) && (await sha256File(destination)) === sha256) {\n    return destination\n  }\n  mkdirSync(join(destination,
+        ''..''), { recursive: true })\n  const partial = `${destination}.partial-${process.pid}`\n  await download(url,
+        partial)\n  const actual = await sha256File(partial)\n  if (actual !== sha256) {\n    rmSync(partial, {
+        force: true })\n    throw new Error(`${url} hashed ${actual}, but the Node runtime pin expects ${sha256}`)\n  }\n  rmSync(destination,
+        { force: true })\n  copyFileSync(partial, destination)\n  rmSync(partial, { force: true })\n  return destination\n}\n\n/**\n
+        * A node-gyp `--nodedir` for `target`, built from the pinned headers tarball.\n *\n * Why per target: on
+        Windows node-gyp links `<nodedir>/Release/node.lib`, which differs by\n * arch and is not in the headers
+        tarball.\n */\nexport async function preparePinnedNodeDir({ target, workDir, cacheDir = pinnedNodeCacheDir()
+        }) {\n  const { version, headers } = NODE_RUNTIME_PIN\n  const tarball = await fetchPinnedFile({\n    url:
+        nodeRuntimeHeadersUrl(),\n    destination: join(cacheDir, headers.file),\n    sha256: headers.sha256\n  })\n  rmSync(workDir,
+        { recursive: true, force: true })\n  extract(tarball, workDir, `node-v${version}/include`)\n  const nodeDir
+        = join(workDir, `node-v${version}`)\n  if (isWindowsServerTarget(target)) {\n    const lib = NODE_RUNTIME_PIN.windowsImportLibs[target]\n    const
+        cached = await fetchPinnedFile({\n      url: nodeRuntimeReleaseUrl(''official'', lib.file, version),\n      destination:
+        join(cacheDir, `node-v${version}-${lib.file.replace(''/'', ''-'')}`),\n      sha256: lib.sha256\n    })\n    mkdirSync(join(nodeDir,
+        ''Release''), { recursive: true })\n    copyFileSync(cached, join(nodeDir, ''Release'', ''node.lib''))\n  }\n  return
+        nodeDir\n}\n\n/** The pinned `node` for a default or compat `target`, verified against both hashes. */\nexport
+        async function ensurePinnedNodeExecutable({ target, cacheDir = pinnedNodeCacheDir() }) {\n  const asset
+        = nodeRuntimeAsset(target)\n  if (!asset) {\n    throw new Error(`The Node runtime pin has no asset for
+        ${target}`)\n  }\n  const member = nodeRuntimeExecutablePath(target, asset.archive)\n  const executable
+        = join(cacheDir, member)\n  if (existsSync(executable) && (await sha256File(executable)) === asset.executableSha256)
+        {\n    return executable\n  }\n  const archive = await fetchPinnedFile({\n    url: nodeRuntimeReleaseUrl(asset.source,
+        asset.archive),\n    destination: join(cacheDir, asset.archive),\n    sha256: asset.archiveSha256\n  })\n  extract(archive,
+        cacheDir, member)\n  const actual = await sha256File(executable)\n  if (actual !== asset.executableSha256)
+        {\n    throw new Error(`${member} hashed ${actual}, but the pin expects ${asset.executableSha256}`)\n  }\n  if
+        (process.platform !== ''win32'') {\n    chmodSync(executable, 0o755)\n  }\n  return executable\n}\n\n//
+        Usage: node config/scripts/pinned-node-downloads.mjs <target>... \u2014 warms the cache before packaging.\nif
+        (isDirectInvocation(import.meta.url, process.argv[1])) {\n  for (const target of process.argv.slice(2))
+        {\n    console.log(await ensurePinnedNodeExecutable({ target }))\n  }\n}\n\nexport async function copyPinnedNodeExecutable(source,
+        destination, sha256) {\n  if (!existsSync(source) || (await sha256File(source)) !== sha256) {\n    return
+        false\n  }\n  mkdirSync(dirname(destination), { recursive: true })\n  copyFileSync(source, destination)\n  if
+        ((await sha256File(destination)) !== sha256) {\n    rmSync(destination, { force: true })\n    throw new
+        Error(`Node executable changed while copying ${source}`)\n  }\n  if (process.platform !== ''win32'') {\n    chmodSync(destination,
+        0o755)\n  }\n  return true\n}\n")
+
+        JS'
+    - name: Check process-host imports
+      if: '!cancelled()'
+      id: process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:process-host-imports
+
+        '
+    - name: Check main-process sync launches
+      if: '!cancelled()'
+      id: main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: Lint
+      if: '!cancelled()'
+      id: root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: Reject low-evidence patterns
+      if: '''true'' == ''true'''
+      run: 'node config/scripts/sync-anti-slop-plugin.mjs
+
+        bun --smol node_modules/oxlint/bin/oxlint --config config/oxlint-anti-slop.json src config tests mobile
+        --deny-warnings
+
+        '
+    - wait: root-lint
+    - name: Enforce focused code-quality plugins
+      if: '!cancelled()'
+      id: native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: Enforce type-aware code-quality baseline
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: Enforce changed-code quality
+      if: '!cancelled()'
+      id: changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+
+        '
+    - name: Enforce React Doctor on changed lines
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+    - wait: changed-code-quality
+    - name: Typecheck
+      if: '!cancelled()'
+      id: typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: Check Zustand selector fan-out budget
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: Check reliability gate manifest
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: Enforce dead design-system classes
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: Check VM runtime rollback compatibility
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: Enforce max-lines ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: Enforce ts-nocheck ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: Enforce runtime Electron-import ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: Enforce focus-read ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: Enforce layout-writer ratchets
+      if: '''true'' == ''true'''
+      run: pnpm run check:layout-writer-ratchets
+    - name: Check compatibility-folder imports
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: Check Node runtime pin
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: Verify localization extraction
+      if: '!cancelled()'
+      id: localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
+        \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Boot orcad and round-trip a terminal
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\n\
+        else\n  pnpm run smoke:orcad-terminal\nfi\n"
+    - name: Verify the generated RPC params catalog
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: Verify the generated ACP protocol schema
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: Verify bundled skill guides
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: Verify skill freshness manifest
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: Verify localization catalogs
+      if: '!cancelled()'
+      id: localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: Verify localization coverage
+      if: '''true'' == ''true'''
+      run: pnpm run verify:localization-coverage
+    - wait:
+      - localization-catalogs
+      - localization-extraction
+    - name: Guard against project-owned .d.ts in preload/shared
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: Check feature wall asset budget
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: Verify macOS entitlements
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: Plan unit selection
+      if: '!cancelled()'
+      id: unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        cat > "$RUNNER_TEMP/tail-replay-event.json" <<''EVENT''
+
+        {"pull_request": {"number": 28218, "draft": false, "base": {"sha": "099bb76501f82184820a1f236409e2eacbebb8ef"},
+        "head": {"sha": "3625e2d070f145aba4cbe6b5f818a44b189b55cf"}}}
+
+        EVENT
+
+        GITHUB_EVENT_PATH="$RUNNER_TEMP/tail-replay-event.json" GITHUB_EVENT_NAME=pull_request node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: typecheck
+    - wait: process-host-imports
+    - wait: main-sync-spawn-ratchet
+    - wait: unit-plan
+    - uses: actions/upload-artifact@v7
+      if: '''true'' == ''true'''
+      with:
+        name: tail-replay-baseline-3
+        path: ci-shards/unit-selection.json
+        retention-days: 14
+    - name: Set up Bun for Mobile CI tool tests
+      if: '''false'' == ''true'''
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version-file: config/.bun-version
+    - name: Test Mobile CI tools and runtime routing
+      if: '''false'' == ''true'''
+      env:
+        ORCA_BACKGROUND_LAUNCH: '1'
+        ORCA_BALANCE_UNIT_SHARDS: '1'
+      run: node config/scripts/run-vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 --isolate --retry=0
+        --bail=0 config/scripts/mobile-release-check-scope.test.mjs config/scripts/mobile-test-change-scope.test.mjs
+        config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
+        config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
+    timeout-minutes: 15
+  baseline-4:
+    name: baseline-4
+    needs:
+    - baseline-3
+    if: always()
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 50
+        persist-credentials: false
+        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' != ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' == ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-dependency-path: 'pnpm-lock.yaml
+
+          mobile/pnpm-lock.yaml
+
+          '
+    - name: Set up Bun for preflight checks
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.4.3
+    - name: Select the measured downloader
+      run: 'node --input-type=module - <<''JS''
+
+        import { writeFileSync } from ''node:fs''
+
+        writeFileSync("config/scripts/pinned-node-downloads.mjs", "// Hash-verified downloads of the pinned Node''s
+        build inputs (headers, node.lib) and executable.\nimport { chmodSync, copyFileSync, existsSync, mkdirSync,
+        rmSync } from ''node:fs''\nimport { dirname, join, resolve } from ''node:path''\nimport {\n  NODE_RUNTIME_PIN,\n  isWindowsServerTarget,\n  nodeRuntimeAsset,\n  nodeRuntimeExecutablePath,\n  nodeRuntimeHeadersUrl,\n  nodeRuntimeReleaseUrl\n}
+        from ''../../src/shared/node-runtime-pin.ts''\nimport { isDirectInvocation } from ''./script-entry-detection.mjs''\nimport
+        { download, extract, sha256File } from ''./update-node-runtime-pin.mjs''\n\nconst ROOT = resolve(import.meta.dirname,
+        ''..'', ''..'')\n\nexport function pinnedNodeCacheDir(env = process.env) {\n  return env.ORCA_NODE_RUNTIME_CACHE_DIR
+        || join(ROOT, ''out'', ''node-runtime-cache'')\n}\n\n/** Reuses a cached file only when it still hashes
+        to the pin; anything else is re-fetched. */\nexport async function fetchPinnedFile({ url, destination, sha256
+        }) {\n  if (existsSync(destination) && (await sha256File(destination)) === sha256) {\n    return destination\n  }\n  mkdirSync(join(destination,
+        ''..''), { recursive: true })\n  const partial = `${destination}.partial-${process.pid}`\n  await download(url,
+        partial)\n  const actual = await sha256File(partial)\n  if (actual !== sha256) {\n    rmSync(partial, {
+        force: true })\n    throw new Error(`${url} hashed ${actual}, but the Node runtime pin expects ${sha256}`)\n  }\n  rmSync(destination,
+        { force: true })\n  copyFileSync(partial, destination)\n  rmSync(partial, { force: true })\n  return destination\n}\n\n/**\n
+        * A node-gyp `--nodedir` for `target`, built from the pinned headers tarball.\n *\n * Why per target: on
+        Windows node-gyp links `<nodedir>/Release/node.lib`, which differs by\n * arch and is not in the headers
+        tarball.\n */\nexport async function preparePinnedNodeDir({ target, workDir, cacheDir = pinnedNodeCacheDir()
+        }) {\n  const { version, headers } = NODE_RUNTIME_PIN\n  const tarball = await fetchPinnedFile({\n    url:
+        nodeRuntimeHeadersUrl(),\n    destination: join(cacheDir, headers.file),\n    sha256: headers.sha256\n  })\n  rmSync(workDir,
+        { recursive: true, force: true })\n  extract(tarball, workDir, `node-v${version}/include`)\n  const nodeDir
+        = join(workDir, `node-v${version}`)\n  if (isWindowsServerTarget(target)) {\n    const lib = NODE_RUNTIME_PIN.windowsImportLibs[target]\n    const
+        cached = await fetchPinnedFile({\n      url: nodeRuntimeReleaseUrl(''official'', lib.file, version),\n      destination:
+        join(cacheDir, `node-v${version}-${lib.file.replace(''/'', ''-'')}`),\n      sha256: lib.sha256\n    })\n    mkdirSync(join(nodeDir,
+        ''Release''), { recursive: true })\n    copyFileSync(cached, join(nodeDir, ''Release'', ''node.lib''))\n  }\n  return
+        nodeDir\n}\n\n/** The pinned `node` for a default or compat `target`, verified against both hashes. */\nexport
+        async function ensurePinnedNodeExecutable({ target, cacheDir = pinnedNodeCacheDir() }) {\n  const asset
+        = nodeRuntimeAsset(target)\n  if (!asset) {\n    throw new Error(`The Node runtime pin has no asset for
+        ${target}`)\n  }\n  const member = nodeRuntimeExecutablePath(target, asset.archive)\n  const executable
+        = join(cacheDir, member)\n  if (existsSync(executable) && (await sha256File(executable)) === asset.executableSha256)
+        {\n    return executable\n  }\n  const archive = await fetchPinnedFile({\n    url: nodeRuntimeReleaseUrl(asset.source,
+        asset.archive),\n    destination: join(cacheDir, asset.archive),\n    sha256: asset.archiveSha256\n  })\n  extract(archive,
+        cacheDir, member)\n  const actual = await sha256File(executable)\n  if (actual !== asset.executableSha256)
+        {\n    throw new Error(`${member} hashed ${actual}, but the pin expects ${asset.executableSha256}`)\n  }\n  if
+        (process.platform !== ''win32'') {\n    chmodSync(executable, 0o755)\n  }\n  return executable\n}\n\n//
+        Usage: node config/scripts/pinned-node-downloads.mjs <target>... \u2014 warms the cache before packaging.\nif
+        (isDirectInvocation(import.meta.url, process.argv[1])) {\n  for (const target of process.argv.slice(2))
+        {\n    console.log(await ensurePinnedNodeExecutable({ target }))\n  }\n}\n\nexport async function copyPinnedNodeExecutable(source,
+        destination, sha256) {\n  if (!existsSync(source) || (await sha256File(source)) !== sha256) {\n    return
+        false\n  }\n  mkdirSync(dirname(destination), { recursive: true })\n  copyFileSync(source, destination)\n  if
+        ((await sha256File(destination)) !== sha256) {\n    rmSync(destination, { force: true })\n    throw new
+        Error(`Node executable changed while copying ${source}`)\n  }\n  if (process.platform !== ''win32'') {\n    chmodSync(destination,
+        0o755)\n  }\n  return true\n}\n")
+
+        JS'
+    - name: Check process-host imports
+      if: '!cancelled()'
+      id: process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:process-host-imports
+
+        '
+    - name: Check main-process sync launches
+      if: '!cancelled()'
+      id: main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: Lint
+      if: '!cancelled()'
+      id: root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: Reject low-evidence patterns
+      if: '''true'' == ''true'''
+      run: 'node config/scripts/sync-anti-slop-plugin.mjs
+
+        bun --smol node_modules/oxlint/bin/oxlint --config config/oxlint-anti-slop.json src config tests mobile
+        --deny-warnings
+
+        '
+    - wait: root-lint
+    - name: Enforce focused code-quality plugins
+      if: '!cancelled()'
+      id: native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: Enforce type-aware code-quality baseline
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: Enforce changed-code quality
+      if: '!cancelled()'
+      id: changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+
+        '
+    - name: Enforce React Doctor on changed lines
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+    - wait: changed-code-quality
+    - name: Typecheck
+      if: '!cancelled()'
+      id: typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run typecheck:ci --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: Check Zustand selector fan-out budget
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: Check reliability gate manifest
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: Enforce dead design-system classes
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: Check VM runtime rollback compatibility
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: Enforce max-lines ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: Enforce ts-nocheck ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: Enforce runtime Electron-import ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: Enforce focus-read ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: Enforce layout-writer ratchets
+      if: '''true'' == ''true'''
+      run: pnpm run check:layout-writer-ratchets
+    - name: Check compatibility-folder imports
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: Check Node runtime pin
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: Verify localization extraction
+      if: '!cancelled()'
+      id: localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
+        \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Boot orcad and round-trip a terminal
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs\
+        \ \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        \ &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs \"$RUNNER_TEMP/orcad-smoke-changes\"\
+        )\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\n\
+        else\n  pnpm run smoke:orcad-terminal\nfi\n"
+    - name: Verify the generated RPC params catalog
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: Verify the generated ACP protocol schema
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: Verify bundled skill guides
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: Verify skill freshness manifest
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: Verify localization catalogs
+      if: '!cancelled()'
+      id: localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: Verify localization coverage
+      if: '''true'' == ''true'''
+      run: pnpm run verify:localization-coverage
+    - wait:
+      - localization-catalogs
+      - localization-extraction
+    - name: Guard against project-owned .d.ts in preload/shared
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: Check feature wall asset budget
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: Verify macOS entitlements
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: Plan unit selection
+      if: '!cancelled()'
+      id: unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        cat > "$RUNNER_TEMP/tail-replay-event.json" <<''EVENT''
+
+        {"pull_request": {"number": 28218, "draft": false, "base": {"sha": "099bb76501f82184820a1f236409e2eacbebb8ef"},
+        "head": {"sha": "3625e2d070f145aba4cbe6b5f818a44b189b55cf"}}}
+
+        EVENT
+
+        GITHUB_EVENT_PATH="$RUNNER_TEMP/tail-replay-event.json" GITHUB_EVENT_NAME=pull_request node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: typecheck
+    - wait: process-host-imports
+    - wait: main-sync-spawn-ratchet
+    - wait: unit-plan
+    - uses: actions/upload-artifact@v7
+      if: '''true'' == ''true'''
+      with:
+        name: tail-replay-baseline-4
+        path: ci-shards/unit-selection.json
+        retention-days: 14
+    - name: Set up Bun for Mobile CI tool tests
+      if: '''false'' == ''true'''
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version-file: config/.bun-version
+    - name: Test Mobile CI tools and runtime routing
+      if: '''false'' == ''true'''
+      env:
+        ORCA_BACKGROUND_LAUNCH: '1'
+        ORCA_BALANCE_UNIT_SHARDS: '1'
+      run: node config/scripts/run-vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 --isolate --retry=0
+        --bail=0 config/scripts/mobile-release-check-scope.test.mjs config/scripts/mobile-test-change-scope.test.mjs
+        config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
+        config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
+    timeout-minutes: 15
+  candidate-5:
+    name: candidate-5
+    needs:
+    - baseline-4
+    if: always()
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 50
+        persist-credentials: false
+        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' != ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+    - uses: ./.github/actions/install-node-dependencies
+      if: '''false'' == ''true'''
+      with:
+        native-runtime: node
+        node-version: '24'
+        cache-dependency-path: 'pnpm-lock.yaml
+
+          mobile/pnpm-lock.yaml
+
+          '
+    - name: Set up Bun for preflight checks
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version: 1.4.3
+    - name: Select the measured downloader
+      run: 'node --input-type=module - <<''JS''
+
+        import { writeFileSync } from ''node:fs''
+
+        writeFileSync("config/scripts/pinned-node-downloads.mjs", "// Hash-verified downloads of the pinned Node''s
+        build inputs (headers, node.lib) and executable.\nimport { chmodSync, copyFileSync, existsSync, mkdirSync,
+        rmSync } from ''node:fs''\nimport { dirname, join, resolve } from ''node:path''\nimport {\n  NODE_RUNTIME_PIN,\n  isWindowsServerTarget,\n  nodeRuntimeAsset,\n  nodeRuntimeExecutablePath,\n  nodeRuntimeHeadersUrl,\n  nodeRuntimeReleaseUrl\n}
+        from ''../../src/shared/node-runtime-pin.ts''\nimport { isDirectInvocation } from ''./script-entry-detection.mjs''\nimport
+        { download, extract, sha256File } from ''./update-node-runtime-pin.mjs''\n\nconst ROOT = resolve(import.meta.dirname,
+        ''..'', ''..'')\n\nexport function pinnedNodeCacheDir(env = process.env) {\n  return env.ORCA_NODE_RUNTIME_CACHE_DIR
+        || join(ROOT, ''out'', ''node-runtime-cache'')\n}\n\nexport async function copyPinnedNodeExecutable(source,
+        destination, sha256) {\n  if (!existsSync(source) || (await sha256File(source)) !== sha256) {\n    return
+        false\n  }\n  mkdirSync(dirname(destination), { recursive: true })\n  copyFileSync(source, destination)\n  if
+        ((await sha256File(destination)) !== sha256) {\n    rmSync(destination, { force: true })\n    throw new
+        Error(`Node executable changed while copying ${source}`)\n  }\n  if (process.platform !== ''win32'') {\n    chmodSync(destination,
+        0o755)\n  }\n  return true\n}\n\n/** Reuses a cached file only when it still hashes to the pin; anything
+        else is re-fetched. */\nexport async function fetchPinnedFile({ url, destination, sha256 }) {\n  if (existsSync(destination)
+        && (await sha256File(destination)) === sha256) {\n    return destination\n  }\n  mkdirSync(join(destination,
+        ''..''), { recursive: true })\n  const partial = `${destination}.partial-${process.pid}`\n  await download(url,
+        partial)\n  const actual = await sha256File(partial)\n  if (actual !== sha256) {\n    rmSync(partial, {
+        force: true })\n    throw new Error(`${url} hashed ${actual}, but the Node runtime pin expects ${sha256}`)\n  }\n  rmSync(destination,
+        { force: true })\n  copyFileSync(partial, destination)\n  rmSync(partial, { force: true })\n  return destination\n}\n\n/**\n
+        * A node-gyp `--nodedir` for `target`, built from the pinned headers tarball.\n *\n * Why per target: on
+        Windows node-gyp links `<nodedir>/Release/node.lib`, which differs by\n * arch and is not in the headers
+        tarball.\n */\nexport async function preparePinnedNodeDir({ target, workDir, cacheDir = pinnedNodeCacheDir()
+        }) {\n  const { version, headers } = NODE_RUNTIME_PIN\n  const tarball = await fetchPinnedFile({\n    url:
+        nodeRuntimeHeadersUrl(),\n    destination: join(cacheDir, headers.file),\n    sha256: headers.sha256\n  })\n  rmSync(workDir,
+        { recursive: true, force: true })\n  extract(tarball, workDir, `node-v${version}/include`)\n  const nodeDir
+        = join(workDir, `node-v${version}`)\n  if (isWindowsServerTarget(target)) {\n    const lib = NODE_RUNTIME_PIN.windowsImportLibs[target]\n    const
+        cached = await fetchPinnedFile({\n      url: nodeRuntimeReleaseUrl(''official'', lib.file, version),\n      destination:
+        join(cacheDir, `node-v${version}-${lib.file.replace(''/'', ''-'')}`),\n      sha256: lib.sha256\n    })\n    mkdirSync(join(nodeDir,
+        ''Release''), { recursive: true })\n    copyFileSync(cached, join(nodeDir, ''Release'', ''node.lib''))\n  }\n  return
+        nodeDir\n}\n\n/** The pinned `node` for a default or compat `target`, verified against both hashes. */\nexport
+        async function ensurePinnedNodeExecutable({ target, cacheDir = pinnedNodeCacheDir() }) {\n  const asset
+        = nodeRuntimeAsset(target)\n  if (!asset) {\n    throw new Error(`The Node runtime pin has no asset for
+        ${target}`)\n  }\n  const member = nodeRuntimeExecutablePath(target, asset.archive)\n  const executable
+        = join(cacheDir, member)\n  if (existsSync(executable) && (await sha256File(executable)) === asset.executableSha256)
+        {\n    return executable\n  }\n  // setup-node often already supplies these exact bytes; version equality
+        alone is insufficient.\n  if (await copyPinnedNodeExecutable(process.execPath, executable, asset.executableSha256))
+        {\n    return executable\n  }\n  const archive = await fetchPinnedFile({\n    url: nodeRuntimeReleaseUrl(asset.source,
+        asset.archive),\n    destination: join(cacheDir, asset.archive),\n    sha256: asset.archiveSha256\n  })\n  extract(archive,
+        cacheDir, member)\n  const actual = await sha256File(executable)\n  if (actual !== asset.executableSha256)
+        {\n    throw new Error(`${member} hashed ${actual}, but the pin expects ${asset.executableSha256}`)\n  }\n  if
+        (process.platform !== ''win32'') {\n    chmodSync(executable, 0o755)\n  }\n  return executable\n}\n\n//
+        Usage: node config/scripts/pinned-node-downloads.mjs <target>... \u2014 warms the cache before packaging.\nif
+        (isDirectInvocation(import.meta.url, process.argv[1])) {\n  for (const target of process.argv.slice(2))
+        {\n    console.log(await ensurePinnedNodeExecutable({ target }))\n  }\n}\n")
+
+        JS'
+    - name: Check process-host imports
+      if: '!cancelled()'
+      id: process-host-imports
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:process-host-imports
+
+        '
+    - name: Check main-process sync launches
+      if: '!cancelled()'
+      id: main-sync-spawn-ratchet
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        bun --bun run check:main-sync-spawn-ratchet
+
+        '
+    - name: Lint
+      if: '!cancelled()'
+      id: root-lint
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm exec oxlint --format github
+
+        '
+    - name: Reject low-evidence patterns
+      if: '''true'' == ''true'''
+      run: 'node config/scripts/sync-anti-slop-plugin.mjs
+
+        bun --smol node_modules/oxlint/bin/oxlint --config config/oxlint-anti-slop.json src config tests mobile
+        --deny-warnings
+
+        '
+    - wait: root-lint
+    - name: Enforce focused code-quality plugins
+      if: '!cancelled()'
+      id: native-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run audit:code-quality:native
+
+        '
+    - name: Enforce type-aware code-quality baseline
+      if: '''true'' == ''true'''
+      run: pnpm run audit:code-quality:type-aware
+    - wait: native-code-quality
+    - uses: ./.github/actions/install-mobile-dependencies
+      if: '''true'' == ''true'' && ''false'' == ''true'''
+    - name: Enforce changed-code quality
+      if: '!cancelled()'
+      id: changed-code-quality
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run check:code-quality:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+
+        '
+    - name: Enforce React Doctor on changed lines
+      if: '''true'' == ''true'''
+      run: pnpm run check:react-doctor:changed -- "099bb76501f82184820a1f236409e2eacbebb8ef"
+    - wait: changed-code-quality
+    - name: Typecheck
+      if: '!cancelled()'
+      id: typecheck
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        node config/scripts/run-typecheck-projects-in-parallel.mjs --compiler=bun --bun-concurrency=2 --bun-threads=2
+
+        '
+    - name: Boot orcad and round-trip a terminal
+      if: '!cancelled()'
+      id: orcad-terminal-smoke
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
+        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
+        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
+        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
+        \ orcad\nfi\n"
+    - name: Check Zustand selector fan-out budget
+      if: '''true'' == ''true'''
+      run: pnpm run check:zustand-selector-fanout
+    - name: Check reliability gate manifest
+      if: '''true'' == ''true'''
+      run: pnpm run check:reliability-gates
+    - name: Enforce dead design-system classes
+      if: '''true'' == ''true'''
+      run: pnpm run check:dead-classes
+    - name: Check VM runtime rollback compatibility
+      if: '''true'' == ''true'''
+      env:
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
+        \ \"$DIFF_BASE\" HEAD -- \\\n  src/shared/ephemeral-vm-runtime-store.ts \\\n  src/shared/ephemeral-vm-runtime-feature-store.ts\
+        \ \\\n  src/shared/ephemeral-vm-runtime-rollback-projection.ts \\\n  src/shared/ephemeral-vm-runtimes.ts\
+        \ \\\n  src/shared/ephemeral-vm-recipes.ts \\\n  src/shared/orca-yaml-hook-types.ts \\\n  src/main/ephemeral-vm-runtime-service.ts\
+        \ \\\n  src/main/ephemeral-vm-runtime-provisioning-persistence.ts \\\n  src/main/ephemeral-vm-failed-start-cleanup.ts;\
+        \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
+        \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
+    - name: Enforce max-lines ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:max-lines-ratchet
+    - name: Enforce ts-nocheck ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:ts-nocheck-ratchet
+    - name: Enforce runtime Electron-import ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:runtime-electron-ratchet
+    - name: Enforce focus-read ratchet
+      if: '''true'' == ''true'''
+      run: pnpm run check:focus-read-ratchet
+    - name: Enforce layout-writer ratchets
+      if: '''true'' == ''true'''
+      run: pnpm run check:layout-writer-ratchets
+    - name: Check compatibility-folder imports
+      if: '''true'' == ''true'''
+      run: bun config/scripts/check-compat-boundary-imports.mjs
+    - name: Check Node runtime pin
+      if: '''true'' == ''true'''
+      run: pnpm run check:node-runtime-pin
+    - name: Verify localization extraction
+      if: '!cancelled()'
+      id: localization-extraction
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the full check; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
+        \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
+        \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Verify the generated RPC params catalog
+      if: '''true'' == ''true'''
+      run: pnpm run verify:rpc-params-catalog
+    - name: Verify the generated ACP protocol schema
+      if: '''true'' == ''true'''
+      run: pnpm run verify:acp-protocol
+    - name: Verify bundled skill guides
+      if: '''true'' == ''true'''
+      run: pnpm run verify:bundled-skill-guides
+    - name: Verify skill freshness manifest
+      if: '''true'' == ''true'''
+      run: pnpm run verify:skill-bundle-manifest
+    - name: Verify localization catalogs
+      if: '!cancelled()'
+      id: localization-catalogs
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        pnpm run verify:localization-catalogs
+
+        '
+    - name: Verify localization coverage
+      if: '''true'' == ''true'''
+      run: pnpm run verify:localization-coverage
+    - wait:
+      - localization-catalogs
+      - localization-extraction
+      - orcad-terminal-smoke
+    - name: Guard against project-owned .d.ts in preload/shared
+      if: '''true'' == ''true'''
+      run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
+        \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
+        \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
+        \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
+    - name: Check feature wall asset budget
+      if: '''true'' == ''true'''
+      run: pnpm check:feature-wall-assets
+    - name: Verify macOS entitlements
+      if: '''true'' == ''true'''
+      run: pnpm verify:macos-entitlements
+    - name: Plan unit selection
+      if: '!cancelled()'
+      id: unit-plan
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
+        ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+      run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
+
+        cat > "$RUNNER_TEMP/tail-replay-event.json" <<''EVENT''
+
+        {"pull_request": {"number": 28218, "draft": false, "base": {"sha": "099bb76501f82184820a1f236409e2eacbebb8ef"},
+        "head": {"sha": "3625e2d070f145aba4cbe6b5f818a44b189b55cf"}}}
+
+        EVENT
+
+        GITHUB_EVENT_PATH="$RUNNER_TEMP/tail-replay-event.json" GITHUB_EVENT_NAME=pull_request node config/scripts/ci-unit-plan.mjs
+
+        '
+    - wait: typecheck
+    - wait: process-host-imports
+    - wait: main-sync-spawn-ratchet
+    - wait: unit-plan
+    - uses: actions/upload-artifact@v7
+      if: '''true'' == ''true'''
+      with:
+        name: tail-replay-candidate-5
+        path: ci-shards/unit-selection.json
+        retention-days: 14
+    - name: Set up Bun for Mobile CI tool tests
+      if: '''false'' == ''true'''
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      with:
+        bun-version-file: config/.bun-version
+    - name: Test Mobile CI tools and runtime routing
+      if: '''false'' == ''true'''
+      env:
+        ORCA_BACKGROUND_LAUNCH: '1'
+        ORCA_BALANCE_UNIT_SHARDS: '1'
+      run: node config/scripts/run-vitest.mjs run --config config/vitest.config.ts --maxWorkers=4 --isolate --retry=0
+        --bail=0 config/scripts/mobile-release-check-scope.test.mjs config/scripts/mobile-test-change-scope.test.mjs
+        config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
+        config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
+    timeout-minutes: 15
+  runtime:
+    name: cold-runtime-reuse
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+        fetch-depth: 50
+        persist-credentials: false
+    - uses: ./.github/actions/install-node-dependencies
+      with:
+        native-runtime: none
+        node-version: '24'
+    - name: Measure exact executable reuse
+      run: "cat > .tail-runtime-benchmark.mjs <<'SCRIPT'\nimport { mkdirSync, mkdtempSync, readFileSync, rmSync,\
+        \ writeFileSync } from 'node:fs'\nimport { join } from 'node:path'\nimport { performance } from 'node:perf_hooks'\n\
+        import { runProcessSync } from '@orca/process-host'\nimport { measurePreflightCommand } from './config/scripts/preflight-benchmark-command.mjs'\n\
+        import { buildCounterbalancedSchedule } from './config/scripts/counterbalanced-benchmark-schedule.mjs'\n\
+        import { summarizeBenchmarkSamples } from './config/scripts/benchmark-sample-summary.mjs'\nimport { NODE_RUNTIME_ASSETS\
+        \ } from './src/shared/node-runtime-pin.ts'\nimport { sha256File } from './config/scripts/update-node-runtime-pin.mjs'\n\
+        const root=process.cwd(), output=join(root,'.build/tail-runtime')\nmkdirSync(output,{recursive:true})\n\
+        const file='config/scripts/.tail-baseline-pinned-node-downloads.mjs'\nconst old=runProcessSync({program:'git',args:['show','099bb76501f82184820a1f236409e2eacbebb8ef:config/scripts/pinned-node-downloads.mjs'],cwd:root})\n\
+        if(old.code!==0)throw new Error(old.stderr)\nwriteFileSync(file,old.stdout)\nconst expected=NODE_RUNTIME_ASSETS['linux-arm64-glibc'].executableSha256\n\
+        const hostHash=await sha256File(process.execPath)\nconst report={source:'3625e2d070f145aba4cbe6b5f818a44b189b55cf',base:'099bb76501f82184820a1f236409e2eacbebb8ef',node:process.version,hostMatchesPin:hostHash===expected,method:'Four\
+        \ counterbalanced pairs; a separate empty cache for each invocation; both outputs must match the pinned\
+        \ executable hash.',measurements:[]}\nif(!report.hostMatchesPin)throw new Error('setup-node does not currently\
+        \ match the executable pin')\nconst save=()=>writeFileSync(join(output,'runtime.json'),JSON.stringify(report,null,2))\n\
+        try {\nfor(const [pair,order] of buildCounterbalancedSchedule(4,'baseline','candidate').entries()) {\n \
+        \ for(const arm of order) {\n    const cache=mkdtempSync(join(process.env.RUNNER_TEMP,'tail-node-'))\n \
+        \   const result=await measurePreflightCommand({program:process.execPath,args:[arm==='baseline'?file:'config/scripts/pinned-node-downloads.mjs','linux-arm64-glibc'],label:`runtime-${pair}-${arm}`,root,output,env:{...process.env,ORCA_NODE_RUNTIME_CACHE_DIR:cache},timeoutMs:600000})\n\
+        \    if(result.code!==0||result.signal||result.timedOut)throw new Error(JSON.stringify(result))\n    const\
+        \ executable=result.stdout.trim().split('\\n').at(-1)\n    if(await sha256File(executable)!==expected)throw\
+        \ new Error('Wrong packaged Node bytes')\n    report.measurements.push({pair,arm,...result});save()\n  \
+        \  console.log(JSON.stringify({pair,arm,durationMs:result.durationMs}))\n    rmSync(cache,{recursive:true,force:true})\n\
+        \  }\n}\nreport.summary=Object.fromEntries(['baseline','candidate'].map(arm=>[arm,summarizeBenchmarkSamples(report.measurements.filter(x=>x.arm===arm).map(x=>x.durationMs))]))\n\
+        save();console.log(JSON.stringify(report.summary))\n}finally{rmSync(file,{force:true})}\n\nSCRIPT\nnode\
+        \ .tail-runtime-benchmark.mjs"
+    - uses: actions/upload-artifact@v7
+      if: always()
+      with:
+        name: tail-runtime-reuse
+        path: .build/tail-runtime/
+        retention-days: 30
