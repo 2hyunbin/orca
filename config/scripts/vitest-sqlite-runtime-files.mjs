@@ -208,6 +208,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/runtime/agent-session-record-options.test.ts',
   'src/main/runtime/agent-session-record-store-tab-table.test.ts',
   'src/main/runtime/agent-session-record-store.test.ts',
+  'src/main/runtime/agent-session-permission-backfill.test.ts',
   'src/main/runtime/agent-session-released-reservation-replay.test.ts',
   'src/main/runtime/agent-session-runtime-attribution.test.ts',
   'src/main/runtime/agent-session-store-transactions.test.ts',
