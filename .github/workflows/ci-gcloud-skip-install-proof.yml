@@ -1,0 +1,92 @@
+name: gcloud skip_install proof
+
+# Temporary proof for the setup-gcloud skip_install switch: runs the preinstalled gcloud
+# on every runner the relay workflows use, without credentials, and compares the download path.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/ci-gcloud-skip-install-proof.yml
+
+permissions:
+  contents: read
+
+jobs:
+  preinstalled:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [blacksmith-2vcpu-ubuntu-2204, ubuntu-latest, ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          skip_install: true
+
+      - name: Preinstalled gcloud and its components
+        run: |
+          set -euo pipefail
+          command -v gcloud
+          readlink -f "$(command -v gcloud)"
+          gcloud version
+          gcloud components list --only-local-state --format='table(id,current_version_string)' 2>&1 || true
+          dpkg -l | grep -i google-cloud || true
+
+      - name: Every gcloud subcommand the relay and auth workflows use
+        run: |
+          set -euo pipefail
+          while read -r cmd; do
+            [ -n "$cmd" ] || continue
+            # shellcheck disable=SC2086
+            gcloud $cmd --help > /dev/null
+            echo "ok: gcloud $cmd"
+          done <<'COMMANDS'
+          auth login
+          auth print-access-token
+          auth print-identity-token
+          auth configure-docker
+          config set
+          artifacts docker images describe
+          artifacts docker tags list
+          compute addresses describe
+          compute backend-services describe
+          compute forwarding-rules describe
+          compute instance-groups managed describe
+          compute instance-groups managed list
+          compute instance-groups managed list-instances
+          compute instance-groups managed recreate-instances
+          compute instance-groups managed resize
+          compute instance-groups managed wait-until
+          compute instance-templates describe
+          compute instances describe
+          compute target-https-proxies describe
+          compute url-maps describe
+          logging read
+          run deploy
+          run jobs describe
+          run jobs execute
+          run jobs executions list
+          run jobs update
+          run revisions delete
+          run revisions describe
+          run revisions list
+          run services describe
+          run services update
+          run services update-traffic
+          secrets versions access
+          secrets versions add
+          secrets versions describe
+          sql instances describe
+          sql instances patch
+          COMMANDS
+
+  download:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [blacksmith-2vcpu-ubuntu-2204, ubuntu-latest]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud version
