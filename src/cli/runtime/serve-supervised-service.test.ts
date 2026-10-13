@@ -15,6 +15,7 @@ import {
   SERVE_SUPERVISOR_FAILURE_LIMIT,
   SERVE_SUPERVISOR_FAILURE_WINDOW_MS,
   SERVE_SUPERVISOR_BACKOFF_MAX_MS,
+  SERVE_GAVE_UP_ADVICE,
   type ServeSupervisorBrake
 } from './serve-supervisor-brake'
 import type { ServeInstallEvidence } from './serve-install-hold'
@@ -156,6 +157,7 @@ describe('superviseServeService', () => {
     await expect(superviseServeService(h.options)).resolves.toBe(0)
     expect(runs).toBe(0)
     expect(h.logs.join('\n')).toContain('Not starting')
+    expect(h.logs.join('\n')).toContain(SERVE_GAVE_UP_ADVICE)
   })
 
   it('never spawns while the installer holds the bundle, even when the check fails', async () => {
@@ -229,7 +231,7 @@ describe('superviseServeService', () => {
     })
     await expect(superviseServeService(h.options)).resolves.toBe(0)
     expect(runs).toBe(2)
-    expect(h.logs.join('\n')).toContain('SIGKILL')
+    expect(h.logs).toContain('[serve] Orca serve exited via SIGKILL; restarting in 1s.')
   })
 
   it('restarts from a replaced AppImage before starting a child, not after it', async () => {
