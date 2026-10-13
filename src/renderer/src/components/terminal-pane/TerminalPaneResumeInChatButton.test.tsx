@@ -27,7 +27,10 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    getState: () => ({ tabsByWorktree: { 'wt-1': mocks.tabOpen ? [{ id: 'tab-1' }] : [] } })
+    getState: () => ({
+      tabsByWorktree: { 'wt-1': mocks.tabOpen ? [{ id: 'tab-1' }] : [] },
+      unifiedTabsByWorktree: {}
+    })
   }
 }))
 
@@ -159,7 +162,23 @@ describe('TerminalPaneResumeInChatButton', () => {
     mocks.listSessions.mockRejectedValue(new Error('host unreachable'))
     await clickResume()
     expect(mocks.resumeInNewChat).not.toHaveBeenCalled()
-    expect(mocks.toastError).toHaveBeenCalledWith('Could not resume this session in a new chat.')
+    expect(mocks.toastError).toHaveBeenCalledWith('Could not resume this session in a new chat.', {
+      description: 'host unreachable'
+    })
+  })
+
+  it('reports a scan that failed as a failure, not as an unsaved conversation', async () => {
+    mocks.listSessions.mockResolvedValue({
+      sessions: [],
+      issues: [{ agent: 'codex', kind: 'host', path: 'this computer', message: 'Scan timed out.' }],
+      scannedAt: 'now'
+    })
+    await clickResume()
+    expect(mocks.listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
+    expect(mocks.toastError).toHaveBeenCalledTimes(1)
+    expect(mocks.toastError).toHaveBeenCalledWith('Could not resume this session in a new chat.', {
+      description: 'Scan timed out.'
+    })
   })
 
   it('does nothing once the tab closed during the lookup', async () => {

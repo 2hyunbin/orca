@@ -120,6 +120,7 @@ const liveClaudeEntry = {
 
 const chatSubject: TabSessionHistorySubject = {
   kind: 'chat',
+  agent: 'codex',
   sessionId: 'orca-chat-1',
   workspaceId: WORKTREE_ID,
   request: PANEL_REQUEST
@@ -187,7 +188,7 @@ describe('resolveTabSessionHistorySubject', () => {
         tab: { id: 'unified-1', worktreeId: WORKTREE_ID },
         nativeChat: { sessionId: 'orca-chat-1', agent: 'grok' }
       })
-    ).toEqual({ ...chatSubject })
+    ).toEqual({ ...chatSubject, agent: 'grok' })
   })
 
   it.each(['opencode', 'omp'] as const)(
@@ -388,8 +389,12 @@ describe('one pane of a terminal tab', () => {
       })
       return useAppStore.getState()
     }
+    const tabSubject = (state: AppState) =>
+      resolveTabSessionHistorySubject(state, { tab: { id: 'term-1', worktreeId: WORKTREE_ID } })
     expect(paneGate(onWindows({ kind: 'windows-host' }), claudePane)).toBe(true)
+    expect(tabSubject(onWindows({ kind: 'windows-host' }))).toEqual(cliSubject)
     expect(paneGate(onWindows({ kind: 'wsl', distro: 'Ubuntu' }), claudePane)).toBe(false)
+    expect(tabSubject(onWindows({ kind: 'wsl', distro: 'Ubuntu' }))).toBeNull()
   })
 
   it('offers nothing over SSH', () => {
@@ -527,28 +532,60 @@ describe('lookupTabSessionHistoryRow', () => {
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
   })
 
-  it('does not force another scan while the budget is spent', async () => {
-    const listSessions = vi.fn(async (_args: AiVaultListArgs) => listResult([emptyRow]))
-    await lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    listSessions.mockClear()
+  const failedScan = {
+    sessions: [],
+    issues: [
+      {
+        executionHostId: 'local' as const,
+        agent: 'codex' as const,
+        kind: 'host' as const,
+        path: 'this computer',
+        message: 'Agent Session History timed out.'
+      }
+    ],
+    scannedAt: 'now'
+  }
+
+  it('retries a failed scan with a forced one, which can find the row', async () => {
+    const listSessions = vi
+      .fn()
+      .mockResolvedValueOnce(failedScan)
+      .mockResolvedValueOnce(listResult([row()]))
     await expect(
       lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
-    ).resolves.toMatchObject({
-      messageCount: 0
-    })
-    expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(listSessions).toHaveBeenCalledWith(expect.objectContaining({ force: undefined }))
+    ).resolves.toMatchObject({ id: 'row-1' })
+    expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
   })
 
-  it('starts no forced scan once the menu has closed, and leaves the budget free', async () => {
-    let menuOpen = true
+  it("rejects with the host's message when the forced scan failed too", async () => {
+    const listSessions = vi.fn(async (_args: AiVaultListArgs) => failedScan)
+    await expect(
+      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
+    ).rejects.toThrow('Agent Session History timed out.')
+    expect(listSessions).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects at once where no forced scan can run', async () => {
+    const listSessions = vi.fn(async (_args: AiVaultListArgs) => failedScan)
+    await expect(
+      lookupTabSessionHistoryRow(
+        { ...chatSubject, request: { ...PANEL_REQUEST, executionHostScope: 'runtime:server-1' } },
+        listSessions,
+        lookupOptions
+      )
+    ).rejects.toThrow('Agent Session History timed out.')
+    expect(listSessions).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts no forced scan once the click is abandoned, and leaves the budget free', async () => {
+    let tabOpen = true
     const listSessions = vi.fn(async (_args: AiVaultListArgs) => {
-      menuOpen = false
+      tabOpen = false
       return listResult([emptyRow])
     })
     await lookupTabSessionHistoryRow(cliSubject, listSessions, {
       requestToken: 't',
-      isCancelled: () => !menuOpen
+      isCancelled: () => !tabOpen
     })
     expect(listSessions).toHaveBeenCalledTimes(1)
     expect(claimAiVaultForcedRescan()).toBe(true)
@@ -583,16 +620,15 @@ describe('lookupTabSessionHistoryRow', () => {
       .fn()
       .mockResolvedValueOnce(listResult([emptyRow]))
       .mockResolvedValueOnce(listResult([row()]))
-    const clickOptions = { ...lookupOptions, userRequested: true }
     await expect(
-      lookupTabSessionHistoryRow(cliSubject, listSessions, clickOptions)
+      lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
     ).resolves.toMatchObject({ messageCount: 2 })
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
     resetAiVaultForcedRescanThrottleForTest()
     await lookupTabSessionHistoryRow(
       cliSubject,
       vi.fn().mockResolvedValue(listResult([])),
-      clickOptions
+      lookupOptions
     )
     expect(claimAiVaultForcedRescan()).toBe(false)
   })

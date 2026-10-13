@@ -13599,6 +13599,7 @@
             "resumeInChatConflict": "Otro chat ya está manteniendo esta conversación.",
             "resumeInChatTranscriptMissing": "El historial de esta conversación no se pudo cargar, por lo que no se puede reanudar en el chat.",
             "resumeInChatFailed": "No se pudo reanudar esta sesión en un chat nuevo.",
+            "resumeInNewCliFailed": "No se pudo reanudar esta sesión en una CLI nueva.",
             "resumeInNewCliUnavailable": "Esta sesión no se puede abrir en la CLI.",
             "resumeInNewCliHostTooOld": "Actualiza Orca en el host que ejecuta este chat para reanudarlo en una nueva CLI.",
             "folderWorkspaceUnavailable": "El espacio de trabajo de carpeta ya no está disponible."

@@ -4,19 +4,15 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
-import { createBrowserUuid } from '@/lib/browser-uuid'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
-import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
 import { useAppStore } from '@/store'
-import { isAiVaultSessionResumableContent } from '../../../../shared/ai-vault-types'
-import { agentLabel } from '../../../../shared/ai-vault-session-filters'
 import { isAgentSessionHandleProvider } from '../../../../shared/agent-session-provider-handle'
 import { resumeAiVaultSessionInNewChat } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
+import { resolveTabSessionHistorySubject } from '../tab-bar/tab-session-history-switch'
 import {
-  lookupTabSessionHistoryRow,
-  resolveTabSessionHistorySubject,
-  resolveTabSessionSwitch
-} from '../tab-bar/tab-session-history-switch'
+  isTabStillOpen,
+  runTabSessionSurfaceSwitch
+} from '../tab-bar/tab-session-surface-switch-run'
 
 function notifyResumeFailed(): void {
   toast.error(
@@ -27,8 +23,7 @@ function notifyResumeFailed(): void {
   )
 }
 
-/** The tab menu's "Resume in New Native Chat" for this pane's own conversation. The history lookup
- *  runs on click, not per render, so a header that stays on screen never scans in the background. */
+/** The tab menu's "Resume in New Native Chat" for this pane's own conversation, run the same way. */
 export function TerminalPaneResumeInChatButton({
   tabId,
   worktreeId,
@@ -45,8 +40,6 @@ export function TerminalPaneResumeInChatButton({
   )
 
   const resume = async (): Promise<void> => {
-    const tabIsOpen = (): boolean =>
-      useAppStore.getState().tabsByWorktree[worktreeId]?.some((tab) => tab.id === tabId) ?? false
     const subject = resolveTabSessionHistorySubject(useAppStore.getState(), {
       tab: { id: tabId, worktreeId },
       paneKey
@@ -55,52 +48,20 @@ export function TerminalPaneResumeInChatButton({
       notifyResumeFailed()
       return
     }
-    const row = await lookupTabSessionHistoryRow(
+    await runTabSessionSurfaceSwitch({
       subject,
-      (args) => window.api.aiVault.listSessions(args),
-      { requestToken: createBrowserUuid(), isCancelled: () => !tabIsOpen(), userRequested: true }
-    )
-    // Closing the tab mid-lookup abandons the click rather than opening a chat for it.
-    if (!tabIsOpen()) {
-      return
-    }
-    if (row === undefined) {
-      notifyResumeFailed()
-      return
-    }
-    // Already resumed in a chat: open that chat, as the Session History row's Resume does.
-    if (row?.structuredSession) {
-      await activateAiVaultStructuredSession(row)
-      return
-    }
-    const agent = agentLabel(subject.agent)
-    if (!row || !isAiVaultSessionResumableContent(row)) {
-      toast.error(
-        translate(
-          'components.native-chat.resumeInNewChat.notSavedYet',
-          "{{agent}} hasn't saved this conversation yet. Try again after it replies.",
-          { agent }
-        )
-      )
-      return
-    }
-    const move = resolveTabSessionSwitch(useAppStore.getState(), row, subject)
-    if (move?.action === 'resume-in-new-chat' && isAgentSessionHandleProvider(row.agent)) {
-      await resumeAiVaultSessionInNewChat(
-        row,
-        row.agent,
-        move.worktreeId,
-        newAgentLaunchRequestId()
-      )
-      return
-    }
-    toast.error(
-      translate(
-        'components.native-chat.resumeInNewChat.cannotResume',
-        "This {{agent}} conversation can't be resumed in a native chat.",
-        { agent }
-      )
-    )
+      isSourceOpen: () => isTabStillOpen({ id: tabId, worktreeId }),
+      launch: async (row, targetWorktreeId) => {
+        if (isAgentSessionHandleProvider(row.agent)) {
+          await resumeAiVaultSessionInNewChat(
+            row,
+            row.agent,
+            targetWorktreeId,
+            newAgentLaunchRequestId()
+          )
+        }
+      }
+    })
   }
 
   return (

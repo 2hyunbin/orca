@@ -1,4 +1,4 @@
-// Resolves a tab to its Agent Session History row, so the tab menu offers the same "Resume in New
+// Resolves a tab to its Agent Session History row, so the tab menu runs the same "Resume in New
 // Native Chat" / "Resume in New CLI" move the row menu does, under the row menu's gating.
 
 import type { AppState } from '@/store/types'
@@ -39,6 +39,7 @@ import { getAiVaultResumeWorkspaceExecutionHostId } from '@/lib/ai-vault-resume-
 import { claimAiVaultForcedRescan } from '../right-sidebar/ai-vault-session-refresh'
 import { structuredAgentSessionLaunchFeasible } from '@/lib/agent-session-launch-plan'
 import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
+import { blockingAiVaultScanIssue } from '../right-sidebar/ai-vault-scan-issue-state'
 
 /** What a tab's history row is found by: a native chat tab by the chat it shows, a terminal tab by
  *  the provider conversation its agent reported. */
@@ -47,7 +48,7 @@ export type TabSessionHistorySubject = {
   /** The panel's own list request for this workspace, so both share one cached list. */
   request: AiVaultSessionListRequest
 } & (
-  | { kind: 'chat'; sessionId: string }
+  | { kind: 'chat'; agent: AgentType; sessionId: string }
   | {
       kind: 'cli'
       agent: AgentSessionHandleProvider
@@ -87,18 +88,22 @@ export function canPaneOfferResumeInNewChat(
     getAiVaultResumeWorkspaceExecutionHostId(state, titleRequest.worktreeId),
     titleRequest.worktreeId
   ).defaultExecutionHostScope
-  // The row gate's launch-route half, so a project the chat route refuses (WSL, repair) hides it.
-  return (
-    canHostOfferTabSessionMove('cli', hostScope) &&
-    structuredAgentSessionLaunchFeasible(state, {
-      agent: titleRequest.agent,
-      workspace: {
-        kind: workspaceKindForWorktreeId(titleRequest.worktreeId),
-        worktreeId: titleRequest.worktreeId
-      },
-      settings: state.settings
-    })
-  )
+  return canHostOfferTabSessionMove('cli', hostScope) && canOpenChatRoute(state, titleRequest)
+}
+
+/** The row gate's launch-route half, so a project the chat route refuses (WSL, repair) hides it. */
+function canOpenChatRoute(
+  state: AppState,
+  titleRequest: { agent: AgentSessionHandleProvider; worktreeId: string }
+): boolean {
+  return structuredAgentSessionLaunchFeasible(state, {
+    agent: titleRequest.agent,
+    workspace: {
+      kind: workspaceKindForWorktreeId(titleRequest.worktreeId),
+      worktreeId: titleRequest.worktreeId
+    },
+    settings: state.settings
+  })
 }
 
 /** A native chat tab's session and the provider recorded when it was created. */
@@ -128,11 +133,10 @@ export function resolveTabSessionHistorySubject(
   }
   if (args.nativeChat) {
     // A chat tab's only move is opening a copy in its CLI.
+    const { agent, sessionId } = args.nativeChat
     const target =
-      args.nativeChat.agent && agentForksConversations(args.nativeChat.agent)
-        ? workspace(args.tab.worktreeId, 'chat')
-        : null
-    return target ? { ...target, kind: 'chat', sessionId: args.nativeChat.sessionId } : null
+      agent && agentForksConversations(agent) ? workspace(args.tab.worktreeId, 'chat') : null
+    return agent && target ? { ...target, kind: 'chat', agent, sessionId } : null
   }
   // The pane-to-conversation mapping tab titles use, limited to agents still running: once the agent
   // exits, the tab title keeps its conversation but the move is no longer offered.
@@ -144,7 +148,10 @@ export function resolveTabSessionHistorySubject(
     : (collectAiVaultTitleRequests(state, { runningAgentsOnly: true }).find(
         (candidate) => candidate.tabId === args.tab.id
       ) ?? null)
-  const target = titleRequest ? workspace(titleRequest.worktreeId, 'cli') : null
+  const target =
+    titleRequest && canOpenChatRoute(state, titleRequest)
+      ? workspace(titleRequest.worktreeId, 'cli')
+      : null
   return titleRequest && target
     ? {
         ...target,
@@ -215,43 +222,51 @@ export function resolveTabSessionSwitch(
     : null
 }
 
-/** Reads the row through the panel's own list request. It never uses the panel's renderer cache:
- *  cached rows miss chat ownership the host projects per reply, and a write here would let a
- *  later-opened panel paint this pre-launch list without asking the host.
- *  Resolves `undefined` when it got no answer (cancelled), as opposed to `null` for "no row". */
+/** Reads the row through the panel's own list request, for a click. It never uses the panel's
+ *  renderer cache: cached rows miss chat ownership the host projects per reply, and a write here
+ *  would let a later-opened panel paint this pre-launch list without asking the host.
+ *  Resolves `undefined` when it got no answer (cancelled), as opposed to `null` for "no row", and
+ *  rejects with the host's message when the scan itself failed. */
 export async function lookupTabSessionHistoryRow(
   subject: TabSessionHistorySubject,
   listSessions: (args: AiVaultListArgs) => Promise<AiVaultListResult>,
-  options: {
-    requestToken: string
-    isCancelled: () => boolean
-    /** A click made for this lookup alone may force a scan the way the panel's Refresh does. */
-    userRequested?: boolean
-  }
+  options: { requestToken: string; isCancelled: () => boolean }
 ): Promise<AiVaultSession | null | undefined> {
   const { request } = subject
   const { requestToken } = options
-  const listed = await listSessions(aiVaultSessionListArgs(request, { requestToken }))
-  if (listed.cancelled) {
+  const list = async (force: boolean): Promise<AiVaultListResult | undefined> => {
+    const listed = await listSessions(
+      aiVaultSessionListArgs(request, { ...(force ? { force } : {}), requestToken })
+    )
+    return listed.cancelled ? undefined : listed
+  }
+  const listed = await list(false)
+  if (!listed) {
     return undefined
   }
+  // A failed scan answers with no rows, which must not read as "not saved yet".
+  const failure = blockingAiVaultScanIssue(listed)
   const row = findTabSessionHistoryRow(listed.sessions, subject)
   if (row && isAiVaultSessionResumableContent(row)) {
     return row
   }
   // The host caches the list for a minute, so a conversation newer than that needs a fresh scan,
-  // taken from the panel's forced-rescan budget so right-clicks cannot amplify full scans. A closed
-  // menu checks first: its cancel may have landed before this scan was registered.
+  // claimed from the panel's forced-rescan budget the way its Refresh does; it also retries a failed
+  // scan. An abandoned click checks first: its cancel may have landed before this scan registered.
   if (
     options.isCancelled() ||
     request.executionHostScope !== LOCAL_EXECUTION_HOST_ID ||
-    !claimAiVaultForcedRescan(options.userRequested === true)
+    !claimAiVaultForcedRescan(true)
   ) {
+    if (failure) {
+      throw new Error(failure.message)
+    }
     return row
   }
-  const fresh = await listSessions(aiVaultSessionListArgs(request, { force: true, requestToken }))
-  if (fresh.cancelled) {
-    return undefined
+  const fresh = await list(true)
+  const freshFailure = fresh ? blockingAiVaultScanIssue(fresh) : null
+  if (freshFailure) {
+    throw new Error(freshFailure.message)
   }
-  return findTabSessionHistoryRow(fresh.sessions, subject)
+  return fresh ? findTabSessionHistoryRow(fresh.sessions, subject) : undefined
 }

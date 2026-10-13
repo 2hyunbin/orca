@@ -17,22 +17,39 @@ const mocks = vi.hoisted(() => {
     subject: Record<string, unknown> | null
     move: { action: string; worktreeId: string } | null
     launchActionArgs: unknown[]
-  } = { subject: null, move: null, launchActionArgs: [] }
+    tabOpen: boolean
+  } = { subject: null, move: null, launchActionArgs: [], tabOpen: true }
   return {
     ...state,
-    handleResumeInNewChat: vi.fn(),
-    handleResumeInNewCli: vi.fn(),
+    handleResumeInNewChat: vi.fn(async () => {}),
+    handleResumeInNewCli: vi.fn(async () => {}),
     resolveSwitch: vi.fn(),
     listSessions: vi.fn(),
-    cancelListSessions: vi.fn(async () => {})
+    cancelListSessions: vi.fn(async () => {}),
+    activateChat: vi.fn(async () => true),
+    toastError: vi.fn()
   }
 })
 
-vi.mock('../../store', () => ({
+// The component and the click runner import the store by different specifiers.
+const storeMock = vi.hoisted(() => () => ({
   useAppStore: Object.assign(
     (selector: (state: Record<string, unknown>) => unknown) => selector({ settings: null }),
-    { getState: () => ({}) }
+    {
+      getState: () => ({
+        tabsByWorktree: {},
+        unifiedTabsByWorktree: { 'wt-1': mocks.tabOpen ? [{ id: 'tab-1' }] : [] }
+      })
+    }
   )
+}))
+vi.mock('../../store', storeMock)
+vi.mock('@/store', storeMock)
+
+vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
+
+vi.mock('@/lib/activate-ai-vault-structured-session', () => ({
+  activateAiVaultStructuredSession: mocks.activateChat
 }))
 
 vi.mock('./tab-session-history-switch', async (importOriginal) => ({
@@ -83,6 +100,7 @@ const PANEL_REQUEST = {
 
 const CHAT_SUBJECT = {
   kind: 'chat',
+  agent: 'claude',
   sessionId: 'orca-chat-1',
   workspaceId: 'wt-1',
   request: PANEL_REQUEST
@@ -105,6 +123,9 @@ beforeEach(() => {
   mocks.subject = null
   mocks.move = null
   mocks.launchActionArgs = []
+  mocks.tabOpen = true
+  mocks.activateChat.mockClear()
+  mocks.toastError.mockReset()
   mocks.handleResumeInNewChat.mockReset()
   mocks.handleResumeInNewCli.mockReset()
   mocks.resolveSwitch.mockReset()
@@ -151,6 +172,11 @@ async function renderItems(structuredSessionId?: string): Promise<void> {
   await act(async () => {})
 }
 
+async function clickItem(name: string): Promise<void> {
+  fireEvent.click(screen.getByRole('menuitem', { name }))
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+}
+
 describe('TabSessionSurfaceSwitchMenuItems', () => {
   it('looks nothing up and shows nothing for a tab without a history session', async () => {
     await renderItems()
@@ -159,75 +185,76 @@ describe('TabSessionSurfaceSwitchMenuItems', () => {
     expect(screen.queryByRole('separator')).toBeNull()
   })
 
-  it('hides the move when the Session History gate withholds it', async () => {
+  it('offers Resume in New CLI on a chat tab at once, without waiting on Session History', () => {
     mocks.subject = CHAT_SUBJECT
-    await renderItems('orca-chat-1')
-    expect(mocks.listSessions).toHaveBeenCalled()
-    expect(screen.queryByRole('menuitem')).toBeNull()
+    renderItemsNow('orca-chat-1')
+
+    expect(screen.getByRole('separator')).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Resume in New CLI' })).toBeTruthy()
+    expect(screen.queryByText('Resume in New Native Chat')).toBeNull()
+    expect(mocks.listSessions).not.toHaveBeenCalled()
   })
 
-  it('runs the Session History "Resume in New CLI" handler on the row, in the tab workspace', async () => {
+  it('offers Resume in New Native Chat on a CLI tab at once', () => {
+    mocks.subject = CLI_SUBJECT
+    renderItemsNow()
+
+    expect(screen.getByRole('menuitem', { name: 'Resume in New Native Chat' })).toBeTruthy()
+    expect(screen.queryByText('Resume in New CLI')).toBeNull()
+    expect(mocks.listSessions).not.toHaveBeenCalled()
+  })
+
+  it('looks the row up on click and runs the Session History "Resume in New CLI" handler', async () => {
     mocks.subject = CHAT_SUBJECT
     mocks.move = { action: 'resume-in-new-cli', worktreeId: 'wt-1' }
     await renderItems('orca-chat-1')
+    await clickItem('Resume in New CLI')
 
-    expect(screen.getByRole('separator')).toBeTruthy()
-    expect(screen.queryByText('Resume in New Native Chat')).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Resume in New CLI' }))
+    expect(mocks.listSessions).toHaveBeenCalledTimes(1)
+    expect(mocks.resolveSwitch).toHaveBeenCalledWith(expect.anything(), CHAT_ROW, CHAT_SUBJECT)
     expect(mocks.handleResumeInNewCli).toHaveBeenCalledWith(CHAT_ROW, 'wt-1')
     expect(mocks.launchActionArgs.at(-1)).toMatchObject({
       activeWorktree: null,
       activeWorktreeId: 'wt-1'
     })
+    expect(mocks.toastError).not.toHaveBeenCalled()
   })
 
   it('runs the Session History "Resume in New Native Chat" handler for a CLI tab', async () => {
     const cliRow = { ...CHAT_ROW, structuredSession: undefined }
-    mocks.listSessions.mockResolvedValue({
-      sessions: [cliRow],
-      issues: [],
-      scannedAt: 'now'
-    })
+    mocks.listSessions.mockResolvedValue(listResult([cliRow]))
     mocks.subject = CLI_SUBJECT
     mocks.move = { action: 'resume-in-new-chat', worktreeId: 'wt-1' }
     await renderItems()
+    await clickItem('Resume in New Native Chat')
 
-    expect(screen.queryByText('Resume in New CLI')).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Resume in New Native Chat' }))
     expect(mocks.handleResumeInNewChat).toHaveBeenCalledWith(cliRow, 'wt-1')
   })
 
-  it('offers nothing before the fresh answer and never shows a stale cached row', async () => {
+  it('says so when the Session History gate withholds the move', async () => {
+    mocks.subject = CHAT_SUBJECT
+    await renderItems('orca-chat-1')
+    await clickItem('Resume in New CLI')
+
+    expect(mocks.handleResumeInNewCli).not.toHaveBeenCalled()
+    expect(mocks.toastError).toHaveBeenCalledWith('This session cannot be opened in the CLI.')
+  })
+
+  it('acts on the fresh answer, never a stale cached row', async () => {
     // The cached row predates a chat taking the conversation; only the fresh reply knows.
     const cliRow = { ...CHAT_ROW, structuredSession: undefined }
     cacheAiVaultSessionList(PANEL_REQUEST, listResult([cliRow]), { replaceHostEntries: false })
     mocks.listSessions.mockResolvedValue(listResult([CHAT_ROW]))
     mocks.subject = CLI_SUBJECT
     mocks.move = { action: 'resume-in-new-chat', worktreeId: 'wt-1' }
-    // The real gate refuses a chat-owned row (pinned in tab-session-history-switch.parity.test.ts).
-    mocks.resolveSwitch.mockImplementation((_state: unknown, session: AiVaultSession) =>
-      session.structuredSession ? null : mocks.move
-    )
-    renderItemsNow()
+    await renderItems()
+    await clickItem('Resume in New Native Chat')
 
-    expect(screen.queryByRole('menuitem')).toBeNull()
-    await act(async () => {})
-    expect(mocks.listSessions).toHaveBeenCalledWith(expect.objectContaining({ force: undefined }))
-    expect(mocks.resolveSwitch).toHaveBeenCalledWith(expect.anything(), CHAT_ROW, CLI_SUBJECT)
-    expect(screen.queryByRole('menuitem')).toBeNull()
+    expect(mocks.handleResumeInNewChat).not.toHaveBeenCalled()
+    expect(mocks.activateChat).toHaveBeenCalledWith(CHAT_ROW)
   })
 
-  it('offers the move once the fresh answer has it', async () => {
-    mocks.subject = CHAT_SUBJECT
-    mocks.move = { action: 'resume-in-new-cli', worktreeId: 'wt-1' }
-    renderItemsNow('orca-chat-1')
-
-    expect(screen.queryByRole('menuitem')).toBeNull()
-    await act(async () => {})
-    expect(screen.getByRole('menuitem', { name: 'Resume in New CLI' })).toBeTruthy()
-  })
-
-  it('ignores a lookup that settles after the menu closed', async () => {
+  it('runs one move per conversation while a click is still looking it up', async () => {
     let settle: (result: ReturnType<typeof listResult>) => void = () => {}
     mocks.listSessions.mockReturnValue(
       new Promise((resolve) => {
@@ -237,28 +264,64 @@ describe('TabSessionSurfaceSwitchMenuItems', () => {
     mocks.subject = CHAT_SUBJECT
     mocks.move = { action: 'resume-in-new-cli', worktreeId: 'wt-1' }
     await renderItems('orca-chat-1')
-    cleanup()
+    const item = screen.getByRole('menuitem', { name: 'Resume in New CLI' })
+    await act(async () => {
+      fireEvent.click(item)
+      fireEvent.click(item)
+    })
     await act(async () => settle(listResult([CHAT_ROW])))
 
-    expect(mocks.resolveSwitch).not.toHaveBeenCalled()
+    expect(mocks.listSessions).toHaveBeenCalledTimes(1)
+    expect(mocks.handleResumeInNewCli).toHaveBeenCalledTimes(1)
   })
 
-  it('shows nothing when the lookup fails', async () => {
+  it('starts no second move from a reopened menu while the first is still looking up', async () => {
+    let settle: (result: ReturnType<typeof listResult>) => void = () => {}
+    mocks.listSessions.mockReturnValueOnce(
+      new Promise((resolve) => {
+        settle = resolve
+      })
+    )
+    mocks.subject = CHAT_SUBJECT
+    mocks.move = { action: 'resume-in-new-cli', worktreeId: 'wt-1' }
+    await renderItems('orca-chat-1')
+    await clickItem('Resume in New CLI')
+    cleanup()
+    await renderItems('orca-chat-1')
+    await clickItem('Resume in New CLI')
+    await act(async () => settle(listResult([CHAT_ROW])))
+
+    expect(mocks.listSessions).toHaveBeenCalledTimes(1)
+    expect(mocks.handleResumeInNewCli).toHaveBeenCalledTimes(1)
+    // Once it settles, the next click runs again.
+    await clickItem('Resume in New CLI')
+    expect(mocks.handleResumeInNewCli).toHaveBeenCalledTimes(2)
+  })
+
+  it('abandons the click silently once the tab closed during the lookup', async () => {
+    mocks.listSessions.mockImplementation(async () => {
+      mocks.tabOpen = false
+      return listResult([CHAT_ROW])
+    })
+    mocks.subject = CHAT_SUBJECT
+    mocks.move = { action: 'resume-in-new-cli', worktreeId: 'wt-1' }
+    await renderItems('orca-chat-1')
+    await clickItem('Resume in New CLI')
+
+    expect(mocks.handleResumeInNewCli).not.toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed lookup as a failure to open the CLI', async () => {
     mocks.listSessions.mockRejectedValue(new Error('scanner crashed'))
     mocks.subject = CHAT_SUBJECT
     mocks.move = { action: 'resume-in-new-cli', worktreeId: 'wt-1' }
     await renderItems('orca-chat-1')
+    await clickItem('Resume in New CLI')
 
-    expect(screen.queryByRole('menuitem')).toBeNull()
-  })
-
-  it('cancels its lookup when the menu closes', async () => {
-    mocks.subject = CHAT_SUBJECT
-    mocks.listSessions.mockReturnValue(new Promise(() => {}))
-    await renderItems('orca-chat-1')
-    cleanup()
-    expect(mocks.cancelListSessions).toHaveBeenCalledWith({
-      requestToken: expect.any(String)
+    expect(mocks.handleResumeInNewCli).not.toHaveBeenCalled()
+    expect(mocks.toastError).toHaveBeenCalledWith('Could not resume this session in a new CLI.', {
+      description: 'scanner crashed'
     })
   })
 })

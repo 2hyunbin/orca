@@ -173,6 +173,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
     const state = useAppStore.getState()
     const subject: TabSessionHistorySubject = {
       kind: 'chat',
+      agent: 'claude',
       sessionId: 'orca-chat-1',
       workspaceId: WORKTREE_ID,
       request

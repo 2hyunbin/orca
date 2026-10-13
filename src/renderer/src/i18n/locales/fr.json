@@ -13705,6 +13705,7 @@
             "resumeInChatConflict": "Un autre chat tient déjà cette conversation.",
             "resumeInChatTranscriptMissing": "L'historique de cette conversation n'a pas pu être chargé, elle ne peut donc pas être reprise dans le chat.",
             "resumeInChatFailed": "Impossible de reprendre cette session dans un nouveau chat.",
+            "resumeInNewCliFailed": "Impossible de reprendre cette session dans une nouvelle CLI.",
             "resumeInNewCliUnavailable": "Impossible d'ouvrir cette session dans la CLI.",
             "resumeInNewCliHostTooOld": "Mettez à jour Orca sur l'hôte qui exécute ce chat pour le reprendre dans une nouvelle CLI.",
             "folderWorkspaceUnavailable": "L'espace de travail de type dossier n'est plus disponible."

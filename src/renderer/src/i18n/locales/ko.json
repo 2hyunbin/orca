@@ -13629,6 +13629,7 @@
             "resumeInChatConflict": "다른 채팅에서 이미 이 대화를 진행 중입니다.",
             "resumeInChatTranscriptMissing": "이 대화 기록을 로드할 수 없어 채팅에서 재개할 수 없습니다.",
             "resumeInChatFailed": "새 채팅에서 이 세션을 재개할 수 없습니다.",
+            "resumeInNewCliFailed": "새 CLI에서 이 세션을 재개할 수 없습니다.",
             "resumeInNewCliUnavailable": "이 세션은 CLI에서 열 수 없습니다.",
             "resumeInNewCliHostTooOld": "이 채팅을 새 CLI에서 재개하려면 채팅을 실행하는 호스트의 Orca를 업데이트하세요.",
             "folderWorkspaceUnavailable": "폴더 워크스페이스는 더 이상 사용할 수 없습니다."

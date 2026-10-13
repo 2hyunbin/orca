@@ -93,12 +93,12 @@ export function useAiVaultSessionLaunchActions({
   )
 
   const launchInTerminal = useCallback(
-    (
+    async (
       session: AiVaultSession,
       targetWorktreeId: string | undefined,
       prepareStartup: (worktreeId: string) => Promise<AiVaultResumeStartup>,
       describeFailure: (message: string) => string = (message) => message
-    ): void => {
+    ): Promise<void> => {
       const targetId = resolveAiVaultSessionLaunchTargetOrNotify({
         sessionFilePath: session.filePath,
         sessionExecutionHostId: session.executionHostId,
@@ -118,7 +118,7 @@ export function useAiVaultSessionLaunchActions({
           )
         )
       }
-      void prepareStartup(targetId.worktreeId)
+      await prepareStartup(targetId.worktreeId)
         .then((startup) => {
           const launchResult = launchAiVaultSessionInNewTab({
             agent: session.agent,
@@ -161,7 +161,7 @@ export function useAiVaultSessionLaunchActions({
         void activateAiVaultStructuredSession(session)
         return
       }
-      launchInTerminal(session, targetWorktreeId, (worktreeId) =>
+      void launchInTerminal(session, targetWorktreeId, (worktreeId) =>
         prepareAiVaultSessionForResume(session)
           .then(dropDeletedSshResumeCwd)
           .then((preparedSession) => buildResumeStartup(preparedSession, worktreeId))
@@ -172,7 +172,7 @@ export function useAiVaultSessionLaunchActions({
 
   // Native chat keeps the conversation it owns; the terminal gets a copy (see the fork builder).
   const handleResumeInNewCli = useCallback(
-    (session: AiVaultSession, targetWorktreeId: string): void => {
+    (session: AiVaultSession, targetWorktreeId: string): Promise<void> => {
       const prepareStartup = async (worktreeId: string): Promise<AiVaultResumeStartup> => {
         const startup = buildAiVaultForkStartupForWorktree({
           state: useAppStore.getState(),
@@ -190,13 +190,18 @@ export function useAiVaultSessionLaunchActions({
         }
         return startup
       }
-      launchInTerminal(session, targetWorktreeId, prepareStartup, describeAiVaultCliForkFailure)
+      return launchInTerminal(
+        session,
+        targetWorktreeId,
+        prepareStartup,
+        describeAiVaultCliForkFailure
+      )
     },
     [agentCmdOverrides, launchInTerminal]
   )
 
   const handleResumeInNewChat = useCallback(
-    (session: AiVaultSession, targetWorktreeId?: string): void => {
+    async (session: AiVaultSession, targetWorktreeId?: string): Promise<void> => {
       if (!isAgentSessionHandleProvider(session.agent)) {
         return
       }
@@ -210,7 +215,7 @@ export function useAiVaultSessionLaunchActions({
         )
         return
       }
-      void resumeAiVaultSessionInNewChat(
+      await resumeAiVaultSessionInNewChat(
         session,
         session.agent,
         worktreeId,
