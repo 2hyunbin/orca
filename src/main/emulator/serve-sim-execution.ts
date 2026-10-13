@@ -123,8 +123,7 @@ export function resolveServeSimExecutable(): ServeSimExecutable {
   return { command: 'serve-sim', baseArgs: [], usesElectronAsNode: false }
 }
 
-// Why: `--kill [device]` takes an optional value, so `--kill -q <udid>` leaves it
-// unset and serve-sim kills every stream; `=` binds the device whatever follows.
+// Why: `--kill [device]` has an optional value; a detached udid is dropped and serve-sim kills every stream.
 export function serveSimKillArgs(udid: string): string[] {
   return [`--kill=${udid}`, '-q']
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EmulatorSessionInfo } from './emulator-types'
 import type { SimulatorDevice } from './simctl-simulator-devices'
 import type { ServeSimHelperProcess } from './serve-sim-helper-processes'
+import type * as ServeSimExecution from './serve-sim-execution'
 
 const {
   execServeSimCommandMock,
@@ -23,11 +24,11 @@ const {
 
 vi.mock('electron', () => ({ net: { fetch: netFetchMock } }))
 
-vi.mock('./serve-sim-execution', () => ({
+vi.mock('./serve-sim-execution', async (importOriginal) => ({
   execServeSimCommand: execServeSimCommandMock,
   parseServeSimCommandArgs: vi.fn(() => []),
   resolveServeSimExecutable: vi.fn(() => ({ command: '/serve-sim', env: {} })),
-  serveSimKillArgs: (udid: string) => [`--kill=${udid}`, '-q'],
+  serveSimKillArgs: (await importOriginal<typeof ServeSimExecution>()).serveSimKillArgs,
   stripEmulatorTargetArgs: vi.fn((args: string[]) => args)
 }))
 

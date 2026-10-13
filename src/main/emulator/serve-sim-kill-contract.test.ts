@@ -1,6 +1,6 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -33,7 +33,7 @@ function isAlive(helper: ChildProcess): boolean {
   return helper.exitCode === null && helper.signalCode === null
 }
 
-// Runs the bundled serve-sim against fake helpers in an isolated state dir.
+// TMPDIR isolates serve-sim's state dir so only these fake helpers are reachable.
 describe.skipIf(process.platform === 'win32')('serve-sim kill contract', () => {
   it('stops only the named device helper', async () => {
     const stateRoot = mkdtempSync(join(tmpdir(), 'orca-serve-sim-kill-'))
@@ -51,11 +51,11 @@ describe.skipIf(process.platform === 'win32')('serve-sim kill contract', () => {
     })
 
     execFileSync(process.execPath, [SERVE_SIM_ENTRY, ...serveSimKillArgs(DEVICE_A)], {
-      env: { ...process.env, TMPDIR: stateRoot },
-      stdio: 'ignore'
+      env: { ...process.env, TMPDIR: stateRoot }
     })
 
     await vi.waitFor(() => expect(isAlive(helperA)).toBe(false))
     expect(isAlive(helperB)).toBe(true)
+    expect(existsSync(join(stateRoot, 'serve-sim', `server-${DEVICE_B}.json`))).toBe(true)
   })
 })
