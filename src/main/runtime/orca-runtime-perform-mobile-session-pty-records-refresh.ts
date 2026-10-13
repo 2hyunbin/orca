@@ -177,7 +177,8 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
           try {
             const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
             agentStartup = await this.resolveMobileSessionTerminalCommand(workspace, {
-              agent: tab.launchAgent
+              agent: tab.launchAgent,
+              cwd: tab.startupCwd
             })
           } catch {
             // Why: a disabled or unresolvable agent must not make the tab
@@ -193,6 +194,7 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
             },
             cwd: tab.startupCwd,
             command: agentStartup.command,
+            shellOverride: agentStartup.shellOverride,
             env: agentStartup.env,
             startupCommandDelivery: agentStartup.startupCommandDelivery,
             launchConfig: agentStartup.launchConfig,

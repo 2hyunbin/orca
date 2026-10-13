@@ -7,7 +7,7 @@ import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resum
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
 import { buildAgentStartupPlan } from '../../shared/tui-agent-startup'
 import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
-import { resolveLocalWorkspaceStartupShell } from '../local-project-runtime-resolution'
+import { resolveFolderProjectStartupShell } from '../local-project-runtime-resolution'
 
 export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRuntimeWithRunCreateMobileSessionTerminal {
   protected async resolveMobileSessionTerminalCommand(
@@ -51,7 +51,7 @@ export class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends OrcaRunt
       throw new Error('Selected agent is disabled. Choose an enabled agent before creating.')
     }
     const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
-    const shellOverride = resolveLocalWorkspaceStartupShell(this.store, workspace.id, {
+    const shellOverride = resolveFolderProjectStartupShell(this.store, workspace.id, {
       cwd,
       fallbackHostShell
     })

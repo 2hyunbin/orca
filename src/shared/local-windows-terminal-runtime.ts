@@ -1,5 +1,6 @@
 import type { ProjectExecutionRuntimeResolution } from './project-execution-runtime'
 import type { GlobalSettings } from './global-settings-types'
+import { getProjectRuntimeRepairMessage } from './project-runtime-repair-message'
 
 type LocalWindowsTerminalRuntimeSettings =
   | Partial<Pick<GlobalSettings, 'terminalWindowsShell' | 'terminalWindowsWslDistro'>>
@@ -50,9 +51,7 @@ export function resolveLocalWindowsTerminalRuntimeOptions(args: {
   }
 
   if (projectRuntime.status === 'repair-required') {
-    throw new Error(
-      `Project runtime requires repair before terminal spawn: ${projectRuntime.repair.reason}`
-    )
+    throw new Error(getProjectRuntimeRepairMessage(projectRuntime.repair))
   }
 
   if (projectRuntime.runtime.kind === 'wsl') {

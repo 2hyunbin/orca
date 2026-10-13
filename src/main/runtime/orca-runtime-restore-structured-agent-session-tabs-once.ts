@@ -282,7 +282,12 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
     if (scope.connectionId) {
       return isWindowsAbsolutePathLike(scope.path) ? 'win32' : 'linux'
     }
-    const projectRuntime = resolveLocalProjectRuntimeForWorktreeId(this.store, scope.id)
+    const projectRuntime = resolveLocalProjectRuntimeForWorktreeId(
+      this.store,
+      scope.id,
+      undefined,
+      true
+    )
     if (
       (projectRuntime && isWslUncPath(startupCwd ?? '')) ||
       projectRuntime?.status === 'repair-required' ||

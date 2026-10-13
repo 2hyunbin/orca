@@ -6,6 +6,7 @@ import {
   resolveProjectExecutionRuntime
 } from '../../../../shared/project-execution-runtime'
 import { useState } from 'react'
+import { PROJECT_RUNTIME_REPAIR_MESSAGES } from '../../../../shared/project-runtime-repair-message'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Button } from '../ui/button'
 import { SettingsRow, SettingsSegmentedControl } from './SettingsFormControls'
@@ -334,19 +335,19 @@ function getProjectRuntimeDescription(
     if (resolution.repair.reason === 'wsl-unavailable') {
       return translate(
         'auto.components.settings.ProjectWindowsRuntimeSetting.wslUnavailable',
-        'WSL is not available. Switch this project to Windows or repair WSL.'
+        PROJECT_RUNTIME_REPAIR_MESSAGES['wsl-unavailable']
       )
     }
     if (resolution.repair.reason === 'wsl-distro-missing') {
       return translate(
         'auto.components.settings.ProjectWindowsRuntimeSetting.distroMissing',
-        '{{value0}} is not installed in WSL. Choose an installed distro or switch this project to Windows.',
+        PROJECT_RUNTIME_REPAIR_MESSAGES['wsl-distro-missing'],
         { value0: resolution.repair.preferredRuntime.distro ?? 'WSL' }
       )
     }
     return translate(
       'auto.components.settings.ProjectWindowsRuntimeSetting.distroRequired',
-      'Choose a WSL distro or switch this project to Windows.'
+      PROJECT_RUNTIME_REPAIR_MESSAGES['wsl-distro-required']
     )
   }
 

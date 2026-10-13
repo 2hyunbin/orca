@@ -12,8 +12,7 @@ import type {
 import { canonicalizeAgentSessionIdentity } from './agent-session-claim-identity'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
 import { resolveLocalWindowsAgentStartupShell } from '../../shared/windows-terminal-shell'
-import { resolveLocalProjectRuntimeForWorktreeId } from '../local-project-runtime-resolution'
-import { parseWorkspaceKey } from '../../shared/workspace-scope'
+import { resolveFolderProjectStartupShell } from '../local-project-runtime-resolution'
 import { buildAgentResumeStartupPlan } from '../../shared/tui-agent-startup'
 import { OrchestrationError } from './orchestration/orchestration-error'
 import {
@@ -29,13 +28,6 @@ export class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntim
     if (workspace.connectionId) {
       // Why: SSH target ids are not execution-namespace proof. Preserve the
       // legacy launch until an attested route can safely participate in claims.
-      return null
-    }
-    if (
-      parseWorkspaceKey(workspace.id)?.type === 'folder' &&
-      resolveLocalProjectRuntimeForWorktreeId(this.store, workspace.id)
-    ) {
-      // Path-only claims cannot prove a project-selected folder execution namespace.
       return null
     }
     const wsl = parseWslUncPath(workspace.path)
@@ -134,14 +126,17 @@ export class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntim
     if (!isTuiAgentEnabled(request.agent, settings.disabledTuiAgents)) {
       throw new Error('Selected agent is disabled. Choose an enabled agent before resuming.')
     }
-    const platform = this.getAgentLaunchPlatformForWorkspace(workspace)
+    const shellOverride = resolveFolderProjectStartupShell(this.store, workspace.id, {
+      cwd: workspace.path
+    })
+    const platform = this.getAgentLaunchPlatformForWorkspace(workspace, workspace.path)
     // Why: `workspace.repo` is display metadata and may be a row from another host; the launch
     // shape must match the PTY route this scope already resolved.
     const isRemote = Boolean(workspace.connectionId)
     const shell = resolveLocalWindowsAgentStartupShell({
       platform,
       isRemote,
-      terminalWindowsShell: settings.terminalWindowsShell
+      terminalWindowsShell: shellOverride ?? settings.terminalWindowsShell
     })
     const startup = buildAgentResumeStartupPlan({
       agent: request.agent,
@@ -167,6 +162,7 @@ export class OrcaRuntimeWithGetAgentSessionExecutionNamespace extends OrcaRuntim
     }
     const terminal = await this.createTerminal(`id:${workspace.id}`, {
       command: startup.launchCommand,
+      ...(shellOverride ? { shellOverride } : {}),
       env: startup.env,
       launchConfig: startup.launchConfig,
       startupCommandDelivery: startup.startupCommandDelivery,

@@ -17,7 +17,12 @@ import type { ProjectGroup } from './project-group-types'
 import type { Repo } from './repo-types'
 import { isPathInsideOrEqual } from './cross-platform-path'
 import { getProjectGroupSubtreeIds } from './project-groups'
-import { getRepoExecutionHostId, normalizeHostPart, parseExecutionHostId } from './execution-host'
+import {
+  getRepoExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
+  normalizeHostPart,
+  parseExecutionHostId
+} from './execution-host'
 
 export type FolderWorkspaceHostState = {
   folderWorkspaces: readonly FolderWorkspace[]
@@ -167,4 +172,24 @@ export function resolveFolderWorkspaceHost(
     return { kind: 'ambiguous' }
   }
   return { kind: 'ssh', targetId: [...connectionIds][0] }
+}
+
+export function findLocalFolderWorkspaceProjectRepo(
+  state: FolderWorkspaceHostState,
+  folderWorkspaceId: string
+): Repo | undefined {
+  const folder = state.folderWorkspaces.find((entry) => entry.id === folderWorkspaceId)
+  if (!folder || resolveFolderWorkspaceHost(state, folder.id).kind !== 'local') {
+    return undefined
+  }
+  const group = state.projectGroups.find((entry) => entry.id === folder.projectGroupId)
+  if (
+    (folder.executionHostId ?? group?.executionHostId ?? LOCAL_EXECUTION_HOST_ID) !==
+    LOCAL_EXECUTION_HOST_ID
+  ) {
+    return undefined
+  }
+  const candidates = findFolderWorkspaceCandidateRepos(state, folder.id)
+  const repo = candidates.length === 1 ? candidates[0] : undefined
+  return repo && getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID ? repo : undefined
 }

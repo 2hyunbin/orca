@@ -13,7 +13,7 @@ import {
 import { createHash } from 'node:crypto'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
 import { resolveAgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
-import { resolveLocalWorkspaceStartupShell } from '../local-project-runtime-resolution'
+import { resolveFolderProjectStartupShell } from '../local-project-runtime-resolution'
 import { buildExecutionHostAgentStartupPlan } from '../opencode/opencode-model-startup-plan'
 import type { RuntimeTerminalCreate } from '../../shared/runtime-types'
 import type {
@@ -131,7 +131,7 @@ export class OrcaRuntimeWithCreateAgentSession extends OrcaRuntimeWithGetAgentSe
       if (!isTuiAgentEnabled(request.agent, settings.disabledTuiAgents)) {
         throw new Error('Selected agent is disabled. Choose an enabled agent before creating.')
       }
-      const shellOverride = resolveLocalWorkspaceStartupShell(this.store, workspace.id, {
+      const shellOverride = resolveFolderProjectStartupShell(this.store, workspace.id, {
         cwd: startupCwd
       })
       const startupArgs = resolveAgentStartupPlanInputs({

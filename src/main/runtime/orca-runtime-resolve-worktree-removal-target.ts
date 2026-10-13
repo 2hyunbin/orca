@@ -24,7 +24,7 @@ import { terminalShellOverrideRefusal } from './terminal-shell-override-host-sup
 import { resolveTerminalStartupCwd } from '../../shared/terminal-startup-cwd'
 import {
   resolveLocalProjectRuntimeForWorktreeId,
-  resolveLocalWorkspaceStartupShell
+  resolveFolderProjectStartupShell
 } from '../local-project-runtime-resolution'
 import { LOCAL_EXECUTION_HOST_ID, parseExecutionHostId } from '../../shared/execution-host'
 import { invalidateAuthorizedRootsCacheForRepo } from '../ipc/filesystem-auth'
@@ -251,7 +251,7 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
       launch,
       workspace,
       this.store,
-      this.getAgentLaunchPlatformForWorkspace(workspace)
+      this.getAgentLaunchPlatformForWorkspace(workspace, launch.cwd)
     )
   }
 
@@ -270,7 +270,8 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
           ? resolveLocalProjectRuntimeForWorktreeId(
               this.store,
               workspace.id,
-              resolveTerminalStartupCwd(workspace.path, opts.cwd)
+              resolveTerminalStartupCwd(workspace.path, opts.cwd),
+              Boolean(opts.startupAgent || opts.launchAgent)
             )
           : undefined,
       // Same resolution as the spawn lanes below, so the refusal judges the cwd the PTY gets.
@@ -308,7 +309,7 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
 
     const cwd = resolveTerminalStartupCwd(workspace.path, opts.cwd)
     const shellOverride =
-      opts.shellOverride ?? resolveLocalWorkspaceStartupShell(store, workspace.id, { cwd })
+      opts.shellOverride ?? resolveFolderProjectStartupShell(store, workspace.id, { cwd })
     return buildRuntimeAgentTerminalStartupOptions(
       workspace,
       { ...opts, ...(shellOverride ? { shellOverride } : {}) },

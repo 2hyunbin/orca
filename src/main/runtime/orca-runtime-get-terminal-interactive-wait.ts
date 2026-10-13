@@ -216,7 +216,7 @@ export class OrcaRuntimeWithGetTerminalInteractiveWait extends OrcaRuntimeWithAd
     const workspace = repo
       ? { repo, path: repo.path, connectionId: repo.connectionId }
       : await this.resolveTerminalWorkspaceLaunchScope(target.worktree)
-    const platform = this.getAgentLaunchPlatformForWorkspace(workspace)
+    const platform = this.getAgentLaunchPlatformForWorkspace(workspace, workspace.path)
     const shell = resolveStartupShell(
       platform,
       resolveLocalWindowsAgentStartupShell({

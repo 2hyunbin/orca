@@ -76,7 +76,8 @@ export async function prepareRuntimePtySpawn(
           projectRuntime: resolveLocalProjectRuntimeForWorktreeId(
             ctx.deps.store,
             args.worktreeId,
-            ctx.cwd
+            ctx.cwd,
+            Boolean(args.launchAgent)
           ),
           fallbackHostShell: process.env.COMSPEC || 'powershell.exe',
           sshLoginShell: resolveManagedSshHostLoginShell()

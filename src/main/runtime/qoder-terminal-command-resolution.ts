@@ -27,7 +27,12 @@ export async function resolveQoderTerminalCommandForWorkspace(
     context:
       !workspace.connectionId && store
         ? {
-            projectRuntime: resolveLocalProjectRuntimeForWorktreeId(store, workspace.id),
+            projectRuntime: resolveLocalProjectRuntimeForWorktreeId(
+              store,
+              workspace.id,
+              launch.cwd,
+              true
+            ),
             wslDistro: parseWslUncPath(workspace.path)?.distro
           }
         : undefined,
