@@ -43,7 +43,8 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
   })
 
   it('reports the token user as a domain-relative SID this process can use', () => {
-    expect(sid).toMatch(/^S-1-5-21(?:-\d+){4}$/)
+    // S-1-5-21: a local or AD account; S-1-12-1: an Entra ID account.
+    expect(sid).toMatch(/^S-1-(?:5-21|12-1)(?:-\d+){4}$/)
     const path = join(root, 'only-me.txt')
     addon.createFileWithDacl(path, `D:P(A;;FA;;;${sid})`, Buffer.from('mine'))
     // A DACL naming only that SID still lets this process read: it is our identity.

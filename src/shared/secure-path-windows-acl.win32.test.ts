@@ -255,17 +255,21 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
     writeSecureFile(join(dir, 'second.json'), '{}')
 
     const relockStartedAt = performance.now()
-    await vi.waitFor(() => expect(daclOf(dir)?.protected).toBe(true), {
-      timeout: 60_000,
-      interval: 20
-    })
+    // The parent turns protected before propagation reaches its children, so wait on both ends.
+    await vi.waitFor(
+      () => {
+        expect(daclOf(dir)?.protected).toBe(true)
+        expect(sidsOf(join(dir, 'cache-0'))).toEqual(ORCA_PRINCIPALS())
+        expect(sidsOf(join(dir, 'cache-3999'))).toEqual(ORCA_PRINCIPALS())
+      },
+      { timeout: 60_000, interval: 20 }
+    )
     const relockMs = performance.now() - relockStartedAt + writeMs
     console.log(
       `[live-acl] write ${writeMs.toFixed(1)}ms while relock of 4000 entries ~${relockMs.toFixed(0)}ms`
     )
 
     expect(writes.asyncCount).toBe(1)
-    expect(sidsOf(join(dir, 'cache-0'))).toEqual(ORCA_PRINCIPALS())
 
     // A new process finds the directory already locked and leaves it alone.
     __resetSecureFileHardenedPathsForTests()
