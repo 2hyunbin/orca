@@ -31,6 +31,7 @@ export async function consumeCompleteJsonlLines(args: {
   shouldStop?: () => boolean
   signal?: AbortSignal
 }): Promise<JsonlReadResult> {
+  throwIfAiVaultScanCancelled(args.signal)
   if (args.shouldStop?.()) {
     return {
       consumedThrough: args.start,
@@ -53,7 +54,8 @@ export async function consumeCompleteJsonlLines(args: {
   const stream = openTranscriptReadStream(args.path, { start: args.start }, 'scan', args.signal)
   let chunkStart = args.start
   for await (const chunk of stream as AsyncIterable<Buffer>) {
-    // Why: an SSH-backed stream ignores the signal, and a buffered chunk can land after the abort.
+    // Per chunk, so a cancel stops a giant (or over-budget) record within one
+    // chunk; leaving the loop destroys the stream and releases its handle.
     throwIfAiVaultScanCancelled(args.signal)
     bytesRead += chunk.length
     const chunkEnd = chunkStart + chunk.length

@@ -83,6 +83,7 @@ export async function readJsonObjectIfExists(
     const parsed: unknown = JSON.parse(await wslGatedReadFile(filePath, 'utf-8', 'scan', signal))
     return asRecord(parsed)
   } catch (error) {
+    // A cancel is not "no file": null here would be cached as the enrichment.
     throwIfAiVaultScanCancelled(signal)
     // A missing or malformed file is genuinely "no enrichment", but a gate
     // refusal must reach `parseSessionCandidate` as an issue — degrading it to

@@ -220,7 +220,6 @@ async function parseCachedInLane(
       signal
     })
     const enriched = await enrichSessionFromSidecar(candidate, read.session, platform, signal)
-    // A sibling read that degraded an abort to "no metadata" must not be cached as complete.
     throwIfAiVaultScanCancelled(signal)
     storeSessionParseCacheEntry(file.path, {
       mtimeMs: file.mtimeMs,

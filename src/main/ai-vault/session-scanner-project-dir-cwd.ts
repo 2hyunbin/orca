@@ -57,6 +57,7 @@ export async function cachedProjectDirCwd(
     return cached
   }
   const cwd = await readProjectDirCwd(projectDir, issues, agent, signal)
+  throwIfAiVaultScanCancelled(signal)
   if (cwd) {
     if (projectDirCwdCache.size >= PROJECT_DIR_CWD_CACHE_MAX) {
       const oldest = projectDirCwdCache.keys().next()

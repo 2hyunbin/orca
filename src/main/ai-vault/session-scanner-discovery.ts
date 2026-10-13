@@ -23,7 +23,7 @@ type SessionFileObservation =
 
 async function withNativeDiscoverySlot<T>(
   read: () => Promise<T>,
-  signal: AbortSignal | undefined
+  signal?: AbortSignal
 ): Promise<T> {
   const release = await nativeDiscoverySlots.acquire(0, signal)
   try {
@@ -51,6 +51,8 @@ export async function discoverFiles(args: {
   const native = !isWslUncPath(args.rootDir)
 
   function consume(observations: readonly SessionFileObservation[]): void {
+    // A stat the cancel cut short is not an unreadable file; never record it.
+    throwIfAiVaultScanCancelled(args.signal)
     for (const observation of observations) {
       if ('issue' in observation) {
         recordSessionScanIssue(args.issues, { agent: args.agent, ...observation.issue })
@@ -93,8 +95,6 @@ export async function discoverFiles(args: {
     }
     return finishPending().then(() => {
       pending = readBatch(paths)
-      // Observe overlap failures now; finishPending still consumes the original promise in order.
-      void pending.catch(() => undefined)
       paths = []
     })
   }
@@ -108,9 +108,12 @@ export async function discoverFiles(args: {
     const observations = await mapWithConcurrency(groups, NATIVE_DISCOVERY_CONCURRENCY, (group) =>
       withNativeDiscoverySlot(async () => {
         const files: SessionFileObservation[] = []
+        // Breaks rather than throws: `pending` is not awaited until the next
+        // batch, and `consume` reports the cancel when it is.
         for (const path of group) {
-          // Why: a native stat ignores the signal once issued, so stop before the next one.
-          throwIfAiVaultScanCancelled(args.signal)
+          if (args.signal?.aborted) {
+            break
+          }
           files.push(await observeSessionFile(path, args.contentDependencyPath, args.signal))
         }
         return files
@@ -172,10 +175,8 @@ export async function discoverFiles(args: {
 
 async function observeSessionFile(
   path: string,
-  contentDependencyPath:
-    | ((path: string) => string | undefined | Promise<string | undefined>)
-    | undefined,
-  signal: AbortSignal | undefined
+  contentDependencyPath?: (path: string) => string | undefined | Promise<string | undefined>,
+  signal?: AbortSignal
 ): Promise<SessionFileObservation> {
   try {
     const fileStat = await wslGatedStat(path, 'scan', signal)
@@ -194,7 +195,6 @@ async function observeSessionFile(
       sidecarPath
     }
   } catch (err) {
-    throwIfAiVaultScanCancelled(signal)
     return { issue: { path, message: errorMessage(err) } }
   }
 }
@@ -208,7 +208,7 @@ async function observeSessionFile(
  */
 async function observeSessionSidecar(
   filePath: string | undefined,
-  signal: AbortSignal | undefined
+  signal?: AbortSignal
 ): Promise<SessionSidecarObservation> {
   if (!filePath) {
     return 'none'

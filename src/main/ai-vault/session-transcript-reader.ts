@@ -132,7 +132,6 @@ export async function readResumableTranscript(args: {
     }
 
     const session = await displayState.finalize(args.platform)
-    // A finalize lookup that swallowed the abort must not report this read complete.
     throwIfAiVaultScanCancelled(args.signal)
     channel.finishRead({ session, byteOffset: readResult.consumedThrough, incomplete: false })
     return {
@@ -182,7 +181,6 @@ export async function readWholeTranscript(args: {
   channel.beginRead({ candidate: args.candidate, mode: 'replace', previousByteOffset: 0 })
   try {
     const session = await parseAgentSessionFile(args.candidate, args.platform, channel, args.signal)
-    // Parsers that treat an unreadable file as "no session" would otherwise turn an abort into one.
     throwIfAiVaultScanCancelled(args.signal)
     channel.finishRead({ session, byteOffset: file.sizeBytes ?? 0, incomplete: false })
     return session
@@ -205,7 +203,7 @@ export async function readWholeTranscript(args: {
 async function endsWithNewlineAt(
   path: string,
   offset: number,
-  signal: AbortSignal | undefined
+  signal?: AbortSignal
 ): Promise<boolean> {
   const slice = await readTranscriptSlice(path, offset - 1, 1, 'scan', signal)
   return slice.length === 1 && slice[0] === NEWLINE_BYTE
