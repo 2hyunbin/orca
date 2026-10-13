@@ -1,5 +1,4 @@
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import { applyAdminPowerShellSetting } from '../windows-admin-terminal-setting'
 import { getLegacyOpenCodeEnvKeysToDelete } from '../../../opencode/legacy-shared-config-dir'
 import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { isRestoreSpawnIntent } from '../../../../shared/host-spawn-admission'
@@ -180,7 +179,6 @@ export async function buildPtyIpcSpawnOptions(
     ctx.spawnOptions.terminalWindowsPowerShellImplementation = ctx.deps.getSettings
       ? (ctx.deps.getSettings()?.terminalWindowsPowerShellImplementation ?? 'auto')
       : undefined
-    applyAdminPowerShellSetting(ctx.spawnOptions, ctx.deps.getSettings?.(), ctx.expectedWslDistro)
   }
   const startupIngress = getStartupTerminalIngressIntent(args)
   if (startupIngress) {

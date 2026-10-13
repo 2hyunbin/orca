@@ -22,6 +22,8 @@ export const appApi = {
     return () => ipcRenderer.removeListener('app:profileStateSaveDelayChanged', listener)
   },
   getIdentity: (): Promise<AppIdentity> => ipcRenderer.invoke('app:getIdentity'),
+  getWindowsAdministratorStatus: (): Promise<boolean | null> =>
+    ipcRenderer.invoke('app:getWindowsAdministratorStatus'),
   getFeatureWallAssetBaseUrl: (): Promise<string> =>
     ipcRenderer.invoke('app:getFeatureWallAssetBaseUrl'),
   relaunch: (): Promise<void> =>

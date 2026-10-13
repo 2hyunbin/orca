@@ -21,21 +21,15 @@ use std::process::{exit, Command};
 const SERVER_CONFIG_FILENAME: &str = "orca-launcher.cfg";
 
 #[cfg(windows)]
-mod terminal_host;
-#[cfg(windows)]
-mod terminal_host_paths;
-#[cfg(windows)]
-mod terminal_host_process;
-#[cfg(windows)]
-mod terminal_host_security;
+mod administrator_status;
 
 fn main() {
+    #[cfg(windows)]
+    administrator_status::run_if_requested();
     let launcher = match env::current_exe() {
         Ok(path) => path,
         Err(error) => fail(&format!("Unable to start the Orca CLI: {error}")),
     };
-    #[cfg(windows)]
-    terminal_host::run_if_requested(&launcher);
     if let Some(config) = launcher
         .parent()
         .map(|directory| directory.join(SERVER_CONFIG_FILENAME))
@@ -122,11 +116,7 @@ fn run_server_cli(config_path: &Path) -> ! {
         }
     }
     env::set_var("ORCA_USER_DATA_PATH", user_data_path);
-    for name in [
-        "NODE_OPTIONS",
-        "NODE_REPL_EXTERNAL_MODULE",
-        "ELECTRON_RUN_AS_NODE",
-    ] {
+    for name in ["NODE_OPTIONS", "NODE_REPL_EXTERNAL_MODULE", "ELECTRON_RUN_AS_NODE"] {
         env::remove_var(name);
     }
     run_cli(&node_path, &cli_path)

@@ -48,8 +48,7 @@ export class DegradedDaemonPtyProvider implements IPtyProvider {
       opts.current,
       opts.fallback,
       this.sessionProviders,
-      opts.probeCurrentDaemonSpawn ?? null,
-      opts.legacy.find((adapter) => adapter.windowsAdministrator === true)
+      opts.probeCurrentDaemonSpawn ?? null
     )
     this.ownerRecovery = new DegradedDaemonOwnerRecovery(
       this.allProviders(),

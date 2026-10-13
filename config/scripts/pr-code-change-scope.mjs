@@ -411,6 +411,7 @@ const WINDOWS_PACKAGE_TESTS = [
   'src/main/windows/windows-process-tree-command-line-patch.test.ts',
   'src/main/windows/windows-process-table-native-addon.win32.test.ts',
   'src/main/daemon/daemon-pid-identity-native.win32.test.ts',
+  'src/main/windows/windows-administrator-status.win32.test.ts',
   'src/main/persistence/profile-state/profile-state-access-windows-native.win32.test.ts',
   'src/main/windows-live-tree-kill.win32.test.ts',
   'src/main/wsl/wsl-runner.test.ts',
@@ -678,8 +679,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   for await (const chunk of process.stdin) {
     input += chunk
   }
-  const files = input.split(/\r?\n/).filter(Boolean)
-  const classification = classifyPrJobs(files, {
+  const classification = classifyPrJobs(input.split(/\r?\n/).filter(Boolean), {
     allowMobileCiTools: process.argv.includes('--mobile-ci-tools'),
     allowDaemonInitTestSupport: process.argv.includes('--daemon-init-test-support')
   })

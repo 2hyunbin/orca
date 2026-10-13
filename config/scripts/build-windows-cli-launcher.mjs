@@ -19,12 +19,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     binName: 'orca',
     label: 'Windows CLI launcher',
     fingerprintInputs: [
-      ...[
-        'terminal_host',
-        'terminal_host_paths',
-        'terminal_host_process',
-        'terminal_host_security'
-      ].map((name) => join(crateRoot, 'src', `${name}.rs`)),
+      join(crateRoot, 'src', 'administrator_status.rs'),
       iconPath,
       join(repoRoot, 'config/scripts/build-windows-cli-launcher.mjs')
     ],

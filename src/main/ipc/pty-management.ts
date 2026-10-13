@@ -55,16 +55,13 @@ function readCurrentDaemonIdentity(): DaemonEndpointIdentity | null {
   return provider ? getCurrentDaemonAdapter(provider).getDaemonIdentity() : null
 }
 
-type OwnedSession = { session: DaemonSessionInfo; adapter: DaemonPtyAdapter }
-
-// Why: callers route shutdown to the listing adapter, not by protocolVersion — adapters can share one.
-async function collectSessions(adapters: DaemonPtyAdapter[]): Promise<OwnedSession[]> {
+async function collectSessions(adapters: DaemonPtyAdapter[]): Promise<DaemonSessionInfo[]> {
   const results = await Promise.allSettled(
     adapters.map(async (adapter) => {
       const sessions = await adapter.listSessions()
-      return sessions.map<OwnedSession>((s) => ({
-        session: { ...s, protocolVersion: adapter.protocolVersion },
-        adapter
+      return sessions.map<DaemonSessionInfo>((s) => ({
+        ...s,
+        protocolVersion: adapter.protocolVersion
       }))
     })
   )
@@ -134,8 +131,8 @@ export function registerDaemonManagementHandlers(): void {
   ipcMain.handle(
     'pty:management:listSessions',
     async (): Promise<{ sessions: DaemonSessionInfo[]; degraded: boolean }> => {
-      const owned = await collectSessions(getDaemonAdapters())
-      return { sessions: owned.map((o) => o.session), degraded: isDaemonDegraded() }
+      const sessions = await collectSessions(getDaemonAdapters())
+      return { sessions, degraded: isDaemonDegraded() }
     }
   )
 
@@ -150,7 +147,7 @@ export function registerDaemonManagementHandlers(): void {
       const adapters = getDaemonAdapters()
       // Why: snapshot session IDs up front so mid-kill respawns aren't counted as "remaining".
       const initial = await collectSessions(adapters)
-      const initialIds = new Set(initial.map((o) => o.session.sessionId))
+      const initialIds = new Set(initial.map((s) => s.sessionId))
       const initialCount = initial.length
 
       if (initialCount === 0) {
@@ -159,7 +156,12 @@ export function registerDaemonManagementHandlers(): void {
 
       // Why: no retry — session.kill() is idempotent and runs its own kill ladder; allSettled so one rejection doesn't abort the rest.
       await Promise.allSettled(
-        initial.map(async ({ session, adapter: owner }) => {
+        initial.map(async (session) => {
+          // Why: assumes PROTOCOL_VERSION stays distinct from PREVIOUS_DAEMON_PROTOCOL_VERSIONS (types.ts), else legacy sessions misroute here.
+          const owner = adapters.find((a) => a.protocolVersion === session.protocolVersion)
+          if (!owner) {
+            return
+          }
           // Why: immediate=true only matters to legacy/future adapters; swallow rejections since remainingCount reports stuck sessions.
           await owner.shutdown(session.sessionId, { immediate: true }).catch(() => {})
         })
@@ -172,7 +174,9 @@ export function registerDaemonManagementHandlers(): void {
         await sleep(POLL_INTERVAL_MS)
         const current = await collectSessions(adapters)
         remainingOriginalIds = new Set(
-          current.filter((o) => initialIds.has(o.session.sessionId)).map((o) => o.session.sessionId)
+          current
+            .filter((session) => initialIds.has(session.sessionId))
+            .map((session) => session.sessionId)
         )
         remainingOriginalCount = remainingOriginalIds.size
         if (remainingOriginalCount === 0) {
@@ -199,11 +203,14 @@ export function registerDaemonManagementHandlers(): void {
       }
       const adapters = getDaemonAdapters()
       const sessions = await collectSessions(adapters)
-      const match = sessions.find((o) => o.session.sessionId === args.sessionId)
+      const match = sessions.find((s) => s.sessionId === args.sessionId)
       if (!match) {
         return { success: false }
       }
-      const owner = match.adapter
+      const owner = adapters.find((a) => a.protocolVersion === match.protocolVersion)
+      if (!owner) {
+        return { success: false }
+      }
       try {
         await owner.shutdown(args.sessionId, { immediate: true })
         return { success: true }

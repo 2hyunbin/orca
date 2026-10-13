@@ -79,13 +79,6 @@ export class LocalPtyProvider implements IPtyProvider {
    * Windows launches can pre-deliver startup commands in argv, so the stdin fallback only runs when needed.
    */
   spawn(args: PtySpawnOptions): Promise<PtySpawnResult> {
-    if (args.windowsRunAsAdministrator) {
-      return Promise.reject(
-        new Error(
-          'Administrator terminals require the Windows terminal host. Try again after the terminal host starts.'
-        )
-      )
-    }
     return spawnLocalPty(args, () => this.opts)
   }
 

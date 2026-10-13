@@ -30,6 +30,7 @@ import { TerminalInteractionSection } from './TerminalInteractionSection'
 import { TerminalRenderingSection } from './TerminalRenderingSection'
 import { TerminalSetupScriptSection } from './TerminalSetupScriptSection'
 import { TerminalWindowsShellSection } from './TerminalWindowsShellSection'
+import { TerminalWindowsAdministratorSection } from './TerminalWindowsAdministratorSection'
 import { SettingsSegmentedControl, SettingsSubsectionHeader } from './SettingsFormControls'
 import { translate } from '@/i18n/i18n'
 import { translateSearchKeyword } from './settings-search-keywords'
@@ -301,17 +302,17 @@ export function TerminalPane({
 
   const visibleSections = [
     defaultShellSection,
+    isWindows &&
+    matchesSettingsSearch(searchQuery, getTerminalWindowsAdministratorSearchEntry()) ? (
+      <TerminalWindowsAdministratorSection key="windows-administrator" />
+    ) : null,
     showWindowsHostSettings &&
-    matchesSettingsSearch(searchQuery, [
-      ...getTerminalWindowsShellSearchEntry(),
-      ...getTerminalWindowsAdministratorSearchEntry()
-    ]) ? (
+    matchesSettingsSearch(searchQuery, getTerminalWindowsShellSearchEntry()) ? (
       <TerminalWindowsShellSection
         key="windows-shell"
         updateSettings={updateSettings}
         windowsShell={windowsShell}
         gitBashAvailable={gitBashAvailable}
-        administrator={settings.terminalWindowsPowerShellAdministrator}
       />
     ) : null,
     matchesSettingsSearch(searchQuery, getTerminalRenderingSearchEntries()) ? (

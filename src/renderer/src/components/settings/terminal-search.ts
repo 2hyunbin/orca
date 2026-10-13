@@ -111,6 +111,7 @@ export function getTerminalPaneSearchEntries(platform: {
   return [
     ...getTerminalRenderingSearchEntries(),
     ...getTerminalPaneInteractionSearchEntries(),
+    ...(platform.isWindows ? getTerminalWindowsAdministratorSearchEntry() : []),
     ...(!isWindowsTerminalHost
       ? [
           {
@@ -174,7 +175,6 @@ export function getTerminalPaneSearchEntries(platform: {
     ...(isWindowsTerminalHost
       ? [
           ...getTerminalWindowsShellSearchEntry(),
-          ...getTerminalWindowsAdministratorSearchEntry(),
           ...getTerminalWindowsPowershellImplementationSearchEntry()
         ]
       : []),

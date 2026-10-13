@@ -11,6 +11,7 @@ export function createWebAppApi(): Partial<PreloadApi> {
       // Browser preferences do not use the desktop profile writer.
       isProfileStateSaveDelayed: () => Promise.resolve(false),
       onProfileStateSaveDelayChanged: () => () => undefined,
+      getWindowsAdministratorStatus: () => Promise.resolve(null),
       getIdentity: () =>
         Promise.resolve({
           name: 'Orca',

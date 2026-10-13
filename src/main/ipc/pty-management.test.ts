@@ -367,28 +367,6 @@ describe('pty:management IPC handlers', () => {
       expect(legacy.shutdown).toHaveBeenCalledWith('old-1', { immediate: true })
     })
 
-    it('shuts down via the owning adapter when two adapters share a protocolVersion', async () => {
-      const first = makeAdapter(5, [])
-      const secondSessions = [makeSession('admin-1')]
-      const second = makeAdapter(5, [])
-      second.listSessions = vi.fn(async () =>
-        secondSessions.map(({ protocolVersion: _pv, ...rest }) => rest)
-      )
-      second.shutdown = vi.fn(async () => {
-        secondSessions.length = 0
-      })
-      const { registerDaemonManagementHandlers } = await importFresh()
-      getDaemonProviderMock.mockReturnValue(await makeRouter(first, [second]))
-      registerDaemonManagementHandlers()
-
-      const handlers = buildHandlerMap()
-      const result = await runKillAllWithPolls(handlers['pty:management:killAll'])
-
-      expect(result.killedSessionIds).toEqual(['admin-1'])
-      expect(second.shutdown).toHaveBeenCalledWith('admin-1', { immediate: true })
-      expect(first.shutdown).not.toHaveBeenCalled()
-    })
-
     it('reports remainingCount when sessions refuse to die after the poll window', async () => {
       const sessions = [makeSession('stuck')]
       const current = makeAdapter(5, [])
@@ -503,21 +481,6 @@ describe('pty:management IPC handlers', () => {
       expect(result.success).toBe(true)
       expect(legacy.shutdown).toHaveBeenCalledWith('old-1', { immediate: true })
       expect(current.shutdown).not.toHaveBeenCalled()
-    })
-
-    it('routes to the owning adapter when two adapters share a protocolVersion', async () => {
-      const first = makeAdapter(5, [])
-      const second = makeAdapter(5, [makeSession('admin-1')])
-      const { registerDaemonManagementHandlers } = await importFresh()
-      getDaemonProviderMock.mockReturnValue(await makeRouter(first, [second]))
-      registerDaemonManagementHandlers()
-
-      const handlers = buildHandlerMap()
-      expect(await handlers['pty:management:killOne']({}, { sessionId: 'admin-1' })).toEqual({
-        success: true
-      })
-      expect(second.shutdown).toHaveBeenCalledWith('admin-1', { immediate: true })
-      expect(first.shutdown).not.toHaveBeenCalled()
     })
 
     it('returns success=false for unknown sessionId', async () => {

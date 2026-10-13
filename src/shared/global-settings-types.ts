@@ -183,8 +183,6 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   localWindowsRuntimeDefault: GlobalWindowsRuntimeDefault
   /** 'auto' resolves to PowerShell 7+ when present, else falls back to inbox Windows PowerShell. */
   terminalWindowsPowerShellImplementation: 'auto' | 'powershell.exe' | 'pwsh.exe'
-  /** Opt-in elevation for new native Windows PowerShell terminals. */
-  terminalWindowsPowerShellAdministrator?: boolean
   terminalFocusFollowsMouse: boolean
   /** X11/gnome-terminal "copy on select": selecting text auto-copies to the clipboard; default off. */
   terminalClipboardOnSelect: boolean

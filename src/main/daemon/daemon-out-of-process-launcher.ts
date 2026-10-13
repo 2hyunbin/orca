@@ -33,7 +33,6 @@ import { ensureDaemonSocketDir } from './daemon-socket-endpoint-path'
 import { inspectDaemonHostImage } from './daemon-host-image'
 import { noteSeveredDaemon } from './daemon-host-image-state'
 import { readDaemonPidRecord } from './daemon-endpoint-incarnation'
-import { launchWindowsAdminDaemon } from './windows-admin-daemon-launch'
 
 // Why: the adapter decides a runtime resolver replacement, but the launcher completes it — and by
 // then the daemon has usually self-retired (dropping its last authenticated client is enough), so
@@ -79,7 +78,6 @@ function createPreservedDaemonHandle(
 }
 
 export type DaemonLaunchPolicy = {
-  windowsAdministrator?: boolean
   macosLoginSessionWatch?: boolean
   startupTimeoutMs?: number
   spawnAdmission?: 'observe' | 'enforce'
@@ -87,12 +85,7 @@ export type DaemonLaunchPolicy = {
 
 export function createOutOfProcessLauncher(
   runtimeDir: string,
-  {
-    macosLoginSessionWatch = false,
-    startupTimeoutMs,
-    spawnAdmission,
-    windowsAdministrator
-  }: DaemonLaunchPolicy = {}
+  { macosLoginSessionWatch = false, startupTimeoutMs, spawnAdmission }: DaemonLaunchPolicy = {}
 ): DaemonLauncher {
   return async (socketPath, tokenPath, suppliedPidPath, suppliedLaunchNonce) => {
     const entryPath = getDaemonEntryPath()
@@ -185,20 +178,6 @@ export function createOutOfProcessLauncher(
       pruneDaemonHostStaging()
       // Fork the relocated entry when available; otherwise the install-dir entry.
       const forkEntryPath = relocatedHost ? relocatedHost.entryPath : entryPath
-      if (windowsAdministrator) {
-        return await launchWindowsAdminDaemon(runtimeDir, {
-          entryPath,
-          forkEntryPath,
-          relocatedExecPath: relocatedHost?.execPath,
-          userDataPath,
-          socketPath,
-          tokenPath,
-          pidPath,
-          launchNonce,
-          macosLoginSessionWatch,
-          ...(spawnAdmission ? { spawnAdmission } : {})
-        })
-      }
       let launched
       try {
         launched = await launchDaemonChild({

@@ -8,16 +8,16 @@ import {
 import { matchesSettingsSearch } from './settings-search'
 
 describe('getTerminalPaneSearchEntries', () => {
-  it('finds administrator PowerShell on a Windows execution host only', () => {
-    const windows = getTerminalPaneSearchEntries({
+  it('indexes desktop administrator mode only for Windows clients', () => {
+    const windows = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })
+    const remoteWindows = getTerminalPaneSearchEntries({
       isWindows: false,
       isWindowsTerminalHost: true,
       isMac: true
     })
-    const unix = getTerminalPaneSearchEntries({ isWindows: false, isMac: true })
-    expect(matchesSettingsSearch('administrator', windows)).toBe(true)
+    expect(windows.some((entry) => entry.title === 'Windows administrator mode')).toBe(true)
     expect(matchesSettingsSearch('uac', windows)).toBe(true)
-    expect(matchesSettingsSearch('administrator', unix)).toBe(false)
+    expect(remoteWindows.some((entry) => entry.title === 'Windows administrator mode')).toBe(false)
   })
   it('includes the Windows right-click setting on Windows', () => {
     const entries = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })

@@ -69,6 +69,43 @@ The default shell on Windows is configurable between PowerShell, Command Prompt,
 
 For repos on a WSL filesystem (`\\wsl.localhost\...`), Orca launches through `wsl.exe -d <distro>`. For Windows-path repos opened in WSL, Orca translates the cwd to `/mnt/<drive>/...` and drops you into a login bash.
 
+## Windows administrator mode
+
+Open **Settings → Terminal → Windows administrator mode** to see whether the
+Orca desktop is running as **Administrator** or **Standard user**. **Unable to
+determine** means Orca could not read its Windows elevation status. This is a
+status display, not a saved permission preference or a per-terminal switch.
+
+To run Orca as administrator:
+
+1. Finish your work in local terminals, then exit Orca.
+2. Find Orca in the Windows Start menu, right-click it, and choose **Run as
+   administrator**. Approve the Windows prompt using the same account that
+   normally runs Orca.
+3. If Orca reconnects to an existing ordinary terminal host, use **Settings →
+   Terminal → Manage Sessions → Restart daemon** after reopening. This ends
+   local terminals on that daemon. Newly opened local shells and terminal
+   agents then inherit the administrator desktop's permissions.
+
+To check a PowerShell terminal's own permissions, run:
+
+```powershell
+([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+```
+
+`True` means that PowerShell process has administrator permissions.
+
+Administrator mode applies to the whole desktop. Existing processes do not
+change permissions when you relaunch it. SSH and WSL permissions remain
+controlled by their execution hosts. When running `orca` commands in an
+external PowerShell window, run that window with the same administrator mode
+as the Orca desktop.
+
+To return to ordinary permissions, finish and close all local terminal
+sessions, exit Orca, and launch it normally. Closing the sessions lets the
+retained terminal host retire after Orca disconnects; leaving sessions running
+can retain an administrator host even after the desktop exits.
+
 ## Shortcuts
 
 - `Cmd-T` — new terminal tab in the current worktree.

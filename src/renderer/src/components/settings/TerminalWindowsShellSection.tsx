@@ -3,19 +3,16 @@ import { WINDOWS_GIT_BASH_SHELL } from '../../../../shared/windows-terminal-shel
 import {
   SettingsRow,
   SettingsSegmentedControl,
-  SettingsSwitchRow,
   SettingsSubsectionHeader
 } from './SettingsFormControls'
 import { SearchableSetting } from './SearchableSetting'
 import { translate } from '@/i18n/i18n'
 import { ShellIcon } from '../tab-bar/shell-icons'
-import { getTerminalWindowsAdministratorSearchEntry } from './terminal-windows-search'
 
 type TerminalWindowsShellSectionProps = {
   updateSettings: (updates: Partial<GlobalSettings>) => void
   windowsShell: string
   gitBashAvailable: boolean
-  administrator?: boolean
 }
 
 function windowsShellLabel(shell: string, label: string): React.JSX.Element {
@@ -30,8 +27,7 @@ function windowsShellLabel(shell: string, label: string): React.JSX.Element {
 export function TerminalWindowsShellSection({
   updateSettings,
   windowsShell,
-  gitBashAvailable,
-  administrator = false
+  gitBashAvailable
 }: TerminalWindowsShellSectionProps): React.JSX.Element {
   const showGitBashOption = gitBashAvailable || windowsShell === WINDOWS_GIT_BASH_SHELL
   // Why: selecting WSL here would omit its required distro, but an existing WSL default must stay visible.
@@ -143,22 +139,6 @@ export function TerminalWindowsShellSection({
                     : [])
                 ]}
               />
-            }
-          />
-        </SearchableSetting>
-        <SearchableSetting {...getTerminalWindowsAdministratorSearchEntry()[0]}>
-          <SettingsSwitchRow
-            label={translate(
-              'settings.terminal.windows.administrator',
-              'Run new PowerShell terminals as administrator'
-            )}
-            description={translate(
-              'settings.terminal.windows.administratorDescription',
-              'Windows asks for approval when the administrator terminal host starts. Existing terminals keep their permissions. Applies to PowerShell on this host; Orca does not need administrator permissions.'
-            )}
-            checked={administrator}
-            onChange={() =>
-              updateSettings({ terminalWindowsPowerShellAdministrator: !administrator })
             }
           />
         </SearchableSetting>

@@ -4,34 +4,21 @@ import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 
 export const getTerminalWindowsAdministratorSearchEntry = createLocalizedCatalog(() => [
   {
-    title: translate(
-      'settings.terminal.windows.administrator',
-      'Run new PowerShell terminals as administrator'
-    ),
+    title: translate('settings.terminal.windows.administratorMode', 'Windows administrator mode'),
     description: translate(
-      'settings.terminal.windows.administratorDescription',
-      'Windows asks for approval when the administrator terminal host starts. Existing terminals keep their permissions. Applies to PowerShell on this host; Orca does not need administrator permissions.'
+      'settings.terminal.windows.administratorModeDescription',
+      'Administrator mode applies to the whole Orca desktop. Existing terminal hosts keep their original permissions.'
     ),
     keywords: [
-      ...translateSearchKeyword(
-        'auto.components.settings.terminal.windows.search.e7d2793b03',
-        'terminal'
-      ),
-      ...translateSearchKeyword(
-        'auto.components.settings.terminal.windows.search.28ff08ed35',
-        'windows'
-      ),
-      ...translateSearchKeyword(
-        'auto.components.settings.terminal.windows.search.2d99cd91be',
-        'powershell'
-      ),
-      ...translateSearchKeyword('settings.terminal.windows.keywordAdmin', 'admin'),
-      ...translateSearchKeyword('settings.terminal.windows.keywordAdministrator', 'administrator'),
-      ...translateSearchKeyword('settings.terminal.windows.keywordElevated', 'elevated'),
-      ...translateSearchKeyword('settings.terminal.windows.keywordPermissions', 'permissions'),
-      ...translateSearchKeyword('settings.terminal.windows.keywordUac', 'uac', {
-        englishOnly: true
-      })
+      'windows',
+      'terminal',
+      'powershell',
+      'admin',
+      'administrator',
+      'elevated',
+      'permissions',
+      'uac',
+      'restart'
     ]
   }
 ])

@@ -15,8 +15,7 @@ export class DegradedDaemonFreshSpawnRouter {
     private readonly current: IPtyProvider,
     private readonly fallback: IPtyProvider,
     private readonly sessionProviders: Map<string, IPtyProvider>,
-    private readonly probeCurrent: (() => Promise<boolean>) | null,
-    private readonly administrator?: IPtyProvider
+    private readonly probeCurrent: (() => Promise<boolean>) | null
   ) {
     this.target = fallback
   }
@@ -72,10 +71,7 @@ export class DegradedDaemonFreshSpawnRouter {
 
   async spawn(opts: PtySpawnOptions): Promise<PtySpawnResult> {
     const mapped = opts.sessionId ? this.sessionProviders.get(opts.sessionId) : undefined
-    const target = mapped ?? (opts.windowsRunAsAdministrator ? this.administrator : this.target)
-    if (!target) {
-      throw new Error('Administrator terminals are unavailable on this execution host.')
-    }
+    const target = mapped ?? this.target
     const result = await target.spawn(opts)
     if (!result.exitedBeforeSpawnReply) {
       this.sessionProviders.set(result.id, target)

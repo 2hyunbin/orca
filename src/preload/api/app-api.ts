@@ -19,6 +19,8 @@ export type AppApi = {
   onProfileStateSaveDelayChanged: (callback: (delayed: boolean) => void) => () => void
   /** Returns the app identity currently exposed to native chrome and the titlebar. */
   getIdentity: () => Promise<AppIdentity>
+  /** Local Windows desktop elevation; null when unavailable. Does not describe remote hosts. */
+  getWindowsAdministratorStatus: () => Promise<boolean | null>
   /** Returns a URL base for feature-wall assets. In dev this is Vite /@fs;
    *  in packaged builds this is file:// resources. Renderer appends filenames. */
   getFeatureWallAssetBaseUrl: () => Promise<string>

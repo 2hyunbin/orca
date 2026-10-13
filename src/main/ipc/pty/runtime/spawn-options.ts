@@ -205,7 +205,6 @@ export async function buildRuntimePtySpawnOptions(
     ctx.spawnOptions.terminalWindowsPowerShellImplementation = ctx.deps.getSettings
       ? (ctx.deps.getSettings()?.terminalWindowsPowerShellImplementation ?? 'auto')
       : undefined
-    // No elevation here: runtime clients may be remote, and the consent prompt appears only on this desktop.
   }
   if (
     !ctx.preAdoptedStablePane &&
