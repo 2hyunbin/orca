@@ -14,8 +14,11 @@ import { translate } from '@/i18n/i18n'
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
 import {
   isRuntimeOwnedSshTargetId,
-  toRuntimeExecutionHostId
+  toRuntimeExecutionHostId,
+  toSshExecutionHostId
 } from '../../../../shared/execution-host'
+import { buildExecutionHostRegistry } from '../../../../shared/execution-host-registry'
+import { pickerExecutionHosts } from '../../../../shared/managed-orcad-execution-host'
 import { isUserManagedRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import { RuntimeHostStatusRow } from './RuntimeHostStatusRow'
 import { connectedHostCountLabel, connectingHostsLabel } from './ssh-status-segment-copy'
@@ -52,10 +55,26 @@ export function SshStatusSegment({
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
 
   const hostLabelOverrides = useMemo(() => getHostDisplayLabelOverrides(settings), [settings])
+  const userManagedEnvironments = runtimeEnvironments.filter(isUserManagedRuntimeEnvironment)
+  const visibleHostIds = new Set(
+    pickerExecutionHosts(
+      buildExecutionHostRegistry({
+        repos: [],
+        settings,
+        hostSource: 'configured-only',
+        sshTargetLabels,
+        sshConnectionStates,
+        runtimeEnvironments: userManagedEnvironments,
+        runtimeStatusByEnvironmentId
+      })
+    ).map((host) => host.id)
+  )
   const targets = Array.from(sshTargetLabels.entries())
     // Why: runtime-owned (per-workspace-env) SSH targets are hidden — never list them
     // as a user-facing SSH host in the status bar.
-    .filter(([id]) => !isRuntimeOwnedSshTargetId(id))
+    .filter(
+      ([id]) => !isRuntimeOwnedSshTargetId(id) && visibleHostIds.has(toSshExecutionHostId(id))
+    )
     .map(([id, label]) => {
       const state = sshConnectionStates.get(id)
       return {
@@ -64,8 +83,8 @@ export function SshStatusSegment({
         status: state?.status ?? ('disconnected' satisfies SshConnectionStatus)
       }
     })
-  const runtimeHosts = runtimeEnvironments
-    .filter(isUserManagedRuntimeEnvironment)
+  const runtimeHosts = userManagedEnvironments
+    .filter((environment) => visibleHostIds.has(toRuntimeExecutionHostId(environment.id)))
     .map((environment) => {
       const statusEntry = runtimeStatusByEnvironmentId.get(environment.id)
       const override = hostLabelOverrides.get(toRuntimeExecutionHostId(environment.id))
