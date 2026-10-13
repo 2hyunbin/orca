@@ -96,10 +96,7 @@ export async function executeAgentLaunch(
           : {}),
         ...(execution.callerRendersStructured === false ? { callerRendersStructured: false } : {})
       },
-      settings:
-        intent.nativeChatDefault === undefined
-          ? readAgentLaunchModeSettings(runtime)
-          : { experimentalNativeChat: intent.nativeChatDefault },
+      settings: readAgentLaunchModeSettings(runtime, intent.nativeChatDefault),
       ...(execution.terminalOnly ? { terminalOnly: true } : {}),
       vocabulary
     })
