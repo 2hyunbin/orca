@@ -19511,7 +19511,8 @@
       "deleting": "Eliminando…",
       "confirm": "Eliminar todos los worktrees indicados",
       "preservedBranches": "Se conservaron algunas ramas de worktrees anidados"
-    }
+    },
+    "setupTabTitle": "Configuración"
   },
   "mediaPreview": {
     "unavailable": "No se puede reproducir este archivo multimedia. El archivo puede no estar disponible o usar un códec no compatible.",

@@ -6,6 +6,7 @@ import { getRepoHostedReviewExecutionHostId } from '../source-control/hosted-rev
 import type { BrowserWindow } from 'electron'
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { translateMain } from '../i18n/main-i18n'
 import type { Store } from '../persistence'
 import type { GitAdmissionTier } from '../../shared/rpc-contract/git-admission-tier-params'
 import type { GlobalSettings } from '../../shared/global-settings-types'
@@ -409,7 +410,7 @@ async function spawnLocalStartupAndSetupTerminals(args: {
         await runtime.createTerminal(
           `id:${worktree.id}`,
           {
-            title: 'Setup',
+            title: translateMain('worktree.setupTabTitle', 'Setup'),
             command: setupCommand,
             env: setup.envVars,
             activate: false,
@@ -953,7 +954,7 @@ export function createLocalWorktree(
   repo: Repo,
   store: Store,
   mainWindow: BrowserWindow,
-  runtime?: OrcaRuntimeService,
+  runtime: OrcaRuntimeService,
   timing: WorktreeCreateTimingRecorder = createWorktreeCreateTimingRecorder()
 ): Promise<CreateWorktreeResult> {
   // Why a holder fired in `finally`: consuming a prepared checkout leaves the pool one short, so a
@@ -976,7 +977,7 @@ async function performLocalWorktreeCreate(
   mainWindow: BrowserWindow,
   rearm: PreparationRearmHolder,
   timing: WorktreeCreateTimingRecorder,
-  runtime?: OrcaRuntimeService
+  runtime: OrcaRuntimeService
 ): Promise<CreateWorktreeResult> {
   const settings = store.getSettings()
   const worktreePathSettings = getWorktreePathSettings(
@@ -1691,12 +1692,10 @@ async function performLocalWorktreeCreate(
     })
   )
 
-  // Why: nobody watches an automation's create, so main provisions its tabs in the background
-  // instead of handing them to the window.
-  const hostProvisioner =
-    args.automationProvenance && (setup || defaultTabs?.tabs.length) ? runtime : undefined
-  if (hostProvisioner) {
-    void hostProvisioner.provisionManagedWorktreeTerminals(
+  // Why: an automation's terminals start in main, so the window is handed none to launch.
+  const provisionedByHost = Boolean(args.automationProvenance)
+  if (provisionedByHost && (setup || defaultTabs?.tabs.length)) {
+    void runtime.provisionManagedWorktreeTerminals(
       {
         worktreeSelector: `id:${worktree.id}`,
         worktreeId: worktree.id,
@@ -1722,7 +1721,7 @@ async function performLocalWorktreeCreate(
     },
     ...(worktreeLineage ? { lineage: worktreeLineage } : {}),
     ...(workspaceLineage ? { workspaceLineage } : {}),
-    ...(hostProvisioner
+    ...(provisionedByHost
       ? {}
       : {
           ...(stagedStartup.activationSetup
