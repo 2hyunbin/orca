@@ -63,7 +63,16 @@ describe('Pi RPC session ownership and delivery', () => {
     const acquired = h.adapter.acquire({ ...h.input, fence: 8 })
     const child = await opened.promise
     await Promise.resolve()
-    await expect(acquired).resolves.toMatchObject({ process: { pid: 4123 } })
+    const owned = await acquired
+    expect(owned).toMatchObject({ process: { pid: 4123 } })
+    const opening = h.adapter
+      .open({
+        sessionId,
+        fence: 8,
+        acquisitionGeneration: owned.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+      .catch((error: unknown) => error)
     h.lifecycle.mockClear()
     expect(h.adapter.readCommands(sessionId)).toBeUndefined()
     expect(h.adapter.holdsDispatch(sessionId)).toBe(false)
@@ -73,7 +82,6 @@ describe('Pi RPC session ownership and delivery', () => {
       expect.objectContaining({
         type: 'ended',
         startupUnproven: true,
-        startupUnanswered: true,
         cause: 'requested-close'
       })
     )
@@ -81,6 +89,7 @@ describe('Pi RPC session ownership and delivery', () => {
       expect.objectContaining({ type: 'started', fence: 8 })
     )
     expect(child.rootVerdict).toBe('exited')
+    expect(await opening).toBeInstanceOf(Error)
   })
 
   it('retains final events when exit publication times out under journal backpressure', async () => {
@@ -422,9 +431,8 @@ describe('Pi RPC session ownership and delivery', () => {
 })
 
 describe('Pi RPC start without a model', () => {
-  it('reports a start that listed no model as signed out, for that child only', async () => {
+  it('refuses a successfully empty listing and leaves cleanup to the host', async () => {
     const h = await setup()
-    expect(h.adapter.startUnavailable(sessionId)).toBeUndefined()
     await h.adapter.closeSession(sessionId)
     h.openConnection.mockImplementationOnce((_launch, handlers) => {
       const connection = new FakeConnection(handlers)
@@ -434,19 +442,18 @@ describe('Pi RPC start without a model', () => {
       h.connections.push(connection)
       return connection
     })
-    await h.adapter.acquire({ ...h.input, fence: 8 })
-    // Known by the time the start is proven: the listing is part of Pi's start.
-    await vi.waitFor(() =>
-      expect(h.lifecycle).toHaveBeenCalledWith(expect.objectContaining({ type: 'started' }))
-    )
-    expect(h.adapter.startUnavailable(sessionId)).toEqual({ reason: 'notSignedIn' })
-    // Its root gone while its output still drains: that child says nothing more.
+    const acquired = await h.adapter.acquire({ ...h.input, fence: 8 })
+    await expect(
+      h.adapter.open({
+        sessionId,
+        fence: 8,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+    ).rejects.toMatchObject({ reason: 'notSignedIn' })
     const child = h.connections.at(-1)!
-    child.rootVerdict = 'exited'
     expect(child.closed).toBe(false)
-    expect(h.adapter.startUnavailable(sessionId)).toBeUndefined()
-    child.rootVerdict = 'live'
     await h.adapter.closeSession(sessionId)
-    expect(h.adapter.startUnavailable(sessionId)).toBeUndefined()
+    expect(child.closed).toBe(true)
   })
 })

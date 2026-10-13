@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+import { providerDiagnostic, withProviderDiagnostic } from '../../shared/agent-session-failure'
 import type {
   AgentSessionOptionsResult,
   AgentSessionSlashCommand
 } from '../../shared/agent-session-wire'
 import { JsonlRpcResponseError } from '../jsonl-rpc/peer'
-import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import {
+  AgentSessionAcquisitionRefusal,
+  type StructuredAgentSessionAcquireInput
+} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import {
   unpickedSessionConfiguredChoice,
   withLiveCatalogListing,
@@ -27,17 +32,13 @@ import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agen
 const START_REQUEST = { timeoutMs: STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS }
 
 export class PiRpcSessionStartup {
-  started = false
-  answered = false
   skipped: readonly string[] = []
   commands?: AgentSessionSlashCommand[]
   /** What the start listed; a signed-out Pi lists no model. */
   options?: AgentSessionOptionsResult
-  private readonly controller = new AbortController()
 
   constructor(
     private readonly input: StructuredAgentSessionAcquireInput,
-    private readonly generation: string,
     private readonly connection: PiRpcConnection,
     private readonly selected: Map<string, string>,
     private readonly deps: PiRpcSessionDeps,
@@ -46,16 +47,17 @@ export class PiRpcSessionStartup {
     private readonly setState: (state: PiRpcState) => void
   ) {}
 
-  stop(): void {
-    this.controller.abort(new Error('Pi closed while starting'))
-  }
-
-  async run(launch: PiRpcResolvedLaunch): Promise<void> {
+  async run(
+    launch: PiRpcResolvedLaunch,
+    signal: AbortSignal
+  ): Promise<StructuredAgentSessionProviderOpenResult> {
     const optionRevision = this.input.optionRevision?.() ?? 0
-    const answer = await this.wait(this.connection.request('get_state', {}, START_REQUEST))
-    this.answered = true
-    this.assertLive()
+    const answer = await this.wait(this.connection.request('get_state', {}, START_REQUEST), signal)
+    this.assertLive(signal)
     const state = piRpcStateSchema.parse(answer)
+    if (state.model?.provider === 'unknown') {
+      throw this.notSignedIn()
+    }
     const link = piRpcProviderLink(
       launch,
       state.sessionFile,
@@ -79,9 +81,10 @@ export class PiRpcSessionStartup {
       }
       picked.add(key)
       try {
-        this.assertLive()
+        this.assertLive(signal)
         await this.wait(
-          applyPiRpcSessionOption(this.connection, this.selected, key, value, START_REQUEST)
+          applyPiRpcSessionOption(this.connection, this.selected, key, value, START_REQUEST),
+          signal
         )
         current[key] = value
       } catch (error) {
@@ -92,12 +95,15 @@ export class PiRpcSessionStartup {
         this.warn('Pi rejected a saved option', 'pi-option-restore', error, { key })
       }
     }
-    this.assertLive()
+    this.assertLive(signal)
     current.confirmed = [...(current.model ? ['model'] : []), ...(current.effort ? ['effort'] : [])]
     // Part of the start, as other agents' handshakes answer with theirs: a Pi that lists no model
     // is signed out, and what it started on names its config's default.
-    const options = await this.readListing()
-    this.assertLive()
+    const options = await this.readListing(signal)
+    this.assertLive(signal)
+    if (options && options.models.length === 0) {
+      throw this.notSignedIn()
+    }
     // What it started on names its config's default once; a later switch teaches nothing.
     let catalogListing: AgentModelCatalogLiveListing | undefined
     if (options) {
@@ -108,67 +114,65 @@ export class PiRpcSessionStartup {
       ).catalogListing
     }
     this.skipped = skipped
-    this.started = true
-    this.deps.onLifecycle({
-      type: 'started',
-      ...this.identity(),
+    await this.readCommands(signal)
+    this.assertLive(signal)
+    return {
       link,
       reportedOptions: options?.current ?? current,
       restoreSkippedOptions: skipped,
       optionRevision,
       ...(catalogListing ? { catalogListing } : {})
-    })
-    await this.readCommands()
+    }
   }
 
   /** Never fails the start: without it the chat only lacks the listing and the sign-in verdict. */
-  private async readListing(): Promise<AgentSessionOptionsResult | undefined> {
+  private async readListing(signal: AbortSignal): Promise<AgentSessionOptionsResult | undefined> {
     try {
-      return await this.wait(readPiRpcSessionOptions(this.connection))
+      return await this.wait(readPiRpcSessionOptions(this.connection), signal)
     } catch (error) {
-      this.assertLive()
+      this.assertLive(signal)
       this.warn('Pi options could not be read', 'pi-options', error)
       return undefined
     }
   }
 
-  private async readCommands(): Promise<void> {
+  private async readCommands(signal: AbortSignal): Promise<void> {
     try {
-      this.assertLive()
-      const result = await this.wait(readPiRpcCommands(this.connection))
-      this.assertLive()
+      this.assertLive(signal)
+      const result = await this.wait(readPiRpcCommands(this.connection), signal)
+      this.assertLive(signal)
       this.commands = result.commands
     } catch (error) {
       this.warn('Pi commands could not be read', 'pi-commands', error)
     }
   }
 
-  private assertLive(): void {
-    if (this.controller.signal.aborted || this.connection.closed) {
+  private assertLive(signal: AbortSignal): void {
+    if (signal.aborted || this.connection.closed) {
       throw new Error('Pi closed while starting')
     }
   }
 
-  private wait<T>(promise: Promise<T>): Promise<T> {
-    return waitForPromiseWithSignal(promise, this.controller.signal)
+  private wait<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+    return waitForPromiseWithSignal(promise, signal)
   }
 
-  private identity() {
-    return {
-      sessionId: this.input.identity.sessionId,
-      fence: this.input.fence,
-      acquisitionGeneration: this.generation
-    }
+  private notSignedIn(): AgentSessionAcquisitionRefusal {
+    return withProviderDiagnostic(
+      new AgentSessionAcquisitionRefusal(
+        'Pi has no authenticated model provider available.',
+        'notSignedIn'
+      ),
+      providerDiagnostic('Pi has no authenticated model provider available.', 'person')
+    )
   }
 
   private warn(message: string, scope: string, error: unknown, fields = {}): void {
-    if (!this.controller.signal.aborted) {
-      this.deps.logger.warn(message, {
-        scope,
-        sessionId: this.input.identity.sessionId,
-        error,
-        ...fields
-      })
-    }
+    this.deps.logger.warn(message, {
+      scope,
+      sessionId: this.input.identity.sessionId,
+      error,
+      ...fields
+    })
   }
 }

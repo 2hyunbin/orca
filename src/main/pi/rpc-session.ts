@@ -22,6 +22,8 @@ import { PiRpcDialogCallbacks } from './rpc-dialog-callbacks'
 import { readPiRpcSessionOptions } from './rpc-options'
 import { withLiveCatalogListing } from '../native-chat/agent-model-catalog/agent-model-catalog-entry'
 import type { PiRpcResolvedLaunch } from './rpc-launch-resolution'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
+import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
 import { PiRpcSessionStartup } from './rpc-session-startup'
 
 export type PiRpcConnection = Pick<
@@ -62,6 +64,7 @@ export class PiRpcSession {
   readonly dialogs: PiRpcDialogCallbacks
   readonly selected = new Map<string, string>()
   readonly startup: PiRpcSessionStartup
+  openedLink: AgentSessionProviderHandleLink | null = null
   requestedClose = false
   private publishedExit = false
   private failedCause?: Error
@@ -73,6 +76,7 @@ export class PiRpcSession {
     readonly generation: string,
     launch: ProviderProcessLaunch,
     private readonly deps: PiRpcSessionDeps,
+    private readonly resolvedLaunch: PiRpcResolvedLaunch,
     /** A new Pi session starts on its config's model; a resumed or forked one keeps its own. */
     readonly resolvesConfig = false
   ) {
@@ -143,7 +147,6 @@ export class PiRpcSession {
     })
     this.startup = new PiRpcSessionStartup(
       input,
-      generation,
       this.connection,
       this.selected,
       deps,
@@ -154,18 +157,10 @@ export class PiRpcSession {
     )
   }
 
-  async start(launch: PiRpcResolvedLaunch, retainFailed: () => void): Promise<void> {
-    try {
-      await this.startup.run(launch)
-    } catch (error) {
-      if (!this.requestedClose) {
-        this.failedCause ??= error instanceof Error ? error : new Error(String(error))
-      }
-      const result = await this.close(false).catch(() => null)
-      if (result?.root !== 'exited') {
-        retainFailed()
-      }
-    }
+  async open(signal: AbortSignal): Promise<StructuredAgentSessionProviderOpenResult> {
+    const result = await this.startup.run(this.resolvedLaunch, signal)
+    this.openedLink = result.link ?? null
+    return result
   }
 
   /** What the child reports now; only the start says what its config resolved. */
@@ -175,7 +170,6 @@ export class PiRpcSession {
 
   async close(requested = true): ReturnType<PiRpcConnection['close']> {
     this.requestedClose ||= requested
-    this.startup.stop()
     this.dialogs.cancelAll()
     return this.connection.close()
   }
@@ -187,6 +181,9 @@ export class PiRpcSession {
       sessionId: this.input.identity.sessionId,
       error
     })
+    if (!this.openedLink) {
+      return
+    }
     void this.close(false)
       .then((result) => {
         if (result.root !== 'exited') {
@@ -230,7 +227,6 @@ export class PiRpcSession {
     }
     this.publishedExit = true
     this.failedCause ??= error
-    this.startup?.stop()
     this.dialogs.cancelAll()
     this.turns.end()
     this.lane.finalize()
@@ -265,19 +261,15 @@ export class PiRpcSession {
       observedAt: Date.now(),
       cause: this.requestedClose ? 'requested-close' : 'unexpected-exit',
       reason: cause.message,
-      failure: agentSessionFailureFact(
-        this.startup.started ? 'providerExited' : 'providerStartFailed',
-        {
-          detail:
-            providerDiagnosticOf(cause) ??
-            providerDiagnosticOf(error) ??
-            (cause instanceof JsonlRpcResponseError
-              ? providerDiagnostic(cause.message, 'person')
-              : undefined)
-        }
-      ),
-      ...(this.startup.started ? {} : { startupUnproven: true }),
-      ...(this.startup.answered ? {} : { startupUnanswered: true })
+      failure: agentSessionFailureFact(this.openedLink ? 'providerExited' : 'providerStartFailed', {
+        detail:
+          providerDiagnosticOf(cause) ??
+          providerDiagnosticOf(error) ??
+          (cause instanceof JsonlRpcResponseError
+            ? providerDiagnostic(cause.message, 'person')
+            : undefined)
+      }),
+      ...(this.openedLink ? {} : { startupUnproven: true })
     })
   }
 

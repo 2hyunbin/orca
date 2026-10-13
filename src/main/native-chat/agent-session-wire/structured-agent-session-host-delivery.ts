@@ -83,7 +83,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
       const session = input.clientDelivery.readStopping(sessionId)
         ? undefined
         : sessions.get(sessionId)
-      await retireOutgrownStructuredAgentSessionChild(sessionId, session, startedFor, {
+      await retireOutgrownStructuredAgentSessionChild(sessionId, session, {
         work: {
           childWork: () => input.clientDelivery.readChildWork(sessionId),
           hasOpenDispatch: () => {
@@ -92,7 +92,6 @@ export function createStructuredAgentSessionConversationDelivery(input: {
           },
           providerHoldsDispatch: () => deps.adapter.holdsDispatch?.(sessionId) === true
         },
-        startUnavailable: () => deps.adapter.startUnavailable?.(sessionId),
         launchPermission: async () => {
           const record = deps.store.getRecord(sessionId)
           return record ? structuredAgentSessionLaunchPermission(deps, record) : null
