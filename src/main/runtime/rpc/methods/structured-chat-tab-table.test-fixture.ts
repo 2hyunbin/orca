@@ -4,6 +4,8 @@ import '../unused-default-rpc-methods.test-fixture'
  * the real structured host, the real runtime, and the real RPC handlers. Only the provider is faked.
  */
 
+import { makeRuntimeStoreWithWorkspaceSession } from '../../orca-runtime-test-fixtures.spec'
+import { getDefaultWorkspaceSession } from '../../../../shared/constants'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -186,7 +188,9 @@ beforeEach(async () => {
   acquireFails = false
   closeSession = vi.fn(async () => true)
   directory = await mkdtemp(join(tmpdir(), 'orca-chat-tab-table-'))
-  runtime = new OrcaRuntimeService()
+  // A host with no window saves its chat tabs, so it lists them from this session.
+  const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
+  runtime = new OrcaRuntimeService(runtimeStore as never)
   vi.spyOn(runtime, 'getClientSettings').mockReturnValue(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the structured-chat policy reads only this one setting on these paths.
     { experimentalNativeChat: true } as ReturnType<OrcaRuntimeService['getClientSettings']>

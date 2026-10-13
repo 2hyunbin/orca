@@ -9,7 +9,7 @@ import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
 const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
 await import('./orca-runtime-test-lifecycle.spec')
-const { store, TEST_WORKTREE_ID, HEADLESS_LEAF_ID } =
+const { makeWindowlessRuntimeStore, TEST_WORKTREE_ID, HEADLESS_LEAF_ID } =
   await import('./orca-runtime-test-fixtures.spec')
 const { makePendingAgentTabActivationRuntime } =
   await import('./orca-runtime-test-scenario-builders.spec')
@@ -19,7 +19,7 @@ const WT = TEST_WORKTREE_ID
 function pairedRuntime() {
   let next = 0
   const spawn = vi.fn(async () => ({ id: `pty-${++next}` }))
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
   runtime.setPtyController({
     spawn,
     write: () => true,

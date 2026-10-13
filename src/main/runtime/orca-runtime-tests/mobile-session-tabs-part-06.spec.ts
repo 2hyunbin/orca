@@ -11,6 +11,7 @@ import {
   TEST_WORKTREE_ID,
   makeHeadlessTerminalLayout,
   makeRuntimeStoreWithWorkspaceSession,
+  makeWindowlessRuntimeStore,
   makeWorkspaceSessionWithHeadlessTerminal,
   store
 } from '../orca-runtime-test-fixtures.spec'
@@ -96,7 +97,7 @@ describe('OrcaRuntimeService', () => {
   it('keeps a headless tab-group split alive when a new tab is created', async () => {
     // Regression: drag-to-split-group was client-only and the headless host rejected it, coalescing groups on new-tab; the host must model + persist the split.
     let ptyCounter = 0
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: `split-group-pty-${++ptyCounter}` })),
       write: () => true,
@@ -484,7 +485,7 @@ describe('OrcaRuntimeService', () => {
 
   it('moves a headless tab into an existing group without renderer_unavailable', async () => {
     let ptyCounter = 0
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: `move-group-pty-${++ptyCounter}` })),
       write: () => true,

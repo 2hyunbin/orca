@@ -45,6 +45,8 @@ export function withOpenedServeBrowserTab(
   }
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
   const now = Date.now()
+  // Untargeted, it opens in the shown group, as a window opens a tab.
+  const groupId = page.groupId ?? loaded.desktopView.activeGroupIdByWorktree?.[page.worktreeId]
   const applied = applyLayoutCommand(
     loaded.layout,
     {
@@ -52,7 +54,7 @@ export function withOpenedServeBrowserTab(
       workspace: page.worktreeId,
       pageId: page.pageId,
       ...(page.profileId ? { profileId: page.profileId } : {}),
-      ...(page.groupId ? { groupId: page.groupId } : {})
+      ...(groupId ? { groupId } : {})
     },
     { mintId: randomUUID, mintLeafId: randomUUID, now: () => now }
   )

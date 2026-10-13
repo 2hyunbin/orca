@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { makeWindowlessRuntimeStore } from './orca-runtime-test-fixtures.spec'
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from './orca-runtime'
 
@@ -6,7 +7,7 @@ afterEach(() => setStructuredAgentSessionHost(null))
 
 describe('structured session cold restoration', () => {
   it('publishes a versioned title change and derives listAll titles from the record', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     runtime.projectStructuredAgentSessionTab({
       activate: false,
       sessionId: 'session-1',
@@ -41,7 +42,7 @@ describe('structured session cold restoration', () => {
     unsubscribe()
   })
   it('skips every heavy recovery step when no durable session store exists', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const refresh = vi.fn(async () => new Set<string>())
     const ensureHost = vi.fn(async () => undefined)
     const reconcileRestartLeases = vi.fn(async () => undefined)
@@ -63,7 +64,7 @@ describe('structured session cold restoration', () => {
   })
 
   it('keeps historical journal parsing outside the terminal-safety fence', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const refresh = vi.fn(async () => new Set<string>())
     const ensureHost = vi.fn(async () => undefined)
     const reconcileRestartLeases = vi.fn(async () => undefined)
@@ -87,7 +88,7 @@ describe('structured session cold restoration', () => {
   })
 
   it('loads records, inventories PTYs, restores ownership, then projects tabs exactly once', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const hydrate = vi.fn()
     const refresh = vi.fn(async () => new Set<string>())
     const ensureHost = vi.fn(async () => undefined)
@@ -143,7 +144,7 @@ describe('structured session cold restoration', () => {
   })
 
   it('prefers the durable visible-session index after a legacy profile drops agent tabs', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const restoreReadableSessions = vi.fn(async () => undefined)
     const internal = runtime as unknown as {
       store: { getWorkspaceSession: () => unknown }
@@ -184,7 +185,7 @@ describe('structured session cold restoration', () => {
   })
 
   it('treats an empty durable visible-session index as authoritative', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const restoreReadableSessions = vi.fn(async () => undefined)
     const internal = runtime as unknown as {
       store: { getWorkspaceSession: () => unknown }
@@ -238,7 +239,7 @@ describe('structured session cold restoration', () => {
   })
 
   it('normalizes a restored tab id and removes it when closed', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const closeSessionTab = vi.fn(async () => undefined)
     const closeStructuredSession = vi.fn(async () => {
       const snapshot = await runtime.listMobileSessionTabs('id:workspace-1')
@@ -359,7 +360,7 @@ describe('structured session cold restoration', () => {
   })
 
   it('publishes restored Claude tabs with the Claude title', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const project = vi.spyOn(runtime, 'projectStructuredAgentSessionTab')
     const internal = runtime as unknown as {
       hasPersistedStructuredAgentSessionStore(): boolean
@@ -409,7 +410,7 @@ describe('structured session cold restoration', () => {
   })
 
   it('commits the host close when the renderer already removed the structured tab', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     runtime.setNotifier({
       closeSessionTab: vi.fn(async () => {
         throw new Error('session_tab_not_found')

@@ -356,18 +356,18 @@ describe('projectSessionTabs', () => {
     })
   })
 
-  it('names the first group but no tab active when the view selects nothing, and keeps one group without a tree', () => {
+  it('shows the first group and its first tab when the view selects nothing, and keeps one group without a tree', () => {
     const ctx = testContext()
     const { model } = build(ctx, [{ type: 'createTerminalTab', workspace: WS }])
     const projected = projectSessionTabs(WS, model.workspaces[WS]!, views(), noFacts, false)
     expect(projected).toMatchObject({
       activeGroupId: model.workspaces[WS]!.groups[0]!.id,
-      activeTabId: null,
-      activeTabType: null
+      activeTabId: projected.tabs[0]!.id,
+      activeTabType: 'terminal'
     })
     expect(projected.tabGroups).toHaveLength(1)
     expect(projected).not.toHaveProperty('tabGroupLayout')
-    expect(projected.tabs[0]).toMatchObject({ title: 'Terminal 1', isActive: false })
+    expect(projected.tabs[0]).toMatchObject({ title: 'Terminal 1', isActive: true })
   })
 
   it('names the first group active when the saved one is gone, as a window restores it', () => {

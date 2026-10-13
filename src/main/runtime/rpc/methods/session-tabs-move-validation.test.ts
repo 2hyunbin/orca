@@ -111,6 +111,8 @@ describe('session tab move validation', () => {
 
   it('publishes a structured tab into the active group instead of the first group', async () => {
     const runtime = new OrcaRuntimeService()
+    // A renderer is attached and owns this list.
+    runtime.attachWindow(1)
     setMobileSessionSnapshot(runtime, {
       worktree: 'wt-1',
       publicationEpoch: 'epoch-1',

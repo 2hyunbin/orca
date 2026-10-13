@@ -7,6 +7,7 @@
  * outside orchestration's hold and eviction accounting.
  */
 
+import { makeWindowlessRuntimeStore } from '../../orca-runtime-test-fixtures.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from '../../orca-runtime'
@@ -79,7 +80,7 @@ async function runtimeShowingStructuredTab(): Promise<{
   runtime: OrcaRuntimeService
   emit: ReturnType<typeof vi.fn>
 }> {
-  const runtime = new OrcaRuntimeService()
+  const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
   const internal = runtime as unknown as RuntimeInternals
   internal.ensureStructuredAgentSessionHost = async () => undefined
   internal.notifyMessageArrived = vi.fn()
@@ -296,7 +297,7 @@ describe('structured worker release retires the chat tab', () => {
 describe('structured worker discard retires the chat tab', () => {
   it('prunes the tab a half-started worker published', async () => {
     const { close } = installHost()
-    const runtime = new OrcaRuntimeService()
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
     const internal = runtime as unknown as RuntimeInternals
     internal.ensureStructuredAgentSessionHost = async () => undefined
     let createdSessionId = ''

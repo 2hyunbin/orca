@@ -77,11 +77,20 @@ export function projectSessionTabs(
   const activeGroupId = resolveActiveGroupId(workspace, view.activeGroupIdByWorktree?.[key])
   const groupViews = view.groups[key] ?? {}
   const remembered = view.activeTabIdByWorktree?.[key]
-  // A group the view never recorded (a session from before tab groups) selects the workspace's
-  // remembered tab, as a window restores it.
-  const groupActiveTabId = (group: WorkspaceLayout['groups'][number]): string | null =>
-    groupViews[group.id]?.activeTabId ??
-    (remembered && group.tabOrder.includes(remembered) ? remembered : null)
+  // As a window shows a group: its recorded tab, else (a session from before tab groups) the
+  // workspace's remembered tab, else its most recent, else its first.
+  const groupActiveTabId = (group: WorkspaceLayout['groups'][number]): string | null => {
+    const inGroup = (id: string | null | undefined): id is string =>
+      Boolean(id && group.tabOrder.includes(id))
+    const recorded = groupViews[group.id]
+    return (
+      [recorded?.activeTabId, remembered, recorded?.recentTabIds?.findLast(inGroup)].find(
+        inGroup
+      ) ??
+      group.tabOrder[0] ??
+      null
+    )
+  }
   const activeGroup = workspace.groups.find((group) => group.id === activeGroupId)
   const scope: Scope = {
     key,

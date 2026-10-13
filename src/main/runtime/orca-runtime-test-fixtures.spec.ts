@@ -634,6 +634,11 @@ function makeRuntimeStoreWithWorkspaceSession(
   return { runtimeStore, getSession: () => session, setSession }
 }
 
+/** A store for a host with no window: it saves, and lists from, one empty session partition. */
+function makeWindowlessRuntimeStore() {
+  return makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession()).runtimeStore
+}
+
 function makeWorkspaceSessionWithHeadlessTerminal(
   overrides: Partial<WorkspaceSessionState> = {}
 ): WorkspaceSessionState {
@@ -694,6 +699,7 @@ export { cursorReadyScreen, deferred, expectStablePaneKeyEnv, isOriginMainBaseRe
 export { isLocalBranchCatalogQuery }
 export { makeDeferred, makeFolderProjectGroup, makeFolderWorkspace, makeHeadlessTerminalLayout }
 export { makeRpcRequest, makeRuntimeStoreWithWorkspaceSession, makeStatusFrame }
+export { makeWindowlessRuntimeStore }
 export { makeWorkspaceSessionWithHeadlessTerminal, makeWorktreeInfo, makeWorktreeMeta }
 export { parseHeadlessSnapshotLines, pendingMailPointerRepoints, referenceStatusFrameLines }
 export { renderGateCapMs, setInMemoryOrchestrationMessages, store, syncSinglePty }

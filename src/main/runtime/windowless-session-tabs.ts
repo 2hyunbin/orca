@@ -239,7 +239,10 @@ export function withMovedSessionTab(
   })
 }
 
-/** The partition with a chat's tab saved in the active group; null when it is saved already. */
+/**
+ * The partition with a chat's tab saved in the active group; null when it is saved already. A tab
+ * saved before tabs named their agent learns it here, since a list cannot open a chat without it.
+ */
 export function withOpenedAgentSessionTab(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState,
@@ -247,15 +250,32 @@ export function withOpenedAgentSessionTab(
   chat: { sessionId: string; agent: AgentType }
 ): WorkspaceSessionState | null {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const saved = loaded.layout.workspaces[worktreeId]?.tabs.some(
+  const saved = loaded.layout.workspaces[worktreeId]?.tabs.find(
     (tab) => tab.kind === 'agent-session' && tab.entityId === chat.sessionId
   )
-  if (saved) {
+  if (saved?.agentSessionAgent) {
     return null
   }
+  if (saved) {
+    return {
+      ...session,
+      unifiedTabs: {
+        ...session.unifiedTabs,
+        [worktreeId]: (session.unifiedTabs?.[worktreeId] ?? []).map((tab) =>
+          tab.id === saved.id ? { ...tab, agentSessionAgent: chat.agent } : tab
+        )
+      }
+    }
+  }
+  const groupId = loaded.desktopView.activeGroupIdByWorktree?.[worktreeId]
   const applied = applyLayoutCommand(
     loaded.layout,
-    { type: 'openAgentSessionTab', workspace: worktreeId, ...chat },
+    {
+      type: 'openAgentSessionTab',
+      workspace: worktreeId,
+      ...chat,
+      ...(groupId ? { groupId } : {})
+    },
     { mintId: randomUUID, mintLeafId: randomUUID, now: Date.now }
   )
   return applied.ok ? saveWorkspaceLayout({ ...loaded, layout: applied.model }) : null

@@ -3,6 +3,9 @@
 // bookkeeping: with a saved tab index it writes nothing, and a store that cannot be written costs
 // a bounded number of failed writes, not one per chat.
 
+import { makeRuntimeStoreWithWorkspaceSession } from './orca-runtime-test-fixtures.spec'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -167,14 +170,34 @@ async function seedProfile(
 
 function startupRuntime(options: { afterInstall?: () => void; profileChats?: string[] } = {}) {
   const log = recordingStructuredAgentSessionLogger()
-  const runtime = new OrcaRuntimeService()
+  // A legacy profile's saved chat tabs, which a store with no tab index restores from.
+  const session: WorkspaceSessionState = {
+    ...getDefaultWorkspaceSession(),
+    activeWorktreeId: 'workspace-1',
+    unifiedTabs: {
+      'workspace-1': (options.profileChats ?? []).map((sessionId, index) => ({
+        id: `agent-session:${sessionId}`,
+        entityId: sessionId,
+        groupId: 'group-1',
+        worktreeId: 'workspace-1',
+        contentType: 'agent-session' as const,
+        label: 'Codex Chat',
+        customLabel: null,
+        color: null,
+        sortOrder: index,
+        createdAt: 1
+      }))
+    }
+  }
+  const runtime = new OrcaRuntimeService(
+    makeRuntimeStoreWithWorkspaceSession(session).runtimeStore as never
+  )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root`, stubs the PTY daemon and gives it a profile.
   const internal = runtime as unknown as {
     hasPersistedStructuredAgentSessionStore(): boolean
     ensureStructuredAgentSessionHost(): Promise<unknown>
     refreshMobileSessionPtyRecords(): Promise<Set<string> | null>
     mobileSessionTabsByWorktree: Map<string, RuntimeMobileSessionTabsSnapshot>
-    store: { getWorkspaceSession: () => unknown }
   }
   internal.hasPersistedStructuredAgentSessionStore = () => true
   internal.ensureStructuredAgentSessionHost = async () => {
@@ -192,30 +215,6 @@ function startupRuntime(options: { afterInstall?: () => void; profileChats?: str
     return installed
   }
   internal.refreshMobileSessionPtyRecords = async () => new Set<string>()
-  // A legacy profile's saved chat tabs, which a store with no tab index restores from.
-  internal.store = {
-    getWorkspaceSession: () => ({
-      activeRepoId: null,
-      activeWorktreeId: 'workspace-1',
-      activeTabId: null,
-      tabsByWorktree: {},
-      terminalLayoutsByTabId: {},
-      unifiedTabs: {
-        'workspace-1': (options.profileChats ?? []).map((sessionId, index) => ({
-          id: `agent-session:${sessionId}`,
-          entityId: sessionId,
-          groupId: 'group-1',
-          worktreeId: 'workspace-1',
-          contentType: 'agent-session',
-          label: 'Codex Chat',
-          customLabel: null,
-          color: null,
-          sortOrder: index,
-          createdAt: 1
-        }))
-      }
-    })
-  }
   return {
     runtime,
     log,

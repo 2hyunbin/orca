@@ -259,15 +259,9 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
       if (tab.browserPageId) {
         await this.serveBrowserTabs.restore(worktreeId, tab.browserPageId)
       }
-      // Why: browser mobile tabs are renderer-owned unified tabs; focusing the
-      // session tab keeps desktop tab order/group state authoritative.
-      if (targetsHost) {
-        this.notifier?.focusEditorTab?.(tab.id, worktreeId)
-      }
+      this.focusMobileSessionContentTab(worktreeId, tab.id, targetsHost)
     } else {
-      if (targetsHost) {
-        this.notifier?.focusEditorTab?.(tab.id, worktreeId)
-      }
+      this.focusMobileSessionContentTab(worktreeId, tab.id, targetsHost)
     }
     return this.applyMobileSessionTabNavigation(
       this.getMobileSessionTabsForWorktree(worktreeId),
@@ -275,5 +269,23 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
       navigation,
       opts.clientNavigationId
     )
+  }
+
+  /** Shows a non-terminal tab on the host: saved as its selection with no renderer, else focused. */
+  protected focusMobileSessionContentTab(
+    worktreeId: string,
+    tabId: string,
+    targetsHost: boolean
+  ): void {
+    if (!targetsHost) {
+      return
+    }
+    if (this.isWindowlessSessionTabs()) {
+      this.saveWindowlessTabSelection(worktreeId, tabId)
+      this.republishWindowlessSessionTabs(worktreeId)
+      return
+    }
+    // Why: the renderer owns these tabs; focusing keeps its tab order and group state authoritative.
+    this.notifier?.focusEditorTab?.(tabId, worktreeId)
   }
 }
