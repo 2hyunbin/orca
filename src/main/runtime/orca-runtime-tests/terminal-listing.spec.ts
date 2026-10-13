@@ -77,6 +77,7 @@ describe('OrcaRuntimeService', () => {
     const tabId = 'projected-parent-tab'
     const leafId = 'projected-leaf'
     const ptyId = 'projected-pty'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: reads two protected runtime members this test seeds and calls; their shapes match these declarations.
     const internals = runtime as unknown as {
       mobileSessionTabsByWorktree: Map<string, unknown>
       resolveTerminalSplitSourceAuthority: (
