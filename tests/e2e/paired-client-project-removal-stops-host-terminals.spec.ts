@@ -71,7 +71,7 @@ async function callRuntime<TResult>(
 
 test('removing a project from a paired client stops its shells on the host', async (// oxlint-disable-next-line no-empty-pattern -- This test owns its host launch.
 {}, testInfo) => {
-  test.skip(process.platform === 'win32', 'reads the shell pid with POSIX `$$`')
+  test.skip(process.platform === 'win32', 'reads the shell pid through POSIX `sh`')
   test.setTimeout(240_000)
   const repoPath = seededRepoPathOrSkip()
   const stage = mkdtempSync(join(tmpdir(), 'orca-project-removal-'))
@@ -135,7 +135,8 @@ test('removing a project from a paired client stops its shells on the host', asy
         async () => {
           await callRuntime(paired.page, paired.environmentId, 'terminal.send', {
             terminal: handle,
-            text: `echo $$ > '${markerPath}'`,
+            // Why sh: `$$` is not portable to fish; sh's $PPID is the pane shell in any login shell.
+            text: `sh -c 'echo $PPID > "${markerPath}"'`,
             enter: true
           }).catch(() => undefined)
           return readShellPid(markerPath)
