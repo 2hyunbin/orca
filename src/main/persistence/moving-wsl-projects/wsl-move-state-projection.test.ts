@@ -6,7 +6,7 @@ import {
   wslMoverProfileScope
 } from '../__fixtures__/wsl-mover/wsl-mover-profiles'
 import { WORKSPACE_SESSION_DISPOSITIONS } from './wsl-move-dispositions'
-import { createWslMoveStringNormalizer } from './wsl-move-canonical-form'
+import { createWslMoveStringNormalizer, isRecord } from './wsl-move-canonical-form'
 import { projectWslMoveState, type WslMoveProjectionInput } from './wsl-move-state-projection'
 
 const project = (
@@ -19,19 +19,26 @@ const project = (
   return projectWslMoveState(input, wslMoverProfileScope(name, side))
 }
 
+function sessionOf(projection: unknown): Record<string, unknown> {
+  const session = isRecord(projection) ? projection.session : undefined
+  if (!isRecord(session)) {
+    throw new Error('projection has no session')
+  }
+  return session
+}
+
 describe('projectWslMoveState', () => {
   it.each(WSL_MOVER_PROFILE_NAMES)('%s: the source before equals the destination after', (name) => {
     expect(project(name, 'destination')).toEqual(project(name, 'source'))
   })
 
   it('compares every moved session field the fixture holds', () => {
-    const session = project('heavy-wsl', 'source') as {
-      session: Record<string, unknown>
-    }
+    const session = sessionOf(project('heavy-wsl', 'source'))
     const movedFields = Object.entries(WORKSPACE_SESSION_DISPOSITIONS)
       .filter(([, row]) => row.disposition === 'move')
       .map(([field]) => field)
-      // Focus fields are re-projected on the host, and close intents stay with their client.
+      // Focus is re-projected on the host; client-hosted pages and their close intents are
+      // runtime-authored, so a bridge project's partition never holds them.
       .filter(
         (field) =>
           ![
@@ -42,19 +49,19 @@ describe('projectWslMoveState', () => {
           ].includes(field)
       )
     const empty = movedFields.filter((field) => {
-      const value = session.session[field]
-      return value === undefined || (typeof value === 'object' && Object.keys(value!).length === 0)
+      const value = session[field]
+      return (
+        value === undefined || (typeof value === 'object' && Object.keys(value ?? {}).length === 0)
+      )
     })
     expect(empty).toEqual([])
   })
 
   it('reports any moved session field the destination lost', () => {
-    const source = project('heavy-wsl', 'source') as {
-      session: Record<string, unknown>
-    }
-    const unnoticed = Object.keys(source.session).filter((field) => {
+    const source = project('heavy-wsl', 'source')
+    const unnoticed = Object.keys(sessionOf(source)).filter((field) => {
       const lost = project('heavy-wsl', 'destination', (input) => {
-        delete input.session[field as keyof typeof input.session]
+        Reflect.deleteProperty(input.session, field)
       })
       return JSON.stringify(lost) === JSON.stringify(source)
     })
@@ -98,10 +105,9 @@ describe('projectWslMoveState', () => {
   })
 
   it('leaves Windows-drive and other-distro rows out of the move', () => {
-    const source = project('mixed-windows-wsl', 'source') as {
-      repos: { id: string }[]
-    }
-    expect(source.repos.map((repo) => repo.id)).toEqual(['repo-a'])
+    expect(project('mixed-windows-wsl', 'source')).toMatchObject({
+      repos: [expect.objectContaining({ id: 'repo-a' })]
+    })
   })
 
   it('refuses two spellings of one worktree', () => {

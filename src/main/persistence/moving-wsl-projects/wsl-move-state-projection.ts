@@ -77,6 +77,10 @@ const HOST_BINDING_KEYS = [
   'projectHostSetupId'
 ] as const
 
+const SESSION_OWNERSHIP_BY_FIELD: ReadonlyMap<string, SessionOwnership> = new Map(
+  Object.entries(WORKSPACE_SESSION_FIELD_OWNERSHIP)
+)
+
 const DROPPED_KEYS: ReadonlySet<string> = new Set([
   ...WSL_MOVE_DROPPED_PTY_BINDING_KEYS,
   ...HOST_BINDING_KEYS
@@ -162,21 +166,15 @@ function projectSession(
 ): Record<string, unknown> {
   const byTab = buildWorktreeIdByTabId(session)
   const byFile = buildWorktreeIdByFileId(session)
+  const fields: Readonly<Record<string, unknown>> = session
   const out: Record<string, unknown> = {}
-  for (const field of Object.keys(
-    WORKSPACE_SESSION_DISPOSITIONS
-  ) as (keyof WorkspaceSessionState)[]) {
-    const value: unknown = session[field]
-    if (WORKSPACE_SESSION_DISPOSITIONS[field].disposition !== 'move' || value == null) {
+  for (const [field, row] of Object.entries(WORKSPACE_SESSION_DISPOSITIONS)) {
+    const value = fields[field]
+    const ownership = SESSION_OWNERSHIP_BY_FIELD.get(field)
+    if (row.disposition !== 'move' || value == null || !ownership) {
       continue
     }
-    const owned = projectSessionField(
-      WORKSPACE_SESSION_FIELD_OWNERSHIP[field],
-      value,
-      ownerInScope,
-      byTab,
-      byFile
-    )
+    const owned = projectSessionField(ownership, value, ownerInScope, byTab, byFile)
     if (owned !== undefined) {
       out[field] = owned
     }
@@ -236,11 +234,10 @@ function projectUi(
 ): Record<string, unknown> {
   const byTab = buildWorktreeIdByTabId(session)
   const out: Record<string, unknown> = {}
-  for (const field of Object.keys(
-    UI_STATE_DISPOSITIONS
-  ) as (keyof typeof UI_STATE_DISPOSITIONS)[]) {
-    const value: unknown = ui[field]
-    if (UI_STATE_DISPOSITIONS[field].disposition !== 'move' || value == null) {
+  const fields: Readonly<Record<string, unknown>> = ui
+  for (const [field, row] of Object.entries(UI_STATE_DISPOSITIONS)) {
+    const value = fields[field]
+    if (row.disposition !== 'move' || value == null) {
       continue
     }
     if (Array.isArray(value)) {
