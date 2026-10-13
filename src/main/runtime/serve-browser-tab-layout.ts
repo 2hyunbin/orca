@@ -7,7 +7,6 @@ import type { ExecutionHostId } from '../../shared/execution-host'
 import { applyLayoutCommand } from '../../shared/workspace-layout/workspace-layout-commands'
 import { BLANK_BROWSER_TAB_STATE } from '../../shared/workspace-layout/workspace-layout-beside'
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
-import type { LoadedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load-types'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
@@ -35,38 +34,15 @@ export function findSavedBrowserPage(
   return null
 }
 
-/** Writes the page's address over its saved page and its tab's copy of it, as a window does. */
-function withPage(
-  loaded: LoadedWorkspaceLayout,
-  tabId: string,
-  page: BrowserPage,
-  state: ServeBrowserPageState
-): void {
-  const { facts } = loaded
-  const live = { url: state.url, title: state.title }
-  const tab = facts.browserTabs[state.worktreeId]?.[tabId]
-  // The tab mirrors its active page only.
-  if (!tab?.activePageId || tab.activePageId === page.id) {
-    facts.browserTabs[state.worktreeId] = {
-      ...facts.browserTabs[state.worktreeId],
-      [tabId]: { ...BLANK_BROWSER_TAB_STATE, ...tab, ...live }
-    }
-  }
-  const pages = facts.browserPagesByWorkspace?.[tabId] ?? []
-  facts.browserPagesByWorkspace = {
-    ...facts.browserPagesByWorkspace,
-    [tabId]: pages.some((entry) => entry.id === page.id)
-      ? pages.map((entry) => (entry.id === page.id ? { ...entry, ...live } : entry))
-      : [...pages, { ...page, ...live }]
-  }
-}
-
-/** The partition with a just-created page's tab, or null when the layout refuses it. */
+/** The partition with a just-created page's tab, or null when it is saved already or refused. */
 export function withOpenedServeBrowserTab(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState,
   page: ServeBrowserPageState & { profileId?: string | null; groupId?: string }
 ): WorkspaceSessionState | null {
+  if (findSavedBrowserPage(session, page.worktreeId, page.pageId)) {
+    return null
+  }
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
   const now = Date.now()
   const applied = applyLayoutCommand(
@@ -83,27 +59,34 @@ export function withOpenedServeBrowserTab(
   if (!applied.ok) {
     return null
   }
-  const next = { ...loaded, layout: applied.model }
-  withPage(
-    next,
-    page.pageId,
-    {
-      ...BLANK_BROWSER_TAB_STATE,
-      id: page.pageId,
-      workspaceId: page.pageId,
-      worktreeId: page.worktreeId,
-      url: page.url,
-      title: page.title,
-      createdAt: now
-    },
-    page
-  )
-  return saveWorkspaceLayout(next)
+  const { facts } = loaded
+  const state = { ...BLANK_BROWSER_TAB_STATE, url: page.url, title: page.title }
+  const savedPage: BrowserPage = {
+    ...state,
+    id: page.pageId,
+    workspaceId: page.pageId,
+    worktreeId: page.worktreeId,
+    createdAt: now
+  }
+  return saveWorkspaceLayout({
+    ...loaded,
+    layout: applied.model,
+    facts: {
+      ...facts,
+      browserTabs: {
+        ...facts.browserTabs,
+        [page.worktreeId]: { ...facts.browserTabs[page.worktreeId], [page.pageId]: state }
+      },
+      browserPagesByWorkspace: { ...facts.browserPagesByWorkspace, [page.pageId]: [savedPage] }
+    }
+  })
 }
 
-/** The partition with the page's last address, or null when no saved tab shows the page. */
+/**
+ * The partition with the page's last address, or null when no saved tab shows the page or it is
+ * unchanged. Only address fields change, so the layout is not reloaded.
+ */
 export function withServeBrowserPageState(
-  hostId: ExecutionHostId,
   session: WorkspaceSessionState,
   page: ServeBrowserPageState
 ): WorkspaceSessionState | null {
@@ -111,9 +94,26 @@ export function withServeBrowserPageState(
   if (!saved || (saved.page.url === page.url && saved.page.title === page.title)) {
     return null
   }
-  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  withPage(loaded, saved.tabId, saved.page, page)
-  return saveWorkspaceLayout(loaded)
+  const state = { url: page.url, title: page.title }
+  const tabs = session.browserTabsByWorktree?.[page.worktreeId] ?? []
+  return {
+    ...session,
+    browserTabsByWorktree: {
+      ...session.browserTabsByWorktree,
+      // The tab mirrors its active page only.
+      [page.worktreeId]: tabs.map((tab) =>
+        tab.id === saved.tabId && (!tab.activePageId || tab.activePageId === page.pageId)
+          ? { ...tab, ...state }
+          : tab
+      )
+    },
+    browserPagesByWorkspace: {
+      ...session.browserPagesByWorkspace,
+      [saved.tabId]: (session.browserPagesByWorkspace?.[saved.tabId] ?? []).map((entry) =>
+        entry.id === page.pageId ? { ...entry, ...state } : entry
+      )
+    }
+  }
 }
 
 /** The partition without the tab showing the page, or null when no saved tab shows it. */

@@ -91,7 +91,7 @@ describe('a browser tab a host with no window saves', () => {
   })
 
   it('keeps its page last address', () => {
-    const saved = withServeBrowserPageState(HOST, opened(sessionWithTerminal()), {
+    const saved = withServeBrowserPageState(opened(sessionWithTerminal()), {
       worktreeId: WT,
       pageId: 'page-1',
       url: 'https://example.com/next',
@@ -134,7 +134,7 @@ describe('a browser tab a host with no window saves', () => {
     }
     windowSaved.browserTabsByWorktree![WT]![0]!.activePageId = 'page-1'
 
-    const saved = withServeBrowserPageState(HOST, windowSaved, {
+    const saved = withServeBrowserPageState(windowSaved, {
       worktreeId: WT,
       pageId: 'page-2',
       url: 'https://b/next',
@@ -143,5 +143,18 @@ describe('a browser tab a host with no window saves', () => {
 
     expect(findSavedBrowserPage(saved, WT, 'page-2')?.page.url).toBe('https://b/next')
     expect(saved.browserTabsByWorktree?.[WT]?.[0]?.url).toBe('https://example.com/')
+  })
+
+  it('is saved once when its page is opened again', () => {
+    const saved = opened(sessionWithTerminal())
+
+    expect(
+      withOpenedServeBrowserTab(HOST, saved, {
+        worktreeId: WT,
+        pageId: 'page-1',
+        url: 'https://example.com/',
+        title: 'Example'
+      })
+    ).toBeNull()
   })
 })

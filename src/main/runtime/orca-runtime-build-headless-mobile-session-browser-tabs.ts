@@ -80,7 +80,7 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
         isActive: page.active
       }))
     const publishedSavedTabs = this.serveBrowserTabs.listRestorable(worktreeId).map((page) => {
-      const persistedProps = this.getPersistedUnifiedSessionTabProps(worktreeId, page.pageId)
+      const persistedProps = this.getPersistedUnifiedSessionTabProps(worktreeId, page.tabId)
       return {
         type: 'browser' as const,
         id: page.pageId,

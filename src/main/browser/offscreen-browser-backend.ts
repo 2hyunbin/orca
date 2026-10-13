@@ -120,9 +120,9 @@ export class OffscreenBrowserBackend implements BrowserBackend {
           url: win.webContents.getURL(),
           title: win.webContents.getTitle()
         })
-      win.webContents.on('did-navigate', report)
+      // Committed navigations only: a title a page keeps changing (a counter) is not saved each time.
       win.webContents.on('did-navigate-in-page', report)
-      win.webContents.on('page-title-updated', report)
+      win.webContents.on('did-stop-loading', report)
     }
 
     const url = params.url || 'about:blank'

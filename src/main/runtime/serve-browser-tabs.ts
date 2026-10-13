@@ -14,6 +14,8 @@ import {
 } from './serve-browser-tab-layout'
 
 export type RestorableBrowserPage = {
+  /** The saved tab; a host's own tab is named by its page, a window's by its own id. */
+  tabId: string
   pageId: string
   url: string
   title: string
@@ -28,6 +30,7 @@ export class ServeBrowserTabs {
       /** The page backend while no window hosts the browser tabs, else null. */
       backend: () => BrowserBackend | null
       livePageIds: (worktreeId: string) => ReadonlySet<string>
+      worktreeIds: () => Iterable<string>
       session: (worktreeId: string) => WorkspaceSessionState | null
       hostId: (worktreeId: string) => ExecutionHostId
       save: (worktreeId: string, session: WorkspaceSessionState) => void
@@ -41,9 +44,7 @@ export class ServeBrowserTabs {
   }
 
   navigated(page: ServeBrowserPageState): void {
-    this.write(page.worktreeId, (hostId, session) =>
-      withServeBrowserPageState(hostId, session, page)
-    )
+    this.write(page.worktreeId, (_hostId, session) => withServeBrowserPageState(session, page))
   }
 
   /** A closed page's tab; a page destroyed with the process is not a close. */
@@ -69,6 +70,7 @@ export class ServeBrowserTabs {
       }
       return [
         {
+          tabId: tab.id,
           pageId: page.id,
           url: page.url,
           title: page.title,
@@ -78,23 +80,32 @@ export class ServeBrowserTabs {
     })
   }
 
-  /** Starts a saved tab's page, once however many callers ask; false when none is saved. */
-  async restore(worktreeId: string, pageId: string): Promise<boolean> {
+  /**
+   * Starts a saved tab's page, once however many callers ask; false when none is saved. A caller
+   * that names only the page is answered from whichever workspace saved it.
+   */
+  async restore(worktreeId: string | undefined, pageId: string): Promise<boolean> {
     const pending = this.restoring.get(pageId)
     if (pending) {
       await pending
       return true
     }
     const backend = this.deps.backend()
-    const page = this.listRestorable(worktreeId).find((entry) => entry.pageId === pageId)
-    if (!backend || !page) {
+    const owner = worktreeId ? [worktreeId] : [...this.deps.worktreeIds()]
+    const found = owner.flatMap((id) =>
+      this.listRestorable(id)
+        .filter((entry) => entry.pageId === pageId)
+        .map((page) => ({ worktreeId: id, page }))
+    )[0]
+    if (!backend || !found) {
       return false
     }
+    const { page } = found
     const started = backend
       .createTab({
         browserPageId: pageId,
         url: page.url,
-        worktreeId,
+        worktreeId: found.worktreeId,
         ...(page.profileId ? { profileId: page.profileId } : {})
       })
       .then(() => undefined)
@@ -113,8 +124,14 @@ export class ServeBrowserTabs {
   ): void {
     const session = this.deps.backend() ? this.deps.session(worktreeId) : null
     const next = session ? change(this.deps.hostId(worktreeId), session) : null
-    if (next) {
+    if (!next) {
+      return
+    }
+    // Called from page events and closes; a refused write (writes frozen) must not throw there.
+    try {
       this.deps.save(worktreeId, next)
+    } catch (error) {
+      console.warn('[serve-browser-tabs] could not save a browser tab:', error)
     }
   }
 }

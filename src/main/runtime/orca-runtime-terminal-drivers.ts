@@ -43,6 +43,7 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
       new Set(
         (this.agentBrowserBridge?.tabList?.(worktreeId).tabs ?? []).map((tab) => tab.browserPageId)
       ),
+    worktreeIds: () => this.getKnownWorkspaceSessionWorktreeIds(),
     session: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
     hostId: (worktreeId) => this.getWorkspaceSessionHostIdForWorktree(worktreeId),
     save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session)

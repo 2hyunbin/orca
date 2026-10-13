@@ -149,7 +149,7 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
       !getMobileSessionSnapshotTabIdentityKeys(tab).some((id) =>
         accepted.rendererTabIdentityKeys.has(id)
       ) &&
-      this.getLiveBrowserTabsByPageId(snapshot.worktree).has(tab.browserPageId)
+      this.getListedBrowserTabsByPageId(snapshot.worktree).has(tab.browserPageId)
     )
   }
 

@@ -194,5 +194,5 @@ export type RuntimeBrowserCommandHost = {
   /** Saves a page a host with no window just opened, so a restart lists its tab. */
   saveServeBrowserTab?(page: ServeBrowserPageState & { profileId?: string; groupId?: string }): void
   /** Starts the page of a saved tab a host with no window has not started; false when none. */
-  restoreServeBrowserPage?(worktreeId: string, browserPageId: string): Promise<boolean>
+  restoreServeBrowserPage?(worktreeId: string | undefined, browserPageId: string): Promise<boolean>
 }

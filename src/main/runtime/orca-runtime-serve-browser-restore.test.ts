@@ -87,4 +87,14 @@ describe('a saved browser tab on a host with no window', () => {
     const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
     expect(listed.tabs.some((tab) => tab.type === 'browser')).toBe(false)
   })
+
+  it('starts its page for a command that names only the page', async () => {
+    const { runtime, createTab } = restartedServe()
+
+    expect(await runtime['serveBrowserTabs'].restore(undefined, 'page-1')).toBe(true)
+
+    expect(createTab).toHaveBeenCalledWith(
+      expect.objectContaining({ browserPageId: 'page-1', worktreeId: TEST_WORKTREE_ID })
+    )
+  })
 })
