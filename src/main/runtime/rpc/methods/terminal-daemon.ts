@@ -3,6 +3,7 @@ import {
   readSeveredDaemonStatus,
   restartSeveredDaemon
 } from '../../../daemon/daemon-host-image-state'
+import { readTerminalDaemonLiveness } from '../../../daemon/daemon-liveness-report'
 import { defineMethod } from '../core'
 
 export const TERMINAL_DAEMON_METHODS = [
@@ -10,7 +11,11 @@ export const TERMINAL_DAEMON_METHODS = [
     name: 'terminalDaemon.severedStatus',
     permission: 'workspace',
     params: null,
-    handler: async () => ({ severed: await readSeveredDaemonStatus() })
+    // Why `daemon` is additive: older CLIs read only `severed`.
+    handler: async () => ({
+      severed: await readSeveredDaemonStatus(),
+      daemon: await readTerminalDaemonLiveness()
+    })
   }),
   defineMethod({
     name: 'terminalDaemon.restartSevered',
