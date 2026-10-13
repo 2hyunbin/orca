@@ -136,7 +136,7 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   }
   // Why: on Windows a CLI launch that lost ELECTRON_RUN_AS_NODE would boot the GUI and exit silently; redirect to node mode before the lock gate below.
   // The redirect runs before the serve-argv rewrite so it still matches on the launch argv verbatim.
-  // Direct serve stays in-process so its signal handlers own all children.
+  // A direct Linux `serve` is exec'd into the CLI here (same pid); it only continues in-process if exec fails.
   const cliLaunchRedirect = maybeRedirectCliLaunch({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
