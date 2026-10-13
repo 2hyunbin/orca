@@ -21,6 +21,7 @@ import {
 import type { ClaudeStructuredSdkOptions } from './claude-structured-launch-resolution'
 import { providerStderrForDisplay } from '../provider-process/provider-spawn-failure-report'
 import { withMissingProviderExecutable } from '../provider-process/provider-executable-missing'
+import { deleteProviderChildEnvKeys } from '../provider-process/provider-process-launch'
 
 export { ClaudeControlRequestError }
 
@@ -59,9 +60,7 @@ export type ClaudeStreamJsonLaunch = {
 }
 
 function withoutKeys(env: Record<string, string>, keys: readonly string[]): Record<string, string> {
-  for (const key of keys) {
-    delete env[key]
-  }
+  deleteProviderChildEnvKeys(env, keys)
   return env
 }
 

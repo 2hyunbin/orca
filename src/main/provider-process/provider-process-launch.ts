@@ -15,8 +15,27 @@ export function resolveProviderChildEnv(
   baseEnv: NodeJS.ProcessEnv
 ): NodeJS.ProcessEnv {
   const childEnv: NodeJS.ProcessEnv = { ...baseEnv, ...launch.env }
-  for (const key of launch.envToDelete ?? []) {
-    delete childEnv[key]
-  }
+  deleteProviderChildEnvKeys(childEnv, launch.envToDelete ?? [])
   return childEnv
+}
+
+/** Deletes `keys` from a plain env object; on Windows in any casing, since the child reads its
+ *  environment case-insensitively and an `orca_pane_key` would still name a pane there. */
+export function deleteProviderChildEnvKeys(
+  env: Record<string, string | undefined>,
+  keys: readonly string[],
+  platform: NodeJS.Platform = process.platform
+): void {
+  if (platform !== 'win32') {
+    for (const key of keys) {
+      delete env[key]
+    }
+    return
+  }
+  const doomed = new Set(keys.map((key) => key.toUpperCase()))
+  for (const key of Object.keys(env)) {
+    if (doomed.has(key.toUpperCase())) {
+      delete env[key]
+    }
+  }
 }

@@ -9,6 +9,7 @@ import {
   SEALED_TEST_SPAWN_TOKEN,
   sealedChildEnv
 } from './structured-session-child-env.test-support'
+import { resolveProviderChildEnv } from '../provider-process/provider-process-launch'
 import { sealStructuredSessionChild } from './structured-session-child-env'
 import {
   mintStructuredWorkerHandle,
@@ -222,6 +223,30 @@ describe('sealStructuredSessionChild identity', () => {
       expect(sealed.envToDelete.includes('ORCA_TERMINAL_HANDLE')).toBe(handle === null)
     }
   )
+
+  it('on Windows, strips a pane identity spelled in any case, through the final provider merge', () => {
+    // Windows reads a child's environment case-insensitively, so `orca_pane_key` still names a pane.
+    pinPlatform('win32')
+    installFakeAppEnvironment({ isPackaged: () => false, getPath: () => USER_DATA })
+    const foreign = {
+      orca_pane_key: 'tab-parent:leaf-parent',
+      Orca_Agent_Hook_Endpoint: 'C:\\hook-endpoint',
+      orca_terminal_handle: 'term_parent'
+    }
+    const sealed = sealStructuredSessionChild({
+      sessionId: SESSION_ID,
+      spawnToken: SEALED_TEST_SPAWN_TOKEN,
+      env: { Path: 'C:\\Windows', ...foreign },
+      inheritedEnvToDelete: []
+    })
+    const child = resolveProviderChildEnv(sealed, { SystemRoot: 'C:\\Windows', ...foreign })
+
+    const named = Object.keys(child).filter((key) =>
+      /pane_key|hook_endpoint|terminal_handle/i.test(key)
+    )
+    expect(named).toEqual([])
+    expect(child.ORCA_AGENT_SESSION_ID).toBe(SESSION_ID)
+  })
 
   it('never names the WSL-scoped launcher, because a structured worker cannot run in WSL', () => {
     // `orca-ide` is the literal the PTY lane exports for WSL only. A structured session that

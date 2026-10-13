@@ -59,6 +59,7 @@ import {
   AGENT_HOOK_RUNTIME_ENV_KEYS,
   ORCA_PANE_IDENTITY_ENV_KEYS
 } from '../ipc/pty/host-env/spawn-env-keys'
+import { deleteProviderChildEnvKeys } from '../provider-process/provider-process-launch'
 import { resolveStructuredWorkerIdentityForSession } from './structured-worker-authority'
 
 /**
@@ -110,9 +111,7 @@ export function sealStructuredSessionChild(input: {
 
 function withoutPaneIdentity(env: Record<string, string>): Record<string, string> {
   const next = { ...env }
-  for (const key of STRUCTURED_CHILD_ENV_TO_DELETE) {
-    delete next[key]
-  }
+  deleteProviderChildEnvKeys(next, STRUCTURED_CHILD_ENV_TO_DELETE)
   return next
 }
 
