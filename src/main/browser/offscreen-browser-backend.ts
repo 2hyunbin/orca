@@ -31,6 +31,13 @@ export class OffscreenBrowserBackend implements BrowserBackend {
     private readonly browserManager: BrowserManager,
     private readonly options: {
       getAgentBrowserBridge?: () => Pick<AgentBrowserBridge, 'onPageClosed'> | null
+      /** A page's committed address or title changed, so its saved tab can follow. */
+      onPageStateChanged?: (page: {
+        worktreeId: string
+        pageId: string
+        url: string
+        title: string
+      }) => void
     } = {}
   ) {}
 
@@ -102,6 +109,21 @@ export class OffscreenBrowserBackend implements BrowserBackend {
       this.windowsByPageId.delete(browserPageId)
       this.browserManager.unregisterGuest(browserPageId)
     })
+
+    const { worktreeId } = params
+    const onPageStateChanged = this.options.onPageStateChanged
+    if (worktreeId && onPageStateChanged) {
+      const report = (): void =>
+        onPageStateChanged({
+          worktreeId,
+          pageId: browserPageId,
+          url: win.webContents.getURL(),
+          title: win.webContents.getTitle()
+        })
+      win.webContents.on('did-navigate', report)
+      win.webContents.on('did-navigate-in-page', report)
+      win.webContents.on('page-title-updated', report)
+    }
 
     const url = params.url || 'about:blank'
     void this.loadUrl(win, url).catch((error) => {

@@ -155,6 +155,7 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
 
   // Public so runtime-side page release (lease fencing) can prune a tab whose page is gone.
   retireRuntimeOwnedBrowserSessionTab(worktreeId: string, browserPageId: string): boolean {
+    this.serveBrowserTabs.closed(worktreeId, browserPageId)
     // Why: before the snapshot guard — worktree removal drops the snapshot first, and the host
     // rows for its client pages would otherwise be stranded on screen with nothing to retract them.
     this.clientHostedBrowserRows.publish(worktreeId)

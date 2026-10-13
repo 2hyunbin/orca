@@ -184,6 +184,18 @@ export class OrcaRuntimeWithScheduleMobileSessionTabsChanged extends OrcaRuntime
         profileId: page.browserProfileId
       })
     }
+    // A saved tab whose page starts on first use is listed as if it ran.
+    for (const page of this.serveBrowserTabs.listRestorable(worktreeId)) {
+      byPageId.set(page.pageId, {
+        browserPageId: page.pageId,
+        index: byPageId.size,
+        url: page.url,
+        title: page.title,
+        active: false,
+        worktreeId,
+        ...(page.profileId ? { profileId: page.profileId } : {})
+      })
+    }
     return byPageId
   }
 

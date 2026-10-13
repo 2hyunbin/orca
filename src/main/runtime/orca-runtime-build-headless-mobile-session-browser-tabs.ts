@@ -79,7 +79,24 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
         canGoForward: page.canGoForward,
         isActive: page.active
       }))
-    return [...publishedServerTabs, ...publishedClientTabs]
+    const publishedSavedTabs = this.serveBrowserTabs.listRestorable(worktreeId).map((page) => {
+      const persistedProps = this.getPersistedUnifiedSessionTabProps(worktreeId, page.pageId)
+      return {
+        type: 'browser' as const,
+        id: page.pageId,
+        title: page.title || page.url || 'Browser',
+        browserWorkspaceId: page.pageId,
+        browserPageId: page.pageId,
+        url: page.url || 'about:blank',
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        ...(persistedProps ? { color: persistedProps.color } : {}),
+        ...(persistedProps ? { isPinned: persistedProps.isPinned === true } : {}),
+        isActive: false
+      }
+    })
+    return [...publishedServerTabs, ...publishedClientTabs, ...publishedSavedTabs]
   }
 
   protected getPersistedUnifiedSessionTabProps(

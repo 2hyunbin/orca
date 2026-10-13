@@ -168,6 +168,14 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
     worktreeId: string | undefined,
     browserPageId: string
   ): Promise<void> {
+    // With no window, the host starts a saved tab's page itself, as a window does on first use.
+    if (
+      worktreeId &&
+      !this.host.getAvailableAuthoritativeWindow() &&
+      (await this.host.restoreServeBrowserPage?.(worktreeId, browserPageId))
+    ) {
+      return
+    }
     const win = this.host.getAuthoritativeWindow()
     win.webContents.send(
       'browser:activateView',
