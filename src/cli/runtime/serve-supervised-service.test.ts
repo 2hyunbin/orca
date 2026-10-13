@@ -250,6 +250,28 @@ describe('superviseServeService', () => {
     expect(order).toEqual(['restart'])
   })
 
+  it('does not let a give-up on the old build block a replaced AppImage', async () => {
+    let restarts = 0
+    const h = harness({
+      userDataPath,
+      readBrake: () => ({
+        ...emptyServeSupervisorBrake('build-a'),
+        gaveUp: { at: 1, reason: 'crashed' }
+      }),
+      appImageUpdate: {
+        inspect: () => 'superseded',
+        restart: async () => {
+          restarts++
+          h.stop()
+          return 'the service is stopping'
+        }
+      }
+    })
+    await expect(superviseServeService(h.options)).resolves.toBe(0)
+    expect(restarts).toBe(1)
+    expect(h.logs.join('\n')).not.toContain('Not starting')
+  })
+
   it('keeps serving the running build when the restart fails, without retrying it', async () => {
     let runs = 0
     let restarts = 0

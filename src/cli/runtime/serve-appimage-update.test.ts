@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, rm, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -9,6 +9,7 @@ import {
 } from '../../shared/appimage-cache-identity'
 import {
   APPIMAGE_SETTLE_MS,
+  createSupervisedAppImageUpdate,
   inspectAppImageBuild,
   resolveAppImageBuildWatch,
   restartFromNewAppImage,
@@ -151,5 +152,39 @@ describe('supervised serve and a replaced AppImage', () => {
     const stopping = restartDeps({ isStopped: () => true })
     await expect(restartFromNewAppImage(watch, stopping)).resolves.toBe('the service is stopping')
     expect(stopping.execve).not.toHaveBeenCalled()
+  })
+
+  // Why: a build that dies before its own crash brake must not be exec'd on every service restart.
+  it('tries a new AppImage once, until a supervisor starts on it or --force', async () => {
+    const { root, appImagePath, executable } = await makeRunningGeneration()
+    const watch = resolveAppImageBuildWatch(executable, {}, 'linux')!
+    await swapIn(appImagePath, 'build C')
+    const attemptPath = join(root, 'attempt.json')
+    const logs: string[] = []
+    const make = (overrides: { force?: boolean; runningKey?: string } = {}) =>
+      createSupervisedAppImageUpdate({
+        ...restartDeps({ log: (line) => logs.push(line) }),
+        watch: { ...watch, runningKey: overrides.runningKey ?? watch.runningKey },
+        attemptPath,
+        force: overrides.force ?? false
+      })
+
+    const first = make()
+    expect(first.inspect()).toBe('superseded')
+    await first.restart(() => false)
+    const candidateKey = resolveAppImageCacheKey(appImagePath)
+    expect(JSON.parse(await readFile(attemptPath, 'utf8'))).toEqual({ candidateKey })
+
+    // The new build died early; the service manager restarted the old one.
+    const second = make()
+    expect(second.inspect()).toBe('current')
+    expect(second.inspect()).toBe('current')
+    expect(logs.filter((line) => line.includes('did not come up'))).toHaveLength(1)
+
+    expect(make({ force: true }).inspect()).toBe('superseded')
+    await make().restart(() => false)
+    // A supervisor running the attempted build clears the record.
+    make({ runningKey: candidateKey! })
+    await expect(readFile(attemptPath, 'utf8')).rejects.toThrow()
   })
 })

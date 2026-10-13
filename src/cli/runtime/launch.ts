@@ -143,7 +143,7 @@ export function serveOrcaApp(args: ServeOrcaAppArgs = {}): Promise<number> {
         appRoot: resolveAppRoot(),
         force: args.force === true,
         park: openServeBundlePark({ executable }),
-        appImageUpdate: supervisedAppImageUpdate(executable),
+        appImageUpdate: supervisedAppImageUpdate(executable, userDataPath, args.force === true),
         // Why first only: --force overrides a remembered abort once; the brake owns later attempts.
         runOnce: () =>
           serveOnce(

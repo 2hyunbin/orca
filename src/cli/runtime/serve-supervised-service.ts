@@ -140,7 +140,12 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
     )
     return 0
   }
-  if (record?.gaveUp && record.build === identify(options.executable)) {
+  // Why the AppImage check: a replaced AppImage is a new build, which a give-up must not block.
+  if (
+    record?.gaveUp &&
+    record.build === identify(options.executable) &&
+    (options.appImageUpdate?.inspect() ?? 'current') === 'current'
+  ) {
     return refuseGaveUp(record.gaveUp)
   }
 

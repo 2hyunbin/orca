@@ -5,8 +5,8 @@
  * the new AppImage with its own arguments (same pid, so the service manager keeps tracking it).
  * That serve unpacks the new build and points the stable launcher at it, as any AppImage serve does.
  */
-import { statSync } from 'node:fs'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import {
   readAppImageSourceOfNamespace,
@@ -82,6 +82,8 @@ export type AppImageRestartDeps = {
   log: (line: string) => void
   /** Null when the AppImage runs here; otherwise why it does not. */
   probe?: (appImagePath: string, env: NodeJS.ProcessEnv) => Promise<string | null>
+  /** Records the build about to be exec'd; a throw keeps the running build. */
+  beforeExec?: (candidateKey: string) => void
 }
 
 /** Never returns on success; otherwise returns why the running build stays. */
@@ -100,7 +102,12 @@ export async function restartFromNewAppImage(
   if (deps.isStopped()) {
     return 'the service is stopping'
   }
+  const candidateKey = resolveAppImageCacheKey(watch.appImagePath)
+  if (!candidateKey) {
+    return 'the new AppImage is gone'
+  }
   try {
+    deps.beforeExec?.(candidateKey)
     deps.execve(watch.appImagePath, [watch.appImagePath, ...deps.argv.slice(2)], env)
   } catch (error) {
     return error instanceof Error ? error.message : String(error)
@@ -151,24 +158,93 @@ function appImageEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return next
 }
 
-export function supervisedAppImageUpdate(executable: string): SupervisedAppImageUpdate | null {
+/**
+ * The new AppImage this profile's supervisor last exec'd, kept until a supervisor starts on it.
+ * Why durable: a build that dies before its own crash brake would otherwise be exec'd on every
+ * service restart of the old one, until the service manager's start limit disables the service.
+ */
+export function serveAppImageAttemptPath(userDataPath: string): string {
+  return join(userDataPath, 'serve-supervisor-appimage-attempt.json')
+}
+
+function readAttemptedKey(path: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    return typeof parsed === 'object' &&
+      parsed !== null &&
+      'candidateKey' in parsed &&
+      typeof parsed.candidateKey === 'string'
+      ? parsed.candidateKey
+      : null
+  } catch {
+    return null
+  }
+}
+
+export type SupervisedAppImageUpdateDeps = Omit<AppImageRestartDeps, 'isStopped'> & {
+  watch: AppImageBuildWatch
+  attemptPath: string
+  /** --force retries a build that failed to start before. */
+  force: boolean
+  now?: () => number
+}
+
+export function createSupervisedAppImageUpdate(
+  deps: SupervisedAppImageUpdateDeps
+): SupervisedAppImageUpdate {
+  const { watch, attemptPath } = deps
+  // A supervisor running the attempted build proves it started; so does --force, by intent.
+  if (deps.force || readAttemptedKey(attemptPath) === watch.runningKey) {
+    rmSync(attemptPath, { force: true })
+  }
+  let reportedFailedAttempt = false
+  return {
+    inspect: () => {
+      const state = inspectAppImageBuild(watch, deps.now?.())
+      if (state !== 'superseded') {
+        return state
+      }
+      if (readAttemptedKey(attemptPath) !== resolveAppImageCacheKey(watch.appImagePath)) {
+        return state
+      }
+      if (!reportedFailedAttempt) {
+        reportedFailedAttempt = true
+        deps.log(
+          `[serve] Keeping the running build: ${watch.appImagePath} was started once and did not come up. Replace it again, or run \`orca serve --supervise --force\` once to retry it.`
+        )
+      }
+      return 'current'
+    },
+    restart: (isStopped) =>
+      restartFromNewAppImage(watch, {
+        ...deps,
+        isStopped,
+        beforeExec: (candidateKey) =>
+          writeFileSync(attemptPath, JSON.stringify({ candidateKey }), { mode: 0o600 })
+      })
+  }
+}
+
+export function supervisedAppImageUpdate(
+  executable: string,
+  userDataPath: string,
+  force: boolean
+): SupervisedAppImageUpdate | null {
   const watch = resolveAppImageBuildWatch(executable)
   return watch
-    ? {
-        inspect: () => inspectAppImageBuild(watch),
-        restart: (isStopped) =>
-          restartFromNewAppImage(watch, {
-            isStopped,
-            argv: process.argv,
-            env: process.env,
-            execve: (file, args, env) => {
-              if (!process.execve) {
-                throw new Error('this runtime cannot replace its own process')
-              }
-              process.execve(file, args, env)
-            },
-            log: (line) => process.stderr.write(`${line}\n`)
-          })
-      }
+    ? createSupervisedAppImageUpdate({
+        watch,
+        attemptPath: serveAppImageAttemptPath(userDataPath),
+        force,
+        argv: process.argv,
+        env: process.env,
+        execve: (file, args, env) => {
+          if (!process.execve) {
+            throw new Error('this runtime cannot replace its own process')
+          }
+          process.execve(file, args, env)
+        },
+        log: (line) => process.stderr.write(`${line}\n`)
+      })
     : null
 }
