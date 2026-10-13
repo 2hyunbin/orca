@@ -171,16 +171,11 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     await ready(host)
     expect(record(host)?.options).toEqual({ model: 'sonnet' })
     // The picker offers the saved model, which nothing has vouched for yet.
-    expect(await picker(host)).toEqual({ model: 'sonnet', effort: 'high', confirmed: ['effort'] })
+    expect(await picker(host)).toEqual({ model: 'sonnet', effort: undefined, confirmed: undefined })
 
-    // A turn shows the child running the CLI's own model: the picker follows it, the record
-    // keeps what the user chose.
+    // A live report describes the turn; the picker keeps the saved next-message choice.
     turnReportsModel('claude-sonnet-5')
-    expect(await picker(host)).toEqual({
-      model: 'claude-sonnet-5',
-      effort: 'high',
-      confirmed: ['model', 'effort']
-    })
+    expect(await picker(host)).toEqual({ model: 'sonnet', effort: undefined, confirmed: undefined })
     expect(record(host)?.options).toEqual({ model: 'sonnet' })
 
     behavior.optionWritesHang = false
