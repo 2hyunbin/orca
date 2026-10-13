@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { getDefaultSettings } from '../../shared/constants'
 
-const { prepareHooks, resolveHome, listHomes } = vi.hoisted(() => ({
+const { prepareHooks, resolveHome, listHomes, holdsOwnHooks } = vi.hoisted(() => ({
+  holdsOwnHooks: vi.fn((_home: string) => false),
   prepareHooks: vi.fn(
     async (
       _home: string | null,
@@ -22,6 +23,9 @@ vi.mock('../codex/codex-launch-home-hooks', () => ({
 }))
 vi.mock('../codex/codex-state-db-backfill-recovery', () => ({
   stopCodexStateDbBackfillRecoveries: vi.fn(async () => {})
+}))
+vi.mock('../codex/codex-runtime-home-user-hook-loss', () => ({
+  runtimeHomeHasUnmirroredUserHooks: holdsOwnHooks
 }))
 vi.mock('../codex-accounts/guest-codex-account-homes', () => ({
   resolveGuestCodexAccountHome: resolveHome,
@@ -44,6 +48,7 @@ function settings(overrides: Partial<GlobalSettings>): GlobalSettings {
 describe('orcadCodexAccountHomes', () => {
   beforeEach(() => {
     prepareHooks.mockClear()
+    holdsOwnHooks.mockReturnValue(false)
   })
 
   it('puts the hook into a client-sent account home and launches on it', async () => {
@@ -83,5 +88,18 @@ describe('orcadCodexAccountHomes', () => {
     expect(orcadCodexAccountHomes(() => settings({}), noCleanup).listSessionHomes()).toEqual([
       ACCOUNT_HOME
     ])
+  })
+
+  it('leaves a home that holds its own hooks untouched rather than drop one', async () => {
+    holdsOwnHooks.mockReturnValue(true)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const homes = orcadCodexAccountHomes(() => settings({}), noCleanup)
+    await expect(
+      homes.selectLaunchHome(undefined, { CODEX_HOME: ACCOUNT_HOME }, { launchesCodex: true })
+    ).resolves.toBe(ACCOUNT_HOME)
+    await homes.selectLaunchHome(undefined, { CODEX_HOME: ACCOUNT_HOME })
+    expect(prepareHooks).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
   })
 })

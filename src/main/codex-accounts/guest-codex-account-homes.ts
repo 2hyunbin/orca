@@ -1,6 +1,6 @@
 import { readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { getSystemCodexHomePath } from '../codex/codex-home-paths'
 import { resolveHostCodexManagedHomeVerdict } from './host-codex-managed-home-ownership'
 
@@ -17,13 +17,19 @@ export function resolveGuestCodexAccountHome(
   candidate: string | undefined,
   home: string = homedir()
 ): string | null {
-  const path = candidate?.trim()
-  if (!path?.startsWith('/') || basename(path) !== 'home') {
+  const raw = candidate?.trim()
+  if (!raw?.startsWith('/')) {
+    return null
+  }
+  const path = resolve(raw)
+  const root = guestCodexAccountsRoot(home)
+  // Why lexical first: the path comes off the wire, and a stat of a stalled mount would block.
+  if (basename(path) !== 'home' || dirname(dirname(path)) !== resolve(root)) {
     return null
   }
   const verdict = resolveHostCodexManagedHomeVerdict({
     candidatePath: path,
-    managedAccountsRoot: guestCodexAccountsRoot(home),
+    managedAccountsRoot: root,
     systemCodexHomePath: getSystemCodexHomePath(),
     expectedAccountId: basename(dirname(path))
   })

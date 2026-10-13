@@ -49,6 +49,8 @@ describe.skipIf(process.platform === 'win32')('guest Codex account homes', () =>
     expect(resolveGuestCodexAccountHome(join(home, '.codex'), home)).toBe(null)
     expect(resolveGuestCodexAccountHome(undefined, home)).toBe(null)
     expect(resolveGuestCodexAccountHome('relative/home', home)).toBe(null)
+    expect(resolveGuestCodexAccountHome(join(root, 'a', 'b', 'home'), home)).toBe(null)
+    expect(resolveGuestCodexAccountHome('/mnt/stalled-share/home', home)).toBe(null)
   })
 
   it('refuses an account entry linked out of the root', () => {
