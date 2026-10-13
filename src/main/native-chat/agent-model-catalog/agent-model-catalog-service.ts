@@ -274,9 +274,12 @@ export function createAgentModelCatalogService(
           ...(unavailable ? { unavailable } : {})
         }
       }
-      // A released chat has no running agent to refresh its list; a read after a failed start
-      // must not launch another copy of the same agent.
-      if (params.savedOnly || scoped?.lease?.claimStatus === 'released') {
+      // Death evidence keeps a read after a failed start from spawning another agent; a new chat
+      // also starts released, but still needs its first listing.
+      if (
+        params.savedOnly ||
+        (scoped?.lease?.claimStatus === 'released' && scoped.lease.deathEvidence)
+      ) {
         return answer(entry)
       }
       // Past its TTL, only the probe re-derives a held reason. The reason is served meanwhile;

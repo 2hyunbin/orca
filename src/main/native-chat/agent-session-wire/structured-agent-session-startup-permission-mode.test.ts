@@ -11,6 +11,57 @@ import {
   hostTestOperationId
 } from './structured-agent-session-host-test-data'
 
+it('keeps a permission pick while accepting the startup model report', async () => {
+  const rig = await createRestTestRig({ idleSweep: { intervalMs: 3_600_000 } })
+  try {
+    const acquire = rig.adapter.acquire.getMockImplementation()
+    if (!acquire) {
+      throw new Error('missing test acquisition')
+    }
+    rig.adapter.acquire.mockImplementationOnce(rig.heldStart(acquire))
+    const attached = await rig.host.attach(CALLER, hostTestAttachParams(null))
+    if (!attached.ok) {
+      throw new Error('test attach refused')
+    }
+    const child = await rig.adapter.acquire.mock.results[0].value
+    const fields = { key: 'permissionMode', value: 'full-access' }
+    expect(
+      await rig.host.setOption(CALLER, {
+        envelope: {
+          sessionId: SESSION,
+          clientOperationId: hostTestOperationId(),
+          expectedRuntimeFence: attached.fence,
+          payloadFingerprint: computeAgentSessionPayloadFingerprint({
+            method: 'agentSession.setOption',
+            sessionId: SESSION,
+            fields
+          })
+        },
+        ...fields
+      })
+    ).toMatchObject({ ok: true })
+
+    await rig.host.handleAdapterEvent({
+      type: 'started',
+      sessionId: SESSION,
+      fence: attached.fence,
+      acquisitionGeneration: child.acquisitionGeneration!,
+      reportedOptions: { model: 'provider-model', effort: 'medium' },
+      restoreSkippedOptions: [],
+      optionRevision: 0
+    })
+    await vi.waitFor(() =>
+      expect(rig.store.getRecord(SESSION)?.options).toEqual({
+        model: 'provider-model',
+        effort: 'medium',
+        permissionMode: 'full-access'
+      })
+    )
+  } finally {
+    await rig.dispose()
+  }
+})
+
 it.each([false, true])(
   'keeps startup picks through replacement with dispatch ownership: %s',
   async (hasOpenDispatch) => {
