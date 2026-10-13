@@ -17,7 +17,6 @@ import {
   claudeStructuredSessionPublicationOptions,
   prepareClaudeStructuredSessionAcquisitionOptions
 } from './claude-structured-session-acquisition-options'
-import { claudeRetiredOptions } from './claude-structured-retired-model'
 import {
   claudeResolvedCatalogListing,
   claudeStructuredSessionOptionsFrom,
@@ -37,7 +36,7 @@ import {
 
 export type ClaudeOpenFacts = Pick<
   StructuredAgentSessionProviderOpenResult,
-  'reportedOptions' | 'restoreSkippedOptions' | 'retiredOptions' | 'catalogListing'
+  'reportedOptions' | 'catalogListing'
 >
 
 /** A lifecycle event the start reports, before the session's identity is stamped on it. */
@@ -211,9 +210,7 @@ export async function openClaudeSession(input: {
       session,
       readClaudeModels(initialized.initialization),
       session.fastModeAtStart ? session.optionMutationSequence - 1 : undefined
-    ),
-    restoreSkippedOptions: [...session.restoreSkippedOptions],
-    ...claudeRetiredOptions(session)
+    )
   }
   void settleClaudeStartupSettings(input, initialized)
   return result
@@ -255,9 +252,7 @@ async function settleClaudeStartupSettings(
     reportedOptions: claudeStartedReportedOptions(session, readClaudeModels(facts.initialization))
       .reportedOptions,
     // The one report of what the config resolved: the readback just applied it.
-    ...claudeResolvedCatalogListing(session, readClaudeModels(facts.initialization)),
-    restoreSkippedOptions: [...session.restoreSkippedOptions],
-    ...claudeRetiredOptions(session)
+    ...claudeResolvedCatalogListing(session, readClaudeModels(facts.initialization))
   })
   if (startFastMode !== null) {
     void applyClaudeStartFastMode(session, facts, startFastMode)

@@ -48,8 +48,7 @@ export function structuredAgentSessionHeldStarts(
         return adapter.open
           ? adapter.open(input)
           : {
-              reportedOptions: { model: '' },
-              restoreSkippedOptions: []
+              reportedOptions: { model: '' }
             }
       }
       return { ...adapter, acquire, open }

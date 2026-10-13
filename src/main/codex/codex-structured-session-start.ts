@@ -154,7 +154,6 @@ export async function openCodexStructuredSession(
       linkId: deps.mintLinkId?.(),
       observedAt: deps.now?.() ?? Date.now()
     }),
-    reportedOptions: reportedCodexSessionOptions(session),
-    restoreSkippedOptions: []
+    reportedOptions: reportedCodexSessionOptions(session)
   }
 }

@@ -263,8 +263,7 @@ export async function createQueuedMessageTestRig(
       sessionId: SESSION,
       fence: store.getRecord(SESSION)!.lease.runtimeFence,
       acquisitionGeneration: 'generation-1',
-      reportedOptions: { model: 'default' },
-      restoreSkippedOptions: []
+      reportedOptions: { model: 'default' }
     })
   }
 

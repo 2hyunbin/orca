@@ -64,8 +64,7 @@ function adapter(): StructuredAgentSessionAdapter {
       sessionId: identity.sessionId,
       fence,
       acquisitionGeneration,
-      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) },
-      restoreSkippedOptions: []
+      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) }
     })
     return {
       providerChildPhase: 'starting' as const,
