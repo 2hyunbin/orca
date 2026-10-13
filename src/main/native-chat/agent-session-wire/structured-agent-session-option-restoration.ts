@@ -19,8 +19,7 @@ export async function readNativeSessionOptions(input: {
   })
 }
 
-/** The record's options once the provider has reported: its model, effort, Fast and service tier
- *  replace the saved ones, other saved options stay, and any the child could not take are dropped. */
+/** Legacy acquisition facts replace execution choices; unrelated saved launch fields survive. */
 export function nativeSessionOptionsFromReport(input: {
   reported: AgentSessionOptionsResult['current']
   priorOptions?: Readonly<Record<string, string>>

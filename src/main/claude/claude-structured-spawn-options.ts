@@ -1,6 +1,4 @@
-// A chat's saved options as the Claude child's launch options. The child starts already running
-// them, so its first message can be written at once instead of waiting for initialize to answer and
-// a control request to apply each one.
+// Saved choices seed the CLI launch; message choices are applied again before input.
 
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk'
 import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured-agent-session-option-codec'
