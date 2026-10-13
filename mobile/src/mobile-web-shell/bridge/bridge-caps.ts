@@ -1,3 +1,5 @@
+import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../../src/shared/mobile-bridge-frame-bytes'
+
 /**
  * The bridge's caps, its refusal vocabulary, and the single point that enforces them.
  *
@@ -17,7 +19,7 @@ export const BRIDGE_DIRECTIONS = ['page-to-shell', 'shell-to-page'] as const
 export type BridgeDirection = (typeof BRIDGE_DIRECTIONS)[number]
 
 /** Frame ceiling, in UTF-8 bytes of the raw string, checked before `JSON.parse` sees it. */
-export const BRIDGE_MAX_MESSAGE_BYTES = 640 * 1024
+export const BRIDGE_MAX_MESSAGE_BYTES = MOBILE_BRIDGE_MAX_FRAME_BYTES
 
 /** Nesting levels a page-to-shell frame may carry, counting the frame object itself as one. */
 export const BRIDGE_MAX_DEPTH = 16

@@ -105,7 +105,7 @@ describe('conversation outline read', () => {
       prompt(index + 1, `${index} ${'y'.repeat(1_000)}`)
     )
     const outline = readAgentSessionConversationOutline(snapshot(items))
-    expect(replyBytes(outline)).toBeLessThanOrEqual(HISTORY_PAGE_CONTENT_BUDGET_BYTES)
+    expect(replyBytes(outline.entries)).toBeLessThanOrEqual(HISTORY_PAGE_CONTENT_BUDGET_BYTES)
     expect(outline.entries.at(-1)?.itemId).toBe('user-10000')
   })
 })

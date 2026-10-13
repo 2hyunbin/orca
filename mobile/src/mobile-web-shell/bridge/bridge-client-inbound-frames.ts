@@ -27,6 +27,13 @@ function describeStreamFailure(error: unknown): string {
   return error instanceof Error ? error.message : 'the shell could not keep this stream open'
 }
 
+/** What a reader shows when the app ends its stream; the reason itself goes to diagnostics. */
+const STREAM_END_TEXT: Record<Extract<BridgeHostMessage, { type: 'end' }>['reason'], string> = {
+  overflow: 'This was too large for the app to receive at once.',
+  closed: 'The app could not read what your computer sent.',
+  unsubscribed: 'The app stopped receiving updates.'
+}
+
 /**
  * One frame from the shell, routed to whatever the page has open under the id it names.
  *
@@ -92,7 +99,7 @@ export function createBridgeInboundFrameReader(
         return
       case 'end':
         report({ kind: 'stream-ended', reason: message.reason })
-        subscriptions.end(message.id, `the shell ended this stream (${message.reason})`)
+        subscriptions.end(message.id, STREAM_END_TEXT[message.reason])
         return
     }
   }

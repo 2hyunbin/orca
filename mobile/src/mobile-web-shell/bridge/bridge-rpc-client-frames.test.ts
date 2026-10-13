@@ -615,7 +615,10 @@ describe('bridge client acks', () => {
     // The terminal result is the only thing a consumer hears. `host-worktree-refresh.ts` reads it
     // to clear the flag that says the event stream is live; without it the list never refreshes
     // again, because frames that stop arriving look exactly like a stream with nothing to say.
-    expect(onData.mock.calls).toEqual([[{ type: 'error', message: expect.any(String) }]])
+    // Its words reach a screen, so they are a person's, not the protocol's.
+    expect(onData.mock.calls).toEqual([
+      [{ type: 'error', message: 'This was too large for the app to receive at once.' }]
+    ])
     expect(page.diagnostics).toEqual([{ kind: 'stream-ended', reason: 'overflow' }])
     expect(page.frames().filter((frame) => frame.type === 'cancel')).toEqual([])
   })

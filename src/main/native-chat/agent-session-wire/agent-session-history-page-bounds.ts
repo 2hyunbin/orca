@@ -7,6 +7,7 @@ import type {
   AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
 import { REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES } from '../../../shared/remote-runtime-memory-limits'
+import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-frame-bytes'
 import { agentSessionHostStatusBody } from '../../../shared/agent-session-host-status-rows'
 import { subagentFoldKey, subagentItemBlock } from '../../../shared/native-chat-subagent-items'
 
@@ -14,8 +15,10 @@ export const AGENT_SESSION_HISTORY_MAX_PAGE_BYTES = REMOTE_RUNTIME_MAX_OUTBOUND_
 
 const HISTORY_PAGE_ENVELOPE_RESERVE_BYTES = 64 * 1024
 
+// Pages ride subscribe frames, which a phone's app ends whole when one outgrows its bridge frame;
+// a smaller page only means one more Load-earlier read.
 export const HISTORY_PAGE_CONTENT_BUDGET_BYTES =
-  AGENT_SESSION_HISTORY_MAX_PAGE_BYTES - HISTORY_PAGE_ENVELOPE_RESERVE_BYTES
+  MOBILE_BRIDGE_MAX_FRAME_BYTES - HISTORY_PAGE_ENVELOPE_RESERVE_BYTES
 
 export function historyEntryBytes(
   item: AgentJournalRenderItem,

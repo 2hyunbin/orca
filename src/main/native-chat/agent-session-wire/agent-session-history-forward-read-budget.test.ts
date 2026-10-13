@@ -71,7 +71,7 @@ async function seedJournal(count: number) {
       body: {
         kind: 'message',
         role: 'assistant',
-        blocks: [{ type: 'text', text: `${index}:${'x'.repeat(4096)}` }]
+        blocks: [{ type: 'text', text: `${index}:${'x'.repeat(2048)}` }]
       }
     })
   }
