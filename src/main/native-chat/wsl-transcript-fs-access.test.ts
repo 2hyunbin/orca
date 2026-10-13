@@ -100,7 +100,7 @@ describe('transcript filesystem accessor off WSL UNC', () => {
     expect(mocks.runTask).not.toHaveBeenCalled()
     expect(mocks.stat).toHaveBeenCalledWith(path)
     expect(mocks.readdir).toHaveBeenCalledWith(path, { withFileTypes: true })
-    expect(mocks.readFile).toHaveBeenCalledWith(path, 'utf-8')
+    expect(mocks.readFile).toHaveBeenCalledWith(path, { encoding: 'utf-8', signal: undefined })
     expect(mocks.open).toHaveBeenCalledWith(path, 'r')
     // Off UNC the raw stream is handed back verbatim, encoding included.
     expect(stream).toBe('raw-stream')
@@ -119,6 +119,18 @@ describe('transcript filesystem accessor off WSL UNC', () => {
     expect(mocks.createReadStream).toHaveBeenCalledWith(POSIX_PATH, {
       start: 4,
       signal: controller.signal
+    })
+  })
+
+  it('cancels a native whole-file read through Node', async () => {
+    const fs = await vi.importActual<typeof NodeFsPromisesModule>('node:fs/promises')
+    mocks.readFile.mockImplementation(fs.readFile)
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      wslGatedReadFile(POSIX_PATH, 'utf-8', 'scan', controller.signal)
+    ).rejects.toMatchObject({
+      name: 'AbortError'
     })
   })
 })

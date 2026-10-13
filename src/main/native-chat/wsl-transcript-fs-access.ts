@@ -110,7 +110,7 @@ export function wslGatedReadFile(
   signal?: AbortSignal
 ): Promise<string> {
   return runReusableFsOperation({ operation: 'readfile', path, encoding }, priority, signal, () =>
-    readFile(path, encoding)
+    readFile(path, { encoding, signal })
   )
 }
 

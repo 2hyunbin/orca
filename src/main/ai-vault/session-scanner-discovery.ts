@@ -93,6 +93,8 @@ export async function discoverFiles(args: {
     }
     return finishPending().then(() => {
       pending = readBatch(paths)
+      // Observe overlap failures now; finishPending still consumes the original promise in order.
+      void pending.catch(() => undefined)
       paths = []
     })
   }
