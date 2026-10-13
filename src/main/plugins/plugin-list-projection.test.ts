@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { emptyPluginLockfile } from '../../shared/plugins/plugin-install-lockfile'
 import { pluginManifestSchema } from '../../shared/plugins/plugin-manifest'
 import type { InvalidDiscoveredPlugin, ValidDiscoveredPlugin } from './plugin-discovery'
-import { buildPluginList } from './plugin-list-projection'
+import { buildPluginList, type PluginListProjectionService } from './plugin-list-projection'
 import type { PluginService } from './plugin-service'
 
 const manifest = pluginManifestSchema.parse({
@@ -20,14 +20,15 @@ const manifest = pluginManifestSchema.parse({
 })
 
 function serviceWith(
-  discovered: ValidDiscoveredPlugin,
+  discovered: ValidDiscoveredPlugin | InvalidDiscoveredPlugin,
   options: {
     activation?: ReturnType<PluginService['activationState']>
     worker?: ReturnType<PluginService['workerState']>
     vmRecipes?: ReturnType<PluginService['contentPacks']['vmRecipes']['preview']>
     commands?: ReturnType<PluginService['contentPacks']['commands']['preview']>
+    environmentRecipes?: ReturnType<PluginService['contentPacks']['environmentRecipes']['preview']>
   } = {}
-): PluginService {
+): PluginListProjectionService {
   return {
     options: {
       getPluginConsents: () => ({}),
@@ -37,11 +38,13 @@ function serviceWith(
     activationState: () => options.activation ?? 'pending',
     workerState: () => options.worker ?? { state: 'inactive', restarts: 0 },
     activationError: () => null,
+    isBundledDataPlugin: () => false,
     contentPacks: {
       vmRecipes: { preview: () => options.vmRecipes ?? [] },
+      environmentRecipes: { preview: () => options.environmentRecipes ?? [] },
       commands: { preview: () => options.commands ?? [] }
     }
-  } as unknown as PluginService
+  }
 }
 
 describe('buildPluginList consent identity', () => {
@@ -118,10 +121,7 @@ describe('buildPluginList consent identity', () => {
       error: 'missing orca-plugin.json',
       isDev: true
     }
-    const service = {
-      options: { getPluginConsents: () => ({}), getDisabledPlugins: () => [] },
-      getDiscovered: () => [invalid]
-    } as unknown as PluginService
+    const service = serviceWith(invalid)
 
     const projected = (await buildPluginList(service, emptyPluginLockfile()))[0]!
     expect(projected.pluginKey).toBe('invalid-development-plugin-1')
@@ -220,5 +220,64 @@ describe('buildPluginList consent identity', () => {
         keybindings: [{ key: 'Mod+Alt+T', when: 'worktree' }]
       }
     ])
+  })
+  it('projects executable provider identity and exact literal commands for review', async () => {
+    const envManifest = pluginManifestSchema.parse({
+      ...manifest,
+      manifestVersion: 2,
+      execution: 'instructional',
+      capabilities: [],
+      contributes: { environmentRecipes: [{ path: 'recipes/pods.json' }] }
+    })
+    const p: ValidDiscoveredPlugin = {
+      pluginKey: 'orca-samples.demo',
+      rootDir: join(tmpdir(), 'provider'),
+      manifest: envManifest,
+      consentFingerprint: 'sha256-reviewed',
+      contentHash: null,
+      isDev: true
+    }
+    const recipe = {
+      schemaVersion: 1,
+      id: 'pods',
+      name: 'Development pods',
+      description: 'Company machines',
+      lifetime: 'both',
+      createFields: [],
+      commands: {
+        list: { program: 'company-dev', args: ['list', ';literal'], timeoutSeconds: 120 }
+      }
+    } as const
+    const entries = await buildPluginList(
+      serviceWith(p, {
+        environmentRecipes: [
+          {
+            pluginKey: p.pluginKey,
+            recipe: {
+              ...recipe,
+              commands: { list: { ...recipe.commands.list, args: [...recipe.commands.list.args] } },
+              createFields: []
+            }
+          }
+        ]
+      }),
+      emptyPluginLockfile()
+    )
+    expect(entries[0]).toMatchObject({
+      execution: 'instructional',
+      environmentRecipeCount: 1,
+      environmentRecipes: [
+        {
+          providerId: 'orca-samples.demo/pods',
+          commands: [{ action: 'list', program: 'company-dev', args: ['list', ';literal'] }]
+        }
+      ]
+    })
+    const unavailable = await buildPluginList(serviceWith(p), emptyPluginLockfile())
+    expect(unavailable[0]).toMatchObject({
+      execution: 'instructional',
+      environmentRecipeCount: 1,
+      environmentRecipes: []
+    })
   })
 })

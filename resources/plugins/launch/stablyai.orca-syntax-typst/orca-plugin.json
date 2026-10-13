@@ -1,0 +1,37 @@
+{
+  "manifestVersion": 2,
+  "execution": "data",
+  "id": "orca-syntax-typst",
+  "publisher": "stablyai",
+  "name": "Typst syntax",
+  "description": "Typst syntax data included with Orca.",
+  "version": "1.0.0",
+  "engines": {
+    "orca": ">=1.4.214"
+  },
+  "pluginApi": 1,
+  "capabilities": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "typst",
+        "aliases": [
+          "Typst",
+          "typst"
+        ],
+        "extensions": [
+          ".typ"
+        ],
+        "filenames": [],
+        "configuration": "language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "typst",
+        "scopeName": "source.typst",
+        "path": "syntaxes/typst.tmLanguage.json"
+      }
+    ]
+  }
+}

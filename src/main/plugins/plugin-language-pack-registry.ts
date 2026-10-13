@@ -1,5 +1,5 @@
+import { parsePluginLocaleContent } from './plugin-locale-content'
 import {
-  parsePluginLanguagePackArtifact,
   pluginLanguageResourceId,
   type PluginLanguagePackRegistration
 } from '../../shared/plugins/plugin-language-pack-artifact'
@@ -25,7 +25,13 @@ export class PluginLanguagePackRegistry {
   private packs: PluginLanguagePackRegistration[] = []
   private readonly errors = new Map<string, string>()
 
-  constructor(private readonly contentVerifier: PluginContentVerifier) {}
+  constructor(
+    private readonly contentVerifier: PluginContentVerifier,
+    private readonly builtInLocale: (
+      plugin: ValidDiscoveredPlugin,
+      locale: string
+    ) => 'es' | undefined = () => undefined
+  ) {}
 
   list(): readonly PluginLanguagePackRegistration[] {
     return this.packs
@@ -62,17 +68,19 @@ export class PluginLanguagePackRegistry {
                 contribution.path,
                 PLUGIN_LANGUAGE_PACK_MAX_BYTES
               )
-              const parsed = parsePluginLanguagePackArtifact(text)
-              if (!parsed.ok) {
-                throw new Error(`language pack "${contribution.locale}" ${parsed.error}`)
-              }
+              const parsed = await parsePluginLocaleContent(
+                text,
+                contribution.locale,
+                plugin.manifest.manifestVersion
+              )
               const id = `plugin:${plugin.pluginKey}/${contribution.locale}` as const
               return {
                 id,
                 resourceLanguage: pluginLanguageResourceId(id),
                 pluginKey: plugin.pluginKey,
                 locale: contribution.locale,
-                catalog: parsed.catalog
+                builtInLocale: this.builtInLocale(plugin, contribution.locale),
+                ...parsed
               }
             })
           )

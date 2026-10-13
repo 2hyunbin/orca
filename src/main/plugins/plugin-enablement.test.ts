@@ -4,9 +4,12 @@ import { getDefaultSettings } from '../../shared/constants'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { pluginManifestSchema } from '../../shared/plugins/plugin-manifest'
 import type { Store } from '../persistence'
-import { applyPluginConsent, applyPluginEnablement } from './plugin-enablement'
+import {
+  applyPluginConsent,
+  applyPluginEnablement,
+  type PluginEnablementService
+} from './plugin-enablement'
 import type { ValidDiscoveredPlugin } from './plugin-discovery'
-import type { PluginService } from './plugin-service'
 
 const pluginKey = 'orca-samples.demo'
 const manifest = pluginManifestSchema.parse({
@@ -22,16 +25,17 @@ const manifest = pluginManifestSchema.parse({
 })
 
 function createStore(): {
-  store: Store
+  store: Pick<Store, 'getSettings' | 'updateSettings'>
   getSettings: () => GlobalSettings
   updateSettings: ReturnType<typeof vi.fn>
 } {
   let settings = getDefaultSettings(tmpdir())
   const updateSettings = vi.fn((updates: Partial<GlobalSettings>) => {
     settings = { ...settings, ...updates }
+    return settings
   })
   return {
-    store: { getSettings: () => settings, updateSettings } as unknown as Store,
+    store: { getSettings: () => settings, updateSettings },
     getSettings: () => settings,
     updateSettings
   }
@@ -40,8 +44,10 @@ function createStore(): {
 function createPluginService(
   getFingerprint: () => string,
   overrides: Partial<ValidDiscoveredPlugin> = {}
-): PluginService {
+): PluginEnablementService {
   return {
+    options: { userDataPath: tmpdir() },
+    isBundledDataPlugin: () => false,
     findValidPlugin: (requestedKey: string) =>
       requestedKey === pluginKey
         ? {
@@ -56,7 +62,7 @@ function createPluginService(
           }
         : null,
     reconcileActivationState: vi.fn().mockResolvedValue(undefined)
-  } as unknown as PluginService
+  }
 }
 
 describe('applyPluginConsent', () => {

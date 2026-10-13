@@ -1,0 +1,22 @@
+{
+  "manifestVersion": 2,
+  "execution": "data",
+  "id": "orca-locale-es",
+  "publisher": "stablyai",
+  "name": "Spanish",
+  "description": "Spanish interface translations included with Orca.",
+  "version": "1.0.0",
+  "engines": {
+    "orca": ">=1.4.214"
+  },
+  "pluginApi": 1,
+  "capabilities": [],
+  "contributes": {
+    "languagePacks": [
+      {
+        "locale": "es",
+        "path": "locales/es.json"
+      }
+    ]
+  }
+}

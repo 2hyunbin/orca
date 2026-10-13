@@ -114,4 +114,22 @@ describe('SSH target CRUD against managed orcad targets', () => {
     expect(mocks.updateTarget).toHaveBeenCalledWith('ssh-1', { label: 'renamed' })
     expect(mocks.addTarget.mock.calls[0]?.[0]).not.toHaveProperty('orcadProvisioning')
   })
+  it('never accepts provider ownership from renderer or paired-client target edits', () => {
+    mocks.state.target = target
+    handler('ssh:addTarget')(null, {
+      target: {
+        ...target,
+        environmentProvider: { binding: { providerId: 'forged.provider/pods' } }
+      }
+    })
+    handler('ssh:updateTarget')(null, {
+      id: target.id,
+      updates: { label: 'renamed', environmentProvider: undefined }
+    })
+    expect(mocks.addTarget.mock.calls[0]?.[0]).not.toHaveProperty('environmentProvider')
+    expect(mocks.updateTarget).toHaveBeenCalledWith(target.id, { label: 'renamed' })
+    const mutations = mocks.setMutations.mock.calls.at(-1)?.[0]
+    mutations.update(target.id, { environmentProvider: undefined, label: 'paired' })
+    expect(mocks.updateTarget).toHaveBeenLastCalledWith(target.id, { label: 'paired' })
+  })
 })

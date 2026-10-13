@@ -1,3 +1,4 @@
+import { admitEnvironmentProviderSshTarget } from './environment-provider-ssh-admission'
 import type { SshTarget, SshConnectionState } from '../../shared/ssh-types'
 import { SshConnection, type SshConnectionCallbacks } from './ssh-connection'
 import { recordSshConnectionOpened, recordSshConnectionReused } from './ssh-connection-attribution'
@@ -23,8 +24,24 @@ export class SshConnectionManager {
   async connect(target: SshTarget): Promise<SshConnection> {
     const existing = this.connections.get(target.id)
     if (existing?.getState().status === 'connected') {
-      recordSshConnectionReused(existing)
-      return existing
+      if (target.environmentProvider !== undefined) {
+        const lease = await admitEnvironmentProviderSshTarget(target)
+        if (!lease || lease.signal.aborted || !lease.isCurrent()) {
+          throw new Error('Environment provider SSH authorization changed')
+        }
+        if (
+          JSON.stringify(existing.getTarget().environmentProvider) !==
+          JSON.stringify(target.environmentProvider)
+        ) {
+          await this.disconnectConnection(target.id, existing)
+        } else {
+          recordSshConnectionReused(existing)
+          return existing
+        }
+      } else {
+        recordSshConnectionReused(existing)
+        return existing
+      }
     }
 
     if (this.connectingTargets.has(target.id)) {

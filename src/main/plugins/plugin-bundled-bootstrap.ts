@@ -1,50 +1,11 @@
-import { readFile, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, join, relative, sep } from 'node:path'
-import { z } from 'zod'
-import { isQualifiedPluginKey } from '../../shared/plugins/plugin-manifest'
-import { pluginRelativeDirectorySchema } from '../../shared/plugins/plugin-manifest-fields'
-import { isOfficialPluginIdentity } from '../../shared/plugins/plugin-marketplace'
+import { readBundledPluginIndex, resolveBundlePath } from './plugin-bundled-index'
+export { BUNDLED_PLUGIN_INDEX_FILENAME } from './plugin-bundled-index'
+import { join } from 'node:path'
 import { getUserPluginsDir } from './plugin-discovery'
 import { installBundledPlugin, readPluginLockfile } from './plugin-install'
 import { inspectPluginInstallTree } from './plugin-install-staging'
 import { readPluginCurrentPointer } from './plugin-current-pointer'
 import { hashPluginTree } from './plugin-content-hash'
-
-export const BUNDLED_PLUGIN_INDEX_FILENAME = 'bundled-plugins.json'
-const BUNDLED_PLUGIN_INDEX_MAX_BYTES = 64 * 1024
-
-const bundledPluginIndexSchema = z
-  .object({
-    version: z.literal(1),
-    plugins: z
-      .array(
-        z
-          .object({
-            pluginKey: z
-              .string()
-              .refine(isQualifiedPluginKey, 'invalid qualified plugin identity')
-              .refine(isOfficialPluginIdentity, 'bundled plugins must use an official identity'),
-            path: pluginRelativeDirectorySchema,
-            contentHash: z.string().regex(/^[0-9a-f]{64}$/)
-          })
-          .strict()
-      )
-      .max(32)
-  })
-  .strict()
-  .superRefine((index, ctx) => {
-    const keys = new Set<string>()
-    for (const [entryIndex, plugin] of index.plugins.entries()) {
-      if (keys.has(plugin.pluginKey)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['plugins', entryIndex, 'pluginKey'],
-          message: 'duplicate bundled plugin identity'
-        })
-      }
-      keys.add(plugin.pluginKey)
-    }
-  })
 
 export type PluginBundledBootstrapResult = {
   installed: string[]
@@ -60,29 +21,6 @@ export function resolveBundledPluginRoot(options: {
   return options.isPackaged
     ? join(options.resourcesPath, 'plugins', 'launch')
     : join(options.appPath, 'resources', 'plugins', 'launch')
-}
-
-async function readBundledPluginIndex(
-  root: string
-): Promise<z.infer<typeof bundledPluginIndexSchema>> {
-  const indexPath = join(root, BUNDLED_PLUGIN_INDEX_FILENAME)
-  const metadata = await stat(indexPath)
-  if (!metadata.isFile() || metadata.size > BUNDLED_PLUGIN_INDEX_MAX_BYTES) {
-    throw new Error(`bundled plugin index exceeds ${BUNDLED_PLUGIN_INDEX_MAX_BYTES} bytes`)
-  }
-  return bundledPluginIndexSchema.parse(JSON.parse(await readFile(indexPath, 'utf8')))
-}
-
-async function resolveBundlePath(root: string, path: string): Promise<string> {
-  const [resolvedRoot, resolvedPath] = await Promise.all([
-    realpath(root),
-    realpath(join(root, path))
-  ])
-  const fromRoot = relative(resolvedRoot, resolvedPath)
-  if (!fromRoot || fromRoot === '..' || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)) {
-    throw new Error('bundled plugin path escapes the resource root')
-  }
-  return resolvedPath
 }
 
 async function bundledInstallIsIntact(
@@ -109,6 +47,9 @@ export async function bootstrapBundledPlugins(options: {
   const lock = await readPluginLockfile(pluginsDir)
   const result: PluginBundledBootstrapResult = { installed: [], unchanged: [], errors: [] }
   for (const entry of index.plugins) {
+    if (entry.activation === 'bundled-data') {
+      continue
+    }
     const locked = lock.plugins[entry.pluginKey]
     if (
       locked?.source.kind === 'bundled' &&

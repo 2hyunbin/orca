@@ -351,6 +351,7 @@ export type GlobalSettings = NativeChatGlobalSettings & {
   /** Qualified plugin keys (`publisher.id`) the user disabled. Discovered
    *  plugins stay listed but are not activated. */
   disabledPlugins: string[]
+  disabledBundledDataPlugins: string[]
   /** Consent records: qualified plugin key → capability/worker-trust fingerprint.
    *  A plugin whose current fingerprint differs is pending again, so an update
    *  crossing either trust boundary re-prompts before code runs. Absent key =

@@ -48,6 +48,7 @@ function takeRepoReadoptions(): SshRepoReadoption[] {
 // a renderer must not forge them.
 function omitRendererSshTargetGeneration<
   T extends {
+    environmentProvider?: unknown
     generation?: unknown
     orcadProvisioning?: unknown
     orcadFence?: unknown
@@ -60,6 +61,7 @@ function omitRendererSshTargetGeneration<
   value: T
 ): Omit<
   T,
+  | 'environmentProvider'
   | 'generation'
   | 'orcadProvisioning'
   | 'orcadFence'
@@ -69,6 +71,7 @@ function omitRendererSshTargetGeneration<
   | 'remoteRuntimeResolution'
 > {
   const {
+    environmentProvider: _environmentProvider,
     generation: _generation,
     orcadProvisioning: _orcadProvisioning,
     orcadFence: _orcadFence,

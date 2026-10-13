@@ -197,6 +197,7 @@ export function buildDefaultSettings(args: {
     disabledTuiAgents: [...DEFAULT_DISABLED_TUI_AGENTS],
     pluginSystemEnabled: false,
     disabledPlugins: [],
+    disabledBundledDataPlugins: [],
     pluginConsents: {},
     devPluginPaths: [],
     claudeAgentTeamsDefaultDisabledMigrated: true,

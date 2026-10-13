@@ -1,3 +1,4 @@
+import type { PluginEnvironmentSshBinding } from './plugins/plugin-environment-ssh-binding'
 import type { SshPendingPtyKill } from './ssh-pending-pty-kill'
 import type { OrcadSshProvisioningIntent } from './orcad-ssh-provisioning'
 
@@ -37,6 +38,8 @@ export type SshRemoteRuntimeResolution = {
 export type SshTarget = {
   id: string
   label: string
+  /** Main-owned provider identity; ordinary SSH metadata remains visible across versions. */
+  environmentProvider?: PluginEnvironmentSshBinding
   /** Internal owner for targets that Orca creates as implementation details.
    *  Owned targets are hidden from normal SSH-host management surfaces. */
   owner?: { type: 'on-demand-runtime'; runtimeId: string }
@@ -114,6 +117,7 @@ export type SshTarget = {
 export type SshTargetCreateInput = Omit<
   SshTarget,
   | 'id'
+  | 'environmentProvider'
   | 'generation'
   | 'orcadProvisioning'
   | 'orcadFence'

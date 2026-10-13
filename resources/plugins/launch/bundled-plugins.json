@@ -5,6 +5,18 @@
       "pluginKey": "stablyai.orca-navigation-shortcuts",
       "path": "stablyai.orca-navigation-shortcuts",
       "contentHash": "ce3a146bae9e121a18cb86a710973422be749a25da5a1c21a8911e2e98cc3a77"
+    },
+    {
+      "pluginKey": "stablyai.orca-locale-es",
+      "path": "stablyai.orca-locale-es",
+      "contentHash": "f8e123dfb3002c7567a2d62685bbc3f48b7d431338e462dc8a4611fda0ed6a21",
+      "activation": "bundled-data"
+    },
+    {
+      "pluginKey": "stablyai.orca-syntax-typst",
+      "path": "stablyai.orca-syntax-typst",
+      "contentHash": "cd773b7b28235e08d2fa8ab94ff3ca918c60fb11a2139f9af4f2100cfce2c7ab",
+      "activation": "bundled-data"
     }
   ]
 }

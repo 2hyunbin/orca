@@ -1,3 +1,4 @@
+import { admitEnvironmentProviderSshTarget } from '../ssh/environment-provider-ssh-admission'
 import { appendFileSync } from 'node:fs'
 import type { SshConnectionState } from '../../shared/ssh-types'
 import { createCancelledConnectAttemptError } from '../ssh/ssh-connect-attempt-cancellation'
@@ -82,6 +83,13 @@ async function doConnect(
   }
 
   const authority = rotateSshProviderAuthority(targetId)
+  const providerLease =
+    target.environmentProvider !== undefined
+      ? await admitEnvironmentProviderSshTarget(target)
+      : null
+  if (!isCurrentConnectAttempt(targetId, authority)) {
+    throw createCancelledConnectAttemptError()
+  }
   if (replacePendingTransport) {
     await connectionManager!.disconnect(targetId)
     if (!isCurrentConnectAttempt(targetId, authority)) {
@@ -111,6 +119,10 @@ async function doConnect(
   if (!isCurrentConnectAttempt(targetId, authority)) {
     await abandonDecisionTransport(targetId, owner, authority)
     throw createCancelledConnectAttemptError()
+  }
+  if (providerLease && (providerLease.signal.aborted || !providerLease.isCurrent())) {
+    await abandonDecisionTransport(targetId, owner, authority)
+    throw new Error('Environment provider SSH authorization changed')
   }
   adoptCurrentTransport(targetId, owner)
   if (server.route === 'managed') {

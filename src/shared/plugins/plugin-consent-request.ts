@@ -9,6 +9,7 @@ export const pluginConsentRequestSchema = z
   .object({
     pluginKey: z.string().min(1),
     reviewedFingerprint: z.string().min(1).max(256),
+    reviewedRevision: z.string().min(1).max(256).optional(),
     decision: z.enum(['approve', 'keep-disabled'])
   })
   .strict()

@@ -15,6 +15,14 @@ import {
   isOfficialPluginIdentity
 } from '../../shared/plugins/plugin-marketplace'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
+import {
+  derivePluginExecutionProfile,
+  type PluginExecutionProfile
+} from '../../shared/plugins/plugin-execution-profile'
+import {
+  pluginEnvironmentRecipePreview,
+  type PluginEnvironmentRecipePreview
+} from '../../shared/plugins/plugin-environment-recipe-preview'
 
 const PLUGIN_LIST_PROJECTION_CONCURRENCY = 4
 
@@ -45,6 +53,7 @@ export type PluginListEntry = {
   pluginKey: string
   /** Opaque identity of the exact capabilities and worker tier shown for review. */
   consentFingerprint: string | null
+  reviewRevision?: string
   name: string
   version: string
   publisher: string
@@ -55,8 +64,10 @@ export type PluginListEntry = {
   isDev: boolean
   official: boolean
   bundled: boolean
+  bundledData?: boolean
   capabilities: { kind: PluginCapabilityKind; description: string }[]
   panels: PluginListPanelEntry[]
+  fileViewers?: { id: string; displayName: string; mode: 'readonly' }[]
   commands: {
     id: string
     title: string
@@ -65,6 +76,9 @@ export type PluginListEntry = {
     keybindings: { key: string; when: 'global' | 'worktree' }[]
   }[]
   hasWorker: boolean
+  execution?: PluginExecutionProfile
+  environmentRecipeCount?: number
+  environmentRecipes?: PluginEnvironmentRecipePreview[]
   vmRecipes: {
     id: string
     name: string
@@ -78,12 +92,27 @@ export type PluginListEntry = {
     reference: string
     resolvedCommit: string | null
     contentHash: string
-    marketplace?: { reference: string; resolvedCommit: string }
+    marketplace?: { reference: string; resolvedCommit: string; owner?: string }
+  }
+}
+
+export type PluginListProjectionService = Pick<
+  PluginService,
+  'getDiscovered' | 'activationState' | 'workerState' | 'activationError' | 'isBundledDataPlugin'
+> & {
+  options: Pick<
+    PluginService['options'],
+    'getPluginConsents' | 'getDisabledPlugins' | 'getPluginKillListEntry'
+  >
+  contentPacks: {
+    vmRecipes: Pick<PluginService['contentPacks']['vmRecipes'], 'preview'>
+    environmentRecipes?: Pick<PluginService['contentPacks']['environmentRecipes'], 'preview'>
+    commands: Pick<PluginService['contentPacks']['commands'], 'preview'>
   }
 }
 
 export async function buildPluginList(
-  service: PluginService,
+  service: PluginListProjectionService,
   lock: PluginLockfile
 ): Promise<PluginListEntry[]> {
   const consents = {
@@ -109,7 +138,8 @@ export async function buildPluginList(
           error: plugin.error,
           isDev: plugin.isDev,
           official: false,
-          bundled: false,
+          bundled: service.isBundledDataPlugin(plugin),
+          ...(service.isBundledDataPlugin(plugin) ? { bundledData: true } : {}),
           capabilities: [],
           panels: [],
           commands: [],
@@ -145,7 +175,8 @@ export async function buildPluginList(
         candidateLockEntry.contentHash === plugin.contentHash
           ? candidateLockEntry
           : undefined
-      const bundled = lockEntry?.source.kind === 'bundled'
+      const bundledData = service.isBundledDataPlugin(plugin)
+      const bundled = bundledData || lockEntry?.source.kind === 'bundled'
       const official =
         bundled ||
         (lockEntry?.source.kind === 'marketplace' &&
@@ -155,18 +186,21 @@ export async function buildPluginList(
       return {
         pluginKey: plugin.pluginKey,
         consentFingerprint: plugin.consentFingerprint,
+        ...(plugin.reviewRevision ? { reviewRevision: plugin.reviewRevision } : {}),
         name: plugin.manifest.name,
         version: plugin.manifest.version,
         publisher: plugin.manifest.publisher,
         ...(plugin.manifest.description ? { description: plugin.manifest.description } : {}),
         status,
-        needsReconsent: needsReconsent(plugin.pluginKey, plugin.consentFingerprint, consents),
+        needsReconsent:
+          !bundledData && needsReconsent(plugin.pluginKey, plugin.consentFingerprint, consents),
         ...(status === 'errored'
           ? { error: activationError ?? 'plugin worker crashed repeatedly' }
           : {}),
         isDev: plugin.isDev,
         official,
         bundled,
+        ...(bundledData ? { bundledData: true } : {}),
         capabilities: plugin.manifest.capabilities.map((capability) => ({
           kind: capability.kind,
           description: PLUGIN_CAPABILITY_DESCRIPTIONS[capability.kind]
@@ -185,6 +219,18 @@ export async function buildPluginList(
           keybindings: command.keybindings
         })),
         hasWorker: Boolean(plugin.manifest.main),
+        execution: derivePluginExecutionProfile(plugin.manifest),
+        ...(plugin.manifest.manifestVersion === 2
+          ? {
+              environmentRecipeCount: plugin.manifest.contributes.environmentRecipes.length,
+              fileViewers: plugin.manifest.contributes.fileViewers.map(
+                ({ id, displayName, mode }) => ({ id, displayName, mode })
+              ),
+              environmentRecipes: (
+                service.contentPacks.environmentRecipes?.preview(plugin.pluginKey) ?? []
+              ).map(({ recipe }) => pluginEnvironmentRecipePreview(plugin.pluginKey, recipe))
+            }
+          : {}),
         vmRecipes: service.contentPacks.vmRecipes.preview(plugin.pluginKey).map(({ recipe }) => ({
           id: recipe.id,
           name: recipe.name,
@@ -218,13 +264,34 @@ export async function buildPluginList(
                   ? {
                       marketplace: {
                         reference: lockEntry.source.marketplace.url,
+                        owner: lockEntry.source.marketplace.owner,
                         resolvedCommit: lockEntry.source.marketplace.resolvedCommit
                       }
                     }
                   : {})
               }
             }
-          : {})
+          : bundledData && plugin.contentHash
+            ? {
+                source: {
+                  kind: 'bundled',
+                  reference: `bundled:${plugin.pluginKey}`,
+                  resolvedCommit: null,
+                  contentHash: plugin.contentHash
+                }
+              }
+            : plugin.isDev &&
+                plugin.consentSource?.kind === 'local-path' &&
+                plugin.reviewContentHash
+              ? {
+                  source: {
+                    kind: 'local-path',
+                    reference: plugin.consentSource.path,
+                    resolvedCommit: null,
+                    contentHash: plugin.reviewContentHash
+                  }
+                }
+              : {})
       }
     }
   )

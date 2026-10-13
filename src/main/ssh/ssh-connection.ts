@@ -1,3 +1,5 @@
+import { admitEnvironmentProviderSshTarget } from './environment-provider-ssh-admission'
+import { EnvironmentProviderSshTransportLease } from './environment-provider-ssh-lease'
 /* eslint-disable max-lines -- Why: SSH connection lifecycle, credential retries, reconnect policy, and transport fallback are intentionally co-located so state transitions stay auditable in one file. */
 import { Client as SshClient } from 'ssh2'
 import {
@@ -186,6 +188,7 @@ export class SshConnection {
   private target: SshTarget
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private readonly reconnectLadder = new SshReconnectLadder()
+  private readonly providerTransportLease = new EnvironmentProviderSshTransportLease()
   private disposed = false
   private cachedPassphrase: string | null = null
   private cachedPassword: string | null = null
@@ -225,7 +228,7 @@ export class SshConnection {
   }
   /** Work after disconnect() fails with the operation abort error. */
   private assertNotDisposed(): void {
-    if (this.disposed) {
+    if (this.disposed || !this.providerTransportLease.isCurrent()) {
       throw createSshOperationAbortError()
     }
   }
@@ -529,6 +532,21 @@ export class SshConnection {
   }
 
   private async attemptConnect(connectGeneration = ++this.connectGeneration): Promise<void> {
+    const providerLease =
+      this.target.environmentProvider !== undefined
+        ? await admitEnvironmentProviderSshTarget(this.target)
+        : null
+    if (!this.isCurrentConnectAttempt(connectGeneration)) {
+      throw createCancelledConnectAttemptError()
+    }
+    this.providerTransportLease.replace(providerLease, () => {
+      if (connectGeneration === this.connectGeneration) {
+        void this.disconnect()
+      }
+    })
+    if (!this.isCurrentConnectAttempt(connectGeneration)) {
+      throw createCancelledConnectAttemptError()
+    }
     this.credentialAbortController.abort()
     this.credentialAbortController = new AbortController()
     this.setState('connecting')
@@ -539,6 +557,9 @@ export class SshConnection {
     const resolved = await resolveWithSshG(this.target.configHost || this.target.label).catch(
       () => null
     )
+    if (providerLease && (providerLease.signal.aborted || !providerLease.isCurrent())) {
+      throw new Error('Environment provider SSH authorization changed')
+    }
     this.hostKeyResolvedConfig = resolved
     const usesConfiguredSystemTransport = shouldUseSystemSshTransport(this.target, resolved)
     const requiresSecurityKeyTransport = usesConfiguredSystemTransport
@@ -912,7 +933,11 @@ export class SshConnection {
   }
 
   private isCurrentConnectAttempt(connectGeneration: number): boolean {
-    return !this.disposed && connectGeneration === this.connectGeneration
+    return (
+      !this.disposed &&
+      connectGeneration === this.connectGeneration &&
+      this.providerTransportLease.isCurrent()
+    )
   }
 
   private spawnTrackedSystemSshCommand(command: string, options?: SshExecOptions): ClientChannel {
@@ -1390,6 +1415,7 @@ export class SshConnection {
 
   /** Teardown shared by reconnect and disconnect, after each has closed the ssh2 client. */
   private closeSessionTransports(): void {
+    this.providerTransportLease.clear()
     this.closePendingSsh2Clients()
     this.killProxy()
     this.systemOperationAbortController.abort()
