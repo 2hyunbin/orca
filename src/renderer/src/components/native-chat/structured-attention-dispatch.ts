@@ -29,7 +29,7 @@ import {
   notificationExecutionHostForOwner,
   notificationSourceForOwner
 } from '../../../../shared/notification-source'
-import type { RuntimeClientTarget } from '@/runtime/runtime-client-target'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { resolveNotificationTabOwner } from '@/attention/notification-subject-owner'
 import type {
   AgentSessionPromptAttention,
