@@ -2141,18 +2141,6 @@
   "auto.components.settings.AppearancePane.fd89b5487c": {
     "ko": "라이트"
   },
-  "auto.components.settings.AutoRenameBranchFromWorkSetting.2ee2779c05": {
-    "ko": "{firstPrompt}"
-  },
-  "auto.components.settings.AutoRenameBranchFromWorkSetting.69bf4830c2": {
-    "ko": "Orca의 항목을 포함하도록"
-  },
-  "auto.components.settings.AutoRenameBranchFromWorkSetting.800edb1e54": {
-    "ko": "fix-login-flow"
-  },
-  "auto.components.settings.AutoRenameBranchFromWorkSetting.a4fa380b67": {
-    "ko": "{assistantMessage}"
-  },
   "auto.components.settings.AutoRenameBranchFromWorkSetting.d9b65054ef": {
     "ko": ") 작업을 요약하는 짧은 이름으로 변경됩니다. Orca가 직접 이름 붙인 브랜치만 이름을 바꾸며, 푸시된 후에는 이름을 바꾸지 않습니다."
   },
@@ -2291,20 +2279,8 @@
   "auto.components.settings.GitPane.2351aa5a31": {
     "ko": "Git 사용자 이름"
   },
-  "auto.components.settings.GitPane.36e3de3619": {
-    "ko": "오래된 기록과 비교하지 않도록 합니다. Orca는 해당 브랜치에 commits 되지 않은 변경 사항이나 로컬 전용 commits이 있으면 업데이트를 건너뜁니다."
-  },
-  "auto.components.settings.GitPane.976afc6b3e": {
-    "ko": "워크스페이스를 만들면 Orca가 원격 기준 브랜치를 새로고침하고, 일치하는 로컬 브랜치를 안전하게 fast-forward합니다. 예:"
-  },
   "auto.components.settings.GitPane.b9c011fbc2": {
     "ko": "속도 제한"
-  },
-  "auto.components.settings.GitPane.d072a12995": {
-    "ko": "git diff main...HEAD"
-  },
-  "auto.components.settings.GitPane.db3a127eb1": {
-    "ko": "이렇게 하면 다음과 같은 명령이 유지됩니다"
   },
   "auto.components.settings.GitPane.f35007e6e8": {
     "ko": "git-username"
@@ -2870,20 +2846,8 @@
   "auto.components.settings.VoicePane.174da92062": {
     "ko": "길게 누르기"
   },
-  "auto.components.settings.VoicePane.295d84b849": {
-    "ko": "한 번 누르면 시작, 다시 누르면 중지. 길게 누르기: 누르고 있는 동안 받아쓰기"
-  },
-  "auto.components.settings.VoicePane.366e1b4f36": {
-    "ko": "포커스된 창에 텍스트를 받아쓰기합니다."
-  },
-  "auto.components.settings.VoicePane.4465596675": {
-    "ko": "누르기"
-  },
   "auto.components.settings.VoicePane.61a16c8141": {
     "ko": "추출 중..."
-  },
-  "auto.components.settings.VoicePane.7cf715f891": {
-    "ko": "누르고 있는 동안"
   },
   "auto.components.settings.VoicePane.901985625d": {
     "ko": "토글"
@@ -3731,9 +3695,6 @@
   "auto.components.settings.task.tracker.integration.cards.8c20e76308": {
     "ko": "연결된 각 Jira 사이트에는 활성 런타임이 저장한 토큰이 하나씩 있습니다."
   },
-  "auto.components.settings.task.tracker.integration.cards.9fa04a032e": {
-    "ko": "{{value0}}개 사이트{{value1}} 연결됨"
-  },
   "auto.components.settings.task.tracker.integration.cards.a1093a06c7": {
     "ko": "설정 작업을 표시하기 전에 Jira 액세스를 확인하는 중입니다."
   },
@@ -3751,9 +3712,6 @@
   },
   "auto.components.settings.task.tracker.integration.cards.dd3529015d": {
     "ko": "{{value0}} 연결 해제"
-  },
-  "auto.components.settings.task.tracker.integration.cards.e1f5e6424c": {
-    "ko": "{{value0}}개 워크스페이스{{value1}} 연결됨"
   },
   "auto.components.settings.task.tracker.integration.cards.e2ff968276": {
     "ko": "Jira 연결"

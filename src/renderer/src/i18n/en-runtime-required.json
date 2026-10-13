@@ -1140,17 +1140,7 @@
           "workspaceCardLayoutGuidance": "Managed from the workspace sidebar."
         },
         "AutoRenameBranchFromWorkSetting": {
-          "2ee2779c05": "{firstPrompt}",
-          "56580dcf60": ". You can also reference",
-          "570817d126": "and",
-          "5d569f5199": ". Orca generates only the final segment, like",
-          "69bf4830c2": "to include Orca's",
-          "800edb1e54": "fix-login-flow",
-          "9241b59bf5": "Use",
-          "9c9b54e4ea": "built-in branch-name prompt",
-          "a4fa380b67": "{assistantMessage}",
-          "ef787db0e3": "Auto-Rename Branch",
-          "f19a56498d": "; your branch prefix setting still applies."
+          "ef787db0e3": "Auto-Rename Branch"
         },
         "AutoRenameBranchPromptEditor": {
           "0691753cf2": "Unsaved changes",
@@ -1266,14 +1256,7 @@
           "show": "Show"
         },
         "GitPane": {
-          "36e3de3619": "from comparing against stale history. Orca skips the update if that branch has uncommitted changes or local-only commits.",
-          "3ae3de8898": "master",
-          "5bf885be48": "or",
-          "976afc6b3e": "When you create a workspace, Orca refreshes the remote base and safely fast-forwards your matching local branch, such as",
-          "d072a12995": "git diff main...HEAD",
-          "db3a127eb1": ". This keeps commands like",
-          "f35007e6e8": "git-username",
-          "ffba483bae": "main"
+          "f35007e6e8": "git-username"
         },
         "GrokAccountsSection": {
           "c3d4e5f6a7": "Signed in. Orca only reads that file on disk — run grok login again if usage fails.",
@@ -1452,16 +1435,9 @@
         "RepositoryHooksSection": {
           "0e0dd5b9a5": "loaded",
           "32f417fe17": "text-emerald-700 dark:text-emerald-300",
-          "3397879bee": "and local commands exist, choose which run.",
-          "52aef29e69": "Leave blank to use the repo default from",
-          "70ad20f883": "for the linked issue or PR URL.",
           "8dbe6bedf5": "invalid",
           "925f9e0dc4": "text-foreground",
-          "9b12f15b1e": "when one exists.",
-          "ac9038d2cc": "When both",
           "b5e3e77e89": "action",
-          "b997331366": "Optional override. Use",
-          "c85c2c88a2": "{{artifact_url}}",
           "c90b858573": "text-amber-700 dark:text-amber-300"
         },
         "RepositoryIconPicker": {
@@ -1550,7 +1526,6 @@
         "SshPane": {
           "94c5284560": "Targets",
           "a7d28dff81": "Add a remote host to connect to it in Orca.",
-          "f8050f6307": "Synced {{value0}} server{{value1}}",
           "syncedServerPlural": "Synced {{count}} servers",
           "syncedServerSingular": "Synced {{count}} server"
         },
@@ -1603,13 +1578,8 @@
           "target_label": "Theme Mode"
         },
         "VoicePane": {
-          "295d84b849": "once to start, again to stop. Hold: dictate while",
-          "366e1b4f36": "to dictate text into any focused pane.",
-          "4465596675": "Press",
-          "7cf715f891": "is held.",
           "901985625d": "toggle",
-          "b6536a1d12": "extracting",
-          "ff9a680010": "Toggle: press"
+          "b6536a1d12": "extracting"
         },
         "WarpThemeImportModal": {
           "found_theme_one": "Found 1 theme",
@@ -1858,12 +1828,10 @@
           "tracker": {
             "integration": {
               "cards": {
-                "9fa04a032e": "{{value0}} site{{value1}} connected",
                 "connectedSitePlural": "{{count}} sites connected",
                 "connectedSiteSingular": "{{count}} site connected",
                 "connectedWorkspacePlural": "{{count}} workspaces connected",
-                "connectedWorkspaceSingular": "{{count}} workspace connected",
-                "e1f5e6424c": "{{value0}} workspace{{value1}} connected"
+                "connectedWorkspaceSingular": "{{count}} workspace connected"
               }
             }
           }
