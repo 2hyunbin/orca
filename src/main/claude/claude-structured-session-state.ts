@@ -162,6 +162,8 @@ export type ClaudeSession = {
   /** What `get_settings` says the next request will send, after Claude's own env and settings
    *  precedence: the lowest-ranked answer, unconfirmed until a turn reports it. */
   appliedOptions?: { model?: string; effort?: string }
+  /** CLI settings resolved before a turn changed them, when no launch override hid that value. */
+  configuredDefaults?: { model?: string; effort?: string }
   fastModeState?: AgentSessionFastModeState
   fastModeDisabledReason?: string
   fastModePerSessionOptIn?: boolean

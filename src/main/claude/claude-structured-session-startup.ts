@@ -23,6 +23,7 @@ import {
   claudeResolvedCatalogListing,
   claudeStructuredSessionOptionsFrom,
   observeClaudeSettingsApplied,
+  readClaudeSettingsApplied,
   readClaudeFastModeFacts,
   readClaudeSettingsEffort
 } from './claude-structured-session-options'
@@ -140,6 +141,13 @@ function applyClaudeSettingsFacts(
   const { settings, prepared } = facts
   const effort = readClaudeSettingsEffort(settings)
   const published = claudeStructuredSessionPublicationOptions(prepared)
+  if (!writtenSinceRead) {
+    const applied = readClaudeSettingsApplied(settings)
+    session.configuredDefaults = {
+      ...(!session.options.has('model') && applied?.model ? { model: applied.model } : {}),
+      ...(!session.options.has('effort') && applied?.effort ? { effort: applied.effort } : {})
+    }
+  }
   observeClaudeSettingsApplied(session, settings)
   if (published.fastModePerSessionOptIn !== null) {
     session.fastModePerSessionOptIn = published.fastModePerSessionOptIn
