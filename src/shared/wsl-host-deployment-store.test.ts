@@ -262,6 +262,19 @@ describe('WSL host deployment store', () => {
       expect(listEnvironments(userDataPath).map((entry) => entry.id)).toEqual(['ssh-managed'])
     })
 
+    it('never hides a remote paired server behind an unreadable WSL record', () => {
+      const remote = addEnvironmentFromPairingCode(userDataPath, {
+        name: 'Remote',
+        pairingCode: encodePairingOffer({
+          ...pairing,
+          endpoint: 'wss://build.example.com/runtime'
+        }),
+        now: 150
+      })
+      seed({ ...futureKind, environmentId: remote.id })
+      expect(listEnvironments(userDataPath).map((entry) => entry.id)).toEqual([remote.id])
+    })
+
     it('never hides an SSH-managed server behind an unreadable WSL record', () => {
       addSshManaged()
       seed({ ...futureKind, environmentId: 'ssh-managed' })

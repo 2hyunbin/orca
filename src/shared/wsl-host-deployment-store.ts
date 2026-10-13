@@ -4,7 +4,11 @@ import { z } from 'zod'
 import { writeSecureJsonFileWithinLimit } from './bounded-secure-json-file'
 import { readNodeFileSyncWithinLimit } from './node-bounded-file-reader'
 import { warnUnreadableEnvironmentState } from './runtime-environment-store-records'
-import { KnownRuntimeEnvironmentSchema, type KnownRuntimeEnvironment } from './runtime-environments'
+import {
+  getPreferredLoopbackRuntimePort,
+  KnownRuntimeEnvironmentSchema,
+  type KnownRuntimeEnvironment
+} from './runtime-environments'
 import { hardenExistingSecureFile } from './secure-file'
 import { OrcadWslDeploymentLinkSchema } from './wsl-host-deployment-link'
 
@@ -166,9 +170,12 @@ export function overlayWslHostDeployments(
   { deployments, unreadableEnvironmentIds }: WslHostDeployments
 ): KnownRuntimeEnvironment[] {
   const byEnvironmentId = new Map(deployments.map((record) => [record.environmentId, record]))
-  // An SSH-linked server can never be a WSL host, so an unreadable WSL record must not hide it.
+  // Only a loopback pairing with no SSH link can be a WSL host; an unreadable record hides no other.
   const hidden = environments.filter(
-    (environment) => unreadableEnvironmentIds.has(environment.id) && !hasNonWslOwner(environment)
+    (environment) =>
+      unreadableEnvironmentIds.has(environment.id) &&
+      !hasNonWslOwner(environment) &&
+      getPreferredLoopbackRuntimePort(environment) !== null
   )
   const hiddenIds = new Set(hidden.map((environment) => environment.id))
   if (hidden.length > 0) {
