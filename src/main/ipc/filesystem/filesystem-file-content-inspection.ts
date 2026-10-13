@@ -1,4 +1,5 @@
 import { extname } from 'node:path'
+import { IMAGE_FILE_MIME_TYPES } from '../../../shared/image-file-extensions'
 import { localLogFileIdentity } from '../../ai-vault/local-log-tail-reader'
 import { BINARY_PROBE_BYTES, isBinaryBuffer } from '../../../shared/binary-buffer'
 import {
@@ -13,15 +14,7 @@ export const MAX_TEXT_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 // Why: previewable binaries are base64 blobs (not parsed as text), and local IPC has no frame limit (unlike the relay's 10MB), so 50MB is safe.
 export const MAX_PREVIEWABLE_BINARY_SIZE = 50 * 1024 * 1024 // 50MB
 export const PREVIEWABLE_BINARY_MIME_TYPES: Record<string, string> = {
-  '.png': 'image/png',
-  '.avif': 'image/avif',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp',
-  '.bmp': 'image/bmp',
-  '.ico': 'image/x-icon',
+  ...IMAGE_FILE_MIME_TYPES,
   '.pdf': 'application/pdf'
 }
 

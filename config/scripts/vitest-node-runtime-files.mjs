@@ -91,6 +91,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/plugins/plugin-viewer-resource-guard.test.ts',
   'src/main/plugins/plugin-viewer-session-pool.test.ts',
   'src/main/window/main-window-webview-security.test.ts',
+  'src/main/ipc/settings.test.ts',
   'src/main/plugins/plugin-artifact-file-reader.test.ts',
   'src/main/plugins/plugin-environment-recipe-execution.test.ts',
   'src/main/usage/usage-scan-worker-event-loop.test.ts',

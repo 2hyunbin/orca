@@ -523,7 +523,8 @@ describe('registerSettingsHandlers', () => {
 
     await handler(settingsInvokeEvent, {
       pluginConsents: { 'orca-samples.demo': 'sha256-forged' },
-      disabledPlugins: ['orca-samples.demo']
+      disabledPlugins: ['orca-samples.demo'],
+      disabledBundledDataPlugins: ['stablyai.orca-locale-es']
     })
 
     expect(store.updateSettings).toHaveBeenCalledWith(
