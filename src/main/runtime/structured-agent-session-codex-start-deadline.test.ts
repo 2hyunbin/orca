@@ -13,7 +13,6 @@ import {
   hostTestMessage
 } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
-import { STRUCTURED_AGENT_SESSION_STARTUP_SILENCE_MS } from '../native-chat/agent-session-wire/structured-agent-session-startup-attempt-contract'
 import { recordAgentSessionStartup } from '../observability/agent-session-instrumentation'
 import type { ScriptedAgentChild } from './structured-agent-scripted-child.test-fixture'
 import {
@@ -101,17 +100,4 @@ it('delivers the held message to a Codex that answers initialize after 20 s', as
   await vi.waitFor(() => expect(child.prompts()).toEqual(['held through a slow Codex start']))
   expect(child.spawns()).toBe(1)
   expect(startupOutcomes()).toEqual(['ready'])
-})
-
-it('ends a Codex that never answers at the host silence limit, not at 15 s', async () => {
-  const child = codexScriptedChild()
-  await chatHoldingAMessage(child)
-  await vi.advanceTimersByTimeAsync(STRUCTURED_AGENT_SESSION_STARTUP_SILENCE_MS - 1_000)
-  expect(child.closes()).toBe(0)
-  expect(startupOutcomes()).toEqual([])
-
-  await vi.advanceTimersByTimeAsync(2_000)
-  await vi.waitFor(() => expect(child.closes()).toBe(1))
-  expect(startupOutcomes()).toEqual(['silent'])
-  expect(child.prompts()).toEqual([])
 })

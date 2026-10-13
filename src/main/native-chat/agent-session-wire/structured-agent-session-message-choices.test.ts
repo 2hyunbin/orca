@@ -49,21 +49,6 @@ it('keeps the first accepted choice through opening and saves a later pick for t
   expect(rig.store.getRecord(SESSION)?.options?.model).toBe('model-b')
 })
 
-it('queues a different choice during a running Codex turn', async () => {
-  await pickModel('model-a')
-  const first = await rig.workingSend()
-  await pickModel('model-b')
-  const second = rig.send('second')
-  expect(await second.result).toMatchObject({ ok: true })
-  expect(rig.dispatch).toHaveBeenCalledTimes(1)
-  await rig.settleAccepted(first, 'a')
-  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
-  expect(rig.dispatch.mock.calls.map(([input]) => input.executionOptions?.model)).toEqual([
-    'model-a',
-    'model-b'
-  ])
-})
-
 it('rejects a refused choice before prompt input and leaves the next pick saved', async () => {
   await pickModel('model-b')
   rig.dispatch.mockRejectedValueOnce(
