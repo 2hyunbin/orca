@@ -126,12 +126,14 @@ const MANUAL_OPT_IN = [
   // Same flag; real UNC delete against a distro.
   'src/main/wsl-unc-delete.wsl.test.ts',
   // `enabled = platform === 'win32' && ORCA_REAL_WSL_RUNNER_TEST === '1'`; mutates a real distro's ~/.profile.
-  'src/main/wsl/wsl-runner.wsl.test.ts'
+  'src/main/wsl/wsl-runner.wsl.test.ts',
+  // `enabled = … && ORCA_WINDOWS_ADMIN_TERMINAL_TEST === '1'`; needs an already elevated shell.
+  'src/main/daemon/windows-admin-terminal-host.win32.test.ts'
 ]
 
 /** Caps so growing either list is two deliberate edits, not one. */
 const UNREGISTERED_MAX = 8
-const MANUAL_OPT_IN_MAX = 10
+const MANUAL_OPT_IN_MAX = 11
 
 /**
  * Floor for the Windows-gated population, so a broken walk or a regex that
