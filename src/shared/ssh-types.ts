@@ -90,8 +90,8 @@ export type SshTarget = {
   remoteRuntime?: SshRemoteRuntime
   /** Main-owned ladder cache; renderer updates never set it. */
   remoteRuntimeResolution?: SshRemoteRuntimeResolution
-  /** Durable registration incarnation. Advances on create / re-create / explicit
-   *  re-adopt only, so automations fenced on an old registration cannot run on a
+  /** Durable registration incarnation. Advances on create, re-create, explicit
+   *  re-adopt or reviewed provider endpoint migration, so an old automation cannot run on a
    *  later target that happens to reuse the id. Never advanced by connect state. */
   generation?: number
   /** Main-owned provisioning intent; never fall back to a relay while it exists. */

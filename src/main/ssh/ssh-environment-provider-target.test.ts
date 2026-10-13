@@ -29,6 +29,110 @@ const endpoint = {
   username: 'developer'
 }
 describe('provider SSH registrations preserve main-owned identity', () => {
+  it('requires the exact reviewed saved target before changing a provider endpoint', () => {
+    const persisted = createMockStore()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the persistence calls used by target registration.
+    const store = new SshConnectionStore(persisted as never)
+    const first = store.upsertEnvironmentProviderTarget(owner, endpoint)
+    const reviewed = structuredClone(first)
+    const updatedOwner = {
+      ...owner,
+      resourceRevision: 'r2',
+      connection: { ...owner.connection, host: 'replacement.internal', port: 2222 }
+    }
+    const replacement = { ...endpoint, host: 'replacement.internal', port: 2222 }
+    expect(() => store.upsertEnvironmentProviderTarget(updatedOwner, replacement)).toThrow(
+      'requires migration'
+    )
+    persisted.updateSshTarget(first.id, { identityFile: '/keys/changed-after-review' })
+    expect(() =>
+      store.upsertEnvironmentProviderTarget(updatedOwner, replacement, undefined, reviewed)
+    ).toThrow('changed after its endpoint was reviewed')
+    expect(store.getTarget(first.id)?.host).toBe(endpoint.host)
+    expect(persisted.allocateSshTargetGeneration).toHaveBeenCalledOnce()
+  })
+  it('keeps target, credentials, workspace and server ownership but retires the old incarnation', () => {
+    const persisted = createMockStore()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the persistence calls used by target registration.
+    const store = new SshConnectionStore(persisted as never)
+    const first = structuredClone(
+      store.upsertEnvironmentProviderTarget(owner, { ...endpoint, identityFile: '/keys/company' })
+    )
+    persisted.updateSshTarget(first.id, {
+      orcadFence: { environmentId: 'server-one' },
+      remoteRuntimeResolution: {
+        rung: 'legacy',
+        glibc: '2.31',
+        runtimeSha256: 'a'.repeat(64),
+        orcaMajor: 1
+      },
+      lastRequiredPassphrase: true
+    })
+    const reviewed = structuredClone(store.getTarget(first.id)!)
+    const replacement = { ...endpoint, host: 'replacement.internal' }
+    const updatedOwner = {
+      ...owner,
+      resourceRevision: 'r2',
+      connection: { ...owner.connection, host: replacement.host }
+    }
+    const updated = store.upsertEnvironmentProviderTarget(
+      updatedOwner,
+      replacement,
+      undefined,
+      reviewed
+    )
+    expect(updated.id).toBe(first.id)
+    expect(updated.generation).not.toBe(first.generation)
+    expect(updated.host).toBe(replacement.host)
+    expect(updated.identityFile).toBe('/keys/company')
+    expect(updated.orcadFence).toEqual({ environmentId: 'server-one' })
+    expect(updated.lastRequiredPassphrase).toBe(true)
+    expect(updated.remoteRuntimeResolution).toBeUndefined()
+    expect(updated.environmentProvider).toEqual(updatedOwner)
+    expect(persisted.reassignments).toEqual([])
+    expect(store.lastRepoReadoptions).toEqual([])
+    expect(store.listTargets()).toHaveLength(1)
+    expect(() =>
+      store.upsertEnvironmentProviderTarget(updatedOwner, replacement, undefined, reviewed)
+    ).toThrow('changed after')
+  })
+  it('does not replace an unreviewed source owner even when its saved endpoint was reviewed', () => {
+    const persisted = createMockStore()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the persistence calls used by target registration.
+    const store = new SshConnectionStore(persisted as never)
+    const first = store.upsertEnvironmentProviderTarget(owner, endpoint)
+    expect(() =>
+      store.upsertEnvironmentProviderTarget(
+        {
+          ...owner,
+          binding: { ...owner.binding, sourceDigest: 'c'.repeat(64) },
+          connection: { ...owner.connection, host: 'replacement.internal' }
+        },
+        { ...endpoint, host: 'replacement.internal' },
+        undefined,
+        structuredClone(first)
+      )
+    ).toThrow('another environment owner')
+  })
+  it('refuses an endpoint update while managed server provisioning owns the target', () => {
+    const persisted = createMockStore()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture implements the persistence calls used by target registration.
+    const store = new SshConnectionStore(persisted as never)
+    const first = store.upsertEnvironmentProviderTarget(owner, endpoint)
+    persisted.updateSshTarget(first.id, {
+      orcadProvisioning: { requestId: 'server-one', name: 'Devbox' }
+    })
+    const reviewed = structuredClone(store.getTarget(first.id)!)
+    expect(() =>
+      store.upsertEnvironmentProviderTarget(
+        { ...owner, connection: { ...owner.connection, host: 'replacement.internal' } },
+        { ...endpoint, host: 'replacement.internal' },
+        undefined,
+        reviewed
+      )
+    ).toThrow('still provisioning')
+    expect(persisted.allocateSshTargetGeneration).toHaveBeenCalledOnce()
+  })
   it('remains visible and creates a distinct target without adopting unrelated workspace tombstones', () => {
     const persisted = createMockStore()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The shared fixture implements all persistence calls these target registration cases exercise.

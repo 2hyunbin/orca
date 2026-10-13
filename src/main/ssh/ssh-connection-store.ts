@@ -1,12 +1,8 @@
 import type { EnvironmentRecipeJournalBinding } from '../../shared/plugins/plugin-environment-recipe-journal'
 import type { Store } from '../persistence'
 import type { SshRepoReadoption, SshTarget } from '../../shared/ssh-types'
-import {
-  environmentProviderSshOwnerMatches,
-  pluginEnvironmentSshBindingSchema,
-  type PluginEnvironmentSshBinding
-} from '../../shared/plugins/plugin-environment-ssh-binding'
-import { createHash } from 'node:crypto'
+import type { PluginEnvironmentSshBinding } from '../../shared/plugins/plugin-environment-ssh-binding'
+import { upsertEnvironmentProviderTarget } from './ssh-environment-provider-registration'
 import { RUNTIME_OWNED_SSH_TARGET_ID_PREFIX } from '../../shared/execution-host'
 import { normalizeSshConfigAlias } from '../../shared/ssh-config-alias'
 import { loadUserSshConfig, sshConfigHostsToTargets } from './ssh-config-parser'
@@ -95,66 +91,16 @@ export class SshConnectionStore {
   upsertEnvironmentProviderTarget(
     input: PluginEnvironmentSshBinding,
     target: Pick<SshTarget, 'label' | 'host' | 'port' | 'username' | 'configHost' | 'identityFile'>,
-    migratedFrom?: EnvironmentRecipeJournalBinding
+    migratedFrom?: EnvironmentRecipeJournalBinding,
+    reviewedPrevious?: SshTarget
   ): SshTarget {
-    const owner = pluginEnvironmentSshBindingSchema.parse(structuredClone(input))
-    if (
-      owner.binding.executionHostId !== 'local' ||
-      target.host !== owner.connection.host ||
-      target.port !== owner.connection.port ||
-      target.username !== owner.connection.username ||
-      (target.configHost ?? target.host) !== (owner.connection.configHost ?? owner.connection.host)
-    ) {
-      throw new Error(
-        'SSH endpoint differs from its execution host or reviewed provider connection'
-      )
-    }
-    const key = createHash('sha256')
-      .update(JSON.stringify([owner.binding.providerId, owner.binding.contextId, owner.resourceId]))
-      .digest('hex')
-    const id = `provider-ssh-${key}`
-    const existing = this.store.getSshTarget(id)
-    if (
-      existing &&
-      (!existing.environmentProvider ||
-        existing.owner ||
-        (!environmentProviderSshOwnerMatches(existing.environmentProvider, owner) &&
-          !(
-            migratedFrom &&
-            JSON.stringify(existing.environmentProvider.binding) === JSON.stringify(migratedFrom) &&
-            migratedFrom.providerId === owner.binding.providerId &&
-            migratedFrom.contextId === owner.binding.contextId &&
-            migratedFrom.executionHostId === owner.binding.executionHostId &&
-            existing.environmentProvider.resourceId === owner.resourceId
-          )))
-    ) {
-      throw new Error('The saved SSH connection belongs to another environment owner')
-    }
-    if (
-      existing?.environmentProvider &&
-      JSON.stringify(existing.environmentProvider.connection) !== JSON.stringify(owner.connection)
-    ) {
-      throw new Error('Provider connection details changed; the saved host requires migration')
-    }
-    const next: SshTarget = {
-      ...existing,
-      label: target.label,
-      host: target.host,
-      port: target.port,
-      username: target.username,
-      ...(target.identityFile ? { identityFile: target.identityFile } : {}),
-      allowRemoteCliControl: existing?.allowRemoteCliControl ?? false,
-      id,
-      environmentProvider: owner,
-      source: 'manual',
-      configHost: target.configHost ?? target.host,
-      generation: existing?.generation ?? this.store.allocateSshTargetGeneration()
-    }
-    if (existing) {
-      return this.store.updateSshTarget(id, next) ?? next
-    }
-    this.store.addSshTarget(next)
-    return next
+    return upsertEnvironmentProviderTarget(
+      this.store,
+      input,
+      target,
+      migratedFrom,
+      reviewedPrevious
+    )
   }
 
   /** Exclusive managed-orcad ownership of a target; see ssh-target-orcad-claims. */
