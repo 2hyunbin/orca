@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v6
       with:
-        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
+        ref: d4c60827fd9b329302ec6b35d646446a0b498e21
         fetch-depth: 50
         persist-credentials: false
     - uses: ./.github/actions/install-node-dependencies
@@ -28,7 +28,7 @@ jobs:
         \ } from './config/scripts/preflight-benchmark-command.mjs'\nimport { buildCounterbalancedSchedule } from\
         \ './config/scripts/counterbalanced-benchmark-schedule.mjs'\nimport { summarizeBenchmarkSamples } from './config/scripts/benchmark-sample-summary.mjs'\n\
         const root=process.cwd(), output=join(root,'.build/tail-layout')\nmkdirSync(output,{recursive:true})\nconst\
-        \ report={source:'3625e2d070f145aba4cbe6b5f818a44b189b55cf',node:process.version,bun:runProcessSync({program:'bun',args:['--version']}).stdout.trim(),method:'Four\
+        \ report={source:'d4c60827fd9b329302ec6b35d646446a0b498e21',node:process.version,bun:runProcessSync({program:'bun',args:['--version']}).stdout.trim(),method:'Four\
         \ counterbalanced pairs of the exact old pnpm/Node command and direct Bun command. Per-file counts must\
         \ agree across the full corpus; both runtimes must reject new main and renderer writers.',measurements:[]}\n\
         if(report.bun!=='1.4.3')throw new Error('Wrong Bun version')\nconst countsFile='.tail-layout-counts.mjs'\n\
