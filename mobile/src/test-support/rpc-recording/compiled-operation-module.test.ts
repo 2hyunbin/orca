@@ -33,7 +33,7 @@ describe('compiled operation code', () => {
     const source = 'export const value = 42'
     const original = compiledOperationModule('variants.ts', source, '')
     for (let index = 0; index < 512; index++) {
-      compiledOperationModule('variants.ts', source, `\nexports.variant = ${index}`)
+      compiledOperationModule('variants.ts', `${source}; export const variant = ${index}`, '')
     }
     const recompiled = compiledOperationModule('variants.ts', source, '')
     expect(recompiled).not.toBe(original)
