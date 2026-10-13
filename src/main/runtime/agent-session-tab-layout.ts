@@ -74,14 +74,13 @@ export type SavedAgentSessionTab = { worktreeId: string; hostId: ExecutionHostId
  * whose runtime id rotated (#18202). A tab stamped with another execution host is that host's chat,
  * listed in its index, not this one's.
  */
-export function listSavedAgentSessionTabs(
-  partitions: readonly {
-    hostId: ExecutionHostId
-    session: WorkspaceSessionState | null | undefined
-  }[]
-): Map<string, SavedAgentSessionTab[]> {
+export function listSavedAgentSessionTabs(store: {
+  getWorkspaceSessionHostIds?: () => ExecutionHostId[]
+  getWorkspaceSession?: (hostId: ExecutionHostId) => WorkspaceSessionState | null | undefined
+}): Map<string, SavedAgentSessionTab[]> {
   const saved = new Map<string, SavedAgentSessionTab[]>()
-  for (const { hostId, session } of partitions) {
+  for (const hostId of store.getWorkspaceSessionHostIds?.() ?? [LOCAL_EXECUTION_HOST_ID]) {
+    const session = store.getWorkspaceSession?.(hostId)
     for (const [worktreeId, tabs] of Object.entries(session?.unifiedTabs ?? {})) {
       for (const tab of tabs) {
         const ownHost = !tab.executionHostId || tab.executionHostId === LOCAL_EXECUTION_HOST_ID
