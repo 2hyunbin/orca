@@ -17,10 +17,8 @@ import type {
   openCodexAppServerConnection
 } from '../codex/codex-app-server-connection'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import {
-  AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY,
-  STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
-} from '../../shared/protocol-version'
+import { DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES } from '../ipc/desktop-renderer-runtime-capabilities'
+import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../shared/agent-session-create-capabilities'
 import type {
   AgentJournalRenderItem,
   AgentJournalSubmission
@@ -61,16 +59,15 @@ const JOURNAL_IDENTITY = {
   agent: 'codex' as const,
   providerHandle: codexProviderHandle(THREAD)
 }
-// The capability set the desktop renderer advertises. Without the pending-send
+// An eager-start client with current options capabilities. Without the pending-send
 // one the host holds the reply until the send settles, which is a shim for
 // clients too old to render a pending bubble — not what this suite models.
 const CLIENT = {
   clientId: 'device-a',
   clientKind: 'runtime' as const,
-  clientCapabilities: [
-    AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY,
-    STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
-  ]
+  clientCapabilities: DESKTOP_RENDERER_RUNTIME_CLIENT_CAPABILITIES.filter(
+    (capability) => capability !== AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY
+  )
 }
 
 // ─── the fake `codex app-server` ────────────────────────────────────────────
@@ -108,11 +105,19 @@ function fakeCodex(): CodexScript {
       request: async (method, params) => {
         connection.calls.push({ method, params })
         if (method === 'thread/start') {
-          return { thread: { id: THREAD, path: '/rollouts/integration.jsonl' } }
+          return {
+            thread: { id: THREAD, path: '/rollouts/integration.jsonl' },
+            model: 'gpt-live',
+            reasoningEffort: 'medium'
+          }
         }
         if (method === 'thread/resume') {
           connection.resumedThreadId = (params as { threadId: string }).threadId
-          return { thread: { id: connection.resumedThreadId } }
+          return {
+            thread: { id: connection.resumedThreadId },
+            model: 'gpt-live',
+            reasoningEffort: 'medium'
+          }
         }
         if (method === 'turn/start') {
           return { turn: { id: TURN } }
@@ -335,7 +340,7 @@ beforeEach(async () => {
         providerHandle: _providerHandle,
         ...resolved
       } = attachParams(null)
-      return resolved
+      return { ...resolved, options: { model: 'gpt-live' } }
     },
     publishStructuredAgentSessionTab: () => {},
     ensureStructuredAgentSessionHost: () =>
@@ -441,13 +446,15 @@ describe('a structured codex session over agentSession.*', () => {
       createIntentParams()
     )
     expect(created.page.items.map(textOf)).toContain('legacy question')
-    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-      ok: true,
-      result: {
-        models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
-        current: { model: 'gpt-live' }
-      }
-    })
+    await vi.waitFor(async () =>
+      expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
+        ok: true,
+        result: {
+          models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
+          current: { model: 'gpt-live' }
+        }
+      })
+    )
   })
 
   it('dispatches and streams a plain first send from a fresh session', async () => {
@@ -533,7 +540,11 @@ describe('a structured codex session over agentSession.*', () => {
     expect(stream[0]).toMatchObject({ type: 'snapshot', sessionId: SESSION })
 
     // ── options ─────────────────────────────────────────────────────────────
-    const options = await call('agentSession.options', { sessionId: SESSION })
+    const options = await vi.waitFor(async () => {
+      const result = await call('agentSession.options', { sessionId: SESSION })
+      expect(result).toMatchObject({ ok: true, result: { current: { model: 'gpt-live' } } })
+      return result
+    })
     expect(options).toMatchObject({
       ok: true,
       result: {
@@ -551,10 +562,12 @@ describe('a structured codex session over agentSession.*', () => {
       key: 'effort',
       value: 'high'
     })
-    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-      ok: true,
-      result: { current: { model: 'gpt-live', effort: 'high' } }
-    })
+    await vi.waitFor(async () =>
+      expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
+        ok: true,
+        result: { current: { model: 'gpt-live', effort: 'high' } }
+      })
+    )
     expect(itemsOf(stream)).toEqual([])
 
     // ── send ────────────────────────────────────────────────────────────────
@@ -698,13 +711,15 @@ describe('a structured codex session over agentSession.*', () => {
     )
     expect(resumed.fence).toBe(stoppedFence + 1)
     expect(codex.live().resumedThreadId).toBe(THREAD)
-    expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
-      ok: true,
-      result: {
-        models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
-        current: { model: 'gpt-live', effort: 'high' }
-      }
-    })
+    await vi.waitFor(async () =>
+      expect(await call('agentSession.options', { sessionId: SESSION })).toMatchObject({
+        ok: true,
+        result: {
+          models: [{ id: 'gpt-live', defaultEffort: 'medium' }],
+          current: { model: 'gpt-live', effort: 'high' }
+        }
+      })
+    )
     // The journal belongs to the session, not to the process that just died.
     expect(resumed.page.items.map(textOf)).toContain('Two files.')
 
@@ -728,7 +743,7 @@ describe('a structured codex session over agentSession.*', () => {
     // The turn's lifecycle row outlives the turn: it is revised, never tombstoned.
     expect([...older.page.items, ...tail.page.items].map((item) => item.body?.kind)).toEqual([
       'message',
-      'status',
+      'turn',
       'message',
       'tool-call',
       'approval',
