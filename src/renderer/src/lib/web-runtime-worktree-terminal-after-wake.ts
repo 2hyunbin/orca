@@ -61,7 +61,12 @@ export function ensureWebRuntimeWorktreeTerminalAfterWake(
       return
     }
 
-    if (getLastKnownHostTerminalTabCount(runtimeEnvironmentId, worktreeId) > 0) {
+    const hostTerminalTabCount = getLastKnownHostTerminalTabCount(runtimeEnvironmentId, worktreeId)
+    if (hostTerminalTabCount !== null && hostTerminalTabCount > 0) {
+      return
+    }
+    if (hostTerminalTabCount === null && !opts?.startup) {
+      // Why: the host has not listed this workspace yet; its first frame seeds the terminal if empty.
       return
     }
 
