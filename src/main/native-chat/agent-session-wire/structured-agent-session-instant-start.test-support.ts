@@ -5,10 +5,6 @@ import type {
   StructuredAgentSessionLifecycleEvent
 } from './structured-agent-session-adapter'
 
-/** A report read at this revision is never admitted, so the fake's empty report persists nothing,
- *  as a fake with no options to report never did. */
-const NO_OPTIONS_REPORTED = -1
-
 export function startsWhenPublished<A extends StructuredAgentSessionAdapter>(
   adapter: A,
   _host: () => { handleAdapterEvent(event: StructuredAgentSessionLifecycleEvent): Promise<void> }
@@ -25,9 +21,7 @@ export function startsWhenPublished<A extends StructuredAgentSessionAdapter>(
     open:
       adapter.open ??
       (async () => ({
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
-        optionRevision: NO_OPTIONS_REPORTED
+        reportedOptions: { model: '' }
       }))
   }
 }

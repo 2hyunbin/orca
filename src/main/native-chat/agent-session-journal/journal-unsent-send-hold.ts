@@ -140,6 +140,9 @@ export async function holdUnsentSends(
                 ? {
                     messageId: clientMessageId,
                     body: card.body,
+                    ...(submission.executionOptions
+                      ? { executionOptions: submission.executionOptions }
+                      : {}),
                     fingerprint: agentSessionSendBodyFingerprint(
                       journal.queuedMessages.sessionId,
                       card.body

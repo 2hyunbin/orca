@@ -2,7 +2,6 @@
 
 import type {
   StructuredAgentSessionOptionsReportedEvent,
-  StructuredAgentSessionOptionsSkippedEvent,
   StructuredAgentSessionStartedEvent
 } from './structured-agent-session-adapter'
 import type {
@@ -160,8 +159,7 @@ export function noteStructuredAgentSessionProviderStarted(
   }
 }
 
-/** What a ready child reports later, such as a read that came after its start: persisted as the
- *  start's report is, never ahead of a send. */
+/** A ready child's later read can enrich the saved account catalog. */
 export async function settleStructuredAgentSessionOptionsReported(
   context: StructuredAgentSessionProviderStartedContext,
   event: StructuredAgentSessionOptionsReportedEvent
@@ -180,12 +178,4 @@ export async function settleStructuredAgentSessionOptionsReported(
     void saveStructuredAgentSessionStartReadbackListing(context, event, event.catalogListing)
   }
   return undefined
-}
-
-/** A rejected provider value is live protocol evidence; it does not change a later pick. */
-export function settleStructuredAgentSessionOptionsSkipped(
-  _context: StructuredAgentSessionProviderStartedContext,
-  _event: StructuredAgentSessionOptionsSkippedEvent
-): Promise<void> {
-  return Promise.resolve()
 }

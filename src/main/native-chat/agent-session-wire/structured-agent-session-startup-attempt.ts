@@ -26,7 +26,6 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
   permissionMode?: AgentChatPermissionMode
   events?: StructuredAgentSessionEventSink
   signal?: AbortSignal
-  optionRevision: () => number
   startupOptions?: Readonly<Record<string, string>>
 }): StructuredAgentSessionStartupAttempt {
   const { record } = input
@@ -44,8 +43,7 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
     ...(options ? { options } : {}),
     ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
     ...(input.events ? { events: input.events } : {}),
-    ...(input.signal ? { signal: input.signal } : {}),
-    optionRevision: input.optionRevision
+    ...(input.signal ? { signal: input.signal } : {})
   }
 }
 

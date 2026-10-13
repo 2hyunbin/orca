@@ -81,9 +81,7 @@ function adapter(): StructuredAgentSessionAdapter {
       new Promise((resolve) => {
         releaseOpen = () =>
           resolve({
-            reportedOptions: { model: DEFAULT_MODEL },
-            restoreSkippedOptions: [],
-            optionRevision: 0
+            reportedOptions: { model: DEFAULT_MODEL }
           })
       }),
     acquire,

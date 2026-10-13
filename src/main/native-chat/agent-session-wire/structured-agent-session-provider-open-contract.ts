@@ -13,10 +13,7 @@ export type StructuredAgentSessionProviderOpenInput = {
 export type StructuredAgentSessionProviderOpenResult = {
   link?: AgentSessionProviderHandleLink
   reportedOptions: AgentSessionOptionsResult['current']
-  restoreSkippedOptions: readonly string[]
-  retiredOptions?: Readonly<Record<string, string>>
   catalogListing?: AgentModelCatalogLiveListing
-  optionRevision: number
 }
 
 export type StructuredAgentSessionProviderOpen = (

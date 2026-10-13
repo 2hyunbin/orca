@@ -113,10 +113,8 @@ beforeEach(async () => {
         sessionId: input.identity.sessionId,
         fence: input.fence,
         acquisitionGeneration,
-        reportedOptions: { model: '' },
-        restoreSkippedOptions: [],
+        reportedOptions: { model: '' }
         // Never admitted, so the empty report persists nothing.
-        optionRevision: -1
       })
       return {
         providerChildPhase: 'starting' as const,

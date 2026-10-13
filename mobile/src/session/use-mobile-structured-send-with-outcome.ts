@@ -141,6 +141,9 @@ export function useMobileStructuredSendWithOutcome(args: {
         queuedAt: Date.now(),
         ...(stopping ? { sentWhileStopping: true as const } : {})
       }
+      const executionOptions = messageChoices
+        ? agentSessionExecutionOptionsFromSnapshot(controller.snapshot)
+        : undefined
       const outcome = await sendMobileStructuredAgentSessionMessage({
         client,
         sessionId,
@@ -150,9 +153,7 @@ export function useMobileStructuredSendWithOutcome(args: {
         ...(mobileStructuredSendQueues(queueCapable, stateRef.current.items)
           ? { delivery: 'queue-if-active' as const }
           : {}),
-        ...(messageChoices
-          ? { executionOptions: agentSessionExecutionOptionsFromSnapshot(controller.snapshot) }
-          : {}),
+        ...(executionOptions ? { executionOptions } : {}),
         deadline,
         clientMessageId: send.clientMessageId,
         onError: onSendError

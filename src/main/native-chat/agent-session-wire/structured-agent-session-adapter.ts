@@ -216,26 +216,8 @@ export type StructuredAgentSessionStartedEvent = {
   /** What the child proved, snapshotted by the adapter from what startup already read. The host
    *  handles this inside the session's serialized step, so it must not ask the CLI. */
   reportedOptions: AgentSessionOptionsResult['current']
-  /** Saved options the child could not take; the host drops them rather than persist them. */
-  restoreSkippedOptions: readonly string[]
-  /** Values the child showed it cannot run: a report naming the same value is not persisted. */
-  retiredOptions?: Readonly<Record<string, string>>
   /** What the child listed at startup, saved as its account's catalog even if no view reads it. */
   catalogListing?: AgentModelCatalogLiveListing
-  /** The attempt's `optionRevision()` as the read behind this report began: a pick the host took
-   *  since makes it out of date. An earlier report never does, whenever the host took it. */
-  optionRevision: number
-}
-
-/** A running child showed saved options it cannot run, as a model the provider reports missing.
- *  The record drops them, so the next start uses the provider's own. */
-export type StructuredAgentSessionOptionsSkippedEvent = {
-  type: 'options-skipped'
-  sessionId: string
-  fence: number
-  acquisitionGeneration: string
-  /** Each saved value the child showed it cannot run; a record holding another value keeps it. */
-  options: Readonly<Record<string, string>>
 }
 
 /** What a child that already proved its start reports later, such as an optional read that came
@@ -249,7 +231,6 @@ export type StructuredAgentSessionLifecycleEvent =
   | StructuredAgentSessionEndedEvent
   | StructuredAgentSessionStartedEvent
   | StructuredAgentSessionOptionsReportedEvent
-  | StructuredAgentSessionOptionsSkippedEvent
 
 /** Whether the provider child behind an acquisition has proven its start. A publish-first
  *  acquire hands over a `starting` child, which the host gives no input until the `started`

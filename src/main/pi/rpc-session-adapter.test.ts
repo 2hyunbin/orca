@@ -171,7 +171,6 @@ describe('Pi RPC session ownership and delivery', () => {
       origin: 'created',
       mintedAtFence: 7
     })
-    expect(h.started.restoreSkippedOptions).toEqual([])
     expect(h.connection.requests).not.toContain('set_thinking_level')
     expect(h.connection.requests).toContain('get_commands')
   })

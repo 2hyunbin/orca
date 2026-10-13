@@ -170,21 +170,13 @@ async function submission(id: string): Promise<AgentJournalSubmission | undefine
   )
 }
 
-/** The revision the attempt's `optionRevision()` answers now, as a report's read would stamp. */
-function optionRevisionNow(): number {
-  const [input] = acquire.mock.calls.at(-1)!
-  return input.optionRevision!()
-}
-
 function startedEvent(generation = `generation-${acquire.mock.calls.length}`) {
   return {
     type: 'started' as const,
     sessionId: SESSION,
     fence: store.getRecord(SESSION)!.lease.runtimeFence,
     acquisitionGeneration: generation,
-    reportedOptions: { model: 'default' },
-    restoreSkippedOptions: [],
-    optionRevision: optionRevisionNow()
+    reportedOptions: { model: 'default' }
   }
 }
 
@@ -471,8 +463,5 @@ describe('the attempt an acquire runs under', () => {
     expect(input.onOutput).toEqual(expect.any(Function))
     expect(input.attemptId).toEqual(expect.any(String))
     expect(input.signal).toBeInstanceOf(AbortSignal)
-    expect(input.optionRevision!()).toBe(
-      host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
-    )
   })
 })

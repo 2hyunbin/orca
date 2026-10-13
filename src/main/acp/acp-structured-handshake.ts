@@ -54,7 +54,6 @@ export async function initializeAcpStructuredSession(
   const now = deps.now ?? Date.now
   const assertStarting = () => assertAcpStartingSession(child, input.abandoned)
   const agentName = acpAgentName(spec.agent)
-  const optionRevision = acquire.optionRevision?.() ?? 0
   assertStarting()
   const initialized = await connection.initialize()
   assertStarting()
@@ -155,8 +154,6 @@ export async function initializeAcpStructuredSession(
   return {
     link,
     reportedOptions: options.read().current,
-    restoreSkippedOptions: restoreSkipped,
-    optionRevision,
     catalogListing: options.startListing()
   }
 }

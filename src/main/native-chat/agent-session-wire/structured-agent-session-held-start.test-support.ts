@@ -7,9 +7,6 @@ import type {
 
 type Acquire = StructuredAgentSessionAdapter['acquire']
 
-/** A report read at this revision is never admitted, so the empty report persists nothing. */
-const NO_OPTIONS_REPORTED = -1
-
 export type StructuredAgentSessionHeldStarts = {
   /** Wraps an acquire so the child it answers stays `starting`. */
   held(acquire: Acquire): Acquire
@@ -51,9 +48,7 @@ export function structuredAgentSessionHeldStarts(
         return adapter.open
           ? adapter.open(input)
           : {
-              reportedOptions: { model: '' },
-              restoreSkippedOptions: [],
-              optionRevision: NO_OPTIONS_REPORTED
+              reportedOptions: { model: '' }
             }
       }
       return { ...adapter, acquire, open }

@@ -76,7 +76,6 @@ export async function openCodexStructuredSession(
     assertCodexConnectionOpen(connection, sessionId)
   }
   current()
-  const optionRevision = input.optionRevision?.() ?? 0
   await waitForPromiseWithSignal(
     initializeCodexAppServerConnection(connection, STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS),
     openInput.signal
@@ -163,8 +162,6 @@ export async function openCodexStructuredSession(
       linkId: deps.mintLinkId?.(),
       observedAt: deps.now?.() ?? Date.now()
     }),
-    reportedOptions: reportedCodexSessionOptions(session),
-    restoreSkippedOptions: [],
-    optionRevision
+    reportedOptions: reportedCodexSessionOptions(session)
   }
 }

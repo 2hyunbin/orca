@@ -224,9 +224,7 @@ function prove(): Promise<void> {
     type: 'started',
     ...child,
     acquisitionGeneration,
-    reportedOptions: { model: 'default' },
-    restoreSkippedOptions: [],
-    optionRevision: host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
+    reportedOptions: { model: 'default' }
   })
 }
 

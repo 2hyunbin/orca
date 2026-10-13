@@ -18,9 +18,7 @@ import {
 } from './structured-agent-session-host-test-data'
 
 const OPENED: StructuredAgentSessionProviderOpenResult = {
-  reportedOptions: { model: 'gpt-test' },
-  restoreSkippedOptions: [],
-  optionRevision: -1
+  reportedOptions: { model: 'gpt-test' }
 }
 
 function awaitOpen() {
