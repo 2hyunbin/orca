@@ -256,9 +256,6 @@ export function useStructuredAgentSessionOptions(args: {
         void applied?.then(settleLaunchOptionPick)
         return applied === null ? null : { [id]: encoded }
       }
-      if (optionStateRef.current.pendingPick !== null) {
-        return null
-      }
       return sendStructuredOption(id, encoded)
     },
     [

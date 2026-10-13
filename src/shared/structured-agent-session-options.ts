@@ -219,7 +219,8 @@ export function canSetStructuredAgentSessionOption(
   const descriptor = structuredAgentSessionOptionSnapshot(state).find((entry) => entry.id === id)
   return Boolean(
     state.catalog &&
-    state.pendingPick === null &&
+    (state.pendingPick === null ||
+      (id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID && state.pendingPick.id === id)) &&
     ((typeof value === 'string' &&
       descriptor?.kind.type === 'select' &&
       descriptor.kind.choices.some((choice) => choice.value === value)) ||
