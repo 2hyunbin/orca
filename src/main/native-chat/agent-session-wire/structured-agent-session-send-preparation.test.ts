@@ -255,8 +255,7 @@ describe('a send with no live owner', () => {
       reason: 'startup deadline',
       cause: 'unexpected-exit',
       fence: params.envelope.expectedRuntimeFence ?? 0,
-      acquisitionGeneration: 'generation-1',
-      startupUnproven: true
+      acquisitionGeneration: 'generation-1'
     })
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
     acquire.mockClear()

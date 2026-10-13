@@ -274,7 +274,7 @@ export function createAgentModelCatalogService(
           ...(unavailable ? { unavailable } : {})
         }
       }
-      // Death evidence keeps a read after a failed start from spawning another agent; a new chat
+      // Death evidence keeps a read after an observed exit from spawning another agent; a new chat
       // also starts released, but still needs its first listing.
       if (
         params.savedOnly ||

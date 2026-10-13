@@ -15,29 +15,25 @@ export type StructuredAgentSessionHeldStarts = {
   held(acquire: Acquire): Acquire
   /** Wraps the adapter's acquire: every child not held proves its start once published. */
   wrap<A extends StructuredAgentSessionAdapter>(adapter: A): A
-  /** Settles `started` for a child, as its provider answering the handshake does. */
+  /** Answers the pending protocol open. */
   prove(child: { sessionId: string; fence: number; acquisitionGeneration: string }): Promise<void>
   clear(): void
 }
 
 export function structuredAgentSessionHeldStarts(
-  host: () => { handleAdapterEvent(event: StructuredAgentSessionLifecycleEvent): Promise<void> }
+  _host: () => { handleAdapterEvent(event: StructuredAgentSessionLifecycleEvent): Promise<void> }
 ): StructuredAgentSessionHeldStarts {
-  const heldGenerations = new Set<string>()
+  const heldGenerations = new Map<string, PromiseWithResolvers<void>>()
   let generations = 0
-  const prove: StructuredAgentSessionHeldStarts['prove'] = (child) =>
-    host().handleAdapterEvent({
-      type: 'started',
-      ...child,
-      reportedOptions: { model: '' },
-      restoreSkippedOptions: [],
-      optionRevision: NO_OPTIONS_REPORTED
-    })
+  const prove: StructuredAgentSessionHeldStarts['prove'] = async (child) => {
+    heldGenerations.get(child.acquisitionGeneration)?.resolve()
+    await Promise.resolve()
+  }
   return {
     held: (acquire) => async (input) => {
       const acquired = await acquire(input)
       const acquisitionGeneration = acquired.acquisitionGeneration ?? `held-start-${++generations}`
-      heldGenerations.add(acquisitionGeneration)
+      heldGenerations.set(acquisitionGeneration, Promise.withResolvers<void>())
       return { ...acquired, acquisitionGeneration, providerChildPhase: 'starting' as const }
     },
     wrap: (adapter) => {
@@ -45,18 +41,29 @@ export function structuredAgentSessionHeldStarts(
         const acquired = await adapter.acquire(input)
         const acquisitionGeneration =
           acquired.acquisitionGeneration ?? `instant-start-${++generations}`
-        if (!heldGenerations.has(acquisitionGeneration)) {
-          void prove({
-            sessionId: input.identity.sessionId,
-            fence: input.fence,
-            acquisitionGeneration
-          })
-        }
         return { ...acquired, acquisitionGeneration, providerChildPhase: 'starting' as const }
       }
-      return { ...adapter, acquire }
+      const open: NonNullable<StructuredAgentSessionAdapter['open']> = async (input) => {
+        if (input.acquisitionGeneration) {
+          await heldGenerations.get(input.acquisitionGeneration)?.promise
+          heldGenerations.delete(input.acquisitionGeneration)
+        }
+        return adapter.open
+          ? adapter.open(input)
+          : {
+              reportedOptions: { model: '' },
+              restoreSkippedOptions: [],
+              optionRevision: NO_OPTIONS_REPORTED
+            }
+      }
+      return { ...adapter, acquire, open }
     },
     prove,
-    clear: () => heldGenerations.clear()
+    clear: () => {
+      for (const held of heldGenerations.values()) {
+        held.resolve()
+      }
+      heldGenerations.clear()
+    }
   }
 }
