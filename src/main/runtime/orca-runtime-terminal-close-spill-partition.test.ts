@@ -206,6 +206,9 @@ describe('terminal close across local and runtime session partitions (#18202)', 
     )!
 
     await expect(runtime.closeTerminalTab(terminal.handle)).rejects.toThrow('terminal_tab_pinned')
+    await expect(runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, 'target')).rejects.toThrow(
+      'terminal_tab_pinned'
+    )
     expect(sessions.get(SPILL_HOST_ID)).toBe(spill)
     expect(kill).not.toHaveBeenCalled()
   })

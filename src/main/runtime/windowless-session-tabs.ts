@@ -150,6 +150,7 @@ export function nextWindowlessSnapshot(
   if (!existing && !projected?.tabs.length) {
     return null
   }
+  const hostPublished = existing?.publicationEpoch.startsWith('headless') === true
   const next = preserveTerminalRetirementProofs(
     {
       ...(projected ?? {
@@ -159,14 +160,16 @@ export function nextWindowlessSnapshot(
         tabs: []
       }),
       worktree: existing?.worktree ?? worktreeId,
-      // Clients read a new epoch as a new publisher and recover from a fresh list.
-      publicationEpoch:
-        existing?.publicationEpoch ?? `headless-hydrated:${Date.now().toString(36)}`,
+      // Clients read a new epoch as a new publisher and recover from a fresh list; a closed
+      // window's epoch is replaced, as the host is now the publisher.
+      publicationEpoch: hostPublished
+        ? existing.publicationEpoch
+        : `headless-hydrated:${Date.now().toString(36)}`,
       snapshotVersion: (existing?.snapshotVersion ?? 0) + 1
     },
     existing
   )
-  return existing && headlessMobileSnapshotContentUnchanged(existing, next) ? null : next
+  return hostPublished && headlessMobileSnapshotContentUnchanged(existing, next) ? null : next
 }
 
 /**

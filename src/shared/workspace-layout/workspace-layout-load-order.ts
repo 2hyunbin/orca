@@ -55,6 +55,6 @@ export function resolveGroupOrder(args: {
 }
 
 /** What the Loader mints a workspace's first group from when nothing stored names one. */
-export function firstGroupSeed(workspaceKey: string): string {
+function firstGroupSeed(workspaceKey: string): string {
   return `group:${workspaceKey}`
 }

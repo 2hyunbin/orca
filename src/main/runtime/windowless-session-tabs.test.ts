@@ -173,7 +173,11 @@ describe('the session-tabs list of a host with no window', () => {
   it('republishes a saved change in the same publication, one version on', async () => {
     const { runtime } = twoGroupHost()
     const listed = await runtime.listMobileSessionTabs(WT)
-    const existing = { ...listed, publicationEpoch: 'earlier-publication', snapshotVersion: 4 }
+    const existing = {
+      ...listed,
+      publicationEpoch: 'headless-hydrated:earlier',
+      snapshotVersion: 4
+    }
 
     const next = nextWindowlessSnapshot(
       TEST_WORKTREE_ID,
@@ -181,7 +185,21 @@ describe('the session-tabs list of a host with no window', () => {
       existing
     )
 
-    expect(next).toMatchObject({ publicationEpoch: 'earlier-publication', snapshotVersion: 5 })
+    expect(next).toMatchObject({
+      publicationEpoch: 'headless-hydrated:earlier',
+      snapshotVersion: 5
+    })
+  })
+
+  it("replaces a closed window's publication with the host's own", async () => {
+    const { runtime } = twoGroupHost()
+    const listed = await runtime.listMobileSessionTabs(WT)
+    const existing = { ...listed, publicationEpoch: 'renderer-epoch', snapshotVersion: 4 }
+
+    const next = nextWindowlessSnapshot(TEST_WORKTREE_ID, listed, existing)
+
+    expect(next?.publicationEpoch).toMatch(/^headless-hydrated:/)
+    expect(next?.snapshotVersion).toBe(5)
   })
 
   it('tells subscribers about a saved change that a list read first', async () => {

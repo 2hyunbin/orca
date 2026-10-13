@@ -124,14 +124,8 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
       if (input.activate) {
         this.saveWindowlessTabSelection(input.workspaceId, id)
       }
-      if (input.notify === false) {
-        const session = this.getWorkspaceSessionForWorktree(input.workspaceId)
-        if (session) {
-          this.publishWindowlessSessionTabs(input.workspaceId, session)
-        }
-      } else {
-        this.republishWindowlessSessionTabs(input.workspaceId)
-      }
+      // The saved layout is the list; every change it stores is announced.
+      this.republishWindowlessSessionTabs(input.workspaceId)
       return
     }
     const existing = this.mobileSessionTabsByWorktree.get(input.workspaceId)

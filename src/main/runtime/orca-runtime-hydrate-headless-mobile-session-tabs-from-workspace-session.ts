@@ -291,8 +291,12 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
     const clientRows = clientHostedSessionBrowserTabs(
       getRuntimeBrowserPageRegistry(this).listPages(worktreeId)
     )
+    const hostId = this.workspaceSessions.tryGetHostId(worktreeId)
+    if (!hostId) {
+      return
+    }
     const projected = projectWindowlessSessionTabs({
-      hostId: this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+      hostId,
       session,
       worktreeId,
       generatedTitlesEnabled: this.store?.getSettings?.()?.tabAutoGenerateTitle === true,
@@ -310,7 +314,12 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
       return
     }
     // Every caller stores through here, so subscribers hear a change whichever caller saw it first.
-    this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(worktreeId, next))
+    this.storingWindowlessProjection = true
+    try {
+      this.emitMobileSessionTabsSnapshot(this.storeMobileSessionSnapshot(worktreeId, next))
+    } finally {
+      this.storingWindowlessProjection = false
+    }
   }
 
   /** Republishes a windowless worktree's list from its saved layout. */
@@ -323,9 +332,14 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
 
   /** Saves a listed row's tab as the one shown, as a window saves a user's selection. */
   protected saveWindowlessTabSelection(worktreeId: string, rowId: string): void {
-    this.applyWorkspaceSessionChange(worktreeId, (hostId, session) =>
-      withSavedTabSelection(hostId, session, worktreeId, rowId)
-    )
+    try {
+      this.applyWorkspaceSessionChange(worktreeId, (hostId, session) =>
+        withSavedTabSelection(hostId, session, worktreeId, rowId)
+      )
+    } catch (error) {
+      // A tap still lands; the selection is restored from the layout on the next write.
+      console.warn('[session-tabs] could not save a tab selection:', error)
+    }
   }
 
   /** No renderer is attached to publish its own list (a headless host's graph is not one). */
