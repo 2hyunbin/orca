@@ -17,10 +17,12 @@ export function createAppMenuSelectionItem({
     ...(isMac ? { accelerator: action === 'copy' ? 'Command+C' : 'Command+A' } : {}),
     click: () => {
       const focusedWindow = BrowserWindow.getFocusedWindow()
-      // Why: a native browser popup hosts a web page with no Orca renderer to receive the IPC.
-      if (focusedWindow && !isNativeBrowserPopupWindow(focusedWindow)) {
-        const focusedContents = webContents.getFocusedWebContents()
-        if (focusedContents && focusedContents !== focusedWindow.webContents) {
+      if (focusedWindow) {
+        const focusedContents = webContents.getFocusedWebContents() ?? focusedWindow.webContents
+        if (
+          isNativeBrowserPopupWindow(focusedWindow) ||
+          focusedContents !== focusedWindow.webContents
+        ) {
           if (action === 'copy') {
             focusedContents.copy()
           } else {

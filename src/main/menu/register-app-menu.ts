@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, app } from 'electron'
+import { BrowserWindow, Menu, app, webContents } from 'electron'
 import {
   formatKeybindingList,
   getEffectiveKeybindingsForAction,
@@ -198,8 +198,10 @@ function buildAndApplyMenu(options: RegisterAppMenuOptions): void {
           // Why: a focused terminal/native-chat pane is not a native editable
           // control, so raw Electron paste cannot know which Orca surface owns it.
           const focusedWindow = BrowserWindow.getFocusedWindow()
-          // Why: a native browser popup hosts a web page with no Orca renderer to receive the IPC.
-          if (focusedWindow && !isNativeBrowserPopupWindow(focusedWindow)) {
+          if (focusedWindow) {
+            if (isNativeBrowserPopupWindow(focusedWindow)) {
+              return (webContents.getFocusedWebContents() ?? focusedWindow.webContents).paste()
+            }
             focusedWindow.webContents.send('ui:appMenuPaste')
             return
           }
