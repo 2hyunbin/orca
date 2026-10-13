@@ -64,7 +64,7 @@ export async function writePluginEnvironmentPackageFixture(
 process.stdin.setEncoding('utf8');let raw='';process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{
 const request=JSON.parse(raw);const identity={protocolVersion:2,contextId:request.contextId,operationId:request.operationId,providerId:request.providerId,action:request.action};
 if(request.contextId!=='company/account/region'){process.stdout.write(JSON.stringify({...identity,kind:'error',code:'conflict',message:'Account context mismatch'}));return;}
-fs.writeFileSync(${JSON.stringify(marker)},'executed');
+fs.appendFileSync(${JSON.stringify(marker)},String(process.pid)+'\\n');
 const ssh=${JSON.stringify(connection)};
 const file=${JSON.stringify(`${marker}.inventory.json`)};
 const resources=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{devbox:{id:'devbox',name:'Existing development machine',revision:'r1',lifetime:'long-lived',state:'running',...(ssh?{connection:ssh}:{})}};

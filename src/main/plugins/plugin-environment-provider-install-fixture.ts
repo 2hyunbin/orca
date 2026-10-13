@@ -131,6 +131,7 @@ process.stdout.write(JSON.stringify({...identity,...response}));`
   let backendDirectory = cwd
   let backendContext = 'company/account/region'
   let enabled = true
+  let disabledPlugins: string[] = []
   const consents: Record<string, string> = {}
   const service = new PluginService({
     userDataPath: join(root, 'user-data'),
@@ -144,7 +145,7 @@ process.stdout.write(JSON.stringify({...identity,...response}));`
       ...(options.loseResponseAction ? { PROVIDER_LOSE_ACTION: options.loseResponseAction } : {})
     }),
     isPluginSystemEnabled: () => enabled,
-    getDisabledPlugins: () => [],
+    getDisabledPlugins: () => disabledPlugins,
     getPluginConsents: () => consents,
     getDevPluginPaths: () => []
   })
@@ -237,6 +238,15 @@ process.stdout.write(JSON.stringify({...identity,...response}));`
     },
     disable: () => {
       enabled = false
+      return service.reconcileActivationState()
+    },
+    enable: () => {
+      enabled = true
+      disabledPlugins = []
+      return service.reconcileActivationState()
+    },
+    disableProvider: () => {
+      disabledPlugins = ['company.platform']
       return service.reconcileActivationState()
     }
   }

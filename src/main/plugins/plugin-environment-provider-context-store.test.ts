@@ -24,6 +24,14 @@ const directory = () => join(root, 'plugin-environment-provider-contexts')
 const file = () => join(directory(), filename)
 
 describe('durable host-selected provider account contexts', () => {
+  it('enumerates durable selected accounts and refuses a valid record at a forged filename', async () => {
+    const store = new PluginEnvironmentProviderContextStore(root)
+    expect(await store.list()).toEqual([])
+    const record = await store.configure(binding)
+    expect(await store.list()).toEqual([record])
+    await writeFile(join(directory(), `${'c'.repeat(64)}.json`), JSON.stringify(record))
+    await expect(store.list()).rejects.toThrow('filename')
+  })
   it('preserves an exact account binding across reopening without storing a launch environment', async () => {
     const store = new PluginEnvironmentProviderContextStore(root)
     expect(await store.read(binding.providerId)).toBeNull()
@@ -78,6 +86,7 @@ describe('durable host-selected provider account contexts', () => {
     await writeFile(file(), '{broken')
     await expect(store.read(binding.providerId)).rejects.toThrow()
     await expect(store.configure(binding)).rejects.toThrow()
+    await expect(store.list()).rejects.toThrow()
   })
   it('rejects unknown execution fields, oversize data and another provider at the stable path', async () => {
     const store = new PluginEnvironmentProviderContextStore(root)
@@ -118,5 +127,6 @@ describe('durable host-selected provider account contexts', () => {
     }
     await expect(store.read(binding.providerId)).rejects.toThrow()
     await expect(store.configure(binding)).rejects.toThrow()
+    await expect(store.list()).rejects.toThrow('file type')
   })
 })

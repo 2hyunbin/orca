@@ -20,10 +20,10 @@ export function PluginEnvironmentOperationHistory({
   busy,
   onInspected
 }: {
-  provider: PluginEnvironmentProviderEntry
+  provider?: PluginEnvironmentProviderEntry
   operations: EnvironmentRecipeJournalOperation[]
   busy: boolean
-  onInspected(): void
+  onInspected?(): void
 }): React.JSX.Element | null {
   const [intent, setIntent] = useState<PluginEnvironmentRecoveryIntent | null>(null)
   const [count, setCount] = useState(10)
@@ -34,8 +34,9 @@ export function PluginEnvironmentOperationHistory({
     (operation) => isEnvironmentRecipeOperationUnresolved(operation) && operation.action !== 'list'
   )
   const supported =
-    provider.recoverySupported &&
+    provider?.recoverySupported &&
     provider.configuration.status === 'ready' &&
+    onInspected &&
     window.api.plugins.recoverEnvironmentProvider
   return (
     <div className="space-y-3 border-t border-border pt-3">
@@ -60,12 +61,14 @@ export function PluginEnvironmentOperationHistory({
               variant="outline"
               size="sm"
               disabled={busy}
-              onClick={() =>
-                setIntent({
-                  provider: structuredClone(provider),
-                  operation: structuredClone(operation)
-                })
-              }
+              onClick={() => {
+                if (provider) {
+                  setIntent({
+                    provider: structuredClone(provider),
+                    operation: structuredClone(operation)
+                  })
+                }
+              }}
             >
               {translate(
                 'auto.components.settings.PluginEnvironmentOperationHistory.check',
@@ -74,10 +77,15 @@ export function PluginEnvironmentOperationHistory({
             </Button>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {translate(
-                'auto.components.settings.PluginEnvironmentOperationHistory.unsupported',
-                'This provider has no reviewed receipt command. Check its CLI or ask its maintainer for recovery support; refreshing inventory cannot settle the original change.'
-              )}
+              {provider
+                ? translate(
+                    'auto.components.settings.PluginEnvironmentOperationHistory.unsupported',
+                    'This provider has no reviewed receipt command. Check its CLI or ask its maintainer for recovery support; refreshing inventory cannot settle the original change.'
+                  )
+                : translate(
+                    'auto.components.settings.PluginEnvironmentOperationHistory.inactive',
+                    'Enable and review this provider to check the unresolved change. The original operation remains saved.'
+                  )}
             </p>
           )}
         </div>
@@ -128,7 +136,7 @@ export function PluginEnvironmentOperationHistory({
           ) : null}
         </div>
       </details>
-      {intent ? (
+      {intent && onInspected ? (
         <PluginEnvironmentRecoveryDialog
           intent={intent}
           onClose={() => setIntent(null)}

@@ -2,6 +2,10 @@ import type { Page } from '@stablyai/playwright-test'
 
 export async function installPluginEnvironmentProvider(page: Page) {
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  const notice = page.getByRole('status', { name: 'Usage display is now compact', exact: true })
+  if (await notice.isVisible()) {
+    await notice.getByRole('button', { name: 'Dismiss', exact: true }).click()
+  }
   await page.getByRole('button', { name: 'Plugins', exact: true }).click()
   const feature = page.getByRole('switch', { name: 'Plugin system', exact: true })
   if (!(await feature.isChecked())) {

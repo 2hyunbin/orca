@@ -54,11 +54,9 @@ export function renderSshSettingsSection(context: SettingsRenderContext): React.
     >
       {view.isSectionMounted('ssh') ? (
         <div className="space-y-6">
-          {model.settings.pluginSystemEnabled ? (
-            <PluginEnvironmentProvidersSection
-              onBrowsePlugins={() => void context.actions.scrollToSection('plugins')}
-            />
-          ) : null}
+          <PluginEnvironmentProvidersSection
+            onBrowsePlugins={() => void context.actions.scrollToSection('plugins')}
+          />
           <SshPane addTargetIntentSignal={model.sshHostAddIntentSignal} />
         </div>
       ) : null}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
 import type { PluginEnvironmentProviderEntry } from '../../../../shared/plugins/plugin-environment-provider-api'
+import type { PluginEnvironmentProviderSavedEntry } from '../../../../shared/plugins/plugin-environment-provider-saved-history-api'
 import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
@@ -8,6 +9,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { PluginEnvironmentProviderAccountDialog } from './PluginEnvironmentProviderAccountDialog'
 import { PluginEnvironmentProviderCard } from './PluginEnvironmentProviderCard'
+import { PluginEnvironmentSavedProviderCard } from './PluginEnvironmentSavedProviderCard'
 
 export function PluginEnvironmentProvidersSection({
   onBrowsePlugins
@@ -15,6 +17,8 @@ export function PluginEnvironmentProvidersSection({
   onBrowsePlugins(): void
 }): React.JSX.Element {
   const [providers, setProviders] = useState<PluginEnvironmentProviderEntry[]>([])
+  const [saved, setSaved] = useState<PluginEnvironmentProviderSavedEntry[]>([])
+  const [savedError, setSavedError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -29,9 +33,19 @@ export function PluginEnvironmentProvidersSection({
       if (!list) {
         throw new Error('Unsupported provider host')
       }
-      const next = await list()
+      const [active, historical] = await Promise.allSettled([
+        list(),
+        window.api.plugins.listSavedEnvironmentProviders?.() ?? Promise.resolve([])
+      ])
       if (mounted.current && generation.current === attempt) {
-        setProviders(next)
+        setSaved(historical.status === 'fulfilled' ? historical.value : [])
+        setSavedError(historical.status === 'rejected')
+      }
+      if (active.status === 'rejected') {
+        throw active.reason
+      }
+      if (mounted.current && generation.current === attempt) {
+        setProviders(active.value)
         setError(null)
       }
     } catch {
@@ -66,6 +80,11 @@ export function PluginEnvironmentProvidersSection({
     `${provider.name} ${provider.pluginKey} ${provider.description}`
       .toLocaleLowerCase()
       .includes(normalized)
+  )
+  const activeIds = new Set(providers.map((provider) => provider.providerId))
+  const inactiveSaved = saved.filter((entry) => !activeIds.has(entry.providerId))
+  const visibleSaved = inactiveSaved.filter((entry) =>
+    `${entry.providerId} ${entry.contextId}`.toLocaleLowerCase().includes(normalized)
   )
   return (
     <section
@@ -118,7 +137,7 @@ export function PluginEnvironmentProvidersSection({
           </Button>
         </div>
       </div>
-      {providers.length > 1 ? (
+      {providers.length + inactiveSaved.length > 1 ? (
         <div className="relative">
           <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
           <Input
@@ -145,7 +164,7 @@ export function PluginEnvironmentProvidersSection({
           )}
         </p>
       ) : null}
-      {!loading && !error && providers.length === 0 ? (
+      {!loading && !error && providers.length + inactiveSaved.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {translate(
             'auto.components.settings.PluginEnvironmentProvidersSection.empty',
@@ -153,7 +172,9 @@ export function PluginEnvironmentProvidersSection({
           )}
         </p>
       ) : null}
-      {!loading && providers.length > 0 && visible.length === 0 ? (
+      {!loading &&
+      providers.length + inactiveSaved.length > 0 &&
+      visible.length + visibleSaved.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {translate(
             'auto.components.settings.PluginEnvironmentProvidersSection.noMatches',
@@ -166,6 +187,20 @@ export function PluginEnvironmentProvidersSection({
           key={`${provider.providerId}:${provider.review.reviewRevision}:${provider.configuration.status}:${'contextId' in provider.configuration ? provider.configuration.contextId : ''}`}
           provider={provider}
           onSetUp={() => setSetup(provider)}
+        />
+      ))}
+      {savedError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {translate(
+            'auto.components.settings.PluginEnvironmentProvidersSection.savedError',
+            'Could not load saved provider history. The saved files are kept; refresh to try again.'
+          )}
+        </p>
+      ) : null}
+      {visibleSaved.map((entry) => (
+        <PluginEnvironmentSavedProviderCard
+          key={`${entry.providerId}:${entry.contextId}:${entry.configuredAt}`}
+          entry={entry}
         />
       ))}
       {setup ? (

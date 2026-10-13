@@ -1,6 +1,10 @@
 import type { PluginEnvironmentProviderMigrationPreview } from '../../shared/plugins/plugin-environment-provider-migration-api'
 import type { PluginEnvironmentProviderHistory } from '../../shared/plugins/plugin-environment-provider-history-api'
 import type {
+  PluginEnvironmentProviderSavedEntry,
+  PluginEnvironmentProviderSavedHistory
+} from '../../shared/plugins/plugin-environment-provider-saved-history-api'
+import type {
   PluginEnvironmentProviderRecoverRequest,
   PluginEnvironmentProviderRecoveryResult
 } from '../../shared/plugins/plugin-environment-provider-recovery-api'
@@ -195,6 +199,11 @@ export type PluginMarketplaceDataActionResult =
   | { kind: 'error'; error: string }
 
 export type PluginsApi = {
+  listSavedEnvironmentProviders?: () => Promise<PluginEnvironmentProviderSavedEntry[]>
+  savedEnvironmentProviderSnapshot?: (input: {
+    providerId: string
+    offset?: number
+  }) => Promise<PluginEnvironmentProviderSavedHistory>
   prepareEnvironmentProviderMigration?: (input: {
     review: PluginEnvironmentProviderReview
     queryId: string

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { lstatSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
+import { lstat, opendir } from 'node:fs/promises'
 import { z } from 'zod'
 import {
   environmentRecipeJournalBindingSchema,
@@ -34,6 +35,46 @@ export class PluginEnvironmentProviderContextStore {
   private filename(providerId: string): string {
     const parsed = environmentRecipeJournalBindingSchema.shape.providerId.parse(providerId)
     return `${createHash('sha256').update(parsed).digest('hex')}.json`
+  }
+
+  async list(): Promise<PluginEnvironmentProviderContext[]> {
+    try {
+      const info = await lstat(this.directory)
+      if (!info.isDirectory() || info.isSymbolicLink()) {
+        throw new Error('Saved provider contexts require a regular directory')
+      }
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        return []
+      }
+      throw error
+    }
+    const records: PluginEnvironmentProviderContext[] = []
+    const entries = await opendir(this.directory)
+    let scanned = 0
+    for await (const entry of entries) {
+      if (++scanned > 4096) {
+        throw new Error('Saved provider directory exceeds its entry limit')
+      }
+      if (!entry.name.endsWith('.json')) {
+        continue
+      }
+      if (records.length >= 128 || !entry.isFile()) {
+        throw new Error('Saved provider context count or file type is invalid')
+      }
+      const raw = await readContainedPluginArtifactText(this.directory, entry.name, CONTEXT_BYTES)
+      assertJsonTextStructureWithinLimits(raw, { nestingDepth: 8, structuralTokens: 256 })
+      const record = contextSchema.parse(JSON.parse(raw))
+      if (entry.name !== this.filename(record.binding.providerId)) {
+        throw new Error('Saved provider context filename belongs to another provider')
+      }
+      const current = await this.open(record.binding.providerId)
+      if (!current || JSON.stringify(current.record) !== JSON.stringify(record)) {
+        throw new Error('Saved provider context changed during enumeration')
+      }
+      records.push(record)
+    }
+    return records.sort((a, b) => a.binding.providerId.localeCompare(b.binding.providerId))
   }
 
   async read(providerId: string): Promise<PluginEnvironmentProviderContext | null> {

@@ -29,6 +29,9 @@ export const pluginsApi = {
   previousEnvironmentProviderSnapshot: (input) =>
     ipcRenderer.invoke('plugins:previousEnvironmentProviderSnapshot', input),
   listEnvironmentProviders: () => ipcRenderer.invoke('plugins:listEnvironmentProviders'),
+  listSavedEnvironmentProviders: () => ipcRenderer.invoke('plugins:listSavedEnvironmentProviders'),
+  savedEnvironmentProviderSnapshot: (input) =>
+    ipcRenderer.invoke('plugins:savedEnvironmentProviderSnapshot', input),
   configureEnvironmentProvider: (review) =>
     ipcRenderer.invoke('plugins:configureEnvironmentProvider', review),
   environmentProviderSnapshot: (review) =>

@@ -39,11 +39,17 @@ export function PluginRemoveDialog({
             {translate('auto.components.settings.PluginRemoveDialog.title', 'Remove plugin?')}
           </DialogTitle>
           <DialogDescription>
-            {translate(
-              'auto.components.settings.PluginRemoveDialog.description',
-              'This removes {{value0}} and its stored plugin data from this computer. You can install it again later.',
-              { value0: plugin?.name ?? '' }
-            )}
+            {plugin?.environmentRecipeCount
+              ? translate(
+                  'auto.components.settings.PluginRemoveDialog.environmentDescription',
+                  'This removes {{value0}} from this computer. Saved machine inventory and operation history remain in SSH Hosts. Manage the machines through your company’s tooling or reinstall the provider.',
+                  { value0: plugin.name }
+                )
+              : translate(
+                  'auto.components.settings.PluginRemoveDialog.description',
+                  'This removes {{value0}} and its stored plugin data from this computer. You can install it again later.',
+                  { value0: plugin?.name ?? '' }
+                )}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

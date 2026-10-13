@@ -27,10 +27,12 @@ import { resolveReviewedPluginEnvironmentProvider } from './plugin-environment-p
 import { PluginEnvironmentRecipeJournalStore } from './plugin-environment-recipe-journal-store'
 import { PluginEnvironmentRecipeHost } from './plugin-environment-recipe-host'
 import { PluginEnvironmentProviderSsh } from './plugin-environment-provider-ssh'
+import { PluginEnvironmentProviderSavedHistoryStore } from './plugin-environment-provider-saved-history'
 
 export class PluginEnvironmentProviderService {
   private readonly migration: PluginEnvironmentProviderMigration
   private readonly catalog: PluginEnvironmentProviderCatalog
+  private readonly saved: PluginEnvironmentProviderSavedHistoryStore
   private readonly host: PluginEnvironmentRecipeHost
   private readonly active = new Map<
     object,
@@ -54,6 +56,10 @@ export class PluginEnvironmentProviderService {
       isCurrent: () => !this.lifetime.signal.aborted
     })
     this.contexts = new PluginEnvironmentProviderContextStore(options.userDataPath)
+    this.saved = new PluginEnvironmentProviderSavedHistoryStore({
+      ...options,
+      isCurrent: () => !this.lifetime.signal.aborted
+    })
     this.ssh = new PluginEnvironmentProviderSsh({
       service: options.service,
       userDataPath: options.userDataPath,
@@ -290,6 +296,12 @@ export class PluginEnvironmentProviderService {
 
   list() {
     return this.catalog.list()
+  }
+  listSaved() {
+    return this.saved.list()
+  }
+  savedSnapshot(input: unknown) {
+    return this.saved.read(input)
   }
   configure(input: unknown) {
     return this.catalog.configure(input)

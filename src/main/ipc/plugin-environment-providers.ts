@@ -3,6 +3,7 @@ import {
   pluginEnvironmentProviderMigrationCommitSchema
 } from '../../shared/plugins/plugin-environment-provider-migration-api'
 import { pluginEnvironmentProviderHistorySchema } from '../../shared/plugins/plugin-environment-provider-history-api'
+import { pluginEnvironmentProviderSavedHistorySchema } from '../../shared/plugins/plugin-environment-provider-saved-history-api'
 import { pluginEnvironmentProviderRecoverSchema } from '../../shared/plugins/plugin-environment-provider-recovery-api'
 import { registerPluginRendererHandler } from './plugin-renderer-ipc'
 import {
@@ -44,6 +45,8 @@ type ProviderOperations = Pick<
   commitMigration?: PluginEnvironmentProviderService['commitMigration']
   revokeMigrationOwner?: PluginEnvironmentProviderService['revokeMigrationOwner']
   previousSnapshot?: PluginEnvironmentProviderService['previousSnapshot']
+  listSaved?: PluginEnvironmentProviderService['listSaved']
+  savedSnapshot?: PluginEnvironmentProviderService['savedSnapshot']
 }
 
 export class PluginEnvironmentProviderIpcController {
@@ -67,6 +70,20 @@ export class PluginEnvironmentProviderIpcController {
   list(sender: PluginEnvironmentProviderSender) {
     this.requireTrusted(sender)
     return this.service.list()
+  }
+  listSaved(sender: PluginEnvironmentProviderSender) {
+    this.requireTrusted(sender)
+    if (!this.service.listSaved) {
+      throw new Error('Saved provider history is unavailable')
+    }
+    return this.service.listSaved()
+  }
+  savedSnapshot(sender: PluginEnvironmentProviderSender, input: unknown) {
+    this.requireTrusted(sender)
+    if (!this.service.savedSnapshot) {
+      throw new Error('Saved provider history is unavailable')
+    }
+    return this.service.savedSnapshot(pluginEnvironmentProviderSavedHistorySchema.parse(input))
   }
   configure(sender: PluginEnvironmentProviderSender, input: unknown) {
     this.requireTrusted(sender)
@@ -197,6 +214,13 @@ export function registerPluginEnvironmentProviderHandlers(
   service: PluginEnvironmentProviderService
 ): void {
   const controller = new PluginEnvironmentProviderIpcController(service)
+  registerPluginRendererHandler('plugins:listSavedEnvironmentProviders', (event) =>
+    controller.listSaved(event.sender)
+  )
+  registerPluginRendererHandler(
+    'plugins:savedEnvironmentProviderSnapshot',
+    (event, input: unknown) => controller.savedSnapshot(event.sender, input)
+  )
   registerPluginRendererHandler(
     'plugins:prepareEnvironmentProviderMigration',
     (event, input: unknown) => controller.prepareMigration(event.sender, input)

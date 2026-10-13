@@ -46,6 +46,8 @@ function harness() {
   const signals: AbortSignal[] = []
   const service = {
     list: vi.fn(async () => []),
+    listSaved: vi.fn(async () => []),
+    savedSnapshot: vi.fn<PluginEnvironmentProviderService['savedSnapshot']>(),
     configure: vi.fn(async () => []),
     snapshot: vi.fn(async () => ({
       version: 1 as const,
@@ -66,7 +68,10 @@ function harness() {
       signals.push(signal)
       return held.promise
     })
-  } satisfies Pick<PluginEnvironmentProviderService, 'list' | 'configure' | 'snapshot' | 'execute'>
+  } satisfies Pick<
+    PluginEnvironmentProviderService,
+    'list' | 'listSaved' | 'savedSnapshot' | 'configure' | 'snapshot' | 'execute'
+  >
   const controller = new PluginEnvironmentProviderIpcController(
     service,
     (sender) => sender.id === 1 || sender.id === 2
@@ -87,6 +92,26 @@ function harness() {
 }
 
 describe('provider IPC is bound to the trusted requesting renderer', () => {
+  it('keeps saved history behind trusted sender and strict provider/generation parsing', async () => {
+    const { service, controller } = harness()
+    expect(() => controller.listSaved(new Sender(3))).toThrow('trusted')
+    expect(() =>
+      controller.savedSnapshot(new Sender(3), { providerId: review.providerId })
+    ).toThrow('trusted')
+    expect(service.listSaved).not.toHaveBeenCalled()
+    expect(service.savedSnapshot).not.toHaveBeenCalled()
+    expect(() =>
+      controller.savedSnapshot(new Sender(1), { providerId: review.providerId, offset: 129 })
+    ).toThrow()
+    expect(service.savedSnapshot).not.toHaveBeenCalled()
+    await controller.listSaved(new Sender(1))
+    controller.savedSnapshot(new Sender(1), { providerId: review.providerId })
+    expect(service.listSaved).toHaveBeenCalledOnce()
+    expect(service.savedSnapshot).toHaveBeenCalledExactlyOnceWith({
+      providerId: review.providerId,
+      offset: 0
+    })
+  })
   it('rejects untrusted windows and unknown execution/configuration fields before touching host state', async () => {
     const f = harness()
     const untrusted = new Sender(3)
