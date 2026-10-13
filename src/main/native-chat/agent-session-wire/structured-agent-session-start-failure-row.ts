@@ -72,24 +72,23 @@ export function hasStructuredAgentSessionStartFailureRow(
 
 /**
  * A start the delivery loop needed and did not get: every queued message rejected with the same
- * words, then the start's row. Writes nothing when nothing is still queued: a start whose messages
- * Stop withdrew did not fail anyone.
+ * words, then the start's row. A failed owned open also records its cause before any message.
  */
 export async function recordStructuredAgentSessionStartFailure(
   session: Pick<StructuredAgentSessionHostSession, 'journal'> & { fence: number },
   failure: StructuredAgentSessionStartFailure
 ): Promise<void> {
   const oldest = oldestQueuedSubmission(session)
-  if (!oldest) {
+  const startKey = failure.startKey ?? oldest?.clientMessageId
+  if (startKey === undefined) {
     return
   }
-  const startKey = failure.startKey ?? oldest.clientMessageId
   await session.journal.appendLifecycleBatch({
     settlementId: `start-failure:${startKey}`,
     fence: session.fence,
     recovered: true,
     mutations: [structuredAgentSessionStartFailureRow(startKey, failure)],
-    rejectsQueued: { reason: failure.reason, rejection: failure.rejection }
+    ...(oldest ? { rejectsQueued: { reason: failure.reason, rejection: failure.rejection } } : {})
   })
 }
 

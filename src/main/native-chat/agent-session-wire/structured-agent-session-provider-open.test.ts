@@ -85,6 +85,23 @@ it('closes a refused open once and records one provider failure for all held mes
   expect(dispatch).not.toHaveBeenCalled()
 })
 
+it('records a refused owned open even before a message is accepted', async () => {
+  const { host, close, pending, dispatch } = awaitOpen()
+  await attach()
+  pending.reject(new AgentSessionAcquisitionRefusal('Sign in to the provider.', 'notSignedIn'))
+  await vi.waitFor(async () => {
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(snapshot.submissions).toEqual([])
+    expect(
+      snapshot.items.filter(
+        (item) => item.body.kind === 'status' && item.body.failure?.kind === 'notSignedIn'
+      )
+    ).toHaveLength(1)
+  })
+  expect(close).toHaveBeenCalledTimes(1)
+  expect(dispatch).not.toHaveBeenCalled()
+})
+
 it('closes a child while its open is pending and refuses its late readiness result', async () => {
   const { host, open, close, dispatch, pending, send } = awaitOpen()
   await attach()
