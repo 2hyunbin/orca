@@ -14,10 +14,10 @@ import { join } from 'node:path'
 import type * as HashLookup from './codex-hook-hash-lookup'
 import type { HookDefinition } from '../agent-hooks/installer-utils'
 
-const mocks = vi.hoisted(() => ({
-  homedir: vi.fn<() => string>(),
-  hashes: {} as Record<string, string>
-}))
+const mocks = vi.hoisted(() => {
+  const hashes: Record<string, string> = {}
+  return { homedir: vi.fn<() => string>(), hashes }
+})
 
 vi.mock('node:os', async () => ({
   ...(await vi.importActual<typeof NodeOs>('node:os')),
