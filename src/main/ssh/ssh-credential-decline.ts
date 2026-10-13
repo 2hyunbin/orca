@@ -1,3 +1,8 @@
+import {
+  getRuntimeSshAccess,
+  type KnownRuntimeEnvironment
+} from '../../shared/runtime-environments'
+
 /**
  * Hosts whose credential prompt the user cancelled (or left unanswered). Until the user explicitly
  * connects again, no automatic connect may prompt for them: background status checks, managed
@@ -13,9 +18,19 @@ export function isSshCredentialDeclined(targetId: string): boolean {
   return declinedTargets.has(targetId)
 }
 
-/** Only an explicit user connect (or the target going away) may lift a decline. */
+/** Only an explicit user connect may lift a decline. */
 export function clearSshCredentialDeclined(targetId: string): void {
   declinedTargets.delete(targetId)
+}
+
+/** An explicit connect to a server reached over SSH is a sign-in to that SSH host too. */
+export function clearSshCredentialDeclinedForEnvironment(
+  environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment' | 'sshAccess'>
+): void {
+  const targetId = getRuntimeSshAccess(environment)?.sshTargetId
+  if (targetId) {
+    clearSshCredentialDeclined(targetId)
+  }
 }
 
 export function resetSshCredentialDeclinesForTests(): void {
