@@ -4,7 +4,36 @@ import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-qu
 import { structuredAgentSessionStartFailureRowIdentity } from '../../../shared/structured-agent-session-start-failure-row-key'
 import type { JournalLifecycleMutationInput } from '../agent-session-journal/journal-row-builders'
 import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
-import type { StructuredAgentSessionStartFailureWords } from './structured-agent-session-failure-text'
+import type {
+  StructuredAgentSessionStartFailureWords,
+  StructuredAgentSessionStartFailureCause
+} from './structured-agent-session-failure-text'
+import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+
+export function refusedStructuredAgentSessionStart(
+  record: AgentSessionRecord | null,
+  {
+    refusal,
+    diagnostic,
+    argumentProblem,
+    expired
+  }: Extract<StructuredAgentSessionResumeOutcome, { ok: false }>
+): { startKey: null; cause: StructuredAgentSessionStartFailureCause } {
+  if (expired) {
+    return { startKey: null, cause: { failure: agentSessionFailureFact('hostStopped') } }
+  }
+  return {
+    startKey: null,
+    cause: {
+      refusal,
+      ...(diagnostic ? { diagnostic } : {}),
+      ...(argumentProblem ? { argumentProblem } : {}),
+      ...(record?.providerHandleChain.length === 0 ? { newSession: true as const } : {})
+    }
+  }
+}
 
 /** A start that failed, keyed like its row, in the words `structuredAgentSessionStartFailure` gave. */
 export type StructuredAgentSessionStartFailure = StructuredAgentSessionStartFailureWords & {

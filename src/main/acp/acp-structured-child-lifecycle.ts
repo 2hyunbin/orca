@@ -1,14 +1,9 @@
 import { AgentSessionAcquisitionRootExitObservedError } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { ProviderAcquisitionStarts } from '../provider-process/provider-acquisition-starts'
-import { AcpConnectionClosedError } from './acp-errors'
-import {
-  acpStartupFailure,
-  endAcpStartingSession,
-  type AcpStartingSession,
-  type AcpStructuredChild
-} from './acp-structured-child'
-import { waitForAcpExit, type AcpStructuredConnection } from './acp-structured-connection'
+import { isAcpReadySession, type AcpStructuredChild } from './acp-structured-child'
+import type { AcpStructuredConnection } from './acp-structured-connection'
 import { closeAcpSessionJournal, endAcpStructuredSession } from './acp-structured-session'
+import { agentSessionFailureFact, providerDiagnostic } from '../../shared/agent-session-failure'
 import {
   ACP_STOP_GRACE_MS,
   type AcpStructuredSessionAdapterDeps
@@ -48,7 +43,7 @@ export class AcpStructuredChildren {
     if (!session || session.ended) {
       return true
     }
-    if (session.phase === 'starting') {
+    if (!isAcpReadySession(session)) {
       session.closeRequested ||= requested && session.journalClosed === null
       session.dispose()
       session.closing ??= session.connection
@@ -86,10 +81,29 @@ export class AcpStructuredChildren {
 
   /** The child's exit is proven: the host hears it, and nothing of the child stays here. */
   finish(session: AcpStructuredChild, observedAt: number): void {
-    if (session.phase === 'starting') {
-      endAcpStartingSession(session, observedAt, this.deps.onEvent)
-    } else {
+    if (isAcpReadySession(session)) {
       endAcpStructuredSession(session, observedAt, this.deps.onEvent)
+    } else if (!session.ended) {
+      session.ended = true
+      session.exitObservedAt = observedAt
+      session.dispose()
+      this.deps.onEvent?.({
+        type: 'ended',
+        sessionId: session.sessionId,
+        fence: session.fence,
+        acquisitionGeneration: session.acquisitionGeneration,
+        observedAt,
+        cause: session.closeRequested ? 'requested-close' : 'unexpected-exit',
+        reason:
+          session.connection.stderrTail() || `${session.spec.agent} ACP agent ended while starting`,
+        failure: agentSessionFailureFact(
+          session.closeRequested ? 'hostStopped' : 'providerExited',
+          {
+            detail: providerDiagnostic(session.connection.stderrTail(), 'person')
+          }
+        ),
+        ...(!session.closeRequested ? { startupUnproven: true } : {})
+      })
     }
     if (this.sessions.get(session.sessionId) === session) {
       this.sessions.delete(session.sessionId)
@@ -106,8 +120,8 @@ export class AcpStructuredChildren {
     ) {
       return
     }
-    if (session.phase === 'starting') {
-      void this.startupFailed(session, error)
+    if (!isAcpReadySession(session)) {
+      session.journalClosed = error.message || error.name
       return
     }
     closeAcpSessionJournal(
@@ -115,35 +129,6 @@ export class AcpStructuredChildren {
       `${session.spec.agent} ACP connection closed: ${error.message || error.name}`
     )
     void this.stop(session.sessionId, false)
-  }
-
-  async startupFailed(session: AcpStartingSession, error: unknown): Promise<void> {
-    if (session.ended || session.closeRequested || session.journalClosed !== null) {
-      return
-    }
-    session.failure = acpStartupFailure(session, error)
-    session.journalClosed = error instanceof Error ? error.message : String(error)
-    session.dispose()
-    if (error instanceof AcpConnectionClosedError) {
-      await waitForAcpExit(session.connection, this.stopGraceMs(), new AbortController().signal)
-    }
-    if (session.ended) {
-      return
-    }
-    try {
-      if (!(await this.stopSession(session.sessionId, false))) {
-        this.deps.logger?.warn('ACP startup child exit remains unproven', {
-          scope: 'acp-startup-close',
-          sessionId: session.sessionId
-        })
-      }
-    } catch (closeError) {
-      this.deps.logger?.warn('ACP startup child could not be stopped', {
-        scope: 'acp-startup-close',
-        sessionId: session.sessionId,
-        error: closeError
-      })
-    }
   }
 
   private stopGraceMs(): number {

@@ -53,6 +53,7 @@ import type { ProviderHistoryWindow } from '../agent-session-journal/journal-sub
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
 import type { AgentSessionCreatePhaseRecorder } from '../../observability/agent-session-instrumentation'
 import type { AgentModelCatalogLiveListing } from '../agent-model-catalog/agent-model-catalog-entry'
+import type { StructuredAgentSessionProviderOpen } from './structured-agent-session-provider-open-contract'
 
 /** A live options read, plus what the child listed for its account's saved catalog. The host
  *  saves that listing and strips it before answering; an adapter whose listing reaches the
@@ -283,6 +284,8 @@ export type StructuredAgentSessionSetOptionInput = {
 }
 
 export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & {
+  /** Opens the published process under the host's startup signal. */
+  open?: StructuredAgentSessionProviderOpen
   /** Provider-aware capability check for hosts that route more than one adapter. */
   supportsCreate?(location: AgentSessionExecutionLocation, agent: string): boolean
   /** Provider/runtime support, kept here so remote enablement changes adapter data, not UI logic. */

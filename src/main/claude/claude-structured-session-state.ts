@@ -5,8 +5,7 @@ import type { AgentJournalItemIdentity } from '../../shared/agent-session-journa
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type {
   StructuredAgentSessionOptionsReportedEvent,
-  StructuredAgentSessionOptionsSkippedEvent,
-  StructuredAgentSessionStartedEvent
+  StructuredAgentSessionOptionsSkippedEvent
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type {
   ClaudeStreamJsonConnection,
@@ -24,7 +23,8 @@ import type { ClaudeBackgroundTaskTracker } from './claude-background-task-track
 import type { ClaudeChildWorkDecoder } from './claude-child-work-decoder'
 import type { ClaudeSlashCommandCatalog } from './claude-slash-command-catalog'
 import type { ClaudeAtRestCommandCatalog } from './claude-at-rest-commands'
-import type { ClaudeSessionStartup } from './claude-structured-session-startup-state'
+import type { ClaudeInitProof } from './claude-structured-init-proof'
+import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
 
 export type ClaudeAuthDiagnostic = {
   apiKeySourceConfigured: boolean
@@ -63,8 +63,6 @@ export type ClaudeStructuredSessionEvent =
       fence: number
     }
   | { type: 'auth-diagnostic'; sessionId: string; diagnostic: ClaudeAuthDiagnostic }
-  /** The CLI answered initialize: the host may hand the child input from here. */
-  | StructuredAgentSessionStartedEvent
   | StructuredAgentSessionOptionsReportedEvent
   | StructuredAgentSessionOptionsSkippedEvent
   | {
@@ -78,10 +76,6 @@ export type ClaudeStructuredSessionEvent =
       acquisitionGeneration?: string
       /** Host clock when the end was observed. */
       observedAt?: number
-      /** The child ended before proving startup, so reacquiring would repeat the same start. */
-      startupUnproven?: true
-      /** The child ended before it answered initialize, so it ran nothing it was handed. */
-      startupUnanswered?: true
     }
 
 export type ClaudeLateDispatchOutcome =
@@ -206,8 +200,15 @@ export type ClaudeSession = {
   translator: ClaudeJournalTranslator | null
   events: StructuredAgentSessionEventSink | undefined
   unbindReadingControl?: () => void
-  /** Published at spawn with its saved options; init facts land when startup does. */
-  startup: ClaudeSessionStartup
+  /** Provider identity and initialize proof retained for the host-awaited open. */
+  link: AgentSessionProviderHandleLink
+  initialization: {
+    proof: ClaudeInitProof
+    account: ClaudeStructuredLaunch['account']
+    resumesTranscript: boolean
+    optionRevision: () => number
+    onLateRefusal: (error: Error) => void
+  }
 }
 
 export function mintClaudeAcquisitionGeneration(deps: ClaudeStructuredSessionAdapterDeps): string {

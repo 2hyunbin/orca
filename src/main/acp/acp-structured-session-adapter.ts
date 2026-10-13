@@ -3,13 +3,14 @@
 // them; compaction is the agent's own `/compact` prompt, for an agent whose launch spec offers it.
 
 import { randomUUID } from 'node:crypto'
-import { agentSessionFailureFact } from '../../shared/agent-session-failure'
+import { agentSessionFailureFact, withProviderDiagnostic } from '../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import {
   AgentSessionAcquisitionExitProvenError,
   AgentSessionAcquisitionExitUnprovenError,
+  AgentSessionAcquisitionRefusal,
   AgentSessionPreSpawnError,
   isAgentSessionPreSpawnError,
   type AgentSessionAcquisition,
@@ -36,7 +37,11 @@ import {
 import { readAcpLiveOptions, writeAcpSessionOption } from './acp-structured-options'
 import { readAcpRecoveryHistory } from './acp-recovery-history'
 import { stopAcpChildren, acpChildStopCapabilities } from './acp-structured-child-stop'
-import type { AcpStructuredChild } from './acp-structured-child'
+import {
+  acpStartupFailure,
+  isAcpReadySession,
+  type AcpStructuredChild
+} from './acp-structured-child'
 import { AcpStructuredChildren } from './acp-structured-child-lifecycle'
 
 export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapter {
@@ -78,7 +83,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     const sessionId = input.identity.sessionId
     const generation = this.deps.mintGeneration?.() ?? randomUUID()
     try {
-      const { acquisition, session, initialize } = await acquireAcpStructuredSession({
+      const { acquisition, session } = await acquireAcpStructuredSession({
         acquire: input,
         deps: this.deps,
         generation,
@@ -90,19 +95,6 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
           }
         },
         onConnectionLost: (session, error) => this.children.connectionLost(session, error),
-        onReady: (ready, event) => {
-          const child = this.children.sessions.get(sessionId)
-          if (
-            child?.phase !== 'starting' ||
-            child.ended ||
-            child.closeRequested ||
-            child.journalClosed !== null
-          ) {
-            return
-          }
-          this.children.sessions.set(sessionId, ready)
-          this.deps.onEvent?.(event)
-        },
         onSettled: (settlement) => this.deps.onDispatchSettledLate?.({ sessionId, ...settlement }),
         forceClose: (id) => void this.forceCloseSession(id)
       })
@@ -111,7 +103,6 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
         throw new Error('closed while starting')
       }
       this.children.sessions.set(sessionId, session)
-      void initialize().catch((error: unknown) => this.children.startupFailed(session, error))
       return acquisition
     } catch (error) {
       const { connection } = attempt
@@ -141,6 +132,31 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
             new Error(connection.stderrTail() || String(error), { cause: error })
           )
         )
+      }
+      throw error
+    }
+  }
+
+  open: NonNullable<StructuredAgentSessionAdapter['open']> = async (input) => {
+    const child = this.children.sessions.get(input.sessionId)
+    if (
+      !child ||
+      child.fence !== input.fence ||
+      child.acquisitionGeneration !== input.acquisitionGeneration ||
+      child.ended
+    ) {
+      throw new Error('ACP child changed before it opened')
+    }
+    try {
+      return await child.open(input.signal)
+    } catch (error) {
+      const failure = acpStartupFailure(child, error)
+      if (failure.kind === 'notSignedIn') {
+        const refusal = new AgentSessionAcquisitionRefusal(
+          `${acpAgentName(child.spec.agent)} requires sign-in`,
+          'notSignedIn'
+        )
+        throw failure.detail ? withProviderDiagnostic(refusal, failure.detail) : refusal
       }
       throw error
     }
@@ -203,7 +219,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
 
   awaitStoppedRequestEnd = async (sessionId: string, stoppedAt: number): Promise<void> => {
     const session = this.children.sessions.get(sessionId)
-    if (session?.phase === 'ready') {
+    if (session && isAcpReadySession(session)) {
       await awaitAcpTurnEnd(session, stoppedAt, this.stopGraceMs())
     }
   }
@@ -234,17 +250,17 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
 
   readOptionRestoreFailures = (sessionId: string): readonly string[] => {
     const session = this.children.sessions.get(sessionId)
-    return session?.phase === 'ready' ? session.restoreSkipped : []
+    return session && isAcpReadySession(session) ? session.restoreSkipped : []
   }
 
   readCommands = (sessionId: string) => {
     const session = this.children.sessions.get(sessionId)
-    return session?.phase === 'ready' ? session.options.readCommands() : undefined
+    return session && isAcpReadySession(session) ? session.options.readCommands() : undefined
   }
 
   holdsDispatch = (sessionId: string): boolean => {
     const session = this.children.sessions.get(sessionId)
-    return session?.phase === 'ready' && session.turns.running
+    return session ? isAcpReadySession(session) && session.turns.running : false
   }
 
   holdsLiveProviderProcess = (sessionId: string, generation: string): boolean => {
@@ -302,7 +318,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
 
   private live(sessionId: string): AcpStructuredSession {
     const session = this.children.sessions.get(sessionId)
-    if (session?.phase !== 'ready' || session.journalClosed !== null) {
+    if (!session || !isAcpReadySession(session) || session.journalClosed !== null) {
       throw new Error(`no live ${this.deps.spec.agent} child owns ${sessionId}`)
     }
     return session
