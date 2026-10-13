@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { posix, resolve, win32 } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
 import { CLI_BOOLEAN_FLAGS, findCliCommandIndex } from '../../shared/cli-argument-boundary'
+import { ELECTRON_NO_SANDBOX_REQUEST_ENV } from '../../shared/electron-no-sandbox-request'
 import { CLI_COMMAND_NAMES } from './cli-command-names'
 import { VALUE_TAKING_FLAGS } from './serve-mode-argv'
 
@@ -85,7 +86,7 @@ export function maybeRedirectCliLaunch(
   }
 }
 
-type DirectServeLaunch = { args: string[]; userDataPath: string | null }
+type DirectServeLaunch = { args: string[]; userDataPath: string | null; noSandbox: boolean }
 
 /**
  * A direct `<binary> serve` on Linux. It runs through the CLI like `orca-ide serve` does, so it
@@ -120,7 +121,8 @@ export function getDirectServeLaunch(
   return {
     // Why everywhere: serve has no such flags, and in-process serve tolerated them after the command.
     args: stripDesktopFlags(rest, rest.length),
-    userDataPath: userDataPath ? resolve(userDataPath) : null
+    userDataPath: userDataPath ? resolve(userDataPath) : null,
+    noSandbox: rest.includes('--no-sandbox')
   }
 }
 
@@ -136,6 +138,9 @@ function execDirectServe(
   delete childEnv[REDIRECT_ATTEMPT_ENV]
   if (serve.userDataPath) {
     childEnv.ORCA_USER_DATA_PATH = serve.userDataPath
+  }
+  if (serve.noSandbox) {
+    childEnv[ELECTRON_NO_SANDBOX_REQUEST_ENV] = '1'
   }
   try {
     execve(execPath, [execPath, cliEntryPath, ...serve.args], childEnv)
