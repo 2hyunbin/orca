@@ -70,7 +70,7 @@ async function stopWhileTheTurnOpens(
     publish: vi.fn(),
     now: () => 1
   }
-  await performCancel(ctx, { clientOperationId: 'stop-1' })
+  await performCancel(ctx, { clientOperationId: 'stop-1', endSession: () => {} })
   return journal
     .snapshot()
     .items.flatMap((item) =>

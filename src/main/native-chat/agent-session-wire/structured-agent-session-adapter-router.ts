@@ -5,10 +5,7 @@ import type {
   AgentSessionAccountHome,
   AgentSessionExecutionLocation
 } from '../../../shared/agent-session-record'
-import type {
-  StructuredAgentSessionAdapter,
-  StructuredAgentSessionStopCause
-} from './structured-agent-session-adapter'
+import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import type {
   StructuredAgentRegistration,
   StructuredAgentRegistry
@@ -202,23 +199,17 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     this.requireAgent(input.identity).adapter.providerHistoryWindow?.(input) ??
     Promise.resolve(null)
 
-  closeSession = (sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) =>
-      cause === undefined
-        ? adapter.closeSession?.(sessionId)
-        : adapter.closeSession?.(sessionId, cause)
-    )
+  closeSession = (sessionId: string): Promise<boolean> =>
+    this.stopSession(sessionId, (adapter) => adapter.closeSession?.(sessionId))
 
   forceCloseSession = (sessionId: string): Promise<boolean> =>
     this.stopSession(sessionId, (adapter) =>
       (adapter.forceCloseSession ?? adapter.closeSession)?.call(adapter, sessionId)
     )
 
-  disposeSession = (sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean> =>
+  disposeSession = (sessionId: string): Promise<boolean> =>
     this.stopSession(sessionId, (adapter) =>
-      cause === undefined
-        ? (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
-        : (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId, cause)
+      (adapter.disposeSession ?? adapter.closeSession)?.call(adapter, sessionId)
     )
 
   private async stopSession(

@@ -70,4 +70,25 @@ describe('Codex process-tree diagnostic after a forced close', () => {
     await expect(connection.close()).resolves.toBe(true)
     expect(connection.processTreeUnproven).toBe(unproven)
   })
+
+  it('reports a root exit that arrives after an unproven close', async () => {
+    vi.useFakeTimers()
+    teardown.verdict = 'unverifiable'
+    teardown.rootExits = () => {}
+    const { child, spawnImpl } = stubChild()
+    const onExit = vi.fn()
+    const connection = await openCodexAppServerConnection(
+      { command: 'codex', args: ['app-server'] },
+      { onExit },
+      spawnImpl
+    )
+    const closing = connection.close()
+    await vi.advanceTimersByTimeAsync(10_000)
+    await expect(closing).resolves.toBe(false)
+    expect(onExit).not.toHaveBeenCalled()
+    child.emit('exit', 0, null)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onExit).toHaveBeenCalledTimes(1)
+    expect(onExit).toHaveBeenCalledWith(expect.any(Error), { expected: true })
+  })
 })

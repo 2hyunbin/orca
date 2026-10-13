@@ -20,10 +20,7 @@ import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
 import type { AgentChildWorkEvidence } from '../../shared/agent-status-child-work-evidence'
 import type { CodexBackgroundTaskTracker } from './codex-background-task-tracker'
 import type { CodexJournalTranslator } from './codex-structured-journal-translation'
-import type {
-  StructuredAgentSessionLifecycleEvent,
-  StructuredAgentSessionStopCause
-} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionLifecycleEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { CodexStructuredPermissionPolicy } from './codex-structured-permission-policy'
 import type { StructuredLaunchRequest } from '../runtime/structured-agent-launch-composition'
 import type {
@@ -132,7 +129,7 @@ export type CodexSession = {
   exitObservedAt?: number
   /** The close Orca began for this child: asked for, or forced as a death, and why. Whatever ends
    *  the child after it (that close, or the exit the connection reports meanwhile) keeps this. */
-  orcaClose?: { requested: boolean; reason: Error; stopCause?: StructuredAgentSessionStopCause }
+  orcaClose?: { requested: boolean; reason: Error }
   fence: number
   acquisitionGeneration: string
   threadId: string

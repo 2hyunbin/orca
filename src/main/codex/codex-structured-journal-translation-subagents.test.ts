@@ -195,7 +195,6 @@ describe('codex journal translation — subagents', () => {
       sessionId: SESSION_ID,
       reason: 'stopped',
       cause: 'requested-close',
-      stopCause: 'user-stop',
       processExit,
       fence: 1,
       acquisitionGeneration: 'gen-1'
@@ -203,25 +202,21 @@ describe('codex journal translation — subagents', () => {
     expect(rosterAgents(rows)).toMatchObject([{ id: 'child-1', state }])
   })
 
-  it.each(['user-close', 'context-clear', 'evict', 'host-stop'] as const)(
-    'settles a proven %s child as stopped',
-    (stopCause) => {
-      const { translator, rows } = harness()
-      translator.handle(notification('turn/started', { turn: { id: TURN_ID } }))
-      deliverActivity(translator, subagentItem('started', 'child-1', '/root/read'))
-      translator.handle({
-        type: 'ended',
-        sessionId: SESSION_ID,
-        reason: 'chat closed',
-        cause: 'requested-close',
-        stopCause,
-        processExit: { root: 'exited', workload: 'exited' },
-        fence: 1,
-        acquisitionGeneration: 'gen-1'
-      })
-      expect(rosterAgents(rows)).toMatchObject([{ id: 'child-1', state: 'stopped' }])
-    }
-  )
+  it('settles a proven requested close as stopped', () => {
+    const { translator, rows } = harness()
+    translator.handle(notification('turn/started', { turn: { id: TURN_ID } }))
+    deliverActivity(translator, subagentItem('started', 'child-1', '/root/read'))
+    translator.handle({
+      type: 'ended',
+      sessionId: SESSION_ID,
+      reason: 'chat closed',
+      cause: 'requested-close',
+      processExit: { root: 'exited', workload: 'exited' },
+      fence: 1,
+      acquisitionGeneration: 'gen-1'
+    })
+    expect(rosterAgents(rows)).toMatchObject([{ id: 'child-1', state: 'stopped' }])
+  })
 
   it('settles a proven provider exit without a Stop cause as stopped', () => {
     const { translator, rows } = harness()

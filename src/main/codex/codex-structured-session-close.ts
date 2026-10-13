@@ -8,10 +8,7 @@ import {
   type CodexSession,
   type CodexStructuredSessionEvent
 } from './codex-structured-session-state'
-import type {
-  StructuredAgentSessionEndedEvent,
-  StructuredAgentSessionStopCause
-} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionEndedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 
 export function handleCodexSessionExit(input: {
@@ -43,9 +40,6 @@ export function handleCodexSessionExit(input: {
       ? agentSessionFailureFact('hostFault')
       : agentSessionFailureFact('providerExited', { detail: providerDiagnosticOf(input.error) }),
     cause: session.orcaClose?.requested ? 'requested-close' : 'unexpected-exit',
-    ...(session.orcaClose?.requested && session.orcaClose.stopCause
-      ? { stopCause: session.orcaClose.stopCause }
-      : {}),
     ...(input.closedByOrca && input.connection?.closeResult
       ? {
           processExit: {
@@ -91,7 +85,6 @@ export async function closeCodexPublishedSession(
   options?: {
     logger?: StructuredAgentSessionLogger
     requestedClose?: boolean
-    stopCause?: StructuredAgentSessionStopCause
     expectedFence?: number
     expectedAcquisitionGeneration?: string
     unexpectedReason?: Error
@@ -116,8 +109,7 @@ export async function closeCodexPublishedSession(
   // observed-exit cause so host lease settlement runs as an unexpected death.
   session.orcaClose ??= {
     requested: options?.requestedClose ?? true,
-    reason: options?.unexpectedReason ?? new Error('codex session closed'),
-    ...(options?.stopCause ? { stopCause: options.stopCause } : {})
+    reason: options?.unexpectedReason ?? new Error('codex session closed')
   }
   // Keep the session indexed until the child exit is observed. A timeout or
   // failed kill must leave the live connection available for a safe retry.
@@ -147,8 +139,7 @@ export async function closeCodexSession(
   acquisitions: CodexAcquisitionRegistry,
   onEvent?: (event: CodexStructuredSessionEvent) => void,
   logger?: StructuredAgentSessionLogger,
-  requestedClose = true,
-  stopCause?: StructuredAgentSessionStopCause
+  requestedClose = true
 ): Promise<boolean> {
   const attempt = acquisitions.get(sessionId)
   const published = sessions.get(sessionId)
@@ -157,7 +148,6 @@ export async function closeCodexSession(
     attempt.requestedClose = requestedClose
     const closed = await closeCodexPublishedSession(sessions, sessionId, onEvent, {
       requestedClose,
-      ...(stopCause ? { stopCause } : {}),
       ...(logger ? { logger } : {})
     })
     if (closed) {
@@ -173,7 +163,6 @@ export async function closeCodexSession(
   }
   return closeCodexPublishedSession(sessions, sessionId, onEvent, {
     requestedClose,
-    ...(stopCause ? { stopCause } : {}),
     ...(logger ? { logger } : {})
   })
 }

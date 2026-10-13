@@ -20,8 +20,8 @@ import {
   STOP_NOTE_CANCELLATION_REQUESTED,
   structuredAgentSessionNamedTurnScope,
   structuredAgentSessionStopNamesTurnNotLive,
-  structuredAgentSessionStopNoteScope,
-  structuredAgentSessionStoppedTurnId
+  structuredAgentSessionStoppedTurnId,
+  writeStructuredAgentSessionStopNote
 } from './structured-agent-session-turn-stop-notes'
 import { isStructuredAgentSessionMainAgentWorking } from '../../../shared/structured-agent-session-main-agent-working'
 import type { StructuredAgentSessionStopWindDown } from './structured-agent-session-stop-wind-down'
@@ -174,21 +174,14 @@ async function cancelAndNote(
   let noteWritten = false
   const writeNote = (body: AgentJournalStatusItem): Promise<void> => {
     noteWritten = true
-    return ctx.journal
-      .appendItem(noteIdentity, body, {
-        fence: ctx.fence,
-        turnScope: structuredAgentSessionStopNoteScope(ctx.journal, stoppedTurn, turnScope)
-      })
-      .then(() => undefined)
-      .catch((error: unknown) =>
-        ctx.logger.warn('writing the Stop note failed', {
-          scope: 'chat-stop-note',
-          sessionId: ctx.sessionId,
-          error
-        })
-      )
+    return writeStructuredAgentSessionStopNote(ctx, {
+      identity: noteIdentity,
+      body,
+      stoppedTurn,
+      fallbackScope: turnScope
+    })
   }
-  const requestNoteWrite = !input.scope && !namesTurnNotLive ? writeNote(note) : undefined
+  const requestNoteWrite = endsSession && !namesTurnNotLive ? writeNote(note) : undefined
   // The provider's own answer; unset when its cancel threw, leaving the effect unknown.
   let taken: boolean | undefined
   // The provider could not interrupt the turn, or its cancel threw: the turn may run on.

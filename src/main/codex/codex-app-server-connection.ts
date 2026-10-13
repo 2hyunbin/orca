@@ -56,6 +56,7 @@ async function connectCodexAppServer(
 
   let nextRequestId = 1
   let closing = false
+  let closesInFlight = 0
   let exitReported = false
   /** First terminal cause, or null while the transport is still usable. Set once:
    *  a child that dies reaches us through several listeners, and the specific
@@ -88,7 +89,7 @@ async function connectCodexAppServer(
     // Transport/protocol failures make the connection unusable immediately so
     // callers do not hang, but recovery must not treat that as a child exit
     // until the execution host has observed `exit`/`close`.
-    if (managed.rootVerdict === 'exited' && !closing && !exitReported) {
+    if (managed.rootVerdict === 'exited' && closesInFlight === 0 && !exitReported) {
       exitReported = true
       handlers.onExit?.(terminalError, { expected: closing })
     }
@@ -201,14 +202,23 @@ async function connectCodexAppServer(
 
   function close(): Promise<boolean> {
     closing ||= managed.rootVerdict !== 'exited'
-    return managed.close(tree).then((result) => {
-      if (result.root === 'exited' && !exitReported) {
-        exitReported = true
-        handlers.onExit?.(terminalError ?? buildExitError(), { expected: closing })
-      }
-      dispatcher.failPending(new Error('codex app-server connection closed'))
-      return result.root === 'exited'
-    })
+    closesInFlight += 1
+    return managed
+      .close(tree)
+      .then((result) => {
+        if (result.root === 'exited' && !exitReported) {
+          exitReported = true
+          handlers.onExit?.(terminalError ?? buildExitError(), { expected: closing })
+        }
+        dispatcher.failPending(new Error('codex app-server connection closed'))
+        return result.root === 'exited'
+      })
+      .finally(() => {
+        closesInFlight -= 1
+        if (managed.rootVerdict === 'exited') {
+          handleUnexpectedEnd()
+        }
+      })
   }
 
   const connection: CodexAppServerConnection = {

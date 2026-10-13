@@ -325,13 +325,11 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     priorOptions?: Readonly<Record<string, string>>
   }) => readCodexAcquisitionOptions(this.session(input.sessionId), input.priorOptions)
 
-  closeSession: NonNullable<StructuredAgentSessionAdapter['closeSession']> = (sessionId, cause) =>
-    this.teardown.close(sessionId, { cause })
+  closeSession: NonNullable<StructuredAgentSessionAdapter['closeSession']> = (sessionId) =>
+    this.teardown.close(sessionId)
   forceCloseSession = (sessionId: string): Promise<boolean> => this.teardown.forceClose(sessionId)
-  disposeSession: NonNullable<StructuredAgentSessionAdapter['disposeSession']> = (
-    sessionId,
-    cause
-  ) => this.teardown.close(sessionId, { cause })
+  disposeSession: NonNullable<StructuredAgentSessionAdapter['disposeSession']> = (sessionId) =>
+    this.teardown.close(sessionId)
   closeAll = (): Promise<void> => this.teardown.closeAll()
   releaseAcquisition = (input: { sessionId: string }): Promise<boolean> =>
     this.teardown.close(input.sessionId)

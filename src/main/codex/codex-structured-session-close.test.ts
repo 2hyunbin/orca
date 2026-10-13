@@ -159,10 +159,7 @@ describe('Codex structured session close lifecycle', () => {
   })
 
   it('carries separate root and workload exit evidence into a requested end', () => {
-    const { connection, translator, sessions, session } = backpressuredSession(true)
-    if (session.orcaClose) {
-      session.orcaClose.stopCause = 'user-stop'
-    }
+    const { connection, translator, sessions } = backpressuredSession(true)
     Object.defineProperty(connection, 'closeResult', {
       value: { root: 'exited', tree: 'unverifiable' }
     })
@@ -176,7 +173,6 @@ describe('Codex structured session close lifecycle', () => {
     expect(translator.handle).toHaveBeenCalledWith(
       expect.objectContaining({
         cause: 'requested-close',
-        stopCause: 'user-stop',
         processExit: { root: 'exited', workload: 'unverifiable' }
       })
     )
@@ -220,19 +216,6 @@ describe('Codex structured session close lifecycle', () => {
         fence: 9,
         acquisitionGeneration: 'generation-2'
       }
-    ])
-  })
-
-  it('preserves the host Stop cause through the adapter close', async () => {
-    const { adapter, events } = adapterFixture()
-    await acquireReadyCodexForTest(adapter, {
-      identity: identity('session-1'),
-      fence: 7,
-      spawnToken: 'spawn-1'
-    })
-    await expect(adapter.disposeSession('session-1', 'user-stop')).resolves.toBe(true)
-    expect(events.filter((event) => event.type === 'ended')).toMatchObject([
-      { cause: 'requested-close', stopCause: 'user-stop' }
     ])
   })
 

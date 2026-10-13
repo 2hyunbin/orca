@@ -142,7 +142,7 @@ describe('StructuredAgentSessionAdapterRouter.closeSession', () => {
 
 describe('StructuredAgentSessionAdapterRouter optional lifecycle methods', () => {
   it.each(['closeSession', 'disposeSession'] as const)(
-    'forwards the Stop cause through %s',
+    'closes the owner through %s',
     async (method) => {
       const claude = adapterOf(vi.fn(async () => true))
       const closeSession = vi.fn(async () => true)
@@ -157,8 +157,8 @@ describe('StructuredAgentSessionAdapterRouter optional lifecycle methods', () =>
         spawnToken: 'spawn-1'
       })
 
-      await expect(router[method]('session-1', 'user-stop')).resolves.toBe(true)
-      expect(closeSession).toHaveBeenCalledExactlyOnceWith('session-1', 'user-stop')
+      await expect(router[method]('session-1')).resolves.toBe(true)
+      expect(closeSession).toHaveBeenCalledExactlyOnceWith('session-1')
     }
   )
 
