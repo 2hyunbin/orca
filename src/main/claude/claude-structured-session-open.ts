@@ -2,6 +2,7 @@ import type {
   StructuredAgentSessionProviderOpenInput,
   StructuredAgentSessionProviderOpenResult
 } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
+import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { readClaudeStructuredSessionSettings } from './claude-structured-session-acquisition-options'
 import { openClaudeSession, readClaudeStartupFacts } from './claude-structured-session-startup'
 import type {
@@ -19,6 +20,7 @@ export async function openClaudeStructuredSession(input: {
   emit: (session: ClaudeSession, event: ClaudeStructuredSessionEvent) => void
 }): Promise<StructuredAgentSessionProviderOpenResult> {
   const { request, session, sessions, deps, emit } = input
+  request.signal.throwIfAborted()
   if (
     session.fence !== request.fence ||
     session.acquisitionGeneration !== request.acquisitionGeneration
@@ -54,22 +56,9 @@ export async function openClaudeStructuredSession(input: {
         acquisitionGeneration: session.acquisitionGeneration
       })
   })
-  if (request.signal.aborted) {
-    throw request.signal.reason
+  const result = await waitForPromiseWithSignal(opened, request.signal)
+  if (sessions.get(request.sessionId) !== session || request.signal.aborted) {
+    throw new Error('claude session closed before startup completed')
   }
-  let removeAbort = (): void => {}
-  const aborted = new Promise<never>((_resolve, reject) => {
-    const onAbort = (): void => reject(request.signal.reason)
-    request.signal.addEventListener('abort', onAbort, { once: true })
-    removeAbort = () => request.signal.removeEventListener('abort', onAbort)
-  })
-  try {
-    const result = await Promise.race([opened, aborted])
-    if (sessions.get(request.sessionId) !== session || request.signal.aborted) {
-      throw new Error('claude session closed before startup completed')
-    }
-    return { link: session.link, ...result }
-  } finally {
-    removeAbort()
-  }
+  return { link: session.link, ...result }
 }

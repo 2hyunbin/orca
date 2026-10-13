@@ -17,8 +17,7 @@ import { AgentHookServer, _internals } from '../../agent-hooks/server'
 import { ClaudeStructuredSessionAdapter } from '../../claude/claude-structured-session-adapter'
 import {
   fakeClaude,
-  PROVIDER_SESSION_ID,
-  claudeStartupSettled
+  PROVIDER_SESSION_ID
 } from '../../claude/claude-structured-session-test-support'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
@@ -192,7 +191,9 @@ describe('a Claude chat whose CLI is still starting', () => {
     expect(claude.connections[0].closeCount).toBe(0)
 
     landInit()
-    await claudeStartupSettled(adapter, SESSION)
+    await vi.waitFor(() =>
+      expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
+    )
     await untilSent(claude.connections[0])
     expect(claude.connections[0].sent).toEqual([expect.objectContaining({ type: 'user' })])
     await vi.waitFor(async () => expect(await dispatchState(sent)).toBe('accepted'))
@@ -218,7 +219,9 @@ describe('a Claude chat whose CLI is still starting', () => {
     // Startup lands just before the window closes and the message is handed over; the agent stays
     // while its message waits.
     landInit()
-    await claudeStartupSettled(adapter, SESSION)
+    await vi.waitFor(() =>
+      expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
+    )
     await Promise.all(lifecycle)
     await untilSent(connection)
     expect(connection.sent).toEqual([expect.objectContaining({ type: 'user' })])
@@ -237,7 +240,9 @@ describe('a Claude chat whose CLI is still starting', () => {
   it('stops the agent and closes the conversation once its turn has finished and it idled', async () => {
     await attachStarting()
     landInit()
-    await claudeStartupSettled(adapter, SESSION)
+    await vi.waitFor(() =>
+      expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
+    )
     const answered = await send('answered')
     await vi.waitFor(async () => expect(await dispatchState(answered)).toBe('accepted'))
     claude.connections[0].handlers.onMessage?.({
@@ -275,7 +280,9 @@ describe('a chat whose settled lead still has background work running', () => {
   async function settleTurnLeavingTask(taskType: string): Promise<void> {
     await attachStarting()
     landInit()
-    await claudeStartupSettled(adapter, SESSION)
+    await vi.waitFor(() =>
+      expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready')
+    )
     const fanOut = await send('fan out')
     await vi.waitFor(async () => expect(await dispatchState(fanOut)).toBe('accepted'))
     frame({

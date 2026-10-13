@@ -23,6 +23,7 @@ export async function openStructuredAgentSessionProviderChild(
   }
   const attempt = context.runtimeState.acquireAborts.begin(sessionId)
   try {
+    attempt.signal.throwIfAborted()
     const result = await waitForPromiseWithSignal(
       open.call(context.deps.adapter, {
         sessionId,
