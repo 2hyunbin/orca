@@ -16,7 +16,8 @@ import {
   declareRelayedPhoneCapabilities,
   RelayedPhoneReplies,
   relayedPhoneCapabilities,
-  rewriteRelayedPhoneRequest
+  rewriteRelayedPhoneRequest,
+  withRelayedLaunchChatDefault
 } from './relayed-phone-frames'
 
 const RELAY_CONNECT_TIMEOUT_MS = 15_000
@@ -74,6 +75,8 @@ export class MobileDesktopRelay {
       hosts: MobileDesktopRelayHosts
       listPhones: () => DelegatedMobileDeviceSyncParams['phones']
       allocateStreamId: () => number
+      /** This desktop's "new agent tabs open as chats" setting. */
+      nativeChatDefault: () => boolean
     }
   ) {
     this.stopRetirementWatch = options.hosts.onEnvironmentRetired((environmentId) =>
@@ -122,7 +125,12 @@ export class MobileDesktopRelay {
         if (!this.isCurrent(link)) {
           return
         }
-        if (!socket.send(rewriteRelayedPhoneRequest(frame, phone.deviceToken, hostToken))) {
+        const outgoing = withRelayedLaunchChatDefault(
+          rewriteRelayedPhoneRequest(frame, phone.deviceToken, hostToken),
+          request.method,
+          this.options.nativeChatDefault()
+        )
+        if (!socket.send(outgoing)) {
           this.endLink(link, unavailable('The server connection could not take the request.'))
         }
       },
