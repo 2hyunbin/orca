@@ -148,6 +148,15 @@ export function writeWslHostDeployment(
   )
 }
 
+function hasNonWslOwner(environment: KnownRuntimeEnvironment): boolean {
+  return Boolean(
+    environment.orcadDeployment ||
+    environment.sshAccess ||
+    environment.pendingSshAccessOperation ||
+    environment.connectionDependency
+  )
+}
+
 /**
  * Overlays each WSL deployment onto its environment and hides environments whose record cannot be
  * read. A record that conflicts with SSH state or with its pairing is stale and ignored.
@@ -157,27 +166,27 @@ export function overlayWslHostDeployments(
   { deployments, unreadableEnvironmentIds }: WslHostDeployments
 ): KnownRuntimeEnvironment[] {
   const byEnvironmentId = new Map(deployments.map((record) => [record.environmentId, record]))
-  const hidden = environments.filter((environment) => unreadableEnvironmentIds.has(environment.id))
+  // An SSH-linked server can never be a WSL host, so an unreadable WSL record must not hide it.
+  const hidden = environments.filter(
+    (environment) => unreadableEnvironmentIds.has(environment.id) && !hasNonWslOwner(environment)
+  )
+  const hiddenIds = new Set(hidden.map((environment) => environment.id))
   if (hidden.length > 0) {
     warnUnreadableEnvironmentState(
       `Hiding ${hidden.length} server(s) whose WSL deployment cannot be read (ids: ${hidden.map((environment) => environment.id).join(', ')}); they may need a newer version of Orca.`
     )
   }
   return environments
-    .filter((environment) => !unreadableEnvironmentIds.has(environment.id))
+    .filter((environment) => !hiddenIds.has(environment.id))
     .map((environment) => {
       const record = byEnvironmentId.get(environment.id)
       if (!record) {
         return environment
       }
       const { environmentId: _environmentId, createdAt: _createdAt, ...link } = record
-      const overlaid =
-        environment.orcadDeployment ||
-        environment.sshAccess ||
-        environment.pendingSshAccessOperation ||
-        environment.connectionDependency
-          ? null
-          : KnownRuntimeEnvironmentSchema.safeParse({ ...environment, orcadDeployment: link })
+      const overlaid = hasNonWslOwner(environment)
+        ? null
+        : KnownRuntimeEnvironmentSchema.safeParse({ ...environment, orcadDeployment: link })
       if (!overlaid?.success) {
         warnUnreadableEnvironmentState(
           `Ignoring the WSL deployment for server ${environment.id}; it conflicts with the server's pairing or SSH link.`

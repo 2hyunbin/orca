@@ -31,6 +31,7 @@ import {
   WslHostDeploymentStoreInvalidError,
   type WslHostDeploymentRecord
 } from './wsl-host-deployment-store'
+import { WSL_HOSTS_INTERNAL_GATE_ENV } from './wsl-host-internal-gate'
 
 const pairing = {
   v: 2 as const,
@@ -65,6 +66,7 @@ describe('WSL host deployment store', () => {
   })
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
     rmSync(userDataPath, { recursive: true, force: true })
   })
 
@@ -242,13 +244,28 @@ describe('WSL host deployment store', () => {
       })
     })
 
-    it('fails closed when the file itself is corrupt', () => {
+    it('fails closed when the file itself is corrupt and WSL hosts are enabled', () => {
+      vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
       addSshManaged()
       writeFileSync(getWslHostDeploymentStorePath(userDataPath), '{"version":1,"deployments":{}}')
       expect(() => listEnvironments(userDataPath)).toThrow(RuntimeEnvironmentStoreError)
       expect(() => writeWslHostDeployment(userDataPath, 'x', null)).toThrow(
         WslHostDeploymentStoreInvalidError
       )
+    })
+
+    // Regression: with the gate closed a corrupt WSL file must not hide SSH and paired servers.
+    it('keeps every other server listed when the file is corrupt and the gate is closed', () => {
+      vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '')
+      addSshManaged()
+      writeFileSync(getWslHostDeploymentStorePath(userDataPath), '{"version":1,"deployments":{}}')
+      expect(listEnvironments(userDataPath).map((entry) => entry.id)).toEqual(['ssh-managed'])
+    })
+
+    it('never hides an SSH-managed server behind an unreadable WSL record', () => {
+      addSshManaged()
+      seed({ ...futureKind, environmentId: 'ssh-managed' })
+      expect(listEnvironments(userDataPath)[0]?.orcadDeployment).toEqual(sshTunnel)
     })
   })
 

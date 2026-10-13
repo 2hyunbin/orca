@@ -22,6 +22,7 @@ import {
   readWslHostDeployments,
   WslHostDeploymentStoreInvalidError
 } from './wsl-host-deployment-store'
+import { isWslHostsInternalGateOpen } from './wsl-host-internal-gate'
 
 export {
   getEnvironmentStorePath,
@@ -51,6 +52,27 @@ export function readPersistedEnvironmentStore(
 }
 
 /** Persisted environments with their sidecar state overlaid; stale sidecar entries are ignored. */
+/**
+ * With the internal gate closed a corrupt WSL file must not take SSH and paired servers down with
+ * it; only an open gate fails the whole registry closed.
+ */
+function readWslHostDeploymentsForRegistry(
+  userDataPath: string
+): ReturnType<typeof readWslHostDeployments> {
+  try {
+    return readWslHostDeployments(userDataPath)
+  } catch (error) {
+    if (
+      !(error instanceof WslHostDeploymentStoreInvalidError) ||
+      isWslHostsInternalGateOpen(process.env)
+    ) {
+      throw error
+    }
+    warnUnreadableEnvironmentState(error.message)
+    return { deployments: [], unreadableEnvironmentIds: new Set() }
+  }
+}
+
 export function readEnvironmentStore(
   userDataPath: string,
   options: { requireStoreFile?: boolean } = {}
@@ -63,7 +85,7 @@ export function readEnvironmentStore(
   let wslDeployments: ReturnType<typeof readWslHostDeployments>
   try {
     sidecar = readRuntimeEnvironmentSidecar(userDataPath)
-    wslDeployments = readWslHostDeployments(userDataPath)
+    wslDeployments = readWslHostDeploymentsForRegistry(userDataPath)
   } catch (error) {
     // Fail closed like the main file: a link we cannot read may pin a host key we must not drop.
     if (
