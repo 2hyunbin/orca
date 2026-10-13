@@ -34,6 +34,24 @@ beforeEach(async () => {
   const actual = await vi.importActual<typeof NodeFsPromises>('node:fs/promises')
   readlinkMock.mockReset().mockImplementation(actual.readlink)
   realpathMock.mockReset().mockImplementation(actual.realpath)
+  // The real-process lsof smoke test exercises the unmocked path, so execFile
+  // falls back to the real child process unless a test stages its own. The
+  // source promisifies execFile and staged tests hand it `{ stdout }`, so the
+  // real callback's string stdout is wrapped to that shape.
+  const actualChildProcess = await vi.importActual<typeof NodeChildProcess>('node:child_process')
+  execFileCallbackMock.mockImplementation(
+    (
+      file: string,
+      args: readonly string[],
+      options: NodeChildProcess.ExecFileOptions | undefined,
+      callback: (error: Error | null, value?: { stdout: string }) => void
+    ) => {
+      actualChildProcess.execFile(file, args, { encoding: 'utf8', ...options }, (error, stdout) => {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: encoding: 'utf8' makes execFile deliver stdout as a string.
+        callback(error, error ? undefined : { stdout: stdout as string })
+      })
+    }
+  )
 })
 
 describe('shell process readiness', () => {
