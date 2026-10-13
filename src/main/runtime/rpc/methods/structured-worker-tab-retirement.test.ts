@@ -80,7 +80,7 @@ async function runtimeShowingStructuredTab(): Promise<{
   runtime: OrcaRuntimeService
   emit: ReturnType<typeof vi.fn>
 }> {
-  const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
+  const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore())
   const internal = runtime as unknown as RuntimeInternals
   internal.ensureStructuredAgentSessionHost = async () => undefined
   internal.notifyMessageArrived = vi.fn()
@@ -297,7 +297,7 @@ describe('structured worker release retires the chat tab', () => {
 describe('structured worker discard retires the chat tab', () => {
   it('prunes the tab a half-started worker published', async () => {
     const { close } = installHost()
-    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore())
     const internal = runtime as unknown as RuntimeInternals
     internal.ensureStructuredAgentSessionHost = async () => undefined
     let createdSessionId = ''

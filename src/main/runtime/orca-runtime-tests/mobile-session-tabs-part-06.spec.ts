@@ -97,7 +97,7 @@ describe('OrcaRuntimeService', () => {
   it('keeps a headless tab-group split alive when a new tab is created', async () => {
     // Regression: drag-to-split-group was client-only and the headless host rejected it, coalescing groups on new-tab; the host must model + persist the split.
     let ptyCounter = 0
-    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore())
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: `split-group-pty-${++ptyCounter}` })),
       write: () => true,
@@ -485,7 +485,7 @@ describe('OrcaRuntimeService', () => {
 
   it('moves a headless tab into an existing group without renderer_unavailable', async () => {
     let ptyCounter = 0
-    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore())
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: `move-group-pty-${++ptyCounter}` })),
       write: () => true,
@@ -525,7 +525,7 @@ describe('OrcaRuntimeService', () => {
   it('creates a new headless terminal in the targeted split group, not the active one', async () => {
     // Regression: a per-group "+" passes targetGroupId, but the headless create ignored it and funneled every new tab into the active group.
     let ptyCounter = 0
-    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore())
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: `target-group-pty-${++ptyCounter}` })),
       write: () => true,

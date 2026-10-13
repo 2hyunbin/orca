@@ -19,7 +19,7 @@ const WT = TEST_WORKTREE_ID
 function pairedRuntime() {
   let next = 0
   const spawn = vi.fn(async () => ({ id: `pty-${++next}` }))
-  const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
+  const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore())
   runtime.setPtyController({
     spawn,
     write: () => true,

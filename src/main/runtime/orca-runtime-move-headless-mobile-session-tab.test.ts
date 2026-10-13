@@ -71,6 +71,7 @@ function headlessRuntime(): {
       }
     })
   )
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The runtime reads only these store methods on these paths.
   return { runtime: new OrcaRuntimeService(runtimeStore as never), getSession }
 }
 

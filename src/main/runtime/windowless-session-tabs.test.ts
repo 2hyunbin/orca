@@ -69,14 +69,18 @@ function twoGroupHost(overrides: Partial<WorkspaceSessionState> = {}) {
       ...overrides
     })
   )
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The runtime reads only these store methods on these paths.
   const runtime = new OrcaRuntimeService(runtimeStore as never)
   // Electron serve: the saved browser tab can start on this host.
-  runtime.setOffscreenBrowserBackend({
-    createTab: async ({ browserPageId }: { browserPageId?: string }) => ({
-      browserPageId: browserPageId!
-    }),
-    closeTab: async () => {}
-  } as never)
+  runtime.setOffscreenBrowserBackend(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The runtime calls only createTab and closeTab on this backend here.
+    {
+      createTab: async ({ browserPageId }: { browserPageId?: string }) => ({
+        browserPageId: browserPageId!
+      }),
+      closeTab: async () => {}
+    } as never
+  )
   return { runtime, getSession, setSession }
 }
 

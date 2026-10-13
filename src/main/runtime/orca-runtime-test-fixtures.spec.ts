@@ -1,3 +1,4 @@
+import type { RuntimeStore } from './runtime-store-contract'
 import { withDurableRuntimeStore, withRuntimePaneAdmission } from './runtime-durable-store-fixture'
 import { expect, vi } from 'vitest'
 import { createHash } from 'node:crypto'
@@ -635,8 +636,10 @@ function makeRuntimeStoreWithWorkspaceSession(
 }
 
 /** A store for a host with no window: it saves, and lists from, one empty session partition. */
-function makeWindowlessRuntimeStore() {
-  return makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession()).runtimeStore
+function makeWindowlessRuntimeStore(): RuntimeStore {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture supplies RuntimeStore methods; its Mock return types lose callable signatures.
+  return makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
+    .runtimeStore as RuntimeStore
 }
 
 function makeWorkspaceSessionWithHeadlessTerminal(

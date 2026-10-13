@@ -190,6 +190,7 @@ beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'orca-chat-tab-table-'))
   // A host with no window saves its chat tabs, so it lists them from this session.
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The runtime reads only these store methods on these paths.
   runtime = new OrcaRuntimeService(runtimeStore as never)
   vi.spyOn(runtime, 'getClientSettings').mockReturnValue(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the structured-chat policy reads only this one setting on these paths.

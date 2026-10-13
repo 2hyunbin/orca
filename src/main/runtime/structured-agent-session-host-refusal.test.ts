@@ -190,7 +190,7 @@ describe('logging a journal that will not open', () => {
 // and only structured requests are refused.
 describe('startup and other non-chat work without a structured host', () => {
   function startupRuntime(ensureHost: () => Promise<unknown> = install) {
-    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore() as never)
+    const runtime = new OrcaRuntimeService(makeWindowlessRuntimeStore())
     const refreshPtyRecords = vi.fn(async () => new Set<string>())
     const hydrateTabs = vi.fn(() => new Set<string>())
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root` and stubs the PTY daemon.

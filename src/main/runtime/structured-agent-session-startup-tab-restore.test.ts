@@ -190,6 +190,7 @@ function startupRuntime(options: { afterInstall?: () => void; profileChats?: str
     }
   }
   const runtime = new OrcaRuntimeService(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The runtime reads only these store methods on these paths.
     makeRuntimeStoreWithWorkspaceSession(session).runtimeStore as never
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root`, stubs the PTY daemon and gives it a profile.
