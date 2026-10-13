@@ -81,6 +81,36 @@ function withdraw(clientMessageId: string) {
 }
 
 describe("a Stop's event", () => {
+  it('publishes the request note while the native interrupt is still unanswered', async () => {
+    rig = await createQueuedMessageTestRig()
+    await rig.workingSend()
+    const interrupt = Promise.withResolvers<{ cancelled: boolean }>()
+    rig.cancelTurn.mockImplementationOnce(() => interrupt.promise)
+    const stopped = rig.stop()
+    try {
+      await eventually(() =>
+        expect(
+          journal()
+            .snapshot()
+            .items.filter(
+              (item) => item.body.kind === 'status' && item.body.text === 'Cancellation requested.'
+            )
+        ).toHaveLength(1)
+      )
+      expect(rig.cancelTurn).toHaveBeenCalledOnce()
+    } finally {
+      interrupt.resolve({ cancelled: true })
+      await stopped
+    }
+    expect(
+      journal()
+        .snapshot()
+        .items.filter(
+          (item) => item.body.kind === 'status' && item.body.text === 'Cancellation requested.'
+        )
+    ).toHaveLength(1)
+  })
+
   it('reaches the journal before the interrupt, naming the turn it stopped and who asked', async () => {
     rig = await createQueuedMessageTestRig()
     await rig.workingSend()

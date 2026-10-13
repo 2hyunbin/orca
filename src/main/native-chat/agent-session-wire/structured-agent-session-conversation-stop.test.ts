@@ -1,3 +1,4 @@
+import { envelope as mutationEnvelope } from './structured-agent-session-host-test-harness'
 // A Stop that names no turn stops what the conversation has in flight: it withdraws what is
 // queued, and interrupts a handed-over message even before the provider has opened its turn —
 // the gap no client can name a turn for. Against the real host, store and journal.
@@ -186,16 +187,7 @@ function stop(turnId?: string, clientOperationId = hostTestOperationId()) {
 function pickOption(key: string, value: string) {
   const fields = { key, value }
   return host.setOption(CALLER, {
-    envelope: {
-      sessionId: SESSION,
-      clientOperationId: hostTestOperationId(),
-      expectedRuntimeFence: 1,
-      payloadFingerprint: computeAgentSessionPayloadFingerprint({
-        method: 'agentSession.setOption',
-        sessionId: SESSION,
-        fields
-      })
-    },
+    envelope: mutationEnvelope('agentSession.setOption', fields, { expectedRuntimeFence: 1 }),
     ...fields
   })
 }
@@ -491,7 +483,7 @@ describe('a Stop that names no turn', () => {
 
   // Codex can take a Stop as the turn starts, with that turn's start still buffered when the answer
   // lands. A bound sink hands each event to the journal as it is read, so the note lands after it.
-  it("writes a taken Stop's note after the turn record the provider sent before its answer", async () => {
+  it('writes Stop before the turn record the provider sends while interrupting', async () => {
     const first = send('first send')
     await first.result
     await eventually(() => expect(dispatch).toHaveBeenCalledOnce())
@@ -509,8 +501,8 @@ describe('a Stop that names no turn', () => {
     const items = (await host.journalSnapshot(SESSION)).items
     const record = items.find((item) => item.body.kind === 'turn')
     const note = items.find((item) => isStructuredAgentSessionStopNote(item.itemId))
-    expect(note?.sequence).toBeGreaterThan(record?.sequence ?? Infinity)
-    expect(note?.turnScope).toEqual({ kind: 'turn', turnItemId: record?.itemId })
+    expect(note?.sequence).toBeLessThan(record?.sequence ?? 0)
+    expect(note?.turnScope).toEqual(AGENT_JOURNAL_THREAD_SCOPE)
   })
 
   // Codex's own shape: the turn's start is read before the interrupt's answer, so the turn has a

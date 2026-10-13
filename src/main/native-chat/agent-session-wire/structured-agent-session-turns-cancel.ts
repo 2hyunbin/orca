@@ -167,6 +167,10 @@ async function cancelAndNote(
   // send resumes the conversation. A row's Stop (`scope`) stops only that task.
   const endsSession = input.endSession !== undefined
   const stoppedAt = Date.now()
+  const noteIdentity = structuredAgentSessionStopNoteIdentity(
+    stoppedTurnId ?? input.clientOperationId
+  )
+  let stoppedTurn: string | undefined = stoppedTurnId ?? undefined
   let noteWritten = false
   const writeNote = (body: AgentJournalStatusItem): Promise<void> => {
     noteWritten = true
@@ -184,13 +188,12 @@ async function cancelAndNote(
         })
       )
   }
+  const requestNoteWrite = !input.scope && !namesTurnNotLive ? writeNote(note) : undefined
   // The provider's own answer; unset when its cancel threw, leaving the effect unknown.
   let taken: boolean | undefined
   // The provider could not interrupt the turn, or its cancel threw: the turn may run on.
   let interruptFailed = false
   let refusal: AgentSessionCancelOutcome['refusal']
-  // The turn the provider says this Stop's interrupt took.
-  let stoppedTurn: string | undefined
   try {
     const dispatchStatus = latestJournalDispatchObservation(ctx.journal, ctx.fence)
     const background =
@@ -264,11 +267,6 @@ async function cancelAndNote(
       ...agentSessionFailureWords(agentSessionFailureFact('cancelUnconfirmed'), { surface: 'row' })
     }
   }
-  // Keyed by the turn it stopped, as the provider names it, so another Stop of that turn rewrites
-  // this row, never adds one.
-  const noteIdentity = structuredAgentSessionStopNoteIdentity(
-    stoppedTurn ?? stoppedTurnId ?? input.clientOperationId
-  )
   // A Stop naming a turn that has since ended keeps the session only when the provider declined
   // it: an interrupt, answered or not, can stop a follow-up whose turn has not opened.
   if (endsSession && (!namesTurnNotLive || taken !== false)) {
@@ -278,7 +276,7 @@ async function cancelAndNote(
     // The child's end confirms the Stop, so a refused or unconfirmed interrupt says nothing more.
     const ended: AgentJournalStatusItem | null =
       note === null ? null : { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED }
-    const stopNoteWrite = ended !== null ? writeNote(ended) : undefined
+    const stopNoteWrite = ended !== null ? (requestNoteWrite ?? writeNote(ended)) : undefined
     input.endSession?.({
       waitsForProvider: taken === true,
       stoppedAt,
@@ -289,7 +287,8 @@ async function cancelAndNote(
     cancelled = true
     note = ended
   } else if (runningCommand && !cancelled) {
-    const noteWrite = writeNote({ kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED })
+    const noteWrite =
+      requestNoteWrite ?? writeNote({ kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED })
     await input.stopChild?.()
     await noteWrite
     cancelled = true
@@ -303,7 +302,8 @@ async function cancelAndNote(
   ) {
     // The interrupt failed and the turn runs on: only the child's end stops it.
     let ended: boolean
-    const noteWrite = writeNote({ kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED })
+    const noteWrite =
+      requestNoteWrite ?? writeNote({ kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED })
     try {
       await input.stopChild()
       ended = true
@@ -337,8 +337,8 @@ async function cancelAndNote(
   if (input.scope || note === null) {
     return { ok: true, value }
   }
-  if (!noteWritten || note.text !== STOP_NOTE_CANCELLATION_REQUESTED) {
-    await writeNote(note)
-  }
+  await (!noteWritten || note.text !== STOP_NOTE_CANCELLATION_REQUESTED
+    ? writeNote(note)
+    : requestNoteWrite)
   return { ok: true, value }
 }
