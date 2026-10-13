@@ -6,6 +6,11 @@ import type {
 } from '../../shared/doc-preview-file-access'
 import type { DirEntry, FsChangeEvent, MarkdownDocument } from '../../shared/filesystem-entry-types'
 import type { WorkspaceSpaceDirectoryScanResult } from '../../shared/workspace-space-types'
+import type { PluginViewerDocumentOwner } from '../../shared/plugins/plugin-viewer-document-registry'
+import type {
+  PluginViewerFileRequest,
+  PluginViewerFileResource
+} from '../../shared/plugins/plugin-viewer-file-resource'
 
 export type FileStat = {
   size: number
@@ -56,6 +61,11 @@ export type IFilesystemProvider = {
   readDir(dirPath: string, options?: { followSymlinks?: boolean }): Promise<DirEntry[]>
   readFile(filePath: string, limits?: FileReadLimits): Promise<FileReadResult>
   readDocPreviewFile?(request: DocPreviewFileAccessRequest): Promise<DocPreviewFileAccessResult>
+  openPluginViewerDocument?(
+    owner: PluginViewerDocumentOwner,
+    file: PluginViewerFileRequest,
+    signal: AbortSignal
+  ): Promise<PluginViewerFileResource>
   /** Positional read. Optional because an older remote host cannot serve one.
    *  Strict by design: it throws `FileRangeReadUnsupportedError` rather than
    *  silently degrading, so a caller cannot accidentally pay a whole-file
