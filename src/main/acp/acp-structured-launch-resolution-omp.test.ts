@@ -63,11 +63,8 @@ describe('OMP ACP launch resolution', () => {
       ANTHROPIC_API_KEY: 'sk-test'
     }
     const launch = await resolver(ompRecord(), { launchEnv: userEnv })({ identity })
-    // Only the shared pane and hook keys, and an inherited visuals folder: this chat has none.
-    expect(launch.envToDelete).toEqual([
-      ...STRUCTURED_CHILD_ENV_TO_DELETE,
-      NATIVE_CHAT_VISUALS_DIR_ENV
-    ])
+    // Only an inherited visuals folder (this chat has none); the seal strips pane and hook keys.
+    expect(launch.envToDelete).toEqual([NATIVE_CHAT_VISUALS_DIR_ENV])
     const child = createProviderSpawnSpec(
       {
         command: launch.command,

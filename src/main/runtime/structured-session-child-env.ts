@@ -52,27 +52,22 @@ import {
   ORCA_AGENT_SESSION_ID_ENV,
   ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV
 } from '../../shared/agent-session-caller-env'
-import {
-  ORCA_SCRUB_SAFE_LAUNCH_ENV,
-  ORCA_SCRUB_SAFE_PANE_ENV
-} from '../../shared/agent-hook-scrub-safe-env'
 import { ORCA_STRUCTURED_SESSION_ENV } from '../../shared/structured-session-marker'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { prependOrcaCliDirToChildPath } from '../cli/orca-cli-child-path'
-import { AGENT_HOOK_RUNTIME_ENV_KEYS } from '../ipc/pty/host-env/spawn-env-keys'
+import {
+  AGENT_HOOK_RUNTIME_ENV_KEYS,
+  ORCA_PANE_IDENTITY_ENV_KEYS
+} from '../ipc/pty/host-env/spawn-env-keys'
 import { resolveStructuredWorkerIdentityForSession } from './structured-worker-authority'
 
 /**
- * A pane's identity in the inherited environment would let the agent's own Orca status hooks
- * report for this session too; the structured session is its one status producer.
+ * A pane's identity would let the agent's own Orca status hooks report for this session too; the
+ * structured session is its one status producer. The seal strips it for every agent, from whatever
+ * environment source supplied it, so no agent can opt out.
  */
 export const STRUCTURED_CHILD_ENV_TO_DELETE: readonly string[] = [
-  'ORCA_PANE_KEY',
-  'ORCA_TAB_ID',
-  'ORCA_WORKTREE_ID',
-  'ORCA_AGENT_LAUNCH_TOKEN',
-  ORCA_SCRUB_SAFE_PANE_ENV,
-  ORCA_SCRUB_SAFE_LAUNCH_ENV,
+  ...ORCA_PANE_IDENTITY_ENV_KEYS,
   ...AGENT_HOOK_RUNTIME_ENV_KEYS
 ]
 
@@ -83,9 +78,9 @@ export type SealedStructuredSessionChild = {
 }
 
 /**
- * `env` named as this session's child. `inheritedEnvToDelete` is required so every agent states
- * what it strips, none included; a key the seal itself names the child by is never stripped (a
- * registered worker keeps its handle). `cliRuntimeCommand`: a Node CLI whose own directory goes
+ * `env` named as this session's child. `inheritedEnvToDelete` is what the agent strips beyond
+ * STRUCTURED_CHILD_ENV_TO_DELETE, none included; a key the seal itself names the child by is never
+ * stripped (a registered worker keeps its handle). `cliRuntimeCommand`: a Node CLI whose own directory goes
  * first on PATH, after the identity's, so it runs on the runtime beside it.
  */
 export function sealStructuredSessionChild(input: {
@@ -95,7 +90,7 @@ export function sealStructuredSessionChild(input: {
   inheritedEnvToDelete: readonly string[]
   cliRuntimeCommand?: string
 }): SealedStructuredSessionChild {
-  const identity = childIdentity(input.sessionId, input.env)
+  const identity = childIdentity(input.sessionId, withoutPaneIdentity(input.env))
   const named = new Set([
     ORCA_AGENT_SESSION_ID_ENV,
     ORCA_STRUCTURED_SESSION_ENV,
@@ -107,8 +102,18 @@ export function sealStructuredSessionChild(input: {
     : identity.env
   return {
     env: { ...env, [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: input.spawnToken },
-    envToDelete: input.inheritedEnvToDelete.filter((key) => !named.has(key))
+    envToDelete: [
+      ...new Set([...STRUCTURED_CHILD_ENV_TO_DELETE, ...input.inheritedEnvToDelete])
+    ].filter((key) => !named.has(key))
   }
+}
+
+function withoutPaneIdentity(env: Record<string, string>): Record<string, string> {
+  const next = { ...env }
+  for (const key of STRUCTURED_CHILD_ENV_TO_DELETE) {
+    delete next[key]
+  }
+  return next
 }
 
 function childIdentity(

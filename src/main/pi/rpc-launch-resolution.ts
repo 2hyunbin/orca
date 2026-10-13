@@ -16,11 +16,7 @@ import {
 } from '../native-chat/structured-agent-command-resolution'
 import type { StructuredAgentLaunchPartResolver } from '../runtime/structured-agent-launch-composition'
 import { isWindowsProcessStartTimeAvailable } from '../windows/windows-process-table'
-import {
-  PI_RPC_SESSION_ENV_TO_DELETE,
-  withoutPiCallerEnv,
-  type PiRpcLaunchOptions
-} from './rpc-launch'
+import { withoutPiCallerEnv, type PiRpcLaunchOptions } from './rpc-launch'
 
 export type PiRpcResolvedLaunch = PiRpcLaunchOptions & {
   previous: AgentSessionProviderHandleLink | null
@@ -152,7 +148,7 @@ export function piRpcLaunchPart(
         ...(replacement ? { replacement } : {})
       },
       env: withoutPiCallerEnv(env),
-      inheritedEnvToDelete: PI_RPC_SESSION_ENV_TO_DELETE
+      inheritedEnvToDelete: []
     }
   }
 }

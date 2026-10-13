@@ -28,7 +28,6 @@ import {
   spelledProviderTimelineItemKey
 } from '../native-chat/agent-session-timeline/provider-timeline-identity'
 import type { StructuredAgentLaunchPartResolver } from '../runtime/structured-agent-launch-composition'
-import { STRUCTURED_CHILD_ENV_TO_DELETE } from '../runtime/structured-session-child-env'
 import {
   NATIVE_CHAT_VISUALS_DIR_ENV,
   withNativeChatVisualsEnv
@@ -230,7 +229,6 @@ export function acpStructuredLaunchPart(
       },
       env: withNativeChatVisualsEnv({ ...env, ...skill?.env }, skill ? visuals : null),
       inheritedEnvToDelete: [
-        ...STRUCTURED_CHILD_ENV_TO_DELETE,
         ...envToDelete,
         // Without visuals, a folder Orca itself inherited (started from a chat) names another chat's.
         ...(skill ? [] : [NATIVE_CHAT_VISUALS_DIR_ENV])

@@ -1,5 +1,23 @@
 import { ORCA_AGENT_SESSION_ID_ENV } from '../../../../shared/agent-session-caller-env'
+import {
+  ORCA_SCRUB_SAFE_LAUNCH_ENV,
+  ORCA_SCRUB_SAFE_PANE_ENV
+} from '../../../../shared/agent-hook-scrub-safe-env'
 import { ORCA_STRUCTURED_SESSION_ENV } from '../../../../shared/structured-session-marker'
+
+// Why: what an Orca pane names its shell by; any other process holding them was handed another pane's identity.
+export const ORCA_PANE_IDENTITY_ENV_KEYS = [
+  'ORCA_PANE_KEY',
+  'ORCA_TAB_ID',
+  'ORCA_WORKTREE_ID',
+  'ORCA_WORKSPACE_ID',
+  'ORCA_PROJECT_GROUP_ID',
+  'ORCA_WORKSPACE_ROOT',
+  'ORCA_AGENT_LAUNCH_TOKEN',
+  ORCA_SCRUB_SAFE_PANE_ENV,
+  ORCA_SCRUB_SAFE_LAUNCH_ENV,
+  'ORCA_TERMINAL_HANDLE'
+] as const
 
 export const AGENT_HOOK_RUNTIME_ENV_KEYS = [
   'ORCA_AGENT_HOOK_PORT',

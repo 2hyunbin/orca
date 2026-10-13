@@ -9,6 +9,7 @@ import {
   SEALED_TEST_SPAWN_TOKEN,
   sealedChildEnv
 } from './structured-session-child-env.test-support'
+import { sealStructuredSessionChild } from './structured-session-child-env'
 import {
   mintStructuredWorkerHandle,
   mintStructuredWorkerPaneKey,
@@ -192,6 +193,35 @@ describe('sealStructuredSessionChild identity', () => {
     expect(env.ORCA_PANE_KEY).toBeUndefined()
     expect(Object.keys(env).filter((key) => key.includes('PANE'))).toEqual([])
   })
+
+  it.each(['chat', 'worker'] as const)(
+    'strips a pane identity a settings or shell overlay supplies, for a %s of any agent',
+    (kind) => {
+      installFakeAppEnvironment({ isPackaged: () => false, getPath: () => USER_DATA })
+      const handle = kind === 'worker' ? registerWorker() : null
+      const sealed = sealStructuredSessionChild({
+        sessionId: SESSION_ID,
+        spawnToken: SEALED_TEST_SPAWN_TOKEN,
+        env: {
+          PATH: '/usr/bin',
+          ORCA_PANE_KEY: 'tab-parent:leaf-parent',
+          ORCA_WORKSPACE_ID: 'global-floating-terminal',
+          ORCA_TERMINAL_HANDLE: 'term_parent',
+          ORCA_AGENT_HOOK_PORT: '4100'
+        },
+        // An agent that asks for no deletions of its own still loses the pane identity.
+        inheritedEnvToDelete: []
+      })
+      expect(sealed.env).not.toHaveProperty('ORCA_PANE_KEY')
+      expect(sealed.env).not.toHaveProperty('ORCA_WORKSPACE_ID')
+      expect(sealed.env).not.toHaveProperty('ORCA_AGENT_HOOK_PORT')
+      expect(sealed.env.ORCA_TERMINAL_HANDLE).toBe(handle ?? undefined)
+      expect(sealed.envToDelete).toEqual(
+        expect.arrayContaining(['ORCA_PANE_KEY', 'ORCA_WORKSPACE_ID', 'ORCA_AGENT_HOOK_PORT'])
+      )
+      expect(sealed.envToDelete.includes('ORCA_TERMINAL_HANDLE')).toBe(handle === null)
+    }
+  )
 
   it('never names the WSL-scoped launcher, because a structured worker cannot run in WSL', () => {
     // `orca-ide` is the literal the PTY lane exports for WSL only. A structured session that

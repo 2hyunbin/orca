@@ -21,12 +21,6 @@ const CALLER_ENV_TO_DELETE = [
   ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV
 ]
 
-/** What a structured Pi session strips from its inheritance; the seal keeps a worker's handle. */
-export const PI_RPC_SESSION_ENV_TO_DELETE: readonly string[] = [
-  ...STRUCTURED_CHILD_ENV_TO_DELETE,
-  'ORCA_TERMINAL_HANDLE'
-]
-
 /** `env` naming no caller: a structured session's seal names its own. */
 export function withoutPiCallerEnv(env: Readonly<Record<string, string>>): Record<string, string> {
   const next = { ...env }
