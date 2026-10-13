@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 2,
+  "execution": "data",
+  "pluginApi": 1,
+  "publisher": "example",
+  "id": "locale-pt-br",
+  "name": "Português (Brasil)",
+  "version": "1.0.0",
+  "engines": { "orca": ">=1.4.214" },
+  "description": "A partial interface-language pack. Missing or stale entries fall back to English.",
+  "contributes": { "languagePacks": [{ "locale": "pt-BR", "path": "locales/pt-BR.json" }] }
+}

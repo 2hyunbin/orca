@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 2,
+  "execution": "data",
+  "pluginApi": 1,
+  "publisher": "example",
+  "id": "syntax-example",
+  "name": "Example syntax",
+  "version": "1.0.0",
+  "engines": { "orca": ">=1.4.214" },
+  "contributes": {
+    "languages": [
+      {
+        "id": "example",
+        "aliases": ["Example"],
+        "extensions": [".example"],
+        "configuration": "language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "example",
+        "scopeName": "source.example",
+        "path": "syntaxes/example.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "scopeName": "source.example",
+  "patterns": [
+    { "match": "#.*$", "name": "comment.line.example" },
+    { "match": "\\b(let|if|else)\\b", "name": "keyword.control.example" },
+    { "match": "\\b[0-9]+\\b", "name": "constant.numeric.example" }
+  ]
+}

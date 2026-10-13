@@ -1,0 +1,26 @@
+{
+  "name": "@orca/plugin-sdk",
+  "version": "1.0.0",
+  "description": "Public contracts for Orca file viewer plugins",
+  "license": "MIT",
+  "files": [
+    "src",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    "./viewer": {
+      "types": "./src/viewer.ts",
+      "import": "./dist/viewer.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

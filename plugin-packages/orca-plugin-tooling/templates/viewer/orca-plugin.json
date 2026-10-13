@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 2,
+  "execution": "sandboxed-ui",
+  "pluginApi": 1,
+  "publisher": "example",
+  "id": "viewer-example",
+  "name": "Example binary inspector",
+  "version": "1.0.0",
+  "engines": { "orca": ">=1.4.214" },
+  "description": "Read-only metadata and a short byte preview through the opened-file SDK.",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "binary",
+        "displayName": "Example binary inspector",
+        "selector": [{ "filenamePattern": "*.example-binary" }],
+        "entry": "dist/example.worker.js",
+        "mode": "readonly",
+        "rendering": "host-ui"
+      }
+    ]
+  }
+}

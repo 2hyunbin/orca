@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    },
+    "plugins": {
+      "maxItems": 2048,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "git"
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32768
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              }
+            },
+            "required": [
+              "kind",
+              "url",
+              "ref"
+            ],
+            "additionalProperties": false
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "categories": {
+            "default": [],
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "release": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "commit": {
+                "type": "string",
+                "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+              },
+              "contentHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "execution": {
+                "type": "string",
+                "enum": [
+                  "data",
+                  "sandboxed-ui",
+                  "instructional",
+                  "trusted-worker"
+                ]
+              },
+              "minimumOrca": {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+              },
+              "types": {
+                "minItems": 1,
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "interface-language",
+                    "coding-language",
+                    "file-viewer",
+                    "environment-provider",
+                    "app-theme",
+                    "icon-theme",
+                    "terminal-theme",
+                    "panel",
+                    "instructions",
+                    "worker"
+                  ]
+                }
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "preview": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "title",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "version",
+              "commit",
+              "contentHash",
+              "execution",
+              "minimumOrca",
+              "types",
+              "license"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "name",
+          "release"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 2
+    }
+  },
+  "required": [
+    "name",
+    "owner",
+    "plugins",
+    "formatVersion"
+  ],
+  "additionalProperties": false,
+  "$comment": "Generated from Orca runtime schemas. Cross-field, path, identity, source freshness and byte limits require orca-plugin validate; JSON Schema alone is not an approval boundary."
+}

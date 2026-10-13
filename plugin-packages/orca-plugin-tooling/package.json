@@ -1,0 +1,13 @@
+{
+  "name": "@orca/plugin-tooling",
+  "version": "1.0.0",
+  "description": "Offline authoring and immutable release checks for Orca plugins",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.16.0" },
+  "bin": { "orca-plugin": "src/cli.mjs" },
+  "exports": { ".": "./src/package-validation.mjs" },
+  "files": ["src", "dist", "schemas", "templates", "locale-kit.json", "LICENSE", "README.md", "THIRD-PARTY-LICENSES.txt"],
+  "scripts": { "test": "node --test tests/*.test.mjs" },
+  "devDependencies": { "esbuild": "0.28.2", "zod": "4.6.5" }
+}

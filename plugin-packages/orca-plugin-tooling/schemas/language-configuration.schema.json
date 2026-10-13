@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "comments": {
+      "type": "object",
+      "properties": {
+        "lineComment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "blockComment": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "additionalProperties": false
+    },
+    "brackets": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        ],
+        "items": false,
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "autoClosingPairs": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "close": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "open",
+          "close"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "surroundingPairs": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "close": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "open",
+          "close"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$comment": "Generated from Orca runtime schemas. Cross-field, path, identity, source freshness and byte limits require orca-plugin validate; JSON Schema alone is not an approval boundary."
+}
