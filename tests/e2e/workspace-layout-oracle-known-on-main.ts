@@ -37,24 +37,6 @@ export const LAYOUT_ORACLE_KNOWN_ON_MAIN: readonly KnownOnMain[] = [
     step: 'after relaunch',
     platform: 'linux' as const,
     cause: 'daemon restart empties the runtime layout'
-  })),
-  // A headless host lists a worktree with no saved tab bar (and, after a restart, every worktree)
-  // under a synthesized `headless-terminals:` group, while the layout stream names the same group
-  // by its saved or minted id: same tabs and order, two group ids. One projection in PR 6.
-  {
-    scenario: 'headless-*',
-    check: 'client',
-    detail: /^group id differs: runtime \S+, client headless-terminals:\S+ \(tabs /,
-    cause: 'two group ids'
-  },
-  // After a headless move into an existing group, paired clients still see that group's previous
-  // tab selected, not the moved one. A split into a new group selects the moved tab.
-  ...(['orcad', 'electron'] as const).map((kind) => ({
-    scenario: `headless-${kind}-move-tab-between-groups`,
-    check: 'expected' as const,
-    step: 'move',
-    detail: /^group \S+ selects /,
-    cause: 'headless move-to-group keeps the target group selection'
   }))
 ]
 
