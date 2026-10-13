@@ -174,10 +174,10 @@ export function resolveFolderWorkspaceHost(
   return { kind: 'ssh', targetId: [...connectionIds][0] }
 }
 
-export function findLocalFolderWorkspaceProjectRepo(
+export function findLocalFolderWorkspaceProject(
   state: FolderWorkspaceHostState,
   folderWorkspaceId: string
-): Repo | undefined {
+): { folder: FolderWorkspace; repo: Repo } | undefined {
   const folder = state.folderWorkspaces.find((entry) => entry.id === folderWorkspaceId)
   if (!folder || resolveFolderWorkspaceHost(state, folder.id).kind !== 'local') {
     return undefined
@@ -191,5 +191,7 @@ export function findLocalFolderWorkspaceProjectRepo(
   }
   const candidates = findFolderWorkspaceCandidateRepos(state, folder.id)
   const repo = candidates.length === 1 ? candidates[0] : undefined
-  return repo && getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID ? repo : undefined
+  return repo && getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
+    ? { folder, repo }
+    : undefined
 }

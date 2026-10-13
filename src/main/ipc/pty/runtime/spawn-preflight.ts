@@ -77,7 +77,7 @@ export async function prepareRuntimePtySpawn(
             ctx.deps.store,
             args.worktreeId,
             ctx.cwd,
-            Boolean(args.launchAgent)
+            { agentLaunch: Boolean(args.launchAgent) }
           ),
           fallbackHostShell: process.env.COMSPEC || 'powershell.exe',
           sshLoginShell: resolveManagedSshHostLoginShell()

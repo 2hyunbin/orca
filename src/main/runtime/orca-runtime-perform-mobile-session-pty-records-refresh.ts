@@ -181,8 +181,7 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
               cwd: tab.startupCwd
             })
           } catch {
-            // Why: a disabled or unresolvable agent must not make the tab
-            // untappable; fall back to the plain-shell materialize.
+            // Fall back to shell materialization; project repair still blocks the spawn.
           }
         }
         try {

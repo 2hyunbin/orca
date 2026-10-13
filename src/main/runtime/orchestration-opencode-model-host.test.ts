@@ -5,7 +5,6 @@ import {
   resolveOpenCodeDirectModelExecutable
 } from '../opencode/opencode-model-availability'
 import { probeOpenCodeLaunchCapabilities } from '../opencode/opencode-launch-capabilities'
-import { resolveLocalProjectRuntimeForRepo } from '../project-runtime-git-options'
 
 vi.mock('../opencode/opencode-launch-capabilities', () => ({
   probeOpenCodeLaunchCapabilities: vi.fn()
@@ -17,7 +16,6 @@ vi.mock('../opencode/opencode-model-availability', () => ({
 vi.mock('../managed-data-accounts/launch-environment', () => ({
   applyManagedDataAccountEnvironment: vi.fn()
 }))
-vi.mock('../project-runtime-git-options', () => ({ resolveLocalProjectRuntimeForRepo: vi.fn() }))
 
 function host(
   scope: { path: string; connectionId?: string; repo?: { executionHostId?: string } } = {
@@ -51,7 +49,6 @@ describe('OpenCode worker model execution host', () => {
     vi.clearAllMocks()
     vi.mocked(probeOpenCodeModelAvailability).mockResolvedValue(true)
     vi.mocked(resolveOpenCodeDirectModelExecutable).mockResolvedValue('/tmp/private-opencode')
-    vi.mocked(resolveLocalProjectRuntimeForRepo).mockReturnValue(undefined)
     vi.mocked(probeOpenCodeLaunchCapabilities).mockResolvedValue({
       version: '1.18.30',
       pluginApi: 'v1',

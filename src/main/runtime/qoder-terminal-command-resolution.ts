@@ -31,7 +31,7 @@ export async function resolveQoderTerminalCommandForWorkspace(
               store,
               workspace.id,
               launch.cwd,
-              true
+              { agentLaunch: true }
             ),
             wslDistro: parseWslUncPath(workspace.path)?.distro
           }

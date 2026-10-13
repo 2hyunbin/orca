@@ -15,7 +15,7 @@ import {
 } from './wsl'
 import { getRepoIdFromWorktreeId } from '../shared/worktree/id'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../shared/execution-host'
-import { findLocalFolderWorkspaceProjectRepo } from '../shared/folder-workspace-execution-host'
+import { findLocalFolderWorkspaceProject } from '../shared/folder-workspace-execution-host'
 import { parseWorkspaceKey } from '../shared/workspace-scope'
 import { isWslUncPath } from '../shared/wsl-paths'
 import { resolveLocalWindowsTerminalRuntimeOptions } from '../shared/local-windows-terminal-runtime'
@@ -155,7 +155,7 @@ export function resolveLocalProjectRuntimeForWorktreeId(
   store: ProjectRuntimeResolutionStore | undefined,
   worktreeId: string | undefined,
   startupCwd?: string,
-  agentLaunch = false
+  options: { agentLaunch?: boolean } = {}
 ): ProjectExecutionRuntimeResolution | undefined {
   if (!store || !worktreeId) {
     return undefined
@@ -165,7 +165,7 @@ export function resolveLocalProjectRuntimeForWorktreeId(
   }
   const scope = parseWorkspaceKey(worktreeId)
   if (scope?.type === 'folder') {
-    if (!agentLaunch || process.platform !== 'win32') {
+    if (!options.agentLaunch || process.platform !== 'win32') {
       return undefined
     }
     const state = {
@@ -173,12 +173,11 @@ export function resolveLocalProjectRuntimeForWorktreeId(
       projectGroups: store.getProjectGroups?.() ?? [],
       repos: store.getRepos?.() ?? []
     }
-    const folder = state.folderWorkspaces.find((entry) => entry.id === scope.folderWorkspaceId)
-    const repo = findLocalFolderWorkspaceProjectRepo(state, scope.folderWorkspaceId)
-    if (!folder || !repo || isWslUncPath(folder.folderPath) || isWslUncPath(startupCwd ?? '')) {
+    const project = findLocalFolderWorkspaceProject(state, scope.folderWorkspaceId)
+    if (!project || isWslUncPath(project.folder.folderPath) || isWslUncPath(startupCwd ?? '')) {
       return undefined
     }
-    const runtime = resolveLocalWorkspaceRuntime(store, repo, folder.folderPath)
+    const runtime = resolveLocalWorkspaceRuntime(store, project.repo, project.folder.folderPath)
     // STA-10231: inherited Windows default waits for the settings decision.
     return runtime?.status === 'resolved' &&
       runtime.runtime.kind === 'windows-host' &&
@@ -199,7 +198,9 @@ export function resolveFolderProjectStartupShell(
   if (parseWorkspaceKey(worktreeId)?.type !== 'folder') {
     return undefined
   }
-  const projectRuntime = resolveLocalProjectRuntimeForWorktreeId(store, worktreeId, undefined, true)
+  const projectRuntime = resolveLocalProjectRuntimeForWorktreeId(store, worktreeId, undefined, {
+    agentLaunch: true
+  })
   if (!projectRuntime) {
     return undefined
   }

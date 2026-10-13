@@ -180,7 +180,6 @@ describe('project runtime in a folder workspace', () => {
     {
       projectRuntime: { kind: 'windows-host' },
       terminalWindowsShell: 'cmd.exe',
-      clientCommand: "claude '--resume' 'resume-session'",
       shellOverride: 'cmd.exe',
       command: 'claude "--name" "Bob\'s box" "--resume" "resume-session"',
       distro: null
@@ -188,7 +187,6 @@ describe('project runtime in a folder workspace', () => {
     {
       projectRuntime: { kind: 'wsl', distro: 'Ubuntu' },
       terminalWindowsShell: 'powershell.exe',
-      clientCommand: "claude '--name' 'Bob''s box' '--resume' 'resume-session'",
       shellOverride: 'wsl.exe',
       command: `claude '--name' 'Bob'"'"'s box' '--resume' 'resume-session'`,
       distro: 'Ubuntu'
@@ -232,7 +230,6 @@ describe('project runtime in a folder workspace', () => {
         { clientId: 'paired-client', pairedDeviceId: 'paired-client', clientKind: 'runtime' }
       )
       expect(response).toMatchObject({ ok: true })
-      expect(row.command).not.toBe(row.clientCommand)
       expect(createTerminal).toHaveBeenCalledTimes(1)
       expect(createTerminal).toHaveBeenCalledWith(
         'id:folder:fw-1',
@@ -531,6 +528,22 @@ describe('project runtime in a folder workspace', () => {
     })
   })
 
+  it('resolves the worker command override using the folder project shell', async () => {
+    setMainPlatform('win32')
+    const lanes = startParityLanes(suite, {
+      workspace,
+      settings: {
+        ...settings,
+        agentCmdOverrides: { claude: '"C:\\Program Files\\custom-claude.exe"' }
+      }
+    })
+    expect(
+      await lanes.runtime.resolveOrchestrationAgentLauncherForTarget('custom-claude', {
+        worktree: 'id:folder:fw-1'
+      })
+    ).toBe('claude')
+  })
+
   it('refuses an unverified OpenCode model in the chosen WSL runtime before spawning', async () => {
     setMainPlatform('win32')
     stubOpenCodeV2()
@@ -538,6 +551,13 @@ describe('project runtime in a folder workspace', () => {
       workspace: { ...workspace, projectRuntime: { kind: 'wsl', distro: 'Ubuntu' } },
       settings: { ...settings, terminalWindowsShell: 'powershell.exe', agentDefaultArgs: {} }
     })
+    expect(
+      await lanes.runtime.probeOrchestrationOpenCodeModelLaunchSupport({
+        worktree: 'id:folder:fw-1',
+        model: OPENCODE_MODEL
+      })
+    ).toBe(false)
+    expect(probeOpenCodeLaunchCapabilities).not.toHaveBeenCalled()
     await expect(
       runHostCall(lanes, {
         name: 'OpenCode WSL model',

@@ -271,7 +271,7 @@ export class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRuntimeWith
               this.store,
               workspace.id,
               resolveTerminalStartupCwd(workspace.path, opts.cwd),
-              Boolean(opts.startupAgent || opts.launchAgent)
+              { agentLaunch: Boolean(opts.startupAgent || opts.launchAgent) }
             )
           : undefined,
       // Same resolution as the spawn lanes below, so the refusal judges the cwd the PTY gets.

@@ -286,7 +286,7 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
       this.store,
       scope.id,
       undefined,
-      true
+      { agentLaunch: true }
     )
     if (
       (projectRuntime && isWslUncPath(startupCwd ?? '')) ||

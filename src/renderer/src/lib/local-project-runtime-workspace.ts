@@ -1,7 +1,7 @@
 import type { AppState } from '@/store/types'
 import { getIndexedWorktreeById } from '@/store/worktree-repo-index'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
-import { findLocalFolderWorkspaceProjectRepo } from '../../../shared/folder-workspace-execution-host'
+import { findLocalFolderWorkspaceProject } from '../../../shared/folder-workspace-execution-host'
 import type { Worktree } from '../../../shared/worktree/types'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 
@@ -30,13 +30,12 @@ export function getLocalProjectRuntimeWorkspace(
     projectGroups: state.projectGroups ?? [],
     repos: state.repos
   }
-  const folder = folderState.folderWorkspaces.find((entry) => entry.id === scope.folderWorkspaceId)
-  const repo = findLocalFolderWorkspaceProjectRepo(folderState, scope.folderWorkspaceId)
-  return folder && repo
+  const project = findLocalFolderWorkspaceProject(folderState, scope.folderWorkspaceId)
+  return project
     ? {
         id: targetWorktreeId,
-        repoId: repo.id,
-        path: folder.folderPath,
+        repoId: project.repo.id,
+        path: project.folder.folderPath,
         hostId: LOCAL_EXECUTION_HOST_ID
       }
     : null

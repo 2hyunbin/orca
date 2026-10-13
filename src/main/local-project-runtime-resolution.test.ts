@@ -86,7 +86,9 @@ describe('project ownership of a folder workspace runtime', () => {
   })
   it('resolves the single local project instead of treating the folder key as a repo id', () => {
     expect(
-      resolveLocalProjectRuntimeForWorktreeId(makeStore(), 'folder:folder-1', undefined, true)
+      resolveLocalProjectRuntimeForWorktreeId(makeStore(), 'folder:folder-1', undefined, {
+        agentLaunch: true
+      })
     ).toEqual({
       status: 'resolved',
       runtime: {
@@ -105,7 +107,7 @@ describe('project ownership of a folder workspace runtime', () => {
         makeStore({ preference: { kind: 'inherit-global' }, global: { kind: 'windows-host' } }),
         'folder:folder-1',
         undefined,
-        true
+        { agentLaunch: true }
       )
     ).toBeUndefined()
   })
@@ -119,7 +121,7 @@ describe('project ownership of a folder workspace runtime', () => {
         makeStore({ preference, global: { kind: 'wsl', distro: 'Debian' } }),
         'folder:folder-1',
         undefined,
-        true
+        { agentLaunch: true }
       )
     ).toMatchObject({ status: 'resolved', runtime: { kind: 'wsl', distro: 'Debian', reason } })
   })
@@ -132,7 +134,7 @@ describe('project ownership of a folder workspace runtime', () => {
           makeStore({ folder: { ...folder, ...host } }),
           'folder:folder-1',
           undefined,
-          true
+          { agentLaunch: true }
         )
       ).toBeUndefined()
     }
@@ -144,7 +146,7 @@ describe('project ownership of a folder workspace runtime', () => {
         makeStore({ group: { ...group, executionHostId: 'runtime:server-1' } }),
         'folder:folder-1',
         undefined,
-        true
+        { agentLaunch: true }
       )
     ).toBeUndefined()
   })
@@ -155,7 +157,7 @@ describe('project ownership of a folder workspace runtime', () => {
         makeStore({ repos: [repo, { ...repo, id: 'repo-2', path: 'C:\\work\\other' }] }),
         'folder:folder-1',
         undefined,
-        true
+        { agentLaunch: true }
       )
     ).toBeUndefined()
   })
@@ -166,7 +168,7 @@ describe('project ownership of a folder workspace runtime', () => {
         makeStore({ repos: [] }),
         'folder:folder-1',
         undefined,
-        true
+        { agentLaunch: true }
       )
     ).toBeUndefined()
   })
@@ -177,7 +179,7 @@ describe('project ownership of a folder workspace runtime', () => {
         makeStore({ folder: { ...folder, folderPath: '\\\\wsl$\\Ubuntu\\work' } }),
         'folder:folder-1',
         undefined,
-        true
+        { agentLaunch: true }
       )
     ).toBeUndefined()
   })
@@ -185,7 +187,9 @@ describe('project ownership of a folder workspace runtime', () => {
   it('leaves non-Windows folder routing unchanged', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' })
     expect(
-      resolveLocalProjectRuntimeForWorktreeId(makeStore(), 'folder:folder-1', undefined, true)
+      resolveLocalProjectRuntimeForWorktreeId(makeStore(), 'folder:folder-1', undefined, {
+        agentLaunch: true
+      })
     ).toBeUndefined()
   })
 })
