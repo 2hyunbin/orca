@@ -5,13 +5,10 @@
  * deployment record (C7) persists what `onChange` reports.
  */
 import { errorMessage } from '../../shared/error-message'
-import { parsePairingCode } from '../../shared/pairing'
-import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
 import type { ServeReadiness } from '../server/serve-readiness'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import {
   OrcadManagedIdentityError,
-  verifyOrcadPairingIdentity,
   type OrcadTunnelIdentity
 } from '../ssh/orcad-managed-tunnel-identity'
 import { tunneledOrcadPairingCode } from '../ssh/orcad-tunneled-pairing'
@@ -28,6 +25,7 @@ import {
 } from './wsl-orcad-deploy'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
+import { verifyWslOrcadIdentity } from './wsl-orcad-pairing-identity'
 import { trackWslOrcadHostEnvironment } from './wsl-orcad-host-environments'
 import {
   listenWslOrcadStdioBridge,
@@ -342,18 +340,6 @@ export class WslOrcadConnectionManager {
       await this.close(key)
     }
   }
-}
-
-async function verifyWslOrcadIdentity(
-  pairingOffer: string,
-  readiness: ServeReadiness
-): Promise<OrcadTunnelIdentity> {
-  const offer = parsePairingCode(pairingOffer)
-  return offer
-    ? verifyOrcadPairingIdentity(pairedRuntimeConnectionFromOffer(offer), {
-        runtimeId: readiness.runtimeId || null
-      })
-    : { verdict: 'foreign', detail: 'The Orca server in WSL published an invalid pairing offer.' }
 }
 
 function defaultTransport(target: WslOrcadHostTarget): OrcadHostTransport {
