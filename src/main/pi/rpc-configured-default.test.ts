@@ -191,6 +191,7 @@ async function piHost() {
         child = piChild(opts.available ?? AVAILABLE, opts.thinking ?? 'high', opts.startsOn ?? '')
         return child.connection
       },
+      onLifecycle: vi.fn(),
       onSettled: vi.fn(),
       onIdle: vi.fn(),
       logger: { warn: vi.fn(), error: vi.fn() }
