@@ -197,8 +197,10 @@ export type RuntimeBrowserCommandHost = {
   restoreServeBrowserPage?(worktreeId: string | undefined, browserPageId: string): Promise<boolean>
   /** Saved tabs a host with no window has not started; every worktree's when none is named. */
   listServeBrowserTabs?(worktreeId: string | undefined): BrowserTabInfo[]
-  /** Starts the first saved tab when a worktree runs no page, as a window mounts its active one. */
-  restoreFirstServeBrowserPage?(worktreeId: string | undefined): Promise<boolean>
+  /** Starts the saved active tab when no page runs, as a window mounts it; false when none. */
+  restoreActiveServeBrowserPage?(worktreeId: string | undefined): Promise<boolean>
+  /** Records a switched-to page's saved tab as the one its worktree shows. */
+  selectServeBrowserTab?(worktreeId: string, browserPageId: string): void
   /** The worktree of a saved tab whose page has not started, or null. */
   findServeBrowserTabWorktree?(worktreeId: string | undefined, browserPageId: string): string | null
 }

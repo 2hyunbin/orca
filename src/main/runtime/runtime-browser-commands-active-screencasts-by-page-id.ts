@@ -75,7 +75,7 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
   // Why: the CLI sends selectors (e.g. "path:/...") but the bridge keys tabs by "repoId::path"; resolve to that store-compatible id.
   private async resolveBrowserWorktreeId(selector?: string): Promise<string | undefined> {
     // With no window there is no view to mount; a command that acts on a page starts it itself.
-    if (!this.host.getAvailableAuthoritativeWindow() && this.host.restoreFirstServeBrowserPage) {
+    if (!this.host.getAvailableAuthoritativeWindow() && this.host.restoreActiveServeBrowserPage) {
       return selector ? (await this.host.resolveWorktreeSelector(selector)).id : undefined
     }
     if (!selector) {
@@ -112,7 +112,7 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
     if (!browserPageId) {
       const worktreeId = await this.resolveBrowserWorktreeId(params.worktree)
       if (!this.host.getAvailableAuthoritativeWindow()) {
-        await this.host.restoreFirstServeBrowserPage?.(worktreeId)
+        await this.host.restoreActiveServeBrowserPage?.(worktreeId)
       }
       return { worktreeId }
     }
