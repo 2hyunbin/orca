@@ -58,24 +58,36 @@ export const SESSION_TAB_MUTATION_METHODS = [
       }
       const base = { tabId: translated.tabId, targetGroupId: translated.targetGroupId }
       if (translated.kind === 'reorder') {
-        return runtime.moveMobileSessionTab(params.worktree, {
-          ...base,
-          kind: 'reorder',
-          tabOrder: translated.tabOrder
-        })
+        return runtime.moveMobileSessionTab(
+          params.worktree,
+          {
+            ...base,
+            kind: 'reorder',
+            tabOrder: translated.tabOrder
+          },
+          pairedDeviceId
+        )
       }
       if (translated.kind === 'split') {
-        return runtime.moveMobileSessionTab(params.worktree, {
-          ...base,
-          kind: 'split',
-          splitDirection: translated.splitDirection
-        })
+        return runtime.moveMobileSessionTab(
+          params.worktree,
+          {
+            ...base,
+            kind: 'split',
+            splitDirection: translated.splitDirection
+          },
+          pairedDeviceId
+        )
       }
-      return runtime.moveMobileSessionTab(params.worktree, {
-        ...base,
-        kind: 'move-to-group',
-        index: translated.index
-      })
+      return runtime.moveMobileSessionTab(
+        params.worktree,
+        {
+          ...base,
+          kind: 'move-to-group',
+          index: translated.index
+        },
+        pairedDeviceId
+      )
     }
   }),
   defineMethod({

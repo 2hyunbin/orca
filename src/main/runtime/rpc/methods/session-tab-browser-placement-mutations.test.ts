@@ -57,12 +57,16 @@ describe('session tab browser placement mutations', () => {
     })
 
     expect(response.ok).toBe(true)
-    expect(runtime.moveMobileSessionTab).toHaveBeenCalledWith('id:wt-1', {
-      tabId: 'tab-2',
-      targetGroupId: 'group-1',
-      kind: 'reorder',
-      tabOrder: ['tab-2', 'hidden-page', 'tab-1']
-    })
+    expect(runtime.moveMobileSessionTab).toHaveBeenCalledWith(
+      'id:wt-1',
+      {
+        tabId: 'tab-2',
+        targetGroupId: 'group-1',
+        kind: 'reorder',
+        tabOrder: ['tab-2', 'hidden-page', 'tab-1']
+      },
+      'legacy'
+    )
   })
 
   it('refuses an old-client close for a projected-out browser page', async () => {

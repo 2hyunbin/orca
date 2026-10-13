@@ -348,12 +348,16 @@ describe('session tab RPC methods', () => {
     )
 
     expect(response.ok).toBe(true)
-    expect(runtime.moveMobileSessionTab).toHaveBeenCalledWith('id:wt-1', {
-      tabId: 'tab-1::leaf-1',
-      targetGroupId: 'group-left',
-      kind: 'reorder',
-      tabOrder: ['tab-2::leaf-1', 'tab-1::leaf-1']
-    })
+    expect(runtime.moveMobileSessionTab).toHaveBeenCalledWith(
+      'id:wt-1',
+      {
+        tabId: 'tab-1::leaf-1',
+        targetGroupId: 'group-left',
+        kind: 'reorder',
+        tabOrder: ['tab-2::leaf-1', 'tab-1::leaf-1']
+      },
+      undefined
+    )
   })
 
   it('rejects ambiguous tab move payloads', async () => {
@@ -396,12 +400,16 @@ describe('session tab RPC methods', () => {
     )
 
     expect(response.ok).toBe(true)
-    expect(runtime.moveMobileSessionTab).toHaveBeenCalledWith('id:wt-1', {
-      tabId: 'tab-1',
-      targetGroupId: 'group-2',
-      kind: 'split',
-      splitDirection: 'right'
-    })
+    expect(runtime.moveMobileSessionTab).toHaveBeenCalledWith(
+      'id:wt-1',
+      {
+        tabId: 'tab-1',
+        targetGroupId: 'group-2',
+        kind: 'split',
+        splitDirection: 'right'
+      },
+      undefined
+    )
   })
 
   it('dispatches ordinary terminal creation with the requested tab group', async () => {
