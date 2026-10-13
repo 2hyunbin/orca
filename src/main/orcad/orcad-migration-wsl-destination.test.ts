@@ -42,6 +42,22 @@ describe('WSL migration destination', () => {
     )
   })
 
+  it('refuses a source from another registration of the same distro name', () => {
+    const source = { ...WSL_SOURCE, distroGuid: '{AAAA}' }
+    expect(() =>
+      assertOrcadMigrationSourceServedHere(
+        source,
+        { ...WSL_HOST, ORCA_WSL_DISTRO_GUID: '{aaaa}' },
+        'linux'
+      )
+    ).not.toThrow()
+    for (const env of [{ ...WSL_HOST, ORCA_WSL_DISTRO_GUID: '{BBBB}' }, WSL_HOST]) {
+      expect(() => assertOrcadMigrationSourceServedHere(source, env, 'linux')).toThrow(
+        ORCAD_MIGRATION_SOURCE_NOT_THIS_HOST
+      )
+    }
+  })
+
   it('leaves the SSH conversion alone everywhere', () => {
     expect(() => assertOrcadMigrationSourceServedHere(SSH_SOURCE, {}, 'linux')).not.toThrow()
   })

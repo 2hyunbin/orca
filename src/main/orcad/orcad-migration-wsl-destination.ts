@@ -8,6 +8,9 @@ import { isWslHostOrcadProcess } from '../ipc/wsl-guest-windows-drive-path'
 
 export const ORCAD_MIGRATION_SOURCE_NOT_THIS_HOST = 'orcad_migration_source_not_this_host'
 
+/** The distro's registry id, which the desktop passes at launch (D1b-4); the guest cannot read it. */
+export const ORCAD_WSL_DISTRO_GUID_ENV = 'ORCA_WSL_DISTRO_GUID'
+
 /** True on the orcad of a WSL host, which is the only host that advertises the WSL source kind. */
 export function servesLocalWslMigrationSource(
   env: NodeJS.ProcessEnv = process.env,
@@ -27,6 +30,11 @@ export function assertOrcadMigrationSourceServedHere(
   // WSL treats distro names case-insensitively, and so does every UNC path to one.
   const distro = env.WSL_DISTRO_NAME?.trim().toLowerCase()
   if (!servesLocalWslMigrationSource(env, platform) || distro !== source.distro.toLowerCase()) {
+    throw new Error(ORCAD_MIGRATION_SOURCE_NOT_THIS_HOST)
+  }
+  // A re-registered distro reuses the name but not the files. Unknown here fails closed.
+  const guid = env[ORCAD_WSL_DISTRO_GUID_ENV]?.trim().toLowerCase()
+  if (source.distroGuid !== undefined && guid !== source.distroGuid.toLowerCase()) {
     throw new Error(ORCAD_MIGRATION_SOURCE_NOT_THIS_HOST)
   }
 }
