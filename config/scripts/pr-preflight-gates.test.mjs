@@ -27,9 +27,7 @@ it('shares one setup and overlaps the compiler only after type-aware checks fini
   }
   expect(steps[0].with['fetch-depth']).toBeGreaterThanOrEqual(2)
   expect(compiler.background).toBe(true)
-  expect(compiler.run).toContain(
-    'node config/scripts/run-typecheck-projects-in-parallel.mjs --compiler=bun'
-  )
+  expect(compiler.run).toContain('pnpm run typecheck:ci')
   const bunSetup = steps.find((step) => step.name === 'Set up Bun for preflight checks')
   expect(bunSetup.with['bun-version']).toBe('1.4.3')
   expect(bunSetup.if).toBeUndefined()
@@ -50,20 +48,6 @@ it('shares one setup and overlaps the compiler only after type-aware checks fini
   expect(compilerJoin).toBeGreaterThan(
     steps.findIndex((step) => step.wait?.includes('localization-extraction'))
   )
-})
-
-it('joins the early daemon smoke before publishing a successful preflight', () => {
-  const smoke = steps.find((step) => step.id === 'orcad-terminal-smoke')
-  const smokeJoin = steps.findIndex((step) => step.wait?.includes('orcad-terminal-smoke'))
-  expect(smoke.background).toBe(true)
-  expect(steps.indexOf(smoke)).toBeGreaterThan(steps.indexOf(compiler))
-  expect(steps.indexOf(smoke)).toBeLessThan(
-    steps.findIndex((step) => step.name === 'Check Zustand selector fan-out budget')
-  )
-  expect(smokeJoin).toBeGreaterThan(steps.indexOf(smoke))
-  expect(smokeJoin).toBeLessThan(steps.indexOf(plan))
-  expect(compiler.run).not.toContain('build:packages')
-  expect(smoke.run).not.toContain('pnpm run build:orcad')
 })
 
 it('keeps the Bun anti-slop scan aligned with the local audit', () => {
@@ -243,6 +227,7 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Enforce layout-writer ratchets', staticPhase],
     ['Check compatibility-folder imports', staticPhase],
     ['Check Node runtime pin', staticPhase],
+    ['Boot orcad and round-trip a terminal', staticPhase],
     ['Verify the generated RPC params catalog', staticPhase],
     ['Verify the generated ACP protocol schema', staticPhase],
     ['Verify bundled skill guides', staticPhase],
@@ -264,7 +249,6 @@ it('pins every foreground and background step to its selected phase', () => {
     ['native-code-quality', `\${{ ${staticPhase} }}`],
     ['changed-code-quality', `\${{ ${staticPhase} }}`],
     ['typecheck', `\${{ ${typePhase} }}`],
-    ['orcad-terminal-smoke', `\${{ ${staticPhase} }}`],
     ['localization-extraction', `\${{ ${staticPhase} }}`],
     ['localization-catalogs', `\${{ ${staticPhase} }}`],
     ['unit-plan', `\${{ ${typePhase} }}`]

@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
@@ -40,6 +48,14 @@ it('falls back when the host executable differs from the pin without staging it'
 it('falls back when the candidate executable is unavailable', async () => {
   const { source, destination, hash } = fixture()
   rmSync(source)
+  expect(await copyPinnedNodeExecutable(source, destination, hash)).toBe(false)
+  expect(existsSync(destination)).toBe(false)
+})
+
+it('falls back when the candidate cannot be read as an executable file', async () => {
+  const { source, destination, hash } = fixture()
+  rmSync(source)
+  mkdirSync(source)
   expect(await copyPinnedNodeExecutable(source, destination, hash)).toBe(false)
   expect(existsSync(destination)).toBe(false)
 })

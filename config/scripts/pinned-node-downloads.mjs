@@ -19,7 +19,11 @@ export function pinnedNodeCacheDir(env = process.env) {
 }
 
 export async function copyPinnedNodeExecutable(source, destination, sha256) {
-  if (!existsSync(source) || (await sha256File(source)) !== sha256) {
+  try {
+    if ((await sha256File(source)) !== sha256) {
+      return false
+    }
+  } catch {
     return false
   }
   mkdirSync(dirname(destination), { recursive: true })
