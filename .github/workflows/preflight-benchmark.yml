@@ -342,17 +342,16 @@ jobs:
         \ from 'node:fs'\nimport {spawnSync} from 'node:child_process'\nimport {join} from 'node:path'\nimport {performance}\
         \ from 'node:perf_hooks'\nconst output='.build/scope-components';mkdirSync(output,{recursive:true})\nconst\
         \ files=['.anti-slop-plugin/rules/no-widen-then-assert.ts','.anti-slop-plugin/rules/no-module-mocking.ts']\n\
-        const candidate=files.map(f=>readFileSync(f,'utf8'))\nconst revert=()=>{\nimport {readFileSync,writeFileSync}\
-        \ from 'node:fs'\nconst change=(file,changes)=>{\n let text=readFileSync(file,'utf8')\n for(const [from,to]\
-        \ of changes){\n  if(text.split(from).length!==2)throw new Error(`Expected one baseline transform in ${file}:\
-        \ ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n}\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n\
-        \ ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] | null = null;','let scopes: Parameters<typeof\
-        \ resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes ??= context.sourceCode.scopeManager.scopes;\\\
-        n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n\
-        \ ['  const property = callee.property;','  if (!isTestFrameworkObject(sourceCode, callee.object)) return\
-        \ false;\\n  const property = callee.property;'],\n ['  return method !== null && moduleMockMethods.has(method)\
-        \ && isTestFrameworkObject(sourceCode, callee.object);','  return method !== null && moduleMockMethods.has(method);']\n\
-        ])\n}\nconst setArm=arm=>{files.forEach((f,i)=>writeFileSync(f,candidate[i]));if(arm==='baseline')revert()}\n\
+        const candidate=files.map(f=>readFileSync(f,'utf8'))\nconst revert=()=>{\nconst change=(file,changes)=>{\n\
+        \ let text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
+        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
+        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
+        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
+        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
+        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
+        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
+        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
+        \  return method !== null && moduleMockMethods.has(method);']\n])\n}\nconst setArm=arm=>{files.forEach((f,i)=>writeFileSync(f,candidate[i]));if(arm==='baseline')revert()}\n\
         const report={source:\"6a86277c5920023b7191b69a47a8ab1cf3d31148\",measurements:[],negative:[]}\nconst save=()=>writeFileSync(join(output,'components.json'),JSON.stringify(report,null,2))\n\
         const command=(runtime,args,label,expected=0)=>{\n const resources=join(output,label+'.resources.txt');const\
         \ t=performance.now()\n const r=spawnSync('/usr/bin/time',['-v','-o',resources,runtime,...args],{encoding:'utf8',timeout:300000,maxBuffer:32*1024*1024})\n\
