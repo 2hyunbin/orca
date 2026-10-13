@@ -24,7 +24,6 @@ function row(worktreeId: string): Worktree {
     path: `/srv/${worktreeId}`,
     liveTerminalCount: 0,
     hasAttachedPty: false,
-    preview: '',
     unread: false,
     isPinned: false,
     linkedPR: null
