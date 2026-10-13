@@ -22,8 +22,25 @@ export function useAddRepoWslHostPaths({
   selectedHostId: ExecutionHostId | null
   setServerPath: (path: string) => void
   setStep: (step: AddRepoDialogStep) => void
-}): { browseWslHost: (() => void) | null } {
+}): {
+  browseWslHost: (() => void) | null
+  /** The last path Windows handed over; only that path skips the host's own browser. */
+  prefilledServerPath: string | null
+  clearPrefilledServerPath: () => void
+} {
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
+  // Why a ref: every write is paired with setServerPath or setStep, which re-render the dialog.
+  const prefilledServerPathRef = useRef<string | null>(null)
+  const clearPrefilledServerPath = useCallback(() => {
+    prefilledServerPathRef.current = null
+  }, [])
+  const setPickedServerPath = useCallback(
+    (path: string) => {
+      prefilledServerPathRef.current = path
+      setServerPath(path)
+    },
+    [setServerPath]
+  )
   const access = useMemo(
     () => getWindowsPathAccess(selectedHostId, runtimeEnvironments),
     [runtimeEnvironments, selectedHostId]
@@ -49,9 +66,9 @@ export function useAddRepoWslHostPaths({
       return
     }
     handledDropRef.current = droppedHostPath
-    setServerPath(droppedHostPath.path)
+    setPickedServerPath(droppedHostPath.path)
     setStep('server-path')
-  }, [droppedHostPath, isOpen, selectedHostId, setServerPath, setStep])
+  }, [droppedHostPath, isOpen, selectedHostId, setPickedServerPath, setStep])
 
   const browseWslHost = useCallback(async (): Promise<void> => {
     const host = parseExecutionHostId(selectedHostId)
@@ -67,9 +84,13 @@ export function useAddRepoWslHostPaths({
     if (!linuxPath || pickerOwnerRef.current !== selectedHostId) {
       return
     }
-    setServerPath(linuxPath)
+    setPickedServerPath(linuxPath)
     setStep('server-path')
-  }, [access, selectedHostId, setServerPath, setStep])
+  }, [access, selectedHostId, setPickedServerPath, setStep])
 
-  return { browseWslHost: access ? () => void browseWslHost() : null }
+  return {
+    browseWslHost: access ? () => void browseWslHost() : null,
+    prefilledServerPath: prefilledServerPathRef.current,
+    clearPrefilledServerPath
+  }
 }

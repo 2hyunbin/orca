@@ -261,7 +261,7 @@ export default React.memo(function AddRepoDialog({
   })
 
   // Why after the host-change reset: a drop's path must survive the reset its host switch causes.
-  const { browseWslHost } = useAddRepoWslHostPaths({
+  const { browseWslHost, prefilledServerPath, clearPrefilledServerPath } = useAddRepoWslHostPaths({
     isOpen,
     droppedHostPath,
     selectedHostId: hostSelection.selectedHostId,
@@ -309,6 +309,7 @@ export default React.memo(function AddRepoDialog({
         nestedScanInProgress={nestedScanInProgress}
         nestedScanId={nestedScanId}
         serverPath={serverPath}
+        serverPathPrefilled={prefilledServerPath !== null && prefilledServerPath === serverPath}
         isAddingServerPath={isAddingServerPath}
         cloneUrl={cloneUrl}
         cloneDestination={cloneDestination}
@@ -342,7 +343,10 @@ export default React.memo(function AddRepoDialog({
         onBrowse={() =>
           routeAddRepoBrowse(hostSelection.selectedParsedHost, {
             browseLocal: () => void handleBrowse(),
-            browseRuntime: () => setStep('server-path'),
+            browseRuntime: () => {
+              clearPrefilledServerPath()
+              setStep('server-path')
+            },
             browseWslHost
           })
         }
