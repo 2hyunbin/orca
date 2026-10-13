@@ -52,8 +52,6 @@ const KNOWN_PREEXISTING_I2_FAILURES: Record<string, number> = {
   // Shrink leaves the cursor one column short; also present in the pre-Qoder serializer.
   'qoder-no-account': 2,
   'qoder-ready': 2,
-  // #28231's capture, serializer untouched: its full-screen frame shows the known restore divergence.
-  'codex-model-capacity-fullscreen': 12,
   // Codex 0.157 header border restores with an extra attribute bit (STA-8628 fixtures).
   'codex-0157-config-override-embedded-warning': 22,
   'codex-0157-effort-override-embedded-warning': 4,
