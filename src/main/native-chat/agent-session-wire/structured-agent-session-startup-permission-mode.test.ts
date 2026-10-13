@@ -117,10 +117,11 @@ it.each([false, true])(
         optionRevision: -1
       })
       await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledOnce())
-      expect(writes.mock.calls.map(([input]) => [input.key, input.value])).toEqual([
-        ['model', 'launched-model'],
-        ['effort', 'low']
-      ])
+      expect(writes).not.toHaveBeenCalled()
+      expect(rig.adapter.dispatch.mock.calls[0]?.[0].executionOptions).toEqual({
+        model: 'launched-model',
+        effort: 'low'
+      })
       const options = { model: 'picked-model', effort: 'high', permissionMode: 'full-access' }
       expect(rig.adapter.closeSession).toHaveBeenCalledTimes(hasOpenDispatch ? 0 : 1)
       expect(rig.adapter.acquire).toHaveBeenCalledTimes(hasOpenDispatch ? 1 : 2)

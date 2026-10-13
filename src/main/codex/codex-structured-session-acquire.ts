@@ -103,7 +103,7 @@ export async function acquireCodexStructuredSession(input: {
       throw new Error(`codex app-server for session ${sessionId} could not be stopped`)
     }
     acquisitions.assertCurrent(sessionId, attempt)
-    const launch = await deps
+    const resolvedLaunch = await deps
       .resolveLaunch({
         identity: acquireInput.identity,
         spawnToken: acquireInput.spawnToken,
@@ -112,6 +112,14 @@ export async function acquireCodexStructuredSession(input: {
       .catch((error: unknown) => {
         throw new AgentSessionPreSpawnError(error)
       })
+    const { model: _savedNextModel, ...launchSettings } = resolvedLaunch
+    const launch =
+      acquireInput.options === undefined
+        ? resolvedLaunch
+        : {
+            ...launchSettings,
+            ...(acquireInput.options.model ? { model: acquireInput.options.model } : {})
+          }
     acquisitions.assertCurrent(sessionId, attempt)
     account = launch.codexHome ? deps.resolveAccountKind?.(launch.codexHome) : undefined
     const connection = await open(

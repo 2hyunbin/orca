@@ -119,6 +119,14 @@ export async function openCodexStructuredSession(
     prompts: attempt.window.prompts,
     options: restoredCodexSessionOptions(input.options),
     reportedOptions: reportedCodexThreadOptions(opened),
+    ...(launch.resumeThreadId === null && !launch.model && opened.model
+      ? {
+          nativeDefaults: {
+            model: opened.model,
+            ...(opened.effort ? { effort: opened.effort } : {})
+          }
+        }
+      : {}),
     ...(catalogAccess ? { catalogAccess } : {}),
     dispatchEchoes: start.dispatchEchoes,
     translator,
