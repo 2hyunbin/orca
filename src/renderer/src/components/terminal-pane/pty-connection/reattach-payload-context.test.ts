@@ -109,24 +109,15 @@ describe('reattach payload context', () => {
     expect(context.reattachPayloadApplied).toBe(true)
   })
 
-  it('retires every recovery source when a native chat owns the saved conversation', async () => {
-    const startup: ColdRestoreAgentResumeStartup = {
-      command: "claude --resume 'chat-session'",
-      agent: 'claude',
-      resumeProviderSession: { key: 'session_id', id: 'chat-session' },
-      launchConfig: { agentCommand: 'claude', agentArgs: '', agentEnv: {} },
-      launchToken: 'transport-launch-token',
-      useLiveEntry: true,
-      hasSleepingRecord: true,
-      sleepingRecordEntry: null
-    }
-    const retireChatOwnedColdRestore = vi.fn()
+  it('says a chat-owned resume is unavailable without rebuilding or re-registering its plan', async () => {
+    const buildColdRestoreAgentResumeStartup = vi.fn()
+    const applyColdRestoreAgentResumeStartup = vi.fn(() => false)
     const clearSleepingRecordAfterColdRestoreSpawn = vi.fn()
     const showSessionRestoredBanner = vi.fn()
     const session = createSession({
-      applyColdRestoreAgentResumeStartup: vi.fn(() => true),
+      buildColdRestoreAgentResumeStartup,
+      applyColdRestoreAgentResumeStartup,
       showSessionRestoredBanner,
-      retireChatOwnedColdRestore,
       clearSleepingRecordAfterColdRestoreSpawn,
       consumeRestoredViewportBlankingMarker: vi.fn(),
       writeFreshShellViewportBlanking: vi.fn()
@@ -139,13 +130,15 @@ describe('reattach payload context', () => {
         agentResumeUnavailable: true,
         agentResumeOwnedByChat: true
       },
-      coldRestoreStartup: startup
+      // The result handler already retired the plan.
+      coldRestoreStartup: null
     }
 
     await createReattachPayloadHandlers(session, context).applyReattachPayload()
 
     expect(showSessionRestoredBanner).toHaveBeenCalledWith('resume-unavailable')
-    expect(retireChatOwnedColdRestore).toHaveBeenCalledWith(startup)
+    expect(buildColdRestoreAgentResumeStartup).not.toHaveBeenCalled()
+    expect(applyColdRestoreAgentResumeStartup).toHaveBeenCalledWith(null)
     expect(clearSleepingRecordAfterColdRestoreSpawn).not.toHaveBeenCalled()
   })
 })

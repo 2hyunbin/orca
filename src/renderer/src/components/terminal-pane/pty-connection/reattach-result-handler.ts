@@ -43,6 +43,7 @@ type ReattachResultSession = ReattachPayloadSession &
     | 'registerPaneSerializerFor'
     | 'registerSideEffectFactConsumerForPty'
     | 'reportPanePtyVisibility'
+    | 'retireChatOwnedColdRestore'
     | 'retryUnverifiableParkRevealSnapshot'
     | 'sampleVisiblePaneForegroundAgent'
     | 'warnParkRevealNoHostImage'
@@ -124,12 +125,16 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       })
       return false
     }
+    // Why first: nothing of a chat-owned resume plan may be registered for the plain shell.
+    const startup = connectResult?.agentResumeOwnedByChat
+      ? session.retireChatOwnedColdRestore(coldRestoreStartup)
+      : coldRestoreStartup
     session.registerEffectiveLaunchConfig(connectResult?.launchConfig, {
-      ...(coldRestoreStartup ? { launchToken: coldRestoreStartup.launchToken } : {}),
+      ...(startup ? { launchToken: startup.launchToken } : {}),
       ...(connectResult?.launchAgent
         ? { launchAgent: connectResult.launchAgent }
-        : coldRestoreStartup
-          ? { launchAgent: coldRestoreStartup.agent }
+        : startup
+          ? { launchAgent: startup.agent }
           : {})
     })
     if (connectResult?.sessionExpired) {
@@ -142,7 +147,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
         session.deps.clearTabPtyId(session.deps.tabId, staleSessionId)
       }
       // Why: a host can invalidate the PTY while the tab stays mounted; replace it in place, not with a stale overlay.
-      session.startFreshColdRestoreAgentResume(coldRestoreStartup, {
+      session.startFreshColdRestoreAgentResume(startup, {
         forceBlankRestoredViewport: true
       })
       return false
@@ -166,11 +171,15 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     const hasStructuralReplay = Boolean(
       connectResult?.snapshot || connectResult?.replay || connectResult?.coldRestore
     )
+    // Why here: a fresh result with no scrollback never reaches the cold-restore payload that says so.
+    if (connectResult?.agentResumeUnavailable && !connectResult.coldRestore) {
+      session.showSessionRestoredBanner('resume-unavailable')
+    }
     // Why: reattach drops startup commands; only real hibernation is authority to retire an empty adopted shell and resume its provider session.
     if (
       !hasStructuralReplay &&
       connectResult?.isReattach &&
-      hasEmptyReattachRetireEvidence(ptyId, coldRestoreStartup)
+      hasEmptyReattachRetireEvidence(ptyId, startup)
     ) {
       session.transport.disconnect()
       if (staleSessionId) {
@@ -179,7 +188,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       } else {
         session.syncPanePtyLayoutBinding(null)
       }
-      session.startFreshColdRestoreAgentResume(coldRestoreStartup, {
+      session.startFreshColdRestoreAgentResume(startup, {
         forceBlankRestoredViewport: true
       })
       return false
@@ -278,7 +287,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       prefetchedParkModelSnapshot,
       revealFollowsTerminalPark,
       shouldApplyStructuralPayload,
-      coldRestoreStartup,
+      coldRestoreStartup: startup,
       reattachPayloadApplied: !shouldApplyStructuralPayload,
       skippedAltFrameCaptureCols: null
     }

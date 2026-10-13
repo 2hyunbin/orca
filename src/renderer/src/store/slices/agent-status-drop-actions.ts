@@ -114,7 +114,11 @@ export function createAgentStatusDropActions(
         freshness.scheduleDeferred()
       }
       if (typeof window !== 'undefined') {
-        window.api?.agentStatus?.drop?.(paneKey)
+        if (opts?.forgetResume) {
+          window.api?.agentStatus?.drop?.(paneKey, { forgetResume: true })
+        } else {
+          window.api?.agentStatus?.drop?.(paneKey)
+        }
       }
     },
 

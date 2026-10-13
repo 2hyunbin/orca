@@ -47,6 +47,8 @@ export type DropAgentStatusOptions = {
    *  cleared-at cutoff and manual-unread stamp in place so a still-live pane's next hook event
    *  cannot resurrect activity the user already cleared. */
   paneRemoved?: boolean
+  /** The conversation belongs to a native chat, so the host keeps no resumable copy for this pane. */
+  forgetResume?: boolean
 }
 
 export type DropAgentStatusByTabPrefixOptions = {

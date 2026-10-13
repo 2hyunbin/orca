@@ -293,6 +293,15 @@ describe('agentStatus:drop IPC', () => {
     expect(clearMigrationUnsupportedPtysForPaneKey).toHaveBeenCalledWith(PANE_KEY)
   })
 
+  it('keeps no resumable remnant when the conversation belongs to a native chat', async () => {
+    const { registerAgentHookHandlers } = await import('./agent-hooks')
+    registerAgentHookHandlers()
+
+    onHandlers.get('agentStatus:drop')!({}, PANE_KEY, { forgetResume: true })
+
+    expect(dropStatusEntry).toHaveBeenCalledWith(PANE_KEY, { preserveResumeIdentity: false })
+  })
+
   it('forwards a runtime-owned legacy numeric row dismissal', async () => {
     const { registerAgentHookHandlers } = await import('./agent-hooks')
     registerAgentHookHandlers()

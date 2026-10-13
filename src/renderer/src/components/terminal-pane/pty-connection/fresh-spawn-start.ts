@@ -175,10 +175,14 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
           }
           return accepted ? resolvedPtyId : null
         }
+        // Why first: nothing of a chat-owned resume plan may be registered for the plain shell.
+        const coldRestore = connectResult?.agentResumeOwnedByChat
+          ? session.retireChatOwnedColdRestore(coldRestoreOverride)
+          : coldRestoreOverride
         if (spawnedPtyId && typeof spawnedPtyId === 'object' && 'id' in spawnedPtyId) {
           session.registerEffectiveLaunchConfig(spawnedPtyId.launchConfig, {
-            ...(coldRestoreOverride ? { launchToken: coldRestoreOverride.launchToken } : {}),
-            ...(coldRestoreOverride ? { launchAgent: coldRestoreOverride.agent } : {})
+            ...(coldRestore ? { launchToken: coldRestore.launchToken } : {}),
+            ...(coldRestore ? { launchAgent: coldRestore.agent } : {})
           })
         }
         if (resolvedPtyId) {
@@ -199,18 +203,10 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
             // Why: main dropped the resume argv, so this pane is a NEW session —
             // the plain restored banner would claim the old one came back.
             session.showSessionRestoredBanner('resume-unavailable')
-          } else if (coldRestoreOverride?.hasSleepingRecord) {
+          } else if (coldRestore?.hasSleepingRecord) {
             session.showSessionRestoredBanner()
           }
-          if (
-            spawnedPtyId &&
-            typeof spawnedPtyId === 'object' &&
-            spawnedPtyId.agentResumeOwnedByChat
-          ) {
-            session.retireChatOwnedColdRestore(coldRestoreOverride)
-          } else {
-            session.clearSleepingRecordAfterColdRestoreSpawn(coldRestoreOverride)
-          }
+          session.clearSleepingRecordAfterColdRestoreSpawn(coldRestore)
         } else if (
           session.paneStartup?.launchConfig ||
           (startupOverride && 'launchConfig' in startupOverride)

@@ -66,8 +66,12 @@ export const agentStatusApi = {
   getMigrationUnsupportedSnapshot: (): Promise<MigrationUnsupportedPtyEntry[]> =>
     ipcRenderer.invoke('agentStatus:getMigrationUnsupportedSnapshot'),
   /** Drop the cached hook status for a paneKey on both sides (memory + on-disk) so a relaunch can't resurrect a dismissed row. */
-  drop: (paneKey: string): void => {
-    ipcRenderer.send('agentStatus:drop', paneKey)
+  drop: (paneKey: string, options?: { forgetResume: true }): void => {
+    if (options) {
+      ipcRenderer.send('agentStatus:drop', paneKey, options)
+    } else {
+      ipcRenderer.send('agentStatus:drop', paneKey)
+    }
   },
   dropPersisted: (identity: AgentStatusCacheIdentity): void => {
     ipcRenderer.send('agentStatus:dropPersisted', identity)

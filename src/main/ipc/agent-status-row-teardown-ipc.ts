@@ -27,7 +27,7 @@ export function registerAgentStatusRowTeardownIpcHandlers(): void {
   ipcMain.removeAllListeners('agentStatus:reconcileEndedProcess')
   ipcMain.removeAllListeners('agentStatus:dropByTabPrefix')
 
-  ipcMain.on('agentStatus:drop', (_event, paneKey: unknown) => {
+  ipcMain.on('agentStatus:drop', (_event, paneKey: unknown, options?: unknown) => {
     if (
       typeof paneKey !== 'string' ||
       (!isValidPaneKey(paneKey) && parseLegacyNumericPaneKey(paneKey) === null)
@@ -39,7 +39,12 @@ export function registerAgentStatusRowTeardownIpcHandlers(): void {
       // dismissing a status row, not tearing down a PTY. clearPaneState would also
       // wipe the per-pane prompt/tool caches, which the next hook event for that
       // (still-alive) pane needs to render a coherent row.
-      agentHookServer.dropStatusEntry(paneKey)
+      if (isForgetResumeDrop(options)) {
+        // Why: a native chat owns the conversation; a remnant would let the pane resume it again.
+        agentHookServer.dropStatusEntry(paneKey, { preserveResumeIdentity: false })
+      } else {
+        agentHookServer.dropStatusEntry(paneKey)
+      }
       clearMigrationUnsupportedPtysForPaneKey(paneKey)
     } catch (err) {
       console.warn('[agent-hooks] dropStatusEntry failed:', err)
@@ -120,5 +125,14 @@ function isValidAgentStatusCacheIdentity(value: unknown): value is AgentStatusCa
     Number.isFinite(request.receivedAt) &&
     typeof request.stateStartedAt === 'number' &&
     Number.isFinite(request.stateStartedAt)
+  )
+}
+
+function isForgetResumeDrop(options: unknown): boolean {
+  return (
+    typeof options === 'object' &&
+    options !== null &&
+    'forgetResume' in options &&
+    options.forgetResume === true
   )
 }
