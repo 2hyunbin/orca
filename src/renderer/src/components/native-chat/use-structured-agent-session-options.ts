@@ -246,7 +246,11 @@ export function useStructuredAgentSessionOptions(args: {
       if (
         !optionCatalog ||
         encoded === null ||
-        !canSetStructuredAgentSessionOption(optionView, id, value)
+        !canSetStructuredAgentSessionOption(
+          { ...optionView, pendingPick: optionStateRef.current.pendingPick },
+          id,
+          value
+        )
       ) {
         return null
       }
