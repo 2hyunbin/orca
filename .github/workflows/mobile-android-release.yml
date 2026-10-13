@@ -240,8 +240,7 @@ jobs:
   # the site's APK download on the previous release and must not fail the release run.
   bump-apk-download:
     needs: android-build
-    # Why not ota: the public download follows native-shell builds; promoting an ota-shell APK is a manual call.
-    if: needs.android-build.outputs.publish_release == 'true' && inputs.shell != 'ota'
+    if: needs.android-build.outputs.publish_release == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:
