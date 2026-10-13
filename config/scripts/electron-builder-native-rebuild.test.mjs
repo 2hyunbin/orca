@@ -88,7 +88,7 @@ describe('electron-builder native rebuild hook', () => {
       ],
       [
         process.execPath,
-        ['config/scripts/build-windows-agent-hook.mjs'],
+        ['config/scripts/build-windows-agent-hook.mjs', '--arch', 'x64'],
         expect.objectContaining({ stdio: 'inherit' })
       ],
       [
