@@ -27,6 +27,7 @@ export const WorktreeCreate = z
       .transform((v) => (typeof v === 'string' ? v : ''))
       .pipe(z.string().min(1, 'Missing repo selector')),
     name: OptionalString,
+    recipeId: z.string().min(1).optional(),
     /** Set by clients that fell back to a generated creature name. Absent means user-typed, so the
      *  host neither skips a retired candidate nor retires the name it lands on. */
     nameWasGenerated: z.boolean().optional(),

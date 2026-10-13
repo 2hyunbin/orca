@@ -1,3 +1,4 @@
+import { createCliRecipeWorkspace } from '../ephemeral-vm-cli-workspace-create'
 import {
   applySessionSearchSettingsChange,
   installChildSessionSearchService
@@ -145,6 +146,15 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
   // Why here: this runs for the desktop and headless `orca serve`, and each evaluates its own panes.
   startAgentStateRulesLiveUpdates(store, (rules) =>
     recordDurableCrashBreadcrumb('agent_state_rules_active', rules)
+  )
+  runtime.setRecipeWorkspaceCreator((params, repo) =>
+    createCliRecipeWorkspace({
+      store,
+      userDataPath: app.getPath('userData'),
+      repo,
+      params,
+      pluginService: state.pluginService
+    })
   )
   state.runtime = runtime
   agentHookServer.subscribeEnrichedStatus((enriched) =>

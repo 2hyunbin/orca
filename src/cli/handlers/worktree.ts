@@ -1,3 +1,4 @@
+import { createWorktreeOnRecipe } from './worktree-create-recipe'
 import type {
   RuntimeWorktreeListResult,
   RuntimeWorktreePsResult,
@@ -162,6 +163,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatWorktreeShow)
   },
   'worktree create': async ({ flags, client, cwd, json, rawArgs }) => {
+    const recipeId = flags.has('recipe') ? getRequiredStringFlag(flags, 'recipe') : undefined
     const linkedItems = getCreateReferences(flags)
     assertWorktreeParentFlagsCompatible(flags)
     assertWorkspaceTargetFlagsCompatible(flags)
@@ -232,6 +234,10 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       // Why: marks the workspace as CLI-created so the sidebar can badge and
       // filter it. Sent on every `worktree create` — hand-typed or agent-run.
       cliProvenanceRequest: callerTerminalHandle ? { callerTerminalHandle } : {}
+    }
+    if (recipeId) {
+      await createWorktreeOnRecipe({ client, flags, create, recipeId, launch: agentLaunch, json })
+      return
     }
     if (agentLaunch) {
       await createWorktreeWithAgent({ client, flags, create, launch: agentLaunch, json, rawArgs })

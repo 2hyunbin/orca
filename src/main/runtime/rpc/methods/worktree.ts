@@ -97,6 +97,9 @@ export const WORKTREE_METHODS = [
       // worktree instead of spawning a duplicate. No key (desktop/CLI) runs plainly.
       context.runtime.dedupeWorktreeCreate(params.repo, params.clientMutationId, async () => {
         const { runtime } = context
+        if (params.recipeId !== undefined) {
+          return runtime.createManagedRecipeWorkspace(params)
+        }
         const repo = await runtime.showRepo(params.repo)
         const automationProvenance = resolveAutomationWorkspaceProvenance({
           authority: runtime,

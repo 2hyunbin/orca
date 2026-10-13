@@ -1,3 +1,4 @@
+import { WORKTREE_RECIPE_CREATE_RUNTIME_CAPABILITY } from '../../shared/worktree-recipe-create-capability'
 import { OrcaRuntimeWithGetRuntimeId } from './orca-runtime-get-runtime-id'
 import type { RuntimeDegradation, RuntimeStatus } from '../../shared/runtime-types'
 import {
@@ -49,6 +50,7 @@ import { MACHINE_NAME_PUBLISH_WAIT_MS } from './runtime-machine-name'
 import { getManagedServerActions } from './managed-server-actions-registry'
 
 type RuntimeStatusHost = {
+  supportsRecipeWorkspaceCreation?(): boolean
   getAvailableAuthoritativeWindow(): unknown
   getRecordedTerminalSleepHandles(
     ptyIds: Iterable<string>,
@@ -108,6 +110,9 @@ export class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
         (capability !== TERMINAL_PROMPT_DELIVERY_RUNTIME_CAPABILITY ||
           supportsDurableTerminalPromptDelivery())
     )
+    if (statusHost.supportsRecipeWorkspaceCreation?.()) {
+      capabilities.push(WORKTREE_RECIPE_CREATE_RUNTIME_CAPABILITY)
+    }
     if (hasOffscreen || hasHeadlessCommands) {
       capabilities.push(BROWSER_HEADLESS_RUNTIME_CAPABILITY)
     }
