@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { writeDurableSecureJsonFile } from '../../shared/secure-file'
 import {
   OrcadManagedStopRequestSchema,
+  orcadManagedStopRequestKey,
   type OrcadManagedStopInstance,
   type OrcadManagedStopRequest,
   type OrcadManagedStopVerdict
@@ -140,7 +141,10 @@ function lockStillNamesInstance(instance: OrcadManagedStopInstance): boolean {
 /** A request already present must be this one; another transaction's request is not ours. */
 function existingRequestMatches(path: string, request: OrcadManagedStopRequest): boolean {
   try {
-    return JSON.stringify(readOrcadManagedStopRequest(path)) === JSON.stringify(request)
+    return (
+      orcadManagedStopRequestKey(readOrcadManagedStopRequest(path)) ===
+      orcadManagedStopRequestKey(request)
+    )
   } catch (error) {
     return hasErrorCode(error, 'ENOENT')
   }

@@ -23,7 +23,10 @@ afterEach(() => {
   }
 })
 
-const RECORDED: OrcadProcessIncarnation = { linuxStartTicks: '4242', bootId: 'boot-a' }
+const RECORDED: OrcadProcessIncarnation = {
+  linuxStartTicks: '4242',
+  bootId: 'boot-a'
+}
 // The WSL2 smoke saw btime move by 157 s against a 1.5 s tolerance.
 const DRIFTED_STARTED_AT_MS = 5_000 + 157_000
 
@@ -130,5 +133,13 @@ describe('managed stop instance identity', () => {
     expect(JSON.parse(readFileSync(orcadManagedStopRequestPath(request.instance), 'utf8'))).toEqual(
       fromOlderClient
     )
+  })
+
+  it('matches its own receipt when an older client retries without the incarnation', async () => {
+    const request = running(RECORDED, { requestCarriesIncarnation: true })
+    expect(await completeOrcadManagedStop(request, linuxHost(RECORDED, 2))).toBe('exited')
+    const { linuxStartTicks: _ticks, bootId: _boot, ...withoutIncarnation } = request.instance
+    const retried = { ...request, instance: withoutIncarnation }
+    expect(await completeOrcadManagedStop(retried, linuxHost(RECORDED, 0))).toBe('exited')
   })
 })

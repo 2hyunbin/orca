@@ -43,6 +43,13 @@ export const OrcadManagedStopRequestSchema = z.object({
 
 export type OrcadManagedStopInstance = z.infer<typeof OrcadManagedStopInstanceSchema>
 export type OrcadManagedStopRequest = z.infer<typeof OrcadManagedStopRequestSchema>
+
+/** Equality key for a request; omits the incarnation, which an older client recovering it drops. */
+export function orcadManagedStopRequestKey(request: OrcadManagedStopRequest): string {
+  const { instance, ...rest } = OrcadManagedStopRequestSchema.parse(request)
+  const { linuxStartTicks: _ticks, bootId: _bootId, ...bound } = instance
+  return JSON.stringify({ ...rest, instance: bound })
+}
 /** What a stopping orcad must match before a managed request may stop it. */
 export type OrcadManagedStopContext = Omit<
   OrcadManagedStopRequest,

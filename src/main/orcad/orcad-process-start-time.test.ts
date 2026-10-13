@@ -1,3 +1,7 @@
+import { spawn } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type * as DaemonProcessStartTime from '../daemon/daemon-process-start-time'
 
@@ -5,7 +9,9 @@ const { readWindowsProcessCreationTime, getProcessStartedAtMs } = vi.hoisted(() 
   readWindowsProcessCreationTime: vi.fn<(pid: number) => number | null>(),
   getProcessStartedAtMs: vi.fn<(pid: number) => number | null>()
 }))
-vi.mock('../windows/windows-process-table', () => ({ readWindowsProcessCreationTime }))
+vi.mock('../windows/windows-process-table', () => ({
+  readWindowsProcessCreationTime
+}))
 vi.mock('../daemon/daemon-process-start-time', async (importOriginal) => ({
   ...(await importOriginal<typeof DaemonProcessStartTime>()),
   getProcessStartedAtMs
@@ -13,6 +19,7 @@ vi.mock('../daemon/daemon-process-start-time', async (importOriginal) => ({
 
 import {
   compareOrcadProcessIdentity,
+  readOrcadProcessIncarnation,
   readOrcadProcessStartedAtMs
 } from './orcad-process-start-time'
 
@@ -82,8 +89,49 @@ describe('orcad process identity', () => {
       compareOrcadProcessIdentity(
         42,
         { startedAtMs: 1_000 },
-        { startedAtMs: () => 158_000, incarnation: () => incarnation, platform: 'linux' }
+        {
+          startedAtMs: () => 158_000,
+          incarnation: () => incarnation,
+          platform: 'linux'
+        }
       )
     ).toBe('unproven')
+  })
+})
+
+describe.runIf(platform === 'linux')('orcad process incarnation on a real /proc', () => {
+  it('reads ticks and the boot id, even for a command name with spaces and parens', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orcad-incarnation-'))
+    const odd = join(dir, 'x) y (z')
+    symlinkSync('/bin/sleep', odd)
+    const child = spawn(odd, ['30'], { stdio: 'ignore' })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', resolve)
+        child.once('error', reject)
+      })
+      const pid = child.pid ?? 0
+      const bootId = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim()
+      const own = readOrcadProcessIncarnation(process.pid)
+      const other = readOrcadProcessIncarnation(pid)
+      expect(own).toEqual({
+        linuxStartTicks: expect.stringMatching(/^\d+$/),
+        bootId
+      })
+      expect(other).toEqual({
+        linuxStartTicks: expect.stringMatching(/^\d+$/),
+        bootId
+      })
+      expect(compareOrcadProcessIdentity(pid, { startedAtMs: null, ...other })).toBe('matches')
+      // This test process started well before the child, so its ticks name another process.
+      expect(compareOrcadProcessIdentity(pid, { startedAtMs: null, ...own })).toBe('differs')
+    } finally {
+      child.kill('SIGKILL')
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('answers null for a PID that does not exist', () => {
+    expect(readOrcadProcessIncarnation(2 ** 30)).toBeNull()
   })
 })
