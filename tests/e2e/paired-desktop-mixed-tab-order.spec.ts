@@ -31,48 +31,48 @@ import { toHostSessionTabId } from '../../src/shared/terminal-surface-id'
 
 type Strip = string[][]
 
-const STRIPS_KEY = '__mixedTabOrderStrips'
+declare global {
+  /** Every distinct strip the desktop drew since the last read. */
+  // eslint-disable-next-line no-var -- renderer global read between page.evaluate calls
+  var __mixedTabOrderStrips: Strip[] | undefined
+}
 
 /** Records every distinct strip the desktop draws for the worktree, as host tab and page ids. */
 async function recordDesktopStrips(page: Page, worktreeId: string): Promise<void> {
-  await page.evaluate(
-    ({ id, key }) => {
-      const store = window.__store!
-      const read = (): Strip => {
-        const state = store.getState()
-        const tabs = state.unifiedTabsByWorktree[id] ?? []
-        return (state.groupsByWorktree[id] ?? []).map((group) =>
-          group.tabOrder.map((tabId) => {
-            const tab = tabs.find((candidate) => candidate.id === tabId)
-            if (tab?.contentType !== 'browser') {
-              return tabId
-            }
-            const pageId = state.browserPagesByWorkspace[tab.entityId]?.[0]?.id
-            const handle = pageId ? state.remoteBrowserPageHandlesByPageId[pageId] : undefined
-            return `page:${handle?.remotePageId ?? pageId ?? tab.entityId}`
-          })
-        )
+  await page.evaluate((id) => {
+    const store = window.__store!
+    const read = (): Strip => {
+      const state = store.getState()
+      const tabs = state.unifiedTabsByWorktree[id] ?? []
+      return (state.groupsByWorktree[id] ?? []).map((group) =>
+        group.tabOrder.map((tabId) => {
+          const tab = tabs.find((candidate) => candidate.id === tabId)
+          if (tab?.contentType !== 'browser') {
+            return tabId
+          }
+          const pageId = state.browserPagesByWorkspace[tab.entityId]?.[0]?.id
+          const handle = pageId ? state.remoteBrowserPageHandlesByPageId[pageId] : undefined
+          return `page:${handle?.remotePageId ?? pageId ?? tab.entityId}`
+        })
+      )
+    }
+    const strips: Strip[] = [read()]
+    window.__mixedTabOrderStrips = strips
+    store.subscribe(() => {
+      const next = read()
+      if (JSON.stringify(next) !== JSON.stringify(strips.at(-1))) {
+        strips.push(next)
       }
-      const strips: Strip[] = [read()]
-      Reflect.set(window, key, strips)
-      store.subscribe(() => {
-        const next = read()
-        if (JSON.stringify(next) !== JSON.stringify(strips.at(-1))) {
-          strips.push(next)
-        }
-      })
-    },
-    { id: worktreeId, key: STRIPS_KEY }
-  )
+    })
+  }, worktreeId)
 }
 
 /** The strips recorded since the last call, terminal ids mapped to the host tabs they mirror. */
 async function takeDesktopStrips(page: Page): Promise<Strip[]> {
-  const strips = await page.evaluate((key) => {
-    const recorded: unknown = Reflect.get(window, key)
-    const strips: Strip[] = Array.isArray(recorded) ? recorded : []
+  const strips = await page.evaluate(() => {
+    const strips = window.__mixedTabOrderStrips ?? []
     return strips.splice(0, strips.length - 1).concat(strips)
-  }, STRIPS_KEY)
+  })
   return strips.map((strip) =>
     strip.map((group) =>
       group.map((id) => (id.startsWith('page:') ? id.slice(5) : toHostSessionTabId(id)))
