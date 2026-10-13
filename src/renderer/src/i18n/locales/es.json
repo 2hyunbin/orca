@@ -6840,7 +6840,7 @@
           "cfd82406dd": "Guardando...",
           "40e7be7850": "Guardado",
           "7c7e34a66d": "Cambios sin guardar",
-          "commandTemplateDescription": "Usa <basePrompt>{basePrompt}</basePrompt> para incluir el <promptLink>prompt integrado para nombres de rama</promptLink>. También puedes referenciar <firstPrompt>{firstPrompt}</firstPrompt> y <assistantMessage>{assistantMessage}</assistantMessage>. Orca genera solo el segmento final, como <example>fix-login-flow</example>; se seguirá aplicando tu prefijo de rama."
+          "commandTemplateDescription": "Usa <basePrompt>{basePrompt}</basePrompt> para incluir el <promptLink>prompt integrado de Orca para nombres de rama</promptLink>. También puedes referenciar <firstPrompt>{firstPrompt}</firstPrompt> y <assistantMessage>{assistantMessage}</assistantMessage>. Orca genera solo el segmento final, como <example>fix-login-flow</example>; se seguirá aplicando tu prefijo de rama."
         },
         "AutoRenameBranchPromptEditor": {
           "63121132c0": "Descartar",
@@ -7411,7 +7411,7 @@
           "compareAgainstUpstreamDescription": "Elige qué base usa Control de código fuente de forma predeterminada para las comparaciones de cambios confirmados. El upstream de la rama sigue automáticamente la rama actual y recurre a la rama predeterminada del repositorio cuando no hay upstream. Aun así, puedes cambiar la base de comparación por worktree desde el panel Git de ese worktree. Los objetivos de Pull Request y rebase no cambian.",
           "compareBaseRepositoryDefault": "Predeterminada del repositorio",
           "compareBaseBranchUpstream": "Upstream de la rama",
-          "refreshLocalBaseDescription": "Cuando creas un espacio de trabajo, Orca actualiza la base remota y adelanta de forma segura tu rama local correspondiente, como <mainBranch>main</mainBranch> o <masterBranch>master</masterBranch>. Esto mantiene comandos como <diffCommand>git diff main...HEAD</diffCommand> comparen con historial obsoleto. Orca omite la actualización si esa rama tiene cambios sin commit o commits solo locales."
+          "refreshLocalBaseDescription": "Cuando creas un espacio de trabajo, Orca actualiza la base remota y adelanta de forma segura tu rama local correspondiente, como <mainBranch>main</mainBranch> o <masterBranch>master</masterBranch>. Esto evita que comandos como <diffCommand>git diff main...HEAD</diffCommand> comparen con un historial obsoleto. Orca omite la actualización si esa rama tiene cambios sin commit o commits solo locales."
         },
         "HiddenExperimentalGroup": {
           "7c4e18d2f6": "Activa los gestos de captura del fallo de negrita en esta máquina: {{samplingShortcut}} inicia una ráfaga de muestreo; {{captureShortcut}} captura evidencia del panel en disco.",
@@ -7923,8 +7923,8 @@
           "waitForSetupBeforeAgent": "Espera a que se complete la configuración antes de iniciar el agente",
           "issueCommandDescription": "Anulación opcional. Usa <artifactUrl>{{artifact_url}}</artifactUrl> para la URL del Issue o PR vinculado.",
           "issueCommandSharedDefault": "Déjalo en blanco para usar el valor predeterminado del repositorio desde <yaml>orca.yaml</yaml>.",
-          "issueCommandOptionalDefault": "Déjalo en blanco para usar el valor predeterminado del repositorio desde <yaml>orca.yaml</yaml>cuando uno existe.",
-          "commandSourceDescription": "Cuando ambos <yaml>orca.yaml</yaml> y hay comandos locales, elige cuáles se ejecutan."
+          "issueCommandOptionalDefault": "Déjalo en blanco para usar el valor predeterminado del repositorio desde <yaml>orca.yaml</yaml>, si existe.",
+          "commandSourceDescription": "Cuando existen tanto <yaml>orca.yaml</yaml> como comandos locales, elige cuáles se ejecutan."
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "Usar {{value0}} como color del repositorio",
@@ -10964,10 +10964,10 @@
                 "statusConnected": "Conectado",
                 "statusNotConnected": "No conectado",
                 "linearTokenName": "Su token de API Linear",
-                "connectedSiteSingular": "Conexión completada para {{count}} sitio",
-                "connectedSitePlural": "Conexión completada para {{count}} sitios",
-                "connectedWorkspaceSingular": "Conexión completada para {{count}} workspace",
-                "connectedWorkspacePlural": "Conexión completada para {{count}} workspaces"
+                "connectedSiteSingular": "{{count}} sitio conectado",
+                "connectedSitePlural": "{{count}} sitios conectados",
+                "connectedWorkspaceSingular": "{{count}} espacio de trabajo conectado",
+                "connectedWorkspacePlural": "{{count}} espacios de trabajo conectados"
               }
             }
           }

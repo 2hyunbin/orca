@@ -6825,7 +6825,7 @@
           "cfd82406dd": "保存中...",
           "40e7be7850": "已保存",
           "7c7e34a66d": "未保存的更改",
-          "commandTemplateDescription": "使用 <basePrompt>{basePrompt}</basePrompt> 包括 Orca 的 <promptLink>内置分支名称提示</promptLink>。您还可以参考 <firstPrompt>{firstPrompt}</firstPrompt> 和 <assistantMessage>{assistantMessage}</assistantMessage>。 Orca 仅生成最后一段，例如 <example>fix-login-flow</example>;您的分支前缀设置仍然适用。"
+          "commandTemplateDescription": "使用 <basePrompt>{basePrompt}</basePrompt> 可包含 Orca 的<promptLink>内置分支名称提示</promptLink>。您还可以引用 <firstPrompt>{firstPrompt}</firstPrompt> 和 <assistantMessage>{assistantMessage}</assistantMessage>。Orca 只生成最后一段，例如 <example>fix-login-flow</example>；您的分支前缀设置仍然适用。"
         },
         "AutoRenameBranchPromptEditor": {
           "63121132c0": "放弃",
@@ -7396,7 +7396,7 @@
           "compareAgainstUpstreamDescription": "选择源代码管理在比较已提交变更时默认使用的基准。分支上游会自动跟随当前分支；如果没有上游，则回退到仓库默认分支。你仍然可以在对应 worktree 的 Git 面板中按 worktree 更改对比基准。Pull Request 和变基目标不会改变。",
           "compareBaseRepositoryDefault": "仓库默认",
           "compareBaseBranchUpstream": "分支上游",
-          "refreshLocalBaseDescription": "当您创建工作区时，Orca 会刷新远程库并安全地快进您匹配的本地分支，例如 <mainBranch>main</mainBranch> 或者 <masterBranch>master</masterBranch>。这使得命令像 <diffCommand>git diff main...HEAD</diffCommand> 避免与过时的历史记录进行比较。如果该分支有未提交的更改或仅在本地的提交，Orca 会跳过更新。"
+          "refreshLocalBaseDescription": "创建工作区时，Orca 会刷新远程基准分支，并安全地快进对应的本地分支，例如 <mainBranch>main</mainBranch> 或 <masterBranch>master</masterBranch>。这样可以避免 <diffCommand>git diff main...HEAD</diffCommand> 等命令与过时的历史记录进行比较。如果该分支有未提交的更改或仅在本地的提交，Orca 会跳过更新。"
         },
         "HiddenExperimentalGroup": {
           "7c4e18d2f6": "在本机启用粗体故障捕获手势：{{samplingShortcut}} 开始采样突发；{{captureShortcut}} 将窗格证据捕获到磁盘。",
@@ -7906,10 +7906,10 @@
           "da37d6f10e": "复制",
           "3149964b66": "已复制",
           "waitForSetupBeforeAgent": "等待设置完成后再启动智能体",
-          "issueCommandDescription": "可选覆盖。使用 <artifactUrl>{{artifact_url}}</artifactUrl> 对于链接的议题或 PR URL。",
-          "issueCommandSharedDefault": "留空以使用仓库默认值 <yaml>orca.yaml</yaml>.",
-          "issueCommandOptionalDefault": "留空以使用仓库默认值 <yaml>orca.yaml</yaml>当一个存在时。",
-          "commandSourceDescription": "当两者 <yaml>orca.yaml</yaml> 并且本地命令存在，选择哪个运行。"
+          "issueCommandDescription": "可选覆盖。使用 <artifactUrl>{{artifact_url}}</artifactUrl> 表示关联议题或 PR 的 URL。",
+          "issueCommandSharedDefault": "留空则使用 <yaml>orca.yaml</yaml> 中的仓库默认值。",
+          "issueCommandOptionalDefault": "留空则使用 <yaml>orca.yaml</yaml> 中的仓库默认值（如果有）。",
+          "commandSourceDescription": "当 <yaml>orca.yaml</yaml> 和本地命令同时存在时，选择要运行哪些命令。"
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "使用 {{value0}} 仓库颜色",
@@ -8452,8 +8452,8 @@
           "0e5aa04161": "需要主机或 SSH 配置别名",
           "f1fc50dad2": "无法加载 SSH 目标",
           "0cda732f43": "连接测试失败",
-          "syncedServerSingular": "已同步 {{count}} 服务器",
-          "syncedServerPlural": "已同步 {{count}} 服务器s"
+          "syncedServerSingular": "已同步 {{count}} 台服务器",
+          "syncedServerPlural": "已同步 {{count}} 台服务器"
         },
         "SshPassphraseDialog": {
           "d5a234456f": "取消",
@@ -8855,7 +8855,7 @@
           "d504ab05f0": "流媒体",
           "fbe5990716": "选择型号",
           "e24f7d43d2": "选择语音模型，本地模型离线运行；云模型需要 API 密钥。",
-          "174da92062": "抓住",
+          "174da92062": "按住",
           "118b3c2dee": "切换",
           "901985625d": "切换",
           "ad5d036ecc": "无法请求麦克风权限。未启用语音听写。",
@@ -8864,8 +8864,8 @@
           "cd9fe37556": "已授予麦克风权限",
           "6fa734ed95": "删除 {{value0}}",
           "openAiKeyName": "您的 OpenAI 转录密钥",
-          "dictationShortcutDescription": "按 {{shortcut}} 将文本听写到任何焦点窗格中。",
-          "dictationModesDescription": "切换：按下 {{shortcut}} 一次开始，再次停止。按住：指示同时 {{shortcut}} 举行。"
+          "dictationShortcutDescription": "按 {{shortcut}} 可将文本听写到当前聚焦的任意窗格中。",
+          "dictationModesDescription": "切换：按一次 {{shortcut}} 开始，再按一次停止。按住：按住 {{shortcut}} 期间进行听写。"
         },
         "WorktreeSymlinksSection": {
           "1c1e35b219": "删除 {{value0}}",
@@ -10964,10 +10964,10 @@
                 "statusConnected": "已连接",
                 "statusNotConnected": "未连接",
                 "linearTokenName": "您的 Linear API 令牌",
-                "connectedSiteSingular": "{{count}} 个站点 已连接",
-                "connectedSitePlural": "{{count}} 个站点s 已连接",
-                "connectedWorkspaceSingular": "{{count}} 个工作区 已连接",
-                "connectedWorkspacePlural": "{{count}} 个工作区s 已连接"
+                "connectedSiteSingular": "已连接 {{count}} 个站点",
+                "connectedSitePlural": "已连接 {{count}} 个站点",
+                "connectedWorkspaceSingular": "已连接 {{count}} 个工作区",
+                "connectedWorkspacePlural": "已连接 {{count}} 个工作区"
               }
             }
           }

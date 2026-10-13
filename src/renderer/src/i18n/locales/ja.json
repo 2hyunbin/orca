@@ -6825,7 +6825,7 @@
           "cfd82406dd": "保存中…",
           "40e7be7850": "保存済み",
           "7c7e34a66d": "未保存の変更",
-          "commandTemplateDescription": "使用 <basePrompt>{basePrompt}</basePrompt> Orca も含めて <promptLink>組み込みのブランチ名プロンプト</promptLink>。参考にすることもできます <firstPrompt>{firstPrompt}</firstPrompt> と <assistantMessage>{assistantMessage}</assistantMessage>。 Orca は次のような最後のセグメントのみを生成します。 <example>fix-login-flow</example>;ブランチプレフィックス設定は引き続き適用されます。"
+          "commandTemplateDescription": "<basePrompt>{basePrompt}</basePrompt> を使うと、Orca の<promptLink>組み込みのブランチ名プロンプト</promptLink>を含めることができます。<firstPrompt>{firstPrompt}</firstPrompt> と <assistantMessage>{assistantMessage}</assistantMessage> も参照できます。Orca が生成するのは <example>fix-login-flow</example> のような最後のセグメントだけで、ブランチプレフィックス設定は引き続き適用されます。"
         },
         "AutoRenameBranchPromptEditor": {
           "63121132c0": "破棄",
@@ -7433,7 +7433,7 @@
           "compareAgainstUpstreamDescription": "ソース管理がコミット済み変更の比較に既定で使うベースを選択します。ブランチの upstream は現在のブランチに自動的に追従し、upstream がない場合はリポジトリの既定ブランチにフォールバックします。比較ベースは各ワークツリーの Git パネルからワークツリーごとに変更できます。Pull Request やリベースの対象は変更されません。",
           "compareBaseRepositoryDefault": "リポジトリ既定",
           "compareBaseBranchUpstream": "ブランチの upstream",
-          "refreshLocalBaseDescription": "ワークスペースを作成すると、Orca はリモートベースを更新し、一致するローカルブランチを安全に fast-forward します。対象は <mainBranch>main</mainBranch> または <masterBranch>master</masterBranch>。これにより、 <diffCommand>git diff main...HEAD</diffCommand> などのコマンドが古い履歴と比較されるのを防ぎます。対象のブランチにコミットしていない変更やローカルのみのコミットがある場合、Orca は更新をスキップします。"
+          "refreshLocalBaseDescription": "ワークスペースを作成すると、Orca はリモートのベースを更新し、<mainBranch>main</mainBranch> や <masterBranch>master</masterBranch> など、対応するローカルブランチを安全に fast-forward します。これにより、<diffCommand>git diff main...HEAD</diffCommand> などのコマンドが古い履歴と比較されるのを防ぎます。対象のブランチにコミットしていない変更やローカルのみのコミットがある場合、Orca は更新をスキップします。"
         },
         "HiddenExperimentalGroup": {
           "7c4e18d2f6": "このマシンで太字グリッチのキャプチャジェスチャーを有効にします。{{samplingShortcut}} でサンプリングバーストを開始し、{{captureShortcut}} でペインの証拠をディスクに保存します。",
@@ -7943,10 +7943,10 @@
           "da37d6f10e": "コピー",
           "3149964b66": "コピーしました",
           "waitForSetupBeforeAgent": "セットアップが完了するまで待ってから Agent を開始してください",
-          "issueCommandDescription": "オプションの上書き。使用 <artifactUrl>{{artifact_url}}</artifactUrl> リンクされた号または PR URL をご覧ください。",
-          "issueCommandSharedDefault": "リポジトリのデフォルトを使用するには空白のままにします <yaml>orca.yaml</yaml>.",
-          "issueCommandOptionalDefault": "リポジトリのデフォルトを使用するには空白のままにします <yaml>orca.yaml</yaml>存在するとき。",
-          "commandSourceDescription": "両方のとき <yaml>orca.yaml</yaml> ローカルコマンドが存在する場合は、どのコマンドを実行するかを選択します。"
+          "issueCommandDescription": "任意の上書きです。リンクされた Issue または PR の URL には <artifactUrl>{{artifact_url}}</artifactUrl> を使用します。",
+          "issueCommandSharedDefault": "空欄のままにすると、<yaml>orca.yaml</yaml> のリポジトリのデフォルトを使用します。",
+          "issueCommandOptionalDefault": "空欄のままにすると、<yaml>orca.yaml</yaml> にリポジトリのデフォルトがあればそれを使用します。",
+          "commandSourceDescription": "<yaml>orca.yaml</yaml> とローカルの両方にコマンドがある場合は、どちらを実行するかを選択します。"
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "{{value0}} リポジトリカラーを使用する",
@@ -8489,8 +8489,8 @@
           "0e5aa04161": "ホストまたは SSH 構成エイリアスが必要です",
           "f1fc50dad2": "SSH ターゲットのロードに失敗しました",
           "0cda732f43": "接続テストに失敗しました",
-          "syncedServerSingular": "{{count}} サーバー を同期しました",
-          "syncedServerPlural": "{{count}} サーバーs を同期しました"
+          "syncedServerSingular": "{{count}} 台のサーバーを同期しました",
+          "syncedServerPlural": "{{count}} 台のサーバーを同期しました"
         },
         "SshPassphraseDialog": {
           "d5a234456f": "キャンセル",
@@ -8901,8 +8901,8 @@
           "cd9fe37556": "マイクの許可が与えられました",
           "6fa734ed95": "{{value0}} を削除",
           "openAiKeyName": "OpenAI 転写キー",
-          "dictationShortcutDescription": "プレス {{shortcut}} フォーカスされたペインにテキストを書き込むことができます。",
-          "dictationModesDescription": "トグル: 押す {{shortcut}} 一度開始し、もう一度停止します。ホールド: 言いながら言い続ける {{shortcut}} が開催されます。"
+          "dictationShortcutDescription": "{{shortcut}} を押すと、フォーカスされているペインにテキストを音声入力できます。",
+          "dictationModesDescription": "トグル: {{shortcut}} を1回押すと開始し、もう一度押すと停止します。ホールド: {{shortcut}} を押している間、音声入力します。"
         },
         "WorktreeSymlinksSection": {
           "1c1e35b219": "{{value0}} を削除",
@@ -10964,10 +10964,10 @@
                 "statusConnected": "接続済み",
                 "statusNotConnected": "接続されていません",
                 "linearTokenName": "リニア API トークン",
-                "connectedSiteSingular": "{{count}} サイト が接続されました",
-                "connectedSitePlural": "{{count}} サイトs が接続されました",
-                "connectedWorkspaceSingular": "{{count}} ワークスペース が接続されました",
-                "connectedWorkspacePlural": "{{count}} ワークスペースs が接続されました"
+                "connectedSiteSingular": "{{count}} 件のサイトに接続済み",
+                "connectedSitePlural": "{{count}} 件のサイトに接続済み",
+                "connectedWorkspaceSingular": "{{count}} 件のワークスペースに接続済み",
+                "connectedWorkspacePlural": "{{count}} 件のワークスペースに接続済み"
               }
             }
           }

@@ -6946,7 +6946,7 @@
           "cfd82406dd": "Enregistrement...",
           "40e7be7850": "Enregistré",
           "7c7e34a66d": "Modifications non enregistrées",
-          "commandTemplateDescription": "Utiliser <basePrompt>{basePrompt}</basePrompt> pour inclure <promptLink>l'invite intégrée de nom de branche d'Orca</promptLink>. Vous pouvez aussi référencer <firstPrompt>{firstPrompt}</firstPrompt> et <assistantMessage>{assistantMessage}</assistantMessage>. Orca ne génère que le dernier segment, comme <example>fix-login-flow</example>; votre paramètre de préfixe de branche s'applique toujours."
+          "commandTemplateDescription": "Utilisez <basePrompt>{basePrompt}</basePrompt> pour inclure <promptLink>l'invite intégrée de nom de branche d'Orca</promptLink>. Vous pouvez aussi référencer <firstPrompt>{firstPrompt}</firstPrompt> et <assistantMessage>{assistantMessage}</assistantMessage>. Orca ne génère que le dernier segment, comme <example>fix-login-flow</example> ; votre paramètre de préfixe de branche s'applique toujours."
         },
         "AutoRenameBranchPromptEditor": {
           "63121132c0": "Abandonner",
@@ -7554,7 +7554,7 @@
           "compareAgainstUpstreamDescription": "Choisissez la base que le contrôle de code source utilise par défaut pour comparer les changements commités. L'amont de la branche suit automatiquement la branche courante et revient à la branche par défaut du dépôt en l'absence d'amont. Vous pouvez toujours changer la base de comparaison d'un worktree depuis son panneau Git. Les cibles de pull request et de rebase ne changent pas.",
           "compareBaseRepositoryDefault": "Valeur par défaut du dépôt",
           "compareBaseBranchUpstream": "Amont de la branche",
-          "refreshLocalBaseDescription": "Quand vous créez un espace de travail, Orca actualise la base distante et fait avancer en toute sécurité votre branche locale correspondante (fast-forward), telle que <mainBranch>main</mainBranch> ou <masterBranch>master</masterBranch>. Cela permet de garder des commandes comme <diffCommand>git diff main...HEAD</diffCommand> de comparer avec un historique périmé. Orca ignore la mise à jour si cette branche contient des modifications non commitées ou des commits uniquement locaux."
+          "refreshLocalBaseDescription": "Quand vous créez un espace de travail, Orca actualise la base distante et fait avancer en toute sécurité votre branche locale correspondante (fast-forward), telle que <mainBranch>main</mainBranch> ou <masterBranch>master</masterBranch>. Cela évite que des commandes comme <diffCommand>git diff main...HEAD</diffCommand> comparent avec un historique périmé. Orca ignore la mise à jour si cette branche contient des modifications non commitées ou des commits uniquement locaux."
         },
         "InputPane": {
           "db15068196": "Activé par défaut sur Linux et macOS. Linux utilise le presse-papiers de sélection du système ; les autres plateformes utilisent un tampon privé.",
@@ -8067,8 +8067,8 @@
           "waitForSetupBeforeAgent": "Attendre la fin du setup avant de démarrer l'agent",
           "issueCommandDescription": "Remplacement facultatif. Utilisez <artifactUrl>{{artifact_url}}</artifactUrl> pour l'URL de l'issue ou de la pull request liée.",
           "issueCommandSharedDefault": "Laissez vide pour utiliser la valeur par défaut du dépôt définie dans <yaml>orca.yaml</yaml>.",
-          "issueCommandOptionalDefault": "Laissez vide pour utiliser la valeur par défaut du dépôt définie dans <yaml>orca.yaml</yaml>lorsqu'il en existe un.",
-          "commandSourceDescription": "Lorsque les deux <yaml>orca.yaml</yaml> et des commandes locales existent, choisissez celles qui s'exécutent."
+          "issueCommandOptionalDefault": "Laissez vide pour utiliser la valeur par défaut du dépôt définie dans <yaml>orca.yaml</yaml>, s'il en existe une.",
+          "commandSourceDescription": "Lorsque <yaml>orca.yaml</yaml> et des commandes locales existent tous les deux, choisissez celles qui s'exécutent."
         },
         "RepositoryIconPicker": {
           "2b7d27b93c": "Utiliser la couleur de dépôt {{value0}}",
@@ -9027,8 +9027,8 @@
           "1eac933202": "Panneau Confidentialité et sécurité de macOS ouvert. Réactivez la dictée après avoir accordé l'accès.",
           "cd9fe37556": "Autorisation d'accès au micro accordée",
           "openAiKeyName": "Votre clé de transcription OpenAI",
-          "dictationShortcutDescription": "Appuyez {{shortcut}} pour dicter du texte dans n'importe quel volet actif.",
-          "dictationModesDescription": "Bascule : appuyez {{shortcut}} une fois pour démarrer, à nouveau pour arrêter. Maintien : dictez tant que {{shortcut}} est maintenu."
+          "dictationShortcutDescription": "Appuyez sur {{shortcut}} pour dicter du texte dans n'importe quel volet actif.",
+          "dictationModesDescription": "Bascule : appuyez une fois sur {{shortcut}} pour démarrer, puis à nouveau pour arrêter. Maintien : dictez tant que {{shortcut}} est maintenu."
         },
         "WorktreeSymlinksSection": {
           "1c1e35b219": "Supprimer {{value0}}",
@@ -11057,9 +11057,9 @@
                 "statusNotConnected": "Non connecté",
                 "linearTokenName": "Votre jeton API linéaire",
                 "connectedSiteSingular": "{{count}} site connecté",
-                "connectedSitePlural": "{{count}} sites connecté",
-                "connectedWorkspaceSingular": "Connecté : {{count}} espace de travail",
-                "connectedWorkspacePlural": "Connectés : {{count}} espace de travail"
+                "connectedSitePlural": "{{count}} sites connectés",
+                "connectedWorkspaceSingular": "{{count}} espace de travail connecté",
+                "connectedWorkspacePlural": "{{count}} espaces de travail connectés"
               }
             }
           }
