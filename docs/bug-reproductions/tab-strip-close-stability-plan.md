@@ -4,7 +4,26 @@
 
 This is a provisional implementation proposal, not a proven regression fix or a completed council decision. Three independent Orca investigators completed their initial investigations, but report retrieval and structured-worker reuse failed before the required blind cross-review could be completed. No introducing commit has been established for the user's entire reported regression.
 
-The investigation started from clean HEAD `b4e99fcea2f7796a902c07efe7c8385b0cfbd7ec`. No fix has been implemented, committed, reverted, or submitted for review.
+The original investigation started from clean HEAD `b4e99fcea2f7796a902c07efe7c8385b0cfbd7ec`. This branch now contains a scroll-anchor extension in `cd0b716f774bbd07efb0c5d70a8ca16be8f53873`; it has not been established as a fix for the user's reported jump.
+
+## Chat-only report and follow-up checks (2026-10-12)
+
+The user reports that closing chat UI tabs is jumpy, while closing other tab types is not. This narrows the reproduction target. A general tab-strip anchor change alone does not explain the difference.
+
+Dedicated chat tabs and terminals use the same `SortableTab` surface. Dedicated chats additionally retire their conversation reader, stop pending sends, remove the unified tab locally, and close the session and tab on the owning host. A later host inventory update is a possible source of another layout change, but it must be observed before attributing the report to it. A terminal switched to Chat view instead follows the terminal close path.
+
+A fresh, isolated background Electron instance of this worktree was checked through Playwright CDP with `ORCA_BACKGROUND_LAUNCH=1`. Its app identity confirmed the worktree path. Real local chat sessions were created without sending prompts. Full-window screenshots, frame samples of tab rectangles, scroll-write instrumentation, and store subscriptions covered:
+
+- A non-overflowing active chat close with a distant recent chat selected afterward.
+- An overflowing, docked rightmost chat close while scrolled away from the end, with the recent successor docking at the opposite edge.
+- Active and inactive middle chat closes, an end-pinned active close, middle-click, and the platform's close-tab keyboard shortcut.
+- A terminal switched to Chat view with a synthetic local transcript, closed through its actual tab close button.
+
+These checks did not reproduce an extra viewport jump, a resurrected closed tab, or a second selection change from the local host's follow-up publication. The non-overflowing case widened survivors once, from about 76.37px to 81.83px. The overflowing dock-transfer case retained `scrollLeft = 200`. End-pinned removal reduced the legal scroll maximum by one 72px tab and clamped to that maximum. The converted terminal chat similarly clamped from 501px to its new 486px maximum. Frame sampling and endpoint screenshots do not prove the absence of every intermediate painted transition.
+
+The six focused tab-strip, pointer-activation, chat-owner, stale-frame-close, and reopened-chat-close test files passed (56 tests). The documentation diff passed `git diff --check`.
+
+No additional runtime change was made from these results. The next reproduction needs to identify whether "chat UI tabs" means dedicated chats or terminals switched to Chat view, whether an active or inactive tab is closed, and whether the movement is in the strip or the conversation body. Chats with live provider output, rapid stationary-pointer closes, SSH or paired-server sessions, and the user's exact sequence remain unverified.
 
 ## Proposed change
 
