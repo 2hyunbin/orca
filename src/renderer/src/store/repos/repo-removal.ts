@@ -9,11 +9,11 @@ import { repoMatchesHostIdentity } from '../slices/repo-host-identity'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { hasRuntimeRpcErrorCode } from '../../runtime/runtime-rpc-result'
 import { ipcOrRuntimeTargetForHostId } from '../../runtime/runtime-client-target'
-import { toRuntimeWorktreeSelector } from '../../runtime/runtime-worktree-selector'
 import { translate } from '@/i18n/i18n'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { destroyRecipeVmBeforeProjectRemoval } from './recipe-vm-project-removal'
+import { stopRuntimeProjectTerminalsBeforeRemoval } from './runtime-project-terminal-stop'
 import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
@@ -110,18 +110,11 @@ export function createRepoRemovalActions(
             executionHostId: ownerHostId
           }))
         )
-        // Why before repo.rm: the host resolves `terminal.stop` through the project's workspace
-        // rows, which repo.rm deletes, so stopping afterwards left the shells running.
         if (target.kind === 'environment' && !vmServerDestroyed) {
-          await Promise.allSettled(
-            getKnownRepoWorktreeIds(get(), projectId, ownerHostId).map((worktreeId) =>
-              callRuntimeRpc(
-                target,
-                'terminal.stop',
-                { worktree: toRuntimeWorktreeSelector(worktreeId) },
-                { timeoutMs: 15_000 }
-              )
-            )
+          await stopRuntimeProjectTerminalsBeforeRemoval(
+            target.environmentId,
+            projectId,
+            getKnownRepoWorktreeIds(get(), projectId, ownerHostId)
           )
         }
         try {

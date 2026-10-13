@@ -36,6 +36,7 @@ const localRepo: Repo = {
 
 const hostCalls: string[] = []
 let hostKnowsProject = true
+let hostSelectorAmbiguous = false
 let liveHostTerminals = 0
 const removeForHost = vi.fn()
 
@@ -47,6 +48,10 @@ function answerLikeRuntimeHost(args: RuntimeEnvironmentCallRequest): unknown {
   }
   hostCalls.push(args.method)
   const meta = { runtimeId: 'runtime-remote' }
+  if (hostSelectorAmbiguous && (args.method === 'repo.show' || args.method === 'repo.rm')) {
+    const error = { code: 'selector_ambiguous', message: 'selector_ambiguous' }
+    return { id: args.method, ok: false, error, _meta: meta }
+  }
   if (args.method === 'repo.rm') {
     hostKnowsProject = false
     return { id: 'repo.rm', ok: true, result: { removed: true }, _meta: meta }
@@ -76,6 +81,7 @@ beforeEach(() => {
   removeForHost.mockReset()
   hostCalls.length = 0
   hostKnowsProject = true
+  hostSelectorAmbiguous = false
   liveHostTerminals = 0
   vi.stubGlobal('window', {
     api: {
@@ -110,6 +116,18 @@ describe('project removal on a runtime host', () => {
 
     expect(hostCalls).toContain('repo.rm')
     expect(store.getState().repos).toEqual([])
+  })
+
+  it('leaves the shells running when the host will reject the removal', async () => {
+    hostSelectorAmbiguous = true
+    liveHostTerminals = 2
+    const store = seedRemoteProject()
+
+    await store.getState().removeProject('app', { hostId: 'runtime:env-1' })
+
+    expect(hostCalls).not.toContain('terminal.stop')
+    expect(liveHostTerminals).toBe(2)
+    expect(store.getState().repos).toEqual([remoteRepo])
   })
 })
 

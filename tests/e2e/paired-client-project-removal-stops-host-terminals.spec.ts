@@ -129,7 +129,7 @@ test('removing a project from a paired client stops its shells on the host', asy
       .toBeGreaterThan(0)
     const [handle] = await listHostTerminals()
 
-    // Retried because the first send can land before the shell has printed its prompt.
+    // Retried because the first send can land before the shell is writable or has its prompt.
     await expect
       .poll(
         async () => {
@@ -137,7 +137,7 @@ test('removing a project from a paired client stops its shells on the host', asy
             terminal: handle,
             text: `echo $$ > '${markerPath}'`,
             enter: true
-          })
+          }).catch(() => undefined)
           return readShellPid(markerPath)
         },
         { timeout: 30_000, intervals: [1_000], message: 'The host shell never reported its pid' }
