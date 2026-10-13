@@ -151,7 +151,18 @@
       "codexSharedServerWarning": {
         "title": "Codex 탭이 서버를 공유할 때 경고",
         "description": "에이전트 상태가 잘못되었을 수 있으므로 서버를 다른 탭과 공유할 때 직접 시작한 Codex에 대한 알림을 표시합니다."
-      }
+      },
+      "environmentName": "환경 변수 이름",
+      "environmentValue": "{{name}} 값",
+      "savedEnvironment": "저장된 값 · 바꾸려면 입력",
+      "newEnvironment": "값",
+      "removeEnvironment": "삭제",
+      "loadingHost": "에이전트 설정 불러오는 중…",
+      "updateHost": "에이전트 실행 설정을 편집하려면 이 서버를 업데이트하세요.",
+      "readFailed": "에이전트 설정을 읽을 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
+      "saveFailed": "에이전트 설정을 저장할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
+      "hostDefaults": "선택한 호스트의 새 에이전트 기본값입니다.",
+      "save": "저장"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "심볼릭 링크",
@@ -19549,16 +19560,5 @@
   },
   "projectField": {
     "updateFailed": "프로젝트 필드를 업데이트하지 못했습니다"
-  },
-  "settings.agents.environmentName": "환경 변수 이름",
-  "settings.agents.environmentValue": "{{name}} 값",
-  "settings.agents.savedEnvironment": "저장된 값 · 바꾸려면 입력",
-  "settings.agents.newEnvironment": "값",
-  "settings.agents.removeEnvironment": "삭제",
-  "settings.agents.loadingHost": "에이전트 설정 불러오는 중…",
-  "settings.agents.updateHost": "에이전트 실행 설정을 편집하려면 이 서버를 업데이트하세요.",
-  "settings.agents.readFailed": "에이전트 설정을 읽을 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
-  "settings.agents.saveFailed": "에이전트 설정을 저장할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
-  "settings.agents.hostDefaults": "선택한 호스트의 새 에이전트 기본값입니다.",
-  "settings.agents.save": "저장"
+  }
 }

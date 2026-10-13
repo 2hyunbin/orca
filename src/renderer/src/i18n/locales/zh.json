@@ -151,7 +151,18 @@
       "codexSharedServerWarning": {
         "title": "当 Codex 选项卡共享服务器时发出警告",
         "description": "当您自己启动的 Codex 与其他选项卡共享服务器时，在您自己启动的 Codex 上显示一条通知，因为它的智能体状态可能是错误的。"
-      }
+      },
+      "environmentName": "环境变量名称",
+      "environmentValue": "{{name}} 的值",
+      "savedEnvironment": "已保存的值 · 输入以替换",
+      "newEnvironment": "值",
+      "removeEnvironment": "删除",
+      "loadingHost": "正在加载代理设置…",
+      "updateHost": "请更新此服务器以编辑其代理启动设置。",
+      "readFailed": "无法读取代理设置。请检查主机连接并重试。",
+      "saveFailed": "无法保存代理设置。请检查主机连接并重试。",
+      "hostDefaults": "所选主机上新代理的默认设置。",
+      "save": "保存"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "符号链接",
@@ -19533,16 +19544,5 @@
   },
   "projectField": {
     "updateFailed": "无法更新项目字段"
-  },
-  "settings.agents.environmentName": "环境变量名称",
-  "settings.agents.environmentValue": "{{name}} 的值",
-  "settings.agents.savedEnvironment": "已保存的值 · 输入以替换",
-  "settings.agents.newEnvironment": "值",
-  "settings.agents.removeEnvironment": "删除",
-  "settings.agents.loadingHost": "正在加载代理设置…",
-  "settings.agents.updateHost": "请更新此服务器以编辑其代理启动设置。",
-  "settings.agents.readFailed": "无法读取代理设置。请检查主机连接并重试。",
-  "settings.agents.saveFailed": "无法保存代理设置。请检查主机连接并重试。",
-  "settings.agents.hostDefaults": "所选主机上新代理的默认设置。",
-  "settings.agents.save": "保存"
+  }
 }
