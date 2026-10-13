@@ -141,6 +141,8 @@ async function posixEndpointExited(
  */
 export async function startLegacyRelayBridge(targetId: string): Promise<void> {
   if (!hasBridgeableLeases(targetId)) {
+    // Leases retired while hung up publish nothing themselves; this connect is the next answer.
+    releaseHeldPanes(targetId)
     return
   }
   const bridge = bridgeFor(targetId)
@@ -179,6 +181,10 @@ export function stopLegacyRelayBridge(targetId: string): void {
 /** The target and its leases are gone, so nothing it served is held any longer. */
 export function forgetLegacyRelayTarget(targetId: string): void {
   stopLegacyRelayBridge(targetId)
+  releaseHeldPanes(targetId)
+}
+
+function releaseHeldPanes(targetId: string): void {
   if (heldPanes.delete(targetId)) {
     host?.onPanesChanged(legacyRelayBridgedPanes())
   }

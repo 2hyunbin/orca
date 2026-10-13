@@ -103,6 +103,28 @@ describe('a hung-up legacy relay bridge (loss of contact is not exit)', () => {
     expect(registry.legacyRelayBridgedPanes()).toEqual([])
   })
 
+  it("hands the target back to the next bridge's own listing", async () => {
+    registry.stopLegacyRelayBridge(TARGET)
+    await registry.startLegacyRelayBridge(TARGET)
+
+    expect(registry.legacyRelayBridgedPanes()).toEqual([
+      { ptyId: PTY, targetId: TARGET, tabId: 'tab-1', leafId: 'leaf-1', state: 'live' }
+    ])
+  })
+
+  it('publishes an empty list when the next connect finds the leases retired', async () => {
+    registry.stopLegacyRelayBridge(TARGET)
+    const published: LegacyRelayBridgedPane[][] = []
+    const record = (panes: LegacyRelayBridgedPane[]): void => void published.push(panes)
+    renderer.listeners.add(record)
+
+    leases = []
+    await registry.startLegacyRelayBridge(TARGET)
+    renderer.listeners.delete(record)
+
+    expect(published.at(-1)).toEqual([])
+  })
+
   it('still sends a pane that remounts during the reconnect gap to the bridge', () => {
     // Disconnect, then the pane's transport is rebuilt before the next connect starts a bridge.
     registry.stopLegacyRelayBridge(TARGET)
