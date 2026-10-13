@@ -4,6 +4,7 @@
  * never starts it itself.
  */
 import { describe, expect, it } from 'vitest'
+import { CLIENT_HOSTED_BROWSER_PAGE_MAX_AGE_MS } from '../../shared/client-hosted-browser-page-record'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getBrowserHostLeaseRegistry } from './browser-host-lease-registry-instance'
 import { OrcaRuntimeService } from './orca-runtime'
@@ -109,6 +110,41 @@ describe('a client-hosted page on a host with no window', () => {
     expect(savedTabIds(state)).toEqual(['page-a'])
     expect(replacement['serveBrowserTabs'].listRestorable(WT)).toEqual([])
     expect(await replacement['serveBrowserTabs'].restore(WT, 'page-a')).toBe(false)
+  })
+
+  it('loses its saved tab when its record expires, in the same write', () => {
+    const { state, store } = createProfile()
+    let writes = 0
+    const setWorkspaceSession = store.setWorkspaceSession
+    store.setWorkspaceSession = (next) => {
+      writes += 1
+      setWorkspaceSession(next)
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on this path.
+    const first = new OrcaRuntimeService(store as never, undefined, {})
+    startClientPage(first, 'page-a')
+    const records = state.session.clientHostedBrowserPagesByWorktree?.[WT] ?? []
+    expect(records.map((row) => row.browserPageId)).toEqual(['page-a'])
+    expect(savedTabIds(state)).toEqual(['page-a'])
+    state.session = {
+      ...state.session,
+      clientHostedBrowserPagesByWorktree: {
+        [WT]: records.map((row) => ({
+          ...row,
+          savedAt: Date.now() - CLIENT_HOSTED_BROWSER_PAGE_MAX_AGE_MS - 1
+        }))
+      }
+    }
+
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on this path.
+    const replacement = new OrcaRuntimeService(store as never, undefined, {})
+    writes = 0
+    replacement.rehydrateClientHostedBrowserPages()
+
+    expect(writes).toBe(1)
+    expect(state.session.clientHostedBrowserPagesByWorktree?.[WT]).toBeUndefined()
+    expect(savedTabIds(state)).toEqual([])
+    expect(state.session.browserPagesByWorkspace?.['page-a']).toBeUndefined()
   })
 
   it('loses its saved tab when the user closes it', () => {

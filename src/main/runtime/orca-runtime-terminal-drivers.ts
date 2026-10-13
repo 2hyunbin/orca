@@ -85,11 +85,14 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
           index,
           url: page.url,
           title: page.title,
-          active: false,
+          active: page.active,
           worktreeId: page.worktreeId,
           profileId: page.profileId
         })),
-      restoreFirstServeBrowserPage: (worktreeId) => this.serveBrowserTabs.restoreFirst(worktreeId),
+      restoreActiveServeBrowserPage: (worktreeId) =>
+        this.serveBrowserTabs.restoreActive(worktreeId),
+      selectServeBrowserTab: (worktreeId, browserPageId) =>
+        this.serveBrowserTabs.selected(worktreeId, browserPageId),
       findServeBrowserTabWorktree: (worktreeId, browserPageId) =>
         this.serveBrowserTabs.restorableWorktreeOf(worktreeId, browserPageId)
     },

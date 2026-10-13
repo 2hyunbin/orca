@@ -8,6 +8,7 @@ import type { ExecutionHostId } from '../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import {
   findSavedBrowserPage,
+  withActiveServeBrowserTab,
   withClosedServeBrowserTab,
   withOpenedServeBrowserTab,
   withServeBrowserPageState,
@@ -21,6 +22,8 @@ export type RestorableBrowserPage = {
   url: string
   title: string
   profileId: string | null
+  /** The tab the layout shows for its worktree, as a window mounts it; none outside the scope. */
+  active: boolean
 }
 
 export class ServeBrowserTabs {
@@ -61,6 +64,23 @@ export class ServeBrowserTabs {
     )
   }
 
+  /** The partition without the tabs showing these pages; a window's own tabs are left to it. */
+  withoutTabs(
+    worktreeId: string,
+    session: WorkspaceSessionState,
+    pageIds: readonly string[]
+  ): WorkspaceSessionState {
+    if (!this.deps.windowless()) {
+      return session
+    }
+    const hostId = this.deps.hostId(worktreeId)
+    return pageIds.reduce(
+      (current, pageId) =>
+        withClosedServeBrowserTab(hostId, current, worktreeId, pageId) ?? current,
+      session
+    )
+  }
+
   /** Saved tabs whose page has not started, each by the page it shows; every worktree's if none. */
   listRestorable(
     worktreeId: string | undefined
@@ -69,9 +89,26 @@ export class ServeBrowserTabs {
       return []
     }
     const worktreeIds = worktreeId ? [worktreeId] : [...new Set(this.deps.savedWorktreeIds())]
+    const scope = this.scope(worktreeId)
     return worktreeIds.flatMap((id) =>
-      this.listRestorableIn(id).map((page) => ({ ...page, worktreeId: id }))
+      this.listRestorableIn(id).map((page) => ({
+        ...page,
+        active: page.active && id === scope,
+        worktreeId: id
+      }))
     )
+  }
+
+  /**
+   * The worktree a command that names none acts in: the one the saved session shows, as a window
+   * opens on it, else the first that saves a browser tab.
+   */
+  private scope(worktreeId: string | undefined): string | undefined {
+    if (worktreeId) {
+      return worktreeId
+    }
+    const saved = [...new Set(this.deps.savedWorktreeIds())]
+    return saved.find((id) => this.deps.session(id)?.activeWorktreeId === id) ?? saved[0]
   }
 
   /** The saved tab showing a page, which a window keys pin and colour by. */
@@ -86,7 +123,11 @@ export class ServeBrowserTabs {
       return []
     }
     const live = this.deps.livePageIds(worktreeId)
-    return (session.browserTabsByWorktree?.[worktreeId] ?? []).flatMap((tab) => {
+    const tabs = session.browserTabsByWorktree?.[worktreeId] ?? []
+    // A window's rule: the recorded tab while it is still saved, else the first saved tab.
+    const recorded = session.activeBrowserTabIdByWorktree?.[worktreeId]
+    const activeTabId = tabs.some((tab) => tab.id === recorded) ? recorded : tabs[0]?.id
+    return tabs.flatMap((tab) => {
       const pageId = tab.activePageId ?? tab.pageIds?.[0]
       const page = pageId ? findSavedBrowserPage(session, worktreeId, pageId)?.page : undefined
       // A document page is one desktop's; a remote page belongs to the host that ran it.
@@ -105,22 +146,33 @@ export class ServeBrowserTabs {
           pageId: page.id,
           url: page.url,
           title: page.title,
-          profileId: tab.sessionProfileId ?? null
+          profileId: tab.sessionProfileId ?? null,
+          active: tab.id === activeTabId
         }
       ]
     })
   }
 
+  /** A switched-to page's tab is the one its worktree shows, as a window records it. */
+  selected(worktreeId: string, pageId: string): void {
+    const tabId = this.savedTabId(worktreeId, pageId)
+    if (tabId) {
+      this.write(worktreeId, (_hostId, session) =>
+        withActiveServeBrowserTab(session, worktreeId, tabId)
+      )
+    }
+  }
+
   /**
-   * A command that names no page acts on the worktree's active page; with none running, that is
-   * the first saved tab, as the tab list reports it. False when nothing is saved to start.
+   * A command that names no page acts on the active page; with none running, that is the tab the
+   * layout shows, as a window mounts it. False when nothing runs and nothing is saved.
    */
-  async restoreFirst(worktreeId: string | undefined): Promise<boolean> {
+  async restoreActive(worktreeId: string | undefined): Promise<boolean> {
     if (this.deps.livePageIds(worktreeId).size > 0) {
       return false
     }
-    const first = this.listRestorable(worktreeId)[0]
-    return first ? this.restore(first.worktreeId, first.pageId) : false
+    const active = this.listRestorable(worktreeId).find((page) => page.active)
+    return active ? this.restore(active.worktreeId, active.pageId) : false
   }
 
   /** The worktree of a saved tab whose page has not started, or null when none shows it. */

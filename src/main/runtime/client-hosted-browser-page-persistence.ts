@@ -52,7 +52,23 @@ export function isRestoredClientHostedBrowserPlacement(
 export type ClientHostedBrowserPagePersistenceHost = {
   getWorkspaceSession(worktreeId: string): WorkspaceSessionState | null
   setWorkspaceSession(worktreeId: string, session: WorkspaceSessionState): void
+  /** The partition without the saved browser tabs showing these pages. */
+  withoutSavedBrowserTabs?(
+    worktreeId: string,
+    session: WorkspaceSessionState,
+    pageIds: readonly string[]
+  ): WorkspaceSessionState
   now?: () => number
+}
+
+/** Rows past the expiry bound: rehydration skips them, and the worktree's next write drops them. */
+export function expiredClientHostedBrowserPageIds(
+  rows: readonly PersistedClientHostedBrowserPage[] | undefined,
+  now: number
+): string[] {
+  return (rows ?? [])
+    .filter((row) => now - row.savedAt > CLIENT_HOSTED_BROWSER_PAGE_MAX_AGE_MS)
+    .map((row) => row.browserPageId)
 }
 
 /**
@@ -68,10 +84,8 @@ export function persistClientHostedBrowserPages(
   registry: Pick<RuntimeBrowserPageRegistry, 'listPages'>,
   worktreeId: string
 ): boolean {
-  const rows = buildPersistedClientHostedBrowserPages(
-    registry.listPages(worktreeId),
-    host.now?.() ?? Date.now()
-  )
+  const now = host.now?.() ?? Date.now()
+  const rows = buildPersistedClientHostedBrowserPages(registry.listPages(worktreeId), now)
   let session: WorkspaceSessionState | null
   try {
     session = host.getWorkspaceSession(worktreeId)
@@ -88,6 +102,14 @@ export function persistClientHostedBrowserPages(
   ) {
     return false
   }
+  // An expired record takes its saved tab with it, so the host never lists a page nobody runs.
+  const expired = expiredClientHostedBrowserPageIds(existing[worktreeId], now).filter(
+    (pageId) => !rows.some((row) => row.browserPageId === pageId)
+  )
+  const base =
+    expired.length > 0
+      ? (host.withoutSavedBrowserTabs?.(worktreeId, session, expired) ?? session)
+      : session
   const next = { ...existing }
   if (rows.length === 0) {
     delete next[worktreeId]
@@ -96,7 +118,7 @@ export function persistClientHostedBrowserPages(
   }
   try {
     host.setWorkspaceSession(worktreeId, {
-      ...session,
+      ...base,
       clientHostedBrowserPagesByWorktree: next
     })
   } catch {
