@@ -54,7 +54,6 @@ export async function initializeAcpStructuredSession(
   const now = deps.now ?? Date.now
   const assertStarting = () => assertAcpStartingSession(child, input.abandoned)
   const agentName = acpAgentName(spec.agent)
-  const optionRevision = acquire.optionRevision?.() ?? 0
   assertStarting()
   const initialized = await connection.initialize()
   assertStarting()
@@ -103,7 +102,6 @@ export async function initializeAcpStructuredSession(
   assertStarting()
   options.adoptSession(started.response, started.kind === 'new' ? 'new' : 'loaded')
   liveLane.apply(liveLane.translator.contextModels(started.response.models, now()))
-  const restoreSkipped: string[] = []
   const link: AgentSessionProviderHandleLink = {
     linkId:
       deps.mintLinkId?.() ?? `${spec.agent}-${acquire.fence}-${started.sessionId}`.slice(0, 128),
@@ -113,19 +111,6 @@ export async function initializeAcpStructuredSession(
     observedAt: now(),
     ...takeover
   }
-  Object.assign(child, {
-    childStops,
-    lane: liveLane,
-    turns: new AcpStructuredTurns({
-      connection,
-      withdrawRequests: () => prompts.withdrawAll(),
-      lane: liveLane,
-      agentName,
-      now,
-      settle: onSettled
-    }),
-    restoreSkipped
-  })
   const reading = liveLane
   const unbind = acquire.events?.bindReadingControl?.({
     pauseReading: () => connection.pauseReading(),
@@ -149,14 +134,24 @@ export async function initializeAcpStructuredSession(
     liveLane.apply(acpSessionNotRestoredRow(key, started.sessionId, agentName))
   }
   assertStarting()
+  Object.assign(child, {
+    childStops,
+    lane: liveLane,
+    turns: new AcpStructuredTurns({
+      connection,
+      withdrawRequests: () => prompts.withdrawAll(),
+      lane: liveLane,
+      agentName,
+      now,
+      settle: onSettled
+    })
+  })
   if (!isAcpReadySession(child)) {
     throw new Error('ACP session did not open')
   }
   return {
     link,
     reportedOptions: options.read().current,
-    restoreSkippedOptions: restoreSkipped,
-    optionRevision,
     catalogListing: options.startListing()
   }
 }

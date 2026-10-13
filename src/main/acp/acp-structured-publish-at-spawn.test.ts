@@ -37,8 +37,7 @@ describe('ACP child published before its handshake', () => {
     })
     const acquired = await rig.acquire({
       waitForStart: false,
-      options: { effort: 'low', model: 'grok-4.6' },
-      optionRevision: () => 7
+      options: { effort: 'low', model: 'grok-4.6' }
     })
     expect(acquired.process.pid).toBe(4242)
     if (!acquired.acquisitionGeneration) {
@@ -59,9 +58,7 @@ describe('ACP child published before its handshake', () => {
     answer?.()
     expect(await opening).toMatchObject({
       link: { handle: { nativeId: PROVIDER_SESSION }, origin: 'created' },
-      reportedOptions: { model: 'grok-4.7', effort: 'high' },
-      restoreSkippedOptions: [],
-      optionRevision: 7
+      reportedOptions: { model: 'grok-4.7', effort: 'high' }
     })
     expect(writes).toEqual([])
     rig.child().agent.notify('session/update', {
@@ -133,7 +130,7 @@ describe('ACP child published before its handshake', () => {
       rig.child().exit()
       expect(await opening).toBeInstanceOf(Error)
       expect(rig.ended).toMatchObject([
-        { startupUnproven: true, failure: { detail: { text: 'provider config is invalid' } } }
+        { failure: { detail: { text: 'provider config is invalid' } } }
       ])
       expect(rig.ended[0]?.startupUnanswered).toBeUndefined()
     }
@@ -167,7 +164,6 @@ describe('ACP child published before its handshake', () => {
     })
     await rig.acquire({ options: { model: 'retired-model' } })
     expect(rig.started()).toMatchObject({
-      restoreSkippedOptions: [],
       reportedOptions: { model: 'grok-4.7', effort: 'high' }
     })
     expect(rig.sent('session/set_config_option')).toEqual([])

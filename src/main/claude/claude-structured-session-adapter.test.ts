@@ -152,7 +152,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
   })
 
   // The chat's permission mode is the start's, never a saved option the CLI is handed.
-  it('self-heals a persisted effort the CLI would refuse, and launches the start mode', async () => {
+  it('omits an invalid persisted effort at launch and uses the explicit start mode', async () => {
     const claude = fakeClaude()
     const adapter = adapterFor(claude)
     const resolveLaunch = vi.spyOn(adapter['deps'], 'resolveLaunch')
@@ -160,7 +160,6 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
     const start = { identity: identityFor(), fence: 7, spawnToken: 'spawn-9', options }
 
     await adapter.acquire({ ...start, permissionMode: 'accept-edits' })
-    expect(adapter.readOptionRestoreFailures('session-1')).toEqual(['effort'])
     expect(claude.connections[0].launch.options).not.toHaveProperty('effort')
     expect(resolveLaunch.mock.calls[0]?.[0].permissionMode).toBe('accept-edits')
   })

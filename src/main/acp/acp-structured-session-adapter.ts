@@ -152,7 +152,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
       return await child.open(input.signal)
     } catch (error) {
       const failure = acpStartupFailure(child, error)
-      if (failure.kind === 'notSignedIn') {
+      if (failure) {
         const refusal = new AgentSessionAcquisitionRefusal(
           `${acpAgentName(child.spec.agent)} requires sign-in`,
           'notSignedIn'
@@ -224,6 +224,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     return { cancelled: true }
   }
 
+  // Stop closes the session because background work can start a new turn after cancel.
   awaitStoppedRequestEnd = async (sessionId: string, stoppedAt: number): Promise<void> => {
     const session = this.children.sessions.get(sessionId)
     if (session && isAcpReadySession(session)) {
@@ -256,11 +257,6 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
 
   readOptions = async (input: { sessionId: string; fence: number }) =>
     readAcpLiveOptions(this.live(input.sessionId))
-
-  readOptionRestoreFailures = (sessionId: string): readonly string[] => {
-    const session = this.children.sessions.get(sessionId)
-    return session && isAcpReadySession(session) ? session.restoreSkipped : []
-  }
 
   readCommands = (sessionId: string) => {
     const session = this.children.sessions.get(sessionId)

@@ -169,7 +169,7 @@ describe('a chat pane over its own launch', () => {
     )
   })
 
-  it('keeps showing the picks its create carried once the launch is gone, while the agent starts', async () => {
+  it('derives launch picks while held and drops them once the host owns the choice', async () => {
     saveSelection('gpt-5.5')
     const { sessionId } = startStructuredAgentLaunch('wt-picks', 'codex', {
       requestId: 'request-4'
@@ -190,7 +190,8 @@ describe('a chat pane over its own launch', () => {
       settleStructuredLaunchCallers(state.callers, 'published')
     })
     expect(getStructuredLaunchStateBySessionId(sessionId)).toBeUndefined()
-    expect(result.current.launch?.seedOptions).toMatchObject({ model: 'gpt-5.6-luna' })
+    expect(result.current.launch?.seedOptions).toBeUndefined()
+    expect(result.current.launch?.heldOptions).toEqual({})
   })
 
   it('shows a pick the launch could not apply the way a refused option change is shown', async () => {
@@ -216,6 +217,16 @@ describe('a chat pane over its own launch', () => {
 
     publishedTabs = [publishedSnapshot('wt-refused', sessionId)]
     readState = sessionState(1)
+    mocks.call.mockImplementation((_target, method) =>
+      method === 'agentSession.options'
+        ? Promise.resolve({ models: SAVED_LIST.models, current: { model: 'gpt-5.5' } })
+        : method === 'agentSession.setOption'
+          ? Promise.resolve({
+              ok: false,
+              refusal: { code: 'invalid_option', message: 'GPT-5.6 Luna is not available' }
+            })
+          : answerCatalog(method)
+    )
     await act(async () => {
       created({ sessionId, fence: 1 })
       await launch.launchResult
@@ -225,6 +236,6 @@ describe('a chat pane over its own launch', () => {
       expect(mocks.toastError).toHaveBeenCalledWith("The setting wasn't changed.")
     )
     // Reverted to what the chat runs; the refusal never kept the launch from publishing.
-    expect(currentModel(result.current.optionSnapshot)).toBe('gpt-5.5')
+    await waitFor(() => expect(currentModel(result.current.optionSnapshot)).toBe('gpt-5.5'))
   })
 })

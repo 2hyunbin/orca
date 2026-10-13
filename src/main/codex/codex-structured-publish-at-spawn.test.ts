@@ -59,9 +59,7 @@ describe('Codex host-awaited open', () => {
     threaded.resolve({ thread: { id: THREAD_ID }, model: 'gpt-live' })
     expect(await opening).toMatchObject({
       link: { handle: { nativeId: THREAD_ID } },
-      reportedOptions: { model: 'gpt-saved' },
-      restoreSkippedOptions: [],
-      optionRevision: 0
+      reportedOptions: { model: 'gpt-saved' }
     })
     expect(events.some((event) => event.type === 'started')).toBe(false)
     await adapter.closeAll()
@@ -188,8 +186,7 @@ describe('Codex host-awaited open', () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'ended',
-        cause: 'unexpected-exit',
-        startupUnproven: true
+        cause: 'unexpected-exit'
       })
     )
     expect(codex.connections[0].closeCount).toBe(0)

@@ -1,6 +1,12 @@
 // The host owns start policy; expiry rechecks its current child before ending a stale attempt.
 
 import { randomUUID } from 'node:crypto'
+import {
+  StructuredAgentSessionOperationOrder,
+  waitForStructuredAgentSessionStart,
+  type StructuredAgentSessionStartReadiness
+} from './structured-agent-session-start-readiness'
+export type { StructuredAgentSessionStartReadiness } from './structured-agent-session-start-readiness'
 import type { AgentSessionJournalIdentity } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
@@ -20,7 +26,6 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
   permissionMode?: AgentChatPermissionMode
   events?: StructuredAgentSessionEventSink
   signal?: AbortSignal
-  optionRevision: () => number
   startupOptions?: Readonly<Record<string, string>>
 }): StructuredAgentSessionStartupAttempt {
   const { record } = input
@@ -38,8 +43,7 @@ export function mintStructuredAgentSessionStartupAttempt(input: {
     ...(options ? { options } : {}),
     ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
     ...(input.events ? { events: input.events } : {}),
-    ...(input.signal ? { signal: input.signal } : {}),
-    optionRevision: input.optionRevision
+    ...(input.signal ? { signal: input.signal } : {})
   }
 }
 
@@ -92,14 +96,11 @@ type Tracked = {
   readiness: PromiseWithResolvers<'ready' | 'ended'>
 }
 
-export type StructuredAgentSessionStartReadiness = {
-  wait: (budgetMs?: number) => Promise<'ready' | 'ended' | 'timeout'>
-}
-
 /** Each session's open attempt and its startup clock. A session starts one child at a time, so a
  *  new attempt replaces any older one. */
 export class StructuredAgentSessionStartupAttempts {
   private readonly open = new Map<string, Tracked>()
+  private readonly operationOrder = new StructuredAgentSessionOperationOrder()
   private disposed = false
   private readonly limits: StructuredAgentSessionStartupLimits
   private readonly now: () => number
@@ -166,22 +167,14 @@ export class StructuredAgentSessionStartupAttempts {
       return null
     }
     return {
-      wait: async (budgetMs) => {
-        if (budgetMs === undefined) {
-          return tracked.readiness.promise
-        }
-        let timer: ReturnType<typeof setTimeout> | undefined
-        const timeout = new Promise<'timeout'>((resolve) => {
-          timer = setTimeout(() => resolve('timeout'), Math.max(0, budgetMs))
-          timer.unref?.()
-        })
-        try {
-          return await Promise.race([tracked.readiness.promise, timeout])
-        } finally {
-          clearTimeout(timer)
-        }
-      }
+      reserveOperation: () => this.operationOrder.reserve(sessionId),
+      waitForOperations: () => this.operationOrder.pending(sessionId) ?? Promise.resolve(),
+      wait: (budgetMs) => waitForStructuredAgentSessionStart(tracked.readiness.promise, budgetMs)
     }
+  }
+
+  pendingOperations(sessionId: string): Promise<void> | null {
+    return this.operationOrder.pending(sessionId)
   }
 
   /** The acquire returned: its `starting` child stays on the clock until it proves its start, and

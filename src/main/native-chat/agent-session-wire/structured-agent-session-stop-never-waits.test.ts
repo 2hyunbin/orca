@@ -51,10 +51,7 @@ async function runningTurn(): Promise<AgentSessionJournal> {
 
 /** A child whose handshake never answers, so a Stop ends the start. */
 async function startingChild(): Promise<{ journal: AgentSessionJournal; closeSession: Mock }> {
-  const handle = host.handleAdapterEvent.bind(host)
-  vi.spyOn(host, 'handleAdapterEvent').mockImplementation(async (event) =>
-    event.type === 'started' ? undefined : handle(event)
-  )
+  host.deps.adapter.open = () => new Promise(() => {})
   const closeSession = vi.fn(async () => true)
   Object.assign(host.deps.adapter, { closeSession })
   await attach()

@@ -405,11 +405,11 @@ describe('a Stop that names no turn', () => {
     ])
   })
 
-  it('fails a turn Codex refuses for a model picked before the list, then sends again', async () => {
+  it('records a provider-refused turn, then sends again without changing saved picks', async () => {
     const pending = Promise.withResolvers<unknown>()
     const codex = fakeCodex({ 'model/list': () => pending.promise })
     codex.routes['turn/start'] = (params) => {
-      if (params?.model === 'gpt-missing') {
+      if (codex.connections[0].calls.filter((call) => call.method === 'turn/start').length === 1) {
         throw new CodexAppServerRequestError(
           'turn/start',
           -32602,
@@ -449,9 +449,7 @@ describe('a Stop that names no turn', () => {
         codex.connections[0].calls.filter((call) => call.method === 'turn/start')
       ).toHaveLength(2)
     )
-    expect(
-      codex.connections[0].calls.filter((call) => call.method === 'turn/start')[1]?.params
-    ).toMatchObject({ model: 'gpt-live' })
+    expect(store.getRecord(SESSION)?.options?.model).toBe('gpt-live')
     await eventually(async () =>
       expect((await submission(retried.id))?.dispatchState).not.toBe('rejected')
     )

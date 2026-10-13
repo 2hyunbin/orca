@@ -160,7 +160,6 @@ export async function acquireAcpStructuredSession(input: {
   input.track(connection)
   connection.subscribe((event: AcpSessionEvent) =>
     whenLane(() => {
-      const optionRevision = acquire.optionRevision?.() ?? 0
       if (slot.lane) {
         routeAcpSessionEvent({ lane: slot.lane, options }, event, now(), slot.reattaching)
       }
@@ -175,9 +174,7 @@ export async function acquireAcpStructuredSession(input: {
           sessionId,
           fence: acquire.fence,
           acquisitionGeneration: generation,
-          reportedOptions: options.read().current,
-          restoreSkippedOptions: [],
-          optionRevision
+          reportedOptions: options.read().current
         })
       }
     })
@@ -238,7 +235,6 @@ export async function acquireAcpStructuredSession(input: {
     options,
     prompts,
     childStops: undefined,
-    restoreSkipped: [],
     closeRequested: false,
     journalClosed: null,
     ended: false,

@@ -1,7 +1,4 @@
-import type {
-  AgentSessionAccountKind,
-  AgentSessionUnavailable
-} from '../../../shared/agent-session-availability'
+import type { AgentSessionAccountKind } from '../../../shared/agent-session-availability'
 import type {
   AgentSessionRewindReason,
   AgentSessionRewindSupport
@@ -211,8 +208,6 @@ export type StructuredAgentSessionEndedEvent = {
   acquisitionGeneration: string
   /** Host receipt of the child exit: the end time of a turn it interrupted. */
   observedAt?: number
-  /** The provider ended before it finished starting, so resuming it would repeat the failure. */
-  startupUnproven?: true
   /** The provider ended before it answered its start, so it ran nothing it was handed. */
   startupUnanswered?: true
 }
@@ -229,26 +224,8 @@ export type StructuredAgentSessionStartedEvent = {
   /** What the child proved, snapshotted by the adapter from what startup already read. The host
    *  handles this inside the session's serialized step, so it must not ask the CLI. */
   reportedOptions: AgentSessionOptionsResult['current']
-  /** Saved options the child could not take; the host drops them rather than persist them. */
-  restoreSkippedOptions: readonly string[]
-  /** Values the child showed it cannot run: a report naming the same value is not persisted. */
-  retiredOptions?: Readonly<Record<string, string>>
   /** What the child listed at startup, saved as its account's catalog even if no view reads it. */
   catalogListing?: AgentModelCatalogLiveListing
-  /** The attempt's `optionRevision()` as the read behind this report began: a pick the host took
-   *  since makes it out of date. An earlier report never does, whenever the host took it. */
-  optionRevision: number
-}
-
-/** A running child showed saved options it cannot run, as a model the provider reports missing.
- *  The record drops them, so the next start uses the provider's own. */
-export type StructuredAgentSessionOptionsSkippedEvent = {
-  type: 'options-skipped'
-  sessionId: string
-  fence: number
-  acquisitionGeneration: string
-  /** Each saved value the child showed it cannot run; a record holding another value keeps it. */
-  options: Readonly<Record<string, string>>
 }
 
 /** What a child that already proved its start reports later, such as an optional read that came
@@ -262,7 +239,6 @@ export type StructuredAgentSessionLifecycleEvent =
   | StructuredAgentSessionEndedEvent
   | StructuredAgentSessionStartedEvent
   | StructuredAgentSessionOptionsReportedEvent
-  | StructuredAgentSessionOptionsSkippedEvent
 
 /** Whether the provider child behind an acquisition has proven its start. A publish-first
  *  acquire hands over a `starting` child, which the host gives no input until the `started`
@@ -329,6 +305,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   recoverRewind?(input: {
     sessionId: string
     fence: number
+    signal?: AbortSignal
     beforeTurnId: string
   }): Promise<
     | { ok: true; items: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] }
@@ -395,9 +372,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** The adapter's own child for this exact acquisition has a pid and its root exit has not been
    *  seen: first-hand proof of life for lease renewal. Absent or false falls back to a PID probe. */
   holdsLiveProviderProcess?(sessionId: string, acquisitionGeneration: string): boolean
-  /** Why the session's running child can take no turn, as its own start found; undefined when
-   *  unknown or no child runs. Lives and dies with that child. */
-  startUnavailable?(sessionId: string): AgentSessionUnavailable | undefined
   /** The `/` surface the running provider reports for itself. Undefined when the
    *  provider never reports one, which is what keeps the client on its catalog. */
   readCommands?(sessionId: string): AgentSessionSlashCommand[] | undefined
@@ -440,8 +414,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     | Promise<Readonly<Record<string, string>> | undefined>
     | Readonly<Record<string, string>>
     | undefined
-  /** Option keys skipped after a provider rejected their persisted restore value. */
-  readOptionRestoreFailures?(sessionId: string): readonly string[]
   /** Provider history for restart reconciliation, bounded to what the provider
    *  recorded after the journal's last committed item. Only the adapter can say
    *  whether the read has a proven start and whether a turn is still running, so

@@ -149,9 +149,8 @@ export class StructuredAgentSessionDeliveryLoop {
           )
           return
         }
-        if (prepared.readiness) {
-          await prepared.readiness.wait()
-        }
+        await prepared.readiness?.wait()
+        await prepared.readiness?.waitForOperations?.()
         const handed = await this.deps.serialize(sessionId, () =>
           this.handOver(sessionId, prepared.awaited, prepared.readiness !== null)
         )

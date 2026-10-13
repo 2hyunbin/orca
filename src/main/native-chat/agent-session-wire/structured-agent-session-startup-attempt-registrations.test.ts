@@ -88,7 +88,7 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
   const adapter: StructuredAgentSessionAdapter = {
     open: () =>
       new Promise((resolve) => {
-        ready = () => resolve({ reportedOptions: {}, restoreSkippedOptions: [], optionRevision: 0 })
+        ready = () => resolve({ reportedOptions: {} })
       }),
     acquire,
     dispatch,

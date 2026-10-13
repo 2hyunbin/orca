@@ -99,6 +99,7 @@ async function accept(
     body?: AgentJournalMessageItem
     origin?: 'client' | 'host'
     source?: AgentSessionMessageSource
+    executionOptions?: { model: string; effort: string }
   } = {}
 ): Promise<void> {
   const body = fields.body ?? message(`text of ${id}`)
@@ -109,7 +110,8 @@ async function accept(
     fence: 0,
     handoverRecorded: true,
     ...(fields.origin ? { origin: fields.origin } : {}),
-    ...(fields.source ? { source: fields.source } : {})
+    ...(fields.source ? { source: fields.source } : {}),
+    ...(fields.executionOptions ? { executionOptions: fields.executionOptions } : {})
   })
 }
 
@@ -159,6 +161,21 @@ afterEach(async () => {
 })
 
 describe('which sends an earlier host process left unsent are kept', () => {
+  it('keeps an accepted message’s choices on its card through restart', async () => {
+    const executionOptions = { model: 'model-a', effort: 'high' }
+    const journal = await afterRestart((earlier) =>
+      accept(earlier, 'chosen', {
+        origin: 'client',
+        source: USER_MESSAGE_SOURCE,
+        executionOptions
+      })
+    )
+    await hold(journal)
+    await journal.close()
+    const reopened = await open()
+    expect(reopened.queuedMessages.get('chosen')?.executionOptions).toEqual(executionOptions)
+  })
+
   it('keeps a person’s and a launch’s text, and an older build’s client send', async () => {
     const journal = await afterRestart(async (earlier) => {
       await accept(earlier, 'person', { origin: 'client', source: USER_MESSAGE_SOURCE })

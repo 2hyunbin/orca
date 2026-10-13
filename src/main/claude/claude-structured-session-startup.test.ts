@@ -34,8 +34,7 @@ describe('Claude host-awaited open', () => {
     await vi.advanceTimersByTimeAsync(1)
     await expect(open).resolves.toMatchObject({
       link: expect.objectContaining({ handle: expect.objectContaining({ agent: 'claude' }) }),
-      reportedOptions: expect.any(Object),
-      optionRevision: 0
+      reportedOptions: expect.any(Object)
     })
     expect(events.map((event) => event.type)).not.toContain('started')
     await adapter.closeAll()

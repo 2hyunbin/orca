@@ -1,9 +1,23 @@
-// An idle child launched under a different permission mode is replaced before the next send.
+// A child the chat outgrew is replaced before the next send: one that reported it is not signed in,
+// so a sign-in made since reaches a new child, and one launched with a permission mode the chat no
+// longer has, so the new mode reaches a new child.
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
-import { retireOutgrownStructuredAgentSessionChild } from './structured-agent-session-outgrown-child'
+import {
+  acceptedDispatch,
+  createRestTestRig,
+  foundRestTestChat,
+  REST_TEST_CALLER as CALLER,
+  REST_TEST_SESSION as SESSION,
+  restTestSend,
+  type RestTestRig
+} from './structured-agent-session-rest-test-rig'
+import {
+  retireOutgrownStructuredAgentSessionChild,
+  structuredAgentSessionChildReportedSignedOut
+} from './structured-agent-session-outgrown-child'
 import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
@@ -14,23 +28,97 @@ import type {
   AgentJournalTurnLifecycle
 } from '../../../shared/agent-session-journal-types'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
+import type { JournalItemLinkageVisitor } from '../agent-session-journal/journal-store-contracts'
 import type { StructuredAgentSessionChildWorkReads } from './structured-agent-session-idle-sweep'
+
+describe('a send after the agent said it is not signed in', () => {
+  let rig: RestTestRig
+
+  beforeEach(async () => {
+    rig = await createRestTestRig()
+  })
+
+  afterEach(async () => {
+    await rig.dispose()
+  })
+
+  const fence = () => rig.store.getRecord(SESSION)?.lease.runtimeFence ?? 1
+
+  it('goes to a new agent, and the new agent is kept for the sends after it', async () => {
+    await foundRestTestChat(rig)
+    rig.adapter.dispatch.mockImplementationOnce(async () => ({
+      state: 'rejected',
+      ...agentSessionFailureWords(agentSessionFailureFact('notSignedIn'), {
+        surface: 'rejection'
+      })
+    }))
+    expect((await rig.host.send(CALLER, restTestSend('signed out', fence()))).ok).toBe(true)
+    await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
+    expect(rig.adapter.acquire).toHaveBeenCalledTimes(1)
+    rig.adapter.closeSession.mockClear()
+
+    expect((await rig.host.send(CALLER, restTestSend('signed in now', fence()))).ok).toBe(true)
+    await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(3))
+    expect(rig.adapter.closeSession).toHaveBeenCalledWith(SESSION)
+    expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
+
+    // The earlier child's report does not follow the new one.
+    expect((await rig.host.send(CALLER, restTestSend('and again', fence()))).ok).toBe(true)
+    await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(4))
+    expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the agent after any other rejection', async () => {
+    await foundRestTestChat(rig)
+    rig.adapter.dispatch.mockImplementationOnce(async () => ({
+      state: 'rejected',
+      ...agentSessionFailureWords(agentSessionFailureFact('providerRejected'), {
+        surface: 'rejection'
+      })
+    }))
+    expect((await rig.host.send(CALLER, restTestSend('refused', fence()))).ok).toBe(true)
+    await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
+    rig.adapter.dispatch.mockImplementation(async () => acceptedDispatch())
+
+    expect((await rig.host.send(CALLER, restTestSend('next', fence()))).ok).toBe(true)
+    await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(3))
+    expect(rig.adapter.acquire).toHaveBeenCalledTimes(1)
+  })
+})
 
 type Row = { itemId: string; fence: number; agentId?: string; body: AgentJournalItemBody }
 
+const statusRow = (
+  fence: number,
+  kind: 'notSignedIn' | 'providerExited',
+  agentId?: string
+): Row => ({
+  itemId: `status-${fence}-${kind}-${agentId ?? 'root'}`,
+  fence,
+  ...(agentId ? { agentId } : {}),
+  body: {
+    kind: 'status',
+    ...agentSessionFailureWords(agentSessionFailureFact(kind), { surface: 'row' })
+  }
+})
+const rejected = (fence: number) => ({
+  fence,
+  dispatchState: 'rejected' as const,
+  rejection: agentSessionFailureFact('notSignedIn')
+})
 const childAt = (
   overrides: Partial<StructuredAgentSessionProviderChild> = {}
 ): StructuredAgentSessionProviderChild => ({
   generation: 'generation-2',
   fence: 2,
   phase: 'ready',
-  permissionMode: 'ask',
   ...overrides
 })
 const conversation = (
   input: {
     child?: StructuredAgentSessionProviderChild | null
     items?: Row[]
+    submissions?: ReturnType<typeof rejected>[]
     activeTurnId?: string
     newestTurnEndedAt?: number
   } = {}
@@ -39,8 +127,14 @@ const conversation = (
   return {
     child: input.child === undefined ? childAt() : input.child,
     journal: {
+      submissions: () => input.submissions ?? [],
       visitItems: (visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void) =>
         items.forEach((item, index) => visit(item.itemId, index, item.body)),
+      visitItemsWithLinkage: (visit: JournalItemLinkageVisitor) =>
+        items.forEach((item, index) =>
+          visit(item.itemId, index, item.body, item.agentId ? { agentId: item.agentId } : {})
+        ),
+      itemFence: (itemId: string) => items.find((item) => item.itemId === itemId)?.fence,
       activeTurnId: () => input.activeTurnId ?? null,
       newestTurn: (): AgentJournalTurnLifecycle | null =>
         input.newestTurnEndedAt === undefined
@@ -50,39 +144,33 @@ const conversation = (
   }
 }
 
-describe('retireOutgrownStructuredAgentSessionChild', () => {
-  it('keeps a signed-out child until normal failure settlement closes it', async () => {
-    const stopAgent = vi.fn(async () => undefined)
-    await retireOutgrownStructuredAgentSessionChild(
-      'session',
-      conversation({
-        child: childAt({ permissionMode: undefined }),
-        items: [
-          {
-            itemId: 'signed-out',
-            fence: 2,
-            body: {
-              kind: 'status',
-              ...agentSessionFailureWords(agentSessionFailureFact('notSignedIn'), {
-                surface: 'row'
-              })
-            }
-          }
-        ]
-      }),
-      {
-        work: {
-          childWork: () => [],
-          hasOpenDispatch: () => false,
-          providerHoldsDispatch: () => false
-        },
-        launchPermission: async () => 'full-access',
-        stopAgent,
-        logger: { warn: vi.fn(), error: vi.fn() }
-      }
-    )
-    expect(stopAgent).not.toHaveBeenCalled()
+describe('structuredAgentSessionChildReportedSignedOut', () => {
+  const reported = (input: Parameters<typeof conversation>[0]) =>
+    structuredAgentSessionChildReportedSignedOut(conversation(input))
+
+  it('reads a not-signed-in row the running child wrote', () => {
+    expect(reported({ items: [statusRow(2, 'notSignedIn')] })).toBe(true)
   })
+
+  it('ignores one an earlier child or a subagent wrote, and any other failure', () => {
+    expect(reported({ items: [statusRow(1, 'notSignedIn')] })).toBe(false)
+    expect(reported({ items: [statusRow(2, 'notSignedIn', 'subagent-1')] })).toBe(false)
+    expect(reported({ items: [statusRow(2, 'providerExited')] })).toBe(false)
+  })
+
+  it('reads a send rejected as not signed in at this child, not at an earlier one', () => {
+    expect(reported({ submissions: [rejected(2)] })).toBe(true)
+    expect(reported({ submissions: [rejected(1)] })).toBe(false)
+  })
+
+  it('leaves a child that is starting, closing, or absent', () => {
+    const items = [statusRow(2, 'notSignedIn')]
+    expect(reported({ items, child: childAt({ phase: 'starting' }) })).toBe(false)
+    expect(reported({ items, child: null })).toBe(false)
+  })
+})
+
+describe('retireOutgrownStructuredAgentSessionChild', () => {
   const liveChildWork: AgentChildWorkView = {
     id: 'subagent-1',
     kind: 'agent',
@@ -98,30 +186,34 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
     hasOpenDispatch: () => false,
     providerHoldsDispatch: () => false
   }
-  const outgrown = { child: childAt({ permissionMode: 'ask' }) }
+  const signedOut = { submissions: [rejected(2)] }
   const retire = async (
     input: Parameters<typeof conversation>[0],
     work: Partial<typeof idle> = {},
     stopAgent = vi.fn(async () => undefined),
-    launchPermission: () => Promise<AgentChatPermissionMode | null> = async () => 'full-access'
+    launchPermission?: () => Promise<AgentChatPermissionMode | null>
   ) => {
     const warn = vi.fn()
     await retireOutgrownStructuredAgentSessionChild('session', conversation(input), {
       work: { ...idle, ...work },
-      launchPermission,
+      ...(launchPermission ? { launchPermission } : {}),
       stopAgent,
       logger: { warn, error: vi.fn() }
     })
     return { stopAgent, warn }
   }
 
+  it('stops a signed-out child that owes nothing', async () => {
+    expect((await retire(signedOut)).stopAgent).toHaveBeenCalledWith('session')
+  })
+
   it('keeps it while it owes work the idle sweep also protects', async () => {
     // A pending prompt is the shared check's too; the idle sweep's tests cover that case.
     for (const kept of [
-      await retire({ ...outgrown, activeTurnId: 'turn-1' }),
-      await retire(outgrown, { childWork: () => [liveChildWork] }),
-      await retire(outgrown, { hasOpenDispatch: () => true }),
-      await retire(outgrown, { providerHoldsDispatch: () => true })
+      await retire({ ...signedOut, activeTurnId: 'turn-1' }),
+      await retire(signedOut, { childWork: () => [liveChildWork] }),
+      await retire(signedOut, { hasOpenDispatch: () => true }),
+      await retire(signedOut, { providerHoldsDispatch: () => true })
     ]) {
       expect(kept.stopAgent).not.toHaveBeenCalled()
     }
@@ -136,12 +228,12 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
       settledAt: 200
     }
     const after = await retire(
-      { ...outgrown, newestTurnEndedAt: 100 },
+      { ...signedOut, newestTurnEndedAt: 100 },
       { childWork: () => [settled] }
     )
     expect(after.stopAgent).not.toHaveBeenCalled()
     const before = await retire(
-      { ...outgrown, newestTurnEndedAt: 300 },
+      { ...signedOut, newestTurnEndedAt: 300 },
       { childWork: () => [settled] }
     )
     expect(before.stopAgent).toHaveBeenCalledWith('session')
@@ -149,7 +241,7 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
 
   it('logs a stop that fails and lets the send go on', async () => {
     const { warn } = await retire(
-      outgrown,
+      signedOut,
       {},
       vi.fn(async () => {
         throw new Error('exit not proven')
@@ -268,10 +360,7 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
 
     it('never reads the mode for a child launched with none', async () => {
       const current = now('full-access')
-      expect(
-        (await retire({ child: childAt({ permissionMode: undefined }) }, {}, undefined, current))
-          .stopAgent
-      ).not.toHaveBeenCalled()
+      expect((await retire({}, {}, undefined, current)).stopAgent).not.toHaveBeenCalled()
       expect(current).not.toHaveBeenCalled()
     })
   })

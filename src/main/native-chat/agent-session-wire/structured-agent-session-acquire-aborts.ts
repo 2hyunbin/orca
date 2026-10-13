@@ -1,10 +1,10 @@
-// The acquire each session has in flight, owned by the host that runs it, or another provider wait
-// its queue is on (an option write). The queue runs one step at a time, so a session has at most
-// one; a close, a Stop admitted now, quit, or the startup limit aborts it from outside the queue
-// instead of waiting behind a provider that may never answer.
+// Concurrent host waits keep their own cancellation handles until they settle.
 
 export class StructuredAgentSessionAcquireAborts {
-  private readonly inFlight = new Map<string, { controller: AbortController; handover: boolean }>()
+  private readonly inFlight = new Map<
+    string,
+    Set<{ controller: AbortController; handover: boolean }>
+  >()
   /** Set by quit: the host is going away, so an attach that begins after it starts aborted. */
   private quitReason: Error | null = null
 
@@ -14,11 +14,16 @@ export class StructuredAgentSessionAcquireAborts {
     if (this.quitReason) {
       controller.abort(this.quitReason)
     }
-    this.inFlight.set(sessionId, { controller, handover })
+    const waits =
+      this.inFlight.get(sessionId) ?? new Set<{ controller: AbortController; handover: boolean }>()
+    const active = { controller, handover }
+    waits.add(active)
+    this.inFlight.set(sessionId, waits)
     return {
       signal: controller.signal,
       end: () => {
-        if (this.inFlight.get(sessionId)?.controller === controller) {
+        waits.delete(active)
+        if (waits.size === 0 && this.inFlight.get(sessionId) === waits) {
           this.inFlight.delete(sessionId)
         }
       }
@@ -27,17 +32,21 @@ export class StructuredAgentSessionAcquireAborts {
 
   /** A no-op when the session has nothing in flight. */
   abort(sessionId: string, reason: string | Error): boolean {
-    const active = this.inFlight.get(sessionId)
-    const stoppedHandover = active?.handover === true && !active.controller.signal.aborted
-    active?.controller.abort(typeof reason === 'string' ? new Error(reason) : reason)
+    let stoppedHandover = false
+    for (const { controller, handover } of this.inFlight.get(sessionId) ?? []) {
+      stoppedHandover ||= handover && !controller.signal.aborted
+      controller.abort(typeof reason === 'string' ? new Error(reason) : reason)
+    }
     return stoppedHandover
   }
 
   /** Quit: every start under way stops, and so does any the attach drain still runs. */
   abortAll(reason: string): void {
     this.quitReason ??= new Error(reason)
-    for (const { controller } of this.inFlight.values()) {
-      controller.abort(this.quitReason)
+    for (const waits of this.inFlight.values()) {
+      for (const { controller } of waits) {
+        controller.abort(this.quitReason)
+      }
     }
   }
 }

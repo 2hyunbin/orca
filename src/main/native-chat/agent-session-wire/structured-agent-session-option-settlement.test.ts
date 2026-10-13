@@ -64,11 +64,7 @@ function adapter(): StructuredAgentSessionAdapter {
       sessionId: identity.sessionId,
       fence,
       acquisitionGeneration,
-      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) },
-      restoreSkippedOptions: [],
-      optionRevision: host
-        .collaboratorsForTests()
-        .runtimeState.optionRevisions.current(identity.sessionId)
+      reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) }
     })
     return {
       providerChildPhase: 'starting' as const,
@@ -185,6 +181,7 @@ describe('structured session options and close', () => {
         sessions: [expect.objectContaining({ status: 'idle', optionSelection: {} })]
       }
     ])
+    expect(events[0]).not.toHaveProperty('sessions.0.model')
     expect(store.getRecord(SESSION)?.options).toBeUndefined()
   })
 

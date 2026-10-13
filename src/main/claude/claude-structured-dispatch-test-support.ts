@@ -29,7 +29,6 @@ export function sessionFor(send: Mock = vi.fn().mockResolvedValue(undefined)): C
     reportedOptions: {},
     reportedModelMutation: 0,
     confirmedOptions: new Set(),
-    restoreSkippedOptions: new Set(),
     launchedModel: null,
     fastModeAtStart: false,
     capabilities: [],
@@ -46,7 +45,6 @@ export function sessionFor(send: Mock = vi.fn().mockResolvedValue(undefined)): C
       proof: createClaudeInitProof(),
       account: undefined,
       resumesTranscript: false,
-      optionRevision: () => 0,
       onLateRefusal: () => {}
     }
   }

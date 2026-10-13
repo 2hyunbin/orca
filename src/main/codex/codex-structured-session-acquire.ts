@@ -177,8 +177,7 @@ export async function acquireCodexStructuredSession(input: {
                   : agentSessionFailureFact('providerExited', {
                       detail: providerDiagnosticOf(error)
                     }),
-                observedAt: deps.now?.() ?? Date.now(),
-                startupUnproven: true
+                observedAt: deps.now?.() ?? Date.now()
               })
             }
             if (sessions.get(sessionId)?.connection === acquisition.connection) {

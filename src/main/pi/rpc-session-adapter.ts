@@ -212,9 +212,6 @@ export class PiRpcSessionAdapter implements StructuredAgentSessionAdapter {
   }
   readOptions: NonNullable<StructuredAgentSessionAdapter['readOptions']> = async (input) =>
     this.session(input.sessionId, input.fence).readOptions()
-  readOptionRestoreFailures(id: string): readonly string[] {
-    return this.sessions.get(id)?.startup.skipped ?? []
-  }
   readCommands = (id: string) => this.sessions.get(id)?.startup.commands
   holdsDispatch(id: string): boolean {
     return this.sessions.get(id)?.turns.holdsDispatch ?? false

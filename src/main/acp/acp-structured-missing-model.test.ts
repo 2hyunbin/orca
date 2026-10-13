@@ -47,8 +47,7 @@ function writtenOptions(provider: string, reader: AcpStructuredOptions) {
   }
   // What the host writes from the report a started child sends.
   const options = nativeSessionOptionsFromReport({
-    reported: reader.read().current,
-    restoreSkipped: []
+    reported: reader.read().current
   })
   const changed = replaceAgentSessionRecordOptions(record, {
     sessionId: record.sessionId,

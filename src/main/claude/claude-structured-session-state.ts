@@ -3,10 +3,7 @@ import type { AgentJournalDispatchRejection } from '../../shared/agent-session-f
 import type { SubmissionRejectionFact } from '../../shared/agent-session-failure'
 import type { AgentJournalItemIdentity } from '../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import type {
-  StructuredAgentSessionOptionsReportedEvent,
-  StructuredAgentSessionOptionsSkippedEvent
-} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionOptionsReportedEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type {
   ClaudeStreamJsonConnection,
   openClaudeStreamJsonConnection
@@ -64,7 +61,6 @@ export type ClaudeStructuredSessionEvent =
     }
   | { type: 'auth-diagnostic'; sessionId: string; diagnostic: ClaudeAuthDiagnostic }
   | StructuredAgentSessionOptionsReportedEvent
-  | StructuredAgentSessionOptionsSkippedEvent
   | {
       type: 'ended'
       sessionId: string
@@ -172,7 +168,6 @@ export type ClaudeSession = {
   reportedModelMutation: number
   /** Options whose recorded value the provider reported, not merely accepted. */
   confirmedOptions: Set<string>
-  restoreSkippedOptions: Set<string>
   /** The model the child was launched with, as `--model`; null when it runs the CLI's own. */
   launchedModel: string | null
   /** The launch left the saved Fast out, so the start applies it once the settings are read. */
@@ -208,7 +203,6 @@ export type ClaudeSession = {
     proof: ClaudeInitProof
     account: ClaudeStructuredLaunch['account']
     resumesTranscript: boolean
-    optionRevision: () => number
     onLateRefusal: (error: Error) => void
   }
 }

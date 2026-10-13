@@ -64,6 +64,7 @@ function adapter(): StructuredAgentSessionAdapter {
   acquire = vi.fn(async ({ fence, spawnToken, options }) => {
     activeModel = options?.model ?? DEFAULT_MODEL
     return {
+      providerChildPhase: 'starting' as const,
       process: { hostId: 'local', pid: 4200, processStartTimeMs: NOW, spawnToken },
       acquisitionGeneration: 'generation-1',
       link: {
@@ -80,9 +81,7 @@ function adapter(): StructuredAgentSessionAdapter {
       new Promise((resolve) => {
         releaseOpen = () =>
           resolve({
-            reportedOptions: { model: DEFAULT_MODEL },
-            restoreSkippedOptions: [],
-            optionRevision: 0
+            reportedOptions: { model: DEFAULT_MODEL }
           })
       }),
     acquire,

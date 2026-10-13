@@ -266,13 +266,12 @@ describe('Codex service tier across clients and rest', () => {
     expect(
       nativeSessionOptionsFromReport({
         reported: { model: 'gpt-live', serviceTier: 'priority', fastMode: true },
-        restoreSkipped: [],
         priorOptions: { fastMode: 'true', serviceTier: 'ultrafast' }
       })
     ).toEqual({ model: 'gpt-live', serviceTier: 'priority' })
     // An agent that reports Fast with no tier still keeps it.
-    expect(
-      nativeSessionOptionsFromReport({ reported: { fastMode: true }, restoreSkipped: [] })
-    ).toEqual({ fastMode: 'true' })
+    expect(nativeSessionOptionsFromReport({ reported: { fastMode: true } })).toEqual({
+      fastMode: 'true'
+    })
   })
 })

@@ -74,7 +74,6 @@ export async function acquireOwner(
       ...(permissionMode ? { permissionMode } : {}),
       ...(input.eventSink ? { events: input.eventSink } : {}),
       ...(input.acquireSignal ? { signal: input.acquireSignal } : {}),
-      optionRevision: input.optionRevision,
       ...(input.startupOptions ? { startupOptions: input.startupOptions } : {})
     })
     const progress = input.onStartupAttempt?.(attempt)

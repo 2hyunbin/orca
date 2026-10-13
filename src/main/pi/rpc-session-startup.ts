@@ -26,7 +26,6 @@ import { STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS } from '../native-chat/agen
 const START_REQUEST = { timeoutMs: STRUCTURED_AGENT_SESSION_STARTUP_CEILING_MS }
 
 export class PiRpcSessionStartup {
-  skipped: readonly string[] = []
   commands?: AgentSessionSlashCommand[]
   /** What the start listed; a signed-out Pi lists no model. */
   options?: AgentSessionOptionsResult
@@ -37,14 +36,14 @@ export class PiRpcSessionStartup {
     private readonly deps: PiRpcSessionDeps,
     /** A new Pi session starts on its config's model; a resumed or forked one keeps its own. */
     private readonly resolvesConfig: boolean,
-    private readonly setState: (state: PiRpcState) => void
+    private readonly setState: (state: PiRpcState) => void,
+    private readonly failedCause: () => Error | undefined
   ) {}
 
   async run(
     launch: PiRpcResolvedLaunch,
     signal: AbortSignal
   ): Promise<StructuredAgentSessionProviderOpenResult> {
-    const optionRevision = this.input.optionRevision?.() ?? 0
     const answer = await this.wait(this.connection.request('get_state', {}, START_REQUEST), signal)
     this.assertLive(signal)
     const state = piRpcStateSchema.parse(answer)
@@ -63,7 +62,6 @@ export class PiRpcSessionStartup {
       model: state.model ? piModelOptionId(state.model.provider, state.model.id) : '',
       ...(state.thinkingLevel ? { effort: state.thinkingLevel } : {})
     }
-    const skipped: string[] = []
     this.assertLive(signal)
     current.confirmed = [...(current.model ? ['model'] : []), ...(current.effort ? ['effort'] : [])]
     // Part of the start, as other agents' handshakes answer with theirs: a Pi that lists no model
@@ -81,19 +79,15 @@ export class PiRpcSessionStartup {
         options,
         unpickedSessionConfiguredChoice({
           resolvesConfig: this.resolvesConfig,
-          picked: new Set(),
           ...options
         })
       ).catalogListing
     }
-    this.skipped = skipped
     await this.readCommands(signal)
     this.assertLive(signal)
     return {
       link,
       reportedOptions: options?.current ?? current,
-      restoreSkippedOptions: skipped,
-      optionRevision,
       ...(catalogListing ? { catalogListing } : {})
     }
   }
@@ -121,6 +115,10 @@ export class PiRpcSessionStartup {
   }
 
   private assertLive(signal: AbortSignal): void {
+    const failure = this.failedCause()
+    if (failure) {
+      throw failure
+    }
     if (signal.aborted || this.connection.closed) {
       throw new Error('Pi closed while starting')
     }

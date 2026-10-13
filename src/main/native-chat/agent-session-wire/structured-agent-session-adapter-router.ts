@@ -139,9 +139,6 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     this.liveOwnerOrNull(sessionId)?.holdsLiveProviderProcess?.(sessionId, acquisitionGeneration) ??
     false
 
-  startUnavailable: NonNullable<StructuredAgentSessionAdapter['startUnavailable']> = (sessionId) =>
-    this.liveOwnerOrNull(sessionId)?.startUnavailable?.(sessionId)
-
   awaitStoppedRequestEnd = async (sessionId: string, stoppedAt: number) =>
     this.liveOwnerOrNull(sessionId)?.awaitStoppedRequestEnd?.(sessionId, stoppedAt)
 
@@ -197,9 +194,6 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
       ? adapter.readAcquisitionOptions(input)
       : readNativeSessionOptions({ adapter, ...input })
   }
-
-  readOptionRestoreFailures = (sessionId: string): readonly string[] =>
-    this.owner(sessionId).readOptionRestoreFailures?.(sessionId) ?? []
 
   providerHistoryWindow = (input: {
     identity: AgentSessionJournalIdentity
