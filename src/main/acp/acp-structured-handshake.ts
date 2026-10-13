@@ -1,5 +1,5 @@
 // An ACP child's handshake, run after the host has published it: initialize, reopen the chat's
-// session or start a new one, restore its saved options, then report `started`. A saved session the
+// session or start a new one, then return its protocol facts to the host. A saved session the
 // agent cannot reopen is replaced by a new one, with a warning row that any later start writes if
 // this one never did; while a reopened session replays history the journal already holds, nothing
 // it sends is written except context usage.
@@ -150,7 +150,6 @@ export async function initializeAcpStructuredSession(
     liveLane.apply(acpSessionNotRestoredRow(key, started.sessionId, agentName))
   }
   assertStarting()
-  child.phase = 'ready'
   if (!isAcpReadySession(child)) {
     throw new Error('ACP session did not open')
   }

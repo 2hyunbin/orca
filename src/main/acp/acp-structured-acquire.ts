@@ -13,7 +13,11 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { providerTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { providerSpawnedProcessIdentity } from '../provider-process/provider-spawned-process-identity'
-import { assertAcpStartingSession, type AcpStructuredChild } from './acp-structured-child'
+import {
+  assertAcpStartingSession,
+  isAcpReadySession,
+  type AcpStructuredChild
+} from './acp-structured-child'
 import type { AcpSessionEvent } from './acp-session-runtime'
 import type { AcpStructuredConnection } from './acp-structured-connection'
 import { acpAgentName } from './acp-structured-agent-definitions'
@@ -84,11 +88,9 @@ export async function acquireAcpStructuredSession(input: {
   // has nobody waiting on it. What a settled request carries still shows in that turn.
   const prompts = new AcpStructuredPrompts(
     () => slot.lane,
-    () => session?.phase === 'ready' && session.turns?.acceptsRequests === true,
+    () => isAcpReadySession(session) && session.turns?.acceptsRequests === true,
     () =>
-      session?.phase === 'ready' &&
-      session.turns !== null &&
-      session.lane !== null &&
+      isAcpReadySession(session) &&
       (session.turns.acceptsRequests ||
         (!session.turns.running && !session.turns.stopped && session.lane.openTurnId !== null))
   )
@@ -112,7 +114,7 @@ export async function acquireAcpStructuredSession(input: {
       clientInfo: { name: 'orca', version: '1' },
       ...(acquire.onOutput ? { onOutput: acquire.onOutput } : {}),
       onPermission: (request, context) => {
-        if (session?.phase !== 'ready' || !session.turns?.acceptsRequests) {
+        if (!isAcpReadySession(session) || !session.turns?.acceptsRequests) {
           // No prompt of Orca's runs (a turn the agent began itself included), or a Stop or steer
           // is cutting it short: nobody is there to ask.
           return { outcome: { outcome: 'cancelled' } }
@@ -163,7 +165,7 @@ export async function acquireAcpStructuredSession(input: {
         routeAcpSessionEvent({ lane: slot.lane, options }, event, now(), slot.reattaching)
       }
       if (
-        session?.phase === 'ready' &&
+        isAcpReadySession(session) &&
         !session.ended &&
         event.kind === 'known' &&
         event.notification.update.sessionUpdate === 'config_option_update'
@@ -200,7 +202,7 @@ export async function acquireAcpStructuredSession(input: {
       ...acpLaneChildWorkDelivery(deps, sessionId),
       logger: deps.logger ?? createStructuredAgentSessionLogger(),
       onInputAccepted: (clientMessageId) => {
-        if (session?.phase === 'ready') {
+        if (isAcpReadySession(session)) {
           session.turns?.accept(clientMessageId)
         }
       },
@@ -226,7 +228,6 @@ export async function acquireAcpStructuredSession(input: {
   await identity.onSpawned(pid)
   const process = await identity.read(pid)
   const child: AcpStructuredChild = {
-    phase: 'starting',
     sessionId,
     fence: acquire.fence,
     acquisitionGeneration: generation,

@@ -20,7 +20,6 @@ export type AcpStructuredChild = Pick<
   | 'ended'
   | 'exitObservedAt'
 > & {
-  phase: 'starting' | 'ready'
   lane: AcpStructuredSession['lane'] | null
   turns: AcpStructuredSession['turns'] | null
   options: AcpStructuredSession['options']
@@ -34,9 +33,9 @@ export type AcpStructuredChild = Pick<
 }
 
 export function isAcpReadySession(
-  session: AcpStructuredChild
+  session: AcpStructuredChild | null | undefined
 ): session is AcpStructuredSession & AcpStructuredChild {
-  return session.phase === 'ready' && session.lane !== null && session.turns !== null
+  return session != null && session.lane !== null && session.turns !== null
 }
 
 export function acpStartupFailure(

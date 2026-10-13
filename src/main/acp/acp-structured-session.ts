@@ -18,7 +18,6 @@ import type { AcpStructuredTurns } from './acp-structured-turns'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 
 export type AcpStructuredSession = {
-  phase: 'ready'
   sessionId: string
   fence: number
   acquisitionGeneration: string
