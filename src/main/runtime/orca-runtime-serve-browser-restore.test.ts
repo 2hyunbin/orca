@@ -40,6 +40,7 @@ function restartedServe(session: WorkspaceSessionState = savedServeTabs()) {
         }))
       })),
       getRegisteredTabs: vi.fn(() => registered()),
+      snapshot: vi.fn(async () => ({ snapshot: '' })),
       getActivePageId: vi.fn(() => livePages[0] ?? null),
       tabSwitch: vi.fn(async (_index: unknown, _worktreeId: unknown, browserPageId: string) => ({
         switched: livePages.indexOf(browserPageId),
@@ -173,12 +174,14 @@ describe('a saved browser tab on a host with no window', () => {
     )
   })
 
-  it('is listed, and the first one started, for a tab list that names no page', async () => {
+  it('is listed by a tab list without starting, and the first one starts for a pageless command', async () => {
     const { runtime, createTab } = restartedServe()
 
     const listed = await runtime.browserTabList({ worktree: `id:${TEST_WORKTREE_ID}` })
-
     expect(listed.tabs.map((tab) => tab.browserPageId)).toEqual(['page-1', 'page-2'])
+    expect(createTab).not.toHaveBeenCalled()
+
+    await runtime.browserSnapshot({ worktree: `id:${TEST_WORKTREE_ID}` })
     expect(createTab).toHaveBeenCalledTimes(1)
     expect(createTab).toHaveBeenCalledWith(expect.objectContaining({ browserPageId: 'page-1' }))
   })

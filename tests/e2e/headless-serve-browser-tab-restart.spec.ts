@@ -14,8 +14,11 @@ import {
   startHeadlessOracleHost
 } from './helpers/headless-layout-oracle-hosts'
 
-async function startPage(): Promise<{ url: string; server: Server }> {
+/** A page server that counts loads per path: a page that has not started has loaded nothing. */
+async function startPage(): Promise<{ url: string; server: Server; loads: Map<string, number> }> {
+  const loads = new Map<string, number>()
   const server = createServer((request, response) => {
+    loads.set(request.url ?? '', (loads.get(request.url ?? '') ?? 0) + 1)
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     response.end(`<!doctype html><title>${request.url === '/next' ? 'next' : 'first'}</title>`)
   })
@@ -24,7 +27,7 @@ async function startPage(): Promise<{ url: string; server: Server }> {
   if (!address || typeof address === 'string') {
     throw new Error('page server has no port')
   }
-  return { url: `http://127.0.0.1:${address.port}`, server }
+  return { url: `http://127.0.0.1:${address.port}`, server, loads }
 }
 
 async function browserRows(client: RuntimeClient, worktree: string) {
@@ -36,16 +39,12 @@ async function browserRows(client: RuntimeClient, worktree: string) {
   )
 }
 
-async function liveTabs(client: RuntimeClient, worktree: string) {
+async function listedTabs(client: RuntimeClient, worktree: string) {
   const listed = await client.call<{ tabs: { browserPageId: string; url: string }[] }>(
     'browser.tabList',
     { worktree }
   )
   return listed.result.tabs
-}
-
-async function livePageIds(client: RuntimeClient, worktree: string): Promise<string[]> {
-  return (await liveTabs(client, worktree)).map((tab) => tab.browserPageId)
 }
 
 test('a serve browser tab survives a restart and starts when opened', async () => {
@@ -67,19 +66,22 @@ test('a serve browser tab survives a restart and starts when opened', async () =
       .toBe(`${page.url}/next`)
 
     await host.restart()
+    const loadsBeforeOpen = page.loads.get('/next')
 
     // Listed at its last address before anything opens it, with no page running yet.
     await expect
       .poll(async () => browserRows(phone, worktree), { timeout: 30_000 })
       .toEqual([{ id: pageId, url: `${page.url}/next`, title: 'next' }])
-    expect(await livePageIds(cli, worktree)).toEqual([])
+    expect((await listedTabs(cli, worktree)).map((tab) => tab.browserPageId)).toEqual([pageId])
+    expect(page.loads.get('/next')).toBe(loadsBeforeOpen)
 
     // Driving it by page id, as an old client's stream does, starts it at that address.
     await phone.call('browser.snapshot', { worktree, page: pageId })
-    expect(await livePageIds(cli, worktree)).toEqual([pageId])
+    await expect.poll(() => page.loads.get('/next')).toBe((loadsBeforeOpen ?? 0) + 1)
     await expect
       .poll(
-        async () => (await liveTabs(cli, worktree)).find((tab) => tab.browserPageId === pageId)?.url
+        async () =>
+          (await listedTabs(cli, worktree)).find((tab) => tab.browserPageId === pageId)?.url
       )
       .toBe(`${page.url}/next`)
 
@@ -108,12 +110,14 @@ test('tapping a restored serve browser tab starts its page', async () => {
       url: `${page.url}/first`
     })
     const pageId = created.result.browserPageId
+    await expect.poll(() => page.loads.get('/first')).toBe(1)
     await host.restart()
     await expect.poll(async () => (await browserRows(phone, worktree)).length).toBe(1)
+    expect(page.loads.get('/first')).toBe(1)
 
     await phone.call('session.tabs.activate', { worktree, tabId: pageId })
 
-    expect(await livePageIds(cli, worktree)).toEqual([pageId])
+    await expect.poll(() => page.loads.get('/first')).toBe(2)
   } finally {
     await host.dispose()
     await new Promise((resolve) => page.server.close(resolve))
