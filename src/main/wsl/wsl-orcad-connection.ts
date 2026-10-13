@@ -122,7 +122,10 @@ export class WslOrcadConnectionManager {
     const key = wslDistroHolderKey(name)
     const pending = this.inFlight.get(key)
     if (pending) {
-      return pending
+      // Force needs its own deploy; joining a plain connect would silently drop it.
+      return options.force
+        ? pending.catch(() => {}).then(() => this.ensure(distro, options))
+        : pending
     }
     const status = options.status ?? { pending: CONNECTING, ready: READY }
     // A refresh of a live connection stays quiet; liveness recovery always reports.

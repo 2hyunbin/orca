@@ -18,7 +18,11 @@ const mocks = vi.hoisted(() => ({
   wake: vi.fn(),
   adopt: vi.fn(),
   incumbent: vi.fn(),
-  localVersion: vi.fn()
+  localVersion: vi.fn(),
+  readRecord: vi.fn()
+}))
+vi.mock('../ssh/orcad-activation-record-store', () => ({
+  readOrcadActivationRecord: mocks.readRecord
 }))
 vi.mock('../ssh/remote-versioned-install', async (importOriginal) => ({
   ...(await importOriginal<typeof RemoteVersionedInstall>()),
@@ -309,10 +313,8 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
     mocks.adopt.mockResolvedValue({ outcome: 'none' })
     mocks.probe.mockResolvedValue(READINESS)
     mocks.localVersion.mockReturnValue('1.5.0+ab')
-    mocks.incumbent.mockResolvedValue({
-      census: LIVE,
-      readiness: INCUMBENT_READINESS
-    })
+    mocks.incumbent.mockResolvedValue({ census: LIVE, readiness: INCUMBENT_READINESS })
+    mocks.readRecord.mockResolvedValue(activeOld)
   })
 
   it('plans the update on the census the running orcad reports, not an unknown one', async () => {
@@ -363,6 +365,17 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
     // The installed candidate is what a later Force activates; nothing may collect it.
     expect(mocks.prune).not.toHaveBeenCalled()
     expect(mocks.probe).not.toHaveBeenCalled()
+  })
+
+  it('does not serve an incumbent another client replaced during the deploy', async () => {
+    mocks.readRecord.mockResolvedValueOnce({ ...activeOld, active: '1.4.5+bb' })
+    mocks.deploy.mockResolvedValueOnce({
+      outcome: 'installed-not-activated',
+      fullVersion: '1.5.0+ab',
+      code: 'orcad_update_terminals_running',
+      reason: 'terminals are running'
+    })
+    await expect(launch()).resolves.toMatchObject({ outcome: 'deferred', forceable: true })
   })
 
   it('forwards force to the update planner', async () => {

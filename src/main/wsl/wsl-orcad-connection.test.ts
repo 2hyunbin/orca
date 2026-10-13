@@ -235,6 +235,18 @@ describe('WslOrcadConnectionManager', () => {
     })
   })
 
+  it('runs a forced connect after a plain one in flight instead of joining it', async () => {
+    const { manager, deployAndLaunch } = setup()
+    const plain = manager.ensure('Ubuntu')
+    const forced = manager.ensure('Ubuntu', { force: true })
+    await Promise.all([plain, forced])
+    expect(deployAndLaunch).toHaveBeenCalledTimes(2)
+    expect(deployAndLaunch).toHaveBeenLastCalledWith(
+      'Ubuntu',
+      expect.objectContaining({ force: true })
+    )
+  })
+
   it('throws the deferral and starts no bridge', async () => {
     const { manager, launches, children } = setup()
     launches.push({

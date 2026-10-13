@@ -177,7 +177,13 @@ async function launchOverTransport(
         deployed.code === ORCAD_ACTIVATION_POLICY_REFUSED_CODE
     }
     // Waiting (e.g. live terminals) is not broken: the incumbent serves until Update or Force.
-    if (incumbentVersion && incumbent?.readiness && isWaitingOrcadUpdateDeferral(deployed.code)) {
+    if (
+      incumbentVersion &&
+      incumbent?.readiness &&
+      isWaitingOrcadUpdateDeferral(deployed.code) &&
+      // Another client may have activated a build since the census; then this one is stale.
+      (await readOrcadActivationRecord(slot)).active === incumbentVersion
+    ) {
       const serving = {
         fullVersion: incumbentVersion,
         readiness: incumbent.readiness
