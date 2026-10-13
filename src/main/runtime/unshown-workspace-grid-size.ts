@@ -2,8 +2,8 @@ import type { TabGroupLayoutNode } from '../../shared/tab-types'
 
 type GridSize = { cols: number; rows: number }
 
-// Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), or no
-// pane at the default font mounted yet. #1707's original size.
+// Why 120x40: no size to go on: no window attached (serve, orcad), no pane at the default font
+// mounted yet, or a split workspace with no saved split. #1707's original size.
 export const UNMEASURED_GRID_SIZE: GridSize = { cols: 120, rows: 40 }
 
 /** Grid for a tab opening in a workspace the window has not shown, so none of its groups is measured.

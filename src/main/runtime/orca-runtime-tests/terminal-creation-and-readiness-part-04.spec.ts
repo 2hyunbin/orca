@@ -596,14 +596,18 @@ describe('OrcaRuntimeService', () => {
       const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
         ...getDefaultWorkspaceSession(),
         ...(tabGroups ? { tabGroups: { [TEST_WORKTREE_ID]: tabGroups } } : {}),
-        tabGroupLayouts: {
-          [TEST_WORKTREE_ID]: {
-            type: 'split',
-            direction: 'horizontal',
-            first: { type: 'leaf', groupId: 'group-left' },
-            second: { type: 'leaf', groupId: 'group-right' }
-          }
-        }
+        ...(tabGroups?.length === 2
+          ? {
+              tabGroupLayouts: {
+                [TEST_WORKTREE_ID]: {
+                  type: 'split',
+                  direction: 'horizontal',
+                  first: { type: 'leaf', groupId: 'group-left' },
+                  second: { type: 'leaf', groupId: 'group-right' }
+                }
+              }
+            }
+          : {})
       })
       const runtime = new OrcaRuntimeService(runtimeStore)
       runtime.setPtyController({
