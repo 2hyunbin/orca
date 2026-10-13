@@ -21,8 +21,8 @@ import {
   closeCodexPublishedSession,
   handleCodexSessionExit
 } from './codex-structured-session-close'
-import { startCodexStructuredSession } from './codex-structured-session-start'
-import { CodexStartingChild } from './codex-structured-starting-child'
+import { openCodexStructuredSession } from './codex-structured-session-start'
+import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import {
   assertCodexConnectionOpen,
   mintCodexAcquisitionGeneration,
@@ -149,13 +149,33 @@ export async function acquireCodexStructuredSession(input: {
         ...(acquireInput.onOutput ? { onOutput: acquireInput.onOutput } : {}),
         onExit: (error, exit) => {
           try {
-            if (attempt.startingChild && !sessions.has(sessionId)) {
+            if (attempt.acquisitionGeneration && !sessions.has(sessionId)) {
               attempt.exitProven = true
-              attempt.startingChild.end(
-                error,
-                attempt.cancelled && attempt.requestedClose !== false
-              )
+              attempt.exitError = error
+              attempt.dispose?.()
               acquisitions.deleteIfCurrent(sessionId, attempt)
+              deps.onEvent?.({
+                type: 'ended',
+                sessionId,
+                fence: acquireInput.fence,
+                acquisitionGeneration,
+                reason: error.message,
+                cause:
+                  attempt.cancelled && attempt.requestedClose !== false
+                    ? 'requested-close'
+                    : 'unexpected-exit',
+                failure: attempt.cancelled
+                  ? agentSessionFailureFact('hostFault')
+                  : agentSessionFailureFact('providerExited', {
+                      detail: providerDiagnosticOf(error)
+                    }),
+                observedAt: deps.now?.() ?? Date.now(),
+                startupUnproven: true
+              })
+            }
+            if (sessions.get(sessionId)?.connection === acquisition.connection) {
+              attempt.exitProven = true
+              attempt.exitError = error
             }
             handleCodexSessionExit({
               sessions,
@@ -188,35 +208,40 @@ export async function acquireCodexStructuredSession(input: {
     const process = await spawnIdentity.read(connection.pid)
     acquisitions.assertCurrent(sessionId, attempt)
     assertCodexConnectionOpen(connection, sessionId)
-    attempt.startingChild = new CodexStartingChild(acquisitionGeneration, {
-      sessionId,
-      fence: acquireInput.fence,
-      onEvent: deps.onEvent,
-      dispose: () => {
-        unbindReadingControl?.()
-        acquisition.prompts.clear()
-        acquisition.drain()
-        translator?.dispose()
+    attempt.acquisitionGeneration = acquisitionGeneration
+    let disposed = false
+    attempt.dispose = () => {
+      if (disposed) {
+        return
       }
-    })
-    void startCodexStructuredSession({
-      input: acquireInput,
-      deps,
-      launch,
-      account,
-      sessions,
-      acquisitions,
-      attempt,
-      connection,
-      translator,
-      dispatchEchoes,
-      subagentExecutions,
-      setPrimaryThreadId: (threadId) => {
-        primaryThreadId = threadId
-      },
-      forceCloseUnexpected: input.forceCloseUnexpected,
-      ...(unbindReadingControl ? { unbindReadingControl } : {})
-    })
+      disposed = true
+      unbindReadingControl?.()
+      acquisition.prompts.clear()
+      acquisition.drain()
+      translator?.dispose()
+    }
+    attempt.open = (openInput) =>
+      openCodexStructuredSession(
+        {
+          input: acquireInput,
+          deps,
+          launch,
+          account,
+          sessions,
+          acquisitions,
+          attempt,
+          connection,
+          translator,
+          dispatchEchoes,
+          subagentExecutions,
+          setPrimaryThreadId: (threadId) => {
+            primaryThreadId = threadId
+          },
+          forceCloseUnexpected: input.forceCloseUnexpected,
+          ...(unbindReadingControl ? { unbindReadingControl } : {})
+        },
+        openInput
+      )
     return { process, acquisitionGeneration, providerChildPhase: 'starting' }
   } catch (error) {
     if (sessions.get(sessionId)?.connection !== acquisition.connection) {
