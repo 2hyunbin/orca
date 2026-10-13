@@ -1028,6 +1028,7 @@
               "undecryptableUnknown": "{{value0}} cookies n'ont pas pu être déchiffrés et ont été ignorés. Fermez complètement le navigateur source, puis réessayez l'importation.",
               "unrecognizedWarning": "L'importation des cookies s'est terminée avec un avertissement que cette version d'Orca ne reconnaît pas. Mettez Orca à jour pour voir les détails, puis vérifiez ce profil avant de vous fier à ses cookies.",
               "undecryptableUnrecognizedReason": "{{value0}} cookies n'ont pas pu être déchiffrés et ont été ignorés pour une raison que cette version d'Orca ne reconnaît pas. Mettez Orca à jour pour voir les détails, puis réessayez l'importation.",
+              "partitionSkippedBreakdown": "Cookies dont la partition de site est illisible : {{value0}}. Cookies associés non importés pour protéger les sessions existantes : {{value1}}. Les cookies existants de ces sites n’ont pas été modifiés. Vérifiez ces sites dans ce profil avant de vous reconnecter.",
               "partitionSkipped": "{{value0}} cookies n'ont pas été importés car leur partition de site n'a pas pu être lue. Connectez-vous à nouveau à ces sites dans Orca.",
               "locationClientHosted": "Lire à partir de cet appareil et stocké ici pour l'espace de travail {{value0}}.",
               "locationRemoteHost": "Lire à partir des navigateurs sur {{value0}} et y être stockée.",

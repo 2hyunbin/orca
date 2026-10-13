@@ -930,6 +930,7 @@
               "undecryptableUnknown": "{{value0}} 쿠키를 해독할 수 없어 건너뛰었습니다. 소스 브라우저를 완전히 닫고 가져오기를 다시 시도하세요.",
               "unrecognizedWarning": "이 버전의 Orca가 인식하지 못한다는 경고와 함께 쿠키 가져오기가 완료되었습니다. Orca를 업데이트하여 세부 정보를 확인한 다음 쿠키를 사용하기 전에 이 프로필을 확인하세요.",
               "undecryptableUnrecognizedReason": "{{value0}} 쿠키는 이 버전의 Orca가 인식하지 못하는 이유로 해독할 수 없으며 건너뛰었습니다. Orca를 업데이트하여 세부정보를 확인한 후 가져오기를 다시 시도하세요.",
+              "partitionSkippedBreakdown": "사이트 파티션을 읽을 수 없는 쿠키: {{value0}}. 기존 세션을 보호하기 위해 가져오지 않은 관련 쿠키: {{value1}}. 해당 사이트의 기존 쿠키는 변경되지 않았습니다. 다시 로그인하기 전에 이 프로필에서 해당 사이트를 확인하세요.",
               "partitionSkipped": "{{value0}} 쿠키는 사이트 파티션을 읽을 수 없기 때문에 가져오지 못했습니다. Orca에서 해당 사이트에 다시 로그인합니다.",
               "locationClientHosted": "이 기기에서 읽고 {{value0}} 워크스페이스를 위해 여기에 저장됩니다.",
               "locationRemoteHost": "{{value0}}의 브라우저에서 읽고 거기에 저장됩니다.",
