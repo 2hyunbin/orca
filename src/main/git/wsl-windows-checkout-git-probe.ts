@@ -18,6 +18,7 @@ import {
   parseHostAutocrlf,
   recordHostAutocrlf,
   recordLineEndingSample,
+  writesAnotherCheckout,
   wslWindowsCheckoutKey,
   type HostAutocrlfAnswer,
   type LineEndingSampleAnswer
@@ -232,8 +233,12 @@ async function settle(
   deps: WslWindowsCheckoutProbeDeps
 ): Promise<void> {
   const now = deps.now ?? Date.now
+  const isRead = isWslDirectGitReadCommand(args)
+  if (!isRead && writesAnotherCheckout(args)) {
+    return
+  }
   let state = getWslWindowsCheckoutState(key)
-  if (!state?.host) {
+  if (!state?.host || (!isRead && !isFresh(state.host, now()))) {
     await waitUnlessAborted(runStage('host', key, options, deps), signal)
   } else if (!isFresh(state.host, now())) {
     void runStage('host', key, options, deps)
@@ -242,21 +247,24 @@ async function settle(
   if (state?.host?.value !== 'true') {
     return
   }
-  if (isWslDirectGitReadCommand(args)) {
+  if (isRead) {
     // Reads are already correct with the flags; the sample only has to catch up for later writes.
     if (!isFresh(state.sample, now())) {
       void runStage('sample', key, options, deps)
     }
     return
   }
-  if (state.sample) {
-    const identity = await (deps.checkoutIdentity ?? defaultCheckoutIdentity)(options.cwd)
-    if (identity !== state.sample.identity) {
-      forgetLineEndingSample(key)
-    }
+  const identityOf = deps.checkoutIdentity ?? defaultCheckoutIdentity
+  const identity = await identityOf(options.cwd)
+  if (state.sample && identity !== state.sample.identity) {
+    forgetLineEndingSample(key)
   }
   if (!isFresh(getWslWindowsCheckoutState(key)?.sample, now())) {
     await waitUnlessAborted(runStage('sample', key, options, deps), signal)
+    // Why: a joined sample may have started before the checkout was replaced at this path.
+    if (getWslWindowsCheckoutState(key)?.sample?.identity !== identity) {
+      forgetLineEndingSample(key)
+    }
   }
 }
 

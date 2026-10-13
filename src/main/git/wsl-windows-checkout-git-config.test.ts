@@ -6,6 +6,7 @@ import {
   recordHostAutocrlf,
   recordLineEndingSample,
   resetWslWindowsCheckoutGitConfigForTests,
+  UNPROVEN_CHECKOUT_WRITE_GIT_CONFIG_ARGS,
   usesWindowsCheckoutGitConfig,
   WINDOWS_CHECKOUT_GIT_CONFIG_ARGS,
   withWslWindowsCheckoutGitConfig,
@@ -98,7 +99,10 @@ describe('which commands run with Windows Git settings', () => {
       ...WINDOWS_CHECKOUT_GIT_CONFIG_ARGS,
       ...read
     ])
-    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', NOW)).toEqual(write)
+    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', NOW)).toEqual([
+      ...UNPROVEN_CHECKOUT_WRITE_GIT_CONFIG_ARGS,
+      ...write
+    ])
   })
 
   it('stops flagging reads once the sample proves an LF checkout', () => {
@@ -114,16 +118,40 @@ describe('which commands run with Windows Git settings', () => {
       'core.autocrlf=true'
     )
     const stale = NOW + WSL_WINDOWS_CHECKOUT_TTL_MS
-    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', stale)).toEqual(write)
+    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', stale)).toEqual([
+      ...UNPROVEN_CHECKOUT_WRITE_GIT_CONFIG_ARGS,
+      ...write
+    ])
     expect(withWslWindowsCheckoutGitConfig(read, CWD, 'Ubuntu', 'win32', stale)[1]).toBe(
       'core.autocrlf=true'
     )
   })
 
-  it('does not flag writes on an inconclusive sample', () => {
+  it('only normalizes staged content on an inconclusive sample, never writing CRLF', () => {
     recordHostAutocrlf(KEY, 'true', NOW)
     recordLineEndingSample(KEY, 'inconclusive', 'id', NOW)
+    expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', NOW)).toEqual([
+      '-c',
+      'core.autocrlf=input',
+      ...write
+    ])
+  })
+
+  it('leaves writes unflagged once the sample proves an LF checkout', () => {
+    recordHostAutocrlf(KEY, 'true', NOW)
+    recordLineEndingSample(KEY, 'not-windows', 'id', NOW)
     expect(withWslWindowsCheckoutGitConfig(write, CWD, 'Ubuntu', 'win32', NOW)).toEqual(write)
+  })
+
+  it('never flags commands that create another checkout', () => {
+    recordHostAutocrlf(KEY, 'true', NOW)
+    recordLineEndingSample(KEY, 'windows', 'id', NOW)
+    const worktreeAdd = ['-c', 'core.longpaths=true', 'worktree', 'add', '-b', 'x', '../x']
+    expect(withWslWindowsCheckoutGitConfig(worktreeAdd, CWD, 'Ubuntu', 'win32', NOW)).toEqual(
+      worktreeAdd
+    )
+    const clone = ['clone', 'https://example.com/r.git']
+    expect(withWslWindowsCheckoutGitConfig(clone, CWD, 'Ubuntu', 'win32', NOW)).toEqual(clone)
   })
 
   it('keys case-insensitively and per distro, and ignores non-candidates', () => {

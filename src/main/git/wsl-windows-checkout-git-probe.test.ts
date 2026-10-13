@@ -149,6 +149,44 @@ describe('pendingWslWindowsCheckoutGitConfig', () => {
     expect(flagged(WRITE)).toBe(false)
   })
 
+  it('does not trust a joined sample that began before the checkout was replaced', async () => {
+    let finishSample: (result: WslResult) => void = () => {}
+    const { deps, run, flagged } = harness({
+      runWsl: vi.fn(() => new Promise<WslResult>((resolve) => (finishSample = resolve)))
+    })
+    await run(READ)
+    await vi.waitFor(() => expect(deps.runWsl).toHaveBeenCalledTimes(1))
+    deps.checkoutIdentity.mockResolvedValue('clone-2')
+    const write = run(WRITE)
+    await vi.waitFor(() => expect(deps.checkoutIdentity).toHaveBeenCalledTimes(2))
+    finishSample(wsl())
+    await write
+    expect(flagged(WRITE)).toBe(false)
+    expect(withWslWindowsCheckoutGitConfig(WRITE, CWD, 'Ubuntu', 'win32', Date.now())).toEqual([
+      '-c',
+      'core.autocrlf=input',
+      ...WRITE
+    ])
+  })
+
+  it('refreshes a stale host answer before a write rather than in the background', async () => {
+    const { clock, deps, run, flagged } = harness()
+    await run(WRITE)
+    clock.now += WSL_WINDOWS_CHECKOUT_TTL_MS
+    deps.runHostGit.mockResolvedValue(host({ stdout: HOST_CONFIG_LOCAL_AUTOCRLF_FALSE }))
+    await run(WRITE)
+    expect(deps.runHostGit).toHaveBeenCalledTimes(2)
+    expect(flagged(WRITE)).toBe(false)
+    expect(flagged(READ)).toBe(false)
+  })
+
+  it('never probes for a command that creates another checkout', async () => {
+    const { deps, run } = harness()
+    await run(['worktree', 'add', '-b', 'feature', String.raw`C:\Users\dev\feature`])
+    expect(deps.runHostGit).not.toHaveBeenCalled()
+    expect(deps.runWsl).not.toHaveBeenCalled()
+  })
+
   it('caches only a genuine "not a git repository" and backs off other fatal errors', async () => {
     const notRepo = harness({
       runHostGit: vi.fn(async () =>

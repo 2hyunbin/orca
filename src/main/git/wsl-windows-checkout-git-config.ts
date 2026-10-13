@@ -1,5 +1,5 @@
 import { win32 } from 'node:path'
-import { isWslDirectGitReadCommand } from './wsl-direct-git-read-commands'
+import { findGitSubcommandIndex, isWslDirectGitReadCommand } from './wsl-direct-git-read-commands'
 
 /**
  * Per-command config that makes Linux Git read a Windows Git checkout the way Windows Git does.
@@ -18,6 +18,24 @@ export const WINDOWS_CHECKOUT_GIT_CONFIG_ARGS: readonly string[] = [
   '-c',
   'core.checkStat=minimal'
 ]
+
+/**
+ * Writes while the sample has not proven which Git wrote the checkout: `input` stages LF like
+ * Windows Git would, yet never writes CRLF into what may be a Linux checkout.
+ */
+export const UNPROVEN_CHECKOUT_WRITE_GIT_CONFIG_ARGS: readonly string[] = [
+  '-c',
+  'core.autocrlf=input'
+]
+
+// Why: these write a new checkout whose `.git` points at /mnt/..., which Windows Git cannot open,
+// so its probe answers not-repo and CRLF files written here would read as modified forever.
+const OTHER_CHECKOUT_SUBCOMMANDS = new Set(['clone', 'worktree'])
+
+export function writesAnotherCheckout(args: readonly string[]): boolean {
+  const subcommandIndex = findGitSubcommandIndex(args)
+  return subcommandIndex !== -1 && OTHER_CHECKOUT_SUBCOMMANDS.has(args[subcommandIndex])
+}
 
 /** Deliberate cap: ~200 eligible files decide the checkout without reading the whole tree over drvfs. */
 export const LINE_ENDING_SAMPLE_LIMIT = 200
@@ -147,20 +165,35 @@ export function classifyLineEndingSample(
  *
  * Reads need only the host's autocrlf=true: the flags never make a read less correct, even on an
  * LF checkout, so an unfinished sample must not leave status flashing every file as modified.
- * Writes change bytes on disk or in the index, so they need a fresh sample proving CRLF.
+ * Writes change bytes on disk or in the index, so they need a fresh sample proving CRLF; until then
+ * they only normalize what they stage.
  */
+export function windowsCheckoutGitConfigArgs(
+  args: readonly string[],
+  state: Readonly<CheckoutState> | undefined,
+  now: number
+): readonly string[] {
+  if (state?.host?.value !== 'true' || state.sample?.value === 'not-windows') {
+    return []
+  }
+  if (isWslDirectGitReadCommand(args)) {
+    return WINDOWS_CHECKOUT_GIT_CONFIG_ARGS
+  }
+  if (writesAnotherCheckout(args)) {
+    return []
+  }
+  return state.sample?.value === 'windows' && isFresh(state.sample, now)
+    ? WINDOWS_CHECKOUT_GIT_CONFIG_ARGS
+    : UNPROVEN_CHECKOUT_WRITE_GIT_CONFIG_ARGS
+}
+
+/** Whether this command runs with Windows Git's full settings, including minimal stat. */
 export function usesWindowsCheckoutGitConfig(
   args: readonly string[],
   state: Readonly<CheckoutState> | undefined,
   now: number
 ): boolean {
-  if (state?.host?.value !== 'true') {
-    return false
-  }
-  if (isWslDirectGitReadCommand(args)) {
-    return state.sample?.value !== 'not-windows'
-  }
-  return state.sample?.value === 'windows' && isFresh(state.sample, now)
+  return windowsCheckoutGitConfigArgs(args, state, now) === WINDOWS_CHECKOUT_GIT_CONFIG_ARGS
 }
 
 /** `args` with Windows Git's settings prepended when this WSL command needs them. */
@@ -174,10 +207,12 @@ export function withWslWindowsCheckoutGitConfig(
   if (!isWslWindowsCheckoutCandidate(cwd, wslDistro, platform) || !wslDistro) {
     return args
   }
-  const state = states.get(wslWindowsCheckoutKey(cwd, wslDistro))
-  return usesWindowsCheckoutGitConfig(args, state, now)
-    ? [...WINDOWS_CHECKOUT_GIT_CONFIG_ARGS, ...args]
-    : args
+  const config = windowsCheckoutGitConfigArgs(
+    args,
+    states.get(wslWindowsCheckoutKey(cwd, wslDistro)),
+    now
+  )
+  return config.length > 0 ? [...config, ...args] : args
 }
 
 export function resetWslWindowsCheckoutGitConfigForTests(): void {
