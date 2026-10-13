@@ -81,12 +81,12 @@ function closeProviderRoot(
   }
   return stopAgentSessionProviderRoot(
     async () => {
+      const close = adapter.disposeSession ?? adapter.closeSession
+      const cause = context.sessions.get(sessionId)?.child?.close?.cause
       return (
-        (await (adapter.disposeSession ?? adapter.closeSession)?.call(
-          adapter,
-          sessionId,
-          context.sessions.get(sessionId)?.child?.close?.cause
-        )) === true
+        (await (cause === undefined
+          ? close?.call(adapter, sessionId)
+          : close?.call(adapter, sessionId, cause))) === true
       )
     },
     // The exit is proven; a child process left behind, or a write after it, is reported only.

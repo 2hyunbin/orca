@@ -209,7 +209,11 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
     Promise.resolve(null)
 
   closeSession = (sessionId: string, cause?: StructuredAgentSessionStopCause): Promise<boolean> =>
-    this.stopSession(sessionId, (adapter) => adapter.closeSession?.(sessionId, cause))
+    this.stopSession(sessionId, (adapter) =>
+      cause === undefined
+        ? adapter.closeSession?.(sessionId)
+        : adapter.closeSession?.(sessionId, cause)
+    )
 
   forceCloseSession = (sessionId: string): Promise<boolean> =>
     this.stopSession(sessionId, (adapter) =>

@@ -290,7 +290,12 @@ describe('a Stop that names no turn', () => {
     ['its end is read before the answer', 'before'],
     ['no end comes', 'none']
   ])('withdraws a send whose turn Codex never started when it takes a Stop: %s', async (_, end) => {
-    const codex = fakeCodex()
+    const codex = fakeCodex({
+      'model/list': () => ({
+        data: [{ model: 'gpt-live', isDefault: true, defaultReasoningEffort: 'medium' }],
+        nextCursor: null
+      })
+    })
     codex.routes['turn/start'] = () => ({ turn: { id: 'turn-1' } })
     const ended = () =>
       codex.connections[0].handlers.onNotification?.('turn/completed', {
@@ -335,7 +340,12 @@ describe('a Stop that names no turn', () => {
   })
 
   it('keeps the record of a turn Codex never started when something of it was read', async () => {
-    const codex = fakeCodex()
+    const codex = fakeCodex({
+      'model/list': () => ({
+        data: [{ model: 'gpt-live', isDefault: true, defaultReasoningEffort: 'medium' }],
+        nextCursor: null
+      })
+    })
     codex.routes['turn/start'] = () => ({ turn: { id: 'turn-1' } })
     codex.routes['turn/interrupt'] = () => {
       const notify = codex.connections[0].handlers.onNotification

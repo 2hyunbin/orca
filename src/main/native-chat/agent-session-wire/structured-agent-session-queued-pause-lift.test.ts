@@ -501,7 +501,7 @@ describe('a failed Stop', () => {
     await expectPaused(draftId)
   })
 
-  it('keeps its pause when it fails after the interrupt reached the agent', async () => {
+  it('keeps its pause when its note fails after the interrupt reached the agent', async () => {
     // A running turn, so the Stop writes its note in its own step rather than at the child's end.
     await openRigTurnFor(rig, await rig.workingSend())
     const draftId = await queuedDraft('paused by stop')
@@ -516,7 +516,7 @@ describe('a failed Stop', () => {
         return append.apply(this, args)
       })
     try {
-      await expect(rig.stop()).rejects.toThrow('disk full')
+      await expect(rig.stop()).resolves.toMatchObject({ ok: true, value: { cancelled: true } })
     } finally {
       failing.mockRestore()
     }

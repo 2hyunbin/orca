@@ -313,8 +313,9 @@ describe('Stop on a child still proving its start', () => {
       dispatchState: 'rejected',
       reason: DISPATCH_REJECTED_CANCELLED
     })
-    // A Stop is not a failure: no row, and the loop is gone.
-    expect(await statusRows()).toEqual([])
+    expect(await statusRows()).toEqual([
+      { itemId: 'orca:stop%3Aturn-none', text: 'Cancellation requested.' }
+    ])
     await eventually(() => expect(host['conversationDelivery'].loop.isRunning(SESSION)).toBe(false))
 
     const next = await accept('after stop')
@@ -743,7 +744,9 @@ describe('how a stopped child ends the start its loop was waiting on', () => {
 
     await eventually(async () => expect((await submission(second))?.dispatchState).toBe('accepted'))
     expect(conversation()?.lastEndedChild).toMatchObject({ cause: 'user-stop', reason: null })
-    expect(await statusRows()).toEqual([])
+    expect(await statusRows()).toEqual([
+      { itemId: 'orca:stop%3Aturn-none', text: 'Cancellation requested.' }
+    ])
   })
 
   /** The close's stop alone: a close that aborts after it leaves the conversation indexed. */

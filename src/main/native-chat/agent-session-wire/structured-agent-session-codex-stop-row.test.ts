@@ -47,7 +47,12 @@ let closeProviderSession: NonNullable<StructuredAgentSessionAdapter['disposeSess
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-codex-stop-row-'))
   resetHostTestOperationIds()
-  codex = fakeCodex()
+  codex = fakeCodex({
+    'model/list': () => ({
+      data: [{ model: 'gpt-live', isDefault: true, defaultReasoningEffort: 'medium' }],
+      nextCursor: null
+    })
+  })
   notify = (method, params) => codex.connections.at(-1)?.handlers.onNotification?.(method, params)
   turns = codexTurnLifecycleFake(THREAD, () => notify)
   codex.routes['turn/start'] = turns.routes['turn/start']

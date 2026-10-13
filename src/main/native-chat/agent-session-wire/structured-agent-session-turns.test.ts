@@ -414,7 +414,7 @@ describe('what a conversation Stop reports when the provider stopped nothing', (
   it('reports a Stop naming no turn that withdrew what was queued, with nothing left working, as a success', async () => {
     expect(await cancelWith({ cancelled: false }, { withdrewQueued: true })).toEqual({
       cancelled: true,
-      rows: []
+      rows: ['Cancellation requested.']
     })
   })
 
