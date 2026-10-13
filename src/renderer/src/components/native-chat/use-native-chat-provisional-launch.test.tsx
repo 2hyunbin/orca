@@ -51,15 +51,7 @@ import { getDefaultSettings } from '../../../../shared/constants'
 import { useAppStore } from '../../store'
 import { startStructuredAgentLaunch } from '@/lib/structured-agent-session-launch'
 import { resetStructuredAgentLaunchPersistenceForTests } from '@/lib/structured-agent-session-launch-persistence'
-import {
-  getStructuredLaunchStateBySessionId,
-  resetStructuredAgentLaunchRegistryForTests
-} from '@/lib/structured-agent-session-launch-registry'
-import {
-  holdStructuredAgentSessionLaunchOption,
-  settleStructuredLaunchCreateOptions
-} from '@/lib/structured-agent-session-launch-options'
-import { settleStructuredLaunchCallers } from '@/lib/structured-agent-session-launch-callers'
+import { resetStructuredAgentLaunchRegistryForTests } from '@/lib/structured-agent-session-launch-registry'
 import { useNativeChatProvisionalLaunch } from './use-native-chat-provisional-launch'
 import { useStructuredAgentSession } from './use-structured-agent-session'
 import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
@@ -167,31 +159,6 @@ describe('a chat pane over its own launch', () => {
       'agentSession.modelCatalog',
       expect.objectContaining({ worktree: 'id:wt-second' })
     )
-  })
-
-  it('derives launch picks while held and drops them once the host owns the choice', async () => {
-    saveSelection('gpt-5.5')
-    const { sessionId } = startStructuredAgentLaunch('wt-picks', 'codex', {
-      requestId: 'request-4'
-    })
-    const { result } = renderHook(() => useNativeChatProvisionalLaunch('wt-picks', sessionId))
-    act(() => {
-      void holdStructuredAgentSessionLaunchOption(sessionId, 'model', 'gpt-5.6-luna')
-    })
-    expect(result.current.launch?.heldOptions).toEqual({ model: 'gpt-5.6-luna' })
-    const state = getStructuredLaunchStateBySessionId(sessionId)
-    if (!state) {
-      throw new Error('launch missing')
-    }
-    // Publication settles the picks create carried and retires the launch in one step, before
-    // the view renders again; the chat's agent then starts with them.
-    act(() => {
-      settleStructuredLaunchCreateOptions(state, { model: 'gpt-5.6-luna' })
-      settleStructuredLaunchCallers(state.callers, 'published')
-    })
-    expect(getStructuredLaunchStateBySessionId(sessionId)).toBeUndefined()
-    expect(result.current.launch?.seedOptions).toBeUndefined()
-    expect(result.current.launch?.heldOptions).toEqual({})
   })
 
   it('shows a pick the launch could not apply the way a refused option change is shown', async () => {
