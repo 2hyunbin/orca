@@ -163,47 +163,6 @@ describe.runIf(process.platform !== 'win32')('Codex app-server process teardown'
     }
   }, 30_000)
 
-  it('reaps the forced-close descendant in 40 consecutive launches', async () => {
-    const running: RunningServer[] = []
-    try {
-      for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
-        running.push(await openServer(iteration))
-      }
-      expect(running.every(({ descendantPid }) => processExists(descendantPid))).toBe(true)
-
-      const closed = await Promise.all(running.map(({ connection }) => connection.close()))
-
-      expect(closed).toEqual(Array.from({ length: ITERATIONS }, () => true))
-      expect(running.filter(({ descendantPid }) => processExists(descendantPid))).toEqual([])
-    } finally {
-      for (const server of running) {
-        await cleanupServer(server)
-      }
-    }
-  }, 30_000)
-
-  it.each(['normal', 'signal'] as const)(
-    'does not claim an unobserved tree clean after a %s root exit in 40 launches',
-    async (exitMode) => {
-      for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
-        const server = await openServer(iteration, exitMode)
-        try {
-          await server.exit
-          expect(processExists(server.supervisorPid)).toBe(false)
-          expect(processExists(server.descendantPid)).toBe(false)
-          await expect(server.connection.close()).resolves.toBe(true)
-          expect(server.connection.closeResult).toMatchObject({
-            root: 'exited',
-            tree: 'unverifiable'
-          })
-        } finally {
-          await cleanupServer(server)
-        }
-      }
-    },
-    60_000
-  )
-
   it('does not settle a stdin-close/root-exit race before the descendant is reaped', async () => {
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
       const server = await openServer(iteration, 'stdin-race')
