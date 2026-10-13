@@ -134,7 +134,7 @@ it('writes startup model and effort picks before a message accepted after them',
   const wire = script.wire()
   expect(wire.indexOf('set_model')).toBeGreaterThanOrEqual(0)
   expect(wire.indexOf('set_thinking_level')).toBeGreaterThan(wire.indexOf('set_model'))
-  expect(wire.indexOf('prompt')).toBeGreaterThan(wire.indexOf('set_thinking_level'))
+  expect(wire.indexOf('prompt:first message')).toBeGreaterThan(wire.indexOf('set_thinking_level'))
   expect(peekOpenedAgentSessionRecordStore()?.getRecord(HOST_TEST_SESSION)?.options).toMatchObject({
     model: 'scripted/model-2',
     effort: 'low'
