@@ -609,8 +609,7 @@ describe('a child that exits before its message is handed over', () => {
   it('rejects the message with the exit reason instead of starting another child (W24)', async () => {
     await host.close(SESSION, 'evict')
     await startHost()
-    // Each child the loop starts proves its start, then dies as its start step returns: its exit,
-    // asked for on the lane then, lands before the handover step.
+    // The child exits before the host can finish its protocol open.
     acquire.mockImplementation(async (input) => {
       const child = await spawnStartingChild(input)
       const acquisitionGeneration = `generation-${acquire.mock.calls.length}`
@@ -630,8 +629,8 @@ describe('a child that exits before its message is handed over', () => {
 
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
     expect(await submission(id)).toMatchObject({
-      reason: 'Codex stopped before this message was sent.',
-      rejection: { kind: 'providerExited' }
+      reason: 'Codex stopped before it finished starting. Send your message to try again.',
+      rejection: { kind: 'providerStartFailed' }
     })
     expect(acquire).toHaveBeenCalledTimes(2)
     expect(dispatch).not.toHaveBeenCalled()

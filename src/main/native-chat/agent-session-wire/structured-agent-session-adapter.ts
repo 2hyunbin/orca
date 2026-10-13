@@ -316,6 +316,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   recoverRewind?(input: {
     sessionId: string
     fence: number
+    signal?: AbortSignal
     beforeTurnId: string
   }): Promise<
     | { ok: true; items: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] }
