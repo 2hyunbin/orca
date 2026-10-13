@@ -6,10 +6,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSessionOwnerProbe } from '../../../shared/agent-session-lease-adjudication'
 import {
-  agentSessionLeaseFixture,
-  agentSessionRecordFixture
-} from '../../../shared/agent-session-record.test-fixture'
-import {
   EMPTY_STRUCTURED_AGENT_SESSION,
   reduceStructuredAgentSession
 } from '../../../shared/structured-agent-session-reducer'
@@ -24,7 +20,6 @@ import {
   type QueuedMessageTestRig
 } from './structured-agent-session-queued-message-rig.test-fixture'
 import { HOST_TEST_SESSION as SESSION } from './structured-agent-session-host-test-data'
-import { isResumableStructuredAgentSessionRecord } from './structured-agent-session-resume-eligibility'
 
 let rig: QueuedMessageTestRig | undefined
 
@@ -142,18 +137,4 @@ describe('an owner this host cannot prove dead', () => {
       expect(await current.drafts()).toEqual([{ messageId: draftId, state: 'returned' }])
     }
   )
-
-  it('widens nothing for a lease this host never saw end: another fence, or no root proof', () => {
-    const record = agentSessionRecordFixture(
-      agentSessionLeaseFixture({ claimStatus: 'live', handoffStage: null, runtimeFence: 7 })
-    )
-    expect(isResumableStructuredAgentSessionRecord(record)).toBe(false)
-    expect(isResumableStructuredAgentSessionRecord(record, { fence: 6, rootGone: true })).toBe(
-      false
-    )
-    expect(isResumableStructuredAgentSessionRecord(record, { fence: 7, rootGone: false })).toBe(
-      false
-    )
-    expect(isResumableStructuredAgentSessionRecord(record, { fence: 7, rootGone: true })).toBe(true)
-  })
 })

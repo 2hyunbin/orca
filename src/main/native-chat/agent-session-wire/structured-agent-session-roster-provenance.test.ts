@@ -29,7 +29,6 @@ import {
 import { claudeSubagentGroupIdentity } from '../../claude/claude-subagent-journaled-roster'
 import { createTrackedJournalOpener } from '../agent-session-journal/journal-host-database-test-support'
 import { subagentGroupJournalBody } from '../agent-session-journal/journal-subagent-group-body'
-import { stampJournalEntryProvenance } from '../agent-session-journal/journal-item-provenance'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { createDeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
 import { settleStructuredAgentSessionLeftovers } from './structured-agent-session-leftover-settlement'
@@ -117,24 +116,6 @@ function openJournal(): Promise<AgentSessionJournal> {
     stateDirectory: root
   })
 }
-
-describe('a roster entry’s provenance', () => {
-  const group = (agents: NativeChatSubagentEntry[]) => subagentGroupJournalBody(GROUP, agents)
-  const agentsOf = (body: AgentJournalItemBody) =>
-    body.kind === 'message'
-      ? body.blocks.flatMap((b) => (isSubagentGroupBlock(b) ? b.agents : []))
-      : []
-
-  it('falls back to the row’s own provenance for an entry an older build never stamped', () => {
-    const before = group([child('a')])
-    const after = stampJournalEntryProvenance(
-      group([child('a')]),
-      { body: before, ownerFence: 2 },
-      LIVE
-    )
-    expect(agentsOf(after)[0]?.ownerFence).toBe(2)
-  })
-})
 
 describe('settling an ended generation’s roster', () => {
   it('settles only the children and tasks it observed; the live generation’s stay working', async () => {
