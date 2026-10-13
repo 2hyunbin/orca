@@ -252,7 +252,7 @@ describe('STA-9417: setup split of an unmounted tab, then first activation', () 
     await runScenario(true)
   })
 
-  // Main now always offers the split; this is the window alone if that offer is lost (a reload).
+  // Main now always offers the split. If that offer is lost, this is the window alone.
   it.fails('ends with one tab and one owner per terminal when the split reveal never arrives', async () => {
     await runScenario(false)
   })

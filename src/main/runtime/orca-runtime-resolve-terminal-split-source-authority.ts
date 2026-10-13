@@ -22,14 +22,21 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
     tabId: string,
     leafId: string,
     ptyId: string
-  ): {
-    persisted: boolean
-    rendererMounted: boolean
-    rendererRunsOtherPty: boolean
-    persistedWorktreeId: string | null
-    persistedIncarnationId: string | null
-    liveIncarnationId: string | null
-  } | null {
+  ):
+    | {
+        persisted: true
+        rendererRunsOtherPty: boolean
+        persistedWorktreeId: string | null
+        persistedIncarnationId: string | null
+        liveIncarnationId: string | null
+      }
+    | {
+        persisted: false
+        persistedWorktreeId: null
+        persistedIncarnationId: null
+        liveIncarnationId: string | null
+      }
+    | null {
     const session = this.getWorkspaceSessionForWorktree(worktreeId)
     const sessionWorktreeId = session ? resolveTerminalSessionWorktreeId(session, worktreeId) : null
     const persistedTab = sessionWorktreeId
@@ -68,7 +75,6 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
     if (persisted && persistedLayout) {
       return {
         persisted: true,
-        rendererMounted,
         rendererRunsOtherPty,
         persistedWorktreeId: sessionWorktreeId,
         persistedIncarnationId,
@@ -92,8 +98,6 @@ export class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRunt
     }
     return {
       persisted: false,
-      rendererMounted,
-      rendererRunsOtherPty,
       persistedWorktreeId: null,
       persistedIncarnationId: null,
       liveIncarnationId
