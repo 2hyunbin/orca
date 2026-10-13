@@ -11,8 +11,10 @@ import type {
   FolderWorkspacePathStatusCacheEntry,
   FolderWorkspacePathStatusRouteOptions
 } from '../repos/repo-state'
-import { runtimeTargetForOwnerEnvironment } from '../../runtime/runtime-client-target'
-import { getRuntimeTargetHostId } from '../runtime-target-host'
+import {
+  getRuntimeTargetHostId,
+  runtimeTargetForOwnerEnvironment
+} from '../../runtime/runtime-client-target'
 import { catalogOwnsHost, getProjectGroupHostId } from '../slices/project-group-owner-routing'
 import { getFolderWorkspaceHostId } from './folder-workspace-catalog'
 
