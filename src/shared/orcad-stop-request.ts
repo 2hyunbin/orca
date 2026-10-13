@@ -22,6 +22,9 @@ export const ORCAD_MANAGED_STOP_REQUEST_FILE_FLAG = '--request-file'
 export const OrcadManagedStopInstanceSchema = z.object({
   pid: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   startedAtMs: z.number().finite().nonnegative().nullable(),
+  /** Linux only, copied from the lock; older clients omit it and older slots drop it. */
+  linuxStartTicks: z.string().regex(/^\d+$/).max(32).optional().catch(undefined),
+  bootId: z.string().min(1).max(255).optional().catch(undefined),
   nonce: z.string().min(1).max(255),
   lockPath: z.string().min(1).max(4096)
 })

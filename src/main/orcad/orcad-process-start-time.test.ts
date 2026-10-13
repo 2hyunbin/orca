@@ -12,7 +12,7 @@ vi.mock('../daemon/daemon-process-start-time', async (importOriginal) => ({
 }))
 
 import {
-  orcadProcessStartTimeMatches,
+  compareOrcadProcessIdentity,
   readOrcadProcessStartedAtMs
 } from './orcad-process-start-time'
 
@@ -45,9 +45,45 @@ describe('orcad process start time', () => {
   it('tells a reused Windows PID apart, and fails open when the addon cannot answer', () => {
     onPlatform('win32')
     readWindowsProcessCreationTime.mockReturnValue(9_000_000)
-    expect(orcadProcessStartTimeMatches(42, 1_000)).toBe(false)
-    expect(orcadProcessStartTimeMatches(42, 9_000_100)).toBe(true)
+    expect(compareOrcadProcessIdentity(42, { startedAtMs: 1_000 })).toBe('differs')
+    expect(compareOrcadProcessIdentity(42, { startedAtMs: 9_000_100 })).toBe('matches')
     readWindowsProcessCreationTime.mockReturnValue(null)
-    expect(orcadProcessStartTimeMatches(42, 1_000)).toBe(true)
+    expect(compareOrcadProcessIdentity(42, { startedAtMs: 1_000 })).toBe('unknown')
+  })
+})
+
+describe('orcad process identity', () => {
+  const incarnation = { linuxStartTicks: '1234', bootId: 'boot-a' }
+  const recorded = { startedAtMs: 1_000, ...incarnation }
+
+  it('matches on ticks and boot id even when the btime-derived start time drifted', () => {
+    expect(
+      compareOrcadProcessIdentity(42, recorded, {
+        startedAtMs: () => 158_000,
+        incarnation: () => incarnation,
+        platform: 'linux'
+      })
+    ).toBe('matches')
+  })
+
+  it.each([
+    ['different start ticks', { ...incarnation, linuxStartTicks: '9999' }],
+    ['a different boot', { ...incarnation, bootId: 'boot-b' }]
+  ])('proves reuse on %s', (_name, actual) => {
+    expect(compareOrcadProcessIdentity(42, recorded, { incarnation: () => actual })).toBe('differs')
+  })
+
+  it('is unknown, never different, when the incarnation cannot be read', () => {
+    expect(compareOrcadProcessIdentity(42, recorded, { incarnation: () => null })).toBe('unknown')
+  })
+
+  it('reads a Linux wall-clock mismatch on a record without ticks as unproven', () => {
+    expect(
+      compareOrcadProcessIdentity(
+        42,
+        { startedAtMs: 1_000 },
+        { startedAtMs: () => 158_000, incarnation: () => incarnation, platform: 'linux' }
+      )
+    ).toBe('unproven')
   })
 })
