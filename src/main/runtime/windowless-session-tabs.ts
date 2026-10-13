@@ -10,10 +10,12 @@ import type {
 } from '../../shared/runtime-types'
 import {
   projectSessionTabs,
+  resolveSessionTabRow,
   type ProjectedSessionTabs
 } from '../../shared/workspace-layout/old-client'
 import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
+import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 
 export type WindowlessSessionTabsInput = {
@@ -76,4 +78,49 @@ function withLivePage(
     loadError: hostPage.loadError ?? undefined,
     certificateFailure: hostPage.certificateFailure ?? undefined
   }
+}
+
+/**
+ * The partition with a listed row's tab shown in its group, and its group the active one, as a
+ * window saves the tab a user selects. A terminal row also focuses its pane. Null when no saved
+ * tab holds the row.
+ */
+export function withSavedTabSelection(
+  hostId: ExecutionHostId,
+  session: WorkspaceSessionState,
+  worktreeId: string,
+  rowId: string
+): WorkspaceSessionState | null {
+  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
+  const workspace = loaded.layout.workspaces[worktreeId]
+  const target = workspace ? resolveSessionTabRow(workspace, rowId) : null
+  const group = target && workspace?.groups.find((entry) => entry.tabOrder.includes(target.tab.id))
+  if (!target || !group) {
+    return null
+  }
+  const { tab, leafId } = target
+  const view = loaded.desktopView
+  const groups = view.groups[worktreeId] ?? {}
+  const recentTabIds = (groups[group.id]?.recentTabIds ?? []).filter((id) => id !== tab.id)
+  view.groups = {
+    ...view.groups,
+    [worktreeId]: {
+      ...groups,
+      [group.id]: { activeTabId: tab.id, recentTabIds: [...recentTabIds, tab.id] }
+    }
+  }
+  view.activeGroupIdByWorktree = { ...view.activeGroupIdByWorktree, [worktreeId]: group.id }
+  if (tab.kind === 'terminal') {
+    view.activeTabIdByWorktree = { ...view.activeTabIdByWorktree, [worktreeId]: tab.id }
+    if (leafId) {
+      view.panes = {
+        ...view.panes,
+        [tab.entityId]: {
+          expandedLeafId: view.panes[tab.entityId]?.expandedLeafId ?? null,
+          activeLeafId: leafId
+        }
+      }
+    }
+  }
+  return saveWorkspaceLayout(loaded)
 }

@@ -23,3 +23,4 @@ export {
   type SessionTabsFacts,
   type SessionTabsView
 } from './old-client-session-tabs-projection'
+export { resolveSessionTabRow } from './old-client-session-tab-rows'

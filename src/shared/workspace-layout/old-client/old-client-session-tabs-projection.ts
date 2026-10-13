@@ -18,9 +18,9 @@ import type {
   RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabsSnapshot
 } from '../../runtime-session-contracts'
-import type { TabGroupLayoutNode } from '../../tab-types'
 import type { TerminalLayoutSnapshot } from '../../terminal-tab-types'
 import { pruneGroupLayout } from '../../workspace-session-terminal-tab-close'
+import { groupsInLayoutOrder, resolveActiveGroupId } from './old-client-session-tab-groups'
 import {
   agentSessionRowId,
   publishedTabOrderId,
@@ -42,7 +42,7 @@ import type {
 /** One view's selection: the desktop's record today, a phone's own record once views exist. */
 export type SessionTabsView = Pick<
   DesktopLayoutView,
-  'activeGroupIdByWorktree' | 'groups' | 'panes' | 'editorDrafts'
+  'activeGroupIdByWorktree' | 'activeTabIdByWorktree' | 'groups' | 'panes' | 'editorDrafts'
 >
 
 export type SessionTabsFacts = Pick<
@@ -76,13 +76,20 @@ export function projectSessionTabs(
 ): ProjectedSessionTabs {
   const activeGroupId = resolveActiveGroupId(workspace, view.activeGroupIdByWorktree?.[key])
   const groupViews = view.groups[key] ?? {}
+  const remembered = view.activeTabIdByWorktree?.[key]
+  // A group the view never recorded (a session from before tab groups) selects the workspace's
+  // remembered tab, as a window restores it.
+  const groupActiveTabId = (group: WorkspaceLayout['groups'][number]): string | null =>
+    groupViews[group.id]?.activeTabId ??
+    (remembered && group.tabOrder.includes(remembered) ? remembered : null)
+  const activeGroup = workspace.groups.find((group) => group.id === activeGroupId)
   const scope: Scope = {
     key,
     workspace,
     view,
     facts,
     generatedTitlesEnabled,
-    activeTabId: activeGroupId ? (groupViews[activeGroupId]?.activeTabId ?? null) : null
+    activeTabId: activeGroup ? groupActiveTabId(activeGroup) : null
   }
   const byId = new Map(workspace.tabs.map((tab) => [tab.id, tab]))
   const tabs: RuntimeMobileSessionSnapshotTab[] = []
@@ -102,7 +109,8 @@ export function projectSessionTabs(
     }
     const shown = new Set(tabOrder)
     const groupView = groupViews[group.id]
-    const activeTab = groupView?.activeTabId ? byId.get(groupView.activeTabId) : undefined
+    const groupActiveId = groupActiveTabId(group)
+    const activeTab = groupActiveId ? byId.get(groupActiveId) : undefined
     const activeId = activeTab ? publishedTabOrderId(activeTab) : null
     tabGroups.push({
       id: group.id,
@@ -129,32 +137,6 @@ export function projectSessionTabs(
     ...(tabGroupLayout ? { tabGroupLayout } : {}),
     tabs
   }
-}
-
-/** As a window restores it: the saved group while the workspace has it, else the first group. */
-function resolveActiveGroupId(
-  workspace: WorkspaceLayout,
-  saved: string | undefined
-): string | null {
-  if (saved && workspace.groups.some((group) => group.id === saved)) {
-    return saved
-  }
-  return groupsInLayoutOrder(workspace)[0]?.id ?? null
-}
-
-function groupsInLayoutOrder(workspace: WorkspaceLayout): WorkspaceLayout['groups'] {
-  const ids: string[] = []
-  const visit = (node: TabGroupLayoutNode | undefined): void => {
-    if (node?.type === 'leaf') {
-      ids.push(node.groupId)
-    } else if (node) {
-      visit(node.first)
-      visit(node.second)
-    }
-  }
-  visit(workspace.groupLayout)
-  const placed = ids.flatMap((id) => workspace.groups.filter((group) => group.id === id))
-  return [...placed, ...workspace.groups.filter((group) => !placed.includes(group))]
 }
 
 function projectTab(tab: LayoutTab, scope: Scope): RuntimeMobileSessionSnapshotTab[] {

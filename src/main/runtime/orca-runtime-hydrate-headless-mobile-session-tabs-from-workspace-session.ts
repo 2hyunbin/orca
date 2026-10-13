@@ -27,7 +27,7 @@ import {
   collectBrowserGroupAssignment
 } from './mobile-session-browser-group-projection'
 import { headlessMobileSnapshotContentUnchanged } from './mobile-session-snapshot-equality'
-import { projectWindowlessSessionTabs } from './windowless-session-tabs'
+import { projectWindowlessSessionTabs, withSavedTabSelection } from './windowless-session-tabs'
 import { preserveTerminalRetirementProofs } from './mobile-session-terminal-retirement-proof'
 
 export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession extends OrcaRuntimeWithWaitForSessionTabsInventoryPublication {
@@ -131,10 +131,7 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
         reconciledWorktreeIds.add(entryWorktreeId)
         continue
       }
-      // Why: windowless, nothing publishes the other tabs, and a filtered seed would make the full pass skip this worktree.
-      const runtimeOwnedOnly =
-        options.onlyRuntimeOwnedTerminals === true &&
-        (existing !== undefined || hasAuthoritativeWindow)
+      const runtimeOwnedOnly = options.onlyRuntimeOwnedTerminals === true
       const terminalTabs = buildHeadlessMobileSessionTerminalTabs(
         entryWorktreeId,
         persistedTabs,
@@ -318,5 +315,34 @@ export class OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession
       return
     }
     this.storeMobileSessionSnapshot(worktreeId, next)
+  }
+
+  /** Republishes a windowless worktree's list and tells clients when it changed. */
+  protected republishWindowlessSessionTabs(worktreeId: string): void {
+    const session = this.getWorkspaceSessionForWorktree(worktreeId)
+    const before = this.mobileSessionTabsByWorktree.get(worktreeId)
+    if (session) {
+      this.publishWindowlessSessionTabs(worktreeId, session)
+    }
+    const after = this.mobileSessionTabsByWorktree.get(worktreeId)
+    if (after && after !== before) {
+      this.emitMobileSessionTabsSnapshot(after)
+    }
+  }
+
+  /** Saves a listed row's tab as the one shown, as a window saves a user's selection. */
+  protected saveWindowlessTabSelection(worktreeId: string, rowId: string): void {
+    const session = this.getWorkspaceSessionForWorktree(worktreeId)
+    const next = session
+      ? withSavedTabSelection(
+          this.getWorkspaceSessionHostIdForWorktree(worktreeId),
+          session,
+          worktreeId,
+          rowId
+        )
+      : null
+    if (next) {
+      this.setWorkspaceSessionForWorktree(worktreeId, next)
+    }
   }
 }

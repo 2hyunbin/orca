@@ -147,6 +147,11 @@ export class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeW
     snapshot: RuntimeMobileSessionTabsSnapshot,
     activeTab: RuntimeMobileSessionTerminalTab
   ): void {
+    if (!this.getAvailableAuthoritativeWindow()) {
+      this.saveWindowlessTabSelection(worktreeId, activeTab.id)
+      this.republishWindowlessSessionTabs(worktreeId)
+      return
+    }
     const tabs = snapshot.tabs.map((candidate) => ({
       ...candidate,
       isActive: candidate.id === activeTab.id

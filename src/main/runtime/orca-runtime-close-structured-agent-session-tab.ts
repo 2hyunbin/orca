@@ -207,6 +207,29 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     ) {
       return
     }
+    if (!this.getAvailableAuthoritativeWindow()) {
+      // The saved layout already places the tab; a host-focusing create also selects it there.
+      this.republishWindowlessSessionTabs(worktreeId)
+      const row = this.mobileSessionTabsByWorktree
+        .get(worktreeId)
+        ?.tabs.find((tab) => tab.type === 'browser' && tab.browserPageId === browserPageId)
+      if (!row) {
+        return
+      }
+      if (focusesHost) {
+        this.saveWindowlessTabSelection(worktreeId, row.id)
+        this.republishWindowlessSessionTabs(worktreeId)
+      }
+      if (options.caller) {
+        this.applyMobileSessionTabNavigation(
+          this.getMobileSessionTabsForWorktree(worktreeId),
+          row.id,
+          options.caller.navigation,
+          options.caller.clientNavigationId
+        )
+      }
+      return
+    }
     // Hydrate first so the freshly created browser tab is present in the snapshot.
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
