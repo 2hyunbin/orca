@@ -47,84 +47,97 @@ async function desktopStrip(page: Page, worktreeId: string): Promise<string[][]>
   )
 }
 
-test('a paired desktop keeps a mixed terminal and browser tab order', async ({
-  testRepoPath
-}, testInfo) => {
-  test.setTimeout(420_000)
-  const fixture = await startClientHostedMarkerFixture()
-  const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
-  let client: PairedElectronClient | null = null
-  try {
-    await host.client.call('repo.add', { path: testRepoPath, kind: 'git' })
-    client = await launchPairedElectronClient(host.offer, testInfo, 'mixed tab order')
-    const worktreeId = await waitForPairedWorktreeId(client.page, testRepoPath)
-    const worktree = `id:${worktreeId}`
-    await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
-    // Opening an empty server workspace makes the desktop create its first terminal there.
-    await expect
-      .poll(async () => (await desktopStrip(client!.page, worktreeId)).flat().length, {
-        timeout: 60_000
-      })
-      .toBe(1)
-    const [first] = (await desktopStrip(client.page, worktreeId)).flat()
-    const browser = (await openClientHostedFixturePage(client, worktreeId, fixture.markerUrl))
-      .remotePageId
-    const second = (
-      await host.client.call<{ tab: { parentTabId: string } }>('session.tabs.createTerminal', {
-        worktree,
-        activate: false
-      })
-    ).result.tab.parentTabId
-
-    const findings: string[] = []
-    const expectOrder = async (step: string, expected: string[]): Promise<void> => {
-      const reads = {
-        desktop: async () => desktopStrip(client!.page, worktreeId),
-        server: async () =>
-          ((await readSessionTabs(host.client, worktree)).tabGroups ?? []).map(
-            (group) => group.tabOrder
-          )
+for (const hosting of ['desktop', 'server'] as const) {
+  test(`a paired desktop keeps a mixed terminal and browser tab order (${hosting}-hosted page)`, async ({
+    testRepoPath
+  }, testInfo) => {
+    test.setTimeout(420_000)
+    const fixture = await startClientHostedMarkerFixture()
+    const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
+    let client: PairedElectronClient | null = null
+    try {
+      await host.client.call('repo.add', { path: testRepoPath, kind: 'git' })
+      client = await launchPairedElectronClient(host.offer, testInfo, 'mixed tab order')
+      const worktreeId = await waitForPairedWorktreeId(client.page, testRepoPath)
+      const worktree = `id:${worktreeId}`
+      await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
+      // Opening an empty server workspace makes the desktop create its first terminal there.
+      await expect
+        .poll(async () => (await desktopStrip(client!.page, worktreeId)).flat().length, {
+          timeout: 60_000
+        })
+        .toBe(1)
+      const [first] = (await desktopStrip(client.page, worktreeId)).flat()
+      const serverBrowserIds = async () =>
+        (await readSessionTabs(host.client, worktree)).tabs
+          .filter((tab) => tab.type === 'browser')
+          .map((tab) => tab.id)
+      let browser: string
+      if (hosting === 'desktop') {
+        browser = (await openClientHostedFixturePage(client, worktreeId, fixture.markerUrl))
+          .remotePageId
+      } else {
+        await host.client.call('browser.tabCreate', { worktree, url: fixture.markerUrl })
+        await expect.poll(serverBrowserIds, { timeout: 60_000 }).toHaveLength(1)
+        ;[browser] = await serverBrowserIds()
       }
-      for (const [view, read] of Object.entries(reads)) {
-        let strip: string[][] = []
-        await expect
-          .poll(async () => JSON.stringify((strip = await read())), { timeout: 60_000 })
-          .toBe(JSON.stringify([expected]))
-          .catch(() => undefined)
-        if (JSON.stringify(strip) !== JSON.stringify([expected])) {
-          const name = (id: string) =>
-            id === first ? 'T1' : id === browser ? 'B' : id === second ? 'T2' : id
-          findings.push(`${step}, ${view}: ${JSON.stringify(strip.map((g) => g.map(name)))}`)
+      const second = (
+        await host.client.call<{ tab: { parentTabId: string } }>('session.tabs.createTerminal', {
+          worktree,
+          activate: false
+        })
+      ).result.tab.parentTabId
+
+      const findings: string[] = []
+      const expectOrder = async (step: string, expected: string[]): Promise<void> => {
+        const reads = {
+          desktop: async () => desktopStrip(client!.page, worktreeId),
+          server: async () =>
+            ((await readSessionTabs(host.client, worktree)).tabGroups ?? []).map(
+              (group) => group.tabOrder
+            )
+        }
+        for (const [view, read] of Object.entries(reads)) {
+          let strip: string[][] = []
+          await expect
+            .poll(async () => JSON.stringify((strip = await read())), { timeout: 60_000 })
+            .toBe(JSON.stringify([expected]))
+            .catch(() => undefined)
+          if (JSON.stringify(strip) !== JSON.stringify([expected])) {
+            const name = (id: string) =>
+              id === first ? 'T1' : id === browser ? 'B' : id === second ? 'T2' : id
+            findings.push(`${step}, ${view}: ${JSON.stringify(strip.map((g) => g.map(name)))}`)
+          }
         }
       }
+      await expectOrder('terminal, browser, terminal', [first!, browser, second])
+
+      const runtimeIdBeforeRestart = await refreshAuthorityRuntimeId(client)
+      await host.restartServeProcess()
+      await waitForRelaunchedRuntime(client, runtimeIdBeforeRestart!)
+      await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
+      await expectOrder('serve restart', [first!, browser, second])
+
+      // The desktop quits and reopens on its profile, so it adopts the server's strip afresh.
+      const profile = client.userDataDir
+      const quitting = client.app
+      client = null
+      await closeElectronAppForE2E(quitting)
+      client = await launchPairedElectronClient(host.offer, testInfo, 'mixed tab order', {
+        reuseUserDataDir: profile
+      })
+      await waitForPairedWorktreeId(client.page, testRepoPath)
+      await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
+      await expectOrder('desktop relaunch', [first!, browser, second])
+
+      expect(findings).toEqual([])
+    } finally {
+      if (client) {
+        await cleanupE2EDaemons(client.userDataDir).catch(() => undefined)
+        await client.dispose()
+      }
+      await host.dispose()
+      await fixture.close()
     }
-    await expectOrder('terminal, browser, terminal', [first!, browser, second])
-
-    const runtimeIdBeforeRestart = await refreshAuthorityRuntimeId(client)
-    await host.restartServeProcess()
-    await waitForRelaunchedRuntime(client, runtimeIdBeforeRestart!)
-    await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
-    await expectOrder('serve restart', [first!, browser, second])
-
-    // The desktop quits and reopens on its profile, so it adopts the server's strip afresh.
-    const profile = client.userDataDir
-    const quitting = client.app
-    client = null
-    await closeElectronAppForE2E(quitting)
-    client = await launchPairedElectronClient(host.offer, testInfo, 'mixed tab order', {
-      reuseUserDataDir: profile
-    })
-    await waitForPairedWorktreeId(client.page, testRepoPath)
-    await selectPairedWorktreeGroup(client.page, client.environmentId, worktreeId)
-    await expectOrder('desktop relaunch', [first!, browser, second])
-
-    expect(findings).toEqual([])
-  } finally {
-    if (client) {
-      await cleanupE2EDaemons(client.userDataDir).catch(() => undefined)
-      await client.dispose()
-    }
-    await host.dispose()
-    await fixture.close()
-  }
-})
+  })
+}
