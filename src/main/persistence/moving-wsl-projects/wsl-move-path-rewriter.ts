@@ -1,0 +1,35 @@
+/**
+ * The path-rewrite stage of a local WSL move: a UNC path of the moved distro becomes the Linux path
+ * orcad sees for the same file. Anything else is returned unchanged, as the stage contract requires.
+ */
+import { parseWslUncPath } from '../../../shared/wsl-paths'
+import type { OrcadMigrationPathRewriter } from '../../ssh/orcad-migration-path-rewrite'
+
+/** Linux form of `value` when it is a UNC path of `distro` (either spelling, either slash). */
+export function wslUncPathToLinux(value: string, distro: string): string | null {
+  const parsed = parseWslUncPath(value)
+  // WSL resolves distro names case-insensitively, and so does every UNC path to one.
+  return parsed && parsed.distro.toLowerCase() === distro.toLowerCase() ? parsed.linuxPath : null
+}
+
+export function createUncToLinuxPathRewriter(distro: string): OrcadMigrationPathRewriter {
+  const fileUrl = new RegExp(`^file://(?:wsl\\.localhost|wsl\\$)/([^/]+)(/.*)?$`, 'i')
+  return {
+    path: (value, form) => {
+      switch (form) {
+        case 'absolute':
+        case 'maybe-absolute':
+          return wslUncPathToLinux(value, distro) ?? value
+        case 'relative':
+          // Windows built these against a UNC root; the host's own paths use `/`.
+          return value.replace(/\\/g, '/')
+        case 'url': {
+          const match = fileUrl.exec(value)
+          return match && match[1].toLowerCase() === distro.toLowerCase()
+            ? `file://${match[2] ?? '/'}`
+            : value
+        }
+      }
+    }
+  }
+}
