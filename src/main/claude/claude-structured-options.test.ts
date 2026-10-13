@@ -55,7 +55,6 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
       proof: createClaudeInitProof(),
       account: undefined,
       resumesTranscript: false,
-      optionRevision: () => 0,
       onLateRefusal: () => {}
     }
   }

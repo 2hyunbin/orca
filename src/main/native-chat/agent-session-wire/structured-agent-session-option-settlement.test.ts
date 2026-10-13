@@ -65,10 +65,7 @@ function adapter(): StructuredAgentSessionAdapter {
       fence,
       acquisitionGeneration,
       reportedOptions: { model: activeModel, ...(activeEffort ? { effort: activeEffort } : {}) },
-      restoreSkippedOptions: [],
-      optionRevision: host
-        .collaboratorsForTests()
-        .runtimeState.optionRevisions.current(identity.sessionId)
+      restoreSkippedOptions: []
     })
     return {
       providerChildPhase: 'starting' as const,
@@ -215,4 +212,30 @@ describe('structured session options and close', () => {
     await expect(host.close(SESSION, 'evict')).resolves.toBeUndefined()
     expect(closeNativeSession).not.toHaveBeenCalled()
   })
+})
+
+it('applies running Codex model and effort picks to the next message', async () => {
+  await vi.waitFor(() => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('ready'))
+  for (const [key, value] of [
+    ['model', 'gpt-picked'],
+    ['effort', 'high']
+  ]) {
+    expect(
+      await host.setOption(CALLER, {
+        envelope: envelope('agentSession.setOption', { key, value }),
+        key,
+        value
+      })
+    ).toMatchObject({ ok: true })
+  }
+  const body = {
+    kind: 'message' as const,
+    role: 'user' as const,
+    blocks: [{ type: 'text' as const, text: 'with the new choices' }]
+  }
+  expect(
+    await host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
+  ).toMatchObject({ ok: true })
+  await vi.waitFor(() => expect(dispatchedModels).toEqual(['gpt-picked']))
+  expect(activeEffort).toBe('high')
 })

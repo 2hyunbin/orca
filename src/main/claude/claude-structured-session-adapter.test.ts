@@ -202,12 +202,7 @@ describe('ClaudeStructuredSessionAdapter.acquire', () => {
       answerApply(failure)
       await tick()
 
-      // A refusal drops the pick, as main's refused restore did, from the record too, after
-      // `started`; silence keeps it wanted and unconfirmed.
-      const skipped = events.filter((event) => event.type === 'options-skipped')
-      expect(skipped).toEqual(
-        kept ? [] : [expect.objectContaining({ fence: 7, options: { fastMode: 'true' } })]
-      )
+      // A refusal drops the child's value; silence keeps it wanted and unconfirmed.
       expect(adapter.readOptionRestoreFailures('session-1')).toEqual(kept ? [] : ['fastMode'])
       const options = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
       expect(options.current.fastMode === true).toBe(kept)

@@ -1,3 +1,4 @@
+import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 import {
   mergeRetainedHostLifecycleRows,
@@ -6,6 +7,7 @@ import {
 import { isDeepStrictEqual } from 'node:util'
 import {
   agentJournalItemKey,
+  agentJournalSubmissionKey,
   parseAgentJournalItemKey
 } from '../../../shared/agent-session-journal-item-key'
 import type { AgentSessionRewindRecord } from '../../../shared/agent-session-rewind'
@@ -184,13 +186,22 @@ export async function recoverStructuredRewind(
   }
   // A crash after the journal transaction must settle its existing epoch, not replace it twice.
   const alreadyReplaced = journal.cursor().epoch !== rewind.expectedEpoch
+  const queued = new Set(
+    journal
+      .submissions()
+      .filter(isQueuedAgentJournalSubmission)
+      .map((submission) => agentJournalSubmissionKey(submission.clientMessageId))
+  )
   if (
     alreadyReplaced &&
     !isDeepStrictEqual(
-      journal.snapshot().items.map(({ itemId }) => ({
-        itemId,
-        body: journal.itemBody(itemId)
-      })),
+      journal
+        .snapshot()
+        .items.filter(({ itemId }) => !queued.has(itemId))
+        .map(({ itemId }) => ({
+          itemId,
+          body: journal.itemBody(itemId)
+        })),
       replacement.map(({ identity, body }) => ({ itemId: agentJournalItemKey(identity), body }))
     )
   ) {

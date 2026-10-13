@@ -121,11 +121,11 @@ describe('a press sent again', () => {
     await pick('B')
 
     expect(await pick('A', first)).toMatchObject({ ok: true, replayed: true })
-    expect(setOption).not.toHaveBeenCalled()
+    expect(setOption.mock.calls.map(([input]) => input.value)).toEqual(['A', 'B'])
     expect(store.getRecord(SESSION)?.options?.model).toBe('B')
 
     expect(await pick('A')).toMatchObject({ ok: true, replayed: false })
-    expect(setOption).not.toHaveBeenCalled()
+    expect(setOption.mock.calls.map(([input]) => input.value)).toEqual(['A', 'B', 'A'])
     expect(store.getRecord(SESSION)?.options?.model).toBe('A')
   })
 

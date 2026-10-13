@@ -242,7 +242,6 @@ export async function acquireClaudeSession({
         proof: initProof,
         account: launch.account,
         resumesTranscript: launch.resumesTranscript,
-        optionRevision: () => input.optionRevision?.() ?? 0,
         onLateRefusal: (error) => callbacks.handleExit(sessionId, attempt, error)
       },
       ...(deps.mintLinkId ? { linkId: deps.mintLinkId() } : {}),
