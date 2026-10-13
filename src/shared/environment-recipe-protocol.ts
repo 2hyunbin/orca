@@ -169,11 +169,7 @@ export function parseEnvironmentRecipeResponse(
   stdout: string,
   request: EnvironmentRecipeRequest
 ): EnvironmentRecipeResponse {
-  if (new TextEncoder().encode(stdout).byteLength > ENVIRONMENT_RECIPE_OUTPUT_BYTES) {
-    throw new Error('Environment recipe response exceeds its byte limit')
-  }
-  assertJsonTextStructureWithinLimits(stdout, { nestingDepth: 16, structuralTokens: 32 * 1024 })
-  const result = environmentRecipeResponseSchema.parse(JSON.parse(stdout))
+  const result = environmentRecipeResponseSchema.parse(parseEnvironmentRecipeJsonContent(stdout))
   if (
     result.protocolVersion !== request.protocolVersion ||
     result.contextId !== request.contextId ||
@@ -187,19 +183,35 @@ export function parseEnvironmentRecipeResponse(
     if ('resourceId' in request && result.resource.id !== request.resourceId) {
       throw new Error('Environment recipe response names another resource')
     }
-    const expectedState =
-      request.action === 'delete'
-        ? 'deleted'
-        : request.action === 'sleep'
-          ? 'sleeping'
-          : request.action === 'archive'
-            ? 'archived'
-            : request.action === 'resume' || request.action === 'create'
-              ? 'running'
-              : null
+    const expectedState = expectedEnvironmentRecipeResourceState(request.action)
     if (expectedState && result.resource.state !== expectedState) {
       throw new Error('Environment recipe response did not confirm the requested transition')
     }
   }
   return result
+}
+
+export function parseEnvironmentRecipeJsonContent(stdout: string): unknown {
+  if (new TextEncoder().encode(stdout).byteLength > ENVIRONMENT_RECIPE_OUTPUT_BYTES) {
+    throw new Error('Environment recipe response exceeds its byte limit')
+  }
+  assertJsonTextStructureWithinLimits(stdout, { nestingDepth: 16, structuralTokens: 32 * 1024 })
+  return JSON.parse(stdout)
+}
+export function expectedEnvironmentRecipeResourceState(
+  action: EnvironmentRecipeAction
+): EnvironmentRecipeResource['state'] | null {
+  switch (action) {
+    case 'create':
+    case 'resume':
+      return 'running'
+    case 'delete':
+      return 'deleted'
+    case 'sleep':
+      return 'sleeping'
+    case 'archive':
+      return 'archived'
+    case 'list':
+      return null
+  }
 }

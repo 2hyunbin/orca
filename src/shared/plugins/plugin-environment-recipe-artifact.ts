@@ -42,6 +42,9 @@ export const pluginEnvironmentRecipeSchema = z
     description: literal(1024),
     lifetime: z.enum(['long-lived', 'ephemeral', 'both']),
     createFields: z.array(field).max(32).default([]),
+    recovery: z
+      .strictObject({ protocolVersion: z.literal(1), command: environmentRecipeCommandSchema })
+      .optional(),
     commands: z.strictObject({
       list: environmentRecipeCommandSchema,
       create: environmentRecipeCommandSchema.optional(),
@@ -52,6 +55,13 @@ export const pluginEnvironmentRecipeSchema = z
     })
   })
   .superRefine((recipe, context) => {
+    if (recipe.recovery && recipe.protocolVersion !== 2) {
+      context.addIssue({
+        code: 'custom',
+        path: ['recovery'],
+        message: 'recovery requires context-aware protocol 2'
+      })
+    }
     if (new Set(recipe.createFields.map((value) => value.id)).size !== recipe.createFields.length) {
       context.addIssue({
         code: 'custom',

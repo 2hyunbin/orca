@@ -1,3 +1,4 @@
+import { pluginEnvironmentRecipePreview } from './plugin-environment-recipe-preview'
 import { describe, expect, it } from 'vitest'
 import {
   environmentRecipeDeclaredActions,
@@ -95,5 +96,24 @@ describe('plugin environment recipe artifacts', () => {
     expect(() => parsePluginEnvironmentRecipe(`${'['.repeat(20)}0${']'.repeat(20)}`)).toThrow(
       'nesting'
     )
+  })
+  it('requires explicit context-aware recovery support and includes its literal command in review', () => {
+    const recovery = {
+      protocolVersion: 1,
+      command: { program: 'company-dev', args: ['inspect-operation'] }
+    }
+    expect(() => parsePluginEnvironmentRecipe(JSON.stringify({ ...raw, recovery }))).toThrow(
+      'protocol 2'
+    )
+    const recipe = parsePluginEnvironmentRecipe(
+      JSON.stringify({ ...raw, protocolVersion: 2, recovery })
+    )
+    const preview = pluginEnvironmentRecipePreview('company.platform', recipe)
+    expect(preview.commands.at(-1)).toMatchObject({
+      action: 'inspect-operation',
+      program: 'company-dev',
+      args: ['inspect-operation']
+    })
+    expect(environmentRecipeDeclaredActions(recipe)).toHaveLength(6)
   })
 })
