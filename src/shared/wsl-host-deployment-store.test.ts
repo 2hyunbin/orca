@@ -219,6 +219,7 @@ describe('WSL host deployment store', () => {
     })
 
     it('hides the environment an unreadable record owns and refuses to replace that record', () => {
+      vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
       addSshManaged()
       const wslId = addWslManaged()
       const future = { ...futureKind, environmentId: wslId }
@@ -260,6 +261,14 @@ describe('WSL host deployment store', () => {
       addSshManaged()
       writeFileSync(getWslHostDeploymentStorePath(userDataPath), '{"version":1,"deployments":{}}')
       expect(listEnvironments(userDataPath).map((entry) => entry.id)).toEqual(['ssh-managed'])
+    })
+
+    // Regression: a stale record must not hide a re-paired loopback server while the gate is closed.
+    it('hides nothing for an unreadable record while the gate is closed', () => {
+      vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '')
+      const wslId = addWslManaged()
+      seed({ ...futureKind, environmentId: wslId })
+      expect(listEnvironments(userDataPath).map((entry) => entry.id)).toEqual([wslId])
     })
 
     it('never hides a remote paired server behind an unreadable WSL record', () => {

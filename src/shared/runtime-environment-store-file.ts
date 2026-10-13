@@ -53,19 +53,18 @@ export function readPersistedEnvironmentStore(
 
 /** Persisted environments with their sidecar state overlaid; stale sidecar entries are ignored. */
 /**
- * With the internal gate closed a corrupt WSL file must not take SSH and paired servers down with
- * it; only an open gate fails the whole registry closed.
+ * Only an open internal gate fails closed on WSL state this build cannot read (a corrupt file, a
+ * newer record). Closed, that state is ignored, so it can never hide an SSH or paired server.
  */
 function readWslHostDeploymentsForRegistry(
   userDataPath: string
 ): ReturnType<typeof readWslHostDeployments> {
+  const gateOpen = isWslHostsInternalGateOpen(process.env)
   try {
-    return readWslHostDeployments(userDataPath)
+    const read = readWslHostDeployments(userDataPath)
+    return gateOpen ? read : { deployments: read.deployments, unreadableEnvironmentIds: new Set() }
   } catch (error) {
-    if (
-      !(error instanceof WslHostDeploymentStoreInvalidError) ||
-      isWslHostsInternalGateOpen(process.env)
-    ) {
+    if (!(error instanceof WslHostDeploymentStoreInvalidError) || gateOpen) {
       throw error
     }
     warnUnreadableEnvironmentState(error.message)
