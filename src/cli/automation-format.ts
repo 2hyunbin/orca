@@ -14,6 +14,7 @@ import type { AutomationOwnerPrecondition } from '../shared/automation-owner-pre
 import { getAutomationLegacyRepoId } from '../shared/automation-run-identity'
 import { formatAutomationPrecheckTimeout } from '../shared/automation-precheck'
 import { formatAutomationSchedule } from '../shared/automation-schedules'
+import { quoteCliCommandArgument } from './shell-command-quote'
 
 export type AutomationListPayload = {
   automations: Automation[]
@@ -128,7 +129,35 @@ function formatAutomationRunAcknowledgement(run: { id: string; status: string })
   }
 }
 
-export function formatAutomationRun(result: { run: AutomationRun }): string {
+type AutomationRunFollowUpTarget = {
+  environment?: string
+  preserveConnectionSettings?: boolean
+}
+
+function formatAutomationRunFollowUp(
+  automationId: string,
+  target: AutomationRunFollowUpTarget
+): string {
+  const command = ['orca', 'automations', 'runs', '--id', quoteCliCommandArgument(automationId)]
+  // Windows shells can expand a label even inside double quotes.
+  const safeEnvironment =
+    target.environment &&
+    !target.environment.startsWith('--') &&
+    (process.platform !== 'win32' || /^[a-zA-Z0-9._:/@ -]+$/.test(target.environment))
+  if (target.environment && safeEnvironment) {
+    command.push('--environment', quoteCliCommandArgument(target.environment))
+  }
+  const prefix =
+    target.preserveConnectionSettings || (target.environment && !safeEnvironment)
+      ? 'Follow up on the same host and profile (preserve your connection/profile settings)'
+      : 'Follow up'
+  return `${prefix}: ${command.join(' ')}`
+}
+
+export function formatAutomationRun(
+  result: { run: AutomationRun },
+  target: AutomationRunFollowUpTarget = {}
+): string {
   return [
     formatAutomationRunAcknowledgement(result.run),
     `id: ${result.run.id}`,
@@ -143,7 +172,7 @@ export function formatAutomationRun(result: { run: AutomationRun }): string {
     ...(result.run.terminalPtyId ? [`terminalPtyId: ${result.run.terminalPtyId}`] : []),
     ...(result.run.precheckResult ? [`precheck: ${formatAutomationRunPrecheck(result.run)}`] : []),
     ...(result.run.error ? [`error: ${result.run.error}`] : []),
-    `Follow up: orca automations runs --id ${result.run.automationId}`
+    formatAutomationRunFollowUp(result.run.automationId, target)
   ].join('\n')
 }
 
