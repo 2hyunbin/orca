@@ -13,6 +13,7 @@ import {
   type AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { isSubagentGroupBlock } from '../../../shared/native-chat-types'
 import { retainedRowReplacement } from '../agent-session-wire/structured-rewind-retained-host-rows'
 import type { JournalHostDatabase } from './journal-host-database'
 import {
@@ -20,6 +21,8 @@ import {
   liveTestJournalRows,
   openTestJournalHostDatabase
 } from './journal-host-database-test-support'
+import { stampJournalEntryProvenance } from './journal-item-provenance'
+import { subagentGroupJournalBody } from './journal-subagent-group-body'
 import type { AgentSessionJournal } from './journal-store'
 
 const IDENTITY: AgentSessionJournalIdentity = {
@@ -127,5 +130,14 @@ describe('execution provenance', () => {
     expect(retainedRowReplacement(row).ownerFence).toBe(2)
     const { ownerFence: _stated, ...older } = row
     expect(retainedRowReplacement(older).ownerFence).toBe(0)
+  })
+
+  it('reads a roster entry an older build never stamped as its row’s provenance', () => {
+    const roster = subagentGroupJournalBody('group', [
+      { id: 'a', label: 'A', state: 'working', startedAt: 1 }
+    ])
+    const stamped = stampJournalEntryProvenance(roster, { body: roster, ownerFence: 2 }, 3)
+    const groups = stamped.kind === 'message' ? stamped.blocks.filter(isSubagentGroupBlock) : []
+    expect(groups[0]?.agents[0]?.ownerFence).toBe(2)
   })
 })
