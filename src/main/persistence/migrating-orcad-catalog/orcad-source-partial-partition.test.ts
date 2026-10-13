@@ -62,13 +62,13 @@ describe('collecting dormant state from partially written session partitions', (
     })
   })
 
-  it('uses the host-owned row when an older local snapshot disagrees', () => {
+  it('still blocks when two partitions disagree about the same worktree', () => {
     const state = partialPartitions()
     state.workspaceSession.activeTabTypeByWorktree = { [WORKTREE]: 'editor' }
-    const inspection = collectOrcadMigrationSourceDormantState(state, SOURCE, CATALOG)
-    expect(inspection.blockedCounts['workspace-session']).toBe(0)
-    expect(inspection.payload.workspaceSession?.activeTabTypeByWorktree?.[WORKTREE]).toBe(
-      'terminal'
-    )
+    expect(
+      collectOrcadMigrationSourceDormantState(state, SOURCE, CATALOG).blockedCounts[
+        'workspace-session'
+      ]
+    ).toBe(1)
   })
 })

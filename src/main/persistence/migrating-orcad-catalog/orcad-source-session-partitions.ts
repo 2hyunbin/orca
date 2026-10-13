@@ -1,63 +1,82 @@
+import { hasClosedTerminalTabRecord } from '../../../shared/closed-terminal-tab-tombstones'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { PersistedState } from '../../../shared/persisted-state-types'
-import { removeWorkspaceSessionOwners } from '../restoring-sessions/session-owner-removal'
+import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../shared/workspace-scope'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { keepUnsavedDrafts } from '../../../shared/workspace-session-draft-retention'
 import {
-  collectSessionOwnerKeys,
-  sessionPartitions
-} from './orcad-source-workspace-session-fragments'
+  withoutWorkspaces,
+  workspaceIdsNamedByPartition,
+  workspacesTheHostSupersedes
+} from '../../../shared/workspace-session-stranded-partition-adoption'
+import { sessionPartitions } from './orcad-source-workspace-session-fragments'
 import {
   orcadMigrationOwnerMatchesScope,
   orcadMigrationPartitionScope,
-  unqualifyOrcadMigrationOwnerKey,
   type OrcadMigrationSourceScope
 } from './orcad-source-scope'
 
-/** The host partition owns its rows; local can hold an older renderer copy of the same workspace. */
+/**
+ * The partitions as the app itself reads them: the shared adoption rule decides where the host's
+ * copy supersedes an older local one (#12723). Everywhere else both copies export and must agree.
+ */
 export function orcadMigrationSessionPartitions(
   state: PersistedState,
   scope: OrcadMigrationSourceScope
-) {
+): [string, WorkspaceSessionState][] {
   const partitions = sessionPartitions(state, LOCAL_EXECUTION_HOST_ID)
-  const ownerSession = partitions.find(([hostId]) => hostId === scope.hostId)?.[1]
-  if (!ownerSession) {
+  const host = partitions.find(([hostId]) => hostId === scope.hostId)?.[1]
+  if (!host) {
     return partitions
   }
-  const ownerScope = orcadMigrationPartitionScope(scope, scope.hostId)
+  const localScope = orcadMigrationPartitionScope(scope, LOCAL_EXECUTION_HOST_ID)
+  const contested = new Set(
+    partitions
+      .filter(([hostId]) => hostId !== LOCAL_EXECUTION_HOST_ID && hostId !== scope.hostId)
+      .flatMap(([, session]) => [...workspaceIdsNamedByPartition(session)])
+  )
   const owned = new Set(
-    [...collectSessionOwnerKeys(ownerSession)]
-      .filter((key) => orcadMigrationOwnerMatchesScope(key, ownerScope))
-      .map(unqualifyOrcadMigrationOwnerKey)
+    Object.keys(host.tabsByWorktree ?? {})
+      .filter((key) => orcadMigrationOwnerMatchesScope(key, localScope))
+      .map(normalizeWorkspaceSessionKeyToWorkspaceId)
   )
   return partitions.map(([hostId, session]) => {
     if (hostId !== LOCAL_EXECUTION_HOST_ID) {
-      return [hostId, session] as const
+      return [hostId, session]
     }
-    const localScope = orcadMigrationPartitionScope(scope, hostId)
-    const fencedOwners = new Set(
-      Object.values(session.sleepingAgentSessionsByPaneKey ?? {})
-        .filter(
-          (record) =>
-            'automaticResumeBlockedBy' in record && record.automaticResumeBlockedBy !== undefined
-        )
-        .map((record) => unqualifyOrcadMigrationOwnerKey(record.worktreeId))
-    )
-    const spill = new Set(
-      [...collectSessionOwnerKeys(session)].filter(
-        (key) =>
-          orcadMigrationOwnerMatchesScope(key, localScope) &&
-          owned.has(unqualifyOrcadMigrationOwnerKey(key)) &&
-          !fencedOwners.has(unqualifyOrcadMigrationOwnerKey(key))
+    const superseded = workspacesTheHostSupersedes(host, owned, contested)
+    for (const id of copiesThatStillDisagree(session, host)) {
+      superseded.delete(id)
+    }
+    if (superseded.size === 0) {
+      return [hostId, session]
+    }
+    const next = withoutWorkspaces(session, superseded)
+    keepUnsavedDrafts(next, session)
+    return [hostId, next]
+  })
+}
+
+/** Workspaces the local copy must keep: a worker fence, or a close record for a tab the host lists. */
+function copiesThatStillDisagree(
+  local: WorkspaceSessionState,
+  host: WorkspaceSessionState
+): Set<string> {
+  const kept = new Set<string>()
+  for (const record of Object.values(local.sleepingAgentSessionsByPaneKey ?? {})) {
+    if ('automaticResumeBlockedBy' in record && record.automaticResumeBlockedBy !== undefined) {
+      kept.add(normalizeWorkspaceSessionKeyToWorkspaceId(record.worktreeId))
+    }
+  }
+  for (const [key, tabs] of Object.entries(host.tabsByWorktree ?? {})) {
+    const closed = tabs.some((tab) =>
+      [local, host].some((copy) =>
+        hasClosedTerminalTabRecord(copy.closedTerminalTabTombstonesByTabId, tab.id)
       )
     )
-    if (spill.size === 0) {
-      return [hostId, session] as const
+    if (closed) {
+      kept.add(normalizeWorkspaceSessionKeyToWorkspaceId(key))
     }
-    const next = removeWorkspaceSessionOwners(session, spill)!
-    // Owner removal preserves these fences/recency normally; the host's copies own this export.
-    for (const key of spill) {
-      delete next.terminalTopologyRevisionByRepoId?.[key]
-      delete next.lastVisitedAtByWorktreeId?.[key]
-    }
-    return [hostId, next] as const
-  })
+  }
+  return kept
 }

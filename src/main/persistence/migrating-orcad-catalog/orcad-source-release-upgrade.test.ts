@@ -3,6 +3,7 @@ import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../../s
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
+import type { PersistedOpenFile } from '../../../shared/workspace-session-state-types'
 import type { WorktreeLineage } from '../../../shared/worktree/lineage-types'
 import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import { createOrcadMigrationManifest } from '../../ssh/orcad-migration-manifest-export'
@@ -48,6 +49,16 @@ function resume(tabId: string): SleepingAgentSessionRecord {
     updatedAt: 1,
     connectionId: TARGET.id,
     origin: 'quit'
+  }
+}
+
+function draft(): PersistedOpenFile {
+  return {
+    filePath: '/srv/repo/a.ts',
+    relativePath: 'a.ts',
+    worktreeId: WORKTREE,
+    language: 'typescript',
+    dirtyDraftContent: 'unsaved'
   }
 }
 
@@ -211,5 +222,78 @@ describe('migrating saved state from released SSH clients', () => {
     expect(
       exportState(state).payload.dormantState?.workspaceSession?.tabsByWorktree[WORKTREE]?.[0]?.id
     ).toBe('source')
+  })
+
+  // Shipped builds split one SSH workspace across the local and host copies (#12723).
+  describe('when the local and host copies both hold the workspace', () => {
+    function split() {
+      const state = sourceState()
+      return { state, local: state.workspaceSession, host: state.workspaceSessionsByHostId![HOST]! }
+    }
+
+    it('exports local tabs when the host holds only a recency stamp', () => {
+      const { state, local, host } = split()
+      host.lastVisitedAtByWorktreeId = { [WORKTREE]: 5 }
+      local.tabsByWorktree = { [WORKTREE]: [terminal('local')] }
+      expect(census(state).totalCount).toBe(0)
+      const session = exportState(state).payload.dormantState?.workspaceSession
+      expect(session?.tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual(['local'])
+    })
+
+    it('exports local tabs and drafts beside a host-only closed-pane resume record', () => {
+      const { state, local, host } = split()
+      host.sleepingAgentSessionsByPaneKey = { 'closed:leaf': resume('closed') }
+      local.tabsByWorktree = { [WORKTREE]: [terminal('local')] }
+      local.openFilesByWorktree = { [WORKTREE]: [draft()] }
+      expect(census(state).totalCount).toBe(0)
+      const session = exportState(state).payload.dormantState?.workspaceSession
+      expect(session?.tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual(['local'])
+      expect(session?.openFilesByWorktree?.[WORKTREE]).toEqual([draft()])
+      expect(session?.sleepingAgentSessionsByPaneKey ?? {}).toEqual({})
+    })
+
+    it('refuses a host resume record for a tab only the local copy lists', () => {
+      const { state, local, host } = split()
+      host.sleepingAgentSessionsByPaneKey = { 'local:leaf': resume('local') }
+      local.tabsByWorktree = { [WORKTREE]: [terminal('local')] }
+      expect(census(state).counts['workspace-session']).toBe(1)
+    })
+
+    it('refuses when the host holds an empty tab list and local holds tabs', () => {
+      const { state, local, host } = split()
+      host.tabsByWorktree = { [WORKTREE]: [] }
+      local.tabsByWorktree = { [WORKTREE]: [terminal('local')] }
+      expect(census(state).counts['workspace-session']).toBe(1)
+    })
+
+    it('keeps a local unsaved draft when the host tabs supersede the local copy', () => {
+      const { state, local, host } = split()
+      host.tabsByWorktree = { [WORKTREE]: [terminal('host')] }
+      local.tabsByWorktree = { [WORKTREE]: [terminal('host')] }
+      local.openFilesByWorktree = { [WORKTREE]: [draft()] }
+      expect(census(state).totalCount).toBe(0)
+      const session = exportState(state).payload.dormantState?.workspaceSession
+      expect(session?.tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual(['host'])
+      expect(session?.openFilesByWorktree?.[WORKTREE]).toEqual([draft()])
+    })
+
+    it('refuses when the host holds a different copy of the file with the local draft', () => {
+      const { state, local, host } = split()
+      host.tabsByWorktree = { [WORKTREE]: [terminal('host')] }
+      host.openFilesByWorktree = { [WORKTREE]: [{ ...draft(), dirtyDraftContent: 'other' }] }
+      local.openFilesByWorktree = { [WORKTREE]: [draft()] }
+      expect(census(state).counts['workspace-session']).toBe(1)
+    })
+
+    it('never brings back a tab the local copy recorded as closed', () => {
+      const { state, local, host } = split()
+      host.tabsByWorktree = { [WORKTREE]: [terminal('closed-tab')] }
+      local.tabsByWorktree = { [WORKTREE]: [] }
+      local.closedTerminalTabTombstonesByTabId = {
+        'closed-tab': { worktreeId: WORKTREE, reason: 'user', closedAt: Date.now() }
+      }
+      expect(census(state).counts['workspace-session']).toBe(1)
+      expect(exportState(state).payload.dormantState?.workspaceSession).toBeUndefined()
+    })
   })
 })

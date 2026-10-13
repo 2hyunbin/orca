@@ -65,15 +65,23 @@ function collectWorkspaceSession(
   const fragments: WorkspaceSessionState[] = []
   const snapshots: OrcadMigrationTerminalScrollbackSnapshot[] = []
   let blockedCount = 0
-  for (const [partitionId, session] of orcadMigrationSessionPartitions(state, sourceScope)) {
-    const scope = orcadMigrationPartitionScope(sourceScope, partitionId)
-    const sourceHostPartition = partitionId === scope.hostId
-    const terminalTabIds = collectOwnedTerminalTabIds(session, scope)
+  const partitions = orcadMigrationSessionPartitions(state, sourceScope).map(
+    ([partitionId, session]) => {
+      const scope = orcadMigrationPartitionScope(sourceScope, partitionId)
+      return { session, scope, terminalTabIds: collectOwnedTerminalTabIds(session, scope) }
+    }
+  )
+  const sourceTerminalTabIds = new Set(
+    partitions.flatMap(({ terminalTabIds }) => [...terminalTabIds])
+  )
+  for (const { session, scope, terminalTabIds } of partitions) {
+    const sourceHostPartition = scope.partitionHostId === scope.hostId
     blockedCount += countUnsupportedSessionState(
       session,
       scope,
       sourceHostPartition,
-      terminalTabIds
+      terminalTabIds,
+      sourceTerminalTabIds
     )
     blockedCount += countUnrepresentableMarkdownState(session, scope, sourceHostPartition)
     const fragment = extractSessionOwnersForTransfer(session, {
