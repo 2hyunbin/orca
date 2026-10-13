@@ -6,10 +6,11 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync, unlinkSync } from 'node:fs'
 import { lstat, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import type { ProcessLivenessVerdict } from '../daemon/daemon-incarnation-evidence-types'
 import { parseLinuxStartTicks, readBootIdentity } from '../agent-hooks/managed-hook-owner-identity'
 import { isAppImageCacheKey } from './appimage-cache-layout'
+import { APPIMAGE_NODE_RUNTIME_SEGMENTS } from '../../shared/appimage-node-runtime'
 
 const LEASE_DIRECTORY_NAME = 'leases'
 const LEASE_SUFFIX = '.json'
@@ -36,18 +37,27 @@ export type AppImageLeaseProcessReader = {
   readBootId(): Promise<string | undefined>
 }
 
+/** The generation root an executable runs from: its `orca-ide`, or its bundled Node (the daemon). */
+function generationRootOfExecutable(execPath: string): string | null {
+  const resolved = resolve(execPath)
+  if (basename(resolved) === LINUX_EXECUTABLE_NAME) {
+    return dirname(resolved)
+  }
+  const nodeSuffix = join('resources', ...APPIMAGE_NODE_RUNTIME_SEGMENTS)
+  return resolved.endsWith(`${sep}${nodeSuffix}`) ? resolved.slice(0, -nodeSuffix.length - 1) : null
+}
+
 export function resolveAppImageGenerationOfExecutable(
   execPath: string
 ): AppImageGenerationLocation | null {
-  const rootPath = dirname(resolve(execPath))
+  const rootPath = generationRootOfExecutable(execPath)
+  if (!rootPath) {
+    return null
+  }
   const namespacePath = dirname(rootPath)
   const generationKey = basename(rootPath)
   const namespaceKey = basename(namespacePath)
-  if (
-    basename(execPath) !== LINUX_EXECUTABLE_NAME ||
-    !isAppImageCacheKey(generationKey) ||
-    !isAppImageCacheKey(namespaceKey)
-  ) {
+  if (!isAppImageCacheKey(generationKey) || !isAppImageCacheKey(namespaceKey)) {
     return null
   }
   return { cacheRootPath: dirname(namespacePath), namespaceKey, generationKey, rootPath }
