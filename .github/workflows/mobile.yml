@@ -170,7 +170,6 @@ jobs:
 
       # All checks read the completed install; compilers need not hold up test workers.
       - wait: [production-types, test-types]
-        if: ${{ !cancelled() }}
 
       # Reports, never gates: the goldens are content-addressed JSON, so their raw diff is hashes.
       # This decodes which recorded behaviour the pull request moves into the job summary, and runs

@@ -92,7 +92,7 @@ it('overlaps both typechecks with tests and collects their failures before the s
   expect(waits).toHaveLength(1)
   const [wait] = waits
   expect(wait.wait).toEqual(['production-types', 'test-types'])
-  expect(wait.if).toBe('${{ !cancelled() }}')
+  expect(wait.if).toBeUndefined()
   expect(steps.indexOf(wait)).toBeGreaterThan(test)
   expect(steps.indexOf(wait)).toBeLessThan(summary)
   for (const id of wait.wait) {

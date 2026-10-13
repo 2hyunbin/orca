@@ -82,7 +82,6 @@ it('gates Ruby independently and retains mobile static validation', () => {
   const gated = steps.filter(
     (step) =>
       step.if !== undefined &&
-      step.wait === undefined &&
       step.name !== 'Test' &&
       step.name !== 'Setup Bun for tests' &&
       step.name !== 'Summarize RPC recording changes'
