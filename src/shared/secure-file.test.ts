@@ -1,10 +1,11 @@
-import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   __getSecureFileHardeningCacheStateForTests,
   __resetSecureFileHardenedPathsForTests,
+  createSecureFile,
   hardenExistingSecureFile,
   isUnreadableError,
   writeSecureFile
@@ -65,6 +66,18 @@ describe('POSIX secure files', () => {
 
     expect(statMode(targetPath)).toBe(0o600)
     expect(statMode(userDataPath)).toBe(0o700)
+  })
+
+  posixModeIt('creates a file at mode 0600 and refuses one that already exists', () => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
+    const targetPath = join(tempDir(), 'authority.key')
+
+    expect(createSecureFile(targetPath, Buffer.from([0, 1, 255]))).toBe(true)
+    expect(statMode(targetPath)).toBe(0o600)
+
+    // A racing creator must not replace the value the first one published.
+    expect(() => createSecureFile(targetPath, Buffer.from('second'))).toThrow(/EEXIST/)
+    expect(readFileSync(targetPath)).toEqual(Buffer.from([0, 1, 255]))
   })
 
   posixModeIt('re-hardens a POSIX directory when its metadata changes after caching', () => {

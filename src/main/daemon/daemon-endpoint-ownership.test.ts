@@ -138,7 +138,10 @@ describe('daemon endpoint ownership publication', () => {
       spawnSubprocess: () => createMockSubprocess()
     })
 
-    await expect(server.start()).rejects.toMatchObject({ code: 'EISDIR' })
+    // The token publishes by rename, which Windows refuses onto a directory as EPERM.
+    await expect(server.start()).rejects.toMatchObject({
+      code: process.platform === 'win32' ? 'EPERM' : 'EISDIR'
+    })
 
     expect(existsSync(pidPath)).toBe(false)
     expect(existsSync(tokenPath)).toBe(true)

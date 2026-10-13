@@ -55,20 +55,23 @@ export function restrictWindowsPathSync(targetPath: string, isDirectory: boolean
 
 /**
  * Writes a NEW file that is restricted from the moment it exists, so its contents are never
- * readable under the directory's (possibly broader) inherited DACL. Returns whether the
- * restriction holds. Without the addon the file is written plainly and this is false; with it, a
- * failed create throws like any other write failure.
+ * readable under the directory's (possibly broader) inherited DACL. Throws when the path already
+ * exists. Returns whether the restriction holds. Without the addon the file is written plainly and
+ * this is false; with it, a failed create throws like any other write failure.
  */
-export function writeRestrictedWindowsFile(targetPath: string, contents: string): boolean {
+export function writeRestrictedWindowsFile(
+  targetPath: string,
+  contents: string | Uint8Array
+): boolean {
   const security = securityFor(targetPath)
   if (!security) {
-    writeFileSync(targetPath, contents, { encoding: 'utf-8', mode: 0o600 })
+    writeFileSync(targetPath, contents, { encoding: 'utf-8', mode: 0o600, flag: 'wx' })
     return false
   }
   security.addon.createFileWithDacl(
     targetPath,
     hardenedDaclSddl(security.userSid, false),
-    Buffer.from(contents, 'utf-8')
+    typeof contents === 'string' ? Buffer.from(contents, 'utf-8') : contents
   )
   // Why read it back: FAT32 and some shares accept the descriptor and silently drop it.
   return verifyAfterApply(security, targetPath, false)

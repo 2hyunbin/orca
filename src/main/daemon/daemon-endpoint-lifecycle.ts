@@ -1,4 +1,5 @@
-import { chmodSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, unlinkSync } from 'node:fs'
+import { writeSecureFile } from '../../shared/secure-file'
 import type { DaemonFileLog } from './daemon-file-log'
 import {
   DaemonEndpointUnavailableError,
@@ -74,7 +75,7 @@ export class DaemonEndpointLifecycle {
     try {
       this.options.publishEndpointOwnership()
       publishedOwnership = true
-      writeFileSync(this.options.tokenPath, this.options.token, { mode: 0o600 })
+      writeSecureFile(this.options.tokenPath, this.options.token)
     } catch (error) {
       if (publishedOwnership && this.options.pidPath && this.options.launchNonce) {
         unlinkOwnedDaemonPidFile(this.options.pidPath, process.pid, this.options.launchNonce)

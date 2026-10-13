@@ -65,4 +65,13 @@ export function buildInstallFixture(root: string): void {
   writeFileSync(join(processTreeDir, 'lib', 'promises.js'), 'require("./index")')
   mkdirSync(join(processTreeDir, 'build', 'Release', 'obj'), { recursive: true })
   writeFileSync(join(processTreeDir, 'build', 'Release', 'obj', 'addon.obj'), 'intermediate')
+  const securityDir = join(root, 'resources', 'node_modules', '@orca', 'windows-security')
+  mkdirSync(join(securityDir, 'build', 'Release', 'obj'), { recursive: true })
+  mkdirSync(join(securityDir, 'bin', 'win32-x64-148'), { recursive: true })
+  writeFileSync(join(securityDir, 'package.json'), '{"main":"index.js"}')
+  writeFileSync(join(securityDir, 'index.js'), 'module.exports = {}')
+  writeFileSync(join(securityDir, 'build', 'Release', 'orca_windows_security.node'), 'security')
+  writeFileSync(join(securityDir, 'build', 'Release', 'orca_windows_security.pdb'), 'symbols')
+  writeFileSync(join(securityDir, 'build', 'Release', 'obj', 'addon.obj'), 'intermediate')
+  writeFileSync(join(securityDir, 'bin', 'win32-x64-148', 'windows-security.node'), 'stale')
 }

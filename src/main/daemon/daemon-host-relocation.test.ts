@@ -227,6 +227,29 @@ describe('materializeRelocatedDaemonHost', () => {
         join(dest, 'resources', 'app.asar.unpacked', 'out', 'main', 'chunks', 'a.js')
       ).resolve('@vscode/windows-process-tree')
     ).toBe(realpathSync(join(processTreeDest, 'lib', 'index.js')))
+    // The daemon's secure writes load @orca/windows-security; only its runtime files are copied.
+    const securityDest = join(dest, 'resources', 'node_modules', '@orca', 'windows-security')
+    expect(
+      createRequire(
+        join(dest, 'resources', 'app.asar.unpacked', 'out', 'main', 'chunks', 'a.js')
+      ).resolve('@orca/windows-security')
+    ).toBe(realpathSync(join(securityDest, 'index.js')))
+    expect(existsSync(join(securityDest, 'build', 'Release', 'orca_windows_security.node'))).toBe(
+      true
+    )
+    expect(existsSync(join(securityDest, 'build', 'Release', 'orca_windows_security.pdb'))).toBe(
+      false
+    )
+    expect(existsSync(join(securityDest, 'build', 'Release', 'obj'))).toBe(false)
+    expect(existsSync(join(securityDest, 'bin'))).toBe(false)
+  })
+
+  it('still materializes a host when the security addon is absent', () => {
+    rmSync(join(installDir, 'resources', 'node_modules', '@orca', 'windows-security'), {
+      recursive: true
+    })
+
+    expect(materializeRelocatedDaemonHost()).not.toBeNull()
   })
 
   it('copies the exe verbatim: same file name and same bytes as the install-dir exe', () => {

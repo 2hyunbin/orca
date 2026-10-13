@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   canonicalizeAgentSessionIdentity,
-  createEphemeralAgentSessionClaimSigner
+  AgentSessionClaimSigner,
+  createEphemeralAgentSessionClaimSigner,
+  loadAgentSessionClaimSigner
 } from './agent-session-claim-identity'
 
 describe('agent session claim identity', () => {
@@ -64,6 +66,36 @@ describe('agent session claim identity', () => {
           transcriptPath: canonicalTranscriptPath
         }
       })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('creates the coordination key once and reuses it on every later load', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orca-claim-key-'))
+    try {
+      const first = loadAgentSessionClaimSigner(dir, 'profile-1')
+      const key = readFileSync(join(dir, 'agent-session-authority.key'))
+
+      expect(key).toHaveLength(32)
+      expect(loadAgentSessionClaimSigner(dir, 'profile-1').keyId).toBe(first.keyId)
+      expect(readFileSync(join(dir, 'agent-session-authority.key'))).toEqual(key)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  // Another process that created the key first must win, or the two would sign incomparably.
+  it('adopts a key another process already created instead of replacing it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orca-claim-key-'))
+    try {
+      const existing = Buffer.alloc(32, 7)
+      writeFileSync(join(dir, 'agent-session-authority.key'), existing)
+
+      const signer = loadAgentSessionClaimSigner(dir, 'profile-1')
+
+      expect(readFileSync(join(dir, 'agent-session-authority.key'))).toEqual(existing)
+      expect(signer.keyId).toBe(new AgentSessionClaimSigner('profile-1', existing).keyId)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

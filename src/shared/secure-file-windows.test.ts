@@ -6,6 +6,7 @@ import { runProcess, runProcessSync } from '@orca/process-host'
 import {
   __getSecureFileHardeningCacheStateForTests,
   __resetSecureFileHardenedPathsForTests,
+  createSecureFile,
   hardenExistingSecureFile,
   writeSecureFile
 } from './secure-file'
@@ -162,6 +163,38 @@ describe('Windows secure files through the native ACL addon', () => {
       expect(mayAttemptHardening(targetPath)).toBe(true)
       expect(reports).toContainEqual(expect.objectContaining({ targetPath, stage: 'recovered' }))
       now.mockRestore()
+    })
+  })
+
+  describe('exclusive create', () => {
+    it('creates a binary file already restricted at its final path, with no rename', () => {
+      const targetPath = join(tempDir(), 'authority.key')
+      const key = Buffer.from([0, 1, 2, 255])
+
+      expect(createSecureFile(targetPath, key)).toBe(true)
+
+      const creates = fake.callsFor('create')
+      expect(creates.map((call) => call.path)).toEqual([targetPath])
+      expect(creates[0] && 'sddl' in creates[0] ? creates[0].sddl : '').toBe(FILE_SDDL)
+      expect(readFileSync(targetPath)).toEqual(key)
+    })
+
+    // A racing creator must not replace the value the first one published.
+    it('refuses an existing file and leaves its contents alone', () => {
+      const targetPath = join(tempDir(), 'authority.key')
+      writeFileSync(targetPath, 'first')
+
+      expect(() => createSecureFile(targetPath, Buffer.from('second'))).toThrow()
+      expect(readFileSync(targetPath, 'utf-8')).toBe('first')
+    })
+
+    it('stays exclusive, and reports unrestricted, when the addon cannot load', () => {
+      setWindowsSecurityForTests(null)
+      const targetPath = join(tempDir(), 'authority.key')
+
+      expect(createSecureFile(targetPath, Buffer.from('first'))).toBe(false)
+      expect(() => createSecureFile(targetPath, Buffer.from('second'))).toThrow(/EEXIST/)
+      expect(readFileSync(targetPath, 'utf-8')).toBe('first')
     })
   })
 

@@ -137,12 +137,7 @@ export function writeSecureFile(
 
   const tmpFile = `${targetPath}.${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`
   try {
-    // Why born restricted on Windows: writeFileSync's mode is a no-op there, and a file created
-    // plainly would hold the credential under the directory's inherited DACL until a later fix.
-    const restricted =
-      process.platform === 'win32'
-        ? writeRestrictedWindowsFile(tmpFile, contents)
-        : writeModeRestrictedFile(tmpFile, contents)
+    const restricted = createSecureFile(tmpFile, contents)
     if (options.durable) {
       fsyncFileSync(tmpFile)
     }
@@ -168,10 +163,20 @@ export function writeSecureFile(
   }
 }
 
-function writeModeRestrictedFile(tmpFile: string, contents: string): boolean {
-  writeFileSync(tmpFile, contents, { encoding: 'utf-8', mode: 0o600 })
+/**
+ * Creates `targetPath` restricted to the current user from its first byte, and throws when it
+ * already exists. With no rename, concurrent creators cannot replace each other's value: the first
+ * wins and the rest can read it. Returns whether the restriction holds, as writeSecureFile does.
+ */
+export function createSecureFile(targetPath: string, contents: string | Uint8Array): boolean {
+  // Why born restricted on Windows: writeFileSync's mode is a no-op there, and a file created
+  // plainly would hold the credential under the directory's inherited DACL until a later fix.
+  if (process.platform === 'win32') {
+    return writeRestrictedWindowsFile(targetPath, contents)
+  }
+  writeFileSync(targetPath, contents, { encoding: 'utf-8', mode: 0o600, flag: 'wx' })
   // The umask can strip bits from `mode` but never add them; chmod sets exactly 0o600.
-  chmodSync(tmpFile, 0o600)
+  chmodSync(targetPath, 0o600)
   return true
 }
 

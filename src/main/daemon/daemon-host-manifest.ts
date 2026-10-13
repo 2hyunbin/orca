@@ -33,6 +33,13 @@ export const WINDOWS_PROCESS_TREE_REQUIRED = [
   'build/Release/windows_process_tree.node'
 ] as const
 
+/** What `require('@orca/windows-security')` loads, package-relative: secure writes in the daemon. */
+const WINDOWS_SECURITY_REQUIRED = [
+  'package.json',
+  'index.js',
+  'build/Release/orca_windows_security.node'
+] as const
+
 export type CopyOp = {
   sourcePath: string
   /** Destination path relative to the host root, posix-separated. */
@@ -60,6 +67,10 @@ export function daemonHostProcessPackageDir(sources: DaemonHostSources): string 
 
 function daemonHostNodePtyDir(sources: DaemonHostSources): string {
   return join(sources.resourcesPath, 'node_modules', 'node-pty')
+}
+
+function daemonHostWindowsSecurityDir(sources: DaemonHostSources): string {
+  return join(sources.resourcesPath, 'node_modules', '@orca', 'windows-security')
 }
 
 /**
@@ -96,14 +107,19 @@ function isRuntimeProcessHostPath(packageRel: string): boolean {
   )
 }
 
+/** The package root, one of `required`, or a directory on the way to one. */
+function isRequiredPackagePath(packageRel: string, required: readonly string[]): boolean {
+  return (
+    packageRel === '' ||
+    required.some((file) => file === packageRel || file.startsWith(`${packageRel}/`))
+  )
+}
+
 /** A required file, a directory on the way to one, or anything in lib/ (index.js requires its siblings). */
 function isRuntimeProcessTreePath(packageRel: string): boolean {
   return (
-    packageRel === '' ||
     packageRel.startsWith('lib/') ||
-    WINDOWS_PROCESS_TREE_REQUIRED.some(
-      (required) => required === packageRel || required.startsWith(`${packageRel}/`)
-    )
+    isRequiredPackagePath(packageRel, WINDOWS_PROCESS_TREE_REQUIRED)
   )
 }
 
@@ -178,6 +194,20 @@ export function buildDaemonHostManifest(sources: DaemonHostSources): CopyOp[] {
     kind: 'dir',
     filter: (sourcePath) =>
       isRuntimeProcessTreePath(toPosixRelative(windowsProcessTreeDir, sourcePath))
+  })
+  // Without it the daemon's secure writes (its auth token) fall back to plain files under the
+  // inherited DACL. Optional for the same reason: a host lacking it degrades, it does not fail.
+  const windowsSecurityDir = daemonHostWindowsSecurityDir(sources)
+  ops.push({
+    sourcePath: windowsSecurityDir,
+    destRel: toPosixRelative(appDir, windowsSecurityDir),
+    kind: 'dir',
+    optional: true,
+    filter: (sourcePath) =>
+      isRequiredPackagePath(
+        toPosixRelative(windowsSecurityDir, sourcePath),
+        WINDOWS_SECURITY_REQUIRED
+      )
   })
   // node-pty tree, mirrored so require('node-pty') resolves it; filtered to drop unused .pdb/other-arch prebuilds.
   const nodePtyDir = daemonHostNodePtyDir(sources)

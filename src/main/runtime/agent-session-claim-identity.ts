@@ -1,13 +1,5 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto'
-import {
-  closeSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  realpathSync,
-  statSync,
-  writeFileSync
-} from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, normalize } from 'node:path'
 import {
   AGENT_SESSION_CLAIM_DIGEST_VERSION,
@@ -20,6 +12,7 @@ import {
   type AgentProviderSessionMetadata,
   type ResumableTuiAgent
 } from '../../shared/agent-session-resume'
+import { createSecureFile } from '../../shared/secure-file'
 
 const COORDINATION_KEY_BYTES = 32
 const COORDINATION_KEY_FILE = 'agent-session-authority.key'
@@ -151,17 +144,12 @@ export function loadAgentSessionClaimSigner(
     key = readFileSync(keyPath)
   } catch {
     const candidate = randomBytes(COORDINATION_KEY_BYTES)
-    let fd: number | null = null
+    // Exclusive create: a racing process that created the key first wins, and we read its key.
     try {
-      fd = openSync(keyPath, 'wx', 0o600)
-      writeFileSync(fd, candidate)
+      createSecureFile(keyPath, candidate)
       key = candidate
     } catch {
       key = readFileSync(keyPath)
-    } finally {
-      if (fd !== null) {
-        closeSync(fd)
-      }
     }
   }
   // Why: a replaced/corrupt key could make a surviving owner look absent;
