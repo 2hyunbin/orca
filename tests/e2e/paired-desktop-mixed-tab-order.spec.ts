@@ -33,7 +33,6 @@ type Strip = string[][]
 
 declare global {
   /** Every distinct strip the desktop drew since the last read. */
-  // eslint-disable-next-line no-var -- renderer global read between page.evaluate calls
   var __mixedTabOrderStrips: Strip[] | undefined
 }
 
