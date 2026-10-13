@@ -1,3 +1,4 @@
+import { createRuntimeFilePositionQueue } from './runtime-file-position'
 import { applyClosedTerminalLeafNotice } from '@/components/terminal-pane/closed-terminal-leaf-notice'
 import { closeTerminalTab } from '@/components/terminal/terminal-tab-actions'
 import { detectLanguage } from '@/lib/language-detect'
@@ -37,13 +38,14 @@ export function registerMobileAndTerminalCloseIpcBridge(
   unsubs: (() => void)[],
   requestSleepingAgentWake: (worktreeId: string) => void
 ): void {
+  const positionFile = createRuntimeFilePositionQueue(unsubs)
   unsubs.push(
     window.api.ui.onOpenFileFromMobile(
-      ({ worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation }) => {
+      ({ worktreeId, filePath, relativePath, runtimeEnvironmentId, navigation, position }) => {
         const basename = relativePath.split(/[\\/]/).pop() || relativePath
-        openRuntimeEditorTab(worktreeId, navigation, (store, selection) =>
+        openRuntimeEditorTab(worktreeId, navigation, (store, selection) => {
           // Why: renderer owns tab creation so grouped order and markdown bridges share the desktop File Explorer's store path.
-          store.openFile(
+          const fileId = store.openFile(
             {
               filePath,
               relativePath,
@@ -54,7 +56,10 @@ export function registerMobileAndTerminalCloseIpcBridge(
             },
             { selection }
           )
-        )
+          if (position) {
+            positionFile(fileId, position, selection === 'focus')
+          }
+        })
       }
     )
   )

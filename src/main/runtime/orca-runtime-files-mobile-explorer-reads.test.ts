@@ -127,6 +127,18 @@ describe('RuntimeFileCommands', () => {
     })
   })
 
+  it('passes file positioning to the renderer with the resolved owner', async () => {
+    const openFile = vi.fn()
+    const { commands } = createRuntimeFileCommands({ openFile })
+    resolveAuthorizedPathMock.mockResolvedValue('/repo/a.ts')
+    statMock.mockResolvedValue({ isDirectory: () => false })
+    await commands.openMobileFile('id:wt-1', 'a.ts', 'caller', { line: 12, column: 5 })
+    expect(openFile).toHaveBeenCalledWith('wt-1', '/repo/a.ts', 'a.ts', null, 'caller', {
+      line: 12,
+      column: 5
+    })
+  })
+
   it('opens previewable images through the renderer host as an image tab', async () => {
     const openFile = vi.fn()
     const { commands } = createRuntimeFileCommands({ openFile })
