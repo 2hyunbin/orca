@@ -21,6 +21,7 @@ import {
 } from './serve-supervised-stop'
 import type { ServeBundlePark } from './serve-bundle-park'
 import { createSupervisedParkWatch } from './serve-supervised-park-watch'
+import type { AppImageBuildState } from './serve-appimage-update'
 
 export const SERVE_INSTALL_HOLD_POLL_MS = 2_000
 /** A hold this long is reported as stuck; it still never times out into a spawn. */
@@ -52,6 +53,14 @@ export type SupervisedServeOptions = {
   park?: ServeBundlePark | null
   currentChild?: typeof currentServeChild
   setRepeating?: (callback: () => void, ms: number) => () => void
+  /** The AppImage this build was unpacked from, checked before each start; null elsewhere. */
+  appImageUpdate?: SupervisedAppImageUpdate | null
+}
+
+export type SupervisedAppImageUpdate = {
+  inspect: () => AppImageBuildState
+  /** Re-execs into the new build and never returns; otherwise resolves with why it could not. */
+  restart: (isStopped: () => boolean) => Promise<string>
 }
 
 export function getServeSuperviseValidationError(input: {
@@ -188,6 +197,7 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
   }
   resetSupervisedServeStop(awaitClearToSpawn, () => options.park?.holds() ?? false)
 
+  let appImageUpdate = options.appImageUpdate ?? null
   try {
     let standbyAttempt = 0
     const hold: { current: { reason: string; since: number; reportedStuck: boolean } | null } = {
@@ -226,6 +236,19 @@ export async function superviseServeService(options: SupervisedServeOptions): Pr
         continue
       }
       hold.current = null
+      const appImage = appImageUpdate?.inspect() ?? 'current'
+      if (appImage === 'settling') {
+        // Why: the AppImage file is still being written; starting either build now would be wrong.
+        await sleep(SERVE_INSTALL_HOLD_POLL_MS)
+        continue
+      }
+      if (appImage === 'superseded' && appImageUpdate) {
+        const reason = await appImageUpdate.restart(() => stopped)
+        // One attempt per supervisor: a failed restart keeps serving the running build.
+        appImageUpdate = null
+        log(`[serve] Kept the running build: ${reason}.`)
+        continue
+      }
       record = brakeForBuild(record, identify(options.executable))
       if (record.gaveUp) {
         return refuseGaveUp(record.gaveUp)
