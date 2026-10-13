@@ -83,7 +83,7 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
           index,
           url: page.url,
           title: page.title,
-          active: false,
+          active: page.active,
           worktreeId: page.worktreeId,
           profileId: page.profileId
         })),

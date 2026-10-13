@@ -21,6 +21,8 @@ export type RestorableBrowserPage = {
   url: string
   title: string
   profileId: string | null
+  /** The tab the layout shows for its worktree, as a window mounts it. */
+  active: boolean
 }
 
 export class ServeBrowserTabs {
@@ -95,7 +97,8 @@ export class ServeBrowserTabs {
           pageId: page.id,
           url: page.url,
           title: page.title,
-          profileId: tab.sessionProfileId ?? null
+          profileId: tab.sessionProfileId ?? null,
+          active: session.activeBrowserTabIdByWorktree?.[worktreeId] === tab.id
         }
       ]
     })
@@ -123,10 +126,7 @@ export class ServeBrowserTabs {
     const scope =
       worktreeId ??
       [...this.deps.savedWorktreeIds()].find((id) => this.deps.session(id)?.activeWorktreeId === id)
-    const activeTabId = scope && this.deps.session(scope)?.activeBrowserTabIdByWorktree?.[scope]
-    const active = activeTabId
-      ? this.listRestorable(scope).find((page) => page.tabId === activeTabId)
-      : undefined
+    const active = scope && this.listRestorable(scope).find((page) => page.active)
     return active ? this.restore(scope, active.pageId) : false
   }
 

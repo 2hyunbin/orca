@@ -179,6 +179,8 @@ describe('a saved browser tab on a host with no window', () => {
 
     const listed = await runtime.browserTabList({ worktree: `id:${TEST_WORKTREE_ID}` })
     expect(listed.tabs.map((tab) => tab.browserPageId)).toEqual(['page-1', 'page-2'])
+    const current = await runtime.browserTabCurrent({ worktree: `id:${TEST_WORKTREE_ID}` })
+    expect(current.tab.browserPageId).toBe('page-2')
     expect(createTab).not.toHaveBeenCalled()
 
     // The last tab opened is the one the layout shows, as a window shows it.
@@ -191,6 +193,9 @@ describe('a saved browser tab on a host with no window', () => {
     const saved = savedServeTabs()
     const { runtime, createTab } = restartedServe({ ...saved, activeBrowserTabIdByWorktree: {} })
 
+    await expect(runtime.browserTabCurrent({ worktree: `id:${TEST_WORKTREE_ID}` })).rejects.toThrow(
+      'No browser tab open in this worktree'
+    )
     await runtime.browserSnapshot({ worktree: `id:${TEST_WORKTREE_ID}` }).catch(() => undefined)
     expect(createTab).not.toHaveBeenCalled()
   })
