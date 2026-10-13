@@ -5721,7 +5721,7 @@
     "ko": "터미널 강조 표시"
   },
   "auto.components.settings.ExperimentalPane.88b7613afb": {
-    "ko": "터미널 벨과 에이전트 완료 이벤트가 발생하면 패널을 계속 강조 표시합니다."
+    "ko": "터미널 벨 및 에이전트 완료 이벤트에 대한 지속적인 패널 강조 표시입니다."
   },
   "auto.components.settings.ExperimentalPane.agentHibernation.copy": {
     "ko": "설정된 유휴 시간이 지난 백그라운드 에이전트 터미널을 중지하고, 다시 열 때 지원되는 세션을 재개합니다. 에이전트 최대 절전은 Orca에서 시작한 에이전트의 시작 옵션을 보존합니다. 수동으로 시작한 에이전트는 현재 Orca 기본값으로 재개될 수 있습니다. 안전 모델을 조정하는 동안 제공되는 실험적 기능입니다."
@@ -6294,16 +6294,16 @@
     "ko": "중지 중…"
   },
   "auto.components.settings.SettingsHostScopePicker.description": {
-    "ko": "아래의 계정, 감지된 에이전트, 터미널 옵션은 이 호스트에 적용됩니다."
+    "ko": "아래의 계정, 감지된 에이전트 및 터미널 옵션은 이 호스트에 적용됩니다."
   },
   "auto.components.settings.SettingsHostScopePicker.label": {
     "ko": "호스트"
   },
   "auto.components.settings.SettingsHostScopePicker.unavailable": {
-    "ko": "{{value0}} (사용할 수 없음)"
+    "ko": "{{value0}} (사용 불가)"
   },
   "auto.components.settings.SettingsHostScopePicker.unavailableNotice": {
-    "ko": "이 서버는 더 이상 저장되어 있지 않아 표시할 내용이 없습니다. 설정 상단에서 다른 호스트를 선택하세요."
+    "ko": "이 서버는 더 이상 저장되어 있지 않아 정보를 표시할 수 없습니다. 설정 상단에서 다른 호스트를 선택하세요."
   },
   "auto.components.settings.SshPassphraseDialog.c624f64b86": {
     "ko": "계속"
