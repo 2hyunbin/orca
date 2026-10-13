@@ -1,6 +1,9 @@
 import { BaseWindow, WebContentsView } from 'electron'
 import { isBackgroundLaunch } from '../window/foreground-activation-policy'
-import { prepareNativeBrowserPopup } from './browser-popup-native-window'
+import {
+  discardBrowserPopupContents,
+  prepareNativeBrowserPopup
+} from './browser-popup-native-window'
 
 // Why: Electron passes the pre-created popup WebContents through the
 // createWindow options (present at runtime, absent from the published d.ts).
@@ -9,6 +12,8 @@ import { prepareNativeBrowserPopup } from './browser-popup-native-window'
 export type PopupChildWindowOptions = Electron.BrowserWindowConstructorOptions & {
   webContents?: Electron.WebContents
   nativeWindow?: Electron.BrowserWindow
+  // Why: a Cmd/Ctrl+Shift-clicked link hands over no page; only a GET may be reloaded by URL.
+  loadInitialUrl?: boolean
 }
 
 export type PopupOriginBarWindow = {
@@ -106,9 +111,8 @@ function closeUnpreparedPopup(
       listener()
     }
   })
-  if (!contentWebContents.isDestroyed()) {
-    contentWebContents.close()
-  }
+  // Why: a plain close() lets an adopted link's pending first request reach the server.
+  discardBrowserPopupContents(contentWebContents)
   if (!originBarWebContents.isDestroyed()) {
     originBarWebContents.close()
   }
@@ -164,7 +168,10 @@ export function openPopupWithOriginBar(
     title: initialOrigin.label,
     // Why: Windows/Linux attach Orca's app menu to every window, including web popups.
     autoHideMenuBar: true,
-    show: Boolean(options.webContents) && !isBackgroundLaunch() && options.show !== false
+    show:
+      Boolean(options.webContents || options.loadInitialUrl) &&
+      !isBackgroundLaunch() &&
+      options.show !== false
   })
 
   // Why: the origin bar renders only Orca's own data: URL and must stay
@@ -203,7 +210,10 @@ export function openPopupWithOriginBar(
   layoutViews()
 
   const contentWebContents = contentView.webContents
-  if (!options.webContents || (prepareContent && !prepareContent(contentWebContents))) {
+  if (
+    (!options.webContents && !options.loadInitialUrl) ||
+    (prepareContent && !prepareContent(contentWebContents))
+  ) {
     return closeUnpreparedPopup(window, contentWebContents, originBarWebContents)
   }
   let currentUrl = initialUrl
@@ -245,6 +255,10 @@ export function openPopupWithOriginBar(
     }
   }
   contentWebContents.on('page-title-updated', handlePageTitleUpdated)
+
+  if (options.loadInitialUrl && !options.webContents) {
+    void contentWebContents.loadURL(initialUrl).catch(() => {})
+  }
 
   const closedListeners: (() => void)[] = []
   const handleContentDestroyed = (): void => {
