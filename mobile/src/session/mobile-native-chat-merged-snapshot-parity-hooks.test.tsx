@@ -90,6 +90,7 @@ const HOST_SUPPORT = {
   queuedMessages: true,
   queuedCommands: false,
   statusFeed: true,
+  messageChoices: false,
   quietRepeatedStop: true
 }
 
