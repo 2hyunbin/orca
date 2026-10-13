@@ -49,7 +49,9 @@ const failed = (outcome: Awaited<ReturnType<typeof within>>) =>
 
 describe('a Grok model pick Grok never answers', () => {
   it('does not hold a Stop behind it; the pick fails', async () => {
-    const { rig, host } = await openAttachedHostRig()
+    const { rig, host } = await openAttachedHostRig({
+      script: (agent) => agent.on('session/set_config_option', () => {})
+    })
     const picking = pick(host, 'grok-4.6')
     await waitFor(() => expect(framesOf(rig.child(), 'session/set_config_option')).toHaveLength(1))
     expect(await within(stop(host), 2_000)).toMatchObject({ settled: 'resolved' })
@@ -58,7 +60,9 @@ describe('a Grok model pick Grok never answers', () => {
   })
 
   it('does not hold a Close behind it; the pick fails', async () => {
-    const { rig, host } = await openAttachedHostRig()
+    const { rig, host } = await openAttachedHostRig({
+      script: (agent) => agent.on('session/set_config_option', () => {})
+    })
     const picking = pick(host, 'grok-4.6')
     await waitFor(() => expect(framesOf(rig.child(), 'session/set_config_option')).toHaveLength(1))
     expect(await within(host.close(SESSION, 'user-close'), 2_000)).toMatchObject({
@@ -68,7 +72,10 @@ describe('a Grok model pick Grok never answers', () => {
   })
 
   it('fails at its bound, frees the chat, and keeps what Grok answers late', async () => {
-    const { rig, host } = await openAttachedHostRig({ optionWriteTimeoutMs: 100 })
+    const { rig, host } = await openAttachedHostRig({
+      optionWriteTimeoutMs: 100,
+      script: (agent) => agent.on('session/set_config_option', () => {})
+    })
     const picking = pick(host, 'grok-4.6')
     await waitFor(() => expect(framesOf(rig.child(), 'session/set_config_option')).toHaveLength(1))
     expect(failed(await within(picking, 2_000))).toBe(true)

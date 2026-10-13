@@ -193,22 +193,27 @@ export const framesOf = (child: FakeAcpChild, method: string) =>
 
 /** A new Grok chat the host attached; Grok loads its session on a later start, counting each. */
 export async function openAttachedHostRig(
-  deps: Partial<AcpStructuredSessionAdapterDeps> = {},
+  deps: Partial<AcpStructuredSessionAdapterDeps> & {
+    script?: (agent: AcpScriptedAgent) => void
+  } = {},
   statusSink?: StructuredAgentSessionStatusSink,
   modelCatalog?: AgentModelCatalogService
 ) {
+  const { script, ...adapterDeps } = deps
   const count = { loads: 0 }
   let resumed = false
   const rig = await openHostRig({
     statusSink,
     ...(modelCatalog ? { modelCatalog } : {}),
     initialize: RESUMES,
-    script: (agent) =>
+    script: (agent) => {
       agent.on('session/load', (frame) => {
         count.loads += 1
         agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
-      }),
-    deps: { resolveLaunch: launch(() => resumed), ...deps }
+      })
+      script?.(agent)
+    },
+    deps: { resolveLaunch: launch(() => resumed), ...adapterDeps }
   })
   expect(await rig.host.attach(CALLER, attachParams())).toMatchObject({ ok: true })
   await rig.ready()
