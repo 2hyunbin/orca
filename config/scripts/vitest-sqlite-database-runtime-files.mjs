@@ -35,6 +35,7 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/runtime/claude-structured-session-integration.test.ts',
   'src/main/runtime/claude-structured-startup-fault-is-not-an-exit.test.ts',
   'src/main/runtime/exit-provenance-audit.test.ts',
+  'src/main/runtime/orca-runtime-files-artifact-facade.test.ts',
   'src/main/runtime/orchestration-cli-subprocess.test.ts',
   'src/main/runtime/orchestration-dispatch-mailbox-delivery.test.ts',
   'src/main/runtime/orchestration-mailbox-crash-recovery.test.ts',
