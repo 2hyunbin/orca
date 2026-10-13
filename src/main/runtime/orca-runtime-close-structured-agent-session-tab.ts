@@ -321,10 +321,7 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
 
   /** Each of this host's chats with a saved tab, and where, across every saved partition. */
   protected savedAgentSessionTabs(): Map<string, SavedAgentSessionTab[]> {
-    const hostIds = this.store?.getWorkspaceSessionHostIds?.() ?? []
-    return listSavedAgentSessionTabs(
-      hostIds.map((hostId) => ({ hostId, session: this.store?.getWorkspaceSession?.(hostId) }))
-    )
+    return this.store ? listSavedAgentSessionTabs(this.store) : new Map()
   }
 
   // A window saves its own layout whole, chat tabs included; only a host with none saves them here.
