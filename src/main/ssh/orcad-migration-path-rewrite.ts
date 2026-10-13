@@ -33,6 +33,10 @@ export function rewriteOrcadMigrationPayloadPaths(
   rewriter: OrcadMigrationPathRewriter
 ): OrcadMigrationCatalogPayload {
   const copy = structuredClone(payload)
+  // Why: SSH exports run this on every stage and commit check; the identity changes nothing.
+  if (rewriter === IDENTITY_ORCAD_MIGRATION_PATH_REWRITER) {
+    return copy
+  }
   for (const field of ORCAD_MIGRATION_PATH_FIELDS) {
     const map = (value: string): string => rewriteValue(value, field.kind, rewriter)
     visit(copy, parseFieldLocation(field.at), map)
@@ -95,8 +99,9 @@ function visit(node: unknown, steps: Step[], map: (value: string) => string): un
 }
 
 function renameKeys(node: Record<string, unknown>, map: (value: string) => string): void {
-  const entries = Object.entries(node).map(([key, value]) => [map(key), value] as const)
-  if (entries.every(([key], index) => key === Object.keys(node)[index])) {
+  const keys = Object.keys(node)
+  const entries = keys.map((key) => [map(key), node[key]] as const)
+  if (entries.every(([key], index) => key === keys[index])) {
     return
   }
   if (new Set(entries.map(([key]) => key)).size !== entries.length) {

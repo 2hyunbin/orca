@@ -56,6 +56,15 @@ function payloadWithEveryField(): OrcadMigrationCatalogPayload {
   return { repositories: [], projectGroups: [], folderWorkspaces: [], ...root }
 }
 
+function payloadWithManyOwnerKeys(count: number): OrcadMigrationCatalogPayload {
+  const root: Record<string, unknown> = {}
+  const steps = parseFieldLocation('dormantState.workspaceSession.tabsByWorktree{key}')
+  for (let index = 0; index < count; index++) {
+    place(root, steps, `repo::/src/w${index}`)
+  }
+  return { repositories: [], projectGroups: [], folderWorkspaces: [], ...root }
+}
+
 function place(
   node: Record<string, unknown>,
   steps: ReturnType<typeof parseFieldLocation>,
@@ -133,6 +142,13 @@ describe('orcad migration path-rewrite stage', () => {
     expect(output).toEqual(input)
     expect(JSON.stringify(output)).toBe(JSON.stringify(input))
     expect(serializeOrcadMigrationValue(output)).toBe(serializeOrcadMigrationValue(input))
+  })
+
+  // Regression: renaming re-read Object.keys per entry, so a 20k-key record took seconds.
+  it('walks a large keyed record in linear time', () => {
+    const started = performance.now()
+    rewriteOrcadMigrationPayloadPaths(payloadWithManyOwnerKeys(20_000), MARKING)
+    expect(performance.now() - started).toBeLessThan(2_000)
   })
 
   it('reaches every field the table names', () => {
