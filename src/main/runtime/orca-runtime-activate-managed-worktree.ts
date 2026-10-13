@@ -305,7 +305,7 @@ export class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListM
     return deliverWorktreeStartupFollowup(this.getWorktreeStartupReadinessHost(), handle, followup)
   }
 
-  protected async provisionManagedWorktreeTerminals(
+  async provisionManagedWorktreeTerminals(
     args: {
       worktreeSelector: string
       worktreeId: string

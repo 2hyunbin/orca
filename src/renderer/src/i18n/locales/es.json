@@ -649,13 +649,6 @@
             }
           }
         },
-        "worktree": {
-          "background": {
-            "terminals": {
-              "setupTitle": "Configuración"
-            }
-          }
-        },
         "work": {
           "item": {
             "direct": {
