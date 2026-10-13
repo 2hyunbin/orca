@@ -114,19 +114,6 @@ export async function initializeAcpStructuredSession(
     observedAt: now(),
     ...takeover
   }
-  Object.assign(child, {
-    childStops,
-    lane: liveLane,
-    turns: new AcpStructuredTurns({
-      connection,
-      withdrawRequests: () => prompts.withdrawAll(),
-      lane: liveLane,
-      agentName,
-      now,
-      settle: onSettled
-    }),
-    restoreSkipped
-  })
   const reading = liveLane
   const unbind = acquire.events?.bindReadingControl?.({
     pauseReading: () => connection.pauseReading(),
@@ -150,6 +137,19 @@ export async function initializeAcpStructuredSession(
     liveLane.apply(acpSessionNotRestoredRow(key, started.sessionId, agentName))
   }
   assertStarting()
+  Object.assign(child, {
+    childStops,
+    lane: liveLane,
+    turns: new AcpStructuredTurns({
+      connection,
+      withdrawRequests: () => prompts.withdrawAll(),
+      lane: liveLane,
+      agentName,
+      now,
+      settle: onSettled
+    }),
+    restoreSkipped
+  })
   if (!isAcpReadySession(child)) {
     throw new Error('ACP session did not open')
   }

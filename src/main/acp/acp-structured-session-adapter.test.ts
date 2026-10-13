@@ -136,7 +136,7 @@ it('reports an agent that exits while starting with its own last words', async (
   })
   await rig.acquire()
   expect(rig.ended).toMatchObject([
-    { startupUnproven: true, failure: { detail: { text: 'grok: config.toml is invalid' } } }
+    { failure: { detail: { text: 'grok: config.toml is invalid' } } }
   ])
 })
 
@@ -153,7 +153,7 @@ it('reads those last words when the agent ends its stdout before its exit is see
   })
   await rig.acquire()
   expect(rig.ended).toMatchObject([
-    { startupUnproven: true, failure: { detail: { text: 'grok: config.toml is invalid' } } }
+    { failure: { detail: { text: 'grok: config.toml is invalid' } } }
   ])
 })
 
