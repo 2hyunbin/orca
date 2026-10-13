@@ -19,6 +19,13 @@ import { createElectronHomeIsolation } from './helpers/electron-home-isolation'
 import { expect, forwardElectronProcessLogs, test } from './helpers/orca-app'
 import { RuntimeClient } from '../../src/cli/runtime/client'
 import { createRuntimeDesktopPairingOffer } from './helpers/paired-electron-client'
+import { encodePairingOffer } from '../../src/shared/pairing'
+import { listEnvironments } from '../../src/shared/runtime-environment-store'
+import {
+  addWslHostEnvironment,
+  findWslHostDeployment
+} from '../../src/shared/runtime-environment-wsl-host-store'
+import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../src/shared/wsl-host-internal-gate'
 import { openSidebarProjectDialog } from './helpers/sidebar-project-dialog'
 import { ensureTerminalVisible, waitForSessionReady } from './helpers/store'
 import {
@@ -36,19 +43,28 @@ const LEGACY_DISTRO = { name: 'Legacy', state: 'stopped', version: 1 }
 async function launchDesktopWithFakeWsl(
   pairingCode: string,
   testInfo: Parameters<typeof forwardElectronProcessLogs>[1],
-  fakeOverrides: Record<string, unknown> = {}
-): Promise<{ app: ElectronApplication; page: Page; dispose: () => Promise<void> }> {
+  fakeOverrides: Record<string, unknown> = {},
+  options: { internalGate?: boolean; beforeLaunch?: (userDataDir: string) => void } = {}
+): Promise<{
+  app: ElectronApplication
+  page: Page
+  userDataDir: string
+  dispose: () => Promise<void>
+}> {
   const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-wsl-desktop-'))
   writeFileSync(
     path.join(userDataDir, 'orca-data.json'),
     `${JSON.stringify(getE2ECompletedOnboardingProfile(), null, 2)}\n`
   )
+  options.beforeLaunch?.(userDataDir)
   const { ELECTRON_RUN_AS_NODE: _unused, ...cleanEnv } = process.env
   void _unused
   const isolation = createElectronHomeIsolation({
     inheritedEnv: cleanEnv,
     launchEnv: {},
     extraEnv: {
+      // WSL hosts exist only behind this internal gate; the gated-off test leaves it closed.
+      ...(options.internalGate === false ? {} : { [WSL_HOSTS_INTERNAL_GATE_ENV]: '1' }),
       ORCA_E2E_FAKE_WSL_HOSTS: JSON.stringify({
         distros: [
           { name: 'Ubuntu', state: 'running', version: 2 },
@@ -74,7 +90,7 @@ async function launchDesktopWithFakeWsl(
     const page = await app.firstWindow({ timeout: 120_000 })
     await page.waitForLoadState('domcontentloaded')
     await waitForSessionReady(page)
-    return { app, page, dispose }
+    return { app, page, userDataDir, dispose }
   } catch (error) {
     await dispose()
     throw error
@@ -398,5 +414,86 @@ test('a build without the WSL host server files says so instead of failing an ad
     await page.screenshot({ path: testInfo.outputPath('wsl-add-host-server-files-missing.png') })
   } finally {
     await desktop.dispose()
+  }
+})
+
+test('with the internal gate closed, no WSL host surface shows and a saved host stays untouched', async ({
+  orcaPage
+}, testInfo) => {
+  test.setTimeout(180_000)
+  await waitForSessionReady(orcaPage)
+  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
+  const logDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-wsl-gate-'))
+  const connectLogFile = path.join(logDir, 'connects.log')
+  const desktop = await launchDesktopWithFakeWsl(
+    offer.pairingUrl,
+    testInfo,
+    { connectLogFile },
+    {
+      internalGate: false,
+      // A host saved during internal testing: it must be ignored, never deleted.
+      beforeLaunch: (userDataDir) =>
+        addWslHostEnvironment(userDataDir, {
+          id: WSL_ENVIRONMENT_ID,
+          name: WSL_HOST_LABEL,
+          pairingCode: encodePairingOffer({
+            v: 2,
+            endpoint: 'ws://127.0.0.1:42000',
+            deviceToken: 'gated-token',
+            publicKeyB64: Buffer.alloc(32, 7).toString('base64')
+          }),
+          record: {
+            kind: 'wsl',
+            distro: 'Ubuntu',
+            distroId: '0e3a7f2c-1b4d-4c5e-9f60-7a8b9c0d1e2f',
+            localPort: 42000,
+            remotePort: 6768
+          }
+        })
+    }
+  )
+  try {
+    const { page, userDataDir } = desktop
+    // The user-level setting being on must not reveal anything behind the closed gate.
+    await setWslHostsEnabled(page, true)
+    expect(await page.evaluate(() => window.api.runtimeEnvironments.wslHosts)).toBeUndefined()
+    const listed = await page.evaluate(() => window.api.runtimeEnvironments.list())
+    expect(listed.map((environment) => environment.id)).not.toContain(WSL_ENVIRONMENT_ID)
+
+    await openSidebarProjectDialog(page)
+    await page
+      .getByRole('dialog', { name: /Add a project/i })
+      .getByRole('combobox')
+      .click()
+    await expect(page.locator('[cmdk-item]').filter({ hasText: WSL_HOST_LABEL })).toHaveCount(0)
+    await page.locator('[cmdk-item]').filter({ hasText: 'Add remote host' }).click()
+    await expect(page.getByRole('button', { name: /Add SSH host/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Add WSL distro/ })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+
+    await page.evaluate(() => {
+      const state = window.__store?.getState()
+      state?.openSettingsPage()
+      state?.openSettingsTarget({ pane: 'experimental', repoId: null })
+    })
+    await expect(page.getByText('Cloud VM').first()).toBeVisible()
+    await expect(page.getByText('WSL distros as hosts')).toHaveCount(0)
+    await page.evaluate(() =>
+      window.__store?.getState().openSettingsTarget({ pane: 'servers', repoId: null })
+    )
+    await expect(page.getByText('No saved servers.')).toBeVisible()
+    await expect(page.locator('[data-settings-section="wsl-hosts"]')).toHaveCount(0)
+    await expect(page.getByText(WSL_HOST_LABEL)).toHaveCount(0)
+
+    expect(fakeWslConnects(connectLogFile)).toEqual([])
+    expect(listEnvironments(userDataDir).map((environment) => environment.id)).toContain(
+      WSL_ENVIRONMENT_ID
+    )
+    expect(findWslHostDeployment(userDataDir, WSL_ENVIRONMENT_ID)).not.toBeNull()
+    await page.screenshot({ path: testInfo.outputPath('wsl-hosts-gated-off-settings.png') })
+  } finally {
+    await desktop.dispose()
+    rmSync(logDir, { recursive: true, force: true })
   }
 })
