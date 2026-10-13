@@ -122,7 +122,10 @@ for (const scenario of ['single', 'children', 'batch', 'known-dirty'] as const) 
       const started = performance.now()
       while (performance.now() - started < 2400) {
         const dialog = document.querySelector('[data-slot="dialog-content"]')
-        const button = dialog?.querySelector('[data-slot="dialog-footer"] button:last-child')
+        // Why not the last button: force delete is a split button whose menu chevron comes last.
+        const button = Array.from(
+          dialog?.querySelectorAll('[data-slot="dialog-footer"] button:not([aria-haspopup])') ?? []
+        ).at(-1)
         if (!(dialog instanceof HTMLElement) || !(button instanceof HTMLElement)) {
           throw new Error('Missing dialog')
         }
