@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 2,
+  "execution": "sandboxed-ui",
+  "pluginApi": 1,
+  "publisher": "stablyai",
+  "id": "orca-viewer-stl",
+  "name": "STL models",
+  "version": "1.0.0",
+  "engines": { "orca": ">=1.4.214" },
+  "description": "Open binary STL models with orbit and zoom. Read only. ASCII STL, per-facet color and material extensions are unsupported.",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "stl",
+        "displayName": "STL models",
+        "entry": "dist/stl.worker.js",
+        "selector": [{ "filenamePattern": "*.stl" }],
+        "mode": "readonly",
+        "rendering": "host-ui"
+      }
+    ]
+  }
+}

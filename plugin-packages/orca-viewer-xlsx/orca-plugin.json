@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 2,
+  "execution": "sandboxed-ui",
+  "pluginApi": 1,
+  "publisher": "stablyai",
+  "id": "orca-viewer-xlsx",
+  "name": "XLSX tables",
+  "version": "1.0.0",
+  "engines": { "orca": ">=1.4.214" },
+  "description": "Open worksheets, values, dates and cached formula results. Read only; formulas are not calculated. Macros and external workbook links are unsupported.",
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "xlsx",
+        "displayName": "XLSX tables",
+        "entry": "dist/xlsx.worker.js",
+        "selector": [{ "filenamePattern": "*.xlsx" }],
+        "mode": "readonly",
+        "rendering": "host-ui"
+      }
+    ]
+  }
+}

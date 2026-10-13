@@ -1,0 +1,27 @@
+{
+  "name": "@orca-plugins/viewer-xlsx",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Read-only XLSX tables for Orca",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-worker.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fflate": "0.8.3",
+    "sax": "1.6.1"
+  },
+  "devDependencies": {
+    "@orca/plugin-sdk": "file:vendor/orca-plugin-sdk-1.0.0.tgz",
+    "@types/sax": "1.2.7",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
