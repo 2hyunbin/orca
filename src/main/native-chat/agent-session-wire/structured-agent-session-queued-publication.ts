@@ -10,7 +10,6 @@ import {
   type AgentSessionQueuePause
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import type { QueuedMessageRow } from '../agent-session-journal/queued-message-table'
 import {
   queuePauseLiftOnItsWay,
   resumableQueuePause
@@ -45,28 +44,27 @@ export function structuredQueueSendGate(
 /** Waiting and returned rows only. `paused` is a per-card hold (a failed conversion); a person's
  *  Stop pauses the queue, published once beside it. */
 function computePublishedQueuedMessages(journal: AgentSessionJournal): AgentSessionQueuedMessage[] {
-  return journal.queuedMessages.list().flatMap((row) => publishedQueuedMessage(row) ?? [])
-}
-
-/** The card a row publishes as; null for a row that has left the queue. */
-export function publishedQueuedMessage(row: QueuedMessageRow): AgentSessionQueuedMessage | null {
-  if (row.state !== 'waiting' && row.state !== 'returned') {
-    return null
+  const published: AgentSessionQueuedMessage[] = []
+  for (const row of journal.queuedMessages.list()) {
+    if (row.state !== 'waiting' && row.state !== 'returned') {
+      continue
+    }
+    const held = row.state === 'waiting' && row.holdReason !== null
+    published.push({
+      messageId: row.messageId,
+      position: row.position,
+      body: row.body,
+      state: row.state,
+      ...(held ? { paused: true as const } : {}),
+      // The stored reason is a typed marker; an unknown one reads as a plain hold.
+      ...(held && isPublishedPausedReason(row.holdReason) ? { pausedReason: row.holdReason } : {}),
+      ...(row.state === 'returned' ? { returnedReason: row.returnedReason } : {}),
+      ...(row.state === 'returned' && row.returnedRejection
+        ? { returnedRejection: row.returnedRejection }
+        : {})
+    })
   }
-  const held = row.state === 'waiting' && row.holdReason !== null
-  return {
-    messageId: row.messageId,
-    position: row.position,
-    body: row.body,
-    state: row.state,
-    ...(held ? { paused: true as const } : {}),
-    // The stored reason is a typed marker; an unknown one reads as a plain hold.
-    ...(held && isPublishedPausedReason(row.holdReason) ? { pausedReason: row.holdReason } : {}),
-    ...(row.state === 'returned' ? { returnedReason: row.returnedReason } : {}),
-    ...(row.state === 'returned' && row.returnedRejection
-      ? { returnedRejection: row.returnedRejection }
-      : {})
-  }
+  return published
 }
 
 function isPublishedPausedReason(

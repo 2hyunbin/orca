@@ -5,7 +5,7 @@ import type {
   AgentJournalSnapshot
 } from '../../../shared/agent-session-journal-types'
 import { readAgentSessionConversationOutline } from './agent-session-conversation-outline'
-import { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES } from './agent-session-history-page-bounds'
+import { HISTORY_PAGE_CONTENT_BUDGET_BYTES } from './agent-session-history-page-bounds'
 
 function prompt(sequence: number, text: string): AgentJournalRenderItem {
   return {
@@ -99,13 +99,13 @@ describe('conversation outline read', () => {
     )
   })
 
-  it("stays inside a page's share of the relay frame for a journal far past it", () => {
+  it('stays inside the history page budget for a journal far past it', () => {
     // ~10k prompts of 1 KB each: an order of magnitude past the budget at full preview.
     const items = Array.from({ length: 10_000 }, (_, index) =>
       prompt(index + 1, `${index} ${'y'.repeat(1_000)}`)
     )
     const outline = readAgentSessionConversationOutline(snapshot(items))
-    expect(replyBytes(outline)).toBeLessThanOrEqual(AGENT_SESSION_HISTORY_MAX_PAGE_BYTES)
+    expect(replyBytes(outline)).toBeLessThanOrEqual(HISTORY_PAGE_CONTENT_BUDGET_BYTES)
     expect(outline.entries.at(-1)?.itemId).toBe('user-10000')
   })
 })

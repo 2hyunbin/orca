@@ -71,7 +71,7 @@ afterEach(async () => {
 
 it.each([1, 100, 200])('serializes each of %i unchanged forward page items once', async (count) => {
   const cursor = journal.cursor()
-  await appendItems(count, 'x'.repeat(2_000))
+  await appendItems(count, 'x'.repeat(8_000))
   const snapshot = journal.snapshot()
   const stringify = JSON.stringify
   // Method-shaped type: the JSON.stringify overloads split on replacer shape and reject a forwarded one.

@@ -10,13 +10,13 @@ import { boundJournalKeyComponent } from '../../../shared/agent-session-journal-
 import { MAX_DIFF_CHARS, rendersAsDiff } from '../../../shared/native-chat-diff'
 import { MAX_TOOL_DETAIL_LENGTH } from '../../../shared/native-chat-tool-summary'
 import {
-  HISTORY_PAGE_CONTENT_BUDGET_BYTES,
+  BOUNDED_FRAME_CONTENT_BUDGET_BYTES,
   oversizedHistoryItem
 } from './agent-session-history-page-bounds'
 import { cutLongStrings, jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
 
 /** One row's share of a page, so a page always carries several rows. */
-export const BOUNDED_FRAME_ROW_BYTES = HISTORY_PAGE_CONTENT_BUDGET_BYTES / 8
+export const BOUNDED_FRAME_ROW_BYTES = BOUNDED_FRAME_CONTENT_BUDGET_BYTES / 8
 
 /** A tool's output as the phone shows it: a diff in full, anything else to its detail length. */
 function displayedOutput(payload: AgentJournalBoundedPayload): AgentJournalBoundedPayload {

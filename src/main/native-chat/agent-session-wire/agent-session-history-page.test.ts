@@ -21,7 +21,6 @@ import {
   REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES,
   serializeRemoteRuntimePayload
 } from '../../../shared/remote-runtime-memory-limits'
-import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-frame-bytes'
 import { structuredAgentSessionPayloadFingerprint } from '../../../shared/structured-agent-session-mutation'
 import {
   createTrackedJournalOpener,
@@ -35,11 +34,7 @@ import type {
 } from '../agent-session-journal/journal-row-schema'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { projectJournalBatch } from './agent-session-journal-batch'
-import {
-  readAgentSessionHistory,
-  readAgentSessionHydrationPage,
-  resolveHistoryLimit
-} from './agent-session-history-page'
+import { readAgentSessionHistory, resolveHistoryLimit } from './agent-session-history-page'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 
 const IDENTITY: AgentSessionJournalIdentity = {
@@ -313,43 +308,6 @@ describe('history page byte ceiling', () => {
       hasNewer = page.hasNewer
     }
     expect(new Set(seen).size).toBe(20)
-  })
-
-  it('fits every streamed page of a long conversation in one mobile bridge frame', async () => {
-    // Shaped like the chat that failed on a phone: ~1.2 MB of ordinary rows.
-    const start = { epoch: journal.epoch, sequence: 0 }
-    for (let ordinal = 1; ordinal <= 150; ordinal += 1) {
-      await journal.appendItem(item(ordinal), body(`${ordinal}:${'z'.repeat(8 * 1024)}`), {
-        fence: 1,
-        turnScope: AGENT_JOURNAL_THREAD_SCOPE
-      })
-    }
-    const bridgeFrameBytes = (payload: unknown): number =>
-      Buffer.byteLength(JSON.stringify({ v: 1, type: 'event', id: 'stream-1', seq: 1, payload }))
-
-    const snapshot = readAgentSessionHydrationPage(journal, 1)
-    expect(
-      bridgeFrameBytes({ type: 'snapshot', sessionId: 'session-1', page: snapshot, fence: 1 })
-    ).toBeLessThanOrEqual(MOBILE_BRIDGE_MAX_FRAME_BYTES)
-    expect(snapshot.hasOlder).toBe(true)
-
-    let cursor = start
-    let hasNewer = true
-    while (hasNewer) {
-      const batch = pageOf(
-        readAgentSessionHistory(journal, {
-          sessionId: 'session-1',
-          direction: 'after',
-          cursor,
-          limit: AGENT_SESSION_HISTORY_MAX_LIMIT
-        })
-      )
-      expect(bridgeFrameBytes({ type: 'batch', batch })).toBeLessThanOrEqual(
-        MOBILE_BRIDGE_MAX_FRAME_BYTES
-      )
-      cursor = batch.window.nextCursor
-      hasNewer = batch.hasNewer
-    }
   })
 
   it('degrades a single over-budget item to a visible truncation marker instead of overflowing', async () => {

@@ -1,12 +1,9 @@
 import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
 import { AGENT_SESSION_HISTORY_MAX_LIMIT } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import {
-  HISTORY_PAGE_CONTENT_BUDGET_BYTES,
-  oversizedHistoryItem
-} from './agent-session-history-page-bounds'
+import { oversizedHistoryItem } from './agent-session-history-page-bounds'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
-import { subscriberItemForm } from './agent-session-bounded-frames'
+import { subscriberHistoryReader } from './agent-session-bounded-frames'
 import type { SubscriberDeliveryPort } from './agent-session-subscriber-catch-up'
 import type { Subscriber } from './structured-agent-session-subscribers'
 import { isStructuredAgentSessionStopNote } from './structured-agent-session-command-turn'
@@ -32,7 +29,7 @@ export function refreshDerivedStopNotes(
     return
   }
   const snapshot = journal.snapshot()
-  const form = subscriberItemForm(subscriber)
+  const { form, budgetBytes } = subscriberHistoryReader(subscriber)
   let pending: AgentJournalRenderItem[] = []
   let bytes = 0
   const emit = (): void => {
@@ -61,13 +58,11 @@ export function refreshDerivedStopNotes(
     }
     const formed = form(item)
     const projectedBytes = Buffer.byteLength(JSON.stringify(formed), 'utf8')
-    const bounded =
-      projectedBytes > HISTORY_PAGE_CONTENT_BUDGET_BYTES ? oversizedHistoryItem(formed) : formed
+    const bounded = projectedBytes > budgetBytes ? oversizedHistoryItem(formed) : formed
     const itemBytes = Buffer.byteLength(JSON.stringify(bounded), 'utf8') + 1
     if (
       pending.length > 0 &&
-      (pending.length === AGENT_SESSION_HISTORY_MAX_LIMIT ||
-        bytes + itemBytes > HISTORY_PAGE_CONTENT_BUDGET_BYTES)
+      (pending.length === AGENT_SESSION_HISTORY_MAX_LIMIT || bytes + itemBytes > budgetBytes)
     ) {
       emit()
     }

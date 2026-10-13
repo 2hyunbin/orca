@@ -1,61 +1,41 @@
-// The one bound on a conversation's queue: the bytes its cards publish. There is no card count
-// limit; the cards ride every hydrating frame and history answer.
+// The one bound on a conversation's queue: the bytes its unsettled cards publish. There is no
+// card count limit; the cards' bodies ride every hydrating frame and history answer.
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type {
-  AgentSessionQueuedMessage,
-  AgentSessionWireRefusal
-} from '../../../shared/agent-session-wire'
+import type { AgentSessionWireRefusal } from '../../../shared/agent-session-wire'
 import { refuse } from '../../../shared/agent-session-wire-refusals'
+import { REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES } from '../../../shared/remote-runtime-memory-limits'
 import { MAX_PROMPT_BYTES } from '../../../shared/rpc-contract/structured-agent-session-params'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import { HISTORY_PAGE_CONTENT_BUDGET_BYTES } from './agent-session-history-page-bounds'
-import { jsonBytes } from './json-string-shortening'
-import { publishedQueuedMessage } from './structured-agent-session-queued-publication'
+import { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES } from './agent-session-history-page-bounds'
+import { unsettledQueuedMessages } from './structured-agent-session-queued-stop'
 
-/** A frame bound, not a queue limit: admitted cards fit the rows' share of one bounded frame, so a
- *  phone receives every card whole. Whole cards are counted, so many small cards are bounded as
- *  surely as a few large ones. */
-export const QUEUED_MESSAGES_PUBLISHED_MAX_BYTES = HISTORY_PAGE_CONTENT_BUDGET_BYTES
+/** A frame bound, not a queue limit: every unsettled card's body rides each hydrating frame and
+ *  history answer beside a full page, and a frame past the outbound cap closes the remote session. */
+export const QUEUED_MESSAGES_PUBLISHED_MAX_BYTES =
+  (REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES - AGENT_SESSION_HISTORY_MAX_PAGE_BYTES) / 2
 
 /** Kept free of other agents' cards, so they alone never refuse a person's message: the largest
- *  message's blocks plus its card's own fields. */
+ *  message's blocks plus its body's own fields. */
 export const QUEUED_MESSAGES_PERSON_RESERVE_BYTES = MAX_PROMPT_BYTES + 1024
 
-/** Every card the queue publishes now or can publish again without passing admission: waiting and
- *  returned cards, and sent ones whose delivery is not yet accepted, which a Stop or a restart puts
- *  back in line. */
-function cardsInLine(journal: AgentSessionJournal): AgentSessionQueuedMessage[] {
-  return journal.queuedMessages.list().flatMap((row) => {
-    if (row.state !== 'dispatched') {
-      return publishedQueuedMessage(row) ?? []
-    }
-    const delivery = row.consumedAs === null ? undefined : journal.submission(row.consumedAs)
-    return delivery?.dispatchState === 'accepted'
-      ? []
-      : (publishedQueuedMessage({ ...row, state: 'waiting' }) ?? [])
-  })
-}
-
-/** Refused readably rather than trimmed, when the cards in line would outgrow their frame room.
- *  Another agent's card must also leave the person's reserve free. A card already in line is an
- *  edit: the new body takes the old one's place. */
+/** Refused readably rather than trimmed, when the published cards would outgrow their frame room.
+ *  Another agent's card must also leave the person's reserve free. `replacing` is an edit's own
+ *  card, whose old body the new one takes the place of. */
 export function queuedMessagesPublishedBytesRefusal(
   journal: AgentSessionJournal,
-  card: QueuedCardDraft,
-  fromPerson: boolean
+  body: AgentJournalMessageItem,
+  fromPerson: boolean,
+  replacing?: string
 ): AgentSessionWireRefusal | null {
-  const inLine = cardsInLine(journal)
-  const edited = inLine.some((other) => other.messageId === card.messageId)
-  const published = edited
-    ? inLine.map((other) =>
-        other.messageId === card.messageId ? { ...other, body: card.body } : other
-      )
-    : [...inLine, newQueuedCard(card)]
+  const bytes = unsettledQueuedMessages(journal).reduce(
+    (sum, row) => (row.messageId === replacing ? sum : sum + publishedBodyBytes(row.body)),
+    publishedBodyBytes(body)
+  )
   const limit = fromPerson
     ? QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
     : QUEUED_MESSAGES_PUBLISHED_MAX_BYTES - QUEUED_MESSAGES_PERSON_RESERVE_BYTES
-  return jsonBytes(published) > limit
+  return bytes > limit
     ? refuse(
         'agent_session_operation_invalid',
         { reason: 'queueTooLarge' },
@@ -64,11 +44,6 @@ export function queuedMessagesPublishedBytesRefusal(
     : null
 }
 
-type QueuedCardDraft = { messageId: string; body: AgentJournalMessageItem }
-
-/** A new card: waiting, at the widest position. */
-export function newQueuedCard(
-  card: QueuedCardDraft
-): QueuedCardDraft & { position: number; state: 'waiting' } {
-  return { ...card, position: Number.MAX_SAFE_INTEGER, state: 'waiting' }
+function publishedBodyBytes(body: AgentJournalMessageItem): number {
+  return Buffer.byteLength(JSON.stringify(body), 'utf8')
 }

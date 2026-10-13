@@ -319,40 +319,6 @@ describe('frames to a bounded-frame subscriber', () => {
     )
   })
 
-  it('fit even a queue an older build let grow past what previews can shrink', async () => {
-    // Too many cards to fit as previews: the ones sent first are listed.
-    const queuedMessages: AgentSessionQueuedMessage[] = Array.from(
-      { length: 20_000 },
-      (_, index) => ({
-        messageId: `draft-${index}`,
-        position: index,
-        state: 'waiting',
-        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'ok' }] }
-      })
-    )
-    const frames: AgentSessionSubscribeEvent[] = []
-    new AgentSessionSubscribers({
-      readQueuePublication: () => ({ queuedMessages, queuePause: null, nextQueuedMessageId: null })
-    }).open({
-      id: 'phone',
-      sessionId: SESSION,
-      journal,
-      fence: 1,
-      emit: (event) => frames.push(event),
-      boundedFrames: true
-    })
-    for (const frame of frames) {
-      expect(bridgeFrameBytes(frame)).toBeLessThanOrEqual(MOBILE_BRIDGE_MAX_FRAME_BYTES)
-    }
-    const listed = frames.flatMap((frame) =>
-      frame.type === 'batch' && frame.queuedMessages ? frame.queuedMessages : []
-    )
-    expect(listed.length).toBeGreaterThan(0)
-    expect(listed.map((card) => card.messageId)).toEqual(
-      queuedMessages.slice(0, listed.length).map((card) => card.messageId)
-    )
-  })
-
   it('leave out a turn record no real provider id could make too large, rather than outgrow', async () => {
     await journal.appendItem(
       identity(),

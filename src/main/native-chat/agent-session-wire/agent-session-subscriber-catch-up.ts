@@ -16,7 +16,7 @@ import {
   createAgentSessionCatchUpReader,
   readAgentSessionHydrationPage
 } from './agent-session-history-page'
-import { subscriberItemForm } from './agent-session-bounded-frames'
+import { subscriberHistoryReader } from './agent-session-bounded-frames'
 import {
   subscriberCommandsChanged,
   subscriberQueuedMessagesChanged,
@@ -59,8 +59,8 @@ export function deliverToSubscriber(
     emitCaughtUp(port, subscriber, emitCheckpoint, shared)
     return
   }
-  const form = subscriberItemForm(subscriber)
-  const readPage = createAgentSessionCatchUpReader(journal, form)
+  const reader = subscriberHistoryReader(subscriber)
+  const readPage = createAgentSessionCatchUpReader(journal, reader)
   while (true) {
     const result = readPage({
       sessionId: subscriber.sessionId,
@@ -90,7 +90,7 @@ export function deliverToSubscriber(
     // A phone's app ends a stream that outruns its unacked window, so a gap of more than one page
     // arrives as the newest page instead; older rows load on scroll.
     if (page.hasNewer && subscriber.boundedFrames) {
-      const tail = readAgentSessionHydrationPage(journal, subscriber.fence, form)
+      const tail = readAgentSessionHydrationPage(journal, subscriber.fence, reader)
       port.emit(subscriber, {
         type: 'snapshot',
         sessionId: subscriber.sessionId,

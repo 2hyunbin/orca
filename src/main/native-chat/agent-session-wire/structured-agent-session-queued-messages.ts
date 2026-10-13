@@ -216,7 +216,7 @@ export async function maybeQueueStructuredAgentSessionSend(
   }
   const refusal = queuedMessagesPublishedBytesRefusal(
     ctx.journal,
-    { messageId: clientMessageId, body: params.body },
+    params.body,
     params.userSend === true || params.personsMessage === true
   )
   if (refusal) {

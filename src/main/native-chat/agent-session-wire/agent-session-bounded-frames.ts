@@ -15,16 +15,21 @@ import { boundedFrameItem } from './agent-session-bounded-frame-item'
 import { boundedQueuePublication } from './agent-session-bounded-queue'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
 import {
-  asStoredHistoryItem,
-  HISTORY_PAGE_CONTENT_BUDGET_BYTES,
-  type HistoryItemForm
+  BOUNDED_FRAME_CONTENT_BUDGET_BYTES,
+  STORED_HISTORY_READER,
+  type HistoryReader
 } from './agent-session-history-page-bounds'
 import { jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
 
+const BOUNDED_FRAME_READER: HistoryReader = {
+  form: boundedFrameItem,
+  budgetBytes: BOUNDED_FRAME_CONTENT_BUDGET_BYTES
+}
+
 /** How a subscriber's rows are read, and so how its pages are sized. */
-export function subscriberItemForm(subscriber: { boundedFrames: boolean }): HistoryItemForm {
-  return subscriber.boundedFrames ? boundedFrameItem : asStoredHistoryItem
+export function subscriberHistoryReader(subscriber: { boundedFrames: boolean }): HistoryReader {
+  return subscriber.boundedFrames ? BOUNDED_FRAME_READER : STORED_HISTORY_READER
 }
 
 /** The latest turn and the activity line are each a few hundred bytes, their ids and text bounded
@@ -89,7 +94,7 @@ function withoutOlderRows(state: AgentSessionBackgroundTaskState): AgentSessionB
   for (const list of ['settledTasks', 'children', 'tasks'] as const) {
     while (
       (fitted[list]?.length ?? 0) > 0 &&
-      jsonBytes(fitted) > HISTORY_PAGE_CONTENT_BUDGET_BYTES
+      jsonBytes(fitted) > BOUNDED_FRAME_CONTENT_BUDGET_BYTES
     ) {
       const rows = fitted[list] ?? []
       fitted = { ...fitted, [list]: rows.slice(Math.ceil(rows.length / 2)), incomplete: true }
@@ -106,8 +111,8 @@ export function boundedBackgroundTasks(
     return null
   }
   return (
-    shortenJsonStringsToFit(state, HISTORY_PAGE_CONTENT_BUDGET_BYTES) ??
-    shortenJsonStringsToFit(withoutOlderRows(state), HISTORY_PAGE_CONTENT_BUDGET_BYTES) ?? {
+    shortenJsonStringsToFit(state, BOUNDED_FRAME_CONTENT_BUDGET_BYTES) ??
+    shortenJsonStringsToFit(withoutOlderRows(state), BOUNDED_FRAME_CONTENT_BUDGET_BYTES) ?? {
       state: state.state,
       incomplete: true
     }

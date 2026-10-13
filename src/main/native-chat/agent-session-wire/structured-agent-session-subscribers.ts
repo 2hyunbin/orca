@@ -22,7 +22,7 @@ import { deliverToSubscriber } from './agent-session-subscriber-catch-up'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
-import { subscriberItemForm } from './agent-session-bounded-frames'
+import { subscriberHistoryReader } from './agent-session-bounded-frames'
 import { rememberSessionActivity } from './structured-agent-session-activity-retention'
 import { refreshDerivedStopNotes } from './agent-session-stop-note-refresh'
 
@@ -114,7 +114,7 @@ export class AgentSessionSubscribers {
       const page = readAgentSessionHydrationPage(
         input.journal,
         input.fence,
-        subscriberItemForm(subscriber)
+        subscriberHistoryReader(subscriber)
       )
       this.emit(subscriber, {
         type: 'snapshot',
@@ -171,7 +171,7 @@ export class AgentSessionSubscribers {
     let storedPage: AgentSessionHistoryPage | undefined
     let boundedPage: AgentSessionHistoryPage | undefined
     const read = (subscriber: Subscriber): AgentSessionHistoryPage =>
-      readAgentSessionHydrationPage(journal, fence, subscriberItemForm(subscriber))
+      readAgentSessionHydrationPage(journal, fence, subscriberHistoryReader(subscriber))
     const pageFor = (subscriber: Subscriber): AgentSessionHistoryPage =>
       subscriber.boundedFrames
         ? (boundedPage ??= read(subscriber))

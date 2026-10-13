@@ -18,9 +18,7 @@ import {
   hostTestMessage,
   hostTestOperationId
 } from './structured-agent-session-host-test-data'
-import { jsonBytes } from './json-string-shortening'
 import {
-  newQueuedCard,
   QUEUED_MESSAGES_PERSON_RESERVE_BYTES,
   QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
 } from './structured-agent-session-queued-published-bytes'
@@ -111,9 +109,7 @@ describe('a /compact that waits in line', () => {
     await rig.workingSend()
     const backgroundRoom =
       QUEUED_MESSAGES_PUBLISHED_MAX_BYTES - QUEUED_MESSAGES_PERSON_RESERVE_BYTES
-    const overhead = jsonBytes([
-      newQueuedCard({ messageId: hostTestOperationId(), body: hostTestMessage('') })
-    ])
+    const overhead = Buffer.byteLength(JSON.stringify(hostTestMessage('')), 'utf8')
     const background = rig.send('x'.repeat(backgroundRoom - overhead), 'queue-if-active', {
       internal: true
     })

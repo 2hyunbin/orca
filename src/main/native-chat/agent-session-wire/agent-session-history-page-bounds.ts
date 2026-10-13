@@ -11,17 +11,19 @@ import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-fra
 import { agentSessionHostStatusBody } from '../../../shared/agent-session-host-status-rows'
 import { subagentFoldKey, subagentItemBlock } from '../../../shared/native-chat-subagent-items'
 
-/** A page's share of one relay frame; page content keeps to the tighter budget below. */
 export const AGENT_SESSION_HISTORY_MAX_PAGE_BYTES = REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES / 2
 
-/** Everything a history frame carries beside its rows: the bridge envelope, ids and cursors, the
- *  subagent roster, the latest turn and the activity line. A bounded-frame reader's frame keeps
- *  each of those to its own bound, and their sum to this. */
+const HISTORY_PAGE_ENVELOPE_RESERVE_BYTES = 64 * 1024
+
+export const HISTORY_PAGE_CONTENT_BUDGET_BYTES =
+  AGENT_SESSION_HISTORY_MAX_PAGE_BYTES - HISTORY_PAGE_ENVELOPE_RESERVE_BYTES
+
+/** Everything a bounded frame carries beside its rows: the bridge envelope, ids and cursors, the
+ *  subagent roster, the latest turn and the activity line, each held to its own bound. */
 export const FRAME_METADATA_CEILING_BYTES = 64 * 1024
 
-// Pages ride subscribe frames, which a phone's app ends whole when one outgrows its bridge frame;
-// a smaller page only means one more Load-earlier read.
-export const HISTORY_PAGE_CONTENT_BUDGET_BYTES =
+/** The rows' share of a phone's bridge frame, which its app ends a stream over. */
+export const BOUNDED_FRAME_CONTENT_BUDGET_BYTES =
   MOBILE_BRIDGE_MAX_FRAME_BYTES - FRAME_METADATA_CEILING_BYTES
 
 export function historyEntryBytes(
@@ -63,11 +65,17 @@ export function oversizedHistoryItem(item: AgentJournalRenderItem): AgentJournal
   }
 }
 
-/** How a reader receives each item; a bounded-frame reader gets the form that fits its frame. A
- *  page is measured in that form, so it carries what it will actually send. */
-export type HistoryItemForm = (item: AgentJournalRenderItem) => AgentJournalRenderItem
+/** How a reader receives each item, and the bytes its page may hold of them. A page is measured
+ *  in that form, so it carries what it will actually send. */
+export type HistoryReader = {
+  form: (item: AgentJournalRenderItem) => AgentJournalRenderItem
+  budgetBytes: number
+}
 
-export const asStoredHistoryItem: HistoryItemForm = (item) => item
+export const STORED_HISTORY_READER: HistoryReader = {
+  form: (item) => item,
+  budgetBytes: HISTORY_PAGE_CONTENT_BUDGET_BYTES
+}
 
 /** Rows are put in `form` only as the page takes them. */
 export function boundHistoryItemsByBytes(
@@ -75,7 +83,7 @@ export function boundHistoryItemsByBytes(
   keep: 'newest' | 'oldest',
   submissionBytes: ReadonlyMap<string, number>,
   maxBytes: number,
-  form: HistoryItemForm = asStoredHistoryItem
+  form: HistoryReader['form'] = STORED_HISTORY_READER.form
 ): { items: AgentJournalRenderItem[]; dropped: number } {
   const ordered = groupItemsBySequence(items, keep)
   const kept: AgentJournalRenderItem[][] = []

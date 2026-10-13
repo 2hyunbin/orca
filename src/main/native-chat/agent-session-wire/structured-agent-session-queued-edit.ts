@@ -47,8 +47,9 @@ export function updateQueuedStructuredAgentMessage(
       // Editing an agent's card is still the person's action, so it may use their reserve.
       const refusal = queuedMessagesPublishedBytesRefusal(
         ctx.journal,
-        { messageId: fields.messageId, body: decision.body },
-        true
+        decision.body,
+        true,
+        fields.messageId
       )
       return refusal ? { ok: false, refusal } : { ok: true, value: await queued.update(fields) }
     },
