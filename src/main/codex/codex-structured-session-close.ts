@@ -68,7 +68,7 @@ export function handleCodexSessionExit(input: {
   // Nothing can echo for this child any more; the journal's pending-submission
   // recovery is what settles the sends these were armed for.
   session.dispatchEchoes.clear()
-  session.backgroundTasks.clear()
+  session.backgroundTasks.clear(event.processExit)
   // Every close path funnels here, so the session's children end with it on each one.
   session.backgroundTasks.publishChildWork()
   session.unbindReadingControl?.()

@@ -136,6 +136,19 @@ describe('Codex child-work evidence', () => {
     expect(log.flat().filter((edge) => edge.type === 'live')).toHaveLength(1)
   })
 
+  it('keeps usage that arrives before the child is announced, and never credits the parent its own', () => {
+    const { send, byKind } = harness()
+    const usage = (threadId: string, totalTokens: number): CodexBackgroundTaskEvent => ({
+      method: 'thread/tokenUsage/updated',
+      threadId,
+      params: { threadId, tokenUsage: { total: { totalTokens } } }
+    })
+    send(turn('turn/started', PRIMARY, PARENT_TURN), usage(PRIMARY, 9_000), usage(CHILD, 1_500))
+    expect(byKind('agent')).toEqual([])
+    send(spawned(), turn('turn/started', CHILD, 'c1'))
+    expect(byKind('agent')).toEqual([expect.objectContaining({ totalTokens: 1_500 })])
+  })
+
   it('makes no record for a child whose turn began before its announcement, until it lands', () => {
     const { send, records } = harness()
     send(turn('turn/started', PRIMARY, PARENT_TURN), turn('turn/started', CHILD, 'c1'))
@@ -621,5 +634,50 @@ describe('Codex child-work evidence', () => {
     expect(records()).toEqual([
       expect.objectContaining({ kind: 'agent', membership: 'settled', outcome: 'unknown' })
     ])
+  })
+
+  it.each([
+    [{ root: 'exited', workload: 'exited' }, 'cancelled'],
+    [{ root: 'exited', workload: 'unverifiable' }, 'unknown'],
+    [{ root: 'live', workload: 'exited' }, 'unknown'],
+    [{ root: 'unverifiable', workload: 'exited' }, 'unknown'],
+    [undefined, 'unknown']
+  ] as const)('settles the host child records from process proof %j as %s', (proof, outcome) => {
+    const { send, tracker, records, store } = runningChild()
+    send(spawned('completed-child'), turn('turn/started', 'completed-child', 'c2'))
+    send(turn('turn/completed', 'completed-child', 'c2'))
+    tracker.clear(proof)
+    const evidence = tracker.drainChildWorkEvidence(9_000)
+    reconcileAgentChildWorkEvidence({
+      store,
+      admission: createAgentChildWorkAdmission(store, { mintChildWorkId: () => 'unused' }),
+      parent,
+      provider: 'codex',
+      evidence
+    })
+    expect(records()).toEqual([
+      expect.objectContaining({
+        kind: 'agent',
+        membership: 'settled',
+        outcome,
+        invocation: { invocationId: 'c1', generation: 1 }
+      }),
+      expect.objectContaining({
+        outcome: 'succeeded',
+        invocation: { invocationId: 'c2', generation: 1 }
+      })
+    ])
+    expect(evidence.filter((edge) => edge.type === 'ended')).toEqual(
+      outcome === 'cancelled'
+        ? [
+            {
+              type: 'ended',
+              observedAt: 9_000,
+              handle: { idKind: 'thread_id', id: CHILD, runId: 'c1' },
+              outcome: 'cancelled'
+            }
+          ]
+        : []
+    )
   })
 })
