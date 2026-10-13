@@ -10,8 +10,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import type { TerminalLayoutSnapshot } from '../shared/terminal-tab-types'
 import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
 import { getDefaultWorkspaceSession } from '../shared/constants'
+import { isTerminalLeafId } from '../shared/stable-pane-id'
 import { TEST_LEAF_1 } from './persistence-session-fixtures'
 
 vi.mock('electron', () => ({
@@ -20,10 +22,9 @@ vi.mock('electron', () => ({
 }))
 
 const WORKTREE_ID = 'repo-1::/worktree'
-const EMPTY_ROOT = { root: null, activeLeafId: null, expandedLeafId: null }
 
 // A session saved before tabs named their first pane: the tab exists, its layout has no root.
-function oldEmptyRootSession(): WorkspaceSessionState {
+function oldSession(layout: TerminalLayoutSnapshot): WorkspaceSessionState {
   return {
     ...getDefaultWorkspaceSession(),
     activeRepoId: 'repo-1',
@@ -32,15 +33,15 @@ function oldEmptyRootSession(): WorkspaceSessionState {
     tabsByWorktree: {
       [WORKTREE_ID]: [makeTerminalTab({ id: 'tab-1', worktreeId: WORKTREE_ID, ptyId: null })]
     },
-    terminalLayoutsByTabId: { 'tab-1': { ...EMPTY_ROOT } }
+    terminalLayoutsByTabId: { 'tab-1': layout }
   }
 }
 
-function loadOldSession() {
+function loadOldSession(layout: TerminalLayoutSnapshot) {
   writeDataFile({
     schemaVersion: 1,
     repos: [makeRepo({ id: 'repo-1', path: '/repo-1' })],
-    workspaceSession: oldEmptyRootSession()
+    workspaceSession: oldSession(layout)
   })
   return createStore()
 }
@@ -55,46 +56,49 @@ describe('a saved layout with an empty root', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
-  it('loads, and takes the pane the window mounts once its terminal starts', async () => {
-    const store = loadOldSession()
-    expect(store.getWorkspaceSession().terminalLayoutsByTabId['tab-1']).toEqual(EMPTY_ROOT)
+  it('keeps its terminal when main binds an unmounted tab and the window then saves it', async () => {
+    const store = loadOldSession({ root: null, activeLeafId: null, expandedLeafId: null })
+    // The window's copy of the session as it was loaded.
+    const loaded = structuredClone(store.getWorkspaceSession())
+    // Main binds the pane the loaded layout names (any pane, if it names none).
+    const leafId = loaded.terminalLayoutsByTabId['tab-1']?.activeLeafId ?? TEST_LEAF_1
 
-    // The window saves the loaded empty root before mount, then the named pane at mount, then the
-    // terminal starts; one window's messages reach main in that order.
-    store.setWorkspaceSession(oldEmptyRootSession())
+    await store.persistPtyBinding({
+      worktreeId: WORKTREE_ID,
+      tabId: 'tab-1',
+      leafId,
+      ptyId: 'pty-1'
+    })
+    // The window never mounted the tab, so it saves the layout as it was loaded, with no bindings.
     store.setWorkspaceSession({
-      ...oldEmptyRootSession(),
+      ...loaded,
       terminalLayoutsByTabId: {
-        'tab-1': {
-          root: { type: 'leaf', leafId: TEST_LEAF_1 },
-          activeLeafId: TEST_LEAF_1,
-          expandedLeafId: null
-        }
+        'tab-1': { ...loaded.terminalLayoutsByTabId['tab-1']!, ptyIdsByLeafId: {} }
       }
     })
-    await store.persistPtyBinding({
-      worktreeId: WORKTREE_ID,
-      tabId: 'tab-1',
-      leafId: TEST_LEAF_1,
-      ptyId: 'pty-1'
-    })
 
-    expect(store.getWorkspaceSession().terminalLayoutsByTabId['tab-1']).toEqual({
-      root: { type: 'leaf', leafId: TEST_LEAF_1 },
-      activeLeafId: TEST_LEAF_1,
-      expandedLeafId: null,
-      ptyIdsByLeafId: { [TEST_LEAF_1]: 'pty-1' }
-    })
+    const session = store.getWorkspaceSession()
+    expect(session.tabsByWorktree[WORKTREE_ID]?.[0]?.ptyId).toBe('pty-1')
+    expect(session.terminalLayoutsByTabId['tab-1']?.ptyIdsByLeafId).toEqual({ [leafId]: 'pty-1' })
   })
 
-  it('gets a root when main binds its terminal before the window mounts it', async () => {
-    const store = loadOldSession()
+  it('names a fresh pane when the old layout names none', () => {
+    const layout = loadOldSession({
+      root: null,
+      activeLeafId: null,
+      expandedLeafId: null
+    }).getWorkspaceSession().terminalLayoutsByTabId['tab-1']
+    const leafId = layout?.activeLeafId ?? ''
+    expect(isTerminalLeafId(leafId)).toBe(true)
+    expect(layout?.root).toEqual({ type: 'leaf', leafId })
+  })
 
-    await store.persistPtyBinding({
-      worktreeId: WORKTREE_ID,
-      tabId: 'tab-1',
-      leafId: TEST_LEAF_1,
-      ptyId: 'pty-1'
+  it('names the pane the old layout was already bound to', () => {
+    const store = loadOldSession({
+      root: null,
+      activeLeafId: null,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [TEST_LEAF_1]: 'pty-1' }
     })
 
     expect(store.getWorkspaceSession().terminalLayoutsByTabId['tab-1']).toEqual({

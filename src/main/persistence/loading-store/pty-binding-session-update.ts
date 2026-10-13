@@ -103,7 +103,7 @@ export function applyPtyBinding(
   if (layout) {
     if (!layout.root) {
       terminalMembershipChanged = true
-      // Why: a layout saved before tabs named their first pane has no root; the binding still needs a durable one.
+      // Why: load names every saved root, but the layout type still allows none; the binding needs a durable one.
       layout.root = { type: 'leaf', leafId: args.leafId }
       layout.activeLeafId = args.leafId
       layout.expandedLeafId = null
