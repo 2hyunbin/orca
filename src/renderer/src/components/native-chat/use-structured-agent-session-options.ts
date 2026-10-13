@@ -6,7 +6,6 @@ import type {
 } from '../../../../shared/agent-session-wire'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured-agent-session-seed-catalog'
-import type { SessionOptionsSurface } from '../../../../shared/native-chat-session-options'
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../../shared/agent-chat-permission-mode'
 import {
   applyStructuredAgentSessionOptions,
@@ -17,18 +16,18 @@ import {
   structuredAgentSessionOptionSnapshot,
   type StructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
-import { structuredAgentSessionOptionView } from '../../../../shared/structured-agent-session-option-view'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import { structuredAgentSessionHostKey } from '@/runtime/structured-agent-session-host-capability'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { enqueueSessionOptionSettingsWrite } from './native-chat-session-option-settings-write'
 import { encodeStructuredAgentSessionOptionValue } from '../../../../shared/structured-agent-session-option-codec'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
 import { useHostModelCatalogUpgrade } from './use-host-model-catalog-upgrade'
 import { useStructuredAgentSessionOptionState } from './use-structured-agent-session-option-state'
+import { useStructuredAgentSessionOptionSurface } from './use-structured-agent-session-option-surface'
 import { agentSessionWriteFailureText } from './agent-session-write-notice-text'
 import type { StructuredAgentSessionLaunchView } from './use-native-chat-provisional-launch'
 import {
-  getStructuredAgentSessionLaunchSelection,
   holdStructuredAgentSessionLaunchOption,
   type StructuredLaunchOptionOutcome
 } from '@/lib/structured-agent-session-launch-options'
@@ -45,6 +44,7 @@ export function useStructuredAgentSessionOptions(args: {
   providerStarting?: boolean
   providerRunning?: boolean
   hostOptionStamp?: string
+  optionSelection?: Readonly<Record<string, string>>
   fence: number | null
   turnId: string | null
   unloadedTurnRevisions: number | undefined
@@ -67,12 +67,13 @@ export function useStructuredAgentSessionOptions(args: {
   // Published but not attached: the launch no longer holds picks and there is no fence to send one.
   const acceptsPicks = !transportEnabled || fence !== null
   const optionCatalog = useMemo(() => structuredAgentSessionSeedCatalog(agent), [agent])
-  const identity = `${agent}:${sessionId}`
+  const identity = `${agent}:${sessionId}:${structuredAgentSessionHostKey(target)}`
+  const selectionFromStatus = args.optionSelection !== undefined
   const {
     optionState,
+    optionView,
     optionStateRef,
     activeOptionRecordRef,
-    pendingOptionRef,
     optionMutationGeneration,
     updateOptionState,
     rereadOptions,
@@ -93,6 +94,9 @@ export function useStructuredAgentSessionOptions(args: {
     // A new chat's host knows nothing of its model before the provider starts; a resumed one's
     // holds the model it ran, so only the former waits rather than show the host's guess.
     readsBeforeStart: launch?.kind !== 'new',
+    hostSelection: args.optionSelection,
+    launchSeedOptions,
+    held,
     turnId,
     unloadedTurnRevisions: args.unloadedTurnRevisions
   })
@@ -129,26 +133,23 @@ export function useStructuredAgentSessionOptions(args: {
     [agent, target]
   )
   const sendStructuredOption = useCallback(
-    async (id: string, encoded: string): Promise<boolean> => {
-      const currentState = optionStateRef.current
-      const targetRecord = currentState.record
+    async (id: string, encoded: string): Promise<Readonly<Record<string, string>> | null> => {
+      const targetRecord = optionStateRef.current.record
       const mutationGeneration = ++optionMutationGeneration.current
       const isCurrent = (): boolean =>
         activeOptionRecordRef.current === targetRecord &&
         optionMutationGeneration.current === mutationGeneration
-      // Record-only: shown at once, so the picker stays usable while the write waits behind a start.
       const shownAtOnce = id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
-      if (shownAtOnce) {
+      if (shownAtOnce && !selectionFromStatus) {
         updateOptionState((current) =>
           current.record === targetRecord
             ? commitStructuredAgentSessionOptionValues(current, { [id]: encoded })
             : current
         )
-      } else {
-        pendingOptionRef.current = id
-        updateOptionState((current) => ({ ...current, pendingId: id }))
       }
+      updateOptionState((current) => ({ ...current, pendingPick: { id, value: encoded } }))
       let result: AgentSessionOptionResult | null = null
+      let committed: Readonly<Record<string, string>> | null = null
       try {
         result = await mutate<AgentSessionOptionResult>(
           'agentSession.setOption',
@@ -156,43 +157,53 @@ export function useStructuredAgentSessionOptions(args: {
           { key: id, value: encoded }
         )
         if (result && isCurrent()) {
-          const committed = result.options ?? { [id]: encoded }
+          const acceptedValues = result.options ?? { [id]: encoded }
+          committed = acceptedValues
           updateOptionState((current) =>
-            current.record === targetRecord
-              ? commitStructuredAgentSessionOptionValues(current, committed)
+            current.record === targetRecord && !selectionFromStatus
+              ? commitStructuredAgentSessionOptionValues(current, acceptedValues)
               : current
           )
-          // The launch seed names the model an effort-only pick was made under.
-          rememberOptionPicks(
-            structuredAgentSessionOptionView(currentState, launchSeedOptions, NO_HELD_OPTIONS),
-            committed
-          )
+          rememberOptionPicks(optionView, acceptedValues)
+          if (!selectionFromStatus) {
+            void callStructuredAgentSession<AgentSessionOptionsResult>(
+              target,
+              'agentSession.options',
+              { sessionId }
+            )
+              .then((refreshed) => {
+                if (isCurrent()) {
+                  updateOptionState((latest) =>
+                    latest.record === targetRecord && optionCatalog
+                      ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
+                      : latest
+                  )
+                }
+              })
+              .catch(() => {})
+          }
         }
-        return Boolean(result)
+        return committed
       } finally {
-        // A settled write, or a shown one that failed, reads back what the host now holds.
-        if (isCurrent() && (result || shownAtOnce)) {
+        if (shownAtOnce && !result && !selectionFromStatus && isCurrent()) {
           void callStructuredAgentSession<AgentSessionOptionsResult>(
             target,
             'agentSession.options',
             { sessionId }
           )
             .then((refreshed) => {
-              if (isCurrent()) {
+              if (isCurrent() && optionCatalog) {
                 updateOptionState((latest) =>
-                  latest.record === targetRecord && optionCatalog
-                    ? applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
-                    : latest
+                  applyStructuredAgentSessionOptions(latest, optionCatalog, refreshed)
                 )
               }
             })
             .catch(() => {})
         }
         if (isCurrent()) {
-          pendingOptionRef.current = null
           updateOptionState((current) =>
-            current.record === targetRecord && current.pendingId === id
-              ? { ...current, pendingId: null }
+            current.record === targetRecord && current.pendingPick?.id === id
+              ? { ...current, pendingPick: null }
               : current
           )
         }
@@ -200,13 +211,13 @@ export function useStructuredAgentSessionOptions(args: {
     },
     [
       activeOptionRecordRef,
-      launchSeedOptions,
       mutate,
       optionCatalog,
       optionMutationGeneration,
       optionStateRef,
-      pendingOptionRef,
       rememberOptionPicks,
+      optionView,
+      selectionFromStatus,
       sessionId,
       target,
       updateOptionState
@@ -217,85 +228,61 @@ export function useStructuredAgentSessionOptions(args: {
       if (outcome.kind === 'refused') {
         toast.error(agentSessionWriteFailureText(outcome.failure, 'option'))
       } else if (outcome.kind === 'accepted') {
-        rememberOptionPicks(
-          structuredAgentSessionOptionView(
-            optionStateRef.current,
-            launchSeedOptions,
-            NO_HELD_OPTIONS
-          ),
-          outcome.options
-        )
+        rememberOptionPicks(optionView, outcome.options)
       }
     },
-    [launchSeedOptions, optionStateRef, rememberOptionPicks]
+    [optionView, rememberOptionPicks]
   )
   const optionSnapshot = useMemo(() => {
-    const snapshot = structuredAgentSessionOptionSnapshot(
-      structuredAgentSessionOptionView(optionState, launchSeedOptions, held)
-    )
+    const snapshot = structuredAgentSessionOptionSnapshot(optionView)
     return acceptsPicks ? snapshot : lockedStructuredAgentSessionOptionSnapshot(snapshot)
-  }, [acceptsPicks, held, launchSeedOptions, optionState])
-  const setStructuredOption = useCallback(
-    async (id: string, value: string | boolean): Promise<boolean> => {
-      const view = structuredAgentSessionOptionView(optionStateRef.current, launchSeedOptions, held)
+  }, [acceptsPicks, optionView])
+  const changeStructuredOption = useCallback(
+    async (
+      id: string,
+      value: string | boolean
+    ): Promise<Readonly<Record<string, string>> | null> => {
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
         !optionCatalog ||
         encoded === null ||
-        !canSetStructuredAgentSessionOption(view, id, value)
+        !canSetStructuredAgentSessionOption(optionView, id, value)
       ) {
-        return false
+        return null
       }
       if (!transportEnabled || fence === null) {
         // No fence yet: the launch holds it and applies it before anything else is sent.
         const applied = holdStructuredAgentSessionLaunchOption(sessionId, id, encoded)
         void applied?.then(settleLaunchOptionPick)
-        return applied !== null
+        return applied === null ? null : { [id]: encoded }
       }
-      if (pendingOptionRef.current !== null) {
-        return false
+      if (optionStateRef.current.pendingPick !== null) {
+        return null
       }
       return sendStructuredOption(id, encoded)
     },
     [
       fence,
-      held,
-      launchSeedOptions,
       optionCatalog,
+      optionView,
       optionStateRef,
-      pendingOptionRef,
       sendStructuredOption,
       sessionId,
       settleLaunchOptionPick,
       transportEnabled
     ]
   )
-  const setOption = useCallback(
-    async (id: string, value: string | boolean) => {
-      await setStructuredOption(id, value)
-      // Read, not rendered: a pick the launch just took is not in this render's props yet.
-      const currentHeld = getStructuredAgentSessionLaunchSelection(sessionId)?.held
-      return {
-        snapshot: structuredAgentSessionOptionSnapshot(
-          structuredAgentSessionOptionView(
-            optionStateRef.current,
-            launchSeedOptions,
-            currentHeld ?? NO_HELD_OPTIONS
-          )
-        )
-      }
-    },
-    [launchSeedOptions, optionStateRef, sessionId, setStructuredOption]
+  const setStructuredOption = useCallback(
+    async (id: string, value: string | boolean): Promise<boolean> =>
+      (await changeStructuredOption(id, value)) !== null,
+    [changeStructuredOption]
   )
-  const optionSurface = useMemo<SessionOptionsSurface>(
-    () => ({
-      getSnapshot: () => optionSnapshot,
-      setOption,
-      invokeAction: async () => ({ snapshot: optionSnapshot }),
-      subscribe: () => () => {}
-    }),
-    [setOption, optionSnapshot]
-  )
+  const optionSurface = useStructuredAgentSessionOptionSurface({
+    sessionId,
+    optionView,
+    optionSnapshot,
+    changeOption: changeStructuredOption
+  })
 
   const support =
     transportEnabled && conversationSupport?.sessionId === sessionId ? conversationSupport : null

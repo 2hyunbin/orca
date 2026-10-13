@@ -9,6 +9,7 @@ import type {
   AgentSessionJournalProviderHandle
 } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionMessageSource } from '../../../shared/agent-session-message-source'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { agentSessionJournalProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { journalRowSchemaVersion } from '../../../shared/agent-session-journal-types'
 import { agentJournalLinkageFields } from '../../../shared/agent-session-journal-producer'
@@ -87,6 +88,7 @@ export function journalSubmissionRowBuilder(
     payloadFingerprint: string
     body: AgentJournalMessageItem
     fence: number
+    executionOptions?: AgentSessionExecutionOptions
     handoverRecorded?: true
     queuedMessageId?: string
     origin?: 'client' | 'host'
@@ -276,6 +278,7 @@ export function buildJournalSubmissionRow(input: {
   payloadFingerprint: string
   providerHandle: AgentSessionJournalProviderHandle
   body: AgentJournalMessageItem
+  executionOptions?: AgentSessionExecutionOptions
   seq: number
   fence: number
   ts: number
@@ -290,6 +293,7 @@ export function buildJournalSubmissionRow(input: {
     payloadFingerprint: input.payloadFingerprint,
     providerHandle: input.providerHandle,
     body: input.body,
+    ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
     ...journalRowBase(input.state.epoch, input.seq, input.fence, input.ts),
     ...(input.handoverRecorded ? { handoverRecorded: true } : {}),
     ...(input.queuedMessageId !== undefined ? { queuedMessageId: input.queuedMessageId } : {}),

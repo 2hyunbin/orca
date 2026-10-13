@@ -30,7 +30,7 @@ import type {
   AgentModelCatalogSessionAccess,
   AgentModelCatalogStore
 } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
-import type { CodexStartingChild } from './codex-structured-starting-child'
+import type { StructuredAgentSessionProviderOpen } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import type { NativeChatVisualsLaunch } from '../native-chat/native-chat-visuals-delivery'
 
 export type CodexSessionCatalogAccess = AgentModelCatalogSessionAccess
@@ -127,7 +127,6 @@ export type CodexStructuredSessionAdapterDeps = {
 export type CodexSession = {
   account?: AgentSessionAccountKind
   connection: CodexAppServerConnection
-  startingChild?: CodexStartingChild
   ended: boolean
   /** First observed child exit survives rejected settlement admission. */
   exitObservedAt?: number
@@ -155,6 +154,8 @@ export type CodexSession = {
     serviceTier?: string | null
     serviceTierKnown?: true
   }
+  /** A fresh thread opened without a model override proved these native defaults. */
+  nativeDefaults?: { model: string; effort?: string }
   /** Absent when the adapter runs without a host catalog store (tests). */
   catalogAccess?: CodexSessionCatalogAccess
   /** Sends whose identity is still to be settled by the provider echo. */
@@ -206,10 +207,13 @@ export function requireLiveCodexSession(
 
 export type CodexAcquisitionAttempt = {
   window: CodexAcquisitionWindow
-  startingChild?: CodexStartingChild
+  acquisitionGeneration?: string
+  open?: StructuredAgentSessionProviderOpen
+  dispose?: () => void
   cancelled: boolean
   requestedClose?: boolean
   exitProven: boolean
+  exitError?: Error
   finished: Promise<void>
   finish: () => void
 }
@@ -311,7 +315,7 @@ export async function cancelCodexAcquisitionAttempt(
   })
   if (closed) {
     attempt.exitProven = true
-    attempt.startingChild?.end(new Error('codex session closed'), requestedClose)
+    attempt.dispose?.()
   }
   return closed
 }

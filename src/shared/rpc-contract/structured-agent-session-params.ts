@@ -22,6 +22,7 @@ export {
   SessionId
 } from './structured-agent-session-identifiers'
 import { z } from 'zod'
+import { AgentSessionExecutionOptionsSchema } from '../agent-session-execution-options'
 import { isAgentSessionSurfaceTabId } from '../agent-session-surface-tab-id'
 import { isAgentSessionOptions } from '../agent-session-record'
 import { isStructuredAgentId } from '../agent-session-provider-handle-encoding'
@@ -135,6 +136,7 @@ export const SendParams = z
      *  older host refuses it: clients send it only when `agent-session.queued-messages.v1` is
      *  advertised. Participates in the operation fingerprint, never the body fingerprint. */
     delivery: z.literal('queue-if-active').optional(),
+    executionOptions: AgentSessionExecutionOptionsSchema.optional(),
     body: SendBody
   })
   .strict()

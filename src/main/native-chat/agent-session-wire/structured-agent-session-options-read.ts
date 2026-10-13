@@ -1,9 +1,8 @@
+import { saveStructuredAgentSessionStartListing } from './structured-agent-session-start-listing'
 // A chat's options, live or at rest.
 //
-// At rest nothing here needs a child. The pick is the record's own `options` — what the next start replays —
-// and the list is the host's model catalog, the same one the picker already reads before a chat
-// exists. A pick made at rest is written to the record as intent, through the same transition a live
-// pick takes, so the next start applies it.
+// The record keeps the next message's choices; the catalog names known defaults. A provider's
+// reports remain execution facts and never replace the saved selection.
 
 import {
   refuse,
@@ -28,7 +27,10 @@ import { structuredAgentSessionLaunchPermission } from './structured-agent-sessi
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 
-type RestingOptions = Pick<AgentSessionOptionsResult, 'models' | 'fastModeSupport' | 'current'>
+type RestingOptions = Pick<
+  AgentSessionOptionsResult,
+  'models' | 'modelsKnown' | 'fastModeSupport' | 'current'
+>
 
 /** What the asking client takes: whether it reads an answer that names no model. */
 export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean }
@@ -133,6 +135,7 @@ async function readStructuredAgentSessionOptionsAtRest(
       : undefined)
   return {
     models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
+    modelsKnown: catalog.origin !== 'unknown',
     ...(catalog.origin !== 'unknown' && catalog.fastModeSupport
       ? { fastModeSupport: catalog.fastModeSupport }
       : {}),
@@ -218,7 +221,7 @@ export async function readStructuredAgentSessionOptions(
     const { catalogListing, ...answer } = live
     if (catalogListing) {
       // What a running child listed is its account's catalog too, so the next chat opens warm.
-      context.deps.modelCatalog?.recordLiveListing(sessionId, catalogListing)
+      saveStructuredAgentSessionStartListing(context, sessionId, catalogListing)
     }
     options = answer
   } else {
@@ -236,9 +239,32 @@ export async function readStructuredAgentSessionOptions(
   const permissionMode = record
     ? await structuredAgentSessionLaunchPermission(context.deps, record)
     : null
+  const selected = live
+    ? await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader)
+    : options
+  const confirmed = options.current.confirmed?.filter((key) => {
+    if (key === 'model') {
+      return selected.current.model === options.current.model
+    }
+    if (key === 'effort') {
+      return selected.current.effort === options.current.effort
+    }
+    if (key === 'fastMode') {
+      return selected.current.fastMode === options.current.fastMode
+    }
+    if (key === 'serviceTier') {
+      return selected.current.serviceTier === options.current.serviceTier
+    }
+    return false
+  })
   return {
     ...options,
-    ...(permissionMode ? { current: { ...options.current, permissionMode } } : {}),
+    current: {
+      ...selected.current,
+      ...(options.current.fastModeState ? { fastModeState: options.current.fastModeState } : {}),
+      ...(confirmed?.length ? { confirmed } : {}),
+      ...(permissionMode ? { permissionMode } : {})
+    },
     rewind:
       phase === 'prepared' || phase === 'provider-succeeded'
         ? { supported: false, reason: 'outcome-unknown' }

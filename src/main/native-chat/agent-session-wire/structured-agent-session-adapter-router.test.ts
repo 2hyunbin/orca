@@ -141,6 +141,27 @@ describe('StructuredAgentSessionAdapterRouter.closeSession', () => {
 })
 
 describe('StructuredAgentSessionAdapterRouter optional lifecycle methods', () => {
+  it.each(['closeSession', 'disposeSession'] as const)(
+    'forwards the Stop cause through %s',
+    async (method) => {
+      const claude = adapterOf(vi.fn(async () => true))
+      const closeSession = vi.fn(async () => true)
+      claude.closeSession = closeSession
+      const router = claudeAndCodexRouter(
+        { claude, codex: adapterOf(vi.fn(async () => false)) },
+        async () => {}
+      )
+      await router.acquire({
+        identity: claudeIdentity('session-1'),
+        fence: 1,
+        spawnToken: 'spawn-1'
+      })
+
+      await expect(router[method]('session-1', 'user-stop')).resolves.toBe(true)
+      expect(closeSession).toHaveBeenCalledExactlyOnceWith('session-1', 'user-stop')
+    }
+  )
+
   it.each([
     ['forceCloseSession', 'forceCloseSession'],
     ['disposeSession', 'disposeSession']

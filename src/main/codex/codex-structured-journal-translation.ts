@@ -175,10 +175,6 @@ export function createCodexJournalTranslator(
         }
         // No event will ever settle a child once the provider is gone.
         const provenStopped =
-          'cause' in event &&
-          event.cause === 'requested-close' &&
-          'stopCause' in event &&
-          event.stopCause === 'user-stop' &&
           'processExit' in event &&
           event.processExit?.root === 'exited' &&
           event.processExit.workload === 'exited'

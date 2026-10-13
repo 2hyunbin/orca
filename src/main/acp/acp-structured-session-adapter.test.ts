@@ -119,7 +119,8 @@ describe('ACP structured session adapter: acquire', () => {
         agent.on('session/new', (frame) => agent.fail(frame, -32000, 'Authentication required'))
     })
     await rig.acquire()
-    expect(rig.ended).toMatchObject([{ startupUnproven: true, failure: { kind: 'notSignedIn' } }])
+    expect(rig.openFailure()).toMatchObject({ reason: 'notSignedIn' })
+    expect(rig.ended).toMatchObject([{ cause: 'requested-close' }])
     expect(rig.child().closes).toBe(1)
   })
 })
@@ -157,6 +158,115 @@ it('reads those last words when the agent ends its stdout before its exit is see
 })
 
 describe('ACP structured session adapter: turns', () => {
+  it('applies a sent message’s model and effort before its prompt', async () => {
+    const rig = await openAcpAdapterRig()
+    await rig.acquire()
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'chosen-send',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hello' }] },
+      executionOptions: { model: 'grok-4.6', effort: 'low' }
+    })
+    await rig.frame('session/prompt')
+    const methods = rig.child().agent.frames.map((frame) => frame.method)
+    expect(methods.slice(-3)).toEqual([
+      'session/set_config_option',
+      'session/set_config_option',
+      'session/prompt'
+    ])
+    await expect(rig.adapter.readOptions({ sessionId: SESSION, fence: 1 })).resolves.toMatchObject({
+      current: { model: 'grok-4.6', effort: 'low' }
+    })
+  })
+
+  it('restores the opened model and effort when the next message omits both choices', async () => {
+    const rig = await openAcpAdapterRig()
+    await rig.acquire()
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'override',
+      body: hello,
+      executionOptions: { model: 'grok-4.6', effort: 'low' }
+    })
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'default',
+      body: hello,
+      executionOptions: {}
+    })
+    expect(rig.sent('session/set_config_option')).toMatchObject([
+      { params: { configId: 'model', value: 'grok-4.6' } },
+      { params: { configId: 'reasoning_effort', value: 'low' } },
+      { params: { configId: 'model', value: 'grok-4.7' } },
+      { params: { configId: 'reasoning_effort', value: 'high' } }
+    ])
+  })
+
+  it('keeps legacy sends on the current selection when execution options are absent', async () => {
+    const rig = await openAcpAdapterRig()
+    await rig.acquire()
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'override',
+      body: hello,
+      executionOptions: { model: 'grok-4.6', effort: 'low' }
+    })
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'legacy',
+      body: hello
+    })
+    expect(rig.sent('session/set_config_option')).toHaveLength(2)
+    expect(rig.sent('session/prompt')).toHaveLength(1)
+  })
+
+  it('refuses an omitted effort whose new model default cannot be confirmed', async () => {
+    const rig = await openAcpAdapterRig()
+    await rig.acquire()
+    await rig.adapter.dispatch({
+      sessionId: SESSION,
+      fence: 1,
+      clientMessageId: 'override-effort',
+      body: hello,
+      executionOptions: { model: 'grok-4.7', effort: 'low' }
+    })
+    await expect(
+      rig.adapter.dispatch({
+        sessionId: SESSION,
+        fence: 1,
+        clientMessageId: 'unknown-default',
+        body: hello,
+        executionOptions: { model: 'grok-4.6' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(rig.sent('session/prompt')).toHaveLength(1)
+  })
+
+  it('does not send a prompt when the agent refuses a message’s model', async () => {
+    const rig = await openAcpAdapterRig({
+      script: (agent) =>
+        agent.on('session/set_config_option', (frame) =>
+          agent.fail(frame, -32602, 'Model unavailable')
+        )
+    })
+    await rig.acquire()
+    await expect(
+      rig.adapter.dispatch({
+        sessionId: SESSION,
+        fence: 1,
+        clientMessageId: 'refused-model',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hello' }] },
+        executionOptions: { model: 'grok-4.6' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(rig.sent('session/prompt')).toEqual([])
+  })
+
   it("sends Grok's prompt identity only to an agent whose dialect echoes it", async () => {
     const rig = await openAcpAdapterRig({
       deps: { spec: { ...GROK, dialect: GENERIC_ACP_DIALECT } }

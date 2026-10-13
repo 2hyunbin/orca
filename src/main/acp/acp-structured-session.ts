@@ -15,9 +15,9 @@ import type { AcpStructuredLane } from './acp-structured-lane'
 import type { AcpStructuredOptions } from './acp-structured-options'
 import type { AcpStructuredPrompts } from './acp-structured-prompts'
 import type { AcpStructuredTurns } from './acp-structured-turns'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 
 export type AcpStructuredSession = {
-  phase: 'ready'
   sessionId: string
   fence: number
   acquisitionGeneration: string
@@ -38,6 +38,8 @@ export type AcpStructuredSession = {
   ended: boolean
   exitObservedAt: number | null
   unbindReadingControl?: () => void
+  dispose: () => void
+  open: (signal: AbortSignal) => Promise<StructuredAgentSessionProviderOpenResult>
 }
 
 /** Every agent frame goes through here once the lane exists: options and commands first, so a

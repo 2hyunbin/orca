@@ -80,9 +80,8 @@ export function claudeStructuredSpawnOptions(input: {
       skipped.push('fastMode')
     } else {
       options.set('fastMode', fastMode)
-      // A new CLI session may opt in to Fast per session, which only its settings say, and the
-      // agent Arguments' own `--settings` would be replaced by one carrying Fast: either way the
-      // start applies the saved Fast once it has read them (`applyClaudeStartFastMode`).
+      // A new CLI session may opt in to Fast per session; the first message applies a saved Fast
+      // when launch settings cannot carry it.
       if (
         (!decoded || input.launch.resumesTranscript) &&
         !Object.hasOwn(sdkOptions.extraArgs ?? {}, 'settings')

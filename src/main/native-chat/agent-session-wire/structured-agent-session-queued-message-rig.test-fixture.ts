@@ -10,6 +10,7 @@ import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type { AgentSessionQueuePause } from '../../../shared/agent-session-wire'
 import type { AgentMessageSource } from '../../../shared/agent-session-message-source'
 import { agentSessionMessagePayload } from '../../../shared/structured-agent-session-send-mutation'
@@ -35,7 +36,11 @@ import {
 import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
 
 export const QUEUED_RIG_CALLER = { callerKey: 'client-1' }
-type RigSendOptions = { internal?: true; from?: AgentMessageSource }
+type RigSendOptions = {
+  internal?: true
+  from?: AgentMessageSource
+  executionOptions?: AgentSessionExecutionOptions
+}
 
 export function eventually(assertion: () => void | Promise<void>): Promise<void> {
   return vi.waitFor(assertion, { timeout: 10_000 })
@@ -55,7 +60,7 @@ export async function createQueuedMessageTestRig(
   resetHostTestOperationIds()
   const store = await openTestAgentSessionRecordStore(root)
   const provider = createQueuedRigProvider(store, options, () => host)
-  const { dispatch, compact, cancelTurn, closeSession } = provider
+  const { dispatch, compact, cancelTurn, closeSession, setOption } = provider
   const makeHost = () =>
     new StructuredAgentSessionHost({
       agents: claudeAndCodexDeclared(),
@@ -100,6 +105,7 @@ export async function createQueuedMessageTestRig(
       envelope: envelope(fields, 'agentSession.send', clientOperationId),
       ...fields,
       body,
+      ...(options?.executionOptions ? { executionOptions: options.executionOptions } : {}),
       ...(options?.internal ? {} : { userSend: true as const })
     })
     return { id: clientOperationId, result }
@@ -281,6 +287,7 @@ export async function createQueuedMessageTestRig(
       return host
     },
     dispatch,
+    setOption,
     cancelTurn,
     closeSession,
     compact,

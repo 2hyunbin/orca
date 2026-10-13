@@ -63,7 +63,16 @@ describe('Pi RPC session ownership and delivery', () => {
     const acquired = h.adapter.acquire({ ...h.input, fence: 8 })
     const child = await opened.promise
     await Promise.resolve()
-    await expect(acquired).resolves.toMatchObject({ process: { pid: 4123 } })
+    const owned = await acquired
+    expect(owned).toMatchObject({ process: { pid: 4123 } })
+    const opening = h.adapter
+      .open({
+        sessionId,
+        fence: 8,
+        acquisitionGeneration: owned.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+      .catch((error: unknown) => error)
     h.lifecycle.mockClear()
     expect(h.adapter.readCommands(sessionId)).toBeUndefined()
     expect(h.adapter.holdsDispatch(sessionId)).toBe(false)
@@ -73,7 +82,6 @@ describe('Pi RPC session ownership and delivery', () => {
       expect.objectContaining({
         type: 'ended',
         startupUnproven: true,
-        startupUnanswered: true,
         cause: 'requested-close'
       })
     )
@@ -81,6 +89,7 @@ describe('Pi RPC session ownership and delivery', () => {
       expect.objectContaining({ type: 'started', fence: 8 })
     )
     expect(child.rootVerdict).toBe('exited')
+    expect(await opening).toBeInstanceOf(Error)
   })
 
   it('retains final events when exit publication times out under journal backpressure', async () => {
@@ -163,7 +172,8 @@ describe('Pi RPC session ownership and delivery', () => {
       origin: 'created',
       mintedAtFence: 7
     })
-    expect(h.started.restoreSkippedOptions).toEqual(['unknown', 'effort'])
+    expect(h.started.restoreSkippedOptions).toEqual([])
+    expect(h.connection.requests).not.toContain('set_thinking_level')
     expect(h.connection.requests).toContain('get_commands')
   })
 
@@ -188,6 +198,135 @@ describe('Pi RPC session ownership and delivery', () => {
       }
     })
     expect(h.connection.sent[0]).toMatchObject({ type: 'prompt', message: 'hello' })
+  })
+
+  it('applies each sent model before effort and before prompting Pi', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    const result = await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'choice-send',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'chosen' }] },
+      executionOptions: { model: 'anthropic/model-2', effort: 'low' }
+    })
+    expect(result).toEqual({ state: 'admitted' })
+    expect(h.connection.requests.slice(-2)).toEqual(['set_model', 'set_thinking_level'])
+    expect(h.connection.sent).toMatchObject([{ type: 'prompt', message: 'chosen' }])
+  })
+
+  it('restores the opened model when a later snapshot omits its override', async () => {
+    const h = await setup()
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'override',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'first' }] },
+      executionOptions: { model: 'anthropic/model-2' }
+    })
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'default',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'second' }] },
+      executionOptions: {}
+    })
+    expect(h.connection.requests.filter((command) => command === 'set_model')).toEqual([
+      'set_model',
+      'set_model'
+    ])
+    expect(h.connection.sent).toMatchObject([
+      { type: 'prompt', message: 'first' },
+      { type: 'prompt', message: 'second' }
+    ])
+  })
+
+  it('keeps legacy sends on the current selection when execution options are absent', async () => {
+    const h = await setup()
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'override',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'first' }] },
+      executionOptions: { model: 'anthropic/model-2' }
+    })
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'legacy',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'second' }] }
+    })
+    expect(h.connection.requests.filter((command) => command === 'set_model')).toEqual([
+      'set_model'
+    ])
+    expect(h.connection.sent).toHaveLength(2)
+  })
+
+  it('refuses an omitted effort whose new model default cannot be confirmed', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    await h.adapter.dispatch({
+      sessionId,
+      fence: 7,
+      clientMessageId: 'override-effort',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'first' }] },
+      executionOptions: { model: 'anthropic/model-1', effort: 'low' }
+    })
+    await expect(
+      h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId: 'unknown-default',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'second' }] },
+        executionOptions: { model: 'anthropic/model-2' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(h.connection.sent).toHaveLength(1)
+  })
+
+  it('applies the displayed default model and effort after different message choices', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    for (const [clientMessageId, model, effort] of [
+      ['override', 'anthropic/model-2', 'low'],
+      ['default', 'anthropic/model-1', 'high']
+    ]) {
+      await h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: clientMessageId }] },
+        executionOptions: { model, effort }
+      })
+    }
+    expect(h.connection.requests.slice(-4)).toEqual([
+      'set_model',
+      'set_thinking_level',
+      'set_model',
+      'set_thinking_level'
+    ])
+    expect(h.connection.sent).toHaveLength(2)
+  })
+
+  it('leaves the prompt unsent when Pi refuses a sent model', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_model'
+        ? Promise.reject(new JsonlRpcResponseError(command, 'Model unavailable'))
+        : undefined
+    await expect(
+      h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId: 'refused-choice',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'chosen' }] },
+        executionOptions: { model: 'anthropic/model-2' }
+      })
+    ).rejects.toMatchObject({ name: 'AgentSessionOptionRejectedError' })
+    expect(h.connection.sent).toEqual([])
   })
 
   it('rejects stale fences and a Stop for a different turn before sending abort', async () => {
@@ -422,9 +561,8 @@ describe('Pi RPC session ownership and delivery', () => {
 })
 
 describe('Pi RPC start without a model', () => {
-  it('reports a start that listed no model as signed out, for that child only', async () => {
+  it('refuses a successfully empty listing and leaves cleanup to the host', async () => {
     const h = await setup()
-    expect(h.adapter.startUnavailable(sessionId)).toBeUndefined()
     await h.adapter.closeSession(sessionId)
     h.openConnection.mockImplementationOnce((_launch, handlers) => {
       const connection = new FakeConnection(handlers)
@@ -434,19 +572,18 @@ describe('Pi RPC start without a model', () => {
       h.connections.push(connection)
       return connection
     })
-    await h.adapter.acquire({ ...h.input, fence: 8 })
-    // Known by the time the start is proven: the listing is part of Pi's start.
-    await vi.waitFor(() =>
-      expect(h.lifecycle).toHaveBeenCalledWith(expect.objectContaining({ type: 'started' }))
-    )
-    expect(h.adapter.startUnavailable(sessionId)).toEqual({ reason: 'notSignedIn' })
-    // Its root gone while its output still drains: that child says nothing more.
+    const acquired = await h.adapter.acquire({ ...h.input, fence: 8 })
+    await expect(
+      h.adapter.open({
+        sessionId,
+        fence: 8,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+    ).rejects.toMatchObject({ reason: 'notSignedIn' })
     const child = h.connections.at(-1)!
-    child.rootVerdict = 'exited'
     expect(child.closed).toBe(false)
-    expect(h.adapter.startUnavailable(sessionId)).toBeUndefined()
-    child.rootVerdict = 'live'
     await h.adapter.closeSession(sessionId)
-    expect(h.adapter.startUnavailable(sessionId)).toBeUndefined()
+    expect(child.closed).toBe(true)
   })
 })

@@ -112,6 +112,7 @@ export async function startCodexTurn(
     body: AgentJournalMessageItem
     requestedAt?: number
     timeoutMs?: number
+    turnOptions?: Readonly<Record<string, string>>
   }
 ): Promise<{ turnId: string | null; via: AgentJournalTurnJoin } | false> {
   // Armed before the write: the echo and `turn/started` can both land while the
@@ -133,17 +134,38 @@ export async function startCodexTurn(
   if (steered) {
     return steered
   }
-  const answer = await host.connection.request(
-    'turn/start',
-    {
-      threadId: host.threadId,
-      clientUserMessageId: input.clientMessageId,
-      input: turnInputFor(input.body),
-      // Codex omits a tier the model does not list.
-      ...Object.fromEntries(host.options)
-    },
-    { timeoutMs: input.timeoutMs }
-  )
+  const previousOptions = input.turnOptions ? new Map(host.options) : null
+  if (input.turnOptions) {
+    host.options.clear()
+    for (const [key, value] of Object.entries(input.turnOptions)) {
+      host.options.set(key, value)
+    }
+  }
+  let answer: unknown
+  try {
+    answer = await host.connection.request(
+      'turn/start',
+      {
+        threadId: host.threadId,
+        clientUserMessageId: input.clientMessageId,
+        input: turnInputFor(input.body),
+        // Codex omits a tier the model does not list.
+        ...(input.turnOptions ?? Object.fromEntries(host.options))
+      },
+      { timeoutMs: input.timeoutMs }
+    )
+  } catch (error) {
+    if (
+      previousOptions &&
+      (isCodexAppServerRequestError(error) || isCodexAppServerUnsupportedError(error))
+    ) {
+      host.options.clear()
+      for (const [key, value] of previousOptions) {
+        host.options.set(key, value)
+      }
+    }
+    throw error
+  }
   return { turnId: readCodexTurnId(answer), via: 'start' }
 }
 
@@ -160,6 +182,7 @@ export async function dispatchCodexTurn(
     clientMessageId: string
     body: AgentJournalMessageItem
     requestedAt?: number
+    turnOptions?: Readonly<Record<string, string>>
   },
   timeoutMs: number | undefined
 ): Promise<AgentSessionDispatchOutcome> {

@@ -54,6 +54,7 @@ export function createQueuedRigProvider(
   const cancelTurn: Mock<StructuredAgentSessionAdapter['cancelTurn']> = vi.fn(async () => ({
     cancelled: true
   }))
+  const setOption: Mock<StructuredAgentSessionAdapter['setOption']> = vi.fn(async () => undefined)
   const closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>> = vi.fn(
     async () => true
   )
@@ -101,7 +102,7 @@ export function createQueuedRigProvider(
     compact,
     cancelTurn,
     answerPrompt: vi.fn(async () => undefined),
-    setOption: vi.fn(async () => undefined),
+    setOption,
     ...(options.rewind
       ? { rewind: options.rewind, rewindSupport: () => ({ supported: true as const }) }
       : {}),
@@ -176,6 +177,7 @@ export function createQueuedRigProvider(
     failNextStart,
     compact,
     cancelTurn,
+    setOption,
     closeSession,
     finishCompact,
     providerEvents

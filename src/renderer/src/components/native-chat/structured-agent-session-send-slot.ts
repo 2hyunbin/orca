@@ -2,6 +2,7 @@
 // of that chat out until it settles.
 
 import { createStructuredAgentSessionOperationId } from '../../../../shared/structured-agent-session-mutation'
+import type { AgentSessionExecutionOptions } from '../../../../shared/agent-session-execution-options'
 import {
   structuredAgentSessionSendBody,
   type StructuredAgentSessionAttachment
@@ -20,6 +21,7 @@ export type StructuredAgentSessionSendInput = {
   attachments?: readonly StructuredAgentSessionAttachment[]
   /** Asks the host to hold it as a card while the agent works; decided once, at the send. */
   delivery?: 'queue-if-active'
+  executionOptions?: AgentSessionExecutionOptions
   /** The caller keeps the text if it comes back, instead of the chat's composer. */
   callerKeepsText?: true
   /** Made while the chat read Stopping: drawn after that turn until the host records it. */
@@ -42,6 +44,7 @@ export function takeStructuredAgentSessionSendSlot(
     previewUris: attachments.map((attachment) => attachment.previewUri),
     queuedAt: input.now ?? Date.now(),
     ...(input.delivery ? { delivery: input.delivery } : {}),
+    ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
     ...(input.callerKeepsText ? { callerKeepsText: true as const } : {}),
     ...(input.sentWhileStopping ? { sentWhileStopping: true as const } : {}),
     ...(attachments.some((attachment) => attachment.connectionId)

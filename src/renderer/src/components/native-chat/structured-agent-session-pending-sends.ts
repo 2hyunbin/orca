@@ -2,6 +2,7 @@
 // chat's view reads.
 
 import type { structuredAgentSessionSendBody } from '../../../../shared/structured-agent-session-send-mutation'
+import type { AgentSessionExecutionOptions } from '../../../../shared/agent-session-execution-options'
 
 export type StructuredAgentSessionPendingSend = {
   clientMessageId: string
@@ -10,6 +11,7 @@ export type StructuredAgentSessionPendingSend = {
   previewUris: readonly string[]
   queuedAt: number
   delivery?: 'queue-if-active'
+  executionOptions?: AgentSessionExecutionOptions
   /**
    * `sending`: on its way, its one request out or about to be; the chat takes no other send meanwhile.
    * `recorded`: the host holds it; an open chat draws it until the host's row or card arrives.

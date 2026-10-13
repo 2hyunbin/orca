@@ -1,9 +1,8 @@
-import { vi } from 'vitest'
 import type {
   StructuredAgentSessionAcquireInput,
-  StructuredAgentSessionStartedEvent,
   StructuredAgentSessionOptionsReportedEvent
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import type {
   AgentJournalMessageItem,
   AgentSessionJournalIdentity
@@ -24,11 +23,11 @@ import { codexProviderHandle } from '../../shared/agent-session-provider-handle-
 
 const startLinks = new WeakMap<
   CodexStructuredSessionAdapter,
-  Map<string, NonNullable<StructuredAgentSessionStartedEvent['link']>>
+  Map<string, NonNullable<StructuredAgentSessionProviderOpenResult['link']>>
 >()
 const startReports = new WeakMap<
   CodexStructuredSessionAdapter,
-  Map<string, StructuredAgentSessionStartedEvent | StructuredAgentSessionOptionsReportedEvent>
+  Map<string, StructuredAgentSessionProviderOpenResult | StructuredAgentSessionOptionsReportedEvent>
 >()
 
 export function codexStartReport(adapter: CodexStructuredSessionAdapter, sessionId = 'session-1') {
@@ -48,11 +47,16 @@ export async function acquireReadyCodexForTest(
   input: StructuredAgentSessionAcquireInput
 ) {
   const acquired = await adapter.acquire(input)
-  await vi.waitFor(() => {
-    if (adapter.backgroundTaskStops(input.identity.sessionId) === undefined) {
-      throw new Error('Codex thread not ready')
-    }
+  const result = await adapter.open({
+    sessionId: input.identity.sessionId,
+    fence: input.fence,
+    acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+    signal: new AbortController().signal
   })
+  startReports.get(adapter)?.set(input.identity.sessionId, result)
+  if (result.link) {
+    startLinks.get(adapter)?.set(input.identity.sessionId, result.link)
+  }
   return acquired
 }
 
@@ -158,10 +162,10 @@ export function adapterFor(
   deps: Partial<CodexStructuredSessionAdapterDeps> = {}
 ): CodexStructuredSessionAdapter {
   let acquisitionGeneration = 0
-  const links = new Map<string, NonNullable<StructuredAgentSessionStartedEvent['link']>>()
+  const links = new Map<string, NonNullable<StructuredAgentSessionProviderOpenResult['link']>>()
   const reports = new Map<
     string,
-    StructuredAgentSessionStartedEvent | StructuredAgentSessionOptionsReportedEvent
+    StructuredAgentSessionProviderOpenResult | StructuredAgentSessionOptionsReportedEvent
   >()
   const adapter = new CodexStructuredSessionAdapter({
     resolveLaunch: async () => ({
@@ -178,10 +182,7 @@ export function adapterFor(
     mintAcquisitionGeneration: () => `generation-${++acquisitionGeneration}`,
     ...deps,
     onEvent: (event) => {
-      if (event.type === 'started' && event.link) {
-        links.set(event.sessionId, event.link)
-      }
-      if (event.type === 'started' || event.type === 'options-reported') {
+      if (event.type === 'options-reported') {
         reports.set(event.sessionId, event)
       } else {
         events.push(event)

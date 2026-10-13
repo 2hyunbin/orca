@@ -125,6 +125,8 @@ export async function requestStructuredAgentSessionMutation<TValue>(args: {
   sessionId: string
   expectedRuntimeFence: number
   fields: Record<string, unknown>
+  /** Sent beside the request, excluded from the operation fingerprint. */
+  unfingerprintedFields?: Record<string, unknown>
   clientOperationId?: string
   timeoutMs?: number
 }): Promise<StructuredAgentSessionMutationCallResult<TValue>> {
@@ -135,6 +137,7 @@ export async function requestStructuredAgentSessionMutation<TValue>(args: {
     sessionId,
     expectedRuntimeFence,
     fields,
+    unfingerprintedFields,
     clientOperationId,
     timeoutMs
   } = args
@@ -153,7 +156,8 @@ export async function requestStructuredAgentSessionMutation<TValue>(args: {
             fields
           })
         },
-        ...fields
+        ...fields,
+        ...unfingerprintedFields
       },
       timeoutMs
     )

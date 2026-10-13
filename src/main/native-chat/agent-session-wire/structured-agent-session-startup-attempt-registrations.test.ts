@@ -32,13 +32,6 @@ import { createStructuredAgentSessionLogger } from './structured-agent-session-l
 
 const CALLER = { callerKey: 'client-1' }
 
-// Temporary, removed when every adapter publishes at spawn: adapters whose own acquire already does,
-// with the test that drives the real one. Every other registration still runs its handshake inside
-// acquire (the bridge) until then.
-const REAL_ADAPTER_PUBLISHES_AT_SPAWN: Readonly<Record<string, string>> = {
-  claude: 'structured-agent-session-claude-hung-start-stop.test.ts'
-}
-
 let root: string | null = null
 
 afterEach(async () => {
@@ -64,6 +57,7 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
   store: AgentSessionRecordStore
   acquire: Mock<StructuredAgentSessionAdapter['acquire']>
   dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
+  ready: () => void
 }> {
   root = await mkdtemp(join(tmpdir(), 'orca-startup-registrations-'))
   resetHostTestOperationIds()
@@ -90,7 +84,12 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
   const dispatch: Mock<StructuredAgentSessionAdapter['dispatch']> = vi.fn(async () => ({
     state: 'admitted' as const
   }))
+  let ready = () => {}
   const adapter: StructuredAgentSessionAdapter = {
+    open: () =>
+      new Promise((resolve) => {
+        ready = () => resolve({ reportedOptions: {}, restoreSkippedOptions: [], optionRevision: 0 })
+      }),
     acquire,
     dispatch,
     closeSession: vi.fn(async () => true),
@@ -114,7 +113,7 @@ async function hostFor(definition: StructuredAgentDefinition): Promise<{
     mintSpawnToken: () => `spawn-${acquire.mock.calls.length}`,
     now: () => NOW
   })
-  return { host, store, acquire, dispatch }
+  return { host, store, acquire, dispatch, ready: () => ready() }
 }
 
 describe.each(
@@ -123,7 +122,7 @@ describe.each(
   )
 )('%s starts under the host attempt', (agent, definition) => {
   it('acquires under a host-minted attempt and is handed nothing until it proves its start', async () => {
-    const { host, store, acquire, dispatch } = await hostFor(definition)
+    const { host, store, acquire, dispatch, ready } = await hostFor(definition)
     try {
       const attached = await host.attach(
         CALLER,
@@ -160,33 +159,15 @@ describe.each(
       })
       expect(sent).toMatchObject({ ok: true })
       await vi.waitFor(() =>
-        expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(
-          false
-        )
+        expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(true)
       )
       expect(dispatch).not.toHaveBeenCalled()
 
-      await host.handleAdapterEvent({
-        type: 'started',
-        sessionId: SESSION,
-        fence: record.lease.runtimeFence,
-        acquisitionGeneration: 'generation-1',
-        reportedOptions: { model: 'default' },
-        restoreSkippedOptions: [],
-        optionRevision: host.collaboratorsForTests().runtimeState.optionRevisions.current(SESSION)
-      })
+      ready()
 
       await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
     } finally {
       await host.flushAllStreamedEvents()
     }
   })
-})
-
-describe.each(
-  STRUCTURED_AGENT_RUNTIME_REGISTRATIONS.map(({ definition }) => definition.agent).filter(
-    (agent) => !REAL_ADAPTER_PUBLISHES_AT_SPAWN[agent]
-  )
-)('%s with its own adapter', () => {
-  it.todo('publishes at spawn instead of finishing its handshake first')
 })

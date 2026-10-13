@@ -15,15 +15,18 @@ import type { StructuredAgentSessionClientDelivery } from './structured-agent-se
 import { StructuredAgentSessionDeliveryLoop } from './structured-agent-session-delivery-loop'
 import { structuredAgentSessionCommandRunning } from './structured-agent-session-command-turn'
 import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
+import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 import type {
   StructuredAgentSessionHostDeps,
-  StructuredAgentSessionHostSession
+  StructuredAgentSessionHostSession,
+  StructuredAgentSessionProviderChildIdentity
 } from './structured-agent-session-host-types'
 import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
 import { recoverStructuredRewind } from './structured-rewind-recovery'
 import { retireOutgrownStructuredAgentSessionChild } from './structured-agent-session-outgrown-child'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
+import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 
 export type StructuredAgentSessionConversationDelivery = {
   loop: StructuredAgentSessionDeliveryLoop
@@ -50,6 +53,7 @@ export type StructuredAgentSessionConversationDelivery = {
 
 export function createStructuredAgentSessionConversationDelivery(input: {
   deps: StructuredAgentSessionHostDeps
+  acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
   sessions: Map<string, StructuredAgentSessionHostSession>
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   trackStart: <T>(start: Promise<T>) => Promise<T>
@@ -58,6 +62,10 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     sessionId: string,
     startedFor: string
   ) => Promise<StructuredAgentSessionResumeOutcome>
+  readiness: (
+    sessionId: string,
+    child: StructuredAgentSessionProviderChildIdentity
+  ) => StructuredAgentSessionStartReadiness | null
   /** Stops a child the chat outgrew, so the start after it reads a new login or permission mode. */
   stopOutgrownAgent: (sessionId: string) => Promise<void>
   clientDelivery: Pick<
@@ -77,7 +85,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
       const session = input.clientDelivery.readStopping(sessionId)
         ? undefined
         : sessions.get(sessionId)
-      await retireOutgrownStructuredAgentSessionChild(sessionId, session, startedFor, {
+      await retireOutgrownStructuredAgentSessionChild(sessionId, session, {
         work: {
           childWork: () => input.clientDelivery.readChildWork(sessionId),
           hasOpenDispatch: () => {
@@ -86,7 +94,6 @@ export function createStructuredAgentSessionConversationDelivery(input: {
           },
           providerHoldsDispatch: () => deps.adapter.holdsDispatch?.(sessionId) === true
         },
-        startUnavailable: () => deps.adapter.startUnavailable?.(sessionId),
         launchPermission: async () => {
           const record = deps.store.getRecord(sessionId)
           return record ? structuredAgentSessionLaunchPermission(deps, record) : null
@@ -96,6 +103,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
       })
       return input.ensureProviderChild(sessionId, startedFor)
     },
+    readiness: input.readiness,
     conversationFence: (sessionId) =>
       structuredAgentSessionConversationFence(deps.store, sessionId),
     holdClosed: async (sessionId, which) => {
@@ -116,7 +124,8 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     record: (sessionId) => deps.store.getRecord(sessionId),
     readChildWork: input.clientDelivery.readChildWork,
     stopping: input.clientDelivery.readStopping,
-    now: () => deps.now?.() ?? Date.now()
+    now: () => deps.now?.() ?? Date.now(),
+    acquireAborts: input.acquireAborts
   })
   const adoptOpened = async (
     sessionId: string,

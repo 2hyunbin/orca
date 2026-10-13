@@ -14,11 +14,7 @@ import type {
   AgentSessionTurnActivity
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionAttachParams } from './structured-agent-session-attach'
-import {
-  performAttach,
-  type AttachedOwner,
-  type AttachFlowInput
-} from './structured-agent-session-attach-flow'
+import { performAttach, type AttachFlowInput } from './structured-agent-session-attach-flow'
 import { endStructuredAgentSessionReleasedChild } from './structured-agent-session-attach-failure'
 import { stampFailedCreateOwnerVerdict } from './structured-agent-session-failed-create-refusal'
 import {
@@ -53,6 +49,7 @@ export type StructuredAgentSessionAttachOptions = {
   onAcquisitionFailed?: AttachFlowInput['onAcquisitionFailed']
   /** The queued message a start is for; see `StructuredAgentSessionProviderChild.startedFor`. */
   startedFor?: string
+  startupOptions?: Readonly<Record<string, string>>
   /** A close, an admitted Stop or quit aborted this attach: its refusal is that abort's. */
   onAborted?: () => void
   /** The startup limit aborted this attach's acquire: it failed, nobody stopped it. */
@@ -210,6 +207,7 @@ async function runAttachUnderAbort(
         return startupAttempts.track(sessionId, startup)
       },
       optionRevision: () => context.runtimeState.optionRevisions.current(sessionId),
+      ...(options.startupOptions ? { startupOptions: options.startupOptions } : {}),
       launchPermissionMode: async (record) =>
         (await structuredAgentSessionLaunchPermission(context.deps, record)) ?? undefined,
       ...(options.onAcquisitionFailed ? { onAcquisitionFailed: options.onAcquisitionFailed } : {}),
@@ -260,7 +258,6 @@ async function runAttachUnderAbort(
               // An acquire reports its phase; a re-attach keeps what its child already proved.
               phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
               ...(startedFor === undefined ? {} : { startedFor }),
-              ...launchedOptionsOf(owner, attempt.startup, current),
               ...(permissionMode === undefined ? {} : { permissionMode })
             }
           }
@@ -294,6 +291,8 @@ async function runAttachUnderAbort(
         startupAttempts.published(sessionId, attempt.startup.attemptId, candidate.child)
         if (candidate.child.phase === 'ready') {
           noteStructuredAgentSessionProviderStarted(context.deps, sessionId)
+        } else {
+          context.openProviderChild?.(sessionId, candidate.child)
         }
       }
       context.publishStatus?.(sessionId)
@@ -307,15 +306,6 @@ async function runAttachUnderAbort(
       }
     }
   }
-}
-
-function launchedOptionsOf(
-  owner: AttachedOwner,
-  startup: StructuredAgentSessionStartupAttempt | null,
-  current: StructuredAgentSessionProviderChild | null
-): Pick<StructuredAgentSessionProviderChild, 'launchedOptions'> {
-  const launchedOptions = owner === 'acquired' ? (startup?.options ?? {}) : current?.launchedOptions
-  return launchedOptions ? { launchedOptions } : {}
 }
 
 type AttachCandidate = {

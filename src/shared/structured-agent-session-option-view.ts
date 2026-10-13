@@ -64,5 +64,5 @@ function modelOptionView(
   if (seeded) {
     view = commitStructuredAgentSessionOptionValues(view, seed)
   }
-  return { ...commitStructuredAgentSessionOptionValues(view, held), pendingId: state.pendingId }
+  return { ...commitStructuredAgentSessionOptionValues(view, held), pendingPick: state.pendingPick }
 }

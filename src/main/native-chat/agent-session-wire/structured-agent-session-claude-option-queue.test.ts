@@ -34,6 +34,7 @@ let activeModel: string
 let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let order: string[]
 let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
+let releaseOpen: () => void
 
 function envelope(method: string, fields: Record<string, unknown>): AgentSessionMutationEnvelope {
   return {
@@ -63,7 +64,6 @@ function adapter(): StructuredAgentSessionAdapter {
   acquire = vi.fn(async ({ fence, spawnToken, options }) => {
     activeModel = options?.model ?? DEFAULT_MODEL
     return {
-      providerChildPhase: 'starting' as const,
       process: { hostId: 'local', pid: 4200, processStartTimeMs: NOW, spawnToken },
       acquisitionGeneration: 'generation-1',
       link: {
@@ -76,6 +76,15 @@ function adapter(): StructuredAgentSessionAdapter {
     }
   })
   return {
+    open: () =>
+      new Promise((resolve) => {
+        releaseOpen = () =>
+          resolve({
+            reportedOptions: { model: DEFAULT_MODEL },
+            restoreSkippedOptions: [],
+            optionRevision: 0
+          })
+      }),
     acquire,
     dispatch,
     cancelTurn: vi.fn(async () => ({ cancelled: true })),
@@ -94,6 +103,7 @@ beforeEach(async () => {
   resetHostTestOperationIds()
   activeModel = DEFAULT_MODEL
   order = []
+  releaseOpen = () => {}
   store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
     agents: claudeAndCodexDeclared(),
@@ -125,7 +135,7 @@ afterEach(async () => {
 })
 
 describe('Claude structured session options', () => {
-  it('takes a pick made while the agent starts as intent and applies it, model first, before the first send', async () => {
+  it('captures picks made while opening for the first message', async () => {
     const pick = (key: string, value: string) =>
       host.setOption(CALLER, {
         envelope: envelope('agentSession.setOption', { key, value }),
@@ -144,19 +154,14 @@ describe('Claude structured session options', () => {
     ).toMatchObject({ ok: true })
     expect(dispatch).not.toHaveBeenCalled()
 
-    // The start's own report was read before the picks, so it is out of date.
-    await host.handleAdapterEvent({
-      type: 'started',
-      sessionId: SESSION,
-      fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: 'generation-1',
-      reportedOptions: { model: DEFAULT_MODEL },
-      restoreSkippedOptions: [],
-      optionRevision: 0
-    })
+    releaseOpen()
     await vi.waitFor(() => expect(dispatch).toHaveBeenCalledOnce())
-    expect(order).toEqual([`model=${PICKED_MODEL}`, 'effort=high', 'dispatch'])
-    expect(activeModel).toBe(PICKED_MODEL)
+    expect(order).toEqual(['dispatch'])
+    expect(dispatch.mock.calls[0]?.[0].executionOptions).toEqual({
+      model: PICKED_MODEL,
+      effort: 'high'
+    })
+    expect(activeModel).toBe(DEFAULT_MODEL)
     await host.flushAllStreamedEvents()
     expect(store.getRecord(SESSION)?.options).toEqual({ effort: 'high', model: PICKED_MODEL })
   })

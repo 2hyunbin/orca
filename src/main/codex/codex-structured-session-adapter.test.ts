@@ -271,41 +271,45 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
     expect(codex.connections[0].closeCount).toBe(0)
   })
 
-  it('refuses a resume that lands on a different thread and reaps the child', async () => {
+  it('rejects a resume that lands on a different thread; the host closes once', async () => {
     const codex = fakeCodex({ 'thread/resume': () => ({ thread: { id: 'thread-other' } }) })
-    const events: CodexStructuredSessionEvent[] = []
-    const unsubscribe = vi.fn((event: CodexStructuredSessionEvent) => events.push(event))
-    const failing = adapterFor(codex, { resumeThreadId: 'thread-proven' }, [], {
-      onEvent: unsubscribe
+    const adapter = adapterFor(codex, { resumeThreadId: 'thread-proven' })
+    const acquired = await adapter.acquire({
+      identity: identityFor('session-1'),
+      fence: 9,
+      spawnToken: 'spawn-9'
     })
-    await failing.acquire({ identity: identityFor('session-1'), fence: 9, spawnToken: 'spawn-9' })
-    await vi.waitFor(() =>
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: 'ended',
-          startupUnproven: true,
-          reason: expect.stringContaining('resumed thread-other instead of thread-proven')
-        })
-      )
-    )
+    await expect(
+      adapter.open({
+        sessionId: 'session-1',
+        fence: 9,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+    ).rejects.toThrow('resumed thread-other instead of thread-proven')
+    expect(codex.connections[0].closeCount).toBe(0)
+    expect(await adapter.closeSession('session-1')).toBe(true)
     expect(codex.connections[0].closeCount).toBe(1)
   })
 
-  it('refuses a thread Codex never named', async () => {
+  it('rejects a thread Codex never named; the host closes once', async () => {
     const codex = fakeCodex({ 'thread/start': () => ({}) })
-    const events: CodexStructuredSessionEvent[] = []
-    const unsubscribe = vi.fn((event: CodexStructuredSessionEvent) => events.push(event))
-    const failing = adapterFor(codex, { resumeThreadId: null }, [], { onEvent: unsubscribe })
-    await failing.acquire({ identity: identityFor('session-1'), fence: 1, spawnToken: 'spawn-9' })
-    await vi.waitFor(() =>
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          type: 'ended',
-          startupUnproven: true,
-          reason: expect.stringContaining('did not name the thread')
-        })
-      )
-    )
+    const adapter = adapterFor(codex)
+    const acquired = await adapter.acquire({
+      identity: identityFor('session-1'),
+      fence: 1,
+      spawnToken: 'spawn-9'
+    })
+    await expect(
+      adapter.open({
+        sessionId: 'session-1',
+        fence: 1,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+    ).rejects.toThrow('did not name the thread')
+    expect(codex.connections[0].closeCount).toBe(0)
+    expect(await adapter.closeSession('session-1')).toBe(true)
     expect(codex.connections[0].closeCount).toBe(1)
   })
 

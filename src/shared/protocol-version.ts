@@ -50,6 +50,8 @@ import { DEVICE_KEY_RUNTIME_CAPABILITIES } from './device-key-capability'
 export * from './agent-session-resume-runtime-capabilities'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from './agent-session-background-task-child-views-capability'
 import { AGENT_SESSION_STOP_RUNTIME_CAPABILITIES } from './agent-session-stop-capabilities'
+import * as AGENT_SESSION_QUEUE from './agent-session-queue-capabilities'
+export * from './agent-session-queue-capabilities'
 import { AGENT_SESSION_CREATE_RUNTIME_CAPABILITIES } from './agent-session-create-capabilities'
 import { REMOTE_SERVER_UPDATE_CAPABILITY } from './remote-server-update'
 import { SKILL_RUNTIME_CAPABILITIES } from './skill-install-capability'
@@ -235,34 +237,6 @@ export const AGENT_SESSION_ACCEPTED_SEND_RUNTIME_CAPABILITY =
 // holds there.
 export const AGENT_SESSION_SEND_ANSWERS_PROOF_RUNTIME_CAPABILITY =
   'agent-session.send-answers-proof.v1' as const
-// Why: `agentSession.send`'s params are strict, so an older host rejects `delivery`; and only a
-// capable client can render the `queued` result arm. It gates `delivery: 'queue-if-active'` and
-// the client's queueing setting and chord, never the published draft list or its card actions: a
-// host without it still publishes a message it kept unsent across a restart or a close, and both
-// clients show that card and call its actions. DARK ON PURPOSE — not in RUNTIME_CAPABILITIES:
-// advertising still requires the integrated Codex steer matrix (#21062) in the shipped host.
-// v1 includes `submission.queuedMessageId` on every draft hand-off: a client reads that link and
-// never compares a draft id with a submission id. It also publishes the queue's pause once, as
-// `queuePause` beside the list, lifted by `agentSession.queuedMessagesResume` or any turn sent
-// after it starting; while it is set every waiting card waits. `nextQueuedMessageId` beside the list
-// names the card the queue sends next once nothing runs, null while anything holds it; absent (an
-// older host) reads as null. A card carries a hold of its own when its conversion failed
-// (`send_failed`) or the host kept it unsent (`kept`). The host mechanism lands first; the constant
-// gates the rollout.
-export const AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY =
-  'agent-session.queued-messages.v1' as const
-// Why: a host advertising this edits a queued card in place (`agentSession.queuedMessageUpdate`)
-// and holds it from automatic delivery while edited (`agentSession.queuedMessageEditHold`). Apart
-// from queued-messages.v1: kept and agent-mail cards are editable with mid-turn queueing still off.
-// A client offers Edit only when the host advertises it; there is no copy-and-delete fallback.
-export const AGENT_SESSION_QUEUED_MESSAGE_EDIT_RUNTIME_CAPABILITY =
-  'agent-session.queued-message-edit.v1' as const
-// Why: `agentSession.conversationCommand`'s params are strict, so an older host rejects
-// `delivery`. A host advertising this holds a /compact sent while the agent works as a queued
-// card instead of refusing it. Clients ask only when queued-messages.v1 is advertised too:
-// the card is the only place the waiting command shows.
-export const AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY =
-  'agent-session.queued-commands.v1' as const
 // Why: paired clients advertise Claude-structured support so the host can gate its agent-specific
 // journal and lifecycle surfaces independently from Codex support.
 export const CLAUDE_STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY =
@@ -417,8 +391,9 @@ export const RUNTIME_CAPABILITIES = [
   // turn starts, so a client may gate on either.
   AGENT_SESSION_ACCEPTED_SEND_RUNTIME_CAPABILITY,
   AGENT_SESSION_SEND_ANSWERS_PROOF_RUNTIME_CAPABILITY,
-  AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY,
-  AGENT_SESSION_QUEUED_MESSAGE_EDIT_RUNTIME_CAPABILITY,
+  AGENT_SESSION_QUEUE.AGENT_SESSION_MESSAGE_CHOICES_RUNTIME_CAPABILITY,
+  AGENT_SESSION_QUEUE.AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY,
+  AGENT_SESSION_QUEUE.AGENT_SESSION_QUEUED_MESSAGE_EDIT_RUNTIME_CAPABILITY,
   AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY,
   ...STRUCTURED_AGENT_SESSION_SURFACE_RUNTIME_CAPABILITIES,
   ...AGENT_SESSION_ATTENTION_RUNTIME_CAPABILITIES,

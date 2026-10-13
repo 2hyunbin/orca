@@ -13,7 +13,7 @@ import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-qu
 import type { AgentSessionMutationResult } from '../../../shared/agent-session-wire'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
-  mutateStructuredAgentSession,
+  runStructuredAgentSessionMutation,
   type StructuredAgentSessionMutationContext
 } from './structured-agent-session-mutation-context'
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
@@ -26,7 +26,10 @@ import {
   structuredAgentSessionFailureWordsContext,
   structuredAgentSessionSendBlock
 } from './structured-agent-session-send-preparation'
-import { runAfterProviderStart } from './structured-agent-session-provider-start-hold'
+import {
+  runAfterRewindStart,
+  type ReadyOperationSelection
+} from './structured-agent-session-ready-operation'
 import { STRUCTURED_AGENT_SESSION_START_WAIT_MS } from './structured-agent-session-send-settlement'
 import {
   conversationCommandFailure,
@@ -147,8 +150,8 @@ function acceptStructuredConversationCommand(
     ...(params.delivery ? { delivery: params.delivery } : {}),
     priorRecord
   })
-  return runAfterProviderStart(context, params.envelope.sessionId, () =>
-    acceptUnderSerialize(context, caller, params, plan, arrival)
+  return runAfterRewindStart(context, caller.callerKey, params.envelope, plan, (selection) =>
+    acceptUnderSerialize(context, caller, params, plan, arrival, selection)
   )
 }
 
@@ -157,9 +160,10 @@ function acceptUnderSerialize(
   caller: StructuredAgentSessionCaller,
   params: ConversationCommandParams,
   plan: ReturnType<typeof conversationCommandPlan>,
-  arrival: { clearInFlight?: boolean }
+  arrival: { clearInFlight?: boolean },
+  selection: ReadyOperationSelection
 ): Promise<AgentSessionMutationResult<ConversationCommandAcceptance>> {
-  return mutateStructuredAgentSession(
+  return runStructuredAgentSessionMutation(
     context,
     caller,
     params.envelope,
@@ -206,6 +210,6 @@ function acceptUnderSerialize(
         return plan.run(ctx)
       }
     },
-    sendPreparation(context, params.envelope, arrival)
+    sendPreparation(context, params.envelope, arrival, selection)
   )
 }

@@ -29,7 +29,7 @@ class ScriptedPiConnection implements PiRpcConnection {
     private readonly wire: string[],
     private readonly onClosed: () => void,
     number: number,
-    /** A Pi with no login: it lists no model and fails every prompt as not signed in. */
+    /** A Pi with no login lists no model. */
     private readonly signedOut = false
   ) {
     this.pid = 42_000 + number
@@ -195,6 +195,7 @@ class ScriptedPiConnection implements PiRpcConnection {
 export type ScriptedPiChild = ScriptedAgentChild & {
   /** Every request command and prompt any spawn received, in order. */
   wire(): readonly string[]
+  signIn(): void
 }
 
 export const piScriptedChild = (options: { signedOut?: boolean } = {}): ScriptedPiChild => {
@@ -203,6 +204,7 @@ export const piScriptedChild = (options: { signedOut?: boolean } = {}): Scripted
   const wire: string[] = []
   let resumed = 0
   let closed = 0
+  let signedOut = options.signedOut ?? false
   const script: ScriptedPiChild = {
     holdHandshakes: true,
     completeTurns: true,
@@ -242,7 +244,7 @@ export const piScriptedChild = (options: { signedOut?: boolean } = {}): Scripted
             closed += 1
           },
           children.length + 1,
-          options.signedOut
+          signedOut
         )
         children.push(child)
         return child
@@ -255,7 +257,10 @@ export const piScriptedChild = (options: { signedOut?: boolean } = {}): Scripted
     spawns: () => children.length,
     resumes: () => resumed,
     closes: () => closed,
-    wire: () => wire
+    wire: () => wire,
+    signIn: () => {
+      signedOut = false
+    }
   }
   return script
 }

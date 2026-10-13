@@ -41,9 +41,8 @@ let notify: (method: string, params: unknown) => void
 /** Read at each start, so a test can say what the next start resumes. */
 let launch: { resumeThreadId?: string | null }
 let log: ReturnType<typeof recordingStructuredAgentSessionLogger>
-let stopSessionWithCause: MockInstance<
-  NonNullable<StructuredAgentSessionAdapter['stopSessionWithCause']>
->
+let disposeSession: MockInstance<NonNullable<StructuredAgentSessionAdapter['disposeSession']>>
+let closeProviderSession: NonNullable<StructuredAgentSessionAdapter['disposeSession']>
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-codex-stop-row-'))
@@ -77,7 +76,8 @@ beforeEach(async () => {
       }
     }
   })
-  stopSessionWithCause = vi.spyOn(adapter, 'stopSessionWithCause')
+  closeProviderSession = adapter.disposeSession.bind(adapter)
+  disposeSession = vi.spyOn(adapter, 'disposeSession')
   host = new StructuredAgentSessionHost({
     agents: NO_STRUCTURED_AGENTS,
     logger: (log = recordingStructuredAgentSessionLogger()).logger,
@@ -180,7 +180,7 @@ async function followUpUnopened(): Promise<void> {
 /** Whether the Stop ended the child: the host's stop, which proves the exit. Nothing else here
  *  stops it before the test's teardown. */
 function childEndedByStop(): boolean {
-  return stopSessionWithCause.mock.calls.length > 0
+  return disposeSession.mock.calls.length > 0
 }
 
 /** The Stop's second step, which ends the child once Codex has wound down, has run. */
@@ -212,6 +212,50 @@ describe('a Codex Stop that Codex answered', () => {
   )
 })
 
+describe('a Codex Stop request note', () => {
+  it('exists once while child close remains unresolved, including a repeated Stop', async () => {
+    await runningTurn()
+    const held = Promise.withResolvers<void>()
+    disposeSession.mockImplementationOnce(async (sessionId, cause) => {
+      await held.promise
+      return closeProviderSession(sessionId, cause)
+    })
+
+    expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
+    await vi.waitFor(() => expect(disposeSession).toHaveBeenCalledOnce())
+    expect((await journalRows()).statuses).toEqual(['Cancellation requested.'])
+    const repeated = stop()
+    expect((await journalRows()).statuses).toEqual(['Cancellation requested.'])
+
+    held.resolve()
+    expect(await repeated).toMatchObject({ ok: true })
+    await stopSettled()
+    expect((await journalRows()).statuses).toEqual(['Cancellation requested.'])
+  })
+
+  it('starts child close while the request note write is blocked', async () => {
+    await runningTurn()
+    const journal = host['sessions'].get(SESSION)?.journal
+    if (!journal) {
+      throw new Error('expected an open journal')
+    }
+    const append = journal.appendItem.bind(journal)
+    const held = Promise.withResolvers<Awaited<ReturnType<typeof journal.appendItem>>>()
+    vi.spyOn(journal, 'appendItem').mockImplementation((identity, body, linkage) =>
+      body.kind === 'status' ? held.promise : append(identity, body, linkage)
+    )
+
+    const stopping = stop()
+    try {
+      await vi.waitFor(() => expect(disposeSession).toHaveBeenCalledOnce())
+    } finally {
+      held.resolve({ cursor: { epoch: 'test', sequence: 1 }, itemId: 'note', revision: 1 })
+    }
+    expect(await stopping).toMatchObject({ ok: true, value: { cancelled: true } })
+    await stopSettled()
+  })
+})
+
 describe('a Codex Stop whose interrupt failed', () => {
   it.each([
     ['Codex could not submit it, naming no turn', undefined, 'internal error'],
@@ -230,7 +274,7 @@ describe('a Codex Stop whose interrupt failed', () => {
       await stopSettled()
 
       expect(stopped).toMatchObject({ ok: true, value: { cancelled: true } })
-      expect(stopSessionWithCause).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+      expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
       expect(codex.connections.at(-1)?.closed).toBe(true)
       const rows = await journalRows()
       expect(rows.turns).toEqual(['interrupted'])
@@ -245,13 +289,13 @@ describe('a Codex Stop whose interrupt failed', () => {
     codex.routes['turn/interrupt'] = () => {
       throw interruptFailure('internal error')
     }
-    stopSessionWithCause.mockResolvedValueOnce(false)
+    disposeSession.mockResolvedValueOnce(false)
 
     const stopped = await stop('turn-1')
     await stopSettled()
 
     expect(stopped).toMatchObject({ ok: true, value: { cancelled: true } })
-    expect(stopSessionWithCause).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
     const rows = await journalRows()
     expect(rows.turns).toEqual(['running'])
     expect(rows.statuses).toEqual(['Cancellation was not confirmed.'])
@@ -296,8 +340,9 @@ describe('a Codex Stop whose interrupt failed', () => {
     "ends the child when Codex's refusal arrives before the turn's end, %s",
     async (_case, turnId) => {
       await runningTurn()
+      const stoppedTurns = turns
       codex.routes['turn/interrupt'] = () => {
-        setTimeout(() => turns.end('completed'), 2)
+        setTimeout(() => stoppedTurns.end('completed'), 2)
         throw refused('no active turn to interrupt')
       }
 
@@ -448,7 +493,7 @@ describe('a Codex Stop whose interrupt failed', () => {
     await stopSettled()
 
     expect(stopped).toMatchObject({ ok: true, value: { cancelled: true } })
-    expect(stopSessionWithCause).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
+    expect(disposeSession).toHaveBeenCalledExactlyOnceWith(SESSION, 'user-stop')
     await vi.waitFor(() => expect(host['sessions'].get(SESSION)?.child).toBeNull())
     expect(host['sessions'].get(SESSION)?.lastEndedChild).toMatchObject({
       cause: 'user-stop',

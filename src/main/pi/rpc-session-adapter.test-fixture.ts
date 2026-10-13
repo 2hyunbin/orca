@@ -168,9 +168,12 @@ export async function setup(
     logger: { warn: vi.fn(), error: vi.fn() }
   })
   const acquired = await adapter.acquire(input)
-  // Commands are read after the start; waiting for them leaves nothing of it in flight.
-  await vi.waitFor(() => expect(adapter.readCommands(sessionId)).toBeDefined())
-  const started = reportedEvent(lifecycle, 'started')
+  const started = await adapter.open({
+    sessionId,
+    fence: 7,
+    acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+    signal: new AbortController().signal
+  })
   lifecycle.mockClear()
   const connection = connections[0]
   if (!connection) {

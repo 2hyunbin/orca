@@ -12,6 +12,7 @@ import type {
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionMessageSource } from '../../../shared/agent-session-message-source'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import type { JournalHostDatabase } from './journal-host-database'
 import type { JournalLifecycleMutationInput } from './journal-row-builders'
 import type { JournalRow } from './journal-row-schema'
@@ -94,6 +95,7 @@ export type JournalResolvedLifecycleBatchInput = Omit<
 }
 
 export type JournalSubmissionInput = {
+  executionOptions?: AgentSessionExecutionOptions
   clientMessageId: string
   payloadFingerprint: string
   body: AgentJournalMessageItem

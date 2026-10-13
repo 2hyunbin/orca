@@ -1,11 +1,11 @@
-// A message that starts a signed-out Pi reaches it once and is settled by Pi's own refusal; the
-// start made for it is never replaced as a signed-out child, which would start Pi for it forever.
+// A signed-out Pi fails construction once; a later send after sign-in opens a new child.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { readWholeAgentSessionFailureFact } from '../../shared/agent-session-failure'
+import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
   hostTestMessage,
   HOST_TEST_SESSION as SESSION
@@ -13,6 +13,7 @@ import {
 import { createTestParams } from '../native-chat/agent-session-wire/structured-agent-session-create-test-fixture'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { piScriptedChild } from '../pi/pi-scripted-child.test-fixture'
+import { peekOpenedAgentSessionRecordStore } from './agent-session-record-store-slot'
 import {
   ensureStructuredAgentSessionHost,
   stopStructuredAgentSessionRuntime
@@ -31,7 +32,7 @@ afterEach(async () => {
   }
 })
 
-it('settles the first message of a signed-out Pi as not signed in, and starts Pi once', async () => {
+it('settles the held message once, closes Pi, and starts afresh for a later send after sign-in', async () => {
   directory = await mkdtemp(join(tmpdir(), 'orca-pi-signed-out-'))
   const root = directory
   const script = piScriptedChild({ signedOut: true })
@@ -67,11 +68,10 @@ it('settles the first message of a signed-out Pi as not signed in, and starts Pi
   if (!created.ok) {
     throw new Error(JSON.stringify(created.refusal))
   }
-  // Pi answers its start after the host has published it, as a real Pi does.
+  // Pi answers its start after the host has published it.
   await vi.waitFor(() =>
     expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('starting')
   )
-  await new Promise((resolve) => setTimeout(resolve, 50))
   script.releaseHandshake()
   const submission = async () => {
     await host.flushStreamedEvents(SESSION)
@@ -86,9 +86,28 @@ it('settles the first message of a signed-out Pi as not signed in, and starts Pi
   expect(readWholeAgentSessionFailureFact((await submission())?.rejection)?.kind).toBe(
     'notSignedIn'
   )
-  // Nothing starts Pi again for a message it already refused.
-  await new Promise((resolve) => setTimeout(resolve, 500))
+  await vi.waitFor(() => expect(script.closes()).toBe(1))
   expect(script.spawns()).toBe(1)
-  expect(script.closes()).toBe(0)
-  expect(new Set(script.prompts())).toEqual(new Set(['hello, signed-out Pi']))
+  expect(script.prompts()).toEqual([])
+  script.signIn()
+  const body = hostTestMessage('hello after sign-in')
+  const fields = { body }
+  const sent = await host.send(caller, {
+    envelope: {
+      sessionId: SESSION,
+      clientOperationId: operationId(),
+      expectedRuntimeFence:
+        peekOpenedAgentSessionRecordStore()?.getRecord(SESSION)?.lease.runtimeFence ?? null,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({
+        method: 'agentSession.send',
+        sessionId: SESSION,
+        fields
+      })
+    },
+    body
+  })
+  expect(sent.ok).toBe(true)
+  await vi.waitFor(() => expect(script.spawns()).toBe(2))
+  script.releaseHandshake()
+  await vi.waitFor(() => expect(script.prompts()).toEqual(['hello after sign-in']))
 })

@@ -19,6 +19,7 @@ import type { AgentSessionContextUsage } from './agent-session-context-usage'
 import type { AgentSessionProviderHandle } from './agent-session-provider-handle'
 import type { NativeChatBlock, NativeChatRole } from './native-chat-types'
 import type { AgentMessageSource } from './agent-session-message-source'
+import type { AgentSessionExecutionOptions } from './agent-session-execution-options'
 
 export { type AgentType }
 
@@ -467,6 +468,8 @@ export type AgentJournalDispatchState = (typeof AGENT_JOURNAL_DISPATCH_STATES)[n
  *  the turn reads as delivery unconfirmed, never as sent and never as failed. */
 export type AgentJournalSubmission = {
   clientMessageId: string
+  /** Immutable choices captured on acceptance; absent on older submissions. */
+  executionOptions?: AgentSessionExecutionOptions
   /** Execution fence of the latest dispatch attempt or recovery. */
   fence: number
   payloadFingerprint: string

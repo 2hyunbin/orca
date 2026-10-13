@@ -61,7 +61,7 @@ async function signInWith(options: {
   })
   await rig.acquire()
   const methods = rig.sent('authenticate').map((frame) => METHOD.parse(frame.params).methodId)
-  return { rig, acquired: rig.ended.length ? rig.ended[0] : rig.started(), methods }
+  return { rig, acquired: rig.openFailure() ?? rig.started(), methods }
 }
 
 describe('Grok sign-in on its own machine', () => {
@@ -91,7 +91,7 @@ describe('Grok sign-in on its own machine', () => {
       authMethods: [{ id: 'browser', name: 'Browser' }]
     })
     expect(methods).toEqual([])
-    expect(acquired).toMatchObject({ type: 'ended', failure: { kind: 'notSignedIn' } })
+    expect(acquired).toMatchObject({ reason: 'notSignedIn' })
   })
 
   it('signs in the same way when it reopens a saved session', async () => {

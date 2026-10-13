@@ -359,7 +359,7 @@ describe('reattaching a Grok chat the journal holds', () => {
         agent.on('session/load', (frame) => agent.fail(frame, -32000, 'Authentication required'))
     })
     await rig.acquire()
-    expect(rig.ended).toMatchObject([{ failure: { kind: 'notSignedIn' }, startupUnproven: true }])
+    expect(rig.openFailure()).toMatchObject({ reason: 'notSignedIn' })
     expect(rig.sent('session/new')).toEqual([])
   })
 

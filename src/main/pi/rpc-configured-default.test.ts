@@ -28,10 +28,6 @@ import { agentModelCatalogFingerprint } from '../native-chat/agent-model-catalog
 import { createPiModelCatalogProbe, piModelCatalogFromListing } from './rpc-model-catalog-probe'
 import type { PiRpcConnection } from './rpc-session'
 import { PiRpcSessionAdapter } from './rpc-session-adapter'
-import type {
-  StructuredAgentSessionLifecycleEvent,
-  StructuredAgentSessionStartedEvent
-} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 
 const PI_HOME = { variable: 'PI_CODING_AGENT_DIR', path: '/homes/pi' }
 // What `pi --list-models` prints: the first row is not the model Pi starts on.
@@ -180,7 +176,6 @@ async function piHost() {
       }
     } as AgentSessionRecord)
     const rig = await openProviderTimelineRig({ agent: 'pi', sessionId })
-    const onLifecycle = vi.fn<(event: StructuredAgentSessionLifecycleEvent) => void>()
     const adapter = new PiRpcSessionAdapter({
       resolveLaunch: async () => ({
         command: '/opt/pi/bin/pi',
@@ -196,13 +191,13 @@ async function piHost() {
         child = piChild(opts.available ?? AVAILABLE, opts.thinking ?? 'high', opts.startsOn ?? '')
         return child.connection
       },
-      onLifecycle,
+      onLifecycle: vi.fn(),
       onSettled: vi.fn(),
       onIdle: vi.fn(),
       logger: { warn: vi.fn(), error: vi.fn() }
     })
     adapters.push(adapter)
-    await adapter.acquire({
+    const acquired = await adapter.acquire({
       identity: {
         sessionId,
         workspaceId: 'ws-1',
@@ -215,16 +210,17 @@ async function piHost() {
       options: opts.saved ?? {},
       events: rig.eventSink
     })
-    // The acquire answers at spawn; the start hands the host its listing once it is proven.
-    const started = await vi.waitFor(() => {
-      const event = onLifecycle.mock.calls
-        .map(([call]) => call)
-        .find((call): call is StructuredAgentSessionStartedEvent => call.type === 'started')
-      if (!event) {
-        throw new Error('Pi has not started')
-      }
-      return event
-    })
+    const started = await adapter
+      .open({
+        sessionId,
+        fence: 1,
+        acquisitionGeneration: acquired.acquisitionGeneration ?? null,
+        signal: new AbortController().signal
+      })
+      .catch(async (error: unknown) => {
+        await adapter.closeSession(sessionId)
+        throw error
+      })
     if (!started.catalogListing) {
       throw new Error('a Pi start hands the host its listing')
     }
@@ -301,27 +297,37 @@ describe('Pi’s default comes from what a chat with no pick runs', () => {
     ).toEqual(NOTHING)
   })
 
-  it('learns nothing from a chat that restored a pick or resumed a conversation', async () => {
+  it('learns its configured default despite a saved next-message pick, but not from a resumed conversation', async () => {
     const { catalog, chat } = await piHost()
     await catalog.read({ agent: 'pi', waitForListing: true })
     const clean = workspace('clean')
-    expect((await chat(clean, { saved: { model: 'openai/gpt-6' } })).listing).not.toHaveProperty(
-      'configuredDefault'
-    )
-    expect((await chat(clean, { resumed: true })).listing).not.toHaveProperty('configuredDefault')
-    expect(firstFrame(await catalog.read({ agent: 'pi', workspacePath: clean }))).toEqual(NOTHING)
+    expect(
+      (await chat(clean, { saved: { model: 'openai/gpt-6' } })).listing.configuredDefault
+    ).toEqual({
+      modelId: 'openai/gpt-6',
+      effort: 'high'
+    })
+    expect(firstFrame(await catalog.read({ agent: 'pi', workspacePath: clean }))).toEqual({
+      model: 'openai/gpt-6',
+      effort: 'high'
+    })
+    const resumed = await piHost()
+    await resumed.catalog.read({ agent: 'pi', waitForListing: true })
+    expect(
+      (await resumed.chat(workspace('resumed'), { resumed: true })).listing
+    ).not.toHaveProperty('configuredDefault')
   })
 
   it('saves no default from a signed-out Pi, which lists no model', async () => {
     const { catalog, chat } = await piHost()
     const clean = workspace('clean')
     await catalog.read({ agent: 'pi', waitForListing: true })
-    expect((await chat(clean, { available: [] })).listing).not.toHaveProperty('configuredDefault')
+    await expect(chat(clean, { available: [] })).rejects.toMatchObject({ reason: 'notSignedIn' })
     expect(firstFrame(await catalog.read({ agent: 'pi', workspacePath: clean }))).toEqual(NOTHING)
 
     // Nor does it forget one a signed-in chat taught.
     await chat(clean)
-    await chat(clean, { available: [] })
+    await expect(chat(clean, { available: [] })).rejects.toMatchObject({ reason: 'notSignedIn' })
     expect(firstFrame(await catalog.read({ agent: 'pi', workspacePath: clean }))).toEqual({
       model: 'openai/gpt-6',
       effort: 'high'
@@ -403,10 +409,10 @@ describe('Pi’s default comes from what a chat with no pick runs', () => {
     })
   })
 
-  it('learns the model, but not the thinking level, from a chat that restored only its thinking level', async () => {
+  it('learns the configured model and thinking level despite a saved next-message thinking pick', async () => {
     const { chat } = await piHost()
     const { listing } = await chat(workspace('clean'), { saved: { effort: 'low' } })
-    expect(listing.configuredDefault).toEqual({ modelId: 'openai/gpt-6' })
+    expect(listing.configuredDefault).toEqual({ modelId: 'openai/gpt-6', effort: 'high' })
   })
 
   it('learns from a new Pi session standing in for a conversation whose file was gone', async () => {

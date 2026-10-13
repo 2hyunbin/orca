@@ -17,6 +17,7 @@ import type {
 import type { QUEUED_MESSAGE_PAUSED_SEND_FAILED } from '../../../shared/agent-session-queued-message-wire'
 import { rejectedDraftSettlement } from './journal-dispatch-settlement'
 import { readStoredQueuedMessageRow } from './queued-message-stored-row'
+import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 
 export type QueuedMessageState = 'waiting' | 'dispatched' | 'returned' | 'withdrawn'
 
@@ -36,6 +37,7 @@ export function isUnsettledQueuedMessage(row: Pick<QueuedMessageRow, 'state'>): 
 
 export type QueuedMessageRow = {
   sessionId: string
+  executionOptions?: AgentSessionExecutionOptions
   messageId: string
   position: number
   body: AgentJournalMessageItem
@@ -64,7 +66,7 @@ export type QueuedMessageRow = {
 }
 
 const COLUMNS =
-  'session_id, message_id, position, body_json, fingerprint, created_at, host_instance, state, hold_reason, returned_reason, returned_rejection, settled_at, settled_by_op, consumed_as, carried_from, queued_epoch, queued_sequence'
+  'session_id, message_id, position, body_json, fingerprint, created_at, host_instance, state, hold_reason, returned_reason, returned_rejection, settled_at, settled_by_op, consumed_as, carried_from, queued_epoch, queued_sequence, execution_options_json'
 
 export function insertQueuedMessage(
   db: Database.Database,
@@ -72,6 +74,7 @@ export function insertQueuedMessage(
     sessionId: string
     messageId: string
     body: AgentJournalMessageItem
+    executionOptions?: AgentSessionExecutionOptions
     fingerprint: string
     hostInstance: string
     queuedAt: AgentJournalCursor
@@ -88,7 +91,7 @@ export function insertQueuedMessage(
   const position = input.position ?? Number(highest?.p ?? 0) + 1
   db.prepare(
     `INSERT INTO queued_messages (${COLUMNS})
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?, NULL, NULL, NULL, NULL, NULL, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?)`
   ).run(
     input.sessionId,
     input.messageId,
@@ -100,13 +103,15 @@ export function insertQueuedMessage(
     input.holdReason ?? null,
     null,
     input.queuedAt.epoch,
-    input.queuedAt.sequence
+    input.queuedAt.sequence,
+    input.executionOptions ? JSON.stringify(input.executionOptions) : null
   )
   return {
     sessionId: input.sessionId,
     messageId: input.messageId,
     position,
     body: input.body,
+    ...(input.executionOptions ? { executionOptions: input.executionOptions } : {}),
     fingerprint: input.fingerprint,
     createdAt: input.now,
     hostInstance: input.hostInstance,
