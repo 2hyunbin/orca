@@ -42,12 +42,14 @@ export class OrcaRuntimeWithPersistHeadlessSessionTabProps extends OrcaRuntimeWi
     }
 
     const unifiedTabs = session.unifiedTabs?.[worktreeId]
-    if (unifiedTabs?.some((tab) => tab.id === tabId || tab.entityId === tabId)) {
+    // A browser row is named by its page; a window keys the tab's props by the saved tab.
+    const unifiedId = this.serveBrowserTabs.savedTabId(worktreeId, tabId) ?? tabId
+    if (unifiedTabs?.some((tab) => tab.id === unifiedId || tab.entityId === unifiedId)) {
       changed = true
       nextSession.unifiedTabs = {
         ...session.unifiedTabs,
         [worktreeId]: unifiedTabs.map((tab) =>
-          tab.id === tabId || tab.entityId === tabId
+          tab.id === unifiedId || tab.entityId === unifiedId
             ? {
                 ...tab,
                 ...(props.color !== undefined ? { color: props.color } : {}),

@@ -29,8 +29,10 @@ export class ServeBrowserTabs {
     private readonly deps: {
       /** The page backend while no window hosts the browser tabs, else null. */
       backend: () => BrowserBackend | null
-      livePageIds: (worktreeId: string) => ReadonlySet<string>
-      worktreeIds: () => Iterable<string>
+      /** Live pages in a worktree, or in every worktree when none is named. */
+      livePageIds: (worktreeId: string | undefined) => ReadonlySet<string>
+      /** Every workspace that holds a saved browser tab, whatever else it holds. */
+      savedWorktreeIds: () => Iterable<string>
       session: (worktreeId: string) => WorkspaceSessionState | null
       hostId: (worktreeId: string) => ExecutionHostId
       save: (worktreeId: string, session: WorkspaceSessionState) => void
@@ -54,9 +56,27 @@ export class ServeBrowserTabs {
     )
   }
 
-  /** Saved tabs whose page has not started, each by the page it shows. */
-  listRestorable(worktreeId: string): RestorableBrowserPage[] {
-    const session = this.deps.backend() ? this.deps.session(worktreeId) : null
+  /** Saved tabs whose page has not started, each by the page it shows; every worktree's if none. */
+  listRestorable(
+    worktreeId: string | undefined
+  ): (RestorableBrowserPage & { worktreeId: string })[] {
+    if (!this.deps.backend()) {
+      return []
+    }
+    const worktreeIds = worktreeId ? [worktreeId] : [...new Set(this.deps.savedWorktreeIds())]
+    return worktreeIds.flatMap((id) =>
+      this.listRestorableIn(id).map((page) => ({ ...page, worktreeId: id }))
+    )
+  }
+
+  /** The saved tab showing a page, which a window keys pin and colour by. */
+  savedTabId(worktreeId: string, pageId: string): string | null {
+    const session = this.deps.session(worktreeId)
+    return session ? (findSavedBrowserPage(session, worktreeId, pageId)?.tabId ?? null) : null
+  }
+
+  private listRestorableIn(worktreeId: string): RestorableBrowserPage[] {
+    const session = this.deps.session(worktreeId)
     if (!session) {
       return []
     }
@@ -81,6 +101,25 @@ export class ServeBrowserTabs {
   }
 
   /**
+   * A command that names no page acts on the worktree's active page; with none running, that is
+   * the first saved tab, as the tab list reports it. False when nothing is saved to start.
+   */
+  async restoreFirst(worktreeId: string | undefined): Promise<boolean> {
+    if (this.deps.livePageIds(worktreeId).size > 0) {
+      return false
+    }
+    const first = this.listRestorable(worktreeId)[0]
+    return first ? this.restore(first.worktreeId, first.pageId) : false
+  }
+
+  /** The worktree of a saved tab whose page has not started, or null when none shows it. */
+  restorableWorktreeOf(worktreeId: string | undefined, pageId: string): string | null {
+    return (
+      this.listRestorable(worktreeId).find((page) => page.pageId === pageId)?.worktreeId ?? null
+    )
+  }
+
+  /**
    * Starts a saved tab's page, once however many callers ask; false when none is saved. A caller
    * that names only the page is answered from whichever workspace saved it.
    */
@@ -91,22 +130,16 @@ export class ServeBrowserTabs {
       return true
     }
     const backend = this.deps.backend()
-    const owner = worktreeId ? [worktreeId] : [...this.deps.worktreeIds()]
-    const found = owner.flatMap((id) =>
-      this.listRestorable(id)
-        .filter((entry) => entry.pageId === pageId)
-        .map((page) => ({ worktreeId: id, page }))
-    )[0]
+    const found = this.listRestorable(worktreeId).find((entry) => entry.pageId === pageId)
     if (!backend || !found) {
       return false
     }
-    const { page } = found
     const started = backend
       .createTab({
         browserPageId: pageId,
-        url: page.url,
+        url: found.url,
         worktreeId: found.worktreeId,
-        ...(page.profileId ? { profileId: page.profileId } : {})
+        ...(found.profileId ? { profileId: found.profileId } : {})
       })
       .then(() => undefined)
       .finally(() => this.restoring.delete(pageId))

@@ -74,6 +74,13 @@ export class RuntimeBrowserCommandsWithActiveScreencastsByPageId extends Runtime
 
   // Why: the CLI sends selectors (e.g. "path:/...") but the bridge keys tabs by "repoId::path"; resolve to that store-compatible id.
   private async resolveBrowserWorktreeId(selector?: string): Promise<string | undefined> {
+    if (!this.host.getAvailableAuthoritativeWindow() && this.host.restoreFirstServeBrowserPage) {
+      const worktreeId = selector
+        ? (await this.host.resolveWorktreeSelector(selector)).id
+        : undefined
+      await this.host.restoreFirstServeBrowserPage(worktreeId)
+      return worktreeId
+    }
     if (!selector) {
       // Why: after restart, webviews mount only when the pane is visible; activate the view so persisted tabs become operable via registerGuest.
       const bridge = this.host.getAgentBrowserBridge()

@@ -43,7 +43,10 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
       new Set(
         (this.agentBrowserBridge?.tabList?.(worktreeId).tabs ?? []).map((tab) => tab.browserPageId)
       ),
-    worktreeIds: () => this.getKnownWorkspaceSessionWorktreeIds(),
+    savedWorktreeIds: () =>
+      (this.store?.getWorkspaceSessionHostIds?.() ?? []).flatMap((hostId) =>
+        Object.keys(this.store?.getWorkspaceSession?.(hostId)?.browserTabsByWorktree ?? {})
+      ),
     session: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
     hostId: (worktreeId) => this.getWorkspaceSessionHostIdForWorktree(worktreeId),
     save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session)
@@ -73,7 +76,20 @@ export class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideLi
         this.retireRuntimeOwnedBrowserSessionTab(worktreeId, browserPageId),
       saveServeBrowserTab: (page) => this.serveBrowserTabs.opened(page),
       restoreServeBrowserPage: (worktreeId, browserPageId) =>
-        this.serveBrowserTabs.restore(worktreeId, browserPageId)
+        this.serveBrowserTabs.restore(worktreeId, browserPageId),
+      listServeBrowserTabs: (worktreeId) =>
+        this.serveBrowserTabs.listRestorable(worktreeId).map((page, index) => ({
+          browserPageId: page.pageId,
+          index,
+          url: page.url,
+          title: page.title,
+          active: false,
+          worktreeId: page.worktreeId,
+          profileId: page.profileId
+        })),
+      restoreFirstServeBrowserPage: (worktreeId) => this.serveBrowserTabs.restoreFirst(worktreeId),
+      findServeBrowserTabWorktree: (worktreeId, browserPageId) =>
+        this.serveBrowserTabs.restorableWorktreeOf(worktreeId, browserPageId)
     },
     screencast: {
       registerSubscriptionCleanup: (subscriptionId, cleanup, connectionId) =>

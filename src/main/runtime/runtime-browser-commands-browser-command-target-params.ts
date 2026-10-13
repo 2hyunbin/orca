@@ -1,5 +1,5 @@
 // @ts-nocheck -- mechanically split declarations.
-import type { BrowserScreencastResult } from '../../shared/runtime-types'
+import type { BrowserScreencastResult, BrowserTabInfo } from '../../shared/runtime-types'
 import type {
   BrowserScreencastFrameBudget,
   BrowserScreencastSession,
@@ -195,4 +195,10 @@ export type RuntimeBrowserCommandHost = {
   saveServeBrowserTab?(page: ServeBrowserPageState & { profileId?: string; groupId?: string }): void
   /** Starts the page of a saved tab a host with no window has not started; false when none. */
   restoreServeBrowserPage?(worktreeId: string | undefined, browserPageId: string): Promise<boolean>
+  /** Saved tabs a host with no window has not started; every worktree's when none is named. */
+  listServeBrowserTabs?(worktreeId: string | undefined): BrowserTabInfo[]
+  /** Starts the first saved tab when a worktree runs no page, as a window mounts its active one. */
+  restoreFirstServeBrowserPage?(worktreeId: string | undefined): Promise<boolean>
+  /** The worktree of a saved tab whose page has not started, or null. */
+  findServeBrowserTabWorktree?(worktreeId: string | undefined, browserPageId: string): string | null
 }

@@ -108,6 +108,11 @@ export class RuntimeBrowserCommandsWithBrowserTabClose extends RuntimeBrowserCom
         return { closed: false }
       }
       if (explicitPage && !bridge.getRegisteredTabs(worktreeId).has(resolvedTabId)) {
+        const savedIn = this.host.findServeBrowserTabWorktree?.(worktreeId, resolvedTabId)
+        if (savedIn) {
+          this.host.retireRuntimeOwnedBrowserSessionTab?.(savedIn, resolvedTabId)
+          return { closed: true }
+        }
         if (this.retireGhostBrowserSessionRow(worktreeId, resolvedTabId)) {
           return { closed: true }
         }

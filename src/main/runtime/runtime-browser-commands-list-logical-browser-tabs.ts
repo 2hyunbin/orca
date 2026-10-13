@@ -40,7 +40,14 @@ export class RuntimeBrowserCommandsWithListLogicalBrowserTabs extends RuntimeBro
         profileLabel: profile.label
       }
     })
-    const tabs = [...serverTabs, ...clientTabs]
+    // Saved tabs a host with no window starts on first use, listed as the phone lists them.
+    const savedTabs = (this.host.listServeBrowserTabs?.(worktreeId) ?? []).map((tab) => {
+      const profile =
+        browserSessionRegistry.getProfile(tab.profileId ?? 'default') ??
+        browserSessionRegistry.getDefaultProfile()
+      return { ...tab, profileId: profile.id, profileLabel: profile.label }
+    })
+    const tabs = [...serverTabs, ...clientTabs, ...savedTabs]
     if (tabs.length > 0 && !tabs.some((tab) => tab.active)) {
       tabs[0] = { ...tabs[0]!, active: true }
     }

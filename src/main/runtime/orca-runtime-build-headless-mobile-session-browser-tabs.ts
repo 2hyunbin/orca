@@ -42,7 +42,10 @@ export class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRu
         ? this.agentBrowserBridge.tabList(worktreeId).tabs
         : []
     const publishedServerTabs = serverTabs.map((tab) => {
-      const persistedProps = this.getPersistedUnifiedSessionTabProps(worktreeId, tab.browserPageId)
+      const persistedProps = this.getPersistedUnifiedSessionTabProps(
+        worktreeId,
+        this.serveBrowserTabs.savedTabId(worktreeId, tab.browserPageId) ?? tab.browserPageId
+      )
       return {
         type: 'browser' as const,
         // Why: an offscreen page has no separate workspace identity, so the page id

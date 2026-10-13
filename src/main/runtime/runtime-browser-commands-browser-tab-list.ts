@@ -110,6 +110,9 @@ export class RuntimeBrowserCommandsWithBrowserTabList extends RuntimeBrowserComm
         : params.worktree
           ? (await this.host.resolveBrowserWorkspace(params.worktree)).id
           : undefined
+    if (!this.host.getAvailableAuthoritativeWindow()) {
+      await this.host.restoreServeBrowserPage?.(worktreeId, selected.browserPageId)
+    }
     const result = await bridge.tabSwitch(undefined, worktreeId, selected.browserPageId)
     this.host.getRuntimeBrowserPageRegistry().deactivateGlobal()
     if (worktreeId) {
