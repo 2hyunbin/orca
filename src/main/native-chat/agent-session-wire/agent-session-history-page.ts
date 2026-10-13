@@ -92,16 +92,22 @@ function isSubagentRow(item: AgentJournalRenderItem): boolean {
  *  page is measured in that form, so a page sized for it carries what it will actually send. */
 export type HistoryItemForm = (item: AgentJournalRenderItem) => AgentJournalRenderItem
 
-const asStored: HistoryItemForm = (item) => item
+export const asStoredHistoryItem: HistoryItemForm = (item) => item
 
 export function readAgentSessionHistory(
   journal: AgentSessionJournal,
   request: AgentSessionHistoryRequest,
-  /** Reduced state to read against. A synchronous multi-page catch-up passes one
-   *  snapshot for the whole run so each page costs its own rows, not the timeline. */
-  snapshot: AgentJournalSnapshot = journal.snapshot(),
-  scope: AgentSessionHistoryScope = 'every-agent',
-  form: HistoryItemForm = asStored
+  {
+    snapshot = journal.snapshot(),
+    scope = 'every-agent',
+    form = asStoredHistoryItem
+  }: {
+    /** Reduced state to read against. A synchronous multi-page catch-up passes one
+     *  snapshot for the whole run so each page costs its own rows, not the timeline. */
+    snapshot?: AgentJournalSnapshot
+    scope?: AgentSessionHistoryScope
+    form?: HistoryItemForm
+  } = {}
 ): AgentSessionHistoryResult {
   const limit = resolveHistoryLimit(request.limit)
   if (request.direction === 'after') {
@@ -150,7 +156,7 @@ export function readAgentSessionHistory(
  */
 export function createAgentSessionCatchUpReader(
   journal: AgentSessionJournal,
-  form: HistoryItemForm = asStored
+  form: HistoryItemForm = asStoredHistoryItem
 ): (request: AgentSessionHistoryRequest) => AgentSessionHistoryResult {
   let snapshot = journal.snapshot()
   return (request) => {
@@ -158,14 +164,14 @@ export function createAgentSessionCatchUpReader(
     if (live.epoch !== snapshot.cursor.epoch || live.sequence !== snapshot.cursor.sequence) {
       snapshot = journal.snapshot()
     }
-    return readAgentSessionHistory(journal, request, snapshot, 'every-agent', form)
+    return readAgentSessionHistory(journal, request, { snapshot, form })
   }
 }
 
 export function readAgentSessionHydrationPage(
   journal: AgentSessionJournal,
   fence?: number,
-  form: HistoryItemForm = asStored
+  form: HistoryItemForm = asStoredHistoryItem
 ): AgentSessionHistoryPage {
   return buildHydrationPage(journal.snapshot(), fence, form)
 }

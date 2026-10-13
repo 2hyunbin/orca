@@ -23,7 +23,11 @@ afterEach(() => {
 
 async function subscribeParams(boundedFrames: boolean | null): Promise<unknown> {
   const subscribe = vi.fn(() => () => undefined)
-  const sendRequest = vi.fn(async () => ({ ok: true, result: {}, _meta: { runtimeId: 'r' } }))
+  const sendRequest = vi.fn(async (_method: string) => ({
+    ok: true,
+    result: {},
+    _meta: { runtimeId: 'r' }
+  }))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an RPC client stub with the two members the hook calls.
   const client = { sendRequest, subscribe } as unknown as RpcClient
   const hostSupport =
@@ -48,14 +52,21 @@ async function subscribeParams(boundedFrames: boolean | null): Promise<unknown> 
   act(() => {
     renderer = create(createElement(Harness))
   })
-  await vi.waitFor(() => expect(subscribe).toHaveBeenCalled())
+  if (boundedFrames === null) {
+    // Long enough for a hold to answer and a stream to open, were either asked for.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(sendRequest.mock.calls.map(([method]) => method)).not.toContain('agentSession.hold')
+  } else {
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalled())
+  }
   return subscribe.mock.calls[0]?.[1]
 }
 
-it('asks for bounded frames only from a host that advertises them, since older hosts refuse it', async () => {
+it('asks for bounded frames only from a host that advertises them, and waits until it says', async () => {
   expect(await subscribeParams(true)).toEqual({ sessionId: 'session-1', boundedFrames: true })
   act(() => renderer?.unmount())
   expect(await subscribeParams(false)).toEqual({ sessionId: 'session-1' })
   act(() => renderer?.unmount())
-  expect(await subscribeParams(null)).toEqual({ sessionId: 'session-1' })
+  // Unbounded, the opening frame of a long chat is the one that outgrows the bridge.
+  expect(await subscribeParams(null)).toBeUndefined()
 })

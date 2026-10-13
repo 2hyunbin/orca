@@ -29,11 +29,16 @@ function headOf(text: string, length: number): string {
 }
 
 /**
- * `value` with every shortenable string over `length` cut to it. A string is cut only when that
- * removes more units than its mark adds bytes, so a smaller `length` never yields a larger value:
- * every unit is at least one byte, and the mark is three.
+ * `value` with every shortenable string over `length` cut to it; `value` itself when none is. A
+ * string is cut only when that removes more units than its mark adds bytes, so a smaller `length`
+ * never yields a larger value: every unit is at least one byte, and the mark is three.
  */
-function cutTo(value: unknown, length: number, key = ''): unknown {
+export function cutLongStrings<T>(value: T, length: number): T {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `cutTo` keeps every key and shape and only shortens strings.
+  return cutTo(value, length, '') as T
+}
+
+function cutTo(value: unknown, length: number, key: string): unknown {
   if (typeof value === 'string') {
     return value.length > length + ELLIPSIS_BYTES && !isIdentifierKey(key)
       ? `${headOf(value, length)}${ELLIPSIS}`
@@ -42,15 +47,19 @@ function cutTo(value: unknown, length: number, key = ''): unknown {
   if (typeof value !== 'object' || value === null) {
     return value
   }
-  if (Array.isArray(value)) {
-    return value.map((entry) => cutTo(entry, length))
+  if (isBoundedPayload(value)) {
+    return value.head.length > length
+      ? { ...value, head: headOf(value.head, length), truncated: true }
+      : value
   }
-  if (isBoundedPayload(value) && value.head.length > length) {
-    return { ...value, head: headOf(value.head, length), truncated: true }
+  const entries = Object.entries(value)
+  const cut = entries.map(([entryKey, entry]) => cutTo(entry, length, entryKey))
+  if (cut.every((entry, index) => entry === entries[index]![1])) {
+    return value
   }
-  return Object.fromEntries(
-    Object.entries(value).map(([entryKey, entry]) => [entryKey, cutTo(entry, length, entryKey)])
-  )
+  return Array.isArray(value)
+    ? cut
+    : Object.fromEntries(entries.map(([entryKey], index) => [entryKey, cut[index]]))
 }
 
 function longestStringLength(value: unknown): number {
@@ -72,8 +81,7 @@ export function shortenJsonStringsToFit<T>(value: T, maxBytes: number): T | null
   if (jsonBytes(value) <= maxBytes) {
     return value
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `cutTo` keeps every key and shape and only shortens strings.
-  const at = (length: number): T => cutTo(value, length) as T
+  const at = (length: number): T => cutLongStrings(value, length)
   if (jsonBytes(at(KEEP_AT_LEAST)) > maxBytes) {
     return null
   }

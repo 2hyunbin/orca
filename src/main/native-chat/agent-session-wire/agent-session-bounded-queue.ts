@@ -2,7 +2,8 @@
 //
 // Admission keeps the published list within the rows' share of one frame, so it arrives whole. Only
 // a queue admitted by an older build under its larger bound can be over: each card is then a
-// preview of an equal share, marked `truncated`, which a reader must not edit in place.
+// preview of an equal share, marked `truncated`, which a reader must not edit in place, and a queue
+// of more cards than fit even so lists the ones it sends first.
 
 import type { AgentSessionQueuedMessage } from '../../../shared/agent-session-wire'
 import { HISTORY_PAGE_CONTENT_BUDGET_BYTES } from './agent-session-history-page-bounds'
@@ -38,5 +39,21 @@ export function boundedQueuePublication(publication: QueuePublication): QueuePub
   }
   // -1 per card for its list separator.
   const share = Math.floor(HISTORY_PAGE_CONTENT_BUDGET_BYTES / cards.length) - 1
-  return { ...publication, queuedMessages: cards.map((card) => previewCard(card, share)) }
+  const previews = cards.map((card) => previewCard(card, share))
+  return { ...publication, queuedMessages: leadingCardsThatFit(previews) }
+}
+
+/** Cards too many to fit even as their smallest previews: the ones the queue sends first. */
+function leadingCardsThatFit(cards: AgentSessionQueuedMessage[]): AgentSessionQueuedMessage[] {
+  let fits = 0
+  let fitsNot = cards.length + 1
+  while (fitsNot - fits > 1) {
+    const middle = Math.floor((fits + fitsNot) / 2)
+    if (jsonBytes(cards.slice(0, middle)) <= HISTORY_PAGE_CONTENT_BUDGET_BYTES) {
+      fits = middle
+    } else {
+      fitsNot = middle
+    }
+  }
+  return cards.slice(0, fits)
 }

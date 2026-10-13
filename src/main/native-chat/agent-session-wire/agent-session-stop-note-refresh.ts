@@ -32,7 +32,7 @@ export function refreshDerivedStopNotes(
     return
   }
   const snapshot = journal.snapshot()
-  const form = subscriberItemForm(subscriber) ?? ((item: AgentJournalRenderItem) => item)
+  const form = subscriberItemForm(subscriber)
   let pending: AgentJournalRenderItem[] = []
   let bytes = 0
   const emit = (): void => {

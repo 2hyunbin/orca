@@ -5,9 +5,10 @@
 
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { agentSessionRefusalNotice } from '../../../shared/agent-session-refusal-notice'
+import { jsonBytes } from './json-string-shortening'
 import { MAX_PROMPT_BYTES } from '../../../shared/rpc-contract/structured-agent-session-params'
 import {
-  newQueuedCardBytes,
+  newQueuedCard,
   QUEUED_MESSAGES_PERSON_RESERVE_BYTES,
   QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
 } from './structured-agent-session-queued-published-bytes'
@@ -29,10 +30,10 @@ beforeEach(async () => {
 
 afterEach(() => rig.dispose())
 
-/** Text whose new card adds exactly `bytes` to the published list; rig ids share one length. */
+/** Text whose card, alone in the queue, publishes exactly `bytes`; rig ids share one length. */
 function textOfCard(bytes: number): string {
   const card = { messageId: hostTestOperationId(), body: hostTestMessage('') }
-  return 'x'.repeat(bytes - newQueuedCardBytes(card))
+  return 'x'.repeat(bytes - jsonBytes([newQueuedCard(card)]))
 }
 
 /** Text whose message body (or, with `blocksOnly`, whose blocks) serializes to exactly `bytes`. */

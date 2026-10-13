@@ -87,7 +87,7 @@ export function useMobileStructuredAgentSession(args: {
     sessionKey,
     enabled,
     connected,
-    boundedFrames: hostSupport?.boundedFrames === true
+    boundedFrames: hostSupport === null ? null : hostSupport?.boundedFrames === true
   }
   const { state, stateRef, queuedMessages, queuePause, loadingOlder, loadEarlier } =
     useMobileStructuredAgentState(stateArgs)

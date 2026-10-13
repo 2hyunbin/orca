@@ -251,28 +251,97 @@ describe('frames to a bounded-frame subscriber', () => {
     expect(frames.some((frame) => frame.type === 'batch' && frame.backgroundTasks)).toBe(true)
   })
 
-  it('leave every other subscriber the frames it had', async () => {
-    await append(message('hello'))
-    const queue = largeQueue()
+  it('fit even a queue an older build let grow past what previews can shrink', async () => {
+    // Too many cards to fit as previews: the ones sent first are listed.
+    const queuedMessages: AgentSessionQueuedMessage[] = Array.from(
+      { length: 20_000 },
+      (_, index) => ({
+        messageId: `draft-${index}`,
+        position: index,
+        state: 'waiting',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'ok' }] }
+      })
+    )
     const frames: AgentSessionSubscribeEvent[] = []
     new AgentSessionSubscribers({
+      readQueuePublication: () => ({ queuedMessages, queuePause: null, nextQueuedMessageId: null })
+    }).open({
+      id: 'phone',
+      sessionId: SESSION,
+      journal,
+      fence: 1,
+      emit: (event) => frames.push(event),
+      boundedFrames: true
+    })
+    for (const frame of frames) {
+      expect(bridgeFrameBytes(frame)).toBeLessThanOrEqual(MOBILE_BRIDGE_MAX_FRAME_BYTES)
+    }
+    const listed = frames.flatMap((frame) =>
+      frame.type === 'batch' && frame.queuedMessages ? frame.queuedMessages : []
+    )
+    expect(listed.length).toBeGreaterThan(0)
+    expect(listed.map((card) => card.messageId)).toEqual(
+      queuedMessages.slice(0, listed.length).map((card) => card.messageId)
+    )
+  })
+
+  it('leave out a turn record no real provider id could make too large, rather than outgrow', async () => {
+    await journal.appendItem(
+      identity(),
+      { kind: 'turn', turnId: 'u'.repeat(100_000), state: 'running' },
+      { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )
+    const frames: AgentSessionSubscribeEvent[] = []
+    new AgentSessionSubscribers().open({
+      id: 'phone',
+      sessionId: SESSION,
+      journal,
+      fence: 1,
+      emit: (event) => frames.push(event),
+      boundedFrames: true
+    })
+    const [snapshot] = frames
+    expect(bridgeFrameBytes(snapshot!)).toBeLessThanOrEqual(MOBILE_BRIDGE_MAX_FRAME_BYTES)
+    expect(snapshot?.type === 'snapshot' && snapshot.page).not.toHaveProperty('latestTurn')
+  })
+
+  it('leave every other subscriber the frames it had', async () => {
+    const stored = message(WIDE_TEXT.repeat(30_000))
+    await append(stored)
+    const queue = largeQueue()
+    const frames: AgentSessionSubscribeEvent[] = []
+    const subscribers = new AgentSessionSubscribers({
       readQueuePublication: () => queue,
       readBackgroundTasks: () => largeRoster,
       readCommands: () => largeCommands
-    }).open({
+    })
+    subscribers.open({
       id: 'desktop',
       sessionId: SESSION,
       journal,
       fence: 1,
       emit: (event) => frames.push(event)
     })
+    await append(stored)
+    subscribers.publish(SESSION, journal)
 
-    expect(frames).toHaveLength(1)
+    expect(frames).toHaveLength(2)
     expect(frames[0]).toMatchObject({
       type: 'snapshot',
       commands: largeCommands,
       queuedMessages: queue.queuedMessages,
       backgroundTasks: largeRoster
     })
+    // Rows as stored, whole.
+    for (const frame of frames) {
+      const items =
+        frame.type === 'snapshot'
+          ? frame.page.items
+          : frame.type === 'batch'
+            ? frame.batch.items
+            : []
+      expect(items.map((item) => item.body)).toEqual(items.map(() => stored))
+      expect(items.every((item) => item.truncated === undefined)).toBe(true)
+    }
   })
 })

@@ -6,6 +6,7 @@ import type { AgentJournalRenderItem } from '../../../src/shared/agent-session-j
 import type { AgentSessionSubscribeEvent } from '../../../src/shared/agent-session-wire'
 import type { RpcClient } from '../transport/rpc-client'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
+import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() }
@@ -97,7 +98,7 @@ it('draws one row for a run of provider retries, with what failed on its second 
       enabled: true,
       connected: true,
       agent: 'codex',
-      hostSupport: null,
+      hostSupport: structuredAgentSessionHostSupport([]),
       onSendError: vi.fn()
     })
     return null

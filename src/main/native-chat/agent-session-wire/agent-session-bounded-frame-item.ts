@@ -13,36 +13,18 @@ import {
   HISTORY_PAGE_CONTENT_BUDGET_BYTES,
   oversizedHistoryItem
 } from './agent-session-history-page-bounds'
-import { jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
+import { cutLongStrings, jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
 
 /** One row's share of a page, so a page always carries several rows. */
 export const BOUNDED_FRAME_ROW_BYTES = HISTORY_PAGE_CONTENT_BUDGET_BYTES / 8
 
 /** A tool's output as the phone shows it: a diff in full, anything else to its detail length. */
 function displayedOutput(payload: AgentJournalBoundedPayload): AgentJournalBoundedPayload {
-  if (payload.head.length <= MAX_TOOL_DETAIL_LENGTH || rendersAsDiff(payload.head)) {
-    return payload
-  }
-  return { ...payload, head: payload.head.slice(0, MAX_TOOL_DETAIL_LENGTH), truncated: true }
+  return rendersAsDiff(payload.head) ? payload : cutLongStrings(payload, MAX_TOOL_DETAIL_LENGTH)
 }
 
-/** A tool's input as the phone shows it: every string to the length its diff view reads, plus
- *  the mark, so that view still ends in its truncation line. Unchanged input keeps its identity. */
-function displayedInput(input: unknown): unknown {
-  if (typeof input === 'string') {
-    return input.length > MAX_DIFF_CHARS ? `${input.slice(0, MAX_DIFF_CHARS)}…` : input
-  }
-  if (typeof input !== 'object' || input === null) {
-    return input
-  }
-  const entries = Object.entries(input)
-  const displayed = entries.map(([key, value]) => [key, displayedInput(value)] as const)
-  if (displayed.every(([, value], index) => value === entries[index]![1])) {
-    return input
-  }
-  return Array.isArray(input) ? displayed.map(([, value]) => value) : Object.fromEntries(displayed)
-}
-
+/** A tool call or diff as the phone shows it. Input strings keep the length the diff view reads,
+ *  and their mark makes them one longer, so that view still ends in its truncation line. */
 function displayedBody(body: AgentJournalItemBody): AgentJournalItemBody {
   if (body.kind === 'diff') {
     const patch = displayedOutput(body.patch)
@@ -51,7 +33,7 @@ function displayedBody(body: AgentJournalItemBody): AgentJournalItemBody {
   if (body.kind !== 'tool-call') {
     return body
   }
-  const input = displayedInput(body.input)
+  const input = cutLongStrings(body.input, MAX_DIFF_CHARS)
   const output = body.output && displayedOutput(body.output)
   return input === body.input && output === body.output
     ? body
@@ -104,8 +86,6 @@ export function boundedFrameItem(item: AgentJournalRenderItem): AgentJournalRend
   if (result === undefined) {
     result = boundFrameItem(item)
     bounded.set(item, result)
-    // Bounding is idempotent, so a frame that bounds an already-bounded row pays nothing.
-    bounded.set(result, result)
   }
   return result
 }

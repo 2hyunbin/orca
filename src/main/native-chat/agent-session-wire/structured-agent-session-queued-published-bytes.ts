@@ -25,25 +25,22 @@ export const QUEUED_MESSAGES_PERSON_RESERVE_BYTES = MAX_PROMPT_BYTES + 1024
  *  an edit: the new body takes the old one's place. */
 export function queuedMessagesPublishedBytesRefusal(
   journal: AgentSessionJournal,
-  card: { messageId: string; body: AgentJournalMessageItem },
+  card: QueuedCardDraft,
   fromPerson: boolean
 ): AgentSessionWireRefusal | null {
-  let edited = false
-  const bytes = unsettledQueuedMessages(journal).reduce((sum, row) => {
-    const published = publishedQueuedMessage(row)
-    if (published === null) {
-      return sum
-    }
-    const replaced = row.messageId === card.messageId
-    edited ||= replaced
-    // +1 for the list separator.
-    return sum + jsonBytes(replaced ? { ...published, body: card.body } : published) + 1
-  }, 0)
-  const total = edited ? bytes : bytes + newQueuedCardBytes(card)
+  const others = unsettledQueuedMessages(journal).flatMap(
+    (row) => publishedQueuedMessage(row) ?? []
+  )
+  const edited = others.some((other) => other.messageId === card.messageId)
+  const published = edited
+    ? others.map((other) =>
+        other.messageId === card.messageId ? { ...other, body: card.body } : other
+      )
+    : [...others, newQueuedCard(card)]
   const limit = fromPerson
     ? QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
     : QUEUED_MESSAGES_PUBLISHED_MAX_BYTES - QUEUED_MESSAGES_PERSON_RESERVE_BYTES
-  return total > limit
+  return jsonBytes(published) > limit
     ? refuse(
         'agent_session_operation_invalid',
         { reason: 'queueTooLarge' },
@@ -52,11 +49,9 @@ export function queuedMessagesPublishedBytesRefusal(
     : null
 }
 
-/** What a new card adds to the published list at its widest: waiting, at the last position. */
-export function newQueuedCardBytes(card: {
-  messageId: string
-  body: AgentJournalMessageItem
-}): number {
-  // +1 for the list separator.
-  return jsonBytes({ ...card, position: Number.MAX_SAFE_INTEGER, state: 'waiting' }) + 1
+type QueuedCardDraft = { messageId: string; body: AgentJournalMessageItem }
+
+/** A new card at its widest: waiting, at the last position. */
+export function newQueuedCard(card: QueuedCardDraft): object {
+  return { ...card, position: Number.MAX_SAFE_INTEGER, state: 'waiting' }
 }

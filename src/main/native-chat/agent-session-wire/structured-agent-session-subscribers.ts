@@ -167,15 +167,14 @@ export class AgentSessionSubscribers {
   /** Every subscriber back to a bounded tail page. */
   snapshot(sessionId: string, journal: AgentSessionJournal, fence: number): void {
     // Read once per item form, since bounded-frame subscribers size their page by theirs.
-    const pages = new Map<boolean, AgentSessionHistoryPage>()
-    const pageFor = (subscriber: Subscriber): AgentSessionHistoryPage => {
-      let page = pages.get(subscriber.boundedFrames)
-      if (page === undefined) {
-        page = readAgentSessionHydrationPage(journal, fence, subscriberItemForm(subscriber))
-        pages.set(subscriber.boundedFrames, page)
-      }
-      return page
-    }
+    let storedPage: AgentSessionHistoryPage | undefined
+    let boundedPage: AgentSessionHistoryPage | undefined
+    const read = (subscriber: Subscriber): AgentSessionHistoryPage =>
+      readAgentSessionHydrationPage(journal, fence, subscriberItemForm(subscriber))
+    const pageFor = (subscriber: Subscriber): AgentSessionHistoryPage =>
+      subscriber.boundedFrames
+        ? (boundedPage ??= read(subscriber))
+        : (storedPage ??= read(subscriber))
     const hostNow = this.now()
     for (const subscriber of this.subscribers(sessionId)) {
       const page = pageFor(subscriber)
@@ -223,7 +222,11 @@ export class AgentSessionSubscribers {
     const hostNow = this.now()
     for (const sessionId of this.bySession.keys()) {
       for (const subscriber of this.subscribers(sessionId)) {
-        if ((this.hooks.readCommands?.(sessionId) ?? null) !== subscriber.commands) {
+        // A bounded-frame subscriber is never sent the list.
+        if (
+          !subscriber.boundedFrames &&
+          (this.hooks.readCommands?.(sessionId) ?? null) !== subscriber.commands
+        ) {
           this.emit(subscriber, {
             type: 'batch',
             sessionId,

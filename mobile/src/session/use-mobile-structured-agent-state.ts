@@ -81,8 +81,9 @@ export function useMobileStructuredAgentState(args: {
    *  but the transcript must survive the outage rather than blank out with it. */
   connected: boolean
   /** The host fits every frame to this app's bridge; asked for only where advertised, since an
-   *  older host refuses the param. */
-  boundedFrames: boolean
+   *  older host refuses the param. Null until the host says: the stream waits rather than open
+   *  unbounded, since its opening frame is the one most likely to outgrow the bridge. */
+  boundedFrames: boolean | null
 }): {
   state: StructuredAgentSessionState
   stateRef: { readonly current: StructuredAgentSessionState }
@@ -196,6 +197,9 @@ export function useMobileStructuredAgentState(args: {
       return
     }
     apply({ type: 'loading' })
+    if (boundedFrames === null) {
+      return
+    }
     const holderId = structuredAgentSessionHolderId('mobile-chat')
     const held = callAgentSession(client, 'agentSession.hold', {
       sessionId,

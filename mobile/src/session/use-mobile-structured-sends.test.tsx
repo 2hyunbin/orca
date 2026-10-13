@@ -22,6 +22,7 @@ import {
 } from './use-mobile-structured-agent-session-queued.test-fixture'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
 import { useMobileStructuredSends } from './use-mobile-structured-sends'
+import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 
 const asyncStorage = vi.hoisted(() => ({ getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }))
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: asyncStorage }))
@@ -89,7 +90,7 @@ describe('a structured send in the open chat', () => {
       enabled: true,
       connected: true,
       agent: 'codex',
-      hostSupport: null,
+      hostSupport: structuredAgentSessionHostSupport([]),
       onSendError
     })
     return null

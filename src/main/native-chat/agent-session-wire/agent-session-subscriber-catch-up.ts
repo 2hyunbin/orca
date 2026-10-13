@@ -118,6 +118,7 @@ function emitCaughtUp(
   }
 ): void {
   const commandsChanged =
+    !subscriber.boundedFrames &&
     port.hooks.readCommands !== undefined &&
     (port.hooks.readCommands(subscriber.sessionId) ?? null) !== subscriber.commands
   const queuedChanged = subscriberQueuedMessagesChanged(port.hooks, subscriber)

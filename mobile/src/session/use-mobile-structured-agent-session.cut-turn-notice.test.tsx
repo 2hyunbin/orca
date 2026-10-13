@@ -6,6 +6,7 @@ import type { AgentSessionSubscribeEvent } from '../../../src/shared/agent-sessi
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcResponse } from '../transport/types'
 import { useMobileStructuredAgentSession } from './use-mobile-structured-agent-session'
+import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() }
@@ -102,7 +103,7 @@ describe('useMobileStructuredAgentSession transcript', () => {
         sessionId: 'session-1',
         enabled: true,
         connected: true,
-        hostSupport: null,
+        hostSupport: structuredAgentSessionHostSupport([]),
         agent: 'codex',
         onSendError: vi.fn()
       })
