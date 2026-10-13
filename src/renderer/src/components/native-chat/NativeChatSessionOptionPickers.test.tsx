@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type * as ReactModule from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OMP_SESSION_OPTION_CATALOG } from '../../../../shared/agent-session-option-catalog-omp'
@@ -11,12 +11,6 @@ import {
 } from '../../../../shared/structured-agent-session-options'
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
-
-import { computeAgentSessionPayloadFingerprint } from '../../../../shared/agent-session-mutation-envelope'
-import { claudeSessionIdForOrcaSession } from '../../../../main/claude/claude-structured-launch-resolution'
-import { hostTestMessage } from '../../../../main/native-chat/agent-session-wire/structured-agent-session-host-test-data'
-import { StructuredAgentSessionStartupAttempts } from '../../../../main/native-chat/agent-session-wire/structured-agent-session-startup-attempt'
-import { createScriptedClaudeRuntime } from '../../../../main/runtime/structured-claude-scripted-runtime-test-support'
 
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
@@ -698,143 +692,5 @@ describe('NativeChatSessionOptionPickers', () => {
     )
     expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Sent to the agent — not confirmed').length).toBeGreaterThan(0)
-  })
-
-  it('picks model then effort through the menus during startup and uses both in the first reply', async () => {
-    const SESSION = 'picker-startup-pair'
-    const CALLER = { callerKey: 'picker-client' }
-    const claude = createScriptedClaudeRuntime([SESSION])
-    const picked: Promise<unknown>[] = []
-    let operation = 0
-    claude.behave(SESSION, { initHangs: true, sendsNoStartFrame: true })
-    try {
-      const host = await claude.install()
-      await host.attach(CALLER, claude.attachParams(SESSION, null, { options: { model: 'opus' } }))
-      await vi.waitFor(() => expect(claude.child(SESSION).initializing).toBe(true))
-      const child = claude.child(SESSION)
-      let replyModel = 'opus'
-      let replyEffort = 'high'
-      let firstReply: { model: string; effort: string } | undefined
-      child.connection.supportedModels = async () => [
-        {
-          value: 'sonnet',
-          displayName: 'Sonnet',
-          supportsEffort: true,
-          supportedEffortLevels: ['low', 'high']
-        },
-        {
-          value: 'opus',
-          displayName: 'Opus',
-          supportsEffort: true,
-          supportedEffortLevels: ['low', 'high']
-        }
-      ]
-      const setModel = child.connection.setModel
-      child.connection.setModel = async (value, options) => {
-        await setModel(value, options)
-        replyModel = value ?? 'opus'
-      }
-      const applyFlags = child.connection.applyFlagSettings
-      child.connection.applyFlagSettings = async (settings, options) => {
-        await applyFlags(settings, options)
-        if (typeof settings.effortLevel === 'string') {
-          replyEffort = settings.effortLevel
-        }
-      }
-      child.connection.getSettings = async () => ({ effective: { effortLevel: replyEffort } })
-      child.connection.send = async (_message, beforeDispatch) => {
-        await beforeDispatch?.()
-        child.calls.push('send')
-        firstReply = { model: replyModel, effort: replyEffort }
-        child.handlers.onMessage?.({
-          type: 'assistant',
-          session_id: claudeSessionIdForOrcaSession(SESSION),
-          uuid: 'first-reply',
-          message: {
-            role: 'assistant',
-            model: replyModel,
-            content: [{ type: 'text', text: firstReply.effort }]
-          }
-        })
-      }
-      // Let delivery wake before the callers waiting on the same ready child resume.
-      const readiness = StructuredAgentSessionStartupAttempts.prototype.readiness
-      const delayed = vi
-        .spyOn(StructuredAgentSessionStartupAttempts.prototype, 'readiness')
-        .mockImplementation(function (
-          this: StructuredAgentSessionStartupAttempts,
-          sessionId,
-          identity
-        ) {
-          const selected = readiness.call(this, sessionId, identity)
-          return selected
-            ? {
-                wait: async (budget) => {
-                  const outcome = await selected.wait(budget)
-                  await new Promise((resolve) => setTimeout(resolve, 0))
-                  return outcome
-                }
-              }
-            : null
-        })
-      const envelope = (method: string, fields: Record<string, unknown>) => ({
-        sessionId: SESSION,
-        clientOperationId: `${Date.now()}-${(++operation).toString(16).padStart(32, '0')}`,
-        expectedRuntimeFence: host.deps.store.getRecord(SESSION)?.lease.runtimeFence ?? 0,
-        payloadFingerprint: computeAgentSessionPayloadFingerprint({
-          method,
-          sessionId: SESSION,
-          fields
-        })
-      })
-      const setOption = (key: string, value: string | boolean) => {
-        if (typeof value !== 'string') {
-          throw new Error('This flow picks select options.')
-        }
-        const write = host
-          .setOption(CALLER, {
-            envelope: envelope('agentSession.setOption', { key, value }),
-            key,
-            value
-          })
-          .then((result) => {
-            expect(result).toMatchObject({ ok: true })
-            return { snapshot: [] }
-          })
-        picked.push(write)
-        return write
-      }
-      render(
-        <NativeChatSessionOptionPickers
-          surface={{ ...surface, setOption }}
-          snapshot={[model(), effort]}
-          isWorking={false}
-        />
-      )
-      fireEvent.click(screen.getByRole('option', { name: 'Sonnet 5' }))
-      await waitFor(() =>
-        expect(screen.getByRole('radio', { name: 'Low' }).getAttribute('disabled')).toBeNull()
-      )
-      fireEvent.click(screen.getByRole('radio', { name: 'Low' }))
-      const body = hostTestMessage('reply using these choices')
-      await expect(
-        host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
-      ).resolves.toMatchObject({ ok: true })
-      child.answerInit()
-      await Promise.all(picked)
-      await vi.waitFor(async () => {
-        const reply = (await host.journalSnapshot(SESSION)).items.find(
-          (item) => item.body.kind === 'message' && item.body.role === 'assistant'
-        )
-        expect(reply?.body).toMatchObject({
-          blocks: [{ type: 'text', text: 'low' }]
-        })
-      })
-      expect(firstReply).toEqual({ model: 'sonnet', effort: 'low' })
-      delayed.mockRestore()
-    } finally {
-      await claude.dispose()
-      await Promise.allSettled(picked)
-    }
   })
 })

@@ -2,7 +2,7 @@ import { SQLITE_DATABASE_RUNTIME_INCLUDE } from './vitest-sqlite-database-runtim
 
 // Real SQLite fixtures keep Node publication and close semantics.
 export const SQLITE_RUNTIME_INCLUDE = [
-  'src/renderer/src/components/native-chat/NativeChatSessionOptionPickers.test.tsx',
+  'tests/e2e/native-chat-startup-option-pickers.unit.test.ts',
   ...SQLITE_DATABASE_RUNTIME_INCLUDE,
   'src/main/acp/acp-structured-host-live-listing.test.ts',
   'src/main/acp/acp-structured-host-configured-default.test.ts',
