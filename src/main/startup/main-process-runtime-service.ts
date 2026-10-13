@@ -113,7 +113,8 @@ export function initializeMainProcessRuntime(): OrcaRuntimeService {
       forget: (subject) => agentHookServer.dropStructuredStatus(subject),
       publishChildWork: (subject, evidence, provider) =>
         agentHookServer.ingestStructuredChildWork(subject, evidence, provider),
-      readChildWork: (subject) => agentHookServer.getStructuredChildWorkViews(subject)
+      readChildWork: (subject) => agentHookServer.getStructuredChildWorkViews(subject),
+      readChildWorkRecords: (subject) => agentHookServer.getStructuredChildWork(subject)
     },
     // Why captured rather than resolved at read: the fleet snapshot remints cached rows on every
     // read, so a row observed under one process otherwise acquires whatever the pane owns now.
