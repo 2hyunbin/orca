@@ -1,4 +1,4 @@
-import type { AgentStatus } from '../../shared/agent-detection'
+import { isOpenCodeNativeTitle, type AgentStatus } from '../../shared/agent-detection'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
   isFreshNonDoneAgentStatus
@@ -386,16 +386,18 @@ export function judgeScreenBlockedText(input: {
     (hasFreshWorkingFirstPartyStatus(input.firstPartyStatus) &&
       input.firstPartyStatus?.state === 'working') ||
     hasFreshDoneFirstPartyStatus(input.firstPartyStatus) ||
-    hasExplicitIdleTitle(input.record, input.rendererTitle)
+    (hasExplicitIdleTitle(input.record, input.rendererTitle) &&
+      // Why: OpenCode keeps its idle title while its permission dialog is open.
+      !isOpenCodeNativeTitle(input.record.lastOscTitle ?? input.rendererTitle ?? ''))
   ) {
     return null
   }
   if (explicitStatus === null || explicitStatus.status === 'permission') {
     return reason
   }
-  // Why only a done newer than the blocker: a menu painted after the turn ended is still open.
-  return explicitStatus.status === 'working' ||
-    (input.blockedAt !== null && explicitStatus.updatedAt > input.blockedAt)
-    ? null
-    : reason
+  // Why only a status newer than the blocker: a dialog painted after it is still open.
+  if (input.blockedAt !== null) {
+    return explicitStatus.updatedAt > input.blockedAt ? null : reason
+  }
+  return explicitStatus.status === 'working' ? null : reason
 }

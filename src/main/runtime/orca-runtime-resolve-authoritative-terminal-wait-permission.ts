@@ -206,12 +206,16 @@ export class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission extends O
       const screen = this.readCurrentScreenText(ptyId)
       if (screen !== null) {
         const reason = detectTerminalWaitBlockedReason(screen)
+        const clear = reason === null ? null : this.getPtyTitleDisplayClear(ptyId)
         // Why before the hook read: a pane showing no blocker needs no status lookup at all.
         return reason === null
           ? null
           : judgeScreenBlockedText({
               reason,
-              record: read.record,
+              // Why display: a stale-working title clear must not hide a dialog painted after it.
+              record: clear
+                ? { ...read.record, lastOscTitle: clear.title, lastAgentStatus: clear.status }
+                : read.record,
               rendererTitle: read.rendererTitle,
               firstPartyStatus: this.tuiIdleEvidenceSource.getFirstPartyAgentStatus(ptyId),
               explicitStatus: readExplicit(),
