@@ -328,8 +328,8 @@ jobs:
         config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
         config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
     timeout-minutes: 15
-  candidate-1:
-    name: candidate-1
+  late-1:
+    name: late-1
     needs:
     - baseline-0
     if: always()
@@ -501,23 +501,6 @@ jobs:
         node config/scripts/run-typecheck-projects-in-parallel.mjs --compiler=bun --bun-concurrency=2 --bun-threads=2
 
         '
-    - name: Boot orcad and round-trip a terminal
-      if: '!cancelled()'
-      id: orcad-terminal-smoke
-      background: true
-      env:
-        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
-        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
-        ORCA_BACKGROUND_LAUNCH: '1'
-      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
-        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
-        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
-        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
-        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
-        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
-        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
-        \ orcad\nfi\n"
     - name: Check Zustand selector fan-out budget
       if: '''true'' == ''true'''
       run: pnpm run check:zustand-selector-fanout
@@ -573,6 +556,23 @@ jobs:
         \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
         \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
         \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Boot orcad and round-trip a terminal
+      if: '!cancelled()'
+      id: orcad-terminal-smoke
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
+        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
+        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
+        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
+        \ orcad\nfi\n"
     - name: Verify the generated RPC params catalog
       if: '''true'' == ''true'''
       run: pnpm run verify:rpc-params-catalog
@@ -644,7 +644,7 @@ jobs:
     - uses: actions/upload-artifact@v7
       if: '''true'' == ''true'''
       with:
-        name: tail-replay-candidate-1
+        name: tail-replay-late-1
         path: ci-shards/unit-selection.json
         retention-days: 14
     - name: Set up Bun for Mobile CI tool tests
@@ -662,8 +662,8 @@ jobs:
         config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
         config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
     timeout-minutes: 15
-  candidate-2:
-    name: candidate-2
+  late-2:
+    name: late-2
     if: always()
     runs-on: ubuntu-24.04-arm
     steps:
@@ -833,23 +833,6 @@ jobs:
         node config/scripts/run-typecheck-projects-in-parallel.mjs --compiler=bun --bun-concurrency=2 --bun-threads=2
 
         '
-    - name: Boot orcad and round-trip a terminal
-      if: '!cancelled()'
-      id: orcad-terminal-smoke
-      background: true
-      env:
-        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
-        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
-        ORCA_BACKGROUND_LAUNCH: '1'
-      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
-        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
-        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
-        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
-        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
-        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
-        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
-        \ orcad\nfi\n"
     - name: Check Zustand selector fan-out budget
       if: '''true'' == ''true'''
       run: pnpm run check:zustand-selector-fanout
@@ -905,6 +888,23 @@ jobs:
         \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
         \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
         \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Boot orcad and round-trip a terminal
+      if: '!cancelled()'
+      id: orcad-terminal-smoke
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
+        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
+        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
+        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
+        \ orcad\nfi\n"
     - name: Verify the generated RPC params catalog
       if: '''true'' == ''true'''
       run: pnpm run verify:rpc-params-catalog
@@ -976,7 +976,7 @@ jobs:
     - uses: actions/upload-artifact@v7
       if: '''true'' == ''true'''
       with:
-        name: tail-replay-candidate-2
+        name: tail-replay-late-2
         path: ci-shards/unit-selection.json
         retention-days: 14
     - name: Set up Bun for Mobile CI tool tests
@@ -997,7 +997,7 @@ jobs:
   baseline-3:
     name: baseline-3
     needs:
-    - candidate-2
+    - late-2
     if: always()
     runs-on: ubuntu-24.04-arm
     steps:
@@ -1640,8 +1640,8 @@ jobs:
         config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
         config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
     timeout-minutes: 15
-  candidate-5:
-    name: candidate-5
+  late-5:
+    name: late-5
     needs:
     - baseline-4
     if: always()
@@ -1813,23 +1813,6 @@ jobs:
         node config/scripts/run-typecheck-projects-in-parallel.mjs --compiler=bun --bun-concurrency=2 --bun-threads=2
 
         '
-    - name: Boot orcad and round-trip a terminal
-      if: '!cancelled()'
-      id: orcad-terminal-smoke
-      background: true
-      env:
-        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
-        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
-        ORCA_BACKGROUND_LAUNCH: '1'
-      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
-        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
-        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
-        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
-        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
-        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
-        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
-        \ orcad\nfi\n"
     - name: Check Zustand selector fan-out budget
       if: '''true'' == ''true'''
       run: pnpm run check:zustand-selector-fanout
@@ -1885,6 +1868,23 @@ jobs:
         \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/localization-changes\" &&\n  scope=\"$(node config/scripts/localization-extraction-change-scope.mjs\
         \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Localization\
         \ extraction inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
+    - name: Boot orcad and round-trip a terminal
+      if: '!cancelled()'
+      id: orcad-terminal-smoke
+      background: true
+      env:
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
+        PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
+        BASE_SHA: 099bb76501f82184820a1f236409e2eacbebb8ef
+        ORCA_BACKGROUND_LAUNCH: '1'
+      run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
+        \ 0; fi\n# Detection failures run the smoke; renames retain the removed input path.\nDIFF_BASE=\"$(node\
+        \ config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --name-only --no-renames -z\
+        \ \"$DIFF_BASE\" HEAD > \"$RUNNER_TEMP/orcad-smoke-changes\" &&\n  scope=\"$(node config/scripts/orcad-terminal-smoke-change-scope.mjs\
+        \ \"$RUNNER_TEMP/orcad-smoke-changes\")\" && [ \"$scope\" = force-full-check ]; then\n  echo \"Orcad terminal\
+        \ smoke inputs are unchanged.\"\nelse\n  node config/scripts/ensure-native-runtime.mjs --runtime=node\n\
+        \  node config/scripts/build-orcad-node.mjs\n  node config/scripts/runtime-serve-terminal-smoke.mjs --target\
+        \ orcad\nfi\n"
     - name: Verify the generated RPC params catalog
       if: '''true'' == ''true'''
       run: pnpm run verify:rpc-params-catalog
@@ -1956,7 +1956,7 @@ jobs:
     - uses: actions/upload-artifact@v7
       if: '''true'' == ''true'''
       with:
-        name: tail-replay-candidate-5
+        name: tail-replay-late-5
         path: ci-shards/unit-selection.json
         retention-days: 14
     - name: Set up Bun for Mobile CI tool tests
@@ -1974,47 +1974,3 @@ jobs:
         config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
         config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
     timeout-minutes: 15
-  runtime:
-    name: cold-runtime-reuse
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 20
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        ref: 3625e2d070f145aba4cbe6b5f818a44b189b55cf
-        fetch-depth: 50
-        persist-credentials: false
-    - uses: ./.github/actions/install-node-dependencies
-      with:
-        native-runtime: none
-        node-version: '24'
-    - name: Measure exact executable reuse
-      run: "cat > .tail-runtime-benchmark.mjs <<'SCRIPT'\nimport { mkdirSync, mkdtempSync, readFileSync, rmSync,\
-        \ writeFileSync } from 'node:fs'\nimport { join } from 'node:path'\nimport { performance } from 'node:perf_hooks'\n\
-        import { runProcessSync } from '@orca/process-host'\nimport { measurePreflightCommand } from './config/scripts/preflight-benchmark-command.mjs'\n\
-        import { buildCounterbalancedSchedule } from './config/scripts/counterbalanced-benchmark-schedule.mjs'\n\
-        import { summarizeBenchmarkSamples } from './config/scripts/benchmark-sample-summary.mjs'\nimport { NODE_RUNTIME_ASSETS\
-        \ } from './src/shared/node-runtime-pin.ts'\nimport { sha256File } from './config/scripts/update-node-runtime-pin.mjs'\n\
-        const root=process.cwd(), output=join(root,'.build/tail-runtime')\nmkdirSync(output,{recursive:true})\n\
-        const file='config/scripts/.tail-baseline-pinned-node-downloads.mjs'\nconst old=runProcessSync({program:'git',args:['show','099bb76501f82184820a1f236409e2eacbebb8ef:config/scripts/pinned-node-downloads.mjs'],cwd:root})\n\
-        if(old.code!==0)throw new Error(old.stderr)\nwriteFileSync(file,old.stdout)\nconst expected=NODE_RUNTIME_ASSETS['linux-arm64-glibc'].executableSha256\n\
-        const hostHash=await sha256File(process.execPath)\nconst report={source:'3625e2d070f145aba4cbe6b5f818a44b189b55cf',base:'099bb76501f82184820a1f236409e2eacbebb8ef',node:process.version,hostMatchesPin:hostHash===expected,method:'Four\
-        \ counterbalanced pairs; a separate empty cache for each invocation; both outputs must match the pinned\
-        \ executable hash.',measurements:[]}\nif(!report.hostMatchesPin)throw new Error('setup-node does not currently\
-        \ match the executable pin')\nconst save=()=>writeFileSync(join(output,'runtime.json'),JSON.stringify(report,null,2))\n\
-        try {\nfor(const [pair,order] of buildCounterbalancedSchedule(4,'baseline','candidate').entries()) {\n \
-        \ for(const arm of order) {\n    const cache=mkdtempSync(join(process.env.RUNNER_TEMP,'tail-node-'))\n \
-        \   const result=await measurePreflightCommand({program:process.execPath,args:[arm==='baseline'?file:'config/scripts/pinned-node-downloads.mjs','linux-arm64-glibc'],label:`runtime-${pair}-${arm}`,root,output,env:{...process.env,ORCA_NODE_RUNTIME_CACHE_DIR:cache},timeoutMs:600000})\n\
-        \    if(result.code!==0||result.signal||result.timedOut)throw new Error(JSON.stringify(result))\n    const\
-        \ executable=result.stdout.trim().split('\\n').at(-1)\n    if(await sha256File(executable)!==expected)throw\
-        \ new Error('Wrong packaged Node bytes')\n    report.measurements.push({pair,arm,...result});save()\n  \
-        \  console.log(JSON.stringify({pair,arm,durationMs:result.durationMs}))\n    rmSync(cache,{recursive:true,force:true})\n\
-        \  }\n}\nreport.summary=Object.fromEntries(['baseline','candidate'].map(arm=>[arm,summarizeBenchmarkSamples(report.measurements.filter(x=>x.arm===arm).map(x=>x.durationMs))]))\n\
-        save();console.log(JSON.stringify(report.summary))\n}finally{rmSync(file,{force:true})}\n\nSCRIPT\nnode\
-        \ .tail-runtime-benchmark.mjs"
-    - uses: actions/upload-artifact@v7
-      if: always()
-      with:
-        name: tail-runtime-reuse
-        path: .build/tail-runtime/
-        retention-days: 30
