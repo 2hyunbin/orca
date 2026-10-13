@@ -189,7 +189,7 @@ export const TerminalCreateParams = z.object({
   terminalColorQueryReplies: TerminalColorQueryReplyColorsParam.optional(),
   title: OptionalString,
   focus: z.unknown().optional(),
-  // Ignored: sent by CLIs before this host started every workspace terminal itself.
+  // Ignored here; the CLI still sends it for hosts before v1.4.211, which route on it.
   rendererBacked: z.unknown().optional(),
   activate: z.unknown().optional(),
   presentation: z.enum(['background', 'focused']).optional(),
