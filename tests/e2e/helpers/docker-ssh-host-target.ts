@@ -7,6 +7,7 @@ import { getDockerSshHostImage } from './docker-ssh-host-image'
 import { quotePosixShell } from '../../../src/shared/wsl-login-shell-command'
 
 import type { TestInfo } from '@stablyai/playwright-test'
+import { runProcessSync } from '@orca/process-host'
 
 export const DOCKER_SSH_HOST_REMOTE_REPO_PATH = '/tmp/orca-docker-relay-perf-repo'
 
@@ -17,6 +18,23 @@ export type DockerSshHostTarget = {
   identityFile: string
   port: number
   tempDir: string
+}
+
+export function copyFileIntoDockerSshHostTarget(
+  target: DockerSshHostTarget,
+  source: string,
+  destination: string
+): void {
+  const result = runProcessSync({
+    program: 'docker',
+    args: ['cp', source, `${target.containerName}:${destination}`],
+    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+    timeoutMs: 30000,
+    stdio: 'inherit'
+  })
+  if (result.code !== 0) {
+    throw new Error('Could not copy the fixture into the owned SSH container')
+  }
 }
 
 function run(command: string, args: string[], opts: { timeoutMs?: number } = {}): string {

@@ -1,0 +1,106 @@
+name: Independent plugin packages
+
+on:
+  pull_request:
+    paths:
+      - 'plugin-packages/**'
+      - 'src/shared/plugins/plugin-viewer-author-api*'
+      - 'src/shared/plugins/**'
+      - 'src/shared/authorized-regular-file*'
+      - 'src/shared/node-bounded-file-reader*'
+      - 'src/main/plugins/plugin-artifact-file-reader.ts'
+      - 'src/main/plugins/plugin-content-hash.ts'
+      - 'src/main/plugins/plugin-manifest-file.ts'
+      - 'src/main/plugins/plugin-syntax-content.ts'
+      - 'src/renderer/src/i18n/locales/en.json'
+      - 'config/scripts/*plugin-tooling*'
+      - '.github/workflows/plugin-packages.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'plugin-packages/**'
+      - 'src/shared/plugins/plugin-viewer-author-api*'
+      - 'src/shared/plugins/**'
+      - 'src/shared/authorized-regular-file*'
+      - 'src/shared/node-bounded-file-reader*'
+      - 'src/main/plugins/plugin-artifact-file-reader.ts'
+      - 'src/main/plugins/plugin-content-hash.ts'
+      - 'src/main/plugins/plugin-manifest-file.ts'
+      - 'src/main/plugins/plugin-syntax-content.ts'
+      - 'src/renderer/src/i18n/locales/en.json'
+      - 'config/scripts/*plugin-tooling*'
+      - '.github/workflows/plugin-packages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tooling:
+    name: Tooling / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: plugin-packages/orca-plugin-tooling
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.20.0'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node ../../config/scripts/snapshot-plugin-tooling.mjs --check
+      - run: npm test
+      - run: npm pack --ignore-scripts
+
+  sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: plugin-packages/orca-plugin-sdk
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - run: npm pack --ignore-scripts
+
+  formats:
+    name: ${{ matrix.format }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        format: [xlsx, stl]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: plugin-packages/orca-viewer-${{ matrix.format }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Verify committed release bundle
+        run: git diff --exit-code -- dist

@@ -89,6 +89,16 @@ export const PR_E2E_SOURCE_ROUTES = [
         file === 'src/renderer/src/components/right-sidebar/use-file-explorer-tree-load-effects.ts')
   },
   {
+    id: 'plugins.managed-runtime-viewers',
+    specs: ['tests/e2e/plugin-viewer-managed-runtime.spec.ts'],
+    matches: (file) =>
+      file === 'tests/e2e/helpers/plugin-catalog-fixture.ts' ||
+      (isProductSource(file) &&
+        /^src\/(?:main\/(?:ipc\/plugin-viewer-runtime-|runtime\/runtime-plugin-viewer-|runtime\/rpc\/methods\/files-plugin-viewer-)|shared\/plugins\/plugin-viewer-runtime-)/.test(
+          file
+        ))
+  },
+  {
     id: 'serve.orcad-mode-switch',
     specs: ['tests/e2e/orcad-serve-mode-switch.spec.ts'],
     matches: (file) =>

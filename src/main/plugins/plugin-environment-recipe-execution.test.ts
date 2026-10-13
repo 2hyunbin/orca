@@ -31,6 +31,7 @@ if(mode==='hang'){setInterval(()=>{},1000);await new Promise(()=>{});}
 if(mode==='flood'){process.stdout.write('x'.repeat(1024*1024));await new Promise(()=>{});}
 if(mode==='exit'){process.stderr.write('SECRET_DIAGNOSTIC');process.exit(2);}
 if(mode==='invalid'){process.stdout.write('SECRET_DIAGNOSTIC');process.exit(0);}
+if(mode==='unavailable'){process.stdout.write(JSON.stringify({protocolVersion:1,operationId:request.operationId,providerId:request.providerId,action:request.action,kind:'error',code:'unavailable',message:'Backend did not confirm the operation'}));process.exit(0);}
 if(mode==='slow'){await new Promise(resolve=>setTimeout(resolve,200));}
 const state={create:'running',resume:'running',sleep:'sleeping',archive:'archived',delete:'deleted'}[request.action];
 const resource={id:request.resourceId??'new-pod',name:'Development pod',revision:'r2',lifetime:'long-lived',state:state??'running'};
@@ -108,6 +109,20 @@ describe('approved environment recipe execution', () => {
       )
     }
   )
+  it('preserves uncertainty for an unavailable mutation even when the provider exits successfully', async () => {
+    const mutation = input('create')
+    mutation.env.TEST_MODE = 'unavailable'
+    expect(await executePluginEnvironmentRecipe(mutation)).toEqual({
+      kind: 'unverifiable',
+      reason: 'provider-unavailable'
+    })
+    const inventory = input('list')
+    inventory.env.TEST_MODE = 'unavailable'
+    expect(await executePluginEnvironmentRecipe(inventory)).toMatchObject({
+      kind: 'completed',
+      response: { kind: 'error', code: 'unavailable' }
+    })
+  })
   it('never spawns without current approval and refuses already cancelled work', async () => {
     const args = input()
     expect(await executePluginEnvironmentRecipe({ ...args, authorize: async () => null })).toEqual({

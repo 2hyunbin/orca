@@ -260,6 +260,7 @@ module.exports = {
     '!config{,/**/*}',
     // Release archives and other build staging are not runtime resources.
     '!.build{,/**/*}',
+    '!.tmp{,/**/*}',
     '!docs{,/**/*}',
     '!mobile{,/**/*}',
     '!native{,/**/*}',
@@ -269,6 +270,8 @@ module.exports = {
     '!skill-guides{,/**/*}',
     '!skill-stubs{,/**/*}',
     '!tests{,/**/*}',
+    '!plugin-packages{,/**/*}',
+    '!out/plugin-directory{,/**/*}',
     // Why: examples/ is plugin authoring documentation with no runtime consumer —
     // bundled plugins ship via extraResources from resources/plugins/launch/. It also
     // carries hostile-panel, the adversarial fixture the containment tests point at,

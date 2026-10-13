@@ -58,10 +58,16 @@ describe('electron-builder config', () => {
     matcher.prependPattern('**/*')
     const isPacked = matcher.createFilter()
     expect(isPacked(join('/app', '.build'), { isDirectory: () => true })).toBe(false)
+    expect(isPacked(join('/app', '.tmp'), { isDirectory: () => true })).toBe(false)
     for (const stagingPath of [
       '.build/release-javascript/release-javascript.tar.gz',
       '.build/release-javascript/manifest.json',
-      '.build/release-javascript-123/out/main/index.js'
+      '.build/release-javascript-123/out/main/index.js',
+      '.tmp/phase-o-1/evidence/catalog.png',
+      '.tmp/phase-o-1/orca-plugin-tooling-1.0.0.tgz',
+      '.tmp/phase-o-1/packaged-current/Orca.app/Contents/Resources/app.asar',
+      'out/plugin-directory/directory-catalog.json',
+      'out/plugin-directory/assets/index.js'
     ]) {
       expect(isPacked(join('/app', stagingPath), { isDirectory: () => false })).toBe(false)
     }

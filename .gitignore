@@ -40,6 +40,19 @@ native/windows-security/bin/
 # pnpm
 .pnpm-store/
 package-lock.json
+!plugin-packages/*/package-lock.json
+!plugin-packages/orca-viewer-xlsx/dist/
+plugin-packages/orca-viewer-xlsx/dist/*
+!plugin-packages/orca-viewer-xlsx/dist/xlsx.worker.js
+!plugin-packages/orca-viewer-stl/dist/
+plugin-packages/orca-viewer-stl/dist/*
+!plugin-packages/orca-viewer-stl/dist/stl.worker.js
+!plugin-packages/orca-plugin-tooling/dist/
+plugin-packages/orca-plugin-tooling/dist/*
+!plugin-packages/orca-plugin-tooling/dist/runtime.mjs
+!plugin-packages/orca-plugin-tooling/templates/viewer/dist/
+plugin-packages/orca-plugin-tooling/templates/viewer/dist/*
+!plugin-packages/orca-plugin-tooling/templates/viewer/dist/example.worker.js
 
 # Environment
 .env
@@ -178,10 +191,3 @@ ci-shards/
 .build/preflight-benchmark/
 
 .local/static-analysis-research/
-
-!plugin-packages/orca-plugin-tooling/dist/
-plugin-packages/orca-plugin-tooling/dist/*
-!plugin-packages/orca-plugin-tooling/dist/runtime.mjs
-!plugin-packages/orca-plugin-tooling/templates/viewer/dist/
-plugin-packages/orca-plugin-tooling/templates/viewer/dist/*
-!plugin-packages/orca-plugin-tooling/templates/viewer/dist/example.worker.js

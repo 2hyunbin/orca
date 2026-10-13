@@ -15,6 +15,8 @@
 *.html text eol=lf
 # Bundled plugin trees are byte-hashed; CRLF checkout would break the pinned hash.
 /resources/plugins/** text eol=lf
+# Independent release trees preserve exact committed text and binary bytes.
+/plugin-packages/** -text
 # Relay assets are copied verbatim into the bundle and hashed byte-for-byte into
 # .version, which names the immutable remote install dir. A CRLF checkout makes a
 # Windows-built client disagree with a mac/Linux-built one on the same release,

@@ -1,5 +1,4 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import { runProcess } from '@orca/process-host'
 import { createServer } from 'node:http'
 import { readFile, mkdir, rm } from 'node:fs/promises'
 import { join, resolve, relative, extname } from 'node:path'
@@ -25,9 +24,9 @@ export async function createDirectoryFixtureServer(
       environmentRecipes: true
     }))
   try {
-    await promisify(execFile)(
-      process.execPath,
-      [
+    const build = await runProcess({
+      program: process.execPath,
+      args: [
         'config/scripts/run-plugin-directory-build.mjs',
         '--catalog',
         join(fixture.root, 'repositories', 'orca-plugins.git', 'orca-marketplace.json'),
@@ -36,8 +35,14 @@ export async function createDirectoryFixtureServer(
         '--source-ref',
         'main'
       ],
-      { cwd: resolve('.'), timeout: 60_000, maxBuffer: 2 * 1024 * 1024 }
-    )
+      cwd: resolve('.'),
+      timeoutMs: 60_000,
+      maxOutputBytes: 2 * 1024 * 1024,
+      killOnOutputLimit: true
+    })
+    if (build.code !== 0) {
+      throw new Error(build.stderr || 'Directory fixture build failed')
+    }
     const root = resolve('out/plugin-directory')
     const directory = directoryCatalogSchema.parse(
       JSON.parse(await readFile(join(root, 'directory-catalog.json'), 'utf8'))

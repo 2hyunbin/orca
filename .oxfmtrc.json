@@ -7,6 +7,10 @@
   "ignorePatterns": [
     "cloud/**",
     "resources/licenses/**",
+    "plugin-packages/*/dist/**",
+    "plugin-packages/orca-plugin-tooling/templates/viewer/dist/**",
+    "plugin-packages/orca-plugin-tooling/schemas/**",
+    "plugin-packages/orca-plugin-tooling/locale-kit.json",
     ".github/actions/cloud-sql-rollout-lease/**",
     ".anti-slop-plugin/**",
     "src/main/runtime/__fixtures__/*.timing.json"

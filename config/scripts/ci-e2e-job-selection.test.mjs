@@ -74,6 +74,24 @@ it('runs real browser file-drop ownership in the template-building Docker job', 
   }
 })
 
+it('routes managed viewers to the template-producing lane with an Electron build', () => {
+  const spec = 'tests/e2e/plugin-viewer-managed-runtime.spec.ts'
+  for (const source of [
+    'src/main/ipc/plugin-viewer-runtime-file-route.ts',
+    'src/main/runtime/runtime-plugin-viewer-lease-observer.ts',
+    'src/shared/plugins/plugin-viewer-runtime-client.ts'
+  ]) {
+    expect(selectPrE2eSpecs([source]), source).toContain(spec)
+  }
+  expect(classify([spec])).toEqual({ e2e_run_changed: false, e2e_needs_build: true })
+  const lane = workflow.jobs['orcad-ssh-docker']
+  expect(lane.if).toContain(`contains(inputs.test_files, '${spec}')`)
+  const run = lane.steps.find((step) => step.run?.includes('ORCA_E2E_ORCAD_CONVERT_TEMPLATE='))
+  expect(run.env.ORCA_E2E_SSH_DOCKER).toBe('1')
+  expect(run.run).toContain('ORCA_E2E_ORCAD_CONVERT_TEMPLATE=')
+  expect(run.run).toContain(spec)
+})
+
 it('skips the general consumer only when every requested spec has a dedicated owner', () => {
   for (const spec of DEDICATED_E2E_SPECS) {
     expect(classify([spec]).e2e_run_changed, spec).toBe(false)

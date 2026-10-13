@@ -74,6 +74,21 @@ describe('changed-code quality line matching', () => {
   it('leaves Cloud source to the independent Cloud quality checks', () => {
     expect(isRootCodeQualityPath('cloud/apps/relay/src/index.ts')).toBe(false)
     expect(isRootCodeQualityPath('src/main/index.ts')).toBe(true)
+    expect(isRootCodeQualityPath('plugin-packages/orca-viewer-xlsx/dist/xlsx.worker.js')).toBe(
+      false
+    )
+    expect(isRootCodeQualityPath('plugin-packages/orca-viewer-stl/dist/stl.worker.js')).toBe(false)
+    expect(isRootCodeQualityPath('plugin-packages/orca-plugin-tooling/dist/runtime.mjs')).toBe(
+      false
+    )
+    expect(isRootCodeQualityPath('plugin-packages/orca-plugin-tooling/src/cli.mjs')).toBe(true)
+    expect(
+      isRootCodeQualityPath(
+        'plugin-packages/orca-plugin-tooling/templates/viewer/dist/example.worker.js'
+      )
+    ).toBe(false)
+    expect(isRootCodeQualityPath('plugin-packages/orca-viewer-xlsx/src/worker.ts')).toBe(true)
+    expect(isRootCodeQualityPath('plugin-packages/orca-viewer-xlsx/dist/unexpected.js')).toBe(true)
   })
 })
 

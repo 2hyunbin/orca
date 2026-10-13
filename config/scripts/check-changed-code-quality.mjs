@@ -8,6 +8,12 @@ import { resolveOxlintInvocation } from './oxlint-cli-invocation.mjs'
 
 const SOURCE_FILE_PATTERN = /\.(?:[cm]?[jt]sx?)$/
 const ROOT_CODE_QUALITY_IGNORED_PREFIXES = ['cloud/']
+const GENERATED_PLUGIN_BUNDLES = new Set([
+  'plugin-packages/orca-viewer-xlsx/dist/xlsx.worker.js',
+  'plugin-packages/orca-plugin-tooling/dist/runtime.mjs',
+  'plugin-packages/orca-plugin-tooling/templates/viewer/dist/example.worker.js',
+  'plugin-packages/orca-viewer-stl/dist/stl.worker.js'
+])
 const CASTING_RULE = 'typescript/consistent-type-assertions'
 const CASTING_DISABLE_PATTERN =
   /\/[/*]\s*(?:oxlint|eslint)-disable(?:-next-line|-line)?\s[^\n]*typescript\/consistent-type-assertions/
@@ -119,7 +125,11 @@ function splitNullDelimited(output) {
 }
 
 export function isRootCodeQualityPath(file) {
-  return !ROOT_CODE_QUALITY_IGNORED_PREFIXES.some((prefix) => file.startsWith(prefix))
+  // Bundled dependency code is checked through its authored sources and release build.
+  return (
+    !GENERATED_PLUGIN_BUNDLES.has(file) &&
+    !ROOT_CODE_QUALITY_IGNORED_PREFIXES.some((prefix) => file.startsWith(prefix))
+  )
 }
 
 function resolveBase(root, requestedBase) {

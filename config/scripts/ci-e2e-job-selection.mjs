@@ -11,12 +11,22 @@ export const WINDOWS_MISSING_APPDATA_E2E_SPEC = 'tests/e2e/windows-missing-appda
 export const LAYOUT_ORACLE_HEADLESS_E2E_SPEC = 'tests/e2e/workspace-layout-oracle-headless.spec.ts'
 // One Docker job runs every managed-SSH spec; it builds the orcad template they need.
 export const MANAGED_SSH_E2E_SPEC_PREFIX = 'tests/e2e/ssh-orcad-'
+export const PLUGIN_VIEWER_MANAGED_RUNTIME_E2E_SPEC =
+  'tests/e2e/plugin-viewer-managed-runtime.spec.ts'
+// These require the actual production app built by the PR package job.
+export const PACKAGED_PLUGIN_E2E_SPECS = [
+  'tests/e2e/plugin-packaged-cohort.spec.ts',
+  'tests/e2e/plugin-packaged-parser-recovery.spec.ts',
+  'tests/e2e/plugin-packaged-ssh.spec.ts'
+]
 export const DEDICATED_E2E_SPECS = [
   NODE_NETWORK_E2E_SPEC,
   NATIVE_IME_E2E_SPEC,
   ORCAD_SERVE_MODE_SWITCH_E2E_SPEC,
   LAYOUT_ORACLE_HEADLESS_E2E_SPEC,
-  WINDOWS_MISSING_APPDATA_E2E_SPEC
+  WINDOWS_MISSING_APPDATA_E2E_SPEC,
+  PLUGIN_VIEWER_MANAGED_RUNTIME_E2E_SPEC,
+  ...PACKAGED_PLUGIN_E2E_SPECS
 ]
 const dedicatedSpecs = new Set(DEDICATED_E2E_SPECS)
 // Their jobs build their own app or none, so they never need the shared e2e build.

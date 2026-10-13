@@ -8,6 +8,7 @@ import {
   pluginMarketplaceSchema
 } from '../../shared/plugins/plugin-marketplace'
 import { bootstrapBundledPlugins, resolveBundledPluginRoot } from './plugin-bundled-bootstrap'
+import { readBundledPluginIndex } from './plugin-bundled-index'
 import { inspectPluginInstallTree } from './plugin-install-staging'
 
 const launchRoot = join(process.cwd(), 'resources', 'plugins', 'launch')
@@ -24,15 +25,11 @@ afterEach(async () => {
 })
 
 describe('Phase 1 launch plugin content', () => {
-  it('lists and validates the launch plugin packs', async () => {
+  it('validates catalog examples and separately indexed app-owned data', async () => {
     const marketplace = pluginMarketplaceSchema.parse(
       await readJson(join(launchRoot, 'orca-marketplace.json'))
     )
-    expect(marketplace.plugins.map((plugin) => plugin.id).sort()).toEqual([
-      'stablyai.orca-multipass-recipes',
-      'stablyai.orca-navigation-shortcuts',
-      'stablyai.orca-portuguese'
-    ])
+    expect(marketplace.plugins.length).toBeGreaterThanOrEqual(7)
     expect(
       marketplace.plugins.filter(
         (plugin) =>
@@ -44,26 +41,45 @@ describe('Phase 1 launch plugin content', () => {
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort()
-    expect(marketplace.plugins.map((plugin) => plugin.id).sort()).toEqual(localPluginDirectories)
+    const bundledIndex = await readBundledPluginIndex(launchRoot)
+    const bundledDataKeys = bundledIndex.plugins
+      .filter((entry) => entry.activation === 'bundled-data')
+      .map((entry) => entry.pluginKey)
+    expect([...marketplace.plugins.map((plugin) => plugin.id), ...bundledDataKeys].sort()).toEqual(
+      localPluginDirectories
+    )
 
     const contributionKinds = new Set<string>()
-    for (const listing of marketplace.plugins) {
+    for (const pluginKey of localPluginDirectories) {
       const inspection = await inspectPluginInstallTree({
-        rootDir: join(launchRoot, listing.id),
-        hostVersion: '1.4.0',
-        expectedPluginKey: listing.id
+        rootDir: join(launchRoot, pluginKey),
+        hostVersion: '1.4.214',
+        expectedPluginKey: pluginKey
       })
-      expect(inspection, `${listing.id} must pass the production install inspection`).toMatchObject(
-        {
-          ok: true
-        }
-      )
+      expect(inspection, `${pluginKey} must pass the production install inspection`).toMatchObject({
+        ok: true
+      })
       if (!inspection.ok) {
         continue
       }
       const contributes = inspection.manifest.contributes
+      if (contributes.themes.length > 0) {
+        contributionKinds.add('theme')
+      }
       if (contributes.languagePacks.length > 0) {
         contributionKinds.add('language')
+      }
+      if (
+        inspection.manifest.manifestVersion === 2 &&
+        inspection.manifest.contributes.languages.length > 0
+      ) {
+        contributionKinds.add('coding-language')
+      }
+      if (contributes.iconThemes.length > 0) {
+        contributionKinds.add('icon')
+      }
+      if (contributes.terminalThemes.length > 0) {
+        contributionKinds.add('terminal-theme')
       }
       if (contributes.vmRecipes.length > 0) {
         contributionKinds.add('vm-recipe')
@@ -72,7 +88,17 @@ describe('Phase 1 launch plugin content', () => {
         contributionKinds.add('command-keybinding')
       }
     }
-    expect(contributionKinds).toEqual(new Set(['language', 'vm-recipe', 'command-keybinding']))
+    expect(contributionKinds).toEqual(
+      new Set([
+        'theme',
+        'language',
+        'coding-language',
+        'icon',
+        'terminal-theme',
+        'vm-recipe',
+        'command-keybinding'
+      ])
+    )
   })
 
   it('publishes every bundled pack only when its release hash matches exact bytes', async () => {
@@ -108,6 +134,9 @@ describe('Phase 1 launch plugin content', () => {
     })
 
     expect(result.errors).toEqual([])
-    expect(result.installed).toEqual(['stablyai.orca-navigation-shortcuts'])
+    expect(result.installed).toEqual([
+      'stablyai.orca-midnight-theme',
+      'stablyai.orca-navigation-shortcuts'
+    ])
   })
 })

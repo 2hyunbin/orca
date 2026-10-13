@@ -1,0 +1,49 @@
+name: Public plugin directory
+
+on:
+  pull_request:
+    paths:
+      - 'src/plugin-directory/**'
+      - 'src/shared/plugins/**'
+      - 'src/renderer/src/components/plugin-catalog/**'
+      - 'src/renderer/src/components/ui/**'
+      - 'src/renderer/src/assets/main.css'
+      - 'src/renderer/src/assets/fonts/Geist-Variable.woff2'
+      - 'src/renderer/src/lib/utils.ts'
+      - 'src/renderer/src/lib/ime-*'
+      - 'resources/plugins/launch/**'
+      - 'tests/plugin-directory/**'
+      - 'tests/e2e/helpers/plugin-*'
+      - 'tests/playwright.plugin-directory.config.ts'
+      - 'config/scripts/*plugin-directory*'
+      - 'config/tsconfig.plugin-directory.json'
+      - 'vite.plugin-directory.config.ts'
+      - 'plugin-packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/plugin-directory.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  directory:
+    name: Headless browser / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: none
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run typecheck:plugin-directory
+      - run: pnpm exec vitest run --config config/vitest.config.ts src/plugin-directory/directory-catalog-loader.test.ts config/scripts/plugin-directory-build-input.test.ts config/scripts/plugin-directory-design-tokens.test.ts src/renderer/src/components/plugin-catalog/plugin-catalog-filter.test.ts
+      - run: pnpm run test:plugin-directory

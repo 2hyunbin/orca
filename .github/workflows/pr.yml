@@ -416,6 +416,9 @@ jobs:
       - name: Verify bundled skill guides
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: pnpm run verify:bundled-skill-guides
+      - name: Verify bundled language data
+        if: needs.code_paths.outputs.static_analysis == 'true'
+        run: pnpm run verify:bundled-data-plugins
 
       - name: Verify skill freshness manifest
         if: needs.code_paths.outputs.static_analysis == 'true'
@@ -1215,6 +1218,30 @@ jobs:
 
       - name: Smoke packaged hang watchdog worker
         run: xvfb-run --auto-servernum node config/scripts/smoke-packaged-hang-watchdog-worker.mjs --app-dir=dist/linux-unpacked
+
+      - name: Verify packaged plugin journeys
+        env:
+          ORCA_BACKGROUND_LAUNCH: '1'
+          ORCA_E2E_SSH_DOCKER: '1'
+          SKIP_BUILD: '1'
+        run: |
+          ORCA_PHASE_O_1_PACKAGED_EXECUTABLE="$PWD/dist/linux-unpacked/orca-ide" \
+            xvfb-run --auto-servernum pnpm exec playwright test \
+            tests/e2e/plugin-git-object-format.spec.ts \
+            tests/e2e/plugin-packaged-cohort.spec.ts \
+            tests/e2e/plugin-packaged-parser-recovery.spec.ts \
+            tests/e2e/plugin-packaged-ssh.spec.ts \
+            --config tests/playwright.config.ts --project electron-headless --workers=1
+
+      - name: Upload packaged plugin evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: packaged-plugin-evidence
+          path: |
+            test-results/
+            .tmp/phase-o-1/evidence/
+          retention-days: 14
 
   package_windows:
     name: package (windows)

@@ -61,6 +61,9 @@ const GIT_COMPAT_PREFIXES = [
   'src/shared/review-head-tracking-ref',
   'src/shared/worktree/local-base-branch-fast-forward',
   'src/main/git/',
+  'src/main/plugins/plugin-git-',
+  'src/shared/plugins/plugin-git-',
+  'src/shared/plugins/plugin-tree-limits',
   'config/scripts/git-binary-compatibility'
 ]
 
@@ -362,6 +365,10 @@ const WINDOWS_PACKAGE_PREFIXES = [
 ]
 
 const LINUX_PACKAGE_TESTS = [
+  'tests/e2e/plugin-git-object-format.spec.ts',
+  'tests/e2e/plugin-packaged-cohort.spec.ts',
+  'tests/e2e/plugin-packaged-parser-recovery.spec.ts',
+  'tests/e2e/plugin-packaged-ssh.spec.ts',
   'src/main/browser/browser-client-page-renderer-lifecycle.electron.test.ts',
   'src/main/browser/browser-route-tcp-egress.electron.test.ts',
   'src/main/browser/browser-route-webrtc-egress.electron.test.ts',

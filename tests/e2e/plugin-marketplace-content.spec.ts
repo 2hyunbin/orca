@@ -1,7 +1,7 @@
 /**
  * Invariant: a fresh profile discovers the managed official marketplace and
- * completes the Phase 1 language, VM-recipe, and keybinding journey through
- * production Git paths.
+ * completes the Phase 1/P2 theme, language, VM-recipe, and keybinding journey
+ * through production Git paths.
  */
 
 import { execFile } from 'node:child_process'
@@ -19,10 +19,10 @@ const execFileAsync = promisify(execFile)
 type MarketplaceFixture = {
   root: string
   home: string
-  gitEnvironment: NodeJS.ProcessEnv
+  gitEnvironment: Record<string, string>
 }
 
-function isolatedGitProcessEnv(gitEnvironment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function isolatedGitProcessEnv(gitEnvironment: Record<string, string>): NodeJS.ProcessEnv {
   return {
     ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))),
     ...gitEnvironment
@@ -32,14 +32,14 @@ function isolatedGitProcessEnv(gitEnvironment: NodeJS.ProcessEnv): NodeJS.Proces
 async function runGit(
   cwd: string,
   args: string[],
-  gitEnvironment: NodeJS.ProcessEnv
+  gitEnvironment: Record<string, string>
 ): Promise<void> {
   await execFileAsync('git', args, { cwd, env: isolatedGitProcessEnv(gitEnvironment) })
 }
 
 async function commitRepository(
   repository: string,
-  gitEnvironment: NodeJS.ProcessEnv
+  gitEnvironment: Record<string, string>
 ): Promise<void> {
   await runGit(repository, ['init', '--quiet'], gitEnvironment)
   await runGit(repository, ['checkout', '--quiet', '-b', 'main'], gitEnvironment)
@@ -65,7 +65,7 @@ async function copyLaunchPlugin(
   repositories: string,
   repositoryName: string,
   launchDirectory: string,
-  gitEnvironment: NodeJS.ProcessEnv
+  gitEnvironment: Record<string, string>
 ): Promise<void> {
   const repository = join(repositories, `${repositoryName}.git`)
   await cp(join(process.cwd(), 'resources', 'plugins', 'launch', launchDirectory), repository, {
@@ -74,11 +74,14 @@ async function copyLaunchPlugin(
   await commitRepository(repository, gitEnvironment)
 }
 
-async function configureFixtureGit(home: string, repositories: string): Promise<NodeJS.ProcessEnv> {
+async function configureFixtureGit(
+  home: string,
+  repositories: string
+): Promise<Record<string, string>> {
   const hooksDirectory = join(home, 'hooks')
   const configPath = join(home, '.gitconfig')
   await mkdir(hooksDirectory, { recursive: true })
-  const gitEnvironment: NodeJS.ProcessEnv = {
+  const gitEnvironment: Record<string, string> = {
     GIT_CONFIG_GLOBAL: configPath,
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_TERMINAL_PROMPT: '0'
@@ -104,6 +107,12 @@ async function createMarketplaceFixture(): Promise<MarketplaceFixture> {
   await mkdir(repositories, { recursive: true })
   await mkdir(home, { recursive: true })
   const gitEnvironment = await configureFixtureGit(home, repositories)
+  await copyLaunchPlugin(
+    repositories,
+    'orca-nord-theme',
+    'stablyai.orca-nord-theme',
+    gitEnvironment
+  )
   await copyLaunchPlugin(
     repositories,
     'orca-portuguese',
@@ -132,6 +141,7 @@ async function createMarketplaceFixture(): Promise<MarketplaceFixture> {
         name: 'Orca Plugins',
         owner: 'stablyai',
         plugins: [
+          ['stablyai.orca-nord-theme', 'orca-nord-theme', 'themes'],
           ['stablyai.orca-portuguese', 'orca-portuguese', 'languages'],
           ['stablyai.orca-multipass-recipes', 'orca-multipass-recipes', 'vm-recipes'],
           ['stablyai.orca-navigation-shortcuts', 'orca-navigation-shortcuts', 'keybindings']
@@ -203,7 +213,8 @@ async function enableInstalledPluginThroughUi(
   await expect(consent).toBeHidden()
 }
 
-async function applyInstalledLanguage(page: Page): Promise<void> {
+async function applyInstalledThemeAndLanguage(page: Page): Promise<void> {
+  const themeId = 'plugin:stablyai.orca-nord-theme/nord'
   const languageId = 'plugin:stablyai.orca-portuguese/pt-BR'
   await page.evaluate(() => {
     const state = window.__store?.getState()
@@ -213,6 +224,12 @@ async function applyInstalledLanguage(page: Page): Promise<void> {
     state.openSettingsTarget({ pane: 'appearance', repoId: null })
   })
   await expect(page.locator('[data-settings-section="appearance"]')).toBeVisible()
+  await page.getByRole('combobox', { name: 'Plugin theme' }).click()
+  await page.getByRole('option', { name: 'Nord', exact: true }).click()
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.orcaPluginTheme))
+    .toBe(themeId)
+
   await page.evaluate(() => window.__store?.setState({ settingsSearchQuery: 'Language' }))
   await page.getByRole('combobox', { name: 'Language' }).click()
   await page.getByRole('option', { name: 'pt-BR — stablyai.orca-portuguese', exact: true }).click()
@@ -239,8 +256,12 @@ async function runMarketplaceJourney(page: Page): Promise<void> {
     .toMatchObject({
       sources: [expect.objectContaining({ official: true, stale: false })],
       listings: expect.arrayContaining([
+        expect.objectContaining({ pluginKey: 'stablyai.orca-nord-theme', official: true }),
         expect.objectContaining({ pluginKey: 'stablyai.orca-portuguese', official: true }),
-        expect.objectContaining({ pluginKey: 'stablyai.orca-multipass-recipes', official: true }),
+        expect.objectContaining({
+          pluginKey: 'stablyai.orca-multipass-recipes',
+          official: true
+        }),
         expect.objectContaining({
           pluginKey: 'stablyai.orca-navigation-shortcuts',
           official: true
@@ -248,6 +269,12 @@ async function runMarketplaceJourney(page: Page): Promise<void> {
       ])
     })
 
+  await installMarketplacePluginThroughUi(
+    page,
+    'stablyai.orca-nord-theme',
+    'Nord for Orca',
+    'Review plugin'
+  )
   await installMarketplacePluginThroughUi(
     page,
     'stablyai.orca-portuguese',
@@ -266,7 +293,7 @@ async function runMarketplaceJourney(page: Page): Promise<void> {
     'Review plugin content'
   )
 
-  await applyInstalledLanguage(page)
+  await applyInstalledThemeAndLanguage(page)
   expect(Date.now() - startedAt).toBeLessThan(120_000)
 }
 

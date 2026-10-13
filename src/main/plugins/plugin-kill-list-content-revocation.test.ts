@@ -25,6 +25,9 @@ function contentManifest(): PluginManifest {
     engines: { orca: '>=1.0.0' },
     pluginApi: 1,
     contributes: {
+      themes: [{ id: 'app', label: 'App', path: 'theme.json' }],
+      iconThemes: [{ id: 'icons', label: 'Icons', path: 'icons.json' }],
+      terminalThemes: [{ id: 'terminal', label: 'Terminal', path: 'terminal.json' }],
       languagePacks: [{ locale: 'es', path: 'locales/es.json' }],
       vmRecipes: [{ path: 'recipes/vm.json' }]
     },
@@ -38,6 +41,22 @@ async function pluginRoot(): Promise<string> {
   await Promise.all([mkdir(join(root, 'locales')), mkdir(join(root, 'recipes'))])
   await Promise.all([
     writeFile(join(root, 'orca-plugin.json'), JSON.stringify(contentManifest())),
+    writeFile(
+      join(root, 'theme.json'),
+      JSON.stringify({ base: 'dark', tokens: { '--background': '#101010' } })
+    ),
+    writeFile(
+      join(root, 'icons.json'),
+      JSON.stringify({ schemaVersion: 1, icons: { file: 'file.svg' } })
+    ),
+    writeFile(join(root, 'file.svg'), '<svg viewBox="0 0 16 16"><path d="M0 0h16v16z"/></svg>'),
+    writeFile(
+      join(root, 'terminal.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        terminal: { background: '#101010', foreground: '#eeeeee', black: '#000000' }
+      })
+    ),
     writeFile(join(root, 'locales', 'es.json'), JSON.stringify({ settings: 'Ajustes' })),
     writeFile(
       join(root, 'recipes', 'vm.json'),
@@ -85,12 +104,18 @@ describe('kill-list revocation of declarative plugin content', () => {
     const service = await createService(root, () => killed)
     await service.initialize()
     expect(await getApprovedPluginVmRecipes(service)).toHaveLength(1)
+    expect(service.contentPacks.themes.list()).toHaveLength(1)
+    expect(service.contentPacks.iconThemes.list()).toHaveLength(1)
+    expect(service.contentPacks.terminalThemes.list()).toHaveLength(1)
 
     killed = true
     await service.reconcileActivationState()
 
     expect(await getApprovedPluginVmRecipes(service)).toEqual([])
     expect(service.contentPacks.languagePacks.list()).toEqual([])
+    expect(service.contentPacks.themes.list()).toEqual([])
+    expect(service.contentPacks.iconThemes.list()).toEqual([])
+    expect(service.contentPacks.terminalThemes.list()).toEqual([])
   })
 
   it('never publishes killed content after a restart discovers the plugin', async () => {
@@ -101,5 +126,8 @@ describe('kill-list revocation of declarative plugin content', () => {
 
     expect(await getApprovedPluginVmRecipes(service)).toEqual([])
     expect(service.contentPacks.languagePacks.list()).toEqual([])
+    expect(service.contentPacks.themes.list()).toEqual([])
+    expect(service.contentPacks.iconThemes.list()).toEqual([])
+    expect(service.contentPacks.terminalThemes.list()).toEqual([])
   })
 })

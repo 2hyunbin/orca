@@ -28,6 +28,7 @@ type TestServer = {
 const servers: WebSocketServer[] = []
 
 afterEach(async () => {
+  vi.useRealTimers()
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -42,6 +43,21 @@ afterEach(async () => {
 })
 
 describe('RemoteRuntimeRequestConnection', () => {
+  it('closes ordinary cached sockets after idle and opens a new one for the next request', async () => {
+    const server = await createServer()
+    const connection = new RemoteRuntimeRequestConnection(server.pairing)
+    try {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      await connection.request('status.get', undefined, 1000)
+      await vi.advanceTimersByTimeAsync(61_000)
+      vi.useRealTimers()
+      await connection.request('status.get', undefined, 1000)
+      expect(server.connectionCount()).toBe(2)
+    } finally {
+      connection.close()
+    }
+  })
+
   it('reuses one encrypted WebSocket for multiple one-shot RPCs', async () => {
     const server = await createServer()
     const connection = new RemoteRuntimeRequestConnection(server.pairing)

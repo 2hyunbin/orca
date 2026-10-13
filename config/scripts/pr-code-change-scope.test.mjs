@@ -101,6 +101,18 @@ describe('docs-only path classification', () => {
 })
 
 describe('per-job path classification', () => {
+  it.each([
+    'plugin-git-object-format',
+    'plugin-packaged-cohort',
+    'plugin-packaged-parser-recovery',
+    'plugin-packaged-ssh'
+  ])('runs the real package lane when its plugin journey changes: %s', (name) => {
+    expectClassification([`tests/e2e/${name}.spec.ts`], {
+      package: true,
+      package_windows: true
+    })
+  })
+
   it('runs every expensive job on an empty diff rather than skipping by accident', () => {
     const result = classifyPrJobs([])
     expect(result.should_run).toBe(true)
@@ -449,6 +461,18 @@ describe('per-job path classification', () => {
     expect(classifyPrJobs(['mobile/package.json']).mobile_dependencies).toBe(true)
     expect(classifyPrJobs(['mobile/package.json']).should_run).toBe(false)
     expect(classifyPrJobs(['README.md', 'mobile/src/a.ts']).mobile_dependencies).toBe(true)
+  })
+
+  it('runs the real Git compatibility contract for plugin tree downloads', () => {
+    expect(classifyPrJobs(['src/main/plugins/plugin-git-repository.ts']).git_compatibility).toBe(
+      true
+    )
+    expect(classifyPrJobs(['src/shared/plugins/plugin-git-tree-format.ts']).git_compatibility).toBe(
+      true
+    )
+    expect(classifyPrJobs(['src/shared/plugins/plugin-tree-limits.ts']).git_compatibility).toBe(
+      true
+    )
   })
 
   // Why: `mobile/` is desktop-irrelevant for every other job, so a mobile-only diff used to skip
