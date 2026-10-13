@@ -152,35 +152,6 @@ describe('main sync-spawn ratchet', () => {
     expect(uses(source)).toEqual({ count: 1, symbols: [symbol] })
   })
 
-  it('counts hardenSecurePath unless the call is visibly async', () => {
-    const imported = "import { hardenSecurePath } from '../shared/secure-file'\n"
-    const count = (call) => uses(`${imported}${call}`).count
-    expect(count('hardenSecurePath(p, { isDirectory: true, sync: true })')).toBe(1)
-    expect(count("hardenSecurePath(p, { isDirectory: true, 'sync': true })")).toBe(1)
-    expect(count('hardenSecurePath(p, options)')).toBe(1)
-    expect(count('hardenSecurePath(p, { ...base, isDirectory: true })')).toBe(1)
-    expect(count('hardenSecurePath(p, { isDirectory: true, sync })')).toBe(1)
-    expect(count('hardenSecurePath(p, { sync: true } as const)')).toBe(1)
-    expect(count('tasks.map(hardenSecurePath)')).toBe(1)
-    expect(count('hardenSecurePath(p, { isDirectory: true })')).toBe(0)
-    expect(count('hardenSecurePath(p, { isDirectory: true, sync: false })')).toBe(0)
-    expect(count('hardenSecurePath(p)')).toBe(0)
-    expect(
-      uses("import * as sf from '../shared/secure-file'\nsf.hardenSecurePath(p, { sync: true })")
-    ).toEqual({ count: 1, symbols: ['hardenSecurePath'] })
-  })
-
-  it.each([
-    'const args = [p, { isDirectory: false, platform: "win32", sync: true }] as const\nhardenSecurePath(...args)',
-    'const options = [{ isDirectory: false, platform: "win32", sync: true }] as const\nhardenSecurePath(p, ...options)',
-    'hardenSecurePath(...paths, { isDirectory: true, sync: false })'
-  ])('counts hardenSecurePath with spread call arguments: %s', (source) => {
-    expect(uses(`import { hardenSecurePath } from '../shared/secure-file'\n${source}`)).toEqual({
-      count: 1,
-      symbols: ['hardenSecurePath']
-    })
-  })
-
   it('counts re-exports in the re-exporting module and internal calls in the defining one', () => {
     expect(
       uses(
@@ -244,7 +215,7 @@ describe('main sync-spawn ratchet', () => {
       'execFileSync, runProcessSync: use runProcess or spawnProcess from @orca/process-host.'
     )
     expect(adviceFor(['writeSecureFile'])).toContain(
-      "no async secure writer exists yet; keep the synchronous one and raise this file's count in config/main-sync-spawn-baseline.txt"
+      "can block on its whole subtree); keep the synchronous one and raise this file's count in config/main-sync-spawn-baseline.txt"
     )
     expect(adviceFor(['restrictWindowsPathSync'])).toContain('never a plain write')
     expect(adviceFor(['gitExecFileSync', 'grantDirAcl'])).toBe(

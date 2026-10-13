@@ -16,22 +16,21 @@ export const WINDOWS_FILE_READ_EXECUTE = 0x1200a9
 
 const requireFromHere = createRequire(__filename)
 
-/** `reported` lets the first caller log a load failure once per process. */
-let loaded: WindowsSecurity | { error: string; reported: boolean } | null = null
+let loaded: WindowsSecurity | { error: string } | null = null
 
 /**
  * The addon, or why it cannot load on this host. Desktop and the CLI resolve the workspace
  * package; orcad ships the bare binary at its slot root, beside its server bundles and two levels
  * above its CLI bundle (`out/cli/index.js`), with no node_modules.
  */
-export function loadWindowsSecurity(): WindowsSecurity | { error: string; reported: boolean } {
+export function loadWindowsSecurity(): WindowsSecurity | { error: string } {
   loaded ??= loadOnce()
   return loaded
 }
 
-function loadOnce(): WindowsSecurity | { error: string; reported: boolean } {
+function loadOnce(): WindowsSecurity | { error: string } {
   if (process.platform !== 'win32') {
-    return { error: `unsupported on ${process.platform}`, reported: false }
+    return { error: `unsupported on ${process.platform}` }
   }
   const failures: string[] = []
   for (const specifier of [
@@ -46,7 +45,7 @@ function loadOnce(): WindowsSecurity | { error: string; reported: boolean } {
       failures.push(`${specifier}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  return { error: failures.join('; '), reported: false }
+  return { error: failures.join('; ') }
 }
 
 /**
@@ -55,6 +54,7 @@ function loadOnce(): WindowsSecurity | { error: string; reported: boolean } {
  *
  * Async DACL writes to one path run in order. A grant reads the DACL and writes back a merge, so
  * one racing a re-lock on another pool thread could land last and restore the broader DACL.
+ * A synchronous grantDirAcl is not ordered against them; it never targets the userData root.
  */
 function prepare(raw: WindowsSecurityAddon): WindowsSecurity {
   const writes = new Map<string, Promise<unknown>>()
@@ -78,8 +78,7 @@ function prepare(raw: WindowsSecurityAddon): WindowsSecurity {
       setDaclSddl: (path, sddl) => raw.setDaclSddl(extended(path), sddl),
       setDaclSddlAsync: (path, sddl) =>
         inPathOrder(extended(path), () => raw.setDaclSddlAsync(extended(path), sddl)),
-      createFileWithDacl: (path, sddl, data) =>
-        withErrnoCode(() => raw.createFileWithDacl(extended(path), sddl, data)),
+      createFileWithDacl: (path, sddl, data) => raw.createFileWithDacl(extended(path), sddl, data),
       grantAccess: (path, sid, mask, options) =>
         raw.grantAccess(extended(path), sid, mask, options),
       grantAccessAsync: (path, sid, mask, options) =>
@@ -99,37 +98,12 @@ function extended(path: string): string {
   return normalized.startsWith('\\\\') ? `\\\\?\\UNC\\${normalized.slice(2)}` : path
 }
 
-/** The Node `code` libuv gives the same Win32 error, so a failed create reads like any fs failure. */
-const ERRNO_BY_WIN32_CODE: Record<number, string> = {
-  2: 'ENOENT',
-  3: 'ENOENT',
-  5: 'EPERM',
-  32: 'EBUSY',
-  80: 'EEXIST',
-  112: 'ENOSPC',
-  206: 'ENAMETOOLONG'
-}
-
-function withErrnoCode(create: () => void): void {
-  try {
-    create()
-  } catch (error) {
-    if (error instanceof Error && 'winCode' in error && typeof error.winCode === 'number') {
-      const code = ERRNO_BY_WIN32_CODE[error.winCode]
-      if (code) {
-        Object.assign(error, { code })
-      }
-    }
-    throw error
-  }
-}
-
 /** Installs `addon` (a fake, or null for "cannot load") behind the same wrapping as the real one. */
 export function setWindowsSecurityForTests(addon: WindowsSecurityAddon | null): void {
-  loaded = addon ? prepare(addon) : { error: 'disabled for tests', reported: false }
+  loaded = addon ? prepare(addon) : { error: 'disabled for tests' }
 }
 
-/** Forgets the loaded addon, its SID and whether a load failure was reported. */
+/** Forgets the loaded addon and its SID. */
 export function resetWindowsSecurityLoadForTests(): void {
   loaded = null
 }

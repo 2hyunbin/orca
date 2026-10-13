@@ -10,7 +10,7 @@ import {
   type WindowsSecurityAddon
 } from '../../shared/windows-security-addon'
 import {
-  nativeInstallDirPackageGrant,
+  grantInstallDirPackageAcl,
   RESTRICTED_APP_PACKAGES_SID
 } from './windows-install-dir-package-acl-grant'
 
@@ -46,7 +46,7 @@ function installFakeAddon(fail: (path: string) => boolean = () => false): GrantC
   return calls
 }
 
-describe('nativeInstallDirPackageGrant', () => {
+describe('grantInstallDirPackageAcl', () => {
   let installDir: string
 
   beforeEach(() => {
@@ -63,7 +63,7 @@ describe('nativeInstallDirPackageGrant', () => {
 
   it('grants the root once, inheritable, so files a later update writes inherit it', async () => {
     const calls = installFakeAddon()
-    const outcome = await nativeInstallDirPackageGrant()(installDir, 'root')
+    const outcome = await grantInstallDirPackageAcl(installDir, 'root')
     expect(outcome).toEqual({ ok: true, failedFileCount: 0 })
     expect(calls).toEqual([
       {
@@ -77,7 +77,7 @@ describe('nativeInstallDirPackageGrant', () => {
 
   it('grants every entry flagless on the tree pass, the root and nested files included', async () => {
     const calls = installFakeAddon()
-    const outcome = await nativeInstallDirPackageGrant()(installDir, 'tree')
+    const outcome = await grantInstallDirPackageAcl(installDir, 'tree')
     expect(outcome).toEqual({ ok: true, failedFileCount: 0 })
     expect(calls.map((call) => call.path).sort()).toEqual(
       [
@@ -97,7 +97,7 @@ describe('nativeInstallDirPackageGrant', () => {
 
   it('never replaces existing rules on either pass', async () => {
     const calls = installFakeAddon()
-    const grant = nativeInstallDirPackageGrant()
+    const grant = grantInstallDirPackageAcl
     await grant(installDir, 'root')
     await grant(installDir, 'tree')
     expect(calls.length).toBeGreaterThan(1)
@@ -116,7 +116,7 @@ describe('nativeInstallDirPackageGrant', () => {
     }
     try {
       const calls = installFakeAddon()
-      await nativeInstallDirPackageGrant()(installDir, 'tree')
+      await grantInstallDirPackageAcl(installDir, 'tree')
       const paths = calls.map((call) => call.path)
       expect(paths).not.toContain(join(installDir, 'linked'))
       expect(paths.some((path) => path.includes('elsewhere.dll'))).toBe(false)
@@ -128,7 +128,7 @@ describe('nativeInstallDirPackageGrant', () => {
 
   it('keeps going past failed entries and counts them, like icacls /T /C', async () => {
     const calls = installFakeAddon((path) => path.endsWith('.dll') || path.endsWith('.node'))
-    const outcome = await nativeInstallDirPackageGrant()(installDir, 'tree')
+    const outcome = await grantInstallDirPackageAcl(installDir, 'tree')
     expect(calls).toHaveLength(5)
     expect(outcome.ok).toBe(false)
     expect(outcome.failedFileCount).toBe(2)
@@ -137,14 +137,14 @@ describe('nativeInstallDirPackageGrant', () => {
 
   it('counts a failed root grant as one failed entry', async () => {
     installFakeAddon(() => true)
-    const outcome = await nativeInstallDirPackageGrant()(installDir, 'root')
+    const outcome = await grantInstallDirPackageAcl(installDir, 'root')
     expect(outcome).toMatchObject({ ok: false, failedFileCount: 1 })
     expect(outcome.reason).toContain('Win32 error 5')
   })
 
   it('reports an unavailable addon instead of granting anything', async () => {
     setWindowsSecurityForTests(null)
-    const grant = nativeInstallDirPackageGrant()
+    const grant = grantInstallDirPackageAcl
     expect(await grant(installDir, 'root')).toEqual({
       ok: false,
       failedFileCount: 0,
@@ -161,7 +161,7 @@ describe('nativeInstallDirPackageGrant', () => {
   it('reaches a path past MAX_PATH through the extended-length prefix', async () => {
     const calls = installFakeAddon()
     const longDir = `C:\\Program Files\\${'orca'.repeat(70)}`
-    await nativeInstallDirPackageGrant()(longDir, 'root')
+    await grantInstallDirPackageAcl(longDir, 'root')
     expect(calls.map((call) => call.path)).toEqual([`\\\\?\\${longDir}`])
   })
 })

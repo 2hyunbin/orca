@@ -6,6 +6,7 @@ import {
 } from '../../shared/crash-reporting'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import { loadWindowsSecurity } from '../../shared/windows-security-addon'
+import { parseSddlDacl } from '../../shared/windows-security-descriptor'
 import { RESTRICTED_APP_PACKAGES_SID } from './windows-install-dir-package-acl-grant'
 
 /**
@@ -38,10 +39,8 @@ const MODULE_SHORTLIST = ['ffmpeg.dll', 'libGLESv2.dll', 'libEGL.dll', 'icudtl.d
 // names — and on zh/ja/ko even keep "NT AUTHORITY" English while doing so — so a
 // repaired tree read as poisoned. SDDL prints SIDs on every locale.
 const PACKAGE_SID = /^S-1-15-2-[0-9-]+$/i
-/** `AC` is SDDL's alias for ALL APPLICATION PACKAGES (S-1-15-2-1). */
-const WELL_KNOWN_PACKAGE_SIDS = new Set(['AC', 'S-1-15-2-1', RESTRICTED_APP_PACKAGES_SID])
-/** (type;flags;rights;object;inheritedObject;sid[;condition]) */
-const SDDL_ACE = /\(([A-Z]+);([A-Z]*);[^;()]*;[^;()]*;[^;()]*;([^;()]+)[;)]/gi
+/** ALL APPLICATION PACKAGES (SDDL's `AC`) and ALL RESTRICTED APPLICATION PACKAGES. */
+const WELL_KNOWN_PACKAGE_SIDS = new Set(['S-1-15-2-1', RESTRICTED_APP_PACKAGES_SID])
 
 export type WindowsInstallDirAclProbeOptions = {
   platform?: NodeJS.Platform
@@ -73,32 +72,30 @@ function readDacl(target: string): string {
 }
 
 function collectAclFacts(savedDacl: string): AclFacts | null {
-  const orphanPackageSids: string[] = []
-  let hasWellKnownPackageGrant = false
-  let hasRestrictedPackageGrant = false
-  // A partial DACL can hide a later grant; unsupported ACEs must stay unreadable.
-  const dacl = /^D:[A-Z]*((?:\([^()]*\))*)(?:S:.*)?$/im.exec(savedDacl)
+  // Fails closed: an unreadable target ('') or any ACE the parser cannot read gives no facts,
+  // since a skipped ACE could be the grant that satisfies an orphan.
+  const dacl = parseSddlDacl(savedDacl)
   if (!dacl) {
     return null
   }
-  for (const [, type, flags, rawSid] of dacl[1].matchAll(SDDL_ACE)) {
-    const sid = rawSid.toUpperCase()
-    if (!WELL_KNOWN_PACKAGE_SIDS.has(sid)) {
-      if (PACKAGE_SID.test(sid)) {
-        orphanPackageSids.push(rawSid)
+  const orphanPackageSids: string[] = []
+  let hasWellKnownPackageGrant = false
+  let hasRestrictedPackageGrant = false
+  for (const ace of dacl.aces) {
+    if (!WELL_KNOWN_PACKAGE_SIDS.has(ace.sid)) {
+      if (PACKAGE_SID.test(ace.sid)) {
+        orphanPackageSids.push(ace.sid)
       }
       continue
     }
     // Why: an ACE that denies, or only propagates to children (IO), grants nothing
     // on this object — so it cannot satisfy an orphan the way the reproduced fix did.
-    const flagTokens: string[] = flags.toUpperCase().match(/../g) ?? []
-    const inheritOnly = flagTokens.includes('IO')
-    if (type.toUpperCase() !== 'A' || inheritOnly) {
+    if (ace.type !== 'A' || ace.flags.includes('IO')) {
       continue
     }
     hasWellKnownPackageGrant = true
     // Reported, never the verdict: narrows which grant is present for triage.
-    if (sid === RESTRICTED_APP_PACKAGES_SID) {
+    if (ace.sid === RESTRICTED_APP_PACKAGES_SID) {
       hasRestrictedPackageGrant = true
     }
   }

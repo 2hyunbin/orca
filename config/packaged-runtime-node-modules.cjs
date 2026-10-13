@@ -627,7 +627,7 @@ function assertPackagedNativeVariantsInstalled(electronPlatformName, electronArc
   // .node would otherwise surface only at runtime (secure files unrestricted, orcad refusing to start).
   if (electronPlatformName === 'win32') {
     for (const [name, binary] of WORKSPACE_WINDOWS_ADDON_BINARIES) {
-      const addon = join(projectDir, 'native', name.slice('@orca/'.length), binary)
+      const addon = join(nodeModulesDir, name, binary)
       if (!existsSync(addon) || readPeMachine(addon) !== PE_MACHINE[architecture]) {
         missingWindowsAddons.push(`${name} (${binary} for ${architecture})`)
       }

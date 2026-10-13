@@ -31,6 +31,7 @@ export function localDomainSidOf(accountSid: string): string | null {
 
 /** The two-letter aliases SDDL substitutes for well-known SIDs. */
 const SDDL_SID_ALIASES: Record<string, string> = {
+  AC: 'S-1-15-2-1',
   AN: 'S-1-5-7',
   AU: 'S-1-5-11',
   BA: 'S-1-5-32-544',

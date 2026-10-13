@@ -637,10 +637,21 @@ describe('arch-aware packaging guard', () => {
       expect(() => packHost(OTHER_ARCH)).toThrow(otherSherpa)
       expect(() => packHost(OTHER_ARCH)).toThrow('pnpm install:release')
       expect(() => packHost(HOST_ARCH)).not.toThrow()
-    } else {
+    } else if (process.platform !== 'win32') {
       expect(() => packHost(OTHER_ARCH)).not.toThrow()
     }
   })
+
+  // The host's own build is the foreign-arch case: a Windows checkout compiles these for its CPU only.
+  it.runIf(process.platform === 'win32')(
+    'refuses a Windows workspace addon built for another architecture',
+    () => {
+      for (const binary of ['orca_windows_registry.node', 'orca_windows_security.node']) {
+        expect(() => packHost(OTHER_ARCH)).toThrow(`${binary} for ${OTHER_ARCH_NAME}`)
+      }
+      expect(() => packHost(HOST_ARCH)).not.toThrow()
+    }
+  )
 
   it('requires installed Windows addons for Windows packaging', () => {
     const windowsAddon = electronBuilderConfig.win.extraResources.some(

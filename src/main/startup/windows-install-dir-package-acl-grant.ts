@@ -28,24 +28,20 @@ export type InstallDirPackageGrant = (
 export type GrantEntry = (path: string, inheritable: boolean) => Promise<void>
 
 /** The in-process grant; never `replace`, so SYSTEM, Administrators, the user and the orphan all survive. */
-export function nativeInstallDirPackageGrant(): InstallDirPackageGrant {
-  return (installDir, pass) => {
-    const security = loadWindowsSecurity()
-    if (!('addon' in security)) {
-      return Promise.resolve({ ok: false, failedFileCount: 0, reason: 'addon-unavailable' })
-    }
-    const grantEntry: GrantEntry = (path, inheritable) =>
-      security.addon.grantAccessAsync(
-        path,
-        RESTRICTED_APP_PACKAGES_SID,
-        WINDOWS_FILE_READ_EXECUTE,
-        {
-          inheritable,
-          replace: false
-        }
-      )
-    return pass === 'root' ? grantRoot(grantEntry, installDir) : grantTree(grantEntry, installDir)
+export function grantInstallDirPackageAcl(
+  installDir: string,
+  pass: InstallDirPackageGrantPass
+): Promise<InstallDirPackageGrantOutcome> {
+  const security = loadWindowsSecurity()
+  if (!('addon' in security)) {
+    return Promise.resolve({ ok: false, failedFileCount: 0, reason: 'addon-unavailable' })
   }
+  const grantEntry: GrantEntry = (path, inheritable) =>
+    security.addon.grantAccessAsync(path, RESTRICTED_APP_PACKAGES_SID, WINDOWS_FILE_READ_EXECUTE, {
+      inheritable,
+      replace: false
+    })
+  return pass === 'root' ? grantRoot(grantEntry, installDir) : grantTree(grantEntry, installDir)
 }
 
 async function grantRoot(

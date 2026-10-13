@@ -147,20 +147,20 @@ describe('probeWindowsInstallDirAcl', () => {
     expect(fake.calls).toEqual([INSTALL_DIR, join(INSTALL_DIR, 'ffmpeg.dll')])
   })
 
-  // Real DACLs captured on win32 10.0.26200 (the SDDL `icacls /save` also wrote).
+  // Real DACLs captured on win32 10.0.26200, as the addon reads them (DACL-only SDDL).
   it.each([
     [
       'a repaired module file',
-      'ffmpeg.dll\r\nD:AI(A;;0x1200a9;;;S-1-15-2-2)(A;;0x1200a9;;;S-1-15-2-999-999-999)' +
+      'D:AI(A;;0x1200a9;;;S-1-15-2-2)(A;;0x1200a9;;;S-1-15-2-999-999-999)' +
         '(A;ID;0x1200a9;;;S-1-15-2-999-999-999)(A;ID;FA;;;SY)(A;ID;FA;;;BA)' +
-        '(A;ID;FA;;;S-1-5-21-432636774-4279371817-3971399515-1001)\r\n',
+        '(A;ID;FA;;;S-1-5-21-432636774-4279371817-3971399515-1001)',
       false
     ],
     [
       'a poisoned dir whose AC ACE denies',
-      'scan21acl\r\nD:AI(D;;0x100116;;;AC)(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)' +
+      'D:AI(D;;0x100116;;;AC)(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)' +
         '(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)' +
-        '(A;OICIID;FA;;;S-1-5-21-432636774-4279371817-3971399515-1001)\r\n',
+        '(A;OICIID;FA;;;S-1-5-21-432636774-4279371817-3971399515-1001)',
       true
     ]
   ])('reads a real captured DACL: %s', async (_label, saved, poisoned) => {
@@ -174,9 +174,9 @@ describe('probeWindowsInstallDirAcl', () => {
 
   it('keeps a conditional DACL unreadable instead of hiding a later package grant', async () => {
     const saved =
-      'orca\r\nD:AI(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)' +
+      'D:AI(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)' +
       '(XA;OICI;FA;;;WD;(@User.Department == "Finance"))' +
-      '(A;OICIID;0x1200a9;;;S-1-15-2-2)\r\n'
+      '(A;OICIID;0x1200a9;;;S-1-15-2-2)'
     let verdict: CrashReportBreadcrumbData = {}
     installFakeDacls(() => saved)
     const data = await probe({
@@ -186,6 +186,17 @@ describe('probeWindowsInstallDirAcl', () => {
     expect(data).toMatchObject({ status: 'failed', reason: 'all-targets-unreadable' })
     expect(data.matchesPoisonSignature).toBeUndefined()
     expect(isInstallDirAclPoisonVerdict(verdict)).toBe(false)
+  })
+
+  // A skipped ACE could be the grant that satisfies an orphan, so nothing partial may count.
+  it.each([
+    ['an empty read', ''],
+    ['a truncated ACE', 'D:AI(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)(A;;0x1200a9)'],
+    ['a non-DACL prefix', 'O:BAD:AI(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)']
+  ])('keeps %s unreadable rather than reading what parses', async (_label, saved) => {
+    installFakeDacls(() => saved)
+    const data = await probe({ fileExists: () => false })
+    expect(data).toMatchObject({ status: 'failed', reason: 'all-targets-unreadable' })
   })
 
   it('treats a read that fails as unreadable, never as a clean DACL', async () => {

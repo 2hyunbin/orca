@@ -6,7 +6,7 @@ import {
 } from '../../shared/crash-reporting'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import {
-  nativeInstallDirPackageGrant,
+  grantInstallDirPackageAcl,
   RESTRICTED_APP_PACKAGES_SID,
   type InstallDirPackageGrant,
   type InstallDirPackageGrantOutcome
@@ -185,7 +185,7 @@ async function runRepair(args: WindowsInstallDirAclRepairArgs): Promise<void> {
       result = { mode: 'marker-hit', alreadyRepaired: markerHit.alreadyRepaired }
       data = { status: 'skipped', reason: 'marker-hit', alreadyRepaired: markerHit.alreadyRepaired }
     } else {
-      const grant = args.grantFn ?? nativeInstallDirPackageGrant()
+      const grant = args.grantFn ?? grantInstallDirPackageAcl
       const root = await runPass(grant, installDir, 'root')
       // Unconditional: the root grant failing does not make the per-file pass —
       // the one that actually unblocks the shipped modules — any less worth trying.

@@ -126,14 +126,16 @@ function violationOf(
   }
 }
 
+let reportedLoadFailure = false
+
 function securityFor(targetPath: string): WindowsSecurity | null {
   const loaded = loadWindowsSecurity()
   if (!('error' in loaded)) {
     return loaded
   }
   // Once per process: a missing addon is a packaging fault, and every secure write would repeat it.
-  if (!loaded.reported) {
-    loaded.reported = true
+  if (!reportedLoadFailure) {
+    reportedLoadFailure = true
     report(targetPath, 'addon', loaded.error)
   }
   return null

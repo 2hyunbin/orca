@@ -110,7 +110,7 @@ describe('Windows secure files through the native ACL addon', () => {
     })
 
     // Never a truncating plain write of the secret: a failed create surfaces like any fs failure.
-    it('throws a failed restricted create with its Node error code and leaves no temp file', () => {
+    it('throws a failed restricted create and leaves no temp file', () => {
       const dir = tempDir()
       const targetPath = join(dir, 'secret.json')
       writeFileSync(targetPath, 'previous')
@@ -122,7 +122,7 @@ describe('Windows secure files through the native ACL addon', () => {
       }
 
       expect(() => writeSecureFile(targetPath, 'contents')).toThrow(
-        expect.objectContaining({ code: 'EPERM' })
+        expect.objectContaining({ winCode: 5, syscall: 'CreateFileW' })
       )
 
       expect(readFileSync(targetPath, 'utf-8')).toBe('previous')

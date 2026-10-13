@@ -19,7 +19,7 @@ const ROOT = path.resolve(import.meta.dirname, '..', '..')
 const BASELINE_PATH = 'config/main-sync-spawn-baseline.txt'
 const SCAN_DIRECTORIES = ['src/main', 'src/shared']
 const PROCESS_ADVICE = 'use runProcess or spawnProcess from @orca/process-host'
-const SECURE_ADVICE = `no async secure writer exists yet; keep the synchronous one and raise this file's count in ${BASELINE_PATH} (or add a row), never a plain write (it loses the Windows ACL hardening)`
+const SECURE_ADVICE = `no async secure writer exists yet (a directory rewrite or grant can block on its whole subtree); keep the synchronous one and raise this file's count in ${BASELINE_PATH} (or add a row), never a plain write (it loses the Windows ACL hardening)`
 const SECURE_WRITERS = [
   'writeSecureFile',
   'writeSecureJsonFile',
@@ -36,9 +36,7 @@ const GATED_FAMILIES = [
   { modules: ['@orca/process-host'], advice: { runProcessSync: PROCESS_ADVICE } },
   {
     modules: ['src/shared/secure-file', 'src/shared/bounded-secure-json-file'],
-    advice: Object.fromEntries(
-      [...SECURE_WRITERS, 'hardenSecurePath'].map((name) => [name, SECURE_ADVICE])
-    )
+    advice: Object.fromEntries(SECURE_WRITERS.map((name) => [name, SECURE_ADVICE]))
   },
   {
     modules: ['src/shared/secure-path-windows-acl'],
@@ -64,13 +62,12 @@ const GATED_FAMILIES = [
   { modules: ['src/main/win32-utils'], advice: { grantDirAcl: 'use grantDirAclAsync' } }
 ]
 const ADVICE = new Map(GATED_FAMILIES.flatMap((family) => Object.entries(family.advice)))
-// Only spread-free calls with no options or a literal with absent/false `sync` are exempt.
-const SYNC_FLAG_SYMBOLS = new Set(['hardenSecurePath'])
 const FALLBACK_OPERATORS = new Set([ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.BarBarToken])
 const BASELINE_HEADER = [
   '# Synchronous child-process launches in production src/main and src/shared, per file: uses of',
   '# execFileSync/spawnSync/execSync, runProcessSync and the repo sync wrappers listed in',
-  '# config/scripts/check-main-sync-spawn-ratchet.mjs (secure writers run icacls on Windows).',
+  '# config/scripts/check-main-sync-spawn-ratchet.mjs (secure writes and ACL grants, which can block',
+  '# on a whole directory subtree).',
   '# Some entries run in the daemon or orcad process, or are test harnesses outside the test-path',
   '# conventions. This is a RATCHET: counts may only go DOWN.',
   '# Prune after removing launches: pnpm check:main-sync-spawn-ratchet --prune'
@@ -103,36 +100,6 @@ export function gatedSymbolsFor(file, specifier) {
         path.posix.join(path.posix.dirname(normalized(file)), normalizedSpecifier)
       )
     )
-  )
-}
-
-function isAsyncOnlyCall(callee) {
-  const call = callee.parent
-  if (
-    !ts.isCallExpression(call) ||
-    call.expression !== callee ||
-    call.arguments.some(ts.isSpreadElement)
-  ) {
-    return false
-  }
-  const options = unwrap(call.arguments[1])
-  return (
-    !options ||
-    (ts.isObjectLiteralExpression(options) &&
-      options.properties.every((property) => {
-        if (ts.isSpreadAssignment(property)) {
-          return false
-        }
-        const name = ts.isIdentifier(property.name)
-          ? property.name.text
-          : literalString(property.name)
-        return (
-          name !== null &&
-          (name !== 'sync' ||
-            (ts.isPropertyAssignment(property) &&
-              unwrap(property.initializer).kind === ts.SyntaxKind.FalseKeyword))
-        )
-      }))
   )
 }
 
@@ -214,10 +181,7 @@ export function collectSyncLaunchUses(file, contents) {
     }
     return null
   }
-  function recordUse(name, node) {
-    if (SYNC_FLAG_SYMBOLS.has(name) && isAsyncOnlyCall(node)) {
-      return
-    }
+  function recordUse(name) {
     used.add(name)
     count += 1
   }
@@ -326,13 +290,13 @@ export function collectSyncLaunchUses(file, contents) {
   for (const node of members) {
     const name = propertyName(node)
     if (moduleSymbols(node.expression)?.has(name)) {
-      recordUse(name, node)
+      recordUse(name)
     }
   }
   for (const node of identifiers) {
     const name = functions.get(node.text)
     if (name) {
-      recordUse(name, node)
+      recordUse(name)
     }
   }
   return { count, symbols: [...used].sort() }

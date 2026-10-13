@@ -45,14 +45,16 @@ let hardenedDirectoryPathsThisProcess = new SecurePathHardeningCache<true>(
   DEFAULT_HARDENING_CACHE_BOUNDS
 )
 
-function hardenSecureDirectoryOnce(dirPath: string): void {
-  // Why async: a Windows directory rewrite propagates to every descendant, ~2 s on a 29k-entry userData.
-  if (hardenedDirectoryPathsThisProcess.get(dirPath)) {
+function hardenWindowsDirectoryOnce(dirPath: string): void {
+  // Why the floor: read paths poll at ~2/s (#4901); retrying every failure there would storm.
+  if (hardenedDirectoryPathsThisProcess.get(dirPath) || !mayAttemptHardening(dirPath)) {
     return
   }
   // Cache before the ACL lands so concurrent writes don't restorm; a failure drops it, under the retry budget.
   hardenedDirectoryPathsThisProcess.set(dirPath, true)
-  applySecurePathRestriction(dirPath, true, (restricted) => {
+  // Why async: a directory rewrite propagates to every descendant, ~2 s on a 29k-entry userData.
+  bestEffortRestrictWindowsPath(dirPath, true, (restricted) => {
+    recordHardeningOutcome(dirPath, restricted)
     if (!restricted) {
       hardenedDirectoryPathsThisProcess.delete(dirPath)
     }
@@ -61,7 +63,7 @@ function hardenSecureDirectoryOnce(dirPath: string): void {
 
 function hardenSecurePathOnce(targetPath: string, isDirectory: boolean): boolean {
   if (isDirectory && process.platform === 'win32') {
-    hardenSecureDirectoryOnce(targetPath)
+    hardenWindowsDirectoryOnce(targetPath)
     return true
   }
 
@@ -76,7 +78,7 @@ function hardenSecurePathOnce(targetPath: string, isDirectory: boolean): boolean
   if (process.platform === 'win32') {
     return hardenExistingWindowsFile(targetPath)
   }
-  applySecurePathRestriction(targetPath, isDirectory)
+  chmodSync(targetPath, isDirectory ? 0o700 : 0o600)
   rememberHardenedPath(targetPath, isDirectory)
   return true
 }
@@ -116,8 +118,8 @@ export function writeDurableSecureJsonFile(targetPath: string, value: unknown): 
  * An optional publication predicate runs after staged hardening; false discards the staged file.
  *
  * The return value covers the *file* only. The parent directory is hardened fire-and-forget — on
- * Windows that lane is async and answers `pending` regardless — so a `true` here says nothing
- * about the directory's ACL.
+ * Windows on the thread pool, settling after this returns — so a `true` here says nothing about
+ * the directory's ACL.
  */
 export function writeSecureFile(
   targetPath: string,
@@ -238,29 +240,6 @@ export function hardenExistingSecureFile(targetPath: string): void {
   if (existsSync(targetPath)) {
     hardenSecurePathOnce(targetPath, false)
   }
-}
-
-/** Windows answers asynchronously through `onAsyncSettled`; POSIX chmods in place. */
-function applySecurePathRestriction(
-  targetPath: string,
-  isDirectory: boolean,
-  onAsyncSettled?: (restricted: boolean) => void
-): void {
-  if (process.platform !== 'win32') {
-    chmodSync(targetPath, isDirectory ? 0o700 : 0o600)
-    return
-  }
-  // Why the floor: read paths poll at ~2/s (#4901). Retrying every failure there is the same
-  // storm the cache exists to prevent.
-  if (!mayAttemptHardening(targetPath)) {
-    onAsyncSettled?.(false)
-    return
-  }
-  // Why async: a directory rewrite walks every descendant.
-  bestEffortRestrictWindowsPath(targetPath, isDirectory, (restricted) => {
-    recordHardeningOutcome(targetPath, restricted)
-    onAsyncSettled?.(restricted)
-  })
 }
 
 /** Caches the current metadata snapshot for a just-hardened path, or clears it if the path is gone. */

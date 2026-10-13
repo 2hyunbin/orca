@@ -1,6 +1,7 @@
 # Synchronous child-process launches in production src/main and src/shared, per file: uses of
 # execFileSync/spawnSync/execSync, runProcessSync and the repo sync wrappers listed in
-# config/scripts/check-main-sync-spawn-ratchet.mjs (secure writers run icacls on Windows).
+# config/scripts/check-main-sync-spawn-ratchet.mjs (secure writes and ACL grants, which can block
+# on a whole directory subtree).
 # Some entries run in the daemon or orcad process, or are test harnesses outside the test-path
 # conventions. This is a RATCHET: counts may only go DOWN.
 # Prune after removing launches: pnpm check:main-sync-spawn-ratchet --prune
