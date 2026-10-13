@@ -16,6 +16,7 @@ import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire
 import type { StructuredAgentSessionCloseCause } from '../native-chat/agent-session-wire/structured-agent-session-host-lifetime'
 import { retireStructuredAgentSessionTabFrom } from './structured-agent-session-tab-retirement'
 import { withClosedAgentSessionTab, withOpenedAgentSessionTab } from './agent-session-tab-layout'
+import { structuredSessionTabRetired } from './structured-worker-custody'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
@@ -64,9 +65,6 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
       if (!nextSnapshot) {
         continue
       }
-      this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
-        withClosedAgentSessionTab(hostId, session, worktreeId, sessionId)
-      )
       this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
       this.emitMobileSessionTabsSnapshot(nextSnapshot)
       return true
@@ -260,6 +258,31 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
       withOpenedAgentSessionTab(hostId, session, worktreeId, chat)
     )
+  }
+
+  /**
+   * Removes a chat's saved tab once the index no longer lists it. Called from the index's hidden
+   * notice, which every chat close reaches; a close that put the tab back keeps it.
+   */
+  protected removeWindowlessAgentSessionTab(sessionId: string): void {
+    const host = getStructuredAgentSessionHost()
+    if (!host || !structuredSessionTabRetired(host, sessionId)) {
+      return
+    }
+    const worktreeIds = new Set(
+      this.listWorkspaceSessionPartitions().flatMap((session) =>
+        Object.entries(session.unifiedTabs ?? {})
+          .filter(([, tabs]) =>
+            tabs.some((tab) => tab.contentType === 'agent-session' && tab.entityId === sessionId)
+          )
+          .map(([worktreeId]) => worktreeId)
+      )
+    )
+    for (const worktreeId of worktreeIds) {
+      this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
+        withClosedAgentSessionTab(hostId, session, worktreeId, sessionId)
+      )
+    }
   }
 
   // A window saves its own layout whole, chat tabs included; only a host with none saves them here.

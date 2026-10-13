@@ -19,7 +19,13 @@ function createRuntime() {
       terminalLayoutsByTabId: {}
     }
   }
-  const store = {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
+  const runtime = new OrcaRuntimeService(runtimeStore(state) as never)
+  return { runtime, state }
+}
+
+function runtimeStore(state: { session: WorkspaceSessionState }) {
+  return {
     getRepos: () => [],
     getSettings: () => ({}),
     getWorkspaceSession: () => state.session,
@@ -28,9 +34,12 @@ function createRuntime() {
       state.session = next
     }
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
-  const runtime = new OrcaRuntimeService(store as never)
-  return { runtime, state }
+}
+
+/** A chat host with only the members a test's path reads. */
+function useChatHost(fake: Record<string, unknown>): void {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each test supplies every host member its path reads.
+  setStructuredAgentSessionHost(fake as never)
 }
 
 function savedChatIds(state: { session: WorkspaceSessionState }): string[] {
@@ -50,7 +59,7 @@ describe('a chat tab on a host with no window', () => {
     expect(savedChatIds(state)).toEqual(['chat-1'])
   })
 
-  it('leaves the layout when the chat closes', async () => {
+  it('leaves the layout when the index hides the chat, on any close path', async () => {
     const { runtime, state } = createRuntime()
     await runtime.publishStructuredAgentSessionTab({
       workspaceId: WT,
@@ -58,15 +67,37 @@ describe('a chat tab on a host with no window', () => {
       agent: 'codex',
       activate: true
     })
-
     expect(savedChatIds(state)).toEqual(['chat-1'])
-    expect(runtime.retireStructuredAgentSessionTabFromSnapshot('chat-1')).toBe(true)
+    // A fresh runtime lists no chats, as when the close RPC or a worker stop runs before a restore.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
+    const fresh = new OrcaRuntimeService(runtimeStore(state) as never)
+    useChatHost({ getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: [] }) })
+
+    fresh.onStructuredSessionTabHidden('chat-1')
 
     expect(savedChatIds(state)).toEqual([])
   })
 
+  it('keeps its saved tab when a failed close put it back in the index', async () => {
+    const { runtime, state } = createRuntime()
+    await runtime.publishStructuredAgentSessionTab({
+      workspaceId: WT,
+      sessionId: 'chat-1',
+      agent: 'codex',
+      activate: true
+    })
+    useChatHost({
+      getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: ['chat-1'] })
+    })
+
+    runtime.onStructuredSessionTabHidden('chat-1')
+
+    expect(savedChatIds(state)).toEqual(['chat-1'])
+  })
+
   it('is saved at startup for a chat the index restores without one', async () => {
     const { runtime, state } = createRuntime()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test stubs startup's PTY and store probes.
     const internal = runtime as unknown as {
       hasPersistedStructuredAgentSessionStore(): boolean
       refreshMobileSessionPtyRecords(): Promise<Set<string> | null>
@@ -75,12 +106,12 @@ describe('a chat tab on a host with no window', () => {
     internal.hasPersistedStructuredAgentSessionStore = () => true
     internal.refreshMobileSessionPtyRecords = async () => new Set()
     internal.ensureStructuredAgentSessionHost = async () => undefined
-    setStructuredAgentSessionHost({
+    useChatHost({
       reconcileRestartLeases: async () => undefined,
       getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: ['chat-1'] }),
       restoreReadableSessions: async () => undefined,
       listSessionTabs: () => [{ sessionId: 'chat-1', workspaceId: WT, agent: 'codex' }]
-    } as never)
+    })
 
     await runtime.restoreStructuredAgentSessionTabs()
 
@@ -89,10 +120,9 @@ describe('a chat tab on a host with no window', () => {
 
   it('is left to the window when one saves the layout', async () => {
     const { runtime, state } = createRuntime()
-    vi.spyOn(
-      runtime as unknown as { getAvailableAuthoritativeWindow(): unknown },
-      'getAvailableAuthoritativeWindow'
-    ).mockReturnValue({})
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime's own protected member; any non-null value is an attached window.
+    const withWindow = runtime as unknown as { getAvailableAuthoritativeWindow(): unknown }
+    vi.spyOn(withWindow, 'getAvailableAuthoritativeWindow').mockReturnValue({})
 
     await runtime.publishStructuredAgentSessionTab({
       workspaceId: WT,
