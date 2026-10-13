@@ -1,24 +1,53 @@
-// @ts-nocheck -- mechanically split from OrcaRuntimeService; behavior is covered by AST equivalence and characterization tests.
-import { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './orca-runtime-build-headless-mobile-session-browser-tabs'
-import type { PtyControllerInventory } from './runtime-pty-controller-contract'
-import { isAgentLaunchRunningIn } from '../agent-launch/agent-launch-pane-attachment'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
-import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
-import type { TabActivationIntent } from '../../shared/tab-activation-intent'
-import type {
-  RuntimeMobileSessionTabsResult,
-  RuntimeMobileSessionTerminalTab
-} from '../../shared/runtime-types'
-import type { ResolvedWorktree } from './runtime-worktree-path-identity'
-import { includeTargetResolvedWorktree } from './runtime-worktree-path-identity'
-import { parseExecutionHostId } from '../../shared/execution-host'
-import { parseWorkspaceKey } from '../../shared/workspace-scope'
-import { navigationTargetsHost } from '../../shared/runtime-navigation'
-import { isAutomaticTabActivation } from '../../shared/tab-activation-intent'
-import { parseAppSshPtyId } from '../../shared/ssh-pty-id'
-import { isWorktreeTerminalsSleepingError } from './worktree-terminals-sleeping-error'
+import type { RuntimeWorkspaceSelectors as WorkspaceSelectors } from '../../workspaces/workspace-selectors'
+import type { OrcaRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
+import type { OrcaRuntimeWithStopTerminalsForWorktree as WorktreeTerminalStop } from '../../terminal/stop/worktree-terminal-stop'
+import type { MobileTerminalCommand } from '../../terminal/launch/mobile-terminal-startup'
+import { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './build-headless-mobile-session-browser-tabs'
+import type { PtyControllerInventory } from '../../runtime-pty-controller-contract'
+import { isAgentLaunchRunningIn } from '../../../agent-launch/agent-launch-pane-attachment'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import type { RuntimeNavigationTarget } from '../../../../shared/runtime-navigation'
+import type { TabActivationIntent } from '../../../../shared/tab-activation-intent'
+import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
+import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
+import { includeTargetResolvedWorktree } from '../../runtime-worktree-path-identity'
+import { parseExecutionHostId } from '../../../../shared/execution-host'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { navigationTargetsHost } from '../../../../shared/runtime-navigation'
+import { isAutomaticTabActivation } from '../../../../shared/tab-activation-intent'
+import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { isWorktreeTerminalsSleepingError } from '../../worktree-terminals-sleeping-error'
+import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 
-export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs {
+export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs {
+  protected abstract resolveAgentLaunchRuntime(
+    scope: TerminalWorkspaceLaunchScope,
+    agent: TuiAgent | undefined
+  ): AgentLaunchRuntime
+  protected abstract buildResolvedWorktreeFromId(
+    ...args: Parameters<WorkspaceSelectors['buildResolvedWorktreeFromId']>
+  ): ReturnType<WorkspaceSelectors['buildResolvedWorktreeFromId']>
+  protected abstract isDeliberatelyParkedPane(
+    ...args: Parameters<MobileSessionNavigation['isDeliberatelyParkedPane']>
+  ): ReturnType<MobileSessionNavigation['isDeliberatelyParkedPane']>
+  protected abstract isWorktreeTerminalSleepHeld(
+    ...args: Parameters<WorktreeTerminalStop['isWorktreeTerminalSleepHeld']>
+  ): ReturnType<WorktreeTerminalStop['isWorktreeTerminalSleepHeld']>
+  protected abstract shouldMaterializeHeadlessMobileSessionTab(
+    ...args: Parameters<MobileSessionNavigation['shouldMaterializeHeadlessMobileSessionTab']>
+  ): ReturnType<MobileSessionNavigation['shouldMaterializeHeadlessMobileSessionTab']>
+  protected abstract applyMobileSessionTabNavigation(
+    ...args: Parameters<MobileSessionNavigation['applyMobileSessionTabNavigation']>
+  ): ReturnType<MobileSessionNavigation['applyMobileSessionTabNavigation']>
+  protected abstract shouldPersistHeadlessMobileSessionActivation(
+    ...args: Parameters<MobileSessionNavigation['shouldPersistHeadlessMobileSessionActivation']>
+  ): ReturnType<MobileSessionNavigation['shouldPersistHeadlessMobileSessionActivation']>
+  protected abstract activateHeadlessMobileSessionTerminalTab(
+    ...args: Parameters<MobileSessionNavigation['activateHeadlessMobileSessionTerminalTab']>
+  ): ReturnType<MobileSessionNavigation['activateHeadlessMobileSessionTerminalTab']>
+
   protected async performMobileSessionPtyRecordsRefresh(
     targetWorktreeId: string | null
   ): Promise<PtyControllerInventory | null> {
@@ -170,9 +199,7 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
         // bare materialize would put a plain shell under the agent icon.
         // Re-resolve the launch like the create path; providers skip startup
         // commands when attaching to live sessions, so this cannot double-launch.
-        let agentStartup: Awaited<
-          ReturnType<OrcaRuntimeService['resolveMobileSessionTerminalCommand']>
-        > = {}
+        let agentStartup: MobileTerminalCommand = {}
         if (tab.launchAgent) {
           let workspace
           try {
@@ -237,12 +264,17 @@ export class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRu
       const activeSibling =
         tab.id === tabId || leafId
           ? null
-          : (callerSnapshot.tabs.find(
-              (candidate) =>
+          : callerSnapshot.tabs.find(
+              (
+                candidate
+              ): candidate is Extract<
+                RuntimeMobileSessionTabsResult['tabs'][number],
+                { type: 'terminal' }
+              > =>
                 candidate.type === 'terminal' &&
                 candidate.parentTabId === tab.parentTabId &&
                 candidate.isActive
-            ) as RuntimeMobileSessionTerminalTab | undefined)
+            )
       const targetTab = activeSibling ?? tab
       if (targetsHost && !this.notifier?.focusTerminal) {
         if (
