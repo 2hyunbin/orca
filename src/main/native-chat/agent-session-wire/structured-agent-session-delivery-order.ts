@@ -2,7 +2,6 @@ import type { AgentJournalSubmission } from '../../../shared/agent-session-journ
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 
 export type StructuredAgentSessionDeliveryPlace = {
-  pending: boolean
   before: Promise<void>
   release: () => void
 }
@@ -47,7 +46,6 @@ export class StructuredAgentSessionDeliveryOrder {
     this.lanes.set(sessionId, lane)
     const done = Promise.withResolvers<void>()
     const place: StructuredAgentSessionDeliveryPlace = {
-      pending: lane.places.size > 0,
       before: lane.tail,
       release: () => {
         done.resolve()
@@ -64,6 +62,15 @@ export class StructuredAgentSessionDeliveryOrder {
 
   beforeSend(sessionId: string, messageId: string): Promise<void> {
     return this.lanes.get(sessionId)?.sends.get(messageId)?.before ?? Promise.resolve()
+  }
+
+  /** Queued messages keep their journal rows, but stop ordering operations when delivery parks. */
+  parkSends(sessionId: string): void {
+    const lane = this.lanes.get(sessionId)
+    for (const place of lane?.sends.values() ?? []) {
+      place.release()
+    }
+    lane?.sends.clear()
   }
 
   dispose(): void {
