@@ -14,11 +14,7 @@ import type {
   AgentSessionTurnActivity
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionAttachParams } from './structured-agent-session-attach'
-import {
-  performAttach,
-  type AttachedOwner,
-  type AttachFlowInput
-} from './structured-agent-session-attach-flow'
+import { performAttach, type AttachFlowInput } from './structured-agent-session-attach-flow'
 import { endStructuredAgentSessionReleasedChild } from './structured-agent-session-attach-failure'
 import { stampFailedCreateOwnerVerdict } from './structured-agent-session-failed-create-refusal'
 import {
@@ -258,7 +254,6 @@ async function runAttachUnderAbort(
             // An acquire reports its phase; a re-attach keeps what its child already proved.
             phase: owner === 'acquired' ? providerChildPhase : (current?.phase ?? 'ready'),
             ...(startedFor === undefined ? {} : { startedFor }),
-            ...launchedOptionsOf(owner, attempt.startup, current),
             ...(permissionMode === undefined ? {} : { permissionMode })
           }
         }
@@ -306,15 +301,6 @@ async function runAttachUnderAbort(
       }
     }
   }
-}
-
-function launchedOptionsOf(
-  owner: AttachedOwner,
-  startup: StructuredAgentSessionStartupAttempt | null,
-  current: StructuredAgentSessionProviderChild | null
-): Pick<StructuredAgentSessionProviderChild, 'launchedOptions'> {
-  const launchedOptions = owner === 'acquired' ? (startup?.options ?? {}) : current?.launchedOptions
-  return launchedOptions ? { launchedOptions } : {}
 }
 
 type AttachCandidate = {

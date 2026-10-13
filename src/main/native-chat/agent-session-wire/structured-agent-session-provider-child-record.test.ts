@@ -561,12 +561,12 @@ describe('a child that ends before its message is handed over', () => {
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
     // The exit's stderr rides beside the sentence, never in it.
     const failure = {
-      kind: 'providerExited',
+      kind: 'providerStartFailed',
       detail: { text: 'codex app-server crashed', audience: 'log' }
     }
     expect(await submission(id)).toMatchObject({
-      reason: 'Codex stopped before this message was sent.',
-      rejection: failure
+      reason: 'Codex stopped before it finished starting. Send your message to try again.',
+      rejection: { ...failure, kind: 'providerStartFailed' }
     })
     expect(await statusRows()).toEqual([
       { itemId: expect.any(String), text: (await submission(id))?.reason, tone: 'error', failure }

@@ -27,10 +27,10 @@ import {
 } from './structured-agent-session-mutation-context'
 import {
   openForProviderWrite,
+  openForWrite,
   sendPreparation,
   structuredAgentSessionSendBlock
 } from './structured-agent-session-send-preparation'
-import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import {
   cancelPlan,
   promptPlan,
@@ -47,7 +47,6 @@ import {
   openWithReadyStructuredAgentSessionChild,
   runAfterRewindStart
 } from './structured-agent-session-ready-operation'
-import { performSetOption } from './structured-agent-session-turns-options'
 export type { StructuredAgentSessionMutationContext } from './structured-agent-session-mutation-context'
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import {
@@ -185,44 +184,16 @@ export async function setStructuredAgentSessionOption(
   params: { envelope: AgentSessionMutationEnvelope; key: string; value: string }
 ): Promise<AgentSessionMutationResult<AgentSessionOptionResult>> {
   const plan = setOptionPlan(params)
-  // With no child, or one still starting, the pick is intent: the next start replays it, and a
-  // starting child takes it before it is handed anything. Never a write the pick waits on.
-  const recordsIntent = () => {
-    const child = context.sessions.get(params.envelope.sessionId)?.child
-    return (
-      params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID || !child || child.phase === 'starting'
-    )
-  }
   return mutateStructuredAgentSession(
     context,
     caller,
     params.envelope,
     {
       ...plan,
-      // Read as the call is admitted; a ready child's pick is still its owner's to make.
-      get conversationWrite() {
-        return recordsIntent() ? (true as const) : undefined
-      },
-      run: async (ctx) => {
-        if (recordsIntent()) {
-          if (params.key !== AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
-            // A report the starting child read before this pick is out of date.
-            context.optionRevisions.advance(params.envelope.sessionId)
-          }
-          return recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
-        }
-        // Held where a start is, so a close, a Stop admitted now or quit ends the wait from outside.
-        const wait = context.acquireAborts.begin(params.envelope.sessionId)
-        try {
-          return await performSetOption(ctx, params, wait.signal)
-        } finally {
-          wait.end()
-          // Whatever the write's outcome, the child may hold what it asked for now.
-          context.optionRevisions.advance(params.envelope.sessionId)
-        }
-      }
+      conversationWrite: true,
+      run: (ctx) => recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
     },
-    openForProviderWrite(context, params.envelope)
+    openForWrite(context, params.envelope)
   )
 }
 

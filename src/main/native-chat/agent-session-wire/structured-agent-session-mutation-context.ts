@@ -35,7 +35,7 @@ export type StructuredAgentSessionMutationContext = {
   openConversation: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
   /** Gives the session a provider child; inside the caller's serialize. */
   ensureAgent: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
-  startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'readiness'>
+  startupAttempts: Pick<StructuredAgentSessionStartupAttempts, 'readiness' | 'pendingOperations'>
   /** Joins a close a stop began on the session's child, for an operation that starts no child;
    *  inside the caller's serialize. */
   joinChildClose: (sessionId: string) => Promise<AgentSessionMutationSessionPreparation>
