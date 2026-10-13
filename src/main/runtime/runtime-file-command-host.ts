@@ -1,5 +1,5 @@
-import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
 // @ts-nocheck -- mechanically split declarations.
+import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
 import type { Store } from '../persistence'
 import type {
   ResolvedRuntimeFileTarget,
