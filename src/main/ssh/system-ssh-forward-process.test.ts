@@ -129,7 +129,7 @@ describe('system SSH forward process', () => {
     const terminatorIdx = args.indexOf('--')
     const forwardFlagIdx = args.indexOf('-N')
     const localForwardIdx = args.indexOf('-L')
-    const exitOnForwardFailureIdx = args.indexOf('ExitOnForwardFailure=yes')
+    const exitOnForwardFailureIdx = args.indexOf('ExitOnForwardFailure=no')
     const standaloneControlIdx = args.indexOf('-S')
 
     expect(terminatorIdx).toBeGreaterThan(-1)
@@ -141,6 +141,7 @@ describe('system SSH forward process', () => {
     expect(localForwardIdx).toBeLessThan(terminatorIdx)
     expect(args[exitOnForwardFailureIdx - 1]).toBe('-o')
     expect(exitOnForwardFailureIdx).toBeLessThan(terminatorIdx)
+    expect(args).not.toContain('ExitOnForwardFailure=yes')
     expect(standaloneControlIdx).toBe(-1)
     expectNoOrcaControlMasterArgs(args)
     expect(args).toContain('127.0.0.1:5173:127.0.0.1:3000')
@@ -261,6 +262,70 @@ describe('system SSH forward process', () => {
     child.emit('exit', 255)
 
     await expect(pending).rejects.toThrow('bind: Address already in use')
+  })
+
+  it("rejects startup and stops ssh when it cannot listen on this forward's own port", async () => {
+    const child = createFakeProcess()
+    spawnMock.mockReturnValue(child)
+    connectMock.mockReturnValue(createFakeSocket())
+    const forward = await startSystemSshPortForwardProcess(createTarget(), 5173, '127.0.0.1', 3000)
+
+    const pending = forward.waitForStartup()
+    child.stderr.emit('data', Buffer.from('bind [127.0.0.1]:5173: Address already in use\n'))
+    child.stderr.emit('data', Buffer.from('channel_setup_fwd_listener_tcpip: cannot listen'))
+    child.stderr.emit('data', Buffer.from(' to port: 5173\n'))
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+    child.emit('exit', null)
+
+    await expect(pending).rejects.toThrow('cannot listen to port: 5173')
+  })
+
+  it('keeps running when only an ssh_config forward cannot listen', async () => {
+    vi.useFakeTimers()
+    const child = createFakeProcess()
+    spawnMock.mockReturnValue(child)
+    connectMock.mockImplementation(() => {
+      const socket = createFakeSocket()
+      queueMicrotask(() => socket.emit('error', new Error('ECONNREFUSED')))
+      return socket
+    })
+    const forward = await startSystemSshPortForwardProcess(createTarget(), 5173, '127.0.0.1', 3000)
+
+    const pending = forward.waitForStartup()
+    child.stderr.emit(
+      'data',
+      Buffer.from(
+        'bind [127.0.0.1]:51730: Address already in use\n' +
+          'channel_setup_fwd_listener_tcpip: cannot listen to port: 51730\n' +
+          'Could not request local forwarding.\n'
+      )
+    )
+    await vi.advanceTimersByTimeAsync(SYSTEM_SSH_FORWARD_STARTUP_GRACE_MS)
+
+    await expect(pending).resolves.toBeUndefined()
+    expect(child.kill).not.toHaveBeenCalled()
+  })
+
+  it('stops ssh when its own listener fails after startup already resolved', async () => {
+    vi.useFakeTimers()
+    const child = createFakeProcess()
+    spawnMock.mockReturnValue(child)
+    connectMock.mockImplementation(() => {
+      const socket = createFakeSocket()
+      queueMicrotask(() => socket.emit('error', new Error('ECONNREFUSED')))
+      return socket
+    })
+    const forward = await startSystemSshPortForwardProcess(createTarget(), 5173, '127.0.0.1', 3000)
+    const pending = forward.waitForStartup()
+    await vi.advanceTimersByTimeAsync(SYSTEM_SSH_FORWARD_STARTUP_GRACE_MS)
+    await expect(pending).resolves.toBeUndefined()
+
+    child.stderr.emit(
+      'data',
+      Buffer.from('channel_setup_fwd_listener_tcpip: cannot listen to port: 5173\n')
+    )
+
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM')
   })
 
   it('rejects startup when the ssh process emits an error', async () => {
