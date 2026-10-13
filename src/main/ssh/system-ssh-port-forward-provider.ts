@@ -4,6 +4,7 @@ import {
   systemSshForwardError
 } from './system-ssh-forward-process'
 import type {
+  ForwardChannelOpenFailure,
   PortForwardStartOptions,
   SshPortForwardProvider,
   StartedPortForward
@@ -58,6 +59,7 @@ export class SystemSshPortForwardProvider implements SshPortForwardProvider {
 
     return {
       entry,
+      lastChannelOpenFailure: () => lastChannelOpenFailure(stderr),
       close: async () => {
         try {
           await forward.close()
@@ -71,4 +73,16 @@ export class SystemSshPortForwardProvider implements SshPortForwardProvider {
       }
     }
   }
+}
+
+// OpenSSH logs each refused direct-tcpip open as `channel N: open failed: <reason>: <message>`.
+const CHANNEL_OPEN_FAILED = /open failed: (administratively prohibited|connect failed)/g
+
+export function lastChannelOpenFailure(stderr: string): ForwardChannelOpenFailure | null {
+  const reason = [...stderr.matchAll(CHANNEL_OPEN_FAILED)].at(-1)?.[1]
+  return reason === undefined
+    ? null
+    : reason === 'connect failed'
+      ? 'connect-failed'
+      : 'administratively-prohibited'
 }

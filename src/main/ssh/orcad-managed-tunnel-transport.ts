@@ -10,22 +10,35 @@ import type {
   SshPortForwardProvider,
   StartedPortForward
 } from './ssh-port-forward-provider'
-import { probeTcpForwarding, type TcpForwardingVerdict } from './ssh-tcp-forwarding-probe'
+import {
+  checkForwardChannel,
+  probeTcpForwarding,
+  type TcpForwardingVerdict
+} from './ssh-tcp-forwarding-probe'
 import { Ssh2PortForwardProvider } from './ssh2-port-forward-provider'
 import { SystemSshPortForwardProvider } from './system-ssh-port-forward-provider'
+import { reserveLocalForwardPort } from './system-ssh-forward-process'
 
 type OrcadManagedTunnelTransportDependencies = {
   forwards: SshPortForwardProvider[]
   stdio: SshPortForwardProvider
   probe: (conn: SshConnection, port: number) => Promise<TcpForwardingVerdict>
+  checkForward: (forward: StartedPortForward) => Promise<TcpForwardingVerdict>
+  /** Frees the persisted local port (an orphaned `ssh -L` may hold it) before the bridge binds. */
+  reserveLocalPort: (localPort: number) => Promise<unknown>
 }
 
 export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvider {
+  // Why per transport generation: a reconnect may route through a different sshd.
+  private readonly refusedGenerations = new WeakMap<SshConnection, number>()
+
   constructor(
     private readonly dependencies: OrcadManagedTunnelTransportDependencies = {
       forwards: [new Ssh2PortForwardProvider(), new SystemSshPortForwardProvider()],
       stdio: new OrcadStdioBridgePortForwardProvider(),
-      probe: probeTcpForwarding
+      probe: probeTcpForwarding,
+      checkForward: checkForwardChannel,
+      reserveLocalPort: reserveLocalForwardPort
     }
   ) {}
 
@@ -34,19 +47,43 @@ export class OrcadManagedTunnelTransportProvider implements SshPortForwardProvid
   }
 
   async start(conn: SshConnection, options: PortForwardStartOptions): Promise<StartedPortForward> {
-    const { forwards, stdio, probe } = this.dependencies
+    const { forwards, probe, checkForward } = this.dependencies
+    if (this.refusedGenerations.get(conn) === conn.getConnectGeneration()) {
+      if (options.localPort !== 0) {
+        await this.dependencies.reserveLocalPort(options.localPort)
+      }
+      return this.startBridge(conn, options)
+    }
     // Why only on refusal: an unverifiable answer keeps the forward, as before this transport.
-    if ((await probe(conn, options.remotePort)) === 'refused' && stdio.canHandle(conn)) {
-      const started = await stdio.start(conn, options)
-      rememberOrcadTunnelTransport(options.connectionId, 'stdio_bridge')
-      return started
+    if ((await probe(conn, options.remotePort)) === 'refused') {
+      return this.startBridge(conn, options)
     }
     const forward = forwards.find((provider) => provider.canHandle(conn))
     if (!forward) {
       throw new Error('SSH connection is not established')
     }
     const started = await forward.start(conn, options)
+    // Why: system SSH's listener is up before sshd is asked for a channel, so it proves nothing.
+    if ((await checkForward(started)) === 'refused') {
+      await started.close()
+      return this.startBridge(conn, options)
+    }
     rememberOrcadTunnelTransport(options.connectionId, 'tcp_forward')
+    return started
+  }
+
+  private async startBridge(
+    conn: SshConnection,
+    options: PortForwardStartOptions
+  ): Promise<StartedPortForward> {
+    this.refusedGenerations.set(conn, conn.getConnectGeneration())
+    if (!this.dependencies.stdio.canHandle(conn)) {
+      throw new Error(
+        'This SSH host refuses TCP forwarding, and the managed Orca server tunnel has no other route.'
+      )
+    }
+    const started = await this.dependencies.stdio.start(conn, options)
+    rememberOrcadTunnelTransport(options.connectionId, 'stdio_bridge')
     return started
   }
 }
