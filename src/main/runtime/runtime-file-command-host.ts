@@ -5,6 +5,7 @@ import type {
   ResolvedRuntimeFileWorktree
 } from './runtime-file-command-target'
 import type { ExecutionHostId } from '../../shared/execution-host'
+import type { RuntimeGitTarget } from './runtime-git-command-target'
 import type { RuntimeNativeChatFileContext } from '../../shared/runtime-types'
 import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
 import type { FsChangeEvent } from '../../shared/filesystem-entry-types'
@@ -46,9 +47,7 @@ export type RuntimeFileCommandHost = {
   // `executionHostId`, not `connectionId`, on both target contracts: a repo row's connection cannot
   // tell `runtime:` from `local`, and neither may re-introduce that spelling. See
   // runtime-git-command-target and runtime-file-command-target.
-  resolveRuntimeGitTarget(
-    selector: string
-  ): Promise<{ worktree: ResolvedRuntimeFileWorktree; executionHostId: ExecutionHostId }>
+  resolveRuntimeGitTarget(selector: string): Promise<RuntimeGitTarget>
   openFile(
     worktreeId: string,
     filePath: string,

@@ -32,6 +32,11 @@ type RuntimeFileCommandName =
   | 'listRuntimeMarkdownDocuments'
   | 'pathsExistRuntimeFiles'
   | 'statRuntimeFile'
+  | 'openRuntimePluginViewerDocument'
+  | 'selectRuntimePluginViewerFile'
+  | 'readRuntimePluginViewerDocument'
+  | 'closeRuntimePluginViewerDocument'
+  | 'observeRuntimePluginViewerDocument'
 
 export type RuntimeFileCommandSurface = Pick<RuntimeFileCommands, RuntimeFileCommandName>
 
@@ -70,6 +75,11 @@ export function installRuntimeFileCommandSurface(
     listRuntimeFiles: commands.listRuntimeFiles.bind(commands),
     listRuntimeMarkdownDocuments: commands.listRuntimeMarkdownDocuments.bind(commands),
     pathsExistRuntimeFiles: commands.pathsExistRuntimeFiles.bind(commands),
-    statRuntimeFile: commands.statRuntimeFile.bind(commands)
+    statRuntimeFile: commands.statRuntimeFile.bind(commands),
+    openRuntimePluginViewerDocument: commands.openRuntimePluginViewerDocument.bind(commands),
+    selectRuntimePluginViewerFile: commands.selectRuntimePluginViewerFile.bind(commands),
+    readRuntimePluginViewerDocument: commands.readRuntimePluginViewerDocument.bind(commands),
+    closeRuntimePluginViewerDocument: commands.closeRuntimePluginViewerDocument.bind(commands),
+    observeRuntimePluginViewerDocument: commands.observeRuntimePluginViewerDocument.bind(commands)
   } satisfies RuntimeFileCommandSurface)
 }

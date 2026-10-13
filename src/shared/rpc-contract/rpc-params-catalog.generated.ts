@@ -30,6 +30,12 @@ import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration-scr
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
 import {
+  pluginViewerRuntimeLeaseSchema,
+  pluginViewerRuntimeOpenSchema,
+  pluginViewerRuntimeReadSchema,
+  pluginViewerRuntimeSelectionSchema
+} from '../plugins/plugin-viewer-runtime-document'
+import {
   AccountsUnsubscribeParams,
   AddClaudeFromConfigDirParams,
   AddCodexFromHomeParams,
@@ -837,6 +843,11 @@ export const RPC_PARAMS_BY_METHOD = {
   'files.open': FileOpenTab,
   'files.openDiff': FileOpenDiff,
   'files.pathsExist': FilePathsExist,
+  'files.pluginViewer.close': pluginViewerRuntimeLeaseSchema,
+  'files.pluginViewer.observe': pluginViewerRuntimeLeaseSchema,
+  'files.pluginViewer.open': pluginViewerRuntimeOpenSchema,
+  'files.pluginViewer.read': pluginViewerRuntimeReadSchema,
+  'files.pluginViewer.select': pluginViewerRuntimeSelectionSchema,
   'files.read': FileOpen,
   'files.readChunk': FileReadChunk,
   'files.readDir': FileTreePath,
