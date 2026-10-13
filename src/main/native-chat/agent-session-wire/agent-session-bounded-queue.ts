@@ -1,38 +1,23 @@
 // The draft queue as a bounded-frame subscriber receives it.
 //
-// Admission sizes every card at its widest and keeps the list within the rows' share of one frame,
-// so it arrives whole. A queue saved by an older build under its larger bound can still be over: its
-// long text is then cut to one common length and each card it cut is marked `truncated`, which a
-// reader must not edit in place. A queue of more cards than fit even so lists the ones it sends
-// first.
+// Admission keeps the cards in line within the rows' share of one frame, so the list arrives whole.
+// It can still be over: a queue an older build admitted under its larger bound, or cards that grew
+// after admission (a failed send adds its reason). The list then carries the cards it sends first,
+// whole; the rest show once those leave. A card is never shortened: a reader that edits one
+// replaces the draft with what it holds.
 
-import type { AgentSessionQueuedMessage } from '../../../shared/agent-session-wire'
 import { HISTORY_PAGE_CONTENT_BUDGET_BYTES } from './agent-session-history-page-bounds'
-import { jsonBytes, shortenJsonStringsToFit } from './json-string-shortening'
+import { jsonBytes } from './json-string-shortening'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
 
-/** What the mark adds to a shortened card. */
-const TRUNCATED_MARK_BYTES = Buffer.byteLength(',"truncated":true', 'utf8')
-
-/** A card with nothing left to cut: what places it, and an empty body. */
-function emptiedCard(card: AgentSessionQueuedMessage): AgentSessionQueuedMessage {
-  const { messageId, position, state, body } = card
-  return { messageId, position, state, body: { kind: 'message', role: body.role, blocks: [] } }
-}
-
-function markedCut(
-  cards: readonly AgentSessionQueuedMessage[],
-  cut: readonly AgentSessionQueuedMessage[]
-): AgentSessionQueuedMessage[] {
-  return cut.map((card, index) =>
-    card === cards[index] ? card : { ...card, truncated: true as const }
-  )
-}
-
-/** The longest run from the front that fits. */
-function leadingCardsThatFit(cards: AgentSessionQueuedMessage[]): AgentSessionQueuedMessage[] {
+export function boundedQueuePublication(publication: QueuePublication): QueuePublication {
+  const cards = publication.queuedMessages
+  if (jsonBytes(cards) <= HISTORY_PAGE_CONTENT_BUDGET_BYTES) {
+    return publication
+  }
+  // The longest run from the front that fits.
   let fits = 0
-  let fitsNot = cards.length + 1
+  let fitsNot = cards.length
   while (fitsNot - fits > 1) {
     const middle = Math.floor((fits + fitsNot) / 2)
     if (jsonBytes(cards.slice(0, middle)) <= HISTORY_PAGE_CONTENT_BUDGET_BYTES) {
@@ -41,19 +26,7 @@ function leadingCardsThatFit(cards: AgentSessionQueuedMessage[]): AgentSessionQu
       fitsNot = middle
     }
   }
-  return cards.slice(0, fits)
-}
-
-export function boundedQueuePublication(publication: QueuePublication): QueuePublication {
-  const cards = publication.queuedMessages
-  if (jsonBytes(cards) <= HISTORY_PAGE_CONTENT_BUDGET_BYTES) {
-    return publication
-  }
-  const room = HISTORY_PAGE_CONTENT_BUDGET_BYTES - cards.length * TRUNCATED_MARK_BYTES
-  const cut = shortenJsonStringsToFit(cards, room)
-  const queuedMessages = cut
-    ? markedCut(cards, cut)
-    : leadingCardsThatFit(markedCut(cards, cards.map(emptiedCard)))
+  const queuedMessages = cards.slice(0, fits)
   const listed = queuedMessages.some((card) => card.messageId === publication.nextQueuedMessageId)
   return {
     ...publication,

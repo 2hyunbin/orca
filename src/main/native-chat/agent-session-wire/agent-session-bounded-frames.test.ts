@@ -25,6 +25,12 @@ import { MAX_TOOL_DETAIL_LENGTH } from '../../../shared/native-chat-tool-summary
 import { createTrackedJournalOpener } from '../agent-session-journal/journal-host-database-test-support'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { BOUNDED_FRAME_ROW_BYTES, boundedFrameItem } from './agent-session-bounded-frame-item'
+import {
+  EMPTY_STRUCTURED_AGENT_SESSION,
+  oldestStructuredAgentSessionCursor,
+  reduceStructuredAgentSession
+} from '../../../shared/structured-agent-session-reducer'
+import { readAgentSessionHistory } from './agent-session-history-page'
 import { jsonBytes } from './json-string-shortening'
 import { AgentSessionSubscribers } from './structured-agent-session-subscribers'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
@@ -246,8 +252,10 @@ describe('frames to a bounded-frame subscriber', () => {
     const cards = frames.flatMap((frame) =>
       frame.type === 'batch' && frame.queuedMessages ? [frame.queuedMessages] : []
     )
-    expect(cards.at(-1)).toHaveLength(queue.queuedMessages.length)
-    expect(cards.at(-1)?.every((card) => card.truncated === true)).toBe(true)
+    // Whole cards from the front: an older build's 1 MiB queue lists what fits.
+    const listed = cards.at(-1) ?? []
+    expect(listed.length).toBeGreaterThan(0)
+    expect(listed).toEqual(queue.queuedMessages.slice(0, listed.length))
     expect(frames.some((frame) => frame.type === 'batch' && frame.backgroundTasks)).toBe(true)
   })
 
@@ -284,9 +292,31 @@ describe('frames to a bounded-frame subscriber', () => {
     )
     // Live rows after it arrive as batches again.
     await append(message('next'))
-    frames.length = 0
+    const live = frames.length
     subscribers.publish(SESSION, journal)
-    expect(frames.map((frame) => frame.type)).toEqual(['batch'])
+    expect(frames.slice(live).map((frame) => frame.type)).toEqual(['batch'])
+
+    // A phone that applied all of it pages back to the first row with no gap.
+    let state = frames.reduce(
+      (current, event) => reduceStructuredAgentSession(current, { type: 'event', event }),
+      EMPTY_STRUCTURED_AGENT_SESSION
+    )
+    for (let cursor = oldestStructuredAgentSessionCursor(state); state.hasOlder && cursor;) {
+      const older = readAgentSessionHistory(journal, {
+        sessionId: SESSION,
+        direction: 'before',
+        cursor
+      })
+      state = reduceStructuredAgentSession(state, {
+        type: 'older-page',
+        requestedCursor: cursor,
+        page: older.page
+      })
+      cursor = oldestStructuredAgentSessionCursor(state)
+    }
+    expect(state.items.map((item) => item.sequence)).toEqual(
+      journal.snapshot().items.map((item) => item.sequence)
+    )
   })
 
   it('fit even a queue an older build let grow past what previews can shrink', async () => {

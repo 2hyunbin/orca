@@ -5,12 +5,12 @@
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { agentSessionRefusalNotice } from '../../../shared/agent-session-refusal-notice'
+import { boundedQueuePublication } from './agent-session-bounded-queue'
 import { jsonBytes } from './json-string-shortening'
 import { MAX_PROMPT_BYTES } from '../../../shared/rpc-contract/structured-agent-session-params'
 import { MAX_PROVIDER_DIAGNOSTIC_CHARS } from '../../../shared/agent-session-failure'
 import {
   newQueuedCard,
-  QUEUED_CARD_STATUS_BYTES,
   QUEUED_MESSAGES_PERSON_RESERVE_BYTES,
   QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
 } from './structured-agent-session-queued-published-bytes'
@@ -32,11 +32,10 @@ beforeEach(async () => {
 
 afterEach(() => rig.dispose())
 
-/** Text whose card, alone in the queue and at its widest, counts exactly `bytes`; rig ids share
- *  one length. */
+/** Text whose card, alone in the queue, publishes exactly `bytes`; rig ids share one length. */
 function textOfCard(bytes: number): string {
   const card = { messageId: hostTestOperationId(), body: hostTestMessage('') }
-  return 'x'.repeat(bytes - jsonBytes([newQueuedCard(card)]) - QUEUED_CARD_STATUS_BYTES)
+  return 'x'.repeat(bytes - jsonBytes([newQueuedCard(card)]))
 }
 
 /** Text whose message body (or, with `blocksOnly`, whose blocks) serializes to exactly `bytes`. */
@@ -100,7 +99,35 @@ it('counts whole cards, so the published queue always fits one bounded frame', a
   )
 })
 
-it('keeps a full queue within its bound after a send fails and returns a card', async () => {
+it('counts a sent card until its delivery is accepted, so its coming back stays in bound', async () => {
+  const working = await rig.workingSend()
+  const third = 'x'.repeat(Math.ceil(QUEUED_MESSAGES_PUBLISHED_MAX_BYTES * 0.4))
+  const first = await rig.send(third, 'queue-if-active').result
+  if (!first.ok || !('queued' in first.value)) {
+    throw new Error('expected the first draft queued')
+  }
+  const draftId = first.value.queued.messageId
+  await rig.settleAccepted(working, 'a')
+  await vi.waitFor(async () => expect(await rig.handoff(draftId)).toBeDefined())
+  expect((await rig.drafts()).map((card) => card.messageId)).not.toContain(draftId)
+
+  expect(await rig.send(third, 'queue-if-active').result).toMatchObject({ ok: true })
+  expect(await rig.send(third, 'queue-if-active').result).toMatchObject({
+    ok: false,
+    refusal: { details: { reason: 'queueTooLarge' } }
+  })
+  // Refused by the agent, the sent card comes back into the list.
+  await rig.settleRejected(await rig.handoffId(draftId), 'refused')
+  await vi.waitFor(async () =>
+    expect((await rig.drafts()).map((card) => card.messageId)).toContain(draftId)
+  )
+  const page = await rig.host.history({ sessionId: HOST_TEST_SESSION, direction: 'tail' })
+  expect(jsonBytes(page.page.queuedMessages ?? [])).toBeLessThanOrEqual(
+    QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
+  )
+})
+
+it('shows a phone the front cards whole when a failed send grows a full queue past its bound', async () => {
   const working = await rig.workingSend()
   const first = await rig.send('x'.repeat(2_000), 'queue-if-active').result
   if (!first.ok || !('queued' in first.value)) {
@@ -112,15 +139,25 @@ it('keeps a full queue within its bound after a send fails and returns a card', 
   const draftId = first.value.queued.messageId
   await rig.settleAccepted(working, 'a')
   await vi.waitFor(async () => expect(await rig.handoff(draftId)).toBeDefined())
+  // Escaped control characters: the widest a provider's words serialize.
   await rig.settleRejected(
     await rig.handoffId(draftId),
-    '\u00e9'.repeat(MAX_PROVIDER_DIAGNOSTIC_CHARS)
+    '\u0001'.repeat(MAX_PROVIDER_DIAGNOSTIC_CHARS)
   )
   await vi.waitFor(async () =>
     expect((await rig.drafts())[0]).toEqual({ messageId: draftId, state: 'returned' })
   )
   const page = await rig.host.history({ sessionId: HOST_TEST_SESSION, direction: 'tail' })
-  expect(jsonBytes(page.page.queuedMessages ?? [])).toBeLessThanOrEqual(
-    QUEUED_MESSAGES_PUBLISHED_MAX_BYTES
-  )
+  const cards = page.page.queuedMessages ?? []
+  expect(jsonBytes(cards)).toBeGreaterThan(QUEUED_MESSAGES_PUBLISHED_MAX_BYTES)
+
+  const { queuedMessages } = boundedQueuePublication({
+    queuedMessages: cards,
+    queuePause: null,
+    nextQueuedMessageId: null
+  })
+  expect(jsonBytes(queuedMessages)).toBeLessThanOrEqual(QUEUED_MESSAGES_PUBLISHED_MAX_BYTES)
+  expect(queuedMessages.length).toBeGreaterThan(0)
+  // Never shortened: an Edit copies the whole draft.
+  expect(queuedMessages).toEqual(cards.slice(0, queuedMessages.length))
 })

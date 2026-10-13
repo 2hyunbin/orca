@@ -51,17 +51,10 @@ function cursorAfter(event: HistoryFrame): AgentJournalCursor {
     : (event.page.liveCursor ?? event.page.window.nextCursor)
 }
 
-/** `event` without its side lists, and with metadata past its bound left out. */
+/** `event` without the roster, which rides its own frame, and with metadata past its bound left
+ *  out. The other side lists are attached only after this, so an event never carries them. */
 function boundedHistoryFrame(event: HistoryFrame): HistoryFrame {
-  const {
-    commands: _commands,
-    queuedMessages: _queuedMessages,
-    queuePause: _queuePause,
-    nextQueuedMessageId: _nextQueuedMessageId,
-    backgroundTasks: _backgroundTasks,
-    activity,
-    ...rest
-  } = event
+  const { backgroundTasks: _backgroundTasks, activity, ...rest } = event
   const frame = {
     ...rest,
     ...(activity !== undefined && within(activity, BOUNDED_FRAME_ACTIVITY_BYTES)
