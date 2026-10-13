@@ -31,7 +31,6 @@ import type {
 } from './structured-agent-session-host-types'
 import {
   oldestQueuedSubmission,
-  startThatFailedWhileQueued,
   recordStructuredAgentSessionStartFailure,
   refusedStructuredAgentSessionStart,
   startThatFailedWhileQueued
