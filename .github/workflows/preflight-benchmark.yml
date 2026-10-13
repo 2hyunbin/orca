@@ -43,7 +43,21 @@ jobs:
 
         git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
 
-        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs
+
+        node --input-type=module - <<''JS''
+
+        import { readFileSync, writeFileSync } from ''node:fs''
+
+        const file = ''config/scripts/runtime-serve-terminal-smoke.mjs''
+
+        const source = readFileSync(file, ''utf8'')
+
+        if (!source.includes(''function resolveCli() {'')) throw new Error(''Baseline CLI resolver changed'')
+
+        writeFileSync(file, source.replace(''function resolveCli() {'', ''export function resolveCli() {''))
+
+        JS'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
@@ -826,7 +840,21 @@ jobs:
 
         git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/check-main-sync-spawn-ratchet.mjs > config/scripts/check-main-sync-spawn-ratchet.mjs
 
-        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs'
+        git show 845b723258c0502365ef8ea29392a3badc8cbeae:config/scripts/run-typecheck-projects-in-parallel.mjs > config/scripts/run-typecheck-projects-in-parallel.mjs
+
+        node --input-type=module - <<''JS''
+
+        import { readFileSync, writeFileSync } from ''node:fs''
+
+        const file = ''config/scripts/runtime-serve-terminal-smoke.mjs''
+
+        const source = readFileSync(file, ''utf8'')
+
+        if (!source.includes(''function resolveCli() {'')) throw new Error(''Baseline CLI resolver changed'')
+
+        writeFileSync(file, source.replace(''function resolveCli() {'', ''export function resolveCli() {''))
+
+        JS'
     - name: Check process-host imports
       if: '!cancelled()'
       id: process-host-imports
