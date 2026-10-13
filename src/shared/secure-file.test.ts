@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   __getSecureFileHardeningCacheStateForTests,
   __resetSecureFileHardenedPathsForTests,
-  __resetSecureFileWindowsUserSidForTests,
   hardenExistingSecureFile,
   isUnreadableError,
   writeSecureFile
 } from './secure-file'
-import { setWindowsSecurityAddonForTests } from './windows-security-addon'
+import {
+  setWindowsSecurityForTests,
+  resetWindowsSecurityLoadForTests
+} from './windows-security-addon'
 import { createFakeWindowsSecurity } from './windows-security-addon.test-fixture'
 
 const posixModeIt = process.platform === 'win32' ? it.skip : it
@@ -20,14 +22,14 @@ describe('POSIX secure files', () => {
   const tempDirs: string[] = []
 
   beforeEach(() => {
-    __resetSecureFileWindowsUserSidForTests()
+    resetWindowsSecurityLoadForTests()
     __resetSecureFileHardenedPathsForTests()
   })
 
   afterEach(() => {
-    __resetSecureFileWindowsUserSidForTests()
+    resetWindowsSecurityLoadForTests()
     __resetSecureFileHardenedPathsForTests()
-    setWindowsSecurityAddonForTests(null)
+    setWindowsSecurityForTests(null)
     if (originalPlatform) {
       Object.defineProperty(process, 'platform', originalPlatform)
     }
@@ -45,7 +47,7 @@ describe('POSIX secure files', () => {
   it('never touches the Windows ACL addon off win32', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
     const fake = createFakeWindowsSecurity()
-    setWindowsSecurityAddonForTests(fake)
+    setWindowsSecurityForTests(fake)
     const targetPath = join(tempDir(), 'secret.json')
 
     writeSecureFile(targetPath, 'contents')

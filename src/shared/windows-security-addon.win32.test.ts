@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseSddlDacl } from './windows-security-descriptor'
 import {
-  loadWindowsSecurityAddon,
+  loadWindowsSecurity,
   WINDOWS_FILE_ALL_ACCESS,
   type WindowsSecurityAddon
 } from './windows-security-addon'
@@ -22,12 +22,12 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
   let root: string
 
   beforeAll(() => {
-    const loaded = loadWindowsSecurityAddon()
-    if (!loaded) {
-      throw new Error('the windows-security addon did not load')
+    const loaded = loadWindowsSecurity()
+    if (!('addon' in loaded)) {
+      throw new Error(`the windows-security addon did not load: ${loaded.error}`)
     }
-    addon = loaded
-    sid = addon.currentUserSid()
+    addon = loaded.addon
+    sid = loaded.userSid
     root = mkdtempSync(join(tmpdir(), 'orca-windows-security-'))
   })
 
@@ -119,6 +119,38 @@ describeOnWindows('native windows-security addon against a real filesystem', () 
     const dacl = parseSddlDacl(addon.getDaclSddl(path))
     expect(dacl?.isProtected).toBe(true)
     expect(dacl?.aces.map((ace) => ace.sid).sort()).toEqual([sid, 'S-1-15-2-2', 'S-1-5-18'].sort())
+  })
+
+  // A NULL DACL already allows everyone; merging a grant into it would revoke every other principal.
+  it('leaves a NULL DACL as it is when granting', () => {
+    const path = join(root, 'null-dacl-grant.txt')
+    addon.createFileWithDacl(path, 'D:NO_ACCESS_CONTROL', Buffer.from(''))
+    expect(addon.getDaclSddl(path)).toBe('D:NO_ACCESS_CONTROL')
+
+    addon.grantAccess(path, sid, WINDOWS_FILE_ALL_ACCESS, { inheritable: false, replace: true })
+
+    expect(addon.getDaclSddl(path)).toBe('D:NO_ACCESS_CONTROL')
+  })
+
+  it('reaches a path longer than MAX_PATH', () => {
+    let dir = join(root, 'long')
+    while (dir.length < 280) {
+      dir = join(dir, 'x'.repeat(40))
+    }
+    mkdirSync(dir, { recursive: true })
+    const path = join(dir, 'secret.json')
+    addon.createFileWithDacl(path, `D:P(A;;FA;;;${sid})`, Buffer.from('{}'))
+
+    addon.grantAccess(path, 'S-1-5-18', WINDOWS_FILE_ALL_ACCESS, {
+      inheritable: false,
+      replace: false
+    })
+
+    expect(
+      parseSddlDacl(addon.getDaclSddl(path))
+        ?.aces.map((ace) => ace.sid)
+        .sort()
+    ).toEqual(['S-1-5-18', sid].sort())
   })
 
   it('runs DACL writes on the thread pool and rejects with the Win32 code', async () => {

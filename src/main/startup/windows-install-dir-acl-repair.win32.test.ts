@@ -5,9 +5,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { CrashReportBreadcrumbData } from '../../shared/crash-reporting'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import {
-  loadWindowsSecurityAddon,
+  loadWindowsSecurity,
   WINDOWS_FILE_READ_EXECUTE,
-  type WindowsSecurityAddon
+  type WindowsSecurity
 } from '../../shared/windows-security-addon'
 import {
   probeWindowsInstallDirAcl,
@@ -34,16 +34,16 @@ const ORPHAN_SID =
 /** The repair's flagless, explicit RX grant to ALL RESTRICTED APPLICATION PACKAGES. */
 const RESTRICTED_GRANT_ON_FILE = '(A;;0x1200a9;;;S-1-15-2-2)'
 
-function requireAddon(): WindowsSecurityAddon {
-  const addon = loadWindowsSecurityAddon()
-  if (!addon) {
-    throw new Error('the windows-security addon must load on a Windows test host')
+function requireSecurity(): WindowsSecurity {
+  const loaded = loadWindowsSecurity()
+  if (!('addon' in loaded)) {
+    throw new Error(`the windows-security addon must load on a Windows test host: ${loaded.error}`)
   }
-  return addon
+  return loaded
 }
 
 describeOnWindows('install-dir package ACL repair against real DACLs', () => {
-  let addon: WindowsSecurityAddon
+  let addon: WindowsSecurity['addon']
   let userSid: string
   let installDir: string
   let userDataPath: string
@@ -60,8 +60,7 @@ describeOnWindows('install-dir package ACL repair against real DACLs', () => {
   }
 
   beforeAll(() => {
-    addon = requireAddon()
-    userSid = addon.currentUserSid()
+    ;({ addon, userSid } = requireSecurity())
     installDir = mkdtempSync(join(tmpdir(), 'orca-acl-live-'))
     userDataPath = mkdtempSync(join(tmpdir(), 'orca-acl-live-ud-'))
     mkdirSync(join(installDir, 'resources'), { recursive: true })

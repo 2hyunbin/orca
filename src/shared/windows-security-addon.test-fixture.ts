@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import type { WindowsSecurityAddon, WindowsSecurityGrantOptions } from './windows-security-addon'
+import type { GrantAccessOptions, WindowsSecurityAddon } from './windows-security-addon'
 
 export const FAKE_USER_SID = 'S-1-5-21-1-2-3-1001'
 
@@ -14,7 +14,7 @@ export type FakeWindowsSecurityCall =
       path: string
       sid: string
       mask: number
-      options: WindowsSecurityGrantOptions
+      options: GrantAccessOptions
     }
 
 export type FakeWindowsSecurity = WindowsSecurityAddon & {
@@ -27,7 +27,6 @@ export type FakeWindowsSecurity = WindowsSecurityAddon & {
   holdAsync: boolean
   /** Settles every parked setDaclSddlAsync. */
   releaseAsync: () => void
-  sidFails: boolean
   callsFor: (op: FakeWindowsSecurityCall['op'], path?: string) => FakeWindowsSecurityCall[]
 }
 
@@ -43,16 +42,10 @@ export function createFakeWindowsSecurity(): FakeWindowsSecurity {
     dacls: new Map(),
     failing: new Set(),
     holdAsync: false,
-    sidFails: false,
     releaseAsync: () => parked.splice(0).forEach((settle) => settle()),
     callsFor: (op, path) =>
       fake.calls.filter((call) => call.op === op && (path === undefined || call.path === path)),
-    currentUserSid: () => {
-      if (fake.sidFails) {
-        throw win32Error('OpenProcessToken')
-      }
-      return FAKE_USER_SID
-    },
+    currentUserSid: () => FAKE_USER_SID,
     getDaclSddl: (path) => {
       fake.calls.push({ op: 'get', path })
       return fake.dacls.get(path) ?? INHERITED_SDDL

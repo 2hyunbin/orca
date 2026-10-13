@@ -1,6 +1,6 @@
 import { delimiter, join, win32 } from 'node:path'
 import { existsSync } from 'node:fs'
-import { loadWindowsSecurityAddon, WINDOWS_FILE_ALL_ACCESS } from '../shared/windows-security-addon'
+import { loadWindowsSecurity, WINDOWS_FILE_ALL_ACCESS } from '../shared/windows-security-addon'
 
 export {
   getCmdExePath,
@@ -73,23 +73,26 @@ const USER_DIRECTORY_GRANT = { inheritable: true, replace: true } as const
  * the caller's original EPERM to surface.
  */
 export function grantDirAcl(dirPath: string): void {
-  const addon = loadWindowsSecurityAddon()
-  if (!addon) {
-    return
+  const security = loadWindowsSecurity()
+  if ('addon' in security) {
+    security.addon.grantAccess(
+      dirPath,
+      security.userSid,
+      WINDOWS_FILE_ALL_ACCESS,
+      USER_DIRECTORY_GRANT
+    )
   }
-  addon.grantAccess(dirPath, addon.currentUserSid(), WINDOWS_FILE_ALL_ACCESS, USER_DIRECTORY_GRANT)
 }
 
 /** As grantDirAcl, on the thread pool: the grant propagates through the directory's subtree. */
 export async function grantDirAclAsync(dirPath: string): Promise<void> {
-  const addon = loadWindowsSecurityAddon()
-  if (!addon) {
-    return
+  const security = loadWindowsSecurity()
+  if ('addon' in security) {
+    await security.addon.grantAccessAsync(
+      dirPath,
+      security.userSid,
+      WINDOWS_FILE_ALL_ACCESS,
+      USER_DIRECTORY_GRANT
+    )
   }
-  await addon.grantAccessAsync(
-    dirPath,
-    addon.currentUserSid(),
-    WINDOWS_FILE_ALL_ACCESS,
-    USER_DIRECTORY_GRANT
-  )
 }

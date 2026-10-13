@@ -1,11 +1,7 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { sanitizeCrashReportString } from '../../shared/crash-reporting'
-import {
-  loadWindowsSecurityAddon,
-  WINDOWS_FILE_READ_EXECUTE,
-  type WindowsSecurityAddon
-} from '../../shared/windows-security-addon'
+import { loadWindowsSecurity, WINDOWS_FILE_READ_EXECUTE } from '../../shared/windows-security-addon'
 
 /** ALL RESTRICTED APPLICATION PACKAGES: the grant that cleared electron/electron#51761. */
 export const RESTRICTED_APP_PACKAGES_SID = 'S-1-15-2-2'
@@ -32,18 +28,22 @@ export type InstallDirPackageGrant = (
 export type GrantEntry = (path: string, inheritable: boolean) => Promise<void>
 
 /** The in-process grant; never `replace`, so SYSTEM, Administrators, the user and the orphan all survive. */
-export function nativeInstallDirPackageGrant(
-  addon: WindowsSecurityAddon | null = loadWindowsSecurityAddon()
-): InstallDirPackageGrant {
+export function nativeInstallDirPackageGrant(): InstallDirPackageGrant {
   return (installDir, pass) => {
-    if (!addon) {
+    const security = loadWindowsSecurity()
+    if (!('addon' in security)) {
       return Promise.resolve({ ok: false, failedFileCount: 0, reason: 'addon-unavailable' })
     }
     const grantEntry: GrantEntry = (path, inheritable) =>
-      addon.grantAccessAsync(path, RESTRICTED_APP_PACKAGES_SID, WINDOWS_FILE_READ_EXECUTE, {
-        inheritable,
-        replace: false
-      })
+      security.addon.grantAccessAsync(
+        path,
+        RESTRICTED_APP_PACKAGES_SID,
+        WINDOWS_FILE_READ_EXECUTE,
+        {
+          inheritable,
+          replace: false
+        }
+      )
     return pass === 'root' ? grantRoot(grantEntry, installDir) : grantTree(grantEntry, installDir)
   }
 }

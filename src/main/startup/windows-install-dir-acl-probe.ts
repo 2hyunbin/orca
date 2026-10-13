@@ -5,7 +5,8 @@ import {
   type CrashReportBreadcrumbData
 } from '../../shared/crash-reporting'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
-import { loadWindowsSecurityAddon } from '../../shared/windows-security-addon'
+import { loadWindowsSecurity } from '../../shared/windows-security-addon'
+import { RESTRICTED_APP_PACKAGES_SID } from './windows-install-dir-package-acl-grant'
 
 /**
  * Read-only DACL probe for the win32 install directory.
@@ -37,10 +38,8 @@ const MODULE_SHORTLIST = ['ffmpeg.dll', 'libGLESv2.dll', 'libEGL.dll', 'icudtl.d
 // names — and on zh/ja/ko even keep "NT AUTHORITY" English while doing so — so a
 // repaired tree read as poisoned. SDDL prints SIDs on every locale.
 const PACKAGE_SID = /^S-1-15-2-[0-9-]+$/i
-/** ALL RESTRICTED APPLICATION PACKAGES: the grant the reproduced remedy added. */
-const RESTRICTED_PACKAGES_SID = 'S-1-15-2-2'
 /** `AC` is SDDL's alias for ALL APPLICATION PACKAGES (S-1-15-2-1). */
-const WELL_KNOWN_PACKAGE_SIDS = new Set(['AC', 'S-1-15-2-1', RESTRICTED_PACKAGES_SID])
+const WELL_KNOWN_PACKAGE_SIDS = new Set(['AC', 'S-1-15-2-1', RESTRICTED_APP_PACKAGES_SID])
 /** (type;flags;rights;object;inheritedObject;sid[;condition]) */
 const SDDL_ACE = /\(([A-Z]+);([A-Z]*);[^;()]*;[^;()]*;[^;()]*;([^;()]+)[;)]/gi
 
@@ -49,7 +48,6 @@ export type WindowsInstallDirAclProbeOptions = {
   isServeMode?: boolean
   installDir?: string
   /** Test seams. */
-  readDaclSddl?: (path: string) => string
   fileExists?: (path: string) => boolean
   recordBreadcrumb?: typeof recordDurableCrashBreadcrumb
   onDone?: (data: CrashReportBreadcrumbData) => void
@@ -62,20 +60,16 @@ type AclFacts = {
 }
 
 /** The target's DACL as SDDL, or '' when it cannot be read (an empty read stays unreadable). */
-function readDacl(readDaclSddl: (path: string) => string, target: string): string {
+function readDacl(target: string): string {
+  const security = loadWindowsSecurity()
+  if (!('addon' in security)) {
+    throw new Error(`windows-security addon unavailable: ${security.error}`)
+  }
   try {
-    return readDaclSddl(target)
+    return security.addon.getDaclSddl(target)
   } catch {
     return ''
   }
-}
-
-function nativeDaclReader(): (path: string) => string {
-  const addon = loadWindowsSecurityAddon()
-  if (!addon) {
-    throw new Error('windows-security addon unavailable')
-  }
-  return (path) => addon.getDaclSddl(path)
 }
 
 function collectAclFacts(savedDacl: string): AclFacts | null {
@@ -104,7 +98,7 @@ function collectAclFacts(savedDacl: string): AclFacts | null {
     }
     hasWellKnownPackageGrant = true
     // Reported, never the verdict: narrows which grant is present for triage.
-    if (sid === RESTRICTED_PACKAGES_SID) {
+    if (sid === RESTRICTED_APP_PACKAGES_SID) {
       hasRestrictedPackageGrant = true
     }
   }
@@ -122,8 +116,7 @@ function runProbe(options: WindowsInstallDirAclProbeOptions): void {
   try {
     const installDir = options.installDir ?? dirname(process.execPath)
     const targets = resolveTargets(installDir, options.fileExists ?? existsSync)
-    const readDaclSddl = options.readDaclSddl ?? nativeDaclReader()
-    const outputs = targets.map((target) => readDacl(readDaclSddl, target))
+    const outputs = targets.map(readDacl)
     const facts = outputs.map(collectAclFacts).filter((fact) => fact !== null)
     const orphans = [...new Set(facts.flatMap((f) => f.orphanPackageSids))]
     const hasWellKnownPackageGrant = facts.some((f) => f.hasWellKnownPackageGrant)

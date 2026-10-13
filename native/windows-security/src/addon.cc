@@ -10,7 +10,6 @@
 #include <aclapi.h>
 #include <sddl.h>
 
-#include <algorithm>
 #include <functional>
 #include <memory>
 #include <string>
@@ -93,6 +92,11 @@ Win32Result GrantAccess(std::u16string path, const std::u16string& sid, DWORD ma
     return Fail("GetNamedSecurityInfoW", status);
   }
   LocalPtr descriptor(rawDescriptor);
+  // A NULL DACL already grants everyone everything; merging into it would build a DACL holding
+  // only this rule and lock every other principal out.
+  if (existing == nullptr) {
+    return {};
+  }
   PSID rawSid = nullptr;
   if (!ConvertStringSidToSidW(reinterpret_cast<LPCWSTR>(sid.c_str()), &rawSid)) {
     return Fail("ConvertStringSidToSidW", GetLastError());
@@ -126,6 +130,9 @@ Win32Result CreateFileWithDacl(const std::u16string& path, const std::u16string&
   if (!parsed.ok()) {
     return parsed;
   }
+  if (length > MAXDWORD) {
+    return Fail("WriteFile", ERROR_INVALID_PARAMETER);
+  }
   SECURITY_ATTRIBUTES attributes{sizeof(attributes), descriptor.get(), FALSE};
   // Why CREATE_NEW: the descriptor only applies to a file this call creates; opening an
   // existing one would keep that file's (possibly broader) DACL. Share mode 0 keeps every other
@@ -136,15 +143,11 @@ Win32Result CreateFileWithDacl(const std::u16string& path, const std::u16string&
     return Fail("CreateFileW", GetLastError());
   }
   Win32Result result;
-  size_t offset = 0;
-  while (offset < length) {
-    DWORD chunk = static_cast<DWORD>(std::min<size_t>(length - offset, 1u << 30));
-    DWORD written = 0;
-    if (!WriteFile(file, data + offset, chunk, &written, nullptr)) {
-      result = Fail("WriteFile", GetLastError());
-      break;
-    }
-    offset += written;
+  DWORD written = 0;
+  if (!WriteFile(file, data, static_cast<DWORD>(length), &written, nullptr)) {
+    result = Fail("WriteFile", GetLastError());
+  } else if (written != length) {
+    result = Fail("WriteFile", ERROR_WRITE_FAULT);
   }
   CloseHandle(file);
   if (!result.ok()) {

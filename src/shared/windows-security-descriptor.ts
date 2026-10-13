@@ -1,5 +1,5 @@
 /**
- * Parses the DACL out of an SDDL string, as produced by `icacls <path> /save`.
+ * Parses a DACL-only SDDL string, as the windows-security addon reads it.
  *
  * Why SDDL rather than the human-readable `icacls <path>` listing: the listing prints resolved
  * account *names*, which are localized and cannot be compared against a SID. Checking only the
@@ -65,8 +65,9 @@ export type WindowsDacl = {
 }
 
 export function parseSddlDacl(sddl: string, localDomainSid?: string): WindowsDacl | null {
-  // ACE bodies never contain parentheses, so the group stops cleanly at a following `S:` SACL.
-  const dacl = /D:([A-Z]*)((?:\([^()]*\))*)/.exec(sddl)
+  // Anchored, so anything the ACE grammar here cannot read fails closed: a conditional ACE body
+  // holds parentheses, and an unanchored match stopped before it and accepted the rest.
+  const dacl = /^D:([A-Z]*)((?:\([^()]*\))*)$/.exec(sddl)
   if (!dacl) {
     return null
   }

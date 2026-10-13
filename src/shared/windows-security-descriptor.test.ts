@@ -38,18 +38,18 @@ describe('parseSddlDacl', () => {
     expect(parseSddlDacl('D:P(A;OICI;FA;;;SY)')?.aces[0]!.flags).not.toContain('ID')
   })
 
-  it('stops at a trailing SACL rather than absorbing its entries', () => {
-    const dacl = parseSddlDacl('D:P(A;;FA;;;SY)S:AI(AU;SAFA;FA;;;WD)')
-
-    expect(dacl?.aces).toHaveLength(1)
-    expect(dacl?.aces[0]!.sid).toBe('S-1-5-18')
+  // The addon asks for the DACL alone, so anything around it means the input is not what was read.
+  it('fails closed on SDDL that carries more than a DACL', () => {
+    expect(parseSddlDacl('D:P(A;;FA;;;SY)S:AI(AU;SAFA;FA;;;WD)')).toBeNull()
+    expect(parseSddlDacl('O:WDG:WDD:P(A;;FA;;;SY)')).toBeNull()
   })
 
-  it('finds the DACL after an owner and group whose aliases end in D', () => {
-    const dacl = parseSddlDacl('O:WDG:WDD:P(A;;FA;;;SY)')
-
-    expect(dacl?.isProtected).toBe(true)
-    expect(dacl?.aces[0]!.sid).toBe('S-1-5-18')
+  // A conditional ACE body holds parentheses; stopping before it would accept a DACL granting Everyone.
+  it.each([
+    ['last', `D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;${USER_SID})(XA;;FA;;;WD;(Member_of {SID(WD)}))`],
+    ['first', `D:P(XA;;FA;;;WD;(Member_of {SID(WD)}))(A;;FA;;;SY)(A;;FA;;;${USER_SID})`]
+  ])('fails closed on a conditional ACE placed %s', (_position, sddl) => {
+    expect(parseSddlDacl(sddl)).toBeNull()
   })
 
   it('returns null when there is no DACL', () => {

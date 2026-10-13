@@ -10,8 +10,8 @@ import type { WebSocket } from 'ws'
 
 import { runProcess, runProcessSync } from '@orca/process-host'
 import {
-  resetWindowsSecurityAddonForTests,
-  setWindowsSecurityAddonForTests
+  resetWindowsSecurityLoadForTests,
+  setWindowsSecurityForTests
 } from '../../../shared/windows-security-addon'
 import { createFakeWindowsSecurity } from '../../../shared/windows-security-addon.test-fixture'
 import { DEVICE_REGISTRY_FILENAME } from '../mobile-pairing-files'
@@ -73,7 +73,7 @@ describe('mobile auth critical path', () => {
       timeline.push('restricted-create')
       create(path, sddl, data)
     }
-    setWindowsSecurityAddonForTests(fake)
+    setWindowsSecurityForTests(fake)
   })
 
   afterEach(() => {
@@ -81,7 +81,7 @@ describe('mobile auth critical path', () => {
     expect(runProcess).not.toHaveBeenCalled()
     expect(runProcessSync).not.toHaveBeenCalled()
     vi.useRealTimers()
-    resetWindowsSecurityAddonForTests()
+    resetWindowsSecurityLoadForTests()
     if (originalPlatform) {
       Object.defineProperty(process, 'platform', originalPlatform)
     }

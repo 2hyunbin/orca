@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runProcess, runProcessSync } from '@orca/process-host'
-import { setWindowsSecurityAddonForTests } from '../shared/windows-security-addon'
+import { setWindowsSecurityForTests } from '../shared/windows-security-addon'
 import {
   createFakeWindowsSecurity,
   FAKE_USER_SID,
@@ -24,14 +24,14 @@ describe('grantDirAcl', () => {
 
   beforeEach(() => {
     fake = createFakeWindowsSecurity()
-    setWindowsSecurityAddonForTests(fake)
+    setWindowsSecurityForTests(fake)
   })
 
   afterEach(() => {
     // Neither grant may start a process: no icacls, no whoami.
     expect(runProcess).not.toHaveBeenCalled()
     expect(runProcessSync).not.toHaveBeenCalled()
-    setWindowsSecurityAddonForTests(null)
+    setWindowsSecurityForTests(null)
   })
 
   it('replaces the user rule with inheritable full control, by SID, in-process', () => {
@@ -59,7 +59,7 @@ describe('grantDirAcl', () => {
   })
 
   it('is a silent no-op when the addon cannot load', async () => {
-    setWindowsSecurityAddonForTests(null)
+    setWindowsSecurityForTests(null)
 
     expect(() => grantDirAcl('C:\\Orca')).not.toThrow()
     await expect(grantDirAclAsync('C:\\Orca')).resolves.toBeUndefined()

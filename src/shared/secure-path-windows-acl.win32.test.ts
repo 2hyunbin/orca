@@ -11,24 +11,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import {
-  __resetSecureFileHardenedPathsForTests,
-  __resetSecureFileWindowsUserSidForTests,
-  writeSecureFile
-} from './secure-file'
+import { __resetSecureFileHardenedPathsForTests, writeSecureFile } from './secure-file'
 import {
   setSecurePathHardeningReporter,
   type SecurePathHardeningReport
 } from './secure-path-hardening-report'
+import { bestEffortRestrictWindowsPath, restrictWindowsPathSync } from './secure-path-windows-acl'
 import {
-  bestEffortRestrictWindowsPath,
-  resetSecureFileWindowsUserSidForTests,
-  restrictWindowsPathSync
-} from './secure-path-windows-acl'
-import {
-  loadWindowsSecurityAddon,
-  resetWindowsSecurityAddonForTests,
-  setWindowsSecurityAddonForTests,
+  loadWindowsSecurity,
+  resetWindowsSecurityLoadForTests,
+  setWindowsSecurityForTests,
   type WindowsSecurityAddon
 } from './windows-security-addon'
 import { findSecureDaclViolation } from './windows-secure-dacl'
@@ -56,20 +48,20 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
   const ORCA_PRINCIPALS = () => ['S-1-5-18', 'S-1-5-32-544', sid].sort()
 
   beforeAll(() => {
-    const loaded = loadWindowsSecurityAddon()
-    if (!loaded) {
-      throw new Error('the windows-security addon did not load')
+    const loaded = loadWindowsSecurity()
+    if (!('addon' in loaded)) {
+      throw new Error(`the windows-security addon did not load: ${loaded.error}`)
     }
-    addon = loaded
-    sid = addon.currentUserSid()
+    addon = loaded.addon
+    sid = loaded.userSid
     root = mkdtempSync(join(tmpdir(), 'orca-acl-win32-'))
     relocatedRoot = join('C:\\', `orca-acl-test-${randomBytes(4).toString('hex')}`)
     mkdirSync(relocatedRoot)
   })
 
   afterEach(() => {
-    resetWindowsSecurityAddonForTests()
-    __resetSecureFileWindowsUserSidForTests()
+    resetWindowsSecurityLoadForTests()
+    resetWindowsSecurityLoadForTests()
     __resetSecureFileHardenedPathsForTests()
     setSecurePathHardeningReporter(null)
   })
@@ -97,10 +89,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
   }
 
   it('starts from a relocated root that really is broader than Orca allows', () => {
-    const verdict = findSecureDaclViolation(addon.getDaclSddl(relocatedRoot), {
-      userSid: sid,
-      isDirectory: true
-    })
+    const verdict = findSecureDaclViolation(addon.getDaclSddl(relocatedRoot), sid, true)
     expect(verdict).toMatch(/unexpected rule for S-1-5-(11|32-545)/)
   })
 
@@ -225,7 +214,6 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
    * and published file while the main thread writes, as another account racing for a handle would.
    */
   it('never exposes a staged or published credential under the relocated root', async () => {
-    resetSecureFileWindowsUserSidForTests()
     const dir = join(relocatedRoot, 'race')
     mkdirSync(dir)
     const target = join(dir, 'orca-e2ee-keypair.json')
@@ -247,7 +235,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
     expect(restricted).toBeGreaterThan(50)
     expect(observed.samples).toBeGreaterThan(50)
     const broad = Object.keys(observed.distinct).filter(
-      (sddl) => findSecureDaclViolation(sddl, { userSid: sid, isDirectory: false }) !== null
+      (sddl) => findSecureDaclViolation(sddl, sid, false) !== null
     )
     console.log(
       `[live-acl] ${restricted} writes, ${observed.samples} DACL samples, ` +
@@ -297,7 +285,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
   /** Installs the real addon behind a proxy that counts DACL rewrites. */
   function countingAddon(): { count: number; asyncCount: number } {
     const counts = { count: 0, asyncCount: 0 }
-    setWindowsSecurityAddonForTests({
+    setWindowsSecurityForTests({
       ...addon,
       setDaclSddl: (path, sddl) => {
         counts.count += 1

@@ -1,7 +1,8 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetWindowsSecurityLoadForTests } from '../../shared/windows-security-addon'
 
 import type { CrashReportBreadcrumbData } from '../../shared/crash-reporting'
 import { readActiveGpuFallbackMarker, writeGpuFallbackMarker } from './gpu-fallback-marker'
@@ -36,7 +37,7 @@ import type {
 } from './windows-install-dir-package-acl-grant'
 import {
   ALL_PACKAGES_ACE,
-  fakeDaclReader,
+  installFakeDacls,
   ORPHAN_PACKAGE_ACE,
   RESTRICTED_PACKAGES_ACE
 } from './windows-install-dir-acl.test-fixture'
@@ -66,12 +67,12 @@ function probeThenRecover(
     specs.push(pass)
     return options.failRepair === true ? DENIED : OK
   }
+  installFakeDacls(savedAces)
   return new Promise((resolve) => {
     probeWindowsInstallDirAcl({
       platform: 'win32',
       installDir: INSTALL_DIR,
       fileExists: (path) => path.endsWith('ffmpeg.dll'),
-      readDaclSddl: fakeDaclReader(savedAces).readDaclSddl,
       recordBreadcrumb: () => undefined,
       onDone: (data) => {
         startWindowsInstallDirAclRepairIfPoisoned(data, {
@@ -118,13 +119,13 @@ describe('startWindowsInstallDirAclRepairIfPoisoned', () => {
   })
 
   it('does not act when the probe could not read the DACL', async () => {
+    installFakeDacls(() => null)
     const specs = await new Promise<InstallDirPackageGrantPass[]>((resolve) => {
       const collected: InstallDirPackageGrantPass[] = []
       probeWindowsInstallDirAcl({
         platform: 'win32',
         installDir: INSTALL_DIR,
         fileExists: () => false,
-        readDaclSddl: fakeDaclReader(() => null).readDaclSddl,
         recordBreadcrumb: () => undefined,
         onDone: (data) => {
           startWindowsInstallDirAclRepairIfPoisoned(data, {
@@ -850,11 +851,11 @@ describe('the probe-pending grace window', () => {
   // once-per-process, so a re-arm would wait 15s on a verdict that already landed
   // and drop every GPU child crash in between.
   it('is armed by a dispatched probe only, so a reopen cannot re-arm it', async () => {
+    installFakeDacls(() => [RESTRICTED_PACKAGES_ACE])
     const probeArgs = {
       platform: 'win32' as const,
       installDir: INSTALL_DIR,
       fileExists: () => false,
-      readDaclSddl: fakeDaclReader(() => [RESTRICTED_PACKAGES_ACE]).readDaclSddl,
       recordBreadcrumb: () => undefined
     }
     let settleVerdict: () => void = () => undefined
@@ -934,4 +935,8 @@ describe('isBlockingInstallDirAclRepairInFlight', () => {
     expect(mode).toBe('skipped')
     expect(isBlockingInstallDirAclRepairInFlight()).toBe(false)
   })
+})
+
+afterEach(() => {
+  resetWindowsSecurityLoadForTests()
 })

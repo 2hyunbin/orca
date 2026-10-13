@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { grantDirAclAsync } from '../win32-utils'
-import { loadWindowsSecurityAddon } from '../../shared/windows-security-addon'
+import { loadWindowsSecurity } from '../../shared/windows-security-addon'
 
 /**
  * Startup ACL grant for the win32 userData tree.
@@ -43,12 +43,6 @@ export type WindowsAclGrantResult =
 
 type EnsureOptions = {
   onDone?: (result: WindowsAclGrantResult) => void
-  /** Test seam — defaults to the native current-user grant. */
-  grantFn?: (directory: string) => Promise<void>
-  /** Test seam — defaults to the current user's SID. */
-  identity?: string | null
-  /** Test seam — the pre-native identity a marker may still record. */
-  legacyIdentity?: string
 }
 
 function readMarker(userDataPath: string): WindowsAclGrantMarker | null {
@@ -77,16 +71,10 @@ function writeMarker(userDataPath: string, identity: string): void {
   writeFileSync(join(userDataPath, WINDOWS_ACL_GRANT_MARKER_FILE), JSON.stringify(marker))
 }
 
+/** `*` + SID is the spelling markers written by the icacls-era grant already use. */
 function currentIdentity(): string | null {
-  const addon = loadWindowsSecurityAddon()
-  if (!addon) {
-    return null
-  }
-  try {
-    return `*${addon.currentUserSid()}`
-  } catch {
-    return null
-  }
+  const security = loadWindowsSecurity()
+  return 'userSid' in security ? `*${security.userSid}` : null
 }
 
 function childDirectories(userDataPath: string): string[] {
@@ -95,15 +83,12 @@ function childDirectories(userDataPath: string): string[] {
     .map((entry) => join(userDataPath, entry.name))
 }
 
-async function grantEach(
-  grantFn: (directory: string) => Promise<void>,
-  directories: string[]
-): Promise<string[]> {
+async function grantEach(directories: string[]): Promise<string[]> {
   const failures: string[] = []
   // Sequential: each grant already walks its subtree on a pool thread.
   for (const directory of directories) {
     try {
-      await grantFn(directory)
+      await grantDirAclAsync(directory)
     } catch (error) {
       // A partial grant is still strictly better than none; the per-write EPERM backstop covers stragglers.
       failures.push(`${directory}: ${error instanceof Error ? error.message : String(error)}`)
@@ -122,7 +107,7 @@ export function ensureWindowsUserDataAclGrant(
   options: EnsureOptions = {}
 ): void {
   const onDone = options.onDone ?? ((): void => undefined)
-  const identity = options.identity !== undefined ? options.identity : currentIdentity()
+  const identity = currentIdentity()
   if (!identity) {
     onDone({ mode: 'no-identity' })
     return
@@ -130,12 +115,10 @@ export function ensureWindowsUserDataAclGrant(
   const marker = readMarker(userDataPath)
   // Why the legacy name too: markers written before the native grant record USERNAME, and
   // re-granting would re-walk the whole tree once for nothing.
-  const legacyIdentity = options.legacyIdentity ?? process.env.USERNAME
-  if (marker && (marker.identity === identity || marker.identity === legacyIdentity)) {
+  if (marker && (marker.identity === identity || marker.identity === process.env.USERNAME)) {
     onDone({ mode: 'marker-hit' })
     return
   }
-  const grantFn = options.grantFn ?? grantDirAclAsync
   void (async () => {
     // Immediate children first: those explicit ACEs are the durable fix
     // (Chromium replaces the root DACL on every BrowserWindow construction,
@@ -143,7 +126,7 @@ export function ensureWindowsUserDataAclGrant(
     // directly under userData succeed before Chromium's first reset.
     let failures: string[]
     try {
-      failures = await grantEach(grantFn, [...childDirectories(userDataPath), userDataPath])
+      failures = await grantEach([...childDirectories(userDataPath), userDataPath])
     } catch (error) {
       failures = [error instanceof Error ? error.message : String(error)]
     }

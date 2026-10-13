@@ -16,10 +16,9 @@ import {
   removeArtifactCreateIntent
 } from './artifact-create-intent-store'
 import { runProcess, runProcessSync } from '@orca/process-host'
-import { __resetSecureFileWindowsUserSidForTests } from '../../shared/secure-file'
 import {
-  resetWindowsSecurityAddonForTests,
-  setWindowsSecurityAddonForTests
+  resetWindowsSecurityLoadForTests,
+  setWindowsSecurityForTests
 } from '../../shared/windows-security-addon'
 import {
   createFakeWindowsSecurity,
@@ -180,50 +179,52 @@ describe('artifact create intent store', () => {
     expect((await readdir(directory)).some((name) => name.endsWith('.tmp'))).toBe(false)
   })
 
-  it('hardens one Windows journal directory, in-process, with no per-file ACL work', async () => {
+  it('writes each Windows intent born restricted and relocks the directory once, off the write', async () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    __resetSecureFileWindowsUserSidForTests()
     const fake = createFakeWindowsSecurity()
-    setWindowsSecurityAddonForTests(fake)
+    setWindowsSecurityForTests(fake)
     try {
       const userDataPath = await createUserDataPath()
       const directory = join(userDataPath, 'profiles', 'local-profile', 'artifact-create-intents')
-      getOrCreateArtifactCreateIntent(
-        'local-profile',
-        userDataPath,
-        '/repo/report.html',
-        scope,
-        'key-a',
-        body
-      )
-      getOrCreateArtifactCreateIntent(
-        'local-profile',
-        userDataPath,
-        '/repo/other.html',
-        scope,
-        'key-b',
-        body
-      )
+      for (const [sourceKey, key] of [
+        ['/repo/report.html', 'key-a'],
+        ['/repo/other.html', 'key-b']
+      ]) {
+        getOrCreateArtifactCreateIntent('local-profile', userDataPath, sourceKey, scope, key, body)
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
-      // One rewrite across both intents, and only of the directory.
-      const writes = fake.calls.filter((call) => call.op !== 'get')
-      expect(writes).toEqual([
+      // Each intent is created already carrying the protected file DACL, then renamed into place.
+      const creates = fake.callsFor('create')
+      expect(creates).toHaveLength(2)
+      for (const create of creates) {
+        expect(create.path.startsWith(directory)).toBe(true)
+        expect(create.path.endsWith('.tmp')).toBe(true)
+        expect(create).toMatchObject({
+          sddl: `D:P(A;;FA;;;S-1-5-18)(A;;FA;;;S-1-5-32-544)(A;;FA;;;${FAKE_USER_SID})`
+        })
+      }
+      // The directory is relocked once, on the thread pool; nothing is rewritten synchronously.
+      expect(fake.callsFor('setAsync')).toEqual([
         {
-          op: 'set',
+          op: 'setAsync',
           path: directory,
-          // The child intent files rely on inheritance, so the directory rules must carry OI|CI.
           sddl: `D:P(A;OICI;FA;;;S-1-5-18)(A;OICI;FA;;;S-1-5-32-544)(A;OICI;FA;;;${FAKE_USER_SID})`
         }
       ])
+      expect(fake.callsFor('set')).toEqual([])
+      expect(
+        getArtifactCreateIntent('local-profile', userDataPath, '/repo/other.html', scope)
+      ).toMatchObject({ idempotencyKey: 'key-b' })
+      expect((await readdir(directory)).filter((name) => name.endsWith('.tmp'))).toEqual([])
       expect(runProcess).not.toHaveBeenCalled()
       expect(runProcessSync).not.toHaveBeenCalled()
     } finally {
       if (originalPlatform) {
         Object.defineProperty(process, 'platform', originalPlatform)
       }
-      resetWindowsSecurityAddonForTests()
-      __resetSecureFileWindowsUserSidForTests()
+      resetWindowsSecurityLoadForTests()
     }
   })
 

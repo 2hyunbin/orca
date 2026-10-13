@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,9 +6,7 @@ import { runProcess, runProcessSync } from '@orca/process-host'
 import {
   __getSecureFileHardeningCacheStateForTests,
   __resetSecureFileHardenedPathsForTests,
-  __resetSecureFileWindowsUserSidForTests,
   hardenExistingSecureFile,
-  hardenSecurePath,
   writeSecureFile
 } from './secure-file'
 import { mayAttemptHardening } from './secure-path-hardening-retry-budget'
@@ -16,7 +14,11 @@ import {
   setSecurePathHardeningReporter,
   type SecurePathHardeningReport
 } from './secure-path-hardening-report'
-import { setWindowsSecurityAddonForTests } from './windows-security-addon'
+import {
+  loadWindowsSecurity,
+  resetWindowsSecurityLoadForTests,
+  setWindowsSecurityForTests
+} from './windows-security-addon'
 import {
   createFakeWindowsSecurity,
   FAKE_USER_SID,
@@ -42,10 +44,10 @@ describe('Windows secure files through the native ACL addon', () => {
 
   beforeEach(() => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    __resetSecureFileWindowsUserSidForTests()
+    resetWindowsSecurityLoadForTests()
     __resetSecureFileHardenedPathsForTests()
     fake = createFakeWindowsSecurity()
-    setWindowsSecurityAddonForTests(fake)
+    setWindowsSecurityForTests(fake)
     reports = []
     setSecurePathHardeningReporter((entry) => reports.push(entry))
     vi.mocked(runProcess).mockReset()
@@ -57,8 +59,8 @@ describe('Windows secure files through the native ACL addon', () => {
     expect(runProcess).not.toHaveBeenCalled()
     expect(runProcessSync).not.toHaveBeenCalled()
     setSecurePathHardeningReporter(null)
-    setWindowsSecurityAddonForTests(null)
-    __resetSecureFileWindowsUserSidForTests()
+    setWindowsSecurityForTests(null)
+    resetWindowsSecurityLoadForTests()
     __resetSecureFileHardenedPathsForTests()
     if (originalPlatform) {
       Object.defineProperty(process, 'platform', originalPlatform)
@@ -97,7 +99,7 @@ describe('Windows secure files through the native ACL addon', () => {
     })
 
     it('reports false but still writes when the addon cannot load, and says so once', () => {
-      setWindowsSecurityAddonForTests(null)
+      setWindowsSecurityForTests(null)
       const dir = tempDir()
 
       for (const name of ['a.json', 'b.json', 'c.json']) {
@@ -107,20 +109,24 @@ describe('Windows secure files through the native ACL addon', () => {
       expect(reports.filter((entry) => entry.stage === 'addon')).toHaveLength(1)
     })
 
-    it('falls back to a plain write and reports false when the restricted create fails', () => {
+    // Never a truncating plain write of the secret: a failed create surfaces like any fs failure.
+    it('throws a failed restricted create with its Node error code and leaves no temp file', () => {
       const dir = tempDir()
       const targetPath = join(dir, 'secret.json')
-      const realCreate = fake.createFileWithDacl
-      fake.createFileWithDacl = (path, sddl, data) => {
-        realCreate(path, sddl, data)
-        rmSync(path)
-        throw new Error('CreateFileW failed with Win32 error 5')
+      writeFileSync(targetPath, 'previous')
+      fake.createFileWithDacl = () => {
+        throw Object.assign(new Error('CreateFileW failed with Win32 error 5'), {
+          winCode: 5,
+          syscall: 'CreateFileW'
+        })
       }
 
-      expect(writeSecureFile(targetPath, 'contents')).toBe(false)
+      expect(() => writeSecureFile(targetPath, 'contents')).toThrow(
+        expect.objectContaining({ code: 'EPERM' })
+      )
 
-      expect(readFileSync(targetPath, 'utf-8')).toBe('contents')
-      expect(reports).toContainEqual(expect.objectContaining({ stage: 'create' }))
+      expect(readFileSync(targetPath, 'utf-8')).toBe('previous')
+      expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([])
     })
 
     it('reports false when the filesystem drops the descriptor (FAT32, some shares)', () => {
@@ -137,16 +143,6 @@ describe('Windows secure files through the native ACL addon', () => {
       expect(reports).toContainEqual(
         expect.objectContaining({ stage: 'verify', detail: expect.stringContaining('no DACL') })
       )
-    })
-
-    it('retries the SID lookup on the next write instead of latching a failure', () => {
-      fake.sidFails = true
-      const targetPath = join(tempDir(), 'secret.json')
-      expect(writeSecureFile(targetPath, 'first')).toBe(false)
-
-      fake.sidFails = false
-      expect(writeSecureFile(targetPath, 'second')).toBe(true)
-      expect(reports).toContainEqual(expect.objectContaining({ stage: 'sid-lookup' }))
     })
 
     it('clears the read-path backoff once a write restricts the same path', () => {
@@ -204,6 +200,7 @@ describe('Windows secure files through the native ACL addon', () => {
         expect(writeSecureFile(join(dir, `secret-${i}.json`), 'contents')).toBe(true)
         expect(readFileSync(join(dir, `secret-${i}.json`), 'utf-8')).toBe('contents')
       }
+      await settle()
       expect(fake.callsFor('setAsync', dir)).toHaveLength(1)
 
       fake.releaseAsync()
@@ -374,12 +371,34 @@ describe('Windows secure files through the native ACL addon', () => {
     })
   })
 
-  it('reaches paths past MAX_PATH through the extended-length prefix', async () => {
+  it('hands the addon extended-length paths past MAX_PATH', () => {
     const longPath = `C:\\Users\\me\\.orca\\${'d'.repeat(300)}\\secret.json`
+    const loaded = loadWindowsSecurity()
 
-    hardenSecurePath(longPath, { isDirectory: false, platform: 'win32' })
+    expect('addon' in loaded && loaded.addon.getDaclSddl(longPath)).toBeTruthy()
+    expect(fake.callsFor('get')[0]?.path).toBe(`\\\\?\\${longPath}`)
+  })
+
+  // A grant reads the DACL and writes back a merge; racing a re-lock it could restore the broad one.
+  it('runs async DACL writes to the same path one after another', async () => {
+    const loaded = loadWindowsSecurity()
+    if (!('addon' in loaded)) {
+      throw new Error('fake not installed')
+    }
+    fake.holdAsync = true
+    const order: string[] = []
+    const relock = loaded.addon
+      .setDaclSddlAsync('C:\\Orca', 'D:P(A;OICI;FA;;;SY)')
+      .then(() => order.push('relock'))
+    const grant = loaded.addon
+      .grantAccessAsync('c:\\orca', FAKE_USER_SID, 0x1f01ff, { inheritable: true, replace: true })
+      .then(() => order.push('grant'))
     await settle()
 
-    expect(fake.callsFor('get')[0]?.path).toBe(`\\\\?\\${longPath}`)
+    // The grant waits for the parked re-lock on the same path, whatever its letter case.
+    expect(fake.callsFor('grantAsync')).toEqual([])
+    fake.releaseAsync()
+    await Promise.all([relock, grant])
+    expect(order).toEqual(['relock', 'grant'])
   })
 })

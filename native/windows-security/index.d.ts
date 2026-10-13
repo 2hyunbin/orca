@@ -4,7 +4,10 @@ export type WindowsSecurityError = Error & { winCode: number; syscall: string }
 export type GrantAccessOptions = {
   /** Children inherit the grant (OI|CI). Only meaningful on a directory. */
   inheritable: boolean
-  /** Replace the trustee's existing explicit allow rules (`icacls /grant:r`) instead of merging. */
+  /**
+   * SET_ACCESS: drop every explicit rule for the trustee, allow and deny, then grant exactly
+   * `accessMask`. Otherwise GRANT_ACCESS: add `accessMask` to what the trustee is already allowed.
+   */
   replace: boolean
 }
 
@@ -24,7 +27,10 @@ export declare function setDaclSddlAsync(path: string, sddl: string): Promise<vo
 /** Creates a NEW file already carrying the DACL in `sddl`, then writes `data` into it. */
 export declare function createFileWithDacl(path: string, sddl: string, data: Uint8Array): void
 
-/** Adds an allow rule for `sid` to the existing DACL, keeping its protection state. */
+/**
+ * Adds an allow rule for `sid` to the existing DACL, keeping its protection state; Windows orders
+ * the result canonically. A NULL DACL already allows everyone, so it is left untouched.
+ */
 export declare function grantAccess(
   path: string,
   sid: string,

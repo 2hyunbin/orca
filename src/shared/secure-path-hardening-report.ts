@@ -9,15 +9,7 @@ export type SecurePathHardeningReport = {
    * `settle` is the async lane's own callback failing, which is a caller bug rather than a host one;
    * `addon` is the native ACL module failing to load, reported once per process.
    */
-  stage:
-    | 'addon'
-    | 'sid-lookup'
-    | 'create'
-    | 'apply'
-    | 'verify'
-    | 'settle'
-    | 'throttled'
-    | 'recovered'
+  stage: 'addon' | 'apply' | 'verify' | 'settle' | 'throttled' | 'recovered'
   detail: string
 }
 

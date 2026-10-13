@@ -1,32 +1,7 @@
 import { writeFileSync } from 'node:fs'
-import { win32 as pathWin32 } from 'node:path'
-import {
-  reportSecurePathHardening,
-  type SecurePathHardeningReport
-} from './secure-path-hardening-report'
-import {
-  loadWindowsSecurityAddon,
-  windowsSecurityAddonLoadError,
-  type WindowsSecurityAddon
-} from './windows-security-addon'
+import { reportSecurePathHardening as report } from './secure-path-hardening-report'
+import { loadWindowsSecurity, type WindowsSecurity } from './windows-security-addon'
 import { findSecureDaclViolation, hardenedDaclSddl } from './windows-secure-dacl'
-
-type AclPlan = {
-  addon: WindowsSecurityAddon
-  /** Extended-length prefixed when needed. */
-  path: string
-  isDirectory: boolean
-  userSid: string
-  sddl: string
-}
-
-function report(
-  targetPath: string,
-  stage: SecurePathHardeningReport['stage'],
-  detail: string
-): void {
-  reportSecurePathHardening(targetPath, stage, detail)
-}
 
 /**
  * Applies the ACL without blocking. `onSettled` reports the real outcome, which the return value
@@ -37,10 +12,12 @@ export function bestEffortRestrictWindowsPath(
   isDirectory: boolean,
   onSettled?: (restricted: boolean) => void
 ): void {
-  const plan = planFor(targetPath, isDirectory)
+  const security = securityFor(targetPath)
   // Why a promise even for the synchronous verdicts: callers cache the path after this returns,
   // and a callback that fired first would have its eviction overwritten.
-  const outcome = plan ? restrictAsync(targetPath, plan) : Promise.resolve(false)
+  const outcome = security
+    ? restrictAsync(security, targetPath, isDirectory)
+    : Promise.resolve(false)
   // Why both arms and a terminal catch: a throw from `onSettled` itself must not become an
   // unhandled rejection, which Node's default turns into a main-process crash.
   void outcome
@@ -57,63 +34,74 @@ function reportSettlementThrow(targetPath: string, error: unknown): void {
   }
 }
 
-async function restrictAsync(targetPath: string, plan: AclPlan): Promise<boolean> {
+async function restrictAsync(
+  security: WindowsSecurity,
+  targetPath: string,
+  isDirectory: boolean
+): Promise<boolean> {
   // Verify first: a directory rewrite walks every descendant (seconds on a large userData), so
   // a path that already reads back correct must never pay it again.
-  if (verify(plan) === null) {
+  if (violationOf(security, targetPath, isDirectory) === null) {
     return true
   }
   try {
-    await plan.addon.setDaclSddlAsync(plan.path, plan.sddl)
+    await security.addon.setDaclSddlAsync(
+      targetPath,
+      hardenedDaclSddl(security.userSid, isDirectory)
+    )
   } catch (error) {
     report(targetPath, 'apply', String(error))
     return false
   }
-  return verifyAfterApply(targetPath, plan)
+  return verifyAfterApply(security, targetPath, isDirectory)
 }
 
 /** Verifies and, only when that fails, rewrites the DACL on the calling thread. */
 export function restrictWindowsPathSync(targetPath: string, isDirectory: boolean): boolean {
-  const plan = planFor(targetPath, isDirectory)
-  if (!plan) {
+  const security = securityFor(targetPath)
+  if (!security) {
     return false
   }
-  if (verify(plan) === null) {
+  if (violationOf(security, targetPath, isDirectory) === null) {
     return true
   }
   try {
-    plan.addon.setDaclSddl(plan.path, plan.sddl)
+    security.addon.setDaclSddl(targetPath, hardenedDaclSddl(security.userSid, isDirectory))
   } catch (error) {
     // Why not fatal: a failed apply must not crash the caller; false leaves the path retryable.
     report(targetPath, 'apply', String(error))
     return false
   }
-  return verifyAfterApply(targetPath, plan)
+  return verifyAfterApply(security, targetPath, isDirectory)
 }
 
 /**
  * Writes a NEW file that is restricted from the moment it exists, so its contents are never
  * readable under the directory's (possibly broader) inherited DACL. Returns whether the
- * restriction holds; when the addon cannot do it, the file is still written and this is false.
+ * restriction holds. Without the addon the file is written plainly and this is false; with it, a
+ * failed create throws like any other write failure.
  */
 export function writeRestrictedWindowsFile(targetPath: string, contents: string): boolean {
-  const plan = planFor(targetPath, false)
-  if (plan) {
-    try {
-      plan.addon.createFileWithDacl(plan.path, plan.sddl, Buffer.from(contents, 'utf-8'))
-      // Why read it back: FAT32 and some shares accept the descriptor and silently drop it.
-      return verifyAfterApply(targetPath, plan)
-    } catch (error) {
-      report(targetPath, 'create', String(error))
-    }
+  const security = securityFor(targetPath)
+  if (!security) {
+    writeFileSync(targetPath, contents, { encoding: 'utf-8', mode: 0o600 })
+    return false
   }
-  // Same bytes, inherited DACL: a real filesystem failure surfaces here as the usual Node error.
-  writeFileSync(targetPath, contents, { encoding: 'utf-8', mode: 0o600 })
-  return false
+  security.addon.createFileWithDacl(
+    targetPath,
+    hardenedDaclSddl(security.userSid, false),
+    Buffer.from(contents, 'utf-8')
+  )
+  // Why read it back: FAT32 and some shares accept the descriptor and silently drop it.
+  return verifyAfterApply(security, targetPath, false)
 }
 
-function verifyAfterApply(targetPath: string, plan: AclPlan): boolean {
-  const invalid = verify(plan)
+function verifyAfterApply(
+  security: WindowsSecurity,
+  targetPath: string,
+  isDirectory: boolean
+): boolean {
+  const invalid = violationOf(security, targetPath, isDirectory)
   if (invalid) {
     report(targetPath, 'verify', invalid)
     return false
@@ -122,86 +110,31 @@ function verifyAfterApply(targetPath: string, plan: AclPlan): boolean {
 }
 
 /** Why the DACL on disk is not acceptable, or null when it is. */
-function verify(plan: AclPlan): string | null {
-  let sddl: string
+function violationOf(
+  security: WindowsSecurity,
+  targetPath: string,
+  isDirectory: boolean
+): string | null {
   try {
-    sddl = plan.addon.getDaclSddl(plan.path)
+    return findSecureDaclViolation(
+      security.addon.getDaclSddl(targetPath),
+      security.userSid,
+      isDirectory
+    )
   } catch (error) {
     return String(error)
   }
-  return findSecureDaclViolation(sddl, {
-    userSid: plan.userSid,
-    isDirectory: plan.isDirectory,
-    readParentSddl: () => {
-      try {
-        return plan.addon.getDaclSddl(toExtendedLengthPath(pathWin32.dirname(plan.path)))
-      } catch {
-        return null
-      }
-    }
-  })
 }
 
-/**
- * The Win32 path APIs here are MAX_PATH-limited and fail past 259 characters; the extended
- * prefix is the documented escape.
- */
-function toExtendedLengthPath(targetPath: string): string {
-  if (targetPath.length < 260 || targetPath.startsWith('\\\\?\\')) {
-    return targetPath
+function securityFor(targetPath: string): WindowsSecurity | null {
+  const loaded = loadWindowsSecurity()
+  if (!('error' in loaded)) {
+    return loaded
   }
-  const normalized = pathWin32.normalize(targetPath)
-  if (/^[A-Za-z]:\\/.test(normalized)) {
-    return `\\\\?\\${normalized}`
+  // Once per process: a missing addon is a packaging fault, and every secure write would repeat it.
+  if (!loaded.reported) {
+    loaded.reported = true
+    report(targetPath, 'addon', loaded.error)
   }
-  if (normalized.startsWith('\\\\')) {
-    return `\\\\?\\UNC\\${normalized.slice(2)}`
-  }
-  return targetPath
-}
-
-let addonFailureReported = false
-
-function planFor(targetPath: string, isDirectory: boolean): AclPlan | null {
-  const addon = loadWindowsSecurityAddon()
-  if (!addon) {
-    // Once per process: a missing addon is a packaging fault, and every secure write would repeat it.
-    if (!addonFailureReported) {
-      addonFailureReported = true
-      report(targetPath, 'addon', windowsSecurityAddonLoadError() ?? 'not loaded')
-    }
-    return null
-  }
-  const userSid = getCurrentWindowsUserSid(addon, targetPath)
-  if (!userSid) {
-    return null
-  }
-  return {
-    addon,
-    path: toExtendedLengthPath(targetPath),
-    isDirectory,
-    userSid,
-    sddl: hardenedDaclSddl(userSid, isDirectory)
-  }
-}
-
-let cachedWindowsUserSid: string | null = null
-
-/** The token's user never changes in-process, so one successful read serves the process. */
-function getCurrentWindowsUserSid(addon: WindowsSecurityAddon, targetPath: string): string | null {
-  if (cachedWindowsUserSid) {
-    return cachedWindowsUserSid
-  }
-  try {
-    cachedWindowsUserSid = addon.currentUserSid()
-    return cachedWindowsUserSid
-  } catch (error) {
-    report(targetPath, 'sid-lookup', String(error))
-    return null
-  }
-}
-
-export function resetSecureFileWindowsUserSidForTests(): void {
-  cachedWindowsUserSid = null
-  addonFailureReported = false
+  return null
 }

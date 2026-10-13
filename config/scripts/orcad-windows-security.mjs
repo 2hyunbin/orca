@@ -3,14 +3,11 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
 import { ORCAD_WINDOWS_SECURITY_FILENAME } from '../../src/shared/orcad-artifacts.ts'
+import { windowsSecurityAddonOutput } from './build-windows-security-addon.mjs'
 
 const { PE_MACHINE, describePeMachine, readPeMachine } = createRequire(import.meta.url)(
   './windows-pe-machine.cjs'
 )
-
-export function orcadWindowsSecuritySource(root, arch) {
-  return join(root, '.build', 'windows-security', arch, ORCAD_WINDOWS_SECURITY_FILENAME)
-}
 
 /**
  * A Windows slot's ACL addon. Required, not optional: orcad's data-root privacy check fails
@@ -27,7 +24,7 @@ export function stageOrcadWindowsSecurity(
     return
   }
   const arch = target.slice('win32-'.length)
-  const source = orcadWindowsSecuritySource(root, arch)
+  const source = windowsSecurityAddonOutput(root, arch)
   if (!existsSync(source)) {
     if (host.platform !== 'win32') {
       throw new Error(

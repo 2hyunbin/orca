@@ -1,3 +1,5 @@
+import { setWindowsSecurityForTests } from '../../shared/windows-security-addon'
+import { createFakeWindowsSecurity } from '../../shared/windows-security-addon.test-fixture'
 import type {
   InstallDirPackageGrant,
   InstallDirPackageGrantOutcome,
@@ -27,15 +29,16 @@ export function savedDacl(aces: string[]): string {
 }
 
 /**
- * `saved` returns the target's extra ACEs, or a raw SDDL string; `null` makes the
- * read throw, as an unreadable target does.
+ * Installs a fake windows-security addon whose DACL reads come from `saved`: the target's extra
+ * ACEs, or a raw SDDL string; `null` makes the read throw, as an unreadable target does. Returns
+ * the paths read. Reset with resetWindowsSecurityLoadForTests().
  */
-export function fakeDaclReader(saved: (target: string) => string[] | string | null): {
-  readDaclSddl: (path: string) => string
+export function installFakeDacls(saved: (target: string) => string[] | string | null): {
   calls: string[]
 } {
   const calls: string[] = []
-  const readDaclSddl = (path: string): string => {
+  const fake = createFakeWindowsSecurity()
+  fake.getDaclSddl = (path: string): string => {
     calls.push(path)
     const aces = saved(path)
     if (aces === null) {
@@ -43,7 +46,8 @@ export function fakeDaclReader(saved: (target: string) => string[] | string | nu
     }
     return typeof aces === 'string' ? aces : savedDacl(aces)
   }
-  return { readDaclSddl, calls }
+  setWindowsSecurityForTests(fake)
+  return { calls }
 }
 
 /** Records each grant pass; `reply` decides its outcome (default: success). */

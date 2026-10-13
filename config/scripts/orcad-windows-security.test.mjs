@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
-import { orcadWindowsSecuritySource, stageOrcadWindowsSecurity } from './orcad-windows-security.mjs'
+import { windowsSecurityAddonOutput } from './build-windows-security-addon.mjs'
+import { stageOrcadWindowsSecurity } from './orcad-windows-security.mjs'
 
 const roots = []
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })))
@@ -22,7 +23,7 @@ function fixture() {
   const output = join(root, 'output')
   mkdirSync(output)
   const write = (arch, machine) => {
-    const source = orcadWindowsSecuritySource(root, arch)
+    const source = windowsSecurityAddonOutput(root, arch)
     mkdirSync(dirname(source), { recursive: true })
     writeFileSync(source, peBytes(machine))
     return source
