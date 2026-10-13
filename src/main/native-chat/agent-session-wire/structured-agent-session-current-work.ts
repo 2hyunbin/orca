@@ -97,7 +97,7 @@ export function structuredAgentSessionReplacedRuntimeEnded(
 }
 
 /** `StructuredAgentSessionCurrentWork.handsOver`, for a reader that needs no other answer. */
-export function structuredAgentSessionHandsOver(
+function structuredAgentSessionHandsOver(
   journal: Pick<AgentSessionJournal, 'wroteBeforeOpen'>,
   submission: Pick<
     AgentJournalSubmission,

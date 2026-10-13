@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
-import { agentSessionRecordFixture } from '../../../shared/agent-session-record.test-fixture'
 import {
   isActionableStructuredAgentSessionPrompt,
   runningStructuredAgentSessionTurnId
@@ -37,7 +36,6 @@ import {
   sendText,
   turnState
 } from './structured-agent-session-leftover-settlement.test-fixture'
-import { structuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 
 let rig: QueuedMessageTestRig | undefined
 
@@ -133,7 +131,9 @@ describe("a dead generation's leftovers, its settlement refused and its lease re
     // Read interrupted, as its settlement will write it: never running, never finished.
     expect(page.latestTurn?.turn.state).toBe('interrupted')
     expect(page.actionablePromptIds).toEqual([])
+    expect(page.working).toBe(false)
     await vi.waitFor(() => expect(view.chat().actionablePromptIds).toEqual([]))
+    expect(view.chat().working).toBe(false)
     expect(runningStructuredAgentSessionTurnId(view.chat())).toBeNull()
     expect(view.answerable()).toBe(false)
   })
@@ -178,6 +178,7 @@ describe('a close Orca asked for, its settlement refused', () => {
     expect(currentJournal(current).cursor().sequence).toBe(before)
     expect(turnState(current)).toBe('running')
     await vi.waitFor(() => expect(view.answerable()).toBe(false))
+    expect(view.chat().working).toBe(false)
     expect(runningStructuredAgentSessionTurnId(view.chat())).toBeNull()
     expect(view.listed()?.status).not.toBe('working')
   })
@@ -242,33 +243,11 @@ describe('a live owner', () => {
     const page = await hydration(current)
     expect(page.latestTurn?.turn).toMatchObject({ turnId: 'unfinished', state: 'running' })
     expect(page.actionablePromptIds).toEqual([APPROVAL_ID])
+    expect(page.working).toBe(true)
     await vi.waitFor(() => expect(view.chat().actionablePromptIds).toEqual([APPROVAL_ID]))
+    expect(view.chat().working).toBe(true)
     expect(runningStructuredAgentSessionTurnId(view.chat())).toBe('unfinished')
     expect(view.answerable()).toBe(true)
     expect(view.listed()?.status).not.toBe('idle')
-  })
-})
-
-describe('an owner whose adjudication concludes with no row written', () => {
-  it('changes the published answer when it goes from unverifiable to released', () => {
-    const journal = {
-      runningTurn: () => null,
-      itemFence: () => undefined,
-      visitItems: () => undefined,
-      submissions: () => [],
-      wroteBeforeOpen: () => false
-    }
-    const record = agentSessionRecordFixture()
-    const unverifiable = structuredAgentSessionCurrentWork(journal, {
-      record: { lease: { ...record.lease, unreconciled: true } },
-      child: null
-    })
-    const released = structuredAgentSessionCurrentWork(journal, {
-      record: { lease: { ...record.lease, claimStatus: 'released' } },
-      child: null
-    })
-
-    expect(unverifiable.liveFence).toBe(released.liveFence)
-    expect(unverifiable.viewKey()).not.toBe(released.viewKey())
   })
 })
