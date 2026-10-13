@@ -30,7 +30,8 @@ import type {
 } from './structured-agent-session-host-types'
 import {
   oldestQueuedSubmission,
-  recordStructuredAgentSessionStartFailure
+  recordStructuredAgentSessionStartFailure,
+  refusedStructuredAgentSessionStart
 } from './structured-agent-session-start-failure-row'
 import { failedProviderChildStart } from './structured-agent-session-provider-child'
 import { handOverSubmission } from './structured-agent-session-turns'
@@ -148,13 +149,10 @@ export class StructuredAgentSessionDeliveryLoop {
           return
         }
         if (prepared.readiness) {
-          if ((await prepared.readiness.wait()) === 'ready') {
-            // Re-derive launch permission and queued work after the wait released the lane.
-            continue
-          }
+          await prepared.readiness.wait()
         }
         const handed = await this.deps.serialize(sessionId, () =>
-          this.handOver(sessionId, prepared.awaited)
+          this.handOver(sessionId, prepared.awaited, prepared.readiness !== null)
         )
         if (handed === 'stop') {
           return
@@ -231,7 +229,8 @@ export class StructuredAgentSessionDeliveryLoop {
 
   private async handOver(
     sessionId: string,
-    awaited: StructuredAgentSessionProviderChildIdentity | null
+    awaited: StructuredAgentSessionProviderChildIdentity | null,
+    waited: boolean
   ): Promise<Step> {
     const session = this.deps.sessions.get(sessionId)
     if (!session || this.disposed) {
@@ -271,6 +270,16 @@ export class StructuredAgentSessionDeliveryLoop {
     if (!next) {
       return this.stop(sessionId)
     }
+    if (waited) {
+      // Re-check launch permission only after proving the awaited child still exists.
+      const ready = await this.deps.ensureProviderChild(sessionId, next.clientMessageId)
+      if (!ready.ok) {
+        return this.fail(sessionId, this.refusedStart(sessionId, ready))
+      }
+      if (session.child !== awaitedChild) {
+        return 'continue'
+      }
+    }
     await handOverSubmission(
       {
         sessionId,
@@ -289,24 +298,8 @@ export class StructuredAgentSessionDeliveryLoop {
   }
 
   /** A start the session refused, as the failure every queued message it was for is rejected with. */
-  private refusedStart(
-    sessionId: string,
-    { refusal, diagnostic, argumentProblem, expired }: RefusedStart
-  ): StartFailure {
-    if (expired) {
-      return { startKey: null, cause: { failure: agentSessionFailureFact('hostStopped') } }
-    }
-    // A conversation no agent ever ran, such as a cleared chat's, failed to start, not restart.
-    const newSession = this.deps.record(sessionId)?.providerHandleChain.length === 0
-    return {
-      startKey: null,
-      cause: {
-        refusal,
-        ...(diagnostic ? { diagnostic } : {}),
-        ...(argumentProblem ? { argumentProblem } : {}),
-        ...(newSession ? { newSession: true as const } : {})
-      }
-    }
+  private refusedStart(sessionId: string, refused: RefusedStart): StartFailure {
+    return refusedStructuredAgentSessionStart(this.deps.record(sessionId), refused)
   }
 
   private async fail(sessionId: string, failure: StartFailure): Promise<'stop'> {
