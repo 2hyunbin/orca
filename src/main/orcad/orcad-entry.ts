@@ -239,6 +239,8 @@ async function startOrcadRuntime(
     statusHooksEnabled: isAgentStatusHooksEnabled(profileStore.getSettings())
   })
 
+  // Before hook reconcile, the daemon and the runtime: each reads or inherits this env.
+  await loginEnvironment
   startOrcadManagedAgentHooks(
     profileStore,
     (enabled) => agentHookServer.setStatusHooksEnabled(enabled),
@@ -248,8 +250,6 @@ async function startOrcadRuntime(
   // Why before the runtime and the PTY handlers: `setLocalPtyProvider` installs the daemon
   // adapter as THE local provider, and the registry's contract is that it lands before
   // registerPtyHandlers so the IPC layer routes through the daemon from the first call.
-  // Before the daemon and the runtime: both spawn children that inherit this env.
-  await loginEnvironment
   await startOrcadDaemon()
 
   // Why a holder and not a direct reference: the index is installed after the runtime is

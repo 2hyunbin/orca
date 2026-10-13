@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
+
+const loginShell = vi.hoisted(() => ({
+  resolveLoginShellEnvironment: vi.fn(async (_options?: { env?: NodeJS.ProcessEnv }) => ({}))
+}))
+vi.mock('../startup/login-shell-environment', () => loginShell)
+
 import {
   adoptWslHostLoginEnvironment,
   wslHostLoginEnvironmentOverlay
@@ -47,6 +53,13 @@ describe('adoptWslHostLoginEnvironment', () => {
       SSH_AUTH_SOCK: '/home/u/.ssh/agent.sock',
       GNUPGHOME: '/home/u/.gnupg',
       https_proxy: 'http://proxy.internal:3128'
+    })
+  })
+
+  it('probes with the PATH probe marker, so an rc that skips `exec tmux` for it still exports', async () => {
+    await adoptWslHostLoginEnvironment({ HOME: '/home/u' }, undefined, () => true)
+    expect(loginShell.resolveLoginShellEnvironment).toHaveBeenCalledWith({
+      env: { HOME: '/home/u', ORCA_SHELL_PATH_PROBE: '1' }
     })
   })
 

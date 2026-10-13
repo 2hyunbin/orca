@@ -5,6 +5,7 @@
  * Terminals need none of it: they are login shells and source the rc files themselves.
  */
 import { isWslHostOrcadProcess } from '../ipc/wsl-guest-windows-drive-path'
+import { PROBE_MARKER_ENV_VAR } from '../startup/hydrate-shell-path'
 import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
 
 // Why an allowlist: the snapshot is the whole rc environment, and PATH has its own hydration with
@@ -15,6 +16,7 @@ export const WSL_HOST_LOGIN_ENV_NAMES: readonly string[] = [
   'GIT_SSH',
   'GIT_SSH_COMMAND',
   'GIT_SSH_VARIANT',
+  'GIT_CONFIG_GLOBAL',
   'GNUPGHOME',
   'HTTPS_PROXY',
   'https_proxy',
@@ -37,9 +39,13 @@ export const WSL_HOST_LOGIN_ENV_NAMES: readonly string[] = [
   'GITHUB_ENTERPRISE_TOKEN',
   'GH_CONFIG_DIR',
   'GITLAB_TOKEN',
+  'GITLAB_ACCESS_TOKEN',
+  'OAUTH_TOKEN',
   'GITLAB_HOST',
   'GL_HOST',
   'GLAB_CONFIG_DIR',
+  'GLAB_PROXY',
+  'GLAB_CA_CERT',
   'XDG_CONFIG_HOME',
   'XDG_RUNTIME_DIR'
 ]
@@ -65,7 +71,9 @@ export function wslHostLoginEnvironmentOverlay(
  */
 export async function adoptWslHostLoginEnvironment(
   env: NodeJS.ProcessEnv = process.env,
-  resolveShellEnv: () => Promise<NodeJS.ProcessEnv> = () => resolveLoginShellEnvironment(),
+  // The PATH probe's marker, so an rc that skips `exec tmux` for that probe skips it here too.
+  resolveShellEnv: () => Promise<NodeJS.ProcessEnv> = () =>
+    resolveLoginShellEnvironment({ env: { ...env, [PROBE_MARKER_ENV_VAR]: '1' } }),
   isWslHost: () => boolean = () => isWslHostOrcadProcess(env)
 ): Promise<string[]> {
   if (!isWslHost()) {
