@@ -206,7 +206,7 @@ describe('artifact create intent store', () => {
         })
       }
       // The directory is relocked once, on the thread pool; nothing is rewritten synchronously.
-      expect(fake.callsFor('setAsync')).toEqual([
+      expect(fake.callsFor('setAsync')).toMatchObject([
         {
           op: 'setAsync',
           path: directory,

@@ -6,10 +6,9 @@ export type SecurePathHardeningReport = {
   targetPath: string
   /**
    * `throttled` and `recovered` mark entering and leaving the rate-limited degraded state;
-   * `settle` is the async lane's own callback failing, which is a caller bug rather than a host one;
    * `addon` is the native ACL module failing to load, reported once per process.
    */
-  stage: 'addon' | 'apply' | 'verify' | 'settle' | 'throttled' | 'recovered'
+  stage: 'addon' | 'apply' | 'verify' | 'throttled' | 'recovered'
   detail: string
 }
 
@@ -40,5 +39,9 @@ export function reportSecurePathHardening(
   stage: SecurePathHardeningReport['stage'],
   detail: string
 ): void {
-  reportEntry({ targetPath, stage, detail: detail.trim().slice(0, 500) })
+  try {
+    reportEntry({ targetPath, stage, detail: detail.trim().slice(0, 500) })
+  } catch {
+    // A throwing caller-installed reporter must not break hardening; this diagnostic is lost.
+  }
 }

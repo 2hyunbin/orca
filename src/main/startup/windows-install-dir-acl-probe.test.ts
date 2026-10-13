@@ -188,13 +188,9 @@ describe('probeWindowsInstallDirAcl', () => {
     expect(isInstallDirAclPoisonVerdict(verdict)).toBe(false)
   })
 
-  // A skipped ACE could be the grant that satisfies an orphan, so nothing partial may count.
-  it.each([
-    ['an empty read', ''],
-    ['a truncated ACE', 'D:AI(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)(A;;0x1200a9)'],
-    ['a non-DACL prefix', 'O:BAD:AI(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)']
-  ])('keeps %s unreadable rather than reading what parses', async (_label, saved) => {
-    installFakeDacls(() => saved)
+  // A NULL DACL grants everyone everything, so it says nothing about which package grant applies.
+  it('keeps a NULL DACL unreadable rather than reading it as clean', async () => {
+    installFakeDacls(() => 'D:NO_ACCESS_CONTROL')
     const data = await probe({ fileExists: () => false })
     expect(data).toMatchObject({ status: 'failed', reason: 'all-targets-unreadable' })
   })

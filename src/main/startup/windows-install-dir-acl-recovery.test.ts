@@ -30,16 +30,15 @@ import {
   WINDOWS_INSTALL_DIR_ACL_REPAIR_MARKER_FILE,
   WINDOWS_INSTALL_DIR_ACL_REPAIR_SCHEME_VERSION
 } from './windows-install-dir-package-acl-repair'
-import type {
-  InstallDirPackageGrant,
-  InstallDirPackageGrantOutcome,
-  InstallDirPackageGrantPass
-} from './windows-install-dir-package-acl-grant'
+import type { InstallDirPackageGrantOutcome } from './windows-install-dir-package-acl-grant'
 import {
   ALL_PACKAGES_ACE,
+  grantsFrom,
   installFakeDacls,
   ORPHAN_PACKAGE_ACE,
-  RESTRICTED_PACKAGES_ACE
+  RESTRICTED_PACKAGES_ACE,
+  type InstallDirPackageGrant,
+  type InstallDirPackageGrantPass
 } from './windows-install-dir-acl.test-fixture'
 
 const INSTALL_DIR = 'C:\\Users\\neil\\AppData\\Local\\Programs\\orca'
@@ -80,7 +79,7 @@ function probeThenRecover(
           installDir: INSTALL_DIR,
           appVersion: APP_VERSION,
           userDataPath: mkdtempSync(join(tmpdir(), 'orca-acl-recovery-')),
-          grantFn,
+          grants: grantsFrom(grantFn),
           recordBreadcrumb: () => undefined
         })
         // Longer than the repair's own setImmediate hop, so a repair that was
@@ -133,10 +132,10 @@ describe('startWindowsInstallDirAclRepairIfPoisoned', () => {
             installDir: INSTALL_DIR,
             appVersion: APP_VERSION,
             userDataPath: mkdtempSync(join(tmpdir(), 'orca-acl-recovery-')),
-            grantFn: async (_installDir, pass) => {
+            grants: grantsFrom(async (_installDir, pass) => {
               collected.push(pass)
               throw new Error('unreachable')
-            },
+            }),
             recordBreadcrumb: () => undefined
           })
           setTimeout(() => resolve(collected), 25)
@@ -183,7 +182,7 @@ describe('describeInstallDirAclPoison', () => {
         installDir: INSTALL_DIR,
         appVersion: APP_VERSION,
         userDataPath: mkdtempSync(join(tmpdir(), 'orca-acl-recovery-')),
-        grantFn: () => new Promise<never>(() => undefined),
+        grants: grantsFrom(() => new Promise<never>(() => undefined)),
         recordBreadcrumb: () => undefined
       }
     )
@@ -203,7 +202,7 @@ function recoveryOptions(userDataPath: string, run: Runner): WindowsInstallDirAc
     installDir: INSTALL_DIR,
     appVersion: APP_VERSION,
     userDataPath,
-    grantFn: run,
+    grants: grantsFrom(run),
     recordBreadcrumb: () => undefined
   }
 }

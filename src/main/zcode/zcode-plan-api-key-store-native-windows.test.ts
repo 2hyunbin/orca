@@ -63,14 +63,10 @@ vi.mock('../../shared/secure-path-windows-acl', async (original) => {
       }
       return state.reject ? false : outcome
     },
-    bestEffortRestrictWindowsPath: (
-      path: string,
-      directory: boolean,
-      settled?: (restricted: boolean) => void
-    ) =>
-      real.bestEffortRestrictWindowsPath(path, directory, (restricted) => {
+    restrictWindowsDirectory: (path: string) =>
+      real.restrictWindowsDirectory(path).then((restricted) => {
         state.directories.push(restricted)
-        settled?.(restricted)
+        return restricted
       })
   }
 })

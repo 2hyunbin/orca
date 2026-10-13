@@ -16,15 +16,18 @@ import {
   setSecurePathHardeningReporter,
   type SecurePathHardeningReport
 } from './secure-path-hardening-report'
-import { bestEffortRestrictWindowsPath, restrictWindowsPathSync } from './secure-path-windows-acl'
+import { restrictWindowsPathSync } from './secure-path-windows-acl'
 import {
   loadWindowsSecurity,
   resetWindowsSecurityLoadForTests,
   setWindowsSecurityForTests,
-  type WindowsSecurityAddon
+  type WindowsSecurity
 } from './windows-security-addon'
-import { findSecureDaclViolation } from './windows-secure-dacl'
-import { readDaclOf } from './windows-dacl.test-fixture'
+import {
+  CONTAINER_INHERIT_ACE,
+  findSecureDaclViolation,
+  OBJECT_INHERIT_ACE
+} from './windows-secure-dacl'
 import { removeTreeSync } from './windows-transient-lock-removal'
 
 /**
@@ -37,19 +40,21 @@ import { removeTreeSync } from './windows-transient-lock-removal'
 const describeOnWindows = process.platform === 'win32' ? describe : describe.skip
 
 describeOnWindows('Windows secure paths against a real filesystem', () => {
-  let addon: WindowsSecurityAddon
+  let addon: WindowsSecurity['addon']
   let sid: string
   let root: string
   /** A relocated data root: `C:\orca-…` inherits BUILTIN\Users and Authenticated Users from C:\. */
   let relocatedRoot: string
 
-  const daclOf = (path: string) => readDaclOf(addon, path, sid)
+  const daclOf = (path: string) => addon.getDaclAces(path)
   const sidsOf = (path: string) => (daclOf(path)?.aces ?? []).map((ace) => ace.sid).sort()
+  const INHERITABLE = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE
+  const INHERITED_ACE = 0x10
   const ORCA_PRINCIPALS = () => ['S-1-5-18', 'S-1-5-32-544', sid].sort()
 
   beforeAll(() => {
     const loaded = loadWindowsSecurity()
-    if (!('addon' in loaded)) {
+    if ('error' in loaded) {
       throw new Error(`the windows-security addon did not load: ${loaded.error}`)
     }
     addon = loaded.addon
@@ -88,7 +93,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
   }
 
   it('starts from a relocated root that really is broader than Orca allows', () => {
-    const verdict = findSecureDaclViolation(addon.getDaclSddl(relocatedRoot), sid, true)
+    const verdict = findSecureDaclViolation(addon.getDaclAces(relocatedRoot), sid, true)
     expect(verdict).toMatch(/unexpected rule for S-1-5-(11|32-545)/)
   })
 
@@ -100,7 +105,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
 
     expect(restrictWindowsPathSync(file, false)).toBe(true)
 
-    expect(daclOf(file)?.isProtected).toBe(true)
+    expect(daclOf(file)?.protected).toBe(true)
     expect(sidsOf(file)).toEqual(ORCA_PRINCIPALS())
   })
 
@@ -110,11 +115,11 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
 
     expect(restrictWindowsPathSync(dir, true)).toBe(true)
 
-    expect(daclOf(dir)?.aces.every((ace) => ace.flags.join('') === 'OICI')).toBe(true)
+    expect(daclOf(dir)?.aces.every((ace) => ace.flags === INHERITABLE)).toBe(true)
     const child = join(dir, 'plain.json')
     writeFileSync(child, '{}')
     expect(sidsOf(child)).toEqual(ORCA_PRINCIPALS())
-    expect(daclOf(child)?.aces.every((ace) => ace.flags.includes('ID'))).toBe(true)
+    expect(daclOf(child)?.aces.every((ace) => (ace.flags & INHERITED_ACE) !== 0)).toBe(true)
   })
 
   it.each([
@@ -127,7 +132,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
 
     expect(restrictWindowsPathSync(dir, true)).toBe(true)
 
-    expect(daclOf(dir)?.aces.every((ace) => ace.flags.join('') === 'OICI')).toBe(true)
+    expect(daclOf(dir)?.aces.every((ace) => ace.flags === INHERITABLE)).toBe(true)
     expect(() => writeFileSync(join(dir, 'child.json'), '{}')).not.toThrow()
   })
 
@@ -146,13 +151,13 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
     const file = join(root, 'icacls-era.json')
     writeFileSync(file, '{}')
     addon.setDaclSddl(file, `D:PAI(A;;FA;;;BA)(A;;FA;;;SY)(A;;FA;;;${sid})`)
-    const before = addon.getDaclSddl(file)
+    const before = addon.getDaclAces(file)
     const writes = countingAddon()
 
     expect(restrictWindowsPathSync(file, false)).toBe(true)
 
     expect(writes.count).toBe(0)
-    expect(addon.getDaclSddl(file)).toBe(before)
+    expect(addon.getDaclAces(file)).toEqual(before)
   })
 
   it.each([
@@ -193,25 +198,15 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
     expect(reports).toContainEqual(expect.objectContaining({ stage: 'apply' }))
   })
 
-  it('reports rather than crashes when the settlement callback throws', async () => {
-    const reports: SecurePathHardeningReport[] = []
-    setSecurePathHardeningReporter((entry) => reports.push(entry))
-    const file = join(root, 'settle.json')
-    writeFileSync(file, '{}')
-
-    bestEffortRestrictWindowsPath(file, false, () => {
+  // The reporter is a caller-installed hook; one that throws must not take hardening down with it.
+  it('keeps hardening alive when the installed reporter throws', () => {
+    setSecurePathHardeningReporter(() => {
       throw new Error('caller bug')
     })
-    await vi.waitFor(() =>
-      expect(reports).toContainEqual(expect.objectContaining({ stage: 'settle' }))
-    )
+
+    expect(restrictWindowsPathSync(join(root, 'missing-reporter.json'), false)).toBe(false)
   })
 
-  /**
-   * The guarantee the icacls lane bought with a blocking spawn per write: the credential is never
-   * readable under the directory's broader DACL. A second thread reads the DACL of every staged
-   * and published file while the main thread writes, as another account racing for a handle would.
-   */
   it('never exposes a staged or published credential under the relocated root', async () => {
     const dir = join(relocatedRoot, 'race')
     mkdirSync(dir)
@@ -234,14 +229,14 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
     expect(restricted).toBeGreaterThan(50)
     expect(observed.samples).toBeGreaterThan(50)
     const broad = Object.keys(observed.distinct).filter(
-      (sddl) => findSecureDaclViolation(sddl, sid, false) !== null
+      (dacl) => findSecureDaclViolation(JSON.parse(dacl), sid, false) !== null
     )
     console.log(
       `[live-acl] ${restricted} writes, ${observed.samples} DACL samples, ` +
         `${Object.keys(observed.distinct).length} distinct, ${broad.length} broad`
     )
     expect(broad).toEqual([])
-    expect(daclOf(target)?.isProtected).toBe(true)
+    expect(daclOf(target)?.protected).toBe(true)
   })
 
   // A relock walks every descendant (~2 s on a 29k-entry userData), so it must never hold up a
@@ -260,7 +255,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
     writeSecureFile(join(dir, 'second.json'), '{}')
 
     const relockStartedAt = performance.now()
-    await vi.waitFor(() => expect(daclOf(dir)?.isProtected).toBe(true), {
+    await vi.waitFor(() => expect(daclOf(dir)?.protected).toBe(true), {
       timeout: 60_000,
       interval: 20
     })
@@ -286,6 +281,7 @@ describeOnWindows('Windows secure paths against a real filesystem', () => {
     const counts = { count: 0, asyncCount: 0 }
     setWindowsSecurityForTests({
       ...addon,
+      currentUserSid: () => sid,
       setDaclSddl: (path, sddl) => {
         counts.count += 1
         addon.setDaclSddl(path, sddl)
@@ -320,7 +316,7 @@ function observeDacls(
       try { names = readdirSync(workerData.dir) } catch {}
       for (const name of names) {
         try {
-          const sddl = addon.getDaclSddl(join(workerData.dir, name))
+          const sddl = JSON.stringify(addon.getDaclAces(join(workerData.dir, name)))
           samples += 1
           distinct[sddl] = (distinct[sddl] || 0) + 1
         } catch {}

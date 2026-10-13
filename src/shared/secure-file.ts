@@ -22,7 +22,7 @@ import {
   recordHardeningOutcome
 } from './secure-path-hardening-retry-budget'
 import {
-  bestEffortRestrictWindowsPath,
+  restrictWindowsDirectory,
   restrictWindowsPathSync,
   writeRestrictedWindowsFile
 } from './secure-path-windows-acl'
@@ -53,7 +53,7 @@ function hardenWindowsDirectoryOnce(dirPath: string): void {
   // Cache before the ACL lands so concurrent writes don't restorm; a failure drops it, under the retry budget.
   hardenedDirectoryPathsThisProcess.set(dirPath, true)
   // Why async: a directory rewrite propagates to every descendant, ~2 s on a 29k-entry userData.
-  bestEffortRestrictWindowsPath(dirPath, true, (restricted) => {
+  void restrictWindowsDirectory(dirPath).then((restricted) => {
     recordHardeningOutcome(dirPath, restricted)
     if (!restricted) {
       hardenedDirectoryPathsThisProcess.delete(dirPath)
@@ -111,9 +111,11 @@ export function writeDurableSecureJsonFile(targetPath: string, value: unknown): 
 /**
  * Writes `contents` and restricts the result to the current user.
  *
- * Returns whether the restriction actually took. Hardening stays best-effort — it fails
- * legitimately on FAT32, network paths and restricted tokens, and must not break a write — but
- * the outcome is now reported rather than assumed, so a caller storing a credential can react.
+ * Returns whether the restriction actually took, so a caller storing a credential can react. On
+ * Windows with the ACL addon loaded the file is created already restricted, and a failed create
+ * throws like any write failure (fail closed). Only when the addon cannot load is the file written
+ * plainly, best-effort, and reported as unrestricted. A restriction the filesystem drops (FAT32,
+ * some shares) also reports false.
  *
  * An optional publication predicate runs after staged hardening; false discards the staged file.
  *

@@ -19,13 +19,7 @@ const ROOT = path.resolve(import.meta.dirname, '..', '..')
 const BASELINE_PATH = 'config/main-sync-spawn-baseline.txt'
 const SCAN_DIRECTORIES = ['src/main', 'src/shared']
 const PROCESS_ADVICE = 'use runProcess or spawnProcess from @orca/process-host'
-const SECURE_ADVICE = `no async secure writer exists yet (a directory rewrite or grant can block on its whole subtree); keep the synchronous one and raise this file's count in ${BASELINE_PATH} (or add a row), never a plain write (it loses the Windows ACL hardening)`
-const SECURE_WRITERS = [
-  'writeSecureFile',
-  'writeSecureJsonFile',
-  'writeDurableSecureJsonFile',
-  'writeSecureJsonFileWithinLimit'
-]
+const SECURE_ADVICE = `rewrites a DACL on the calling thread, and a directory rewrite blocks on its whole subtree; use restrictWindowsDirectory for a directory, or raise this file's count in ${BASELINE_PATH} (or add a row)`
 // Gated modules (package names, or repo-relative paths without extension, re-exporters included)
 // and the advice for each gated function they export.
 const GATED_FAMILIES = [
@@ -34,10 +28,6 @@ const GATED_FAMILIES = [
     advice: { execFileSync: PROCESS_ADVICE, spawnSync: PROCESS_ADVICE, execSync: PROCESS_ADVICE }
   },
   { modules: ['@orca/process-host'], advice: { runProcessSync: PROCESS_ADVICE } },
-  {
-    modules: ['src/shared/secure-file', 'src/shared/bounded-secure-json-file'],
-    advice: Object.fromEntries(SECURE_WRITERS.map((name) => [name, SECURE_ADVICE]))
-  },
   {
     modules: ['src/shared/secure-path-windows-acl'],
     advice: { restrictWindowsPathSync: SECURE_ADVICE }
@@ -72,8 +62,8 @@ const FALLBACK_OPERATORS = new Set([ts.SyntaxKind.QuestionQuestionToken, ts.Synt
 const BASELINE_HEADER = [
   '# Synchronous child-process launches in production src/main and src/shared, per file: uses of',
   '# execFileSync/spawnSync/execSync, runProcessSync and the repo sync wrappers listed in',
-  '# config/scripts/check-main-sync-spawn-ratchet.mjs (secure writes and ACL grants, which can block',
-  '# on a whole directory subtree).',
+  '# config/scripts/check-main-sync-spawn-ratchet.mjs (synchronous ACL rewrites and grants, which',
+  '# can block on a whole directory subtree).',
   '# Some entries run in the daemon or orcad process, or are test harnesses outside the test-path',
   '# conventions. This is a RATCHET: counts may only go DOWN.',
   '# Prune after removing launches: pnpm check:main-sync-spawn-ratchet --prune'

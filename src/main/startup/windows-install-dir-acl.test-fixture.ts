@@ -1,14 +1,16 @@
 import { setWindowsSecurityForTests } from '../../shared/windows-security-addon'
-import { createFakeWindowsSecurity } from '../../shared/windows-security-addon.test-fixture'
+import {
+  createFakeWindowsSecurity,
+  daclFromSddl
+} from '../../shared/windows-security-addon.test-fixture'
 import type {
-  InstallDirPackageGrant,
   InstallDirPackageGrantOutcome,
-  InstallDirPackageGrantPass
+  InstallDirPackageGrants
 } from './windows-install-dir-package-acl-grant'
 
 /**
  * Shared ACL doubles for the install-dir DACL probe, repair, and recovery tests.
- * ACEs are SDDL, the shape the native `getDaclSddl` returns (`D:AI(...)(...)`).
+ * ACEs are written as SDDL for readability; the fake hands the probe their structure.
  */
 
 export const ORPHAN_PACKAGE_ACE = '(A;OICI;0x1200a9;;;S-1-15-2-999-999-999)'
@@ -38,16 +40,32 @@ export function installFakeDacls(saved: (target: string) => string[] | string | 
 } {
   const calls: string[] = []
   const fake = createFakeWindowsSecurity()
-  fake.getDaclSddl = (path: string): string => {
+  fake.getDaclAces = (addonPath: string) => {
+    const path = addonPath.startsWith('\\\\?\\') ? addonPath.slice(4) : addonPath
     calls.push(path)
     const aces = saved(path)
     if (aces === null) {
       throw new Error('GetNamedSecurityInfoW failed with Win32 error 5')
     }
-    return typeof aces === 'string' ? aces : savedDacl(aces)
+    return daclFromSddl(typeof aces === 'string' ? aces : savedDacl(aces))
   }
   setWindowsSecurityForTests(fake)
   return { calls }
+}
+
+export type InstallDirPackageGrantPass = keyof InstallDirPackageGrants
+
+/** One function standing in for both passes, the shape most tests find easiest to write. */
+export type InstallDirPackageGrant = (
+  installDir: string,
+  pass: InstallDirPackageGrantPass
+) => Promise<InstallDirPackageGrantOutcome>
+
+export function grantsFrom(grant: InstallDirPackageGrant): InstallDirPackageGrants {
+  return {
+    root: (installDir) => grant(installDir, 'root'),
+    tree: (installDir) => grant(installDir, 'tree')
+  }
 }
 
 /** Records each grant pass; `reply` decides its outcome (default: success). */
@@ -56,14 +74,14 @@ export function fakePackageGrant(
     pass: InstallDirPackageGrantPass
   ) => Partial<InstallDirPackageGrantOutcome> | Promise<InstallDirPackageGrantOutcome> = () => ({})
 ): {
-  grantFn: InstallDirPackageGrant
+  grants: InstallDirPackageGrants
   passes: { installDir: string; pass: InstallDirPackageGrantPass }[]
 } {
   const passes: { installDir: string; pass: InstallDirPackageGrantPass }[] = []
-  const grantFn: InstallDirPackageGrant = async (installDir, pass) => {
+  const grants = grantsFrom(async (installDir, pass) => {
     passes.push({ installDir, pass })
     const outcome = await reply(pass)
     return { ok: true, failedFileCount: 0, ...outcome }
-  }
-  return { grantFn, passes }
+  })
+  return { grants, passes }
 }

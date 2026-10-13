@@ -27,12 +27,7 @@ vi.mock('../../shared/secure-path-windows-acl', async () => {
       stage(path, contents, { encoding: 'utf-8', mode: 0o600 })
       return restriction(path, false)
     },
-    bestEffortRestrictWindowsPath: (
-      _path: string,
-      _directory: boolean,
-      settled: (restricted: boolean) => void
-    ) => settled(false),
-    resetSecureFileWindowsUserSidForTests: vi.fn()
+    restrictWindowsDirectory: () => Promise.resolve(false)
   }
 })
 

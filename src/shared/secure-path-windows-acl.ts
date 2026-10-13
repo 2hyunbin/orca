@@ -4,34 +4,12 @@ import { loadWindowsSecurity, type WindowsSecurity } from './windows-security-ad
 import { findSecureDaclViolation, hardenedDaclSddl } from './windows-secure-dacl'
 
 /**
- * Applies the ACL without blocking. `onSettled` reports the real outcome, which the return value
- * cannot: the caller's cache must not keep claiming a path is hardened when the apply failed.
+ * Restricts a directory on the thread pool: a rewrite walks every descendant, seconds on a large
+ * userData. Never rejects; failures are reported and resolve false so the caller can retry.
  */
-export function bestEffortRestrictWindowsPath(
-  targetPath: string,
-  isDirectory: boolean,
-  onSettled?: (restricted: boolean) => void
-): void {
-  const security = securityFor(targetPath)
-  // Why a promise even for the synchronous verdicts: callers cache the path after this returns,
-  // and a callback that fired first would have its eviction overwritten.
-  const outcome = security
-    ? restrictAsync(security, targetPath, isDirectory)
-    : Promise.resolve(false)
-  // Why both arms and a terminal catch: a throw from `onSettled` itself must not become an
-  // unhandled rejection, which Node's default turns into a main-process crash.
-  void outcome
-    .then(onSettled, () => onSettled?.(false))
-    .catch((error: unknown) => reportSettlementThrow(targetPath, error))
-}
-
-/** The reporter is a caller-installed hook, the one thing here that plausibly throws. */
-function reportSettlementThrow(targetPath: string, error: unknown): void {
-  try {
-    report(targetPath, 'settle', `hardening settlement callback threw: ${String(error)}`)
-  } catch {
-    // Nothing left to report through; losing one diagnostic beats crashing the main process.
-  }
+export function restrictWindowsDirectory(dirPath: string): Promise<boolean> {
+  const security = securityFor(dirPath)
+  return security ? restrictAsync(security, dirPath, true) : Promise.resolve(false)
 }
 
 async function restrictAsync(
@@ -117,7 +95,7 @@ function violationOf(
 ): string | null {
   try {
     return findSecureDaclViolation(
-      security.addon.getDaclSddl(targetPath),
+      security.addon.getDaclAces(targetPath),
       security.userSid,
       isDirectory
     )
@@ -130,13 +108,13 @@ let reportedLoadFailure = false
 
 function securityFor(targetPath: string): WindowsSecurity | null {
   const loaded = loadWindowsSecurity()
-  if (!('error' in loaded)) {
-    return loaded
+  if ('error' in loaded) {
+    // Once per process: a missing addon is a packaging fault, and every secure write would repeat it.
+    if (!reportedLoadFailure) {
+      reportedLoadFailure = true
+      report(targetPath, 'addon', loaded.error)
+    }
+    return null
   }
-  // Once per process: a missing addon is a packaging fault, and every secure write would repeat it.
-  if (!reportedLoadFailure) {
-    reportedLoadFailure = true
-    report(targetPath, 'addon', loaded.error)
-  }
-  return null
+  return loaded
 }

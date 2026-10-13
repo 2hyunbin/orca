@@ -6,10 +6,9 @@ import {
 } from '../../shared/crash-reporting'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import {
-  grantInstallDirPackageAcl,
+  installDirPackageGrants,
   RESTRICTED_APP_PACKAGES_SID,
-  type InstallDirPackageGrant,
-  type InstallDirPackageGrantOutcome
+  type InstallDirPackageGrants
 } from './windows-install-dir-package-acl-grant'
 
 /**
@@ -64,7 +63,7 @@ export type WindowsInstallDirAclRepairOptions = {
    */
   poisonEvidenceOutstanding?: boolean
   /** Test seams. */
-  grantFn?: InstallDirPackageGrant
+  grants?: InstallDirPackageGrants
   recordBreadcrumb?: typeof recordDurableCrashBreadcrumb
   onDone?: (result: WindowsInstallDirAclRepairResult) => void
 }
@@ -161,18 +160,6 @@ function writeMarker(args: WindowsInstallDirAclRepairArgs, outcome: string): voi
   writeFileSync(markerPath(args.userDataPath), JSON.stringify(marker))
 }
 
-async function runPass(
-  grant: InstallDirPackageGrant,
-  installDir: string,
-  pass: 'root' | 'tree'
-): Promise<InstallDirPackageGrantOutcome> {
-  try {
-    return await grant(installDir, pass)
-  } catch (error) {
-    return { ok: false, failedFileCount: 0, reason: sanitizeCrashReportString(String(error), 200) }
-  }
-}
-
 async function runRepair(args: WindowsInstallDirAclRepairArgs): Promise<void> {
   const record = args.recordBreadcrumb ?? recordDurableCrashBreadcrumb
   const installDir = args.installDir ?? dirname(process.execPath)
@@ -185,11 +172,11 @@ async function runRepair(args: WindowsInstallDirAclRepairArgs): Promise<void> {
       result = { mode: 'marker-hit', alreadyRepaired: markerHit.alreadyRepaired }
       data = { status: 'skipped', reason: 'marker-hit', alreadyRepaired: markerHit.alreadyRepaired }
     } else {
-      const grant = args.grantFn ?? grantInstallDirPackageAcl
-      const root = await runPass(grant, installDir, 'root')
+      const grants = args.grants ?? installDirPackageGrants
+      const root = await grants.root(installDir)
       // Unconditional: the root grant failing does not make the per-file pass —
       // the one that actually unblocks the shipped modules — any less worth trying.
-      const tree = await runPass(grant, installDir, 'tree')
+      const tree = await grants.tree(installDir)
       const failedFileCount = root.failedFileCount + tree.failedFileCount
       if (root.ok && tree.ok) {
         result = { mode: 'repaired' }

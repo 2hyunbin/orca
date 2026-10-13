@@ -32,7 +32,7 @@ vi.mock('@electron-toolkit/utils', () => ({
   electronApp: { setAppUserModelId: vi.fn() }
 }))
 
-import type { InstallDirPackageGrant } from './windows-install-dir-package-acl-grant'
+import { grantsFrom } from './windows-install-dir-acl.test-fixture'
 import {
   DEFAULT_GPU_CRASH_FALLBACK_THRESHOLD,
   DEFAULT_GPU_CRASH_FALLBACK_WINDOW_MS,
@@ -87,10 +87,10 @@ function reportProbePoisoned(): { finishRepair: () => Promise<void> } {
     { status: 'ok', matchesPoisonSignature: true },
     {
       ...recoveryOptions(),
-      grantFn: async () => {
+      grants: grantsFrom(async () => {
         await walkingTheTree
         return { ok: true, failedFileCount: 0 }
-      }
+      })
     }
   )
   return {
@@ -112,10 +112,11 @@ async function reportProbePoisonedWithSettledRepair(
     { status: 'ok', matchesPoisonSignature: true },
     {
       ...recoveryOptions(userDataPath),
-      grantFn: async () =>
+      grants: grantsFrom(async () =>
         granted
           ? { ok: true, failedFileCount: 0 }
           : { ok: false, failedFileCount: 1, reason: 'access denied' }
+      )
     }
   )
   for (let i = 0; i < 200 && isInstallDirAclRepairPending(); i += 1) {
@@ -143,9 +144,9 @@ async function gateFindsRepairBudgetSpent(): Promise<void> {
   writeInstallDirAclPoisonMarker(options.userDataPath, INSTALL_DIR, options.appVersion)
   const mode = await repairKnownPoisonedInstallDirBeforeWindow({
     ...options,
-    grantFn: (() => {
+    grants: grantsFrom(() => {
       throw new Error('the spent budget must not grant')
-    }) satisfies InstallDirPackageGrant
+    })
   })
   expect(mode).toBe('marker-hit')
 }
@@ -242,7 +243,7 @@ describe('handleGpuChildCrash vs the install-dir ACL verdict', () => {
     writeInstallDirAclPoisonMarker(userData.path, INSTALL_DIR, '1.4.184')
     const mode = await repairKnownPoisonedInstallDirBeforeWindow({
       ...recoveryOptions(userData.path),
-      grantFn: async () => ({ ok: true, failedFileCount: 0 })
+      grants: grantsFrom(async () => ({ ok: true, failedFileCount: 0 }))
     })
     expect(mode).toBe('repaired')
     noteWindowsInstallDirAclProbePending()

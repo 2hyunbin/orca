@@ -3,7 +3,7 @@
 // Why native: the alternative is spawning icacls.exe, which blocked the main thread for seconds
 // per write on hosts with slow process creation (#26027), and whose `/reset` + `/inheritance:r`
 // shape behavioural EDR scores as ransomware (#25583). Policy (which SIDs, which flags) lives in
-// JS; this file only moves SDDL and ACEs between JS and the Win32 security APIs.
+// JS; this file writes DACLs given as SDDL and reads them back as plain structure.
 
 #include <napi.h>
 #include <windows.h>
@@ -31,11 +31,8 @@ struct LocalDeleter {
 using LocalPtr = std::unique_ptr<void, LocalDeleter>;
 
 Napi::Error ToError(Napi::Env env, const Win32Result& result) {
-  auto error = Napi::Error::New(
+  return Napi::Error::New(
       env, std::string(result.syscall) + " failed with Win32 error " + std::to_string(result.code));
-  error.Set("winCode", Napi::Number::New(env, result.code));
-  error.Set("syscall", Napi::String::New(env, result.syscall));
-  return error;
 }
 
 Win32Result ParseSddl(const std::u16string& sddl, LocalPtr* descriptor) {
@@ -50,13 +47,16 @@ Win32Result ParseSddl(const std::u16string& sddl, LocalPtr* descriptor) {
 
 // The descriptor's own protection bit decides: a replacement DACL carries the caller's choice, and
 // a grant re-reads the object's, so adding one rule never flips inheritance on or off.
-SECURITY_INFORMATION DaclInformationFor(PSECURITY_DESCRIPTOR descriptor) {
+Win32Result DaclInformationFor(PSECURITY_DESCRIPTOR descriptor, SECURITY_INFORMATION* information) {
   SECURITY_DESCRIPTOR_CONTROL control = 0;
   DWORD revision = 0;
-  GetSecurityDescriptorControl(descriptor, &control, &revision);
-  return DACL_SECURITY_INFORMATION | ((control & SE_DACL_PROTECTED)
-                                          ? PROTECTED_DACL_SECURITY_INFORMATION
-                                          : UNPROTECTED_DACL_SECURITY_INFORMATION);
+  if (!GetSecurityDescriptorControl(descriptor, &control, &revision)) {
+    return Fail("GetSecurityDescriptorControl", GetLastError());
+  }
+  *information = DACL_SECURITY_INFORMATION | ((control & SE_DACL_PROTECTED)
+                                                  ? PROTECTED_DACL_SECURITY_INFORMATION
+                                                  : UNPROTECTED_DACL_SECURITY_INFORMATION);
+  return {};
 }
 
 Win32Result ApplyDacl(std::u16string path, const std::u16string& sddl) {
@@ -75,9 +75,13 @@ Win32Result ApplyDacl(std::u16string path, const std::u16string& sddl) {
   if (!present || dacl == nullptr) {
     return Fail("GetSecurityDescriptorDacl", ERROR_INVALID_SECURITY_DESCR);
   }
+  SECURITY_INFORMATION information = 0;
+  auto control = DaclInformationFor(descriptor.get(), &information);
+  if (!control.ok()) {
+    return control;
+  }
   DWORD status = SetNamedSecurityInfoW(reinterpret_cast<LPWSTR>(path.data()), SE_FILE_OBJECT,
-                                       DaclInformationFor(descriptor.get()), nullptr, nullptr,
-                                       dacl, nullptr);
+                                       information, nullptr, nullptr, dacl, nullptr);
   return status == ERROR_SUCCESS ? Win32Result{} : Fail("SetNamedSecurityInfoW", status);
 }
 
@@ -117,9 +121,13 @@ Win32Result GrantAccess(std::u16string path, const std::u16string& sid, DWORD ma
     return Fail("SetEntriesInAclW", status);
   }
   LocalPtr mergedAcl(merged);
+  SECURITY_INFORMATION information = 0;
+  auto control = DaclInformationFor(descriptor.get(), &information);
+  if (!control.ok()) {
+    return control;
+  }
   status = SetNamedSecurityInfoW(reinterpret_cast<LPWSTR>(path.data()), SE_FILE_OBJECT,
-                                 DaclInformationFor(descriptor.get()), nullptr, nullptr, merged,
-                                 nullptr);
+                                 information, nullptr, nullptr, merged, nullptr);
   return status == ERROR_SUCCESS ? Win32Result{} : Fail("SetNamedSecurityInfoW", status);
 }
 
@@ -180,6 +188,16 @@ Napi::Value ThrowTypeError(Napi::Env env, const char* signature) {
   return env.Undefined();
 }
 
+Napi::Value SidString(Napi::Env env, PSID sid) {
+  LPWSTR text = nullptr;
+  if (!ConvertSidToStringSidW(sid, &text)) {
+    ToError(env, Fail("ConvertSidToStringSidW", GetLastError())).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  LocalPtr owned(text);
+  return Napi::String::New(env, reinterpret_cast<char16_t*>(text));
+}
+
 Napi::Value CurrentUserSid(const Napi::CallbackInfo& info) {
   auto env = info.Env();
   HANDLE token = nullptr;
@@ -197,39 +215,67 @@ Napi::Value CurrentUserSid(const Napi::CallbackInfo& info) {
     ToError(env, Fail("GetTokenInformation", queryError)).ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  LPWSTR text = nullptr;
-  if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &text)) {
-    ToError(env, Fail("ConvertSidToStringSidW", GetLastError())).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
-  LocalPtr owned(text);
-  return Napi::String::New(env, reinterpret_cast<char16_t*>(text));
+  return SidString(env, reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid);
 }
 
-Napi::Value GetDaclSddl(const Napi::CallbackInfo& info) {
+// Structure only, no policy: `{ protected, aces: [{ type, flags, mask, sid }] }`, or null for a
+// NULL DACL. Only plain allow/deny ACEs carry a SID; every other type comes back with sid null so
+// the caller can refuse what it does not understand (object, callback and conditional ACEs).
+Napi::Value GetDaclAces(const Napi::CallbackInfo& info) {
   auto env = info.Env();
   if (info.Length() < 1 || !info[0].IsString()) {
-    return ThrowTypeError(env, "getDaclSddl(path: string)");
+    return ThrowTypeError(env, "getDaclAces(path: string)");
   }
   auto path = info[0].As<Napi::String>().Utf16Value();
   PSECURITY_DESCRIPTOR rawDescriptor = nullptr;
+  PACL dacl = nullptr;
   DWORD status = GetNamedSecurityInfoW(reinterpret_cast<LPCWSTR>(path.c_str()), SE_FILE_OBJECT,
-                                       DACL_SECURITY_INFORMATION, nullptr, nullptr, nullptr,
+                                       DACL_SECURITY_INFORMATION, nullptr, nullptr, &dacl,
                                        nullptr, &rawDescriptor);
   if (status != ERROR_SUCCESS) {
     ToError(env, Fail("GetNamedSecurityInfoW", status)).ThrowAsJavaScriptException();
     return env.Undefined();
   }
   LocalPtr descriptor(rawDescriptor);
-  LPWSTR text = nullptr;
-  if (!ConvertSecurityDescriptorToStringSecurityDescriptorW(
-          rawDescriptor, SDDL_REVISION_1, DACL_SECURITY_INFORMATION, &text, nullptr)) {
-    ToError(env, Fail("ConvertSecurityDescriptorToStringSecurityDescriptorW", GetLastError()))
-        .ThrowAsJavaScriptException();
+  if (dacl == nullptr) {
+    return env.Null();
+  }
+  SECURITY_DESCRIPTOR_CONTROL control = 0;
+  DWORD revision = 0;
+  if (!GetSecurityDescriptorControl(rawDescriptor, &control, &revision)) {
+    ToError(env, Fail("GetSecurityDescriptorControl", GetLastError())).ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  LocalPtr owned(text);
-  return Napi::String::New(env, reinterpret_cast<char16_t*>(text));
+  auto aces = Napi::Array::New(env, dacl->AceCount);
+  for (DWORD index = 0; index < dacl->AceCount; index++) {
+    void* raw = nullptr;
+    if (!GetAce(dacl, index, &raw)) {
+      ToError(env, Fail("GetAce", GetLastError())).ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    auto* header = static_cast<ACE_HEADER*>(raw);
+    auto ace = Napi::Object::New(env);
+    ace.Set("type", Napi::Number::New(env, header->AceType));
+    ace.Set("flags", Napi::Number::New(env, header->AceFlags));
+    // ACCESS_ALLOWED_ACE and ACCESS_DENIED_ACE share this layout: Mask, then SidStart.
+    if (header->AceType == ACCESS_ALLOWED_ACE_TYPE || header->AceType == ACCESS_DENIED_ACE_TYPE) {
+      auto* plain = static_cast<ACCESS_ALLOWED_ACE*>(raw);
+      ace.Set("mask", Napi::Number::New(env, plain->Mask));
+      auto sid = SidString(env, &plain->SidStart);
+      if (env.IsExceptionPending()) {
+        return env.Undefined();
+      }
+      ace.Set("sid", sid);
+    } else {
+      ace.Set("mask", Napi::Number::New(env, 0));
+      ace.Set("sid", env.Null());
+    }
+    aces.Set(index, ace);
+  }
+  auto result = Napi::Object::New(env);
+  result.Set("protected", Napi::Boolean::New(env, (control & SE_DACL_PROTECTED) != 0));
+  result.Set("aces", aces);
+  return result;
 }
 
 Napi::Value SetDaclSddl(const Napi::CallbackInfo& info) {
@@ -349,7 +395,7 @@ Napi::Value GrantAccessAsync(const Napi::CallbackInfo& info) {
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("currentUserSid", Napi::Function::New(env, CurrentUserSid));
-  exports.Set("getDaclSddl", Napi::Function::New(env, GetDaclSddl));
+  exports.Set("getDaclAces", Napi::Function::New(env, GetDaclAces));
   exports.Set("setDaclSddl", Napi::Function::New(env, SetDaclSddl));
   exports.Set("setDaclSddlAsync", Napi::Function::New(env, SetDaclSddlAsync));
   exports.Set("createFileWithDacl", Napi::Function::New(env, CreateFileWithDaclJs));

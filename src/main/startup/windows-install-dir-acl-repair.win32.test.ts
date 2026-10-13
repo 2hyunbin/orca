@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { CrashReportBreadcrumbData } from '../../shared/crash-reporting'
-import { readDaclOf } from '../../shared/windows-dacl.test-fixture'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import {
   loadWindowsSecurity,
@@ -32,12 +31,14 @@ const describeOnWindows = process.platform === 'win32' ? describe : describe.ski
 /** An unresolvable AppContainer SID, the shape the field hosts carry. */
 const ORPHAN_SID =
   'S-1-15-2-1111111111-2222222222-3333333333-1234567890-2345678901-3456789012-4012345678'
-/** The repair's flagless, explicit RX grant to ALL RESTRICTED APPLICATION PACKAGES. */
-const RESTRICTED_GRANT_ON_FILE = '(A;;0x1200a9;;;S-1-15-2-2)'
+const RESTRICTED_SID = 'S-1-15-2-2'
+const READ_EXECUTE = WINDOWS_FILE_READ_EXECUTE
+const FULL_CONTROL = 0x1f01ff
+const INHERITED_ACE = 0x10
 
 function requireSecurity(): WindowsSecurity {
   const loaded = loadWindowsSecurity()
-  if (!('addon' in loaded)) {
+  if ('error' in loaded) {
     throw new Error(`the windows-security addon must load on a Windows test host: ${loaded.error}`)
   }
   return loaded
@@ -116,22 +117,23 @@ describeOnWindows('install-dir package ACL repair against real DACLs', () => {
 
     // A directory grant is not enough: each protected file needs its own explicit, flagless ACE —
     // the root one, and a NESTED one, the shape app.asar.unpacked and node_modules have.
+    const allow = (sid: string, mask: number, flags = 0) =>
+      expect.objectContaining({ type: 0, flags, mask, sid })
     for (const file of [moduleFile, nestedFile]) {
-      const sddl = addon.getDaclSddl(file)
-      expect(sddl).toContain(RESTRICTED_GRANT_ON_FILE)
+      const aces = addon.getDaclAces(file)?.aces
+      expect(aces).toContainEqual(allow(RESTRICTED_SID, READ_EXECUTE))
       // Additive: SYSTEM, Administrators, the user and the orphan all survive.
-      expect(sddl).toContain('(A;;FA;;;SY)')
-      expect(sddl).toContain('(A;;FA;;;BA)')
-      // Parsed, not matched: a RID-500 user (the CI runner's Administrator) reads back as `LA`.
-      expect(readDaclOf(addon, file, userSid)?.aces).toContainEqual(
-        expect.objectContaining({ type: 'A', flags: [], rights: 'FA', sid: userSid })
-      )
-      expect(sddl).toContain(`(A;;0x1200a9;;;${ORPHAN_SID})`)
+      for (const sid of ['S-1-5-18', 'S-1-5-32-544', userSid]) {
+        expect(aces).toContainEqual(allow(sid, FULL_CONTROL))
+      }
+      expect(aces).toContainEqual(allow(ORPHAN_SID, READ_EXECUTE))
     }
     // And the inheritable root grant exists so files a later update writes inherit it.
     const updateFile = join(installDir, 'resources', 'added-by-update.dll')
     writeFileSync(updateFile, 'binary')
-    expect(addon.getDaclSddl(updateFile)).toMatch(/\(A;ID;0x1200a9;;;S-1-15-2-2\)/)
+    expect(addon.getDaclAces(updateFile)?.aces).toContainEqual(
+      allow(RESTRICTED_SID, READ_EXECUTE, INHERITED_ACE)
+    )
     expect((await probeVerdict()).matchesPoisonSignature).toBe(false)
   })
 })

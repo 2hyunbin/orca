@@ -115,14 +115,11 @@ describe('Windows secure files through the native ACL addon', () => {
       const targetPath = join(dir, 'secret.json')
       writeFileSync(targetPath, 'previous')
       fake.createFileWithDacl = () => {
-        throw Object.assign(new Error('CreateFileW failed with Win32 error 5'), {
-          winCode: 5,
-          syscall: 'CreateFileW'
-        })
+        throw new Error('CreateFileW failed with Win32 error 5')
       }
 
       expect(() => writeSecureFile(targetPath, 'contents')).toThrow(
-        expect.objectContaining({ winCode: 5, syscall: 'CreateFileW' })
+        'CreateFileW failed with Win32 error 5'
       )
 
       expect(readFileSync(targetPath, 'utf-8')).toBe('previous')
@@ -135,13 +132,14 @@ describe('Windows secure files through the native ACL addon', () => {
       const realCreate = fake.createFileWithDacl
       fake.createFileWithDacl = (path, sddl, data) => {
         realCreate(path, sddl, data)
-        fake.dacls.set(path, 'D:NO_ACCESS_CONTROL')
+        const created = fake.callsFor('create').at(-1)?.path ?? path
+        fake.dacls.set(created, 'D:NO_ACCESS_CONTROL')
       }
 
       expect(writeSecureFile(targetPath, 'contents')).toBe(false)
 
       expect(reports).toContainEqual(
-        expect.objectContaining({ stage: 'verify', detail: expect.stringContaining('no DACL') })
+        expect.objectContaining({ stage: 'verify', detail: expect.stringContaining('NULL DACL') })
       )
     })
 
@@ -176,7 +174,7 @@ describe('Windows secure files through the native ACL addon', () => {
       await settle()
 
       expect(fake.callsFor('setAsync', dir)).toEqual([
-        { op: 'setAsync', path: dir, sddl: DIRECTORY_SDDL }
+        expect.objectContaining({ op: 'setAsync', path: dir, sddl: DIRECTORY_SDDL })
       ])
       expect(fake.callsFor('set', dir)).toEqual([])
     })
@@ -249,7 +247,7 @@ describe('Windows secure files through the native ACL addon', () => {
       }
 
       expect(fake.callsFor('set', targetPath)).toEqual([
-        { op: 'set', path: targetPath, sddl: FILE_SDDL }
+        expect.objectContaining({ op: 'set', path: targetPath, sddl: FILE_SDDL })
       ])
       expect(fake.callsFor('setAsync', targetPath)).toEqual([])
     })
@@ -375,14 +373,14 @@ describe('Windows secure files through the native ACL addon', () => {
     const longPath = `C:\\Users\\me\\.orca\\${'d'.repeat(300)}\\secret.json`
     const loaded = loadWindowsSecurity()
 
-    expect('addon' in loaded && loaded.addon.getDaclSddl(longPath)).toBeTruthy()
-    expect(fake.callsFor('get')[0]?.path).toBe(`\\\\?\\${longPath}`)
+    expect('error' in loaded ? null : loaded.addon.getDaclAces(longPath)).toBeTruthy()
+    expect(fake.callsFor('get')[0]?.addonPath).toBe(`\\\\?\\${longPath}`)
   })
 
   // A grant reads the DACL and writes back a merge; racing a re-lock it could restore the broad one.
   it('runs async DACL writes to the same path one after another', async () => {
     const loaded = loadWindowsSecurity()
-    if (!('addon' in loaded)) {
+    if ('error' in loaded) {
       throw new Error('fake not installed')
     }
     fake.holdAsync = true

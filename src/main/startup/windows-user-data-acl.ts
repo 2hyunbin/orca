@@ -74,7 +74,7 @@ function writeMarker(userDataPath: string, identity: string): void {
 /** `*` + SID is the spelling markers written by the icacls-era grant already use. */
 function currentIdentity(): string | null {
   const security = loadWindowsSecurity()
-  return 'userSid' in security ? `*${security.userSid}` : null
+  return 'error' in security ? null : `*${security.userSid}`
 }
 
 function childDirectories(userDataPath: string): string[] {

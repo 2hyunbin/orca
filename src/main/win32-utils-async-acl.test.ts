@@ -37,7 +37,7 @@ describe('grantDirAcl', () => {
   it('replaces the user rule with inheritable full control, by SID, in-process', () => {
     grantDirAcl('C:\\Users\\alice\\Orca')
 
-    expect(fake.calls).toEqual([
+    expect(fake.calls).toMatchObject([
       { op: 'grant', path: 'C:\\Users\\alice\\Orca', ...USER_DIRECTORY_GRANT }
     ])
   })
@@ -45,7 +45,7 @@ describe('grantDirAcl', () => {
   it('runs the asynchronous grant on the thread pool rather than the main thread', async () => {
     await grantDirAclAsync('C:\\Users\\alice\\Orca')
 
-    expect(fake.calls).toEqual([
+    expect(fake.calls).toMatchObject([
       { op: 'grantAsync', path: 'C:\\Users\\alice\\Orca', ...USER_DIRECTORY_GRANT }
     ])
   })

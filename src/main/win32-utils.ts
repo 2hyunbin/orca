@@ -74,7 +74,7 @@ const USER_DIRECTORY_GRANT = { inheritable: true, replace: true } as const
  */
 export function grantDirAcl(dirPath: string): void {
   const security = loadWindowsSecurity()
-  if ('addon' in security) {
+  if (!('error' in security)) {
     security.addon.grantAccess(
       dirPath,
       security.userSid,
@@ -87,7 +87,7 @@ export function grantDirAcl(dirPath: string): void {
 /** As grantDirAcl, on the thread pool: the grant propagates through the directory's subtree. */
 export async function grantDirAclAsync(dirPath: string): Promise<void> {
   const security = loadWindowsSecurity()
-  if ('addon' in security) {
+  if (!('error' in security)) {
     await security.addon.grantAccessAsync(
       dirPath,
       security.userSid,

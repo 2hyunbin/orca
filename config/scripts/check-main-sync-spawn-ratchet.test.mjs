@@ -86,14 +86,14 @@ describe('main sync-spawn ratchet', () => {
       ['runProcessSync']
     ],
     [
-      "import { writeDurableSecureJsonFile, writeSecureJsonFile } from '../shared/secure-file.ts'\nconst write = durable ? writeDurableSecureJsonFile : writeSecureJsonFile\nwrite(p, v)",
+      "import { getWslHome, listWslDistros } from './wsl.ts'\nconst read = sync ? getWslHome : listWslDistros\nread()",
       3,
-      ['writeDurableSecureJsonFile', 'writeSecureJsonFile']
+      ['getWslHome', 'listWslDistros']
     ],
     [
-      "import * as store from '..\\\\shared\\\\bounded-secure-json-file'\nstore.writeSecureJsonFileWithinLimit(p, v, 1)",
+      "import * as acl from '..\\\\shared\\\\secure-path-windows-acl'\nacl.restrictWindowsPathSync(p, true)",
       1,
-      ['writeSecureJsonFileWithinLimit']
+      ['restrictWindowsPathSync']
     ],
     [
       "const { execSync } = require('child_process')\nconst run = execSync\nrun('a')",
@@ -180,15 +180,15 @@ describe('main sync-spawn ratchet', () => {
     ).toEqual({ count: 1, symbols: ['listWslDistros'] })
   })
 
-  it('resolves writer imports by the module they point at, not by name', () => {
+  it('resolves imports by the module they point at, not by name', () => {
     expect(
       uses(
-        "import { writeSecureFile } from './secure-file'\nwriteSecureFile(p, v)",
+        "import { restrictWindowsPathSync } from './secure-path-windows-acl'\nrestrictWindowsPathSync(p, true)",
         'src/shared/store.ts'
       )
     ).toEqual({
       count: 1,
-      symbols: ['writeSecureFile']
+      symbols: ['restrictWindowsPathSync']
     })
   })
 
@@ -230,10 +230,9 @@ describe('main sync-spawn ratchet', () => {
     expect(adviceFor(['execFileSync', 'runProcessSync'])).toBe(
       'execFileSync, runProcessSync: use runProcess or spawnProcess from @orca/process-host.'
     )
-    expect(adviceFor(['writeSecureFile'])).toContain(
-      "can block on its whole subtree); keep the synchronous one and raise this file's count in config/main-sync-spawn-baseline.txt"
+    expect(adviceFor(['restrictWindowsPathSync'])).toContain(
+      "use restrictWindowsDirectory for a directory, or raise this file's count in config/main-sync-spawn-baseline.txt"
     )
-    expect(adviceFor(['restrictWindowsPathSync'])).toContain('never a plain write')
     expect(adviceFor(['gitExecFileSync', 'grantDirAcl'])).toBe(
       'gitExecFileSync: use gitExecFileAsync. grantDirAcl: use grantDirAclAsync.'
     )
@@ -261,12 +260,13 @@ describe('main sync-spawn ratchet', () => {
   })
 
   it('fails a lowered or stale count until it is pruned, and prune never raises', () => {
-    const write = "import { writeSecureFile } from '../shared/secure-file'\nwriteSecureFile(a, b)\n"
+    const write =
+      "import { restrictWindowsPathSync } from '../shared/secure-path-windows-acl'\nrestrictWindowsPathSync(a, b)\n"
     const root = tree({
       'src/main/store.ts': write,
       'src/main/clean.ts': 'export const done = true\n',
       'src/main/new.ts': write,
-      'src/main/grown.ts': `${write}writeSecureFile(c, d)\n`,
+      'src/main/grown.ts': `${write}restrictWindowsPathSync(c, d)\n`,
       [BASELINE]:
         '# old header\n3 src/main/store.ts # tracked in #26754\n1 src/main/clean.ts\n1 src/main/grown.ts\n'
     })
@@ -275,7 +275,7 @@ describe('main sync-spawn ratchet', () => {
     const lines = error.mock.calls.map(([line]) => line)
     expect(lines[0]).toContain('src/main/grown.ts::2 synchronous launch use(s), baseline allows 1.')
     expect(lines[1]).toContain('src/main/new.ts::1 synchronous launch use(s), baseline allows 0.')
-    expect(lines[1]).toContain('writeSecureFile: no async secure writer exists yet')
+    expect(lines[1]).toContain('restrictWindowsPathSync: rewrites a DACL on the calling thread')
     expect(lines.slice(2)).toEqual([
       '::error file=src/main/clean.ts::0 synchronous launch use(s), baseline still allows 1. Run: pnpm check:main-sync-spawn-ratchet --prune',
       '::error file=src/main/store.ts::1 synchronous launch use(s), baseline still allows 3. Run: pnpm check:main-sync-spawn-ratchet --prune'

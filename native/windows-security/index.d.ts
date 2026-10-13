@@ -1,5 +1,4 @@
-/** Thrown by every call; `winCode` is the Win32 error the named API returned. */
-export type WindowsSecurityError = Error & { winCode: number; syscall: string }
+/** Every call throws an Error whose message names the Win32 call and its error code. */
 
 export type GrantAccessOptions = {
   /** Children inherit the grant (OI|CI). Only meaningful on a directory. */
@@ -14,8 +13,17 @@ export type GrantAccessOptions = {
 /** The process token's user SID, e.g. `S-1-5-21-…-1001`. */
 export declare function currentUserSid(): string
 
-/** The path's DACL as SDDL (`D:…`), aliases and all. */
-export declare function getDaclSddl(path: string): string
+/**
+ * One DACL entry as stored. `type` and `flags` are the raw ACE_HEADER bytes; `sid` is set only for
+ * plain allow (0) and deny (1) ACEs and is null for every other type.
+ */
+export type WindowsAce = { type: number; flags: number; mask: number; sid: string | null }
+
+/** `protected` is SE_DACL_PROTECTED. */
+export type WindowsDacl = { protected: boolean; aces: WindowsAce[] }
+
+/** The path's DACL as structure, or null for a NULL DACL (which grants everyone everything). */
+export declare function getDaclAces(path: string): WindowsDacl | null
 
 /**
  * Installs exactly the DACL in `sddl`. Its `P` flag picks protected or inheriting. A directory

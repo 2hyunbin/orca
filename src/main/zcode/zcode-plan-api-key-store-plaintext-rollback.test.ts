@@ -30,12 +30,7 @@ vi.mock('../../shared/secure-path-windows-acl', () => ({
     mocks.write(path, contents, { encoding: 'utf-8', mode: 0o600 })
     return mocks.restrict(path, false)
   },
-  bestEffortRestrictWindowsPath: (
-    _path: string,
-    _directory: boolean,
-    settled: (restricted: boolean) => void
-  ) => settled(false),
-  resetSecureFileWindowsUserSidForTests: vi.fn()
+  restrictWindowsDirectory: () => Promise.resolve(false)
 }))
 
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!

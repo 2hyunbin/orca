@@ -12,7 +12,7 @@ function getAddon() {
 
 module.exports = {
   currentUserSid: () => getAddon().currentUserSid(),
-  getDaclSddl: (path) => getAddon().getDaclSddl(path),
+  getDaclAces: (path) => getAddon().getDaclAces(path),
   setDaclSddl: (path, sddl) => getAddon().setDaclSddl(path, sddl),
   setDaclSddlAsync: (path, sddl) => getAddon().setDaclSddlAsync(path, sddl),
   createFileWithDacl: (path, sddl, data) => getAddon().createFileWithDacl(path, sddl, data),

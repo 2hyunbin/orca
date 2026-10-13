@@ -5,8 +5,12 @@ import {
   type CrashReportBreadcrumbData
 } from '../../shared/crash-reporting'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
-import { loadWindowsSecurity } from '../../shared/windows-security-addon'
-import { parseSddlDacl } from '../../shared/windows-security-descriptor'
+import { loadWindowsSecurity, type WindowsDacl } from '../../shared/windows-security-addon'
+import {
+  ACCESS_ALLOWED_ACE_TYPE,
+  ACCESS_DENIED_ACE_TYPE,
+  INHERIT_ONLY_ACE
+} from '../../shared/windows-secure-dacl'
 import { RESTRICTED_APP_PACKAGES_SID } from './windows-install-dir-package-acl-grant'
 
 /**
@@ -35,11 +39,11 @@ export const WINDOWS_INSTALL_DIR_ACL_BREADCRUMB = 'windows_install_dir_acl'
 // one shipped module answers it, and existsSync costs nothing.
 const MODULE_SHORTLIST = ['ffmpeg.dll', 'libGLESv2.dll', 'libEGL.dll', 'icudtl.dat']
 
-// Why SDDL rather than a display listing: displays localize the well-known package
+// Why raw SIDs rather than a display listing: displays localize the well-known package
 // names — and on zh/ja/ko even keep "NT AUTHORITY" English while doing so — so a
-// repaired tree read as poisoned. SDDL prints SIDs on every locale.
+// repaired tree read as poisoned. A SID reads the same on every locale.
 const PACKAGE_SID = /^S-1-15-2-[0-9-]+$/i
-/** ALL APPLICATION PACKAGES (SDDL's `AC`) and ALL RESTRICTED APPLICATION PACKAGES. */
+/** ALL APPLICATION PACKAGES and ALL RESTRICTED APPLICATION PACKAGES. */
 const WELL_KNOWN_PACKAGE_SIDS = new Set(['S-1-15-2-1', RESTRICTED_APP_PACKAGES_SID])
 
 export type WindowsInstallDirAclProbeOptions = {
@@ -58,44 +62,49 @@ type AclFacts = {
   hasRestrictedPackageGrant: boolean
 }
 
-/** The target's DACL as SDDL, or '' when it cannot be read (an empty read stays unreadable). */
-function readDacl(target: string): string {
+/** The target's DACL, or null when it cannot be read (an unreadable target stays unreadable). */
+function readDacl(target: string): WindowsDacl | null {
   const security = loadWindowsSecurity()
-  if (!('addon' in security)) {
+  if ('error' in security) {
     throw new Error(`windows-security addon unavailable: ${security.error}`)
   }
   try {
-    return security.addon.getDaclSddl(target)
+    return security.addon.getDaclAces(target)
   } catch {
-    return ''
+    return null
   }
 }
 
-function collectAclFacts(savedDacl: string): AclFacts | null {
-  // Fails closed: an unreadable target ('') or any ACE the parser cannot read gives no facts,
-  // since a skipped ACE could be the grant that satisfies an orphan.
-  const dacl = parseSddlDacl(savedDacl)
-  if (!dacl) {
+function collectAclFacts(dacl: WindowsDacl | null): AclFacts | null {
+  // Fails closed: an unreadable target, a NULL DACL, or any ACE that is not a plain allow/deny
+  // gives no facts, since a skipped ACE could be the grant that satisfies an orphan.
+  if (
+    !dacl ||
+    dacl.aces.some(
+      (ace) => ace.type !== ACCESS_ALLOWED_ACE_TYPE && ace.type !== ACCESS_DENIED_ACE_TYPE
+    )
+  ) {
     return null
   }
   const orphanPackageSids: string[] = []
   let hasWellKnownPackageGrant = false
   let hasRestrictedPackageGrant = false
   for (const ace of dacl.aces) {
-    if (!WELL_KNOWN_PACKAGE_SIDS.has(ace.sid)) {
-      if (PACKAGE_SID.test(ace.sid)) {
-        orphanPackageSids.push(ace.sid)
+    const sid = ace.sid ?? ''
+    if (!WELL_KNOWN_PACKAGE_SIDS.has(sid)) {
+      if (PACKAGE_SID.test(sid)) {
+        orphanPackageSids.push(sid)
       }
       continue
     }
     // Why: an ACE that denies, or only propagates to children (IO), grants nothing
     // on this object — so it cannot satisfy an orphan the way the reproduced fix did.
-    if (ace.type !== 'A' || ace.flags.includes('IO')) {
+    if (ace.type !== ACCESS_ALLOWED_ACE_TYPE || (ace.flags & INHERIT_ONLY_ACE) !== 0) {
       continue
     }
     hasWellKnownPackageGrant = true
     // Reported, never the verdict: narrows which grant is present for triage.
-    if (ace.sid === RESTRICTED_APP_PACKAGES_SID) {
+    if (sid === RESTRICTED_APP_PACKAGES_SID) {
       hasRestrictedPackageGrant = true
     }
   }

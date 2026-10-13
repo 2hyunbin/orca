@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync, type Sta
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { loadWindowsSecurity, type WindowsSecurityAddon } from '../../shared/windows-security-addon'
+import { loadWindowsSecurity, type WindowsSecurity } from '../../shared/windows-security-addon'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 
 /**
@@ -64,9 +64,9 @@ function canDenyReads(): boolean {
  */
 const FOREIGN_SID = 'S-1-5-32-546'
 
-function addon(): WindowsSecurityAddon {
+function addon(): WindowsSecurity['addon'] {
   const loaded = loadWindowsSecurity()
-  if (!('addon' in loaded)) {
+  if ('error' in loaded) {
     throw new Error(`the windows-security addon did not load: ${loaded.error}`)
   }
   return loaded.addon
