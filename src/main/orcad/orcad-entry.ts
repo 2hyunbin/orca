@@ -39,6 +39,7 @@ import {
   type AiVaultSearchSettings
 } from '../../shared/ai-vault-search-settings'
 import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
+import { adoptWslHostLoginEnvironment } from './orcad-wsl-host-login-environment'
 
 export { parseArgs }
 
@@ -157,6 +158,15 @@ async function startOrcadRuntime(
   options: OrcadOptions,
   registerCleanup: (cleanup: OrcadRuntimeCleanup) => void
 ): Promise<Pick<OrcadHandle, 'readiness'>> {
+  // Started first so the login-shell probe overlaps the imports and store startup below.
+  const loginEnvironment = adoptWslHostLoginEnvironment().then(
+    (names) => {
+      if (names.length > 0) {
+        console.info(`[orcad] adopted login-shell variables: ${names.join(', ')}`)
+      }
+    },
+    (error: unknown) => console.warn('[orcad] could not adopt login-shell variables:', error)
+  )
   const { OrcaRuntimeService } = await import('../runtime/orca-runtime')
   const { OrcaRuntimeRpcServer } = await import('../runtime/runtime-rpc')
   const { registerHeadlessPtyRuntime } = await import('../ipc/pty/register-headless-runtime')
@@ -238,6 +248,8 @@ async function startOrcadRuntime(
   // Why before the runtime and the PTY handlers: `setLocalPtyProvider` installs the daemon
   // adapter as THE local provider, and the registry's contract is that it lands before
   // registerPtyHandlers so the IPC layer routes through the daemon from the first call.
+  // Before the daemon and the runtime: both spawn children that inherit this env.
+  await loginEnvironment
   await startOrcadDaemon()
 
   // Why a holder and not a direct reference: the index is installed after the runtime is
