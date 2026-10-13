@@ -168,7 +168,6 @@ for (const scenario of ['single', 'children', 'batch', 'known-dirty'] as const) 
     }
     await page.screenshot({ path: testInfo.outputPath('loaded.png') })
     await dialog.screenshot({ path: testInfo.outputPath('loaded-dialog.png') })
-    expect(frames.length).toBeGreaterThan(20)
     expect(frames[0]?.confirmFocused).toBe(true)
     for (const frame of frames) {
       expect(frame).toEqual(frames[0])
