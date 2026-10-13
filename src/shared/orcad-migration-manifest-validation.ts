@@ -2,9 +2,11 @@ import type { FolderWorkspace } from './folder-workspace-types'
 import type {
   OrcadMigrationCatalogPayload,
   OrcadMigrationImportReceipt,
+  OrcadMigrationLocalWslManifestSource,
   OrcadMigrationManifest,
   OrcadMigrationManifestSource
 } from './orcad-migration-manifest'
+import { isOrcadMigrationLocalWslSource } from './orcad-migration-source-kind'
 import type { ProjectGroup } from './project-group-types'
 import type { Repo } from './repo-types'
 import {
@@ -64,6 +66,7 @@ export function parseOrcadMigrationManifest(value: unknown): OrcadMigrationManif
   if (bytes > MAX_ORCAD_MIGRATION_MANIFEST_BYTES) {
     throw new Error('orcad_migration_manifest_too_large')
   }
+  assertLocalWslScopeMatchesPayload(manifest)
   return manifest
 }
 
@@ -144,7 +147,10 @@ function parseSource(value: unknown): OrcadMigrationManifestSource {
   if (!isRecord(value)) {
     throw new Error('orcad_migration_manifest_source_invalid')
   }
-  // Only the relay-era SSH source (no `kind`) is parsed here; other kinds ship with their capability.
+  if (value.kind === 'local-wsl') {
+    return parseLocalWslSource(value)
+  }
+  // An explicit 'ssh-relay' is refused too: SSH has exactly one encoding, so one digest.
   if (value.kind !== undefined) {
     throw new Error('orcad_migration_manifest_source_kind_unsupported')
   }
@@ -156,6 +162,53 @@ function parseSource(value: unknown): OrcadMigrationManifestSource {
     sshTargetId: requiredString(value.sshTargetId, 'source.sshTargetId'),
     sshTargetGeneration: generation === null ? null : Number(generation),
     targetLabel: requiredString(value.targetLabel, 'source.targetLabel')
+  }
+}
+
+function parseLocalWslSource(value: Record<string, unknown>): OrcadMigrationLocalWslManifestSource {
+  // A non-SSH source naming an SSH target could only be a confused or forged manifest.
+  if (value.sshTargetId !== undefined) {
+    throw new Error('orcad_migration_manifest_source_invalid')
+  }
+  const generation = value.generation
+  if (!Number.isSafeInteger(generation) || Number(generation) < 1) {
+    throw new Error('orcad_migration_manifest_source_generation_invalid')
+  }
+  return {
+    kind: 'local-wsl',
+    distro: requiredString(value.distro, 'source.distro'),
+    ...(value.distroGuid === undefined
+      ? {}
+      : { distroGuid: requiredString(value.distroGuid, 'source.distroGuid') }),
+    scopeRepoIds: boundedStringArray(
+      value.scopeRepoIds,
+      MAX_ORCAD_MIGRATION_REPOSITORIES,
+      'source.scopeRepoIds_invalid'
+    ),
+    scopeFolderWorkspaceIds: boundedStringArray(
+      value.scopeFolderWorkspaceIds,
+      MAX_ORCAD_MIGRATION_FOLDER_WORKSPACES,
+      'source.scopeFolderWorkspaceIds_invalid'
+    ),
+    generation: Number(generation)
+  }
+}
+
+/** The catalog a WSL source moves is exactly its declared scope; the host never infers scope. */
+function assertLocalWslScopeMatchesPayload(manifest: OrcadMigrationManifest): void {
+  const { source, payload } = manifest
+  if (!isOrcadMigrationLocalWslSource(source)) {
+    return
+  }
+  const sameIds = (declared: readonly string[], rows: readonly { id: string }[]): boolean => {
+    const ids = new Set(rows.map((row) => row.id))
+    return declared.length === ids.size && declared.every((id) => ids.has(id))
+  }
+  if (
+    !sameIds(source.scopeRepoIds, payload.repositories) ||
+    !sameIds(source.scopeFolderWorkspaceIds, payload.folderWorkspaces)
+  ) {
+    throw new Error('orcad_migration_manifest_source_scope_mismatch')
   }
 }
 
