@@ -1,4 +1,5 @@
 import { BaseWindow, WebContentsView } from 'electron'
+import { isBackgroundLaunch } from '../window/foreground-activation-policy'
 
 // Why: Electron passes the pre-created popup WebContents through the
 // createWindow options (present at runtime, absent from the published d.ts).
@@ -6,6 +7,7 @@ import { BaseWindow, WebContentsView } from 'electron'
 // window.opener and the inherited session that OAuth/SSO popups depend on.
 export type PopupChildWindowOptions = Electron.BrowserWindowConstructorOptions & {
   webContents?: Electron.WebContents
+  initialNavigation?: { referrer?: Electron.Referrer; postBody?: Electron.PostBody | null }
 }
 
 export type PopupOriginBarWindow = {
@@ -157,7 +159,8 @@ export function openPopupWithOriginBar(
     minHeight: MIN_POPUP_CONTENT_HEIGHT + POPUP_ORIGIN_BAR_HEIGHT,
     title: initialOrigin.label,
     // Why: Windows/Linux attach Orca's app menu to every window, including web popups.
-    autoHideMenuBar: true
+    autoHideMenuBar: true,
+    show: !isBackgroundLaunch() && options.show !== false
   })
 
   // Why: the origin bar renders only Orca's own data: URL and must stay
@@ -242,7 +245,18 @@ export function openPopupWithOriginBar(
   // Why: with no adopted contents there is no Chromium-driven navigation for
   // this popup, so load the target ourselves (opener handle is already gone).
   if (!options.webContents) {
-    void contentWebContents.loadURL(initialUrl).catch(() => {})
+    const { referrer, postBody } = options.initialNavigation ?? {}
+    void contentWebContents
+      .loadURL(initialUrl, {
+        ...(referrer ? { httpReferrer: referrer } : {}),
+        ...(postBody
+          ? {
+              postData: postBody.data,
+              extraHeaders: `Content-Type: ${postBody.contentType}${postBody.boundary ? `; boundary=${postBody.boundary}` : ''}`
+            }
+          : {})
+      })
+      .catch(() => {})
   }
 
   const closedListeners: (() => void)[] = []
