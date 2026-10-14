@@ -119,5 +119,36 @@ for (const theme of ['dark', 'light'] as const) {
         contentType: 'image/png'
       })
     }
+    await orcaPage.evaluate(async (message) => {
+      await window.__store!.getState().updateSettingsOrThrow({ uiLanguage: 'es' })
+      window.__store!.setState({
+        updateStatus: {
+          state: 'error',
+          version: '1.4.200',
+          retryAction: 'install',
+          message,
+          installBlock: {
+            reason: 'running-instances',
+            instances: [
+              { pid: 74451, kind: 'browser' },
+              { pid: 80932, kind: 'browser' }
+            ]
+          }
+        }
+      })
+    }, diagnostic)
+    const spanishCard = orcaPage.getByRole('complementary').filter({
+      has: orcaPage.getByRole('heading', { name: 'Tu actualización está lista', exact: true })
+    })
+    await expect(spanishCard.getByText('Navegador en segundo plano', { exact: true })).toHaveCount(
+      2
+    )
+    await expect(
+      spanishCard.getByRole('button', { name: 'Reintentar instalación', exact: true })
+    ).toBeVisible()
+    await expect(spanishCard.getByRole('button', { name: 'Más tarde', exact: true })).toBeVisible()
+    const spanishProof = testInfo.outputPath(`after-es-${theme}.png`)
+    await spanishCard.screenshot({ path: spanishProof, animations: 'disabled' })
+    await testInfo.attach(`after-es-${theme}`, { path: spanishProof, contentType: 'image/png' })
   })
 }
