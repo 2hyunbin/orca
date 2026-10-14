@@ -1,5 +1,5 @@
 // The host-side runtime-source fence, paired across two builds over a real socket: current code
-// against the newest published release's host. Release checkouts carry no CLI sources, and an old
+// against both the fence predecessor and newest published release. Release checkouts carry no CLI sources, and an old
 // CLI's frame is exactly the current one without the field, so the old client is the current
 // transport sending none.
 //
@@ -33,6 +33,7 @@ import {
 
 // Why: a cold CI run extracts the baseline checkout before the first pairing.
 const SUITE_TIMEOUT_MS = 180_000
+const BEFORE_SOURCE_FENCE_REF = 'e0376015a45a0d92931cd3026667d49861e8c370'
 const RUNTIME_ID = 'runtime-a'
 const SOURCE_A = '11111111-1111-4111-8111-111111111111'
 const SOURCE_B = '22222222-2222-4222-8222-222222222222'
@@ -108,9 +109,13 @@ async function serve(host: Dispatcher): Promise<RuntimeMetadata> {
 
 let releasedHost: HostBuild
 let currentHost: HostBuild
+let latestHost: HostBuild
+let latestHasFence: boolean
+let clearLatestSource = (): void => undefined
 
 beforeAll(async () => {
-  const checkout = await materializeReleaseCheckout(resolveBaselineReleaseRef())
+  const checkout = await materializeReleaseCheckout(BEFORE_SOURCE_FENCE_REF)
+  const latest = await materializeReleaseCheckout(resolveBaselineReleaseRef())
   const load = (path: string) => importReleaseCheckoutModule(checkout, path)
   const [oldDispatcher, oldCore, newDispatcher, newCore] = await Promise.all([
     load('src/main/runtime/rpc/dispatcher.ts'),
@@ -119,12 +124,29 @@ beforeAll(async () => {
     import('../../../src/main/runtime/rpc/core')
   ])
   releasedHost = hostBuildOf(oldDispatcher, oldCore)
+  const [latestDispatcher, latestCore, latestProtocol, latestDescriptor] = await Promise.all([
+    importReleaseCheckoutModule(latest, 'src/main/runtime/rpc/dispatcher.ts'),
+    importReleaseCheckoutModule(latest, 'src/main/runtime/rpc/core.ts'),
+    importReleaseCheckoutModule(latest, 'src/shared/protocol-version.ts'),
+    importReleaseCheckoutModule(latest, 'src/main/runtime/host-descriptor.ts')
+  ])
+  latestHost = hostBuildOf(latestDispatcher, latestCore)
+  latestHasFence = member<readonly string[]>(latestProtocol, 'RUNTIME_CAPABILITIES').includes(
+    RUNTIME_SOURCE_FENCE_RUNTIME_CAPABILITY
+  )
+  const publishLatest = member<typeof publishHostDescriptor>(
+    latestDescriptor,
+    'publishHostDescriptor'
+  )
+  publishLatest(RUNTIME_ID, { installationId: SOURCE_A })
+  clearLatestSource = () => publishLatest(RUNTIME_ID, null)
   currentHost = hostBuildOf(newDispatcher, newCore)
   publishHostDescriptor(RUNTIME_ID, { installationId: SOURCE_A })
 }, SUITE_TIMEOUT_MS)
 
 afterAll(async () => {
   publishHostDescriptor(RUNTIME_ID, null)
+  clearLatestSource()
   await Promise.all(
     servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve())))
   )
@@ -165,6 +187,32 @@ describe('runtime-source fence across versions', () => {
 
   it('an old host ignores a new CLI’s expectation rather than refusing', async () => {
     const { response, ran } = await call(releasedHost, {
+      sourceId: SOURCE_A,
+      runtimeId: RUNTIME_ID
+    })
+    expect(response).toMatchObject({ ok: true })
+    expect(ran).toBe(1)
+  })
+
+  it('the newest release accepts a client without a source expectation', async () => {
+    const { response, ran } = await call(latestHost)
+    expect(response).toMatchObject({ ok: true })
+    expect(ran).toBe(1)
+  })
+
+  it('the newest release follows its advertised source-fence policy', async () => {
+    const { response, ran } = await call(latestHost, {
+      sourceId: SOURCE_B,
+      runtimeId: RUNTIME_ID
+    })
+    expect(response).toMatchObject(
+      latestHasFence ? { ok: false, error: { code: 'runtime_source_mismatch' } } : { ok: true }
+    )
+    expect(ran).toBe(latestHasFence ? 0 : 1)
+  })
+
+  it('the newest release accepts an expectation matching its published source', async () => {
+    const { response, ran } = await call(latestHost, {
       sourceId: SOURCE_A,
       runtimeId: RUNTIME_ID
     })
