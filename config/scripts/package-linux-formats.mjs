@@ -9,7 +9,8 @@ import {
   realpathSync,
   renameSync,
   rmSync,
-  statSync
+  statSync,
+  writeFileSync
 } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { copyPrivateTree } from './space-sharing-copy.mjs'
@@ -81,6 +82,8 @@ export async function packageLinuxFormats({
         mkdirSync(join(staging, format))
         // Preserve packaged modes; only the format metadata may be rewritten by electron-builder.
         copyPrivateTree(preparedDirectory, appDirectory, { unprotect: () => {} })
+        // FpmTarget writes this only with publishing configured; qualification disables it.
+        writeFileSync(join(appDirectory, 'resources/package-type'), format)
         console.log(
           `[linux-package] ${format} copied in ${Math.round(performance.now() - startedFormatAt)}ms`
         )

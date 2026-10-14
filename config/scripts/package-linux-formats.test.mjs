@@ -41,7 +41,6 @@ function emitPackage(args) {
   const format = valueAfter(args, '--linux')
   const app = valueAfter(args, '--prepackaged')
   const output = valueAfter(args, '--config.directories.output')
-  writeFileSync(join(app, 'resources/package-type'), format)
   mkdirSync(output, { recursive: true })
   writeFileSync(join(output, `orca.${format}`), format)
   writeFileSync(join(output, 'latest-linux.yml'), format)
@@ -89,7 +88,7 @@ describe('independent Linux package formats', () => {
       runBuilder: async (args) => {
         const app = valueAfter(args, '--prepackaged')
         const format = valueAfter(args, '--linux')
-        expect(readFileSync(join(app, 'resources/package-type'), 'utf8')).toBe('AppImage')
+        expect(readFileSync(join(app, 'resources/package-type'), 'utf8')).toBe(format)
         expect(readFileSync(join(app, 'resources/app.asar'), 'utf8')).toBe('verified application')
         if (process.platform !== 'win32') {
           expect(readlinkSync(join(app, 'marker-link'))).toBe('resources/package-type')
