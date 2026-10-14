@@ -17956,6 +17956,23 @@
         "resuming": "Reprise automatique après le redémarrage.",
         "resumed": "Reprises automatiquement après le redémarrage.",
         "changeInSettings": "Modifier dans les paramètres"
+      },
+      "TaskPageJiraSavedFilters": {
+        "6c381858a1": "Filtres enregistrés",
+        "d14121662d": "Aucun filtre enregistré.",
+        "af0dd8c528": "Modifier {{value0}}",
+        "bae9bd87bf": "Vous pouvez enregistrer jusqu’à {{value0}} filtres.",
+        "85506127a5": "Enregistrer le filtre actuel",
+        "7aef259c28": "Modifier le filtre Jira",
+        "4f0e55d2e5": "Enregistrer le filtre Jira",
+        "466c1b12ce": "Nommez cette requête JQL pour y accéder rapidement.",
+        "e4c2f52972": "Nom",
+        "0ab71bb840": "Un filtre enregistré porte déjà ce nom.",
+        "42ce360813": "JQL",
+        "7b21c59a26": "Supprimer le filtre",
+        "a62f9db53d": "Annuler",
+        "c77189bc0c": "Mettre à jour le filtre",
+        "19af906d12": "Enregistrer le filtre"
       }
     },
     "i18n": {
@@ -19908,5 +19925,14 @@
     "browser": "Navigateur",
     "editor": "Éditeur",
     "terminal": "Terminal"
+  },
+  "jira": {
+    "savedFilters": {
+      "retry": "Réessayer",
+      "find": "Rechercher un filtre enregistré",
+      "noMatch": "Aucun filtre correspondant.",
+      "loadFailed": "Impossible de charger les filtres Jira enregistrés.",
+      "saveFailed": "Impossible d’enregistrer les filtres Jira."
+    }
   }
 }

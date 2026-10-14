@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  utimesSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -678,5 +687,140 @@ describe('Jira client credential storage', () => {
     const headers = netFetchMock.mock.calls[0]?.[1]?.headers as Headers
     expect(headers.get('User-Agent')).toBe('Orca')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('Jira site file cross-process visibility', () => {
+  it('reloads rotated tokens without decrypting them during status reads', async () => {
+    writeJiraFiles('site-alpha', 'token-alpha')
+    const path = tokenPathForSite('site-alpha')
+    utimesSync(path, 1_700_000_000, 1_700_000_000)
+    const decrypt = vi.fn((value: Buffer) => value.toString('utf-8'))
+    const jira = await loadClientModule({ encryptionAvailable: true, decryptString: decrypt })
+    expect(jira.getStatus().connected).toBe(true)
+    expect(decrypt).not.toHaveBeenCalled()
+    const captured = jira.getClients('site-alpha')[0]
+    expect(decrypt).toHaveBeenCalledOnce()
+    jira.getClients('site-alpha')
+    expect(decrypt).toHaveBeenCalledOnce()
+
+    writeFileSync(`${path}.replacement`, 'token-bravo')
+    utimesSync(`${path}.replacement`, 1_700_000_000, 1_700_000_000)
+    renameSync(`${path}.replacement`, path)
+    expect(jira.getStatus().connected).toBe(true)
+    expect(decrypt).toHaveBeenCalledOnce()
+    expect(jira.getClients('site-alpha')[0]?.authorization).toBe(
+      `Basic ${Buffer.from('ada@example.com:token-bravo').toString('base64')}`
+    )
+    expect(captured?.authorization).toBe(
+      `Basic ${Buffer.from('ada@example.com:token-alpha').toString('base64')}`
+    )
+    expect(decrypt).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['remove', 'empty'])(
+    'observes an externally %s token and its restoration',
+    async (mode) => {
+      writeJiraFiles('site-alpha', 'token-alpha')
+      const jira = await loadClientModule()
+      expect(jira.getClients('site-alpha')).toHaveLength(1)
+      const path = tokenPathForSite('site-alpha')
+      if (mode === 'remove') {
+        rmSync(path)
+      } else {
+        writeFileSync(path, '')
+      }
+      expect(jira.getStatus().connected).toBe(false)
+      expect(jira.getClients('site-alpha')).toEqual([])
+      writeFileSync(path, 'token-bravo')
+      expect(jira.getStatus().connected).toBe(true)
+      expect(jira.getClients('site-alpha')[0]?.authorization).toBe(
+        `Basic ${Buffer.from('ada@example.com:token-bravo').toString('base64')}`
+      )
+    }
+  )
+
+  it('recovers a token that appears after metadata was first read without it', async () => {
+    writeJiraFiles('site-alpha', 'token-alpha')
+    const path = tokenPathForSite('site-alpha')
+    rmSync(path)
+    const jira = await loadClientModule()
+    expect(jira.getStatus().connected).toBe(false)
+    writeFileSync(path, 'token-alpha')
+    expect(jira.getStatus().connected).toBe(true)
+    expect(jira.getClients('site-alpha')).toHaveLength(1)
+  })
+
+  it('keeps a captured request on its site after an external selection change', async () => {
+    const sites = [
+      { id: 'site-alpha', token: 'token-alpha' },
+      { id: 'site-beta', token: 'token-beta' }
+    ]
+    writeMultiSiteFiles(sites, 'site-alpha')
+    const jira = await loadClientModule()
+    const captured = jira.getClients()[0]
+    if (!captured) {
+      throw new Error('Expected stored Jira client')
+    }
+
+    writeMultiSiteFiles(sites, 'site-beta')
+    expect(jira.getClients()[0]?.site.id).toBe('site-beta')
+    netFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ issues: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    const signal = new AbortController().signal
+    await jira.jiraRequest(captured, '/rest/api/3/search/jql', { signal })
+
+    expect(captured.site.id).toBe('site-alpha')
+    expect(netFetchMock).toHaveBeenCalledWith(
+      'https://site-alpha.atlassian.net/rest/api/3/search/jql',
+      expect.objectContaining({ signal })
+    )
+  })
+
+  it('picks up a site connected by another Orca process', async () => {
+    // Every Orca process on the machine shares ~/.orca. Loading before any site
+    // exists must not pin "disconnected" for the life of the process.
+    const jira = await loadClientModule()
+    expect(jira.getStatus()).toMatchObject({ connected: false, sites: [] })
+
+    writeJiraFiles('site-alpha', 'token-alpha')
+
+    expect(jira.getStatus()).toMatchObject({
+      connected: true,
+      activeSiteId: 'site-alpha',
+      sites: [{ id: 'site-alpha' }]
+    })
+  })
+
+  it('drops a site disconnected by another Orca process', async () => {
+    writeJiraFiles('site-alpha', 'token-alpha')
+    const jira = await loadClientModule()
+    expect(jira.getStatus()).toMatchObject({ connected: true })
+
+    writeFileSync(
+      join(tempHome, '.orca', 'jira-sites.json'),
+      JSON.stringify({ version: 1, activeSiteId: null, selectedSiteId: null, sites: [] }, null, 2),
+      { encoding: 'utf-8' }
+    )
+
+    expect(jira.getStatus()).toMatchObject({ connected: false, sites: [] })
+  })
+
+  it('follows the selected site changing underneath it', async () => {
+    const sites = [
+      { id: 'site-alpha', token: 'token-alpha' },
+      { id: 'site-beta', token: 'token-beta' }
+    ]
+    writeMultiSiteFiles(sites, 'site-alpha')
+    const jira = await loadClientModule()
+    expect(jira.getStatus()).toMatchObject({ selectedSiteId: 'site-alpha' })
+
+    writeMultiSiteFiles(sites, 'site-beta')
+
+    expect(jira.getStatus()).toMatchObject({ selectedSiteId: 'site-beta' })
   })
 })

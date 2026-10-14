@@ -316,8 +316,10 @@ import {
 } from './hosted-review-params'
 import {
   AssignableUsers,
+  CancelGenerateIssueSummary,
   Connect,
   CreateIssue as CreateIssueOfJiraParams,
+  GenerateIssueSummary,
   IssueComment as IssueCommentOfJiraParams,
   IssueKey,
   IssueUpdate,
@@ -330,6 +332,7 @@ import {
   SiteSelection,
   UserSearch
 } from './jira-params'
+import { JiraSavedFilterMutationParam } from './jira-saved-filter-params'
 import {
   AgentIssueContext,
   AgentSearchIssues,
@@ -980,9 +983,11 @@ export const RPC_PARAMS_BY_METHOD = {
   'hostedReview.forBranch': HostedReviewForBranch,
   'hostedReview.getCreationEligibility': HostedReviewCreationEligibility,
   'jira.addIssueComment': IssueCommentOfJiraParams,
+  'jira.cancelGenerateIssueSummary': CancelGenerateIssueSummary,
   'jira.connect': Connect,
   'jira.createIssue': CreateIssueOfJiraParams,
   'jira.disconnect': SiteSelection,
+  'jira.generateIssueSummary': GenerateIssueSummary,
   'jira.getIssue': IssueKey,
   'jira.getIssueStream': IssueKey,
   'jira.getProjectStatusOrder': ProjectStatusOrder,
@@ -1274,6 +1279,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminalDaemon.restartSevered': TerminalDaemonRestartSeveredParams,
   'terminalDaemon.severedStatus': null,
   'ui.get': null,
+  'ui.getJiraSavedFilters': null,
+  'ui.mutateJiraSavedFilters': JiraSavedFilterMutationParam,
   'ui.recordFeatureInteraction': FeatureInteractionIdParam,
   'ui.set': UiUpdate,
   'updater.check': UpdaterCheckParams,
