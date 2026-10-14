@@ -21,27 +21,6 @@ on:
       - '.github/actions/prepare-native-runtime/**'
       - '.github/actions/prepare-orcad-prebuilds/**'
       - '.github/workflows/node-server-tests.yml'
-  # Relevant main pushes qualify every platform after the dependency check.
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'config/**'
-      - 'native/**'
-      - 'tests/**'
-      - 'resources/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'tsconfig.json'
-      - '.npmrc'
-      - '.pnpmfile.cjs'
-      - '.github/actions/install-node-dependencies/**'
-      - '.github/actions/restore-pnpm-verification/**'
-      - '.github/actions/prepare-headless-compiler/**'
-      - '.github/actions/prepare-native-runtime/**'
-      - '.github/actions/prepare-orcad-prebuilds/**'
-      - '.github/workflows/node-server-tests.yml'
   workflow_dispatch:
     inputs:
       build_template:
@@ -59,8 +38,6 @@ on:
         description: Upload each lane's release slot and merge them into the orcad-template artifact
         type: boolean
         default: false
-  schedule:
-    - cron: '30 11 * * *'
 
 permissions:
   contents: read
