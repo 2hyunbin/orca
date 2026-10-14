@@ -240,7 +240,7 @@ describe('ShadowDirectoryCompare', () => {
     ])
   })
 
-  it('counts a compare on every cell it involves, and on none for a host neither side has', () => {
+  it('counts a compare once on every cell it involves, and on none for a host neither side has', () => {
     const lines: Array<Record<string, unknown>> = []
     const compareOn = (seats: Record<string, ReturnType<typeof seat>[]>) =>
       new ShadowDirectoryCompare(directoryWith(seats), () => 0, (line) => lines.push(JSON.parse(line)))
@@ -254,6 +254,10 @@ describe('ShadowDirectoryCompare', () => {
     const mismatch = compareOn({ 'cell-a': [], 'cell-b': [seat(4)] })
     mismatch.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     mismatch.flush(0)
+    // A duplicate seat on the database's own cell counts there once, and on the other seat cell.
+    const duplicate = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2)] })
+    duplicate.compare('sticky-verify', IDENTITY, assignment('cell-a'))
+    duplicate.flush(0)
     const mapOnly = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(3)] })
     mapOnly.compare('resolve', IDENTITY, null)
     mapOnly.flush(0)
@@ -262,6 +266,7 @@ describe('ShadowDirectoryCompare', () => {
       ['db-only-unseen', true, 3, { 'cell-a': 2, 'cell-b': 1 }],
       ['agree-absent', true, 1, {}],
       ['cell-mismatch', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
+      ['duplicate-seat', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['map-only', false, 1, { 'cell-a': 1, 'cell-b': 1 }]
     ])
   })
