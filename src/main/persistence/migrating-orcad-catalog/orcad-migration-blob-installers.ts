@@ -21,6 +21,9 @@ import {
   orcadMigrationStagingKey,
   type OrcadMigrationRequestIdentity
 } from './orcad-migration-staged-file'
+import { resolvePtyShellPath } from '../../daemon/shell-ready'
+import { resolveShellKind } from '../../terminal-history'
+import type { OrcadMigrationShellHistoryShell } from './orcad-migration-shell-history-format'
 import {
   assertOrcadMigrationShellHistoryValid,
   installOrcadMigrationShellHistory
@@ -108,8 +111,19 @@ function installShellHistory(install: OrcadMigrationBlobInstall): void {
     migration: install.migration,
     root: install.root,
     historyRoot: install.shellHistoryRoot,
+    loginShell: resolveHostLoginShellHistoryShell,
     now: install.now
   })
+}
+
+/**
+ * A login-shell history from the WSL bridge (see the header's `loginShell`) lands under the file a
+ * new pane on this host reads: `zsh_history` or `bash_history` for those shells, `bash_history`
+ * for any other. The shell is resolved as a new pane's spawn resolves it.
+ */
+function resolveHostLoginShellHistoryShell(): OrcadMigrationShellHistoryShell | null {
+  const kind = resolveShellKind(resolvePtyShellPath({}))
+  return kind === 'zsh' || kind === 'bash' ? kind : null
 }
 
 function installTerminalRestoreHints(install: OrcadMigrationBlobInstall): void {

@@ -1,34 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createHash } from 'node:crypto'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { OrcadMigrationBlobDescriptor } from '../shared/orcad-migration-blob-transfer'
-import type { OrcadMigrationManifest } from '../shared/orcad-migration-manifest'
-import { folderWorkspaceKey } from '../shared/workspace-scope'
-import { getOrcadMigrationReceivedBlobPath } from './persistence/migrating-orcad-catalog/orcad-migration-blob-staging'
 import { encodeOrcadMigrationShellHistoryHeader } from './persistence/migrating-orcad-catalog/orcad-migration-shell-history-format'
-import { buildWslMoveShellHistoryBlobs } from './persistence/moving-wsl-projects/wsl-move-shell-history-blobs'
-import {
-  commitStagedOrcadMigrationCatalogDurably,
-  getOrcadMigrationCatalogState
-} from './runtime/orcad-migration-catalog-import'
+import { getOrcadMigrationCatalogState } from './runtime/orcad-migration-catalog-import'
 import { injectHistoryEnv, readHistoryMeta } from './terminal-history'
 import { getHistoryRoot } from './terminal-history-paths'
 import { hashWorktreeId } from './terminal-history-id'
+import { DORMANT_WORKTREE_ID, manifest } from './persistence-orcad-migration-catalog-fixture'
 import {
-  DORMANT_WORKTREE_ID,
-  FOLDER_WORKSPACE,
-  manifest
-} from './persistence-orcad-migration-catalog-fixture'
+  BASH,
+  FOLDER_KEY,
+  ZSH,
+  commitDurably,
+  encodedHistories as encodeFrom,
+  hostHistory,
+  hostHistoryDirectory,
+  rawBlob,
+  receivedPath,
+  stage,
+  type EncodedBlob
+} from './persistence-orcad-migration-shell-history-fixture'
 import { createStore, testState } from './persistence-test-harness'
 
 vi.mock('electron', () => ({
@@ -42,98 +34,27 @@ vi.mock('electron', () => ({
 
 vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
 
-type Store = ReturnType<typeof createStore>
-type EncodedBlob = { descriptor: OrcadMigrationBlobDescriptor; bytes: Buffer }
-
-const FOLDER_KEY = folderWorkspaceKey(FOLDER_WORKSPACE.id)
-const ZSH = ': 1700000000:0;make test\n'
-const BASH = 'git status\n'
-
 let desktopHistory: string
 
-// What the desktop sends for the moved worktree: its source ids already equal the host's here.
-async function encodedHistories(
+function encodedHistories(
   files: { worktreeId: string; file: string; content: string }[]
 ): Promise<EncodedBlob[]> {
-  for (const { worktreeId, file, content } of files) {
-    const directory = join(desktopHistory, hashWorktreeId(worktreeId))
-    mkdirSync(directory, { recursive: true })
-    writeFileSync(join(directory, file), content)
-  }
-  const ids = [...new Set(files.map((entry) => entry.worktreeId))]
-  const blobs = await buildWslMoveShellHistoryBlobs({
-    distro: 'Ubuntu',
-    historyRoot: desktopHistory,
-    worktrees: ids.map((id) => ({ sourceWorktreeId: id, destinationWorktreeId: id }))
-  })
-  return Promise.all(
-    blobs.descriptors.map(async (descriptor) => ({
-      descriptor,
-      bytes: await blobs.source.readChunk(descriptor, 0, descriptor.byteLength)
-    }))
-  )
-}
-
-function rawBlob(key: string, bytes: Buffer): EncodedBlob {
-  return {
-    bytes,
-    descriptor: {
-      blobKind: 'shell-history',
-      key,
-      sha256: createHash('sha256').update(bytes).digest('hex'),
-      byteLength: bytes.length
-    }
-  }
-}
-
-function stage(store: Store, input: OrcadMigrationManifest, blobs: EncodedBlob[]): void {
-  store.stageOrcadMigrationCatalog(input)
-  for (const blob of blobs) {
-    store.stageOrcadMigrationBlobChunk({
-      migrationId: input.migrationId,
-      manifestSha256: input.manifestSha256,
-      blob: blob.descriptor,
-      offset: 0,
-      bytesBase64: blob.bytes.toString('base64')
-    })
-  }
-}
-
-function receivedPath(input: OrcadMigrationManifest, key: string): string {
-  return getOrcadMigrationReceivedBlobPath(join(testState.dir, 'orcad-migration-blobs'), input, {
-    blobKind: 'shell-history',
-    key
-  })
-}
-
-function hostHistoryDirectory(worktreeId: string): string {
-  return join(getHistoryRoot(), hashWorktreeId(worktreeId))
-}
-
-function hostHistory(worktreeId: string, file: string): string | null {
-  const path = join(hostHistoryDirectory(worktreeId), file)
-  return existsSync(path) ? readFileSync(path, 'utf8') : null
-}
-
-async function commitDurably(store: Store, input: OrcadMigrationManifest): Promise<string> {
-  const result = await commitStagedOrcadMigrationCatalogDurably({
-    store,
-    manifest: input,
-    onDurableCommit: () => {}
-  })
-  return result.state
+  return encodeFrom(desktopHistory, files)
 }
 
 describe('orcad migration shell history through the store', () => {
   beforeEach(() => {
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-migration-shell-history-'))
     desktopHistory = mkdtempSync(join(tmpdir(), 'orca-desktop-history-'))
+    // A lone WSL bash history follows the host's login shell; pin it for these cases.
+    vi.stubEnv('SHELL', '/bin/bash')
   })
 
   afterEach(() => {
     rmSync(testState.dir, { recursive: true, force: true })
     rmSync(desktopHistory, { recursive: true, force: true })
     rmSync(getHistoryRoot(), { recursive: true, force: true })
+    vi.unstubAllEnvs()
   })
 
   it('installs each history and its meta.json where a new pane in that worktree reads it', async () => {

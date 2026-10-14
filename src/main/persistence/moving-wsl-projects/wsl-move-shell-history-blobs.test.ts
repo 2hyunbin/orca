@@ -93,6 +93,25 @@ describe('WSL move shell history blobs', () => {
     )
   })
 
+  it('marks a bash history as the login shell only when no zsh history came with it', async () => {
+    writeHistory(SOURCE_ID, 'zsh_history', ': 1:0;ls\n')
+    writeHistory(SOURCE_ID, 'bash_history', 'ls\n')
+    writeHistory(SOURCE_FOLDER_ID, 'bash_history', 'make\n')
+
+    const blobs = await build([
+      { sourceWorktreeId: SOURCE_ID, destinationWorktreeId: DESTINATION_ID },
+      { sourceWorktreeId: SOURCE_FOLDER_ID, destinationWorktreeId: SOURCE_FOLDER_ID }
+    ])
+
+    const loginShell = await Promise.all(
+      blobs.descriptors.map(async (descriptor) => {
+        const bytes = await readAll(blobs, descriptor, descriptor.byteLength)
+        return parseOrcadMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length).loginShell
+      })
+    )
+    expect(loginShell).toEqual([false, false, true])
+  })
+
   it('skips missing and empty files and never sends fish', async () => {
     writeHistory(SOURCE_ID, 'zsh_history', '')
     writeHistory(SOURCE_ID, 'fish_history', '- cmd: ls\n')

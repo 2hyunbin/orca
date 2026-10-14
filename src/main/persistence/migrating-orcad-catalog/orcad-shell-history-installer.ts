@@ -24,7 +24,8 @@ import {
   ORCAD_MIGRATION_SHELL_HISTORY_HEADER_SCAN_BYTES,
   parseOrcadMigrationShellHistoryHeader,
   parseOrcadMigrationShellHistoryKey,
-  shellHistoryFileName
+  shellHistoryFileName,
+  type OrcadMigrationShellHistoryShell
 } from './orcad-migration-shell-history-format'
 import type { OrcadMigrationRequestIdentity } from './orcad-migration-staged-file'
 
@@ -54,6 +55,8 @@ export type OrcadShellHistoryInstall = {
   root: string
   /** This host's `getHistoryRoot()`. */
   historyRoot: string
+  /** The shell a new pane on this host runs, when it is one whose history moves. */
+  loginShell: () => OrcadMigrationShellHistoryShell | null
   now: number
 }
 
@@ -103,7 +106,7 @@ function installOne(install: OrcadShellHistoryInstall, key: string): void {
     moved = {
       worktreeId: header.worktreeId,
       worktreeHash,
-      fileName: shellHistoryFileName(shell),
+      fileName: shellHistoryFileName(header.loginShell ? (install.loginShell() ?? shell) : shell),
       history: bytes.subarray(header.byteLength)
     }
   } catch (error) {

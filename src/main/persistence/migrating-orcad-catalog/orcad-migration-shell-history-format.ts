@@ -21,7 +21,8 @@ const NEWLINE = 0x0a
 
 const HeaderSchema = z.object({
   version: z.literal(ORCAD_MIGRATION_SHELL_HISTORY_VERSION),
-  worktreeId: z.string().min(1)
+  worktreeId: z.string().min(1),
+  loginShell: z.literal(true).optional()
 })
 
 export const MAX_ORCAD_MIGRATION_SHELL_HISTORY_BYTES =
@@ -34,6 +35,12 @@ export type OrcadMigrationShellHistoryKey = {
 
 export type OrcadMigrationShellHistoryHeader = {
   worktreeId: string
+  /**
+   * The desktop's WSL bridge names every pane's history `bash_history`, but wsl.exe runs the
+   * distro's login shell, so the file holds that shell's history; set only on such a bash file
+   * that has no zsh sibling.
+   */
+  loginShell: boolean
   /** Where the history bytes start. */
   byteLength: number
 }
@@ -62,11 +69,16 @@ export function parseOrcadMigrationShellHistoryKey(key: string): OrcadMigrationS
   return { worktreeHash, shell: supported }
 }
 
-export function encodeOrcadMigrationShellHistoryHeader(worktreeId: string): Buffer {
-  const header = Buffer.from(
-    `${JSON.stringify({ version: ORCAD_MIGRATION_SHELL_HISTORY_VERSION, worktreeId })}\n`,
-    'utf8'
-  )
+export function encodeOrcadMigrationShellHistoryHeader(
+  worktreeId: string,
+  options: { loginShell?: boolean } = {}
+): Buffer {
+  const document = {
+    version: ORCAD_MIGRATION_SHELL_HISTORY_VERSION,
+    worktreeId,
+    ...(options.loginShell ? { loginShell: true } : {})
+  }
+  const header = Buffer.from(`${JSON.stringify(document)}\n`, 'utf8')
   if (header.length > ORCAD_MIGRATION_SHELL_HISTORY_HEADER_SCAN_BYTES) {
     throw new Error('orcad_migration_shell_history_worktree_id_too_long')
   }
@@ -87,7 +99,7 @@ export function parseOrcadMigrationShellHistoryHeader(
   if (end === -1) {
     throw new Error('orcad_migration_shell_history_header_invalid')
   }
-  const worktreeId = parseHeaderLine(head.subarray(0, end))
+  const { worktreeId, loginShell } = parseHeaderLine(head.subarray(0, end))
   if (hashWorktreeId(worktreeId) !== parsedKey.worktreeHash) {
     throw new Error('orcad_migration_shell_history_key_mismatch')
   }
@@ -95,16 +107,16 @@ export function parseOrcadMigrationShellHistoryHeader(
   if (totalBytes <= byteLength) {
     throw new Error('orcad_migration_shell_history_empty')
   }
-  return { worktreeId, byteLength }
+  return { worktreeId, loginShell, byteLength }
 }
 
-function parseHeaderLine(line: Buffer): string {
+function parseHeaderLine(line: Buffer): { worktreeId: string; loginShell: boolean } {
   try {
     const parsed = HeaderSchema.safeParse(
       JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(line))
     )
     if (parsed.success) {
-      return parsed.data.worktreeId
+      return { worktreeId: parsed.data.worktreeId, loginShell: parsed.data.loginShell === true }
     }
   } catch {
     // Not UTF-8 JSON; refused below like any other malformed header.

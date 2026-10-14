@@ -61,6 +61,7 @@ export async function buildWslMoveShellHistoryBlobs(
   const files: ShellHistoryFile[] = []
   for (const worktree of request.worktrees) {
     const directory = join(root, hashWorktreeId(worktree.sourceWorktreeId))
+    let zshSent = false
     for (const shell of ORCAD_MIGRATION_SHELL_HISTORY_SHELLS) {
       const path = join(directory, shellHistoryFileName(shell))
       const fileBytes = await regularFileSize(path)
@@ -68,7 +69,11 @@ export async function buildWslMoveShellHistoryBlobs(
         continue
       }
       const key = orcadMigrationShellHistoryKey(worktree.destinationWorktreeId, shell)
-      const header = encodeOrcadMigrationShellHistoryHeader(worktree.destinationWorktreeId)
+      // zsh is listed first, so a bash file without a zsh sibling is known here.
+      const header = encodeOrcadMigrationShellHistoryHeader(worktree.destinationWorktreeId, {
+        loginShell: shell === 'bash' && !zshSent
+      })
+      zshSent ||= shell === 'zsh'
       const byteLength = header.length + fileBytes
       if (byteLength > MAX_ORCAD_MIGRATION_SHELL_HISTORY_BYTES) {
         throw new Error(`orcad_migration_shell_history_too_large:${key}`)
