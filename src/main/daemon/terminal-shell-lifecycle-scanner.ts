@@ -1,4 +1,5 @@
 import { buildProcessBoundaryGround } from '../../shared/terminal-mode-reset-profiles'
+import { ownRetainedString } from '../../shared/own-retained-string'
 import type { TerminalOwner } from '../../shared/terminal-owner'
 import { TerminalArmedInputModes } from './terminal-armed-input-modes'
 
@@ -108,7 +109,10 @@ export class TerminalShellLifecycleScanner {
     }
     const previousTailLength = this.scanTail.length
     const input = previousTailLength === 0 ? chunk : this.scanTail + chunk
-    this.scanTail = this.extractScanTail(input)
+    const tail = this.extractScanTail(input)
+    // Own a small pending suffix so it cannot retain the consumed output between chunks.
+    this.scanTail =
+      tail.length > 0 && tail.length * 2 < input.length ? ownRetainedString(tail) : tail
     // The shared regex is safe because scan() is synchronous and never re-enters.
     SEQUENCE_RE.lastIndex = 0
     let match: RegExpExecArray | null
