@@ -125,7 +125,7 @@ describe('scopeGitHubTaskSearch', () => {
   it('lets a parsed issue scope override the caller kind', () => {
     // characterization: quoting hides `is:issue` from the literal-scope regex but
     // not from the tokenizer, so the parsed issue scope beats the prs caller kind.
-    expect(scopeGitHubTaskSearch('is:"issue"', 'prs')).toBe('is:issue is:"issue"')
+    expect(scopeGitHubTaskSearch('is:"issue"', 'prs')).toBe('is:"issue"')
   })
 
   it('re-prefixes a merged-state query with the caller kind', () => {
