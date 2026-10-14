@@ -294,7 +294,7 @@ describe('getPRCheckDetails', () => {
     })
     expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(
       4,
-      ['api', 'repos/acme/widgets/actions/jobs/8801/logs'],
+      ['api', 'repos/acme/widgets/actions/jobs/8801/logs', '--allow-escape-sequences'],
       expect.objectContaining({
         cwd: '/repo-root',
         host: 'github.com',
