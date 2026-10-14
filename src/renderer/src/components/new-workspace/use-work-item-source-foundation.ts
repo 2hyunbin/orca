@@ -12,6 +12,7 @@ import { useJiraUrlSource } from './use-jira-url-source'
 import { useLinearSourceConnection } from './use-linear-source-connection'
 import { useSmartWorkspaceFieldAvailability } from './use-smart-workspace-field-availability'
 import { useWorkItemSourceState } from './use-work-item-source-state'
+import { useJiraComposerProject } from './use-jira-composer-project'
 
 export function useWorkItemSourceFoundation(props: NormalizedWorkItemSourceSearchProps) {
   const {
@@ -158,6 +159,11 @@ export function useWorkItemSourceFoundation(props: NormalizedWorkItemSourceSearc
     connection: jiraConnection
   })
   const jiraSourceConnected = jiraConnectionStatus?.connected === true
+  const jiraProject = useJiraComposerProject(
+    selectedRepo,
+    jiraSourceContext,
+    !disabled && !textOnly && state.mode === 'jira'
+  )
   const showJiraSiteContext =
     state.mode === 'jira' && jiraConnectionStatus?.selectedSiteId === 'all'
   const jiraStatusId = React.useId()
@@ -202,6 +208,7 @@ export function useWorkItemSourceFoundation(props: NormalizedWorkItemSourceSearc
     jiraConnectionStatus,
     jiraSource,
     jiraSourceConnected,
+    ...jiraProject,
     showJiraSiteContext,
     jiraStatusId,
     linearStatusId

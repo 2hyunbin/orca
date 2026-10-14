@@ -13,6 +13,7 @@ import { bindTaskPageJiraItemSourceContext } from './task-page-jira-item-source-
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
 import { shouldHideTaskPageListChrome } from '@/components/task-page-list-chrome-visibility'
 import { getJiraIssueWorkspaceSeed } from './task-page-source-context'
+import { findJiraIssueDefaultRepo } from '../../../shared/jira-project-reference'
 export function useTaskPageComposerActions(model: TaskPageJiraListEffectsModel) {
   const {
     setTaskResumeState,
@@ -215,11 +216,12 @@ export function useTaskPageComposerActions(model: TaskPageJiraListEffectsModel) 
       openModal('new-workspace-composer', {
         linkedWorkItem,
         taskSourceContext,
+        initialRepoId: findJiraIssueDefaultRepo(model.repos, issue, taskSourceContext.hostId)?.id,
         prefilledName: getJiraIssueWorkspaceSeed(issue),
         telemetrySource: 'sidebar'
       })
     },
-    [jiraSites, jiraTaskSourceContext, openModal]
+    [jiraSites, jiraTaskSourceContext, model.repos, openModal]
   )
   const handleUseJiraItem = useCallback(
     (issue: JiraIssue): void => {

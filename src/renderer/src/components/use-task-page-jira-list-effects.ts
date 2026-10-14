@@ -15,6 +15,8 @@ import { searchTaskPageJiraIssues } from '@/components/task-page-jira-search'
 import { JIRA_ITEM_LIMIT, TASK_SEARCH_DEBOUNCE_MS } from './task-page-source-context'
 import { readLinkedJiraIssues } from './task-page-jira-linked-issues'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
+import { buildJiraPresetJql } from '../../../shared/jira-preset-jql'
+import { restrictJiraQueryToProject } from '../../../shared/jira-project-reference'
 export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffectsModel) {
   const {
     accountBackedTaskSourceHostId,
@@ -45,6 +47,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setAppliedJiraSearch,
     activeJiraPreset,
     jiraCurrentSprint,
+    jiraProjectFilter,
     jiraRefreshNonce,
     jiraActiveSavedFilterId,
     jiraSavedFilters,
@@ -114,30 +117,50 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
         ? searchTaskPageJiraIssues(
             trimmed,
             async (jql) => {
-              const query = jiraCurrentSprint ? withCurrentSprintClause(jql) : jql
+              const sprintJql = jiraCurrentSprint ? withCurrentSprintClause(jql) : jql
+              const query = jiraProjectFilter
+                ? restrictJiraQueryToProject(sprintJql, jiraProjectFilter)
+                : sprintJql
               if (jiraCurrentSprint && !isRuntimeProviderSearchQueryWithinLimit(query)) {
                 sprintQueryTooLong = true
                 throw new Error('Query exceeds the request limit after sprint filtering.')
               }
               return searchJiraIssues(query, JIRA_ITEM_LIMIT, {
                 sourceContext: jiraTaskSourceContext,
+                ...(jiraProjectFilter ? { siteId: jiraProjectFilter.siteId } : {}),
                 force
               })
             },
             exactSavedJql ? 'jql' : 'input'
           ).then((result) => ({ ...result, error: null }))
-        : listJiraIssues(activeJiraPreset, JIRA_ITEM_LIMIT, {
-            sourceContext: jiraTaskSourceContext,
-            force,
-            ...(selectedJiraStatuses.length || jiraCurrentSprint
-              ? {
-                  filters: {
-                    ...(selectedJiraStatuses.length ? { statuses: selectedJiraStatuses } : {}),
-                    ...(jiraCurrentSprint ? { currentSprint: true } : {})
+        : jiraProjectFilter
+          ? searchJiraIssues(
+              restrictJiraQueryToProject(
+                buildJiraPresetJql(activeJiraPreset, {
+                  statuses: selectedJiraStatuses,
+                  currentSprint: jiraCurrentSprint
+                }),
+                jiraProjectFilter
+              ),
+              JIRA_ITEM_LIMIT,
+              {
+                sourceContext: jiraTaskSourceContext,
+                siteId: jiraProjectFilter.siteId,
+                force
+              }
+            ).then((issues) => ({ issues, jqlRejection: null, error: null }))
+          : listJiraIssues(activeJiraPreset, JIRA_ITEM_LIMIT, {
+              sourceContext: jiraTaskSourceContext,
+              force,
+              ...(selectedJiraStatuses.length || jiraCurrentSprint
+                ? {
+                    filters: {
+                      ...(selectedJiraStatuses.length ? { statuses: selectedJiraStatuses } : {}),
+                      ...(jiraCurrentSprint ? { currentSprint: true } : {})
+                    }
                   }
-                }
-              : {})
-          }).then((issues) => ({ issues, jqlRejection: null, error: null }))
+                : {})
+            }).then((issues) => ({ issues, jqlRejection: null, error: null }))
     void request
       .then((result) => {
         const { issues, jqlRejection } = result
@@ -207,6 +230,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     jiraHasWorkspace,
     linkedJiraIssueRefsSignature,
     jiraCurrentSprint,
+    jiraProjectFilter,
     jiraRefreshNonce,
     jiraActiveSavedFilterId,
     jiraSavedFilters,

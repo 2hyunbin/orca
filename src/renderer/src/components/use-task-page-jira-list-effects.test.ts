@@ -260,6 +260,21 @@ describe('useTaskPageJiraListEffects refresh wiring', () => {
     })
   })
 
+  it('scopes the All preset to the mapped project and account before reading issues', async () => {
+    const model = createModel()
+    model.activeJiraPreset = 'all'
+    model.jiraProjectFilter = { id: '10', key: 'ALP', name: 'Alpha', siteId: 'site-a' }
+    renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() =>
+      expect(searchJiraIssues).toHaveBeenCalledWith(
+        'project = "10" AND (statusCategory != Done) ORDER BY updated DESC',
+        50,
+        { sourceContext: null, siteId: 'site-a', force: false }
+      )
+    )
+    expect(listJiraIssues).not.toHaveBeenCalled()
+  })
+
   it('shows the JQL rejection with its text matches and clears it for the next search', async () => {
     const model = createModel()
     model.appliedJiraSearch = 'project = NOPE'
