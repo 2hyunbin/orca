@@ -56,7 +56,9 @@ export class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaR
       getClaudeConfigDirectory: (target) => this.accounts.getClaudeConfigDirectory(target),
       prepareCodexLaunchHome: this.prepareCodexStructuredLaunchFn,
       readCodexLaunchHome: this.resolveCodexStructuredLaunchHomeFn,
-      workspaceTrustSettings: () => this.requireStore().getSettings()
+      workspaceTrustSettings: () => this.requireStore().getSettings(),
+      // The chat host's own state root (ensureStructuredAgentSessionHost).
+      stateDirectory: getProfileUserDataPath()
     }
     return async ({ launchEnv, location }) =>
       registration.resolveAccountHome(

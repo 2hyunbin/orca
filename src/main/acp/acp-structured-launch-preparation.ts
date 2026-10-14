@@ -30,6 +30,11 @@ export async function prepareAcpStructuredLaunch(
     launch = await resolveLaunch()
     closedBeforeSpawn()
   }
+  const { prepare } = spec.account
+  if (prepare) {
+    await prepare(launch.env).catch(preSpawnFailure)
+    closedBeforeSpawn()
+  }
   return launch
 }
 

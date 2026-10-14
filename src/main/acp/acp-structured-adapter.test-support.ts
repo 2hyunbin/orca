@@ -1,7 +1,9 @@
 // A scripted ACP agent behind the real adapter: a fake connection over in-memory stdio, the real
 // protocol runtime, translator and assembler, and a real on-disk journal to read back.
 
+import { tmpdir } from 'node:os'
 import { vi } from 'vitest'
+import { z } from 'zod'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
 import type { ProviderProcessExit } from '../provider-process/managed-provider-process'
@@ -23,6 +25,8 @@ import { AcpStructuredSessionAdapter } from './acp-structured-session-adapter'
 import type { AcpStructuredSessionAdapterDeps } from './acp-structured-session-adapter-deps'
 
 export const GROK = acpLaunchSpecFor('grok')!
+const setConfigOptionSchema = z.object({ configId: z.string(), value: z.string() })
+const RIG_ENV = { PATH: '/usr/bin', ORCA_PANE_KEY: 'tab-1:pane-1', ORCA_AGENT_HOOK_PORT: '1234' }
 export const PROVIDER_SESSION = 'acp-session-1'
 export const PID = 4242
 
@@ -172,6 +176,10 @@ export async function openAcpAdapterRig(
   const lifecycle: StructuredAgentSessionLifecycleEvent[] = []
   const settled: AcpAdapterRig['settled'] = []
   const spec = options.spec ?? GROK
+  // A start readies the account folder its row pins; here a scratch one.
+  const { prepare, resolve, environment } = spec.account
+  const scratch = { launchEnv: {}, stateDirectory: tmpdir() }
+  const account = prepare ? environment(await resolve(scratch), {}) : {}
   const resolveLaunch: AcpStructuredSessionAdapterDeps['resolveLaunch'] =
     options.deps?.resolveLaunch ??
     (async () => ({
@@ -179,7 +187,7 @@ export async function openAcpAdapterRig(
       command: `/opt/bin/${spec.command}`,
       args: spec.args({ fullAccess: false, pluginDir: null }),
       cwd: '/workspace/project',
-      env: { PATH: '/usr/bin', ORCA_PANE_KEY: 'tab-1:pane-1', ORCA_AGENT_HOOK_PORT: '1234' },
+      env: { ...RIG_ENV, ...account },
       envToDelete: [],
       fullAccess: false,
       resume: null,
@@ -214,6 +222,14 @@ export async function openAcpAdapterRig(
       agent.on('session/load', (frame) =>
         agent.reply(frame, { configOptions: GROK_CONFIG_OPTIONS })
       )
+      // A row that enforces its permission mode sets it at every start; the agent confirms it.
+      if (spec.permissionModeConfig) {
+        agent.on('session/set_config_option', (frame) => {
+          const { configId: id, value } = setConfigOptionSchema.parse(frame.params)
+          const set = { id, name: id, type: 'select', currentValue: value, options: [] }
+          agent.reply(frame, { configOptions: [...GROK_CONFIG_OPTIONS, set] })
+        })
+      }
       options.script?.(agent)
       return child
     },
