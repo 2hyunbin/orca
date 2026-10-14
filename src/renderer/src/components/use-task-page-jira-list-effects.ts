@@ -1,3 +1,4 @@
+import { buildJiraStatusCatalog } from './task-page-jira-status-catalog'
 import type { TaskPageLinearCollectionEffectsModel } from './use-task-page-linear-collection-effects'
 import { useEffect, useRef } from 'react'
 import {
@@ -8,10 +9,14 @@ import {
 import { createTaskPageJiraLoadFailureState } from '@/components/task-page-jira-load-state'
 import { searchTaskPageJiraIssues } from '@/components/task-page-jira-search'
 import { JIRA_ITEM_LIMIT, TASK_SEARCH_DEBOUNCE_MS } from './task-page-source-context'
+import { readLinkedJiraIssues } from './task-page-jira-linked-issues'
 import { defaultScopeSource } from '@/lib/default-creation-host'
 export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffectsModel) {
   const {
     settings,
+    jiraHasWorkspace,
+    linkedJiraIssueRefs,
+    linkedJiraIssueRefsSignature,
     setTaskResumeState,
     searchJiraIssues,
     listJiraIssues,
@@ -36,6 +41,12 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setAppliedJiraSearch,
     activeJiraPreset,
     jiraRefreshNonce,
+    jiraActiveSavedFilterId,
+    jiraSavedFilters,
+    jiraSavedFiltersLoading,
+    selectedJiraStatuses,
+    jiraQuickFiltersLoading,
+    setJiraStatusCatalog,
     setJiraProjectStatusOrder,
     displayedJiraIssues
   } = model
@@ -60,6 +71,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
       jiraQuery: appliedJiraSearch.trim()
     })
   }, [appliedJiraSearch, setTaskResumeState, taskResumeApplied, jiraSearchPersistReadyRef])
+  const jiraRemoteSearch = jiraHasWorkspace ? '' : appliedJiraSearch
   const previousJiraRefreshNonceRef = useRef(jiraRefreshNonce)
   useEffect(() => {
     if (!taskResumeApplied) {
@@ -68,7 +80,7 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     if (taskSource !== 'jira') {
       return
     }
-    if (!jiraConnected) {
+    if (!jiraConnected || jiraSavedFiltersLoading || jiraQuickFiltersLoading) {
       return
     }
     const force = previousJiraRefreshNonceRef.current !== jiraRefreshNonce
@@ -78,23 +90,38 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     setJiraError(null)
     setJiraJqlRejection(null)
     setJiraErrorDetailsOpen(false)
-    const trimmed = appliedJiraSearch.trim()
-    const request =
-      trimmed.length > 0
-        ? searchTaskPageJiraIssues(trimmed, (jql) =>
-            searchJiraIssues(jql, JIRA_ITEM_LIMIT, {
-              sourceContext: jiraTaskSourceContext,
-              force
-            })
-          )
+    const trimmed = jiraRemoteSearch.trim()
+    const savedFilter = jiraSavedFilters.find((filter) => filter.id === jiraActiveSavedFilterId)
+    const exactSavedJql = savedFilter?.jql === trimmed
+    const request = jiraHasWorkspace
+      ? readLinkedJiraIssues(linkedJiraIssueRefs, searchJiraIssues, jiraTaskSourceContext, force)
+      : trimmed.length > 0
+        ? searchTaskPageJiraIssues(
+            trimmed,
+            (jql) =>
+              searchJiraIssues(jql, JIRA_ITEM_LIMIT, {
+                sourceContext: jiraTaskSourceContext,
+                force
+              }),
+            exactSavedJql ? 'jql' : 'input'
+          ).then((result) => ({ ...result, error: null }))
         : listJiraIssues(activeJiraPreset, JIRA_ITEM_LIMIT, {
             sourceContext: jiraTaskSourceContext,
-            force
-          }).then((issues) => ({ issues, jqlRejection: null }))
+            force,
+            ...(selectedJiraStatuses.length ? { filters: { statuses: selectedJiraStatuses } } : {})
+          }).then((issues) => ({ issues, jqlRejection: null, error: null }))
     void request
-      .then(({ issues, jqlRejection }) => {
+      .then((result) => {
+        const { issues, jqlRejection } = result
         if (cancelled) {
           return
+        }
+        setJiraError(result.error)
+        if (!jiraHasWorkspace && !trimmed && selectedJiraStatuses.length === 0) {
+          setJiraStatusCatalog({
+            scopeKey: `${jiraTaskSourceScopeKey}::${selectedJiraSiteId}::${activeJiraPreset}`,
+            items: buildJiraStatusCatalog(issues)
+          })
         }
         setJiraIssues(issues)
         setJiraJqlRejection(jqlRejection)
@@ -137,9 +164,16 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     taskSource,
     jiraConnected,
     selectedJiraSiteId,
-    appliedJiraSearch,
+    jiraRemoteSearch,
     activeJiraPreset,
+    jiraHasWorkspace,
+    linkedJiraIssueRefsSignature,
     jiraRefreshNonce,
+    jiraActiveSavedFilterId,
+    jiraSavedFilters,
+    jiraSavedFiltersLoading,
+    selectedJiraStatuses,
+    jiraQuickFiltersLoading,
     taskResumeApplied,
     jiraTaskSourceContext,
     jiraTaskSourceScopeKey

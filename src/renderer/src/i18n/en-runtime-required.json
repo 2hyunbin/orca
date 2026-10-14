@@ -3157,6 +3157,11 @@
       "viewing": "Viewing: {{path}}"
     }
   },
+  "jira": {
+    "workspace": {
+      "open": "Open workspace linked to {{key}}"
+    }
+  },
   "menu": {
     "quitApp": "Quit {{appName}}"
   },

@@ -66,10 +66,13 @@ function mount(
     runtimeContextKey?: string
   } = {}
 ) {
-  const mutateIssue = vi.fn(async () => {})
+  const mutateIssue = vi.fn(async () => ({ ok: true as const }))
   const props = {
     displayed: options.selected ?? issue,
     transitions: [],
+    transitionsLoading: false,
+    transitionsError: null,
+    reloadTransitions: vi.fn(),
     priorities: [],
     pendingField: options.pendingField ?? null,
     mutateIssue,
