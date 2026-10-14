@@ -10,10 +10,6 @@ import {
   buildRepoHostIdByRepoId
 } from '../worktree/worktree-host-context-labels'
 import { buildSshHostHealthById } from '../worktree/worktree-host-health'
-import {
-  projectSectionsRead,
-  readServedProjectSections
-} from '../worktree/project-sections-operations'
 import type { SectionRepo } from '../worktree/workspace-list-types'
 import type { HostRepoCatalogRow } from './host-screen-reply-schema'
 import {
@@ -79,8 +75,7 @@ export function useHostRepoMetadata(args: {
     setHostHealthById,
     setDesktopRepos,
     setHostPlatform,
-    setRepoHostIdByRepoId,
-    setServedProjectSections
+    setRepoHostIdByRepoId
   } = state
 
   const fetchRepoMetadata = useCallback(
@@ -104,16 +99,11 @@ export function useHostRepoMetadata(args: {
       try {
         do {
           fetchRepoMetadataPendingRef.current.delete(requestClient)
-          const [repoReply, sectionsReply] = await Promise.all([
-            settledMetadataReply(() => hostRepoCatalogRead.request(requestClient)),
-            settledMetadataReply(() => projectSectionsRead.request(requestClient))
-          ])
+          const repoReply = await settledMetadataReply(() =>
+            hostRepoCatalogRead.request(requestClient)
+          )
           if (clientRef.current !== requestClient || hostId !== requestHostId) {
             return
-          }
-          const sections = readServedProjectSections(sectionsReply)
-          if (sections.kind === 'answered') {
-            setServedProjectSections(sections.value)
           }
           const repos = repoReply && hostRepoCatalogRead.interpret(repoReply)
           if (!repos || !repos.accepted) {
