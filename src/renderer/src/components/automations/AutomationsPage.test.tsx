@@ -34,6 +34,7 @@ import { listedRow, listedExternalEntries } from './automations-page-listed-item
 import {
   makeAutomation,
   makeExternalManager,
+  makeRun,
   REPO_ID,
   WORKSPACE_ID
 } from './automations-page-fixtures'
@@ -134,36 +135,6 @@ describe('AutomationsPage list rendering', () => {
       provider: 'hermes'
     })
     expect(rows(container, 'external-row')).toEqual(['Hermes job'])
-  })
-
-  it('keeps the edited external automation selected after its save', async () => {
-    api.automations.list.mockResolvedValue([])
-    api.automations.listExternalManagerForOwner.mockImplementation(
-      async ({ provider }: { provider: string }) =>
-        provider === 'hermes'
-          ? { manager: makeExternalManager(), error: null, updatedAt: 1 }
-          : { manager: null, error: null, updatedAt: 1 }
-    )
-    api.automations.updateExternalForOwner.mockResolvedValue(undefined)
-
-    await renderPage()
-    const entry = listedExternalEntries()[0]
-    if (!entry) {
-      throw new Error('no external entry to edit')
-    }
-
-    await act(async () => {
-      mocks.listPanel?.openEditExternalDialog(entry.manager, entry.job, entry.scope)
-    })
-    await act(async () => {
-      mocks.editorDialog?.onSave()
-    })
-
-    // The row key and the post-save selection are built by two different call
-    // sites; if they ever stop agreeing, selection silently falls through to the
-    // first row and the user's edit appears to open someone else's automation.
-    expect(api.automations.updateExternalForOwner).toHaveBeenCalled()
-    expect(mocks.listPanel?.selectedExternal?.key).toBe(entry.key)
   })
 
   it('routes each authority’s action to its own host when both report hermes:local', async () => {
@@ -360,14 +331,25 @@ describe('AutomationsPage mutations', () => {
     })
   })
 
-  it('re-reads the record before opening the edit dialog', async () => {
-    const automation = makeAutomation({ id: 'a-1' })
+  it('opens an Orca-owned Hermes record in the normal editor with its history', async () => {
+    const automation = makeAutomation({
+      id: 'a-1',
+      agentId: 'hermes',
+      workspaceMode: 'existing',
+      workspaceId: WORKSPACE_ID
+    })
+    const run = makeRun({ automationId: automation.id })
     api.automations.list.mockResolvedValue([automation])
+    scopedList([automation])
+    api.automations.listRuns.mockResolvedValue([run])
 
     await renderPage()
     api.automations.list.mockClear()
     await act(async () => {
-      mocks.listPanel?.openEditDialog(listedRow(automation.id))
+      mocks.listPanel?.selectAutomationRow(listedRow(automation.id).key)
+    })
+    await act(async () => {
+      mocks.detailPane?.openEditDialog(automation)
     })
 
     // Step 6: hydration re-reads the row's own scope; the ambient list is untouched.
@@ -375,6 +357,16 @@ describe('AutomationsPage mutations', () => {
     expect(api.automations.listScoped).toHaveBeenCalledWith({ selector: { kind: 'self' } })
     expect(mocks.editorDialog?.open).toBe(true)
     expect(mocks.editorDialog?.isEditing).toBe(true)
+    expect(mocks.editorDialog?.draft).toMatchObject({
+      agentId: 'hermes',
+      workspaceMode: automation.workspaceMode,
+      workspaceId: automation.workspaceId,
+      savedSchedule: automation.rrule
+    })
+    expect(listedRow(automation.id).automation).toEqual(automation)
+    expect(api.automations.update).not.toHaveBeenCalled()
+    expect(api.automations.runExternalActionForOwner).not.toHaveBeenCalled()
+    expect(mocks.detailPane?.selectedRuns).toEqual([run])
   })
 
   it('opens the create dialog without an editing target', async () => {
@@ -407,7 +399,7 @@ describe('AutomationsPage mutations', () => {
     })
   })
 
-  it('creates at an explicitly stated destination rather than an inferred host', async () => {
+  it('creates an Orca automation with Hermes at the stated destination', async () => {
     api.automations.list.mockResolvedValue([])
 
     await renderPage()
@@ -419,6 +411,7 @@ describe('AutomationsPage mutations', () => {
         ...(current as Record<string, unknown>),
         name: 'Sweep',
         prompt: 'Do the sweep',
+        agentId: 'hermes',
         projectId: REPO_ID,
         workspaceMode: 'existing',
         workspaceId: WORKSPACE_ID
@@ -431,9 +424,11 @@ describe('AutomationsPage mutations', () => {
     expect(api.automations.create).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'Sweep',
+        agentId: 'hermes',
         destination: { selector: { kind: 'self' } }
       })
     )
+    expect(api.automations.runExternalActionForOwner).not.toHaveBeenCalled()
   })
 
   it('refreshes after a mutation so the list reflects the write', async () => {

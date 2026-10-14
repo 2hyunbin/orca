@@ -3,16 +3,12 @@ import type {
   ExternalAutomationAction,
   ExternalAutomationJob
 } from '../../../../shared/automations-types'
-import type { ScopedExternalManagerMutationFields } from '../../../../shared/external-automation-scope'
 import type { AutomationHostCatalogEntry } from './automation-host-catalog-types'
 import {
-  createScopedExternalAutomation,
-  desktopExternalAutomationOwner,
   externalAutomationScopes,
   listScopedExternalAutomationManagers,
   listScopedExternalAutomationRuns,
   runScopedExternalAutomationAction,
-  updateScopedExternalAutomation,
   type ExternalAutomationScope,
   type ScopedExternalAutomationFailure,
   type ScopedExternalAutomationManager
@@ -31,8 +27,6 @@ import { useExternalAutomationScopeRetention } from './use-external-automation-s
  */
 
 export type ScopedExternalAutomationsInput = {
-  /** The whole catalog — used to resolve a create target, never to probe. */
-  catalogEntries: readonly AutomationHostCatalogEntry[]
   /** The hosts in view. Only these are probed, and only these are retained. */
   scopeEntries: readonly AutomationHostCatalogEntry[]
 }
@@ -43,13 +37,6 @@ export type ScopedExternalAutomationsView = {
   failures: readonly ScopedExternalAutomationFailure[]
   /** Reloads every in-view scope; safe to call from the page's refresh path. */
   reload: () => Promise<void>
-  /** The scope a new external automation would be created in, or null to disable it. */
-  createScope: (connectionId: string | null) => ExternalAutomationScope | null
-  saveExternalAutomation: (
-    scope: ExternalAutomationScope,
-    fields: ScopedExternalManagerMutationFields,
-    jobId: string | null
-  ) => Promise<void>
   runExternalAction: (
     scope: ExternalAutomationScope,
     jobId: string,
@@ -73,12 +60,9 @@ const EMPTY_VIEW = {
 }
 
 export function useScopedExternalAutomations({
-  catalogEntries,
   scopeEntries
 }: ScopedExternalAutomationsInput): ScopedExternalAutomationsView {
   const [result, setResult] = useState(EMPTY_VIEW)
-  const catalogEntriesRef = useRef(catalogEntries)
-  catalogEntriesRef.current = catalogEntries
   useExternalAutomationScopeRetention(scopeEntries)
 
   const scopes = useMemo(() => externalAutomationScopes(scopeEntries), [scopeEntries])
@@ -117,25 +101,10 @@ export function useScopedExternalAutomations({
     void reload().catch(() => undefined)
   }, [signature, reload])
 
-  const createScope = useCallback((connectionId: string | null): ExternalAutomationScope | null => {
-    const owner = desktopExternalAutomationOwner(catalogEntriesRef.current, connectionId)
-    // Hermes is the only provider a create dialog offers today; the picker
-    // that would choose between providers does not exist yet.
-    return owner ? { owner, provider: 'hermes' } : null
-  }, [])
-
   return {
     managers: result.managers,
     failures: result.failures,
     reload,
-    createScope,
-    saveExternalAutomation: useCallback(
-      async (scope, fields, jobId) =>
-        jobId === null
-          ? await createScopedExternalAutomation(scope, fields)
-          : await updateScopedExternalAutomation(scope, jobId, fields),
-      []
-    ),
     runExternalAction: useCallback(
       async (scope, jobId, action) => await runScopedExternalAutomationAction(scope, jobId, action),
       []

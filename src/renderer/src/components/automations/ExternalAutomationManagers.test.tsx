@@ -109,28 +109,16 @@ type OnActionMock = ReturnType<
     ) => void
   >
 >
-type OnEditMock = ReturnType<
-  typeof vi.fn<
-    (
-      manager: ExternalAutomationManager,
-      job: ExternalAutomationJob,
-      scope: ExternalAutomationScope
-    ) => void
-  >
->
-
 type RenderOptions = {
   runningActionKey?: string | null
   onAction?: OnActionMock
-  onEdit?: OnEditMock
 }
 
 function renderManagers(
   managers: ScopedExternalAutomationManager[],
   options: RenderOptions = {}
-): { onAction: OnActionMock; onEdit: OnEditMock } {
+): { onAction: OnActionMock } {
   const onAction = options.onAction ?? vi.fn()
-  const onEdit = options.onEdit ?? vi.fn()
   act(() => {
     root.render(
       <ExternalAutomationManagers
@@ -138,11 +126,10 @@ function renderManagers(
         now={0}
         runningActionKey={options.runningActionKey ?? null}
         onAction={onAction}
-        onEdit={onEdit}
       />
     )
   })
-  return { onAction, onEdit }
+  return { onAction }
 }
 
 function getSwitch(index = 0): HTMLButtonElement {
@@ -274,16 +261,6 @@ describe('ExternalAutomationManagers toggle', () => {
     // row can never be replayed against the desktop's identically named cron job.
     expect(onAction).toHaveBeenCalledTimes(1)
     expect(onAction.mock.calls[0]?.[3]).toEqual(runtime.scope)
-  })
-
-  it('keeps the Run/Edit/Delete actions and removes the pause/resume button on hermes', () => {
-    renderManagers([scoped({ provider: 'hermes' })])
-    const labels = actionButtonLabels()
-    expect(labels).toContain('Run external automation')
-    expect(labels).toContain('Edit external automation')
-    expect(labels).toContain('Delete external automation')
-    expect(labels).not.toContain('Pause external automation')
-    expect(labels).not.toContain('Resume external automation')
   })
 
   it('keeps Run/Delete (no Edit) for openclaw and removes the pause/resume button', () => {

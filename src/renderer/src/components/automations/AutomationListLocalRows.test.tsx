@@ -172,7 +172,6 @@ function renderExternalRows(handlers: {
       externalActionKey={null}
       onSelect={handlers.onSelect}
       onRequestAction={handlers.onRequestAction ?? vi.fn()}
-      onEdit={vi.fn()}
     />
   )
 }

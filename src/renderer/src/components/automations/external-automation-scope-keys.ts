@@ -1,9 +1,9 @@
 /**
- * Keys for external manager rows, jobs, runs, dialogs, and in-flight actions.
+ * Keys for external manager rows, jobs, runs, and in-flight actions.
  *
  * A provider's manager ID is unique only inside one host, so a key built from it
  * alone collides the moment two hosts run the same provider — the selected row,
- * the open dialog, and the disabled action button would all follow the wrong
+ * the run page, and the disabled action button would all follow the wrong
  * host. Every key is therefore prefixed with its kind, the captured owner, and
  * the provider.
  */
@@ -59,12 +59,4 @@ export function externalAutomationActionKey(
   action: ExternalAutomationAction
 ): string {
   return key('action', scope, jobId, action)
-}
-
-/** A create dialog has no job yet, and 'new' is a segment of its own so a job literally named "new" cannot alias it. */
-export function externalAutomationDialogKey(
-  scope: ExternalAutomationScopeRef,
-  jobId: string | null
-): string {
-  return jobId === null ? key('dialog', scope, 'new') : key('dialog', scope, 'job', jobId)
 }

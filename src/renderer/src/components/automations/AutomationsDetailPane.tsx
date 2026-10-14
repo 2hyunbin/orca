@@ -70,11 +70,6 @@ type AutomationsDetailPaneProps = {
     job: ExternalAutomationJob,
     run: ExternalAutomationRun
   ) => void
-  openEditExternalDialog: (
-    manager: ExternalAutomationManager,
-    job: ExternalAutomationJob,
-    scope: ExternalAutomationScope
-  ) => void
   runNow: (automation: Automation) => void
   openEditDialog: (automation: Automation) => void
   toggleAutomation: (automation: Automation) => void
@@ -105,7 +100,6 @@ export function AutomationsDetailPane({
   onClearExternalRunPage,
   requestExternalAction,
   openExternalRunPage,
-  openEditExternalDialog,
   runNow,
   openEditDialog,
   toggleAutomation,
@@ -201,7 +195,6 @@ export function AutomationsDetailPane({
               onAction={requestExternalAction}
               onFetchRuns={fetchExternalAutomationRuns}
               onOpenRun={openExternalRunPage}
-              onEdit={openEditExternalDialog}
             />
           )}
         </div>

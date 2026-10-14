@@ -49,7 +49,6 @@ async function renderRunsTab(historyUnavailable: boolean): Promise<HTMLButtonEle
         onClearExternalRunPage={vi.fn()}
         requestExternalAction={vi.fn()}
         openExternalRunPage={vi.fn()}
-        openEditExternalDialog={vi.fn()}
         runNow={vi.fn()}
         openEditDialog={vi.fn()}
         toggleAutomation={vi.fn()}

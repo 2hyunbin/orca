@@ -49,8 +49,6 @@ export function AutomationsPageSurface({
     createOpen,
     editingAutomationId,
     isSaving,
-    editingExternalTarget,
-    createTarget,
     automationYamlHooksByRepoKey,
     draft,
     setCreateOpen,
@@ -156,12 +154,8 @@ export function AutomationsPageSurface({
         isEditing={editingAutomationId !== null}
         isSaving={isSaving}
         canSave={presentation.canSaveDraft}
-        isEditingExternal={editingExternalTarget !== null}
-        createTarget={createTarget}
         createDestination={destination.createDestination.control}
-        editDestination={
-          destinationForm.isOrcaForm ? destinationForm.editDestinationControl : undefined
-        }
+        editDestination={destinationForm.editDestinationControl}
         notice={editorNotice}
         onNoticeRecover={(action) => {
           const host = editorNoticeHost ?? destination.editorRecoveryHost
@@ -187,15 +181,13 @@ export function AutomationsPageSurface({
         onProjectChange={editorActions.handleProjectChange}
         getRepoHostLabel={presentation.getAutomationRepoHostLabel}
         allowAddProject={
-          !destinationForm.isOrcaForm ||
-          (editingAutomationId !== null
+          editingAutomationId !== null
             ? destinationForm.editHostResolution.status === 'ready'
               ? getAutomationAuthorityTarget(destinationForm.editHostResolution.authority).kind ===
                 'local'
               : destinationForm.automationDialogTarget.kind === 'local'
-            : destinationForm.automationDialogTarget.kind === 'local')
+            : destinationForm.automationDialogTarget.kind === 'local'
         }
-        onCreateTargetChange={draftEffects.handleCreateTargetChange}
         onOpenChange={(open) => {
           setCreateOpen(open)
           if (!open) {
@@ -300,7 +292,6 @@ export function AutomationsPageSurface({
           onClearExternalRunPage={() => setSelectedExternalRunPage(null)}
           requestExternalAction={externalActions.requestExternalAction}
           openExternalRunPage={externalActions.openExternalRunPage}
-          openEditExternalDialog={editorActions.openEditExternalDialog}
           runNow={() => runSelectedRowAction(runActions.runNow)}
           openEditDialog={() => runSelectedRowAction(editorActions.openEditDialog)}
           toggleAutomation={() => runSelectedRowAction(managementActions.toggleAutomation)}

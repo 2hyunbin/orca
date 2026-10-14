@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { AutomationOwnerRef } from '../../../../shared/automation-owner-ref'
 import {
   externalAutomationActionKey,
-  externalAutomationDialogKey,
   externalAutomationJobKey,
   externalAutomationManagerKey,
   externalAutomationRunKey,
@@ -50,16 +49,9 @@ describe('external automation scope keys', () => {
       externalAutomationManagerKey(local, 'x'),
       externalAutomationJobKey(local, 'x'),
       externalAutomationRunKey(local, 'x', 'x'),
-      externalAutomationActionKey(local, 'x', 'run'),
-      externalAutomationDialogKey(local, 'x')
+      externalAutomationActionKey(local, 'x', 'run')
     ])
-    expect(kinds.size).toBe(6)
-  })
-
-  it('distinguishes a create dialog from a job literally named new', () => {
-    expect(externalAutomationDialogKey(local, null)).not.toBe(
-      externalAutomationDialogKey(local, 'new')
-    )
+    expect(kinds.size).toBe(5)
   })
 
   it('escapes components so a hostile ID cannot forge another key', () => {

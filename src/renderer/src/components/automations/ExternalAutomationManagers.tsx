@@ -1,5 +1,5 @@
 import React from 'react'
-import { Pencil, Play, RefreshCw, Trash2 } from 'lucide-react'
+import { Play, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SettingsSwitch } from '@/components/settings/SettingsFormControls'
@@ -49,11 +49,6 @@ type ExternalAutomationManagersProps = {
     job: ExternalAutomationJob,
     run: ExternalAutomationRun
   ) => void
-  onEdit?: (
-    manager: ExternalAutomationManager,
-    job: ExternalAutomationJob,
-    scope: ExternalAutomationScope
-  ) => void
 }
 
 function ExternalActionButton({
@@ -96,8 +91,7 @@ export function ExternalAutomationManagers({
   runningActionKey,
   onAction,
   onFetchRuns,
-  onOpenRun,
-  onEdit
+  onOpenRun
 }: ExternalAutomationManagersProps): React.JSX.Element {
   const automationCount = managers.reduce((sum, { manager }) => sum + manager.jobs.length, 0)
 
@@ -284,21 +278,6 @@ export function ExternalAutomationManagers({
                           <Play className="size-3.5" />
                         )}
                       </ExternalActionButton>
-                      {manager.provider === 'hermes' ? (
-                        <ExternalActionButton
-                          label={
-                            disabledMessage ??
-                            translate(
-                              'auto.components.automations.ExternalAutomationManagers.1df491fd00',
-                              'Edit external automation'
-                            )
-                          }
-                          disabled={disabledMessage !== null}
-                          onClick={() => onEdit?.(manager, job, scope)}
-                        >
-                          <Pencil className="size-3.5" />
-                        </ExternalActionButton>
-                      ) : null}
                       <ExternalActionButton
                         label={
                           disabledMessage ??

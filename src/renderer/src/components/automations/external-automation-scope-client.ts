@@ -16,10 +16,7 @@ import type {
   ExternalAutomationRun
 } from '../../../../shared/automations-types'
 import type { AutomationOwnerRef } from '../../../../shared/automation-owner-ref'
-import {
-  EXTERNAL_AUTOMATION_PROVIDERS,
-  type ScopedExternalManagerMutationFields
-} from '../../../../shared/external-automation-scope'
+import { EXTERNAL_AUTOMATION_PROVIDERS } from '../../../../shared/external-automation-scope'
 import type { AutomationHostCatalogEntry } from './automation-host-catalog-types'
 import { resolveExternalAutomationScopeGate } from './external-automation-scope-gating'
 
@@ -110,45 +107,6 @@ export async function listScopedExternalAutomationManagers(
     managers.push({ scope, manager: result.manager })
   }
   return { managers, failures }
-}
-
-/**
- * The desktop host that owns a repo's external managers. Null when no owner
- * could be captured for it, which disables creation rather than defaulting one.
- */
-export function desktopExternalAutomationOwner(
-  entries: readonly AutomationHostCatalogEntry[],
-  connectionId: string | null
-): AutomationOwnerRef | null {
-  for (const entry of entries) {
-    if (entry.stableRef.authority.kind !== 'desktop' || !entry.owner) {
-      continue
-    }
-    const selector = entry.stableRef.selector
-    const matches =
-      connectionId === null
-        ? selector.kind === 'self'
-        : selector.kind === 'ssh' && selector.targetId === connectionId
-    if (matches) {
-      return entry.owner
-    }
-  }
-  return null
-}
-
-export async function createScopedExternalAutomation(
-  scope: ExternalAutomationScope,
-  fields: ScopedExternalManagerMutationFields
-): Promise<void> {
-  await window.api.automations.createExternalForOwner({ ...scope, ...fields })
-}
-
-export async function updateScopedExternalAutomation(
-  scope: ExternalAutomationScope,
-  jobId: string,
-  fields: ScopedExternalManagerMutationFields
-): Promise<void> {
-  await window.api.automations.updateExternalForOwner({ ...scope, ...fields, jobId })
 }
 
 export async function runScopedExternalAutomationAction(

@@ -45,11 +45,6 @@ export const RUNTIME_WORKSPACE_ID = RUNTIME_WORKSPACE_ID_FIXTURE
 export type ListPanelProps = {
   sortedListItems: readonly AutomationListViewItem[]
   selectedExternal: ExternalAutomationListEntry | null
-  openEditExternalDialog: (
-    manager: ExternalAutomationListEntry['manager'],
-    job: ExternalAutomationListEntry['job'],
-    scope: ExternalAutomationListEntry['scope']
-  ) => void
   externalActionKey: string | null
   requestExternalAction: (
     manager: ExternalAutomationListEntry['manager'],
