@@ -12,11 +12,9 @@ export async function reclaimWorktreeSpace({
   acquireLock = lock,
   commonDirectory,
   testsStopped = false,
-  releaseCacheMinAgeDays = 30
+  releaseCacheMinAgeDays = 30,
+  report = console.log
 } = {}) {
-  if (apply && !automatic && !testsStopped) {
-    throw new Error('Stop cross-version tests, then pass --tests-stopped with --apply')
-  }
   if (!Number.isFinite(releaseCacheMinAgeDays) || releaseCacheMinAgeDays < 0) {
     throw new Error('--release-cache-min-age-days requires a non-negative number')
   }
@@ -46,8 +44,12 @@ export async function reclaimWorktreeSpace({
   let cleanupError
   try {
     const scripts = ['reclaim-electron-dists.mjs', 'reclaim-dev-electron-bundles.mjs']
-    if (!automatic) {
+    if (!automatic && (!apply || testsStopped)) {
       scripts.unshift('reclaim-release-test-caches.mjs')
+    } else if (!automatic) {
+      report(
+        'Skipping historical test caches. To include them, stop cross-version tests in all repository worktrees and rerun with --apply --tests-stopped.'
+      )
     }
     for (const script of scripts) {
       const args = [resolve(import.meta.dirname, script), '--repo', repoRoot]
@@ -96,10 +98,13 @@ export async function reclaimWorktreeSpace({
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
   if (process.argv.includes('--help')) {
     console.log(
-      'Usage: pnpm run reclaim:worktree-space [--repo DIRECTORY] [--release-cache-min-age-days 30] [--apply --tests-stopped]'
+      'Usage: pnpm run reclaim:worktree-space [--repo DIRECTORY] [--release-cache-min-age-days 30] [--apply [--tests-stopped]]'
     )
     console.log(
       'Previews historical test cache cleanup, Electron sharing, and idle dev bundle removal.'
+    )
+    console.log(
+      '--apply shares Electron distributions and removes idle dev bundles across registered local worktrees. Add --tests-stopped to also remove historical test caches after stopping cross-version tests.'
     )
     process.exit(0)
   }

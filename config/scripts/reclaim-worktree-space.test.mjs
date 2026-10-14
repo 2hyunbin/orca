@@ -42,10 +42,17 @@ it('forwards apply and repository selection to all cleanup operations', async ()
   }
 })
 
-it('rejects manual apply before any operation unless cross-version tests are stopped', async () => {
+it('applies Electron cleanup and explains how to include historical caches', async () => {
   const options = { ...(await fixture()), apply: true }
-  await expect(reclaimWorktreeSpace(options)).rejects.toThrow('--tests-stopped')
-  expect(options.execute).not.toHaveBeenCalled()
+  const report = vi.fn()
+  await reclaimWorktreeSpace({ ...options, report })
+  expect(options.execute).toHaveBeenCalledTimes(2)
+  const args = options.execute.mock.calls.flatMap(([spec]) => spec.args)
+  expect(args.join(' ')).not.toContain('reclaim-release-test-caches')
+  for (const [spec] of options.execute.mock.calls) {
+    expect(spec.args).toContain('--apply')
+  }
+  expect(report).toHaveBeenCalledWith(expect.stringContaining('--apply --tests-stopped'))
 })
 
 it('leaves historical caches out of automatic invocations', async () => {
@@ -73,7 +80,7 @@ it('rejects an invalid cache age before starting cleanup', async () => {
   expect(options.execute).not.toHaveBeenCalled()
 })
 
-it('runs the combined CLI from outside a disposable repository and requires acknowledgement', async () => {
+it('runs from outside a repository and a linked worktree, preserving caches unless acknowledged', async () => {
   const options = await fixture()
   const init = await runProcess({
     program: 'git',
@@ -83,9 +90,38 @@ it('runs the combined CLI from outside a disposable repository and requires ackn
     terminationBarrier: true
   })
   expect(init.code).toBe(0)
+  const initialCommit = await runProcess({
+    program: 'git',
+    args: [
+      '-c',
+      'user.name=Storage Test',
+      '-c',
+      'user.email=storage-test@example.invalid',
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '--quiet',
+      '--allow-empty',
+      '-m',
+      'Storage fixture'
+    ],
+    cwd: options.repoRoot,
+    timeoutMs: 10_000,
+    terminationBarrier: true
+  })
+  expect(initialCommit.code, initialCommit.stderr).toBe(0)
+  const worktree = join(options.repoRoot, 'linked-worktree')
+  const add = await runProcess({
+    program: 'git',
+    args: ['worktree', 'add', '--quiet', '-b', 'storage-test', worktree],
+    cwd: options.repoRoot,
+    timeoutMs: 10_000,
+    terminationBarrier: true
+  })
+  expect(add.code, add.stderr).toBe(0)
   const commit = 'd'.repeat(40)
   const cache = join(
-    options.repoRoot,
+    worktree,
     'tests',
     'e2e',
     '.cross-version-checkouts',
@@ -96,27 +132,24 @@ it('runs the combined CLI from outside a disposable repository and requires ackn
   const marker = join(cache, 'checkout-stamp.json')
   await writeFile(marker, JSON.stringify({ commit, format: 4 }))
   await utimes(cache, new Date(0), new Date(0))
-  const run = (flags = []) =>
+  const run = (flags = [], cwd = worktree) =>
     runProcess({
       program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath,
-      args: [
-        resolve(import.meta.dirname, 'reclaim-worktree-space.mjs'),
-        '--repo',
-        options.repoRoot,
-        ...flags
-      ],
-      cwd: tmpdir(),
+      args: [resolve(import.meta.dirname, 'reclaim-worktree-space.mjs'), ...flags],
+      cwd,
       env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 20_000,
       terminationBarrier: true
     })
-  const preview = await run()
+  const preview = await run(['--repo', worktree], tmpdir())
   expect(preview.code, preview.stderr).toBe(0)
   expect(preview.stdout).toContain('Would remove 1 cache(s)')
   expect(await readFile(marker, 'utf8')).toContain(commit)
-  const blocked = await run(['--apply'])
-  expect(blocked.code).not.toBe(0)
-  expect(blocked.stderr).toContain('--tests-stopped')
+  const electronOnly = await run(['--apply'])
+  expect(electronOnly.code, electronOnly.stderr).toBe(0)
+  expect(electronOnly.stdout).toContain('Skipping historical test caches')
+  expect(electronOnly.stdout).toContain('--apply --tests-stopped')
+  expect(electronOnly.stdout).toContain('Shared 0 worktree(s)')
   expect(await readFile(marker, 'utf8')).toContain(commit)
   const applied = await run(['--apply', '--tests-stopped'])
   expect(applied.code, applied.stderr).toBe(0)

@@ -57,6 +57,10 @@ formats. To apply the preview, first stop cross-version tests in all this reposi
 pnpm run reclaim:worktree-space --apply --tests-stopped
 ```
 
+For Electron maintenance while tests may still be running, use `--apply` alone from any worktree.
+It shares Electron distributions and removes idle dev bundles across the repository's registered
+local worktrees, leaving historical test caches in place and printing how to include them.
+
 Use `--release-cache-min-age-days 7` for a shorter retention window, or `--release-cache-min-age-days 0` to select all
 recognised completed release checkouts. `--repo DIRECTORY` selects another local repository.
 Each run rescans and rechecks eligibility; it does not apply a saved preview.
