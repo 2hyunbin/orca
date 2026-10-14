@@ -26,8 +26,8 @@ function issue(key: string): JiraIssue {
   }
 }
 it('isolates status results from preset caches and reuses an equivalent selection order', async () => {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only settings and Jira slice fields are accessed by these list reads.
   const store = create<AppState>()(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only settings and Jira slice fields are accessed by these list reads.
     (...args) => ({ settings: null, ...createJiraSlice(...args) }) as AppState
   )
   list.mockImplementation(
