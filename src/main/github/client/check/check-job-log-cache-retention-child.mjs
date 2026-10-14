@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks'
 import { workload } from '../../../../../config/scripts/check-job-log-performance-cases.mjs'
@@ -7,7 +9,9 @@ assert(
   !process.versions.bun && typeof globalThis.gc === 'function',
   'Node with explicit GC is required'
 )
-const [bundlePath, trial] = process.argv.slice(2)
+const [bundlePath, trial, manifest] = process.argv.slice(2)
+const { identityHash, cpuDescriptors } = JSON.parse(manifest)
+const hash = (value) => createHash('sha256').update(value).digest('hex')
 const host = await import(pathToFileURL(bundlePath).href)
 const limit = 16 * 1024
 const mib = 1024 * 1024
@@ -154,8 +158,11 @@ const mixedPayload = {
 }
 host.prCheckLogTailCache.clear()
 const cpu = []
-for (const bytes of [8 * mib, 63 * mib]) {
-  const generated = workload({ mode: 'cpu', family: 'short-lines', bytes })
+for (const descriptor of cpuDescriptors) {
+  const generated = workload(descriptor)
+  const inputBytes = Buffer.byteLength(generated.text)
+  const inputHash = hash(generated.text)
+  assert.equal(inputBytes, descriptor.bytes)
   host.setFixtureOutput(generated.text)
   generated.text = ''
   const histogram = monitorEventLoopDelay({ resolution: 1 })
@@ -167,7 +174,7 @@ for (const bytes of [8 * mib, 63 * mib]) {
   const timer = new Promise((resolve) => setTimeout(() => resolve(performance.now()), 5))
   const beforeCpu = process.cpuUsage()
   const started = performance.now()
-  const jobs = [job(1000 + bytes)]
+  const jobs = [job(1000 + descriptor.bytes)]
   await host.attachFailedJobLogTails(jobs, repo, options, context)
   const wallMs = performance.now() - started
   const usedCpu = process.cpuUsage(beforeCpu)
@@ -179,7 +186,9 @@ for (const bytes of [8 * mib, 63 * mib]) {
       jobs[0].logTail.includes('CPU_FRAME.ts:18:8')
   )
   cpu.push({
-    bytes,
+    workload: descriptor,
+    inputBytes,
+    inputHash,
     wallMs,
     cpuMs: (usedCpu.user + usedCpu.system) / 1000,
     timerLatenessMs: Math.max(0, fired - armed - 5),
@@ -192,5 +201,5 @@ for (const bytes of [8 * mib, 63 * mib]) {
 }
 const finalMemory = memory()
 process.stdout.write(
-  `${JSON.stringify({ trial: Number(trial), runtime: { node: process.version, platform: process.platform, arch: process.arch, gc: true, background: process.env.ORCA_BACKGROUND_LAUNCH === '1' }, pinnedControl, eight, nearCap, maximum, fullPayload, mixedPayload, cpu, finalMemory, activeTimeouts: process.getActiveResourcesInfo().filter((name) => name === 'Timeout').length })}\n`
+  `${JSON.stringify({ trial: Number(trial), identityHash, runtime: { node: process.version, v8: process.versions.v8, uv: process.versions.uv, executableHash: hash(realpathSync(process.execPath)), platform: process.platform, arch: process.arch, gc: true, background: process.env.ORCA_BACKGROUND_LAUNCH === '1' }, pinnedControl, eight, nearCap, maximum, fullPayload, mixedPayload, cpu, finalMemory, activeTimeouts: process.getActiveResourcesInfo().filter((name) => name === 'Timeout').length })}\n`
 )
