@@ -3,17 +3,17 @@
 Run one command from the repository to preview maintenance across its locally registered Git worktrees:
 
 ```sh
-pnpm reclaim
+pnpm reclaim-space
 ```
 
 In an interactive terminal, the preview offers `Apply this cleanup? [y/N]`; enter `Y` to apply it.
-Redirected input or output remains preview-only. To apply without a prompt, use `pnpm reclaim --apply`.
+Redirected input or output remains preview-only. To apply without a prompt, use `pnpm reclaim-space --apply`.
 
 Historical test caches are retained by default. After stopping cross-version tests in all this
 repository's worktrees, include those caches with:
 
 ```sh
-pnpm reclaim --apply --tests-stopped
+pnpm reclaim-space --apply --tests-stopped
 ```
 
 The command reuses the historical test cache, Electron distribution, and dev bundle cleanup scripts.

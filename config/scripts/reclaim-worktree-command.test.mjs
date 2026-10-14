@@ -82,6 +82,6 @@ it('shows the single command without starting cleanup for help', async () => {
   const streams = terminal('Y')
   const reclaim = vi.fn()
   await runReclaimCommand(['--help'], { ...streams, reclaim })
-  expect(streams.text()).toContain('pnpm reclaim')
+  expect(streams.text()).toContain('pnpm reclaim-space')
   expect(reclaim).not.toHaveBeenCalled()
 })

@@ -47,14 +47,14 @@ Folder contexts without a Git repository cannot provide a historical release che
 Preview cleanup across this repository's registered local worktrees and shared source cache:
 
 ```sh
-pnpm reclaim
+pnpm reclaim-space
 ```
 
 The default selects stamped release checkouts older than 30 days, including previous extraction
 formats. To apply the preview, first stop cross-version tests in all this repository's worktrees:
 
 ```sh
-pnpm reclaim --apply --tests-stopped
+pnpm reclaim-space --apply --tests-stopped
 ```
 
 Use `--release-cache-min-age-days 7` for a shorter retention window, or `--release-cache-min-age-days 0` to select all

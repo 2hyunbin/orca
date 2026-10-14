@@ -31,7 +31,7 @@ export function startDevStorageReclaim({
     child.on('error', (error) => report(`[orca-dev] Storage cleanup skipped: ${error.message}`))
     child.on('exit', (code) => {
       if (code !== 0) {
-        report('[orca-dev] Storage cleanup did not finish; retry with pnpm reclaim.')
+        report('[orca-dev] Storage cleanup did not finish; retry with pnpm reclaim-space.')
       }
     })
     child.unref()

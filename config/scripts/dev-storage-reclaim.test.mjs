@@ -37,7 +37,7 @@ it('reports cleanup failure without throwing into dev startup', () => {
   const options = fixture()
   startDevStorageReclaim(options)
   options.child.emit('exit', 1)
-  expect(options.report).toHaveBeenCalledWith(expect.stringContaining('pnpm reclaim'))
+  expect(options.report).toHaveBeenCalledWith(expect.stringContaining('pnpm reclaim-space'))
 })
 
 it.each([true, false])('handles both sync and async spawn errors (sync: %j)', (synchronous) => {

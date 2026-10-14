@@ -50,7 +50,7 @@ export async function runReclaimCommand(
   const options = parseReclaimArguments(args)
   if (options.help) {
     output.write(
-      'Usage: pnpm reclaim [--apply] [--repo DIRECTORY] [--tests-stopped] [--release-cache-min-age-days 30]\n'
+      'Usage: pnpm reclaim-space [--apply] [--repo DIRECTORY] [--tests-stopped] [--release-cache-min-age-days 30]\n'
     )
     output.write(
       'Shares Electron installs and removes idle dev bundles across local Git worktrees.\n'
