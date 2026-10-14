@@ -15,7 +15,8 @@ import {
   backgroundTaskFingerprint,
   buildSubscriberFrame,
   subscriberCommandsChanged,
-  type SubscriberFieldHooks
+  type SubscriberFieldHooks,
+  type SubscriberFieldState
 } from './agent-session-subscriber-frame-fields'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
 import { deliverToSubscriber } from './agent-session-subscriber-catch-up'
@@ -34,6 +35,7 @@ export type AgentSessionSubscribeInput = {
   cursor?: AgentJournalCursor
   /** Every frame to fit a phone's bridge frame; the RPC sets it for every phone. */
   boundedFrames?: boolean
+  projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
 }
 
 export type Subscriber = {
@@ -43,8 +45,9 @@ export type Subscriber = {
   cursor: AgentJournalCursor
   fence: number
   boundedFrames: boolean
+  projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
   commands?: AgentSessionSlashCommand[] | null
-  /** The last draft list actually SENT — never advanced on a page that withheld
+  /** Canonical publication last sent — never advanced on a page that withheld
    *  it, or the final replacement would be suppressed by the identity dedup. */
   queuePublication?: QueuePublication
   /** Fingerprint of the background-task roster last SENT. */
@@ -84,6 +87,7 @@ export class AgentSessionSubscribers {
     emit: AgentSessionSubscriberEmit
     cursor?: AgentJournalCursor
     boundedFrames?: boolean
+    projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
   }): () => void {
     const liveCursor = input.journal.cursor()
     const subscriber: Subscriber = {
@@ -92,7 +96,8 @@ export class AgentSessionSubscribers {
       emit: input.emit,
       cursor: input.cursor ?? { epoch: liveCursor.epoch, sequence: 0 },
       fence: input.fence,
-      boundedFrames: input.boundedFrames === true
+      boundedFrames: input.boundedFrames === true,
+      projectQueuePublication: input.projectQueuePublication
     }
     const session = this.bySession.get(input.sessionId) ?? new Map<string, Subscriber>()
     session.set(input.id, subscriber)

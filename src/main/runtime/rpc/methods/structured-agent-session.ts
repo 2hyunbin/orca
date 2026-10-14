@@ -10,7 +10,7 @@ import {
   projectBackgroundTaskHistory
 } from './structured-agent-session-background-task-capability'
 import {
-  projectQueuedImageCardEvent,
+  projectQueuedImageCardPublication,
   projectQueuedImageCardHistory
 } from './structured-agent-session-queued-image-capability'
 import {
@@ -180,10 +180,12 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
       dispose = await host.subscribe({
         id: subscriptionId,
         sessionId: params.sessionId,
+        projectQueuePublication: (publication) =>
+          projectQueuedImageCardPublication(publication, ctx),
         emit: (event) =>
           emit(
             projectTurnItemEvent(
-              projectQueuedImageCardEvent(projectBackgroundTaskEvent(event, ctx), ctx),
+              projectBackgroundTaskEvent(event, ctx),
               ctx,
               host.sessionAgent(params.sessionId)
             )

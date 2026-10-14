@@ -5,9 +5,9 @@
 import type {
   AgentSessionHistoryResult,
   AgentSessionQueuedMessage,
-  AgentSessionQueuePublicationFields,
-  AgentSessionSubscribeEvent
+  AgentSessionQueuePublicationFields
 } from '../../../../shared/agent-session-wire'
+import type { QueuePublication } from '../../../native-chat/agent-session-wire/structured-agent-session-queued-publication'
 import { AGENT_SESSION_QUEUED_IMAGE_CARDS_CLIENT_CAPABILITY } from '../../../../shared/protocol-version'
 import type { RpcContext } from '../core'
 
@@ -32,7 +32,11 @@ function holdsImage(card: AgentSessionQueuedMessage): boolean {
 /** The fields to replace, or null when nothing is withheld. Positions and the next card's id stay
  *  as published, as when a phone's frame trims the list. A pause over no card the reader sees would
  *  offer a Resume that sends nothing it shows. */
-function withoutImageCards(fields: QueueFields): QueueFields | null {
+function withoutImageCards(
+  fields: QueueFields
+):
+  | (Pick<QueuePublication, 'queuedMessages'> & Partial<Pick<QueuePublication, 'queuePause'>>)
+  | null {
   const cards = fields.queuedMessages
   if (!cards?.some(holdsImage)) {
     return null
@@ -52,14 +56,11 @@ export function projectQueuedImageCardHistory(
   return page ? { ...result, page: { ...result.page, ...page } } : result
 }
 
-/** A frame carries the queue beside its rows, never inside a snapshot's page. */
-export function projectQueuedImageCardEvent(
-  event: AgentSessionSubscribeEvent,
+/** Applied before subscriber frame sizing; the host's canonical publication stays unchanged. */
+export function projectQueuedImageCardPublication(
+  publication: QueuePublication,
   ctx: QueuedImageReader
-): AgentSessionSubscribeEvent {
-  if (event.type === 'end' || readsQueuedImageCards(ctx)) {
-    return event
-  }
-  const fields = withoutImageCards(event)
-  return fields ? { ...event, ...fields } : event
+): QueuePublication {
+  const fields = readsQueuedImageCards(ctx) ? null : withoutImageCards(publication)
+  return fields ? { ...publication, ...fields } : publication
 }
