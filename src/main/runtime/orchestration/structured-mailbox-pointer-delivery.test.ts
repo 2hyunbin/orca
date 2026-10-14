@@ -4,6 +4,7 @@ import {
   type StructuredMailboxPointerHost
 } from './structured-mailbox-pointer-delivery'
 import type { StructuredMailSubmission } from './structured-pointer-operation-id'
+import { AGENT_SESSION_MAX_NEW_OPERATION_AGE_MS } from '../../../shared/agent-session-host-authority'
 import type { StructuredWorkerIdentity } from '../structured-worker-identity'
 import { RuntimeMessageWaiters } from '../runtime-message-waiters'
 
@@ -409,6 +410,26 @@ describe('structured mail delivery', () => {
         first,
         first
       ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never re-mints an ambiguous send after the host replay window expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const { delivery, send, setSubmissions } = harness({ dispatchState: 'unknown' })
+      delivery.deliverForHandle('dispatch:d1')
+      await flush()
+      const first = send.mock.calls[0]![0].operationId
+      setSubmissions([
+        { clientMessageId: first, dispatchState: 'unknown', submittedAt: Date.now() }
+      ])
+      // Its recorded verdict is the only evidence of whether it landed; age changes nothing.
+      vi.setSystemTime(Date.now() + AGENT_SESSION_MAX_NEW_OPERATION_AGE_MS + 60_000)
+      delivery.onJournalActivity('session-1')
+      await flush()
+      expect(send.mock.calls[1]![0].operationId).toBe(first)
     } finally {
       vi.useRealTimers()
     }

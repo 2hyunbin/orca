@@ -133,7 +133,8 @@ function mailFromSender(source: AgentMessageSource, address: string): string[] {
       return orchestration.messages
         .filter((message) => message.from === address)
         .map((message) => message.messageId)
-    default:
+    case 'task':
+    case undefined:
       return []
   }
 }
