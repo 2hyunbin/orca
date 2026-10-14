@@ -5,6 +5,24 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { OrcaRuntimeService } from './orca-runtime'
 import { withOpenedAgentSessionTab } from './agent-session-tab-layout'
+import type { Tab } from '../../shared/tab-types'
+import { openStructuredAgentSessionProvisionalTab } from '../../renderer/src/lib/structured-agent-session-provisional-tab'
+
+const windowStore = vi.hoisted(() => ({
+  unifiedTabsByWorktree: {} as Record<string, Tab[]>,
+  createUnifiedTab: vi.fn()
+}))
+
+vi.mock('@/store', () => ({
+  useAppStore: {
+    getState: () => ({
+      ...windowStore,
+      focusGroup: vi.fn(),
+      activateTab: vi.fn(),
+      setActiveTabType: vi.fn()
+    })
+  }
+}))
 
 const WT = 'repo-1::/tmp/worktree-a'
 
@@ -84,6 +102,28 @@ describe('a chat tab on a host with no window', () => {
       'structured-agent-session-chat-1',
       'reserved-chat-2'
     ])
+  })
+
+  it('is the tab a window later opening the chat finds, not a second one', async () => {
+    const { runtime, state } = createRuntime()
+    await runtime.publishStructuredAgentSessionTab({
+      workspaceId: WT,
+      sessionId: 'chat-1',
+      agent: 'codex',
+      activate: true
+    })
+    // A window opens on the saved layout, then the user opens the same chat.
+    windowStore.unifiedTabsByWorktree = { [WT]: state.session.unifiedTabs?.[WT] ?? [] }
+
+    const tab = openStructuredAgentSessionProvisionalTab({
+      worktreeId: WT,
+      executionHostId: 'local',
+      sessionId: 'chat-1',
+      agent: 'codex'
+    })
+
+    expect(windowStore.createUnifiedTab).not.toHaveBeenCalled()
+    expect(tab).toBe(state.session.unifiedTabs?.[WT]?.[0])
   })
 
   it('leaves the layout when the index hides the chat, on any close path', async () => {
