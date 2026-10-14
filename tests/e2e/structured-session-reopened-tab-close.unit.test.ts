@@ -123,6 +123,8 @@ async function setup() {
   )
   // No durable store, PTYs or workspace session on disk: the host tab list below is the whole state.
   Object.assign(runtime, {
+    // The notifier above is a desktop window's relay: that window publishes its own tab list.
+    isWindowlessSessionTabs: () => false,
     hasPersistedStructuredAgentSessionStore: () => true,
     getKnownWorkspaceSessionWorktreeIds: () => new Set(),
     hydrateHeadlessMobileSessionTabsFromWorkspaceSession: () => new Set(),
