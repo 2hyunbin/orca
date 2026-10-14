@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "sourceRevision": "sha256:633ea02926cf76b89b6d627d1b41c92417bfed458db620fabec4d2e55a20cfe3",
+  "sourceRevision": "sha256:57bf2bcfdb0208d6dcbc61aecd07fe0f7e1aee23977825695382bc1f07975921",
   "entries": {
     "accounts.antigravity.changed": {
       "value": "The native account changed. Select a saved account again before launching agy.",
@@ -60985,6 +60985,18 @@
     "plugins.catalog.reviewRequired": {
       "value": "Review required",
       "sourceHash": "sha256:9550619c95fe189b453a396c0e0f662cf0212e8a25340a70a506e0217c955f8b"
+    },
+    "plugins.managedWorkspace.openSaved": {
+      "value": "Open {{name}}",
+      "sourceHash": "sha256:9a31ef0560a259b3ad6497e156f02afe3b53c9518e924a5c3c53fdc4c0df2431"
+    },
+    "plugins.managedWorkspace.openTitle": {
+      "value": "Open a workspace",
+      "sourceHash": "sha256:59705dc8032c9b4d4e062b6b930bbc92a82f0fcc930d626b1fcaf5d8048b0c09"
+    },
+    "plugins.managedWorkspace.savedWorkspaces": {
+      "value": "Saved workspaces",
+      "sourceHash": "sha256:6bddeab3cb3500fb79cb0591123fb41df4e67b0241d809e6ea8a2ac0156a608d"
     },
     "plugins.viewer.alwaysExtension": {
       "value": "Always use for {{extension}} files",
