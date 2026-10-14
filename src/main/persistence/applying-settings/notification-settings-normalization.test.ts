@@ -47,4 +47,11 @@ describe('muted notification machines', () => {
     const normalized = normalizeNotificationSettings(persisted)
     expect(persistedNotificationSettingsRepaired(persisted, normalized)).toBe(true)
   })
+
+  it('does not count a field the file predates as a repair', () => {
+    const { notifyHiddenWorkspaces: _added, ...persisted } = getDefaultNotificationSettings()
+    const normalized = normalizeNotificationSettings(persisted)
+    expect(normalized.notifyHiddenWorkspaces).toBe(false)
+    expect(persistedNotificationSettingsRepaired(persisted, normalized)).toBe(false)
+  })
 })

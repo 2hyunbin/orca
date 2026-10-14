@@ -4,6 +4,7 @@ import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { normalizeWorkspaceCreatorProvenance } from '../../../../shared/workspace-creator-provenance'
+import { isCreatedByAnotherClient } from '../../../../shared/worktree/workspace-kinds'
 
 type RuntimeStatusEntry = { status: RuntimeStatus | null }
 
@@ -28,13 +29,13 @@ export function isWorkspaceFromOtherDevice(
   worktree: Worktree,
   pairedDeviceIdsByEnvironment: ReadonlyMap<string, string>
 ): boolean {
+  const environmentId = worktree.runtimeOwnerEnvironmentId
+  if (!environmentId) {
+    return isCreatedByAnotherClient(worktree.creatorProvenance)
+  }
   const creator = normalizeWorkspaceCreatorProvenance(worktree.creatorProvenance)
   if (!creator) {
     return false
-  }
-  const environmentId = worktree.runtimeOwnerEnvironmentId
-  if (!environmentId) {
-    return creator.kind !== 'host'
   }
   const pairedDeviceId = pairedDeviceIdsByEnvironment.get(environmentId)
   if (!pairedDeviceId) {

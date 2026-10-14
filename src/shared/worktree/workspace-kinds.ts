@@ -1,4 +1,5 @@
 import { isFolderRepo } from '../repo-kind'
+import { normalizeWorkspaceCreatorProvenance } from '../workspace-creator-provenance'
 import type { Repo } from '../repo-types'
 import { getWorktreeGitIdentityDisplay } from './git-identity-display'
 import type { Worktree } from './types'
@@ -57,6 +58,15 @@ export function isDetachedHeadWorkspace(
   worktree: Pick<WorkspaceKindFields, 'branch' | 'head'>
 ): boolean {
   return getWorktreeGitIdentityDisplay(worktree)?.kind === 'detached'
+}
+
+/**
+ * "Hide other-client workspaces" for a row this host owns (no runtime owner environment): a known
+ * creator that is not the host. Rows owned through a paired environment also need its device id.
+ */
+export function isCreatedByAnotherClient(creatorProvenance: unknown): boolean {
+  const creator = normalizeWorkspaceCreatorProvenance(creatorProvenance)
+  return creator !== undefined && creator.kind !== 'host'
 }
 
 /** The Filters switches that hide a workspace by its kind alone, with no live renderer state. */

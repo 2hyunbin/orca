@@ -25,7 +25,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const LABEL = 'Notify about hidden workspaces'
+const LABEL = 'Notify About Hidden Workspaces'
 
 function renderPane(enabled = true) {
   const defaults = getDefaultSettings('/tmp')
@@ -45,7 +45,7 @@ describe('NotificationsPane hidden workspaces row', () => {
     expect(view.getByText(LABEL)).toBeTruthy()
     expect(
       view.getByText(
-        "Workspaces hidden by the sidebar's Filters menu send no notifications to this computer or your phone while this is off."
+        "When off, workspaces hidden by a Hide switch in the sidebar's Filters menu show no unread dot and send no notifications to this computer or your phone."
       )
     ).toBeTruthy()
     expect(toggle.getAttribute('aria-checked')).toBe('false')
@@ -57,8 +57,8 @@ describe('NotificationsPane hidden workspaces row', () => {
     })
   })
 
-  it('is disabled while notifications are disabled', () => {
+  it('stays usable while notifications are disabled, since it also governs unread dots', () => {
     const { toggle } = renderPane(false)
-    expect(toggle.hasAttribute('disabled')).toBe(true)
+    expect(toggle.hasAttribute('disabled')).toBe(false)
   })
 })

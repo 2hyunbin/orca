@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getDefaultSettings } from '../../../../shared/constants'
-import { getDefaultNotificationSettings } from '../../../../shared/notification-settings-defaults'
+import { getDefaultSettings } from '../../../shared/constants'
+import { getDefaultNotificationSettings } from '../../../shared/notification-settings-defaults'
 import { resolveAgentAttention } from '@/attention/agent-attention-policy'
 import { createTerminalAttentionSurface } from '@/components/terminal-pane/terminal-attention-surface'
 import { createStructuredAttentionSurface } from '@/components/native-chat/structured-attention-surface'
-import { createTabsSliceMockApi } from '../../store/slices/tabs-slice-test-harness'
-import { createTestStore, makeWorktree, TEST_REPO } from '../../store/slices/store-test-helpers'
+import { createTabsSliceMockApi } from '../store/slices/tabs-slice-test-harness'
+import { createTestStore, makeWorktree, TEST_REPO } from '../store/slices/store-test-helpers'
 import { isWorkspaceNotificationMutedBySidebarFilters } from './hidden-workspace-notification-mute'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -43,6 +43,7 @@ beforeEach(() => {
     repos: [TEST_REPO],
     worktreesByRepo: { repo1: [cliRow, plainRow] },
     persistedUIReady: true,
+    workspaceSessionReady: true,
     hideCliCreatedWorkspaces: true
   })
   setNotifyHiddenWorkspaces(false)
@@ -65,6 +66,14 @@ describe('isWorkspaceNotificationMutedBySidebarFilters', () => {
     expect(muted(CLI_ID)).toBe(false)
     store.setState({ persistedUIReady: true, settings: null })
     expect(muted(CLI_ID)).toBe(false)
+  })
+
+  it('fails open until terminals reconnect, when Hide sleeping would read restored work as asleep', () => {
+    store.setState({ hideCliCreatedWorkspaces: false, showSleepingWorkspaces: false })
+    store.setState({ workspaceSessionReady: false })
+    expect(muted(PLAIN_ID)).toBe(false)
+    store.setState({ workspaceSessionReady: true })
+    expect(muted(PLAIN_ID)).toBe(true)
   })
 
   it('keeps notifying for a hidden parent the sidebar shows above a visible child', () => {

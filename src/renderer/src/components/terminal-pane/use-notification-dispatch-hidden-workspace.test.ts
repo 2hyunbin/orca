@@ -28,6 +28,7 @@ function hideCliCreatedPrimary(notifyHiddenWorkspaces: boolean): void {
   const [primary, secondary] = mockState.worktreesByRepo.repo1
   Object.assign(mockState, {
     persistedUIReady: true,
+    workspaceSessionReady: true,
     showSleepingWorkspaces: true,
     hideCliCreatedWorkspaces: true,
     hideDefaultBranchWorkspace: false,

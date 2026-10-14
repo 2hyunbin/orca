@@ -5,6 +5,7 @@ import type { PersistedState } from '../../shared/persisted-state-types'
 import type { Worktree } from '../../shared/worktree/types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import type { WorktreeLineage } from '../../shared/worktree/lineage-types'
+import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import {
   isStructuredAttentionWorkspaceHidden,
   type HiddenWorkspaceAttentionDeps
@@ -46,6 +47,7 @@ function deps(options: {
   notifyHiddenWorkspaces?: boolean
   resolved?: Worktree[] | null
   meta?: Partial<WorktreeMeta>
+  folders?: FolderWorkspace[]
   lineage?: Record<string, Pick<WorktreeLineage, 'parentWorktreeId'>>
 }): HiddenWorkspaceAttentionDeps {
   return {
@@ -56,7 +58,8 @@ function deps(options: {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only provenance fields of this partial meta.
       getWorktreeMeta: () => options.meta as WorktreeMeta | undefined,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the check reads only parentWorktreeId.
-      getAllWorktreeLineage: () => (options.lineage ?? {}) as Record<string, WorktreeLineage>
+      getAllWorktreeLineage: () => (options.lineage ?? {}) as Record<string, WorktreeLineage>,
+      getFolderWorkspaces: () => options.folders ?? []
     },
     notificationSettings: {
       ...getDefaultNotificationSettings(),
@@ -147,6 +150,49 @@ describe('isStructuredAttentionWorkspaceHidden', () => {
       isStructuredAttentionWorkspaceHidden(
         deps({ ui: on, meta: CLI_META, lineage: { child: { parentWorktreeId: WORKSPACE_ID } } }),
         SCOPE
+      )
+    ).toBe(false)
+  })
+
+  it('hides another client’s worktree or folder workspace under Hide other-client workspaces', () => {
+    const fromPhone = { kind: 'paired-device', deviceId: 'phone' } as const
+    const hide = { hideWorkspacesFromOtherDevices: true }
+    expect(
+      isStructuredAttentionWorkspaceHidden(
+        deps({ ui: hide, meta: { creatorProvenance: fromPhone } }),
+        SCOPE
+      )
+    ).toBe(true)
+    expect(
+      isStructuredAttentionWorkspaceHidden(
+        deps({ ui: hide, meta: { creatorProvenance: { kind: 'host' } } }),
+        SCOPE
+      )
+    ).toBe(false)
+    const folder: FolderWorkspace = {
+      id: 'folder-1',
+      projectGroupId: 'g1',
+      name: 'notes',
+      folderPath: '/notes',
+      creatorProvenance: fromPhone,
+      linkedTask: null,
+      comment: '',
+      isArchived: false,
+      isUnread: false,
+      isPinned: false,
+      sortOrder: 0,
+      lastActivityAt: 0,
+      createdAt: 0,
+      updatedAt: 0
+    }
+    const folderScope = { ...SCOPE, workspaceId: 'folder-1', workspaceKind: 'folder' } as const
+    expect(
+      isStructuredAttentionWorkspaceHidden(deps({ ui: hide, folders: [folder] }), folderScope)
+    ).toBe(true)
+    expect(
+      isStructuredAttentionWorkspaceHidden(
+        deps({ ui: { hideCliCreatedWorkspaces: true }, folders: [folder] }),
+        folderScope
       )
     ).toBe(false)
   })

@@ -15,7 +15,7 @@ import {
 } from './workspace-unread-flag'
 import { workspaceMarkerTabIds } from './workspace-live-markers'
 import { isTabOnScreen } from '@/hooks/agent-auto-ack-targets'
-import { isWorkspaceNotificationMutedBySidebarFilters } from '@/components/sidebar/hidden-workspace-notification-mute'
+import { isWorkspaceNotificationMutedBySidebarFilters } from '@/attention/hidden-workspace-notification-mute'
 
 export const createWorkspaceAttentionSlice: StateCreator<
   AppState,

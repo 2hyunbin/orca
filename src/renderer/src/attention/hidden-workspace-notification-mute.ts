@@ -1,23 +1,25 @@
 import type { AppState } from '@/store/types'
 import { getIndexedAllWorktrees, getIndexedRepoMap } from '@/store/worktree-repo-index'
-import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
-import type { Worktree } from '../../../../shared/worktree/types'
+import { parseWorkspaceKey } from '../../../shared/workspace-scope'
+import type { Worktree } from '../../../shared/worktree/types'
 import {
+  anySidebarSwitchIsOn,
   isFolderWorkspaceHiddenBySidebarSwitch,
   isHiddenBySidebarSwitch
-} from './sidebar-switch-hidden-workspace'
-import { buildVisibleWorktreeOptionsFromState } from './visible-worktree-options-from-state'
-import { getLineageAncestorIndex } from './visible-worktree-indexes'
+} from '@/components/sidebar/sidebar-switch-hidden-workspace'
+import { buildVisibleWorktreeOptionsFromState } from '@/components/sidebar/visible-worktree-options-from-state'
+import { getLineageAncestorIndex } from '@/components/sidebar/visible-worktree-indexes'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getLineageRenderInfo
-} from './worktree-lineage-projection'
+} from '@/components/sidebar/worktree-lineage-projection'
 
 /**
  * Whether attention from this workspace must raise nothing — no unread, banner, sound or push —
  * because a Filters-menu switch hides it and "Notify about hidden workspaces" is off.
  *
- * Fails open: unhydrated settings or UI state, or a workspace this store has no record of, notify.
+ * Fails open: unhydrated settings or UI state, terminals not yet reconnected (every restored
+ * workspace would read as sleeping), or a workspace this store has no record of, notify.
  * Ids are not host-qualified, so a same-id twin on another host that the switches show notifies.
  */
 export function isWorkspaceNotificationMutedBySidebarFilters(
@@ -27,6 +29,7 @@ export function isWorkspaceNotificationMutedBySidebarFilters(
   if (
     state.settings?.notifications?.notifyHiddenWorkspaces !== false ||
     !state.persistedUIReady ||
+    !state.workspaceSessionReady ||
     !anySidebarSwitchIsOn(state)
   ) {
     return false
@@ -49,17 +52,6 @@ export function isWorkspaceNotificationMutedBySidebarFilters(
     return false
   }
   return !isShownAsLineageParent(state, workspaceId, all, isHidden)
-}
-
-function anySidebarSwitchIsOn(state: AppState): boolean {
-  return (
-    !state.showSleepingWorkspaces ||
-    state.hideDefaultBranchWorkspace ||
-    state.hideAutomationGeneratedWorkspaces ||
-    state.hideCliCreatedWorkspaces ||
-    state.hideDetachedHeadWorkspaces ||
-    state.hideWorkspacesFromOtherDevices
-  )
 }
 
 /** The sidebar renders a hidden parent above any child it shows, so that parent still notifies. */
