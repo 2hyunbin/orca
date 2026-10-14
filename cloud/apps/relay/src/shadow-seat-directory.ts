@@ -219,6 +219,8 @@ export class ShadowSeatDirectory {
   onBookedJoin?: (join: BookedJoin) => void
   onOutranked?: (seat: OutrankedSeat) => void
   private readonly joinedSinceApply = new Set<string>()
+  // Seats already reported, insertion-ordered: a full resync re-judges a host without a second demote.
+  private readonly reportedOutranked = new Set<string>()
 
   // Cells no longer listed are forgotten with their seats; new ones start pending.
   // `required` defaults to every listed cell.
@@ -590,7 +592,7 @@ export class ShadowSeatDirectory {
   }
 
   // After the whole response, so a cell's first snapshot is judged by the mode it carries. Only a
-  // join triggers it: a cell flipped to reserve later, or a lost demote, waits for the silence close.
+  // join triggers it, once per seat: a cell flipped to reserve later, or a lost demote, waits for the silence close.
   // A lower epoch that joined later (answered from a stale map) is left to the ledger reconcile.
   private reportOutranked(): void {
     const report = this.onOutranked
@@ -604,6 +606,12 @@ export class ShadowSeatDirectory {
         const by = seats.find((other) => seatOutranks(other, seat))
         if (!by) continue
         const { cellId, epoch, joinedAt } = seat
+        const reported = `${key}\u0000${cellId}\u0000${epoch}\u0000${joinedAt}`
+        if (this.reportedOutranked.has(reported)) continue
+        this.reportedOutranked.add(reported)
+        if (this.reportedOutranked.size > SHADOW_SEAT_RECENTLY_LEFT_MAX_HOSTS) {
+          this.reportedOutranked.delete(this.reportedOutranked.values().next().value!)
+        }
         report({ ...parseHostKey(key), cellId, epoch, joinedAt, byCellId: by.cellId })
       }
     }

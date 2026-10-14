@@ -620,6 +620,15 @@ describe('ShadowSeatDirectory.onOutranked', () => {
     expect(justPastSkew.outranked).toEqual([halfOpen])
   })
 
+  it('reports a seat once, even when a full resync re-judges its host', () => {
+    const { map, outranked } = directory()
+    map.apply('cell-a', full('cell-a', 3, 10), 100)
+    map.apply('cell-b', full('cell-b', 4, 2_000), 101)
+    map.apply('cell-b', { ...full('cell-b', 4, 2_000), incarnation: '22222222-2222-4222-8222-222222222222' }, 102)
+    map.apply('cell-a', { ...full('cell-a', 3, 10), incarnation: '22222222-2222-4222-8222-222222222222' }, 103)
+    expect(outranked).toEqual([halfOpen])
+  })
+
   it('leaves a database-cell seat, a drain-only seat, a later lower epoch, and a join within the skew', () => {
     const onDatabaseCell = directory()
     onDatabaseCell.map.apply('cell-a', full('cell-a', 3, 10, db), 100)
