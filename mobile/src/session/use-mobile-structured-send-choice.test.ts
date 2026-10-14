@@ -1,5 +1,5 @@
 import { createElement } from 'react'
-import { act, create } from 'react-test-renderer'
+import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
 import type { RpcClient } from '../transport/rpc-client'
 import { useMobileStructuredSendChoice } from './use-mobile-structured-send-choice'
@@ -34,7 +34,10 @@ it('offers a choice only for a verified injecting agent on the current connectio
     supported = useMobileStructuredSendChoice({ client, agent, enabled })
     return null
   }
-  const renderer = await act(async () => create(createElement(Harness)))
+  let renderer!: ReactTestRenderer
+  await act(async () => {
+    renderer = create(createElement(Harness))
+  })
   try {
     expect(supported).toBe(true)
     await act(async () => renderer.update(createElement(Harness, { agent: 'acp:plain' })))
