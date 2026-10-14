@@ -258,6 +258,10 @@ describe('ShadowDirectoryCompare', () => {
     const duplicate = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2)] })
     duplicate.compare('sticky-verify', IDENTITY, assignment('cell-a'))
     duplicate.flush(0)
+    // A drain-only second seat is explained, so it counts only on the database's cell.
+    const draining = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(2, 'drain-only')] })
+    draining.compare('sticky-verify', IDENTITY, assignment('cell-a'))
+    draining.flush(0)
     const mapOnly = compareOn({ 'cell-a': [seat(3)], 'cell-b': [seat(3)] })
     mapOnly.compare('resolve', IDENTITY, null)
     mapOnly.flush(0)
@@ -267,6 +271,7 @@ describe('ShadowDirectoryCompare', () => {
       ['agree-absent', true, 1, {}],
       ['cell-mismatch', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
       ['duplicate-seat', false, 1, { 'cell-a': 1, 'cell-b': 1 }],
+      ['duplicate-seat', true, 1, { 'cell-a': 1 }],
       ['map-only', false, 1, { 'cell-a': 1, 'cell-b': 1 }]
     ])
   })

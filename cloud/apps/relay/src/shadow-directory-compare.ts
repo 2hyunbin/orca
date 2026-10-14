@@ -102,8 +102,8 @@ export function classifyShadowSeat(
   return { class: 'agree', explained: true }
 }
 
-// The database's cell, or with no row every seat's cell; a cell-mismatch or duplicate-seat
-// also counts on every seat cell, so a stale seat feed shows on its own cell.
+// The database's cell, or with no row every seat's cell; an unexplained cell-mismatch or
+// duplicate-seat also counts on every seat cell, so a stale seat feed shows on its own cell.
 // A compare with neither (agree-absent, or map-incomplete with no row and no seat) has none.
 function comparedCells(
   directory: ShadowSeatDirectory,
@@ -114,7 +114,10 @@ function comparedCells(
   const seats = directory.seatsOf(identity.userId, identity.relayHostId)
   if (!answer) return new Set(seats.map((seat) => seat.cellId))
   const cells = new Set([answer.cellId])
-  if (verdict.class === 'cell-mismatch' || verdict.class === 'duplicate-seat') {
+  if (
+    !verdict.explained &&
+    (verdict.class === 'cell-mismatch' || verdict.class === 'duplicate-seat')
+  ) {
     for (const seat of seats) cells.add(seat.cellId)
   }
   return cells
