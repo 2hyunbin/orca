@@ -3,6 +3,7 @@ import path from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { expect, test } from './helpers/orca-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
+import { startHiddenRendererFrameCapture } from './helpers/hidden-renderer-frame-capture'
 
 const FLOATING = 'global-floating-terminal'
 const PANEL = '[data-floating-terminal-panel][aria-hidden="false"]'
@@ -76,6 +77,31 @@ test('CLI positions floating files without changing the main workspace or reclai
     })
     expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(0)
   }
+  const pendingPosition = () =>
+    orcaPage.evaluate(() => {
+      const reveal = window.__store?.getState().pendingEditorReveal
+      return reveal && { line: reveal.line, column: reveal.column, eligible: reveal.canApply?.() }
+    })
+  const oversizedPosition = {
+    line: Number.MAX_SAFE_INTEGER,
+    column: Number.MAX_SAFE_INTEGER,
+    eligible: true
+  }
+  const resumeHiddenRendererFrames = async (): Promise<void> => {
+    const browserWindow = await electronApp.browserWindow(orcaPage)
+    // Linux throttles hidden renderers to one frame per second, beyond this reveal's frame budget.
+    const state = await browserWindow.evaluate((window) => {
+      window.webContents.setBackgroundThrottling(false)
+      return {
+        throttled: window.webContents.getBackgroundThrottling(),
+        visible: window.isVisible(),
+        focused: window.isFocused()
+      }
+    })
+    await browserWindow.dispose()
+    expect(state).toEqual({ throttled: false, visible: false, focused: false })
+  }
+  let stopFrameCapture: (() => Promise<void>) | undefined
   try {
     await open(mainWorktreeId, relativePath, ['--focus'])
     await expect(orcaPage.locator('.monaco-editor:visible')).toHaveCount(1)
@@ -120,7 +146,11 @@ test('CLI positions floating files without changing the main workspace or reclai
       '--column',
       String(Number.MAX_SAFE_INTEGER)
     ])
+    await expect.poll(pendingPosition).toEqual(oversizedPosition)
     await mainInput.focus()
+    expect(await pendingPosition()).toEqual({ ...oversizedPosition, eligible: false })
+    await resumeHiddenRendererFrames()
+    stopFrameCapture = await startHiddenRendererFrameCapture(orcaPage)
     await orcaPage.waitForTimeout(3500)
     expect(await cursor()).toEqual({ line: 17, column: 3 })
     await expect(mainInput).toBeFocused()
@@ -141,6 +171,8 @@ test('CLI positions floating files without changing the main workspace or reclai
       '--column',
       String(Number.MAX_SAFE_INTEGER)
     ])
+    await expect.poll(pendingPosition).toEqual(oversizedPosition)
+    await resumeHiddenRendererFrames()
     await expect
       .poll(
         () =>
@@ -163,8 +195,12 @@ test('CLI positions floating files without changing the main workspace or reclai
       )
     ).toBe(true)
   } finally {
-    for (const file of [mainFile, floatingFile, floatingEmpty]) {
-      rmSync(file, { force: true })
+    try {
+      await stopFrameCapture?.()
+    } finally {
+      for (const file of [mainFile, floatingFile, floatingEmpty]) {
+        rmSync(file, { force: true })
+      }
     }
   }
 })
