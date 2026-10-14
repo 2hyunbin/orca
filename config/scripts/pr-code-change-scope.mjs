@@ -296,16 +296,15 @@ const NATIVE_CACHE_FILES = new Set([
   'config/scripts/zip-extractor-command.mjs',
   'src/shared/zip-extractor-command.ts',
   'config/scripts/shared-electron-dist-cache.mjs',
-  'config/scripts/space-sharing-copy.mjs',
-  'native/windows-registry/src/addon.cc',
-  'native/windows-registry/binding.gyp',
-  'native/windows-registry/package.json',
-  'native/windows-registry/index.js'
+  'config/scripts/space-sharing-copy.mjs'
 ])
 
 const NATIVE_CACHE_PREFIXES = [
   'config/patches/node-pty@',
-  'config/patches/@vscode__windows-process-tree'
+  'config/patches/@vscode__windows-process-tree',
+  // The vendored addons' sources: build/ and bin/ beside them are ignored, so nothing else lands here.
+  'native/windows-registry/',
+  'native/windows-security/'
 ]
 
 const SHARED_PACKAGE_PREFIXES = [
@@ -386,6 +385,7 @@ const WINDOWS_PACKAGE_TESTS = [
   'config/scripts/verify-packaged-windows-agent-hook.test.mjs',
   'config/scripts/script-module-dependencies.test.mjs',
   'src/main/windows-registry-addon.test.ts',
+  'src/shared/windows-security-addon.win32.test.ts',
   'src/main/providers/windows-conpty-wide-char-duplication.node-pty.test.ts',
   'src/main/providers/pty-repaint-wide-char-buffer.node-pty.test.ts',
   'src/shared/__tests__/process-host/windows-command-line.win32.test.ts',
@@ -411,6 +411,8 @@ const WINDOWS_PACKAGE_TESTS = [
   'src/main/windows/windows-process-tree-command-line-patch.test.ts',
   'src/main/windows/windows-process-table-native-addon.win32.test.ts',
   'src/main/daemon/daemon-pid-identity-native.win32.test.ts',
+  'src/main/windows/windows-administrator-status.win32.test.ts',
+  'src/main/windows/windows-administrator-restart.win32.test.ts',
   'src/main/persistence/profile-state/profile-state-access-windows-native.win32.test.ts',
   'src/main/windows-live-tree-kill.win32.test.ts',
   'src/main/wsl/wsl-runner.test.ts',
@@ -625,10 +627,7 @@ function isProductBundlePath(file, extraPrefixes) {
   if (isTestFile(file)) {
     return false
   }
-  if (file.startsWith('src/')) {
-    return true
-  }
-  return matchesPrefix(file, extraPrefixes)
+  return file.startsWith('src/') || matchesPrefix(file, extraPrefixes)
 }
 
 // These shared fixtures are consumed only by unit tests.
@@ -678,8 +677,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   for await (const chunk of process.stdin) {
     input += chunk
   }
-  const files = input.split(/\r?\n/).filter(Boolean)
-  const classification = classifyPrJobs(files, {
+  const classification = classifyPrJobs(input.split(/\r?\n/).filter(Boolean), {
     allowMobileCiTools: process.argv.includes('--mobile-ci-tools'),
     allowDaemonInitTestSupport: process.argv.includes('--daemon-init-test-support')
   })
