@@ -1,3 +1,5 @@
+import { HostOperationLifetime } from '../runtime/host-operation-lifetime'
+
 type ProviderActivity = {
   providerId: string
   mutation: boolean
@@ -5,10 +7,11 @@ type ProviderActivity = {
   allResources?: boolean
 }
 
-export class PluginEnvironmentProviderActivity {
+export class PluginEnvironmentProviderActivity extends HostOperationLifetime {
   private readonly providers = new Map<object, ProviderActivity>()
-  private readonly pending = new Set<Promise<void>>()
-  private closing = false
+  constructor() {
+    super('The environment provider host is shutting down')
+  }
 
   enter(providerId: string) {
     this.requireOpen()
@@ -37,33 +40,5 @@ export class PluginEnvironmentProviderActivity {
   }
   release(slot: object): void {
     this.providers.delete(slot)
-  }
-
-  async track<T>(run: () => Promise<T>): Promise<T> {
-    this.requireOpen()
-    const finish = this.begin()
-    try {
-      return await run()
-    } finally {
-      finish()
-    }
-  }
-
-  async drain(): Promise<void> {
-    this.closing = true
-    await Promise.all(this.pending)
-  }
-  private requireOpen(): void {
-    if (this.closing) {
-      throw new Error('The environment provider host is shutting down')
-    }
-  }
-  private begin(): () => void {
-    const done = Promise.withResolvers<void>()
-    this.pending.add(done.promise)
-    return () => {
-      this.pending.delete(done.promise)
-      done.resolve()
-    }
   }
 }

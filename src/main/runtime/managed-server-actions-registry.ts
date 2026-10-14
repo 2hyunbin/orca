@@ -1,7 +1,6 @@
 /**
- * The managed-server actions the Managed servers settings run, published by the desktop main
- * process so runtime RPC can offer the same ones. A runtime with none registered (headless
- * `orca serve`) has no SSH registry to manage servers from, and does not advertise them.
+ * Managed-server actions belong to the control host with the SSH registry.
+ * Hosts advertise them only after registering their lifecycle implementation.
  */
 import type {
   OrcadManagedCancelStopResult,

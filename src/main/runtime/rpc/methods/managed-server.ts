@@ -9,8 +9,7 @@ import {
 } from '../../managed-server-actions-registry'
 import { defineMethod } from '../core'
 
-// Why a refusal and not a crash: only the desktop main process registers these actions, and a
-// client must read their absence the same way it reads an older host's method_not_found.
+// Missing composition has the same meaning as an older host's method_not_found.
 function actions(): ManagedServerActions {
   const registered = getManagedServerActions()
   if (!registered) {
