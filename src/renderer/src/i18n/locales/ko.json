@@ -151,7 +151,18 @@
       "codexSharedServerWarning": {
         "title": "Codex 탭이 서버를 공유할 때 경고",
         "description": "에이전트 상태가 잘못되었을 수 있으므로 서버를 다른 탭과 공유할 때 직접 시작한 Codex에 대한 알림을 표시합니다."
-      }
+      },
+      "environmentName": "환경 변수 이름",
+      "environmentValue": "{{name}} 값",
+      "savedEnvironment": "저장된 값 · 바꾸려면 입력",
+      "newEnvironment": "값",
+      "removeEnvironment": "삭제",
+      "loadingHost": "에이전트 설정 불러오는 중…",
+      "updateHost": "에이전트 실행 설정을 편집하려면 이 서버를 업데이트하세요.",
+      "readFailed": "에이전트 설정을 읽을 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
+      "saveFailed": "에이전트 설정을 저장할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
+      "hostDefaults": "선택한 호스트의 새 에이전트 기본값입니다.",
+      "save": "저장"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "심볼릭 링크",
@@ -919,6 +930,7 @@
               "undecryptableUnknown": "{{value0}} 쿠키를 해독할 수 없어 건너뛰었습니다. 소스 브라우저를 완전히 닫고 가져오기를 다시 시도하세요.",
               "unrecognizedWarning": "이 버전의 Orca가 인식하지 못한다는 경고와 함께 쿠키 가져오기가 완료되었습니다. Orca를 업데이트하여 세부 정보를 확인한 다음 쿠키를 사용하기 전에 이 프로필을 확인하세요.",
               "undecryptableUnrecognizedReason": "{{value0}} 쿠키는 이 버전의 Orca가 인식하지 못하는 이유로 해독할 수 없으며 건너뛰었습니다. Orca를 업데이트하여 세부정보를 확인한 후 가져오기를 다시 시도하세요.",
+              "partitionSkippedBreakdown": "사이트 파티션을 읽을 수 없는 쿠키: {{value0}}. 기존 세션을 보호하기 위해 가져오지 않은 관련 쿠키: {{value1}}. 해당 사이트의 기존 쿠키는 변경되지 않았습니다. 다시 로그인하기 전에 이 프로필에서 해당 사이트를 확인하세요.",
               "partitionSkipped": "{{value0}} 쿠키는 사이트 파티션을 읽을 수 없기 때문에 가져오지 못했습니다. Orca에서 해당 사이트에 다시 로그인합니다.",
               "locationClientHosted": "이 기기에서 읽고 {{value0}} 워크스페이스를 위해 여기에 저장됩니다.",
               "locationRemoteHost": "{{value0}}의 브라우저에서 읽고 거기에 저장됩니다.",
@@ -17994,7 +18006,6 @@
         "fastMode": "빠른 모드",
         "speed": "속도",
         "thinking": "사고",
-        "options": "옵션",
         "sessionOptions": "세션 옵션",
         "chooseInAgentPicker": "에이전트 선택기에서 선택…",
         "searchModels": "모델 검색…",
@@ -18059,7 +18070,12 @@
         "permissionFullAccessCodexDescription": "묻지 않습니다. 모든 파일을 편집하고 네트워크를 사용할 수 있습니다",
         "permissionFullAccessSharedDescription": "편집이나 명령 전에 묻지 않습니다",
         "pasteFailed": "붙여넣기 실패.",
-        "commandAttachmentsUnsupported": "채팅 세션 명령을 사용하기 전에 첨부 파일을 제거하세요."
+        "commandAttachmentsUnsupported": "채팅 세션 명령을 사용하기 전에 첨부 파일을 제거하세요.",
+        "optionValueShort": {
+          "minimal": "최소",
+          "medium": "중간",
+          "xhigh": "매우 높음"
+        }
       },
       "tool": {
         "running": "실행 중…",
@@ -19566,16 +19582,5 @@
   },
   "projectField": {
     "updateFailed": "프로젝트 필드를 업데이트하지 못했습니다"
-  },
-  "settings.agents.environmentName": "환경 변수 이름",
-  "settings.agents.environmentValue": "{{name}} 값",
-  "settings.agents.savedEnvironment": "저장된 값 · 바꾸려면 입력",
-  "settings.agents.newEnvironment": "값",
-  "settings.agents.removeEnvironment": "삭제",
-  "settings.agents.loadingHost": "에이전트 설정 불러오는 중…",
-  "settings.agents.updateHost": "에이전트 실행 설정을 편집하려면 이 서버를 업데이트하세요.",
-  "settings.agents.readFailed": "에이전트 설정을 읽을 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
-  "settings.agents.saveFailed": "에이전트 설정을 저장할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
-  "settings.agents.hostDefaults": "선택한 호스트의 새 에이전트 기본값입니다.",
-  "settings.agents.save": "저장"
+  }
 }
