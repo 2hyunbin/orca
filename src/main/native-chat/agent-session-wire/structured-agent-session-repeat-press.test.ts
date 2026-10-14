@@ -63,7 +63,9 @@ beforeEach(async () => {
           link: {
             linkId: `link-${fence}`,
             handle: codexProviderHandle(THREAD),
-            origin: fence > 1 ? ('resumed' as const) : ('created' as const),
+            origin: store.getRecord(SESSION)?.providerHandleChain.length
+              ? ('resumed' as const)
+              : ('created' as const),
             mintedAtFence: fence,
             observedAt: NOW
           }
@@ -220,6 +222,11 @@ describe('a press sent again', () => {
     cancelTurn.mockResolvedValueOnce({ cancelled: false })
     const first = hostTestOperationId()
     await stop(first)
+    await host['serialize'](SESSION, async () => undefined)
+    expect(
+      await host.attach(CALLER, hostTestAttachParams(store.getRecord(SESSION)!.lease.runtimeFence))
+    ).toMatchObject({ ok: true })
+    await runningTurn()
 
     expect(await stop(first)).toMatchObject({
       ok: true,

@@ -29,7 +29,7 @@ let serial = 0
 let warned: ReturnType<typeof vi.spyOn>
 
 beforeEach(async () => {
-  rig = await createQueuedMessageTestRig()
+  rig = await createQueuedMessageTestRig({ restartable: true })
   warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
 })
 
@@ -77,7 +77,10 @@ async function turnRow(turnId: string, state: 'running' | 'interrupted'): Promis
       startedAt: 1,
       ...(state === 'running' ? {} : { completedAt: 2 })
     },
-    { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    {
+      fence: rig.store.getRecord(SESSION)!.lease.runtimeFence,
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE
+    }
   )
 }
 
