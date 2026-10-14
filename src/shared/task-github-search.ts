@@ -4,10 +4,13 @@ import type { TaskViewPresetId } from './ui-chrome-types'
 export type GitHubTaskKind = 'issues' | 'prs'
 
 export function isPRFocusedTaskView(preset: TaskViewPresetId | null, query: string): boolean {
+  const parsed = parseTaskQuery(query)
+  if (parsed.scope === 'issue') {
+    return false
+  }
   if (preset === 'prs' || preset === 'my-prs' || preset === 'review') {
     return true
   }
-  const parsed = parseTaskQuery(query)
   return (
     parsed.scope === 'pr' ||
     parsed.state === 'merged' ||

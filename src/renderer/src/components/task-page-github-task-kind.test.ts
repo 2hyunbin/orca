@@ -67,6 +67,14 @@ describe('normalizeGitHubTaskPreset', () => {
 })
 
 describe('getGitHubTaskKind', () => {
+  it('lets an explicit issue query override a PR-focused preset', () => {
+    for (const preset of ['prs', 'my-prs', 'review'] as const) {
+      expect(getGitHubTaskKind(preset, 'is:issue is:open')).toBe('issues')
+      expect(getGitHubTaskKind(preset, 'is:"issue"')).toBe('issues')
+      expect(getGitHubTaskKind(preset, 'label:is:issue')).toBe('prs')
+    }
+  })
+
   it('reports prs when the preset is PR-focused', () => {
     expect(getGitHubTaskKind('review', '')).toBe('prs')
   })

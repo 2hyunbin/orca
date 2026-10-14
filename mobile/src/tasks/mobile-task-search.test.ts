@@ -10,6 +10,14 @@ import {
 } from './mobile-tasks-item-mapping'
 
 describe('mobile task search parity', () => {
+  it('lets an explicit issue query override a saved PR preset', () => {
+    for (const preset of ['prs', 'my-prs', 'review'] as const) {
+      expect(githubKindFromQuery('is:issue is:open', preset)).toBe('issues')
+      expect(githubKindFromQuery('is:"issue" is:open', preset)).toBe('issues')
+      expect(scopeGitHubTaskSearch('is:issue is:open', 'prs')).toBe('is:issue is:open')
+    }
+  })
+
   it('preserves the pull-request alias while browsing issues', () => {
     expect(scopeGitHubTaskSearch('is:pull-request is:open', 'issues')).toBe(
       'is:pull-request is:open'
