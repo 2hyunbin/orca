@@ -1,4 +1,5 @@
 import { delimiter } from 'node:path'
+import { realpath } from 'node:fs/promises'
 import type { AiVaultAgent, AiVaultScanIssue } from '../../shared/ai-vault-types'
 import { discoverFiles } from './session-scanner-discovery'
 import { opencodeDiscoveries } from './session-scanner-opencode-sources'
@@ -33,28 +34,31 @@ export async function discoverAiVaultSessionSources(args: {
     ...antigravityDiscoveries(options, wslHomeDirs, limitPerAgent, issues),
     ...Object.entries(AI_VAULT_AGENT_SOURCES).flatMap(([agent, source]) =>
       source
-        ? agentDiscoveries(
-            agent as AiVaultAgent,
-            source,
-            options,
-            wslHomeDirs,
-            limitPerAgent,
-            issues
-          )
+        ? [
+            agentDiscoveries(
+              agent as AiVaultAgent,
+              source,
+              options,
+              wslHomeDirs,
+              limitPerAgent,
+              issues
+            )
+          ]
         : []
     )
-  ])
+  ]).then((discoveries) => discoveries.flat())
 }
 
-function agentDiscoveries(
+async function agentDiscoveries(
   agent: AiVaultAgent,
   source: AiVaultAgentSource,
   options: AiVaultScanOptions,
   wslHomeDirs: readonly string[],
   limit: number,
   issues: AiVaultScanIssue[]
-): Promise<SessionFileDiscovery>[] {
-  const rootDirs = source.rootDirs(options, wslHomeDirs)
+): Promise<SessionFileDiscovery[]> {
+  const configuredRoots = source.rootDirs(options, wslHomeDirs)
+  const rootDirs = agent === 'claude' ? await uniqueLinkedRoots(configuredRoots) : configuredRoots
   const discover = (rootDir: string): Promise<SessionFileDiscovery> =>
     discoverFiles({
       rootDir,
@@ -68,8 +72,40 @@ function agentDiscoveries(
       signal: options.signal
     })
   return source.mergeRootDiscoveries
-    ? [mergedDiscovery(agent, rootDirs, limit, discover)]
-    : rootDirs.map(discover)
+    ? [await mergedDiscovery(agent, rootDirs, limit, discover)]
+    : Promise.all(rootDirs.map(discover))
+}
+
+// Claude profiles link their projects folder to the shared one, so one history
+// has several spellings; walk it once under the first. Lookup and deletion
+// still accept every spelling (uniqueDirs). Codex is excluded: its aliases are
+// hardlinked files whose owning home is ranked after parse.
+async function uniqueLinkedRoots(roots: readonly string[]): Promise<string[]> {
+  const canonical = await Promise.all(roots.map(localRealpath))
+  const seen = new Set<string>()
+  return roots.filter((_, index) => {
+    const key = canonical[index]
+    if (key === null) {
+      return true
+    }
+    if (seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
+}
+
+const isUncPath = (path: string): boolean => /^[\\/]{2}/.test(path)
+
+// WSL and network (UNC) roots are never resolved here: they keep their gated
+// readers. Unresolvable roots keep their existing discovery and error path.
+async function localRealpath(root: string): Promise<string | null> {
+  if (isUncPath(root)) {
+    return null
+  }
+  const resolved = await realpath(root).catch(() => null)
+  return resolved !== null && !isUncPath(resolved) ? resolved : null
 }
 
 // Alternate roots for one install: the limit spans them, so they collapse into
