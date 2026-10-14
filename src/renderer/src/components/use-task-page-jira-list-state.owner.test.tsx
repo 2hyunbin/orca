@@ -112,6 +112,36 @@ describe('Jira priority list source owner', () => {
   )
 
   it.each(['account', 'source'] as const)(
+    'hides an already loaded scheme during the next %s owner read',
+    async (kind) => {
+      const old = [{ id: 'old', name: 'Old scheme' }]
+      const response = Promise.withResolvers<JiraPriority[]>()
+      transport.priorities.mockResolvedValueOnce(old).mockReturnValueOnce(response.promise)
+      const source: TaskSourceContext | null =
+        kind === 'source'
+          ? { kind: 'task-source', provider: 'jira', projectId: 'project', hostId: 'runtime:old' }
+          : null
+      const model = fixture('runtime:old', source)
+      const { result, rerender } = renderHook(() => useTaskPageJiraListState(model))
+      await selectPriority(result)
+      await waitFor(() => expect(result.current.jiraPrioritiesBySite.get('site-1')).toEqual(old))
+      await act(async () => {
+        if (source) {
+          model.jiraTaskSourceContext = { ...source, hostId: 'runtime:new' }
+        } else {
+          model.accountBackedTaskSourceHostId = 'runtime:new'
+        }
+        rerender()
+      })
+      expect(result.current.jiraPrioritiesBySite.size).toBe(0)
+      await act(async () => response.resolve([{ id: 'new', name: 'New scheme' }]))
+      expect(result.current.jiraPrioritiesBySite.get('site-1')).toEqual([
+        { id: 'new', name: 'New scheme' }
+      ])
+    }
+  )
+
+  it.each(['account', 'source'] as const)(
     'fails closed for an unresolved %s owner',
     async (kind) => {
       const model = fixture(

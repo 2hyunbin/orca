@@ -18,7 +18,14 @@ import {
   visibleJiraListColumns,
   type JiraListColumnId
 } from './jira-list-columns'
-import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
+import {
+  ipcOrRuntimeTargetForHostId,
+  runtimeTargetEnvironmentId
+} from '@/runtime/runtime-client-target'
+import { getEnvironmentRuntimeContextKey } from '@/lib/provider-runtime-context'
+import { getTaskSourceCacheScope } from '../../../shared/task-source-context'
+const EMPTY_JIRA_PRIORITIES: JiraPrioritiesBySite = new Map()
+
 export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
   const {
     jiraConnected,
@@ -58,9 +65,10 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
     fallbackJiraSortColumn(jiraColumnIds)
   )
   const [jiraOrderDirection, setJiraOrderDirection] = useState<JiraIssueSortDirection>('desc')
-  const [jiraPrioritiesBySite, setJiraPrioritiesBySite] = useState<JiraPrioritiesBySite>(
-    () => new Map()
-  )
+  const [prioritySnapshot, setPrioritySnapshot] = useState<{
+    scopeKey: string
+    priorities: JiraPrioritiesBySite
+  } | null>(null)
   const toggleJiraColumn = useCallback(
     (column: JiraListColumnId) => {
       if (column === 'key' || column === 'title') {
@@ -90,13 +98,25 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
     // Why: result refreshes replace the issue array; depend on the represented sites, not identity.
     return JSON.stringify([...new Set(siteIds)].sort())
   }, [jiraIssues, selectedJiraSiteId])
+  const priorityScopeKey = JSON.stringify([
+    owner ? getEnvironmentRuntimeContextKey(runtimeTargetEnvironmentId(owner)) : null,
+    jiraTaskSourceContext ? getTaskSourceCacheScope(jiraTaskSourceContext) : null,
+    jiraPrioritySiteIdsKey
+  ])
+  const prioritiesEnabled = taskSource === 'jira' && jiraConnected && jiraOrderBy === 'priority'
+  const jiraPrioritiesBySite: JiraPrioritiesBySite =
+    prioritiesEnabled && owner && prioritySnapshot?.scopeKey === priorityScopeKey
+      ? prioritySnapshot.priorities
+      : EMPTY_JIRA_PRIORITIES
   useEffect(() => {
-    if (taskSource !== 'jira' || !jiraConnected || jiraOrderBy !== 'priority' || !owner) {
-      setJiraPrioritiesBySite((current) => (current.size === 0 ? current : new Map()))
+    if (!prioritiesEnabled || !owner) {
       return
     }
     let cancelled = false
-    const jiraPrioritySiteIds = JSON.parse(jiraPrioritySiteIdsKey) as string[]
+    const decodedSiteIds: unknown = JSON.parse(jiraPrioritySiteIdsKey)
+    const jiraPrioritySiteIds = Array.isArray(decodedSiteIds)
+      ? decodedSiteIds.filter((siteId): siteId is string => typeof siteId === 'string')
+      : []
     void Promise.all(
       jiraPrioritySiteIds.map(async (siteId) => {
         try {
@@ -107,13 +127,13 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
       })
     ).then((prioritiesBySite) => {
       if (!cancelled) {
-        setJiraPrioritiesBySite(new Map(prioritiesBySite))
+        setPrioritySnapshot({ scopeKey: priorityScopeKey, priorities: new Map(prioritiesBySite) })
       }
     })
     return () => {
       cancelled = true
     }
-  }, [jiraConnected, jiraOrderBy, jiraPrioritySiteIdsKey, owner, taskSource])
+  }, [prioritiesEnabled, jiraPrioritySiteIdsKey, priorityScopeKey, owner])
   const handleJiraSort = useCallback(
     (column: JiraIssueSortColumn) => {
       if (jiraOrderBy === column) {
@@ -153,7 +173,6 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
     jiraOrderDirection,
     setJiraOrderDirection,
     jiraPrioritiesBySite,
-    setJiraPrioritiesBySite,
     jiraPrioritySiteIdsKey,
     handleJiraSort,
     jiraColumnIds,

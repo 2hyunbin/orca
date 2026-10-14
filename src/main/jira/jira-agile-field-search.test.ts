@@ -106,6 +106,49 @@ describe('planning fields in Jira searches', () => {
     expect(jiraRequestMock).toHaveBeenCalledTimes(12)
   })
 
+  it.each(['search', 'detail'] as const)(
+    'keeps ordinary Server %s reads available when optional discovery hangs',
+    async (kind) => {
+      vi.useFakeTimers()
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const entry = client(`hung-${kind}`)
+        entry.site.authType = 'server'
+        getClientsMock.mockReturnValue([entry])
+        jiraRequestMock
+          .mockClear()
+          .mockImplementation((_entry, path) =>
+            path.endsWith('/field')
+              ? new Promise(() => {})
+              : Promise.resolve(
+                  path.includes('/search')
+                    ? { issues: [{ key: 'DEMO-1', fields: { summary: 'Still available' } }] }
+                    : { key: 'DEMO-1', fields: { summary: 'Still available' } }
+                )
+          )
+        const read = () =>
+          kind === 'search'
+            ? searchIssues('project = DEMO', 30, entry.site.id)
+            : getIssue('DEMO-1', entry.site.id)
+        const first = read()
+        await vi.advanceTimersByTimeAsync(500)
+        expect(await first).toMatchObject(
+          kind === 'search' ? [{ title: 'Still available' }] : { title: 'Still available' }
+        )
+        expect(jiraRequestMock.mock.calls[0][2].signal.aborted).toBe(true)
+        const before = jiraRequestMock.mock.calls.length
+        await read()
+        expect(jiraRequestMock.mock.calls.length).toBe(before + 1)
+        expect(
+          jiraRequestMock.mock.calls.filter((call) => call[1].endsWith('/field'))
+        ).toHaveLength(1)
+      } finally {
+        warn.mockRestore()
+        vi.useRealTimers()
+      }
+    }
+  )
+
   it('preserves planning fields when a list issue is hydrated from its detail read', async () => {
     getClientsMock.mockReturnValue([client('detail-field-site')])
     jiraRequestMock.mockClear().mockImplementation(async (_entry, path) =>

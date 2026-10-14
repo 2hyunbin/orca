@@ -209,7 +209,7 @@ function mapParent(value: unknown): JiraIssue['parent'] {
 // Cloud returns sprint objects; Server/DC returns "…Sprint@…[id=1,…,name=Sprint 3,…]" strings.
 function sprintName(value: unknown): string | undefined {
   if (typeof value === 'string') {
-    return /name=([^,\]]+)/.exec(value)?.[1]
+    return /name=(.*?)(?:,(?:startDate|endDate|completeDate|sequence|goal)=|\]$)/.exec(value)?.[1]
   }
   return asString(asRecord(value).name) || undefined
 }

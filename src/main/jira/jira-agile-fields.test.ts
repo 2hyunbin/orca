@@ -90,6 +90,15 @@ describe('jira agile fields', () => {
     expect(mapSprint(null)).toBeUndefined()
   })
 
+  it('keeps commas and brackets in Server sprint names', () => {
+    expect(
+      mapSprint('Sprint@1[id=1,state=ACTIVE,name=API, UI [October],startDate=<null>,goal=]')
+    ).toBe('API, UI [October]')
+    expect(mapSprint('Sprint@1[id=1,state=ACTIVE,name=API, UI [October]]')).toBe(
+      'API, UI [October]'
+    )
+  })
+
   describe('getAgileFieldIds', () => {
     beforeEach(() => {
       jiraRequestMock.mockReset()
@@ -143,28 +152,36 @@ describe('jira agile fields', () => {
       expect(releaseMock).toHaveBeenCalledTimes(1)
     })
 
-    it('falls back to no agile fields and retries after a failed discovery', async () => {
+    it('backs off failed optional discovery so repeated issue reads stay available', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       jiraRequestMock.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([])
       const client = clientFor('flaky-site')
       expect(await getAgileFieldIds(client)).toEqual({})
       expect(await getAgileFieldIds(client)).toEqual({})
+      expect(jiraRequestMock).toHaveBeenCalledTimes(1)
+      expect(releaseMock).toHaveBeenCalledTimes(1)
+      const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000)
+      expect(await getAgileFieldIds(client)).toEqual({})
       expect(jiraRequestMock).toHaveBeenCalledTimes(2)
       expect(releaseMock).toHaveBeenCalledTimes(2)
+      now.mockRestore()
       warn.mockRestore()
     })
 
-    it('releases a hung discovery after its deadline and retries on the next read', async () => {
+    it('releases a hung discovery and delays retry without delaying the next issue read', async () => {
       vi.useFakeTimers()
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       try {
         jiraRequestMock.mockReturnValueOnce(new Promise(() => {})).mockResolvedValueOnce([])
         const client = clientFor('timeout-site')
         const read = getAgileFieldIds(client)
-        await vi.advanceTimersByTimeAsync(5000)
+        await vi.advanceTimersByTimeAsync(500)
         expect(await read).toEqual({})
         expect(jiraRequestMock.mock.calls[0]?.[2].signal.aborted).toBe(true)
         expect(releaseMock).toHaveBeenCalledTimes(1)
+        expect(await getAgileFieldIds(client)).toEqual({})
+        expect(jiraRequestMock).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(60_000)
         expect(await getAgileFieldIds(client)).toEqual({})
         expect(jiraRequestMock).toHaveBeenCalledTimes(2)
       } finally {
