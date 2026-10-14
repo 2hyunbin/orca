@@ -98,17 +98,21 @@ export async function clickBackgroundPopupProbe(
   page: Page,
   probe: BackgroundPopupProbe
 ): Promise<void> {
-  if (probe.context === 'opaque') {
-    // Electron does not forward opaque OOPIF input to the root route gesture gate.
-    await page.locator('#background-gesture').click()
-  }
   const locator =
     probe.context === 'subframe' || probe.context === 'opaque'
       ? page.frameLocator('#background-probe').locator('#background-open')
       : page.locator('#background-open')
-  await locator.click(
+  const click: Parameters<typeof locator.click>[0] =
     probe.input === 'middle' ? { button: 'middle' } : { modifiers: [backgroundModifier] }
-  )
+  if (probe.context === 'opaque') {
+    // Electron does not forward opaque OOPIF input to the root route gesture gate, and that gate
+    // honors a gesture for BROWSER_GUEST_INPUT_GESTURE_WINDOW_MS (1 s). Settle the frame target
+    // first so only one click separates the gesture from the open on a loaded runner. The trial
+    // carries no modifiers: Playwright presses them even in a trial, which would fake a gesture.
+    await locator.click({ trial: true })
+    await page.locator('#background-gesture').click()
+  }
+  await locator.click(click)
 }
 
 export async function observeBackgroundPopupProbe(
