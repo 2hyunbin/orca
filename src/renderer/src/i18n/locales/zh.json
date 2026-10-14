@@ -17852,6 +17852,23 @@
         "resuming": "重启后正在自动恢复。",
         "resumed": "重启后已自动恢复。",
         "changeInSettings": "在设置中更改"
+      },
+      "TaskPageJiraSavedFilters": {
+        "6c381858a1": "Saved filters",
+        "d14121662d": "No saved filters yet.",
+        "af0dd8c528": "Edit {{value0}}",
+        "bae9bd87bf": "You can save up to {{value0}} filters.",
+        "85506127a5": "Save current filter",
+        "7aef259c28": "Edit Jira filter",
+        "4f0e55d2e5": "Save Jira filter",
+        "466c1b12ce": "Give this JQL query a name for quick access.",
+        "e4c2f52972": "Name",
+        "0ab71bb840": "A saved filter with this name already exists.",
+        "42ce360813": "JQL",
+        "7b21c59a26": "Delete filter",
+        "a62f9db53d": "Cancel",
+        "c77189bc0c": "Update filter",
+        "19af906d12": "Save filter"
       }
     },
     "i18n": {
@@ -19908,5 +19925,14 @@
     "browser": "浏览器",
     "editor": "编辑器",
     "terminal": "终端"
+  },
+  "jira": {
+    "savedFilters": {
+      "retry": "重试",
+      "find": "查找已保存的筛选器",
+      "noMatch": "没有匹配的筛选器。",
+      "loadFailed": "无法加载已保存的 Jira 筛选器。",
+      "saveFailed": "无法保存 Jira 筛选器。"
+    }
   }
 }

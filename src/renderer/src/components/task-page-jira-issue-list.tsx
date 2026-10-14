@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 import { JiraIssueRowCopyMenu } from './JiraIssueRowCopyMenu'
 import { JiraLinkedWorkspaceAction } from './JiraLinkedWorkspaceAction'
 import type { Worktree } from '../../../shared/worktree/types'
+import { jiraListColumnVisibility, type JiraListColumn } from './jira-list-columns'
+import { JiraIssueCell, JiraPriorityText, unassignedLabel } from './task-page-jira-issue-cells'
 import type { JiraIssue, JiraProjectStatusOrder } from '../../../shared/jira-types'
 
 export type TaskPageJiraIssueSection = {
@@ -20,6 +22,7 @@ export type TaskPageJiraIssueSection = {
 type TaskPageJiraIssueListProps = {
   getIssueWorkspaces?: (issue: JiraIssue) => readonly Worktree[]
   onOpenWorkspace?: (workspace: Worktree) => void
+  columns: readonly JiraListColumn[]
   formatUpdatedAt: (updatedAt: string) => string
   getStatusTone: (categoryKey: string) => string
   issues: JiraIssue[]
@@ -92,6 +95,7 @@ function isSelectedIssue(issue: JiraIssue, selectedIssue: JiraIssue | null): boo
 function JiraIssueRow({
   getIssueWorkspaces,
   onOpenWorkspace,
+  columns,
   formatUpdatedAt,
   getStatusTone,
   issue,
@@ -100,8 +104,6 @@ function JiraIssueRow({
   selected,
   showSiteContext
 }: {
-  getIssueWorkspaces?: (issue: JiraIssue) => readonly Worktree[]
-  onOpenWorkspace?: (workspace: Worktree) => void
   formatUpdatedAt: (updatedAt: string) => string
   getStatusTone: (categoryKey: string) => string
   issue: JiraIssue
@@ -109,6 +111,9 @@ function JiraIssueRow({
   onStartWorkspace: (issue: JiraIssue) => void
   selected: boolean
   showSiteContext: boolean
+  columns: readonly JiraListColumn[]
+  getIssueWorkspaces?: (issue: JiraIssue) => readonly Worktree[]
+  onOpenWorkspace?: (workspace: Worktree) => void
 }): React.JSX.Element {
   const workspaces = getIssueWorkspaces?.(issue) ?? []
   const labels = issue.labels.slice(0, 3)
@@ -137,7 +142,7 @@ function JiraIssueRow({
           }
         }}
         className={cn(
-          'group/row grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @3xl:grid-cols-[90px_minmax(0,1fr)_128px_92px_80px_104px] @5xl:grid-cols-[96px_minmax(0,1.25fr)_132px_120px_136px_96px_104px] @7xl:grid-cols-[104px_minmax(0,1.45fr)_144px_132px_160px_128px_104px]',
+          'group/row grid min-h-12 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring @3xl:grid-cols-(--jira-cols-md) @3xl:min-w-(--jira-min-md) @5xl:grid-cols-(--jira-cols-lg) @5xl:min-w-(--jira-min-lg) @7xl:grid-cols-(--jira-cols-xl) @7xl:min-w-(--jira-min-xl)',
           selected && 'bg-accent'
         )}
       >
@@ -163,13 +168,9 @@ function JiraIssueRow({
             >
               <span className="truncate">{issue.status.name}</span>
             </span>
-            <span className="shrink-0 text-[11px] text-muted-foreground">
-              {issue.priority?.name ??
-                translate('auto.components.TaskPage.713179dfdc', 'No priority')}
-            </span>
+            <JiraPriorityText issue={issue} className="shrink-0 text-2xs" />
             <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-              {issue.assignee?.displayName ??
-                translate('auto.components.TaskPage.42a9160321', 'Unassigned')}
+              {issue.assignee?.displayName ?? unassignedLabel()}
             </span>
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-1 @max-5xl:!hidden">
@@ -192,49 +193,21 @@ function JiraIssueRow({
           </div>
         </div>
 
-        <div className="flex min-w-0 @max-3xl:!hidden">
-          <span
-            className={cn(
-              'inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
-              getStatusTone(issue.status.categoryKey)
-            )}
-          >
-            <span className="truncate">{issue.status.name}</span>
-          </span>
-        </div>
-
-        <span className="block truncate text-[12px] text-muted-foreground @max-3xl:!hidden">
-          {issue.priority?.name ?? translate('auto.components.TaskPage.713179dfdc', 'No priority')}
-        </span>
-
-        <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted-foreground @max-5xl:!hidden">
-          {issue.assignee?.avatarUrl ? (
-            <img
-              src={issue.assignee.avatarUrl}
-              alt={issue.assignee.displayName}
-              className="size-5 shrink-0 rounded-full"
-            />
-          ) : (
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/40 text-[10px]">
-              {issue.assignee?.displayName?.slice(0, 1) ?? '-'}
-            </span>
-          )}
-          <span className="truncate">
-            {issue.assignee?.displayName ??
-              translate('auto.components.TaskPage.42a9160321', 'Unassigned')}
-          </span>
-        </div>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="block min-w-0 truncate text-[12px] text-muted-foreground @max-3xl:!hidden">
-              {formatUpdatedAt(issue.updatedAt)}
+        {columns
+          .filter((column) => !column.locked)
+          .map((column) => (
+            <div
+              key={column.id}
+              className={cn('min-w-0 @max-3xl:!hidden', jiraListColumnVisibility(column.id))}
+            >
+              <JiraIssueCell
+                column={column.id}
+                issue={issue}
+                formatUpdatedAt={formatUpdatedAt}
+                getStatusTone={getStatusTone}
+              />
             </div>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {new Date(issue.updatedAt).toLocaleString()}
-          </TooltipContent>
-        </Tooltip>
+          ))}
 
         <div className="flex shrink-0 items-center justify-end gap-1">
           <JiraIssueRowCopyMenu issue={issue} />
@@ -300,6 +273,7 @@ function JiraIssueRow({
 export function TaskPageJiraIssueList({
   getIssueWorkspaces,
   onOpenWorkspace,
+  columns,
   formatUpdatedAt,
   getStatusTone,
   issues,
@@ -358,9 +332,10 @@ export function TaskPageJiraIssueList({
             <CollapsibleContent className="divide-y divide-border/50 border-t border-border/50">
               {section.issues.map((issue) => (
                 <JiraIssueRow
-                  key={`${issue.siteId ?? 'site'}:${issue.id || issue.key}`}
                   getIssueWorkspaces={getIssueWorkspaces}
                   onOpenWorkspace={onOpenWorkspace}
+                  columns={columns}
+                  key={`${issue.siteId ?? 'site'}:${issue.id || issue.key}`}
                   formatUpdatedAt={formatUpdatedAt}
                   getStatusTone={getStatusTone}
                   issue={issue}

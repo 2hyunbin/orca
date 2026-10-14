@@ -1,3 +1,4 @@
+import { TaskPageJiraSavedFilters } from '../../TaskPageJiraSavedFilters'
 import type { TaskPageComposerActionsModel } from '../../use-task-page-composer-actions'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -14,6 +15,18 @@ export function TaskPageJiraFilters({
   model: TaskPageComposerActionsModel
 }): React.JSX.Element | null {
   const {
+    jiraSavedFilters,
+    jiraActiveSavedFilterId,
+    jiraSavedFiltersReady,
+    jiraSavedFiltersLoading,
+    jiraSavedFiltersPending,
+    jiraSavedFiltersError,
+    retryJiraSavedFilters,
+    applyJiraSavedFilter,
+    createJiraSavedFilter,
+    updateJiraSavedFilter,
+    deleteJiraSavedFilter,
+    clearJiraSavedFilterSelection,
     setTaskResumeState,
     jiraPresets,
     jiraHasWorkspace,
@@ -44,9 +57,11 @@ export function TaskPageJiraFilters({
             return (
               <button
                 key={preset.id}
+                disabled={jiraSavedFiltersPending}
                 type="button"
                 onClick={() => {
                   setJiraHasWorkspace(false)
+                  void clearJiraSavedFilterSelection().catch(() => {})
                   setJiraSearchInput('')
                   setAppliedJiraSearch('')
                   setActiveJiraPreset(preset.id)
@@ -82,6 +97,23 @@ export function TaskPageJiraFilters({
           </Button>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <TaskPageJiraSavedFilters
+            filters={jiraSavedFilters}
+            activeFilterId={jiraActiveSavedFilterId}
+            currentJql={jiraSearchInput}
+            disabled={!jiraSavedFiltersReady || jiraSavedFiltersPending}
+            loading={jiraSavedFiltersLoading}
+            error={jiraSavedFiltersError}
+            onRetry={retryJiraSavedFilters}
+            onApply={async (filter) => {
+              if (await applyJiraSavedFilter(filter)) {
+                setJiraHasWorkspace(false)
+              }
+            }}
+            onCreate={createJiraSavedFilter}
+            onUpdate={updateJiraSavedFilter}
+            onDelete={deleteJiraSavedFilter}
+          />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -140,12 +172,21 @@ export function TaskPageJiraFilters({
           </Tooltip>
         </div>
       </div>
+      {jiraSavedFiltersError ? (
+        <p role="alert" className="mt-2 text-xs text-destructive">
+          {jiraSavedFiltersError}
+        </p>
+      ) : null}
       <div className="mt-3 flex items-center gap-3">
         <div className="relative min-w-[320px] flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={jiraSearchInput}
-            onChange={(e) => setJiraSearchInput(e.target.value)}
+            disabled={jiraSavedFiltersPending}
+            onChange={(e) => {
+              void clearJiraSavedFilterSelection().catch(() => {})
+              setJiraSearchInput(e.target.value)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 if (
@@ -186,6 +227,7 @@ export function TaskPageJiraFilters({
               type="button"
               aria-label={translate('auto.components.TaskPage.b797bdd7c3', 'Clear search')}
               onClick={() => {
+                void clearJiraSavedFilterSelection().catch(() => {})
                 setJiraSearchInput('')
                 setAppliedJiraSearch('')
                 setTaskResumeState({

@@ -14,6 +14,10 @@ vi.mock('./authenticated-request', () => ({
   jiraRequest,
   JiraApiError: class extends Error {}
 }))
+vi.mock('./jira-agile-fields', () => ({
+  getAgileFieldIds: async () => ({}),
+  agileFieldIdList: () => []
+}))
 vi.mock('./request-queue', () => ({ acquire: vi.fn(), release: vi.fn() }))
 
 function site(id: string, authType: 'cloud' | 'server' = 'cloud'): JiraClientForSite {
