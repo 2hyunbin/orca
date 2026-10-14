@@ -86,7 +86,7 @@ function countSnapshotRows(emulator) {
 
 const results = []
 for (const scrollback of [0, 1000, 5000]) {
-  for (const shape of ['saved-links', 'no-links', 'live-links']) {
+  for (const linkState of ['saved-links', 'no-links', 'live-links']) {
     const opts = { cols: 120, rows: 24, scrollback }
     const beforeEmulator = new ObservableBefore(opts)
     const afterEmulator = new ObservableAfter(opts)
@@ -94,11 +94,11 @@ for (const scrollback of [0, 1000, 5000]) {
       const lineCount = scrollback + 24
       const plain = Array.from({ length: lineCount - 1 }, (_, index) => `row ${index}\r\n`).join('')
       const text =
-        shape === 'live-links'
+        linkState === 'live-links'
           ? `${plain}\x1b]8;;https://example.com/live\x1b\\LIVE\x1b]8;;\x1b\\`
           : plain
       const restored =
-        shape === 'saved-links'
+        linkState === 'saved-links'
           ? [{ row: 0, startCol: 0, endCol: 4, uri: 'https://example.com/restored' }]
           : []
       await beforeEmulator.write(text)
@@ -111,9 +111,9 @@ for (const scrollback of [0, 1000, 5000]) {
 
       const beforeRowReads = countSnapshotRows(beforeEmulator)
       const afterRowReads = countSnapshotRows(afterEmulator)
-      const expectedDifference = shape === 'saved-links' ? terminal.buffer.active.length : 0
+      const expectedDifference = linkState === 'saved-links' ? terminal.buffer.active.length : 0
       if (beforeRowReads - afterRowReads !== expectedDifference) {
-        throw new Error(`Baseline substitution failed for ${shape} at ${scrollback} rows`)
+        throw new Error(`Baseline substitution failed for ${linkState} at ${scrollback} rows`)
       }
 
       const collectorCalls = scrollback === 0 ? 1000 : 20
@@ -132,7 +132,7 @@ for (const scrollback of [0, 1000, 5000]) {
       const snapshots = pairedSamples(snapshotBefore, snapshotAfter, snapshotCalls)
       const snapshot = JSON.stringify(afterEmulator.getSnapshot())
       results.push({
-        shape,
+        linkState,
         rows: terminal.buffer.active.length,
         cells: terminal.buffer.active.length * terminal.cols,
         collectorCalls,
