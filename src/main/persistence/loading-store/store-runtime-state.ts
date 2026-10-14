@@ -1,6 +1,7 @@
 import { removeStaleDurableWriteTempFiles } from '../../durable-file-write'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { PersistedState } from '../../../shared/persisted-state-types'
+import type { WorkspaceSessionWriteListener } from './workspace-session-write-listeners'
 import type { ActiveViewPreference } from '../../active-view-preference'
 import {
   getProfileTerminalScrollbackSnapshotRoot,
@@ -84,7 +85,7 @@ export class StoreRuntimeState {
   >()
   uiChangeListeners = new Set<(ui: PersistedState['ui']) => void>()
   /** Observers of persisted workspace-session writes; see notifyWorkspaceSessionWritten. */
-  readonly workspaceSessionWriteListeners = new Set<() => void>()
+  readonly workspaceSessionWriteListeners = new Set<WorkspaceSessionWriteListener>()
   projectHostOperations: ProjectHostPersistenceOperations | null = null
   projectGroupOperations: ProjectGroupPersistenceOperations | null = null
   folderWorkspaceOperations: FolderWorkspacePersistenceOperations | null = null
