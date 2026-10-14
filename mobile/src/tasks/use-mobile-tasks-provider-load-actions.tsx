@@ -1,4 +1,5 @@
 import type { RuntimeHydrationModel } from './use-mobile-tasks-runtime-hydration'
+import { readJiraConnection, reconcileJiraConnection } from './jira-mobile-connection'
 import type { RpcSendParams } from '../transport/rpc-params-contract'
 import {
   CROSS_REPO_DISPLAY_LIMIT,
@@ -32,13 +33,35 @@ import {
 import { githubWorkItemSearchRead } from './mobile-task-source-search-operations'
 import { taskSettingsWrite } from './mobile-task-runtime-operations'
 
-export function useMobileTasksProviderLoadActions(model: RuntimeHydrationModel) {
+export type ProviderLoadActionsInput = Pick<
+  RuntimeHydrationModel,
+  | 'appliedQuery'
+  | 'client'
+  | 'clientRef'
+  | 'connState'
+  | 'defaultLinearTeamSelectionRef'
+  | 'githubKind'
+  | 'setJiraConnection'
+  | 'setLinearConnected'
+  | 'setLinearTeams'
+  | 'setLinearWorkspaces'
+  | 'setSelectedLinearTeamIds'
+  | 'setSelectedLinearWorkspaceId'
+  | 'taskUiReady'
+  | 'tasksSupported'
+>
+
+export function useMobileTasksProviderLoadActions<Model extends ProviderLoadActionsInput>(
+  model: Model
+) {
   const {
     appliedQuery,
     client,
+    clientRef,
     connState,
     defaultLinearTeamSelectionRef,
     githubKind,
+    setJiraConnection,
     setLinearConnected,
     setLinearTeams,
     setLinearWorkspaces,
@@ -47,6 +70,17 @@ export function useMobileTasksProviderLoadActions(model: RuntimeHydrationModel) 
     taskUiReady,
     tasksSupported
   } = model
+  // Desktop connection changes need an explicit status refresh on mobile.
+  const refreshJiraConnection = useCallback(async (): Promise<void> => {
+    if (!client || connState !== 'connected' || !tasksSupported) {
+      return
+    }
+    const next = await readJiraConnection(client)
+    if (clientRef.current === client) {
+      setJiraConnection((current) => reconcileJiraConnection(current, next))
+    }
+  }, [client, clientRef, connState, tasksSupported, setJiraConnection])
+
   const loadLinearContext = useCallback(async (): Promise<void> => {
     if (!client || connState !== 'connected' || !tasksSupported) {
       return
@@ -220,6 +254,7 @@ export function useMobileTasksProviderLoadActions(model: RuntimeHydrationModel) 
     [appliedQuery, githubKind]
   )
   return Object.assign(model, {
+    refreshJiraConnection,
     loadLinearContext,
     persistLinearTeamSelection,
     fetchGitHubItemsPage,
@@ -227,4 +262,6 @@ export function useMobileTasksProviderLoadActions(model: RuntimeHydrationModel) 
   })
 }
 
-export type ProviderLoadActionsModel = ReturnType<typeof useMobileTasksProviderLoadActions>
+export type ProviderLoadActionsModel = ReturnType<
+  typeof useMobileTasksProviderLoadActions<RuntimeHydrationModel>
+>
