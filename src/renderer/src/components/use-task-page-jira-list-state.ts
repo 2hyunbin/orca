@@ -64,7 +64,9 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
   const [jiraOrderBy, setJiraOrderBy] = useState<JiraIssueSortColumn>(() =>
     fallbackJiraSortColumn(jiraColumnIds)
   )
-  const [jiraOrderDirection, setJiraOrderDirection] = useState<JiraIssueSortDirection>('desc')
+  const [jiraOrderDirection, setJiraOrderDirection] = useState<JiraIssueSortDirection>(() =>
+    jiraOrderBy === 'updated' ? 'desc' : 'asc'
+  )
   const [prioritySnapshot, setPrioritySnapshot] = useState<{
     scopeKey: string
     priorities: JiraPrioritiesBySite

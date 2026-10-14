@@ -49,6 +49,7 @@ describe('Jira list columns', () => {
     const columns = visibleJiraListColumns(new Set(JIRA_LIST_COLUMNS.map((column) => column.id)))
     for (const tier of [0, 1, 2] as const) {
       expect(jiraListGridTemplate(columns, tier)).toContain('minmax(180px,1fr)')
+      expect(jiraListGridTemplate(columns, tier).endsWith('104px')).toBe(true)
     }
     const style = jiraListGridStyle(columns)
     expect(Number.parseInt(style['--jira-min-md'])).toBeGreaterThan(780)

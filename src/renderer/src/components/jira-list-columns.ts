@@ -52,7 +52,7 @@ export function getJiraListColumnLabel(id: JiraListColumnId): string {
     case 'assignee':
       return translate('auto.components.TaskPage.d2a876ca53', 'Assignee')
     case 'parent':
-      return translate('auto.components.TaskPage.jiraColumnParent', 'Epic / Parent')
+      return translate('auto.components.TaskPage.jiraColumnParent', 'Parent')
     case 'sprint':
       return translate('auto.components.TaskPage.jiraColumnSprint', 'Sprint')
     case 'storyPoints':
@@ -117,7 +117,7 @@ export function jiraListGridTemplate(
     ...columns
       .filter((column) => column.widths[tier] > 0)
       .map((column) => (column.id === 'title' ? 'minmax(180px,1fr)' : `${column.widths[tier]}px`)),
-    tier === 2 ? '72px' : '64px'
+    '104px'
   ].join(' ')
 }
 
@@ -132,7 +132,7 @@ type JiraGridStyle = CSSProperties & {
 
 function jiraListMinimumWidth(columns: readonly JiraListColumn[], tier: 0 | 1 | 2): string {
   const shown = columns.filter((column) => column.widths[tier] > 0)
-  const tracks = shown.reduce((sum, column) => sum + column.widths[tier], tier === 2 ? 72 : 64)
+  const tracks = shown.reduce((sum, column) => sum + column.widths[tier], 104)
   return `${tracks + shown.length * 12 + 24}px`
 }
 

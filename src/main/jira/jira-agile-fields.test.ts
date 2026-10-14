@@ -125,6 +125,16 @@ describe('jira agile fields', () => {
       expect(releaseMock).toHaveBeenCalledTimes(1)
     })
 
+    it('refreshes a successful catalog after its bounded lifetime', async () => {
+      jiraRequestMock.mockResolvedValue([])
+      const client = clientFor('expired-success')
+      await getAgileFieldIds(client)
+      const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 10 * 60_000)
+      await getAgileFieldIds(client)
+      expect(jiraRequestMock).toHaveBeenCalledTimes(2)
+      now.mockRestore()
+    })
+
     it('isolates credentials and Server catalog paths', async () => {
       jiraRequestMock.mockResolvedValue([])
       const first = clientFor('isolation-site')

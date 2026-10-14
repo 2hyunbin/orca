@@ -9,8 +9,9 @@ const SPRINT_FIELD_TYPE = 'com.pyxis.greenhopper.jira:gh-sprint'
 const STORY_POINTS_TYPE = 'com.pyxis.greenhopper.jira:jsw-story-points'
 const NUMBER_FIELD_TYPE = 'com.atlassian.jira.plugin.system.customfieldtypes:float'
 const cache = new Map<string, Promise<JiraAgileFieldIds>>()
-const discoveryRetryAt = new Map<string, number>()
+const discoveryExpiresAt = new Map<string, number>()
 const FAILED_DISCOVERY_RETRY_MS = 60_000
+const FIELD_CATALOG_TTL_MS = 10 * 60_000
 
 export function pickAgileFieldIds(fields: readonly JiraRecord[]): JiraAgileFieldIds {
   const ids: JiraAgileFieldIds = {}
@@ -55,10 +56,10 @@ export function getAgileFieldIds(
     return Promise.reject(new Error('Jira field discovery aborted'))
   }
   const key = clientCacheKey(entry)
-  const retryAt = discoveryRetryAt.get(key)
+  const retryAt = discoveryExpiresAt.get(key)
   if (retryAt !== undefined && retryAt <= Date.now()) {
     cache.delete(key)
-    discoveryRetryAt.delete(key)
+    discoveryExpiresAt.delete(key)
   }
   let pending = cache.get(key)
   if (!pending) {
@@ -76,18 +77,25 @@ export function getAgileFieldIds(
       } finally {
         release()
       }
-    }).catch((error) => {
-      console.warn('[jira] field discovery failed:', error)
-      if (cache.get(key) === pending) {
-        discoveryRetryAt.set(key, Date.now() + FAILED_DISCOVERY_RETRY_MS)
-      }
-      return {}
     })
+      .then((fields) => {
+        if (cache.get(key) === pending) {
+          discoveryExpiresAt.set(key, Date.now() + FIELD_CATALOG_TTL_MS)
+        }
+        return fields
+      })
+      .catch((error) => {
+        console.warn('[jira] field discovery failed:', error)
+        if (cache.get(key) === pending) {
+          discoveryExpiresAt.set(key, Date.now() + FAILED_DISCOVERY_RETRY_MS)
+        }
+        return {}
+      })
     if (cache.size >= 32) {
       const oldest = cache.keys().next().value
       if (oldest) {
         cache.delete(oldest)
-        discoveryRetryAt.delete(oldest)
+        discoveryExpiresAt.delete(oldest)
       }
     }
     cache.set(key, pending)
