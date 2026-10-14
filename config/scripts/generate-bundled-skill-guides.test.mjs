@@ -87,6 +87,48 @@ describe('bundled skill guide generator', () => {
   })
 
   it.skipIf(process.platform === 'win32')(
+    'resolves the documented cleanup path from custom, XDG, and home settings',
+    async () => {
+      const source = await readFile(
+        path.join(projectDir, 'skill-guides', 'orca-per-workspace-env.md'),
+        'utf8'
+      )
+      const assignments = [...source.matchAll(/`(orca_user_data_path=[^`\r\n]+)`/gu)].map(
+        (match) => match[1]
+      )
+      expect(assignments).toHaveLength(1)
+      const script = `${assignments[0]}\nprintf '%s' "$orca_user_data_path"`
+      const root = await mkdtemp(path.join(tmpdir(), 'orca-guide-cleanup-precedence-'))
+      temporaryDirectories.push(root)
+      const home = path.join(root, 'isolated home')
+      const xdg = path.join(root, 'xdg config')
+      const custom = path.join(root, 'custom runtime data')
+      const homeDefault = path.join(home, '.config', 'orca')
+      const xdgDefault = path.join(xdg, 'orca')
+      const cases = [
+        [{}, homeDefault],
+        [{ XDG_CONFIG_HOME: xdg }, xdgDefault],
+        [{ ORCA_USER_DATA_PATH: custom, XDG_CONFIG_HOME: xdg }, custom],
+        [{ ORCA_USER_DATA_PATH: '', XDG_CONFIG_HOME: xdg }, xdgDefault],
+        [{ XDG_CONFIG_HOME: '' }, homeDefault],
+        [{ ORCA_USER_DATA_PATH: '', XDG_CONFIG_HOME: '' }, homeDefault]
+      ]
+
+      for (const [environment, expected] of cases) {
+        const { stdout, stderr } = await execFileAsync(
+          'bash',
+          ['--noprofile', '--norc', '-u', '-c', script],
+          {
+            env: { HOME: home, ORCA_BACKGROUND_LAUNCH: '1', ...environment }
+          }
+        )
+        expect(stdout).toBe(expected)
+        expect(stderr).toBe('')
+      }
+    }
+  )
+
+  it.skipIf(process.platform === 'win32')(
     'keeps Vercel sandbox names valid while preserving the instance suffix',
     async () => {
       const source = await readFile(
