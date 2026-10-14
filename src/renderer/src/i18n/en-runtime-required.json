@@ -2963,6 +2963,8 @@
         "other": "Other…"
       },
       "queuedMessages": {
+        "imageCount_one": "{{count}} image",
+        "imageCount_other": "{{count}} images",
         "sendConfirmBody_one": "You are about to send a message. Do you want to clear the {{count}} message previously queued?",
         "sendConfirmBody_other": "You are about to send a message. Do you want to clear the {{count}} messages previously queued?"
       },

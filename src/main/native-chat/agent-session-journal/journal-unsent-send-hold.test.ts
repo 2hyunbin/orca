@@ -189,15 +189,7 @@ describe('which sends an earlier host process left unsent are kept', () => {
     }
   })
 
-  it('rejects mail, a dispatch preamble, a continuation, /compact, an image, and a send no one can attribute', async () => {
-    const image: AgentJournalMessageItem = {
-      kind: 'message',
-      role: 'user',
-      blocks: [
-        { type: 'text', text: 'look' },
-        { type: 'image-ref', path: '/tmp/attachment.png' }
-      ]
-    }
+  it('rejects mail, a dispatch preamble, a continuation, /compact, and a send no one can attribute', async () => {
     const journal = await afterRestart(async (earlier) => {
       await accept(earlier, 'mail', { origin: 'host', source: MAIL_SOURCE })
       await accept(earlier, 'dispatch', { origin: 'host' })
@@ -207,22 +199,13 @@ describe('which sends an earlier host process left unsent are kept', () => {
         source: USER_MESSAGE_SOURCE,
         body: structuredAgentSessionCompactBody()
       })
-      await accept(earlier, 'image', { origin: 'client', source: USER_MESSAGE_SOURCE, body: image })
       await accept(earlier, 'legacy-host', { origin: 'host' })
       await accept(earlier, 'no-origin')
     })
     await hold(journal)
 
     expect(journal.queuedMessages.list()).toEqual([])
-    for (const id of [
-      'mail',
-      'dispatch',
-      'continuation',
-      'compact',
-      'image',
-      'legacy-host',
-      'no-origin'
-    ]) {
+    for (const id of ['mail', 'dispatch', 'continuation', 'compact', 'legacy-host', 'no-origin']) {
       expect(journal.submission(id)).toMatchObject({ dispatchState: 'rejected', ...HOST_RESTARTED })
       expect(journal.submission(id)).not.toHaveProperty('keptAsQueuedMessageId')
     }

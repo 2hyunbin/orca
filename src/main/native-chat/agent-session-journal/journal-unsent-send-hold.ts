@@ -31,7 +31,6 @@ export type UnsentSendHold =
 /** The body an unsent send is kept with, or null when it is rejected instead:
  *  - a card's own hand-off: its rejection already returns the card (`rejectedDraftSettlement`);
  *  - `/compact` and other commands: a command in flight is not resumed, the person re-runs it;
- *  - an image: cards are text-only;
  *  - a send not from a person: orchestration mail (the mailbox re-sends it), a dispatch preamble
  *    or a restart continuation (their owners re-derive them), a kind this build does not know, and
  *    a row with no source that is not a person's (it could be either). */
@@ -40,9 +39,6 @@ export function unsentSendKeptAsCard(
   body: AgentJournalItemBody | null
 ): AgentJournalMessageItem | null {
   if (submission.queuedMessageId !== undefined || body?.kind !== 'message' || body.command) {
-    return null
-  }
-  if (!body.blocks.every((block) => block.type === 'text')) {
     return null
   }
   const { source } = submission

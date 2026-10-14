@@ -34,11 +34,6 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import { agentSessionAttachmentExpiredRefusal } from './structured-agent-session-turns'
 import { isAgentSessionAttachmentExpiredError } from '../agent-session-attachments/agent-session-attachment-claims'
 
-/** Text-only v1: any image block routes to the immediate path. */
-export function queuedMessageBodyIsTextOnly(body: AgentJournalMessageItem): boolean {
-  return body.blocks.every((block) => block.type === 'text')
-}
-
 /** Walks the reduced items in place: the gate runs on every admission and
  *  drain step, so it must not render a snapshot of the whole journal. */
 export function pendingPromptExists(journal: Pick<AgentSessionJournal, 'visitItems'>): boolean {
@@ -169,8 +164,8 @@ export function shouldQueueStructuredAgentSessionSend(input: {
 /**
  * The accept branch: a capable send while the session is working (or behind an
  * actionable backlog) becomes a draft instead of a submission. Returns null for
- * the immediate path — an incapable client, an image body (text-only v1), a
- * replayed id the journal already answers, or an idle session.
+ * the immediate path — an incapable client, a replayed id the journal already
+ * answers, or an idle session.
  */
 export async function maybeQueueStructuredAgentSessionSend(
   context: {
@@ -193,7 +188,7 @@ export async function maybeQueueStructuredAgentSessionSend(
   | null
 > {
   const clientMessageId = params.envelope.clientOperationId
-  if (params.delivery !== 'queue-if-active' || !queuedMessageBodyIsTextOnly(params.body)) {
+  if (params.delivery !== 'queue-if-active') {
     return null
   }
   // Asked again with no ledger answer: a send this host queued answers as its replay would —

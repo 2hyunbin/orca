@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ChevronDown,
   CornerDownRight,
+  Image as ImageIcon,
   ListEnd,
   MoreHorizontal,
   Pencil,
@@ -37,6 +38,7 @@ import type { AgentSessionFailureFact } from '../../../../shared/agent-session-f
 import { agentSessionWriteNotDoneParts } from '../../../../shared/agent-session-refusal-notice'
 import { NativeChatQueuedMessageEditor } from './NativeChatQueuedMessageEditor'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
+import { nativeChatImageLabel } from './native-chat-image-label'
 
 /** The visible caption under the text; the default waiting hold needs none. */
 export function queuedMessageCardCaption(
@@ -101,6 +103,23 @@ export function queuedMessageCardCaption(
   }
 }
 
+function queuedMessageImageCount(count: number): string {
+  return translate('components.native-chat.queuedMessages.imageCount', '{{count}} images', {
+    count
+  })
+}
+
+/** The card's line: its text, or for a card of images alone, the image's name or their count. */
+function queuedMessageCardLine(card: QueuedMessageCard): string {
+  const images = card.images ?? []
+  if (card.text.trim() || images.length === 0) {
+    return card.text
+  }
+  return images.length === 1
+    ? nativeChatImageLabel(images[0])
+    : queuedMessageImageCount(images.length)
+}
+
 /** Steer's or Send's label and tooltip (`queuedMessageCardSteers`). */
 export function queuedMessageCardSendNow(card: QueuedMessageCard): {
   /** Steer's ↳, or Send's paper plane. */
@@ -160,6 +179,7 @@ export function NativeChatQueuedMessageCard({
   onTurnOffQueueing?: () => void
 }): React.JSX.Element {
   const caption = queuedMessageCardCaption(card, agentName, statedFailures)
+  const line = queuedMessageCardLine(card)
   const returned = card.state === 'returned'
   const sendNow = queuedMessageCardSendNow(card)
   const isMac = isMacPlatform()
@@ -179,7 +199,11 @@ export function NativeChatQueuedMessageCard({
         data-queued-message-state={card.state}
         className="px-2.5 py-1.5"
       >
-        <NativeChatQueuedMessageEditor editor={editor} sender={sender} />
+        <NativeChatQueuedMessageEditor
+          editor={editor}
+          sender={sender}
+          images={card.images ? <QueuedMessageImageCount images={card.images} /> : null}
+        />
       </li>
     )
   }
@@ -198,8 +222,8 @@ export function NativeChatQueuedMessageCard({
         <div className="min-w-0 flex-1">
           {sender}
           {expanded ? null : (
-            <p ref={measureLine} className="truncate text-sm" title={card.text}>
-              {card.text}
+            <p ref={measureLine} className="truncate text-sm" title={line}>
+              {line}
             </p>
           )}
           {caption ? (
@@ -214,6 +238,7 @@ export function NativeChatQueuedMessageCard({
             </p>
           ) : null}
         </div>
+        {card.images ? <QueuedMessageImageCount images={card.images} /> : null}
         {expanded || clipped ? (
           <QueuedMessageExpandToggle
             expanded={expanded}
@@ -315,10 +340,35 @@ export function NativeChatQueuedMessageCard({
           id={textId}
           className="scrollbar-sleek mt-1 max-h-60 overflow-y-auto whitespace-pre-wrap break-words pl-5.5 text-sm"
         >
-          {card.text}
+          {line}
         </p>
       ) : null}
     </li>
+  )
+}
+
+/** Images are named in the tooltip, not drawn: the row stays one line. */
+function QueuedMessageImageCount({
+  images
+}: {
+  images: NonNullable<QueuedMessageCard['images']>
+}): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={queuedMessageImageCount(images.length)}
+          className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
+        >
+          <ImageIcon className="size-3.5" aria-hidden />
+          <span aria-hidden>{images.length}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={4}>
+        {images.map(nativeChatImageLabel).join(', ')}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
