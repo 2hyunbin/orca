@@ -11,9 +11,11 @@ import {
   createdTabGroupId,
   createdTabOptions,
   createLaunchFunnelStore,
+  hostLaunchRequest,
   queuedStartupPayload,
   resetLaunchFunnelStore
 } from './agent-launch-funnel-test-harness'
+import { newTabPromptLaunchesThroughHost } from './launch-agent-new-tab-host-route'
 
 const store = createLaunchFunnelStore()
 
@@ -23,7 +25,9 @@ vi.mock('@/lib/connection-context', () => ({ getConnectionIdFromState: () => nul
 vi.mock('@/lib/native-chat-transcript-readability', () => ({
   isNativeChatTranscriptLocalReadable: () => true
 }))
-vi.mock('@/runtime/web-runtime-session', () => ({ isWebRuntimeSessionActive: () => false }))
+vi.mock('@/runtime/web-runtime-session-environment', () => ({
+  isWebRuntimeSessionActive: () => false
+}))
 vi.mock('@/lib/worktree-runtime-owner', () => ({
   getExecutionHostIdForWorktree: () => 'local',
   getRuntimeEnvironmentIdForWorktree: () => null
@@ -45,6 +49,18 @@ vi.mock('@/lib/agent-ready-wait', () => ({
 vi.mock('@/runtime/local-runtime-capabilities', () => ({
   readLocalRuntimeCapabilitiesOrUnknown: () => []
 }))
+// A launch the host delivers waits on its reply; these tests read only what was sent.
+const callRuntimeRpc = vi.hoisted(() => vi.fn(() => new Promise(() => {})))
+vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc }))
+vi.mock('@/runtime/runtime-rpc-result', () => ({ RuntimeRpcCallError: Error }))
+
+function launchesThroughHost(profile: AgentLaunchCallerProfile): boolean {
+  return newTabPromptLaunchesThroughHost({
+    promptDelivery: profile.args.promptDelivery ?? 'auto-submit',
+    pastesPrompt: (profile.args.prompt?.trim() ?? '').length > 0,
+    isRemote: false
+  })
+}
 
 const cases = callerProfileCases()
 
@@ -73,11 +89,11 @@ describe('agent launch caller placement and telemetry', () => {
     expect(createdTabOptions(store)).toMatchObject({ launchAgent: profile.args.agent })
   })
 
-  it.each(cases)('shows terminals only in the worktree %s launched into', async (_id, profile) => {
+  // Why uniform: the store scopes activation to the launch's own workspace, so no caller — the
+  // floating panel included — needs to opt out of the selection to protect the main window's.
+  it.each(cases)('selects the tab %s opens within its own workspace', async (_id, profile) => {
     await launch(profile)
 
-    // Why: the store moves the main window only when that worktree is the active one, so a floating
-    // or background launch cannot drop the main window off its editor or chat tab.
     expect(createdTabOptions(store)).not.toHaveProperty('activate')
     expect(store.setActiveTabType).toHaveBeenCalledExactlyOnceWith(
       'terminal',
@@ -89,7 +105,7 @@ describe('agent launch caller placement and telemetry', () => {
     await launch(profile)
 
     // Why: without this the stored order falls back to terminals-first and the new tab jumps to
-    // index 0. It runs for every call site, including the floating workspace.
+    // index 0. It runs for every call site.
     expect(store.setTabBarOrder).toHaveBeenCalledTimes(1)
     expect(store.setTabBarOrder.mock.calls[0]?.[0]).toBe(profile.args.worktreeId)
     expect(store.setTabBarOrder.mock.calls[0]?.[1]).toContain('tab-1')
@@ -109,6 +125,19 @@ describe('agent launch caller placement and telemetry', () => {
     async (_id, profile) => {
       await launch(profile)
 
+      if (launchesThroughHost(profile)) {
+        // The host plans the agent where the request names; the pane's spawn starts there too.
+        expect(hostLaunchRequest(store)?.cwd).toBe(profile.args.initialCwd)
+        if (profile.args.initialCwd?.trim()) {
+          expect(store.queueTabInitialCwd).toHaveBeenCalledExactlyOnceWith(
+            createdTabOptions(store)?.id,
+            profile.args.initialCwd
+          )
+        } else {
+          expect(store.queueTabInitialCwd).not.toHaveBeenCalled()
+        }
+        return
+      }
       if (profile.args.initialCwd) {
         expect(store.queueTabInitialCwd).toHaveBeenCalledExactlyOnceWith(
           'tab-1',
@@ -127,6 +156,15 @@ describe('agent launch caller placement and telemetry', () => {
   it.each(cases)('stamps the launch %s started with its telemetry source', async (_id, profile) => {
     await launch(profile)
 
+    if (launchesThroughHost(profile)) {
+      // The host stamps `agent_started` from the request; the window queues no command of its own.
+      expect(queuedStartupPayload(store)).toBeUndefined()
+      expect(hostLaunchRequest(store)).toMatchObject({
+        agent: profile.args.agent,
+        launchSource: profile.args.launchSource ?? 'tab_bar_quick_launch'
+      })
+      return
+    }
     expect(queuedStartupPayload(store)?.telemetry).toEqual({
       agent_kind: `kind:${profile.args.agent}`,
       // git-history-explain-commit names no source, so it reports as a tab-bar quick launch.

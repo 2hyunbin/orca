@@ -1,5 +1,10 @@
 import type { AgentStartupPlanInputs } from '../../shared/agent-startup-plan-inputs'
-import { buildAgentDraftLaunchPlan, buildAgentStartupPlan } from '../../shared/tui-agent-startup'
+import {
+  buildAgentDraftLaunchPlan,
+  buildAgentStartupPlan,
+  type AgentStartupPlan
+} from '../../shared/tui-agent-startup'
+import { planStartupWithPromptCandidate } from '../../shared/startup-line-prompt-carry'
 import { buildSleepingAgentLaunchConfig } from '../../shared/sleeping-agent-launch-config'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -19,6 +24,8 @@ type StartupScope = {
   inputs: AgentStartupPlanInputs
   cwd: string
   isWsl?: boolean
+  /** TEMPORARY parity: the platform main checked this model on, when it differs. */
+  modelCheckPlatform?: NodeJS.Platform
   hostIdentity?: string
   signal?: AbortSignal
 }
@@ -44,20 +51,20 @@ export async function prepareOpenCodeModelStartupInputs(
   if (typeof model !== 'string' || model.trim().length === 0) {
     refuseModel()
   }
+  const platform = options.modelCheckPlatform ?? inputs.platform
   if (
     Object.entries(inputs.sessionOptions ?? {}).some(
       ([key, value]) => key !== 'model' && value !== undefined
     ) ||
     inputs.isRemote ||
     options.isWsl ||
-    inputs.platform !== process.platform ||
+    platform !== process.platform ||
     options.signal?.aborted
   ) {
     refuseModel()
   }
   const command =
-    inputs.cmdOverrides.opencode ||
-    getTuiAgentLaunchCommand(TUI_AGENT_CONFIG.opencode, inputs.platform)
+    inputs.cmdOverrides.opencode || getTuiAgentLaunchCommand(TUI_AGENT_CONFIG.opencode, platform)
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries({ ...process.env, ...inputs.agentEnv })) {
     if (value !== undefined) {
@@ -160,6 +167,22 @@ export async function buildExecutionHostAgentStartupPlan(
     plan.sessionOptions = { ...options.inputs.sessionOptions }
   }
   return plan
+}
+
+/** `buildExecutionHostAgentStartupPlan` for a caller that delivers an uncarried prompt itself. */
+export async function planExecutionHostStartupWithPromptCandidate(
+  options: StartupScope & {
+    prompt: string
+    host: { shellName?: string; provesAgentInFront: boolean }
+  }
+): Promise<{ plan: AgentStartupPlan | null; promptCarried: boolean }> {
+  const prepared = await prepareOpenCodeModelStartupInputs(options)
+  const offered = planStartupWithPromptCandidate(prepared.inputs, options.prompt, options.host)
+  if (offered.plan && prepared.launchConfig) {
+    offered.plan.launchConfig = prepared.launchConfig
+    offered.plan.sessionOptions = { ...options.inputs.sessionOptions }
+  }
+  return offered
 }
 
 export function assertOpenCodeModelLaunchPreferencesAbsent(

@@ -5,7 +5,6 @@
 
 import {
   AGENT_SESSION_HISTORY_MAX_LIMIT,
-  type AgentSessionBackgroundTaskState,
   type AgentSessionSlashCommand,
   type AgentSessionSubscribeEvent,
   type AgentSessionTurnActivity
@@ -13,8 +12,13 @@ import {
 import { sameJournalCursor } from '../agent-session-journal/journal-cursor'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { emptyAgentSessionBatch } from './agent-session-empty-batch'
-import { createAgentSessionCatchUpReader } from './agent-session-history-page'
 import {
+  createAgentSessionCatchUpReader,
+  readAgentSessionHydrationPage
+} from './agent-session-history-page'
+import { subscriberHistoryReader } from './agent-session-bounded-frames'
+import {
+  subscriberCommandsChanged,
   subscriberQueuedMessagesChanged,
   type SubscriberFieldHooks
 } from './agent-session-subscriber-frame-fields'
@@ -40,24 +44,23 @@ export function deliverToSubscriber(
     journal: AgentSessionJournal
     hostNow: number
     emitCheckpoint: boolean
-    backgroundTasks?: AgentSessionBackgroundTaskState | null | undefined
     activity?: AgentSessionTurnActivity | null | undefined
   }
 ): void {
-  const { subscriber, journal, hostNow, emitCheckpoint, backgroundTasks, activity } = input
+  const { subscriber, journal, hostNow, emitCheckpoint, activity } = input
   const checkpointActivity = emitCheckpoint ? port.activity(subscriber.sessionId) : undefined
   const publishedActivity = activity !== undefined ? activity : checkpointActivity
   const shared = {
     hostNow,
-    ...(backgroundTasks !== undefined ? { backgroundTasks } : {}),
     ...(publishedActivity !== undefined ? { activity: publishedActivity } : {})
   }
   // Caught up, so there are no rows to read: every publish behind a commit's own delivery.
-  if (!journal.isReadOnly && sameJournalCursor(subscriber.cursor, journal.cursor())) {
+  if (sameJournalCursor(subscriber.cursor, journal.cursor())) {
     emitCaughtUp(port, subscriber, emitCheckpoint, shared)
     return
   }
-  const readPage = createAgentSessionCatchUpReader(journal)
+  const reader = subscriberHistoryReader(subscriber)
+  const readPage = createAgentSessionCatchUpReader(journal, reader)
   while (true) {
     const result = readPage({
       sessionId: subscriber.sessionId,
@@ -84,6 +87,21 @@ export function deliverToSubscriber(
       emitCaughtUp(port, subscriber, emitCheckpoint, shared)
       return
     }
+    // A phone's app ends a stream that outruns its unacked window, so a gap of more than one page
+    // arrives as the newest page instead; older rows load on scroll.
+    if (page.hasNewer && subscriber.boundedFrames) {
+      const tail = readAgentSessionHydrationPage(journal, subscriber.fence, reader)
+      port.emit(subscriber, {
+        type: 'snapshot',
+        sessionId: subscriber.sessionId,
+        page: tail,
+        fence: subscriber.fence,
+        hostNow,
+        activity: port.activity(subscriber.sessionId)
+      })
+      subscriber.cursor = tail.liveCursor ?? tail.window.nextCursor
+      return
+    }
     port.emit(
       subscriber,
       {
@@ -96,6 +114,7 @@ export function deliverToSubscriber(
           submissions: page.submissions
         },
         fence: subscriber.fence,
+        ...(page.latestTurn !== undefined ? { latestTurn: page.latestTurn } : {}),
         ...shared
       },
       // On a multi-page catch-up the draft list rides only the final page, or a
@@ -115,13 +134,10 @@ function emitCaughtUp(
   emitCheckpoint: boolean,
   shared: {
     hostNow: number
-    backgroundTasks?: AgentSessionBackgroundTaskState | null
     activity?: AgentSessionTurnActivity | null
   }
 ): void {
-  const commandsChanged =
-    port.hooks.readCommands !== undefined &&
-    (port.hooks.readCommands(subscriber.sessionId) ?? null) !== subscriber.commands
+  const commandsChanged = subscriberCommandsChanged(port.hooks, subscriber)
   const queuedChanged = subscriberQueuedMessagesChanged(port.hooks, subscriber)
   if (emitCheckpoint || shared.activity !== undefined || commandsChanged || queuedChanged) {
     port.emit(subscriber, {

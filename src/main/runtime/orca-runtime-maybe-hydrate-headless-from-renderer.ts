@@ -2,6 +2,7 @@
 import { splitFreebuffScreenUpdates } from '../../shared/freebuff-screen-status'
 import { OrcaRuntimeWithSerializeMainTerminalBuffer } from './orca-runtime-serialize-main-terminal-buffer'
 import { observeFreebuffTerminalStatus } from './freebuff-terminal-status'
+import { observeCodexCapacityTerminalStatus } from './codex-capacity-terminal-status'
 import { MOBILE_SUBSCRIBE_SCROLLBACK_ROWS } from './scrollback-limits'
 import { detectAgentStatusFromTitle, normalizeTerminalTitle } from '../../shared/agent-detection'
 import { shouldModelAnswerHiddenPtyQueries } from './terminal-model-query-authority'
@@ -13,24 +14,25 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
   // is populated synchronously so concurrent live writes from
   // trackHeadlessTerminalData chain after the seed via the same writeChain.
   // See docs/mobile-prefer-renderer-scrollback.md.
-  protected maybeHydrateHeadlessFromRenderer(ptyId: string): void {
+  // Public: a phone subscribe calls it after the fit; the promise resolves true once seeded.
+  maybeHydrateHeadlessFromRenderer(ptyId: string): Promise<boolean> | null {
     if (this.headlessHydrationState.has(ptyId)) {
-      return
+      return null
     }
     const providerSnapshotPreferred = this.providerSnapshotPreferredPtys.has(ptyId)
     if (this.headlessTerminals.has(ptyId) && !providerSnapshotPreferred) {
       // Daemon-snapshot seed already populated the emulator — skip hydration.
       this.headlessHydrationState.set(ptyId, 'done')
-      return
+      return null
     }
     const controller = this.ptyController
     if (!controller?.serializeBuffer || !controller.hasRendererSerializer) {
-      return
+      return null
     }
     if (!controller.hasRendererSerializer(ptyId)) {
       // Renderer hasn't registered yet (or never will). Live writes lazy-
       // create the state via trackHeadlessTerminalData on this same tick.
-      return
+      return null
     }
 
     if (providerSnapshotPreferred) {
@@ -52,6 +54,7 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
     // execute AFTER the seed-write resolves. If we awaited inline before
     // setting headlessTerminals, the live byte would lazy-create a separate
     // state and the seed-resolve would overwrite it, dropping live bytes.
+    let seeded = false
     state.writeChain = state.writeChain.then(async () => {
       if (this.headlessTerminals.get(ptyId) !== state) {
         return
@@ -99,6 +102,7 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
           this.applySeededAgentStatus(ptyId, seedTitle)
         }
         this.providerSnapshotPreferredPtys.delete(ptyId)
+        seeded = true
       } catch {
         // Hydration is best-effort. Live writes continue via the same
         // writeChain that this catch-arm leaves intact.
@@ -108,6 +112,7 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
         }
       }
     })
+    return state.writeChain.then(() => seeded)
   }
 
   // Why: seed-derived agent status reflects historical state. Orchestration
@@ -167,8 +172,9 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
     data: string,
     outputSequence: number,
     forwardQueryReplies = false
-  ): Promise<void> {
+  ): void {
     const state = this.getOrCreateHeadlessTerminal(ptyId)
+    const outputObservedAt = Date.now()
     const completion = state.writeChain.then(async () => {
       // Why: the ingestion-time ownership decision is closed over this
       // chain link; async scheduling cannot retroactively change it.
@@ -179,12 +185,21 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
         await state.emulator.write(chunk, { forwardQueryReplies })
         const pty = this.ptysById.get(ptyId)
         if (pty && !pty.connectionId && this.headlessTerminals.get(ptyId) === state) {
-          const payload = observeFreebuffTerminalStatus(
-            state.emulator,
-            chunk,
-            this.terminalSpawnCommandsByPtyId.get(ptyId),
-            pty.launchAgent
-          )
+          const command = this.terminalSpawnCommandsByPtyId.get(ptyId)
+          const payload =
+            observeCodexCapacityTerminalStatus(
+              state.emulator,
+              chunk,
+              command,
+              pty.launchAgent,
+              () => {
+                const paneKey =
+                  this.getLeavesForPty(ptyId).map((leaf) => this.makeRuntimePaneKey(leaf))[0] ??
+                  pty.paneKey
+                return paneKey ? this.getAgentStatusSnapshotForPaneFn?.(paneKey)[0] : undefined
+              },
+              outputObservedAt
+            ) ?? observeFreebuffTerminalStatus(state.emulator, chunk, command, pty.launchAgent)
           if (payload) {
             pty.lastExplicitAgentStatus = {
               state: payload.state,
@@ -201,8 +216,6 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
       }
       state.outputSequence = outputSequence
     })
-    // Legacy callers remain best-effort; bounded SSH admission observes the raw receipt.
     state.writeChain = completion.catch(() => {})
-    return completion
   }
 }

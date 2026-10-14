@@ -85,14 +85,19 @@ export async function spawnIpcPty(
     worktreeId,
     tabId,
     leafId,
+    placement,
     shellOverride,
     projectRuntime,
     terminalColorQueryReplies,
     terminalKittyKeyboardProtocol,
-    telemetry
+    telemetry,
+    agentLaunch
   } = transportOptions
   const shouldSendLocalCwdFallback =
     cwdFallback === 'worktree' && !connectionId && !admittedSessionId
+  const resumesAgent = Boolean(connectOptions.resumeProviderSession ?? resumeProviderSession)
+  const spawnIntent =
+    resumesAgent && !admittedSessionId ? connectOptions.resumeSpawnIntent : undefined
   // Why: a reattach under an admitted session id must never stop the PTY it is reattaching.
   const replacesPtyId = admittedSessionId ? null : (connectOptions.claimReplacedPtyId?.() ?? null)
   return window.api.pty.spawn({
@@ -131,11 +136,14 @@ export async function spawnIpcPty(
     worktreeId,
     ...(tabId ? { tabId } : {}),
     ...(leafId ? { leafId } : {}),
+    ...(placement && !admittedSessionId ? { placement } : {}),
+    ...(spawnIntent ? { spawnIntent } : {}),
     ...(replacesPtyId ? { replacesPtyId } : {}),
     ...(shellOverride ? { shellOverride } : {}),
     ...(projectRuntime ? { projectRuntime } : {}),
     ...(terminalColorQueryReplies ? { terminalColorQueryReplies } : {}),
     ...(terminalKittyKeyboardProtocol === true ? { terminalKittyKeyboardProtocol: true } : {}),
-    ...(telemetry ? { telemetry } : {})
+    ...(telemetry ? { telemetry } : {}),
+    ...(agentLaunch && !admittedSessionId ? { agentLaunch } : {})
   })
 }

@@ -7,6 +7,7 @@ import { agentHookServer } from '../../agent-hooks/server'
 import { ActiveViewPreference } from '../../active-view-preference'
 import { registerPersistedPaneKeyAlias } from '../restoring-sessions/pane-alias-normalization'
 import { normalizePersistedPaneIdentityState } from '../restoring-sessions/workspace-pane-normalization'
+import { nameEmptyPersistedTerminalLayoutRoots } from '../restoring-sessions/empty-terminal-layout-root-repair'
 import { StoreRuntimeState, type StoreRuntimeOptions } from './store-runtime-state'
 import {
   createStoreDomains,
@@ -105,10 +106,13 @@ export class Store {
     } else {
       throw new Error('Store requires an authority or a frozen serialized import')
     }
-    const normalized = normalizePersistedPaneIdentityState(loaded, {
-      registerAliases: !imported,
-      collectUnboundPaneAlias: options.collectUnboundPaneAlias
-    })
+    const normalized = normalizePersistedPaneIdentityState(
+      nameEmptyPersistedTerminalLayoutRoots(loaded),
+      {
+        registerAliases: !imported,
+        collectUnboundPaneAlias: options.collectUnboundPaneAlias
+      }
+    )
     this.state = normalized.state
     this.runtime.state = this.state
     this.runtime.activeViewPreference = new ActiveViewPreference(
@@ -138,11 +142,11 @@ export class Store {
       }
       setMigrationUnsupportedPtyPersistenceListener((entries) => {
         this.state.migrationUnsupportedPtyEntries = entries
-        scheduleSave(this.domains.scheduling)
+        scheduleSave(this.domains.scheduling, ['migrationUnsupportedPtyEntries'])
       })
       agentHookServer.setPaneKeyAliasPersistenceListener((entries) => {
         this.state.legacyPaneKeyAliasEntries = entries
-        scheduleSave(this.domains.scheduling)
+        scheduleSave(this.domains.scheduling, ['legacyPaneKeyAliasEntries'])
       })
       if (
         normalized.changed ||
@@ -219,35 +223,12 @@ export class Store {
     return writeVersionedProfileStateExport(this.runtime.dataFile, writeExport)
   }
 
-  /** Publish recovery and canonical JSON checkpoints for older builds. */
-  writeLatestProfileStateJsonCompatibilityExport(): number | undefined {
-    const authority = this.runtime.profileStateAuthority
-    if (authority?.asynchronous) {
-      throw new Error('Live profile exports require an awaited export')
-    }
-    if (!authority?.writeJsonCompatibilityExport) {
-      return undefined
-    }
-    this.runtime.dirtyProfileStateDomains = null
-    this.flushOrThrow()
-    return authority.writeJsonCompatibilityExport(this.runtime.dataFile)
-  }
-
   writeLatestProfileStateJsonExportAsync(): Promise<number | undefined> {
     if (!this.runtime.profileStateAuthority?.asynchronous) {
       return Promise.resolve(this.writeLatestProfileStateJsonExport())
     }
     return this.enqueueProfileExport((authority) =>
       authority.writeLatestJsonExport(this.runtime.dataFile)
-    )
-  }
-
-  writeLatestProfileStateJsonCompatibilityExportAsync(): Promise<number | undefined> {
-    if (!this.runtime.profileStateAuthority?.asynchronous) {
-      return Promise.resolve(this.writeLatestProfileStateJsonCompatibilityExport())
-    }
-    return this.enqueueProfileExport((authority) =>
-      authority.writeJsonCompatibilityExport(this.runtime.dataFile)
     )
   }
 

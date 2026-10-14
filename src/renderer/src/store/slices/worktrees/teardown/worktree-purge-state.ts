@@ -9,16 +9,19 @@ import { removeDeleteStatesForWorktreeIds } from './worktree-delete-state'
 import { removeWorktreeVisitEntriesForTargets } from '@/lib/worktree-visit-recency'
 import { forgetAmbiguousOwnerWarnings } from '../listing/worktree-owner-settings'
 import { forgetWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
+import { settleAgentLaunchPaneStart } from '@/lib/agent-launch-pane-start'
 import {
   getStructuredAgentSessionLaunchOwner,
   markStructuredAgentSessionLaunchCancelledSilently,
   shouldRetainStructuredAgentSessionLaunchTab,
   structuredLaunchStates
 } from '@/lib/structured-agent-session-launch-registry'
-import { discardStructuredAgentSessionLaunchOutbox } from '@/components/native-chat/structured-agent-session-outbox-storage'
+import { discardStructuredAgentSessionChatSends } from '@/lib/structured-agent-session-launch-prompt'
+import { retireStructuredAgentSessionReadOwner } from '@/components/native-chat/structured-agent-session-read-owner-registry'
 import { clearWebSessionFocusIntentIfMatches } from '@/runtime/web-session-focus-intent'
 import {
   structuredAgentSessionFocusOwner,
+  structuredAgentSessionTargetForTab,
   structuredAgentSessionTargetForHost
 } from '@/runtime/structured-agent-session-owner'
 
@@ -44,7 +47,8 @@ export function buildWorktreePurgeState(
         launch.intent.sessionId,
         launch.intent.executionHostId
       )
-      discardStructuredAgentSessionLaunchOutbox(launch.intent.sessionId)
+      discardStructuredAgentSessionChatSends(launch.intent.sessionId)
+      retireStructuredAgentSessionReadOwner(launch.intent.sessionId, launch.intent.target)
       clearWebSessionFocusIntentIfMatches(
         structuredAgentSessionFocusOwner(launch.intent.target),
         worktreeId,
@@ -54,7 +58,19 @@ export function buildWorktreePurgeState(
     }
   }
   for (const worktreeId of worktreeIdSet) {
+    // A launch tab that never spawned has no spawn left to answer its prompt's wait.
+    for (const tab of s.tabsByWorktree[worktreeId] ?? []) {
+      if (tab.agentLaunchPane) {
+        settleAgentLaunchPaneStart(tab.id, tab.agentLaunchPane.leafId, null)
+      }
+    }
     for (const tab of s.unifiedTabsByWorktree[worktreeId] ?? []) {
+      if (tab.contentType === 'agent-session') {
+        const target = structuredAgentSessionTargetForTab(s, tab)
+        if (target) {
+          retireStructuredAgentSessionReadOwner(tab.entityId, target)
+        }
+      }
       // A retained launch here survived a reload, so its persisted record names its host.
       const owner =
         tab.contentType === 'agent-session' && !cancelledSessionIds.has(tab.entityId)
@@ -67,7 +83,7 @@ export function buildWorktreePurgeState(
         shouldRetainStructuredAgentSessionLaunchTab(worktreeId, tab.entityId)
       ) {
         markStructuredAgentSessionLaunchCancelledSilently(worktreeId, tab.entityId, owner)
-        discardStructuredAgentSessionLaunchOutbox(tab.entityId)
+        discardStructuredAgentSessionChatSends(tab.entityId)
         clearWebSessionFocusIntentIfMatches(
           structuredAgentSessionFocusOwner(target),
           worktreeId,
@@ -91,7 +107,6 @@ export function buildWorktreePurgeState(
     omitWorkspaceLineageByWorktree,
     pruneRightSidebarTabByWorktree,
     omitByTabId,
-    omitRetiredDirectSshLedgerByTabId,
     omitByPtyId,
     omitByPaneKeyTabPrefix,
     omitByBrowserWorkspaceId,
@@ -132,7 +147,6 @@ export function buildWorktreePurgeState(
     workspaceLineageByChildKey: omitWorkspaceLineageByWorktree(s.workspaceLineageByChildKey),
     tabsByWorktree: omitByWorktree(s.tabsByWorktree),
     terminalLayoutsByTabId: omitByTabId(s.terminalLayoutsByTabId),
-    pendingDirectSshLayoutEditsByTabId: omitByTabId(s.pendingDirectSshLayoutEditsByTabId),
     localOnlyScrollbackByTabId: omitByTabId(s.localOnlyScrollbackByTabId),
     ptyIdsByTabId: omitByTabId(s.ptyIdsByTabId),
     runtimePaneTitlesByTabId: omitByTabId(s.runtimePaneTitlesByTabId),
@@ -152,13 +166,6 @@ export function buildWorktreePurgeState(
     pendingIssueCommandSplitByTabId: omitByTabId(s.pendingIssueCommandSplitByTabId),
     pendingSetupSplitByTabId: omitByTabId(s.pendingSetupSplitByTabId),
     pendingStartupByTabId: omitByTabId(s.pendingStartupByTabId),
-    directSshPaneRetryByTabId: omitRetiredDirectSshLedgerByTabId(s.directSshPaneRetryByTabId),
-    directSshLivePtyBindingByTabId: omitRetiredDirectSshLedgerByTabId(
-      s.directSshLivePtyBindingByTabId
-    ),
-    directSshPaneRetryHistoryByTabId: omitRetiredDirectSshLedgerByTabId(
-      s.directSshPaneRetryHistoryByTabId
-    ),
     codexRestartNoticeByPtyId: omitByPtyId(s.codexRestartNoticeByPtyId),
     migrationUnsupportedByPtyId: omitByPtyId(s.migrationUnsupportedByPtyId),
     suppressedPtyExitIds: omitByPtyId(s.suppressedPtyExitIds),

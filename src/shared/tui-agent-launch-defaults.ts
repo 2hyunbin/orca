@@ -47,12 +47,16 @@ export function tuiAgentArgsBypassPermissions(
     return false
   }
   const tokenized = tokenizeStartupCommand(value, shell)
-  if (!tokenized.ok) {
+  const bypass = tokenizeStartupCommand(bypassArg, shell)
+  if (!tokenized.ok || !bypass.ok || bypass.tokens.length === 0) {
     return false
   }
   const terminator = tokenized.tokens.indexOf('--')
   const options = terminator === -1 ? tokenized.tokens : tokenized.tokens.slice(0, terminator)
-  return options.includes(bypassArg)
+  // A token sequence: several agents' bypass is a flag and its value (`--permission-mode X`).
+  return options.some((_, start) =>
+    bypass.tokens.every((token, offset) => options[start + offset] === token)
+  )
 }
 
 function sanitizeTuiAgentLaunchArgs(agent: TuiAgent, args: string): string {
@@ -90,15 +94,15 @@ export function normalizeTuiAgentEnvRecord(
     if (!isTuiAgent(agent) || !env || typeof env !== 'object') {
       continue
     }
-    const nextEnv: Record<string, string> = {}
+    const entries: [string, string][] = []
     for (const [name, raw] of Object.entries(env)) {
       const key = name.trim()
       if (!key || typeof raw !== 'string') {
         continue
       }
-      nextEnv[key] = raw
+      entries.push([key, raw])
     }
-    normalized[agent] = nextEnv
+    normalized[agent] = Object.fromEntries(entries)
   }
   return normalized
 }

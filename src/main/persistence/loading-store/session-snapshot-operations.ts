@@ -13,8 +13,14 @@ import type { StoreRuntimeState } from './store-runtime-state'
 import type { SessionHostPartitionOperations } from './session-host-partitions'
 import type { TerminalBindingRecoveryOperations } from './terminal-binding-recovery'
 import type { WriteSchedulingOperations } from './write-scheduling'
-import { resolveHostId, setHostWorkspaceSession } from './session-host-partitions'
+import {
+  resolveHostId,
+  setHostWorkspaceSession,
+  withRequiredWorkspaceSessionMaps
+} from './session-host-partitions'
+import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
 import { scheduleSave } from './write-scheduling'
+import { orderTerminalRowsByTabGroups } from '../../../shared/workspace-layout/terminal-row-order'
 
 type SessionSnapshotOperationsRuntime = Pick<
   StoreRuntimeState,
@@ -24,6 +30,7 @@ type SessionSnapshotOperationsRuntime = Pick<
   | 'quitFlushStarted'
   | 'state'
   | 'terminalScrollbackSnapshotStorage'
+  | 'retainedScrollbackRefsByMigrationId'
   | 'writesFrozen'
 >
 
@@ -91,17 +98,22 @@ export class SessionSnapshotOperations {
     if (Object.hasOwn(patch, 'browserUrlHistory')) {
       next = pruneWorkspaceSessionBrowserHistory(next)
     }
+    // Why: a unified-tabs patch skips full normalization, so it would bypass the close fence.
+    if (Object.hasOwn(patch, 'unifiedTabs')) {
+      next = dropClosedTerminalTabs(next)
+    }
     this.publishSession(next, resolved)
   }
 
   private publishSession(session: WorkspaceSessionState, hostId: ExecutionHostId): void {
+    session = orderTerminalRowsByTabGroups(session)
     const { runtime, scheduling } = this[sessionSnapshotOperationsContext]
     if (hostId === LOCAL_EXECUTION_HOST_ID) {
       runtime.state.workspaceSession = session
     } else {
       runtime.state.workspaceSessionsByHostId = {
         ...runtime.state.workspaceSessionsByHostId,
-        [hostId]: session
+        [hostId]: withRequiredWorkspaceSessionMaps(session)
       }
     }
     scheduleSave(
@@ -124,13 +136,4 @@ export class SessionSnapshotOperations {
 
 export function getSessionSnapshotOperationsContext(owner: SessionSnapshotOperations) {
   return owner[sessionSnapshotOperationsContext]
-}
-
-export function installSessionSnapshotOperationsContext(
-  target: SessionSnapshotOperations,
-  source: SessionSnapshotOperations
-): void {
-  Object.defineProperty(target, sessionSnapshotOperationsContext, {
-    value: source[sessionSnapshotOperationsContext]
-  })
 }

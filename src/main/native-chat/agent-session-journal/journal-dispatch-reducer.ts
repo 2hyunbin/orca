@@ -6,10 +6,12 @@ import {
   type UnreadAgentSessionFailureFact
 } from '../../../shared/agent-session-failure'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
+import type { AgentJournalAnsweredTurn } from '../../../shared/agent-session-journal-types'
 import { journalDispatchRowApplies } from './journal-dispatch-settlement'
+import { boundInlineText, DEFAULT_JOURNAL_PAYLOAD_LIMITS } from './journal-payload-bounds'
 import type { JournalReducerState } from './journal-reducer'
 import {
-  notePersonTurnAccepted,
+  noteTurnAccepted,
   placeHandedOverMessage,
   placeRejectedMessage
 } from './journal-submission-fold'
@@ -27,12 +29,26 @@ export function applyJournalDispatchRow(
   submission.fence = row.fence
   submission.dispatchState = row.state
   submission.providerItemId = row.providerItemId
-  submission.reason = row.reason
+  // Rows written before the write-side bound (#20654) carry the full text; bound them on read too.
+  submission.reason =
+    row.reason === null ? null : boundInlineText(row.reason, DEFAULT_JOURNAL_PAYLOAD_LIMITS).text
   const rejection = row.state === 'rejected' ? readStoredRejectionFact(row.rejection) : undefined
   if (rejection) {
     submission.rejection = rejection
   } else {
     delete submission.rejection
+  }
+  if (
+    row.state === 'rejected' &&
+    typeof row.keptAsQueuedMessageId === 'string' &&
+    row.keptAsQueuedMessageId.length > 0
+  ) {
+    submission.keptAsQueuedMessageId = row.keptAsQueuedMessageId
+  }
+  if (row.state === 'rejected' && row.answeredInTurn !== undefined) {
+    submission.answeredInTurn = readAnsweredTurn(row.answeredInTurn)
+  } else {
+    delete submission.answeredInTurn
   }
   submission.resolvedAt = row.state === 'pending' ? null : row.ts
   if (row.state === 'pending') {
@@ -47,7 +63,7 @@ export function applyJournalDispatchRow(
     delete submission.recovered
   }
   if (row.state === 'accepted') {
-    notePersonTurnAccepted(state, submission)
+    noteTurnAccepted(state, submission)
   }
   if (row.state !== 'accepted' || !row.providerItemId) {
     return
@@ -59,6 +75,19 @@ export function applyJournalDispatchRow(
     cursor: { epoch: row.epoch, sequence: row.seq },
     acceptedAt: row.ts
   })
+}
+
+/** A stored answered turn. One malformed, or naming a way of joining this build does not know, is
+ *  read as no turn: it was written knowing the field, so it is not an older row. */
+function readAnsweredTurn(value: unknown): AgentJournalAnsweredTurn | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  const turnItemId = 'turnItemId' in value ? value.turnItemId : undefined
+  const via = 'via' in value ? value.via : undefined
+  return typeof turnItemId === 'string' && turnItemId && (via === 'start' || via === 'steer')
+    ? { turnItemId, via }
+    : null
 }
 
 /** A stored rejection fact, read where it can be placed; a kind it cannot place is kept as

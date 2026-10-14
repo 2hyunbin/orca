@@ -8,7 +8,7 @@ import {
   MAX_TERMINAL_QUICK_COMMANDS_SERIALIZED_BYTES
 } from '../../../shared/terminal-quick-command-prompt-limit'
 import { REMOTE_RPC_MAX_CONTENT_BYTES } from '../../../shared/remote-rpc-content-budget'
-import { MAX_WS_MESSAGE_BYTES } from '../../runtime/rpc/ws-transport'
+import { WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES } from '../../runtime/rpc/ws-transport'
 import { updateSettings, type SettingsMutationOperations } from './settings-update'
 import {
   CreateAgentSessionParams,
@@ -122,7 +122,7 @@ describe('the quick-command storage bound against the paired transports', () => 
 
   it('fits one saved command in an inbound frame at the worst JSON escape', () => {
     // Legacy E2EE frames are base64 of nonce + MAC + plaintext.
-    const inboundPlaintextBytes = Math.floor(MAX_WS_MESSAGE_BYTES / 4) * 3 - 40
+    const inboundPlaintextBytes = Math.floor(WEBSOCKET_TRANSPORT_MAX_MESSAGE_BYTES / 4) * 3 - 40
     const worstCasePromptBytes = MAX_QUICK_COMMAND_AGENT_PROMPT_MESSAGE_BYTES
     const envelopeReserveBytes = 16 * 1024
     expect(worstCasePromptBytes + envelopeReserveBytes).toBeLessThanOrEqual(inboundPlaintextBytes)
