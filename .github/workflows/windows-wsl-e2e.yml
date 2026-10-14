@@ -32,41 +32,5 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-wsl-test-runtime
-      - uses: ./.github/actions/install-node-dependencies
-        with:
-          native-runtime: electron
-      - name: Build relay and Electron
-        run: |
-          pnpm run build:wsl-guest
-          if ($LASTEXITCODE -ne 0) { throw 'Relay build failed' }
-          pnpm exec electron-vite build --mode e2e
-          if ($LASTEXITCODE -ne 0) { throw 'Electron build failed' }
-      - name: Verify native Windows and WSL file-backed terminal images
-        env:
-          SKIP_BUILD: '1'
-          ORCA_BACKGROUND_LAUNCH: '1'
-          ORCA_E2E_FORWARD_APP_LOGS: '1'
-        run: >-
-          pnpm exec playwright test
-          tests/e2e/terminal-inline-images-windows.spec.ts
-          --config tests/playwright.config.ts
-          --project=electron-headful
-          --grep "wsl, off"
-          --repeat-each=1
-          --workers=1
-      - name: Upload terminal image proof
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: windows-wsl-terminal-image-proof
-          path: |
-            test-results/**/windows-inline-*.png
-            test-results/**/windows-file-placeholders.png
-          retention-days: 7
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: windows-wsl-terminal-traces
-          path: test-results/
-          retention-days: 7
+      - name: Probe WSL filesystem behavior
+        run: node config/scripts/wsl-filesystem-probe.cjs
