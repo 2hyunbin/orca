@@ -219,7 +219,12 @@ type Mounted = {
   handshakes: () => readonly boolean[]
   documentLoaded: () => void
   pageReady: () => void
+  pagePainted: () => void
   timers: ReturnType<typeof createTimerSeam>
+}
+
+function live(timers: readonly ArmedTimer[]): ArmedTimer[] {
+  return timers.filter((timer) => !timer.cancelled)
 }
 
 async function mount(store: GenerationStore): Promise<Mounted> {
@@ -228,12 +233,14 @@ async function mount(store: GenerationStore): Promise<Mounted> {
     retry: () => void
     documentLoaded: () => void
     pageReady: () => void
+    pagePainted: () => void
     states: MobileWebShellSessionState[]
     handshakes: boolean[]
   } = {
     retry: () => {},
     documentLoaded: () => {},
     pageReady: () => {},
+    pagePainted: () => {},
     states: [],
     handshakes: []
   }
@@ -251,6 +258,7 @@ async function mount(store: GenerationStore): Promise<Mounted> {
     handle.retry = session.retry
     handle.documentLoaded = session.reportDocumentLoaded
     handle.pageReady = session.reportPageReady
+    handle.pagePainted = session.reportPagePainted
     handle.states.push(session.state)
     handle.handshakes.push(session.pageReady)
     return null
@@ -271,6 +279,7 @@ async function mount(store: GenerationStore): Promise<Mounted> {
     handshakes: () => handle.handshakes,
     documentLoaded: () => handle.documentLoaded(),
     pageReady: () => handle.pageReady(),
+    pagePainted: () => handle.pagePainted(),
     timers
   }
 }
@@ -476,12 +485,11 @@ describe('the wait for the page to speak', () => {
     await act(async () => {
       mounted.documentLoaded()
     })
-    // The other armed timer is the log-only stall warning (SHELL_STALL_LOG_MS).
-    expect(mounted.timers.armed.map((timer) => timer.delayMs)).toEqual([
+    // The other live timer is the log-only stall warning; the checking one was cancelled.
+    expect(live(mounted.timers.armed).map((timer) => timer.delayMs)).toEqual([
       SHELL_STALL_LOG_MS,
       PAGE_READY_DEADLINE_MS
     ])
-    expect(SHELL_STALL_LOG_MS).not.toBe(PAGE_READY_DEADLINE_MS)
     await act(async () => {
       mounted.timers.fire()
     })
@@ -592,14 +600,16 @@ describe('the wait for the page to speak', () => {
   })
 
   it('logs one stall warning for a page that never draws, without moving the session', async () => {
-    const logged = () => connectionLogStore.get(HOST_ID).map((entry) => entry.message)
+    const logged = () => connectionLogStore.get(HOST_ID)
     const before = logged().length
     const mounted = await ready()
     await act(async () => {
       mounted.documentLoaded()
       mounted.pageReady()
     })
-    const stallTimers = mounted.timers.armed.filter((timer) => timer.delayMs === SHELL_STALL_LOG_MS)
+    const stallTimers = live(mounted.timers.armed).filter(
+      (timer) => timer.delayMs === SHELL_STALL_LOG_MS
+    )
     // A page signal that leaves the cover up re-arms nothing.
     expect(stallTimers).toHaveLength(1)
     await act(async () => {
@@ -607,10 +617,50 @@ describe('the wait for the page to speak', () => {
     })
     expect(mounted.states().at(-1)?.kind).toBe('ready')
     expect(logged().slice(before)).toEqual([
-      expect.stringContaining('Web shell: app opened'),
-      'Web shell: page document loaded',
-      'Web shell: page ready',
-      'Web shell: page has not drawn after 15s'
+      expect.objectContaining({
+        message: 'Web shell: page has not drawn after 15s',
+        detail: expect.stringContaining('page ready=yes readyAsks=1 documentLoaded=yes')
+      })
+    ])
+  })
+
+  it('writes one line for a healthy open, on paint', async () => {
+    const before = connectionLogStore.get(HOST_ID).length
+    const mounted = await ready()
+    await act(async () => {
+      mounted.documentLoaded()
+      mounted.pageReady()
+      mounted.pagePainted()
+    })
+    expect(
+      connectionLogStore
+        .get(HOST_ID)
+        .slice(before)
+        .map((entry) => `${entry.message} | ${entry.detail}`)
+    ).toEqual([expect.stringMatching(/^Web shell: page painted \| source=cache build=\S{1,8} /)])
+    expect(live(mounted.timers.armed).filter((t) => t.delayMs === SHELL_STALL_LOG_MS)).toEqual([])
+    await act(async () => {
+      mounted.tree.unmount()
+    })
+  })
+
+  it("logs a stall for the first open's checking state, which no transition line covers", async () => {
+    const before = connectionLogStore.get(HOST_ID).length
+    const fake = createFakeStore()
+    const mounted = await mount(fake.store)
+    expect(mounted.states().at(-1)?.kind).toBe('checking')
+    const stallTimers = live(mounted.timers.armed).filter(
+      (timer) => timer.delayMs === SHELL_STALL_LOG_MS
+    )
+    expect(stallTimers).toHaveLength(1)
+    await act(async () => {
+      stallTimers[0]?.run()
+    })
+    expect(connectionLogStore.get(HOST_ID).slice(before)).toEqual([
+      expect.objectContaining({
+        message: 'Web shell: still checking host after 15s',
+        detail: 'gates=open cache=unread'
+      })
     ])
     await act(async () => {
       mounted.tree.unmount()

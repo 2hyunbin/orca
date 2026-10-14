@@ -5,7 +5,11 @@ import type {
 } from '../../modules/orca-mobile-web-shell/src'
 import { useHostClient } from '../transport/client-context'
 import { createBridgeDiagnosticReporter } from './bridge-diagnostic-log'
-import { bridgeDiagnosticLine, recordShellLifecycleLine } from './shell-lifecycle-log'
+import {
+  bridgeDiagnosticLine,
+  frameWithoutHostLine,
+  recordShellLifecycleLine
+} from './shell-lifecycle-log'
 import type { BridgeInitRoute } from './bridge/bridge-envelope'
 import type { BridgeClearableRouteParam } from './bridge/bridge-route-update'
 import type { BridgeSafeAreaInsets } from './bridge/bridge-safe-area-insets'
@@ -170,6 +174,10 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
   // Held rather than depended on, for the reason every prop above is: the identity settles with the
   // client, and taking it as a dependency would tear a live page session down to re-read a string.
   const clientIdRef = useRef(clientId)
+  // Read only by the dropped-frame log line, which says which of the two a host waits on.
+  const clientRef = useRef(client)
+  // The session a dropped frame was last logged for, so a page re-asking `ready` logs once.
+  const droppedFrameLoggedRef = useRef<string | null>(null)
   // Commit-phase and declared above the host's effect, so the host is built against what this
   // render passed: a native frame can land between a commit and a passive effect.
   //
@@ -179,6 +187,7 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
   useLayoutEffect(() => {
     argsRef.current = args
     clientIdRef.current = clientId
+    clientRef.current = client
   })
   const snapshot = args.snapshot
 
@@ -262,6 +271,20 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
       (event: MobileWebShellBridgeMessageEvent) => {
         const mounted = hostRef.current
         if (mounted === null || mounted.sessionId !== sessionId) {
+          if (
+            mounted === null &&
+            sessionId !== null &&
+            droppedFrameLoggedRef.current !== sessionId
+          ) {
+            droppedFrameLoggedRef.current = sessionId
+            recordShellLifecycleLine(
+              argsRef.current.hostId,
+              frameWithoutHostLine({
+                clientReady: clientRef.current !== null,
+                snapshotReady: argsRef.current.snapshot !== null
+              })
+            )
+          }
           return
         }
         mounted.host.receive(event.nativeEvent.json)

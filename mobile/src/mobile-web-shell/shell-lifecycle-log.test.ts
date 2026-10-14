@@ -16,10 +16,15 @@ import type {
 } from './mobile-web-shell-session-contract'
 import {
   bridgeDiagnosticLine,
+  EMPTY_SHELL_LOG_TRACE,
+  frameWithoutHostLine,
+  maskUserText,
   pageFaultLine,
   shellSessionStepLines,
   shellStallLine,
-  type ShellLifecycleLine
+  traceShellStep,
+  type ShellLifecycleLine,
+  type ShellLogTrace
 } from './shell-lifecycle-log'
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -29,19 +34,33 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 type Pending = Parameters<typeof stamp>[1]
 
 /** Replays events through the real reducer, collecting what each step would log. */
+type Replayed = {
+  session: MobileWebShellSession
+  trace: ShellLogTrace
+  lines: ShellLifecycleLine[]
+}
+
 function replay(
   events: readonly Pending[],
-  from: MobileWebShellSession = createMobileWebShellSession(ROUTE)
-): { session: MobileWebShellSession; lines: ShellLifecycleLine[] } {
-  let session = from
+  from: Omit<Replayed, 'lines'> = {
+    session: createMobileWebShellSession(ROUTE),
+    trace: EMPTY_SHELL_LOG_TRACE
+  }
+): Replayed {
+  let { session, trace } = from
   const lines: ShellLifecycleLine[] = []
   for (const pending of events) {
     const event: MobileWebShellSessionEvent = stamp(session.flow, pending)
     const next = reduceMobileWebShellSession(session, event).session
-    lines.push(...shellSessionStepLines(session, event, next))
+    trace = traceShellStep(trace, session, event, next)
+    lines.push(...shellSessionStepLines(session, event, next, trace))
     session = next
   }
-  return { session, lines }
+  return { session, trace, lines }
+}
+
+function stall(replayed: Omit<Replayed, 'lines'>): ShellLifecycleLine | null {
+  return shellStallLine(replayed.session.state, replayed.session, replayed.trace)
 }
 
 const ACTIVATED = {
@@ -86,14 +105,38 @@ function summary(lines: readonly ShellLifecycleLine[]): string[] {
   )
 }
 
+const PAGE_LOAD: readonly Pending[] = [
+  { type: 'document-started' },
+  { type: 'document-loaded' },
+  { type: 'page-ready' }
+]
+
+const BUILD = MANIFEST.buildId.slice(0, 8)
+
 describe('shell lifecycle log lines', () => {
-  it('logs each state change of a download open once, and no progress ticks', () => {
-    const { lines } = replay(DOWNLOAD_OPEN)
-    const build = MANIFEST.buildId.slice(0, 8)
+  it('writes exactly one line for a healthy cached open: the paint', () => {
+    const { lines } = replay([
+      { type: 'gates-changed', gates: gates() },
+      { type: 'cache-read', generation: CACHED },
+      { type: 'manifest-read', manifest: MANIFEST },
+      ACTIVATED,
+      ...PAGE_LOAD,
+      { type: 'page-ready' },
+      { type: 'page-painted' },
+      { type: 'page-painted' },
+      { type: 'page-back-claim', claimed: true }
+    ])
+    expect(summary(lines)).toEqual([
+      `web-shell-page Web shell: page painted | source=cache build=${BUILD} elapsed=1234ms`
+    ])
+  })
+
+  it('adds only the download milestones to a downloading open, and no progress ticks', () => {
+    const { lines } = replay([...DOWNLOAD_OPEN, ...PAGE_LOAD, { type: 'page-painted' }])
     expect(summary(lines)).toEqual([
       `web-shell-flow Web shell: downloading app | ${MANIFEST.totalAssets} assets, ${MANIFEST.totalBytes} bytes`,
       'web-shell-flow Web shell: activating app | source=download',
-      `web-shell-flow Web shell: app opened | source=download build=${build} elapsed=1234ms`
+      `web-shell-page Web shell: page painted | source=download build=${BUILD} elapsed=1234ms`
     ])
     // The generation directory names a device path and never reaches the log.
     expect(JSON.stringify(lines)).not.toContain('/Users/someone')
@@ -107,51 +150,17 @@ describe('shell lifecycle log lines', () => {
     expect(lines).toEqual([])
   })
 
-  it('logs a cache open with its source', () => {
-    const { lines } = replay([
-      { type: 'gates-changed', gates: gates() },
-      { type: 'cache-read', generation: CACHED },
-      { type: 'manifest-read', manifest: MANIFEST },
-      ACTIVATED
-    ])
-    expect(summary(lines)).toEqual([
-      expect.stringContaining('Web shell: app opened | source=cache build=')
-    ])
-  })
-
-  it('logs the first page signals of a document and drops their repeats', () => {
-    const opened = replay(DOWNLOAD_OPEN).session
-    const { lines } = replay(
-      [
-        { type: 'document-started' },
-        { type: 'document-loaded' },
-        { type: 'page-ready' },
-        { type: 'page-ready' },
-        { type: 'page-painted' },
-        { type: 'page-painted' },
-        { type: 'page-back-claim', claimed: true }
-      ],
-      opened
-    )
-    expect(summary(lines)).toEqual([
-      'web-shell-page Web shell: page document loaded',
-      'web-shell-page Web shell: page ready',
-      'web-shell-page Web shell: page painted'
-    ])
-  })
-
   it('logs a missed ready deadline, the failure it causes and the recovery flow', () => {
-    const opened = replay(DOWNLOAD_OPEN).session
+    const opened = replay(DOWNLOAD_OPEN)
     const { lines } = replay([{ type: 'document-loaded' }, { type: 'page-ready-deadline' }], opened)
     expect(summary(lines)).toEqual([
-      'web-shell-page Web shell: page document loaded',
       'web-shell-page Web shell: page never said ready before the deadline',
       'web-shell-flow Web shell: checking host'
     ])
   })
 
-  it('logs a view failure reported by the native view and the remount it earns', () => {
-    const opened = replay(DOWNLOAD_OPEN).session
+  it('logs a view failure but not the remount it earns', () => {
+    const opened = replay(DOWNLOAD_OPEN)
     const { lines } = replay(
       [
         { type: 'shell-failed', reason: 'render-process-gone' },
@@ -160,16 +169,15 @@ describe('shell lifecycle log lines', () => {
       opened
     )
     expect(summary(lines)).toEqual([
-      'web-shell-page Web shell: page load failed | reason=render-process-gone',
-      'web-shell-flow Web shell: page view remounted'
+      'web-shell-page Web shell: page load failed | reason=render-process-gone'
     ])
   })
 
   it('ignores results from a superseded flow', () => {
-    const opened = replay(DOWNLOAD_OPEN).session
+    const opened = replay(DOWNLOAD_OPEN)
     const { lines } = replay(
       [
-        { type: 'page-ready-deadline', flow: opened.flow - 1 },
+        { type: 'page-ready-deadline', flow: opened.session.flow - 1 },
         { ...ACTIVATED, flow: 0 }
       ],
       opened
@@ -188,36 +196,90 @@ describe('shell lifecycle log lines', () => {
       'web-shell-flow Web shell: failed | reason=download-failed retried=no'
     ])
   })
+})
 
-  it('names a stall only for the two states that read "Opening workspace"', () => {
-    expect(
-      shellStallLine(
-        { kind: 'activating', source: 'download' },
-        {
-          pageReady: false,
-          pagePainted: false
-        }
-      )
-    ).toMatchObject({ code: 'web-shell-stalled', detail: 'source=download' })
-    const ready = replay(DOWNLOAD_OPEN).session
-    expect(shellStallLine(ready.state, { pageReady: true, pagePainted: false })).toMatchObject({
+describe('shell stall lines', () => {
+  it('names what a checking session waits on: the gates, then the cache', () => {
+    const fresh = replay([])
+    expect(stall(fresh)).toMatchObject({
       code: 'web-shell-stalled',
-      message: 'Web shell: page has not drawn after 15s',
-      detail: 'page ready=yes'
+      message: 'Web shell: still checking host after 15s',
+      detail: 'gates=none cache=unread'
     })
-    expect(shellStallLine(ready.state, { pageReady: true, pagePainted: true })).toBeNull()
     expect(
-      shellStallLine({ kind: 'checking' }, { pageReady: false, pagePainted: false })
-    ).toBeNull()
+      stall(replay([{ type: 'gates-changed', gates: gates({ reachability: 'connecting' }) }]))
+    ).toMatchObject({ detail: 'gates=dialling cache=unread' })
+    const opened = replay([{ type: 'gates-changed', gates: gates() }])
+    expect(opened.session.state.kind).toBe('checking')
+    expect(stall(opened)).toMatchObject({ detail: 'gates=open cache=unread' })
+    // An empty cache leaves `cached` null, so only the trace can tell the manifest wait apart.
+    const awaitingManifest = replay([{ type: 'cache-read', generation: null }], opened)
+    expect(stall(awaitingManifest)).toMatchObject({ detail: 'gates=open cache=read' })
   })
 
-  it('keeps device paths out of a page fault and skips routine bridge kinds', () => {
-    const fault = pageFaultLine({
-      category: 'TypeError',
-      message: 'x is undefined at file:///var/mobile/app/index.js:1\n    at /Users/me/secret.js',
-      isRpcDeliveryUnknown: false
+  it('names how far a stalled download got', () => {
+    const fetching = replay(DOWNLOAD_OPEN.slice(0, 4))
+    expect(stall(fetching)).toMatchObject({
+      message: 'Web shell: download made no progress for 15s',
+      detail: `assets=1/${MANIFEST.totalAssets} bytes=10/${MANIFEST.totalBytes}`
     })
-    expect(fault.detail).toBe('TypeError: x is undefined at [path]')
+  })
+
+  it('names an activation that never finished', () => {
+    expect(stall(replay(DOWNLOAD_OPEN.slice(0, 6)))).toMatchObject({
+      message: 'Web shell: still activating after 15s',
+      detail: 'source=download'
+    })
+  })
+
+  it('tells a page that keeps refusing init from one that took it and never drew', () => {
+    const opened = replay(DOWNLOAD_OPEN)
+    expect(stall(opened)).toMatchObject({
+      message: 'Web shell: page has not drawn after 15s',
+      detail: `build=${BUILD} page ready=no readyAsks=0 documentLoaded=no`
+    })
+    const refusing = replay([...PAGE_LOAD, { type: 'page-ready' }, { type: 'page-ready' }], opened)
+    expect(stall(refusing)).toMatchObject({
+      detail: `build=${BUILD} page ready=yes readyAsks=3 documentLoaded=yes`
+    })
+    // A replacement document starts its own count.
+    const reloaded = replay([{ type: 'document-started' }, { type: 'page-ready' }], refusing)
+    expect(stall(reloaded)).toMatchObject({
+      detail: `build=${BUILD} page ready=yes readyAsks=1 documentLoaded=no`
+    })
+    expect(stall(replay([{ type: 'page-painted' }], reloaded))).toBeNull()
+  })
+
+  it('stays quiet for states nobody waits in', () => {
+    expect(
+      stall(replay([{ type: 'gates-changed', gates: gates({ hostCapabilities: [] }) }]))
+    ).toBeNull()
+  })
+})
+
+describe('shell failure details', () => {
+  it('masks absolute paths wherever they start in page text', () => {
+    expect(
+      pageFaultLine({
+        category: 'TypeError',
+        message: 'x is undefined at file:///var/mobile/app/index.js:1\n    at /Users/me/secret.js',
+        isRpcDeliveryUnknown: false
+      }).detail
+    ).toBe('TypeError: x is undefined at [path]')
+    expect(maskUserText("open '/var/mobile/Containers/a.db' failed")).toBe("open '[path]' failed")
+    expect(maskUserText('at f (/Users/me/secret.js:1)')).toBe('at f ([path])')
+    expect(maskUserText('bad `/Users/me/x.js` here')).toBe('bad `[path]` here')
+    expect(maskUserText('path="/home/bob/x" [/Users/bob/y]')).toBe('path="[path]" [[path]]')
+    expect(maskUserText('read C:\\Users\\bob\\x.txt and \\\\srv\\share\\y')).toBe(
+      'read [path] and [path]'
+    )
+    expect(maskUserText('key:~/notes.txt')).toBe('key:[path]')
+    expect(maskUserText('Cannot read properties of undefined')).toBe(
+      'Cannot read properties of undefined'
+    )
+  })
+
+  it('skips routine bridge kinds and names the specific failure for the rest', () => {
     expect(
       bridgeDiagnosticLine({
         kind: 'terminal-backlog',
@@ -236,6 +298,26 @@ describe('shell lifecycle log lines', () => {
       message: 'Web shell bridge: notify-refused',
       detail: 'ungranted'
     })
+    const gone = new Error('view gone')
+    gone.name = 'BridgeViewGoneError'
+    expect(bridgeDiagnosticLine({ kind: 'post-failed', error: gone })?.detail).toBe(
+      'error=BridgeViewGoneError'
+    )
+    expect(bridgeDiagnosticLine({ kind: 'post-failed', error: 'nope' })?.detail).toBe(
+      'error=string'
+    )
+    expect(
+      bridgeDiagnosticLine({ kind: 'route-refused', issue: 'Invalid path /Users/bob/wt' })?.detail
+    ).toBe('issue=Invalid path [path]')
+  })
+
+  it('says which half a frame with no bridge host was waiting on', () => {
+    expect(frameWithoutHostLine({ clientReady: false, snapshotReady: true })).toEqual({
+      level: 'warn',
+      code: 'web-shell-page',
+      message: 'Web shell: page frame with no bridge host',
+      detail: 'client=null snapshot=ok'
+    })
   })
 })
 
@@ -246,11 +328,7 @@ describe('shell lifecycle lines in the exported report', () => {
 
   it('shows where a connected session stalled without changing the connection verdict', () => {
     const opened = replay(DOWNLOAD_OPEN)
-    const page = replay(
-      [{ type: 'document-started' }, { type: 'document-loaded' }, { type: 'page-ready' }],
-      opened.session
-    )
-    const stall = present(shellStallLine(page.session.state, page.session))
+    const page = replay(PAGE_LOAD, opened)
     const report = buildConnectionDiagnosticsReport({
       hostName: 'Desk',
       endpoint: 'ws://192.168.1.2:6768',
@@ -259,14 +337,15 @@ describe('shell lifecycle lines in the exported report', () => {
       lastConnectedAt: 500,
       platform: 'ios',
       appVersion: '0.0.56',
-      entries: entries([...opened.lines, ...page.lines, ...stall]),
+      entries: entries([...opened.lines, ...page.lines, ...present(stall(page))]),
+      shell: { kind: 'ota', bridgeProtocolVersion: 1 },
       nowMs: 60_000
     })
+    expect(report).toContain('Shell: ota · bridge protocol 1')
     expect(report).toContain('Likely cause: Connection is healthy.')
-    expect(report).toContain('[web-shell-flow] Web shell: app opened')
-    expect(report).toContain('[web-shell-page] Web shell: page ready')
+    expect(report).toContain('[web-shell-flow] Web shell: activating app')
     expect(report).toContain(
-      '[warn] [web-shell-stalled] Web shell: page has not drawn after 15s — page ready=yes'
+      `[warn] [web-shell-stalled] Web shell: page has not drawn after 15s — build=${BUILD} page ready=yes readyAsks=1 documentLoaded=yes`
     )
   })
 
@@ -286,8 +365,10 @@ describe('shell lifecycle lines in the exported report', () => {
       appVersion: '0.0.56',
       entries: entries([
         ...failed.lines,
-        ...present(shellStallLine({ kind: 'activating', source: 'download' }, failed.session)),
-        ...present(bridgeDiagnosticLine({ kind: 'refused', refusal: 'oversized' }))
+        ...present(stall(replay(DOWNLOAD_OPEN.slice(0, 6)))),
+        ...present(stall(replay([]))),
+        ...present(bridgeDiagnosticLine({ kind: 'refused', refusal: 'oversized' })),
+        frameWithoutHostLine({ clientReady: false, snapshotReady: false })
       ]),
       nowMs: 60_000
     })

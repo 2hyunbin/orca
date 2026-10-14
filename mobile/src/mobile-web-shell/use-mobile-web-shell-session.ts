@@ -13,10 +13,12 @@ import {
 import { readMobileWebShellReachability } from './mobile-web-shell-reachability'
 import { shellPageBackClaimed } from './shell-page-back-claim'
 import {
+  EMPTY_SHELL_LOG_TRACE,
   recordShellLifecycleLine,
   SHELL_STALL_LOG_MS,
   shellSessionStepLines,
-  shellStallLine
+  shellStallLine,
+  traceShellStep
 } from './shell-lifecycle-log'
 import { shellPageFrame, type ShellPageFrame } from './shell-page-frame'
 import {
@@ -110,6 +112,7 @@ export function useMobileWebShellSession(args: {
   const timersRef = useRef<Set<() => void>>(new Set())
   // The log's host for `dispatch`, which is stable; moved with the session rebuild below.
   const hostIdRef = useRef(hostId)
+  const logTraceRef = useRef(EMPTY_SHELL_LOG_TRACE)
   const runEffectRef = useRef<
     ((epoch: number, flow: number, effect: MobileWebShellSessionEffect) => void) | null
   >(null)
@@ -119,7 +122,9 @@ export function useMobileWebShellSession(args: {
       return
     }
     const stepped = reduceMobileWebShellSession(sessionRef.current, event)
-    for (const line of shellSessionStepLines(sessionRef.current, event, stepped.session)) {
+    const trace = traceShellStep(logTraceRef.current, sessionRef.current, event, stepped.session)
+    logTraceRef.current = trace
+    for (const line of shellSessionStepLines(sessionRef.current, event, stepped.session, trace)) {
       recordShellLifecycleLine(hostIdRef.current, line)
     }
     sessionRef.current = stepped.session
@@ -230,6 +235,7 @@ export function useMobileWebShellSession(args: {
     // A new host is a new session: the old one's latches, cache handle and in-flight work all go.
     invalidate()
     hostIdRef.current = hostId
+    logTraceRef.current = EMPTY_SHELL_LOG_TRACE
     sessionRef.current = createMobileWebShellSession(routePathname, wide)
     startedAtRef.current = runtime.now()
     setState(sessionRef.current.state)
@@ -238,18 +244,19 @@ export function useMobileWebShellSession(args: {
     return invalidate
   }, [hostId, invalidate, routePathname, runtime])
 
-  // Log-only: one warning per parked state, cancelled by any state or paint change.
+  // Log-only: one warning per parked state object, cancelled by any state, paint or host change.
+  // `CHECKING` is one shared object, so checking-to-checking steps keep the first open's timer.
   useEffect(() => {
-    if (shellStallLine(state, sessionRef.current) === null) {
+    if (shellStallLine(state, sessionRef.current, logTraceRef.current) === null) {
       return
     }
     return runtime.setTimer(() => {
-      const line = shellStallLine(state, sessionRef.current)
+      const line = shellStallLine(state, sessionRef.current, logTraceRef.current)
       if (line !== null) {
         recordShellLifecycleLine(hostIdRef.current, line)
       }
     }, SHELL_STALL_LOG_MS)
-  }, [pageFrame, runtime, state])
+  }, [hostId, pageFrame, runtime, state])
 
   useEffect(() => {
     dispatch(epochRef.current, { type: 'layout-changed', wide })

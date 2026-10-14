@@ -38,7 +38,11 @@ import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
-import { pageFaultLine, recordShellLifecycleLine } from './shell-lifecycle-log'
+import {
+  hostProfileUnreadableLine,
+  pageFaultLine,
+  recordShellLifecycleLine
+} from './shell-lifecycle-log'
 
 function failureMessage(reason: MobileWebShellFailureCause): string {
   switch (reason) {
@@ -268,6 +272,7 @@ export function MobileWebShellScreen({
     // `document-load-failed` because that is what happens: the document loads and the page refuses
     // the session, so no tree is ever built. The refetch it costs is wasted on a route this shell
     // produced, and the second report is terminal, which is the failure screen this deserves.
+    // Logged by the host's `route-refused` diagnostic, which carries the issue, in the same call.
     onRouteRefused: (issue) => {
       console.warn('[web-shell] refused to open this screen', issue)
       reportShellFailure('document-load-failed')
@@ -343,6 +348,12 @@ export function MobileWebShellScreen({
       reportShellFailure('document-load-failed')
     }
   }, [reportShellFailure, unreadable])
+  // Log-only and separate, so the failure effect above keeps its own dependencies.
+  useEffect(() => {
+    if (unreadable) {
+      recordShellLifecycleLine(hostId, hostProfileUnreadableLine())
+    }
+  }, [hostId, unreadable])
 
   if (state.kind === 'native-route') {
     return fallback

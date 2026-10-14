@@ -2,6 +2,7 @@ import { connectionLogStore } from '../transport/persisted-connection-log-store'
 import type { ConnectionLogEntry } from '../transport/types'
 import type { BridgeErrorCapture } from './bridge/bridge-error-capture'
 import type { BridgeHostDiagnostic } from './bridge-host-contract'
+import { gateVerdict } from './mobile-web-shell-gates'
 import type {
   MobileWebShellSession,
   MobileWebShellSessionEvent,
@@ -12,15 +13,35 @@ import type {
  * Sparse OTA shell milestones for the per-host connection log, so an exported report says where a
  * workspace open stalled. Diagnostics only: nothing here feeds back into the session.
  *
- * The store holds 200 entries shared with connection events, so only state changes, first-time page
- * signals and one-shot warnings are written — never progress ticks. Route paths, generation
- * directories and error stacks stay out: they can name user paths.
+ * The store holds 200 entries shared with connection events and every page route mounts its own
+ * shell, so a healthy open writes one line (the paint); the rest are failures and one-shot stall
+ * warnings. Route paths, generation directories and error stacks stay out: they can name user paths.
  */
 export type ShellLifecycleLine = Required<Pick<ConnectionLogEntry, 'level' | 'message' | 'code'>> &
   Pick<ConnectionLogEntry, 'detail'>
 
-/** How long a stuck "Opening workspace" waits before the log says so; past the 10 s ready deadline. */
+/**
+ * How long a parked waiting state lasts before the log says so. Armed per state object, so for
+ * `ready` it starts at activation and outlasts the 10 s ready deadline, which starts at document load.
+ */
 export const SHELL_STALL_LOG_MS = 15_000
+
+/** What the reducer does not keep but a log line needs; tracked beside the session, log-only. */
+export type ShellLogTrace = {
+  /** The flow whose cache read answered, so a stall can say whether it waits on the cache. */
+  readonly cacheReadFlow: number | null
+  readonly openedFrom: 'download' | 'cache' | null
+  /** The page's `ready` asks for this document: more than one means it keeps refusing `init`. */
+  readonly readyAsks: number
+  readonly documentLoaded: boolean
+}
+
+export const EMPTY_SHELL_LOG_TRACE: ShellLogTrace = {
+  cacheReadFlow: null,
+  openedFrom: null,
+  readyAsks: 0,
+  documentLoaded: false
+}
 
 const BUILD_ID_PREFIX_LENGTH = 8
 const FAULT_DETAIL_MAX_CHARS = 160
@@ -33,17 +54,59 @@ export function recordShellLifecycleLine(hostId: string, line: ShellLifecycleLin
   connectionLogStore.append(hostId, { id: `web-shell-${ts}-${lineSequence}`, ts, ...line })
 }
 
-/** What one reducer step is worth logging; empty for most steps. */
-export function shellSessionStepLines(
+export function traceShellStep(
+  trace: ShellLogTrace,
   before: MobileWebShellSession,
   event: MobileWebShellSessionEvent,
   after: MobileWebShellSession
+): ShellLogTrace {
+  if ('flow' in event && event.flow !== before.flow) {
+    return trace
+  }
+  switch (event.type) {
+    case 'cache-read':
+      return { ...trace, cacheReadFlow: event.flow }
+    case 'activated':
+      return {
+        ...trace,
+        readyAsks: 0,
+        documentLoaded: false,
+        openedFrom: before.state.kind === 'activating' ? before.state.source : null
+      }
+    case 'remounted':
+    case 'document-started':
+      return { ...trace, readyAsks: 0, documentLoaded: false }
+    case 'document-loaded':
+      return after.state.kind === 'ready' ? { ...trace, documentLoaded: true } : trace
+    case 'page-ready':
+      return after.state.kind === 'ready' ? { ...trace, readyAsks: trace.readyAsks + 1 } : trace
+    case 'gates-changed':
+    case 'manifest-read':
+    case 'fetch-progress':
+    case 'download-staged':
+    case 'download-failed':
+    case 'shell-failed':
+    case 'retry-pressed':
+    case 'page-painted':
+    case 'page-back-claim':
+    case 'page-ready-deadline':
+    case 'layout-changed':
+      return trace
+  }
+}
+
+/** What one reducer step is worth logging; empty for most steps. `trace` is the post-step one. */
+export function shellSessionStepLines(
+  before: MobileWebShellSession,
+  event: MobileWebShellSessionEvent,
+  after: MobileWebShellSession,
+  trace: ShellLogTrace
 ): ShellLifecycleLine[] {
   // A superseded flow's result changed nothing and says nothing about this one.
   if ('flow' in event && event.flow !== before.flow) {
     return []
   }
-  const lines = [...eventLines(before, event)]
+  const lines = [...eventLines(before, event, trace)]
   const transition = transitionLine(before.state, after.state)
   if (transition !== null) {
     lines.push(transition)
@@ -51,22 +114,43 @@ export function shellSessionStepLines(
   return lines
 }
 
-/** The one-shot warning for a session parked behind "Opening workspace", or null when not parked. */
+/** The one-shot warning for a session parked in a waiting state, or null when not parked. */
 export function shellStallLine(
   state: MobileWebShellSessionState,
-  session: Pick<MobileWebShellSession, 'pagePainted' | 'pageReady'>
+  session: Pick<MobileWebShellSession, 'pagePainted' | 'pageReady' | 'gates' | 'flow'>,
+  trace: ShellLogTrace
 ): ShellLifecycleLine | null {
   const seconds = `${SHELL_STALL_LOG_MS / 1000}s`
-  if (state.kind === 'activating') {
-    return stallLine(`Web shell: still activating after ${seconds}`, `source=${state.source}`)
+  switch (state.kind) {
+    case 'checking': {
+      const gates = session.gates === null ? 'none' : gateVerdict(session.gates).kind
+      const cache = trace.cacheReadFlow === session.flow ? 'read' : 'unread'
+      return stallLine(
+        `Web shell: still checking host after ${seconds}`,
+        `gates=${gates} cache=${cache}`
+      )
+    }
+    case 'fetching':
+      // Each progress tick is a new state and re-arms the timer, so this means no progress.
+      return stallLine(
+        `Web shell: download made no progress for ${seconds}`,
+        `assets=${state.completedAssets}/${state.totalAssets} bytes=${state.receivedBytes}/${state.totalBytes}`
+      )
+    case 'activating':
+      return stallLine(`Web shell: still activating after ${seconds}`, `source=${state.source}`)
+    case 'ready':
+      return session.pagePainted
+        ? null
+        : stallLine(
+            `Web shell: page has not drawn after ${seconds}`,
+            `build=${buildPrefix(state.buildId)} page ready=${yesNo(session.pageReady)} readyAsks=${trace.readyAsks} documentLoaded=${yesNo(trace.documentLoaded)}`
+          )
+    case 'native-route':
+    case 'wall':
+    case 'failed':
+    case 'offline':
+      return null
   }
-  if (state.kind === 'ready' && !session.pagePainted) {
-    return stallLine(
-      `Web shell: page has not drawn after ${seconds}`,
-      `page ready=${session.pageReady ? 'yes' : 'no'}`
-    )
-  }
-  return null
 }
 
 /** Null for routine kinds; the caller already bounds each key to one line per host. */
@@ -75,12 +159,7 @@ export function bridgeDiagnosticLine(diagnostic: BridgeHostDiagnostic): ShellLif
   if (diagnostic.kind === 'terminal-backlog') {
     return null
   }
-  const detail =
-    diagnostic.kind === 'refused'
-      ? diagnostic.refusal
-      : diagnostic.kind === 'notify-refused' || diagnostic.kind === 'navigate-back-refused'
-        ? diagnostic.why
-        : undefined
+  const detail = bridgeDiagnosticDetail(diagnostic)
   return {
     level: 'warn',
     code: 'web-shell-bridge',
@@ -90,12 +169,73 @@ export function bridgeDiagnosticLine(diagnostic: BridgeHostDiagnostic): ShellLif
 }
 
 export function pageFaultLine(error: BridgeErrorCapture): ShellLifecycleLine {
-  return pageLine('warn', 'Web shell: page faulted', `${error.category}: ${shortFaultText(error)}`)
+  const firstLine = error.message.split(/\r?\n/, 1)[0] ?? ''
+  return pageLine(
+    'warn',
+    'Web shell: page faulted',
+    `${error.category}: ${maskUserText(firstLine)}`
+  )
+}
+
+/** The profile read behind `init` rejected, so no bridge host can be built for this screen. */
+export function hostProfileUnreadableLine(): ShellLifecycleLine {
+  return pageLine('warn', 'Web shell: host profile unreadable')
+}
+
+/** A page frame arrived while no bridge host was built, so it was dropped unanswered. */
+export function frameWithoutHostLine(facts: {
+  clientReady: boolean
+  snapshotReady: boolean
+}): ShellLifecycleLine {
+  return pageLine(
+    'warn',
+    'Web shell: page frame with no bridge host',
+    `client=${facts.clientReady ? 'ok' : 'null'} snapshot=${facts.snapshotReady ? 'ok' : 'null'}`
+  )
+}
+
+/** Absolute paths and file URLs masked, then clamped: page and schema text can quote user paths. */
+export function maskUserText(text: string): string {
+  const masked = text
+    .replace(/file:\/\/[^\s)'"`\]]+/g, '[path]')
+    .replace(/(^|[\s'"`([=:])(?:~?\/|[A-Za-z]:[\\/]|\\\\)[^\s)'"`\]]+/g, '$1[path]')
+  return masked.length > FAULT_DETAIL_MAX_CHARS
+    ? `${masked.slice(0, FAULT_DETAIL_MAX_CHARS)}…`
+    : masked
+}
+
+function bridgeDiagnosticDetail(diagnostic: BridgeHostDiagnostic): string | undefined {
+  switch (diagnostic.kind) {
+    case 'refused':
+      return diagnostic.refusal
+    case 'notify-refused':
+    case 'navigate-back-refused':
+      return diagnostic.why
+    case 'post-failed':
+      return `error=${maskUserText(errorName(diagnostic.error))}`
+    case 'route-refused':
+      return `issue=${maskUserText(diagnostic.issue)}`
+    case 'notify-failed':
+    case 'frame-after-dispose':
+    case 'frame-after-close':
+    case 'storage-refused':
+    case 'route-update-refused':
+    case 'binary-lane-refused':
+    case 'binary-frame-dropped':
+    case 'terminal-backlog':
+      // Their payloads name keys, ids or schema text that is not needed to place a stall.
+      return undefined
+  }
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error
 }
 
 function eventLines(
   before: MobileWebShellSession,
-  event: MobileWebShellSessionEvent
+  event: MobileWebShellSessionEvent,
+  trace: ShellLogTrace
 ): ShellLifecycleLine[] {
   if (event.type === 'download-failed') {
     const code = event.cause.hostCode === null ? '' : ` code=${event.cause.hostCode}`
@@ -108,19 +248,26 @@ function eventLines(
     return []
   }
   switch (event.type) {
-    case 'document-loaded':
-      return [pageLine('info', 'Web shell: page document loaded')]
     case 'shell-failed':
       return [pageLine('warn', 'Web shell: page load failed', `reason=${event.reason}`)]
-    case 'page-ready':
-      return before.pageReady ? [] : [pageLine('info', 'Web shell: page ready')]
     case 'page-painted':
-      return before.pagePainted ? [] : [pageLine('success', 'Web shell: page painted')]
+      // The one line a healthy open writes, carrying what the open itself would have said.
+      return before.pagePainted
+        ? []
+        : [
+            pageLine(
+              'success',
+              'Web shell: page painted',
+              `source=${trace.openedFrom ?? 'unknown'} build=${buildPrefix(before.state.buildId)} elapsed=${before.state.elapsedMs}ms`
+            )
+          ]
     case 'page-ready-deadline':
       return before.pageReady
         ? []
         : [pageLine('warn', 'Web shell: page never said ready before the deadline')]
     case 'document-started':
+    case 'document-loaded':
+    case 'page-ready':
     case 'gates-changed':
     case 'cache-read':
     case 'manifest-read':
@@ -131,7 +278,7 @@ function eventLines(
     case 'page-back-claim':
     case 'layout-changed':
     case 'retry-pressed':
-      // Logged, if at all, as the state change they cause; a document start is implied by its load.
+      // Healthy-path signals; the paint line or a stall line's detail stands in for them.
       return []
   }
 }
@@ -140,11 +287,6 @@ function transitionLine(
   before: MobileWebShellSessionState,
   after: MobileWebShellSessionState
 ): ShellLifecycleLine | null {
-  if (after.kind === 'ready' && before.kind === 'ready') {
-    return before.sessionId === after.sessionId
-      ? null
-      : flowLine('info', 'Web shell: page view remounted')
-  }
   if (before.kind === after.kind) {
     return null
   }
@@ -160,21 +302,13 @@ function transitionLine(
         `${after.totalAssets} assets, ${after.totalBytes} bytes`
       )
     case 'activating':
-      // A cache activation is immediate and shows up as the `ready` line's source.
+      // A cache activation is immediate and shows up as the paint line's source.
       return after.source === 'download'
         ? flowLine('info', 'Web shell: activating app', 'source=download')
         : null
-    case 'ready': {
-      const source = before.kind === 'activating' ? `source=${before.source} ` : ''
-      const build = after.buildId.slice(0, BUILD_ID_PREFIX_LENGTH)
-      return flowLine(
-        'success',
-        'Web shell: app opened',
-        `${source}build=${build} elapsed=${after.elapsedMs}ms`
-      )
-    }
+    case 'ready':
     case 'native-route':
-      // The normal outcome for every native screen; logging it would crowd out connection events.
+      // `ready` is logged at paint; native is every native screen's normal outcome.
       return null
     case 'wall': {
       const side = 'side' in after.verdict ? ` side=${after.verdict.side}` : ''
@@ -193,15 +327,12 @@ function transitionLine(
   }
 }
 
-/** First line only, absolute paths and file URLs masked, then clamped. */
-function shortFaultText(error: BridgeErrorCapture): string {
-  const firstLine = error.message.split(/\r?\n/, 1)[0] ?? ''
-  const masked = firstLine
-    .replace(/file:\/\/\S+/g, '[path]')
-    .replace(/(^|\s)(?:~?\/|[A-Za-z]:[\\/])\S+/g, '$1[path]')
-  return masked.length > FAULT_DETAIL_MAX_CHARS
-    ? `${masked.slice(0, FAULT_DETAIL_MAX_CHARS)}…`
-    : masked
+function buildPrefix(buildId: string): string {
+  return buildId.slice(0, BUILD_ID_PREFIX_LENGTH)
+}
+
+function yesNo(value: boolean): string {
+  return value ? 'yes' : 'no'
 }
 
 function flowLine(
