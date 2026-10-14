@@ -45,6 +45,7 @@ export function runLocalPlanForAgent(input: {
       operation: input.operation,
       wslDistro: input.target.wslDistro,
       holdHomeLockUntilExit,
+      generationRequest: input.target.generationRequest,
       spawnAgent: input.spawnAgent
     })
   if (input.agentId !== 'codex') {
@@ -77,11 +78,11 @@ function runCodexLocalPlanUnderHomeLock(
     canceledWhileQueued = true
     publishResult({ success: false, error: 'Generation canceled.', canceled: true })
   }
-  setLocalGenerationCancelToken(laneKey, queuedCancel)
+  setLocalGenerationCancelToken(laneKey, queuedCancel, target.generationRequest)
   void withCodexHomeProcessLock(
     resolveCodexHomeProcessLockKeyForSpawnEnv(target.env, target.wslDistro, commandEnv),
     async () => {
-      if (canceledWhileQueued) {
+      if (canceledWhileQueued || target.generationRequest?.canceled) {
         publishResult({ success: false, error: 'Generation canceled.', canceled: true })
         return
       }
@@ -102,7 +103,7 @@ function runCodexLocalPlanUnderHomeLock(
         rejectResult(error)
       }
     })
-    .finally(() => clearLocalGenerationCancelToken(laneKey, queuedCancel))
+    .finally(() => clearLocalGenerationCancelToken(laneKey, queuedCancel, target.generationRequest))
   return result
 }
 

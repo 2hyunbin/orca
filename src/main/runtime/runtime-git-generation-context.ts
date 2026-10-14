@@ -8,6 +8,7 @@ import {
 import type { SourceControlAiOperation } from '../../shared/source-control-ai-types'
 import type { CommitMessageAgentRuntimeTarget } from '../text-generation/commit-message-agent-environment'
 import type { CommitMessageGenerationTarget } from '../text-generation/commit-message-text-generation'
+import type { LocalGenerationRequest } from '../text-generation/source-control-generation-lanes'
 import type { PullRequestLinkedIssueMeta } from '../source-control/pull-request-linked-issue'
 import {
   localGitOptionsForTarget,
@@ -69,14 +70,16 @@ export function localAgentRuntimeTargetForTarget(
 
 export function localTextGenerationTargetForTarget(
   target: RuntimeGitTarget,
-  env?: NodeJS.ProcessEnv
+  env?: NodeJS.ProcessEnv,
+  generationRequest?: LocalGenerationRequest
 ): Extract<CommitMessageGenerationTarget, { kind: 'local' }> {
   const wslDistro = localGitOptionsForTarget(target).wslDistro
   return {
     kind: 'local',
     cwd: target.worktree.path,
     ...(wslDistro ? { wslDistro } : {}),
-    ...(env ? { env } : {})
+    ...(env ? { env } : {}),
+    ...(generationRequest ? { generationRequest } : {})
   }
 }
 

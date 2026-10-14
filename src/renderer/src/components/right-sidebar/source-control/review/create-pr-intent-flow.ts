@@ -12,6 +12,10 @@ import {
 } from '../../../../../../shared/hosted-review-refs'
 import type { GitStatusEntry, GitUpstreamStatus } from '../../../../../../shared/git-status-types'
 import { summarizeCommitFailure } from '../commit/commit-failure-summary'
+import type {
+  RuntimeGitContext,
+  SourceControlGenerationCancellation
+} from '@/runtime/runtime-git-client-context'
 import { getStageAllPaths } from '../commit/discard-all-sequence'
 
 export type CreatePrIntentRemoteStep =
@@ -30,6 +34,9 @@ export type CreatePrIntentRunToken = {
   provider: HostedReviewProvider
   baseRef?: string | null
   startedAt: number
+  commitMessageGeneration?: RuntimeGitContext & {
+    generationCancellation: SourceControlGenerationCancellation
+  }
 }
 
 export type CreatePrIntentCurrentTarget = {

@@ -5,6 +5,7 @@ import type { PullRequestGenerationOutcome } from '../create-pull-request-dialog
 import { settlePullRequestGenerationRequest } from '../pull-request-generation-request-outcome'
 import { useAppStore } from '@/store'
 import { getConnectionId } from '@/lib/connection-context'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import {
   generateRuntimePullRequestFields,
   cancelRuntimeGeneratePullRequestFields
@@ -100,6 +101,8 @@ export function useChecksPanelGeneration(model: ChecksPanelGenerationInput) {
               )
             : null,
         requestId,
+        generationId: createBrowserUuid(),
+        generationCancellation: { canceled: false },
         repoId: repo.id,
         branch,
         runtimeTarget: ownerTarget
@@ -131,7 +134,8 @@ export function useChecksPanelGeneration(model: ChecksPanelGenerationInput) {
               prefs: useAppStore.getState().settings,
               worktreeId: context.worktreeId,
               worktreePath: context.worktreePath,
-              connectionId: context.connectionId
+              connectionId: context.connectionId,
+              generationId: context.generationId
             },
             {
               base: stripBaseRef(seed.base.trim()),
@@ -141,7 +145,8 @@ export function useChecksPanelGeneration(model: ChecksPanelGenerationInput) {
               provider: hostedReviewCreateProvider,
               useTemplate: prCreationDefaults.useTemplate
             },
-            overrides
+            overrides,
+            () => context.generationCancellation?.canceled === true
           )
           if (result.branchChangedByPreparation) {
             await handleBranchChangedByPullRequestGeneration(generationKey, context)
@@ -205,6 +210,9 @@ export function useChecksPanelGeneration(model: ChecksPanelGenerationInput) {
     if (!record || record.status !== 'running') {
       return
     }
+    if (record.context.generationCancellation) {
+      record.context.generationCancellation.canceled = true
+    }
     const generationKey = activePullRequestGenerationKey
     updatePullRequestGenerationRecord(generationKey, (current) => {
       if (!current || current.context.requestId !== record.context.requestId) {
@@ -217,7 +225,8 @@ export function useChecksPanelGeneration(model: ChecksPanelGenerationInput) {
       target: record.context.runtimeTarget,
       worktreeId: record.context.worktreeId,
       worktreePath: record.context.worktreePath,
-      connectionId: record.context.connectionId
+      connectionId: record.context.connectionId,
+      generationId: record.context.generationId
     }).catch((error) => {
       updatePullRequestGenerationRecord(generationKey, (current) => {
         if (!current || current.context.requestId !== record.context.requestId) {

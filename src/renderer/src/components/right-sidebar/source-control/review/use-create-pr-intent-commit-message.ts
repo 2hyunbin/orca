@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { operationGitContext } from '../listing/operation-target'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import { generateRuntimeCommitMessage } from '@/runtime/runtime-git-generation-client'
 import { useAppStore } from '@/store'
 import { isCustomAgentId } from '../../../../../../shared/commit-message-agent-spec'
@@ -60,11 +61,18 @@ export function useSourceControlCreatePrIntentCommitMessage({
       setGenerateInFlightByWorktree((prev) => ({ ...prev, [target.worktreeId]: true }))
       setGenerateErrors((prev) => ({ ...prev, [target.worktreeId]: null }))
       try {
+        const context = {
+          ...operationGitContext(target, useAppStore.getState().settings),
+          generationId: createBrowserUuid(),
+          generationCancellation: { canceled: false }
+        }
+        token.commitMessageGeneration = context
         const result = await generateRuntimeCommitMessage(
-          operationGitContext(target, useAppStore.getState().settings),
+          context,
           {
             sourceControlAiResolvedParams: resolvedCommitMessageAi.value.params
-          }
+          },
+          () => context.generationCancellation.canceled
         )
         if (!result.success) {
           if (!result.canceled) {
@@ -83,6 +91,7 @@ export function useSourceControlCreatePrIntentCommitMessage({
         }))
         return { ok: false, reason: 'failed' }
       } finally {
+        delete token.commitMessageGeneration
         setGenerateInFlightByWorktree((prev) => ({ ...prev, [target.worktreeId]: false }))
         generateInFlightRef.current[target.worktreeId] = false
       }

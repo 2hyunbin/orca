@@ -62,6 +62,9 @@ export async function executeGenerationPlan(input: {
   operation: TextGenerationOperation
   spawnAgent: SpawnSourceControlAgent
 }): Promise<InternalTextGenerationResult> {
+  if (input.target.kind === 'local' && input.target.generationRequest?.canceled) {
+    return { success: false, error: 'Generation canceled.', canceled: true }
+  }
   const execute = (plan: CommitMessagePlan): Promise<InternalTextGenerationResult> =>
     input.target.kind === 'remote'
       ? runRemoteSourceControlPlan({
@@ -79,7 +82,10 @@ export async function executeGenerationPlan(input: {
           spawnAgent: input.spawnAgent
         })
   let result = await execute(input.plan)
-  if (!result.success && input.params.agentId === 'opencode') {
+  if (input.target.kind === 'local' && input.target.generationRequest?.canceled) {
+    return { success: false, error: 'Generation canceled.', canceled: true }
+  }
+  if (!result.success && !result.canceled && input.params.agentId === 'opencode') {
     const retry = openCodeVariantRetryPlan(input.plan, result.failureOutput?.stderr ?? '')
     if (retry) {
       result = await execute(retry)

@@ -6,6 +6,7 @@ import type {
   CommitMessageModelCapability
 } from '../../shared/commit-message-agent-spec'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
+import type { LocalGenerationRequest } from './source-control-generation-lanes'
 
 export type GenerateCommitMessageResult =
   | { success: true; message: string; agentLabel?: string }
@@ -47,7 +48,13 @@ export type TextGenerationOperation =
   | 'conversation-name'
 
 export type CommitMessageGenerationTarget =
-  | { kind: 'local'; cwd: string; env?: NodeJS.ProcessEnv; wslDistro?: string }
+  | {
+      kind: 'local'
+      cwd: string
+      env?: NodeJS.ProcessEnv
+      wslDistro?: string
+      generationRequest?: LocalGenerationRequest
+    }
   | {
       kind: 'remote'
       cwd: string

@@ -3,7 +3,8 @@ import type { AppState } from '@/store'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type {
   RuntimeGeneratePullRequestFieldsOverrides,
-  RuntimeGitContext
+  RuntimeGitContext,
+  SourceControlGenerationCancellation
 } from '@/runtime/runtime-git-client-context'
 import type { Repo } from '../../../../shared/repo-types'
 import type { HostedReviewCreationEligibility } from '../../../../shared/hosted-review'
@@ -66,7 +67,9 @@ export type UseCreatePullRequestDialogFieldsOptions = {
 export type GenerationSeed = {
   requestId: number
   fieldRevisions: PullRequestFieldRevisions
-  context: RuntimeGitContext
+  context: RuntimeGitContext & {
+    generationCancellation?: SourceControlGenerationCancellation
+  }
 }
 
 export function createInitialPullRequestFieldRevisions(): PullRequestFieldRevisions {

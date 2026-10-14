@@ -124,6 +124,7 @@ export const gitApi = {
   }): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('git:commit', args),
   generateCommitMessage: (args: {
     worktreePath: string
+    generationId?: string
     worktreeId?: string
     repoId?: string
     connectionId?: string
@@ -138,10 +139,12 @@ export const gitApi = {
   }) => ipcRenderer.invoke('git:discoverCommitMessageModels', args),
   cancelGenerateCommitMessage: (args: {
     worktreePath: string
+    generationId?: string
     connectionId?: string
   }): Promise<void> => ipcRenderer.invoke('git:cancelGenerateCommitMessage', args),
   generatePullRequestFields: (args: {
     worktreePath: string
+    generationId?: string
     worktreeId?: string
     repoId?: string
     base: string
@@ -157,6 +160,7 @@ export const gitApi = {
   }) => ipcRenderer.invoke('git:generatePullRequestFields', args),
   cancelGeneratePullRequestFields: (args: {
     worktreePath: string
+    generationId?: string
     connectionId?: string
   }): Promise<void> => ipcRenderer.invoke('git:cancelGeneratePullRequestFields', args),
   stage: (args: { worktreePath: string; filePath: string; connectionId?: string }): Promise<void> =>

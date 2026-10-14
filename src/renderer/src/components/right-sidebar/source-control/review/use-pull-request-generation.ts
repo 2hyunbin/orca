@@ -2,6 +2,7 @@ import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
 import { getWorkspaceJiraIssueKey } from '../../../../../../shared/jira-review-title'
 import { useCallback } from 'react'
 import { getConnectionId } from '@/lib/connection-context'
+import { createBrowserUuid } from '@/lib/browser-uuid'
 import {
   cancelRuntimeGeneratePullRequestFields,
   generateRuntimePullRequestFields
@@ -118,6 +119,8 @@ export function useSourceControlPullRequestGeneration({
               )
             : null,
         requestId,
+        generationId: createBrowserUuid(),
+        generationCancellation: { canceled: false },
         repoId: activeRepo.id,
         branch: branchName,
         runtimeTarget: activeRepoTarget
@@ -138,7 +141,8 @@ export function useSourceControlPullRequestGeneration({
               prefs: useAppStore.getState().settings,
               worktreeId: context.worktreeId,
               worktreePath: context.worktreePath,
-              connectionId: context.connectionId
+              connectionId: context.connectionId,
+              generationId: context.generationId
             },
             {
               base: stripBaseRef(seed.base.trim()),
@@ -148,7 +152,8 @@ export function useSourceControlPullRequestGeneration({
               provider: hostedReviewCreateProvider,
               useTemplate: resolvedPrCreationDefaults.useTemplate
             },
-            overrides
+            overrides,
+            () => context.generationCancellation?.canceled === true
           )
           if (result.branchChangedByPreparation) {
             await refreshGitStatusAfterPullRequestGeneration(context)
@@ -216,6 +221,9 @@ export function useSourceControlPullRequestGeneration({
     if (!record || record.status !== 'running') {
       return
     }
+    if (record.context.generationCancellation) {
+      record.context.generationCancellation.canceled = true
+    }
     const generationKey = activePullRequestGenerationKey
     updatePullRequestGenerationRecord(generationKey, (current) => {
       if (!current || current.context.requestId !== record.context.requestId) {
@@ -228,7 +236,8 @@ export function useSourceControlPullRequestGeneration({
       target: record.context.runtimeTarget,
       worktreeId: record.context.worktreeId,
       worktreePath: record.context.worktreePath,
-      connectionId: record.context.connectionId
+      connectionId: record.context.connectionId,
+      generationId: record.context.generationId
     }).catch((error) => {
       updatePullRequestGenerationRecord(generationKey, (current) => {
         if (!current || current.context.requestId !== record.context.requestId) {

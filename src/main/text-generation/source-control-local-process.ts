@@ -10,7 +10,8 @@ import {
 import {
   clearLocalGenerationCancelToken,
   localGenerationLaneKey,
-  setLocalGenerationCancelToken
+  setLocalGenerationCancelToken,
+  type LocalGenerationRequest
 } from './source-control-generation-lanes'
 import {
   MAX_SOURCE_CONTROL_AGENT_OUTPUT_BYTES,
@@ -94,6 +95,7 @@ export function runLocalSourceControlPlan(input: {
   operation: TextGenerationOperation
   wslDistro?: string
   holdHomeLockUntilExit: boolean
+  generationRequest?: LocalGenerationRequest
   spawnAgent: SpawnSourceControlAgent
 }): LocalProcessExecution<InternalTextGenerationResult> {
   const { plan, cwd, operation, holdHomeLockUntilExit } = input
@@ -103,6 +105,11 @@ export function runLocalSourceControlPlan(input: {
   })
   const couldNotStart = `${plan.label} could not be started. Check the agent command in Settings and try again.`
   const result = new Promise<InternalTextGenerationResult>((resolve) => {
+    if (input.generationRequest?.canceled) {
+      markProcessClosed()
+      resolve({ success: false, error: 'Generation canceled.', canceled: true })
+      return
+    }
     let child: SpawnedSourceControlAgentProcess
     try {
       // Why before spawn: agents like jcode ride the whole prompt on argv, so a large
@@ -161,7 +168,7 @@ export function runLocalSourceControlPlan(input: {
         timer = null
       }
       detachChildListeners()
-      clearLocalGenerationCancelToken(laneKey, cancel)
+      clearLocalGenerationCancelToken(laneKey, cancel, input.generationRequest)
       if (!holdHomeLockUntilExit) {
         markProcessClosed()
       }
@@ -172,7 +179,6 @@ export function runLocalSourceControlPlan(input: {
       startTermination()
       finalize({ success: false, error: 'Generation canceled.', canceled: true })
     }
-    setLocalGenerationCancelToken(laneKey, cancel)
     timer = setTimeout(() => {
       startTermination()
       finalize({
@@ -265,6 +271,10 @@ export function runLocalSourceControlPlan(input: {
       child.stderr?.off?.('data', onStderrData)
       child.off?.('error', onError)
       child.off?.('close', onClose)
+    }
+    setLocalGenerationCancelToken(laneKey, cancel, input.generationRequest)
+    if (settled) {
+      return
     }
     try {
       child.stdin?.end(plan.stdinPayload ?? undefined)
