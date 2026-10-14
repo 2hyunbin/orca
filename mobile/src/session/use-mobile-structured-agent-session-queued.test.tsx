@@ -433,6 +433,29 @@ describe('mobile structured queued messages', () => {
       expect(onSendError).toHaveBeenCalledWith('This message was already sent.')
     })
 
+    it('Clear all sends one snapshot request only to a capable host', async () => {
+      sendRequest.mockImplementation(async (method) =>
+        method === 'agentSession.queuedMessagesClear'
+          ? mutationOk({ withdrawn: ['draft-1'], dispatched: [], missing: [] })
+          : method === 'agentSession.options'
+            ? ok({ models: [], current: {} })
+            : ok({})
+      )
+      await mountSession(
+        CAPABLE,
+        snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
+      )
+      await act(async () => expect(await hook!.queued.clear?.(['draft-1'])).toBe(true))
+      expect(requestOf('agentSession.queuedMessagesClear').params.messageIds).toEqual(['draft-1'])
+      expect(calls('agentSession.queuedMessageDelete')).toHaveLength(0)
+      unmountSession()
+      await mountSession(
+        LEGACY,
+        snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'draft-1' })] })
+      )
+      expect(hook!.queued.clear).toBeUndefined()
+    })
+
     it('Edit copies the card’s shown text into the composer before its delete leaves', async () => {
       sendRequest.mockImplementation(async (method) => {
         if (method === 'agentSession.queuedMessageDelete') {

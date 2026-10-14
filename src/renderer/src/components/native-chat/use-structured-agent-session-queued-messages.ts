@@ -9,10 +9,12 @@ import type { AgentJournalSubmission } from '../../../../shared/agent-session-jo
 import type {
   AgentSessionQueuedMessage,
   AgentSessionQueuedMessageDeleteResult,
+  AgentSessionQueuedMessagesClearResult,
   AgentSessionQueuedMessagesResumeResult,
   AgentSessionQueuePause,
   AgentSessionSendResult
 } from '../../../../shared/agent-session-wire'
+import { AGENT_SESSION_MAX_QUEUED_CLEAR_IDS } from '../../../../shared/agent-session-queued-message-wire'
 import {
   useStructuredAgentSessionQueuedEdit,
   type QueuedEditTransport,
@@ -34,6 +36,9 @@ export type StructuredAgentSessionQueuedMessagesController = {
   /** The host queues sends. Without it a card can still show — a message the host kept unsent —
    *  but queueing settings and the steer chord would do nothing. */
   queueCapable: boolean
+  clearSupported: boolean
+  /** This host accepts atomic bulk withdrawal and no optimistic send is still awaiting admission. */
+  clearCapable: boolean
   /** Why the queue holds cards Resume would send: the header row above them. A string reason: a
    *  newer host may name one this build does not know. */
   pause: { reason: string } | null
@@ -67,6 +72,7 @@ function alreadySentNotice(): void {
 export function useStructuredAgentSessionQueuedMessages(args: {
   /** Host advertises `agent-session.queued-messages.v1` and the transport has a fence. */
   enabled: boolean
+  clearSupported?: boolean
   queuedMessages: readonly AgentSessionQueuedMessage[] | null
   queuePause: AgentSessionQueuePause | null
   submissions: readonly AgentJournalSubmission[]
@@ -204,20 +210,40 @@ export function useStructuredAgentSessionQueuedMessages(args: {
   }, [mutate])
   const pause = useMemo(() => queuedMessagesQueuePause(cards, queuePause), [cards, queuePause])
 
-  // Every card shown, held or not: Clear all empties the list the person sees. One at a time,
-  // stopping at the first failure, so one failed press is one toast.
-  const clear = useCallback(
-    (): Promise<boolean> =>
-      cardsRef.current.reduce<Promise<boolean>>(
-        (previous, card) => previous.then((removed) => removed && removeCard(card.messageId)),
-        Promise.resolve(true)
-      ),
-    [removeCard]
-  )
+  const clearCapable =
+    args.clearSupported === true &&
+    cards.length <= AGENT_SESSION_MAX_QUEUED_CLEAR_IDS &&
+    !cards.some((card) => card.hold === 'sending')
+  const clearingRef = useRef(false)
+  const clear = useCallback(async (): Promise<boolean> => {
+    if (clearingRef.current || !clearCapable) {
+      return false
+    }
+    const messageIds = cards.map((card) => card.messageId)
+    if (messageIds.length === 0) {
+      return false
+    }
+    clearingRef.current = true
+    try {
+      const result = await mutate<AgentSessionQueuedMessagesClearResult>(
+        'agentSession.queuedMessagesClear',
+        'agentSession.queuedMessagesClear',
+        { messageIds }
+      )
+      if (result?.dispatched.length) {
+        alreadySentNotice()
+      }
+      return result !== null && result.dispatched.length === 0
+    } finally {
+      clearingRef.current = false
+    }
+  }, [cards, clearCapable, mutate])
 
   return {
     cards,
     queueCapable: enabled,
+    clearSupported: args.clearSupported === true,
+    clearCapable,
     pause,
     resume,
     resuming,

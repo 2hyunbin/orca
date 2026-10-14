@@ -70,6 +70,7 @@ function renderController(initialProps: ControllerInput = {}) {
       })
       return useStructuredAgentSessionQueuedMessages({
         enabled: true,
+        clearSupported: true,
         queuedMessages: input.queuedMessages ?? [card('held')],
         queuePause: input.queuePause === undefined ? { reason: 'stopped' } : input.queuePause,
         submissions: [],

@@ -6,6 +6,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSessionQueuedMessage } from '../../../../shared/agent-session-wire'
+import type { StructuredAgentSessionPendingSend } from './structured-agent-session-pending-sends'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
@@ -39,6 +40,8 @@ function createHarness(
     enabled?: boolean
     composerScopeKey?: string | undefined
     mutateResult?: (call: MutateCall) => unknown
+    clearSupported?: boolean
+    sending?: StructuredAgentSessionPendingSend[]
   } = {}
 ) {
   const mutateCalls: MutateCall[] = []
@@ -49,11 +52,13 @@ function createHarness(
   const rendered = renderHook(() =>
     useStructuredAgentSessionQueuedMessages({
       enabled: overrides.enabled ?? true,
+      clearSupported: overrides.clearSupported,
       queuedMessages: overrides.queuedMessages ?? [draft('draft-1', 1), draft('draft-2', 2)],
       queuePause: null,
       submissions: [],
       hasPendingPrompt: false,
-      isWorking: false,
+      isWorking: (overrides.sending?.length ?? 0) > 0,
+      sending: overrides.sending,
       composerScopeKey: 'composerScopeKey' in overrides ? overrides.composerScopeKey : SCOPE,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each scripted answer is the result shape of the one mutate it responds to; generic erasure cannot express that.
       mutate: mutate as StructuredAgentSessionMutate,
@@ -72,6 +77,39 @@ afterEach(() => {
 })
 
 describe('queued message actions', () => {
+  it('sends one bounded host snapshot for Clear all', async () => {
+    const harness = createHarness({
+      clearSupported: true,
+      mutateResult: () => ({ withdrawn: ['draft-1', 'draft-2'], dispatched: [], missing: [] })
+    })
+    await act(async () => expect(await harness.result.current.clear()).toBe(true))
+    expect(harness.mutateCalls).toEqual([
+      [
+        'agentSession.queuedMessagesClear',
+        'agentSession.queuedMessagesClear',
+        { messageIds: ['draft-1', 'draft-2'] }
+      ]
+    ])
+  })
+
+  it('keeps Clear all unavailable while a local send has no host card', async () => {
+    const pending: StructuredAgentSessionPendingSend = {
+      clientMessageId: 'pending',
+      sessionId: 'session',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'pending' }] },
+      previewUris: [],
+      queuedAt: 1,
+      delivery: 'queue-if-active',
+      phase: 'sending',
+      issued: true
+    }
+    const harness = createHarness({ clearSupported: true, sending: [pending] })
+    expect(harness.result.current.cards.map((card) => card.messageId)).toContain('pending')
+    expect(harness.result.current.clearCapable).toBe(false)
+    await act(async () => expect(await harness.result.current.clear()).toBe(false))
+    expect(harness.mutate).not.toHaveBeenCalled()
+  })
+
   it('Steer sends the named draft through queuedMessageSend', async () => {
     const harness = createHarness()
     await act(() => harness.result.current.steer('draft-1'))

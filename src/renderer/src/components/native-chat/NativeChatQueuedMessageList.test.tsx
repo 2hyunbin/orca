@@ -79,6 +79,8 @@ function controller(
   return {
     cards,
     queueCapable,
+    clearSupported: true,
+    clearCapable: cards.every((entry) => entry.hold !== 'sending'),
     editCapable: true,
     editor: undefined,
     pause,
@@ -117,6 +119,7 @@ function renderHeldQueue(
   function HeldQueue(): React.JSX.Element {
     const owner = useStructuredAgentSessionQueuedMessages({
       enabled: true,
+      clearSupported: true,
       queuedMessages,
       queuePause,
       submissions: [],
@@ -491,6 +494,15 @@ describe('NativeChatQueuedMessageList', () => {
     const header = screen.getByRole('list').previousElementSibling!
     expect(header.textContent).toBe('Paused2Clear allResume')
     expect(screen.getAllByRole('button', { name: 'Steer' })).toHaveLength(2)
+  })
+
+  it('does not offer Clear all when the host lacks the batch capability', () => {
+    const owner = controller([card({ messageId: 'held', hold: 'queue-paused' })], {
+      reason: 'stopped'
+    })
+    owner.clearSupported = false
+    renderList(owner)
+    expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull()
   })
 
   it('a queue that drains on its own (or after a restart) reads Queued, with no Resume; no cards, nothing', () => {

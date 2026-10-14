@@ -10,6 +10,7 @@ import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-labe
 import { useStructuredLegacyLaunchStop } from '@/lib/structured-agent-session-legacy-launch-stop'
 import { supportsStructuredAgentSessionPromptCancel } from '@/runtime/structured-agent-session-client'
 import {
+  useStructuredAgentSessionHostClearsQueuedMessages,
   useStructuredAgentSessionHostQueuesCommands,
   useStructuredAgentSessionHostEditsQueuedMessages,
   useStructuredAgentSessionHostQueuesMessagesState
@@ -221,6 +222,7 @@ export function useStructuredAgentSession(args: {
     transportState.submissions
   )
   const editCapable = useStructuredAgentSessionHostEditsQueuedMessages(target)
+  const clearSupported = useStructuredAgentSessionHostClearsQueuedMessages(target)
   const editTransport = useMemo(
     () => ({ target, sessionId, capable: editCapable, write }),
     [editCapable, sessionId, target, write]
@@ -229,6 +231,7 @@ export function useStructuredAgentSession(args: {
     // Its published list, pause and submissions; the rest is named below.
     ...transportState,
     enabled: queueCapability === 'supported' && transportState.fence !== null,
+    clearSupported,
     hasPendingPrompt: prompts.length > 0,
     isWorking,
     // Hidden from the transcript, a queue send on its way reads as sending among the cards.

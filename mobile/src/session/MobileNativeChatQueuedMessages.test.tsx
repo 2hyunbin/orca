@@ -374,7 +374,12 @@ describe('MobileNativeChatQueuedMessages', () => {
     async function mountPaused(
       props: Partial<Parameters<typeof MobileNativeChatQueuedMessages>[0]>
     ): Promise<ReactTestRenderer> {
-      return mount({ cards: [waiting], onSend: vi.fn(async () => true), ...props })
+      return mount({
+        cards: [waiting],
+        onSend: vi.fn(async () => true),
+        onClearAll: vi.fn(async () => true),
+        ...props
+      })
     }
 
     it('heads the box with Paused, the count, Clear all and Resume; unpaused, Queued and the count', async () => {
@@ -396,19 +401,19 @@ describe('MobileNativeChatQueuedMessages', () => {
       expect(empty.toJSON()).toBeNull()
     })
 
-    it('Clear all deletes every card, one at a time, and stops at the first that fails', async () => {
-      const onDelete = vi.fn(async (messageId: string) => messageId !== 'b')
+    it('Clear all sends one captured set of card ids', async () => {
+      const onClearAll = vi.fn(async () => true)
       const mounted = await mountPaused({
         cards: [waiting, card({ messageId: 'b' }), card({ messageId: 'c' })],
         pause: { reason: 'stopped' },
-        onDelete
+        onClearAll
       })
       await act(async () =>
         mounted.root
           .findByProps({ accessibilityLabel: 'Delete every queued message' })
           .props.onPress()
       )
-      expect(onDelete.mock.calls).toEqual([['waiting-1'], ['b']])
+      expect(onClearAll).toHaveBeenCalledExactlyOnceWith(['waiting-1', 'b', 'c'])
     })
 
     it('the chevron folds only the cards; the header and its actions stay', async () => {
@@ -490,6 +495,7 @@ describe('MobileNativeChatQueuedMessages', () => {
       pause: { reason: 'stopped' },
       onSend: vi.fn(async () => true),
       onDelete: vi.fn(async () => true),
+      onClearAll: vi.fn(async () => true),
       onEdit: vi.fn(async () => true)
     })
     // The card's text is its own tap target, sized by the text it shows.

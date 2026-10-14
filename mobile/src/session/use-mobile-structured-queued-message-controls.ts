@@ -15,8 +15,10 @@ import { agentSessionVisibleFailureFacts } from '../../../src/shared/agent-sessi
 import type {
   AgentSessionQueuedMessageDeleteResult,
   AgentSessionQueuedMessagesResumeResult,
+  AgentSessionQueuedMessagesClearResult,
   AgentSessionSendResult
 } from '../../../src/shared/agent-session-wire'
+import { AGENT_SESSION_MAX_QUEUED_CLEAR_IDS } from '../../../src/shared/agent-session-queued-message-wire'
 import {
   mobileQueueHasResumableCard,
   mobileQueuedMessageCards,
@@ -38,6 +40,7 @@ export type MobileStructuredQueuedMessageControls = {
   send: (messageId: string) => Promise<boolean>
   /** Discard the draft. */
   delete: (messageId: string) => Promise<boolean>
+  clear: ((messageIds: string[]) => Promise<boolean>) | undefined
   /** Copy the card's shown text into the composer, then delete the card. */
   edit: MobileQueuedMessageEdit
   /** The whole queue's pause, shown above the cards; null when it sends on its own. */
@@ -58,6 +61,7 @@ export function useMobileStructuredQueuedMessageControls(args: {
   /** The chat shows the agent working: a command card offers no send then. */
   agentWorking?: boolean
   mutate: MobileStructuredAgentMutate
+  clearSupported?: boolean
   /** The active pane's live composer, Edit's copy target; absent = Edit refuses. False when
    *  nothing was copied. */
   appendComposerText: ((text: string) => boolean) | undefined
@@ -137,6 +141,30 @@ export function useMobileStructuredQueuedMessageControls(args: {
     (messageId: string) => deleteQueued(messageId, false),
     [deleteQueued]
   )
+  const clear = useCallback(
+    async (messageIds: string[]): Promise<boolean> => {
+      if (
+        !args.clearSupported ||
+        messageIds.length === 0 ||
+        messageIds.length > AGENT_SESSION_MAX_QUEUED_CLEAR_IDS
+      ) {
+        return false
+      }
+      const result = await mutate<AgentSessionQueuedMessagesClearResult>(
+        'agentSession.queuedMessagesClear',
+        'agentSession.queuedMessagesClear',
+        { messageIds }
+      )
+      if (result.status !== 'accepted') {
+        return false
+      }
+      if (result.value.dispatched.length > 0) {
+        onSendError('This message was already sent.')
+      }
+      return resolved(result.value.dispatched.length === 0)
+    },
+    [args.clearSupported, mutate, onSendError, resolved]
+  )
   const edit = useCallback<MobileQueuedMessageEdit>(
     async (messageId, onCopied) => {
       const card = cards.find((candidate) => candidate.messageId === messageId)
@@ -170,5 +198,15 @@ export function useMobileStructuredQueuedMessageControls(args: {
   )
   // The header shows only while Resume would send something, as on desktop.
   const pause = mobileQueueHasResumableCard(cards) ? queuePause : null
-  return { cards, send, delete: deleteDraft, edit, pause, resume, sessionKey }
+  return {
+    cards,
+    send,
+    delete: deleteDraft,
+    clear:
+      args.clearSupported && cards.length <= AGENT_SESSION_MAX_QUEUED_CLEAR_IDS ? clear : undefined,
+    edit,
+    pause,
+    resume,
+    sessionKey
+  }
 }

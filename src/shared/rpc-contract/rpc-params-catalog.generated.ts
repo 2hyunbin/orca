@@ -525,6 +525,7 @@ import {
   ThreadGoalParams,
   UnsubscribeParams
 } from './structured-agent-session-params'
+import { QueuedMessagesClearParams } from './structured-agent-session-queued-clear-params'
 import {
   QueuedMessageEditHoldParams,
   QueuedMessageUpdateParams
@@ -651,6 +652,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.queuedMessageEditHold': QueuedMessageEditHoldParams,
   'agentSession.queuedMessageSend': QueuedMessageActionParams,
   'agentSession.queuedMessageUpdate': QueuedMessageUpdateParams,
+  'agentSession.queuedMessagesClear': QueuedMessagesClearParams,
   'agentSession.queuedMessagesResume': QueuedMessagesResumeParams,
   'agentSession.readVisual': ReadVisualParams,
   'agentSession.release': HoldParams,

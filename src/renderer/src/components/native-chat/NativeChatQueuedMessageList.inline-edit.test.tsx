@@ -53,6 +53,8 @@ function controller(
   return {
     cards,
     queueCapable,
+    clearSupported: true,
+    clearCapable: true,
     ...edits,
     pause,
     resume: vi.fn(async () => false),

@@ -9,6 +9,8 @@ it('reveals before launch Retry, but waits for a successful queue Resume', async
     respond: vi.fn(async () => null),
     queuedMessages: {
       queueCapable: true,
+      clearSupported: true,
+      clearCapable: true,
       cards: [],
       pause: null,
       resuming: false,

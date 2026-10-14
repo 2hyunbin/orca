@@ -231,6 +231,7 @@ export function useMobileStructuredAgentSession(args: {
     [approvalPrompt, questionPrompt, turnId]
   )
   const queued = useMobileStructuredQueuedMessageControls({
+    clearSupported: hostSupport?.queuedMessagesClear === true,
     sessionKey,
     agentName: agent ? (tuiAgentDisplayName(agent) ?? agent) : undefined,
     journalItems: state.items,

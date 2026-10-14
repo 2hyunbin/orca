@@ -28,6 +28,7 @@ export type MobileNativeChatQueuedMessagesProps = {
    *  (its send failed), or a returned one. */
   onSend?: (messageId: string) => Promise<boolean>
   onDelete?: (messageId: string) => Promise<boolean>
+  onClearAll?: (messageIds: string[]) => Promise<boolean>
   /** Copy the card's text into the composer, then delete the card. */
   onEdit?: MobileQueuedMessageEdit
   /** The whole queue's pause: the header reads Paused, with Clear all and Resume. */
@@ -43,6 +44,7 @@ export function MobileNativeChatQueuedMessages({
   cards,
   onSend,
   onDelete,
+  onClearAll,
   onEdit,
   pause,
   onResume,
@@ -76,15 +78,6 @@ export function MobileNativeChatQueuedMessages({
   }
   const resuming = busyIds.has(RESUME_KEY)
   const clearing = busyIds.has(CLEAR_KEY)
-  // One card at a time, stopping at the first failure, so one failed press is one banner.
-  const clearAll = async (): Promise<boolean> => {
-    for (const card of cards) {
-      if (!(await onDelete?.(card.messageId))) {
-        return false
-      }
-    }
-    return true
-  }
   // A card that drained or was removed while its menu was open closes the menu, for good: a
   // Stop-requeued draft comes back under the same id and must not reopen it.
   const menuCard = cards.find((card) => card.messageId === menuFor)
@@ -107,21 +100,25 @@ export function MobileNativeChatQueuedMessages({
           <Text style={styles.headerCount}>{cards.length}</Text>
           {pause ? (
             <>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: clearing }}
-                accessibilityLabel="Delete every queued message"
-                style={({ pressed }) => [
-                  styles.textAction,
-                  pressed && styles.pressed,
-                  clearing && styles.disabled
-                ]}
-                disabled={clearing}
-                onPress={() => void run(CLEAR_KEY, onDelete && clearAll)}
-              >
-                <Trash2 size={12} color={colors.textPrimary} strokeWidth={2} />
-                <Text style={styles.actionLabel}>Clear all</Text>
-              </Pressable>
+              {onClearAll ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: clearing }}
+                  accessibilityLabel="Delete every queued message"
+                  style={({ pressed }) => [
+                    styles.textAction,
+                    pressed && styles.pressed,
+                    clearing && styles.disabled
+                  ]}
+                  disabled={clearing}
+                  onPress={() =>
+                    void run(CLEAR_KEY, () => onClearAll(cards.map((card) => card.messageId)))
+                  }
+                >
+                  <Trash2 size={12} color={colors.textPrimary} strokeWidth={2} />
+                  <Text style={styles.actionLabel}>Clear all</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ disabled: resuming }}
