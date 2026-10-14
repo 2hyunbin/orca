@@ -1,3 +1,4 @@
+import { usePluginCatalogApi } from './plugin-catalog-host-context'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Blocks, Loader2, RefreshCw, Settings2, Store } from 'lucide-react'
 import type {
@@ -39,6 +40,7 @@ export function PluginMarketplaceBrowser({
   onRefreshInstalled,
   renderInstalledContent
 }: PluginMarketplaceBrowserProps): React.JSX.Element {
+  const api = usePluginCatalogApi()
   const type = useAppStore((state) => state.pluginCatalogTypeFilter)
   const onTypeChange = useAppStore((state) => state.setPluginCatalogTypeFilter)
   const [sources, setSources] = useState<PluginMarketplaceHostSourceState[]>([])
@@ -62,8 +64,8 @@ export function PluginMarketplaceBrowser({
     const requestId = ++requestRef.current
     try {
       const [nextSources, nextListings] = await Promise.all([
-        window.api.plugins.listMarketplaces(),
-        window.api.plugins.listMarketplacePlugins()
+        api.listMarketplaces(),
+        api.listMarketplacePlugins()
       ])
       if (mountedRef.current && requestId === requestRef.current) {
         setSources(nextSources)
@@ -87,7 +89,7 @@ export function PluginMarketplaceBrowser({
         setLoading(false)
       }
     }
-  }, [])
+  }, [api])
 
   useEffect(() => {
     mountedRef.current = true
@@ -113,7 +115,7 @@ export function PluginMarketplaceBrowser({
     setRefreshBusy(true)
     setError(null)
     try {
-      await Promise.all([window.api.plugins.refreshMarketplaces({}), onRefreshInstalled?.()])
+      await Promise.all([api.refreshMarketplaces({}), onRefreshInstalled?.()])
       await loadMarketplaceData()
     } catch (cause) {
       if (mountedRef.current) {
@@ -143,11 +145,8 @@ export function PluginMarketplaceBrowser({
     setActionError(null)
     setError(null)
     try {
-      if (
-        listing.release?.execution === 'data' &&
-        window.api.plugins.installMarketplaceDataPlugin
-      ) {
-        const result = await window.api.plugins.installMarketplaceDataPlugin({
+      if (listing.release?.execution === 'data' && api.installMarketplaceDataPlugin) {
+        const result = await api.installMarketplaceDataPlugin({
           marketplaceSourceId: listing.marketplaceSourceId,
           marketplaceCommit: listing.marketplaceCommit,
           pluginKey: listing.pluginKey
@@ -166,7 +165,7 @@ export function PluginMarketplaceBrowser({
         setPreview(result.preview)
         return
       }
-      const nextPreview = await window.api.plugins.previewMarketplacePlugin({
+      const nextPreview = await api.previewMarketplacePlugin({
         marketplaceSourceId: listing.marketplaceSourceId,
         pluginKey: listing.pluginKey
       })
@@ -210,9 +209,7 @@ export function PluginMarketplaceBrowser({
       const reviewedUpdate = previewMode === 'update' && preview.manifest.manifestVersion === 2
       if (
         reviewedUpdate &&
-        (!window.api.plugins.approveMarketplaceUpdate ||
-          !currentContentHash ||
-          !preview.reviewRevision)
+        (!api.approveMarketplaceUpdate || !currentContentHash || !preview.reviewRevision)
       ) {
         throw new Error(
           translate(
@@ -223,10 +220,10 @@ export function PluginMarketplaceBrowser({
       }
       const result =
         reviewedUpdate &&
-        window.api.plugins.approveMarketplaceUpdate &&
+        api.approveMarketplaceUpdate &&
         currentContentHash &&
         preview.reviewRevision
-          ? await window.api.plugins.approveMarketplaceUpdate({
+          ? await api.approveMarketplaceUpdate({
               ...identity,
               contentHash: preview.contentHash,
               reviewedFingerprint: preview.consentFingerprint,
@@ -236,7 +233,7 @@ export function PluginMarketplaceBrowser({
                 : {}),
               currentContentHash
             })
-          : await window.api.plugins.installMarketplacePlugin(identity)
+          : await api.installMarketplacePlugin(identity)
       if (!result.ok) {
         throw new Error(result.error)
       }

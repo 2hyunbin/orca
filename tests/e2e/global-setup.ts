@@ -11,6 +11,7 @@
  */
 
 import { execSync } from 'node:child_process'
+import { runProcessSync } from '@orca/process-host'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
@@ -69,11 +70,25 @@ export default function globalSetup(): void {
   if (process.env.SKIP_BUILD && existsSync(outCli)) {
     console.error('[e2e] SKIP_BUILD set and out/cli/index.js exists — skipping CLI build')
     // Artifact downloads lose executable bits; each runner still needs its local dev launcher.
-    execSync('pnpm run prepare:cli-output', {
-      cwd: root,
-      stdio: 'inherit',
-      timeout: CLI_E2E_BUILD_TIMEOUT_MS
-    })
+    for (const args of [
+      [
+        path.join(root, 'config', 'scripts', 'verify-cli-bin.mjs'),
+        '--fix-executable',
+        '--fix-package-json'
+      ],
+      [path.join(root, 'config', 'scripts', 'install-dev-cli.mjs')]
+    ]) {
+      const result = runProcessSync({
+        program: process.execPath,
+        args,
+        cwd: root,
+        stdio: 'inherit',
+        timeoutMs: CLI_E2E_BUILD_TIMEOUT_MS
+      })
+      if (result.code !== 0) {
+        throw new Error('Invalid CLI artifact')
+      }
+    }
   } else {
     console.error('[e2e] Building bundled CLI...')
     execSync('pnpm run build:cli', {

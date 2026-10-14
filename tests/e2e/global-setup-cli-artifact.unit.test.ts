@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fixture = vi.hoisted(() => ({
   exec: vi.fn(),
+  prepare: vi.fn(),
   exists: vi.fn(),
   write: vi.fn()
 }))
 
+vi.mock('@orca/process-host', () => ({ runProcessSync: fixture.prepare }))
 vi.mock('node:child_process', () => ({ execSync: fixture.exec }))
 vi.mock('node:fs', () => ({
   existsSync: fixture.exists,
@@ -22,6 +24,7 @@ import globalSetup, { workerTestRepositoryPathFile } from './global-setup'
 beforeEach(() => {
   vi.resetAllMocks()
   fixture.exists.mockReturnValue(true)
+  fixture.prepare.mockReturnValue({ code: 0 })
   for (const name of [
     'SKIP_BUILD',
     'ORCA_E2E_WEB_CLIENT',
@@ -55,15 +58,22 @@ describe('E2E shared CLI artifact', () => {
   it('repairs downloaded permissions and installs the local launcher without recompiling', () => {
     vi.stubEnv('SKIP_BUILD', '1')
     globalSetup()
-    const prepare = commands().find((command) => command.includes('prepare:cli-output'))
-    expect(prepare).toBe('pnpm run prepare:cli-output')
-    expect(commands()).not.toContain('pnpm run build:cli')
-    expect(commands()).toContain('git init')
-    expect(fixture.exec.mock.calls.find(([command]) => command === prepare)?.[1]).toEqual({
+    expect(fixture.prepare.mock.calls.map(([request]) => request.args)).toEqual([
+      [
+        path.join(process.cwd(), 'config', 'scripts', 'verify-cli-bin.mjs'),
+        '--fix-executable',
+        '--fix-package-json'
+      ],
+      [path.join(process.cwd(), 'config', 'scripts', 'install-dev-cli.mjs')]
+    ])
+    expect(fixture.prepare.mock.calls[0][0]).toMatchObject({
+      program: process.execPath,
       cwd: process.cwd(),
       stdio: 'inherit',
-      timeout: 120_000
+      timeoutMs: 120_000
     })
+    expect(commands()).not.toContain('pnpm run build:cli')
+    expect(commands()).toContain('git init')
   })
 
   it('builds a missing CLI even when the other artifacts exist', () => {
@@ -84,11 +94,7 @@ describe('E2E shared CLI artifact', () => {
 
   it('fails setup if the downloaded CLI cannot be verified', () => {
     vi.stubEnv('SKIP_BUILD', '1')
-    fixture.exec.mockImplementation((command) => {
-      if (command.includes('prepare:cli-output')) {
-        throw new Error('Invalid CLI artifact')
-      }
-    })
+    fixture.prepare.mockReturnValue({ code: 1 })
     expect(() => globalSetup()).toThrow('Invalid CLI artifact')
     expect(commands()).not.toContain('git init')
   })

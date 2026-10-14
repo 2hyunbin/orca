@@ -1,3 +1,5 @@
+import { usePluginCatalogHost } from './plugin-catalog-host-context'
+import { PluginCatalogHostLabel } from './PluginCatalogHostLabel'
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { PluginHostInstallSource } from '../../../../preload/api-types'
@@ -53,6 +55,7 @@ export function PluginInstallDialog({
   onOpenChange,
   onInstall
 }: PluginInstallDialogProps): React.JSX.Element {
+  const host = usePluginCatalogHost()
   const [kind, setKind] = useState<'local-path' | 'git'>('local-path')
   const [localPath, setLocalPath] = useState('')
   const [gitUrl, setGitUrl] = useState('')
@@ -90,7 +93,17 @@ export function PluginInstallDialog({
               'Installing copies the plugin into Orca and shows its permissions for review. No plugin code runs until you enable it.'
             )}
           </DialogDescription>
+          <PluginCatalogHostLabel />
         </DialogHeader>
+        {host ? (
+          <p className="text-xs text-muted-foreground">
+            {translate(
+              'auto.components.settings.PluginInstallDialog.remotePath',
+              'Folder paths and Git credentials belong to {{host}}.',
+              { host: host.hostLabel }
+            )}
+          </p>
+        ) : null}
         <form
           className="contents"
           onSubmit={(event) => {
@@ -101,7 +114,9 @@ export function PluginInstallDialog({
           <Tabs
             value={kind}
             onValueChange={(value) => {
-              setKind(value as 'local-path' | 'git')
+              if (value === 'local-path' || value === 'git') {
+                setKind(value)
+              }
               setError(null)
             }}
           >
@@ -142,7 +157,7 @@ export function PluginInstallDialog({
               <p className="text-xs leading-5 text-muted-foreground">
                 {translate(
                   'auto.components.settings.PluginInstallDialog.localHelp',
-                  'Full path to a folder containing orca-plugin.json on this computer. The path is used exactly as entered.'
+                  'Full path to a folder containing orca-plugin.json on the selected host. The path is used exactly as entered.'
                 )}
               </p>
             </TabsContent>

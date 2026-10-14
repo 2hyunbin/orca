@@ -1,6 +1,8 @@
 import {
   pluginManagementRequestSchema,
-  type PluginManagementRequest
+  type PluginManagementRequest,
+  type PluginManagementMethod,
+  type PluginManagementResults
 } from './plugin-management-api'
 import { z } from 'zod'
 import { environmentProviderRuntimeInputs } from './plugin-environment-provider-runtime-calls'
@@ -64,10 +66,10 @@ export const pluginManagementSessionCallSchema = z.strictObject({
   request: pluginManagementRequestSchema
 })
 export type PluginEnvironmentProviderSessionApi = {
-  callPluginManagementSession?: (input: {
+  callPluginManagementSession?: <Method extends PluginManagementMethod>(input: {
     sessionId: string
     request: PluginManagementRequest
-  }) => Promise<unknown>
+  }) => Promise<PluginManagementResults[Method]>
   openEnvironmentProviderSession?: (
     input: PluginEnvironmentProviderSessionOpen
   ) => Promise<{ sessionId: string; runtimeId: string }>

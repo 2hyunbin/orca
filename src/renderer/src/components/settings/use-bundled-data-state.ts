@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { usePluginCatalogApi } from './plugin-catalog-host-context'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import {
   pluginBundledDataStateSchema,
@@ -11,19 +12,20 @@ const statesSchema = z
   .refine((states) => new Set(states.map((state) => state.pluginKey)).size === states.length)
 
 export function useBundledDataState(mounted: boolean) {
+  const api = usePluginCatalogApi()
   const [packs, setPacks] = useState<PluginBundledDataState[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set())
   const owner = useRef({ generation: 0 })
   const request = useRef(0)
-  const available = Boolean(window.api?.plugins?.listBundledData)
+  const available = Boolean(api?.listBundledData)
 
-  const refresh = async (): Promise<void> => {
+  const refresh = useCallback(async (): Promise<void> => {
     const generation = owner.current.generation
     const requestId = ++request.current
     try {
-      const response = (await window.api.plugins.listBundledData?.()) ?? []
+      const response = (await api.listBundledData?.()) ?? []
       const states = statesSchema.parse(response)
       if (generation === owner.current.generation && requestId === request.current) {
         setPacks(states)
@@ -38,14 +40,14 @@ export function useBundledDataState(mounted: boolean) {
         setLoading(false)
       }
     }
-  }
+  }, [api])
 
   useEffect(() => {
     const lifetime = owner.current
     lifetime.generation++
     if (mounted) {
       void refresh()
-      const unsubscribe = window.api?.plugins?.onChanged?.((event) => {
+      const unsubscribe = api?.onChanged?.((event) => {
         if (event?.contentPacksChanged ?? true) {
           void refresh()
         }
@@ -62,16 +64,16 @@ export function useBundledDataState(mounted: boolean) {
     return () => {
       lifetime.generation++
     }
-  }, [mounted])
+  }, [mounted, api, refresh])
 
   const toggle = async (pack: PluginBundledDataState): Promise<void> => {
-    if (busy.has(pack.pluginKey) || !window.api.plugins.setBundledDataEnabled) {
+    if (busy.has(pack.pluginKey) || !api.setBundledDataEnabled) {
       return
     }
     const generation = owner.current.generation
     setBusy((current) => new Set([...current, pack.pluginKey]))
     try {
-      await window.api.plugins.setBundledDataEnabled({
+      await api.setBundledDataEnabled({
         pluginKey: pack.pluginKey,
         enabled: !pack.enabled
       })
@@ -91,7 +93,7 @@ export function useBundledDataState(mounted: boolean) {
   const retry = async (): Promise<void> => {
     const generation = owner.current.generation
     try {
-      await window.api.plugins.refresh()
+      await api.refresh()
       if (generation === owner.current.generation) {
         await refresh()
       }

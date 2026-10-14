@@ -107,6 +107,16 @@ export class PluginManagementController {
         return removePluginForHost(this.plugins, this.store, request.input.pluginKey)
       case 'getLogs':
         return this.plugins.getLogs(request.input.pluginKey)
+      case 'listLanguagePacks':
+        return this.plugins.contentPacks.languagePacks.list().map((pack) => ({
+          id: pack.id,
+          resourceLanguage: pack.resourceLanguage,
+          pluginKey: pack.pluginKey,
+          locale: pack.locale,
+          displayName: pack.displayName,
+          coverage: pack.coverage,
+          builtInLocale: pack.builtInLocale
+        }))
       case 'listTerminalThemes':
         return this.plugins.contentPacks.terminalThemes.list()
       case 'listBundledData':

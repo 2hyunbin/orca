@@ -1,3 +1,4 @@
+import { PluginCatalogHostLabel } from './PluginCatalogHostLabel'
 import { useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { PluginHostListEntry } from '../../../../preload/api-types'
@@ -47,6 +48,7 @@ export function PluginRollbackDialog({
               { value0: plugin?.name ?? '' }
             )}
           </DialogDescription>
+          <PluginCatalogHostLabel />
         </DialogHeader>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <DialogFooter>

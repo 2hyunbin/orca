@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { AdvancedPane } from './AdvancedPane'
 import { ExperimentalPane } from './ExperimentalPane'
-import { PluginsSettingsSection } from './PluginsSettingsSection'
+import { PluginCatalogHostSection } from './PluginCatalogHostSection'
 import { SettingsSection } from './SettingsSection'
 import { translate } from '@/i18n/i18n'
 import type { SettingsRenderContext } from './settings-render-context'
@@ -89,7 +89,8 @@ export function renderPluginsSettingsSection(
 ): React.JSX.Element | null {
   const { model, view } = context
   return model.showDesktopOnlySettings ? (
-    <PluginsSettingsSection
+    <PluginCatalogHostSection
+      hostScope={model.settingsHostScope}
       mounted={view.isSectionMounted('plugins')}
       settings={model.settings}
       updateSettings={model.updateSettingsOrThrow}

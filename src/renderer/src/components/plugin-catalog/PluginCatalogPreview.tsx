@@ -15,8 +15,8 @@ export function PluginCatalogPreview({
       <pre
         className={
           compact
-            ? 'line-clamp-3 whitespace-pre-wrap break-all font-mono text-xs leading-5'
-            : 'whitespace-pre-wrap break-all font-mono text-xs leading-5'
+            ? 'line-clamp-3 whitespace-pre-wrap break-words font-mono text-xs leading-5'
+            : 'whitespace-pre-wrap break-words font-mono text-xs leading-5'
         }
       >
         {compact ? preview.text.slice(0, 500) : preview.text}

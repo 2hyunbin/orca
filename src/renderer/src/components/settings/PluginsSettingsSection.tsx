@@ -1,3 +1,5 @@
+import { PluginCatalogHostLabel } from './PluginCatalogHostLabel'
+import { usePluginCatalogHost, usePluginCatalogApi } from './plugin-catalog-host-context'
 import type { PluginTerminalThemeRegistration } from '../../../../shared/plugins/plugin-terminal-theme-artifact'
 import { useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
@@ -38,6 +40,8 @@ export function PluginsSettingsSection({
   settings,
   updateSettings
 }: PluginsSettingsSectionProps): React.JSX.Element {
+  const api = usePluginCatalogApi()
+  const host = usePluginCatalogHost()
   const [plugins, setPlugins] = useState<PluginHostListEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +54,8 @@ export function PluginsSettingsSection({
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const mountedRef = useRef(false)
   const listRequestRef = useRef(0)
-  const terminalThemes = usePluginTerminalThemeStore((state) => state.themes)
+  const localTerminalThemes = usePluginTerminalThemeStore((state) => state.themes)
+  const terminalThemes = host?.terminalThemes ?? localTerminalThemes
   const bundledData = useBundledDataState(mounted)
 
   const applyPluginList = (nextPlugins: PluginHostListEntry[]): void => {
@@ -133,20 +138,23 @@ export function PluginsSettingsSection({
     }
     setLoading(true)
     const load = async (): Promise<void> => {
-      await loadPluginList(window.api.plugins.list())
+      await loadPluginList(api.list())
       if (mountedRef.current) {
         setLoading(false)
       }
     }
     void load()
-    const unsubscribe = window.api.plugins.onChanged(() => {
-      void loadPluginList(window.api.plugins.list())
+    const unsubscribe = api.onChanged((change) => {
+      if (change?.environmentProviderId && !change.contentPacksChanged) {
+        return
+      }
+      void loadPluginList(api.list())
     })
     return () => {
       listRequestRef.current += 1
       unsubscribe()
     }
-  }, [mounted, settings.pluginSystemEnabled])
+  }, [mounted, settings.pluginSystemEnabled, api])
 
   const marketplaceLifecycle = usePluginMarketplaceLifecycle({
     mounted,
@@ -159,7 +167,7 @@ export function PluginsSettingsSection({
   })
   const pluginLogs = usePluginLogs(mounted, mountedRef, plugins)
 
-  const sectionPresentation = getPluginsSectionPresentation()
+  const sectionPresentation = getPluginsSectionPresentation(host?.hostLabel)
 
   if (!mounted) {
     return <SettingsSection id="plugins" {...sectionPresentation} />
@@ -188,7 +196,7 @@ export function PluginsSettingsSection({
   }
 
   const applySoleTerminalTheme = async (pluginKey: string): Promise<void> => {
-    const registeredThemes = (await window.api.plugins.listTerminalThemes?.()) ?? []
+    const registeredThemes = (await api.listTerminalThemes?.()) ?? []
     const contributedThemes = registeredThemes.filter((theme) => theme.pluginKey === pluginKey)
     if (contributedThemes.length === 1) {
       await applyTerminalTheme(contributedThemes[0]!)
@@ -201,7 +209,7 @@ export function PluginsSettingsSection({
     setError(null)
     try {
       await updateSettings({ pluginSystemEnabled: !settings.pluginSystemEnabled })
-      await loadPluginList(window.api.plugins.refresh())
+      await loadPluginList(api.refresh())
     } catch {
       if (mountedRef.current) {
         setSettingsError(
@@ -219,14 +227,14 @@ export function PluginsSettingsSection({
   }
 
   const install = async (source: PluginHostInstallSource): Promise<void> => {
-    const result = await window.api.plugins.install(source)
+    const result = await api.install(source)
     if (!result.ok) {
       throw new Error(result.error)
     }
     // Why: installation is not consent; select by id and wait for the authoritative list.
     setInstallOpen(false)
     setConsentPluginId(result.pluginKey)
-    await loadPluginList(window.api.plugins.refresh())
+    await loadPluginList(api.refresh())
   }
 
   const decideConsent = async (
@@ -237,7 +245,7 @@ export function PluginsSettingsSection({
   ): Promise<void> => {
     setBusyPluginKeys((current) => new Set(current).add(pluginKey))
     try {
-      const nextPlugins = await window.api.plugins.consent({
+      const nextPlugins = await api.consent({
         pluginKey,
         reviewedFingerprint,
         ...(reviewedRevision ? { reviewedRevision } : {}),
@@ -270,7 +278,7 @@ export function PluginsSettingsSection({
     setBusyPluginKeys((current) => new Set(current).add(plugin.pluginKey))
     try {
       const nextEnabled = !enabled
-      const nextPlugins = await window.api.plugins.setEnabled({
+      const nextPlugins = await api.setEnabled({
         pluginKey: plugin.pluginKey,
         enabled: nextEnabled
       })
@@ -296,7 +304,7 @@ export function PluginsSettingsSection({
   const remove = async (pluginKey: string): Promise<void> => {
     setBusyPluginKeys((current) => new Set(current).add(pluginKey))
     try {
-      const nextPlugins = await window.api.plugins.remove({ pluginKey })
+      const nextPlugins = await api.remove({ pluginKey })
       applyCompletedMutation(nextPlugins)
       if (mountedRef.current) {
         setRemovePluginId(null)
@@ -317,7 +325,7 @@ export function PluginsSettingsSection({
   }
 
   const refresh = async (): Promise<void> => {
-    await loadPluginList(window.api.plugins.refresh())
+    await loadPluginList(api.refresh())
   }
 
   const updateDevPaths = async (paths: string[]): Promise<void> => {
@@ -325,7 +333,7 @@ export function PluginsSettingsSection({
     setSettingsError(null)
     try {
       await updateSettings({ devPluginPaths: paths })
-      await loadPluginList(window.api.plugins.refresh())
+      await loadPluginList(api.refresh())
     } catch {
       const message = translate(
         'auto.components.settings.PluginsSettingsSection.settingsUpdateFailed',
@@ -359,6 +367,7 @@ export function PluginsSettingsSection({
         </Button>
       }
     >
+      <PluginCatalogHostLabel />
       <PluginSettingsOverview
         bundledData={bundledData}
         featureEnabled={featureEnabled}

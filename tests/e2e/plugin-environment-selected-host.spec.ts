@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@stablyai/playwright-test'
 import { NODE_RUNTIME_PIN } from '../../src/shared/node-runtime-pin'
 import { createPluginCatalogFixture } from './helpers/plugin-catalog-fixture'
-import { installPluginEnvironmentProvider } from './helpers/plugin-environment-management'
 import { createRuntimeDesktopPairingOffer } from './helpers/paired-electron-client'
 import { createRestartSession } from './helpers/orca-restart'
 import { capturePluginEvidence, getPluginEvidenceDirectory } from './helpers/plugin-evidence'
@@ -16,7 +15,7 @@ async function dismissUsageNotice(page: Page): Promise<void> {
   }
 }
 
-test('a selected paired host owns provider accounts, all six actions and external changes', async ({
+test('the selected host catalog installs and approves its provider before all six lifecycle actions', async ({
   browserName: _browserName
 }, testInfo) => {
   const fixture = await createPluginCatalogFixture({
@@ -25,14 +24,30 @@ test('a selected paired host owns provider accounts, all six actions and externa
   })
   const hostSession = createRestartSession(testInfo, fixture.gitEnvironment)
   const clientSession = createRestartSession(testInfo)
+  const catalogMessages: string[] = []
+  const observeCatalog = (page: Page): void => {
+    page.on('console', (message) => {
+      if (message.text().startsWith('[plugins]')) {
+        catalogMessages.push(message.text())
+      }
+    })
+  }
   let host: Awaited<ReturnType<typeof hostSession.launch>> | undefined
   let client: Awaited<ReturnType<typeof clientSession.launch>> | undefined
   try {
     const launch = { waitForStore: false, extraEnv: { NODE_ENV: 'production' } }
     host = await hostSession.launch(launch)
-    await installPluginEnvironmentProvider(host.page)
+    observeCatalog(host.page)
+    await host.page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await dismissUsageNotice(host.page)
+    await host.page.getByRole('button', { name: 'Plugins', exact: true }).click()
+    await host.page.getByRole('switch', { name: 'Plugin system', exact: true }).click()
+    expect(await host.page.evaluate(() => window.api.plugins.listEnvironmentProviders?.())).toEqual(
+      []
+    )
     const offer = await createRuntimeDesktopPairingOffer(host.page)
     client = await clientSession.launch(launch)
+    observeCatalog(client.page)
     const { page, app } = client
     const capture = async (name: string): Promise<void> => {
       await dismissUsageNotice(page)
@@ -59,6 +74,44 @@ test('a selected paired host owns provider accounts, all six actions and externa
     }
     await page.getByRole('combobox', { name: 'Host', exact: true }).click()
     await page.getByRole('option', { name: 'Company control host', exact: true }).click()
+    await page.getByRole('button', { name: 'Plugins', exact: true }).click()
+    await expect(
+      page.getByText('Managing plugins on Company control host', { exact: true })
+    ).toBeVisible()
+    await page.getByRole('combobox', { name: 'Plugin type', exact: true }).click()
+    await page.getByRole('option', { name: 'Environment providers', exact: true }).click()
+    await capture('remote-catalog-host-native')
+    await page
+      .locator('[data-marketplace-plugin-key="stablyai.orca-environments-devpods"]')
+      .getByRole('button', { name: 'Install', exact: true })
+      .click()
+    const preview = page.getByRole('dialog', { name: 'Development environments', exact: true })
+    await expect(preview).toContainText('Managing plugins on Company control host')
+    await capture('remote-catalog-release-review-native')
+    await preview.getByRole('button', { name: 'Install plugin', exact: true }).click()
+    const consent = page.getByRole('dialog', { name: 'Review environment provider', exact: true })
+    await expect(consent).toContainText('Managing plugins on Company control host')
+    expect(existsSync(join(fixture.root, 'provider-executed'))).toBe(false)
+    expect(await page.evaluate(() => window.api.plugins.list())).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pluginKey: 'stablyai.orca-environments-devpods' })
+      ])
+    )
+    await capture('remote-catalog-permissions-native')
+    await consent.getByRole('button', { name: 'Enable plugin', exact: true }).click()
+    await expect(consent).toBeHidden()
+    expect(existsSync(join(fixture.root, 'provider-executed'))).toBe(false)
+    expect(await page.evaluate(() => window.api.plugins.list())).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pluginKey: 'stablyai.orca-environments-devpods' })
+      ])
+    )
+    expect(await host.page.evaluate(() => window.api.plugins.list())).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pluginKey: 'stablyai.orca-environments-devpods', status: 'idle' })
+      ])
+    )
+    await capture('remote-catalog-installed-native')
     await page.getByRole('button', { name: 'SSH Hosts', exact: true }).click()
     const providerId = 'stablyai.orca-environments-devpods/devpods'
     const provider = page.locator(`[data-environment-provider-id="${providerId}"]`)
@@ -158,6 +211,9 @@ test('a selected paired host owns provider accounts, all six actions and externa
           actualHostProviderInvocations: 6,
           runtimeVersion: runtime.version,
           localProviderCatalogEmpty: true,
+          catalogInstallAndApprovalOnSelectedHost: true,
+          releaseAndConsentNameControlHost: true,
+          installationAndApprovalExecuteNoProviderCode: true,
           userHostSwitchesPreserveHistoryWithoutExecution: true,
           externalHostDisablePublishesSavedHistory: true,
           debugStoreExposed: false,
@@ -168,6 +224,13 @@ test('a selected paired host owns provider accounts, all six actions and externa
       )
     )
   } finally {
+    const evidence = getPluginEvidenceDirectory()
+    if (existsSync(evidence)) {
+      await writeFile(
+        join(evidence, 'remote-catalog-console.json'),
+        JSON.stringify(catalogMessages, null, 2)
+      )
+    }
     if (client) {
       await clientSession.close(client.app)
     }

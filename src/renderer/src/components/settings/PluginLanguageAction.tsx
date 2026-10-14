@@ -1,3 +1,4 @@
+import { usePluginCatalogHost } from './plugin-catalog-host-context'
 import { useState } from 'react'
 import { Languages, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -12,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '../ui/dropdown-menu'
-import type { PluginLanguagePackRegistration } from '../../../../shared/plugins/plugin-language-pack-artifact'
+import type { PluginCatalogLanguageMetadata } from '../../../../shared/plugins/plugin-management-api'
 
 export function PluginLanguageAction({
   pluginKey,
@@ -21,10 +22,11 @@ export function PluginLanguageAction({
   pluginKey: string
   disabled?: boolean
 }): React.JSX.Element | null {
-  const packs = usePluginLanguagePackStore((state) => state.packs).filter(
-    (pack) => pack.pluginKey === pluginKey
-  )
-  const selected = useAppStore((state) => state.settings?.uiLanguage)
+  const host = usePluginCatalogHost()
+  const localPacks = usePluginLanguagePackStore((state) => state.packs)
+  const packs = (host?.languagePacks ?? localPacks).filter((pack) => pack.pluginKey === pluginKey)
+  const localSelected = useAppStore((state) => state.settings?.uiLanguage)
+  const selected = host?.settings.uiLanguage ?? localSelected
   const [busy, setBusy] = useState(false)
   if (!packs.length) {
     return null
@@ -36,15 +38,16 @@ export function PluginLanguageAction({
       </Badge>
     )
   }
-  const applyLanguage = async (pack: PluginLanguagePackRegistration): Promise<void> => {
+  const applyLanguage = async (pack: PluginCatalogLanguageMetadata): Promise<void> => {
     if (busy || disabled) {
       return
     }
     setBusy(true)
     try {
-      await useAppStore
-        .getState()
-        .updateSettingsOrThrow({ uiLanguage: pack.builtInLocale ?? pack.id })
+      const updates = { uiLanguage: pack.builtInLocale ?? pack.id }
+      await (host
+        ? host.updateSettings(updates)
+        : useAppStore.getState().updateSettingsOrThrow(updates))
     } catch {
       toast.error(
         translate(

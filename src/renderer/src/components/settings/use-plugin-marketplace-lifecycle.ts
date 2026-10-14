@@ -1,3 +1,4 @@
+import { usePluginCatalogApi } from './plugin-catalog-host-context'
 import {
   useEffect,
   useState,
@@ -34,6 +35,7 @@ export function usePluginMarketplaceLifecycle({
   cancelRollback: () => void
   confirmRollback: (pluginKey: string) => Promise<void>
 } {
+  const api = usePluginCatalogApi()
   const [rollbackPluginId, setRollbackPluginId] = useState<string | null>(null)
   const [rollbackError, setRollbackError] = useState<string | null>(null)
   const rollbackPlugin = plugins.find((plugin) => plugin.pluginKey === rollbackPluginId) ?? null
@@ -47,7 +49,7 @@ export function usePluginMarketplaceLifecycle({
 
   const reloadAfterMutation = async (pluginKey: string): Promise<void> => {
     try {
-      const nextPlugins = await window.api.plugins.list()
+      const nextPlugins = await api.list()
       if (!mountedRef.current) {
         return
       }
@@ -67,7 +69,7 @@ export function usePluginMarketplaceLifecycle({
     setBusyPluginKeys((current) => new Set(current).add(pluginKey))
     setRollbackError(null)
     try {
-      const result = await window.api.plugins.rollbackMarketplacePlugin({ pluginKey })
+      const result = await api.rollbackMarketplacePlugin({ pluginKey })
       if (!result.ok) {
         throw new Error(result.error)
       }

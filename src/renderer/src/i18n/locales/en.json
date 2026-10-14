@@ -11822,7 +11822,7 @@
           "subtitle": "{{value0}} v{{value1}} · {{value2}}",
           "reconsent": "The source, permissions, executable content, or instructions changed since you last reviewed this plugin. Review it again before it can run.",
           "capabilities": "This plugin can",
-          "warning": "These permissions limit how the plugin uses Orca's API. Its worker still runs as a normal process on your computer with full access to your files, network, and other processes.",
+          "warning": "These permissions limit how the plugin uses Orca's API. Its worker still runs as a normal process on the selected host with full access to your files, network, and other processes.",
           "instructionalWarning": "This plugin has no worker process. Its instructional content can still cause actions when you or an agent use it. Review the instructions and commands below before enabling it.",
           "panelWarning": "These permissions limit how the plugin uses Orca's API. This plugin has no background worker.",
           "declarativeWarning": "This plugin contributes validated content only. It does not run a background worker or receive access to Orca's API.",
@@ -11883,14 +11883,15 @@
           "gitTab": "Git URL",
           "localLabel": "Plugin folder path",
           "localPlaceholder": "/Users/you/plugins/my-plugin or C:\\Users\\you\\plugins\\my-plugin",
-          "localHelp": "Full path to a folder containing orca-plugin.json on this computer. The path is used exactly as entered.",
+          "localHelp": "Full path to a folder containing orca-plugin.json on the selected host. The path is used exactly as entered.",
           "gitLabel": "Repository URL with #ref",
           "gitPlaceholder": "https://git.example/acme/orca-notes#v0.1.0",
           "gitHelp": "Append an explicit #ref — a tag or commit — so the install is pinned. Works with GitHub, GitLab, and any git host.",
           "cancel": "Cancel",
           "installing": "Installing…",
           "install": "Install",
-          "installFailed": "Plugin installation failed. Check the source and try again."
+          "installFailed": "Plugin installation failed. Check the source and try again.",
+          "remotePath": "Folder paths and Git credentials belong to {{host}}."
         },
         "PluginKeybindingConsentPreview": {
           "heading": "Keyboard shortcuts",
@@ -11949,7 +11950,7 @@
           "includes": "Includes",
           "noContributions": "Manifest metadata only",
           "capabilities": "Requested access",
-          "workerWarning": "Capabilities limit how this plugin uses Orca's API. Its worker still runs as a normal process on this computer with full access to your files, network, and other processes.",
+          "workerWarning": "Capabilities limit how this plugin uses Orca's API. Its worker still runs as a normal process on the selected host with full access to your files, network, and other processes.",
           "blocked": "Orca's safety list blocks this plugin: {{value0}}",
           "current": "This exact plugin content is already installed.",
           "close": "Close",
@@ -12011,7 +12012,7 @@
         },
         "PluginsSettingsSection": {
           "systemLabel": "Plugin system",
-          "systemDescription": "Data packs become available when you install them. Plugins that run code or add instructions need your approval. Workers run on this computer; SSH workspace actions route through Orca.",
+          "systemDescription": "Data packs become available when you install them. Plugins that run code or add instructions need your approval. Workers run on the selected host; SSH workspace actions route through Orca.",
           "featureOff": "Turn on the plugin system to see and manage installed plugins. Anything already installed stays on disk and stays disabled while the system is off.",
           "loading": "Loading plugins…",
           "noInstalledResultsTitle": "No matching plugins",
@@ -12027,7 +12028,8 @@
           "logsFailed": "Could not load plugin logs.",
           "rollbackFailed": "Could not roll back this plugin. A previous immutable version may not be available.",
           "themeApplyFailed": "The plugin was enabled, but Orca could not apply its terminal theme.",
-          "optionalFeatureOff": "Turn on the plugin system to browse and manage optional plugins. Installed optional packages stay on disk and stay disabled while the system is off."
+          "optionalFeatureOff": "Turn on the plugin system to browse and manage optional plugins. Installed optional packages stay on disk and stay disabled while the system is off.",
+          "remoteDescription": "Install and manage plugins on {{host}}. Approvals and plugin settings belong to this host."
         },
         "PluginSettingsRow": {
           "blocked": "Blocked",
@@ -13001,6 +13003,16 @@
           "observation": "Last recorded inventory and operations. Connection loss or a missing row does not establish machine deletion.",
           "readonly": "Saved history · provider inactive. Enable and review this provider in Plugins to refresh or manage these machines.",
           "show": "Show saved inventory"
+        },
+        "PluginCatalogHostSection": {
+          "unavailable": "Could not open the catalog on this host. Check its connection and Orca version, then reopen the review.",
+          "opening": "Opening this host’s plugin catalog…",
+          "managing": "Managing plugins on {{host}}"
+        },
+        "PluginEnvironmentHostSection": {
+          "opening": "Opening providers on this host…",
+          "retry": "Reopen review",
+          "unavailable": "Could not open providers on this host. Check its connection and Orca version, then reopen the review."
         }
       },
       "right": {

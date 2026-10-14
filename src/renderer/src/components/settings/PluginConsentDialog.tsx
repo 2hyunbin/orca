@@ -1,3 +1,4 @@
+import { PluginCatalogHostLabel } from './PluginCatalogHostLabel'
 import { useRef, useState } from 'react'
 import { AlertTriangle, Check, Loader2 } from 'lucide-react'
 import type { PluginHostListEntry } from '../../../../preload/api-types'
@@ -201,6 +202,7 @@ export function PluginConsentDialog({
                     { value0: plugin.name, value1: plugin.version, value2: plugin.publisher }
                   )}
                 </DialogDescription>
+                <PluginCatalogHostLabel />
               </DialogHeader>
               <div className="flex flex-wrap items-center gap-2">
                 <PluginConsentProvenance
@@ -222,7 +224,7 @@ export function PluginConsentDialog({
                 {plugin.hasWorker
                   ? translate(
                       'auto.components.settings.PluginConsentDialog.warning',
-                      "These permissions limit how the plugin uses Orca's API. Its worker still runs as a normal process on your computer with full access to your files, network, and other processes."
+                      "These permissions limit how the plugin uses Orca's API. Its worker still runs as a normal process on the selected host with full access to your files, network, and other processes."
                     )
                   : hasEnvironmentRecipes(plugin)
                     ? translate(

@@ -231,3 +231,26 @@ it('keeps catalog reads and mutations on the same pinned review connection', asy
   cleanups.push(() => providerOnly.close())
   await expect(providerOnly.manage('state', {})).rejects.toThrow('does not manage plugins')
 })
+
+it('returns language choices without transferring their translation catalogs', async () => {
+  const f = await fixture()
+  vi.spyOn(f.service.contentPacks.languagePacks, 'list').mockReturnValue([
+    {
+      id: 'plugin:company.languages/fr',
+      resourceLanguage: 'pluginfr',
+      pluginKey: 'company.languages',
+      locale: 'fr',
+      displayName: 'French',
+      catalog: { neverTransferThisCatalog: 'translations remain on the selected host' }
+    }
+  ])
+  expect(unwrapRuntimeRpcResult(await f.call('listLanguagePacks'))).toEqual([
+    {
+      id: 'plugin:company.languages/fr',
+      resourceLanguage: 'pluginfr',
+      pluginKey: 'company.languages',
+      locale: 'fr',
+      displayName: 'French'
+    }
+  ])
+})

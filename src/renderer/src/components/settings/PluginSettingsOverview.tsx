@@ -83,7 +83,7 @@ export function PluginSettingsOverview({
         labelId="plugin-system-label"
         description={translate(
           'auto.components.settings.PluginsSettingsSection.systemDescription',
-          'Data packs become available when you install them. Plugins that run code or add instructions need your approval. Workers run on this computer; SSH workspace actions route through Orca.'
+          'Data packs become available when you install them. Plugins that run code or add instructions need your approval. Workers run on the selected host; SSH workspace actions route through Orca.'
         )}
         alignTop
         control={

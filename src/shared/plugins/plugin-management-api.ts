@@ -8,6 +8,7 @@ import { bundledDataPluginKeySchema } from './plugin-bundled-data-state'
 import { isAllowedPluginGitUrl } from './plugin-install-lockfile'
 import { normalizeUiLanguage } from '../ui-language'
 import type { GlobalSettings } from '../global-settings-types'
+import type { PluginLanguagePackRegistration } from './plugin-language-pack-artifact'
 import type { PluginsApi } from '../../preload/api/plugin-host-api'
 
 export const PLUGIN_MANAGEMENT_RUNTIME_CAPABILITY = 'plugins.management.v1' as const
@@ -52,6 +53,7 @@ export const pluginManagementInputs = {
   install: pluginManagementInstallSchema,
   remove: pluginInstalledSelectionSchema,
   getLogs: pluginInstalledSelectionSchema,
+  listLanguagePacks: z.strictObject({}),
   listTerminalThemes: z.strictObject({}),
   listBundledData: z.strictObject({}),
   setBundledDataEnabled: z.strictObject({
@@ -60,8 +62,11 @@ export const pluginManagementInputs = {
   })
 }
 type ApiMethod = Exclude<keyof typeof pluginManagementInputs, 'state' | 'updateSettings'>
+export type PluginCatalogLanguageMetadata = Omit<PluginLanguagePackRegistration, 'catalog'>
 export type PluginManagementResults = {
-  [Method in ApiMethod]: Awaited<ReturnType<NonNullable<PluginsApi[Method]>>>
+  [Method in ApiMethod]: Method extends 'listLanguagePacks'
+    ? PluginCatalogLanguageMetadata[]
+    : Awaited<ReturnType<NonNullable<PluginsApi[Method]>>>
 } & { state: PluginManagementSettings; updateSettings: PluginManagementSettings }
 export type PluginManagementMethod = keyof PluginManagementResults
 export type PluginManagementInput<Method extends PluginManagementMethod> = z.input<
@@ -84,6 +89,7 @@ export const pluginManagementRequestSchema = z.discriminatedUnion('method', [
   request('install', pluginManagementInputs.install),
   request('remove', pluginManagementInputs.remove),
   request('getLogs', pluginManagementInputs.getLogs),
+  request('listLanguagePacks', pluginManagementInputs.listLanguagePacks),
   request('listTerminalThemes', pluginManagementInputs.listTerminalThemes),
   request('listBundledData', pluginManagementInputs.listBundledData),
   request('setBundledDataEnabled', pluginManagementInputs.setBundledDataEnabled),

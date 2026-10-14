@@ -1,3 +1,5 @@
+import { PluginCatalogHostLabel } from './PluginCatalogHostLabel'
+import { usePluginCatalogApi } from './plugin-catalog-host-context'
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import type { PluginMarketplaceHostSourceState } from '../../../../preload/api-types'
@@ -33,6 +35,7 @@ export function PluginMarketplaceSourceDialog({
   onOpenChange,
   onChanged
 }: PluginMarketplaceSourceDialogProps): React.JSX.Element {
+  const api = usePluginCatalogApi()
   const urlRef = useRef<HTMLInputElement>(null)
   const [url, setUrl] = useState('')
   const [gitRef, setGitRef] = useState('main')
@@ -53,7 +56,7 @@ export function PluginMarketplaceSourceDialog({
     setBusyAction('add')
     setError(null)
     try {
-      await window.api.plugins.addMarketplace({
+      await api.addMarketplace({
         kind: 'git',
         url: url.trim(),
         ref: gitRef.trim()
@@ -80,7 +83,7 @@ export function PluginMarketplaceSourceDialog({
     setBusyAction(`refresh:${sourceId}`)
     setError(null)
     try {
-      await window.api.plugins.refreshMarketplaces({ sourceId })
+      await api.refreshMarketplaces({ sourceId })
       await onChanged()
     } catch (cause) {
       setError(
@@ -101,7 +104,7 @@ export function PluginMarketplaceSourceDialog({
     setBusyAction(`remove:${sourceId}`)
     setError(null)
     try {
-      await window.api.plugins.removeMarketplace({ sourceId })
+      await api.removeMarketplace({ sourceId })
       await onChanged()
     } catch (cause) {
       setError(
@@ -142,6 +145,7 @@ export function PluginMarketplaceSourceDialog({
               'Marketplaces are pinned Git repositories. Orca uses your existing system Git credentials for private repositories.'
             )}
           </DialogDescription>
+          <PluginCatalogHostLabel />
         </DialogHeader>
         <div className="space-y-3 rounded-lg border border-border p-4">
           <div className="space-y-1">

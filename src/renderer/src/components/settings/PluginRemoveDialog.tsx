@@ -1,3 +1,4 @@
+import { PluginCatalogHostLabel } from './PluginCatalogHostLabel'
 import { useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { PluginHostListEntry } from '../../../../preload/api-types'
@@ -51,6 +52,7 @@ export function PluginRemoveDialog({
                   { value0: plugin?.name ?? '' }
                 )}
           </DialogDescription>
+          <PluginCatalogHostLabel />
         </DialogHeader>
         <DialogFooter>
           <Button ref={cancelRef} variant="ghost" disabled={busy} onClick={onCancel}>

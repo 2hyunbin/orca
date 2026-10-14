@@ -1,3 +1,4 @@
+import { PluginCatalogHostLabel } from './PluginCatalogHostLabel'
 import { AlertTriangle, Check, Loader2 } from 'lucide-react'
 import type { PluginMarketplaceHostInstallPreview } from '../../../../preload/api-types'
 import { translate } from '@/i18n/i18n'
@@ -90,6 +91,7 @@ export function PluginMarketplacePreviewDialog({
                   </div>
                 </div>
               </div>
+              <PluginCatalogHostLabel />
             </DialogHeader>
             <div
               role="region"
@@ -159,7 +161,7 @@ export function PluginMarketplacePreviewDialog({
                   <span>
                     {translate(
                       'auto.components.settings.PluginMarketplacePreviewDialog.workerWarning',
-                      "Capabilities limit how this plugin uses Orca's API. Its worker still runs as a normal process on this computer with full access to your files, network, and other processes."
+                      "Capabilities limit how this plugin uses Orca's API. Its worker still runs as a normal process on the selected host with full access to your files, network, and other processes."
                     )}
                   </span>
                 </div>
