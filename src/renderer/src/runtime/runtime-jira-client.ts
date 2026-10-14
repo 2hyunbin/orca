@@ -1,6 +1,5 @@
 import type {
   JiraAuthType,
-  JiraComment,
   JiraConnectionStatus,
   JiraCreateField,
   JiraIssue,
@@ -16,16 +15,14 @@ import type {
   JiraViewer
 } from '../../../shared/jira-types'
 import { searchLocalJiraIssues } from './local-jira-search-cancellation'
-import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
-import { JIRA_IMAGE_CAPABILITY } from '../../../shared/jira-attachment-image'
-import { migrateLegacyJiraImages, clearJiraImageCache } from './runtime-jira-image-cache'
-import { RuntimeRpcCallError } from './runtime-rpc-result'
+import { callRuntimeRpc } from './runtime-rpc-client'
+import { clearJiraImageCache } from './runtime-jira-image-cache'
 import { isRuntimeProviderSearchQueryWithinLimit } from './runtime-provider-search-bounds'
-import { readRuntimeJiraPayload } from './runtime-jira-payload-stream'
 import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
 
 export { jiraLookupIssueSummary, jiraReadStatus } from './runtime-jira-summary-client'
+export { jiraGetIssue, jiraIssueComments } from './runtime-jira-detail-client'
 export {
   jiraCreateIssue,
   jiraListAssignableUsers,
@@ -36,24 +33,6 @@ export type { RuntimeJiraSettings } from './runtime-jira-target'
 
 export type JiraConnectResult = { ok: true; viewer: JiraViewer } | { ok: false; error: string }
 export type JiraCommentResult = { ok: true; id: string } | { ok: false; error: string }
-
-async function readRemoteJiraPayload<TResult>(
-  target: { kind: 'environment'; environmentId: string },
-  streamMethod: string,
-  fallbackMethod: string,
-  args: unknown
-): Promise<TResult> {
-  try {
-    return await readRuntimeJiraPayload<TResult>(target, streamMethod, args)
-  } catch (error) {
-    if (!(error instanceof RuntimeRpcCallError) || error.code !== 'method_not_found') {
-      throw error
-    }
-    // Older runtimes predate image payload streaming but still return text-only
-    // Jira details safely through the original one-shot method.
-    return callRuntimeRpc<TResult>(target, fallbackMethod, args, { timeoutMs: 30_000 })
-  }
-}
 
 export async function jiraStatus(settings: RuntimeJiraSettings): Promise<JiraConnectionStatus> {
   const target = getJiraRuntimeTarget(settings)
@@ -150,38 +129,6 @@ export async function jiraListIssues(
     : window.api.jira.listIssues(args)
 }
 
-export async function jiraGetIssue(
-  settings: RuntimeJiraSettings,
-  key: string,
-  siteId?: string | null
-): Promise<JiraIssue | null> {
-  const target = getJiraRuntimeTarget(settings)
-  const references =
-    target.kind === 'local' ||
-    (await runtimeEnvironmentSupportsCapability(target.environmentId, JIRA_IMAGE_CAPABILITY))
-  const args = {
-    key,
-    siteId: siteId ?? undefined,
-    ...(references ? { mediaFormat: 'reference' as const } : {})
-  }
-  const issue =
-    target.kind === 'environment'
-      ? references
-        ? await callRuntimeRpc<JiraIssue | null>(target, 'jira.getIssue', args, {
-            timeoutMs: 30_000
-          })
-        : await readRemoteJiraPayload<JiraIssue | null>(
-            target,
-            'jira.getIssueStream',
-            'jira.getIssue',
-            args
-          )
-      : await window.api.jira.getIssue(args)
-  return issue
-    ? { ...issue, description: migrateLegacyJiraImages(issue.description ?? '', target) }
-    : null
-}
-
 export async function jiraUpdateIssue(
   settings: RuntimeJiraSettings,
   key: string,
@@ -208,39 +155,6 @@ export async function jiraAddIssueComment(
         timeoutMs: 30_000
       })
     : window.api.jira.addIssueComment(args)
-}
-
-export async function jiraIssueComments(
-  settings: RuntimeJiraSettings,
-  key: string,
-  siteId?: string | null
-): Promise<JiraComment[]> {
-  const target = getJiraRuntimeTarget(settings)
-  const references =
-    target.kind === 'local' ||
-    (await runtimeEnvironmentSupportsCapability(target.environmentId, JIRA_IMAGE_CAPABILITY))
-  const args = {
-    key,
-    siteId: siteId ?? undefined,
-    ...(references ? { mediaFormat: 'reference' as const } : {})
-  }
-  const comments =
-    target.kind === 'environment'
-      ? references
-        ? await callRuntimeRpc<JiraComment[]>(target, 'jira.issueComments', args, {
-            timeoutMs: 30_000
-          })
-        : await readRemoteJiraPayload<JiraComment[]>(
-            target,
-            'jira.issueCommentsStream',
-            'jira.issueComments',
-            args
-          )
-      : await window.api.jira.issueComments(args)
-  return comments.map((comment) => ({
-    ...comment,
-    body: migrateLegacyJiraImages(comment.body, target)
-  }))
 }
 
 export async function jiraListProjects(
