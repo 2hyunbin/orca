@@ -147,11 +147,11 @@ export function TaskPageJiraBoard({
               <Badge variant="secondary">
                 <span className="truncate">{section.label || '—'}</span>
               </Badge>
-              <span className="text-[11px] text-muted-foreground">{section.issues.length}</span>
+              <span className="text-2xs text-muted-foreground">{section.issues.length}</span>
             </div>
             <div className="min-h-16 space-y-2 p-2">
               {section.issues.length === 0 ? (
-                <div className="flex h-12 items-center justify-center rounded-md border border-dashed border-border/50 text-[11px] text-muted-foreground">
+                <div className="flex h-12 items-center justify-center rounded-md border border-dashed border-border/50 text-2xs text-muted-foreground">
                   {translate('auto.components.TaskPage.jiraBoardEmptyColumn', 'No issues')}
                 </div>
               ) : null}
@@ -199,10 +199,10 @@ export function TaskPageJiraBoard({
                   >
                     <div className="flex min-w-0 items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                        <div className="flex min-w-0 items-center gap-1.5 font-mono text-2xs text-muted-foreground">
                           <span className="truncate">{issue.key}</span>
                           {issue.priority ? (
-                            <span className="truncate font-sans text-[10px]">
+                            <span className="truncate font-sans text-3xs">
                               {issue.priority.name}
                             </span>
                           ) : null}
@@ -293,19 +293,19 @@ export function TaskPageJiraBoard({
                         {labels.map((label) => (
                           <span
                             key={label}
-                            className="max-w-[140px] truncate rounded-full border border-border/50 bg-muted/35 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                            className="max-w-[140px] truncate rounded-full border border-border/50 bg-muted/35 px-1.5 py-0.5 text-3xs text-muted-foreground"
                           >
                             {label}
                           </span>
                         ))}
                         {issue.labels.length > labels.length ? (
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-3xs text-muted-foreground">
                             +{issue.labels.length - labels.length}
                           </span>
                         ) : null}
                       </div>
                     ) : null}
-                    <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                    <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-2xs text-muted-foreground">
                       <div className="flex min-w-0 items-center gap-1.5">
                         {issue.assignee?.avatarUrl ? (
                           <img
@@ -314,7 +314,7 @@ export function TaskPageJiraBoard({
                             className="size-4 shrink-0 rounded-full"
                           />
                         ) : (
-                          <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/40 text-[9px]">
+                          <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/40 text-3xs">
                             {issue.assignee?.displayName?.slice(0, 1) ?? '-'}
                           </span>
                         )}
@@ -324,7 +324,7 @@ export function TaskPageJiraBoard({
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <span className="max-w-[120px] truncate text-[10px]">{contextLabel}</span>
+                        <span className="max-w-[120px] truncate text-3xs">{contextLabel}</span>
                         <span>{formatUpdatedAt(issue.updatedAt)}</span>
                       </div>
                     </div>

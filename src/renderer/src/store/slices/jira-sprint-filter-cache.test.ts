@@ -17,7 +17,13 @@ it('separates combined filters while treating an unchecked sprint like the defau
     (...args) => ({ settings: null, ...createJiraSlice(...args) }) as AppState
   )
   list.mockImplementation(
-    async (_source, _preset, _limit, _site, filters?: JiraIssueListFilters): Promise<JiraIssue[]> => [
+    async (
+      _source,
+      _preset,
+      _limit,
+      _site,
+      filters?: JiraIssueListFilters
+    ): Promise<JiraIssue[]> => [
       {
         id: 'sprint-cache',
         key: `${filters?.statuses?.join('-') || 'default'}${filters?.currentSprint ? '-sprint' : ''}`,

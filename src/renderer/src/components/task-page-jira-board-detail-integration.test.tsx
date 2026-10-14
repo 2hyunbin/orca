@@ -36,13 +36,11 @@ const runtime = vi.hoisted(() => ({
   jiraUpdateIssueForTarget: vi.fn(),
   refresh: vi.fn()
 }))
-const store = vi.hoisted(
-  (): JiraStoreBoundary & { statusPatches: string[] } => ({
-    settings: { activeRuntimeEnvironmentId: 'board-detail-owner' },
-    patchJiraIssue: () => {},
-    statusPatches: []
-  })
-)
+const store = vi.hoisted((): JiraStoreBoundary & { statusPatches: string[] } => ({
+  settings: { activeRuntimeEnvironmentId: 'board-detail-owner' },
+  patchJiraIssue: () => {},
+  statusPatches: []
+}))
 
 vi.mock('@/runtime/runtime-jira-client', () => runtime)
 vi.mock('@/store', () => ({
@@ -290,11 +288,7 @@ describe('Jira board and detail mutation integration', () => {
       expect(screen.getByTestId('detail-status').textContent).toBe('Done')
       expect(store.statusPatches.slice(queuedPatchCount)).not.toContain('todo')
       expect(store.statusPatches.slice(queuedPatchCount)).not.toContain('review')
-      expect(runtime.jiraGetIssueForTarget).toHaveBeenLastCalledWith(
-        owner,
-        issue.key,
-        issue.siteId
-      )
+      expect(runtime.jiraGetIssueForTarget).toHaveBeenLastCalledWith(owner, issue.key, issue.siteId)
     }
   )
 
@@ -360,7 +354,9 @@ describe('Jira board and detail mutation integration', () => {
         issue.siteId
       )
       expect(runtime.jiraIssueCommentsForTarget).toHaveBeenCalledTimes(1)
-      expect(screen.getByTestId('detail-comments').textContent).not.toContain('Verified from the board')
+      expect(screen.getByTestId('detail-comments').textContent).not.toContain(
+        'Verified from the board'
+      )
 
       if (settlement === 'success') {
         serverIssue = { ...issue, status: done.to }
@@ -380,15 +376,23 @@ describe('Jira board and detail mutation integration', () => {
         await act(async () => boardSave.resolve({ ok: false, error: 'Board transition rejected' }))
         expect((await screen.findByRole('alert')).textContent).toBe('Board transition rejected')
         expect(runtime.jiraIssueCommentsForTarget).toHaveBeenCalledTimes(1)
-        expect(screen.getByTestId('detail-comments').textContent).not.toContain('Verified from the board')
+        expect(screen.getByTestId('detail-comments').textContent).not.toContain(
+          'Verified from the board'
+        )
         expect(runtime.refresh).not.toHaveBeenCalled()
         expect(screen.getByDisplayValue('Verified from the board')).toBeDefined()
-        expect(screen.getByRole('button', { name: 'Change status' }).hasAttribute('disabled')).toBe(false)
+        expect(screen.getByRole('button', { name: 'Change status' }).hasAttribute('disabled')).toBe(
+          false
+        )
       }
       expect(screen.getByText('Existing note')).toBeDefined()
       expect(screen.getByTestId('detail-comments-loading').textContent).toBe('false')
       expect(runtime.jiraIssueCommentsForTarget.mock.calls).toEqual(
-        Array.from({ length: settlement === 'success' ? 2 : 1 }, () => [owner, issue.key, issue.siteId])
+        Array.from({ length: settlement === 'success' ? 2 : 1 }, () => [
+          owner,
+          issue.key,
+          issue.siteId
+        ])
       )
       expect(runtime.jiraAddIssueCommentForTarget).not.toHaveBeenCalled()
     }

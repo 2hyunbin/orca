@@ -97,6 +97,7 @@ export function TaskPageJiraBoardView({
         scope: mutationScope,
         previous: issue,
         optimistic: { status: transition.to },
+        commentsChanged: Boolean(updates.transitionComment?.trim()),
         update: async () => {
           const saved = await applyJiraBoardMove(target, issue, updates)
           latest = saved.latest

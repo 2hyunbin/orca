@@ -56,7 +56,8 @@ export function useTaskPageJiraListEffects(model: TaskPageLinearCollectionEffect
     displayedJiraIssues
   } = model
   const statusOrderOwner = useMemo(
-    () => ipcOrRuntimeTargetForHostId(jiraTaskSourceContext?.hostId ?? accountBackedTaskSourceHostId),
+    () =>
+      ipcOrRuntimeTargetForHostId(jiraTaskSourceContext?.hostId ?? accountBackedTaskSourceHostId),
     [accountBackedTaskSourceHostId, jiraTaskSourceContext]
   )
   const statusOrderRuntimeScopeKey = getTaskPageJiraStatusOrderRuntimeScopeKey(

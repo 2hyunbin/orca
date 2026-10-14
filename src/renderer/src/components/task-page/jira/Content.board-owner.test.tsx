@@ -17,8 +17,11 @@ vi.mock('@/components/task-page-jira-board-view', () => ({
     const [draft, setDraft] = useState('')
     return (
       <div>
-        <input aria-label="Pending board comment" value={draft}
-          onChange={(event) => setDraft(event.target.value)} />
+        <input
+          aria-label="Pending board comment"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
         <output data-testid="board-owner">{JSON.stringify(target)}</output>
         <output data-testid="board-scope">{scopeKey}</output>
       </div>
@@ -36,7 +39,9 @@ vi.mock('@/i18n/i18n', async (importOriginal) => ({
 afterEach(cleanup)
 
 const source: TaskSourceContext = {
-  kind: 'task-source', provider: 'jira', projectId: 'content-owner-project',
+  kind: 'task-source',
+  provider: 'jira',
+  projectId: 'content-owner-project',
   hostId: 'runtime:explicit-jira-owner'
 }
 
@@ -90,7 +95,8 @@ function model(sourceContext: TaskSourceContext | null): TaskPageComposerActions
 it.each([
   { label: 'explicit', sourceContext: source, owner: 'explicit-jira-owner' },
   { label: 'default', sourceContext: null, owner: 'account-jira-owner' }
-])('keeps the $label Jira owner draft through unrelated focus and clears it for a new session',
+])(
+  'keeps the $label Jira owner draft through unrelated focus and clears it for a new session',
   ({ sourceContext, owner }) => {
     const current = model(sourceContext)
     const { rerender } = render(<TaskPageJiraContent model={current} />)
@@ -121,9 +127,15 @@ it('disables sprint filtering in linked mode while retaining its checked prefere
   current.jiraHasWorkspace = true
   const { rerender } = render(<TaskPageJiraContent model={current} />)
   expect(screen.getByRole('switch', { name: 'Current sprint' }).hasAttribute('disabled')).toBe(true)
-  expect(screen.getByRole('switch', { name: 'Current sprint' }).getAttribute('aria-checked')).toBe('true')
+  expect(screen.getByRole('switch', { name: 'Current sprint' }).getAttribute('aria-checked')).toBe(
+    'true'
+  )
   current.jiraHasWorkspace = false
   rerender(<TaskPageJiraContent model={current} />)
-  expect(screen.getByRole('switch', { name: 'Current sprint' }).hasAttribute('disabled')).toBe(false)
-  expect(screen.getByRole('switch', { name: 'Current sprint' }).getAttribute('aria-checked')).toBe('true')
+  expect(screen.getByRole('switch', { name: 'Current sprint' }).hasAttribute('disabled')).toBe(
+    false
+  )
+  expect(screen.getByRole('switch', { name: 'Current sprint' }).getAttribute('aria-checked')).toBe(
+    'true'
+  )
 })

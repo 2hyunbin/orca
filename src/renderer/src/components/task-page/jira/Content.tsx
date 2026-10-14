@@ -17,7 +17,10 @@ import { formatRelativeTime } from '../../task-page-source-context'
 import { getJiraStatusTone } from '@/components/task-page-jira-status-tone'
 import JiraIssueWorkspace from '@/components/JiraIssueWorkspace'
 import { TaskPageLinearContent } from '../linear/Content'
-import { ipcOrRuntimeTargetForHostId, runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
+import {
+  ipcOrRuntimeTargetForHostId,
+  runtimeTargetEnvironmentId
+} from '@/runtime/runtime-client-target'
 import { getEnvironmentRuntimeContextKey } from '@/lib/provider-runtime-context'
 export function TaskPageJiraContent({
   model
@@ -211,31 +214,32 @@ export function TaskPageJiraContent({
               onRefresh={() => setJiraRefreshNonce((value) => value + 1)}
             />
           ) : (
-          <TaskPageJiraIssueList
-            getIssueWorkspaces={getJiraIssueWorkspaces}
-            onOpenWorkspace={(workspace) => {
-              if (
-                activateAndRevealWorktree(workspace.id, { navigationIntent: 'user-open' }) === false
-              ) {
-                toast.error(
-                  translate(
-                    'jira.workspace.openFailed',
-                    'Unable to open the workspace linked to this Jira issue.'
+            <TaskPageJiraIssueList
+              getIssueWorkspaces={getJiraIssueWorkspaces}
+              onOpenWorkspace={(workspace) => {
+                if (
+                  activateAndRevealWorktree(workspace.id, { navigationIntent: 'user-open' }) ===
+                  false
+                ) {
+                  toast.error(
+                    translate(
+                      'jira.workspace.openFailed',
+                      'Unable to open the workspace linked to this Jira issue.'
+                    )
                   )
-                )
-              }
-            }}
-            columns={jiraColumns}
-            formatUpdatedAt={formatRelativeTime}
-            getStatusTone={getJiraStatusTone}
-            issues={sortedJiraIssues}
-            onOpenIssue={openJiraDetailPage}
-            onStartWorkspace={handleUseJiraItem}
-            selectedIssue={selectedJiraIssue}
-            showSiteContext={selectedJiraSiteId === 'all'}
-            statusDirection={jiraOrderBy === 'status' ? jiraOrderDirection : 'asc'}
-            statusOrder={displayedJiraStatusOrder}
-          />
+                }
+              }}
+              columns={jiraColumns}
+              formatUpdatedAt={formatRelativeTime}
+              getStatusTone={getJiraStatusTone}
+              issues={sortedJiraIssues}
+              onOpenIssue={openJiraDetailPage}
+              onStartWorkspace={handleUseJiraItem}
+              selectedIssue={selectedJiraIssue}
+              showSiteContext={selectedJiraSiteId === 'all'}
+              statusDirection={jiraOrderBy === 'status' ? jiraOrderDirection : 'asc'}
+              statusOrder={displayedJiraStatusOrder}
+            />
           )}
         </div>
         <JiraIssueWorkspace
