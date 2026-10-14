@@ -1160,12 +1160,18 @@ jobs:
       - name: Build native components
         run: pnpm run build:native
 
+      - uses: ./.github/actions/prepare-orcad-prebuilds
+
+      - name: Build packaged SSH deployment template
+        run: node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc
+
       - wait: [linux-package-tools, web-client]
 
       - name: Package unpacked app
         env:
           ORCA_BACKGROUND_LAUNCH: '1'
           ORCA_REUSE_PREPARED_NATIVE_RUNTIME: '1'
+          ORCA_REQUIRE_ORCAD_TEMPLATE: '1'
         # Prepare once with every hook, then isolate the format-specific mutations.
         run: |
           pnpm exec electron-builder --config config/electron-builder.config.cjs --linux dir --x64 --publish never

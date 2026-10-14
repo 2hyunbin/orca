@@ -11,6 +11,29 @@ const compiler = steps.find((step) => step.id === 'typecheck')
 const compilerJoin = steps.findIndex((step) => step.wait === 'typecheck')
 const plan = steps.find((step) => step.id === 'unit-plan')
 
+it('embeds the required SSH deployment template before testing the Linux package', () => {
+  const packageSteps = workflow.jobs.package.steps
+  const prebuild = packageSteps.findIndex(
+    (step) => step.uses === './.github/actions/prepare-orcad-prebuilds'
+  )
+  const template = packageSteps.findIndex(
+    (step) => step.name === 'Build packaged SSH deployment template'
+  )
+  const bundle = packageSteps.findIndex((step) => step.name === 'Package unpacked app')
+  const journey = packageSteps.findIndex((step) => step.name === 'Verify packaged plugin journeys')
+  expect(prebuild).toBeGreaterThan(-1)
+  expect(template).toBeGreaterThan(prebuild)
+  expect(bundle).toBeGreaterThan(template)
+  expect(journey).toBeGreaterThan(bundle)
+  expect(packageSteps[template].run).toBe(
+    'node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc'
+  )
+  expect(packageSteps[template]['continue-on-error']).toBeUndefined()
+  expect(packageSteps[bundle].env.ORCA_REQUIRE_ORCAD_TEMPLATE).toBe('1')
+  expect(packageSteps[journey].run).toContain('plugin-packaged-ssh.spec.ts')
+  expect(packageSteps[journey].env.ORCA_ORCAD_TEMPLATE_PATH).toBeUndefined()
+})
+
 it('shares one setup and overlaps the compiler only after type-aware checks finish', () => {
   expect(workflow.jobs.static_analysis).toBeUndefined()
   expect(workflow.jobs.typecheck).toBeUndefined()
