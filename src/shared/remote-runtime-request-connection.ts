@@ -20,7 +20,10 @@ import {
   remoteRuntimeTimeoutError,
   remoteRuntimeUnavailableError
 } from './remote-runtime-request-frames'
-import { settleRemoteRuntimeRequestRpcFrame } from './remote-runtime-request-rpc-frame'
+import {
+  settleRemoteRuntimeRequestRpcFrame,
+  rejectRemoteRuntimePendingRequest
+} from './remote-runtime-request-rpc-frame'
 import type { RuntimeRpcResponse } from './runtime-rpc-envelope'
 import {
   rejectRemoteRuntimeRequestReadyWaiters,
@@ -304,15 +307,9 @@ export class RemoteRuntimeRequestConnection {
   }
 
   private rejectPendingRequest(requestId: string, error: Error): void {
-    const pending = this.pendingRequests.get(requestId)
-    if (!pending) {
-      return
+    if (rejectRemoteRuntimePendingRequest(this.pendingRequests, requestId, error)) {
+      this.scheduleIdleCloseIfUnused()
     }
-    this.pendingRequests.delete(requestId)
-    clearTimeout(pending.timeout)
-    releaseRemoteRuntimePreparedRequest(pending)
-    pending.reject(error)
-    this.scheduleIdleCloseIfUnused()
   }
 
   private scheduleIdleCloseIfUnused(): void {

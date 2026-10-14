@@ -24,7 +24,10 @@ import {
   type EnvironmentAdapterRuntime
 } from './plugin-environment-adapter-launch'
 import { environmentAdapterRuntime } from './plugin-environment-adapter-runtime'
-import type { EnvironmentCommandInvocation } from './plugin-environment-command-execution'
+import type {
+  EnvironmentCommandInvocation,
+  EnvironmentCommandRequest
+} from './plugin-environment-command-execution'
 import {
   pluginEnvironmentProviderReviewSchema,
   type PluginEnvironmentProviderReview
@@ -132,7 +135,7 @@ export class PluginEnvironmentRecipeHost {
     },
     requestSignal?: AbortSignal
   ) {
-    return async (invocation: EnvironmentCommandInvocation<object>) => {
+    return async (invocation: EnvironmentCommandInvocation<EnvironmentCommandRequest>) => {
       if (
         invocation.recipeDigest !== review.recipeDigest ||
         invocation.providerId !== review.providerId ||

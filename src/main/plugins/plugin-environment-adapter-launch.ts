@@ -1,6 +1,7 @@
 import {
   environmentCommandInput,
   type EnvironmentCommandInvocation,
+  type EnvironmentCommandRequest,
   type EnvironmentCommandLaunch
 } from './plugin-environment-command-execution'
 import type { PluginEnvironmentRecipeRegistration } from './plugin-environment-recipe-registry'
@@ -20,7 +21,7 @@ await import('data:text/javascript;base64,'+Buffer.from(envelope.source).toStrin
 
 export async function prepareEnvironmentAdapterLaunch(input: {
   authority: PluginRecipeAuthority<PluginEnvironmentRecipe>
-  invocation: EnvironmentCommandInvocation<object>
+  invocation: EnvironmentCommandInvocation<EnvironmentCommandRequest>
   runtime: EnvironmentAdapterRuntime
   signal: AbortSignal
 }): Promise<EnvironmentCommandLaunch | undefined> {

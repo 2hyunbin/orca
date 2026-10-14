@@ -5,6 +5,22 @@ import {
 import { parseRemoteRuntimeRpcFrame } from './remote-runtime-request-frames'
 import type { RuntimeRpcResponse } from './runtime-rpc-envelope'
 
+export function rejectRemoteRuntimePendingRequest(
+  requests: Map<string, RemoteRuntimePendingRequest<unknown>>,
+  requestId: string,
+  error: Error
+): boolean {
+  const pending = requests.get(requestId)
+  if (!pending) {
+    return false
+  }
+  requests.delete(requestId)
+  clearTimeout(pending.timeout)
+  releaseRemoteRuntimePreparedRequest(pending)
+  pending.reject(error)
+  return true
+}
+
 export function settleRemoteRuntimeRequestRpcFrame(args: {
   plaintext: string
   pendingRequests: Map<string, RemoteRuntimePendingRequest<unknown>>

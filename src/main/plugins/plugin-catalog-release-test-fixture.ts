@@ -1,6 +1,8 @@
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { runProcess } from '@orca/process-host'
 import { afterEach, vi } from 'vitest'
 import { createPluginLocaleEnvelope } from '../../shared/plugins/plugin-locale-envelope'
 import { getPluginLocaleKit } from './plugin-locale-source'
@@ -13,12 +15,37 @@ import { inspectPluginInstallTree } from './plugin-install-staging'
 import { PluginMarketplaceService } from './plugin-marketplace-service'
 import { PluginMarketplaceInstaller } from './plugin-marketplace-installer'
 
-const catalogReleaseGit = vi.hoisted(() => ({ checkout: vi.fn(), commit: 'a'.repeat(40) }))
-vi.mock('./plugin-git-repository', () => ({ checkoutPluginGitSource: catalogReleaseGit.checkout }))
 const roots: string[] = []
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
+
+async function commitPack(pack: string, tag: string): Promise<string> {
+  const git = async (args: string[]): Promise<string> => {
+    const result = await runProcess({ program: 'git', args, cwd: pack, timeoutMs: 30_000 })
+    if (result.code !== 0 || result.timedOut || result.outputTruncated) {
+      throw new Error(result.stderr || 'Catalog fixture Git failed')
+    }
+    return result.stdout.trim()
+  }
+  await git(['init', '--quiet', '--template='])
+  await git(['add', '.'])
+  await git([
+    '-c',
+    'commit.gpgsign=false',
+    '-c',
+    'user.name=Plugin fixture',
+    '-c',
+    'user.email=plugins@example.invalid',
+    'commit',
+    '--quiet',
+    '-m',
+    'catalog fixture'
+  ])
+  await git(['tag', '--force', tag])
+  return git(['rev-parse', 'HEAD'])
+}
 
 async function writePack(root: string): Promise<void> {
   await mkdir(root, { recursive: true })
@@ -53,14 +80,25 @@ export async function createCatalogReleaseFixture() {
   const root = await mkdtemp(join(tmpdir(), 'orca-catalog-release-'))
   roots.push(root)
   const pack = join(root, 'pack')
+  const gitConfig = join(root, 'git-config')
+  await writeFile(
+    gitConfig,
+    `[url "${pathToFileURL(pack).href}"]\n\tinsteadOf = https://example.com/community/de.git\n`
+  )
+  vi.stubEnv('GIT_CONFIG_GLOBAL', gitConfig)
+  vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1')
+  vi.stubEnv('GIT_CONFIG_COUNT', '0')
+  vi.stubEnv('GIT_DEFAULT_HASH', 'sha1')
   await writePack(pack)
+  let releaseRef = 'v1.0.0'
+  const commit = await commitPack(pack, releaseRef)
   const inspection = await inspectPluginInstallTree({ rootDir: pack, hostVersion: '1.0.0' })
   if (!inspection.ok) {
     throw new Error(inspection.error)
   }
   const release = pluginCatalogReleaseSchema.parse({
     version: '1.0.0',
-    commit: 'a'.repeat(40),
+    commit,
     contentHash: inspection.contentHash,
     execution: 'data',
     minimumOrca: '1.0.0',
@@ -80,7 +118,11 @@ export async function createCatalogReleaseFixture() {
           {
             id: 'community.locale-de',
             name: 'German',
-            source: { kind: 'git', url: 'https://example.com/community/de.git', ref: 'v1.0.0' },
+            source: {
+              kind: 'git',
+              url: 'https://example.com/community/de.git',
+              ref: releaseRef
+            },
             release
           }
         ]
@@ -92,14 +134,6 @@ export async function createCatalogReleaseFixture() {
     url: 'https://example.com/community/catalog.git',
     ref: 'main'
   })
-  catalogReleaseGit.commit = release.commit
-  let packWriter = writePack
-  catalogReleaseGit.checkout.mockImplementation(
-    async ({ destination }: { destination: string }) => {
-      await packWriter(destination)
-      return catalogReleaseGit.commit
-    }
-  )
   const installer = new PluginMarketplaceInstaller({
     marketplace,
     userDataPath: root,
@@ -113,7 +147,6 @@ export async function createCatalogReleaseFixture() {
     installer,
     source,
     publishPack: async (writer: typeof writePack) => {
-      packWriter = writer
       await rm(pack, { recursive: true, force: true })
       await writer(pack)
       const candidate = await inspectPluginInstallTree({ rootDir: pack, hostVersion: '1.0.0' })
@@ -124,16 +157,16 @@ export async function createCatalogReleaseFixture() {
       release.contentHash = candidate.contentHash
       release.execution = candidate.manifest.execution
       release.types = pluginCatalogTypes(candidate.manifest)
-      release.commit = 'b'.repeat(40)
-      catalogReleaseGit.commit = release.commit
+      releaseRef = `v${release.version}`
+      release.commit = await commitPack(pack, releaseRef)
       await marketplace.refreshSource(source.id)
     },
     setOwner: (value: string) => {
       owner = value
+    },
+    moveReleaseTag: async () => {
+      await writeFile(join(pack, 'moved-tag.txt'), 'This tag moved after publication.\n')
+      await commitPack(pack, releaseRef)
     }
   }
-}
-
-export function setCatalogReleaseCommit(value: string): void {
-  catalogReleaseGit.commit = value
 }

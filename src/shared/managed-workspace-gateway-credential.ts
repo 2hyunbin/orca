@@ -6,6 +6,24 @@ import {
 const PREFIX = 'orca-gateway-v1:'
 const MAX_CREDENTIAL_BYTES = 2048
 
+export function resolveManagedWorkspaceGatewayCredential(
+  token: string,
+  route: { environmentId: string; targetGeneration: number } | undefined
+): { parentToken?: string } | null {
+  const credential = parseManagedWorkspaceGatewayCredential(token)
+  if (!credential) {
+    return {}
+  }
+  if (
+    !route ||
+    credential.environmentId !== route.environmentId ||
+    credential.targetGeneration !== route.targetGeneration
+  ) {
+    return null
+  }
+  return { parentToken: credential.parentToken }
+}
+
 /** Old peers cannot mistake this audience-bound credential for an ordinary paired bearer. */
 export function managedWorkspaceGatewayCredential(
   parentToken: string,

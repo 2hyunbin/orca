@@ -20,14 +20,17 @@ const languageMetadataSchema = pluginSyntaxLanguageSchema
   })
   .strict()
 
-const metadataShape = z.strictObject({
+const syntaxPackIdentitySchema = z.strictObject({
   pluginKey: z.string().refine(isQualifiedPluginKey),
   name: z.string().min(1).max(256),
   revision: z.string().min(1).max(128),
   languages: z.array(languageMetadataSchema).min(1).max(PLUGIN_SYNTAX_LANGUAGE_LIMIT)
 })
 
-function validateIdentities(pack: z.infer<typeof metadataShape>, ctx: z.RefinementCtx): void {
+function validateIdentities(
+  pack: z.infer<typeof syntaxPackIdentitySchema>,
+  ctx: z.RefinementCtx
+): void {
   const keys = new Set<string>()
   const scopes = new Set<string>()
   for (const [index, language] of pack.languages.entries()) {
@@ -49,9 +52,10 @@ function validateIdentities(pack: z.infer<typeof metadataShape>, ctx: z.Refineme
   }
 }
 
-export const pluginSyntaxPackMetadataSchema = metadataShape.superRefine(validateIdentities)
+export const pluginSyntaxPackMetadataSchema =
+  syntaxPackIdentitySchema.superRefine(validateIdentities)
 
-export const pluginSyntaxPackPayloadSchema = metadataShape
+export const pluginSyntaxPackPayloadSchema = syntaxPackIdentitySchema
   .extend({
     languages: z
       .array(

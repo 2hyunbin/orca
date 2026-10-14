@@ -6,9 +6,10 @@ type ProviderActivity = {
   resourceId?: string
   allResources?: boolean
 }
+type ProviderActivitySlot = symbol
 
 export class PluginEnvironmentProviderActivity extends HostOperationLifetime {
-  private readonly providers = new Map<object, ProviderActivity>()
+  private readonly providers = new Map<ProviderActivitySlot, ProviderActivity>()
   constructor() {
     super('The environment provider host is shutting down')
   }
@@ -21,12 +22,12 @@ export class PluginEnvironmentProviderActivity extends HostOperationLifetime {
     ) {
       throw new Error('An environment operation is already running on this host or provider')
     }
-    const slot = {}
+    const slot = Symbol(providerId)
     this.providers.set(slot, { providerId, mutation: false })
     return { slot, finish: this.begin() }
   }
 
-  update(slot: object, entry: ProviderActivity): void {
+  update(slot: ProviderActivitySlot, entry: ProviderActivity): void {
     if (!this.providers.has(slot)) {
       throw new Error('The environment operation is no longer owned by this host')
     }
@@ -38,7 +39,7 @@ export class PluginEnvironmentProviderActivity extends HostOperationLifetime {
   values() {
     return this.providers.values()
   }
-  release(slot: object): void {
+  release(slot: ProviderActivitySlot): void {
     this.providers.delete(slot)
   }
 }

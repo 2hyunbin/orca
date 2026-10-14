@@ -137,7 +137,12 @@ test('installs an exact viewer release with a separate opened-file approval and 
     await launched.page.getByRole('button', { name: 'Reload viewer' }).click()
     await expect.poll(() => viewerText(launched!.app)).toContain('Updated saved file')
     await capture(launched.page, testInfo, 'viewer-reloaded-file-tab', launched.app)
-    const openBinary = async (filename: string, value: object, name: string): Promise<void> => {
+    type BinaryViewerFixture = { title: string } | { color: readonly number[] }
+    const openBinary = async (
+      filename: string,
+      value: BinaryViewerFixture,
+      name: string
+    ): Promise<void> => {
       const filePath = join(workspace, filename)
       await writeFile(
         filePath,

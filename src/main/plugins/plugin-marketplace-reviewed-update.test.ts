@@ -268,6 +268,7 @@ async function providerUpdate() {
   const preview = await f.installer.preview(f.source.id, pluginKey)
   const request = {
     ...f.request,
+    resolvedCommit: preview.resolvedCommit,
     contentHash: preview.contentHash,
     reviewedFingerprint: preview.consentFingerprint,
     reviewedRevision: preview.reviewRevision ?? '',

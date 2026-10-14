@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 import { runProcess } from '@orca/process-host'
+import type { EnvironmentRecipeRequest } from '../../shared/environment-recipe-protocol'
+import type { EnvironmentRecipeRecoveryRequest } from '../../shared/environment-recipe-recovery-protocol'
 import {
   ENVIRONMENT_RECIPE_INPUT_BYTES,
   ENVIRONMENT_RECIPE_OUTPUT_BYTES
@@ -10,7 +12,8 @@ import type {
   EnvironmentCommandUnverifiableReason
 } from '../../shared/plugins/plugin-environment-recipe-result'
 
-export type EnvironmentCommandInvocation<T extends object> = Readonly<{
+export type EnvironmentCommandRequest = EnvironmentRecipeRequest | EnvironmentRecipeRecoveryRequest
+export type EnvironmentCommandInvocation<T extends EnvironmentCommandRequest> = Readonly<{
   pluginKey: string
   providerId: string
   operationId: string
@@ -30,7 +33,10 @@ export type EnvironmentCommandAuthority = {
   signal: AbortSignal
   launch?: EnvironmentCommandLaunch
 }
-export function environmentCommandInput(request: object): { stdin: string; requestDigest: string } {
+export function environmentCommandInput(request: EnvironmentCommandRequest): {
+  stdin: string
+  requestDigest: string
+} {
   const stdin = `${JSON.stringify(request)}\n`
   if (Buffer.byteLength(stdin) > ENVIRONMENT_RECIPE_INPUT_BYTES) {
     throw new Error('Environment recipe request exceeds its byte limit')
@@ -38,7 +44,10 @@ export function environmentCommandInput(request: object): { stdin: string; reque
   return { stdin, requestDigest: createHash('sha256').update(stdin).digest('hex') }
 }
 
-export async function executeReviewedEnvironmentCommand<T extends object, R>(input: {
+export async function executeReviewedEnvironmentCommand<
+  T extends EnvironmentCommandRequest,
+  R
+>(input: {
   invocation: EnvironmentCommandInvocation<T>
   stdin: string
   cwd: string

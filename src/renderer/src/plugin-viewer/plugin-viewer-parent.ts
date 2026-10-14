@@ -12,6 +12,7 @@ import {
 import { PLUGIN_VIEWER_WORKER_VERSION } from '../../../shared/plugins/plugin-viewer-worker-protocol'
 
 declare global {
+  // oxlint-disable-next-line typescript/consistent-type-definitions -- Window augmentation requires declaration merging.
   interface Window {
     orcaFileViewerHost: {
       initialize(): Promise<unknown>

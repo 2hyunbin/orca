@@ -1,7 +1,8 @@
 import { PluginGrammarFailure, type PluginGrammarFailureReason } from './plugin-grammar-failure'
 
+type PluginGrammarTaskOwner = symbol
 type Job = {
-  owner: object
+  owner: PluginGrammarTaskOwner
   signal: AbortSignal
   run: () => Promise<Uint32Array | null>
   resolve: (result: Uint32Array | null) => void
@@ -13,7 +14,7 @@ export const PLUGIN_GRAMMAR_GLOBAL_WORKER_LIMIT = 2
 export const PLUGIN_GRAMMAR_GLOBAL_QUEUE_LIMIT = 8
 
 export class PluginGrammarTaskScheduler {
-  private readonly active = new Set<object>()
+  private readonly active = new Set<PluginGrammarTaskOwner>()
   private readonly queue: Job[] = []
 
   constructor(
@@ -22,7 +23,7 @@ export class PluginGrammarTaskScheduler {
   ) {}
 
   schedule(
-    owner: object,
+    owner: PluginGrammarTaskOwner,
     signal: AbortSignal,
     run: () => Promise<Uint32Array | null>,
     onFailure?: (reason: PluginGrammarFailureReason) => void

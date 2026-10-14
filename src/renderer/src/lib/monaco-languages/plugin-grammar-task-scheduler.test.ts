@@ -21,15 +21,20 @@ describe('global grammar work budgets and fairness', () => {
     const failures: PluginGrammarFailureReason[] = []
     const report = (reason: PluginGrammarFailureReason) => failures.push(reason)
     const work = task()
-    const active = scheduler.schedule({}, new AbortController().signal, () => work.promise, report)
+    const active = scheduler.schedule(
+      Symbol(),
+      new AbortController().signal,
+      () => work.promise,
+      report
+    )
     const cancelled = new AbortController()
-    const queued = scheduler.schedule({}, cancelled.signal, async () => null, report)
-    await scheduler.schedule({}, new AbortController().signal, async () => null, report)
+    const queued = scheduler.schedule(Symbol(), cancelled.signal, async () => null, report)
+    await scheduler.schedule(Symbol(), new AbortController().signal, async () => null, report)
     expect(failures).toEqual(['capacity'])
     cancelled.abort()
     await queued
     const rejected = scheduler.schedule(
-      {},
+      Symbol(),
       new AbortController().signal,
       async () => {
         throw new PluginGrammarFailure('budget')
@@ -44,9 +49,9 @@ describe('global grammar work budgets and fairness', () => {
 
   it('allows two owners while serializing each owner and gives another grammar a turn', async () => {
     const scheduler = new PluginGrammarTaskScheduler()
-    const a = {},
-      b = {},
-      c = {}
+    const a = Symbol(),
+      b = Symbol(),
+      c = Symbol()
     const signal = new AbortController().signal
     const first = task(),
       second = task(),
@@ -79,27 +84,35 @@ describe('global grammar work budgets and fairness', () => {
   it('bounds pending work, cancels queued jobs without running them, and releases capacity after failures', async () => {
     const scheduler = new PluginGrammarTaskScheduler(1, 1)
     const first = task()
-    const active = scheduler.schedule({}, new AbortController().signal, () => first.promise)
+    const active = scheduler.schedule(Symbol(), new AbortController().signal, () => first.promise)
     const cancelled = new AbortController()
     let ran = false
-    const queued = scheduler.schedule({}, cancelled.signal, async () => {
+    const queued = scheduler.schedule(Symbol(), cancelled.signal, async () => {
       ran = true
       return null
     })
     expect(
-      await scheduler.schedule({}, new AbortController().signal, async () => new Uint32Array([1]))
+      await scheduler.schedule(
+        Symbol(),
+        new AbortController().signal,
+        async () => new Uint32Array([1])
+      )
     ).toBeNull()
     cancelled.abort()
     expect(await queued).toBeNull()
     expect(ran).toBe(false)
-    const failed = scheduler.schedule({}, new AbortController().signal, async () => {
+    const failed = scheduler.schedule(Symbol(), new AbortController().signal, async () => {
       throw new Error('fixture failure')
     })
     first.resolve(null)
     await active
     expect(await failed).toBeNull()
     expect(
-      await scheduler.schedule({}, new AbortController().signal, async () => new Uint32Array([2]))
+      await scheduler.schedule(
+        Symbol(),
+        new AbortController().signal,
+        async () => new Uint32Array([2])
+      )
     ).toEqual(new Uint32Array([2]))
   })
 
@@ -107,9 +120,9 @@ describe('global grammar work budgets and fairness', () => {
     const scheduler = new PluginGrammarTaskScheduler(1, 8)
     const first = task()
     const controller = new AbortController()
-    const active = scheduler.schedule({}, controller.signal, () => first.promise)
+    const active = scheduler.schedule(Symbol(), controller.signal, () => first.promise)
     let ran = false
-    const next = scheduler.schedule({}, new AbortController().signal, async () => {
+    const next = scheduler.schedule(Symbol(), new AbortController().signal, async () => {
       ran = true
       return null
     })

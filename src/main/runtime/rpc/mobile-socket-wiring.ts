@@ -1,20 +1,20 @@
 import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
-import type { DeviceEntry, DeviceRegistry } from '../device-registry'
+import type { DeviceRegistry } from '../device-registry'
 import { isPendingTokenRow } from '../device-entry'
 import { EPHEMERAL_DEVICE_SWEEP_INTERVAL_MS } from '../ephemeral-device-rows'
 import {
   INSECURE_WEB_ORIGIN_AUTH_CODE,
   isInsecureRemoteWebOrigin
 } from '../../../shared/web-origin-security'
-import { devicePrincipalOf } from '../device-principal'
+import { toAuthenticatedDevice } from './mobile-socket-authenticated-device'
 import type { E2EEKeypair } from '../e2ee-keypair'
 import { E2EEChannel, type E2EEAuthenticatedDevice } from './e2ee-channel'
 import { createMobileE2EEOutboundMemoryBudget } from './mobile-e2ee-outbound-memory-budget'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type { RpcBinarySender } from './rpc-binary-sender'
 import type { ManagedWorkspaceRoute } from '../managed-workspace-gateway-contract'
-import { parseManagedWorkspaceGatewayCredential } from '../../../shared/managed-workspace-gateway-credential'
+import { resolveManagedWorkspaceGatewayCredential } from '../../../shared/managed-workspace-gateway-credential'
 
 type MobileSocketPayload = string | Uint8Array<ArrayBufferLike>
 
@@ -75,13 +75,6 @@ type MobileSocketWiringOptions = {
   onUnpairedDeviceAuthFailure?: (metadata: MobileSocketTransportMetadata) => void
   // Operator opt-in for first pairings from a plain-http page on another machine.
   allowInsecureWebPairing?: () => boolean
-}
-
-function toAuthenticatedDevice(device: DeviceEntry): E2EEAuthenticatedDevice {
-  return {
-    ...devicePrincipalOf(device),
-    ...(device.token !== undefined ? { deviceToken: device.token } : {})
-  }
 }
 
 export class MobileSocketWiring {
@@ -209,14 +202,11 @@ export class MobileSocketWiring {
         requireV2: metadata.transport === 'relay',
         outboundMemoryBudget: this.outboundMemoryBudget,
         resolveAuthenticatedDevice: (token) => {
-          const gateway = parseManagedWorkspaceGatewayCredential(token)
-          const route = metadata.transport === 'direct' ? metadata.managedGateway : undefined
-          if (
-            gateway &&
-            (!route ||
-              gateway.environmentId !== route.environmentId ||
-              gateway.targetGeneration !== route.targetGeneration)
-          ) {
+          const gateway = resolveManagedWorkspaceGatewayCredential(
+            token,
+            metadata.transport === 'direct' ? metadata.managedGateway : undefined
+          )
+          if (!gateway) {
             return null
           }
           const device = this.deviceRegistry.validateToken(gateway?.parentToken ?? token)
@@ -240,7 +230,7 @@ export class MobileSocketWiring {
           }
           return {
             ...toAuthenticatedDevice(device),
-            ...(gateway
+            ...(gateway.parentToken
               ? { clientId: token, deviceToken: token, gatewayParentToken: gateway.parentToken }
               : {})
           }

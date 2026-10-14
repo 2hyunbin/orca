@@ -105,7 +105,8 @@ describe('bundled data through actual translation and syntax consumers', () => {
     await setMainUiLanguage('es')
     await setRendererUiLanguage('es')
     let checked = 0
-    function check(value: object, prefix = ''): void {
+    type SecurityTranslationTree = { [key: string]: string | SecurityTranslationTree }
+    function check(value: SecurityTranslationTree, prefix = ''): void {
       for (const [key, item] of Object.entries(value)) {
         const path = prefix ? `${prefix}.${key}` : key
         if (typeof item === 'string') {

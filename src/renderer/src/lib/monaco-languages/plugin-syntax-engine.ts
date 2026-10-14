@@ -58,12 +58,13 @@ export function createPluginSyntaxEngine(options: {
         pack.grammars,
         () => new PluginGrammarWorker()
       )
+      const taskOwner = Symbol(slot.key)
       tokenizer = createPluginGrammarModelTokenizer(
         {
           tokenize: async (text, version, generation, signal) => {
             let failure: PluginGrammarFailureReason | undefined
             const data = await scheduler.schedule(
-              client,
+              taskOwner,
               signal,
               async () => {
                 try {

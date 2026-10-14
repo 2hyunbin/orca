@@ -1,7 +1,4 @@
-import {
-  createCatalogReleaseFixture,
-  setCatalogReleaseCommit
-} from './plugin-catalog-release-test-fixture'
+import { createCatalogReleaseFixture } from './plugin-catalog-release-test-fixture'
 import { describe, expect, it } from 'vitest'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -28,8 +25,8 @@ describe('catalog checks at preview and publication', () => {
     })
   })
   it('fails preview when a release tag moves and publishes nothing', async () => {
-    const { root, installer, source } = await createCatalogReleaseFixture()
-    setCatalogReleaseCommit('c'.repeat(40))
+    const { root, installer, source, moveReleaseTag } = await createCatalogReleaseFixture()
+    await moveReleaseTag()
     await expect(installer.preview(source.id, 'community.locale-de')).rejects.toThrow(
       'catalog commit'
     )

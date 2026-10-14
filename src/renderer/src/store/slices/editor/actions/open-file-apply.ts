@@ -1,3 +1,5 @@
+import type { EditorFilesSlice } from '../types/editor-files-slice'
+import { appendOpenFileTabBarOrder } from './open-file-tab-bar-order'
 import { toast } from 'sonner'
 import { pluginViewerFileId } from '../file-ids/plugin-viewer-file-id'
 import { fileOpeningFileId } from '../file-ids/file-opening-file-id'
@@ -7,9 +9,9 @@ import { getRecentlyClosedTabPosition, pushRecentlyClosedTabKind } from '../../r
 import type { AppState } from '../../../types'
 import {
   type ClosedEditorTabSnapshot,
-  type EditorTabSelection,
   MAX_RECENT_CLOSED_EDITOR_TABS,
-  type OpenFile
+  type OpenFile,
+  type OpenFileApplyScratch
 } from '../types/open-file'
 import {
   canReuseLocalWslAlias,
@@ -31,28 +33,12 @@ import {
   removeEditorStateForReplacedPreview
 } from '../tabs/workspace-editor-item'
 
-export type OpenFileApplyScratch = {
-  editorItemFileId: string
-  editorItemTargetGroupId: string | undefined
-  /** Resolved against the setting inside the reducer so the tab can't disagree with its OpenFile. */
-  editorItemIsPreview: boolean
-}
+export type { OpenFileApplyScratch } from '../types/open-file'
 
 export function applyOpenFileToState(
   s: AppState,
   fileInput: Omit<OpenFile, 'id' | 'isDirty'>,
-  options:
-    | {
-        preview?: boolean
-        targetGroupId?: string
-        recordReplacedPreview?: boolean
-        suppressActiveRuntimeFallback?: boolean
-        forceContentReload?: boolean
-        focusEditor?: boolean
-        reopenId?: string
-        selection?: EditorTabSelection
-      }
-    | undefined,
+  options: Parameters<EditorFilesSlice['openFile']>[1],
   scratch: OpenFileApplyScratch
 ): Partial<AppState> | AppState {
   const file =
@@ -308,24 +294,7 @@ export function applyOpenFileToState(
   }
 
   // Why: append to the persisted tab bar order, else TabBar's reconcileOrder falls back to type-grouped ordering (terminals first).
-  const tabBarUpdate: Record<string, unknown> = {}
-  if (s.tabBarOrderByWorktree) {
-    const currentOrder = s.tabBarOrderByWorktree[worktreeId] ?? []
-    const terminalIds = (s.tabsByWorktree?.[worktreeId] ?? []).map((t) => t.id)
-    const editorFileIds = s.openFiles.filter((f) => f.worktreeId === worktreeId).map((f) => f.id)
-    const browserIds = (s.browserTabsByWorktree?.[worktreeId] ?? []).map((t) => t.id)
-    const allExisting = new Set([...terminalIds, ...editorFileIds, ...browserIds])
-    const base = currentOrder.filter((eid) => allExisting.has(eid))
-    const inBase = new Set(base)
-    for (const eid of [...terminalIds, ...editorFileIds, ...browserIds]) {
-      if (!inBase.has(eid)) {
-        base.push(eid)
-        inBase.add(eid)
-      }
-    }
-    base.push(id)
-    tabBarUpdate.tabBarOrderByWorktree = { ...s.tabBarOrderByWorktree, [worktreeId]: base }
-  }
+  const tabBarUpdate = appendOpenFileTabBarOrder(s, worktreeId, id)
 
   return {
     openFiles: [

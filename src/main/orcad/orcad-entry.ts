@@ -11,13 +11,13 @@
  * Chromium proves available at startup.
  */
 import process from 'node:process'
-import { describeOrcadSecretProtectionGap } from './orcad-secret-protection-gap'
+import { createNodeSecretStore } from './orcad-secret-store'
 import {
   getAppEnvironment,
   setAppEnvironment,
   type AppEnvironment
 } from '../../shared/app-environment'
-import { setSecretStore, type SecretStore } from '../../shared/secret-store'
+import { setSecretStore } from '../../shared/secret-store'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { resolveOrcadInstallRoot, resolveOrcadPath, resolveUserDataPath } from './orcad-app-paths'
 import { getOrcadCliLauncherPath, prepareOrcadCliLauncher } from './orcad-cli-launcher'
@@ -84,24 +84,6 @@ function createNodeAppEnvironment(): AppEnvironment {
     exit: (code = 0) => process.exit(code),
     // Why []: there are no Chromium processes on this host to measure.
     getAppMetrics: () => []
-  }
-}
-
-/**
- * Why not silently plaintext: `isEncryptionAvailable() === false` already makes every
- * caller fall back to unsealed storage, which is a security posture, not a detail.
- * `describeProtectionGap()` gives the reason a client can surface.
- */
-function createNodeSecretStore(): SecretStore {
-  return {
-    isEncryptionAvailable: () => false,
-    encryptString: () => {
-      throw new Error('orcad_secret_sealing_unavailable')
-    },
-    decryptString: () => {
-      throw new Error('orcad_secret_sealing_unavailable')
-    },
-    describeProtectionGap: () => describeOrcadSecretProtectionGap(process.platform)
   }
 }
 

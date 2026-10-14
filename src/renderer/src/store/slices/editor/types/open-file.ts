@@ -155,3 +155,10 @@ export type EditorOpenTargetOptions = {
   runtimeEnvironmentId?: string | null
   forceContentReload?: boolean
 }
+
+export type OpenFileApplyScratch = {
+  editorItemFileId: string
+  editorItemTargetGroupId: string | undefined
+  /** Resolved against the setting inside the reducer so the tab can't disagree with its OpenFile. */
+  editorItemIsPreview: boolean
+}
