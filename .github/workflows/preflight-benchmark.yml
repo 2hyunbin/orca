@@ -1,4 +1,4 @@
-name: Anti-slop scope performance experiment
+name: Anti-slop remaining full-job comparisons
 'on':
   push:
     branches:
@@ -9,19 +9,8 @@ permissions:
 env:
   ORCA_BACKGROUND_LAUNCH: '1'
 jobs:
-  code_paths:
-    runs-on: ubuntu-slim
-    outputs:
-      static_analysis: 'true'
-      typecheck: 'true'
-      mobile_dependencies: 'false'
-      mobile_ci_tools: 'false'
-    steps:
-    - run: echo "Same source, same rules, fresh runner."
   replay:
     name: scope replay ${{ matrix.order }} ${{ matrix.arm }}
-    needs:
-    - code_paths
     runs-on: ubuntu-24.04-arm
     steps:
     - name: Checkout
@@ -31,13 +20,13 @@ jobs:
         persist-credentials: false
         ref: 6a86277c5920023b7191b69a47a8ab1cf3d31148
     - uses: ./.github/actions/install-node-dependencies
-      if: needs.code_paths.outputs.mobile_dependencies != 'true'
+      if: '''false'' != ''true'''
       with:
         native-runtime: node
         node-version: '24'
         cache-pnpm-store: 'false'
     - uses: ./.github/actions/install-node-dependencies
-      if: needs.code_paths.outputs.mobile_dependencies == 'true'
+      if: '''false'' == ''true'''
       with:
         native-runtime: node
         node-version: '24'
@@ -61,7 +50,7 @@ jobs:
       id: process-host-imports
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
@@ -73,7 +62,7 @@ jobs:
       id: main-sync-spawn-ratchet
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
@@ -85,7 +74,7 @@ jobs:
       id: root-lint
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
@@ -93,7 +82,7 @@ jobs:
 
         '
     - name: Reject low-evidence patterns
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: "node config/scripts/sync-anti-slop-plugin.mjs\nif [ '${{ matrix.arm }}' = baseline ]; then\nnode --input-type=module\
         \ <<'BASELINE'\nimport {readFileSync,writeFileSync} from 'node:fs'\nconst change=(file,changes)=>{\n let\
         \ text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
@@ -112,7 +101,7 @@ jobs:
       id: native-code-quality
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
@@ -120,18 +109,17 @@ jobs:
 
         '
     - name: Enforce type-aware code-quality baseline
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run audit:code-quality:type-aware
     - wait: native-code-quality
     - uses: ./.github/actions/install-mobile-dependencies
-      if: needs.code_paths.outputs.static_analysis == 'true' && needs.code_paths.outputs.mobile_dependencies ==
-        'true'
+      if: '''true'' == ''true'' && ''false'' == ''true'''
     - name: Enforce changed-code quality
       if: '!cancelled()'
       id: changed-code-quality
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
@@ -139,7 +127,7 @@ jobs:
 
         '
     - name: Enforce React Doctor on changed lines
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:react-doctor:changed -- "8b0fa15e943b4b36cac3910b22f4d80f626f90ec"
     - wait: changed-code-quality
     - name: Typecheck
@@ -147,7 +135,7 @@ jobs:
       id: typecheck
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.typecheck == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
@@ -155,16 +143,16 @@ jobs:
 
         '
     - name: Check Zustand selector fan-out budget
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:zustand-selector-fanout
     - name: Check reliability gate manifest
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:reliability-gates
     - name: Enforce dead design-system classes
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:dead-classes
     - name: Check VM runtime rollback compatibility
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       env:
         BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
       run: "DIFF_BASE=\"$(node config/scripts/git-pull-request-diff-base.mjs \"$BASE_SHA\")\"\nif git diff --quiet\
@@ -175,32 +163,32 @@ jobs:
         \ then\n  echo \"VM runtime persistence is unchanged.\"\n  exit 0\nfi\nnode config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs\
         \ \\\n  config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts\n"
     - name: Enforce max-lines ratchet
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:max-lines-ratchet
     - name: Enforce ts-nocheck ratchet
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:ts-nocheck-ratchet
     - name: Enforce runtime Electron-import ratchet
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:runtime-electron-ratchet
     - name: Enforce focus-read ratchet
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:focus-read-ratchet
     - name: Enforce layout-writer ratchets
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: bun config/scripts/check-layout-writer-ratchets.mjs
     - name: Check compatibility-folder imports
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: bun config/scripts/check-compat-boundary-imports.mjs
     - name: Check Node runtime pin
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run check:node-runtime-pin
     - name: Verify localization extraction
       if: '!cancelled()'
       id: localization-extraction
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
         BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
       run: "if [ \"$PREFLIGHT_PHASE_SELECTED\" != true ] || [ \"$PREFLIGHT_PRIOR_SUCCESS\" != true ]; then exit\
@@ -210,7 +198,7 @@ jobs:
         \ \"$RUNNER_TEMP/localization-changes\")\" && [ \"$scope\" = false ]; then\n  echo \"Localization extraction\
         \ inputs are unchanged.\"\nelse\n  bun config/scripts/verify-localization-extraction.mjs\nfi\n"
     - name: Boot orcad and round-trip a terminal
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       env:
         BASE_SHA: 8b0fa15e943b4b36cac3910b22f4d80f626f90ec
         ORCA_BACKGROUND_LAUNCH: '1'
@@ -220,23 +208,23 @@ jobs:
         )\" && [ \"$scope\" = false ]; then\n  echo \"Orcad terminal smoke inputs are unchanged.\"\nelse\n  pnpm\
         \ run smoke:orcad-terminal\nfi\n"
     - name: Verify the generated RPC params catalog
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run verify:rpc-params-catalog
     - name: Verify the generated ACP protocol schema
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run verify:acp-protocol
     - name: Verify bundled skill guides
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run verify:bundled-skill-guides
     - name: Verify skill freshness manifest
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run verify:skill-bundle-manifest
     - name: Verify localization catalogs
       if: '!cancelled()'
       id: localization-catalogs
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.static_analysis == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
       run: 'if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
 
@@ -244,29 +232,29 @@ jobs:
 
         '
     - name: Verify localization coverage
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm run verify:localization-coverage
     - wait:
       - localization-catalogs
       - localization-extraction
     - name: Guard against project-owned .d.ts in preload/shared
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: "matches=$(find src/preload src/shared -name '*.d.ts' 2>/dev/null || true)\nif [ -n \"$matches\" ]; then\n\
         \  echo \"::error::Project-owned .d.ts files are not allowed under src/preload or src/shared.\"\n  echo\
         \ \"Move type declarations into a .ts file so skipLibCheck does not hide errors.\"\n  echo \"See .github/CONTRIBUTING.md#type-declarations-prefer-ts-over-dts.\"\
         \n  echo \"Found:\"\n  echo \"$matches\"\n  exit 1\nfi\n"
     - name: Check feature wall asset budget
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm check:feature-wall-assets
     - name: Verify macOS entitlements
-      if: needs.code_paths.outputs.static_analysis == 'true'
+      if: '''true'' == ''true'''
       run: pnpm verify:macos-entitlements
     - name: Plan unit selection
       if: '!cancelled()'
       id: unit-plan
       background: true
       env:
-        PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.typecheck == 'true' }}
+        PREFLIGHT_PHASE_SELECTED: ${{ 'true' == 'true' }}
         PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
         ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
         ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
@@ -282,7 +270,7 @@ jobs:
     - name: Record checks finish
       run: node -e "const fs=require('node:fs'),v=JSON.parse(fs.readFileSync('.build/scope-replay/start.json'));v.finished=Date.now();v.durationMs=v.finished-v.started;fs.writeFileSync('.build/scope-replay/duration.json',JSON.stringify(v));console.log(v)"
     - uses: actions/upload-artifact@v7
-      if: needs.code_paths.outputs.typecheck == 'true'
+      if: '''true'' == ''true'''
       with:
         name: scope-replay-${{ matrix.order }}-${{ matrix.arm }}
         path: 'ci-shards/unit-selection.json
@@ -292,12 +280,12 @@ jobs:
           ci-shards/unit-selection.json'
         retention-days: 14
     - name: Set up Bun for Mobile CI tool tests
-      if: needs.code_paths.outputs.mobile_ci_tools == 'true'
+      if: '''false'' == ''true'''
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       with:
         bun-version-file: config/.bun-version
     - name: Test Mobile CI tools and runtime routing
-      if: needs.code_paths.outputs.mobile_ci_tools == 'true'
+      if: '''false'' == ''true'''
       env:
         ORCA_BACKGROUND_LAUNCH: '1'
         ORCA_BALANCE_UNIT_SHARDS: '1'
@@ -306,14 +294,12 @@ jobs:
         config/scripts/pr-ready-check-reuse.test.mjs config/scripts/ci-dependency-download-cache.test.mjs config/scripts/win32-test-lane-registration.test.mjs
         config/scripts/vitest-node-runtime-boundary.test.ts config/scripts/vitest-sqlite-runtime-boundary.test.ts
     strategy:
-      max-parallel: 2
+      max-parallel: 5
       fail-fast: false
       matrix:
         include:
         - order: 0
           arm: baseline
-        - order: 1
-          arm: candidate
         - order: 2
           arm: candidate
         - order: 3
@@ -322,66 +308,3 @@ jobs:
           arm: baseline
         - order: 5
           arm: candidate
-  components:
-    runs-on: ubuntu-24.04-arm
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        ref: 6a86277c5920023b7191b69a47a8ab1cf3d31148
-        fetch-depth: 50
-        persist-credentials: false
-    - uses: ./.github/actions/install-node-dependencies
-      with:
-        node-version: '24'
-        native-runtime: none
-        cache-pnpm-store: 'false'
-    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      with:
-        bun-version-file: config/.bun-version
-    - run: "node config/scripts/sync-anti-slop-plugin.mjs\ncat > .scope-components.mjs <<'COMPONENT'\nimport {readFileSync,writeFileSync,mkdirSync,rmSync}\
-        \ from 'node:fs'\nimport {spawnSync} from 'node:child_process'\nimport {join} from 'node:path'\nimport {performance}\
-        \ from 'node:perf_hooks'\nconst output='.build/scope-components';mkdirSync(output,{recursive:true})\nconst\
-        \ files=['.anti-slop-plugin/rules/no-widen-then-assert.ts','.anti-slop-plugin/rules/no-module-mocking.ts']\n\
-        const candidate=files.map(f=>readFileSync(f,'utf8'))\nconst revert=()=>{\nconst change=(file,changes)=>{\n\
-        \ let text=readFileSync(file,'utf8')\n for(const [from,to] of changes){\n  if(text.split(from).length!==2)throw\
-        \ new Error(`Expected one baseline transform in ${file}: ${from}`)\n  text=text.replace(from,to)\n }\n writeFileSync(file,text)\n\
-        }\nchange('.anti-slop-plugin/rules/no-widen-then-assert.ts',[\n ['let scopes: Parameters<typeof resolvedVariableForIdentifier>[0]\
-        \ | null = null;','let scopes: Parameters<typeof resolvedVariableForIdentifier>[0] = [];'],\n ['      scopes\
-        \ ??= context.sourceCode.scopeManager.scopes;\\n',''],\n ['        scopes = null;','        scopes = context.sourceCode.scopeManager.scopes;']\n\
-        ])\nchange('.anti-slop-plugin/rules/no-module-mocking.ts',[\n ['  const property = callee.property;',' \
-        \ if (!isTestFrameworkObject(sourceCode, callee.object)) return false;\\n  const property = callee.property;'],\n\
-        \ ['  return method !== null && moduleMockMethods.has(method) && isTestFrameworkObject(sourceCode, callee.object);','\
-        \  return method !== null && moduleMockMethods.has(method);']\n])\n}\nconst setArm=arm=>{files.forEach((f,i)=>writeFileSync(f,candidate[i]));if(arm==='baseline')revert()}\n\
-        const report={source:\"6a86277c5920023b7191b69a47a8ab1cf3d31148\",measurements:[],negative:[]}\nconst save=()=>writeFileSync(join(output,'components.json'),JSON.stringify(report,null,2))\n\
-        const command=(runtime,args,label,expected=0)=>{\n const resources=join(output,label+'.resources.txt');const\
-        \ t=performance.now()\n const r=spawnSync('/usr/bin/time',['-v','-o',resources,runtime,...args],{encoding:'utf8',timeout:300000,maxBuffer:32*1024*1024})\n\
-        \ const measurement={label,code:r.status,durationMs:performance.now()-t,stdout:r.stdout,stderr:r.stderr,resources:readFileSync(resources,'utf8')}\n\
-        \ if(r.error||r.signal||r.status!==expected)throw new Error(JSON.stringify(measurement)+String(r.error))\n\
-        \ return measurement\n}\nconst args=['--smol','node_modules/oxlint/bin/oxlint','--config','config/oxlint-anti-slop.json','src','config','tests','mobile','--deny-warnings','--format','json']\n\
-        let reference\ntry{\n for(let pair=0;pair<4;pair++)for(const arm of pair%2?['candidate','baseline']:['baseline','candidate']){\n\
-        \  setArm(arm);const row={pair,arm,...command('bun',args,`scan-${pair}-${arm}`)}\n  const diagnostics=JSON.stringify(JSON.parse(row.stdout).diagnostics)\n\
-        \  if(reference!==undefined&&diagnostics!==reference)throw new Error('Full scan diagnostics changed')\n\
-        \  reference=diagnostics;report.measurements.push(row);save();console.log(JSON.stringify({pair,arm,durationMs:row.durationMs}))\n\
-        \ }\n const fixture=join(output,'fixtures');mkdirSync(fixture,{recursive:true})\n const sources={\n  '0-cross-boundary.ts':'const\
-        \ value={}; const wide:unknown=value; function read(){ return wide as {}; }',\n  '1-widen.ts':'const value={};\
-        \ const wide:unknown=value; wide as {id:string};',\n  '2-no-assertions.ts':'export const value=1;',\n  '3-mock.ts':\"\
-        import {vi as test} from 'vitest'; test['mock']('module');\",\n  '4-lookalike.ts':\"const vi={mock(){}};\
-        \ vi.mock('module');\",\n  '5-angle.ts':'const value={}; const alias=value; const wide:unknown=alias; <{id:string}>wide;'\n\
-        \ }\n for(const [file,source] of Object.entries(sources))writeFileSync(join(fixture,file),source)\n let\
-        \ negativeReference\n for(const runtime of [process.execPath,'bun'])for(const arm of ['baseline','candidate']){\n\
-        \  setArm(arm)\n  const row=command(runtime,['node_modules/oxlint/bin/oxlint','--config','config/oxlint-anti-slop.json',fixture,'--deny-warnings','--format','json'],`negative-${runtime==='bun'?'bun':'node'}-${arm}`,1)\n\
-        \  const diagnostics=JSON.parse(row.stdout).diagnostics\n  if(diagnostics.length!==3)throw new Error('Expected\
-        \ both guards to reject exactly three fixtures: '+row.stdout)\n  diagnostics.sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))\n\
-        \  if(negativeReference!==undefined&&JSON.stringify(diagnostics)!==negativeReference)throw new Error('Negative\
-        \ diagnostics changed')\n  negativeReference=JSON.stringify(diagnostics);report.negative.push({runtime,arm,diagnostics});save()\n\
-        \ }\n rmSync(fixture,{recursive:true,force:true})\n for(const arm of ['baseline','candidate']){\n  setArm(arm)\n\
-        \  const row=command('bun',args.slice(0,-2).concat(['--debug','timings','--format','default']),`profile-${arm}`)\n\
-        \  writeFileSync(join(output,`profile-${arm}.txt`),row.stdout+row.stderr)\n }\n}finally{files.forEach((f,i)=>writeFileSync(f,candidate[i]));save()}\n\
-        console.log(JSON.stringify(report.measurements.map(({pair,arm,durationMs})=>({pair,arm,durationMs}))))\n\
-        \nCOMPONENT\nnode .scope-components.mjs"
-    - uses: actions/upload-artifact@v7
-      if: always()
-      with:
-        name: scope-components
-        path: .build/scope-components/
-        retention-days: 7
