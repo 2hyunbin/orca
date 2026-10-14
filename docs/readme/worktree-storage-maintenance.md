@@ -10,11 +10,13 @@ In an interactive terminal, the preview offers `Apply this cleanup? [y/N]`; ente
 Redirected input or output remains preview-only. To apply without a prompt, use `pnpm reclaim-space --apply`.
 
 Historical test caches are retained by default. After stopping cross-version tests in all this
-repository's worktrees, include those caches with:
+repository's worktrees, preview the same selection with:
 
 ```sh
-pnpm reclaim-space --apply --tests-stopped
+pnpm reclaim-space --tests-stopped
 ```
+
+Answer `Y` to apply that preview, or use `pnpm reclaim-space --apply --tests-stopped` to apply directly.
 
 The command reuses the historical test cache, Electron distribution, and dev bundle cleanup scripts.
 It shares complete Electron distributions through the repository cache and removes idle
@@ -47,7 +49,7 @@ or copying failures are also reported as skipped rather than silently omitted.
 in the background after the dev process starts. It never prompts or waits before launching the app.
 The worktree being launched is excluded from both Electron sharing and dev bundle removal; active
 sibling apps and recent unfinished builds remain protected by the existing bundle checks.
-Cleanup failures are reported without stopping dev. Set `ORCA_SKIP_DEV_STORAGE_RECLAIM=1` to opt out.
+Background sweep output is suppressed; worker start or exit failures are reported without stopping dev. Set `ORCA_SKIP_DEV_STORAGE_RECLAIM=1` to opt out.
 The worker finishes independently if the dev app exits, and each cleanup operation has a ten-minute limit.
 
 Historical test cache cleanup runs only in the explicit manual command with `--tests-stopped`.

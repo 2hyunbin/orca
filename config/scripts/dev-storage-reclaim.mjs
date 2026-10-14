@@ -11,7 +11,7 @@ export function startDevStorageReclaim({
     return
   }
   try {
-    // The worker owns its cleanup lock even if the dev app exits before it finishes.
+    // The worker owns its lock after dev exits and must not keep captured dev output open.
     const child = spawn({
       program: process.execPath,
       args: [
@@ -26,7 +26,7 @@ export function startDevStorageReclaim({
       cwd: repoRoot,
       env,
       detached: true,
-      stdio: ['ignore', 'inherit', 'inherit']
+      stdio: 'ignore'
     })
     child.on('error', (error) => report(`[orca-dev] Storage cleanup skipped: ${error.message}`))
     child.on('exit', (code) => {
