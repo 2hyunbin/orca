@@ -11,6 +11,7 @@ import {
   type TaskSourceContext
 } from '../../../shared/task-source-context'
 import type { JiraPatchOptions } from '../store/slices/jira-slice-contract'
+import type { AppState } from '../store/types'
 import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
 import { getJiraReadScope } from '@/store/slices/jira-read-coordination'
 import type { RowLessSource } from '@/lib/default-creation-host'
@@ -36,7 +37,7 @@ let currentSettings: GlobalSettings | null = null
 
 vi.mock('@/runtime/runtime-jira-client', () => runtimeMocks)
 vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: object) => unknown) =>
+  useAppStore: (selector: (state: Pick<AppState, 'settings' | 'patchJiraIssue'>) => unknown) =>
     selector({
       settings: currentSettings,
       patchJiraIssue: (key: string, patch: Partial<JiraIssue>, options?: JiraPatchOptions) =>
