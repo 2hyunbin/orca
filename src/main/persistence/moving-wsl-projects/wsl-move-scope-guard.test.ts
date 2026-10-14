@@ -21,7 +21,8 @@ import {
   loadWslMoveFence,
   shouldDropWslMoveProjectUpdate,
   resetWslMoveFenceForTests,
-  withoutWslMovedProjects,
+  withoutWslMovedFolderWorkspaces,
+  withoutWslMovedRepos,
   wslMoveProjectRefForWorkspace
 } from './wsl-move-scope-guard'
 
@@ -35,7 +36,6 @@ afterEach(() => {
   rmSync(userDataPath, { recursive: true, force: true })
   vi.restoreAllMocks()
 })
-const asRepo = (row: { id: string }) => ({ repoId: row.id })
 
 const repoPaths = new Map([
   ['repo-wsl', '\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'],
@@ -98,7 +98,7 @@ describe('WSL move scope guard', () => {
 
   it('lets every project through when no move is recorded', () => {
     expect(writable('repo-1::/x')).not.toThrow()
-    expect(withoutWslMovedProjects([{ id: 'repo-1' }], asRepo)).toHaveLength(1)
+    expect(withoutWslMovedRepos([{ id: 'repo-1' }])).toHaveLength(1)
   })
 
   it('leaves a prepared move untouched', () => {
@@ -115,7 +115,7 @@ describe('WSL move scope guard', () => {
     expect(writable('folder:notes')).toThrow(WslMoveProjectFencedError)
     expect(writable('repo-2::/x')).not.toThrow()
     const rows = [{ id: 'repo-1' }, { id: 'repo-2' }]
-    expect(withoutWslMovedProjects(rows, asRepo)).toEqual(rows)
+    expect(withoutWslMovedRepos(rows)).toEqual(rows)
   })
 
   it('hides and refuses a project the WSL host owns', () => {
@@ -124,11 +124,19 @@ describe('WSL move scope guard', () => {
       cutover('move-1', 'destination-committed', {}, { folderWorkspaceIds: ['notes'] })
     )
     expect(writable('repo-1::/x')).toThrow(WslMoveProjectFencedError)
-    expect(
-      withoutWslMovedProjects([{ id: 'notes' }, { id: 'other' }], (f) => ({
-        folderWorkspaceId: f.id
-      }))
-    ).toEqual([{ id: 'other' }])
+    expect(withoutWslMovedFolderWorkspaces([{ id: 'notes' }, { id: 'other' }])).toEqual([
+      { id: 'other' }
+    ])
+  })
+
+  it("keeps the host's own row, which carries the moved project's id", () => {
+    writeWslMoveCutover(
+      userDataPath,
+      cutover('move-1', 'destination-committed', {}, { repoIds: ['repo-1'] })
+    )
+    const onHost = { id: 'repo-1', executionHostId: 'runtime:wsl:ubuntu' }
+    const viaSsh = { id: 'repo-1', connectionId: 'target-1' }
+    expect(withoutWslMovedRepos([{ id: 'repo-1' }, onHost, viaSsh])).toEqual([onHost, viaSsh])
   })
 
   it('keeps WSL projects read-only and every row listed when the journal is unreadable', () => {
@@ -140,7 +148,7 @@ describe('WSL move scope guard', () => {
     expect(writable('repo-wsl::/x')).toThrow(WslMoveProjectFencedError)
     expect(writable('repo-win::/x')).not.toThrow()
     const rows = [{ id: 'repo-wsl' }]
-    expect(withoutWslMovedProjects(rows, asRepo)).toEqual(rows)
+    expect(withoutWslMovedRepos(rows)).toEqual(rows)
   })
 })
 

@@ -194,8 +194,23 @@ export function assertWslMoveWorkspaceWritable(
   }
 }
 
-/** Rows the WSL host owns stay in the profile for a downgrade; this build lists the host instead. */
-export function withoutWslMovedProjects<T>(rows: T[], toRef: (row: T) => WslMoveProjectRef): T[] {
+type HostedRow = { connectionId?: string | null; executionHostId?: string | null }
+
+/**
+ * Rows the WSL host owns stay in the profile for a downgrade; this build lists the host instead.
+ * Only local rows: after a move the host's own row carries the same id and must stay listed.
+ */
+export function withoutWslMovedRepos<T extends HostedRow & { id: string }>(repos: T[]): T[] {
+  return withoutHidden(repos, (repo) => ({ repoId: repo.id }))
+}
+
+export function withoutWslMovedFolderWorkspaces<T extends HostedRow & { id: string }>(
+  folderWorkspaces: T[]
+): T[] {
+  return withoutHidden(folderWorkspaces, (folder) => ({ folderWorkspaceId: folder.id }))
+}
+
+function withoutHidden<T extends HostedRow>(rows: T[], toRef: (row: T) => WslMoveProjectRef): T[] {
   const fence = loaded?.view
   if (rows.length === 0 || !fence?.readable) {
     return rows
@@ -204,5 +219,9 @@ export function withoutWslMovedProjects<T>(rows: T[], toRef: (row: T) => WslMove
   if (hidden.repoIds.size === 0 && hidden.folderWorkspaceIds.size === 0) {
     return rows
   }
-  return rows.filter((row) => !inScope(hidden, toRef(row)))
+  return rows.filter((row) => !isLocalRow(row) || !inScope(hidden, toRef(row)))
+}
+
+function isLocalRow(row: HostedRow): boolean {
+  return !row.connectionId && isWslMoveSourceHost(row.executionHostId)
 }
