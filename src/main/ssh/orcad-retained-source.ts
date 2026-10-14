@@ -29,6 +29,7 @@ import {
   repoBelongsToOrcadSource
 } from '../persistence/migrating-orcad-catalog/orcad-source-ownership'
 import { findOrcadMigrationSourceCutoverForTarget } from './orcad-migration-cutover-journal'
+import { withoutWslMovedProjects } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 const appUserDataPath = (): string => getAppEnvironment().getPath('userData')
 
@@ -91,7 +92,7 @@ export function visibleRepos(
   getUserDataPath = appUserDataPath
 ): Repo[] {
   const hidden = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
-  const repos = store.getRepos()
+  const repos = withoutWslMovedProjects(store.getRepos(), (repo) => ({ repoId: repo.id }))
   if (hidden.length === 0) {
     return repos
   }
@@ -120,7 +121,9 @@ export function visibleFolderWorkspaces(
   getUserDataPath = appUserDataPath
 ): FolderWorkspace[] {
   const hidden = hiddenRetainedSourceTargetIds(getUserDataPath, store.getSshTargets())
-  const folderWorkspaces = store.getFolderWorkspaces()
+  const folderWorkspaces = withoutWslMovedProjects(store.getFolderWorkspaces(), (workspace) => ({
+    folderWorkspaceId: workspace.id
+  }))
   if (hidden.length === 0) {
     return folderWorkspaces
   }

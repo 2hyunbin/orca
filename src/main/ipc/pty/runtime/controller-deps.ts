@@ -46,7 +46,7 @@ export type PtyRuntimeControllerDeps = {
     env: T,
     launch: CodexResumeLaunch
   ) => T
-  assertFolderWorkspacePtyPathUsable: (worktreeId: string | undefined) => Promise<void> | void
+  assertWorkspaceAcceptsNewPty: (worktreeId: string | undefined) => Promise<void> | void
   resolvePtySpawnStartupCwd: (
     worktreeId: string | undefined,
     cwd: string | undefined,

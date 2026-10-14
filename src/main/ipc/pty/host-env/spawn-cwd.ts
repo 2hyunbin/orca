@@ -10,6 +10,18 @@ import {
   assertFolderWorkspacePathUsable,
   getFolderWorkspacePathStatus
 } from '../../../project-groups/folder-workspace-path-status'
+import { assertWslMoveWorkspaceWritable } from '../../../persistence/moving-wsl-projects/wsl-move-scope-guard'
+
+/** A new PTY needs a workspace no WSL move is taking, and a folder that still exists. */
+export function assertWorkspaceAcceptsNewPty(
+  store: Store | undefined,
+  worktreeId: string | undefined
+): Promise<void> | void {
+  if (store) {
+    assertWslMoveWorkspaceWritable(store, worktreeId)
+  }
+  return assertFolderWorkspacePtyPathUsable(store, worktreeId)
+}
 
 export function assertFolderWorkspacePtyPathUsable(
   store: Store | undefined,

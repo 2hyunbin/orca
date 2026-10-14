@@ -9,7 +9,7 @@
  */
 import type { WslMoveCutover, WslMoveCutoverPhase } from '../../../shared/wsl-move/wsl-move-cutover'
 import { WSL_MOVE_CUTOVER_PHASES } from '../../../shared/wsl-move/wsl-move-cutover'
-import { listWslMoveCutovers } from './wsl-move-cutover-journal'
+import { scanWslMoveCutovers } from './wsl-move-cutover-journal'
 
 export type WslMoveScopeIds = {
   repoIds: ReadonlySet<string>
@@ -29,10 +29,12 @@ const HIDDEN_FROM = phaseIndex('destination-committed')
 
 /** Throws when the journal cannot be read: callers keep every WSL project fenced then. */
 export function resolveWslMoveFence(userDataPath: string): WslMoveFenceState {
-  return wslMoveFenceFromCutovers(listWslMoveCutovers(userDataPath))
+  return wslMoveFenceFromCutovers(scanWslMoveCutovers(userDataPath))
 }
 
-export function wslMoveFenceFromCutovers(cutovers: readonly WslMoveCutover[]): WslMoveFenceState {
+export function wslMoveFenceFromCutovers(
+  cutovers: readonly Readonly<WslMoveCutover>[]
+): WslMoveFenceState {
   const fenced = { repoIds: new Set<string>(), folderWorkspaceIds: new Set<string>() }
   const hidden = { repoIds: new Set<string>(), folderWorkspaceIds: new Set<string>() }
   for (const cutover of cutovers) {
