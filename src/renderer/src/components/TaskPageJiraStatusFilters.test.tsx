@@ -19,6 +19,7 @@ function model(): TaskPageComposerActionsModel {
     jiraTaskSourceScopeKey: 'jira-owner',
     selectedJiraSiteId: 'site',
     activeJiraPreset: 'assigned',
+    jiraCurrentSprint: false,
     jiraSearchInput: '',
     setJiraSearchInput: vi.fn(),
     setAppliedJiraSearch: vi.fn(),
@@ -66,6 +67,24 @@ it('hides status controls and preserves an existing manual query', () => {
   expect(screen.getByText(/Status filters apply to preset views/)).toBeDefined()
   expect(state.setJiraSearchInput).not.toHaveBeenCalled()
 })
+it.each([true, false])(
+  'keeps current-sprint selection %s in the preview and Edit as JQL query',
+  async (currentSprint) => {
+    const state = model()
+    state.activeJiraPreset = 'all'
+    state.selectedJiraStatuses = ['Blocked']
+    state.jiraCurrentSprint = currentSprint
+    const sprintClause = currentSprint ? ' AND sprint in openSprints()' : ''
+    const expected = `statusCategory != Done AND status in ("Blocked")${sprintClause} ORDER BY updated DESC`
+    render(<TaskPageJiraStatusFilters model={state} />)
+    expect(screen.getByRole('textbox', { name: 'Status filter JQL' }).getAttribute('value')).toBe(
+      expected
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Edit as JQL' }))
+    await waitFor(() => expect(state.setJiraSearchInput).toHaveBeenCalledWith(expected))
+    expect(state.setAppliedJiraSearch).toHaveBeenCalledWith(expected)
+  }
+)
 it('hides statuses and query preview in linked mode without clearing selection', () => {
   const state = model()
   state.jiraHasWorkspace = true
