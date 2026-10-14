@@ -4,7 +4,13 @@ import { ghExecFileAsync } from '../../gh-utils'
 import type { GitHubApiRepository } from '../../github-api-repository'
 import { githubRepoIdentityKey } from '../../../../shared/github/repository-identity-key'
 import type { GhExecOptions } from './../github-exec-scope'
-import { rethrowCheckDetailsAbort } from './check-details-abort'
+import { rethrowCheckDetailsAbort, waitForCheckDetailsResolution } from './check-details-abort'
+import { runCheckDetailsCall } from './check-details-admission-lifetime'
+export type CheckJobLogContext = {
+  deadlineAt: number
+  executionScope: string | null
+  retainUntil: (terminated: Promise<void>) => void
+}
 export const PR_CHECK_LOG_TAIL_JOB_LIMIT = 5
 
 // Why: only the tail is kept, but the whole log buffers first — the default 10MiB cap drops long CI logs.
@@ -49,7 +55,8 @@ export function getCheckJobLogTailCacheKey(job: PRCheckRunDetails['jobs'][number
 export async function attachFailedJobLogTails(
   jobs: PRCheckRunDetails['jobs'],
   ownerRepo: GitHubApiRepository,
-  ghOptions: GhExecOptions
+  ghOptions: GhExecOptions,
+  context?: CheckJobLogContext
 ): Promise<void> {
   const failedJobs = jobs
     .filter((job) => {
@@ -69,16 +76,31 @@ export async function attachFailedJobLogTails(
       job.logTail = prCheckLogTailCache.get(cacheKey) ?? null
       continue
     }
+    let terminated = Promise.resolve()
     try {
-      const { stdout } = await ghExecFileAsync(
-        ['api', `repos/${ownerRepo.owner}/${ownerRepo.repo}/actions/jobs/${job.id}/logs`],
-        { ...ghOptions, maxBuffer: PR_CHECK_LOG_MAX_BUFFER }
-      )
+      const argv = ['api', `repos/${ownerRepo.owner}/${ownerRepo.repo}/actions/jobs/${job.id}/logs`]
+      const options = { ...ghOptions, maxBuffer: PR_CHECK_LOG_MAX_BUFFER }
+      const call =
+        context && ghOptions.signal
+          ? runCheckDetailsCall(
+              (hooks) => ghExecFileAsync(argv, options, hooks),
+              ghOptions.signal,
+              context.retainUntil
+            )
+          : { result: ghExecFileAsync(argv, options), terminated }
+      terminated = call.terminated
+      const { stdout } = await call.result
+      if (ghOptions.signal) {
+        await waitForCheckDetailsResolution(terminated, ghOptions.signal)
+      }
       job.logTail = sliceCheckLogTail(stdout)
     } catch (err) {
       rethrowCheckDetailsAbort(ghOptions.signal, err)
-      console.warn('getPRCheckDetails workflow job log fetch failed:', err)
+      console.warn('getPRCheckDetails', 'job_log_failed')
       job.logTail = null
+    }
+    if (ghOptions.signal) {
+      await waitForCheckDetailsResolution(terminated, ghOptions.signal)
     }
     setPrCheckLogTailCache(cacheKey, job.logTail)
   }
