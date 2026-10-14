@@ -117,6 +117,23 @@ describe('Jira preset filters', () => {
     expect(jiraRequest).toHaveBeenCalledTimes(3)
   })
 
+  it('composes multi-status filters inside the bounded Cloud All query', async () => {
+    jiraRequest.mockImplementation(async (_entry, path, init) => {
+      if (path.includes('/project/search')) {
+        return { isLast: true, values: [{ id: '10', key: 'APP' }] }
+      }
+      expect(requestJql(init)).toBe(
+        'project in ("10") AND statusCategory != Done AND status in ("Blocked", "In Progress") ORDER BY updated DESC'
+      )
+      return { issues: [issue('APP-1', false, false)] }
+    })
+    const { listIssues } = await import('./jira-issue-search')
+    await expect(
+      listIssues('all', 20, 'cloud', { statuses: ['Blocked', 'In Progress'] })
+    ).resolves.toMatchObject([{ key: 'APP-1' }])
+    expect(jiraRequest).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps Server/DC All on classic search without project discovery', async () => {
     getClients.mockReturnValue([site('server', 'server')])
     jiraRequest.mockResolvedValue({ issues: [] })

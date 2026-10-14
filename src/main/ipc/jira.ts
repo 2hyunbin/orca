@@ -1,3 +1,4 @@
+import { JiraIssueListFiltersParam } from '../../shared/rpc-contract/jira-quick-filter-params'
 import { ipcMain } from 'electron'
 import { connect, disconnect, getStatus, selectSite, testConnection } from '../jira/client'
 import { _resetPreflightCache } from './preflight'
@@ -23,6 +24,7 @@ import type {
   JiraConnectArgs,
   JiraCreateIssueArgs,
   JiraIssueFilter,
+  JiraIssueListFilters,
   JiraIssueUpdate,
   JiraSiteSelection
 } from '../../shared/jira-types'
@@ -154,12 +156,22 @@ export function registerJiraHandlers(): void {
     'jira:listIssues',
     async (
       _event,
-      args?: { filter?: JiraIssueFilter; limit?: number; siteId?: JiraSiteSelection }
+      args?: {
+        filter?: JiraIssueFilter
+        limit?: number
+        siteId?: JiraSiteSelection
+        filters?: JiraIssueListFilters
+      }
     ) => {
       const filter = VALID_FILTERS.has(args?.filter as JiraIssueFilter)
         ? (args!.filter as JiraIssueFilter)
         : undefined
-      return listIssues(filter, clampLimit(args?.limit), normalizeSiteSelection(args?.siteId))
+      return listIssues(
+        filter,
+        clampLimit(args?.limit),
+        normalizeSiteSelection(args?.siteId),
+        args?.filters ? JiraIssueListFiltersParam.parse(args.filters) : undefined
+      )
     }
   )
 

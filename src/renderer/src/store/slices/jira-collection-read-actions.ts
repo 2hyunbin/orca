@@ -1,3 +1,4 @@
+import { normalizeJiraStatusSelection } from '../../../../shared/jira-quick-filters'
 import { jiraListIssues, jiraSearchIssues } from '@/runtime/runtime-jira-client'
 import { isIntegrationCredentialDecryptionError } from '../../../../shared/integration-credential-errors'
 import type { JiraIssue, JiraSiteSelection } from '../../../../shared/jira-types'
@@ -148,9 +149,11 @@ export function createJiraCollectionReadActions(
     listJiraIssues: async (filter = 'assigned', limit = 30, options) => {
       const scope = getJiraReadScope(get().settings, options?.sourceContext)
       const siteId = getSelectedJiraSiteId(get().jiraStatus)
+      const statuses = normalizeJiraStatusSelection(options?.filters?.statuses).sort()
+      const filters = statuses.length ? { statuses } : undefined
       const cacheKey = scopedJiraCacheKey(
         scope,
-        `${siteId ?? 'default'}::list::${filter}::${limit}`
+        `${siteId ?? 'default'}::list::${filter}::${limit}${filters ? `::${JSON.stringify(filters)}` : ''}`
       )
       const cached = get().jiraSearchCache[cacheKey]
       if (!options?.force && isFreshJiraCacheEntry(cached)) {
@@ -167,7 +170,10 @@ export function createJiraCollectionReadActions(
         return inflight.promise
       }
       let entry: InflightJiraReadRequest<JiraIssue[]>
-      const promise = jiraListIssues(scope.settings, filter, limit, siteId)
+      const request = filters
+        ? jiraListIssues(scope.settings, filter, limit, siteId, filters)
+        : jiraListIssues(scope.settings, filter, limit, siteId)
+      const promise = request
         .then((issues) => {
           if (
             inflightListRequests.get(cacheKey) === entry &&

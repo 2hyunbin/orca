@@ -1,14 +1,21 @@
-import type { JiraIssueFilter } from './jira-types'
+import type { JiraIssueFilter, JiraIssueListFilters } from './jira-types'
+import { normalizeJiraStatusSelection } from './jira-quick-filters'
 
-export function buildJiraPresetJql(filter: JiraIssueFilter): string {
-  if (filter === 'assigned') {
-    return 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC'
+export function buildJiraPresetJql(
+  filter: JiraIssueFilter,
+  filters?: JiraIssueListFilters
+): string {
+  const clauses = []
+  if (filter === 'assigned' || filter === 'done') {
+    clauses.push('assignee = currentUser()')
+  } else if (filter === 'reported') {
+    clauses.push('reporter = currentUser()')
   }
-  if (filter === 'reported') {
-    return 'reporter = currentUser() AND statusCategory != Done ORDER BY updated DESC'
+  clauses.push(filter === 'done' ? 'statusCategory = Done' : 'statusCategory != Done')
+  const statuses = normalizeJiraStatusSelection(filters?.statuses)
+  if (statuses.length > 0) {
+    const names = statuses.map((name) => `"${name.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
+    clauses.push(`status in (${names.join(', ')})`)
   }
-  if (filter === 'done') {
-    return 'assignee = currentUser() AND statusCategory = Done ORDER BY updated DESC'
-  }
-  return 'statusCategory != Done ORDER BY updated DESC'
+  return `${clauses.join(' AND ')} ORDER BY updated DESC`
 }

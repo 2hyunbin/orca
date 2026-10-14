@@ -19933,6 +19933,16 @@
       "noMatch": "Aucun filtre correspondant.",
       "loadFailed": "Impossible de charger les filtres Jira enregistrés.",
       "saveFailed": "Impossible d’enregistrer les filtres Jira."
+    },
+    "statusFilters": {
+      "loadFailed": "Impossible de charger les filtres de statut Jira.",
+      "saveFailed": "Impossible d’enregistrer les filtres de statut Jira.",
+      "manualQuery": "Les filtres de statut s’appliquent aux vues prédéfinies. Effacez la recherche pour les utiliser.",
+      "label": "Filtrer les tickets Jira par statut",
+      "clear": "Effacer les statuts",
+      "jql": "JQL du filtre de statut",
+      "editJql": "Modifier en JQL",
+      "catalogHint": "Les statuts proviennent des tickets chargés. Effacez les statuts pour en découvrir d’autres dans cette vue."
     }
   }
 }

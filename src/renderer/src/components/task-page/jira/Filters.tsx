@@ -1,3 +1,4 @@
+import { TaskPageJiraStatusFilters } from '../../TaskPageJiraStatusFilters'
 import { TaskPageJiraSavedFilters } from '../../TaskPageJiraSavedFilters'
 import type { TaskPageComposerActionsModel } from '../../use-task-page-composer-actions'
 import { cn } from '@/lib/utils'
@@ -177,6 +178,7 @@ export function TaskPageJiraFilters({
           {jiraSavedFiltersError}
         </p>
       ) : null}
+      <TaskPageJiraStatusFilters model={model} />
       <div className="mt-3 flex items-center gap-3">
         <div className="relative min-w-[320px] flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />

@@ -332,6 +332,7 @@ import {
   SiteSelection,
   UserSearch
 } from './jira-params'
+import { JiraQuickFilterStateParam } from './jira-quick-filter-params'
 import { JiraSavedFilterMutationParam } from './jira-saved-filter-params'
 import {
   AgentIssueContext,
@@ -1279,10 +1280,12 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminalDaemon.restartSevered': TerminalDaemonRestartSeveredParams,
   'terminalDaemon.severedStatus': null,
   'ui.get': null,
+  'ui.getJiraQuickFilters': null,
   'ui.getJiraSavedFilters': null,
   'ui.mutateJiraSavedFilters': JiraSavedFilterMutationParam,
   'ui.recordFeatureInteraction': FeatureInteractionIdParam,
   'ui.set': UiUpdate,
+  'ui.setJiraQuickFilters': JiraQuickFilterStateParam,
   'updater.check': UpdaterCheckParams,
   'updater.download': null,
   'updater.getStatus': null,

@@ -19964,6 +19964,16 @@
       "noMatch": "No hay filtros coincidentes.",
       "loadFailed": "No se pudieron cargar los filtros guardados de Jira.",
       "saveFailed": "No se pudieron guardar los filtros de Jira."
+    },
+    "statusFilters": {
+      "loadFailed": "No se pudieron cargar los filtros de estado de Jira.",
+      "saveFailed": "No se pudieron guardar los filtros de estado de Jira.",
+      "manualQuery": "Los filtros de estado se aplican a las vistas predefinidas. Borra la búsqueda para usarlos.",
+      "label": "Filtrar incidencias de Jira por estado",
+      "clear": "Borrar estados",
+      "jql": "JQL del filtro de estado",
+      "editJql": "Editar como JQL",
+      "catalogHint": "Los estados provienen de las incidencias cargadas. Borra los estados para descubrir otros en esta vista."
     }
   }
 }

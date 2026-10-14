@@ -1,5 +1,10 @@
 import { sortByUpdatedAtDescending } from '../../shared/updated-at-order'
-import type { JiraIssue, JiraIssueFilter, JiraSiteSelection } from '../../shared/jira-types'
+import type {
+  JiraIssue,
+  JiraIssueFilter,
+  JiraIssueListFilters,
+  JiraSiteSelection
+} from '../../shared/jira-types'
 import { buildJiraPresetJql } from '../../shared/jira-preset-jql'
 import { acquire, release } from './request-queue'
 import { apiBasePath, jiraRequest, type JiraClientForSite } from './authenticated-request'
@@ -17,7 +22,7 @@ import {
 
 const ISSUE_SEARCH_TIMEOUT_MS = 30_000
 const PROJECTS_PER_QUERY = 100
-type JiraIssueQuery = { filter: JiraIssueFilter } | { jql: string }
+type JiraIssueQuery = { filter: JiraIssueFilter; filters?: JiraIssueListFilters } | { jql: string }
 
 function clampLimit(limit: number | undefined, fallback = 30): number {
   return Math.min(Math.max(1, Number.isFinite(limit) ? Number(limit) : fallback), 100)
@@ -36,7 +41,7 @@ async function readIssuesForClient(
   if ('jql' in query) {
     return searchIssuesForClient(entry, query.jql, limit, signal)
   }
-  const jql = buildJiraPresetJql(query.filter)
+  const jql = buildJiraPresetJql(query.filter, query.filters)
   if (query.filter !== 'all' || entry.site.authType === 'server') {
     return searchIssuesForClient(entry, jql, limit, signal)
   }
@@ -114,9 +119,10 @@ export async function listIssues(
   filter: JiraIssueFilter = 'assigned',
   limit = 30,
   siteId?: JiraSiteSelection | null,
-  strict = false
+  strict = false,
+  filters?: JiraIssueListFilters
 ): Promise<JiraIssue[]> {
-  return runIssueSearch({ filter }, limit, siteId, undefined, strict)
+  return runIssueSearch({ filter, filters }, limit, siteId, undefined, strict)
 }
 
 export async function searchIssues(

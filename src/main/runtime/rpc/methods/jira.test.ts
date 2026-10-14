@@ -281,6 +281,23 @@ describe('jira RPC methods', () => {
   })
 })
 
+it('forwards optional status filters without changing older preset requests', async () => {
+  const jiraListIssues = vi.fn().mockResolvedValue([])
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the runtime identity and list method are invoked by these requests.
+  const runtime = { getRuntimeId: () => 'host-a', jiraListIssues } as unknown as OrcaRuntimeService
+  const dispatcher = new RpcDispatcher({ runtime, methods: JIRA_METHODS })
+  expect(
+    await dispatcher.dispatch(
+      makeRequest('jira.listIssues', { filter: 'all', filters: { statuses: ['In Progress'] } })
+    )
+  ).toMatchObject({ ok: true })
+  expect(jiraListIssues).toHaveBeenLastCalledWith('all', undefined, undefined, {
+    statuses: ['In Progress']
+  })
+  await dispatcher.dispatch(makeRequest('jira.listIssues', { filter: 'all' }))
+  expect(jiraListIssues).toHaveBeenLastCalledWith('all', undefined, undefined)
+})
+
 describe('Jira title generation RPC', () => {
   it('binds generation and stop to the authenticated device across one-shot sockets', async () => {
     const generate = vi.fn().mockResolvedValue({ success: true, summary: 'Title' })

@@ -1,3 +1,4 @@
+import { JiraIssueListFiltersParam } from './jira-quick-filter-params'
 import { z } from 'zod'
 import {
   OptionalFiniteNumber,
@@ -39,7 +40,8 @@ export const ListIssues = z
     filter: z.enum(VALID_FILTERS).optional(),
     limit: OptionalFiniteNumber,
     siteId: OptionalString,
-    strict: z.boolean().optional()
+    strict: z.boolean().optional(),
+    filters: JiraIssueListFiltersParam.optional()
   })
   .optional()
 
