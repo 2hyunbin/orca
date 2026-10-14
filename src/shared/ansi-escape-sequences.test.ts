@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
-import { stripAnsiEscapeSequences } from './ansi-escape-sequences'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import {
+  prepareBenchmark,
+  runDescriptor
+} from '../../config/scripts/check-job-log-byte-cap-benchmark.mjs'
+import { createManifest } from '../../config/scripts/check-job-log-performance-cases.mjs'
+import { ESCAPE_SEQUENCE_PATTERN, stripAnsiEscapeSequences } from './ansi-escape-sequences'
 import { sanitizeCheckJobLogExcerpt } from './check-job-log-excerpt'
 
 const strings = [
@@ -42,6 +47,27 @@ describe('ordered linear ANSI stripping', () => {
     expect(stripAnsiEscapeSequences('\x00\x01\x18\x1a\x7f\x9c\t\r\n\x1b ')).toBe(
       '\x00\x01\x18\x1a\x7f\x9c\t\r\n\x1b '
     )
+  })
+  it('matches the exported generic grammar at every byte and intermediate boundary', () => {
+    for (const intermediates of ['', ' ', ' /']) {
+      for (let unit = 0; unit <= 0xff; unit++) {
+        const input = `a\x1b${intermediates}${String.fromCharCode(unit)}`
+        expect(stripAnsiEscapeSequences(input)).toBe(input.replace(ESCAPE_SEQUENCE_PATTERN, ''))
+      }
+    }
+  })
+  it.each([
+    ['a\x1b /\x1bc', 'a\x1b /'],
+    ['a\x1b /\x00\x1b~b', 'a\x1b /\x00b'],
+    ['a\x1b\x1b /0b', 'a\x1bb'],
+    ['a\x1b /\x7fb\x1b ', 'a\x1b /\x7fb\x1b ']
+  ])('keeps failed generic matches literal before later escapes in %j', (input, expected) => {
+    expect(stripAnsiEscapeSequences(input)).toBe(expected)
+  })
+  it('collects dense generic removals across owned block boundaries without altering UTF-16', () => {
+    const visible = '界\ud800a😀\udfff'
+    const input = `${visible}\x1b(B`.repeat(4097)
+    expect(stripAnsiEscapeSequences(input)).toBe(visible.repeat(4097))
   })
   it.each([
     ['\x1b]a\x1b\\KEEP\x1b]b\x07', 'KEEP'],
@@ -88,4 +114,33 @@ describe('ordered linear ANSI stripping', () => {
       spy.mockClear()
     }
   })
+})
+
+describe('near-cap unfinished 7-bit stripping completion', { concurrent: false }, () => {
+  let context: Awaited<ReturnType<typeof prepareBenchmark>>
+  beforeAll(async () => {
+    context = await prepareBenchmark()
+  }, 15_000)
+  afterAll(async () => {
+    await context?.cleanup()
+  })
+  it.each(['osc', 'dcs'])(
+    'completes %s warmups and a sample under the unchanged child watchdog',
+    async (family) => {
+      const descriptor = createManifest().find(
+        (item) =>
+          item.mode === 'direct' &&
+          item.arm === 'proposed' &&
+          item.family === family &&
+          item.width === 7 &&
+          item.bytes === 63 * 1024 * 1024 &&
+          item.sample === 0
+      )
+      expect(descriptor).toBeDefined()
+      const result = await runDescriptor(context, descriptor)
+      expect(result.status).toBe('completed')
+      expect(result.samples).toHaveLength(1)
+    },
+    15_000
+  )
 })

@@ -33,6 +33,31 @@ function nextSt(value: string, payloadStart: number, search: TerminatorSearch): 
   search.cursor = value.length
 }
 
+function createAnsiSpanCollector(value: string) {
+  let block = ''
+  const blocks: string[] = []
+  const appendSpan = (start: number, end: number): void => {
+    while (start < end) {
+      const next = Math.min(end, start + 4096 - block.length)
+      block += value.slice(start, next)
+      start = next
+      if (block.length === 4096) {
+        blocks.push(ownRetainedString(block))
+        block = ''
+      }
+    }
+  }
+  return {
+    appendSpan,
+    finish: (): string => {
+      if (block) {
+        blocks.push(ownRetainedString(block))
+      }
+      return blocks.join('')
+    }
+  }
+}
+
 function stripControlStrings(value: string, osc: boolean): string {
   if (!(osc ? OSC_INTRODUCER_PATTERN : STRING_INTRODUCER_PATTERN).test(value)) {
     return value
@@ -41,19 +66,7 @@ function stripControlStrings(value: string, osc: boolean): string {
   let bel = -1
   let belExhausted = false
   let spanStart = 0
-  let block = ''
-  let blocks: string[] | undefined
-  const appendSpan = (start: number, end: number): void => {
-    while (start < end) {
-      const next = Math.min(end, start + 4096 - block.length)
-      block += value.slice(start, next)
-      start = next
-      if (block.length === 4096) {
-        blocks?.push(ownRetainedString(block))
-        block = ''
-      }
-    }
-  }
+  let collector: ReturnType<typeof createAnsiSpanCollector> | undefined
   for (let index = 0; index < value.length; index += 1) {
     const unit = value.charCodeAt(index)
     let width = 0
@@ -81,19 +94,43 @@ function stripControlStrings(value: string, osc: boolean): string {
     if (end === -1) {
       continue
     }
-    blocks ??= []
-    appendSpan(spanStart, index)
+    collector ??= createAnsiSpanCollector(value)
+    collector.appendSpan(spanStart, index)
     spanStart = end
     index = end - 1
   }
-  if (!blocks) {
+  if (!collector) {
     return value
   }
-  appendSpan(spanStart, value.length)
-  if (block) {
-    blocks.push(ownRetainedString(block))
+  collector.appendSpan(spanStart, value.length)
+  return collector.finish()
+}
+
+function stripGenericEscapes(value: string): string {
+  let index = value.indexOf('\u001b')
+  let spanStart = 0
+  let collector: ReturnType<typeof createAnsiSpanCollector> | undefined
+  // Dense unfinished 7-bit strings must not allocate a global replacement entry per introducer.
+  while (index !== -1) {
+    let end = index + 1
+    let unit = value.charCodeAt(end)
+    while (unit >= 0x20 && unit <= 0x2f) {
+      end += 1
+      unit = value.charCodeAt(end)
+    }
+    if (unit >= 0x30 && unit <= 0x7e) {
+      collector ??= createAnsiSpanCollector(value)
+      collector.appendSpan(spanStart, index)
+      end += 1
+      spanStart = end
+    }
+    index = value.indexOf('\u001b', end)
   }
-  return blocks.join('')
+  if (!collector) {
+    return value
+  }
+  collector.appendSpan(spanStart, value.length)
+  return collector.finish()
 }
 
 /**
@@ -109,7 +146,5 @@ export function stripAnsiEscapeSequences(value: string): string {
     ? stripControlStrings(stripControlStrings(value, true), false)
     : value
   const withoutCsi = stripped.replace(CSI_SEQUENCE_PATTERN, '')
-  return withoutCsi.includes('\u001b')
-    ? withoutCsi.replace(ESCAPE_SEQUENCE_PATTERN, '')
-    : withoutCsi
+  return stripGenericEscapes(withoutCsi)
 }
