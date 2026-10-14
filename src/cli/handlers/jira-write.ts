@@ -90,7 +90,7 @@ async function transition(context: HandlerContext): Promise<void> {
   if (Boolean(wanted) === Boolean(explicit)) {
     throw new RuntimeClientError(
       'invalid_argument',
-      'Pass --to <name> or --to-id <transitionId>, not both.'
+      'Pass exactly one of --to <name> or --to-id <transitionId>.'
     )
   }
   const target = await resolveJiraTarget(context, getRequiredStringFlag(context.flags, 'key'))

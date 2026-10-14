@@ -97,20 +97,27 @@ Before any status move, read the issue's current status. Do not move an issue th
 When finishing a Jira-linked task with a PR/MR:
 
 1. Read the current issue and its status.
-2. Post exactly one completion comment containing the PR/MR link and a 2-4 sentence summary.
-3. Transition the issue to the review status when doing so would not regress it.
-4. Do not post running commentary unless the user explicitly asked for an in-progress update.
+2. List the issue's available transitions and choose a review transition only when it is unambiguous and would not regress the issue.
+3. Apply that transition when appropriate. If it is rejected or its outcome is uncertain, keep that result for the completion comment and verify before any retry.
+4. Post exactly one completion comment containing the PR/MR link, a 2-4 sentence summary and the status outcome. If no suitable transition exists, explain why the status stayed unchanged.
+5. Do not post running commentary unless the user explicitly asked for an in-progress update.
 
 ```bash
-ORCA jira comment add ENG-123 --body "Fixed in <pr-url>. Root cause was ..." --json
-ORCA jira status set ENG-123 --to "In Review" --json
+ORCA jira status list ENG-123 --json
+```
+
+After choosing a suitable transition, apply it before composing the completion comment:
+
+```bash
+ORCA jira status set ENG-123 --to-id <transitionId> --json
+ORCA jira comment add ENG-123 --body "Fixed in <pr-url>. Root cause was ... Status outcome: <confirmed move or unchanged reason>." --json
 ```
 
 Orca's Jira CLI has no attach subcommand. Put the PR/MR link in the completion comment instead.
 
 ## Follow-Up Issues
 
-When you find an out-of-scope bug while working a linked task, create a concrete follow-up instead of burying it in chat:
+Creating an out-of-scope follow-up issue requires explicit user authorization. If that authorization has not already been given, report the finding with a concise repro and ask before creating it. Once authorized, create a concrete follow-up:
 
 ```bash
 ORCA jira project types --project ENG --json
@@ -131,7 +138,7 @@ Writes are single-attempt and are not idempotent. If a write fails with an uncle
 
 ## Next Action
 
-Confirm `ORCA status --json` unless already checked this turn, then read the issue with `ORCA jira issue <key> --json`. For completion, add one completion comment containing the PR/MR link, then transition status only when the target transition is unambiguous and non-regressive.
+Confirm `ORCA status --json` unless already checked this turn, then read the issue with `ORCA jira issue <key> --json`. For completion, first resolve the available transitions and apply a status change only when it is appropriate. Then post one completion comment containing the PR/MR link and the actual status outcome.
 
 ## Connections and verified reads
 

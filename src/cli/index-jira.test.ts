@@ -298,6 +298,20 @@ describe('Jira CLI', () => {
     expect(mocks.callMock).not.toHaveBeenCalled()
   })
 
+  it.each([[], ['--to', 'In Progress', '--to-id', '31'], ['--to', ' '], ['--to-id', ' ']])(
+    'requires exactly one nonblank transition selector before access: %s',
+    async (...flags) => {
+      await run(['status', 'set', 'ENG-123', ...flags])
+      expect(errorOutput()).toMatchObject({
+        error: {
+          code: 'invalid_argument',
+          message: 'Pass exactly one of --to <name> or --to-id <transitionId>.'
+        }
+      })
+      expect(mocks.callMock).not.toHaveBeenCalled()
+    }
+  )
+
   it('resolves status names using transitions of this exact issue and site', async () => {
     await run(['status', 'set', 'eng-123', '--to', 'In Progress'])
     expect(mocks.callMock).toHaveBeenCalledWith('jira.listTransitions', {
