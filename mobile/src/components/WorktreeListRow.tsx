@@ -285,7 +285,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textMuted,
     fontFamily: typography.monoFamily,
-    flexShrink: 1
+    // Why zero basis: the path takes only what the badges leave, so a short host name never truncates.
+    flexBasis: 0,
+    flexGrow: 1
   },
   childBadge: {
     flexDirection: 'row',
@@ -301,9 +303,8 @@ const styles = StyleSheet.create({
     color: colors.textMuted
   },
   // Why the cap is on the name, not the badge: a health word after a long name must stay readable.
-  // Why no shrink: the path beside it gives up space first; the name cap still bounds the badge.
   hostBadge: {
-    flexShrink: 0
+    flexShrink: 1
   },
   hostBadgeText: {
     flexShrink: 1,

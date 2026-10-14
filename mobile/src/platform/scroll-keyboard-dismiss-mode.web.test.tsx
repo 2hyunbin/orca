@@ -1,9 +1,5 @@
 // @vitest-environment happy-dom
-/**
- * The page's list keeps a search field focused through a scroll. react-native-web dismisses
- * `on-drag` on every scroll event, not only a drag, and narrowing search results clamps the
- * list's offset, which fires one: each keystroke closed the keyboard.
- */
+// The page's search field must survive the scroll event a narrowing search fires.
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'

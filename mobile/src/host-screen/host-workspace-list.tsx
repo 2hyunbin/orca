@@ -121,7 +121,7 @@ export function HostWorkspaceList({ controller }: { controller: HostScreenContro
           sections={sections}
           keyExtractor={(w) => w.sectionListKey ?? getWorktreeRowIdentity(w)}
           stickySectionHeadersEnabled={false}
-          // Why: keep the search IME up while tapping clear / scrolling results.
+          // Why: keep the search IME up while tapping clear.
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={SCROLL_KEYBOARD_DISMISS_MODE}
           onScrollToIndexFailed={activeWorktreeScroll.onScrollToIndexFailed}
