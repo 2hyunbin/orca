@@ -20,6 +20,22 @@ export async function qualifyProviderWorkspaceReopen(input: {
   await machine.getByRole('button', { name: 'Open workspace', exact: true }).click()
   const project = input.page.getByRole('dialog')
   await expect(project).toBeVisible({ timeout: 30_000 })
+  const nativeWindow = await input.app.browserWindow(input.page)
+  try {
+    await nativeWindow.evaluate((window) => window.setSize(1000, 720))
+  } finally {
+    await nativeWindow.dispose()
+  }
+  const bounds = await project.boundingBox()
+  const viewport = await input.page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
+  expect(bounds).not.toBeNull()
+  if (!bounds) {
+    throw new Error('The workspace dialog has no rendered bounds')
+  }
+  expect(bounds.x).toBeGreaterThanOrEqual(0)
+  expect(bounds.y).toBeGreaterThanOrEqual(0)
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width)
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height)
   await expect(project.getByRole('region', { name: 'Saved workspaces', exact: true })).toBeVisible()
   await capturePluginEvidence(
     input.page,
@@ -27,7 +43,10 @@ export async function qualifyProviderWorkspaceReopen(input: {
     'node-provider-saved-workspace-picker-native',
     input.app
   )
-  await project.getByRole('button', { name: 'Open Provider folder workspace', exact: true }).click()
+  const saved = project.getByRole('button', { name: 'Open Provider folder workspace', exact: true })
+  await saved.focus()
+  await expect(saved).toBeFocused()
+  await input.page.keyboard.press('Enter')
   await expect(project).toBeHidden()
   await input.page.getByRole('button', { name: /^Explorer\b/u }).click()
   await input.page

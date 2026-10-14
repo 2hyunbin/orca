@@ -1,0 +1,18 @@
+{
+  "rebaseRef": "4857afde791c22d4f6208047488edb4c938441a8",
+  "serializerSha256": "e9e83997b45ca88a0660ad8faceaf55627aaeccd36949da1a3ad172b389fe451",
+  "failureSignatures": [
+    "none/false/2/14:0c74bdebf8078fe6add52a8ce9b521d6f85417b58d1f06ff9fc563a566a4bc4d",
+    "none/false/2/25:249a8c59dc5156e10e23a31cfafe559827af021797ac16fb3835d021efc8dea5",
+    "none/true/2/14:0c74bdebf8078fe6add52a8ce9b521d6f85417b58d1f06ff9fc563a566a4bc4d",
+    "none/true/2/25:249a8c59dc5156e10e23a31cfafe559827af021797ac16fb3835d021efc8dea5",
+    "shrink/false/2/14:0c74bdebf8078fe6add52a8ce9b521d6f85417b58d1f06ff9fc563a566a4bc4d",
+    "shrink/false/2/26:0d94bd63aebfe927132dfdcd61a1365647176db7510fb7d26d248680ad6f73e7",
+    "shrink/true/2/14:0c74bdebf8078fe6add52a8ce9b521d6f85417b58d1f06ff9fc563a566a4bc4d",
+    "shrink/true/2/26:0d94bd63aebfe927132dfdcd61a1365647176db7510fb7d26d248680ad6f73e7",
+    "shrink-grow/false/2/15:6903eac9616722c66c1082dff5697921583672d11b202b698b107275fd1576a2",
+    "shrink-grow/true/2/15:6903eac9616722c66c1082dff5697921583672d11b202b698b107275fd1576a2",
+    "jitter/false/1/21:fd624509fb64e3f95696c9d7ba0ba4cad83983d26b204fd48efa7c753af5a03e",
+    "jitter/true/1/21:fd624509fb64e3f95696c9d7ba0ba4cad83983d26b204fd48efa7c753af5a03e"
+  ]
+}

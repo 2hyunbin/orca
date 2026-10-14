@@ -127,6 +127,14 @@ const KNOWN_PREEXISTING_I2_FAILURES: Record<string, number> = {
 }
 
 // Exact resize checkpoints and full GridDiff hashes from base 6835b9b4e3ea, not this branch.
+// The unchanged rebase-base serializer produces the same twelve visible-grid differences.
+const CAPACITY_FULLSCREEN_BASELINE: { failureSignatures: readonly string[] } = JSON.parse(
+  readFileSync(
+    join(__dirname, '__fixtures__/codex-capacity-fullscreen-serialize-baseline.json'),
+    'utf8'
+  )
+)
+
 const FREEBUFF_BASELINE: Record<string, readonly string[]> = JSON.parse(
   readFileSync(join(__dirname, '__fixtures__/freebuff-serialize-baseline.json'), 'utf8')
 )
@@ -259,6 +267,7 @@ describe('serialize round trip over captured PTY transcripts', () => {
       }
       if (process.env.SERIALIZE_FUZZ_REPORT === '1') {
         console.log(`${transcript.name} ${JSON.stringify(counts)}`)
+        console.log(`${transcript.name} signatures ${JSON.stringify(failureSignatures)}`)
       }
       expect(blocking).toEqual([])
       if (SEEDS === 2 && transcript.name === 'hermes-tui-ready') {
@@ -275,6 +284,8 @@ describe('serialize round trip over captured PTY transcripts', () => {
         ])
       } else if (SEEDS === 2 && transcript.name.startsWith('freebuff-')) {
         expect(failureSignatures).toEqual(FREEBUFF_BASELINE[transcript.name] ?? [])
+      } else if (SEEDS === 2 && transcript.name === 'codex-model-capacity-fullscreen') {
+        expect(failureSignatures).toEqual(CAPACITY_FULLSCREEN_BASELINE.failureSignatures)
       } else if (!OLD_ADDON_PATH && SEEDS === 2) {
         expect(counts['new-fail'] ?? 0).toBe(KNOWN_PREEXISTING_I2_FAILURES[transcript.name] ?? 0)
       }

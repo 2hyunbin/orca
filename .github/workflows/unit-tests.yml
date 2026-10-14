@@ -61,6 +61,15 @@ jobs:
       - name: Install Electron package binary for tests
         run: node config/scripts/install-electron-package-binary.mjs
 
+      - name: Prepare the Linux Chromium sandbox helper
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          ORCA_TEST_CHROME_SANDBOX="$(node -e 'const p = require("node:path"); process.stdout.write(p.join(p.dirname(require("electron")), "chrome-sandbox"))')"
+          test -f "$ORCA_TEST_CHROME_SANDBOX"
+          sudo chown root:root "$ORCA_TEST_CHROME_SANDBOX"
+          sudo chmod 4755 "$ORCA_TEST_CHROME_SANDBOX"
+
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: config/.bun-version
