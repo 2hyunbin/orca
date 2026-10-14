@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { proveWslMoveTerminalsExited } from './wsl-move-exit-proof'
 
 const moved = new Set(['repo::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'])
+const scope = { worktreeIds: moved, sessionIds: new Set<string>() }
 const id = (worktreeId: string, n: number) => `${worktreeId}@@${n}`
 
 describe('proveWslMoveTerminalsExited', () => {
@@ -11,7 +12,7 @@ describe('proveWslMoveTerminalsExited', () => {
         { sessionId: id([...moved][0], 1), isAlive: false },
         { sessionId: id('other::C:\\src', 2), isAlive: true }
       ],
-      moved
+      scope
     )
     expect(proof).toEqual({ verdict: 'exited' })
   })
@@ -19,7 +20,7 @@ describe('proveWslMoveTerminalsExited', () => {
   it('names every live session of a moved workspace', async () => {
     const live = id([...moved][0], 3)
     await expect(
-      proveWslMoveTerminalsExited(async () => [{ sessionId: live, isAlive: true }], moved)
+      proveWslMoveTerminalsExited(async () => [{ sessionId: live, isAlive: true }], scope)
     ).resolves.toEqual({ verdict: 'live', sessionIds: [live] })
   })
 
@@ -27,7 +28,16 @@ describe('proveWslMoveTerminalsExited', () => {
     await expect(
       proveWslMoveTerminalsExited(async () => {
         throw new Error('daemon unreachable')
-      }, moved)
+      }, scope)
     ).resolves.toEqual({ verdict: 'unverifiable', reason: 'daemon unreachable' })
+  })
+
+  it('counts a live pane session whose id predates the minted format', async () => {
+    await expect(
+      proveWslMoveTerminalsExited(async () => [{ sessionId: 'legacy-uuid', isAlive: true }], {
+        worktreeIds: moved,
+        sessionIds: new Set(['legacy-uuid'])
+      })
+    ).resolves.toEqual({ verdict: 'live', sessionIds: ['legacy-uuid'] })
   })
 })

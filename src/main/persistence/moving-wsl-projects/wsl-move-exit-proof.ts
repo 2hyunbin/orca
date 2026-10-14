@@ -13,7 +13,11 @@ export type WslMoveExitProof =
 
 export async function proveWslMoveTerminalsExited(
   listSessions: () => Promise<readonly Pick<SessionInfo, 'sessionId' | 'isAlive'>[]>,
-  movedWorktreeIds: ReadonlySet<string>
+  scope: {
+    worktreeIds: ReadonlySet<string>
+    /** The ids the moved panes recorded; covers a session whose id predates the minted format. */
+    sessionIds: ReadonlySet<string>
+  }
 ): Promise<WslMoveExitProof> {
   let sessions: readonly Pick<SessionInfo, 'sessionId' | 'isAlive'>[]
   try {
@@ -26,8 +30,14 @@ export async function proveWslMoveTerminalsExited(
   }
   const live = sessions
     .filter((session) => {
+      if (!session.isAlive) {
+        return false
+      }
+      if (scope.sessionIds.has(session.sessionId)) {
+        return true
+      }
       const { worktreeId } = parsePtySessionId(session.sessionId)
-      return session.isAlive && worktreeId !== null && movedWorktreeIds.has(worktreeId)
+      return worktreeId !== null && scope.worktreeIds.has(worktreeId)
     })
     .map((session) => session.sessionId)
   return live.length > 0 ? { verdict: 'live', sessionIds: live } : { verdict: 'exited' }

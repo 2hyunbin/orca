@@ -60,8 +60,9 @@ export function assessWslMoveTerminals(inputs: WslMoveGateInputs): WslMoveGateVe
   for (const pane of inputs.panes) {
     if (pane.foreground === 'unverifiable') {
       block('unverifiable', pane.paneKey, ['wait', 'skip-project'])
-    } else if (pane.agent?.state === 'working' || pane.agent?.state === 'blocked') {
-      // Mid-turn, or holding a permission prompt a restart would lose; the move resumes after.
+    } else if (pane.agent?.state === 'working' || pane.agent?.state === 'waiting') {
+      // Mid-turn, or holding a permission prompt ('waiting') a restart would lose. 'blocked' means
+      // failed, which resumes like any settled turn.
       block('agent-working', pane.paneKey, ['wait', 'end'])
     } else if (pane.agent && !pane.agent.resumable) {
       block('agent-not-resumable', pane.paneKey, ['end', 'skip-project'])

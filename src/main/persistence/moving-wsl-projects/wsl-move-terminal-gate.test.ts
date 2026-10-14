@@ -16,13 +16,13 @@ const gate = (panes: WslMovePaneFacts[], runs: string[] = [], dispatches: string
   assessWslMoveTerminals({ panes, runningAutomationRunIds: runs, activeDispatchIds: dispatches })
 
 describe('assessWslMoveTerminals', () => {
-  it('lets idle shells and resumable idle agents through', () => {
+  it('lets idle shells and resumable settled or failed agents through', () => {
     expect(
       gate([
         pane('t1:a'),
         pane('t1:b', { agent: { state: 'done', resumable: true } }),
         pane('t2:a', {
-          agent: { state: 'waiting', resumable: true },
+          agent: { state: 'blocked', resumable: true },
           foreground: 'process-running'
         })
       ])
@@ -37,8 +37,8 @@ describe('assessWslMoveTerminals', () => {
       ['wait', 'end']
     ],
     [
-      'an agent at a prompt',
-      { agent: { state: 'blocked', resumable: true } },
+      'an agent at a permission prompt',
+      { agent: { state: 'waiting', resumable: true } },
       'agent-working',
       ['wait', 'end']
     ],
