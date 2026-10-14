@@ -8,11 +8,11 @@ import {
   type PluginRestartDecision,
   type PluginRunState
 } from './plugin-supervisor'
-import type { PluginWorkerHandle, PluginWorkerHostCallExecutor } from './plugin-host-process'
+import type { PluginWorkerHandle } from './plugin-host-process'
+import type { PluginWorkerManagerOptions } from './plugin-worker-manager-options'
 import { PluginWorkerSlotPool } from './plugin-worker-slot-pool'
 import {
   startPluginWorkerAttempt,
-  type PluginWorkerFactory,
   type PluginWorkerSpawnSpec,
   type StartedPluginWorker
 } from './plugin-worker-startup'
@@ -25,20 +25,11 @@ import {
 import { finishPluginWorkerActivation, pluginWorkerErrorText } from './plugin-worker-lifecycle'
 
 export type { PluginWorkerFactory, PluginWorkerSpawnSpec } from './plugin-worker-startup'
+export type { PluginWorkerManagerOptions } from './plugin-worker-manager-options'
 
-export type PluginWorkerManagerOptions = {
-  entryPath: string
-  maxActive?: number
-  idleReapMs?: number
-  workerFactory?: PluginWorkerFactory
-  executeHostCall: (
-    pluginKey: string,
-    method: string,
-    params: unknown
-  ) => ReturnType<PluginWorkerHostCallExecutor>
-  log: (pluginKey: string) => (level: 'info' | 'warn' | 'error', line: string) => void
-  onWorkerStateChange: (pluginKey: string) => void
-  onWorkerGone: (pluginKey: string) => void
+type WorkerAdmission = {
+  assertApproved: () => void
+  verifyBeforeStart?: () => Promise<void>
 }
 
 type ActivationRecord = {
@@ -84,7 +75,8 @@ export class PluginWorkerManager {
 
   async ensureActive(
     spec: PluginWorkerSpawnSpec,
-    assertApproved: () => void = () => undefined
+    assertApproved: () => void = () => undefined,
+    verifyBeforeStart?: () => Promise<void>
   ): Promise<PluginWorkerHandle> {
     if (this.disposed) {
       throw new Error('plugin workers are shut down')
@@ -115,16 +107,17 @@ export class PluginWorkerManager {
     const generation = this.nextGeneration(spec.pluginKey)
     this.knownSpecs.set(spec.pluginKey, spec)
     this.supervisor.markRunning(spec.pluginKey, { resetRestarts: true })
-    return this.beginActivation(spec, generation)
+    return this.beginActivation(spec, generation, { assertApproved, verifyBeforeStart })
   }
 
   private beginActivation(
     spec: PluginWorkerSpawnSpec,
     generation: number,
+    admission: WorkerAdmission,
     firstRestart?: Extract<PluginRestartDecision, { restart: true }>
   ): Promise<PluginWorkerHandle> {
     const controller = new AbortController()
-    const task = this.activate(spec, generation, controller.signal, firstRestart)
+    const task = this.activate(spec, generation, controller.signal, admission, firstRestart)
     const record: ActivationRecord = { spec, generation, controller, task }
     this.activations.set(spec.pluginKey, record)
     void task.then(
@@ -138,6 +131,7 @@ export class PluginWorkerManager {
     spec: PluginWorkerSpawnSpec,
     generation: number,
     signal: AbortSignal,
+    admission: WorkerAdmission,
     firstRestart?: Extract<PluginRestartDecision, { restart: true }>
   ): Promise<PluginWorkerHandle> {
     const log = this.options.log(spec.pluginKey)
@@ -156,8 +150,13 @@ export class PluginWorkerManager {
           executeHostCall: (method, params) =>
             this.options.executeHostCall(spec.pluginKey, method, params),
           log,
-          assertActive: () => this.throwIfCancelled(spec.pluginKey, generation, signal),
-          onExit: (record, code) => this.handleUnexpectedExit(spec.pluginKey, record, code)
+          assertActive: () => {
+            this.throwIfCancelled(spec.pluginKey, generation, signal)
+            admission.assertApproved()
+          },
+          verifyBeforeStart: admission.verifyBeforeStart,
+          onExit: (record, code) =>
+            this.handleUnexpectedExit(spec.pluginKey, record, code, admission)
         })
         this.workers.set(spec.pluginKey, worker)
         const earlyExit = worker.completeStart()
@@ -180,7 +179,8 @@ export class PluginWorkerManager {
   private handleUnexpectedExit(
     pluginKey: string,
     record: StartedPluginWorker,
-    code: number | null
+    code: number | null,
+    admission: WorkerAdmission
   ): void {
     if (!this.detachWorker(pluginKey, record)) {
       return
@@ -190,7 +190,7 @@ export class PluginWorkerManager {
     }
     const decision = this.recordFailure(pluginKey, `worker exited unexpectedly (code ${code})`)
     if (decision.restart) {
-      this.beginActivation(record.spec, record.generation, decision)
+      this.beginActivation(record.spec, record.generation, admission, decision)
     }
   }
 

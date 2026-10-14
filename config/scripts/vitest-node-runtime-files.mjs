@@ -45,6 +45,7 @@ export const NODE_RUNTIME_INCLUDE = [
   'src/main/runtime/terminal-tail-redraw-wall-time.test.ts',
   'src/main/agent-hooks/server-transport-interference.test.ts',
   'src/main/plugins/plugin-worker-supervision.integration.test.ts',
+  'src/main/plugins/plugin-worker-release-approval.test.ts',
   'src/main/plugins/plugin-environment-recipe-execution.test.ts',
   'src/main/plugins/plugin-environment-recovery-execution.test.ts',
   'src/main/plugins/plugin-environment-recipe-journal-store.test.ts',

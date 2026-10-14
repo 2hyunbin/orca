@@ -44,12 +44,17 @@ export async function startPluginWorkerAttempt(options: {
   executeHostCall: PluginWorkerHostCallExecutor
   log: PluginWorkerLogSink
   assertActive: () => void
+  verifyBeforeStart?: () => Promise<void>
   onExit: (worker: StartedPluginWorker, code: number | null) => void
 }): Promise<StartedPluginWorker> {
   const lease = await options.slots.acquire(options.signal)
   let handle: PluginWorkerHandle | null = null
   let retained = false
   try {
+    options.assertActive()
+    if (options.verifyBeforeStart) {
+      await options.verifyBeforeStart()
+    }
     options.assertActive()
     const factory = options.factory ?? startPluginWorker
     handle = await factory({

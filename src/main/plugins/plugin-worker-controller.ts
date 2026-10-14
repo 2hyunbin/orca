@@ -7,6 +7,7 @@ import {
 } from '../../shared/plugins/plugin-extension-registry'
 import type { ValidDiscoveredPlugin } from './plugin-discovery'
 import { resolveContainedPluginArtifact } from './plugin-artifact-validation'
+import { verifyReviewedPluginRelease } from './plugin-reviewed-release'
 import type { PluginContentVerifier } from './plugin-content-integrity'
 import {
   PluginWorkerManager,
@@ -73,6 +74,7 @@ export class PluginWorkerController {
     try {
       this.assertCurrentApproved(plugin)
       await this.options.contentVerifier.verify(plugin)
+      await verifyReviewedPluginRelease(plugin, plugin.reviewRevision)
       await resolveContainedPluginArtifact(plugin.rootDir, plugin.manifest.main)
       this.assertCurrentApproved(plugin)
       const capabilities = this.options.capabilities(plugin.pluginKey)
@@ -80,7 +82,11 @@ export class PluginWorkerController {
         throw new Error(`plugin ${plugin.pluginKey} is no longer approved`)
       }
       const spec = buildPluginWorkerSpawnSpec(plugin, capabilities)
-      const handle = await this.manager.ensureActive(spec, () => this.assertCurrentApproved(plugin))
+      const handle = await this.manager.ensureActive(
+        spec,
+        () => this.assertCurrentApproved(plugin),
+        () => verifyReviewedPluginRelease(plugin, plugin.reviewRevision)
+      )
       if (!this.options.isCurrentApproved(plugin)) {
         await this.manager.deactivate(plugin.pluginKey)
         throw new Error(`plugin ${plugin.pluginKey} changed or was disabled during activation`)

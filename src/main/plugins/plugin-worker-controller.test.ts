@@ -158,7 +158,7 @@ describe('PluginWorkerController activation authority', () => {
     approved = false
     finishStart(startedWorker)
 
-    await expect(activation).rejects.toThrow('disabled during activation')
+    await expect(activation).rejects.toThrow('no longer approved')
     expect(startedWorker.dispose).toHaveBeenCalledOnce()
     await subject.dispose()
   })
