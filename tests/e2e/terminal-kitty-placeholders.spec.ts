@@ -4,6 +4,7 @@ import { expect, test } from './helpers/orca-app'
 import { ensureTerminalVisible, waitForSessionReady } from './helpers/store'
 import {
   execInTerminal,
+  sendToTerminal,
   waitForActivePanePtyId,
   waitForActiveTerminalManager,
   waitForTerminalOutput
@@ -12,7 +13,8 @@ import { enableInlineImages } from './helpers/terminal-inline-image-proof'
 import { nodeTerminalCommand } from './terminal-node-command'
 
 test.use({
-  launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' }
+  launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' },
+  orcaAppExtraArgs: ['--force-color-profile=srgb']
 })
 
 const MARK = '\u{10EEEE}'
@@ -69,12 +71,30 @@ for (const acceleration of ['off', 'on'] as const) {
       const producer = testInfo.outputPath('kitty-placeholder-producer.cjs')
       writeFileSync(
         producer,
-        `process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('base64')}', 'base64'))`
+        `process.stdin.setRawMode(true);
+process.stdin.on('data', (data) => {
+  const key = data.toString();
+  if (key === 'q') process.exit(0);
+  const operation = key === 'd' ? 'a=d,d=i,i=65280,q=2' : 'a=p,U=1,i=65280,c=8,r=4,q=2';
+  process.stdout.write('\\x1b_G' + operation + '${kind === 'named' ? ',p=10' : ''};\\x1b\\\\');
+});
+process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('base64')}', 'base64'));`
       )
       await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([producer]))
       await waitForTerminalOutput(orcaPage, 'INLINE_RENDER_DONE', 30_000)
       const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
       await expect(screen).toBeVisible()
+      const screenshot = async (name: string) => {
+        // Compare raw canvas pixels with Chromium's screenshot when a repaint fails.
+        const canvas = await screen.evaluate((element) => {
+          const layer = element.querySelector('.xterm-image-layer-top')
+          return layer instanceof HTMLCanvasElement
+            ? { width: layer.width, height: layer.height, png: layer.toDataURL() }
+            : null
+        })
+        writeFileSync(testInfo.outputPath(`${name}-canvas.json`), JSON.stringify(canvas))
+        return PNG.sync.read(await screen.screenshot({ path: testInfo.outputPath(`${name}.png`) }))
+      }
       const dimensions = await orcaPage.evaluate(() => {
         const tabId = window.__store!.getState().activeTabId
         const pane = tabId && window.__paneManagers?.get(tabId)?.getActivePane()
@@ -86,9 +106,7 @@ for (const acceleration of ['off', 'on'] as const) {
       await expect
         .poll(
           async () => {
-            const image = PNG.sync.read(
-              await screen.screenshot({ path: testInfo.outputPath('kitty-cells.png') })
-            )
+            const image = await screenshot('kitty-cells')
             const cellWidth = image.width / dimensions.cols
             const cellHeight = image.height / dimensions.rows
             const col = kind === 'cursor' ? 0 : 4
@@ -129,19 +147,12 @@ for (const acceleration of ['off', 'on'] as const) {
       expect(redPixels).toBeGreaterThan(1000)
       if (kind === 'placeholder' || kind === 'named') {
         for (const action of ['delete', 'restore'] as const) {
-          const operation =
-            action === 'delete' ? 'a=d,d=i,i=65280,q=2' : 'a=p,U=1,i=65280,c=8,r=4,q=2'
-          const command = operation + (kind === 'named' ? ',p=10' : '')
-          const changeProducer = testInfo.outputPath(`kitty-${action}.cjs`)
-          const bytes = Buffer.from(`\x1b_G${command};\x1b\\`).toString('base64')
-          writeFileSync(changeProducer, `process.stdout.write(Buffer.from('${bytes}', 'base64'))`)
-          await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([changeProducer]))
+          // Only the image command changes: shell echo must not supply the missing repaint.
+          await sendToTerminal(orcaPage, ptyId, action === 'delete' ? 'd' : 'r')
           await expect
             .poll(
               async () => {
-                const png = PNG.sync.read(
-                  await screen.screenshot({ path: testInfo.outputPath(`kitty-${action}.png`) })
-                )
+                const png = await screenshot(`kitty-${action}`)
                 let pixels = 0
                 for (
                   let y = Math.ceil((5 * png.height) / dimensions.rows);
@@ -170,6 +181,7 @@ for (const acceleration of ['off', 'on'] as const) {
             .toBe(action === 'restore')
         }
       }
+      await sendToTerminal(orcaPage, ptyId, 'q')
     })
   }
 }
