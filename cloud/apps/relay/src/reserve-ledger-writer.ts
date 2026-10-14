@@ -25,7 +25,9 @@ export type LedgerEntry = {
 }
 
 export class ReserveLedgerWriter {
-  private queue: LedgerEntry[] = []
+  private queue: (LedgerEntry | undefined)[] = []
+  private head = 0
+  private queued = 0
   private flushing = false
   private failures = 0
   private retryAt = 0
@@ -62,30 +64,52 @@ export class ReserveLedgerWriter {
   // During a database stall the queue grows; past its bound the oldest entries go first,
   // since the 10-minute reconcile rewrites every seat anyway.
   enqueue(entry: LedgerEntry): void {
-    this.queue.push(entry)
     const max = this.input.queueMax ?? RESERVE_LEDGER_QUEUE_MAX
-    if (this.queue.length > max) {
-      const excess = this.queue.length - max
-      this.queue.splice(0, excess)
-      this.dropped += excess
+    if (max === 0) {
+      this.dropped++
+      return
     }
+    if (this.queued === max) {
+      this.remove(1)
+      this.dropped++
+    }
+    this.queue[(this.head + this.queued) % max] = entry
+    this.queued++
   }
 
   pending(): number {
-    return this.queue.length
+    return this.queued
+  }
+
+  private remove(count: number): void {
+    const max = this.input.queueMax ?? RESERVE_LEDGER_QUEUE_MAX
+    const removed = Math.min(count, this.queued)
+    for (let index = 0; index < removed; index++) {
+      this.queue[this.head] = undefined
+      this.head = (this.head + 1) % max
+    }
+    this.queued -= removed
+    if (this.queued === 0) {
+      this.queue = []
+      this.head = 0
+    }
   }
 
   // Single-flight; resolves once the queued rows are written or the attempt failed.
   async flush(): Promise<void> {
-    if (this.flushing || this.queue.length === 0 || this.now() < this.retryAt) {
+    if (this.flushing || this.queued === 0 || this.now() < this.retryAt) {
       this.logSummary()
       return
     }
     this.flushing = true
-    const batch = this.queue.slice(0, RESERVE_LEDGER_BATCH)
+    const max = this.input.queueMax ?? RESERVE_LEDGER_QUEUE_MAX
+    const batch: LedgerEntry[] = []
+    for (let index = 0; index < Math.min(this.queued, RESERVE_LEDGER_BATCH); index++) {
+      batch.push(this.queue[(this.head + index) % max]!)
+    }
     try {
       await this.write(batch)
-      this.queue.splice(0, batch.length)
+      this.remove(batch.length)
       this.written += batch.length
       this.failures = 0
       this.retryAt = 0
@@ -177,7 +201,7 @@ export class ReserveLedgerWriter {
       JSON.stringify({
         event: 'orca_relay_reserve_ledger_summary',
         written: this.written,
-        pending: this.queue.length,
+        pending: this.queued,
         dropped: this.dropped,
         failures: this.failures
       })
@@ -191,7 +215,13 @@ export const RESERVE_LEDGER_RECONCILE_MS = 10 * 60_000
 // A seat this young may still be superseded; the next reconcile takes it.
 const RECONCILE_SETTLE_MS = 30_000
 
-type ReconcileSeat = { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }
+type ReconcileSeat = {
+  userId: string
+  relayHostId: string
+  cellId: string
+  epoch: number
+  joinedAt: number
+}
 
 // Every director upserts the map's seats on reserve-mode cells: guarded and idempotent, so
 // concurrent runs are harmless. A row ahead of the seat (today's path answered a newer epoch,
@@ -211,7 +241,8 @@ export async function reconcileReserveLedger(input: {
   for (const seat of seats) {
     const row = rows.get(`${seat.userId}\u0000${seat.relayHostId}`)
     // Level with the row on another cell is the same divergence: the mirror never replaces it.
-    const behindRow = row && (row.epoch > seat.epoch || (row.epoch === seat.epoch && row.cellId !== seat.cellId))
+    const behindRow =
+      row && (row.epoch > seat.epoch || (row.epoch === seat.epoch && row.cellId !== seat.cellId))
     if (row && behindRow && input.demote) {
       input.demote(seat, row)
       demoted += 1
