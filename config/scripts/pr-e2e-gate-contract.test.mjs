@@ -27,7 +27,7 @@ describe('restart-survival E2E routing', () => {
   // Every file below carries behavior the restart spec is the only test that exercises end to end.
   it.each([
     'src/main/runtime/orca-runtime.ts',
-    'src/main/runtime/orca-runtime-browser.ts',
+    'src/main/runtime/browser/browser-commands.ts',
     'src/main/runtime/client-hosted-page-reconciliation-window.ts',
     'src/main/runtime/runtime-browser-client-page-adoption.ts',
     'src/main/runtime/runtime-browser-client-page-recovery.ts',
@@ -36,7 +36,7 @@ describe('restart-survival E2E routing', () => {
     'src/main/runtime/rpc/methods/browser-client-host.ts',
     'src/main/browser/browser-client-host-authority-replacement-wait.ts',
     'src/main/browser/paired-runtime-browser-client-host-composition.ts',
-    'src/renderer/src/runtime/web-session-tabs-sync.ts',
+    'src/renderer/src/runtime/web-session-tabs-sync/snapshot-api.ts',
     'src/renderer/src/runtime/host-session-snapshot-authority.ts',
     'src/renderer/src/runtime/restored-client-hosted-browser-host-attach.ts',
     'src/renderer/src/store/slices/runtime-status.ts',
@@ -44,6 +44,9 @@ describe('restart-survival E2E routing', () => {
     'src/shared/browser-client-host-protocol.ts'
   ])('routes %s', (path) => {
     expect(restartSurvivalRoute.matches(path)).toBe(true)
+    if (path === 'src/main/runtime/browser/browser-commands.ts') {
+      expect(existsSync(join(projectDir, path))).toBe(true)
+    }
   })
 
   // The pattern is deliberately not "anything under src": routing every PR at a two-Electron spec
@@ -53,7 +56,12 @@ describe('restart-survival E2E routing', () => {
     'src/renderer/src/components/tab-bar/BrowserTab.tsx',
     'src/main/terminal/pty-manager.ts',
     // The status/types entries name whole files, not a suffix any longer name may end with.
-    'src/shared/computer-use-runtime-types.ts'
+    'src/shared/computer-use-runtime-types.ts',
+    'src/main/runtime/browser/browser-commands.test.ts',
+    'src/main/runtime/browser/browser-commands.test-fixture.ts',
+    'src/main/runtime/browser/browser-commands.fixture.ts',
+    'src/main/runtime/browser/browser-commands-extra.ts',
+    'src/main/runtime/browser/browser-navigation.ts'
   ])('does not route %s', (path) => {
     expect(restartSurvivalRoute.matches(path)).toBe(false)
   })
@@ -129,8 +137,9 @@ describe('PR E2E gate contract', () => {
       'src/main/daemon/daemon-pty-spawn-result.ts',
       'src/renderer/src/components/terminal-pane/remote-runtime-pty-transport.ts',
       'src/renderer/src/components/terminal-pane/terminal-error-accumulation.ts',
-      'src/renderer/src/runtime/web-runtime-session.ts',
-      'src/renderer/src/runtime/web-session-tabs-sync.ts',
+      'src/renderer/src/runtime/web-runtime-terminal-creation.ts',
+      'src/renderer/src/runtime/web-runtime-session-tab-lifecycle.ts',
+      'src/renderer/src/runtime/web-session-tabs-sync/use-web-session-tabs-sync.ts',
       'src/renderer/src/runtime/web-session-terminal-orphan-recovery.ts',
       'src/renderer/src/runtime/web-session-terminal-orphan-recovery-adoption.ts',
       'src/renderer/src/runtime/web-session-terminal-orphan-recovery-surface.ts',
@@ -187,7 +196,7 @@ describe('PR E2E gate contract', () => {
         'src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-test-harness.ts'
       ])
     ).not.toContain('tests/e2e/paired-remote-terminal-materialization-reconnect.spec.ts')
-    expect(selectPrE2eSpecs(['src/main/ipc/pty.ts'])).not.toContain(
+    expect(selectPrE2eSpecs(['src/main/ipc/pty/register-handlers.ts'])).not.toContain(
       'tests/e2e/paired-remote-terminal-materialization-reconnect.spec.ts'
     )
   })

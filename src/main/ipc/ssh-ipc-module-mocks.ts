@@ -46,9 +46,6 @@ export function createSshIpcMocks(): SshIpcMocks {
       notify: vi.fn(),
       probeLiveness: vi.fn().mockResolvedValue(false)
     },
-    mockFsProvider: {},
-    mockGitProvider: {},
-    mockRegisterSshGitProvider: vi.fn(),
     mockPortForwardManager: {
       addForward: vi.fn(),
       updateForward: vi.fn(),
@@ -56,6 +53,7 @@ export function createSshIpcMocks(): SshIpcMocks {
       removeForwardAndWait: vi.fn(),
       listForwards: vi.fn().mockReturnValue([]),
       removeAllForwards: vi.fn(),
+      closeAll: vi.fn(),
       dispose: vi.fn(),
       setCallbacks: vi.fn(),
       callbacksRef: { current: null as unknown }
@@ -79,9 +77,6 @@ export function createSshIpcMocks(): SshIpcMocks {
     mockSshStore,
     mockConnectionManager,
     mockMux,
-    mockFsProvider,
-    mockGitProvider,
-    mockRegisterSshGitProvider,
     mockPortForwardManager,
     mockPortScannerCallbacks,
     mockListConfigHosts,
@@ -155,38 +150,6 @@ export function createSshIpcMocks(): SshIpcMocks {
           return mockMux
         }
       }
-    },
-    sshFilesystemProvider: {
-      SshFilesystemProvider: class MockSshFilesystemProvider {
-        constructor() {
-          return mockFsProvider
-        }
-      }
-    },
-    pty: {
-      clearPtyOwnershipForConnection: vi.fn(),
-      clearProviderPtyState: vi.fn(),
-      deletePtyOwnership: vi.fn(),
-      setPtyOwnership: vi.fn(),
-      getPtyIdsForConnection: vi.fn().mockReturnValue([]),
-      isCurrentPtyExit: vi.fn().mockReturnValue(true),
-      isRendererPtyOutputPaused: vi.fn().mockReturnValue(false)
-    },
-    sshFilesystemDispatch: {
-      registerSshFilesystemProvider: vi.fn(),
-      unregisterSshFilesystemProvider: vi.fn(),
-      getSshFilesystemProvider: vi.fn()
-    },
-    sshGitProvider: {
-      SshGitProvider: class MockSshGitProvider {
-        constructor() {
-          return mockGitProvider
-        }
-      }
-    },
-    sshGitDispatch: {
-      registerSshGitProvider: mockRegisterSshGitProvider,
-      unregisterSshGitProvider: vi.fn()
     },
     sshPortForward: {
       SshPortForwardManager: class MockPortForwardManager {

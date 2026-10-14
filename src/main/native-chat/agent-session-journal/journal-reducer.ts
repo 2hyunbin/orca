@@ -57,6 +57,8 @@ export type JournalReducerState = {
   providerActivityAt: Map<number, number>
   /** Revision of a removed item, so a late lower revision cannot resurrect it. */
   tombstones: Map<string, number>
+  /** Turn ids whose record a tombstone removed, as a rewind does: over, though no row shows it. */
+  removedTurnIds: Set<string>
   submissions: Map<string, AgentJournalSubmission>
   receipts: Map<string, AgentJournalAcceptanceReceipt>
   /** Provider item id → the submission slot that adopted it. Stops an accepted
@@ -69,6 +71,8 @@ export type JournalReducerState = {
   latestAcceptedTurnSequence: number
   /** The latest person's Stop event and Resume, what the queue's pause is derived from. */
   queuePauseMarks: JournalQueuePauseMarks
+  /** Host-only: each handed-over send's stopped-message history, from its latest `pending` row. */
+  stoppedHistoryCarried: Map<string, readonly string[]>
 }
 
 export function createJournalReducerState(sessionId: string, epoch: string): JournalReducerState {
@@ -83,13 +87,15 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     itemFences: new Map(),
     providerActivityAt: new Map(),
     tombstones: new Map(),
+    removedTurnIds: new Set(),
     submissions: new Map(),
     receipts: new Map(),
     aliases: new Map(),
     appliedSettlementIds: new Set(),
     derivedTurnScope: new JournalDerivedTurnScope(),
     latestAcceptedTurnSequence: 0,
-    queuePauseMarks: createJournalQueuePauseMarks()
+    queuePauseMarks: createJournalQueuePauseMarks(),
+    stoppedHistoryCarried: new Map()
   }
 }
 
