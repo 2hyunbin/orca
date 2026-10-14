@@ -8,11 +8,13 @@ describe('formatCreditCount', () => {
   })
 
   it.each([
-    [51809.811786, 51809.81],
-    [1234.56789, 1234.57],
-    [500.1, 500.1],
-    [500, 500]
-  ])('rounds %s to at most two decimal places without padding', (count, rounded) => {
+    [51809.811786, 51810],
+    [1234.56789, 1235],
+    [500.1, 500],
+    [500.5, 501],
+    [500, 500],
+    [0.1, 0]
+  ])('rounds %s to whole credits', (count, rounded) => {
     expect(formatCreditCount(count)).toBe(new Intl.NumberFormat().format(rounded))
   })
 
