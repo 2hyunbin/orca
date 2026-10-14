@@ -53,14 +53,16 @@ export function classifyShadowSeat(
   answer: ShadowCompareDatabaseAnswer,
   now: number
 ): ShadowCompareVerdict {
-  // Pure: only ShadowDirectoryCompare records sightings. An epoch never seen is new.
-  const movedAt = answer
-    ? (directory.databaseEpochFirstSeen(
+  // Pure: only ShadowDirectoryCompare records sightings.
+  const firstSeen = answer
+    ? directory.databaseEpochFirstSeen(
         identity.userId,
         identity.relayHostId,
         answer.assignmentEpoch
-      ) ?? now)
-    : now
+      )
+    : undefined
+  // An epoch never seen is new.
+  const movedAt = firstSeen ?? now
   if (!directory.isComplete()) return { class: 'map-incomplete', explained: true }
   const seats = directory.seatsOf(identity.userId, identity.relayHostId)
   if (!answer) {
@@ -90,7 +92,9 @@ export function classifyShadowSeat(
     const superseded =
       current !== undefined &&
       seats.every((seat) => seat === current || seat.epoch < current.epoch) &&
-      now - movedAt <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
+      // No sighting means the move's age is unknown, not new.
+      firstSeen !== undefined &&
+      now - firstSeen <= SHADOW_COMPARE_SUPERSEDED_CLOSE_MS
     return { class: 'duplicate-seat', explained: superseded }
   }
   const seat = seats[0]

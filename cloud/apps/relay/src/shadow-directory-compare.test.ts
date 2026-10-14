@@ -231,6 +231,17 @@ describe('classifyShadowSeat', () => {
       })
     })
 
+    it('is unexplained when this director has no sighting of the epoch', () => {
+      const directory = directoryWith({
+        'cell-a': [seat(3, 'active', HOST, firstSeen)],
+        'cell-b': [seat(2, 'active', HOST, 1)]
+      })
+      expect(classifyShadowSeat(directory, IDENTITY, at('cell-a', 3), firstSeen + 1_700)).toEqual({
+        class: 'duplicate-seat',
+        explained: false
+      })
+    })
+
     it('is unexplained when the database names the lower epoch, or matches no seat', () => {
       for (const answer of [at('cell-b', 2), at('cell-a', 4), at('cell-b', 3)]) {
         expect(classifyShadowSeat(superseded(), IDENTITY, answer, firstSeen + 1_700)).toEqual({
