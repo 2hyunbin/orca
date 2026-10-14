@@ -13,7 +13,7 @@ import {
 type IssuePatchListener = (
   patch: Partial<JiraIssue>,
   rollback: boolean,
-  statusSaved: boolean
+  statusSettled: boolean
 ) => void
 type IssueWrite = {
   confirmed: JiraIssue
@@ -88,13 +88,13 @@ export function enqueueJiraIssueMutation({
   write.pending.push(mutation)
   writes.set(scope, write)
 
-  const publish = (patch: Partial<JiraIssue>, rollback: boolean, statusSaved = false): void => {
+  const publish = (patch: Partial<JiraIssue>, rollback: boolean, statusSettled = false): void => {
     if (Object.keys(patch).length === 0) {
       return
     }
     patchIssue(patch)
     for (const listener of listeners.get(scope) ?? []) {
-      listener(patch, rollback, statusSaved)
+      listener(patch, rollback, statusSettled)
     }
   }
   publish(optimistic, false)
@@ -113,7 +113,13 @@ export function enqueueJiraIssueMutation({
       try {
         const latest = await refresh()
         if (latest) {
-          write.confirmed = latest
+          const newerFields = new Set(
+            write.pending
+              .filter((queued) => queued !== mutation)
+              .flatMap((queued) => editedJiraIssueFields(queued.patch))
+              .filter((field) => !(field in optimistic))
+          )
+          write.confirmed = mergeJiraIssueHydration(latest, write.confirmed, newerFields)
         }
       } catch {
         // A failed refresh does not undo a successful save.
@@ -135,7 +141,7 @@ export function enqueueJiraIssueMutation({
       publish(
         patch,
         !saved,
-        saved && 'status' in optimistic && !write.pending.some((queued) => 'status' in queued.patch)
+        'status' in optimistic && !write.pending.some((queued) => 'status' in queued.patch)
       )
     }
   })()

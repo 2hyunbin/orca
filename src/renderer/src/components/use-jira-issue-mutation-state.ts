@@ -20,7 +20,7 @@ export function useJiraIssueMutationState({
   setFullIssue,
   setTitleDraft,
   setLabelsDraft,
-  onStatusSaved
+  onStatusSettled
 }: {
   scope: string | null
   issue: JiraIssue | null
@@ -29,10 +29,15 @@ export function useJiraIssueMutationState({
   setFullIssue: Dispatch<SetStateAction<JiraIssue | null>>
   setTitleDraft: Dispatch<SetStateAction<string>>
   setLabelsDraft: Dispatch<SetStateAction<string>>
-  onStatusSaved: () => void
+  onStatusSettled: () => void
 }): void {
   const applyPatch = useEffectEvent(
-    (patch: Partial<JiraIssue>, _rollback: boolean, statusSaved: boolean, previous = displayed) => {
+    (
+      patch: Partial<JiraIssue>,
+      _rollback: boolean,
+      statusSettled: boolean,
+      previous = displayed
+    ) => {
       if (!previous) {
         return
       }
@@ -50,8 +55,8 @@ export function useJiraIssueMutationState({
           draft === previous.labels.join(', ') ? labels.join(', ') : draft
         )
       }
-      if (statusSaved) {
-        onStatusSaved()
+      if (statusSettled) {
+        onStatusSettled()
       }
     }
   )

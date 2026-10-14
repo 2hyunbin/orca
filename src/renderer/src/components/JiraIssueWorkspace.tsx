@@ -15,16 +15,9 @@ import {
   jiraGetIssue,
   jiraListAssignableUsers,
   jiraListPriorities,
-  jiraListTransitions,
   jiraUpdateIssue
 } from '@/runtime/runtime-jira-client'
-import type {
-  JiraComment,
-  JiraIssue,
-  JiraPriority,
-  JiraTransition,
-  JiraUser
-} from '../../../shared/jira-types'
+import type { JiraComment, JiraIssue, JiraPriority, JiraUser } from '../../../shared/jira-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { translate } from '@/i18n/i18n'
 import { JiraIssueMetadataBar, JiraIssueWorkspaceHeader } from './jira-issue-workspace-chrome'
@@ -39,6 +32,7 @@ import {
 import { enqueueJiraIssueMutation, jiraIssueRequestScope } from './jira-issue-mutation-queue'
 import { useJiraIssueComments } from './use-jira-issue-comments'
 import { useJiraIssueMutationState } from './use-jira-issue-mutation-state'
+import { useJiraIssueTransitions } from './use-jira-issue-transitions'
 
 type JiraIssueWorkspaceProps = {
   issue: JiraIssue | null
@@ -61,7 +55,6 @@ export default function JiraIssueWorkspace({
   const patchJiraIssue = useAppStore((s) => s.patchJiraIssue)
   const [fullIssue, setFullIssue] = useState<JiraIssue | null>(null)
   const [issueLoading, setIssueLoading] = useState(false)
-  const [transitions, setTransitions] = useState<JiraTransition[]>([])
   const [priorities, setPriorities] = useState<JiraPriority[]>([])
   const [users, setUsers] = useState<JiraUser[]>([])
   const [pendingField, setPendingField] = useState<string | null>(null)
@@ -80,6 +73,10 @@ export default function JiraIssueWorkspace({
     optimisticCommentsRef,
     loadComments
   } = useJiraIssueComments(providerSettings, requestIdRef)
+  const { transitions, setTransitions, loadTransitions } = useJiraIssueTransitions(
+    providerSettings,
+    requestIdRef
+  )
 
   const displayed = fullIssue ?? issue
   const siteId = displayed?.siteId ?? undefined
@@ -145,29 +142,30 @@ export default function JiraIssueWorkspace({
       })
 
     void Promise.all([
-      jiraListTransitions(providerSettings, issue.key, issue.siteId),
       jiraListPriorities(providerSettings, issue.siteId),
       jiraListAssignableUsers(providerSettings, issue.key, undefined, issue.siteId)
     ])
-      .then(([nextTransitions, nextPriorities, nextUsers]) => {
+      .then(([nextPriorities, nextUsers]) => {
         if (requestId !== requestIdRef.current) {
           return
         }
-        setTransitions(nextTransitions)
         setPriorities(nextPriorities)
         setUsers(nextUsers)
       })
       .catch(() => {})
 
+    void loadTransitions(issue, requestId)
     void loadComments(issue, requestId)
   }, [
     issue,
     loadComments,
+    loadTransitions,
     providerSettings,
     requestKey,
     setComments,
     setCommentsError,
     setCommentsLoading,
+    setTransitions,
     optimisticCommentsRef
   ])
 
@@ -179,23 +177,8 @@ export default function JiraIssueWorkspace({
     setFullIssue,
     setTitleDraft,
     setLabelsDraft,
-    onStatusSaved: () => displayed && void refreshTransitions(displayed, requestIdRef.current)
+    onStatusSettled: () => displayed && void loadTransitions(displayed, requestIdRef.current)
   })
-
-  // Jira only offers transitions out of the current status.
-  const refreshTransitions = useCallback(
-    async (target: JiraIssue, requestId: number): Promise<void> => {
-      try {
-        const next = await jiraListTransitions(providerSettings, target.key, target.siteId)
-        if (requestId === requestIdRef.current) {
-          setTransitions(next)
-        }
-      } catch {
-        // Keep the current list if the reload fails.
-      }
-    },
-    [providerSettings]
-  )
 
   const mutateIssue = useCallback(
     async (
