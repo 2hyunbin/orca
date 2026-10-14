@@ -17,6 +17,26 @@ test.use({
   orcaAppExtraArgs: ['--force-color-profile=srgb']
 })
 
+test.afterEach(async ({ orcaPage }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) {
+    return
+  }
+  // Read back only after failure so diagnostics cannot supply the missing repaint.
+  const canvas = await orcaPage
+    .locator('.pane:visible .xterm-image-layer-top')
+    .first()
+    .evaluate(
+      (layer) =>
+        layer instanceof HTMLCanvasElement
+          ? { width: layer.width, height: layer.height, png: layer.toDataURL() }
+          : null,
+      undefined,
+      { timeout: 1000 }
+    )
+    .catch(() => null)
+  writeFileSync(testInfo.outputPath('kitty-failure-canvas.json'), JSON.stringify(canvas))
+})
+
 const MARK = '\u{10EEEE}'
 const ROWS = ['\u0305', '\u030D', '\u030E', '\u0310']
 
@@ -84,17 +104,6 @@ process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('ba
       await waitForTerminalOutput(orcaPage, 'INLINE_RENDER_DONE', 30_000)
       const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
       await expect(screen).toBeVisible()
-      const screenshot = async (name: string) => {
-        // Compare raw canvas pixels with Chromium's screenshot when a repaint fails.
-        const canvas = await screen.evaluate((element) => {
-          const layer = element.querySelector('.xterm-image-layer-top')
-          return layer instanceof HTMLCanvasElement
-            ? { width: layer.width, height: layer.height, png: layer.toDataURL() }
-            : null
-        })
-        writeFileSync(testInfo.outputPath(`${name}-canvas.json`), JSON.stringify(canvas))
-        return PNG.sync.read(await screen.screenshot({ path: testInfo.outputPath(`${name}.png`) }))
-      }
       const dimensions = await orcaPage.evaluate(() => {
         const tabId = window.__store!.getState().activeTabId
         const pane = tabId && window.__paneManagers?.get(tabId)?.getActivePane()
@@ -106,7 +115,9 @@ process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('ba
       await expect
         .poll(
           async () => {
-            const image = await screenshot('kitty-cells')
+            const image = PNG.sync.read(
+              await screen.screenshot({ path: testInfo.outputPath('kitty-cells.png') })
+            )
             const cellWidth = image.width / dimensions.cols
             const cellHeight = image.height / dimensions.rows
             const col = kind === 'cursor' ? 0 : 4
@@ -152,7 +163,9 @@ process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('ba
           await expect
             .poll(
               async () => {
-                const png = await screenshot(`kitty-${action}`)
+                const png = PNG.sync.read(
+                  await screen.screenshot({ path: testInfo.outputPath(`kitty-${action}.png`) })
+                )
                 let pixels = 0
                 for (
                   let y = Math.ceil((5 * png.height) / dimensions.rows);
