@@ -247,31 +247,34 @@ describe('JiraIssueWorkspace optimistic edits', () => {
   it.each([
     ['succeeds', { ok: true }],
     ['fails', { ok: false, error: 'Nope' }]
-  ])('stays on the newly opened issue when a save for the previous one %s', async (_, outcome) => {
-    // Why: the task page keeps one workspace instance across selections, so a
-    // save that finishes after switching must not write the old issue back.
-    const update = deferred<typeof outcome>()
-    runtimeMocks.jiraUpdateIssueForTarget.mockReturnValue(update.promise)
-    runtimeMocks.jiraGetIssueForTarget.mockImplementation(
-      async (_settings: unknown, key: string) =>
-        key === 'ENG-2' ? otherIssue : jiraIssue(editState.serverTitle)
-    )
-    render(<StoreBackedWorkspace initial={jiraIssue('Old title')} />)
-    await flushPromises()
+  ] as const)(
+    'stays on the newly opened issue when a save for the previous one %s',
+    async (_, outcome) => {
+      // Why: the task page keeps one workspace instance across selections, so a
+      // save that finishes after switching must not write the old issue back.
+      const update = deferred<typeof outcome>()
+      runtimeMocks.jiraUpdateIssueForTarget.mockReturnValue(update.promise)
+      runtimeMocks.jiraGetIssueForTarget.mockImplementation(
+        async (_settings: unknown, key: string) =>
+          key === 'ENG-2' ? otherIssue : jiraIssue(editState.serverTitle)
+      )
+      render(<StoreBackedWorkspace initial={jiraIssue('Old title')} />)
+      await flushPromises()
 
-    saveTitle('Old title', 'New title')
-    await flushPromises()
-    await act(async () => selectIssue(otherIssue))
-    await flushPromises()
-    expect(screen.getByText('ENG-2')).toBeDefined()
-    editState.serverTitle = 'New title'
-    await act(async () => update.resolve(outcome))
-    await flushPromises()
+      saveTitle('Old title', 'New title')
+      await flushPromises()
+      await act(async () => selectIssue(otherIssue))
+      await flushPromises()
+      expect(screen.getByText('ENG-2')).toBeDefined()
+      editState.serverTitle = 'New title'
+      await act(async () => update.resolve(outcome))
+      await flushPromises()
 
-    expect(screen.getByText('ENG-2')).toBeDefined()
-    expect(screen.queryByText('ENG-1')).toBeNull()
-    expect(screen.getByDisplayValue('Other issue')).toBeDefined()
-  })
+      expect(screen.getByText('ENG-2')).toBeDefined()
+      expect(screen.queryByText('ENG-1')).toBeNull()
+      expect(screen.getByDisplayValue('Other issue')).toBeDefined()
+    }
+  )
 
   it('does not let a slow initial load overwrite a title saved meanwhile', async () => {
     const initialLoad = deferred<JiraIssue>()
@@ -455,8 +458,8 @@ describe('JiraIssueWorkspace optimistic edits', () => {
     'keeps saves independent when the same issue key moves to another %s',
     async (kind) => {
       runtimeMocks.jiraGetIssueForTarget.mockImplementation(
-        async (_owner: RuntimeClientTarget, _key: string, siteId: string) =>
-          jiraIssue('Old title', { siteId })
+        async (_owner: RuntimeClientTarget, _key: string, siteId?: string | null) =>
+          jiraIssue('Old title', { siteId: siteId ?? undefined })
       )
       const oldSave = deferred<{ ok: false; error: string }>()
       runtimeMocks.jiraUpdateIssueForTarget
