@@ -51,7 +51,6 @@
 1 src/renderer/src/runtime/web-session-terminal-orphan-recovery-surface.ts
 2 src/renderer/src/runtime/web-session-terminal-orphan-topology.ts
 3 src/renderer/src/runtime/web-session-terminal-recovery-snapshot-validation.ts
-9 src/renderer/src/store/repos/repo-removal.ts
 10 src/renderer/src/store/slices/browser/browser-close-actions.ts
 6 src/renderer/src/store/slices/browser/browser-hydration-actions.ts
 5 src/renderer/src/store/slices/browser/browser-page-focus-actions.ts
@@ -81,7 +80,6 @@
 2 src/renderer/src/store/slices/editor/file-ids/hydrated-editor-file-selection.ts
 1 src/renderer/src/store/slices/editor/file-ids/open-file-path-rekey.ts
 4 src/renderer/src/store/slices/editor/tabs/editor-open-target-group.ts
-2 src/renderer/src/store/slices/ssh-target-cleanup.ts
 2 src/renderer/src/store/slices/tab-group-reference-repair.ts
 4 src/renderer/src/store/slices/tab-group-state.ts
 2 src/renderer/src/store/slices/tabs-hydration.ts
@@ -98,14 +96,12 @@
 4 src/renderer/src/store/slices/tabs/tabs-session-actions.ts
 1 src/renderer/src/store/slices/tabs/tabs-split-ratio-actions.ts
 5 src/renderer/src/store/slices/tabs/tabs-surface.ts
+33 src/renderer/src/store/slices/tabs/worktree-layout-lifecycle.ts
 6 src/renderer/src/store/slices/terminal-orphan-helpers.ts
 4 src/renderer/src/store/slices/terminal-tab-title-batch.ts
 6 src/renderer/src/store/slices/terminals.ts
-7 src/renderer/src/store/slices/worktrees/session/set-active-worktree.ts
-15 src/renderer/src/store/slices/worktrees/session/worktree-identity-rename-state.ts
+5 src/renderer/src/store/slices/worktrees/session/set-active-worktree.ts
 2 src/renderer/src/store/slices/worktrees/session/worktree-slice-lookups.ts
-18 src/renderer/src/store/slices/worktrees/teardown/remove-worktree-store-cleanup.ts
-18 src/renderer/src/store/slices/worktrees/teardown/worktree-purge-state.ts
 5 src/renderer/src/store/terminals/terminal-layout-state.ts
 2 src/renderer/src/store/terminals/terminal-pane-hibernation.ts
 3 src/renderer/src/store/terminals/terminal-pty-bindings.ts
