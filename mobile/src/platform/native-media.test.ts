@@ -53,7 +53,16 @@ function fakeFile(bytes: Uint8Array): NativeMediaFile {
 }
 
 function bytesOf(length: number): Uint8Array {
-  return Uint8Array.from({ length }, (_, index) => index % 251)
+  // A fixed stream exposes shifted offsets and reordered chunks without a short repeating pattern.
+  let state = 0x9e3779b9
+  const bytes = new Uint8Array(length)
+  for (let index = 0; index < length; index += 1) {
+    state ^= state << 13
+    state ^= state >>> 17
+    state ^= state << 5
+    bytes[index] = state >>> 24
+  }
+  return bytes
 }
 
 type Harness = {
