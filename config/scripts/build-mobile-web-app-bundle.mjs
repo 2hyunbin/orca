@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { readRouteSnapshot } from './mobile-web-app-route-snapshot.mjs'
 import { realpathSync } from 'node:fs'
-import { basename, extname, isAbsolute, join, resolve } from 'node:path'
+import { basename, extname, join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
@@ -507,7 +507,7 @@ export async function mobileWebAppModuleClosure(entryModules, { absWorkingDir } 
     // `.web.tsx` sibling resolves to that one, and naming the `.tsx` path explicitly would measure
     // the native switch no browser ever loads.
     entryPoints: entryModules.map((entry) =>
-      (isAbsolute(entry) ? entry : `./${entry}`).replace(/\.tsx?$/, '')
+      resolve(absWorkingDir ?? base.absWorkingDir, entry.replace(/\.tsx?$/, ''))
     ),
     splitting: false,
     // `[dir]` too: `app/_layout` and `app/h/_layout` share a name.

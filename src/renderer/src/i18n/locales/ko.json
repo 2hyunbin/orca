@@ -919,6 +919,7 @@
               "undecryptableUnknown": "{{value0}} 쿠키를 해독할 수 없어 건너뛰었습니다. 소스 브라우저를 완전히 닫고 가져오기를 다시 시도하세요.",
               "unrecognizedWarning": "이 버전의 Orca가 인식하지 못한다는 경고와 함께 쿠키 가져오기가 완료되었습니다. Orca를 업데이트하여 세부 정보를 확인한 다음 쿠키를 사용하기 전에 이 프로필을 확인하세요.",
               "undecryptableUnrecognizedReason": "{{value0}} 쿠키는 이 버전의 Orca가 인식하지 못하는 이유로 해독할 수 없으며 건너뛰었습니다. Orca를 업데이트하여 세부정보를 확인한 후 가져오기를 다시 시도하세요.",
+              "partitionSkippedBreakdown": "사이트 파티션을 읽을 수 없는 쿠키: {{value0}}. 기존 세션을 보호하기 위해 가져오지 않은 관련 쿠키: {{value1}}. 해당 사이트의 기존 쿠키는 변경되지 않았습니다. 다시 로그인하기 전에 이 프로필에서 해당 사이트를 확인하세요.",
               "partitionSkipped": "{{value0}} 쿠키는 사이트 파티션을 읽을 수 없기 때문에 가져오지 못했습니다. Orca에서 해당 사이트에 다시 로그인합니다.",
               "locationClientHosted": "이 기기에서 읽고 {{value0}} 워크스페이스를 위해 여기에 저장됩니다.",
               "locationRemoteHost": "{{value0}}의 브라우저에서 읽고 거기에 저장됩니다.",
@@ -2380,8 +2381,8 @@
         "34c8fbb46e": "SSH 원격",
         "63c2be1914": "SSH 연결이 끊어졌습니다.",
         "95be6587d3": "워크트리 \"{{value0}}\" 만들기",
-        "worktreesHeader": "워크트리",
-        "recentWorktreesHeader": "최근 워크트리",
+        "worktreesHeader": "작업 공간",
+        "recentWorktreesHeader": "최근 작업 공간",
         "settingsBadge": "설정",
         "actionBadge": "작업",
         "paletteHostBadge": "호스트: {{value0}}",
@@ -2390,8 +2391,8 @@
         "projectBadge": "프로젝트",
         "repoGroupBadge": "리포지토리 그룹",
         "pluginCommandFailed": "플러그인 명령을 실행할 수 없습니다.",
-        "27f10cca63": "채팅, 터미널, 워크트리, 설정 및 작업 검색...",
-        "2770f02910": "채팅, 터미널, 워크트리, 설정 및 작업 검색",
+        "27f10cca63": "채팅, 터미널, 작업 공간, 설정 및 작업 검색...",
+        "2770f02910": "채팅, 터미널, 작업 공간, 설정 및 작업 검색",
         "recentChatsTerminalsHeader": "최근 채팅 및 터미널",
         "lastActiveTime": "마지막 활동: {{value0}} 전"
       },
@@ -15412,8 +15413,16 @@
           "7b458e0b7f": "Markdown 템플릿을 선택하세요.",
           "1829437fce": "새로운 Markdown"
         },
+        "DiagramViewerModal": {
+          "title": "다이어그램",
+          "zoomOut": "축소",
+          "zoomIn": "확대",
+          "fit": "화면에 맞추기",
+          "close": "닫기"
+        },
         "MermaidBlock": {
-          "dcc132e691": "다이어그램 오류:"
+          "dcc132e691": "다이어그램 오류:",
+          "expand": "다이어그램 확대"
         },
         "MonacoEditor": {
           "68cb83f4a7": "선택한 텍스트에 메모 추가",
@@ -17850,8 +17859,12 @@
         "compactionFailedQuoted": "압축에 실패했습니다: {{detail}}.",
         "compactionUnconfirmed": "압축 완료가 확인되지 않았습니다.",
         "cancelUnconfirmed": "취소가 확인되지 않았습니다.",
+        "backgroundTaskNotStopped": "백그라운드 작업이 중지되지 않았습니다.",
+        "backgroundTasksNotStopped": "백그라운드 작업이 중지되지 않았습니다.",
         "stopRefused": "{{agent}}이(가) 중지되지 않았습니다.",
         "stopRefusedQuoted": "{{agent}}이(가) 중지되지 않았습니다: {{detail}}.",
+        "couldNotStop": "{{agent}}을(를) 중지하지 못했습니다.",
+        "couldNotStopTheAgent": "에이전트를 중지하지 못했습니다.",
         "noTurnToStop": "{{agent}}에 중지할 실행 중인 턴이 없었습니다.",
         "answerUnconfirmed": "응답이 기록되었지만 에이전트가 확인하지 않았습니다.",
         "argumentsMissingValue": "저장된 인수의 {{option}}에 값이 필요합니다.",
@@ -17893,6 +17906,7 @@
         "outcomeUnknown": "Orca가 무슨 일이 있었는지 확인하지 못했습니다. 채팅을 확인하세요.",
         "sendOutcomeLost": "Orca가 메시지가 에이전트에 전달되었는지 확인하지 못했습니다. 채팅을 확인하고 필요하면 다시 보내세요.",
         "questionChanged": "이 질문은 이미 답변되었거나 변경되었습니다.",
+        "cancelNotSaved": "이 질문 또는 승인을 취소하지 못했습니다.",
         "historyUnreadable": "Orca가 이 채팅의 저장된 기록을 읽지 못했습니다.",
         "historyUnusable": "이 채팅을 불러올 수 없습니다.",
         "historyUnavailable": "Orca가 지금 이 채팅의 기록을 열지 못했습니다.",

@@ -219,9 +219,11 @@ describe('bundled skill guide generator', () => {
         const marker = `<!-- bundled-reference: references/${reference} -->`
         expect(guide.fullMarkdown.split(marker)).toHaveLength(2)
         expect(guide.fullMarkdown).toContain(
-          await readFile(
-            path.join(projectDir, 'skill-guides', guide.name, 'references', reference),
-            'utf8'
+          normalizeMarkdown(
+            await readFile(
+              path.join(projectDir, 'skill-guides', guide.name, 'references', reference),
+              'utf8'
+            )
           )
         )
       }
@@ -236,33 +238,43 @@ describe('bundled skill guide generator', () => {
     await expect(verifyArtifacts(first, projectDir)).resolves.toBeUndefined()
   })
 
-  it('generates platform-identical output from CRLF guide sources', async () => {
-    const expected = await buildArtifacts(projectDir)
-    const root = await createFixture()
-    for (const name of CANONICAL_GUIDE_NAMES) {
-      const sourcePath = path.join(root, 'skill-guides', `${name}.md`)
-      const source = await readFile(sourcePath, 'utf8')
-      await writeFile(sourcePath, source.replaceAll('\n', '\r\n'))
-    }
-    for (const name of STUB_TOPICS) {
-      const stubPath = path.join(root, 'skill-stubs', `${name}.md`)
-      const stubSource = await readFile(stubPath, 'utf8')
-      await writeFile(stubPath, stubSource.replaceAll('\n', '\r\n'))
-    }
-    const sharedStubPath = path.join(root, ...SHARED_STUB_SOURCE.split('/'))
-    const sharedStubSource = await readFile(sharedStubPath, 'utf8')
-    await writeFile(sharedStubPath, sharedStubSource.replaceAll('\n', '\r\n'))
-    for (const [guide, reference] of GUIDE_REFERENCE_PATHS) {
-      const referencePath = path.join(root, 'skill-guides', guide, 'references', reference)
-      const source = await readFile(referencePath, 'utf8')
-      await writeFile(referencePath, source.replaceAll('\n', '\r\n'))
-    }
+  it.each([false, true])(
+    'generates platform-identical output from CRLF guide sources (existing CRLF: %s)',
+    async (alreadyCrlf) => {
+      const expected = await buildArtifacts(projectDir)
+      const root = await createFixture()
+      if (alreadyCrlf) {
+        for (const [guide, reference] of GUIDE_REFERENCE_PATHS) {
+          const file = path.join(root, 'skill-guides', guide, 'references', reference)
+          const source = normalizeMarkdown(await readFile(file, 'utf8'))
+          await writeFile(file, source.replaceAll('\n', '\r\n'))
+        }
+      }
+      for (const name of CANONICAL_GUIDE_NAMES) {
+        const sourcePath = path.join(root, 'skill-guides', `${name}.md`)
+        const source = await readFile(sourcePath, 'utf8')
+        await writeFile(sourcePath, normalizeMarkdown(source).replaceAll('\n', '\r\n'))
+      }
+      for (const name of STUB_TOPICS) {
+        const stubPath = path.join(root, 'skill-stubs', `${name}.md`)
+        const stubSource = await readFile(stubPath, 'utf8')
+        await writeFile(stubPath, normalizeMarkdown(stubSource).replaceAll('\n', '\r\n'))
+      }
+      const sharedStubPath = path.join(root, ...SHARED_STUB_SOURCE.split('/'))
+      const sharedStubSource = await readFile(sharedStubPath, 'utf8')
+      await writeFile(sharedStubPath, normalizeMarkdown(sharedStubSource).replaceAll('\n', '\r\n'))
+      for (const [guide, reference] of GUIDE_REFERENCE_PATHS) {
+        const referencePath = path.join(root, 'skill-guides', guide, 'references', reference)
+        const source = await readFile(referencePath, 'utf8')
+        await writeFile(referencePath, normalizeMarkdown(source).replaceAll('\n', '\r\n'))
+      }
 
-    const actual = await buildArtifacts(root)
-    expect(actual.map((artifact) => artifact.content)).toEqual(
-      expected.map((artifact) => artifact.content)
-    )
-  })
+      const actual = await buildArtifacts(root)
+      expect(actual.map((artifact) => artifact.content)).toEqual(
+        expected.map((artifact) => artifact.content)
+      )
+    }
+  )
 
   it('pins guide sources, projections, and embedded output to LF in Git', async () => {
     const attributes = await readFile(path.join(projectDir, '.gitattributes'), 'utf8')
