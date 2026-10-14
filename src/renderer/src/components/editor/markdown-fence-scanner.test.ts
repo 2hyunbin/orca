@@ -13,15 +13,17 @@ function countRangeReads(ranges: MarkdownFenceRanges): {
   getReads: () => number
 } {
   let reads = 0
-  return {
-    ranges: new Proxy(ranges, {
-      get(target, property, receiver) {
-        if (typeof property === 'string' && /^\d+$/.test(property)) {
-          reads += 1
-        }
-        return Reflect.get(target, property, receiver)
+  const tracked = ranges.slice()
+  ranges.forEach((range, index) => {
+    Object.defineProperty(tracked, index, {
+      get() {
+        reads += 1
+        return range
       }
-    }),
+    })
+  })
+  return {
+    ranges: tracked,
     getReads: () => reads
   }
 }
