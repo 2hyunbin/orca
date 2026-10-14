@@ -79,13 +79,12 @@ export function getSelectedAccountRuntime(
   /** A WSL host's distro: its accounts are this desktop's for that distro, with no location to pick. */
   wslHostDistro: string | null = null
 ): LocalAccountRuntime {
-  if (wslHostDistro) {
-    return { runtime: 'wsl', wslDistro: wslHostDistro, label: `WSL ${wslHostDistro}` }
-  }
   // Why: the two-option control displays the concrete target behind the persisted auto policy.
-  const resolvedRuntime = resolveLocalAccountRuntimeTarget(settings, getRendererAppPlatform())
-  if (wslSupportedPlatform && resolvedRuntime.runtime === 'wsl') {
-    if (!wslAvailable && !wslCapabilitiesLoading) {
+  const resolvedRuntime = wslHostDistro
+    ? { runtime: 'wsl' as const, wslDistro: wslHostDistro }
+    : resolveLocalAccountRuntimeTarget(settings, getRendererAppPlatform())
+  if ((wslSupportedPlatform || wslHostDistro) && resolvedRuntime.runtime === 'wsl') {
+    if (!wslHostDistro && !wslAvailable && !wslCapabilitiesLoading) {
       return {
         runtime: 'wsl',
         label: translate('auto.components.settings.AccountsPane.8619f9afa9', 'WSL')
@@ -93,9 +92,10 @@ export function getSelectedAccountRuntime(
     }
     const configuredDistro = resolvedRuntime.wslDistro?.trim() || null
     const selectedDistro =
-      configuredDistro && (wslCapabilitiesLoading || wslDistros.includes(configuredDistro))
+      wslHostDistro ??
+      (configuredDistro && (wslCapabilitiesLoading || wslDistros.includes(configuredDistro))
         ? configuredDistro
-        : null
+        : null)
     return {
       runtime: 'wsl',
       wslDistro: selectedDistro,
