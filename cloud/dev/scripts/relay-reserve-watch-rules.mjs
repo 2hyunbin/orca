@@ -7,11 +7,13 @@ const MINUTE_MS = 60_000
 
 export const RESERVE_WATCH_RULES = {
   // The roll ladder's warn line: max(1.5x, background + 20), so a zero background is not tripped
-  // by one 503. Three complete minutes in a row, not two.
+  // by one 503. Three complete minutes in a row, not two. The read spans more minutes than that so
+  // its newest point shows how far the series is published.
   director503: {
     multiple: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.warnMultiple,
     marginPerMinute: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.warnMarginPerMinute,
-    consecutiveMinutes: 3
+    consecutiveMinutes: 3,
+    readMinutes: 10
   },
   // The cell closes a demoted seat after 60 s (DEMOTION_CLOSE_MS); 30 s more covers a director's
   // map still holding the closed seat.
@@ -23,9 +25,11 @@ export const RESERVE_WATCH_RULES = {
   ledgerSummaryMaxAgeMs: 150_000
 }
 
+// Precedence: the first tripped rule names the verdict, so exact signals come before proxies. The
+// sample line's `rules` keys follow this order too.
 export const RULE_NAMES = ['deadMan', 'overrun', 'director503', 'duplicateSeat', 'hostDrop', 'ledgerDrift']
 
-export function initialWatchState({ cellId, startedAt, durationMinutes, background503PerMinute }) {
+export function initialWatchState({ cellId, startedAt, durationMinutes, background503PerMinute, flippedAt }) {
   return {
     v: 1,
     cellId,
@@ -35,7 +39,8 @@ export function initialWatchState({ cellId, startedAt, durationMinutes, backgrou
     verdict: null,
     samples: 0,
     unverifiableStreak: 0,
-    // Null until measured: the minutes before the watch, unless the operator supplied it.
+    // The background is measured in the minutes before the flip, unless the operator supplied it.
+    flippedAt: flippedAt ?? null,
     background:
       background503PerMinute === null ? null : { medianPerMinute: background503PerMinute, source: 'input' },
     hosts: [],
@@ -44,9 +49,10 @@ export function initialWatchState({ cellId, startedAt, durationMinutes, backgrou
   }
 }
 
-// The background from the per-minute counts read before the watch; a minute with no point had none.
+// The background from the per-minute counts before the flip, read once those minutes are past the
+// publishing delay. A gap among published points had no 503s; no point at all is no evidence.
 export function measuredBackground(perMinute, minutes) {
-  if (minutes.length === 0) return null
+  if (!minutes.some((minute) => minute in perMinute)) return null
   const background = backgroundOf({ minutes, series: minutes.map((minute) => perMinute[minute] ?? 0), unverified: false })
   return { medianPerMinute: background.medianPerMinute, minutes: background.minutes, source: 'measured' }
 }
@@ -66,7 +72,8 @@ function judgeDeadMan(cell) {
   return pass()
 }
 
-// The cell ledger's total (seats, bookings, in-flight and phone units) against its hard cap.
+// The cell ledger's total (seats, bookings, in-flight and phone units) against its hard cap. The
+// ledger refuses past the cap, so this is an invariant check: it trips only if that refusal broke.
 function judgeOverrun(cell) {
   if (!cell.ok) return unverifiable(cell.error)
   if (!Number.isInteger(cell.hardCap) || !Number.isInteger(cell.enforcedUnits)) {
@@ -81,25 +88,33 @@ function judgeOverrun(cell) {
   return pass({ enforcedUnits: cell.enforcedUnits, hardCap: cell.hardCap })
 }
 
-// Fleet-wide director 503s: no existing signal attributes a 503 to the cell a host was bound for.
+// Fleet-wide director 503s: no existing signal attributes a 503 to the cell a host was bound for,
+// so a problem local to one cell can stay under the fleet's line. This proxy can miss.
 function judgeDirector503(read, background) {
   if (!background) return unverifiable('no 503 background yet')
   if (!read.ok) return unverifiable(read.error)
   const { multiple, marginPerMinute, consecutiveMinutes } = RESERVE_WATCH_RULES.director503
   const perMinute = background.medianPerMinute
   const above = Math.max(perMinute * multiple, perMinute + marginPerMinute)
-  // A minute with no point had no 503s; only complete minutes are passed in.
   const recent = read.minutes.slice(-consecutiveMinutes)
+  // Minute keys sort as time. A gap before the newest point had no 503s; a minute after it is not
+  // published yet, and an empty series is no evidence.
+  const published = Object.keys(read.perMinute).sort().at(-1)
+  if (published === undefined) return unverifiable('the director 503 series is empty')
+  const unpublished = recent.find((minute) => minute > published)
+  if (unpublished !== undefined) return unverifiable(`director 503s for ${unpublished} are not published yet`)
   const counts = recent.map((minute) => read.perMinute[minute] ?? 0)
   const detail = { backgroundPerMinute: perMinute, above, recent: Object.fromEntries(recent.map((m, i) => [m, counts[i]])) }
-  if (recent.length === consecutiveMinutes && counts.every((count) => count > above)) {
+  if (recent.length < consecutiveMinutes) return unverifiable(`fewer than ${consecutiveMinutes} complete 503 minutes`)
+  if (counts.every((count) => count > above)) {
     return trip(`director 503s above ${above}/min for ${consecutiveMinutes} min (${counts.join(', ')})`, detail)
   }
   return pass(detail)
 }
 
 // A seat the ledger reconcile found behind its row and found again after the demotion should
-// have closed it. The line names no host, so (epoch, rowEpoch) stands in for one.
+// have closed it. The line names no host, so (director instance, cell, epoch, rowEpoch) stands in
+// for one: a proxy that can only over-count, when two hosts share that key.
 function judgeDuplicateSeat(read, firstSeen, at) {
   if (!read.ok) return { verdict: unverifiable(read.error), firstSeen }
   const { graceMs, lookbackMs } = RESERVE_WATCH_RULES.duplicateSeat
@@ -122,7 +137,7 @@ function judgeDuplicateSeat(read, firstSeen, at) {
 }
 
 function judgeHostDrop(hosts) {
-  const { share, minHosts } = RESERVE_WATCH_RULES.hostDrop
+  const { share, minHosts, windowMs } = RESERVE_WATCH_RULES.hostDrop
   const current = hosts.at(-1)
   if (!current) return unverifiable('no host count')
   if (hosts.some((entry) => entry.draining)) return pass({ controls: current.controls, draining: true })
@@ -130,13 +145,13 @@ function judgeHostDrop(hosts) {
   const drop = peak - current.controls
   const detail = { controls: current.controls, peakInWindow: peak }
   if (peak > 0 && drop >= minHosts && drop / peak > share) {
-    return trip(`connected hosts fell ${peak} -> ${current.controls} within 5 min outside a drain`, detail)
+    return trip(`connected hosts fell ${peak} -> ${current.controls} within ${windowMs / MINUTE_MS} min outside a drain`, detail)
   }
   return pass(detail)
 }
 
 // Rows the placing directors have not written (queued) or gave up on (dropped), per seat. The
-// summaries are fleet-wide: exact for the cell only while it is the only reserve cell.
+// summaries are fleet-wide: exact while this is the only reserve cell, an over-count otherwise.
 function judgeLedgerDrift(cell, ledger, aboveSince, at) {
   if (!cell.ok) return { verdict: unverifiable(cell.error), aboveSince }
   if (!ledger.ok) return { verdict: unverifiable(ledger.error), aboveSince }

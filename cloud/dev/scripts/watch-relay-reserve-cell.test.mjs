@@ -8,7 +8,16 @@ import {
   initialWatchState,
   measuredBackground
 } from './relay-reserve-watch-rules.mjs'
-import { flipBack, parseWatchArguments, recordOutcome, watchSegment } from './watch-relay-reserve-cell.mjs'
+import {
+  FLIP_BACK_ATTEMPTS,
+  flipBack,
+  parseWatchArguments,
+  readDirector503Minutes,
+  readSeatBehindRowSample,
+  recordOutcome,
+  watchSegment
+} from './watch-relay-reserve-cell.mjs'
+import { readRelayWorkflow } from './relay-repository.mjs'
 
 const CELL = 'production-gce-c26'
 const START = Date.parse('2026-10-14T12:00:00Z')
@@ -86,16 +95,72 @@ test('503s trip only after three complete minutes over max(1.5x background, back
   const zero = freshState({ background: { medianPerMinute: 0, source: 'input' } })
   assert.equal(evaluateWatchSample(zero, sampleAt(START, { director503: series([5, 5, 5]) }), LIMIT).state.state, 'watching')
   assert.equal(evaluateWatchSample(zero, sampleAt(START, { director503: series([21, 21, 21]) }), LIMIT).state.state, 'tripped')
-  // A minute with no point had none.
+  // A gap before the newest point had none.
   const gap = series([151, 160, 170])
   delete gap.perMinute[gap.minutes[1]]
   assert.equal(evaluateWatchSample(state, sampleAt(START, { director503: gap }), LIMIT).state.state, 'watching')
 })
 
-test('the measured background is the median of the minutes before the watch, zeros included', () => {
+test('missing 503 data is unverifiable, never zero', () => {
+  const state = freshState()
+  const minutes = minutesBefore(START, 3)
+  const judge = (director503) => evaluateWatchSample(state, sampleAt(START, { director503 }), LIMIT)
+  // An empty series.
+  const empty = judge({ ok: true, minutes, perMinute: {} })
+  assert.equal(empty.rules.director503.status, 'unverifiable')
+  assert.match(empty.rules.director503.reason, /series is empty/)
+  assert.equal(empty.state.unverifiableStreak, 1)
+  // The newest minute is not published yet: points stop before it.
+  const late = judge({ ok: true, minutes, perMinute: { [minutes[0]]: 500, [minutes[1]]: 500 } })
+  assert.equal(late.rules.director503.status, 'unverifiable')
+  assert.match(late.rules.director503.reason, new RegExp(`${minutes[2]} are not published yet`))
+  // Fewer complete minutes than the rule needs.
+  assert.equal(judge({ ok: true, minutes: minutes.slice(1), perMinute: { [minutes[2]]: 1 } }).rules.director503.status, 'unverifiable')
+})
+
+// A Cloud Monitoring or Cloud Logging reader over fakes, as the watch builds one.
+const fakeReader = ({ fetch: fetchImpl = async () => new Response('{}'), runGcloud = async () => ({ stdout: 'token' }) } = {}) => ({
+  fetch: fetchImpl,
+  runGcloud,
+  retryDelayMs: 0,
+  readTimeoutMs: 1_000,
+  now: () => START,
+  deadlineAt: START + 10_000,
+  projectId: 'onorca-cloud'
+})
+
+test('an unparseable timestamp makes the read unverifiable', async () => {
+  const badPoint = {
+    timeSeries: [{ points: [{ interval: { endTime: 'not a time' }, value: { int64Value: '3' } }] }]
+  }
+  const read503 = await readDirector503Minutes(
+    fakeReader({ fetch: async () => new Response(JSON.stringify(badPoint)) }),
+    { projectId: 'onorca-cloud', directorService: 'orca-cloud-relay', endedAt: START, minutes: 3 }
+  )
+  assert.equal(read503.ok, false)
+  assert.match(read503.error, /unreadable/)
+  const seats = await readSeatBehindRowSample(
+    fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify([{ timestamp: 'garbage', jsonPayload: { epoch: 1, rowEpoch: 2 } }]) }) }),
+    { directorService: 'orca-cloud-relay', cellId: CELL, at: START }
+  )
+  assert.equal(seats.ok, false)
+  assert.match(seats.error, /unparseable timestamp/)
+})
+
+test('a seat-behind-row key carries the director instance and cell beside the epochs', async () => {
+  const entry = (instanceId) => ({ timestamp: new Date(START).toISOString(), labels: { instanceId }, jsonPayload: { cellId: CELL, epoch: 7, rowEpoch: 8 } })
+  const read = await readSeatBehindRowSample(
+    fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify([entry('a'), entry('b')]) }) }),
+    { directorService: 'orca-cloud-relay', cellId: CELL, at: START }
+  )
+  assert.deepEqual(read.reports.map((report) => report.key), [`a/${CELL}/7:8`, `b/${CELL}/7:8`])
+})
+
+test('the measured background is the median of the minutes before the flip, gaps as zero, none as no evidence', () => {
   const minutes = ['2026-10-14T11:47', '2026-10-14T11:48', '2026-10-14T11:49']
   assert.equal(measuredBackground({ '2026-10-14T11:48': 30 }, minutes).medianPerMinute, 0)
   assert.equal(measuredBackground({ [minutes[0]]: 10, [minutes[1]]: 30, [minutes[2]]: 20 }, minutes).medianPerMinute, 20)
+  assert.equal(measuredBackground({}, minutes), null)
   assert.equal(measuredBackground({}, []), null)
 })
 
@@ -212,26 +277,40 @@ const watchValues = (overrides = {}) => ({
   'segment-minutes': '55',
   'unverifiable-limit': '3',
   'background-503-per-minute': '',
+  'flipped-at': new Date(START - 5 * MINUTE).toISOString(),
   'state-file': '/unused',
   ...overrides
 })
+const parseAt = (values) => parseWatchArguments(values, START)
 
 test('watch arguments reuse the flag tool checks, so a write watch needs its confirmation up front', () => {
-  assert.equal(parseWatchArguments(watchValues()).background503PerMinute, null)
-  assert.equal(parseWatchArguments(watchValues({ 'background-503-per-minute': '12.5' })).background503PerMinute, 12.5)
-  assert.throws(() => parseWatchArguments(watchValues({ mode: 'write' })), /WRITE_RELAY_CELL_FLAGS production-gce-c26/)
-  assert.doesNotThrow(() =>
-    parseWatchArguments(watchValues({ mode: 'write', confirmation: `WRITE_RELAY_CELL_FLAGS ${CELL}` }))
-  )
-  assert.throws(() => parseWatchArguments(watchValues({ 'cell-origin': 'https://c27.relay.onorca.dev' })), /names another cell/)
-  assert.throws(() => parseWatchArguments(watchValues({ 'duration-minutes': '301' })), /duration-minutes/)
-  assert.throws(() => parseWatchArguments(watchValues({ 'segment-minutes': '56' })), /segment-minutes/)
-  assert.throws(() => parseWatchArguments(watchValues({ 'background-503-per-minute': '-1' })), /background/)
+  assert.equal(parseAt(watchValues()).background503PerMinute, null)
+  assert.equal(parseAt(watchValues()).flippedAt, START - 5 * MINUTE)
+  assert.equal(parseAt(watchValues({ 'background-503-per-minute': '12.5', 'flipped-at': '' })).background503PerMinute, 12.5)
+  assert.throws(() => parseAt(watchValues({ mode: 'write' })), /WRITE_RELAY_CELL_FLAGS production-gce-c26/)
+  assert.doesNotThrow(() => parseAt(watchValues({ mode: 'write', confirmation: `WRITE_RELAY_CELL_FLAGS ${CELL}` })))
+  assert.throws(() => parseAt(watchValues({ 'cell-origin': 'https://c27.relay.onorca.dev' })), /names another cell/)
+  assert.throws(() => parseAt(watchValues({ 'duration-minutes': '301' })), /duration-minutes/)
+  assert.throws(() => parseAt(watchValues({ 'segment-minutes': '56' })), /segment-minutes/)
+  assert.throws(() => parseAt(watchValues({ 'background-503-per-minute': '-1' })), /background/)
+})
+
+test('the 503 background needs flipped-at or an explicit value; flipped-at must be a recent zoned time', () => {
+  assert.throws(() => parseAt(watchValues({ 'flipped-at': '' })), /--flipped-at .* or --background-503-per-minute is required/)
+  assert.throws(() => parseAt(watchValues({ 'flipped-at': '2026-10-14T11:55:00' })), /ISO time with a zone/)
+  assert.throws(() => parseAt(watchValues({ 'flipped-at': '2026-10-14T12:01:00Z' })), /in the future/)
+  assert.throws(() => parseAt(watchValues({ 'flipped-at': '2026-10-13T11:00:00Z' })), /more than 24 hours/)
+  assert.equal(parseAt(watchValues({ 'flipped-at': '2026-10-14T07:55:00-04:00' })).flippedAt, START - 5 * MINUTE)
 })
 
 // A cell, Cloud Monitoring and Cloud Logging, answering from `script` per sample.
-function fakeSources({ cell = () => ({}), ledger = () => [{ timestamp: new Date(START).toISOString(), labels: { instanceId: 'a' }, jsonPayload: { pending: 0, dropped: 0 } }] } = {}) {
+function fakeSources({
+  cell = () => ({}),
+  ledger = () => [{ timestamp: new Date(START).toISOString(), labels: { instanceId: 'a' }, jsonPayload: { pending: 0, dropped: 0 } }],
+  per503 = () => 10
+} = {}) {
   let samples = 0
+  const monitoringSpans = []
   const fetchImpl = async (url) => {
     const text = String(url)
     if (text.endsWith('/v1/admin/runtime-status')) {
@@ -250,7 +329,16 @@ function fakeSources({ cell = () => ({}), ledger = () => [{ timestamp: new Date(
         })
       )
     }
-    if (text.startsWith('https://monitoring.googleapis.com/')) return new Response(JSON.stringify({ timeSeries: [] }))
+    if (text.startsWith('https://monitoring.googleapis.com/')) {
+      const params = new URL(text).searchParams
+      const span = { startedAt: Date.parse(params.get('interval.startTime')), endedAt: Date.parse(params.get('interval.endTime')) }
+      monitoringSpans.push(span)
+      const points = []
+      for (let minute = span.startedAt; minute < span.endedAt; minute += MINUTE) {
+        points.push({ interval: { endTime: new Date(minute + MINUTE).toISOString() }, value: { int64Value: String(per503(minute)) } })
+      }
+      return new Response(JSON.stringify({ timeSeries: [{ points }] }))
+    }
     throw new Error(`unexpected fetch ${text}`)
   }
   const runGcloud = async (args) => {
@@ -259,7 +347,7 @@ function fakeSources({ cell = () => ({}), ledger = () => [{ timestamp: new Date(
     if (filter.includes('orca_relay_reserve_ledger_summary')) return { stdout: JSON.stringify(ledger(samples)) }
     return { stdout: '[]' }
   }
-  return { fetchImpl, runGcloud }
+  return { fetchImpl, runGcloud, monitoringSpans }
 }
 
 test('a segment samples once a minute, carries state to the next segment, and stops on a trip', async () => {
@@ -267,7 +355,7 @@ test('a segment samples once a minute, carries state to the next segment, and st
   try {
     let clock = START
     const lines = []
-    const config = parseWatchArguments(
+    const config = parseAt(
       watchValues({ 'state-file': join(directory, 'state.json'), 'github-output': join(directory, 'out'), 'segment-minutes': '3' })
     )
     const sources = fakeSources({ cell: (sample) => (sample === 5 ? { runtime: { controls: 1_000, enforcedConnectionUnits: 2_001 } } : {}) })
@@ -299,7 +387,7 @@ test('a sample that cannot read its sources counts as unverifiable rather than c
   const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
   try {
     let clock = START
-    const config = parseWatchArguments(watchValues({ 'state-file': join(directory, 'state.json'), 'segment-minutes': '10' }))
+    const config = parseAt(watchValues({ 'state-file': join(directory, 'state.json'), 'segment-minutes': '10' }))
     const sources = fakeSources({ ledger: () => [] })
     const state = await watchSegment(config, {
       ...sources,
@@ -317,7 +405,7 @@ test('a sample that cannot read its sources counts as unverifiable rather than c
   }
 })
 
-test('a watch that ended without a verdict records failed, which starts no flip back', async () => {
+test('a watch that ended without a verdict records failed, which the workflow flips back', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
   try {
     const output = join(directory, 'out')
@@ -332,23 +420,35 @@ test('a watch that ended without a verdict records failed, which starts no flip 
   }
 })
 
-// Google Storage and the director, as far as the flag tool's flip back reaches them.
-function fakeFlipBack({ generation = '7', admitModeAfterWrite = 'db' } = {}) {
+// Google Storage and the director, as far as the flag tool's flip back reaches them. `onUpload`
+// returns 'conflict' to play another writer landing first, optionally with its own admitMode.
+function fakeFlipBack({ generation = '7', onUpload = () => 'ok', cellAnswers = true } = {}) {
   const calls = []
-  let applied = { generation: Number(generation), flags: { admitMode: 'reserve', readinessLocal: true } }
+  let uploads = 0
+  let object = { generation: Number(generation), flags: { admitMode: 'reserve', readinessLocal: true } }
+  let applied = object
   const fetchImpl = async (url, init = {}) => {
     const text = String(url)
     calls.push({ url: text, method: init.method ?? 'GET', body: init.body })
     if (text.includes('/upload/storage/v1/')) {
-      assert.match(text, new RegExp(`ifGenerationMatch=${generation}$`))
-      applied = { generation: Number(generation) + 1, flags: { admitMode: admitModeAfterWrite, readinessLocal: true } }
-      return new Response(JSON.stringify({ generation: String(Number(generation) + 1) }))
+      uploads += 1
+      assert.match(text, new RegExp(`ifGenerationMatch=${object.generation}$`))
+      const outcome = onUpload(uploads)
+      if (outcome !== 'ok') {
+        object = { generation: object.generation + 1, flags: { ...object.flags, admitMode: outcome.admitMode ?? 'reserve' } }
+        applied = object
+        return new Response('', { status: 412 })
+      }
+      object = { generation: object.generation + 1, flags: JSON.parse(init.body.split('\r\n')[7]).flags }
+      applied = object
+      return new Response(JSON.stringify({ generation: String(object.generation) }))
     }
     if (text.includes('?alt=media')) {
-      return new Response(JSON.stringify({ v: 1, cellId: CELL, flags: { admitMode: 'reserve', readinessLocal: true } }))
+      return new Response(JSON.stringify({ v: 1, cellId: CELL, flags: object.flags }))
     }
-    if (text.includes('/storage/v1/b/')) return new Response(JSON.stringify({ generation }))
+    if (text.includes('/storage/v1/b/')) return new Response(JSON.stringify({ generation: String(object.generation) }))
     if (text.endsWith('/v1/admin/runtime-status')) {
+      if (!cellAnswers) return new Response('', { status: 502 })
       return new Response(
         JSON.stringify({
           role: 'cell',
@@ -369,7 +469,20 @@ function fakeFlipBack({ generation = '7', admitModeAfterWrite = 'db' } = {}) {
     }
     throw new Error(`unexpected fetch ${text}`)
   }
-  return { fetchImpl, calls }
+  return { fetchImpl, calls, uploads: () => uploads }
+}
+
+const flipDependencies = (fetchImpl, lines, sleeps = []) => {
+  let clock = START
+  return {
+    fetchImpl,
+    accessToken: 'access',
+    idToken: 'id',
+    audit: { writtenBy: 'reserve-watch/test', runId: '1', runAttempt: '1' },
+    now: () => clock,
+    sleep: async (ms) => { sleeps.push(ms); clock += ms },
+    log: (line) => lines.push(JSON.parse(line))
+  }
 }
 
 const flipValues = (overrides = {}) => ({
@@ -384,17 +497,8 @@ const flipValues = (overrides = {}) => ({
 
 test('the flip back is the flag tool write: admitMode=db at the generation just read, then Postgres db', async () => {
   const { fetchImpl, calls } = fakeFlipBack()
-  let clock = START
   const lines = []
-  const result = await flipBack(flipValues(), {
-    fetchImpl,
-    accessToken: 'access',
-    idToken: 'id',
-    audit: { writtenBy: 'reserve-watch/test', runId: '1', runAttempt: '1' },
-    now: () => clock,
-    sleep: async (ms) => { clock += ms },
-    log: (line) => lines.push(JSON.parse(line))
-  })
+  const result = await flipBack(flipValues(), flipDependencies(fetchImpl, lines))
   assert.equal(result.written, true)
   const upload = calls.find((call) => call.url.includes('/upload/storage/v1/'))
   assert.match(upload.body, /"flags":\{"admitMode":"db","readinessLocal":true\}/)
@@ -432,4 +536,110 @@ test('a write flip back without the typed confirmation is refused before any rea
     /WRITE_RELAY_CELL_FLAGS production-gce-c26/
   )
   assert.equal(calls.length, 0)
+})
+
+test('a generation conflict is re-read and retried while the switch file still says reserve', async () => {
+  const { fetchImpl, uploads } = fakeFlipBack({ onUpload: (n) => (n < 3 ? { admitMode: 'reserve' } : 'ok') })
+  const lines = []
+  const sleeps = []
+  const result = await flipBack(flipValues(), flipDependencies(fetchImpl, lines, sleeps))
+  assert.equal(result.written, true)
+  assert.equal(uploads(), 3)
+  assert.deepEqual(lines.filter((line) => line.event === 'orca_relay_reserve_watch_flip_back_conflict').map((line) => line.attempt), [1, 2])
+  assert.deepEqual(sleeps.slice(0, 1), [2_000])
+  assert.equal(lines.at(-1).generation, '10')
+})
+
+test('a conflict whose writer already flipped the cell to db ends the flip back without a write', async () => {
+  const { fetchImpl, uploads } = fakeFlipBack({ onUpload: () => ({ admitMode: 'db' }) })
+  const lines = []
+  const result = await flipBack(flipValues(), flipDependencies(fetchImpl, lines))
+  assert.equal(uploads(), 1)
+  assert.equal(result.written, false)
+  assert.equal(result.alreadyDb, true)
+  assert.deepEqual(lines.at(-1), { event: 'orca_relay_reserve_watch_flip_back', mode: 'write', cellId: CELL, written: false, generation: '8', alreadyDb: true })
+})
+
+test('conflicts past the retry bound fail the flip back', async () => {
+  const { fetchImpl, uploads } = fakeFlipBack({ onUpload: () => ({ admitMode: 'reserve' }) })
+  await assert.rejects(flipBack(flipValues(), flipDependencies(fetchImpl, [])), /object changed since expected-generation/)
+  assert.equal(uploads(), FLIP_BACK_ATTEMPTS)
+})
+
+test('an unreachable cell fails with the exact break-glass inputs and writes nothing', async () => {
+  const { fetchImpl, uploads } = fakeFlipBack({ cellAnswers: false })
+  const lines = []
+  await assert.rejects(
+    flipBack(flipValues(), flipDependencies(fetchImpl, lines)),
+    (error) => {
+      assert.match(error.message, /production-gce-c26 does not answer runtime-status \(cell runtime status returned 502\)/)
+      assert.match(error.message, /set=admitMode=default, break-glass=BREAK GLASS production-gce-c26, expected-generation=7/)
+      return true
+    }
+  )
+  assert.equal(uploads(), 0)
+  assert.deepEqual(lines.at(-1).inputs, {
+    mode: 'write',
+    'cell-id': CELL,
+    set: 'admitMode=default',
+    'break-glass': `BREAK GLASS ${CELL}`,
+    'expected-generation': '7',
+    confirmation: `WRITE_RELAY_CELL_FLAGS ${CELL}`
+  })
+})
+
+test('the 503 background is the 10 minutes before flipped-at, read once they are published', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'relay-reserve-watch-'))
+  try {
+    let clock = START
+    // Flipped one minute ago: the minutes before it are not published until 3 minutes after it.
+    const flippedAt = START - MINUTE + 20_000
+    const config = parseAt(
+      watchValues({ 'state-file': join(directory, 'state.json'), 'segment-minutes': '3', 'flipped-at': new Date(flippedAt).toISOString() })
+    )
+    const sources = fakeSources({ per503: (minute) => (minute < START - MINUTE ? 4 : 40) })
+    const lines = []
+    const state = await watchSegment(config, {
+      ...sources,
+      idToken: 'id',
+      retryDelayMs: 0,
+      now: () => clock,
+      sleep: async (ms) => { clock += ms },
+      log: (line) => lines.push(JSON.parse(line))
+    })
+    assert.deepEqual(lines.map((line) => line.rules.director503.status), ['unverifiable', 'unverifiable', 'pass'])
+    assert.equal(lines[0].rules.director503.reason, 'no 503 background yet')
+    const baseline = sources.monitoringSpans.find((span) => span.endedAt === START - MINUTE)
+    assert.equal(baseline.startedAt, START - 11 * MINUTE)
+    assert.deepEqual(state.background, { medianPerMinute: 4, minutes: 10, source: 'measured' })
+    // An explicit value overrides the measurement.
+    const explicit = initialWatchState({ cellId: CELL, startedAt: START, durationMinutes: 60, background503PerMinute: 9, flippedAt })
+    assert.deepEqual(explicit.background, { medianPerMinute: 9, source: 'input' })
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+const watchWorkflow = readRelayWorkflow('operate-relay-production-reserve-watch.yml')
+const jobOf = (name) => {
+  const start = watchWorkflow.indexOf(`\n  ${name}:\n`)
+  assert.notEqual(start, -1, `job ${name} is missing`)
+  const next = watchWorkflow.slice(start + 1).search(/\n  [a-z-]+:\n/)
+  return watchWorkflow.slice(start, next === -1 ? undefined : start + 1 + next)
+}
+
+test('workflow: neither job takes the flag workflow group, which would let a newer run cancel a pending flip back', () => {
+  assert.doesNotMatch(watchWorkflow, /group: relay-production-cell-flags/)
+  assert.doesNotMatch(jobOf('flip-back'), /^\s+concurrency:/m)
+  assert.doesNotMatch(jobOf('watch'), /^\s+concurrency:/m)
+})
+
+test('workflow: a watch that failed or was cancelled without a verdict flips back too', () => {
+  const flip = jobOf('flip-back')
+  assert.match(flip, /if: \$\{\{ always\(\) && vars\.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && needs\.watch\.result != 'skipped'/)
+  assert.match(flip, /!contains\(fromJSON\('\["completed","stopped","refused"\]'\), needs\.watch\.outputs\.state\)/)
+  // Every segment checks its ID token's shape, and runs the one shared command.
+  const segments = watchWorkflow.match(/run: bash -c "\$\{WATCH_SEGMENT\}"/g) ?? []
+  assert.equal(segments.length, 6)
+  assert.match(jobOf('watch'), /process\.env\.ORCA_RELAY_ADMIN_ID_TOKEN/)
 })

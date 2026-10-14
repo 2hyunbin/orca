@@ -278,6 +278,12 @@ export async function readCurrentObject(fetchImpl, request, accessToken) {
   return { generation: String(generation), object: await media.json().catch(() => null) }
 }
 
+function generationConflict(current, expected) {
+  return Object.assign(new Error(`current generation is ${current}, not expected ${expected}`), {
+    generationConflict: true
+  })
+}
+
 async function writeObject(fetchImpl, request, object, accessToken, audit) {
   const boundary = `relay-cell-flags-${Date.now()}`
   const metadata = {
@@ -315,7 +321,8 @@ async function writeObject(fetchImpl, request, object, accessToken, audit) {
   if (response.status === 412) {
     await response.body?.cancel().catch(() => undefined)
     throw Object.assign(new Error('the object changed since expected-generation; re-read and retry'), {
-      notWritten: true
+      notWritten: true,
+      generationConflict: true
     })
   }
   if (!response.ok) {
@@ -409,7 +416,7 @@ async function breakGlassToDatabase(request, dependencies, { fetchImpl, log, sle
   }
   const current = await readCurrentObject(fetchImpl, request, accessToken)
   if (current.generation !== request.expectedGeneration) {
-    throw new Error(`current generation is ${current.generation}, not expected ${request.expectedGeneration}`)
+    throw generationConflict(current.generation, request.expectedGeneration)
   }
   const object = desiredObject(request, current.object)
   const generation = await writeObject(fetchImpl, request, object, accessToken, audit)
@@ -459,9 +466,7 @@ export async function operateCellFlags(request, dependencies) {
   // Before the generation check, so a dry run always shows the generation to pass next.
   log(JSON.stringify(plan))
   if (current.generation !== request.expectedGeneration) {
-    throw new Error(
-      `current generation is ${current.generation}, not expected ${request.expectedGeneration}`
-    )
+    throw generationConflict(current.generation, request.expectedGeneration)
   }
   // The cell applies every readable write; a generation it did not apply was voided there. A
   // write of an object this image accepts whole (checked above) repairs it.

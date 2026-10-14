@@ -810,22 +810,34 @@ manual only and inert until dispatched; `dry-run` logs the flag tool's plan inst
 `write` takes the flag workflow's confirmation, `WRITE_RELAY_CELL_FLAGS <cell-id>`.
 
 It samples once a minute for up to 300 minutes, re-authenticating every 55-minute segment because
-an ID token lasts an hour, and logs one JSON line per sample. It trips on:
+an ID token lasts an hour, and logs one JSON line per sample. The 503 background must predate the
+flip: give `flipped-at` (when the reserve write applied; the background is the median of the 10
+minutes before it) or `background-503-per-minute`, which overrides it. With neither, the watch is
+refused. It trips on, in this order:
 
 | Rule | Signal | Exact or proxy |
 |---|---|---|
 | Dead-man tripped | runtime-status `admitModeEffective=db` under a reserve switch file | Exact |
-| Overrun | runtime-status `enforcedConnectionUnits` over `connectionCapacity.hardCap` | Exact (the ledger counts seats, bookings, in-flight and phone units, so it is slightly stricter than seats + bookings) |
-| 503s | Director `request_count` 503s above max(1.5x background, background + 20) for 3 complete minutes; background is the 10 minutes before the watch, or an input | Proxy: fleet-wide, since no signal attributes a 503 to a cell |
-| Duplicate past grace | The ledger reconcile's `orca_relay_reserve_ledger_seat_behind_row` for the cell, reported again more than 90 s (60 s demotion close + 30 s map lag) after it was first seen, keyed by epoch and row epoch | Proxy: the line names no host, and no reachable signal lists one host's seats across cells |
+| Overrun | runtime-status `enforcedConnectionUnits` over `connectionCapacity.hardCap` | Invariant check: the ledger already refuses past its cap, so this trips only if that refusal broke. It counts seats, bookings, in-flight and phone units |
+| 503s | Director `request_count` 503s above max(1.5x background, background + 20) for 3 complete minutes | Proxy that can miss: fleet-wide, since no signal attributes a 503 to a cell, so a problem on one cell can stay under the fleet's line |
+| Duplicate past grace | The ledger reconcile's `orca_relay_reserve_ledger_seat_behind_row` for the cell, reported again more than 90 s (60 s demotion close + 30 s map lag) after it was first seen, keyed by director instance, cell, epoch and row epoch | Proxy that can only over-count: the line names no host, so two hosts sharing that key read as one seat |
 | Host drop | runtime-status `controls` fell more than 5% (and at least 10 hosts) within 5 minutes with no `draining` sample | Exact |
-| Ledger drift | Queued plus dropped rows in each director's newest `orca_relay_reserve_ledger_summary`, over the cell's controls, above 0.5% for 2 minutes | Proxy: the summaries are fleet-wide, so exact only while this is the only reserve cell |
+| Ledger drift | Queued plus dropped rows in each director's newest `orca_relay_reserve_ledger_summary`, over the cell's controls, above 0.5% for 2 minutes | Proxy that can only over-count: the summaries are fleet-wide, so exact only while this is the only reserve cell |
 
 Any rule it cannot read in a sample makes that sample unverifiable; `unverifiable-limit` such
-samples in a row is a trip of its own. A cell whose switch file no longer says reserve ends the
-watch without a write. The watch holds a per-cell group; only the flip back takes the flag
-workflow's `relay-production-cell-flags` group, so a watch never queues manual flag writes behind
-it for hours, and its write never races one.
+samples in a row is a trip of its own. Missing 503 data is never zero: an empty series, a minute
+after the newest published point, or an unparseable timestamp is unverifiable. A gap between
+published points is a minute with no 503s. A cell whose switch file no longer says reserve ends the
+watch without a write.
+
+In `write` mode a watch that fails, times out or is cancelled before a verdict flips the cell back
+as a trip would. The flip back holds no concurrency group: GitHub keeps one pending run per group
+and a newer one cancels it, so a flip back queued in the flag workflow's group could be dropped by
+any later flag dispatch. The flag tool's generation check (CAS) orders it against other writes
+instead; on a conflict it re-reads and retries, up to 5 times, while the switch file still says
+reserve, and stops if it already says db. A cell that does not answer runtime-status cannot take
+the ordinary flip back: the run fails and prints the exact break-glass inputs for `Operate Relay
+Production Cell Flags` (`set=admitMode=default`, `break-glass=BREAK GLASS <cell-id>`).
 
 ## Mobile push gateway
 
