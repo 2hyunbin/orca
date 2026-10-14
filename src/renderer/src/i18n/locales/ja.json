@@ -151,7 +151,18 @@
       "codexSharedServerWarning": {
         "title": "Codex タブがサーバーを共有する場合に警告する",
         "description": "自分で開始した Codex が他のタブとサーバーを共有している場合、Agent のステータスが間違っている可能性があるため、その Codex に関する通知が表示されます。"
-      }
+      },
+      "environmentName": "環境変数名",
+      "environmentValue": "{{name}} の値",
+      "savedEnvironment": "保存済みの値 · 置き換えるには入力",
+      "newEnvironment": "値",
+      "removeEnvironment": "削除",
+      "loadingHost": "Agent設定を読み込み中…",
+      "updateHost": "Agentの起動設定を編集するには、このサーバーを更新してください。",
+      "readFailed": "Agent設定を読み込めませんでした。ホストへの接続を確認して再試行してください。",
+      "saveFailed": "Agent設定を保存できませんでした。ホストへの接続を確認して再試行してください。",
+      "hostDefaults": "選択したホストで起動する新しいAgentの既定値。",
+      "save": "保存"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "シンボリックリンク",
@@ -916,6 +927,7 @@
               "undecryptableUnknown": "{{value0}} Cookie を復号化できなかったため、スキップされました。ソースブラウザを完全に閉じて、インポートを再試行してください。",
               "unrecognizedWarning": "Cookie のインポートは、このバージョンの Orca が認識しない警告とともに終了しました。 Orca を更新して詳細を確認し、Cookie に依存する前にこのプロファイルを確認してください。",
               "undecryptableUnrecognizedReason": "{{value0}} Cookie は復号化できず、このバージョンの Orca が認識しない理由でスキップされました。 Orca を更新して詳細を確認し、インポートを再試行してください。",
+              "partitionSkippedBreakdown": "サイト パーティションを読み取れない Cookie: {{value0}}。既存のセッションを保護するためにインポートしなかった関連 Cookie: {{value1}}。これらのサイトの既存の Cookie は変更されていません。再度ログインする前に、このプロファイルでこれらのサイトを確認してください。",
               "partitionSkipped": "{{value0}} Cookie は、サイトパーティションを読み取れなかったため、インポートされませんでした。 Orca でこれらのサイトに再度サインインします。",
               "locationClientHosted": "このデバイスから読み取り、{{value0}} ワークスペース用にここに保存されます。",
               "locationRemoteHost": "{{value0}} 上のブラウザから読み取り、そこに保存されます。",
@@ -17828,8 +17840,12 @@
         "compactionFailedQuoted": "圧縮に失敗しました: {{detail}}。",
         "compactionUnconfirmed": "圧縮の完了は確認されていません。",
         "cancelUnconfirmed": "キャンセルは確認されませんでした。",
+        "backgroundTaskNotStopped": "バックグラウンドタスクは停止されませんでした。",
+        "backgroundTasksNotStopped": "バックグラウンドタスクは停止されませんでした。",
         "stopRefused": "{{agent}} は停止しませんでした。",
         "stopRefusedQuoted": "{{agent}} は停止しませんでした: {{detail}}。",
+        "couldNotStop": "{{agent}} を停止できませんでした。",
+        "couldNotStopTheAgent": "Agent を停止できませんでした。",
         "noTurnToStop": "{{agent}} には停止できる実行中のターンがありませんでした。",
         "answerUnconfirmed": "回答は記録されましたが、Agent は確認しませんでした。",
         "argumentsMissingValue": "保存された引数の {{option}} に値が必要です。",
@@ -17871,6 +17887,7 @@
         "outcomeUnknown": "Orca は何が起きたかを確認できませんでした。チャットを確認してください。",
         "sendOutcomeLost": "Orca はメッセージが Agent に届いたことを確認できませんでした。チャットを確認し、必要であればもう一度送信してください。",
         "questionChanged": "この質問はすでに回答済みか、変更されています。",
+        "cancelNotSaved": "この質問または承認をキャンセルできませんでした。",
         "historyUnreadable": "Orca はこのチャットの保存済み履歴を読み取れませんでした。",
         "historyUnusable": "このチャットを読み込めません。",
         "historyUnavailable": "Orca は現在このチャットの履歴を開けませんでした。",
@@ -19531,16 +19548,5 @@
   },
   "projectField": {
     "updateFailed": "プロジェクトフィールドを更新できませんでした"
-  },
-  "settings.agents.environmentName": "環境変数名",
-  "settings.agents.environmentValue": "{{name}} の値",
-  "settings.agents.savedEnvironment": "保存済みの値 · 置き換えるには入力",
-  "settings.agents.newEnvironment": "値",
-  "settings.agents.removeEnvironment": "削除",
-  "settings.agents.loadingHost": "Agent設定を読み込み中…",
-  "settings.agents.updateHost": "Agentの起動設定を編集するには、このサーバーを更新してください。",
-  "settings.agents.readFailed": "Agent設定を読み込めませんでした。ホストへの接続を確認して再試行してください。",
-  "settings.agents.saveFailed": "Agent設定を保存できませんでした。ホストへの接続を確認して再試行してください。",
-  "settings.agents.hostDefaults": "選択したホストで起動する新しいAgentの既定値。",
-  "settings.agents.save": "保存"
+  }
 }

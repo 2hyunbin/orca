@@ -4,6 +4,7 @@
  * distro; a relaunch that moved orcad's port moves the bridge with it. In memory only: the
  * deployment record (C7) persists what `onChange` reports.
  */
+import { errorMessage } from '../../shared/error-message'
 import { parsePairingCode } from '../../shared/pairing'
 import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
 import type { ServeReadiness } from '../server/serve-readiness'
@@ -130,7 +131,7 @@ export class WslOrcadConnectionManager {
       if (!options.status && !(error instanceof WslOrcadConnectionSupersededError)) {
         this.dependencies.onChange?.(name, this.get(name), {
           state: 'failed',
-          reason: error instanceof Error ? error.message : String(error),
+          reason: errorMessage(error),
           terminals: 'unverifiable'
         })
       }

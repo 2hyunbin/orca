@@ -55,6 +55,10 @@ const HOLDER_SURVIVAL_MS = 60_000
 const DISTRO_TIMEOUT_MS = 12 * 60_000
 const BRIDGE_PATTERN = '[o]rcadStdioBridge'
 const WSL_INTEROP = '/proc/sys/fs/binfmt_misc/WSLInterop'
+// An rc export orcad's own git calls must see, though `wsl.exe --exec` sources no rc file (E5).
+const LOGIN_ENV_SOCK = '/tmp/orca-lane-agent.sock'
+const LOGIN_ENV_TAG = 'orca-lane-login-env'
+const LANE_REPO = '$HOME/wsl-orcad-lane-repo'
 
 type LaunchState = {
   launchEndedAtMs: number
@@ -248,6 +252,67 @@ function createLaneManager(): void {
   })
 }
 
+/** Runs `command` in a terminal and waits for a printf-split token the echoed input never matches. */
+async function runInTerminal(
+  connection: WslOrcadConnection,
+  handle: string,
+  command: string,
+  what: string
+): Promise<void> {
+  const nonce = randomBytes(6).toString('hex')
+  await rpc(connection, 'terminal.send', {
+    terminal: handle,
+    text: `${command} && printf 'WSL_LANE_%s\\n' ${nonce}`,
+    enter: true
+  })
+  await waitFor(
+    what,
+    async () => {
+      const read = await rpc<{ terminal: { tail?: unknown[] } }>(connection, 'terminal.read', {
+        terminal: handle
+      })
+      return (read.terminal.tail ?? []).map(String).join('\n').includes(`WSL_LANE_${nonce}`)
+        ? true
+        : null
+    },
+    60_000,
+    500
+  )
+}
+
+/**
+ * Long after the wsl.exe that launched orcad exited: orcad's own git (a commit hook) sees the
+ * login shell's exports, and a terminal under orcad still reaches Windows through interop.
+ */
+async function proveDetachedSession(
+  connection: WslOrcadConnection,
+  distro: string
+): Promise<Receipt> {
+  const repoPath = (
+    await guest(
+      distro,
+      `set -e; cd "${LANE_REPO}"; rm -f "$HOME/${LOGIN_ENV_TAG}"; ` +
+        `printf '#!/bin/sh\\nprintf %%s "$SSH_AUTH_SOCK" > "$HOME/${LOGIN_ENV_TAG}"\\n' ` +
+        '> .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit; ' +
+        'git config user.email lane@orca.test; git config user.name lane; ' +
+        'date +%s%N > lane-file; git add lane-file; pwd'
+    )
+  ).trim()
+  await rpc(connection, 'git.commit', { worktree: `path:${repoPath}`, message: 'lane commit' })
+  const hookSock = (await guest(distro, `cat "$HOME/${LOGIN_ENV_TAG}" 2>/dev/null || true`)).trim()
+  expect(hookSock, `${distro}: SSH_AUTH_SOCK seen by orcad's git`).toBe(LOGIN_ENV_SOCK)
+  const created = await rpc<{ terminal: { handle: string } }>(connection, 'terminal.create', {
+    worktree: `path:${repoPath}`
+  })
+  await runInTerminal(
+    connection,
+    created.terminal.handle,
+    '/mnt/c/Windows/System32/cmd.exe /c ver',
+    `Windows interop from a terminal in ${distro}`
+  )
+  return { hookSshAuthSock: hookSock, terminalInterop: 'ok' }
+}
+
 /** status, repo add on a fresh `git init`, terminal create, and its output read back. */
 async function proveRuntimeRpc(connection: WslOrcadConnection, distro: string): Promise<Receipt> {
   const status = await rpc<{ runtimeId?: string }>(connection, 'status.get')
@@ -255,7 +320,7 @@ async function proveRuntimeRpc(connection: WslOrcadConnection, distro: string): 
   const repoPath = (
     await guest(
       distro,
-      'set -e; d="$HOME/wsl-orcad-lane-repo"; rm -rf "$d"; mkdir -p "$d"; cd "$d"; ' +
+      `set -e; d="${LANE_REPO}"; rm -rf "$d"; mkdir -p "$d"; cd "$d"; ` +
         'git init -q -b main; git -c user.email=lane@orca.test -c user.name=lane ' +
         'commit -q --allow-empty -m seed; printf %s "$d"'
     )
@@ -269,26 +334,7 @@ async function proveRuntimeRpc(connection: WslOrcadConnection, distro: string): 
   })
   const handle = created.terminal.handle
   expect(handle).toEqual(expect.any(String))
-  const nonce = randomBytes(6).toString('hex')
-  // printf splits the token so the echoed input line never matches it.
-  await rpc(connection, 'terminal.send', {
-    terminal: handle,
-    text: `printf 'WSL_LANE_%s\\n' ${nonce}`,
-    enter: true
-  })
-  await waitFor(
-    `terminal output token in ${distro}`,
-    async () => {
-      const read = await rpc<{ terminal: { tail?: unknown[] } }>(connection, 'terminal.read', {
-        terminal: handle
-      })
-      return (read.terminal.tail ?? []).map(String).join('\n').includes(`WSL_LANE_${nonce}`)
-        ? true
-        : null
-    },
-    60_000,
-    500
-  )
+  await runInTerminal(connection, handle, ':', `terminal output token in ${distro}`)
   return {
     runtimeId: status.runtimeId,
     repoId: added.repo.id,
@@ -302,6 +348,11 @@ async function launchPhase(distro: string, systemd: boolean): Promise<Receipt> {
   if (!supervisor) {
     throw new Error('supervisor missing')
   }
+  await guest(
+    distro,
+    `grep -q ${LOGIN_ENV_TAG} "$HOME/.profile" 2>/dev/null || ` +
+      `printf 'export SSH_AUTH_SOCK=${LOGIN_ENV_SOCK} # ${LOGIN_ENV_TAG}\\n' >> "$HOME/.profile"`
+  )
   let started = performance.now()
   const connection = await supervisor.connect(distro)
   result.connectMs = Math.round(performance.now() - started)
@@ -386,6 +437,7 @@ async function survivePhase(): Promise<void> {
   for (const { name } of DISTROS) {
     const connection = await manager.ensure(name)
     await rpc(connection, 'status.get')
+    receipt[`${name}.detachedSession`] = await proveDetachedSession(connection, name)
     receipt[`${name}.census`] = await requestOrcadTerminalCensus(pairedConnection(connection), 0)
   }
 
