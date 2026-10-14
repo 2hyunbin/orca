@@ -11,6 +11,16 @@
         "$rpc": "null"
       }
     },
+    "01d6f7ebeadc": {
+      "name": "selectedRepoIds",
+      "ordinal": 62,
+      "value": []
+    },
+    "06e636c63a98": {
+      "name": "taskStateHydrated",
+      "ordinal": 64,
+      "value": false
+    },
     "08c3599aa1ff": {
       "name": "showGitHubKindPicker",
       "ordinal": 11,
@@ -99,11 +109,6 @@
       "value": {
         "$rpc": "null"
       }
-    },
-    "177ab8f3e63e": {
-      "name": "taskStateHydrated",
-      "ordinal": 63,
-      "value": false
     },
     "1f26b7c3f9eb": {
       "name": "jira.status#1",
@@ -549,6 +554,11 @@
         "$rpc": "null"
       }
     },
+    "bf40088b2307": {
+      "name": "error",
+      "ordinal": 63,
+      "value": "Unmapped barrel export: isTaskProvider in /Users/nwparker/orca/workspaces/orca/jira-bell/mobile/src/tasks/mobile-tasks-legacy-foundation.tsx"
+    },
     "c15da9b5667c": {
       "name": "settings.get#1",
       "ordinal": 48,
@@ -626,11 +636,6 @@
       "name": "linearTeams",
       "ordinal": 59,
       "value": []
-    },
-    "ee945b81d521": {
-      "name": "error",
-      "ordinal": 62,
-      "value": "Unmapped barrel export: isTaskProvider in /Users/nwparker/orca/workspaces/orca/jira-mobile-provider/mobile/src/tasks/mobile-tasks-legacy-foundation.tsx"
     },
     "f2557c836246": {
       "name": "settings.get#1",
@@ -828,8 +833,9 @@
             "ee147ac0c45d",
             "85ed8bfeb710",
             "bc8fcdfcfcb7",
-            "ee945b81d521",
-            "177ab8f3e63e"
+            "01d6f7ebeadc",
+            "bf40088b2307",
+            "06e636c63a98"
           ]
         }
       }

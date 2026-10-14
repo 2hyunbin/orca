@@ -9,8 +9,8 @@ import { useHostRepoList, type HostRepoListResource } from './use-host-repo-list
 import { useMobileTasksTaskListLoading } from './use-mobile-tasks-task-list-loading'
 
 vi.mock('./mobile-tasks-dependencies', async () => {
-  const { useCallback } = await import('react')
-  return { useCallback }
+  const { useCallback, useEffect, useRef } = await import('react')
+  return { useCallback, useEffect, useRef }
 })
 vi.mock('./mobile-tasks-legacy-foundation', async () => import('./mobile-tasks-item-mapping'))
 
@@ -44,6 +44,8 @@ function mountJira(fetchRepos: () => Promise<RepoSummary[]>) {
   client.sendRequest.mockResolvedValue({ id: 'jira-test', ok: true, result: [issue] })
   const setItems = vi.fn()
   const setError = vi.fn()
+  const serverRepoList: RepoSummary[] = []
+  const effectiveRepoIds = new Set<string>()
   const holder: {
     repos?: HostRepoListResource<RepoSummary>
     load?: () => Promise<void>
@@ -63,6 +65,8 @@ function mountJira(fetchRepos: () => Promise<RepoSummary[]>) {
         gitlabView: 'project',
         jiraConnection: { connected: true, selection: 'site-a' },
         jiraFilter: 'assigned',
+        effectiveRepoIds,
+        serverRepoList,
         linearConnected: false,
         loadGenerationRef: { current: 0 },
         provider: 'jira',

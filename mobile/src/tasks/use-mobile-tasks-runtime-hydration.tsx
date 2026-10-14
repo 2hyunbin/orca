@@ -13,17 +13,14 @@ import {
   MOBILE_TASKS_CAPABILITY,
   type PersistedTrustedOrcaHooks,
   filterAvailableTaskProviders,
-  isHostedTaskRepo,
   normalizeVisibleTaskProviders,
-  reconcileRepoSelection,
   resolveVisibleTaskProvider,
   useEffect
 } from './mobile-tasks-dependencies'
 import {
   EMPTY_GITHUB_PROJECT_SETTINGS,
   type RuntimeTaskSettings,
-  type TaskResumeState,
-  scopeGitHubTaskSearch
+  type TaskResumeState
 } from './mobile-tasks-legacy-foundation'
 
 export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel) {
@@ -31,11 +28,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     client,
     connState,
     defaultLinearTeamSelectionRef,
-    defaultRepoSelectionRef,
     provider,
-    repoList,
-    repoSelectionHydratedRef,
-    repos,
     requestedTaskSource,
     resetGitHubItemsState,
     resetWorkspaceCreateState,
@@ -73,7 +66,6 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setRuntimeTaskSettings,
     setSelectedLinearTeamIds,
     setSelectedLinearWorkspaceId,
-    setSelectedRepoIds,
     setShowCreateTargetPicker,
     setShowCreateTask,
     setShowGitHubIssueSourcePicker,
@@ -96,6 +88,7 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setShowLinearWorkspacePicker,
     setShowProviderPicker,
     setShowRepoPicker,
+    setSelectedRepoIds,
     setShowSortPicker,
     setTaskStateHydrated,
     setTasksSupportState,
@@ -107,8 +100,6 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
   useEffect(() => {
     if (!client || connState !== 'connected') {
       taskResumeRef.current = {}
-      defaultRepoSelectionRef.current = null
-      repoSelectionHydratedRef.current = false
       setRuntimeTaskSettings({})
       setTrustedOrcaHooks({})
       setOrcaYamlTrustPrompt(null)
@@ -309,7 +300,8 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
         setSelectedLinearTeamIds(new Set())
         setSelectedLinearWorkspaceId(null)
       }
-      defaultRepoSelectionRef.current = settings.defaultRepoSelection ?? null
+      // The user's saved choice, kept as is: readers derive what of it is listed now.
+      setSelectedRepoIds(new Set(settings.defaultRepoSelection ?? []))
       defaultLinearTeamSelectionRef.current = settings.defaultLinearTeamSelection ?? null
       const view = resolveHydratedTaskViewState({
         settings,
@@ -352,26 +344,6 @@ export function useMobileTasksRuntimeHydration(model: ClientSettingsActionsModel
     setProvider(resolveVisibleTaskProvider(provider, visibleProviders))
   }, [provider, visibleProviders])
 
-  // Selection follows the list rather than the fetch, so it reconciles the same
-  // way no matter which caller triggered the load.
-  useEffect(() => {
-    if (repoList.state.status !== 'loaded') {
-      return
-    }
-    if (!repoSelectionHydratedRef.current) {
-      repoSelectionHydratedRef.current = true
-      setSelectedRepoIds(reconcileRepoSelection(repos, defaultRepoSelectionRef.current))
-      return
-    }
-    setSelectedRepoIds((current) => {
-      if (current.size === 0) {
-        return current
-      }
-      const availableIds = new Set(repos.filter(isHostedTaskRepo).map((repo) => repo.id))
-      const next = new Set([...current].filter((id) => availableIds.has(id)))
-      return next.size === current.size ? current : next
-    })
-  }, [repoList.state.status, repos])
   return model
 }
 
