@@ -8,7 +8,8 @@ import { loadWslMoveFence, resetWslMoveFenceForTests } from './wsl-move-scope-gu
 import {
   isWslMoveFolderWorkspaceBlocked,
   isWslMoveRepoBlocked,
-  isWslMoveWorktreeBlocked
+  isWslMoveWorktreeBlocked,
+  wslMoveRepoBackoff
 } from './wsl-move-background-backoff'
 
 const onSsh = { connectionId: 'target-1', executionHostId: 'ssh:target-1' }
@@ -65,4 +66,25 @@ it('backs off only WSL paths when the journal is unreadable', () => {
   expect(isWslMoveFolderWorkspaceBlocked({ id: 'notes', folderPath: WSL_PATH })).toBe(true)
   expect(isWslMoveWorktreeBlocked(`repo-1::${WSL_PATH}\\wt`, 'local')).toBe(true)
   expect(isWslMoveWorktreeBlocked('repo-1::C:\\src\\app\\wt', 'local')).toBe(false)
+})
+
+it('backs off a folder workspace at a WSL path when the journal is unreadable', () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  const directory = wslMoveJournalDirectory(userDataPath)
+  mkdirSync(directory, { recursive: true })
+  writeFileSync(join(directory, 'move-1.json'), '{not json')
+  loadWslMoveFence(userDataPath)
+
+  expect(isWslMoveWorktreeBlocked('folder:notes', 'local', WSL_PATH)).toBe(true)
+  expect(isWslMoveWorktreeBlocked('folder:notes', undefined, 'C:\\notes')).toBe(false)
+  expect(isWslMoveWorktreeBlocked('folder:notes', 'ssh:target-1', WSL_PATH)).toBe(false)
+})
+
+it('tells a move in flight from a project the WSL host owns', () => {
+  writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+  expect(wslMoveRepoBackoff({ id: 'repo-1', path: '/a' })).toBe('moving')
+  expect(wslMoveRepoBackoff({ id: 'repo-2', path: '/a' })).toBeNull()
+  writeWslMoveCutover(userDataPath, cutover('move-1', 'destination-committed'))
+  expect(wslMoveRepoBackoff({ id: 'repo-1', path: '/a' })).toBe('owned')
+  expect(wslMoveRepoBackoff({ id: 'repo-1', path: '/a', ...onSsh })).toBeNull()
 })

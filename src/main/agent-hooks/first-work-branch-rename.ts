@@ -292,6 +292,10 @@ async function runAutoRename(
     return stop(`no distinct unique branch name for slug "${slug}"`, true)
   }
 
+  // The name lookups above await git; a move may have started since the post-generation check.
+  if (isWslMoveRepoBlocked(repo)) {
+    return retry('a WSL move started before the branch rename')
+  }
   await renameCurrentBranch(exec, newBranch)
 
   // resolveUniqueBranchName may append a collision suffix (`-2`, …), so derive names from the resolved leaf, not the slug.
@@ -309,7 +313,9 @@ async function runAutoRename(
 
   // Best-effort local-only folder align, after setDisplayName so the new name rides into the migrated identity; a failure must never undo the landed rename.
   let folderRenamed = false
-  if (deps.renameWorktreeFolder) {
+  // The branch rename landed, but a move now taking the project must not see its folder moved.
+  const folderBlocked = isWslMoveRepoBlocked(repo)
+  if (deps.renameWorktreeFolder && !folderBlocked) {
     try {
       folderRenamed = await deps.renameWorktreeFolder(worktreeId, newBranchLeaf)
     } catch (error) {
@@ -328,5 +334,8 @@ async function runAutoRename(
   console.info(
     `[auto-branch-rename] renamed ${currentBranch} -> ${newBranch}; ${displayLog}${folderLog}`
   )
+  if (folderBlocked) {
+    return retry('a WSL move started before the folder rename')
+  }
   return true
 }

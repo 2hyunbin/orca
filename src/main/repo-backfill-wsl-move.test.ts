@@ -109,4 +109,19 @@ describe('fork upstream backfill under a WSL move', () => {
     expect(store.getRepo(MOVING)?.upstream).toBeUndefined()
     expect(store.getRepo(STAYING)?.upstream).toEqual({ owner: 'acme', repo: 'app' })
   })
+
+  it('fills the host row, not the hidden local row with the same id', async () => {
+    writeWslMoveCutover(testState.dir, cutover('move-1', 'destination-committed'))
+    const store = createStore()
+    store.addRepo(repo(MOVING))
+    store.addRepo(repo(MOVING, { executionHostId: 'runtime:env-1' }))
+
+    await new RuntimeRepositoryForkBackfill(() => store, vi.fn()).run()
+
+    const rows = store.getRepos().filter((row) => row.id === MOVING)
+    expect(rows.map((row) => [getRepoExecutionHostId(row), row.upstream])).toEqual([
+      ['local', undefined],
+      ['runtime:env-1', { owner: 'acme', repo: 'app' }]
+    ])
+  })
 })

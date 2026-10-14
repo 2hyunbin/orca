@@ -118,6 +118,69 @@ describe('first-work rename while a WSL move takes the project', () => {
     expect(setRenameError).not.toHaveBeenCalled()
   })
 
+  it('backs off when the move starts after generation but before git branch -m', async () => {
+    resetWslMoveFenceForTests()
+    loadWslMoveFence(join(userDataPath, 'unused'))
+    let fenced = false
+    const respond = gitResponder({
+      currentBranch: 'you/Nautilus',
+      hasUpstream: false
+    })
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'show-ref' && !fenced) {
+        fenced = true
+        loadWslMoveFence(userDataPath)
+      }
+      return respond(args)
+    })
+    const { deps, setDisplayName, setRenameError, renameWorktreeFolder } = makeDeps({
+      getRepo: () => LOCAL_REPO
+    })
+
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+
+    expect(generateBranchNameMock).toHaveBeenCalledOnce()
+    expect(gitExecFileAsyncMock).not.toHaveBeenCalledWith(
+      expect.arrayContaining(['branch', '-m']),
+      expect.anything()
+    )
+    expect(renameWorktreeFolder).not.toHaveBeenCalled()
+    expect(setDisplayName).not.toHaveBeenCalled()
+    expect(setRenameError).not.toHaveBeenCalled()
+
+    // Still pending: once the move settles the next event renames.
+    resetWslMoveFenceForTests()
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+    expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['branch', '-m', 'you/fix-auth'], {
+      cwd: '/repo/wt'
+    })
+  })
+
+  it('leaves the folder in place when the move starts during git branch -m', async () => {
+    resetWslMoveFenceForTests()
+    loadWslMoveFence(join(userDataPath, 'unused'))
+    const respond = gitResponder({
+      currentBranch: 'you/Nautilus',
+      hasUpstream: false
+    })
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'branch' && args[1] === '-m') {
+        loadWslMoveFence(userDataPath)
+      }
+      return respond(args)
+    })
+    const { deps, renameWorktreeFolder } = makeDeps({
+      getRepo: () => LOCAL_REPO
+    })
+
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+
+    expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['branch', '-m', 'you/fix-auth'], {
+      cwd: '/repo/wt'
+    })
+    expect(renameWorktreeFolder).not.toHaveBeenCalled()
+  })
+
   it('renames a project the move is not taking', async () => {
     const { deps, setDisplayName } = makeDeps({
       getRepo: () => ({ ...LOCAL_REPO, id: 'other-repo' })

@@ -130,6 +130,15 @@ describe('folder catalog identity stamps under a WSL move', () => {
     expect(store.getWorktreeMeta(getRuntimeFolderWorkspaceRootId(folder))).toBeUndefined()
   })
 
+  it('gives the moving root row the same identity on every listing', () => {
+    const folder = repo(MOVING, { kind: 'folder' })
+    const first = listFolderWorkspaces(store, folder)[0]?.instanceId
+    const second = listFolderWorkspaces(store, folder)[0]?.instanceId
+    expect(first).toBeTruthy()
+    expect(second).toBe(first)
+    expect(store.getWorktreeMeta(getFolderWorkspaceRootId(folder))).toBeUndefined()
+  })
+
   it.each([
     ['a project the move is not taking', repo(STAYING, { kind: 'folder' })],
     ['the same repo id on another host', repo(MOVING, { kind: 'folder', ...onSsh })]

@@ -1,4 +1,8 @@
-import { getRepoSshConnectionId, LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  getRepoSshConnectionId,
+  LOCAL_EXECUTION_HOST_ID
+} from '../../shared/execution-host'
 import type { GitHubOwnerRepo } from '../../shared/github/pull-request-types'
 import type { Repo } from '../../shared/repo-types'
 import { getRepoUpstream } from '../github/client'
@@ -52,7 +56,13 @@ export class RuntimeRepositoryForkBackfill {
           upstream && repo.repoIcon?.type === 'image' && repo.repoIcon.source === 'github'
             ? await detectGitHubAvatarIcon(repo.path, LOCAL_EXECUTION_HOST_ID, upstream)
             : null
-        const current = store.getRepos().find((candidate) => candidate.id === repo.id)
+        // By id and host: a WSL move leaves a hidden local row beside the host's same-id row.
+        const hostId = getRepoExecutionHostId(repo)
+        const current = store
+          .getRepos()
+          .find(
+            (candidate) => candidate.id === repo.id && getRepoExecutionHostId(candidate) === hostId
+          )
         if (!current || current.upstream !== undefined || isWslMoveRepoBlocked(current)) {
           continue
         }
@@ -64,7 +74,7 @@ export class RuntimeRepositoryForkBackfill {
         ) {
           updates.repoIcon = repoIcon
         }
-        store.updateRepo(repo.id, updates)
+        store.updateRepo(repo.id, updates, hostId)
         changed = true
       }
       if (changed) {

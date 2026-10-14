@@ -158,7 +158,7 @@ export class RuntimeWorktreeLineageController {
       if (
         store.getWorktreeLineage(worktree.id) ||
         !worktree.instanceId ||
-        isWslMoveWorktreeBlocked(worktree.id, worktree.hostId)
+        isWslMoveWorktreeBlocked(worktree.id, worktree.hostId, worktree.path)
       ) {
         continue
       }

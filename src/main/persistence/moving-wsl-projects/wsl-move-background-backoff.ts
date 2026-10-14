@@ -7,10 +7,11 @@
  * a different project. The row's own path stands in for the store when the journal is unreadable.
  */
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
-import { splitWorktreeId } from '../../../shared/worktree/id'
+import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
 import {
   isLocalWslMoveRow,
   isWslMoveProjectBlocked,
+  isWslMoveProjectFenced,
   isWslMoveSourceHost,
   wslMoveProjectRefForWorkspace
 } from './wsl-move-scope-guard'
@@ -21,12 +22,23 @@ export type WslMoveRepoRow = HostedRow & { id: string; path: string }
 
 export type WslMoveFolderWorkspaceRow = HostedRow & { id: string; folderPath: string }
 
+function repoStore(repo: WslMoveRepoRow) {
+  return { getRepo: (id: string) => (id === repo.id ? repo : undefined) }
+}
+
 export function isWslMoveRepoBlocked(repo: WslMoveRepoRow): boolean {
   if (!isWslMoveSourceHost(getRepoExecutionHostId(repo))) {
     return false
   }
-  const store = { getRepo: (id: string) => (id === repo.id ? repo : undefined) }
-  return isWslMoveProjectBlocked(store, { repoId: repo.id })
+  return isWslMoveProjectBlocked(repoStore(repo), { repoId: repo.id })
+}
+
+/** `moving` while a move is taking the repo, `owned` once the WSL host runs it, else null. */
+export function wslMoveRepoBackoff(repo: WslMoveRepoRow): 'moving' | 'owned' | null {
+  if (!isWslMoveRepoBlocked(repo)) {
+    return null
+  }
+  return isWslMoveProjectFenced(repoStore(repo), { repoId: repo.id }) ? 'moving' : 'owned'
 }
 
 export function isWslMoveFolderWorkspaceBlocked(folder: WslMoveFolderWorkspaceRow): boolean {
@@ -40,15 +52,20 @@ export function isWslMoveFolderWorkspaceBlocked(folder: WslMoveFolderWorkspaceRo
   return isWslMoveProjectBlocked(store, { folderWorkspaceId: folder.id })
 }
 
-/** For a worktree known only by id and host, such as a resolved worktree or its metadata row. */
+/**
+ * For a worktree known only by id and host, such as a resolved worktree or its metadata row.
+ * A folder workspace key carries no path, so callers holding one pass its folder path.
+ */
 export function isWslMoveWorktreeBlocked(
   worktreeId: string,
-  hostId: string | null | undefined
+  hostId: string | null | undefined,
+  worktreePath?: string
 ): boolean {
-  if (!isWslMoveSourceHost(hostId)) {
+  if (!isLocalWslMoveRow({ executionHostId: hostId })) {
     return false
   }
-  const path = splitWorktreeId(worktreeId)?.worktreePath
-  const store = { getRepo: () => (path === undefined ? undefined : { path }) }
+  const path = worktreePath ?? splitWorktreeIdForFilesystem(worktreeId)?.worktreePath
+  const row = path === undefined ? undefined : { path, folderPath: path }
+  const store = { getRepo: () => row, getFolderWorkspace: () => row }
   return isWslMoveProjectBlocked(store, wslMoveProjectRefForWorkspace(worktreeId))
 }

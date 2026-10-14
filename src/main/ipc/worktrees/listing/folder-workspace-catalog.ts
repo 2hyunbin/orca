@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree, DetectedWorktree } from '../../../../shared/worktree/types'
 import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
@@ -30,8 +31,16 @@ function folderMetaWriter(
   if (!isWslMoveRepoBlocked(repo)) {
     return (worktreeId, updates) => store.setWorktreeMeta(worktreeId, updates)
   }
-  return (worktreeId, updates) =>
-    mergeWorktreeMetaForWrite(store.getWorktreeMeta(worktreeId), updates)
+  return (worktreeId, updates) => {
+    const existing = store.getWorktreeMeta(worktreeId)
+    // Nothing persists, so a minted root id would change on every listing; derive it instead.
+    const instanceId =
+      existing?.instanceId ??
+      (worktreeId === getFolderWorkspaceRootId(repo)
+        ? createHash('sha256').update(worktreeId).digest('hex').slice(0, 32)
+        : getFolderWorkspaceInstanceIdentity(repo, worktreeId))
+    return mergeWorktreeMetaForWrite(existing, { ...updates, instanceId })
+  }
 }
 
 export function listFolderWorkspaces(store: Store, repo: Repo): Worktree[] {

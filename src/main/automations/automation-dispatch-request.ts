@@ -6,7 +6,10 @@ import type { Store } from '../persistence'
 import type { AutomationRunWriter } from './automation-run-writer'
 import type { HeadlessAutomationDispatcher } from './headless-dispatch'
 import type { HeadlessAutomationDispatchContext } from './headless-dispatch-runner'
-import { runHeadlessAutomationDispatch } from './headless-dispatch-runner'
+import {
+  AutomationDispatchRefusedError,
+  runHeadlessAutomationDispatch
+} from './headless-dispatch-runner'
 import type { AutomationRunTargetResult } from './run-target-resolution'
 import { createAutomationDispatchToken } from './dispatch-tokens'
 import {
@@ -157,6 +160,14 @@ export async function requestAutomationDispatch(
       const latestTarget = resolveCurrentTarget()
       if (!latestTarget.ok) {
         throw new AutomationDispatchCancelledError(latestTarget.error)
+      }
+      // The precheck can run for minutes; a WSL move starting meanwhile is a skip, not a failure.
+      const latestRefusal = describeScheduledRefusal({
+        target: latestTarget,
+        canDispatch: true
+      })
+      if (latestRefusal) {
+        throw new AutomationDispatchRefusedError(latestRefusal)
       }
       return dispatcher({ ...request, target: latestTarget })
     }
