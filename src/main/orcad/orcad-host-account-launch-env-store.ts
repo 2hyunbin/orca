@@ -9,6 +9,7 @@ import {
   HostAccountLaunchEnvParams,
   type HostAccountLaunchEnv
 } from '../../shared/host-account-launch-env'
+import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 
 const FILE_NAME = 'host-account-launch-env.json'
 
@@ -40,4 +41,13 @@ export function writeOrcadHostAccountLaunchEnv(
     rmSync(temporary, { force: true })
     throw error
   }
+}
+
+export function restoreOrcadHostAccountLaunchEnv(
+  runtime: Pick<OrcaRuntimeService, 'restoreHostAccountLaunchEnv'>,
+  userDataPath: string
+): void {
+  runtime.restoreHostAccountLaunchEnv(readOrcadHostAccountLaunchEnv(userDataPath), (launchEnv) =>
+    writeOrcadHostAccountLaunchEnv(userDataPath, launchEnv)
+  )
 }
