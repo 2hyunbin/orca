@@ -216,6 +216,7 @@ export function preparePendingGrokResultDiscovery(
   }
   // Why: lets the server await discovery without moving filesystem I/O back into synchronous hook normalization.
   return findGrokChatHistoryBySessionId(metadata.sessionsDir, metadata.sessionId).then(
+    () => undefined,
     () => undefined
   )
 }

@@ -247,7 +247,9 @@ describe('grok-session-paths', () => {
       async close() {}
     }))
 
-    await expect(findGrokChatHistoryBySessionId(sessionsDir, 'sess-bounded', 2)).resolves.toBeNull()
+    await expect(findGrokChatHistoryBySessionId(sessionsDir, 'sess-bounded', 2)).rejects.toThrow(
+      'did not inspect every session group'
+    )
     await expect(findGrokChatHistoryBySessionId(sessionsDir, 'sess-bounded', 3)).resolves.toBe(
       beyondBound
     )
@@ -280,7 +282,7 @@ describe('grok-session-paths', () => {
 
     await expect(
       findGrokChatHistoryBySessionId('/missing/sessions', 'sess-iterator', 2)
-    ).resolves.toBeNull()
+    ).rejects.toThrow('did not inspect every session group')
 
     expect(yielded).toBe(3)
     expect(closed).toBe(1)
@@ -356,7 +358,7 @@ describe('grok-session-paths', () => {
     await Promise.all(lookups)
   })
 
-  it('resolves queue overflow to null and drains the bounded queue', async () => {
+  it('refuses queue overflow without claiming absence and drains the bounded queue', async () => {
     const firstScan = deferred<string | null>()
     let calls = 0
     setGrokSessionPathScannerForTests(async () => {
@@ -369,7 +371,7 @@ describe('grok-session-paths', () => {
     )
     const overflow = findGrokChatHistoryBySessionId('/sessions/overflow', 'sess-overflow')
 
-    await expect(overflow).resolves.toBeNull()
+    await expect(overflow).rejects.toThrow('queue is full')
     expect(calls).toBe(1)
     firstScan.resolve(null)
     await expect(active).resolves.toBeNull()
@@ -393,7 +395,7 @@ describe('grok-session-paths', () => {
     const next = findGrokChatHistoryBySessionId('/sessions/reject', 'sess-next')
 
     firstScan.reject(new Error('scanner failed'))
-    await expect(rejected).resolves.toBeNull()
+    await expect(rejected).rejects.toThrow('scanner failed')
     await expect(next).resolves.toBeNull()
     expect(started).toEqual(['sess-reject', 'sess-next'])
   })

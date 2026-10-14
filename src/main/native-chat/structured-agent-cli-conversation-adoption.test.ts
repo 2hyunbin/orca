@@ -158,7 +158,9 @@ it.each([false, true])(
       close: async () => {}
     }))
 
-    expect(await findGrokChatHistoryBySessionId(join(root, 'sessions'), SESSION_ID)).toBeNull()
+    await expect(
+      findGrokChatHistoryBySessionId(join(root, 'sessions'), SESSION_ID)
+    ).rejects.toThrow('did not inspect every session group')
     expect(
       (
         await adopt(

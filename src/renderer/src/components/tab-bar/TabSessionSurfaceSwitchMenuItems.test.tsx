@@ -359,6 +359,7 @@ it.each([false, true])(
     expect(destinationAlive).toBe(dispatched)
     finish()
     await launching
+    expect(mocks.error).not.toHaveBeenCalled()
     replaceRuntimeEnvironmentRevisions([])
   }
 )
@@ -390,4 +391,63 @@ it('OpenCode row aliases share the same pending conversation owner', async () =>
   finish({ status: 'ready', session: { ...ROW, agent: 'opencode2' } })
   await pending
   expect(mocks.launch).toHaveBeenCalledOnce()
+})
+
+it('retired retained source cannot report failure or release a successor owner', async () => {
+  mocks.nativeSource = true
+  replaceRuntimeEnvironmentRevisions([{ id: 'host-1', createdAt: 1, pairingRevision: 1 }])
+  const subject: TabSessionSelectedSource = {
+    kind: 'chat',
+    agent: 'claude',
+    sessionId: 'chat-1',
+    workspaceId: 'wt-1',
+    executionHostId: 'runtime:host-1',
+    legacyListRequest: SUBJECT.legacyListRequest
+  }
+  mocks.resolve.mockImplementation(() => new Promise(() => {}))
+  const run = () =>
+    runTabSessionSurfaceSwitch({
+      subject,
+      sourceTab: { id: 'tab-1', worktreeId: 'wt-1' },
+      launch: mocks.launch
+    })
+  const retired = run()
+  replaceRuntimeEnvironmentRevisions([{ id: 'host-1', createdAt: 1, pairingRevision: 2 }])
+  const successor = run()
+  await retired
+  await run()
+  expect(mocks.resolve).toHaveBeenCalledTimes(2)
+  expect(mocks.error).not.toHaveBeenCalled()
+  expect(mocks.launch).not.toHaveBeenCalled()
+  replaceRuntimeEnvironmentRevisions([])
+  await successor
+})
+
+it('lookup deadline reports before releasing its owner, and preparation failure still reports', async () => {
+  vi.useFakeTimers()
+  try {
+    mocks.resolve.mockReturnValueOnce(new Promise(() => {}))
+    const run = () =>
+      runTabSessionSurfaceSwitch({
+        subject: SUBJECT,
+        sourceTab: { id: 'tab-1', worktreeId: 'wt-1' },
+        launch: mocks.launch
+      })
+    const timedOut = run()
+    vi.advanceTimersByTime(150_000)
+    await run()
+    expect(mocks.resolve).toHaveBeenCalledOnce()
+    await timedOut
+    expect(mocks.error).toHaveBeenCalledWith('Could not resume this session in a new chat.', {
+      description: 'Conversation lookup timed out.'
+    })
+    mocks.launch.mockRejectedValueOnce(new Error('Preparation failed.'))
+    await run()
+    expect(mocks.error).toHaveBeenCalledWith('Could not resume this session in a new chat.', {
+      description: 'Preparation failed.'
+    })
+    expect(mocks.resolve).toHaveBeenCalledTimes(2)
+  } finally {
+    vi.useRealTimers()
+  }
 })

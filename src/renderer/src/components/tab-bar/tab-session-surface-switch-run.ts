@@ -166,7 +166,6 @@ export async function runTabSessionSurfaceSwitch(args: {
   })
   const timer = setTimeout(() => {
     owner.controller.abort(new Error('Conversation lookup timed out.'))
-    release()
     void window.api.aiVault.cancelResolveSession({ requestToken }).catch(() => undefined)
   }, LEGACY_SELECTED_SESSION_LOOKUP_TIMEOUT_MS)
   try {
@@ -260,8 +259,11 @@ export async function runTabSessionSurfaceSwitch(args: {
       owner.controller.signal
     )
   } catch (error) {
-    if (sourceIdentityIsCurrent(subject, sourceTab)) {
-      notifyFailure(subject, error)
+    if (runningSwitches.get(key) === owner && sourceIdentityIsCurrent(subject, sourceTab)) {
+      notifyFailure(
+        subject,
+        owner.controller.signal.aborted ? owner.controller.signal.reason : error
+      )
     }
   } finally {
     clearTimeout(timer)

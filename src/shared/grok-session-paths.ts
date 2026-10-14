@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { blake3 } from '@noble/hashes/blake3'
 import { bytesToHex } from '@noble/hashes/utils'
+import { isDefinitiveAbsence } from './definitive-filesystem-absence'
 import { resolveAbsoluteDirOverride } from './absolute-dir-override'
 import {
   GrokSessionPathLookupQueue,
@@ -176,7 +177,7 @@ export function getCachedGrokChatHistoryBySessionId(
   return sessionPathLookupQueue.getCached(sessionsDir, trimmedId)
 }
 
-/** Async bounded lookup with inflight dedupe and a small successful-result cache. */
+/** Null means completed absence; unreadable, incomplete or refused searches reject. */
 export function findGrokChatHistoryBySessionId(
   sessionsDir: string,
   sessionId: string,
@@ -196,11 +197,19 @@ async function scanGrokChatHistoryBySessionId(
 ): Promise<string | null> {
   const max = normalizeGroupEntryLimit(maxGroupEntries)
   if (max === 0) {
-    return null
+    throw new Error('Conversation lookup could not inspect any session groups.')
   }
-  let directory: GrokSessionDirectory | undefined
+  let directory: GrokSessionDirectory
   try {
     directory = await sessionDirectoryOpener(sessionsDir)
+  } catch (error) {
+    if (isDefinitiveAbsence(error)) {
+      return null
+    }
+    throw error
+  }
+  let unavailable: { error: unknown } | undefined
+  try {
     let eligibleEntries = 0
     // Why: the filesystem's iteration order defines the bounded subset; sorting
     // would first materialize an unbounded sessions root on the main process.
@@ -210,15 +219,23 @@ async function scanGrokChatHistoryBySessionId(
       }
       eligibleEntries += 1
       const history = join(sessionsDir, entry.name, sessionId, GROK_CHAT_HISTORY_FILE)
-      if (await isSafeChatHistoryFile(sessionsDir, history)) {
-        return history
+      try {
+        if (await isSafeChatHistoryFile(sessionsDir, history)) {
+          return history
+        }
+      } catch (error) {
+        unavailable ??= { error }
       }
       if (eligibleEntries >= max) {
-        return null
+        throw (
+          unavailable?.error ??
+          new Error('Conversation lookup did not inspect every session group.')
+        )
       }
     }
-    return null
-  } catch {
+    if (unavailable) {
+      throw unavailable.error
+    }
     return null
   } finally {
     if (directory) {
@@ -292,20 +309,20 @@ async function isSafeChatHistoryFile(sessionsDir: string, candidate: string): Pr
   }
   try {
     const sessionDir = candidateSessionDir(candidate)
-    const [groupStat, sessionStat, fileStat] = await Promise.all([
-      lstat(dirname(sessionDir)),
-      lstat(sessionDir),
-      lstat(candidate)
-    ])
-    return (
-      groupStat.isDirectory() &&
-      !groupStat.isSymbolicLink() &&
-      sessionStat.isDirectory() &&
-      !sessionStat.isSymbolicLink() &&
-      fileStat.isFile() &&
-      !fileStat.isSymbolicLink()
-    )
-  } catch {
-    return false
+    const groupStat = await lstat(dirname(sessionDir))
+    if (!groupStat.isDirectory() || groupStat.isSymbolicLink()) {
+      return false
+    }
+    const sessionStat = await lstat(sessionDir)
+    if (!sessionStat.isDirectory() || sessionStat.isSymbolicLink()) {
+      return false
+    }
+    const fileStat = await lstat(candidate)
+    return fileStat.isFile() && !fileStat.isSymbolicLink()
+  } catch (error) {
+    if (isDefinitiveAbsence(error)) {
+      return false
+    }
+    throw error
   }
 }

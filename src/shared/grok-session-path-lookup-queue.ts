@@ -17,6 +17,7 @@ type PendingLookup = {
   sessionId: string
   maxGroupEntries: number
   resolve: (path: string | null) => void
+  reject: (error: unknown) => void
 }
 
 export class GrokSessionPathLookupQueue {
@@ -53,8 +54,10 @@ export class GrokSessionPathLookupQueue {
     }
     const rootKey = this.rootKey(sessionsDir)
     let resolveLookup: (path: string | null) => void = () => undefined
-    const lookup = new Promise<string | null>((resolvePromise) => {
+    let rejectLookup: (error: unknown) => void = () => undefined
+    const lookup = new Promise<string | null>((resolvePromise, rejectPromise) => {
       resolveLookup = resolvePromise
+      rejectLookup = rejectPromise
     })
     const pending = {
       key,
@@ -62,11 +65,12 @@ export class GrokSessionPathLookupQueue {
       sessionsDir,
       sessionId,
       maxGroupEntries,
-      resolve: resolveLookup
+      resolve: resolveLookup,
+      reject: rejectLookup
     }
     if (this.mustQueue(rootKey)) {
       if (this.pending.length >= GROK_SESSION_SCAN_QUEUE_MAX_ENTRIES) {
-        return Promise.resolve(null)
+        return Promise.reject(new Error('Conversation lookup queue is full.'))
       }
       this.inflight.set(key, lookup)
       this.pending.push(pending)
@@ -83,7 +87,7 @@ export class GrokSessionPathLookupQueue {
     this.inflight.clear()
     this.activeRoots.clear()
     for (const pending of this.pending.splice(0)) {
-      pending.resolve(null)
+      pending.reject(new Error('Conversation lookup was cleared.'))
     }
     this.scanner = this.defaultScanner
   }
@@ -134,8 +138,8 @@ export class GrokSessionPathLookupQueue {
           this.cache(pending.key, path)
         }
         pending.resolve(path)
-      } catch {
-        pending.resolve(null)
+      } catch (error) {
+        pending.reject(error)
       } finally {
         this.activeRoots.delete(pending.rootKey)
         this.inflight.delete(pending.key)

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, chmod, lstat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
@@ -8,7 +8,12 @@ import {
   CLI_CONVERSATION_ADOPTING_AGENTS,
   type CliConversationRowAgent
 } from '../../shared/structured-agent-cli-conversation-adoption'
-import { grokEncodedCwdDirName } from '../../shared/grok-session-paths'
+import * as grokPaths from '../../shared/grok-session-paths'
+import {
+  clearGrokSessionPathLookupCacheForTests,
+  grokEncodedCwdDirName,
+  setGrokSessionPathScannerForTests
+} from '../../shared/grok-session-paths'
 import { SelectedSessionResultSchema } from '../../shared/ai-vault-selected-session-contract'
 import { readSelectedSessionFile } from './selected-session-file-reader'
 import {
@@ -17,6 +22,9 @@ import {
 } from './selected-session-resolver'
 import { structuredAgentRuntimeRegistration } from '../runtime/structured-agent-runtime-registrations'
 import { resolveStructuredAgentSessionAdoptionForCreate } from '../runtime/structured-agent-session-create-adoption'
+import { GROK_TRANSCRIPT_IMPORT } from '../grok/grok-transcript-import'
+import { resolveSessionFilePath } from '../native-chat/session-file-resolver'
+import { preparePendingGrokResultDiscovery } from '../../shared/agent-hook-listener/grok-result-discovery'
 import SyncDatabase from '../sqlite/sync-database'
 import { writeOpenCodeSqliteDatabase } from './session-scanner-opencode-sqlite-fixture'
 
@@ -71,6 +79,7 @@ beforeEach(async () => {
   workspaceCwd = CWD
 })
 afterEach(async () => {
+  clearGrokSessionPathLookupCacheForTests()
   await rm(root, { recursive: true, force: true })
   vi.unstubAllEnvs()
 })
@@ -260,3 +269,84 @@ it.each([false, true])(
     expect(await read()).toEqual({ status: 'missing' })
   }
 )
+
+it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+  'unreadable Grok exact and named sources fail truthfully; ordinary import stays best effort',
+  async () => {
+    account = { variable: 'GROK_HOME', path: root }
+    const group = join(root, 'sessions', encodeURIComponent(CWD))
+    const file = join(group, ID, 'chat_history.jsonl')
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, `${JSON.stringify({ type: 'user', content: 'Saved conversation' })}\n`)
+    await writeFile(
+      join(dirname(file), 'summary.json'),
+      JSON.stringify({ info: { id: ID, cwd: CWD } })
+    )
+    const selected = source('grok')
+    const read = () => resolveSelectedSessionOnHost(selected, runtime, {})
+    expect((await read()).status).toBe('ready')
+    clearGrokSessionPathLookupCacheForTests()
+    const fallback = join(root, 'sessions', 'other-group', ID, 'chat_history.jsonl')
+    await chmod(group, 0)
+    try {
+      await expect(lstat(file)).rejects.toMatchObject({ code: 'EACCES' })
+      await expect(read()).rejects.toMatchObject({ code: 'EACCES' })
+      workspaceCwd = '/other/cwd'
+      await expect(read()).rejects.toMatchObject({ code: 'EACCES' })
+      expect(
+        await GROK_TRANSCRIPT_IMPORT.findTranscript({
+          providerSessionId: ID,
+          accountHome: account,
+          launchEnv: environment,
+          workspaceCwd: CWD
+        })
+      ).toBeNull()
+      await mkdir(dirname(fallback), { recursive: true })
+      await writeFile(fallback, '{}\n')
+      expect(
+        await GROK_TRANSCRIPT_IMPORT.findTranscript({
+          providerSessionId: ID,
+          accountHome: account,
+          launchEnv: environment,
+          workspaceCwd: CWD
+        })
+      ).toBe(fallback)
+    } finally {
+      await chmod(group, 0o700)
+    }
+    workspaceCwd = CWD
+    expect((await read()).status).toBe('ready')
+    clearGrokSessionPathLookupCacheForTests()
+    await rm(group, { recursive: true })
+    await rm(join(root, 'sessions', 'other-group'), { recursive: true })
+    expect(await read()).toEqual({ status: 'missing' })
+  }
+)
+
+it('ordinary-first Grok discovery shares raw failure with selected lookup, preserving best effort', async () => {
+  let rejectScan: (error: Error) => void = () => {}
+  const scanner = vi.fn(
+    () =>
+      new Promise<string | null>((_resolve, reject) => {
+        rejectScan = reject
+      })
+  )
+  setGrokSessionPathScannerForTests(scanner)
+  const lookup = vi.spyOn(grokPaths, 'findGrokChatHistoryBySessionId')
+  account = { variable: 'GROK_HOME', path: root }
+  const sessionsDir = join(root, 'sessions')
+  const ordinary = resolveSessionFilePath('grok', ID, { grokSessionsDir: sessionsDir })
+  const hook = preparePendingGrokResultDiscovery('grok', {
+    grokHome: root,
+    payload: { hookEventName: 'SessionEnd', sessionId: ID, cwd: CWD }
+  })
+  expect(hook).not.toBeNull()
+  const selected = resolveSelectedSessionOnHost(source('grok'), runtime, {})
+  const rejected = expect(selected).rejects.toMatchObject({ code: 'EACCES' })
+  await vi.waitFor(() => expect(lookup).toHaveBeenCalledTimes(3))
+  rejectScan(Object.assign(new Error('History directory is unreadable.'), { code: 'EACCES' }))
+  await rejected
+  expect(await ordinary).toBeNull()
+  await expect(hook).resolves.toBeUndefined()
+  expect(scanner).toHaveBeenCalledOnce()
+})

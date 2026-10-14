@@ -37,11 +37,16 @@ export const GROK_TRANSCRIPT_IMPORT = directoryTranscriptImport({
           sessionId: providerSessionId,
           cwd: workspaceCwd,
           sessionsDir
+        }).catch((error: unknown) => {
+          if (selected) {
+            throw error
+          }
+          return null
         })) ??
         resolveSessionFilePath(
           'grok',
           providerSessionId,
-          { grokSessionsDir: sessionsDir },
+          { grokSessionsDir: sessionsDir, selectedLookup: selected ? true : undefined },
           selected?.signal
         ))(),
       selected?.signal

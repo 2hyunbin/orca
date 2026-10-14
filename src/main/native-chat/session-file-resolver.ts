@@ -289,9 +289,17 @@ async function findHostSessionFile(
     // Why: Native Chat runs on the main thread; use the bounded async direct-layout
     // lookup instead of a recursive full-tree scan.
     signal?.throwIfAborted()
-    const history = await findGrokChatHistoryBySessionId(root, sessionId)
-    signal?.throwIfAborted()
-    return history
+    try {
+      const history = await findGrokChatHistoryBySessionId(root, sessionId)
+      signal?.throwIfAborted()
+      return history
+    } catch (error) {
+      signal?.throwIfAborted()
+      if (selectedLookup) {
+        throw error
+      }
+      return null
+    }
   }
   const { fileMatchesId, directoryPredicate } = SESSION_FILE_ID_LAYOUTS[agent]
   const wanted = (id: string): boolean => id === sessionId
