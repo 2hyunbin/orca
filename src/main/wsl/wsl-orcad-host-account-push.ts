@@ -14,6 +14,7 @@ import {
   type WslOrcadAccountEnvDependencies
 } from './wsl-orcad-account-env'
 import type { WslOrcadHostCapabilityVerdict } from './wsl-orcad-host-environments'
+import { runKeyedSerializedOperation } from '../cli/keyed-promise-queue'
 
 export type WslOrcadHostAccountPush = {
   environmentId: string
@@ -95,28 +96,21 @@ function enqueue(
   generation: number,
   attempt: number
 ): Promise<void> {
-  const next = (pending.get(push.environmentId) ?? Promise.resolve())
-    .then(() => pushOnce(push, dependencies))
-    .catch((error: unknown) => {
-      // Why keep the host's last env: clearing it would start the next launch on another account.
-      console.warn(`[wsl-hosts] Could not give ${push.distro} its selected accounts:`, error)
-      const delay = retryDelaysMs[attempt]
-      if (delay === undefined) {
-        return
-      }
-      const timer = setTimeout(() => {
-        // A newer push already carries the current selection.
-        if (generations.get(push.environmentId) === generation) {
-          void enqueue(push, dependencies, retryDelaysMs, generation, attempt + 1)
-        }
-      }, delay)
-      timer.unref?.()
-    })
-  pending.set(push.environmentId, next)
-  void next.finally(() => {
-    if (pending.get(push.environmentId) === next) {
-      pending.delete(push.environmentId)
+  return runKeyedSerializedOperation(pending, push.environmentId, () =>
+    pushOnce(push, dependencies)
+  ).catch((error: unknown) => {
+    // Why keep the host's last env: clearing it would start the next launch on another account.
+    console.warn(`[wsl-hosts] Could not give ${push.distro} its selected accounts:`, error)
+    const delay = retryDelaysMs[attempt]
+    if (delay === undefined) {
+      return
     }
+    const timer = setTimeout(() => {
+      // A newer push already carries the current selection.
+      if (generations.get(push.environmentId) === generation) {
+        void enqueue(push, dependencies, retryDelaysMs, generation, attempt + 1)
+      }
+    }, delay)
+    timer.unref?.()
   })
-  return next
 }
