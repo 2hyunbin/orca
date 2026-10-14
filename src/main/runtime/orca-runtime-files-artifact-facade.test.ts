@@ -92,7 +92,7 @@ it('preserves artifact facade arity, optional slots, and the same artifact recei
 })
 
 const originalMethodMetadata = [
-  ['openMobileFile', 3, true],
+  ['openMobileFile', 4, true],
   ['openMobileDiff', 4, true],
   ['listRuntimeMarkdownDocuments', 1, true],
   ['pathsExistRuntimeFiles', 2, true],

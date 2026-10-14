@@ -17853,6 +17853,23 @@
         "resuming": "再起動後に自動で再開しています。",
         "resumed": "再起動後に自動で再開しました。",
         "changeInSettings": "設定で変更"
+      },
+      "TaskPageJiraSavedFilters": {
+        "6c381858a1": "Saved filters",
+        "d14121662d": "No saved filters yet.",
+        "af0dd8c528": "Edit {{value0}}",
+        "bae9bd87bf": "You can save up to {{value0}} filters.",
+        "85506127a5": "Save current filter",
+        "7aef259c28": "Edit Jira filter",
+        "4f0e55d2e5": "Save Jira filter",
+        "466c1b12ce": "Give this JQL query a name for quick access.",
+        "e4c2f52972": "Name",
+        "0ab71bb840": "A saved filter with this name already exists.",
+        "42ce360813": "JQL",
+        "7b21c59a26": "Delete filter",
+        "a62f9db53d": "Cancel",
+        "c77189bc0c": "Update filter",
+        "19af906d12": "Save filter"
       }
     },
     "i18n": {
@@ -19915,5 +19932,24 @@
     "browser": "ブラウザ",
     "editor": "エディター",
     "terminal": "ターミナル"
+  },
+  "jira": {
+    "savedFilters": {
+      "retry": "再試行",
+      "find": "保存済みフィルターを検索",
+      "noMatch": "一致するフィルターはありません。",
+      "loadFailed": "Jiraの保存済みフィルターを読み込めませんでした。",
+      "saveFailed": "Jiraフィルターを保存できませんでした。"
+    },
+    "statusFilters": {
+      "loadFailed": "Jira ステータスフィルターを読み込めませんでした。",
+      "saveFailed": "Jira ステータスフィルターを保存できませんでした。",
+      "manualQuery": "ステータスフィルターはプリセットビューに適用されます。使用するには検索をクリアしてください。",
+      "label": "ステータスで Jira 課題を絞り込む",
+      "clear": "ステータスをクリア",
+      "jql": "ステータスフィルターの JQL",
+      "editJql": "JQL として編集",
+      "catalogHint": "ステータスは読み込まれた課題から取得されます。このビューで他のステータスを表示するには、選択をクリアしてください。"
+    }
   }
 }
