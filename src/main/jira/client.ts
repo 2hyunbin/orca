@@ -10,7 +10,7 @@ import type {
 import { clearAttachmentImagesForSite } from './attachment-image-cache'
 import { acquire, release } from './request-queue'
 import {
-  credentialErrors,
+  getCredentialError,
   deleteToken,
   getSiteFile,
   hasStoredToken,
@@ -61,7 +61,7 @@ export function getStatus(): JiraConnectionStatus {
   const sites = file.sites.filter((site) => hasStoredToken(site.id))
   const activeSite = sites.find((site) => site.id === file.activeSiteId) ?? sites[0] ?? null
   const credentialError = sites
-    .map((site) => credentialErrors.get(site.id))
+    .map((site) => getCredentialError(site.id))
     .find((message) => message !== undefined)
   // Why any-not-active: sealing is a host-wide property, so a second site stored while
   // the keyring was missing is exposed even when the active one is sealed.

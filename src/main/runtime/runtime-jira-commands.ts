@@ -1,4 +1,13 @@
 import type {
+  JiraIssueSummaryGenerationRequest,
+  JiraIssueSummaryGenerationCancellation
+} from '../../shared/jira-issue-summary-generation'
+import {
+  generateJiraIssueSummaryRequest,
+  cancelJiraIssueSummaryRequest,
+  type JiraIssueSummaryGenerationHost
+} from '../text-generation/jira-issue-summary-requests'
+import type {
   JiraConnectArgs,
   JiraCreateIssueArgs,
   JiraIssueFilter,
@@ -26,6 +35,24 @@ import {
 } from '../jira/issues'
 
 export class RuntimeJiraCommands {
+  constructor(private readonly host: JiraIssueSummaryGenerationHost) {}
+
+  jiraGenerateIssueSummary(
+    args: JiraIssueSummaryGenerationRequest,
+    owner: string,
+    signal?: AbortSignal
+  ) {
+    return generateJiraIssueSummaryRequest(this.host, owner, args, signal)
+  }
+
+  jiraCancelGenerateIssueSummary(
+    args: JiraIssueSummaryGenerationCancellation,
+    owner: string
+  ): { ok: true } {
+    cancelJiraIssueSummaryRequest(owner, args)
+    return { ok: true }
+  }
+
   jiraConnect(args: JiraConnectArgs): ReturnType<typeof connect> {
     return connect(args)
   }

@@ -10,6 +10,7 @@ import type {
   JiraPrioritiesBySite
 } from './jira-issue-sorter'
 import { jiraListPriorities } from '@/runtime/runtime-jira-client'
+import { loadJiraLinkedView, saveJiraLinkedView } from './jira-linked-view-storage'
 import { defaultScopeSource } from '@/lib/default-creation-host'
 export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
   const { settings, jiraConnected, selectedJiraSiteId, taskSource, jiraTaskSourceContext } = model
@@ -21,6 +22,11 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
   const [jiraJqlRejection, setJiraJqlRejection] = useState<TaskPageJiraJqlRejection | null>(null)
   const [jiraSearchInput, setJiraSearchInput] = useState('')
   const [appliedJiraSearch, setAppliedJiraSearch] = useState('')
+  const [jiraHasWorkspace, setJiraLinkedView] = useState(loadJiraLinkedView)
+  const setJiraHasWorkspace = useCallback((enabled: boolean) => {
+    setJiraLinkedView(enabled)
+    saveJiraLinkedView(enabled)
+  }, [])
   const [activeJiraPreset, setActiveJiraPreset] = useState<JiraPresetId>('assigned')
   const [jiraRefreshNonce, setJiraRefreshNonce] = useState(0)
   const [jiraProjectStatusOrder, setJiraProjectStatusOrder] = useState<{
@@ -86,6 +92,8 @@ export function useTaskPageJiraListState(model: TaskPageLinearViewStateModel) {
     [jiraOrderBy]
   )
   return Object.assign(model, {
+    jiraHasWorkspace,
+    setJiraHasWorkspace,
     jiraIssues,
     setJiraIssues,
     jiraLoading,
