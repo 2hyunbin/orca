@@ -1255,7 +1255,7 @@ jobs:
     needs: [code_paths, preflight]
     if: needs.code_paths.outputs.package_windows == 'true'
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -1433,6 +1433,29 @@ jobs:
 
       - name: Smoke packaged CLI
         run: node config/scripts/smoke-packaged-cli.mjs --app-dir=dist/win-unpacked
+
+      - name: Verify Windows packaged plugin journeys
+        env:
+          ORCA_BACKGROUND_LAUNCH: '1'
+          SKIP_BUILD: '1'
+          ORCA_PHASE_O_1_PACKAGED_EXECUTABLE: '${{ github.workspace }}/dist/win-unpacked/Orca.exe'
+          ORCA_PLUGIN_EVIDENCE_DIR: reports/plugin-system/evidence/windows-packaged
+        run: >-
+          pnpm exec playwright test
+          tests/e2e/plugin-git-object-format.spec.ts
+          tests/e2e/plugin-packaged-cohort.spec.ts
+          tests/e2e/plugin-packaged-parser-recovery.spec.ts
+          --config tests/playwright.config.ts --project electron-headless --workers=1
+
+      - name: Upload Windows packaged plugin evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-packaged-plugin-evidence
+          path: |
+            test-results/
+            reports/plugin-system/evidence/windows-packaged/
+          retention-days: 14
 
   e2e:
     name: e2e
