@@ -24,7 +24,18 @@ import {
 } from '../ai-vault/session-transcript-consumers'
 import { SELF_CONTAINED_TRANSCRIPT_AGENTS } from './session-search-index-consumer'
 
-vi.mock('node:fs', { spy: true })
+// Spying on every fs export also mocks ReadStream internals and stalls real reads.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof fs>()
+  return {
+    ...actual,
+    readFile: vi.fn(actual.readFile),
+    readFileSync: vi.fn(actual.readFileSync),
+    open: vi.fn(actual.open),
+    openSync: vi.fn(actual.openSync),
+    createReadStream: vi.fn(actual.createReadStream)
+  }
+})
 vi.mock('node:fs/promises', { spy: true })
 vi.mock('../native-chat/wsl-transcript-fs-access', { spy: true })
 
