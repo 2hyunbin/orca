@@ -29,6 +29,7 @@ type Ticket = {
 }
 
 export type PluginEnvironmentProviderSshOptions = {
+  track?: <T>(run: () => Promise<T>) => Promise<T>
   service: Pick<PluginService, 'whenReady' | 'contentPacks'>
   userDataPath: string
   inventory(

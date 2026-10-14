@@ -326,12 +326,12 @@ export class PluginService {
   }
 
   async dispose(): Promise<void> {
-    this.environmentProviders.dispose()
+    const providersRetired = this.environmentProviders.dispose()
     this.contentPacks.environmentRecipes.invalidate()
     this.disposed = true
     this.housekeeping.dispose()
     this.panels.dispose()
-    await this.refreshChain.catch(() => undefined)
+    await Promise.all([providersRetired, this.refreshChain.catch(() => undefined)])
     await this.workerController.dispose()
     await this.audit.flush()
   }

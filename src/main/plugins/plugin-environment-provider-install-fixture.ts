@@ -40,7 +40,7 @@ export async function createPluginEnvironmentProviderInstallFixture(
   const program = join(pluginDir, 'provider.mjs')
   await writeFile(
     program,
-    `import {readFile,writeFile} from 'node:fs/promises';
+    `import {readFile,writeFile,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 const directory=process.env.PROVIDER_BACKEND_DIRECTORY??'.';
@@ -53,6 +53,7 @@ if(request.contextId!==(process.env.PROVIDER_CONTEXT_ID??'company/account/region
 const identity=request.queryId?{protocolVersion:1,queryId:request.queryId,providerId:request.providerId,contextId:request.contextId,operation:request.operation}:{protocolVersion:2,operationId:request.operationId,providerId:request.providerId,contextId:request.contextId,action:request.action};
 process.stdout.write(JSON.stringify({...identity,kind:'error',code:'authentication-required',...(request.queryId?{}:{message:'Account context mismatch'})}));process.exit(0);}
 await writeFile(startedFile,String(process.pid));
+await appendFile(join(directory,'invocations.jsonl'),JSON.stringify({version:process.version,entry:process.argv[1]})+'\\n');
 await writeFile(join(directory,'launch-info.json'),JSON.stringify({argv:process.argv,nodeOptions:process.env.NODE_OPTIONS,nodePath:process.env.NODE_PATH,electronRunAsNode:process.env.ELECTRON_RUN_AS_NODE}));
 if(process.env.PROVIDER_MODE==='hang'){setInterval(()=>{},1000);await new Promise(()=>{});}
 const backend=JSON.parse(await readFile(backendFile,'utf8'));

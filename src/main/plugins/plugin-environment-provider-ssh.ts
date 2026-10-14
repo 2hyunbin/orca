@@ -50,10 +50,14 @@ export class PluginEnvironmentProviderSsh {
     )
   }
   prepare(...args: Parameters<PluginEnvironmentProviderSshReviews['prepare']>) {
-    return this.reviews.prepare(...args)
+    return this.options.track
+      ? this.options.track(() => this.reviews.prepare(...args))
+      : this.reviews.prepare(...args)
   }
   save(...args: Parameters<PluginEnvironmentProviderSshReviews['save']>) {
-    return this.reviews.save(...args)
+    return this.options.track
+      ? this.options.track(() => this.reviews.save(...args))
+      : this.reviews.save(...args)
   }
   revokeOwner(ownerKey: string): void {
     this.reviews.revokeOwner(ownerKey)

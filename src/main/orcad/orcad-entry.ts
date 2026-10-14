@@ -39,6 +39,7 @@ import {
   type AiVaultSearchSettings
 } from '../../shared/ai-vault-search-settings'
 import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
+import { orcadPluginHostVersion } from './orcad-plugin-host-version'
 
 export { parseArgs }
 
@@ -220,6 +221,13 @@ async function startOrcadRuntime(
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
   const observedStatusCapture = new AgentStatusObservedPaneIdentityCapture(observedPaneIdentities)
   profileStoreForShutdown = profileStore
+  const { startOrcadPlugins } = await import('./orcad-plugins')
+  await startOrcadPlugins({
+    store: profileStore,
+    userDataPath: runtimeUserDataPath,
+    hostVersion: orcadPluginHostVersion(),
+    registerCleanup
+  })
   uninstallObservedStatusIdentity = agentHookServer.subscribeEnrichedStatus((enriched) =>
     observedStatusCapture.observe(enriched)
   )

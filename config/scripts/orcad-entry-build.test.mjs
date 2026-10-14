@@ -1,9 +1,13 @@
 import { build } from 'esbuild'
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { buildOrcadEntry, ORCAD_COMMONJS_MODULE_OPTIONS } from './orcad-entry-build.mjs'
+import {
+  buildOrcadEntry,
+  ORCAD_COMMONJS_MODULE_OPTIONS,
+  ORCAD_PLUGIN_HOST_VERSION_DEFINE
+} from './orcad-entry-build.mjs'
 import { runProcessSync } from '@orca/process-host'
 
 const directory = mkdtempSync(join(tmpdir(), 'orca-structured-provider-build-'))
@@ -15,6 +19,35 @@ beforeAll(async () => {
 
 afterAll(() => {
   rmSync(directory, { recursive: true, force: true })
+})
+
+it('checks plugin engines against the compiled Orca app version rather than the deployed artifact identity', async () => {
+  const outfile = join(directory, 'plugin-host-version.cjs')
+  await build({
+    entryPoints: [resolve('src/main/orcad/orcad-plugin-host-version.ts')],
+    platform: 'node',
+    format: 'cjs',
+    bundle: true,
+    outfile,
+    define: ORCAD_PLUGIN_HOST_VERSION_DEFINE,
+    logLevel: 'error'
+  })
+  const loaded = runProcessSync({
+    program: process.execPath,
+    args: [
+      '-e',
+      `process.stdout.write(require(${JSON.stringify(outfile)}).orcadPluginHostVersion())`
+    ],
+    cwd: directory,
+    env: {
+      ORCA_BACKGROUND_LAUNCH: '1',
+      ORCA_VERSION: '0.2.0+artifact-hash',
+      ORCA_PLUGIN_HOST_VERSION: '0.0.0-untrusted-launch-value'
+    },
+    timeoutMs: 5000
+  })
+  expect(loaded.code, loaded.stderr).toBe(0)
+  expect(loaded.stdout).toBe(JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version)
 })
 
 it('loads the structured Claude SDK through the packaged server under plain Node', () => {

@@ -1,3 +1,4 @@
+import { PluginEnvironmentProviderActivity } from './plugin-environment-provider-activity'
 import { pluginEnvironmentProviderHistorySchema } from '../../shared/plugins/plugin-environment-provider-history-api'
 import { PluginEnvironmentRecipeJournalFile } from './plugin-environment-recipe-journal-file'
 import { PluginEnvironmentProviderMigration } from './plugin-environment-provider-migration'
@@ -35,10 +36,7 @@ export class PluginEnvironmentProviderService {
   private readonly catalog: PluginEnvironmentProviderCatalog
   private readonly saved: PluginEnvironmentProviderSavedHistoryStore
   private readonly host: PluginEnvironmentRecipeHost
-  private readonly active = new Map<
-    object,
-    { providerId: string; mutation: boolean; resourceId?: string; allResources?: boolean }
-  >()
+  private readonly active = new PluginEnvironmentProviderActivity()
   readonly ssh: PluginEnvironmentProviderSsh
   private readonly contexts: PluginEnvironmentProviderContextStore
   private readonly lifetime = new AbortController()
@@ -64,6 +62,7 @@ export class PluginEnvironmentProviderService {
       isCurrent: () => !this.lifetime.signal.aborted
     })
     this.ssh = new PluginEnvironmentProviderSsh({
+      track: (run) => this.active.track(run),
       service: options.service,
       userDataPath: options.userDataPath,
       onTargetSaved: options.onChanged,
@@ -95,9 +94,9 @@ export class PluginEnvironmentProviderService {
       ...options,
       signal: this.lifetime.signal,
       retireConnections: async (providerId) => {
-        for (const [slot, operation] of this.active) {
+        for (const [slot, operation] of this.active.entries()) {
           if (operation.providerId === providerId) {
-            this.active.set(slot, { ...operation, mutation: true, allResources: true })
+            this.active.update(slot, { ...operation, mutation: true, allResources: true })
           }
         }
         this.ssh.invalidateProvider(providerId)
@@ -139,14 +138,7 @@ export class PluginEnvironmentProviderService {
     if (request.providerId !== providerId || request.contextId !== review.contextId) {
       throw new Error('Environment operation names another provider account')
     }
-    if (
-      this.active.size >= 8 ||
-      [...this.active.values()].some((entry) => entry.providerId === providerId)
-    ) {
-      throw new Error('An environment operation is already running on this host or provider')
-    }
-    const slot = {}
-    this.active.set(slot, { providerId, mutation: false })
+    const { slot, finish } = this.active.enter(providerId)
     try {
       const authority = await resolveReviewedPluginEnvironmentProvider(this.options.service, review)
       if (
@@ -198,38 +190,39 @@ export class PluginEnvironmentProviderService {
           ) {
             throw new Error('The selected environment resource or revision is no longer current')
           }
-          this.active.set(slot, { providerId, mutation: true, resourceId })
+          this.active.update(slot, { providerId, mutation: true, resourceId })
           this.ssh.invalidateProvider(providerId, resourceId)
           await this.options.retireConnections?.(providerId, resourceId)
         } else {
-          this.active.set(slot, { providerId, mutation: true })
+          this.active.update(slot, { providerId, mutation: true })
         }
       }
       return await this.host.execute(review, request, args[2])
     } finally {
-      this.active.delete(slot)
-      await this.ssh.reconcile(providerId)
-      this.options.onChanged?.(providerId)
+      this.active.release(slot)
+      try {
+        await this.ssh.reconcile(providerId)
+        this.options.onChanged?.(providerId)
+      } finally {
+        finish()
+      }
     }
   }
 
   async recover(input: PluginEnvironmentProviderRecoverRequest, signal?: AbortSignal) {
     const parsed = pluginEnvironmentProviderRecoverSchema.parse(structuredClone(input))
     const providerId = parsed.review.providerId
-    if (
-      this.active.size >= 8 ||
-      [...this.active.values()].some((entry) => entry.providerId === providerId)
-    ) {
-      throw new Error('An environment operation is already running on this host or provider')
-    }
-    const slot = {}
-    this.active.set(slot, { providerId, mutation: false })
+    const { slot, finish } = this.active.enter(providerId)
     try {
       return await this.host.recover(parsed, signal)
     } finally {
-      this.active.delete(slot)
-      await this.ssh.reconcile(providerId)
-      this.options.onChanged?.(providerId)
+      this.active.release(slot)
+      try {
+        await this.ssh.reconcile(providerId)
+        this.options.onChanged?.(providerId)
+      } finally {
+        finish()
+      }
     }
   }
 
@@ -263,19 +256,16 @@ export class PluginEnvironmentProviderService {
     this.migration.revokeOwner(ownerKey)
   }
   private async migrateExclusive<T>(providerId: string, run: () => Promise<T>): Promise<T> {
-    if (
-      this.active.size >= 8 ||
-      [...this.active.values()].some((entry) => entry.providerId === providerId)
-    ) {
-      throw new Error('An environment operation is already running on this host or provider')
-    }
-    const slot = {}
-    this.active.set(slot, { providerId, mutation: false })
+    const { slot, finish } = this.active.enter(providerId)
     try {
       return await run()
     } finally {
-      this.active.delete(slot)
-      this.options.onChanged?.(providerId)
+      this.active.release(slot)
+      try {
+        this.options.onChanged?.(providerId)
+      } finally {
+        finish()
+      }
     }
   }
 
@@ -289,12 +279,13 @@ export class PluginEnvironmentProviderService {
     return this.saved.read(input)
   }
   configure(input: unknown) {
-    return this.catalog.configure(input)
+    return this.active.track(() => this.catalog.configure(input))
   }
 
-  dispose(): void {
+  dispose(): Promise<void> {
     this.lifetime.abort()
     this.ssh.dispose()
     this.migration.dispose()
+    return this.active.drain()
   }
 }

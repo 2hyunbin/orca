@@ -28,6 +28,24 @@ afterEach(async () => {
 })
 
 describe('PluginKillListService', () => {
+  it('waits for shutdown and rejects a late refresh before publishing or writing its snapshot', async () => {
+    const root = await tempRoot()
+    const fetched = Promise.withResolvers<PluginKillList>()
+    const fetcher = vi.fn(() => fetched.promise)
+    const service = new PluginKillListService({ pluginsDataDir: root, fetcher })
+    const changed = vi.fn()
+    service.onChanged(changed)
+    const refresh = service.refresh()
+    const refused = expect(refresh).rejects.toThrow()
+    await expect.poll(() => fetcher.mock.calls.length).toBe(1)
+    const stopped = service.dispose()
+    fetched.resolve(killList())
+    await refused
+    await stopped
+    expect(service.snapshot()).toBeNull()
+    expect(changed).not.toHaveBeenCalled()
+    await expect(service.refresh()).rejects.toThrow()
+  })
   it('loads cached revocations before any network refresh', async () => {
     const root = await tempRoot()
     const first = new PluginKillListService({
@@ -59,10 +77,10 @@ describe('PluginKillListService', () => {
   })
 
   it('starts with no revocations after a corrupt cache and accepts a valid refresh', async () => {
-    const store = {
+    const store: Pick<PluginKillListStore, 'read' | 'write'> = {
       read: vi.fn().mockRejectedValue(new Error('invalid JSON')),
       write: vi.fn().mockResolvedValue(undefined)
-    } as unknown as PluginKillListStore
+    }
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const service = new PluginKillListService({
       pluginsDataDir: await tempRoot(),

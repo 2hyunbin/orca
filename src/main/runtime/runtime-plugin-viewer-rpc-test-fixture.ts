@@ -1,13 +1,10 @@
-import { pairedRuntimeConnectionFromOffer } from '../../shared/paired-runtime-connection'
+import { pairedRuntimeRpcFixture } from './runtime-paired-rpc-test-fixture'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Store } from '../persistence'
 import { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
-import { RemoteRuntimeRequestConnection } from '../../shared/remote-runtime-request-connection'
-import { parsePairingCode } from '../../shared/pairing'
 import { PLUGIN_VIEWER_RUNTIME_DOCUMENT_CAPABILITY } from '../../shared/plugins/plugin-viewer-runtime-capability'
 import type { PluginViewerRuntimeOpen } from '../../shared/plugins/plugin-viewer-runtime-document'
 
@@ -73,32 +70,13 @@ export async function runtimeViewerRpcFixture(
     )
   })
   const runtime = new OrcaRuntimeService(store)
-  const rpc = new OrcaRuntimeRpcServer({
-    runtime,
-    userDataPath: root,
-    enableWebSocket: true,
-    wsPort: 0
-  })
-  cleanups.push(() => rpc.stop())
-  await rpc.start()
-  const offer = rpc.createPairingOffer({ name: 'viewer-document', scope })
-  if (!offer.available) {
-    throw new Error('pairing unavailable')
-  }
-  const pairing = parsePairingCode(offer.pairingUrl)
-  if (!pairing) {
-    throw new Error('invalid pairing')
-  }
-  const connect = (
-    capabilities: readonly string[] = [PLUGIN_VIEWER_RUNTIME_DOCUMENT_CAPABILITY]
-  ) => {
-    const connection = new RemoteRuntimeRequestConnection(
-      pairedRuntimeConnectionFromOffer(pairing),
-      capabilities
-    )
-    cleanups.push(() => connection.close())
-    return connection
-  }
+  const {
+    rpc,
+    pairing,
+    connect: connectRpc
+  } = await pairedRuntimeRpcFixture(cleanups, runtime, root, scope)
+  const connect = (capabilities: readonly string[] = [PLUGIN_VIEWER_RUNTIME_DOCUMENT_CAPABILITY]) =>
+    connectRpc(capabilities)
   const input: PluginViewerRuntimeOpen = {
     runtimeId: runtime.getRuntimeId(),
     leaseId: randomUUID(),

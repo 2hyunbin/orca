@@ -5,6 +5,13 @@ import { basename, dirname, join } from 'node:path'
 import { ORCAD_SERVER_ENTRY_FILENAME } from '../../src/shared/orcad-artifacts.ts'
 
 const root = join(import.meta.dirname, '..', '..')
+const appVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
+if (typeof appVersion !== 'string' || !/^\d+\.\d+\.\d+(?:[-+][\w.+-]+)?$/.test(appVersion)) {
+  throw new Error('Orcad plugin compatibility requires a valid Orca app version')
+}
+export const ORCAD_PLUGIN_HOST_VERSION_DEFINE = {
+  'process.env.ORCA_PLUGIN_HOST_VERSION': JSON.stringify(appVersion)
+}
 
 export const ORCAD_ENTRY_POINT = 'src/main/orcad/main.ts'
 export const ORCAD_LAUNCHER_ENTRY_POINT = 'src/main/orcad/launcher.ts'
@@ -68,6 +75,7 @@ export function buildOrcadEntry(outfile) {
     sourcemap: false,
     define: {
       ...ORCAD_COMMONJS_MODULE_OPTIONS.define,
+      ...ORCAD_PLUGIN_HOST_VERSION_DEFINE,
       'process.env.NODE_ENV': '"production"'
     },
     logLevel: 'error'
