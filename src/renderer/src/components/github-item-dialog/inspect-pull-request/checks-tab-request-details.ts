@@ -1,5 +1,10 @@
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { withGitHubCheckDetailsTimeout } from '@/runtime/github-check-details-timeout'
+import { createRuntimeRpcAbortError } from '@/runtime/abortable-runtime-environment-call'
+import {
+  GITHUB_CHECK_DETAILS_TIMEOUT_MESSAGE,
+  isGitHubCheckDetailsTimeout
+} from '../../../../../shared/github/check-details-deadline'
 import {
   beginGitHubChecksTabDetails,
   settleGitHubChecksTabDetails,
@@ -66,12 +71,19 @@ export function requestGitHubCheckDetails(
       })
     })
     .catch((err) => {
+      const timeoutMessage = translate(
+        'auto.runtime.githubCheckDetailsTimeout.timedOut',
+        GITHUB_CHECK_DETAILS_TIMEOUT_MESSAGE
+      )
+      const isTimeout =
+        isGitHubCheckDetailsTimeout(err) || (err instanceof Error && err.message === timeoutMessage)
       commit({
         loading: false,
         details: null,
-        error:
-          err instanceof Error
-            ? err.message
+        error: isTimeout
+          ? timeoutMessage
+          : err instanceof Error && err.name === 'AbortError'
+            ? createRuntimeRpcAbortError().message
             : translate(
                 'auto.components.GitHubItemDialog.e45324fbed',
                 'Failed to load check details.'
