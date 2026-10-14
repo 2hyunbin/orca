@@ -21,7 +21,6 @@ export async function writeStructuredAgentSessionOption(
     fence,
     now: () => context.now(),
     adapter: context.deps.adapter,
-    now: context.now,
     persistOptions: (options: Readonly<Record<string, string>>) =>
       context.deps.store
         .replaceSessionOptions({ sessionId, fence, options, now: context.now() })
