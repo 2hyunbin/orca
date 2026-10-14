@@ -3,7 +3,7 @@ import type {
   JiraIssueSummaryGenerationCancellation
 } from '../../shared/jira-issue-summary-generation'
 import { ipcRenderer } from 'electron'
-import type { JiraProjectStatusOrder } from '../../shared/jira-types'
+import type { JiraIssueListFilters, JiraProjectStatusOrder } from '../../shared/jira-types'
 import type { PreloadApi } from '../api-types'
 
 export const jiraApi = {
@@ -32,6 +32,7 @@ export const jiraApi = {
 
   listIssues: (args?: {
     filter?: 'assigned' | 'reported' | 'all' | 'done'
+    filters?: JiraIssueListFilters
     limit?: number
     siteId?: string
   }) => ipcRenderer.invoke('jira:listIssues', args),

@@ -36,6 +36,7 @@ function createModel(): TaskPageLinearCollectionEffectsModel {
     appliedJiraSearch: '',
     setAppliedJiraSearch: vi.fn(),
     activeJiraPreset: 'assigned',
+    jiraCurrentSprint: false,
     jiraRefreshNonce: 0,
     jiraActiveSavedFilterId: null,
     jiraSavedFilters: [],
@@ -58,6 +59,70 @@ describe('useTaskPageJiraListEffects refresh wiring', () => {
     vi.clearAllMocks()
     listJiraIssues.mockResolvedValue([])
     searchJiraIssues.mockResolvedValue([])
+  })
+  it('keeps sprint presets on the host list path and composes text queries after classification', async () => {
+    const model = createModel()
+    model.activeJiraPreset = 'all'
+    model.jiraCurrentSprint = true
+    model.selectedJiraStatuses = ['Blocked']
+    const { rerender } = renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() =>
+      expect(listJiraIssues).toHaveBeenCalledWith('all', 50, {
+        sourceContext: null,
+        force: false,
+        filters: { statuses: ['Blocked'], currentSprint: true }
+      })
+    )
+    expect(searchJiraIssues).not.toHaveBeenCalled()
+    await act(async () => {
+      model.appliedJiraSearch = 'fix login'
+      rerender()
+      await Promise.resolve()
+    })
+    await waitFor(() =>
+      expect(searchJiraIssues).toHaveBeenCalledWith(
+        '(text ~ "fix login*") AND sprint in openSprints()',
+        50,
+        { sourceContext: null, force: false }
+      )
+    )
+  })
+
+  it('adds sprint filtering to exact saved JQL without retrying invalid syntax as text', async () => {
+    const model = createModel()
+    model.appliedJiraSearch = 'saved-query ORDER BY updated DESC'
+    model.jiraActiveSavedFilterId = 'saved'
+    model.jiraSavedFilters = [{ id: 'saved', name: 'Saved', jql: model.appliedJiraSearch }]
+    model.jiraCurrentSprint = true
+    searchJiraIssues.mockRejectedValue(new Error('Error 400: Invalid saved query'))
+    renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() =>
+      expect(model.setJiraError).toHaveBeenCalledWith(
+        expect.objectContaining({ details: 'Invalid saved query' })
+      )
+    )
+    expect(searchJiraIssues).toHaveBeenCalledExactlyOnceWith(
+      '(saved-query) AND sprint in openSprints() ORDER BY updated DESC',
+      50,
+      { sourceContext: null, force: false }
+    )
+    expect(listJiraIssues).not.toHaveBeenCalled()
+  })
+
+  it('reports a saved query that exceeds the request limit after sprint composition', async () => {
+    const model = createModel()
+    model.appliedJiraSearch = `key in (${Array.from({ length: 1030 }, (_, index) => `APP-${index + 1}`).join(',')})`
+    model.jiraActiveSavedFilterId = 'large'
+    model.jiraSavedFilters = [{ id: 'large', name: 'Large', jql: model.appliedJiraSearch }]
+    model.jiraCurrentSprint = true
+    renderHook(() => useTaskPageJiraListEffects(model))
+    await waitFor(() =>
+      expect(model.setJiraError).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringContaining('too long') })
+      )
+    )
+    expect(searchJiraIssues).not.toHaveBeenCalled()
+    expect(listJiraIssues).not.toHaveBeenCalled()
   })
 
   it('loads linked keys directly and does not reread them for local search text', async () => {

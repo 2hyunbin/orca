@@ -851,6 +851,29 @@ describe('Jira issue operations', () => {
       expect(jiraRequestMock.mock.calls[1]?.[1]).toBe('/rest/agile/1.0/board/42/configuration')
     })
 
+    it('retains configured column names and empty board columns', async () => {
+      jiraRequestMock
+        .mockResolvedValueOnce({ total: 1, values: [{ id: 42 }] })
+        .mockResolvedValueOnce({
+          columnConfig: {
+            columns: [
+              { name: 'Ready', statuses: [{ id: '1' }] },
+              { name: 'Doing', statuses: [] },
+              { name: 'Complete', statuses: [{ id: '3' }] }
+            ]
+          }
+        })
+      const { getProjectStatusOrder } = await import('./issues')
+      await expect(getProjectStatusOrder('ALP', 'site-1')).resolves.toEqual({
+        statusIdsByColumn: [['1'], ['3']],
+        columns: [
+          { name: 'Ready', statusIds: ['1'] },
+          { name: 'Doing', statusIds: [] },
+          { name: 'Complete', statusIds: ['3'] }
+        ]
+      })
+    })
+
     it('clears the token and surfaces credential failures', async () => {
       const authError = new Error('Unauthorized')
       isAuthErrorMock.mockReturnValue(true)

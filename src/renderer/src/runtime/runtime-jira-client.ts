@@ -42,6 +42,7 @@ export {
   jiraListPrioritiesForTarget,
   jiraListTransitionsForTarget
 } from './runtime-jira-detail-client'
+import { JIRA_CURRENT_SPRINT_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 export { jiraLookupIssueSummary, jiraReadStatus } from './runtime-jira-summary-client'
 export {
   jiraCreateIssue,
@@ -170,6 +171,13 @@ export async function jiraListIssuesForTarget(
 ): Promise<JiraIssue[]> {
   const args = { filter, limit, siteId: siteId ?? undefined, ...(filters ? { filters } : {}) }
   if (target.kind === 'environment') {
+    if (filters?.currentSprint) {
+      await assertRuntimeEnvironmentCapability(
+        target.environmentId,
+        JIRA_CURRENT_SPRINT_RUNTIME_CAPABILITY,
+        'Update the remote Orca server to filter preset issues by current sprint.'
+      )
+    }
     if (filters?.statuses?.length) {
       await assertRuntimeEnvironmentCapability(
         target.environmentId,
