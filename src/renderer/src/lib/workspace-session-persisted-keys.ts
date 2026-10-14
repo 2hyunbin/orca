@@ -1,34 +1,18 @@
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { isWorkspaceSessionRecord } from '../../../shared/workspace-session-host-records'
 
-/** Workspace-keyed fields this renderer writes (the runtime-authored one is left out). */
-export const WORKSPACE_SESSION_KEYED_FIELDS = [
-  'tabsByWorktree',
-  'openFilesByWorktree',
-  'activeFileIdByWorktree',
-  'activeBrowserTabIdByWorktree',
-  'activeTabTypeByWorktree',
-  'activeTabIdByWorktree',
-  'browserTabsByWorktree',
-  'unifiedTabs',
-  'tabGroups',
-  'tabGroupLayouts',
-  'activeGroupIdByWorktree',
-  'lastVisitedAtByWorktreeId',
-  'defaultTerminalTabsAppliedByWorktreeId'
-] as const satisfies readonly (keyof WorkspaceSessionState)[]
-
 /** Workspace ids each workspace-keyed session field last held on disk, as far as this client
  *  wrote or read it. A key that drops out of a later write names the one partition holding a
  *  row nothing else will overwrite. */
 export type PersistedWorkspaceKeysByField = Map<keyof WorkspaceSessionState, ReadonlySet<string>>
 
-/** The workspace-keyed fields `session` carries, with the workspace ids each one holds. */
+/** The given workspace-keyed fields `session` carries, with the workspace ids each one holds. */
 export function workspaceKeysByField(
-  session: Partial<WorkspaceSessionState>
+  session: Partial<WorkspaceSessionState>,
+  fields: readonly (keyof WorkspaceSessionState)[]
 ): PersistedWorkspaceKeysByField {
   const keys: PersistedWorkspaceKeysByField = new Map()
-  for (const field of WORKSPACE_SESSION_KEYED_FIELDS) {
+  for (const field of fields) {
     const value = session[field]
     if (isWorkspaceSessionRecord(value)) {
       keys.set(field, new Set(Object.keys(value)))
@@ -59,3 +43,10 @@ export function recordPersistedWorkspaceKeys(
 
 /** The renderer's one ledger: seeded from the startup read, advanced by each settled session write. */
 export const persistedWorkspaceSessionKeys: PersistedWorkspaceKeysByField = new Map()
+
+export function seedPersistedWorkspaceSessionKeys(
+  session: WorkspaceSessionState,
+  fields: readonly (keyof WorkspaceSessionState)[]
+): void {
+  recordPersistedWorkspaceKeys(persistedWorkspaceSessionKeys, workspaceKeysByField(session, fields))
+}

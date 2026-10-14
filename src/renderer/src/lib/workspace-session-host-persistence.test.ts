@@ -6,7 +6,6 @@ import type {
   WorkspaceSessionState
 } from '../../../shared/workspace-session-state-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { workspaceKeysByField } from './workspace-session-persisted-keys'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import {
   buildHostIdByWorktreeId,
@@ -17,8 +16,10 @@ import {
 } from './workspace-session-host-persistence'
 import {
   fetchWorkspaceSessionFromHosts,
-  fetchWorkspaceSessionWithRuntimeHostOwners
+  fetchWorkspaceSessionWithRuntimeHostOwners,
+  WORKSPACE_SESSION_KEYED_FIELDS
 } from './workspace-session-host-hydration'
+import { workspaceKeysByField } from './workspace-session-persisted-keys'
 
 describe('fetchWorkspaceSessionFromHosts', () => {
   it('reads saved runtime host partitions before runtime repos are loaded', async () => {
@@ -735,6 +736,12 @@ describe('patchWorkspaceSessionByHost removed workspace keys', () => {
     }
   } satisfies HostPersistenceState
 
+  const keysBeforeTheClose = () =>
+    workspaceKeysByField(
+      { browserTabsByWorktree: { [remoteWorktreeId]: [browser] } },
+      WORKSPACE_SESSION_KEYED_FIELDS
+    )
+
   /** Main's patch channel over in-memory partitions: a shallow per-field merge. */
   function createPartitions() {
     const partitions: Record<string, WorkspaceSessionState> = {
@@ -756,9 +763,7 @@ describe('patchWorkspaceSessionByHost removed workspace keys', () => {
     // merges each field shallowly, so the host kept the closed browser and a crash-relaunch
     // restored it.
     const { partitions, api } = createPartitions()
-    const persistedKeys = workspaceKeysByField({
-      browserTabsByWorktree: { [remoteWorktreeId]: [browser] }
-    })
+    const persistedKeys = keysBeforeTheClose()
 
     await patchWorkspaceSessionByHost(api, { browserTabsByWorktree: {} }, catalog, persistedKeys)
       .written
@@ -778,7 +783,7 @@ describe('patchWorkspaceSessionByHost removed workspace keys', () => {
       api,
       { browserTabsByWorktree: {} },
       catalog,
-      workspaceKeysByField({ browserTabsByWorktree: { [remoteWorktreeId]: [browser] } })
+      keysBeforeTheClose()
     ).written
 
     expect(partitions['runtime:env-2']).toBeUndefined()
@@ -788,9 +793,7 @@ describe('patchWorkspaceSessionByHost removed workspace keys', () => {
   it('keeps the removed key owed when the write fails, so the retry still clears it', async () => {
     const { api } = createPartitions()
     api.patch.mockRejectedValueOnce(new Error('local write failed'))
-    const persistedKeys = workspaceKeysByField({
-      browserTabsByWorktree: { [remoteWorktreeId]: [browser] }
-    })
+    const persistedKeys = keysBeforeTheClose()
 
     await expect(
       patchWorkspaceSessionByHost(api, { browserTabsByWorktree: {} }, catalog, persistedKeys)
@@ -804,7 +807,7 @@ describe('patchWorkspaceSessionByHost removed workspace keys', () => {
     const snapshots = buildWorkspaceSessionHostSnapshots(
       { ...getDefaultWorkspaceSession(), browserTabsByWorktree: {} },
       catalog,
-      workspaceKeysByField({ browserTabsByWorktree: { [remoteWorktreeId]: [browser] } })
+      keysBeforeTheClose()
     )
 
     expect(snapshots.map((snapshot) => snapshot.hostId)).toEqual([undefined, 'runtime:env-1'])

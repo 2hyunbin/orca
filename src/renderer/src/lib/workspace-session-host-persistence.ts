@@ -32,6 +32,7 @@ import {
   workspaceKeysByField,
   type PersistedWorkspaceKeysByField
 } from './workspace-session-persisted-keys'
+import { WORKSPACE_SESSION_KEYED_FIELDS } from './workspace-session-host-hydration'
 import {
   indexWorkspaceRuntimeHostOwnership,
   type WorkspaceRuntimeOwnerProjection
@@ -241,7 +242,7 @@ export function patchWorkspaceSessionByHost(
   keys?: PersistedWorkspaceKeysByField
 ): { localWrite: Promise<void>; written: Promise<void> } {
   const slices = splitWorkspaceSessionForWrite(patch, state, 'patch', keys)
-  const sentKeys = workspaceKeysByField(patch)
+  const sentKeys = workspaceKeysByField(patch, WORKSPACE_SESSION_KEYED_FIELDS)
   const local = (slices[LOCAL_EXECUTION_HOST_ID] ?? patch) as WorkspaceSessionPatch
   const localWrite = api.patch(local)
   const hostWrites = nonLocalHostSessionEntries(slices).map(([hostId, slice]) =>
