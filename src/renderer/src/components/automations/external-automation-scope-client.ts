@@ -10,10 +10,8 @@
 
 import type {
   ExternalAutomationAction,
-  ExternalAutomationJob,
   ExternalAutomationManager,
-  ExternalAutomationProvider,
-  ExternalAutomationRun
+  ExternalAutomationProvider
 } from '../../../../shared/automations-types'
 import type { AutomationOwnerRef } from '../../../../shared/automation-owner-ref'
 import { EXTERNAL_AUTOMATION_PROVIDERS } from '../../../../shared/external-automation-scope'
@@ -115,25 +113,4 @@ export async function runScopedExternalAutomationAction(
   action: ExternalAutomationAction
 ): Promise<void> {
   await window.api.automations.runExternalActionForOwner({ ...scope, jobId, action })
-}
-
-export type ScopedExternalAutomationRunsPage = {
-  runs: readonly ExternalAutomationRun[]
-  totalCount: number
-}
-
-export async function listScopedExternalAutomationRuns(
-  scope: ExternalAutomationScope,
-  job: ExternalAutomationJob,
-  page: number,
-  pageSize: number
-): Promise<ScopedExternalAutomationRunsPage> {
-  const result = await window.api.automations.listExternalRunsForOwner({
-    ...scope,
-    jobId: job.id,
-    // The engine pages from one; the table's page index is zero-based.
-    page: page + 1,
-    pageSize
-  })
-  return { runs: result.runs, totalCount: result.total }
 }

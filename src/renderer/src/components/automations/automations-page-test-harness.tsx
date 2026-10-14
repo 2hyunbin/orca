@@ -82,13 +82,6 @@ export type DetailPaneProps = {
   toggleAutomation: (automation: Automation) => void
   requestDeleteAutomation: (automation: Automation) => void
   openEditDialog: (automation: Automation) => void
-  fetchExternalAutomationRuns: (input: {
-    scope: ExternalAutomationListEntry['scope']
-    manager: ExternalAutomationListEntry['manager']
-    job: ExternalAutomationListEntry['job']
-    page: number
-    pageSize: number
-  }) => Promise<unknown>
 }
 
 export type EditorDialogProps = {
@@ -281,7 +274,6 @@ export const api = {
     'runNow',
     'listScoped',
     'listExternalManagerForOwner',
-    'listExternalRunsForOwner',
     'createExternalForOwner',
     'updateExternalForOwner',
     'runExternalActionForOwner',

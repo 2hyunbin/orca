@@ -46,7 +46,6 @@ function renderDetailPane(options: {
         <AutomationsDetailPane
           selected={selected}
           selectedExternal={null}
-          selectedExternalRunPage={null}
           selectedRuns={[]}
           selectedRunsNotice={null}
           activePaneTab={activePaneTab}
@@ -59,11 +58,8 @@ function renderDetailPane(options: {
           hostLabelById={new Map()}
           selectedRunNowAvailability={null}
           worktreeMap={new Map()}
-          fetchExternalAutomationRuns={async () => []}
           onActivePaneTabChange={onActivePaneTabChange}
-          onClearExternalRunPage={() => undefined}
           requestExternalAction={() => undefined}
-          openExternalRunPage={() => undefined}
           runNow={() => undefined}
           openEditDialog={() => undefined}
           toggleAutomation={() => undefined}
@@ -168,7 +164,6 @@ describe('AutomationsDetailPane tab keyboard navigation', () => {
           <AutomationsDetailPane
             selected={selected}
             selectedExternal={null}
-            selectedExternalRunPage={null}
             selectedRuns={[]}
             selectedRunsNotice={null}
             activePaneTab="overview"
@@ -181,11 +176,8 @@ describe('AutomationsDetailPane tab keyboard navigation', () => {
             hostLabelById={new Map()}
             selectedRunNowAvailability={null}
             worktreeMap={new Map()}
-            fetchExternalAutomationRuns={async () => []}
             onActivePaneTabChange={() => undefined}
-            onClearExternalRunPage={() => undefined}
             requestExternalAction={() => undefined}
-            openExternalRunPage={() => undefined}
             runNow={() => undefined}
             openEditDialog={() => undefined}
             toggleAutomation={() => undefined}

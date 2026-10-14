@@ -20,12 +20,6 @@ import { externalAutomationActionKey } from './external-automation-scope-keys'
 // environment, matching how the renderer mounts under test.
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-// Why: the run table fetches from the external automation store; stub it so the
-// test stays focused on the row controls (switch + action cluster).
-vi.mock('./ExternalAutomationRunTable', () => ({
-  ExternalAutomationRunTable: () => <div data-testid="run-table" />
-}))
-
 // Why: Tooltip needs a TooltipProvider mounted higher in the real app; stub the
 // primitives so the row renders standalone and the span trigger stays inspectable.
 vi.mock('@/components/ui/tooltip', () => ({

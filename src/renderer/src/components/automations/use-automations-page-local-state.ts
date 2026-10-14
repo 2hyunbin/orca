@@ -20,8 +20,7 @@ import {
 import type {
   AutomationPaneTab,
   AutomationRunPageOrigin,
-  AutomationsPageView,
-  SelectedExternalRunPage
+  AutomationsPageView
 } from './automation-page-state'
 import type { ExternalAutomationScope } from './external-automation-scope-client'
 import type { SelectedAutomationRunHistoryOutcome } from './use-selected-automation-run-history'
@@ -77,8 +76,6 @@ export function useAutomationsPageLocalState(store: AutomationsPageStoreState) {
   )
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
   const [selectedExternalKey, setSelectedExternalKey] = useState<string | null>(null)
-  const [selectedExternalRunPage, setSelectedExternalRunPage] =
-    useState<SelectedExternalRunPage | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const selectedExternalKeyRef = useRef<string | null>(null)
   useEffect(() => {
@@ -94,7 +91,6 @@ export function useAutomationsPageLocalState(store: AutomationsPageStoreState) {
     [setSelectedId]
   )
   const selectExternalKey = useCallback((externalKey: string | null): void => {
-    setSelectedExternalRunPage(null)
     setSelectedExternalKey(externalKey)
   }, [])
   const [draftAtOpen, setDraftAtOpen] = useState<AutomationDraft | null>(null)
@@ -206,8 +202,6 @@ export function useAutomationsPageLocalState(store: AutomationsPageStoreState) {
     setSelectedRowKey,
     selectedExternalKey,
     setSelectedExternalKey,
-    selectedExternalRunPage,
-    setSelectedExternalRunPage,
     isDetailOpen,
     setIsDetailOpen,
     selectedExternalKeyRef,
