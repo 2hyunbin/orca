@@ -200,8 +200,9 @@ function headIdentityChange(
     gitStatusRepoIds: [],
     headIdentityRepoIds: repoIds,
     headIdentityScope,
-    // A head move is also a status change for exactly the checkout that moved.
-    gitStatusScope: headIdentityScope
+    // A head move rewrites a shared branch ref (e.g. a commit to `main`), which
+    // is any checkout's local upstream; refs/heads leaves are not polled, so fan out.
+    gitStatusScope: FULL_HEAD_IDENTITY_SCOPE
   }
 }
 

@@ -140,7 +140,8 @@ describe('matchingWorktreeBaseRepoIds (git-common)', () => {
       gitStatusRepoIds: [],
       headIdentityRepoIds: ['repo-1'],
       headIdentityScope: headIdentityScopeForEntry('wt-a'),
-      gitStatusScope: headIdentityScopeForEntry('wt-a')
+      // The moved branch can be a sibling's local upstream, so status fans out.
+      gitStatusScope: FULL_HEAD_IDENTITY_SCOPE
     })
     expect(
       classifyWorktreeBaseChange(target, {
@@ -152,7 +153,7 @@ describe('matchingWorktreeBaseRepoIds (git-common)', () => {
       gitStatusRepoIds: [],
       headIdentityRepoIds: ['repo-1'],
       headIdentityScope: PRIMARY_HEAD_IDENTITY_SCOPE,
-      gitStatusScope: PRIMARY_HEAD_IDENTITY_SCOPE
+      gitStatusScope: FULL_HEAD_IDENTITY_SCOPE
     })
     // Per-ref reflogs churn on fetches and stay ignored.
     expect(

@@ -94,7 +94,7 @@ describe('scheduleWorktreeBaseNotification git status attribution', () => {
   it('folds admin-dir case and unions every checkout in one burst', async () => {
     await flush(makeWatch(), [
       ['worktrees', 'feature1', 'index'],
-      ['worktrees', 'other', 'logs', 'HEAD'],
+      ['worktrees', 'other', 'index'],
       ['index']
     ])
     expect(notifyWorktreeGitStatusMetadataChanged).toHaveBeenCalledWith(
@@ -102,6 +102,26 @@ describe('scheduleWorktreeBaseNotification git status attribution', () => {
       'repo-1',
       [PRIMARY_PATH, ACTIVE_PATH, SIBLING_PATH]
     )
+  })
+
+  it('leaves sibling commits unattributed: the moved branch can be the active local upstream', async () => {
+    // A commit to `main` in a sibling writes its index and logs/HEAD; refs/heads/main
+    // itself is not polled, so the head move must still reach the active checkout.
+    for (const paths of [
+      [
+        ['worktrees', 'other', 'index'],
+        ['worktrees', 'other', 'logs', 'HEAD']
+      ],
+      [['index'], ['logs', 'HEAD']]
+    ]) {
+      vi.mocked(notifyWorktreeGitStatusMetadataChanged).mockClear()
+      await flush(makeWatch(), paths)
+      expect(notifyWorktreeGitStatusMetadataChanged).toHaveBeenCalledWith(
+        expect.anything(),
+        'repo-1',
+        null
+      )
+    }
   })
 
   it('leaves the signal unattributed when any part of the burst cannot be attributed', async () => {
