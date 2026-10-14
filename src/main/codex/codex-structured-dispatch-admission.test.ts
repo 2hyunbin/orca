@@ -319,7 +319,7 @@ describe('codex dispatch admission', () => {
     })
   })
 
-  it('revises a completed turn when its exact echo arrives late', async () => {
+  it('attributes an accepted echo before completing its turn', async () => {
     const codex = fakeCodexAppServer({
       'turn/start': () => ({ turn: { id: 'turn-1', status: 'inProgress' } })
     })
@@ -328,25 +328,25 @@ describe('codex dispatch admission', () => {
     const adapter = await acquiredCodexAdapter({ codex, settlements, sink: recorded.sink })
     const connection = codex.connections[0]!
 
-    const sending = send(adapter, 'client-late-echo', 1_700_000_000_100)
+    const sending = send(adapter, 'client-echo', 1_700_000_000_100)
     await openAfterTurnStarts(connection, 1, () => startTurn(connection, 'turn-1'))
     await sending
+    echoUserMessage(connection, {
+      turnId: 'turn-1',
+      itemId: 'item-echo',
+      clientId: 'client-echo'
+    })
     connection.handlers.onNotification?.('turn/completed', {
       threadId: CODEX_TEST_THREAD_ID,
       turn: { id: 'turn-1' }
-    })
-    echoUserMessage(connection, {
-      turnId: 'turn-1',
-      itemId: 'item-late',
-      clientId: 'client-late-echo'
     })
 
     expect(recorded.bodies.findLast((body) => body.kind === 'turn')).toMatchObject({
       state: 'completed',
       requestedAt: 1_700_000_000_100,
-      userItemId: agentJournalSubmissionKey('client-late-echo')
+      userItemId: agentJournalSubmissionKey('client-echo')
     })
-    expect(settlements.map(({ clientMessageId }) => clientMessageId)).toEqual(['client-late-echo'])
+    expect(settlements.map(({ clientMessageId }) => clientMessageId)).toEqual(['client-echo'])
   })
 
   it('refuses overflow without discarding an older accepted send', async () => {

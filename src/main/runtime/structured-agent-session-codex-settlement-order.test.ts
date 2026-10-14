@@ -14,10 +14,12 @@ import type {
 } from '../codex/codex-app-server-connection'
 import { codexTurnLifecycleFake } from '../codex/codex-turn-lifecycle-fake'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
+import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
 import type {
   AgentJournalDispatchState,
   AgentJournalTurnItem
 } from '../../shared/agent-session-journal-types'
+import { projectStructuredAgentSessionStatusState } from '../../shared/structured-agent-session-projection'
 import {
   HOST_TEST_SESSION as SESSION,
   HOST_TEST_THREAD as THREAD,
@@ -209,6 +211,16 @@ describe('a settlement Codex proves keeps its place behind the frame that proved
       }
     })
     expect(owesStructuredAgentSessionWork(snapshot.items, snapshot.submissions, fence)).toBe(false)
+    expect(
+      projectStructuredAgentSessionStatusState(snapshot.items, snapshot.submissions, fence)
+    ).toMatchObject({
+      summary: { status: 'idle', turnOutcome: 'failure' },
+      latestRequest: {
+        kind: 'refused-send',
+        id: agentJournalSubmissionKey(sent),
+        outcome: 'failure'
+      }
+    })
     const ended = seqOf((entry) => turnOf(entry)?.state === 'completed')
     expect(seqOf(dispatchRow(sent, 'rejected'))).toBeGreaterThan(ended!)
 
@@ -218,6 +230,14 @@ describe('a settlement Codex proves keeps its place behind the frame that proved
     turns.echo(next)
     turns.end('completed')
     await vi.waitFor(() => expect(seqOf(dispatchRow(next, 'accepted'))).toBeDefined())
+    await host.flushStreamedEvents(SESSION)
+    const nextSnapshot = await host.journalSnapshot(SESSION)
+    expect(
+      projectStructuredAgentSessionStatusState(nextSnapshot.items, nextSnapshot.submissions, fence)
+    ).toMatchObject({
+      summary: { status: 'idle', turnOutcome: 'success' },
+      latestRequest: { kind: 'turn', id: 'turn-2', outcome: 'success' }
+    })
   })
 
   it('rejects a send only after the failed turn that refused it has ended', async () => {

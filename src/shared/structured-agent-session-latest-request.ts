@@ -60,6 +60,15 @@ export function latestStructuredAgentSessionRequest(
   submissions: readonly AgentJournalSubmission[]
 ): StructuredAgentSessionLatestRequest | null {
   const rejected = rejectedSubmissionsByItem(submissions)
+  const refusedOpenings = new Map<string, AgentJournalSubmission>()
+  for (const submission of rejected.values()) {
+    if (
+      submission.answeredInTurn?.via === 'start' &&
+      classifyDispatchRejection(submission).verdict === 'failure'
+    ) {
+      refusedOpenings.set(submission.answeredInTurn.turnItemId, submission)
+    }
+  }
   const commandTurns = structuredAgentSessionCommandTurnItemIds(items)
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
@@ -73,6 +82,22 @@ export function latestStructuredAgentSessionRequest(
     }
     const turn = readAgentJournalTurn(item.body)
     if (turn) {
+      const refusedOpening = refusedOpenings.get(item.itemId)
+      if (
+        turn.state !== 'running' &&
+        refusedOpening &&
+        !items.some(
+          (entry) =>
+            isRootAgentJournalItem(entry) &&
+            entry.body.kind === 'message' &&
+            entry.body.role === 'user' &&
+            !rejected.has(entry.itemId) &&
+            (entry.itemId === turn.userItemId ||
+              (entry.turnScope?.kind === 'turn' && entry.turnScope.turnItemId === item.itemId))
+        )
+      ) {
+        return refusedSendRequest(refusedOpening)
+      }
       return {
         kind: 'turn',
         id: turn.turnId,
@@ -82,17 +107,27 @@ export function latestStructuredAgentSessionRequest(
       }
     }
     const submission = rejected.get(item.itemId)
-    if (submission && classifyDispatchRejection(submission).verdict === 'failure') {
-      return {
-        kind: 'refused-send',
-        id: item.itemId,
-        turnState: null,
-        outcome: 'failure',
-        settledAt: submission.resolvedAt ?? undefined
-      }
+    if (
+      submission &&
+      submission.answeredInTurn?.via !== 'steer' &&
+      classifyDispatchRejection(submission).verdict === 'failure'
+    ) {
+      return refusedSendRequest(submission)
     }
   }
   return null
+}
+
+function refusedSendRequest(
+  submission: AgentJournalSubmission
+): StructuredAgentSessionLatestRequest {
+  return {
+    kind: 'refused-send',
+    id: agentJournalSubmissionKey(submission.clientMessageId),
+    turnState: null,
+    outcome: 'failure',
+    settledAt: submission.resolvedAt ?? undefined
+  }
 }
 
 /** Whether the session has a request to list. A send that failed nobody and never became a turn
