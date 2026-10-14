@@ -3,11 +3,22 @@
  * desktop moves. Retrying never clears that, so the connect names what conflicts and the way out.
  */
 const CONFLICT =
-  /orcad_migration_(repository_path|repository_id|project_group_id|folder_workspace_id|dormant_id|dormant_focus|client_state|close_intent_destination|snapshot_destination)_conflict(?::(\S+))?/
+  /orcad_migration_(repository_path|repository_id|project_group_id|folder_workspace_id|dormant_id|dormant_focus|client_state|close_intent_destination|snapshot_destination)_conflict(?::(.+))?/
+
+const LINKED_PROJECT_TERMINALS = /orcad_migration_linked_project_terminals:(.+)/
 
 /** Null for anything that is not such a conflict, including a transient staged claim. */
 export function orcadMigrationConflictGuidance(error: unknown): string | null {
-  const match = CONFLICT.exec(error instanceof Error ? error.message : String(error))
+  const message = error instanceof Error ? error.message : String(error)
+  const terminals = LINKED_PROJECT_TERMINALS.exec(message)
+  if (terminals) {
+    return (
+      `Terminals an older version of Orca started in ${terminals[1]} are still running, and this ` +
+      'host’s managed server already has that project from another Orca desktop. Close those ' +
+      'terminals in that version of Orca or end them on the host, then reconnect.'
+    )
+  }
+  const match = CONFLICT.exec(message)
   if (!match) {
     return null
   }

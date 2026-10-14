@@ -128,11 +128,11 @@ afterEach(async () => {
   rmSync(userDataPath, { recursive: true, force: true })
 })
 
-const convert = (link = true) =>
+const convert = (link = true, census: 'exited' | 'unverifiable' = 'exited') =>
   convertSshTargetToManagedOrcad(userDataPath, {
     sshTargetId: TARGET.id,
     name: 'Managed',
-    censusHost: async () => ({ verdict: 'exited', count: 0 }),
+    censusHost: async () => ({ verdict: census, count: 0 }),
     destinationFor: () => destination,
     ...(link ? { serverRepositoriesFor: async () => server.getRepos() } : {}),
     now: () => new Date('2026-10-14T00:00:00.000Z')
@@ -189,6 +189,38 @@ describe('moving onto a server another desktop already added the same project to
     expect(server.getWorktreeMeta('desktop-repo::/root/migrepo')).toBeUndefined()
     // Kept in this desktop's retained rows for a downgraded build.
     expect(store.getWorktreeMeta('desktop-repo::/root/migrepo')?.comment).toBe('from this desktop')
+  })
+
+  // COMPAT(legacy-relay-bridge): the bridge reattaches a relay pane only into its own tab.
+  describe('with a relay terminal the bridge still serves', () => {
+    const lease = (worktreeId: string) => ({
+      targetId: TARGET.id,
+      ptyId: 'relay-pty',
+      state: 'detached' as const,
+      tabId: 'tab-1',
+      worktreeId,
+      createdAt: 1,
+      updatedAt: 1
+    })
+
+    it('refuses to link the project the terminal runs in, naming it, and moves nothing', async () => {
+      otherDesktopAddsSameCheckout()
+      vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([
+        lease('desktop-repo::/root/migrepo')
+      ])
+      await expect(convert(true, 'unverifiable')).rejects.toThrow(
+        'orcad_migration_linked_project_terminals:/root/migrepo'
+      )
+      expect(serverRepoIds()).toEqual(['server-repo'])
+      expect(listOrcadMigrationSourceCutovers(userDataPath)[0]?.linkedRepositoryIds).toBeUndefined()
+    })
+
+    it('still links when the terminal runs in a project that moves', async () => {
+      otherDesktopAddsSameCheckout()
+      vi.spyOn(store, 'getSshRemotePtyLeases').mockReturnValue([lease('desktop-only::/root/tool')])
+      await expect(convert(true, 'unverifiable')).resolves.toMatchObject({ outcome: 'converted' })
+      expect(serverRepoIds()).toEqual(['desktop-only', 'server-repo'])
+    })
   })
 
   it('stays managed across a restart: the linked rows are not an older build’s change', async () => {

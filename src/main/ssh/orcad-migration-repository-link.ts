@@ -10,6 +10,7 @@
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import type { OrcadMigrationSourceCutover } from '../../shared/orcad-migration-source-cutover'
 import type { Repo } from '../../shared/repo-types'
+import { splitWorktreeId } from '../../shared/worktree/id'
 import type { Store } from '../persistence'
 import {
   abortOrcadMigrationCutover,
@@ -88,6 +89,35 @@ export function linkedOrcadMigrationCutoverPort(args: {
   })
 }
 
+/**
+ * A relay terminal the bridge still serves reattaches only into its own tab, which a linked
+ * project never sends to the server: linking now would strand it out of sight, still running.
+ */
+function assertNoRelayTerminalsIn(
+  store: Pick<Store, 'getSshRemotePtyLeases'>,
+  cutover: OrcadMigrationSourceCutover,
+  linked: readonly string[]
+): void {
+  const bridged = new Set(cutover.bridgedPtyIds ?? [])
+  const running = store
+    .getSshRemotePtyLeases(cutover.sshTargetId)
+    .filter((lease) => bridged.has(lease.ptyId) && lease.state !== 'terminated')
+  const { repositories, folderWorkspaces } = cutover.manifest.payload
+  const moving = new Set([...repositories, ...folderWorkspaces].map((row) => row.id))
+  const blocked = repositories.find(
+    (repo) =>
+      linked.includes(repo.id) &&
+      running.some((lease) => {
+        const owner = lease.worktreeId ? splitWorktreeId(lease.worktreeId)?.repoId : undefined
+        // A lease whose project can't be told may belong to this one, so it holds the link too.
+        return owner === repo.id || owner === undefined || !moving.has(owner)
+      })
+  )
+  if (blocked) {
+    throw new Error(`orcad_migration_linked_project_terminals:${blocked.path}`)
+  }
+}
+
 /** Returns the cutover to commit: the same one, or one re-journaled without the linked projects. */
 export async function linkServerHeldRepositories(args: {
   userDataPath: string
@@ -109,6 +139,7 @@ export async function linkServerHeldRepositories(args: {
   if (linked.length === 0) {
     return cutover
   }
+  assertNoRelayTerminalsIn(args.store, cutover, linked)
   const source = linkedOrcadMigrationCutoverPort(args)
   // The relinked manifest is cut from the source as fenced, so it must still be that source.
   source.verifyFence(cutover)
