@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jiraListPriorities } from './runtime-jira-client'
-import { jiraListPrioritiesForTarget } from './runtime-jira-priority-client'
+import { jiraListPrioritiesForTarget } from './runtime-jira-detail-client'
 import { defaultScopeSource } from '@/lib/default-creation-host'
 
 const transport = vi.hoisted(() => ({ rpc: vi.fn(), local: vi.fn() }))

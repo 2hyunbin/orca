@@ -13,6 +13,10 @@ vi.mock('./authenticated-request', () => ({
   jiraRequestBinary: vi.fn(),
   JiraApiError: class extends Error {}
 }))
+vi.mock('./jira-agile-fields', () => ({
+  getAgileFieldIds: async () => ({}),
+  agileFieldIdList: () => []
+}))
 vi.mock('./request-queue', () => ({ acquire, release }))
 
 import { listIssues, searchIssues } from './jira-issue-search'

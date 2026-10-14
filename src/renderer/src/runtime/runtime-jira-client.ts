@@ -21,10 +21,6 @@ import { callRuntimeRpc } from './runtime-rpc-client'
 import { isRuntimeProviderSearchQueryWithinLimit } from './runtime-provider-search-bounds'
 import { getJiraRuntimeTarget, type RuntimeJiraSettings } from './runtime-jira-target'
 import { parseJiraConnectionStatus } from './runtime-jira-connection-status'
-import { jiraListPrioritiesForTarget } from './runtime-jira-priority-client'
-
-export { jiraListPrioritiesForTarget } from './runtime-jira-priority-client'
-
 import {
   jiraGetIssueForTarget,
   jiraUpdateIssueForTarget,

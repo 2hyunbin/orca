@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { TaskPageJiraIssueList } from './task-page-jira-issue-list'
+import { defaultJiraListColumnIds, visibleJiraListColumns } from './jira-list-columns'
 import type { JiraIssue } from '../../../shared/jira-types'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 
@@ -34,6 +35,7 @@ const onOpenIssue = vi.fn()
 const onStartWorkspace = vi.fn()
 function renderList(workspaces = [first, second]) {
   const props = {
+    columns: visibleJiraListColumns(defaultJiraListColumnIds()),
     issues: [issue],
     selectedIssue: null,
     showSiteContext: false,

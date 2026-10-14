@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { TaskPageJiraIssueList } from './task-page-jira-issue-list'
+import { defaultJiraListColumnIds, visibleJiraListColumns } from './jira-list-columns'
 import type { JiraIssue } from '../../../shared/jira-types'
 const writeClipboardText = vi.fn().mockResolvedValue(undefined)
 const issue: JiraIssue = {
@@ -24,6 +25,7 @@ function renderList() {
   return render(
     <TooltipProvider>
       <TaskPageJiraIssueList
+        columns={visibleJiraListColumns(defaultJiraListColumnIds())}
         issues={[issue]}
         selectedIssue={null}
         showSiteContext={false}

@@ -332,6 +332,8 @@ export function TaskPageJiraIssueList({
             <CollapsibleContent className="divide-y divide-border/50 border-t border-border/50">
               {section.issues.map((issue) => (
                 <JiraIssueRow
+                  getIssueWorkspaces={getIssueWorkspaces}
+                  onOpenWorkspace={onOpenWorkspace}
                   columns={columns}
                   key={`${issue.siteId ?? 'site'}:${issue.id || issue.key}`}
                   formatUpdatedAt={formatUpdatedAt}
