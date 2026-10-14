@@ -101,7 +101,11 @@ describe('reserve ledger queue', () => {
     const capacity = 1_000
     const writer = new ReserveLedgerWriter(database, { queueMax: capacity, log: () => {} })
     const retained = () => {
-      const queue: unknown = Reflect.get(writer, 'queue')
+      const ledger: unknown = writer
+      if (typeof ledger !== 'object' || ledger === null || !('queue' in ledger)) {
+        throw new Error('ledger queue is missing')
+      }
+      const queue = ledger.queue
       if (!Array.isArray(queue)) throw new Error('ledger queue is missing')
       expect(queue.length).toBeLessThanOrEqual(capacity)
       return queue.filter((value) => value !== undefined).length
