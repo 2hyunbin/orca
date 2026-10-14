@@ -485,6 +485,6 @@ function emptySummary(): PlacementSummary {
     supersedes: 0,
     outcomes: {},
     retries: { mapIncomplete: 0, database: 0, paced: 0 },
-    dryRun: { outcomes: {}, latenciesMs: [], cells: {} }
+    dryRun: { outcomes: {}, latenciesMs: [], cells: Object.create(null) }
   }
 }

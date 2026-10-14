@@ -37,7 +37,7 @@ export const SHADOW_COMPARE_LAG_BOUND_MS = 10_000
 // Per class per flush window, so a systemic fault cannot flood the log.
 export const SHADOW_COMPARE_SAMPLES_PER_CLASS = 10
 
-// `countByCell` is keyed by cell, so bounded by the fleet.
+// `countByCell` is keyed by cell, so bounded by the fleet; prototype-free, so any cell id is a key.
 type ShadowCompareCount = { count: number; countByCell: Record<string, number> }
 
 export function classifyShadowSeat(
@@ -153,7 +153,7 @@ export class ShadowDirectoryCompare {
     }
     const verdict = classifyShadowSeat(this.directory, identity, answer, now)
     const key = `${route}\u0000${verdict.class}\u0000${verdict.explained}`
-    const entry = this.counts.get(key) ?? { count: 0, countByCell: {} }
+    const entry = this.counts.get(key) ?? { count: 0, countByCell: Object.create(null) }
     this.counts.set(key, entry)
     entry.count += 1
     for (const cellId of comparedCells(this.directory, identity, answer, verdict)) {
