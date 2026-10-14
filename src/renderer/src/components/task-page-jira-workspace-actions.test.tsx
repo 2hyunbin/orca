@@ -30,6 +30,8 @@ const first = makeWorktree({ id: 'first', repoId: 'api', displayName: 'API fix' 
 const second = makeWorktree({ id: 'second', repoId: 'web', displayName: 'UI fix' })
 // The row receives a scoped lookup so the UI cannot accidentally match bare keys.
 const onOpenWorkspace = vi.fn()
+const onOpenIssue = vi.fn()
+const onStartWorkspace = vi.fn()
 function renderList(workspaces = [first, second]) {
   const props = {
     issues: [issue],
@@ -38,8 +40,8 @@ function renderList(workspaces = [first, second]) {
     statusOrder: null,
     formatUpdatedAt: () => 'Today',
     getStatusTone: () => '',
-    onOpenIssue: vi.fn(),
-    onStartWorkspace: vi.fn(),
+    onOpenIssue,
+    onStartWorkspace,
     getIssueWorkspaces: () => workspaces,
     onOpenWorkspace
   }
@@ -61,11 +63,17 @@ describe('Jira linked workspace actions', () => {
     await user.click(await screen.findByRole('menuitem', { name: /UI fix/ }))
     expect(onOpenWorkspace).toHaveBeenCalledWith(second)
   })
-  it('opens a single linked workspace without starting another', async () => {
+  it('offers existing and new workspaces when exactly one is linked', async () => {
     renderList([first])
-    await userEvent
-      .setup()
-      .click(screen.getByRole('button', { name: 'Open workspace linked to APP-1' }))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: '1 workspace linked to APP-1' }))
+    expect(onOpenWorkspace).not.toHaveBeenCalled()
+    expect(screen.getByRole('menuitem', { name: /API fix/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: 'Start new workspace' }))
+    expect(onStartWorkspace).toHaveBeenCalledWith(issue)
+    expect(onOpenIssue).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '1 workspace linked to APP-1' }))
+    await user.click(screen.getByRole('menuitem', { name: /API fix/ }))
     expect(onOpenWorkspace).toHaveBeenCalledWith(first)
   })
   it('keeps the new-workspace action for an unlinked issue', () => {

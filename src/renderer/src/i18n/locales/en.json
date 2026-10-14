@@ -19995,7 +19995,8 @@
       "empty": "Link a Jira issue to a workspace, or choose another view.",
       "openFailed": "Unable to open the workspace linked to this Jira issue.",
       "mode": "Has Workspace",
-      "search": "Search linked issues"
+      "search": "Search linked issues",
+      "single": "1 workspace linked to {{key}}"
     }
   }
 }

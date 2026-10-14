@@ -7,7 +7,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import type { JiraIssue } from '../../../shared/jira-types'
 import type { Worktree } from '../../../shared/worktree/types'
@@ -25,7 +24,7 @@ export function JiraLinkedWorkspaceAction({
 }): React.JSX.Element {
   const label =
     workspaces.length === 1
-      ? translate('jira.workspace.open', 'Open workspace linked to {{key}}', { key: issue.key })
+      ? translate('jira.workspace.single', '1 workspace linked to {{key}}', { key: issue.key })
       : translate('jira.workspace.count', '{{count}} workspaces linked to {{key}}', {
           count: workspaces.length,
           key: issue.key
@@ -37,21 +36,13 @@ export function JiraLinkedWorkspaceAction({
       aria-label={label}
       onClick={(event) => {
         event.stopPropagation()
-        if (workspaces.length === 1) {
-          onOpenWorkspace(workspaces[0])
-        }
       }}
     >
       <Layers className="size-3.5" />
       <span>{workspaces.length}</span>
     </Button>
   )
-  return workspaces.length === 1 ? (
-    <Tooltip>
-      <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  ) : (
+  return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
