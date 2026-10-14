@@ -156,7 +156,7 @@ describe('first-work rename while a WSL move takes the project', () => {
     })
   })
 
-  it('leaves the folder in place when the move starts during git branch -m', async () => {
+  it('settles the rename but leaves the folder in place when the move starts during git branch -m', async () => {
     resetWslMoveFenceForTests()
     loadWslMoveFence(join(userDataPath, 'unused'))
     const respond = gitResponder({
@@ -179,6 +179,13 @@ describe('first-work rename while a WSL move takes the project', () => {
       cwd: '/repo/wt'
     })
     expect(renameWorktreeFolder).not.toHaveBeenCalled()
+
+    // The branch already has its new name, so the rename is settled: a later event never renames again.
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+    const branchRenames = gitExecFileAsyncMock.mock.calls.filter(
+      ([args]) => args[0] === 'branch' && args[1] === '-m'
+    )
+    expect(branchRenames).toHaveLength(1)
   })
 
   it('renames a project the move is not taking', async () => {

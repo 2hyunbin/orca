@@ -330,12 +330,14 @@ async function runAutoRename(
   const displayLog = updateDisplay
     ? `display "${currentDisplayName ?? ''}" -> "${newDisplayName}"`
     : `display kept ("${currentDisplayName}")`
-  const folderLog = folderRenamed ? '; folder renamed' : ''
+  // The branch already has its new name, so a move that skipped the folder still settles the rename.
+  const folderLog = folderRenamed
+    ? '; folder renamed'
+    : folderBlocked
+      ? '; folder kept (a WSL move started)'
+      : ''
   console.info(
     `[auto-branch-rename] renamed ${currentBranch} -> ${newBranch}; ${displayLog}${folderLog}`
   )
-  if (folderBlocked) {
-    return retry('a WSL move started before the folder rename')
-  }
   return true
 }
