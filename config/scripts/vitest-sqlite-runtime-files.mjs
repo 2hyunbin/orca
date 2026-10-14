@@ -6,6 +6,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/ipc/repos/project-host-setup-wsl-move-fence.test.ts',
   'src/main/ipc/repos/repo-ipc-wsl-move-fence.test.ts',
   'src/main/runtime/runtime-managed-worktree-metadata-wsl-move.test.ts',
+  'src/main/persistence/moving-wsl-projects/wsl-move-session-freeze.test.ts',
   'src/main/acp/acp-structured-host-live-listing.test.ts',
   'src/main/acp/acp-structured-host-configured-default.test.ts',
   'src/main/pi/rpc-configured-default.test.ts',

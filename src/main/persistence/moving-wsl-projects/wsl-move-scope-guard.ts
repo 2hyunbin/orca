@@ -251,6 +251,38 @@ export function isWslMoveWorkspaceBlocked(
   return !!workspaceId && isWslMoveProjectBlocked(store, wslMoveProjectRefForWorkspace(workspaceId))
 }
 
+/**
+ * True once a move has paused the workspace's project: its session must stay as the quiesce left
+ * it. An unreadable journal freezes every WSL project's session, as it fences them.
+ */
+export function isWslMoveWorkspaceSessionFrozen(
+  store: ProjectStore | undefined,
+  workspaceId: string
+): boolean {
+  const fence = loaded?.view
+  const ref = wslMoveProjectRefForWorkspace(workspaceId)
+  if (!ref || !fence) {
+    return false
+  }
+  if (fence.readable) {
+    return inScope(fence.state.sessionFrozen, ref)
+  }
+  return !store || isWslUncPath(projectPath(store, ref) ?? '')
+}
+
+/** Whether any move has a frozen session; lets the hot write path skip the per-workspace scan. */
+export function hasWslMoveFrozenSessions(): boolean {
+  const fence = loaded?.view
+  if (!fence) {
+    return false
+  }
+  if (!fence.readable) {
+    return true
+  }
+  const { sessionFrozen } = fence.state
+  return sessionFrozen.repoIds.size > 0 || sessionFrozen.folderWorkspaceIds.size > 0
+}
+
 export function assertWslMoveWorkspaceWritable(
   store: ProjectStore | undefined,
   workspaceId: string | null | undefined

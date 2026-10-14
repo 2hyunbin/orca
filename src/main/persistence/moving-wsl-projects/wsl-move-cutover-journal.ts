@@ -135,15 +135,26 @@ function assertWslMoveUpdate(
   }
 }
 
+// Before quiesce nothing has reached the destination, so lifting the fence loses nothing.
+const REMOVABLE_IN_FLIGHT_PHASES: ReadonlySet<WslMoveCutover['phase']> = new Set([
+  'prepared',
+  'source-fenced'
+])
+
 /**
- * Only a record that fences nothing goes: one never fenced (`prepared`) or one finished. A move in
- * between keeps its fence until it resumes, or until a cancel proves the destination holds nothing.
+ * Only a record whose move has touched nothing beyond the source goes, or one finished. A move
+ * further along keeps its fence until it resumes, or until a cancel proves the destination holds
+ * nothing.
  */
 export function removeWslMoveCutover(userDataPath: string, migrationId: string): void {
   const record = listWslMoveCutovers(userDataPath).find(
     (entry) => entry.migrationId === migrationId
   )
-  if (record && record.phase !== 'prepared' && !isWslMoveCutoverFinished(record)) {
+  if (
+    record &&
+    !REMOVABLE_IN_FLIGHT_PHASES.has(record.phase) &&
+    !isWslMoveCutoverFinished(record)
+  ) {
     throw new Error('wsl_move_in_flight')
   }
   journals.remove(userDataPath, migrationId)

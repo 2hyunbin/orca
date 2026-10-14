@@ -122,10 +122,16 @@ describe('WSL move journal', () => {
     ).toThrow()
   })
 
-  it('keeps the fence: an in-flight record cannot be removed', () => {
-    writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+  it('keeps the fence: a record past quiesce cannot be removed', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'quiesced'))
     expect(() => removeWslMoveCutover(userDataPath, 'move-1')).toThrow('wsl_move_in_flight')
     expect(listWslMoveCutovers(userDataPath)).toHaveLength(1)
+  })
+
+  it('lifts a fence whose quiesce refused: nothing reached the destination yet', () => {
+    writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+    removeWslMoveCutover(userDataPath, 'move-1')
+    expect(listWslMoveCutovers(userDataPath)).toEqual([])
   })
 
   it('fails closed on a manifest edited without re-signing it', () => {

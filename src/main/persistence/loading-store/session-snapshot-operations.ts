@@ -19,6 +19,7 @@ import {
   withRequiredWorkspaceSessionMaps
 } from './session-host-partitions'
 import { dropClosedTerminalTabs } from '../closed-terminal-tab-write-fence'
+import { keepWslMoveFrozenSessionsForStore } from '../moving-wsl-projects/wsl-move-session-freeze'
 import { scheduleSave } from './write-scheduling'
 import { orderTerminalRowsByTabGroups } from '../../../shared/workspace-layout/terminal-row-order'
 
@@ -101,6 +102,10 @@ export class SessionSnapshotOperations {
     // Why: a unified-tabs patch skips full normalization, so it would bypass the close fence.
     if (Object.hasOwn(patch, 'unifiedTabs')) {
       next = dropClosedTerminalTabs(next)
+    }
+    if (resolved === LOCAL_EXECUTION_HOST_ID) {
+      const { state } = this[sessionSnapshotOperationsContext].runtime
+      next = keepWslMoveFrozenSessionsForStore(next, state.workspaceSession, state)
     }
     this.publishSession(next, resolved)
   }
