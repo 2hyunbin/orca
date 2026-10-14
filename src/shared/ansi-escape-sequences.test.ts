@@ -116,31 +116,36 @@ describe('ordered linear ANSI stripping', () => {
   })
 })
 
-describe('near-cap unfinished 7-bit stripping completion', { concurrent: false }, () => {
-  let context: Awaited<ReturnType<typeof prepareBenchmark>>
-  beforeAll(async () => {
-    context = await prepareBenchmark()
-  }, 15_000)
-  afterAll(async () => {
-    await context?.cleanup()
-  })
-  it.each(['osc', 'dcs'])(
-    'completes %s warmups and a sample under the unchanged child watchdog',
-    async (family) => {
-      const descriptor = createManifest().find(
-        (item) =>
-          item.mode === 'direct' &&
-          item.arm === 'proposed' &&
-          item.family === family &&
-          item.width === 7 &&
-          item.bytes === 63 * 1024 * 1024 &&
-          item.sample === 0
-      )
-      expect(descriptor).toBeDefined()
-      const result = await runDescriptor(context, descriptor)
-      expect(result.status).toBe('completed')
-      expect(result.samples).toHaveLength(1)
-    },
-    15_000
-  )
-})
+// 63 MiB child workloads run only in the dedicated CI log performance job.
+describe.runIf(process.env.ORCA_CHECK_LOG_PERF === '1')(
+  'near-cap unfinished 7-bit stripping completion',
+  { concurrent: false },
+  () => {
+    let context: Awaited<ReturnType<typeof prepareBenchmark>>
+    beforeAll(async () => {
+      context = await prepareBenchmark(process.cwd(), { compareBaseline: false })
+    }, 15_000)
+    afterAll(async () => {
+      await context?.cleanup()
+    })
+    it.each(['osc', 'dcs'])(
+      'completes %s warmups and a sample under the unchanged child watchdog',
+      async (family) => {
+        const descriptor = createManifest().find(
+          (item) =>
+            item.mode === 'direct' &&
+            item.arm === 'proposed' &&
+            item.family === family &&
+            item.width === 7 &&
+            item.bytes === 63 * 1024 * 1024 &&
+            item.sample === 0
+        )
+        expect(descriptor).toBeDefined()
+        const result = await runDescriptor(context, descriptor)
+        expect(result.status).toBe('completed')
+        expect(result.samples).toHaveLength(1)
+      },
+      15_000
+    )
+  }
+)

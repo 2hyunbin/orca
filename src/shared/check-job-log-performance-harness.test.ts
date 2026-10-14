@@ -188,25 +188,23 @@ const malformedProtocols = (descriptor: typeof adverse | typeof watchdog) => {
 }
 
 describe('performance watchdog failure precedence and completeness', () => {
-  it('requires an explicitly declared CI-relative baseline snapshot', async () => {
-    vi.stubEnv('CI', 'false')
-    vi.stubEnv('ORCA_CHECK_LOG_BASELINE_DIR', 'node_modules/.cache/check-log-baseline')
-    await expect(prepareBenchmark()).rejects.toThrow('CI-only relative directory')
-    vi.stubEnv('CI', 'true')
-    vi.stubEnv('ORCA_CHECK_LOG_BASELINE_DIR', process.cwd())
-    await expect(prepareBenchmark()).rejects.toThrow('CI-only relative directory')
-    expect(launcher).not.toHaveBeenCalled()
+  it('prepares current implementation checks without Git history', async () => {
+    const prepared = await prepareBenchmark(process.cwd(), { compareBaseline: false })
+    try {
+      expect(launcher).not.toHaveBeenCalled()
+      expect(Object.keys(prepared.bundles).sort()).toEqual(['proposed', 'proposed-observed'])
+      expect(prepared.identity.baselineSourceHashes).toEqual({})
+    } finally {
+      await prepared.cleanup()
+    }
   })
-  it('rejects changed historical source in the declared snapshot', async () => {
-    vi.stubEnv('CI', 'true')
-    vi.stubEnv('ORCA_CHECK_LOG_BASELINE_DIR', 'node_modules/.cache/check-log-baseline')
+  it('rejects changed historical source in the manual comparison', async () => {
     const success = { code: 0, signal: null, timedOut: false, outputTruncated: false }
-    launcher.mockResolvedValueOnce({ ...success, stdout: `${BASELINE_REF}\n` })
     launcher.mockResolvedValueOnce({ ...success, stdout: 'changed historical ANSI source' })
     await expect(prepareBenchmark()).rejects.toThrow(
       'Baseline source changed: ansi-escape-sequences.ts'
     )
-    expect(launcher).toHaveBeenCalledTimes(2)
+    expect(launcher).toHaveBeenCalledTimes(1)
   })
   describe.each(['adverse', 'watchdog'])('%s protocol framing', (branch) => {
     const descriptor = branch === 'adverse' ? adverse : watchdog

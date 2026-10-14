@@ -46,41 +46,24 @@ export function enterStrip() { if (phase) { process.stdout.write(JSON.stringify(
 export function resetObservations() { for (const key of Object.keys(counters)) delete counters[key]; }
 `
 
-export async function prepareBenchmark(root = process.cwd(), { profile = false } = {}) {
-  const snapshot = process.env.ORCA_CHECK_LOG_BASELINE_DIR
-  assert(
-    !snapshot || (process.env.CI === 'true' && !path.isAbsolute(snapshot)),
-    'Baseline snapshot must be a CI-only relative directory'
-  )
-  const baselineRoot = snapshot ? path.resolve(root, snapshot) : root
+export async function prepareBenchmark(
+  root = process.cwd(),
+  { profile = false, compareBaseline = true } = {}
+) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'orca-check-log-benchmark-'))
   try {
-    if (snapshot) {
-      const revision = await runProcess({
-        program: 'git',
-        args: ['rev-parse', 'HEAD'],
-        cwd: baselineRoot,
-        timeoutMs: 10_000,
-        maxOutputBytes: 64 * 1024,
-        env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
-      })
-      assert(
-        revision.code === 0 && !revision.signal && !revision.timedOut && !revision.outputTruncated
-      )
-      assert.equal(revision.stdout.trim(), BASELINE_REF, 'Baseline snapshot ref changed')
-    }
     const baseline = new Map()
     const current = new Map()
     for (const name of [...shared, 'check-job-log-excerpt.ts']) {
       const filename = path.join(root, 'src', 'shared', name)
       current.set(name, await readFile(filename, 'utf8'))
-      if (!shared.includes(name)) {
+      if (!compareBaseline || !shared.includes(name)) {
         continue
       }
       const result = await runProcess({
         program: 'git',
         args: ['show', `${BASELINE_REF}:src/shared/${name}`],
-        cwd: baselineRoot,
+        cwd: root,
         timeoutMs: 10_000,
         maxOutputBytes: 64 * 1024,
         env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
@@ -123,7 +106,7 @@ export async function prepareBenchmark(root = process.cwd(), { profile = false }
       )
     }
     const bundles = {}
-    for (const arm of ['baseline', 'proposed']) {
+    for (const arm of compareBaseline ? ['baseline', 'proposed'] : ['proposed']) {
       for (const instrumented of arm === 'baseline' ? [false, true, 'negative'] : [false, true]) {
         const sources = arm === 'baseline' ? baseline : current
         const result = await build({
@@ -421,7 +404,7 @@ export function median(values) {
   return sorted[Math.floor(sorted.length / 2)]
 }
 
-export function auditResults(manifest, records) {
+export function auditResults(manifest, records, { compareBaseline = true } = {}) {
   assert.equal(
     new Set(manifest.map((item) => item.id)).size,
     manifest.length,
@@ -453,13 +436,15 @@ export function auditResults(manifest, records) {
   }
   auditBaselineCensoring(manifest, byId)
   const differentials = records.filter((record) => record.mode === 'differential')
-  assert.equal(differentials.length, 2)
+  assert.equal(differentials.length, compareBaseline ? 2 : 1)
   assert.equal(differentials[0].cases, 5126)
-  assert.equal(
-    differentials[0].outputHash,
-    differentials[1].outputHash,
-    'Plain/LF differential changed'
-  )
+  if (compareBaseline) {
+    assert.equal(
+      differentials[0].outputHash,
+      differentials[1].outputHash,
+      'Plain/LF differential changed'
+    )
+  }
   const candidateGroups = new Map()
   for (const descriptor of manifest.filter(
     (item) => item.mode === 'coverage' && item.arm === 'proposed' && item.bytes >= 32 * 1024
@@ -516,7 +501,7 @@ export function auditResults(manifest, records) {
     assert(record.growth.heapUsed < pinned.growth.heapUsed / 8, 'Owned strings pin raw parents')
   }
   const ordinary = []
-  for (const family of ['actual', 'fixture', 'short-lines']) {
+  for (const family of compareBaseline ? ['actual', 'fixture', 'short-lines'] : []) {
     for (const bytes of new Set(
       manifest
         .filter((item) => item.mode === 'cpu' && item.family === family)
@@ -559,7 +544,7 @@ export function auditResults(manifest, records) {
   }
 }
 
-// The CLI driver drains all descriptors; Vitest grants each descriptor its own outer budget.
+// Manual before/after comparison requires the pinned baseline in local Git history.
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   const context = await prepareBenchmark()
   const fixturePath = path.join(
