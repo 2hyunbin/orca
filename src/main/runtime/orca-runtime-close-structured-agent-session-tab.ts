@@ -23,6 +23,7 @@ import {
 } from './agent-session-tab-layout'
 import { structuredSessionTabRetired } from './structured-worker-custody'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
+import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 
 export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWithCloseMobileSessionTab {
   protected async closeStructuredAgentSessionTab(
@@ -293,9 +294,17 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
     worktreeId: string,
     chat: { sessionId: string; agent: StructuredAgentId }
   ): void {
-    this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) =>
-      withOpenedAgentSessionTab(hostId, session, worktreeId, chat)
-    )
+    this.saveWindowlessAgentSessionTabLayout(worktreeId, (hostId, session) => {
+      // The id the window, the index and status updates all address the chat's tab by.
+      const tabId =
+        getStructuredAgentSessionHost()?.getSessionTabId?.(chat.sessionId) ??
+        structuredAgentSessionTabId(chat.sessionId)
+      return withOpenedAgentSessionTab(hostId, session, worktreeId, {
+        sessionId: chat.sessionId,
+        agent: chat.agent,
+        tabId
+      })
+    })
   }
 
   /**
@@ -304,7 +313,10 @@ export class OrcaRuntimeWithCloseStructuredAgentSessionTab extends OrcaRuntimeWi
    */
   protected removeWindowlessAgentSessionTab(sessionId: string, settled = false): void {
     const host = getStructuredAgentSessionHost()
-    if (!settled && (!host || !structuredSessionTabRetired(host, sessionId))) {
+    if (
+      this.getAvailableAuthoritativeWindow() ||
+      (!settled && (!host || !structuredSessionTabRetired(host, sessionId)))
+    ) {
       return
     }
     for (const { worktreeId, hostId } of this.savedAgentSessionTabs().get(sessionId) ?? []) {

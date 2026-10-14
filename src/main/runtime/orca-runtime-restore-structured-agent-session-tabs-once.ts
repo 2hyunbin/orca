@@ -66,8 +66,9 @@ export class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRu
       this.saveWindowlessAgentSessionTab(session.workspaceId, session)
       this.projectStructuredAgentSessionTab({ ...session, activate: false, notify: false })
     }
-    // A chat whose record went missing between runs leaves the index with no hidden notice; its saved
-    // tab goes the same way. One a newer Orca wrote is only unreadable here, so it keeps its tab.
+    // A saved tab the index omits outlived its close: the process died between the index commit and
+    // the scheduled layout save, or an older build closed it. Valid only while both records exist.
+    // One a newer Orca wrote is only unreadable here, so it keeps its tab.
     for (const sessionId of this.savedAgentSessionTabs().keys()) {
       if (!host?.deps?.store?.isSessionUnreadable?.(sessionId)) {
         this.removeWindowlessAgentSessionTab(sessionId)

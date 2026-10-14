@@ -16,7 +16,7 @@ export function withOpenedAgentSessionTab(
   hostId: ExecutionHostId,
   session: WorkspaceSessionState,
   worktreeId: string,
-  chat: { sessionId: string; agent: AgentType }
+  chat: { sessionId: string; agent: AgentType; tabId: string }
 ): WorkspaceSessionState | null {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
   const workspace = loaded.layout.workspaces[worktreeId]
@@ -42,6 +42,7 @@ export function withOpenedAgentSessionTab(
     {
       type: 'openAgentSessionTab',
       workspace: worktreeId,
+      tabId: chat.tabId,
       sessionId: chat.sessionId,
       agent: chat.agent,
       ...(groupId ? { groupId } : {})

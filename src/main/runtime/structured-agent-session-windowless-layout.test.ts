@@ -44,7 +44,7 @@ function useChatHost(fake: Record<string, unknown>): void {
 }
 
 function chat(sessionId: string) {
-  return { sessionId, agent: 'codex' as const }
+  return { sessionId, agent: 'codex' as const, tabId: `structured-agent-session-${sessionId}` }
 }
 
 function savedChatIds(state: { session: WorkspaceSessionState }): string[] {
@@ -62,6 +62,28 @@ describe('a chat tab on a host with no window', () => {
     await runtime.publishStructuredAgentSessionTab({ ...chat, activate: true })
 
     expect(savedChatIds(state)).toEqual(['chat-1'])
+  })
+
+  it("saves the tab under the chat's own tab id, the one status and attention address", async () => {
+    const { runtime, state } = createRuntime()
+    await runtime.publishStructuredAgentSessionTab({
+      workspaceId: WT,
+      sessionId: 'chat-1',
+      agent: 'codex',
+      activate: true
+    })
+    useChatHost({ getSessionTabId: (sessionId: string) => `reserved-${sessionId}` })
+    await runtime.publishStructuredAgentSessionTab({
+      workspaceId: WT,
+      sessionId: 'chat-2',
+      agent: 'codex',
+      activate: true
+    })
+
+    expect(state.session.unifiedTabs?.[WT]?.map((tab) => tab.id)).toEqual([
+      'structured-agent-session-chat-1',
+      'reserved-chat-2'
+    ])
   })
 
   it('leaves the layout when the index hides the chat, on any close path', async () => {
