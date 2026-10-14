@@ -123,3 +123,28 @@ export function createMigrationJournalDirectory<T extends { migrationId: string 
     }
   }
 }
+
+/**
+ * Oldest first: the records of one source as a single chain of delta moves, each naming the
+ * migration it extends. Throws `unreadable` when they fork or leave a gap.
+ */
+export function orderMigrationJournalChain<
+  T extends { migrationId: string; supersedesMigrationId?: string }
+>(matches: readonly T[], unreadable: (detail: string) => Error, label: string): T[] {
+  const superseded = new Set(matches.map((entry) => entry.supersedesMigrationId))
+  const heads = matches.filter((entry) => !superseded.has(entry.migrationId))
+  if (heads.length > 1) {
+    throw unreadable(`${heads.length} journals name ${label}`)
+  }
+  const byId = new Map(matches.map((entry) => [entry.migrationId, entry]))
+  const chain: T[] = []
+  let entry: T | undefined = heads[0]
+  while (entry && chain.length <= matches.length) {
+    chain.unshift(entry)
+    entry = entry.supersedesMigrationId ? byId.get(entry.supersedesMigrationId) : undefined
+  }
+  if (chain.length !== matches.length) {
+    throw unreadable(`the journals naming ${label} do not form one chain`)
+  }
+  return chain
+}

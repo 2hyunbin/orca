@@ -12,7 +12,10 @@ import {
   parseOrcadMigrationSourceCutover,
   type OrcadMigrationSourceCutover
 } from '../../shared/orcad-migration-source-cutover'
-import { createMigrationJournalDirectory } from '../persistence/migrating-orcad-catalog/migration-journal-directory'
+import {
+  createMigrationJournalDirectory,
+  orderMigrationJournalChain
+} from '../persistence/migrating-orcad-catalog/migration-journal-directory'
 
 export class OrcadMigrationCutoverJournalUnreadableError extends Error {
   constructor(detail: string) {
@@ -68,26 +71,11 @@ export function listOrcadMigrationCutoverChainForTarget(
   const matches = listOrcadMigrationSourceCutovers(userDataPath).filter(
     (cutover) => cutover.sshTargetId === sshTargetId
   )
-  const superseded = new Set(matches.map((cutover) => cutover.supersedesMigrationId))
-  const heads = matches.filter((cutover) => !superseded.has(cutover.migrationId))
-  if (heads.length > 1) {
-    throw new OrcadMigrationCutoverJournalUnreadableError(
-      `${heads.length} journals name SSH target ${sshTargetId}`
-    )
-  }
-  const byId = new Map(matches.map((cutover) => [cutover.migrationId, cutover]))
-  const chain: OrcadMigrationSourceCutover[] = []
-  let entry: OrcadMigrationSourceCutover | undefined = heads[0]
-  while (entry && chain.length <= matches.length) {
-    chain.unshift(entry)
-    entry = entry.supersedesMigrationId ? byId.get(entry.supersedesMigrationId) : undefined
-  }
-  if (chain.length !== matches.length) {
-    throw new OrcadMigrationCutoverJournalUnreadableError(
-      `the journals naming SSH target ${sshTargetId} do not form one chain`
-    )
-  }
-  return chain
+  return orderMigrationJournalChain(
+    matches,
+    (detail) => new OrcadMigrationCutoverJournalUnreadableError(detail),
+    `SSH target ${sshTargetId}`
+  )
 }
 
 /** Durable before it returns: a fence written after this always has its journal on disk. */
