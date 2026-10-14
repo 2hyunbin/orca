@@ -10,9 +10,16 @@ import {
 } from './wsl-move-cutover-journal'
 import {
   WslMoveProjectFencedError,
+  assertWslMoveProjectWritable,
+  assertWslMoveRepoWritable,
+  assertWslMoveReposWritable,
   assertWslMoveWorkspaceWritable,
+  isPassiveWorkspaceUpdate,
   isWslMoveFenceLoaded,
+  isWslMoveProjectBlocked,
+  isWslMoveSourceHost,
   loadWslMoveFence,
+  shouldDropWslMoveProjectUpdate,
   resetWslMoveFenceForTests,
   withoutWslMovedProjects,
   wslMoveProjectRefForWorkspace
@@ -134,5 +141,80 @@ describe('WSL move scope guard', () => {
     expect(writable('repo-win::/x')).not.toThrow()
     const rows = [{ id: 'repo-wsl' }]
     expect(withoutWslMovedProjects(rows, asRepo)).toEqual(rows)
+  })
+})
+
+describe('WSL move edit guard', () => {
+  const fenceRepo1AndNotes = () =>
+    writeWslMoveCutover(
+      userDataPath,
+      cutover('move-1', 'source-fenced', {}, { repoIds: ['repo-1'], folderWorkspaceIds: ['notes'] })
+    )
+
+  it.each([
+    [{ isUnread: true }, true],
+    [{ lastActivityAt: 1, isUnread: false }, true],
+    [{}, false],
+    [{ isUnread: true, displayName: 'x' }, false],
+    [{ comment: 'x' }, false]
+  ])('treats %o as passive: %s', (updates, passive) => {
+    expect(isPassiveWorkspaceUpdate(updates)).toBe(passive)
+  })
+
+  it('drops passive updates to a blocked project and refuses user edits', () => {
+    fenceRepo1AndNotes()
+    const notes = { folderWorkspaceId: 'notes' }
+    expect(shouldDropWslMoveProjectUpdate(undefined, notes, { isUnread: true })).toBe(true)
+    expect(() => shouldDropWslMoveProjectUpdate(undefined, notes, { name: 'x' })).toThrow(
+      WslMoveProjectFencedError
+    )
+    expect(shouldDropWslMoveProjectUpdate(undefined, { repoId: 'repo-2' }, { name: 'x' })).toBe(
+      false
+    )
+  })
+
+  it('refuses a blocked project, and a catalog project when any source repo is blocked', () => {
+    fenceRepo1AndNotes()
+    expect(() => assertWslMoveProjectWritable(undefined, { repoId: 'repo-1' })).toThrow(
+      WslMoveProjectFencedError
+    )
+    expect(() => assertWslMoveProjectWritable(undefined, { repoId: 'repo-2' })).not.toThrow()
+    expect(() => assertWslMoveReposWritable(undefined, ['repo-2', 'repo-1'])).toThrow(
+      WslMoveProjectFencedError
+    )
+    expect(() => assertWslMoveReposWritable(undefined, ['repo-2'])).not.toThrow()
+  })
+
+  it('only fences a repo row that runs on this machine', () => {
+    fenceRepo1AndNotes()
+    expect(isWslMoveSourceHost(undefined)).toBe(true)
+    expect(isWslMoveSourceHost('local')).toBe(true)
+    expect(isWslMoveSourceHost('ssh:box')).toBe(false)
+    expect(() => assertWslMoveRepoWritable(undefined, { id: 'repo-1' })).toThrow(
+      WslMoveProjectFencedError
+    )
+    expect(() =>
+      assertWslMoveRepoWritable(undefined, { id: 'repo-1', executionHostId: 'ssh:box' })
+    ).not.toThrow()
+  })
+
+  it('finds a folder path through the list when the store has no single lookup', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const directory = wslMoveJournalDirectory(userDataPath)
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'move-1.json'), '{not json')
+    loadWslMoveFence(userDataPath)
+    const listOnly = {
+      getRepo: () => undefined,
+      getFolderWorkspaces: () => [
+        { id: 'wsl-notes', folderPath: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\notes' },
+        { id: 'win-notes', folderPath: 'C:\\notes' }
+      ]
+    }
+    expect(isWslMoveProjectBlocked(listOnly, { folderWorkspaceId: 'wsl-notes' })).toBe(true)
+    expect(isWslMoveProjectBlocked(listOnly, { folderWorkspaceId: 'win-notes' })).toBe(false)
+    expect(isWslMoveProjectBlocked({ getRepo: () => undefined }, { folderWorkspaceId: 'x' })).toBe(
+      false
+    )
   })
 })

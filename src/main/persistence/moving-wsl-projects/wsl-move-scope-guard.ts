@@ -12,6 +12,7 @@ import { resolve } from 'node:path'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { isWslUncPath } from '../../../shared/wsl-paths'
+import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { onWslMoveJournalChange } from './wsl-move-cutover-journal'
 import { resolveWslMoveFence, type WslMoveFenceState } from './wsl-move-fence'
 
@@ -28,7 +29,9 @@ export class WslMoveProjectFencedError extends Error {
 /** Only the project paths, read when the journal is unreadable. */
 type ProjectStore = {
   getRepo: (repoId: string) => { path: string } | undefined
-  getFolderWorkspace: (folderWorkspaceId: string) => { folderPath: string } | undefined
+  // RuntimeStore has only the list.
+  getFolderWorkspace?: (folderWorkspaceId: string) => { folderPath: string } | undefined
+  getFolderWorkspaces?: () => readonly { id: string; folderPath: string }[]
 }
 
 /** An unreadable journal fences every WSL project and hides none: never edit, never lose a row. */
@@ -90,9 +93,14 @@ function inScope(scope: WslMoveFenceState['fenced'], ref: WslMoveProjectRef): bo
 }
 
 function projectPath(store: ProjectStore, ref: WslMoveProjectRef): string | undefined {
-  return 'repoId' in ref
-    ? store.getRepo(ref.repoId)?.path
-    : store.getFolderWorkspace(ref.folderWorkspaceId)?.folderPath
+  if ('repoId' in ref) {
+    return store.getRepo(ref.repoId)?.path
+  }
+  const id = ref.folderWorkspaceId
+  if (store.getFolderWorkspace) {
+    return store.getFolderWorkspace(id)?.folderPath
+  }
+  return store.getFolderWorkspaces?.().find((folder) => folder.id === id)?.folderPath
 }
 
 /**
@@ -111,6 +119,63 @@ export function isWslMoveProjectBlocked(
     return inScope(fence.state.fenced, ref) || inScope(fence.state.hidden, ref)
   }
   return !store || isWslUncPath(projectPath(store, ref) ?? '')
+}
+
+export function assertWslMoveProjectWritable(
+  store: ProjectStore | undefined,
+  ref: WslMoveProjectRef | null
+): void {
+  if (isWslMoveProjectBlocked(store, ref)) {
+    throw new WslMoveProjectFencedError()
+  }
+}
+
+// Background bookkeeping a move drops quietly; anything else is a user edit and is refused.
+const PASSIVE_WORKSPACE_UPDATE_KEYS: ReadonlySet<string> = new Set(['isUnread', 'lastActivityAt'])
+
+export function isPassiveWorkspaceUpdate(updates: object): boolean {
+  const keys = Object.keys(updates)
+  return keys.length > 0 && keys.every((key) => PASSIVE_WORKSPACE_UPDATE_KEYS.has(key))
+}
+
+/** A move only takes local projects; the same repo id on another host is a different project. */
+export function isWslMoveSourceHost(hostId: string | null | undefined): boolean {
+  return !hostId || hostId === LOCAL_EXECUTION_HOST_ID
+}
+
+/** For entry points that already hold the repo row, which names its host. */
+export function assertWslMoveRepoWritable(
+  store: ProjectStore | undefined,
+  repo: { id: string; connectionId?: string | null; executionHostId?: string | null }
+): void {
+  if (isWslMoveSourceHost(getRepoExecutionHostId(repo))) {
+    assertWslMoveProjectWritable(store, { repoId: repo.id })
+  }
+}
+
+/** A catalog project spans its source repos; a move taking any of them freezes the whole project. */
+export function assertWslMoveReposWritable(
+  store: ProjectStore | undefined,
+  repoIds: readonly string[]
+): void {
+  for (const repoId of repoIds) {
+    assertWslMoveProjectWritable(store, { repoId })
+  }
+}
+
+/** True when the caller should drop the update quietly; throws for a user edit to a blocked project. */
+export function shouldDropWslMoveProjectUpdate(
+  store: ProjectStore | undefined,
+  ref: WslMoveProjectRef | null,
+  updates: object
+): boolean {
+  if (!isWslMoveProjectBlocked(store, ref)) {
+    return false
+  }
+  if (!isPassiveWorkspaceUpdate(updates)) {
+    throw new WslMoveProjectFencedError()
+  }
+  return true
 }
 
 export function isWslMoveWorkspaceBlocked(

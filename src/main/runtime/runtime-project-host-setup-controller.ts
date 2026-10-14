@@ -34,6 +34,7 @@ import {
   countRepoWorkspacesWithMetadata,
   describeProjectRemovalRefusal
 } from './project-removal-impact'
+import { assertWslMoveReposWritable } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
@@ -73,6 +74,8 @@ export class RuntimeProjectHostSetupController {
     if (!store?.updateProject) {
       throw new Error('runtime_unavailable')
     }
+    const existing = store.getProjects?.().find((entry) => entry.id === projectId)
+    assertWslMoveReposWritable(store, existing?.sourceRepoIds ?? [])
     const project = store.updateProject(projectId, updates)
     if (!project) {
       throw new Error(`Project not found: ${projectId}`)

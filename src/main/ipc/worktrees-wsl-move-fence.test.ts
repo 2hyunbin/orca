@@ -1,0 +1,107 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { wslMoveCutoverFixture as cutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
+import { writeWslMoveCutover } from '../persistence/moving-wsl-projects/wsl-move-cutover-journal'
+import {
+  WslMoveProjectFencedError,
+  loadWslMoveFence,
+  resetWslMoveFenceForTests
+} from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
+import {
+  addWorktreeMock,
+  assertWorktreeCleanForRemovalMock,
+  gitExecFileAsyncMock,
+  killAllProcessesForWorktreeMock,
+  listWorktreesMock,
+  removeWorktreeMock
+} from './worktrees-test-module-mocks'
+import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
+
+vi.mock('electron', async () =>
+  (await import('./worktrees-test-module-mocks')).electronModuleMock()
+)
+vi.mock('../git/worktree', async () =>
+  (await import('./worktrees-test-module-mocks')).gitWorktreeModuleMock()
+)
+vi.mock('../git/runner', async () =>
+  (await import('./worktrees-test-module-mocks')).gitRunnerModuleMock()
+)
+vi.mock('../git/repo', async () =>
+  (await import('./worktrees-test-module-mocks')).gitRepoModuleMock()
+)
+vi.mock('../runtime/worktree-teardown', async () =>
+  (await import('./worktrees-test-module-mocks')).worktreeTeardownModuleMock()
+)
+vi.mock('./pty/provider/registry', async () =>
+  (await import('./worktrees-test-module-mocks')).ptyRegistryModuleMock()
+)
+vi.mock('./pty/provider/state-cleanup', async () =>
+  (await import('./worktrees-test-module-mocks')).ptyStateCleanupModuleMock()
+)
+
+const MOVING = 'repo-1::/workspace/feature-wt'
+const STAYING = 'repo-2::/workspace/other-wt'
+
+let userDataPath: string
+beforeEach(() => {
+  setupWorktreeHandlers()
+  userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-worktree-ipc-'))
+  loadWslMoveFence(userDataPath)
+  writeWslMoveCutover(userDataPath, cutover('move-1', 'source-fenced'))
+})
+afterEach(() => {
+  resetWslMoveFenceForTests()
+  rmSync(userDataPath, { recursive: true, force: true })
+})
+
+describe('worktree IPC under a WSL move', () => {
+  it('refuses a create before any Git work', async () => {
+    await expect(
+      handlers['worktrees:create'](null, { repoId: 'repo-1', name: 'new-feature' })
+    ).rejects.toBeInstanceOf(WslMoveProjectFencedError)
+    expect(addWorktreeMock).not.toHaveBeenCalled()
+    expect(listWorktreesMock).not.toHaveBeenCalled()
+    expect(gitExecFileAsyncMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a delete before any teardown or Git work', async () => {
+    await expect(handlers['worktrees:remove'](null, { worktreeId: MOVING })).rejects.toBeInstanceOf(
+      WslMoveProjectFencedError
+    )
+    expect(assertWorktreeCleanForRemovalMock).not.toHaveBeenCalled()
+    expect(killAllProcessesForWorktreeMock).not.toHaveBeenCalled()
+    expect(removeWorktreeMock).not.toHaveBeenCalled()
+    expect(store.removeWorktreeMeta).not.toHaveBeenCalled()
+  })
+
+  it('refuses a forget before touching metadata', async () => {
+    await expect(
+      handlers['worktrees:forgetLocal'](null, { worktreeId: MOVING })
+    ).rejects.toBeInstanceOf(WslMoveProjectFencedError)
+    expect(killAllProcessesForWorktreeMock).not.toHaveBeenCalled()
+    expect(store.removeWorktreeMeta).not.toHaveBeenCalled()
+  })
+
+  it('drops passive metadata quietly and refuses a user edit', () => {
+    const updateMeta = (worktreeId: string, updates: object) =>
+      handlers['worktrees:updateMeta'](null, { worktreeId, updates })
+    expect(updateMeta(MOVING, { isUnread: true })).toBeNull()
+    expect(() => updateMeta(MOVING, { comment: 'x' })).toThrow(WslMoveProjectFencedError)
+    expect(store.setWorktreeMeta).not.toHaveBeenCalled()
+    updateMeta(STAYING, { comment: 'x' })
+    expect(store.setWorktreeMeta).toHaveBeenCalledWith(STAYING, { comment: 'x' })
+  })
+
+  it('drops the moving worktree from a sort-order batch', async () => {
+    store.getWorktreeMeta.mockImplementation((id) =>
+      id === MOVING ? { sortOrder: 1 } : id === STAYING ? { sortOrder: 2 } : undefined
+    )
+    await handlers['worktrees:persistSortOrder'](null, { orderedIds: [MOVING, STAYING] })
+    expect(store.setWorktreeMeta).toHaveBeenCalledTimes(1)
+    expect(store.setWorktreeMeta).toHaveBeenCalledWith(STAYING, {
+      sortOrder: expect.any(Number)
+    })
+  })
+})

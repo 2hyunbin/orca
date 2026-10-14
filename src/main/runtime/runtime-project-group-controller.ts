@@ -19,6 +19,10 @@ import {
   runtimeVisibleProjectGroups
 } from './runtime-visible-catalog'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
+import {
+  assertWslMoveProjectWritable,
+  shouldDropWslMoveProjectUpdate
+} from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
 
 type RuntimeProjectGroupDependencies = {
   getStore: () => RuntimeStore | null
@@ -128,6 +132,7 @@ export class RuntimeProjectGroupController {
       throw new Error('runtime_unavailable')
     }
     const repo = await this.deps.resolveRepo(repoSelector)
+    assertWslMoveProjectWritable(store, { repoId: repo.id })
     const moved = store.moveProjectToGroup(repo.id, groupId, order)
     if (!moved) {
       throw new Error('repo_not_found')
@@ -199,6 +204,9 @@ export class RuntimeProjectGroupController {
     if (!store?.updateFolderWorkspace) {
       throw new Error('runtime_unavailable')
     }
+    if (shouldDropWslMoveProjectUpdate(store, { folderWorkspaceId }, updates)) {
+      return store.getFolderWorkspaces?.().find((entry) => entry.id === folderWorkspaceId) ?? null
+    }
     if (typeof updates.folderPath === 'string' && updates.folderPath.trim().length > 0) {
       const workspace = store
         .getFolderWorkspaces?.()
@@ -231,6 +239,7 @@ export class RuntimeProjectGroupController {
     if (!store?.removeFolderWorkspace) {
       throw new Error('runtime_unavailable')
     }
+    assertWslMoveProjectWritable(store, { folderWorkspaceId })
     const workspace = store.getFolderWorkspaces?.().find((entry) => entry.id === folderWorkspaceId)
     if (workspace) {
       const worktreeId = folderWorkspaceKey(folderWorkspaceId)
