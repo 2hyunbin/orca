@@ -241,6 +241,7 @@ export function createSetActiveWorktree(
     if (worktreeId && workspaceScope?.type !== 'folder') {
       get().refreshGitHubForWorktreeIfStale(worktreeId)
     }
+
     return true
   }
 }

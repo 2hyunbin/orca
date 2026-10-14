@@ -17,10 +17,6 @@ vi.mock('@/lib/unread-badge-count', async (importOriginal) => {
 
 import { useAppStore } from '@/store'
 import { clearUnreadDockBadgeCount, useUnreadDockBadge } from './useUnreadDockBadge'
-import {
-  clearWorkspaceUnreadFlag,
-  markWorkspaceUnreadFlag
-} from '@/store/slices/workspace-attention/workspace-unread-flag'
 
 const initialState = useAppStore.getInitialState()
 
@@ -115,11 +111,25 @@ describe('useUnreadDockBadge', () => {
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
 
-    act(() => markWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, worktree.id))
+    act(() =>
+      useAppStore.getState().markAgentAttentionUnread({
+        workspaceId: worktree.id,
+        subjectKey: null,
+        groupId: null,
+        reason: 'agent-completion'
+      })
+    )
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(3)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)
 
-    act(() => clearWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, worktree.id))
+    act(() =>
+      useAppStore
+        .getState()
+        .readOnScreenAttention(
+          { workspaceIds: [worktree.id], targets: [] },
+          { screenArrived: true }
+        )
+    )
     expect(getUnreadBadgeCount).toHaveBeenCalledTimes(4)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(0)
   })
@@ -154,13 +164,23 @@ describe('useUnreadDockBadge', () => {
     expect(renders).toBe(rendersAfterMount)
 
     act(() =>
-      markWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, 'repo::worktree-0')
+      useAppStore.getState().markAgentAttentionUnread({
+        workspaceId: 'repo::worktree-0',
+        subjectKey: null,
+        groupId: null,
+        reason: 'agent-completion'
+      })
     )
     expect(renders).toBe(rendersAfterMount + 1)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(2)
 
     act(() =>
-      clearWorkspaceUnreadFlag(useAppStore.setState, useAppStore.getState, 'repo::worktree-0')
+      useAppStore
+        .getState()
+        .readOnScreenAttention(
+          { workspaceIds: ['repo::worktree-0'], targets: [] },
+          { screenArrived: true }
+        )
     )
     expect(renders).toBe(rendersAfterMount + 2)
     expect(setUnreadDockBadgeCount).toHaveBeenLastCalledWith(1)

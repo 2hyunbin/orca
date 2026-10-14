@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import type { useAppStore } from '@/store'
-import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 import type { Repo } from '../../../../shared/repo-types'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceStatusDefinition, Worktree } from '../../../../shared/worktree/types'
@@ -51,7 +50,7 @@ export function useWorktreeContextMenuCommands(args: {
   const handleToggleRead = useCallback(() => {
     args.setWorkspaceUnreadByUser(
       args.worktree.id,
-      !isWorkspaceUnread(args.worktree),
+      !args.worktree.isUnread,
       args.worktree.hostId ?? 'local'
     )
   }, [args])

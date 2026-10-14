@@ -199,8 +199,7 @@ const markers = (record: Record<string, unknown>): string =>
     .map(([key, reason]) => `${shortId(key)}=${String(reason)}`)
     .join(' ') || '-'
 
-// Why not exported: an exported focus reader named `observe` would make every `.observe(` call in
-// the renderer count as a focus read in check-focus-read-ratchet.
+// dockCount stays unexported; check-focus-read-ratchet counts exported readers named observe.
 const dockCount = (s: AppState): number => createUnreadBadgeCountSelector()(s)
 
 /** One compact line per observable, so a scenario step reads as a diffable block. */

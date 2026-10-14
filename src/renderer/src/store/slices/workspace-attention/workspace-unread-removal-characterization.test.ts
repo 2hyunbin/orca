@@ -10,15 +10,14 @@ import {
 } from '../store-cascades-test-harness'
 import {
   addLiveTerminalTab,
-  completeAgentTurn,
   createAttentionStore,
   LEAF_2,
   observe,
-  ringBell,
   WS_A,
   type AttentionStore,
   type PaneTarget
-} from './workspace-unread-characterization-driver'
+} from './workspace-unread-characterization-fixture'
+import { completeAgentTurn, ringBell } from './workspace-unread-characterization-driver'
 
 // Pins what removing a tab or pane does to unread: its markers go, and a workspace whose removed
 // marker was its last live one is read.

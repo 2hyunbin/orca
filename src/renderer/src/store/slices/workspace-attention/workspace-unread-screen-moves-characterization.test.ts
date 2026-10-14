@@ -3,18 +3,20 @@ import type * as WorktreeMetaPersistModule from '../worktrees/metadata/worktree-
 import { makeFolderWorkspace, makeWorktree } from '../worktrees-slice-test-fixtures'
 import { folderWorkspaceKey } from '../../../../../shared/workspace-scope'
 import {
-  addLiveTerminalTab,
   completeAgentTurn,
+  pointerDownInTab,
+  ringBell,
+  toggleUnreadByUser
+} from './workspace-unread-characterization-driver'
+import {
+  addLiveTerminalTab,
   createAttentionStore,
   installAttentionMockApi,
   LEAF_2,
   observe,
-  pointerDownInTab,
-  ringBell,
-  toggleUnreadByUser,
   WS_A,
   type AttentionStore
-} from './workspace-unread-characterization-driver'
+} from './workspace-unread-characterization-fixture'
 
 // What counts as the screen moving, what is on it, and who is looking at it.
 

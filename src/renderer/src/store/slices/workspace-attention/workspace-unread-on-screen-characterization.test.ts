@@ -2,21 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as WorktreeMetaPersistModule from '../worktrees/metadata/worktree-meta-persist'
 import { makeWorktree } from '../worktrees-slice-test-fixtures'
 import {
-  addLiveTerminalTab,
   completeAgentTurn,
+  pointerDownInTab,
+  ringBell,
+  setWindowOnScreen,
+  toggleUnreadByUser,
+  typeInPane
+} from './workspace-unread-characterization-driver'
+import {
+  addLiveTerminalTab,
   createAttentionStore,
   installAttentionMockApi,
   LEAF_1,
   LEAF_2,
   observe,
-  pointerDownInTab,
-  ringBell,
-  setWindowOnScreen,
-  toggleUnreadByUser,
-  typeInPane,
   WS_A,
   type AttentionStore
-} from './workspace-unread-characterization-driver'
+} from './workspace-unread-characterization-fixture'
 
 // On screen means read, the flag follows its markers, and reads retire OS notifications.
 

@@ -20,10 +20,8 @@ import {
   structuredAgentSessionFocusOwner,
   structuredAgentSessionTargetForTab
 } from '@/runtime/structured-agent-session-owner'
-import {
-  removeTabMarkers,
-  removeTabsAttention
-} from '../workspace-attention/subject-attention-transitions'
+import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
+import { removeTabsAttention } from '../workspace-attention/subject-attention-transitions'
 import { settleAttentionRemovedBy } from '../workspace-attention/attention-removal-follow-up'
 
 export function createTabsCloseActions(
@@ -101,9 +99,7 @@ export function createTabsCloseActions(
           )
           // Why: close-to-right/others bypass terminals.closeTab, so clear the entityId-keyed unread flag here or a stale dot leaks.
           const nextUnreadTerminalTabs = terminalEntityId
-            ? removeTabMarkers(current.unreadTerminalTabs, [terminalEntityId], (record) => ({
-                ...record
-              }))
+            ? omitRecordKeys(current.unreadTerminalTabs, [terminalEntityId])
             : current.unreadTerminalTabs
           // Why: a structured chat tab owns its markers directly; nothing else retires them.
           const structuredAttention =

@@ -51,6 +51,8 @@ export function createTabsGroupActions(
               ...state.activeGroupIdByWorktree,
               [worktreeId]: groupId
             }
+        // Why: focusing a group surfaces its active terminal tab, so dismiss the tab-level bell.
+        // Why (activeWorktree guard below): only when the group is in the active worktree, else the unseen tab's bell is swallowed.
         if (state.activeWorktreeId !== worktreeId) {
           if (groupAlreadyFocused) {
             return state

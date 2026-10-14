@@ -22,7 +22,6 @@ import { removePaneKeys } from './agent-status-pane-keyed-records'
 import { registryEntryMatchesStatus } from './agent-status-launch-config'
 import { copyLaunchConfig } from './agent-status-sleeping-records'
 import { agentVerdictFields } from '../../../../shared/agent-main-agent-verdict'
-import { removeCompletionAttention } from './workspace-attention/subject-attention-transitions'
 import { settleAttentionRemovedBy } from './workspace-attention/attention-removal-follow-up'
 
 export function createAgentStatusProviderSessionActions(
@@ -164,7 +163,7 @@ export function createAgentStatusProviderSessionActions(
             ),
             // Why the cleared-at/manual-unread maps stay: the pane survives this transition, so a
             // repeat heartbeat would resurrect cleared history. They are swept on pane retirement.
-            unreadAgentCompletionPanes: removeCompletionAttention(
+            unreadAgentCompletionPanes: removePaneKeys(
               s.unreadAgentCompletionPanes,
               retiredPaneKeys
             ),

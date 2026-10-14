@@ -12,7 +12,6 @@ import type { WorktreeCardProps } from './worktree-card-model'
 import type { useWorktreeCardFoundation } from './use-worktree-card-foundation'
 import type { useWorktreeCardLinkedDetails } from './use-worktree-card-linked-details'
 import type { useWorktreeCardReviewDetails } from './use-worktree-card-review-details'
-import { isWorkspaceUnread } from '@/store/slices/workspace-attention/workspace-unread-selector'
 
 type Foundation = ReturnType<typeof useWorktreeCardFoundation>
 type LinkedDetails = ReturnType<typeof useWorktreeCardLinkedDetails>
@@ -76,7 +75,7 @@ export function useWorktreeCardSecondaryDetails({
     showPorts: boolean
   }) {
   // Why: unread lives in the left status lane, so the Status toggle owns both the dot/PR slot and unread emphasis.
-  const showUnreadEmphasis = showStatus && isWorkspaceUnread(worktree)
+  const showUnreadEmphasis = showStatus && worktree.isUnread
   const hoverIssue = issueDisplay
   const hoverLinearIssue = linearIssueDisplay
   const hoverJiraIssue = jiraIssueDisplay

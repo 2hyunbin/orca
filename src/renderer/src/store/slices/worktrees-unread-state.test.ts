@@ -10,10 +10,6 @@ import {
   resetWorktreeSliceModuleMemory,
   runtimeEnvironmentCall
 } from './worktrees-slice-test-harness'
-import {
-  clearWorkspaceUnreadFlag,
-  markWorkspaceUnreadFlag
-} from './workspace-attention/workspace-unread-flag'
 
 const requestWorktreeBaseFallbackNotice = vi.hoisted(() => vi.fn())
 
@@ -48,7 +44,12 @@ describe('worktree unread (show-until-interact)', () => {
       activeWorktreeId: wt.id
     } as Partial<AppState>)
 
-    markWorkspaceUnreadFlag(store.setState, store.getState, wt.id)
+    store.getState().markAgentAttentionUnread({
+      workspaceId: wt.id,
+      subjectKey: null,
+      groupId: null,
+      reason: 'agent-completion'
+    })
 
     const after = store.getState().worktreesByRepo.repo1[0]
     expect(after.isUnread).toBe(true)
@@ -83,7 +84,14 @@ describe('worktree unread (show-until-interact)', () => {
       worktreesByRepo: { 'repo-shared': [wt] }
     } as Partial<AppState>)
 
-    expect(() => markWorkspaceUnreadFlag(store.setState, store.getState, wt.id)).not.toThrow()
+    expect(() =>
+      store.getState().markAgentAttentionUnread({
+        workspaceId: wt.id,
+        subjectKey: null,
+        groupId: null,
+        reason: 'agent-completion'
+      })
+    ).not.toThrow()
 
     expect(store.getState().worktreesByRepo['repo-shared'][0].isUnread).toBe(true)
     expect(mockApi.worktrees.updateMeta).toHaveBeenCalledWith(
@@ -117,7 +125,14 @@ describe('worktree unread (show-until-interact)', () => {
       }
     } as Partial<AppState>)
 
-    expect(() => markWorkspaceUnreadFlag(store.setState, store.getState, worktreeId)).not.toThrow()
+    expect(() =>
+      store.getState().markAgentAttentionUnread({
+        workspaceId: worktreeId,
+        subjectKey: null,
+        groupId: null,
+        reason: 'agent-completion'
+      })
+    ).not.toThrow()
 
     expect(store.getState().worktreesByRepo['repo-shared'][0].isUnread).toBe(true)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
@@ -214,7 +229,9 @@ describe('worktree unread (show-until-interact)', () => {
       activeWorktreeId: wt.id
     } as Partial<AppState>)
 
-    clearWorkspaceUnreadFlag(store.setState, store.getState, wt.id)
+    store
+      .getState()
+      .readOnScreenAttention({ workspaceIds: [wt.id], targets: [] }, { screenArrived: true })
 
     const after = store.getState().worktreesByRepo.repo1[0]
     expect(after.isUnread).toBe(false)
@@ -232,7 +249,9 @@ describe('worktree unread (show-until-interact)', () => {
     const initial = { repo1: [wt] }
     store.setState({ worktreesByRepo: initial } as Partial<AppState>)
 
-    clearWorkspaceUnreadFlag(store.setState, store.getState, wt.id)
+    store
+      .getState()
+      .readOnScreenAttention({ workspaceIds: [wt.id], targets: [] }, { screenArrived: true })
 
     expect(store.getState().worktreesByRepo).toBe(initial)
     expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
@@ -252,10 +271,17 @@ describe('worktree unread (show-until-interact)', () => {
       detectedWorktreesByRepo: { repo1: detected }
     } as Partial<AppState>)
 
-    markWorkspaceUnreadFlag(store.setState, store.getState, hidden.id)
+    store.getState().markAgentAttentionUnread({
+      workspaceId: hidden.id,
+      subjectKey: null,
+      groupId: null,
+      reason: 'agent-completion'
+    })
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(true)
 
-    clearWorkspaceUnreadFlag(store.setState, store.getState, hidden.id)
+    store
+      .getState()
+      .readOnScreenAttention({ workspaceIds: [hidden.id], targets: [] }, { screenArrived: true })
     expect(store.getState().detectedWorktreesByRepo.repo1.worktrees[0].isUnread).toBe(false)
     expect(mockApi.worktrees.updateMeta).toHaveBeenCalledTimes(2)
   })
