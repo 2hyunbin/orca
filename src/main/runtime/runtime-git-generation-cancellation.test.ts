@@ -156,6 +156,13 @@ function cancel(
     : owner.cancelRuntimeGeneratePullRequestFields('id:offline', identity)
 }
 
+class RuntimeGenerationChild extends ChildProcess {
+  override stdout = new PassThrough()
+  override stderr = new PassThrough()
+  override stdin = new PassThrough()
+  override kill = vi.fn(() => true)
+}
+
 describe('Runtime generation exact request cancellation', () => {
   beforeEach(() => {
     vi.resetAllMocks()
@@ -166,11 +173,7 @@ describe('Runtime generation exact request cancellation', () => {
     mocks.environment.mockResolvedValue({ ok: true, env: selectedEnvironment })
     mocks.output.mockReturnValue('Update README')
     mocks.spawn.mockImplementation(() => {
-      const child = new ChildProcess()
-      child.stdout = new PassThrough()
-      child.stderr = new PassThrough()
-      child.stdin = new PassThrough()
-      child.kill = vi.fn(() => true)
+      const child = new RuntimeGenerationChild()
       const output = mocks.output()
       setImmediate(() => {
         child.stdout?.emit('data', Buffer.from(output))
