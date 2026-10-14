@@ -7,6 +7,8 @@
 // outcome:   the job's state and verdict, from the state file.
 // flip-back: the flag tool's admitMode=db write (or its dry run), then exits non-zero with the
 //            watch's verdict. Why it holds no flag-workflow group: docs/relay-workflows.md.
+// alarm:     a refused watch or a flip back that did not land: an error annotation, and in write
+//            mode a log line the reserve-watch alert pages on.
 import { execFile } from 'node:child_process'
 import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import { parseArgs, promisify } from 'node:util'
@@ -460,6 +462,39 @@ export async function flipBack(values, dependencies) {
   }
 }
 
+export const ALARM_EVENT = 'orca_relay_reserve_watch_alarm'
+export const ALARM_LOG_NAME = 'orca-relay-reserve-watch'
+export const ALARM_KINDS = ['refused', 'flip-back-failed']
+
+// GitHub's workflow-command escaping, so a verdict cannot end the annotation or start another.
+export const escapeWorkflowCommand = (text) => text.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
+const escapeWorkflowProperty = (text) => escapeWorkflowCommand(text).replace(/:/g, '%3A').replace(/,/g, '%2C')
+
+/**
+ * Both kinds can leave the cell in reserve with nothing watching it. Only write mode pages: a
+ * dry-run watch never flips back, so its refusal or failure changes nothing for the cell.
+ */
+export async function raiseAlarm({ mode, cellId, projectId, kind, reason }, { runGcloud, log = console.log }) {
+  if (!ALARM_KINDS.includes(kind)) throw new Error(`--kind must be one of ${ALARM_KINDS.join(', ')}`)
+  const message =
+    kind === 'refused'
+      ? `${cellId} may be in reserve mode and unwatched: the watch was refused (${reason}). Rerun it, or flip the cell to db with Operate Relay Production Cell Flags.`
+      : `${cellId} may still be in reserve mode with no watch: the flip back did not land (${reason}). Flip it to db by hand with Operate Relay Production Cell Flags (set=admitMode=db), or with the break-glass inputs logged above if the cell does not answer.`
+  log(`::error title=${escapeWorkflowProperty(`Reserve watch ${kind} for ${cellId}`)}::${escapeWorkflowCommand(message)}`)
+  if (mode !== 'write') return { paged: false }
+  const entry = JSON.stringify({ event: ALARM_EVENT, cellId, kind, reason })
+  try {
+    await runGcloud(
+      ['logging', 'write', ALARM_LOG_NAME, entry, '--payload-type=json', '--severity=ERROR', '--project', projectId],
+      { timeoutMs: 30_000 }
+    )
+  } catch (error) {
+    log(`::error title=Reserve watch page failed::${escapeWorkflowCommand(`the alarm log line was not written, so nothing pages: ${error instanceof Error ? error.message : error}`)}`)
+    return { paged: false }
+  }
+  return { paged: true }
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const [command, ...rest] = process.argv.slice(2)
   const { values } = parseArgs({
@@ -480,13 +515,23 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
         'flipped-at',
         'state-file',
         'github-output',
-        'verdict'
+        'verdict',
+        'kind'
       ].map((name) => [name, { type: 'string' }])
     )
   })
   const idToken = process.env.ORCA_RELAY_ADMIN_ID_TOKEN
+  const runGcloud = (args, { timeoutMs }) =>
+    execFileAsync('gcloud', args, { maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, killSignal: 'SIGKILL' })
   try {
-    if (command === 'outcome') {
+    if (command === 'alarm') {
+      await raiseAlarm(
+        { mode: values.mode, cellId: values['cell-id'] ?? '', projectId: values['project-id'], kind: values.kind, reason: values.verdict ?? '' },
+        { runGcloud }
+      )
+      // The alarm step is red, whatever the page did.
+      process.exitCode = 1
+    } else if (command === 'outcome') {
       if (!values['state-file'] || !values['github-output']) throw new Error('--state-file and --github-output are required')
       console.log(JSON.stringify({ event: 'orca_relay_reserve_watch_outcome', ...(await recordOutcome(values['state-file'], values['github-output'])) }))
     } else if (!idToken) {
@@ -496,8 +541,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       const state = await watchSegment(config, {
         idToken,
         readRolloutLease: readProductionRolloutLease,
-        runGcloud: (args, { timeoutMs }) =>
-          execFileAsync('gcloud', args, { maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, killSignal: 'SIGKILL' })
+        runGcloud
       })
       // A cell that was never reserve is the operator's mistake; one flipped back by hand is not.
       if (state.state === 'refused') {
@@ -521,7 +565,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       console.log(JSON.stringify({ event: 'orca_relay_reserve_watch_verdict', mode: values.mode, verdict: values.verdict }))
       process.exitCode = 1
     } else {
-      throw new Error('command must be watch, outcome or flip-back')
+      throw new Error('command must be watch, outcome, flip-back or alarm')
     }
   } catch (error) {
     console.log(

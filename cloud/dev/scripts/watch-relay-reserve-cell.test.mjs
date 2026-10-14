@@ -13,7 +13,10 @@ import {
   FLIP_BACK_ATTEMPTS,
   FLIP_BACK_RUNTIME_ATTEMPTS,
   flipBack,
+  ALARM_EVENT,
+  ALARM_LOG_NAME,
   parseWatchArguments,
+  raiseAlarm,
   parseWatchSegment,
   readDirector503Minutes,
   readSeatBehindRowSample,
@@ -886,12 +889,64 @@ test('a live rollout lease refuses the watch before its first sample; an expired
   }
 })
 
-test('workflow: a flip back that did not land raises an error annotation and fails the job', () => {
-  const flip = jobOf('flip-back')
-  const alarm = flip.slice(flip.indexOf('- name: Alarm when the flip back did not land'))
+const stepOf = (job, name) => {
+  const text = jobOf(job)
+  const start = text.indexOf(`- name: ${name}\n`)
+  assert.notEqual(start, -1, `step ${name} is missing`)
+  const end = text.indexOf('\n      - ', start + 1)
+  return text.slice(start, end === -1 ? undefined : end)
+}
+const ALARM_COMMAND = /node dev\/scripts\/watch-relay-reserve-cell\.mjs alarm --kind KIND \\\n\s+--mode "\$\{MODE\}" --cell-id "\$\{CELL_ID\}" --project-id "\$\{GCP_PROJECT_ID\}" --verdict "\$\{VERDICT_VAR\}"/
+const alarmCommand = (kind, verdict) => new RegExp(ALARM_COMMAND.source.replace('KIND', kind).replace('VERDICT_VAR', verdict))
+
+test('workflow: a flip back that did not land and a refused watch both raise the alarm', () => {
+  const alarm = stepOf('flip-back', 'Alarm when the flip back did not land')
+  assert.match(alarm, /if: \$\{\{ always\(\) \}\}/)
   assert.match(alarm, /grep -qs '"event":"orca_relay_reserve_watch_flip_back"' "\$\{RUNNER_TEMP\}\/relay-reserve-flip-back\.jsonl"/)
-  assert.match(alarm, /echo "::error title=Reserve flip back FAILED for \$\{CELL_ID\}::/)
-  assert.match(alarm, /\n\s+exit 1\n/)
+  assert.match(alarm, alarmCommand('flip-back-failed', 'VERDICT'))
+  const refused = stepOf('watch', 'Alarm on a refused watch')
+  assert.match(refused, /if: \$\{\{ always\(\) && steps\.outcome\.outputs\.state == 'refused' \}\}/)
+  assert.match(refused, /WATCH_VERDICT: \$\{\{ steps\.outcome\.outputs\.verdict \}\}/)
+  assert.match(refused, alarmCommand('refused', 'WATCH_VERDICT'))
+  // After the outcome step, so it reads the recorded state.
+  assert.ok(jobOf('watch').indexOf('- name: Alarm on a refused watch') > jobOf('watch').indexOf('- id: outcome'))
   // The flip-back line names only the write's own event, never its conflict retries.
   assert.match(readFileSync(new URL('./watch-relay-reserve-cell.mjs', import.meta.url), 'utf8'), /event: 'orca_relay_reserve_watch_flip_back',\n/)
+})
+
+test('an alarm is an escaped error annotation everywhere, and in write mode a paging log line', async () => {
+  const calls = []
+  const lines = []
+  const runGcloud = async (args, options) => (calls.push({ args, options }), { stdout: '' })
+  const alarm = (overrides) =>
+    raiseAlarm(
+      { mode: 'write', cellId: CELL, projectId: 'onorca-cloud', kind: 'refused', reason: '50%\r\nlease held', ...overrides },
+      { runGcloud, log: (line) => lines.push(line) }
+    )
+  assert.deepEqual(await alarm(), { paged: true })
+  assert.equal(
+    lines[0],
+    `::error title=Reserve watch refused for ${CELL}::${CELL} may be in reserve mode and unwatched: the watch was refused (50%25%0D%0Alease held). ` +
+      'Rerun it, or flip the cell to db with Operate Relay Production Cell Flags.'
+  )
+  assert.deepEqual(calls[0].args, [
+    'logging', 'write', ALARM_LOG_NAME,
+    JSON.stringify({ event: ALARM_EVENT, cellId: CELL, kind: 'refused', reason: '50%\r\nlease held' }),
+    '--payload-type=json', '--severity=ERROR', '--project', 'onorca-cloud'
+  ])
+  // A dry run never flips back, so its alarm annotates but does not page.
+  assert.deepEqual(await alarm({ mode: 'dry-run', kind: 'flip-back-failed' }), { paged: false })
+  assert.equal(calls.length, 1)
+  assert.match(lines[1], /^::error title=Reserve watch flip-back-failed for production-gce-c26::.*did not land/)
+  // A title property escapes its own separators too.
+  await alarm({ mode: 'dry-run', cellId: 'a:b,c' })
+  assert.match(lines[2], /^::error title=Reserve watch refused for a%3Ab%2Cc::/)
+  // A failed log write is named, never swallowed silently.
+  const failed = await raiseAlarm(
+    { mode: 'write', cellId: CELL, projectId: 'onorca-cloud', kind: 'flip-back-failed', reason: 'x' },
+    { runGcloud: async () => { throw new Error('PERMISSION_DENIED') }, log: (line) => lines.push(line) }
+  )
+  assert.deepEqual(failed, { paged: false })
+  assert.match(lines.at(-1), /^::error title=Reserve watch page failed::.*nothing pages: PERMISSION_DENIED/)
+  await assert.rejects(alarm({ kind: 'other' }), /--kind must be one of/)
 })

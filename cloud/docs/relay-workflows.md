@@ -836,11 +836,12 @@ samples in a row is a trip of its own. The 503 read takes every response code in
 newest minute any code has a point for is how far the series is published: a 503 minute at or
 before it with no point had no 503s, so a quiet fleet reads zero. Minutes past it are left out, not
 counted; fewer than 3 published minutes in the read, no request series at all, or an unparseable
-timestamp is unverifiable. The duplicate read also takes `orca_relay_reserve_ledger_summary`, which
+timestamp is unverifiable. This assumes the codes publish together; one code lagging the others
+delays a trip by its lag but cannot hide one, because a later read sees its points. Until the
+minutes before `flipped-at` are published (3 minutes past it) the 503 rule is pending, which does
+not add to the streak. The duplicate read also takes `orca_relay_reserve_ledger_summary`, which
 every placing director logs each minute, in the same query and window: with no summary from the
-last 150 s in it, the read is blind and the sample unverifiable, not zero duplicates. This assumes the codes publish together; one code lagging the others
-delays a trip by its lag but cannot hide one, because a later read sees its points. Until the minutes before `flipped-at` are published (3 minutes past
-it) the 503 rule is pending, which does not add to the streak. The duplicate rule keys a seat by
+last 150 s in it, the read is blind and the sample unverifiable, not zero duplicates. The duplicate rule keys a seat by
 director instance, so a director restart (a new instance id) starts its first-seen clock over. A
 cell whose switch file no longer says reserve ends the watch without a write.
 
@@ -858,11 +859,15 @@ if it already says db. A cell that still does not answer runtime-status after 4 
 cannot take the ordinary flip back: the run fails and prints the exact break-glass inputs for
 `Operate Relay Production Cell Flags` (`set=admitMode=default`, `break-glass=BREAK GLASS <cell-id>`).
 
-An operator watches the run; nothing pages. A flip back that did not land (no ID token, a failed
-login, a cell that does not answer) raises an `::error::` annotation naming the cell and a
-`FLIP BACK FAILED` summary heading, as the clock-skew monitor raises its alarm, and the cell must
-then be flipped to db by hand. The workflow logs in only once the root Terraform that adds it to
-the shared deploy identity's provider condition is applied.
+An operator watches the run. A refused watch and a flip back that did not land (no ID token, a
+failed login, a cell that does not answer) can each leave the cell in reserve with nothing watching
+it, so both raise an `::error::` annotation naming the cell, as the clock-skew monitor does. In
+`write` mode both also log `orca_relay_reserve_watch_alarm` (log `orca-relay-reserve-watch`,
+resource `global`) with the deploy identity, and the `Orca Relay: reserve cell may be unwatched`
+alert pages on any such line. A runner that cannot log in cannot write that line either, so a
+failed login pages only through the operator watching the run. The workflow logs in, and the
+alarm line is written, only once the root Terraform that adds the workflow to the shared deploy
+identity's provider condition and grants that identity `roles/logging.logWriter` is applied.
 
 ## Mobile push gateway
 

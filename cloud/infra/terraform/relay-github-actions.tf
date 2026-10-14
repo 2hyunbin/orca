@@ -381,6 +381,15 @@ resource "google_project_iam_member" "github_logging_viewer" {
   member  = google_service_account.github_deploy[0].member
 }
 
+# The reserve watch logs its paging alarm line (orca_relay_reserve_watch_alarm) from the runner.
+resource "google_project_iam_member" "github_log_writer" {
+  count = local.relay_create_production_ops_identity ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = google_service_account.github_deploy[0].member
+}
+
 resource "google_project_iam_member" "github_cloudsql_viewer" {
   count = local.relay_create_production_ops_identity ? 1 : 0
 
