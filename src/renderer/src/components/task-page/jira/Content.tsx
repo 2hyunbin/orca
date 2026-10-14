@@ -17,7 +17,8 @@ import { formatRelativeTime } from '../../task-page-source-context'
 import { getJiraStatusTone } from '@/components/task-page-jira-status-tone'
 import JiraIssueWorkspace from '@/components/JiraIssueWorkspace'
 import { TaskPageLinearContent } from '../linear/Content'
-import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
+import { ipcOrRuntimeTargetForHostId, runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
+import { getEnvironmentRuntimeContextKey } from '@/lib/provider-runtime-context'
 export function TaskPageJiraContent({
   model
 }: {
@@ -61,10 +62,15 @@ export function TaskPageJiraContent({
     jiraTaskSourceContext,
     jiraTaskSourceScopeKey,
     accountBackedTaskSourceHostId,
-    providerRuntimeContextKey,
     setJiraRefreshNonce
   } = model
-  const boardScopeKey = `${jiraTaskSourceScopeKey}:${providerRuntimeContextKey}`
+  const boardTarget = ipcOrRuntimeTargetForHostId(
+    jiraTaskSourceContext?.hostId ?? accountBackedTaskSourceHostId
+  )
+  const boardScopeKey = JSON.stringify([
+    jiraTaskSourceScopeKey,
+    boardTarget ? getEnvironmentRuntimeContextKey(runtimeTargetEnvironmentId(boardTarget)) : null
+  ])
   return taskSource === 'jira' ? (
     !jiraStatusReady ? (
       <div className="mt-4 flex items-center justify-center py-14">
@@ -191,12 +197,12 @@ export function TaskPageJiraContent({
 
           {jiraViewMode === 'board' ? (
             <TaskPageJiraBoardView
-              key={`${accountBackedTaskSourceHostId}:${boardScopeKey}:${selectedJiraSiteId}`}
+              key={`${boardScopeKey}:${selectedJiraSiteId}`}
               issues={sortedJiraIssues}
               statusOrder={displayedJiraStatusOrder}
               selectedIssue={selectedJiraIssue}
               sourceContext={jiraTaskSourceContext}
-              target={ipcOrRuntimeTargetForHostId(accountBackedTaskSourceHostId)}
+              target={boardTarget}
               scopeKey={boardScopeKey}
               onOpenIssue={openJiraDetailPage}
               onStartWorkspace={handleUseJiraItem}
