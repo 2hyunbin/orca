@@ -1,3 +1,4 @@
+import { projectSshConnectionReadiness } from '../ssh/ssh-connection-readiness'
 import type { BrowserWindow } from 'electron'
 import type { SshPortForwardManager } from '../ssh/ssh-port-forward'
 import type { DetectedPort, EnrichedDetectedPort, SshConnectionState } from '../../shared/ssh-types'
@@ -39,7 +40,10 @@ export function broadcastSshState(
   currentRuntime?.notifySshStateChanged?.(targetId, enrichedState)
 }
 
-function withSshRemotePlatform(targetId: string, state: SshConnectionState): SshConnectionState {
+export function withSshRemotePlatform(
+  targetId: string,
+  state: SshConnectionState
+): SshConnectionState {
   const authority = getSshProviderAuthority(targetId)
   const managedServer = state.managedServer ?? getSshHostServerStatus(targetId)
   return {
@@ -71,7 +75,9 @@ export function clearPublishedManagedServer(targetId: string): void {
 
 export function getPublicSshState(targetId: string): SshConnectionState | undefined {
   const state = connectionManager!.getState(targetId)
-  return state ? withSshRemotePlatform(targetId, state) : undefined
+  return state
+    ? withSshRemotePlatform(targetId, projectSshConnectionReadiness(targetId, state))
+    : undefined
 }
 
 export function broadcastPortForwards(

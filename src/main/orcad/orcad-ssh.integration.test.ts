@@ -27,6 +27,7 @@ import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from '../../shared/ssh-targe
 import { PLUGIN_ENVIRONMENT_PROVIDER_SSH_RUNTIME_CAPABILITY } from '../../shared/plugins/plugin-environment-provider-runtime-capability'
 import {
   connectRegisteredSshTarget,
+  getRegisteredSshState,
   getRegisteredSshTargetMutations,
   getSshTargetRegistryStore
 } from '../ssh/ssh-target-registry'
@@ -35,6 +36,7 @@ import { quitTeardownStartGate } from '../quit-teardown-start-gate'
 import { resetSshShutdownDrain } from '../ipc/ssh-shutdown-drain'
 import { SshConnection } from '../ssh/ssh-connection'
 import { handleSshConnectionStateChange } from '../ssh/ssh-connection-state-publisher'
+import { beginSshHostCensus } from '../ssh/ssh-connection-attribution'
 import * as hostServerDecision from '../ssh/ssh-host-server-on-connect'
 import * as managedLifecycle from '../ssh/orcad-runtime-lifecycle'
 import { getManagedServerActions } from '../runtime/managed-server-actions-registry'
@@ -263,6 +265,8 @@ it('keeps raw transport readiness private until the shared managed-server decisi
     await f.connectionManager.connect(saved)
     return decision.promise
   })
+  const host = await pairedRuntimeRpcFixture(cleanups, f.runtime, f.root)
+  const client = host.connect()
   const publish = vi.spyOn(f.runtime, 'notifySshStateChanged')
   const pending = connectRegisteredSshTarget(target.id)
   try {
@@ -273,6 +277,15 @@ it('keeps raw transport readiness private until the shared managed-server decisi
       )
     )
     expect(publish.mock.calls.some(([, state]) => state.status === 'connected')).toBe(false)
+    expect(getRegisteredSshState(target.id)).toMatchObject({ status: 'connecting' })
+    const observed = unwrapRuntimeRpcResult(
+      await client.request<{ state: { status: string } }>(
+        'ssh.getState',
+        { targetId: target.id },
+        5000
+      )
+    )
+    expect(observed.state.status).toBe('connecting')
   } finally {
     decision.resolve({ route: 'managed', environmentId: 'owned-managed-fixture' })
   }
@@ -281,6 +294,28 @@ it('keeps raw transport readiness private until the shared managed-server decisi
     managedServer: { kind: 'managed', environmentId: 'owned-managed-fixture' }
   })
   expect(publish).toHaveBeenCalledWith(target.id, expect.objectContaining({ status: 'connected' }))
+  const settled = unwrapRuntimeRpcResult(
+    await client.request<{ state: { status: string } }>(
+      'ssh.getState',
+      { targetId: target.id },
+      5000
+    )
+  )
+  expect(settled.state.status).toBe('connected')
+  const finishCensus = beginSshHostCensus(target.id)
+  try {
+    const censusing = unwrapRuntimeRpcResult(
+      await client.request<{ state: { status: string } }>(
+        'ssh.getState',
+        { targetId: target.id },
+        5000
+      )
+    )
+    expect(censusing.state.status).toBe('connecting')
+  } finally {
+    finishCensus()
+  }
+  expect(getRegisteredSshState(target.id)).toMatchObject({ status: 'connected' })
 })
 
 it('closes managed-server admission and drains accepted maintenance before the Node profile freezes', async () => {

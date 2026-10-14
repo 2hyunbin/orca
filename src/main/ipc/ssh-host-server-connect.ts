@@ -15,7 +15,7 @@ import {
 } from '../ssh/ssh-host-server-status'
 import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
 import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
-import { broadcastSshState, getPublicSshState } from './ssh-renderer-broadcast'
+import { broadcastSshState, withSshRemotePlatform } from './ssh-renderer-broadcast'
 import { isAuthError } from '../ssh/ssh-connection-utils'
 
 export async function decideHostServer(target: SshTarget): Promise<HostServerOnConnectResult> {
@@ -90,7 +90,7 @@ export function publishManagedServerConnect(
     managedServer
   }
   broadcastSshState(getCurrentMainWindow, targetId, state)
-  return getPublicSshState(targetId) ?? state
+  return withSshRemotePlatform(targetId, state)
 }
 
 /**
