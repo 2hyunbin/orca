@@ -55,12 +55,13 @@ async function readList<Value>(
 
 /**
  * One host's catalog: the desktop's own through `client`, or a server's through a client scoped to
- * it. Null when it did not answer this round, so the caller keeps that host's last catalog.
+ * it. Null when repo.list did not answer; `provisional` when a list failed this round, which the
+ * caller uses only until that host has answered in full.
  */
 export async function fetchHostProjectCatalog(
   client: RpcOperationSender,
   hostId: ExecutionHostId
-): Promise<HostProjectCatalog | null> {
+): Promise<{ catalog: HostProjectCatalog; provisional: boolean } | null> {
   const target = endpointTarget(hostId)
   const [repos, projects, setups] = await Promise.all([
     readList(
@@ -82,19 +83,21 @@ export async function fetchHostProjectCatalog(
   const adoptedRepos = repos.value.map((repo) => adoptEndpointRepo(target, repo))
   if (projects.kind === 'answered' && setups.kind === 'answered') {
     return {
-      hostId,
-      repos: adoptedRepos,
-      projection: adoptEndpointProjectCatalog(target, projects.value, setups.value)
+      catalog: {
+        hostId,
+        repos: adoptedRepos,
+        projection: adoptEndpointProjectCatalog(target, projects.value, setups.value)
+      },
+      provisional: false
     }
   }
-  // Why: only a host that predates the lists gets the repo-derived projection (the desktop
-  // renderer's fallback); a transient failure must not regroup the list on a guess.
-  if (projects.kind !== 'failed' && setups.kind !== 'failed') {
-    return {
+  // Why: the desktop renderer's own fallback; a transient failure only stands in until a full answer.
+  return {
+    catalog: {
       hostId,
       repos: adoptedRepos,
       projection: projectHostSetupProjectionFromRepos(adoptedRepos)
-    }
+    },
+    provisional: projects.kind === 'failed' || setups.kind === 'failed'
   }
-  return null
 }

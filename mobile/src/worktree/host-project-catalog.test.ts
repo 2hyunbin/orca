@@ -71,6 +71,10 @@ function sectionKeys(rows: Worktree[], catalog: ReturnType<typeof foldHostProjec
   ).map((section) => ({ key: section.key, title: section.title }))
 }
 
+async function fetchCatalog(...args: Parameters<typeof fetchHostProjectCatalog>) {
+  return (await fetchHostProjectCatalog(...args))?.catalog ?? null
+}
+
 describe('fetchHostProjectCatalog', () => {
   it.each(['method_not_found', 'forbidden'])(
     'derives projects from repos on a desktop that answers %s for the project lists',
@@ -81,7 +85,7 @@ describe('fetchHostProjectCatalog', () => {
         'projectHostSetup.list': { error: refusal }
       })
 
-      const catalog = await fetchHostProjectCatalog(client, 'local')
+      const catalog = await fetchCatalog(client, 'local')
 
       expect(calls.sort()).toEqual(['project.list', 'projectHostSetup.list', 'repo.list'])
       expect(catalog?.projection).toEqual(projectHostSetupProjectionFromRepos(catalog?.repos ?? []))
@@ -105,7 +109,7 @@ describe('fetchHostProjectCatalog', () => {
       'projectHostSetup.list': { result: { setups: lists.setups } }
     })
 
-    const catalog = await fetchHostProjectCatalog(client, 'runtime:m4air')
+    const catalog = await fetchCatalog(client, 'runtime:m4air')
 
     expect(catalog?.repos.map((repo) => repo.executionHostId)).toEqual(['runtime:m4air'])
     expect(
@@ -113,14 +117,18 @@ describe('fetchHostProjectCatalog', () => {
     ).toEqual([['runtime:m4air', 'm4air']])
   })
 
-  it('answers null on a transient project-list failure instead of regrouping on a guess', async () => {
+  it('marks a repo-derived catalog provisional on a transient project-list failure', async () => {
     const { client } = hostAnswering({
       'repo.list': { result: { repos: localRepos } },
       'project.list': { error: 'timeout' },
       'projectHostSetup.list': { error: 'method_not_found' }
     })
 
-    await expect(fetchHostProjectCatalog(client, 'local')).resolves.toBeNull()
+    const answer = await fetchHostProjectCatalog(client, 'local')
+    expect(answer?.provisional).toBe(true)
+    expect(answer?.catalog.projection).toEqual(
+      projectHostSetupProjectionFromRepos(answer?.catalog.repos ?? [])
+    )
   })
 
   it('answers null when the repos do not answer, so the caller keeps its last catalog', async () => {
@@ -145,12 +153,12 @@ describe('Project section keys', () => {
   })
 
   it("keep a desktop row's key when a server's catalog arrives later", async () => {
-    const desktop = await fetchHostProjectCatalog(
+    const desktop = await fetchCatalog(
       hostAnswering({ 'repo.list': { result: { repos: localRepos } } }).client,
       'local'
     )
     const serverRepos = [{ ...localRepos[0]!, id: 'win', path: 'C:/Users/jinwo/orca/orca' }]
-    const server = await fetchHostProjectCatalog(
+    const server = await fetchCatalog(
       hostAnswering({ 'repo.list': { result: { repos: serverRepos } } }).client,
       'runtime:windows2'
     )

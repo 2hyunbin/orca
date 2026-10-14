@@ -67,13 +67,17 @@ export function useHostProjectCatalogs(args: {
       return
     }
     let stale = false
-    const store = (catalog: HostProjectCatalog | null): void => {
-      if (stale || !catalog) {
+    const store = (answer: { catalog: HostProjectCatalog; provisional: boolean } | null): void => {
+      if (stale || !answer) {
         return
       }
+      const { catalog, provisional } = answer
       setHeld((previous) => {
         const base = previous.hostId === hostId ? previous.catalogs : cachedCatalogs(hostId)
-        if (structuralValuesEqual(base.get(catalog.hostId), catalog)) {
+        if (
+          (provisional && base.has(catalog.hostId)) ||
+          structuralValuesEqual(base.get(catalog.hostId), catalog)
+        ) {
           return previous.hostId === hostId ? previous : { hostId, catalogs: base }
         }
         return { hostId, catalogs: new Map(base).set(catalog.hostId, catalog) }
