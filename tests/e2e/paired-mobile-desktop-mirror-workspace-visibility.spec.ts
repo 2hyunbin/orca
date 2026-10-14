@@ -108,15 +108,15 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
         .map((row) => row.worktreeId)
         .sort()
       await expect
-        .poll(async () =>
-          (
-            await desktop.page
-              .locator('[data-worktree-id]')
-              .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-worktree-id')))
-          )
+        .poll(async () => {
+          const rendered = await desktop.page
+            .locator('[data-worktree-id]')
+            .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-worktree-id')))
+          // Why a set: the selected row renders more than one element carrying its id.
+          return [...new Set(rendered)]
             .filter((id): id is string => id !== null && serverIds.has(id))
             .sort()
-        )
+        })
         .toEqual(phoneVisible)
       return rows.filter((row) => phoneVisible.includes(row.worktreeId)).map((row) => row.path)
     }
