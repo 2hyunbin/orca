@@ -47,6 +47,16 @@ export type TaskPageWorkItemsFetchOptions = {
 type WorkItemsCache = Record<string, CacheEntry<readonly GitHubWorkItem[]>>
 export type TaskPageWorkItemPages = readonly (GitHubWorkItem[] | null)[]
 
+type DialogWorkItemLookup = {
+  id: string
+  repoId: string
+  url: string
+  item: GitHubWorkItem | null
+}
+
+// Cache writes replace the map; unrelated store writes must not rescan an open drawer's lists.
+const dialogWorkItemLookups = new WeakMap<WorkItemsCache, DialogWorkItemLookup>()
+
 export function deriveTaskPageGitHubWorkItemsFetchOptions(
   forcedFetch: boolean,
   shouldProbeOnLanding: boolean
@@ -239,6 +249,16 @@ export function findTaskPageDialogWorkItem(
     return null
   }
 
+  const cached = dialogWorkItemLookups.get(workItemsCache)
+  if (
+    cached?.id === dialogWorkItemKey.id &&
+    cached.repoId === dialogWorkItemKey.repoId &&
+    cached.url === dialogWorkItemKey.url
+  ) {
+    return cached.item
+  }
+
+  let item: GitHubWorkItem | null = null
   for (const entry of Object.values(workItemsCache)) {
     const found = entry?.data?.find(
       (wi) =>
@@ -247,8 +267,10 @@ export function findTaskPageDialogWorkItem(
         wi.url === dialogWorkItemKey.url
     )
     if (found) {
-      return found
+      item = found
+      break
     }
   }
-  return null
+  dialogWorkItemLookups.set(workItemsCache, { ...dialogWorkItemKey, item })
+  return item
 }
