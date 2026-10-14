@@ -60,6 +60,28 @@ export const LEGACY_WORKSPACE_LAYOUT_PROFILES: readonly WorkspaceLayoutProfile[]
     }
     return session
   }),
+  local('legacy split row sharing one pane’s terminal with a tab-bar tab', () => {
+    const session = twoTabs()
+    session.tabsByWorktree[GIT_KEY]!.push({
+      ...session.tabsByWorktree[GIT_KEY]![0]!,
+      id: 'tab-legacy',
+      title: 'Terminal 3',
+      sortOrder: 2,
+      createdAt: 1_700_000_009_000
+    })
+    session.terminalLayoutsByTabId['tab-legacy'] = {
+      root: {
+        type: 'split',
+        direction: 'vertical',
+        first: { type: 'leaf', leafId: leaf(3) },
+        second: { type: 'leaf', leafId: leaf(4) }
+      },
+      activeLeafId: leaf(3),
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [leaf(3)]: 'pty-a', [leaf(4)]: 'pty-c' }
+    }
+    return session
+  }),
   local('row terminal differs from its focused pane’s', () => {
     const session = twoTabs()
     session.tabsByWorktree[GIT_KEY]![0]!.ptyId = 'pty-stale'

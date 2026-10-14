@@ -48,11 +48,6 @@ const KNOWN_DIFFERENCES: readonly KnownDifference[] = [
     paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-b`, ...terminal('tab-b')]
   },
   {
-    fixture: 'legacy row repeating a tab-bar tab’s terminal',
-    rule: 'duplicate tab: the window drops a legacy row whose terminal a tab-bar tab holds; the Loader keeps it as a tab with an unbound pane',
-    paths: [`${GIT} group 0 tabs`, `${GIT} tab tab-legacy`, ...terminal('tab-legacy')]
-  },
-  {
     fixture: 'row terminal differs from its focused pane’s',
     rule: 'row.ptyId rewrite: the Loader sets the row terminal to its focused pane’s, which changes what the tab reattaches',
     paths: [`${GIT} terminal tab-a reattaches`]
