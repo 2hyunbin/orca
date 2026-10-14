@@ -1,6 +1,7 @@
 import type { OrcadMigrationManifest } from '../../../shared/orcad-migration-manifest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
+import { getHistoryRoot } from '../../terminal-history-paths'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import { findOrcadMigrationImportReceipt } from './orcad-catalog-receipt-ledger'
 import { installOrcadMigrationReceivedBlobs } from './orcad-migration-blob-installers'
@@ -28,7 +29,8 @@ export class OrcadMigrationBlobInstallPersistence {
 
   /**
    * Run only once the commit is durable: installing first and then losing the commit would leave
-   * live hints for a catalog this host never received. A no-op before commit and on repeats.
+   * live hints or history for a catalog this host never received. A no-op before commit and on
+   * repeats.
    */
   installOrcadMigrationReceivedBlobs(
     manifest: OrcadMigrationManifest,
@@ -93,6 +95,7 @@ function installCommitted(
     migration,
     root: runtime.orcadMigrationBlobRoot,
     terminalRestoreHints: runtime.orcadTerminalRestoreHints,
+    shellHistoryRoot: getHistoryRoot(),
     paneWorktreeId: (paneKey) => findPaneWorktreeId(runtime.state, paneKey),
     now: clock(options)
   })
