@@ -209,11 +209,8 @@ export function createCodexJournalTranslator(
         return suppressionAdmission.accepted ? prompts.handle(event) : suppressionAdmission
       }
       if (event.type === 'server-request') {
-        return genericFrames.appendUnhandled(
-          `request:${event.method}`,
-          event.params,
-          event.threadId
-        )
+        const requestKey = `request:${event.method}`
+        return genericFrames.appendUnhandled(requestKey, event.params, event.threadId)
       }
       if (event.type === 'provider-frame') {
         return genericFrames.appendUnhandled(event.kind, event.payload, event.threadId)
