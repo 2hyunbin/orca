@@ -10,7 +10,11 @@ import { z } from 'zod'
 import { expect, test } from './helpers/orca-app'
 import { launchPhoneMirrorTopology } from './helpers/phone-mirror-topology'
 import type { PairedMobileSocket } from './helpers/paired-mobile-client'
-import { filterWorktrees, type Worktree } from '../../mobile/src/worktree/workspace-list-sections'
+import {
+  filterWorktrees,
+  getWorktreeStatus,
+  type Worktree
+} from '../../mobile/src/worktree/workspace-list-sections'
 
 const ServerRowsSchema = z.object({
   worktrees: z.array(
@@ -21,8 +25,8 @@ const ServerRowsSchema = z.object({
       branch: z.string(),
       isMainWorktree: z.boolean().optional(),
       hasHostSidebarActivity: z.boolean().optional(),
-      desktopOtherClient: z.literal(true).optional(),
-      desktopSidebarActivity: z.literal(true).optional()
+      status: z.enum(['working', 'active', 'permission', 'done', 'inactive']).optional(),
+      desktopOtherClient: z.literal(true).optional()
     })
   )
 })
@@ -30,6 +34,7 @@ const ReposSchema = z.object({
   repos: z.array(z.looseObject({ id: z.string(), path: z.string() }))
 })
 const HostsSchema = z.object({ hosts: z.array(z.looseObject({ hostId: z.string() })) })
+const TabsSchema = z.looseObject({ tabs: z.array(z.looseObject({ id: z.string() })) })
 
 let requestId = 0
 async function result(
@@ -144,7 +149,21 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
     )
 
     // Hide sleeping too, with a browser tab open in the desktop's workspace: only the desktop knows
-    // that tab is there, so the server reports the workspace asleep.
+    // that tab is there, so the server alone reports the workspace asleep.
+    const desktopRowStatus = async () => {
+      const row = (await phoneRows()).find((entry) => entry.path.endsWith('from-desktop'))
+      return row ? getWorktreeStatus(toMobileRow(row)) : null
+    }
+    // Creation opened a terminal there; close it so only the desktop's own tab can keep it awake.
+    const desktopRow = (await phoneRows()).find((entry) => entry.path.endsWith('from-desktop'))
+    const worktree = `id:${desktopRow?.worktreeId ?? ''}`
+    const { tabs } = TabsSchema.parse(
+      (await host.client.call('session.tabs.list', { worktree })).result
+    )
+    for (const tab of tabs) {
+      await host.client.call('session.tabs.close', { worktree, tabId: tab.id, reason: 'user' })
+    }
+    await expect.poll(desktopRowStatus, { timeout: 30_000 }).toBe('inactive')
     await desktop.page.evaluate(async () => {
       const state = window.__store!.getState()
       state.setShowSleepingWorkspaces(false)
@@ -156,15 +175,8 @@ test("phone lists a server's workspaces exactly as the desktop sidebar filters t
       state.setBrowserDefaultUrl('about:blank')
       await state.openNewBrowserTabInActiveWorkspace(state.activeGroupIdByWorktree[worktree.id])
     })
-    await expect
-      .poll(
-        async () =>
-          (await phoneRows())
-            .filter((row) => row.desktopSidebarActivity)
-            .map((row) => path.basename(row.path)),
-        { timeout: 60_000 }
-      )
-      .toEqual(['from-desktop'])
+    // The phone's status dot and its Hide sleeping both read the desktop's view of the row.
+    await expect.poll(desktopRowStatus, { timeout: 60_000 }).toBe('active')
     const awake = await expectPhoneMatchesSidebar(true)
     expect(awake.map((row) => path.basename(row))).toContain('from-desktop')
   } finally {
@@ -183,7 +195,7 @@ function toMobileRow(row: z.infer<typeof ServerRowsSchema>['worktrees'][number])
     isMainWorktree: row.isMainWorktree,
     hasHostSidebarActivity: row.hasHostSidebarActivity,
     desktopOtherClient: row.desktopOtherClient,
-    desktopSidebarActivity: row.desktopSidebarActivity,
+    status: row.status,
     liveTerminalCount: 0,
     hasAttachedPty: false,
     unread: false,

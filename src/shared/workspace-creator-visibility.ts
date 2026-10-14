@@ -2,10 +2,7 @@ import type { RuntimeStatus } from './runtime-types'
 import type { PublicKnownRuntimeEnvironment } from './runtime-environments'
 import type { FolderWorkspace } from './folder-workspace-types'
 import { folderWorkspaceToWorktree } from './folder-workspace-worktree'
-import {
-  normalizeWorkspaceCreatorProvenance,
-  workspaceOwnerOf
-} from './workspace-creator-provenance'
+import { normalizeWorkspaceCreatorProvenance } from './workspace-creator-provenance'
 
 type RuntimeStatusEntry = { status: Pick<RuntimeStatus, 'pairedDeviceId'> | null }
 
@@ -28,10 +25,9 @@ export function getPairedDeviceIdsByEnvironment(
 }
 
 /**
- * The "Hide other-client workspaces" rule. A workspace is the viewer's own when this client, or a
- * phone acting for it, created it; anything else with a known creator is someone else's,
- * including one created on the server itself. No creator, or a server whose pairing this client
- * cannot name, stays visible.
+ * The "Hide other-client workspaces" rule: a workspace this client did not create is someone
+ * else's, including one created on the server itself. Phones record the owner they act for as the
+ * creator (workspace-creator-context.ts). No creator, or an unnamed pairing, stays visible.
  */
 export function isWorkspaceOwnedBySomeoneElse(
   worktree: { creatorProvenance?: unknown; runtimeOwnerEnvironmentId?: string },
@@ -41,16 +37,15 @@ export function isWorkspaceOwnedBySomeoneElse(
   if (!creator) {
     return false
   }
-  const owner = workspaceOwnerOf(creator)
   const environmentId = worktree.runtimeOwnerEnvironmentId
   if (!environmentId) {
-    return owner.kind !== 'host'
+    return creator.kind !== 'host'
   }
   const pairedDeviceId = pairedDeviceIdsByEnvironment.get(environmentId)
   if (!pairedDeviceId) {
     return false
   }
-  return owner.kind !== 'paired-device' || owner.deviceId !== pairedDeviceId
+  return creator.kind !== 'paired-device' || creator.deviceId !== pairedDeviceId
 }
 
 export function isFolderWorkspaceFromOtherDevice(

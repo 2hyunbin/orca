@@ -23,7 +23,6 @@ import {
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getWorkspaceSessionTabActivityIds } from '../../../shared/workspace-session-tab-activity'
 import { runtimeWorktreeIdentityKey } from '../runtime-worktree-path-identity'
-import { normalizeWorkspaceCreatorProvenance } from '../../../shared/workspace-creator-provenance'
 import type {
   MobileDesktopRelayHostListing,
   MobileDesktopRelayHosts
@@ -63,8 +62,6 @@ export class MobileRelayHostCatalog {
       hostLabelOverrides: () => ReadonlyMap<ExecutionHostId, string>
       /** The desktop's own "Hide other-client workspaces" setting. */
       hidesWorkspacesFromOtherDevices: () => boolean
-      /** This desktop's phones' device ids on a server, as its relay last synced them. */
-      delegatedPhoneDeviceIds: (environmentId: string) => ReadonlySet<string>
       /** The desktop's saved session for a host, as its sidebar last wrote it. */
       getWorkspaceSession: (hostId: ExecutionHostId) => WorkspaceSessionState | null
     }
@@ -115,10 +112,7 @@ export class MobileRelayHostCatalog {
       worktrees: cached.worktrees
         .filter((row) => row.removing !== true)
         .map((row) =>
-          stampDesktopSidebarView(row, host.environmentId, sessionActivity, {
-            desktopDeviceIds,
-            relayedPhoneDeviceIds: this.options.delegatedPhoneDeviceIds(host.environmentId)
-          })
+          stampDesktopSidebarView(row, host.environmentId, desktopDeviceIds, sessionActivity)
         )
     }
   }
@@ -231,24 +225,18 @@ function relayVerdict(
   return health === 'available' ? 'ready' : 'unavailable'
 }
 
-/** What the desktop's own sidebar decides and the server cannot; marked rather than dropped, so deep links still resolve. */
+/**
+ * What the desktop's own sidebar decides and the server cannot: its "Hide other-client workspaces"
+ * (marked, not dropped, so deep links still resolve), and its own browser and chat tabs as activity.
+ */
 function stampDesktopSidebarView(
   row: MobileRelayServerWorktreeRow,
   environmentId: string,
-  sessionActivity: ReadonlySet<string>,
-  owners: {
-    desktopDeviceIds: ReadonlyMap<string, string> | null
-    relayedPhoneDeviceIds: ReadonlySet<string>
-  }
+  desktopDeviceIds: ReadonlyMap<string, string> | null,
+  sessionActivity: ReadonlySet<string>
 ): MobileRelayServerWorktreeRow {
-  const { desktopDeviceIds, relayedPhoneDeviceIds } = owners
-  const creator = normalizeWorkspaceCreatorProvenance(row.creatorProvenance)
-  // Why: a server older than onBehalfOf records only the relayed phone's own device id.
-  const relayedPhoneCreated =
-    creator?.kind === 'paired-device' && relayedPhoneDeviceIds.has(creator.deviceId)
   const otherClient =
     desktopDeviceIds !== null &&
-    !relayedPhoneCreated &&
     isWorkspaceOwnedBySomeoneElse(
       { creatorProvenance: row.creatorProvenance, runtimeOwnerEnvironmentId: environmentId },
       desktopDeviceIds
@@ -262,7 +250,7 @@ function stampDesktopSidebarView(
   return {
     ...row,
     ...(otherClient ? { desktopOtherClient: true } : {}),
-    ...(active ? { desktopSidebarActivity: true } : {})
+    ...(active ? { hasHostSidebarActivity: true } : {})
   }
 }
 

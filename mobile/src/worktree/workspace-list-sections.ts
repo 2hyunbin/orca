@@ -41,10 +41,6 @@ function makeSection(
 // worktrees with idle terminal prompts had no recent output and were excluded.
 // Any worktree with live terminals or unread output counts as "active".
 export function isWorktreeActive(w: Worktree): boolean {
-  // Why: the server cannot see the desktop's own browser and chat tabs on its rows.
-  if (w.desktopSidebarActivity === true) {
-    return true
-  }
   if (w.hasHostSidebarActivity !== undefined) {
     return w.hasHostSidebarActivity
   }

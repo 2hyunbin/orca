@@ -199,20 +199,9 @@ export type CliWorkspaceProvenance = {
   startupAgent?: TuiAgent
 }
 
-/** Whose workspace a row is: this host's owner, or a paired device's. */
-export type WorkspaceOwnerProvenance =
-  | { kind: 'host' }
-  | { kind: 'paired-device'; deviceId: string }
-
 export type WorkspaceCreatorProvenance =
   | { kind: 'host' }
-  | {
-      kind: 'paired-device'
-      deviceId: string
-      /** Set when a phone created it: the host for its own phones, the desktop that relays a
-       *  delegated phone. Absent from rows written by older hosts and by paired desktops. */
-      onBehalfOf?: WorkspaceOwnerProvenance
-    }
+  | { kind: 'paired-device'; deviceId: string }
 
 export type AutomationWorkspaceProvenance = {
   kind: 'created-by-automation'

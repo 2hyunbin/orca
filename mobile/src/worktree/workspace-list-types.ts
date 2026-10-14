@@ -31,8 +31,6 @@ export type Worktree = {
   hasHostSidebarActivity?: boolean
   /** The paired desktop's "Hide other-client workspaces" hides this row. */
   desktopOtherClient?: true
-  /** The paired desktop's own browser or chat tabs keep this server row awake. */
-  desktopSidebarActivity?: true
   worktreeInstanceId?: string
   lineageWorktreeInstanceId?: string
   parentWorktreeInstanceId?: string

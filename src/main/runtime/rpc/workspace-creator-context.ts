@@ -11,14 +11,10 @@ export function resolveRpcWorkspaceCreatorProvenance(
     if (context.clientKind !== 'mobile') {
       return { kind: 'paired-device', deviceId: context.pairedDeviceId }
     }
-    // Why: a phone acts for whoever paired it, so "Hide other-client workspaces" keeps its rows.
-    return {
-      kind: 'paired-device',
-      deviceId: context.pairedDeviceId,
-      onBehalfOf: context.pairedDeviceParentId
-        ? { kind: 'paired-device', deviceId: context.pairedDeviceParentId }
-        : { kind: 'host' }
-    }
+    // Why the owner, not the phone: a phone acts for whoever paired it, so its rows are theirs.
+    return context.pairedDeviceParentId
+      ? { kind: 'paired-device', deviceId: context.pairedDeviceParentId }
+      : { kind: 'host' }
   }
   if (context.clientId || context.clientKind || context.connectionId) {
     throw new Error('authenticated_device_identity_missing')

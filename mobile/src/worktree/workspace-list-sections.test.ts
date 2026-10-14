@@ -6,7 +6,6 @@ import {
   buildSections,
   filterWorktrees,
   getWorktreeStatus,
-  isWorktreeActive,
   sortWorktrees
 } from './workspace-list-sections'
 import { DEFAULT_MOBILE_WORKSPACE_STATUSES } from './mobile-workspace-statuses'
@@ -224,25 +223,6 @@ describe('filterWorktrees', () => {
         ''
       )
     ).toEqual([mine])
-  })
-
-  it("keeps a server row awake when the desktop's own tabs are open in it", () => {
-    const desktopTabs = worktree({
-      worktreeId: 'desktop-tabs',
-      hasHostSidebarActivity: false,
-      desktopSidebarActivity: true
-    })
-    const serverActive = worktree({ worktreeId: 'server-active', hasHostSidebarActivity: true })
-    const asleep = worktree({ worktreeId: 'asleep', hasHostSidebarActivity: false })
-
-    expect(
-      filterWorktrees(
-        [desktopTabs, serverActive, asleep],
-        { filterRepoIds: new Set(), hideSleeping: true, hideDefaultBranch: false },
-        ''
-      )
-    ).toEqual([desktopTabs, serverActive])
-    expect([desktopTabs, serverActive, asleep].map(isWorktreeActive)).toEqual([true, true, false])
   })
 })
 
